@@ -1,0 +1,21 @@
+target = ".doctrine"
+
+[dirs]
+create = [
+  ".doctrine/agents",
+  ".doctrine/memory",
+  ".doctrine/scripts",
+  ".doctrine/skills",
+  ".doctrine/templates",
+]
+
+[gitignore]
+entries = []
+
+[root_markers]
+markers = [
+  ".git",
+  ".jj",
+  ".project",
+  "Cargo.toml",
+]

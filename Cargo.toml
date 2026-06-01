@@ -1,0 +1,193 @@
+[package]
+name = "heresiarch"
+version = "0.1.0"
+edition = "2024"
+description = "Project tooling CLI"
+license = "GPLv3"
+repository = "https://github.com/heresiarch/heresiarch"
+keywords = ["cli", "project"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+#tokio.workspace = true
+#axum.workspace = true
+serde.workspace = true
+#serde_json.workspace = true
+#uuid.workspace = true
+#time.workspace = true
+#sha2.workspace = true
+#hex.workspace = true
+clap.workspace = true
+rust-embed = { workspace = true }
+toml.workspace = true
+
+[dev-dependencies]
+tower = { workspace = true }
+http-body-util = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
+
+# Cargo.toml at workspace root
+[workspace]
+resolver = "3"
+members = [
+    ".",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+
+# Shared dependency policy: agent-added deps should be explicit and centralized.
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "postgres",
+    "uuid",
+    "time",
+    "migrate",
+    # `macros` is required for the `sqlx::migrate!` embed macro; we do NOT use
+    # the compile-time `query!` macros (DEC-005 — sqlx runtime queries only).
+    "macros",
+] }
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+time = { version = "0.3", features = ["formatting", "parsing", "serde", "serde-well-known"] }
+sha2 = "0.10"
+hex = "0.4"
+clap = { version = "4", features = ["derive", "env"] }
+rust-embed = { version = "8", features = ["debug-embed"] }
+toml = "0.8"
+# Dev-only: drive the assembled axum Router in-process (no bound socket) for the
+# HTTP VTs — tower's oneshot + http-body-util to collect response bodies.
+tower = { version = "0.5", default-features = false, features = ["util"] }
+http-body-util = "0.1"
+tempfile = "3"
+
+# ---- rustc lints ----
+[workspace.lints.rust]
+# Absolute nasties.
+warnings = "deny"
+unsafe_code = "forbid"
+
+# Public API hygiene.
+# missing_docs paused: doc-comment absence is rarely the defect in agent code,
+# and the tax slows exploratory work. Re-enable before publishing.
+# missing_docs = "deny"
+missing_debug_implementations = "deny"
+
+# Dead/unused things should not survive agent iterations.
+unused = { level = "deny", priority = -1 }
+# unused_crate_dependencies paused: false-positives on test/bench/feature-only
+# deps; fights early scaffolding. Re-enable once the dep graph stabilises.
+# unused_crate_dependencies = "deny"
+unreachable_pub = "deny"
+
+# Future-proofing / edition hygiene.
+rust_2018_idioms = { level = "deny", priority = -1 }
+rust_2021_compatibility = { level = "warn", priority = -1 }
+rust_2024_compatibility = { level = "warn", priority = -1 }
+
+# Safety-sensitive.
+unsafe_op_in_unsafe_fn = "deny"
+elided_lifetimes_in_paths = "deny"
+explicit_outlives_requirements = "deny"
+
+# Avoid accidental cfg drift.
+unexpected_cfgs = "deny"
+
+# ---- Clippy lints ----
+[workspace.lints.clippy]
+# Broad groups first, with lower priority so individual overrides below win.
+all = { level = "deny", priority = -2 }
+pedantic = { level = "deny", priority = -2 }
+cargo = { level = "deny", priority = -2 }
+# nursery dropped: warnings="deny" promotes it to hard error, and nursery lints
+# are unstable/false-positive-prone. Re-add deliberately if you want that churn.
+# nursery = { level = "warn", priority = -3 }
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+
+# Correctness / panic avoidance.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+indexing_slicing = "deny"
+integer_division = "deny"
+
+# Debug leftovers.
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+use_debug = "deny"
+
+# Sloppy error handling.
+map_err_ignore = "deny"
+let_underscore_must_use = "deny"
+let_underscore_future = "deny"
+# Doc-comment lints paused alongside missing_docs (see above). Re-enable before publishing.
+# missing_errors_doc = "deny"
+# missing_panics_doc = "deny"
+# missing_safety_doc = "deny"
+
+# Suspicious conversions / casts.
+checked_conversions = "deny"
+as_conversions = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_precision_loss = "deny"
+cast_sign_loss = "deny"
+
+# API/design pressure.
+module_name_repetitions = "deny"
+pub_use = "deny"
+wildcard_imports = "deny"
+enum_glob_use = "deny"
+default_trait_access = "deny"
+implicit_clone = "deny"
+clone_on_ref_ptr = "deny"
+
+# Performance and allocation discipline.
+large_futures = "deny"
+large_stack_arrays = "deny"
+large_types_passed_by_value = "deny"
+needless_pass_by_value = "deny"
+redundant_clone = "deny"
+
+# Async nastiness.
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+future_not_send = "deny"
+async_yields_async = "deny"
+
+# Tests should not be garbage either.
+tests_outside_test_module = "deny"
+unwrap_in_result = "deny"
+
+# Agent-hostile ambiguity.
+shadow_unrelated = "deny"
+same_name_method = "deny"
+disallowed_methods = "deny"
+disallowed_types = "deny"
+
+# Some pedantic lints are too noisy for most real projects.
+must_use_candidate = "allow"
+missing_const_for_fn = "allow"
+return_self_not_must_use = "allow"
+similar_names = "allow"
+too_many_lines = "allow"
+struct_excessive_bools = "allow"
+multiple_crate_versions = "allow"

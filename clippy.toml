@@ -1,0 +1,14 @@
+# clippy.toml
+
+avoid-breaking-exported-api = false
+
+disallowed-methods = [
+  { path = "std::env::var", reason = "Use typed configuration loading instead" },
+  { path = "std::env::set_var", reason = "Global process mutation is test-hostile" },
+  { path = "std::process::exit", reason = "Return an error from main/application boundary instead" },
+]
+
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "Use BTreeMap unless hash iteration nondeterminism is intended" },
+  { path = "std::collections::HashSet", reason = "Use BTreeSet unless hash iteration nondeterminism is intended" },
+]
