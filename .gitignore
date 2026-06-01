@@ -1,0 +1,6 @@
+# use flake:
+.envrc
+
+# Added by cargo
+
+/target
