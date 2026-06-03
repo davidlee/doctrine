@@ -1,5 +1,8 @@
 # glossary
 
+The kinds below group into a small set of durable entities + typed facets — see
+[entity-model](entity-model.md) for the architecture.
+
 | kind                         | abbr     | folder |
 |------------------------------|----------|:------:|
 | **specs**                    | --       |        |

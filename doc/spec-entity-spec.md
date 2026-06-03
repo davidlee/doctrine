@@ -60,8 +60,8 @@ caused by *embedding a queried registry in a hand-edited document*:
 
 A spec is a **directory** (it already is — `sources.variants.path` points at
 `contracts/*.md`). Normalize the three hats apart, reusing the slice
-directory-entity shape and the shared reservation primitive (per-kind namespace
-`prd|spec|rev/id/<n>` — see § Spec identity):
+directory-entity shape and the shared reservation primitive (per-subtype
+namespace `spec/{product,tech,revision}/id/<n>` — see § Spec identity):
 
 The live schema bundle (Section 4, the artefact→blocks map) shows a tech spec
 carries **seven** blocks, not the four `SPEC-110` happened to use:
@@ -72,7 +72,7 @@ carries **seven** blocks, not the four `SPEC-110` happened to use:
 *strongest* case for the split, not the weakest.
 
 ```
-.doctrine/spec/110/
+.doctrine/spec/tech/110/      # subtype folder (product/ | tech/ | revision/)
   spec-110.toml        # identity + flat fields
   spec-110.md          # sections 1–7, pure prose
   requirements.{toml,md}   # [[req]] facets   | ### FR-001 → description, acceptance criteria
@@ -154,29 +154,33 @@ cross-spec reservation needed because the spec id already namespaces it.
 
 The registry validates that every `(spec, req)` FK resolves to a row that exists.
 
-## Spec identity (kind-scoped, not a shared number space)
+## Spec identity (one family, three subtypes, separate folders)
 
-`PRD`/`SPEC`/`REV` are **three kinds, not one numbered family**. The schema
-bundle's artefact map numbers and locates them independently — `product/PROD-xxx/`,
-`specs/tech/SPEC-xxx/`, `revisions/RE-xxx.md` — so `PROD-011` and `SPEC-110`
-coexist with no relation. A single `.doctrine/spec/<n>/` tree under one
-`spec/id/<n>` sequence cannot reproduce that: it either fuses the sequences
-(losing per-kind numbering) or collides `PRD-001` and `SPEC-001` on the same
-`001/` directory.
+`PRD`/`SPEC`/`REV` are **one entity family with three subtypes**, not one fused
+number space and not three unrelated kinds. The schema bundle numbers and locates
+them independently — `product/PROD-xxx/`, `specs/tech/SPEC-xxx/`,
+`revisions/RE-xxx.md` — so `PROD-011` and `SPEC-110` coexist with no relation. A
+single `.doctrine/spec/<n>/` tree under one `spec/id/<n>` sequence cannot
+reproduce that: it fuses the sequences (losing per-subtype numbering) or collides
+`PROD-001` and `SPEC-001` on the same `001/` directory.
 
-**Decision: each kind is its own directory-entity kind.** Own dir
-(`.doctrine/{prd,spec,rev}/<n>/`), own monotonic numbering, own reservation
-namespace `<kind>/id/<n>`. The canonical key is `(kind, n)`, rendered
-`PRD-110` / `SPEC-110` / `REV-001`; numeric ids are unique only **within** a
-kind. The worked decomposition above is the `spec` kind (`.doctrine/spec/110/`).
-This is exactly the engine's per-kind descriptor (slice-003): three descriptors,
-no shared counter.
+**Decision: each subtype gets its own folder.** Sibling trees under the spec
+family root — `.doctrine/spec/{product,tech,revision}/<n>/` — mirroring
+spec-driver's layout. Each has its own monotonic numbering and its own reservation
+namespace (`spec/product/id/<n>`, `spec/tech/id/<n>`, `spec/revision/id/<n>`). The
+canonical key is `(subtype, n)`, rendered `PRD-110` / `SPEC-110` / `REV-001`;
+numeric ids are unique only **within** a subtype. The worked decomposition above
+is the `tech` subtype (`.doctrine/spec/tech/110/`).
 
-They share the **row+prose discipline**, not necessarily an identical fileset.
-The bundle shows the shape diverges by kind — `prod` carries *no* fenced blocks
-(frontmatter + prose only), `revision` is a single `revision.change`-style file,
-only `spec` carries the seven table blocks. The fileset-as-function (slice-003)
-absorbs that; pinning the PRD/REV filesets is left open (§ Open questions).
+**Decision: the facet set is per-subtype, not shared.** They share the entity
+*model* (the storage rule — identity TOML + prose body + flat facet tables — and
+the scaffold engine), **not** an identical fileset. The bundle confirms the
+shape diverges: `product` carries *no* fenced blocks (frontmatter + prose only),
+`revision` is a single `revision.change`-style file, only `tech` carries the seven
+table blocks above. The engine's fileset-as-function (slice-003) supplies each
+subtype's own combination as a descriptor; the exact PRD/REV facet sets are pinned
+when those subtypes are designed (§ Open questions). This sits under the broader
+consolidation direction in [entity-model](entity-model.md).
 
 ## Metadata & table schemas
 
@@ -431,10 +435,12 @@ on every agent tick is a different problem.**
    edge is recorded, and whether a redirect from a retired key to its successor
    is surfaced in queries. Decided with the spec-refactoring workflow; the key
    stability it depends on is now guaranteed.
-4. **PRD / REV filesets.** `spec` carries seven table blocks; the bundle shows
-   `prod` carries none and `revision` is a single-block file (§ Spec identity).
-   Each kind's exact fileset is pinned when that kind is designed; the
-   fileset-as-function engine (slice-003) already admits the difference.
+4. **PRD / REV facet sets.** *Decided:* the facet set differs per subtype and
+   each subtype owns its folder (§ Spec identity). *Open:* the exact combination
+   for `product` (no table blocks in the bundle — likely identity + prose + a
+   light requirements/capabilities set) and `revision` (a single change-record
+   facet), pinned when those subtypes are designed. The fileset-as-function
+   engine (slice-003) already admits the difference.
 
 ## Follow-ups
 
