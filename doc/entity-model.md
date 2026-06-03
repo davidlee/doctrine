@@ -41,6 +41,25 @@ argued in the notes:
 - **Prose lifts out, testable lists stay structured** (spec-entity-spec § The
   decomposition, B3): `acceptance_criteria`/`success_criteria` are rows, not prose.
 
+## Templates are defaults; TOML is owned
+
+The split has a second edge — who owns the *format*:
+
+- **Prose templates (and, later, skills) are sensible defaults, not contracts.**
+  Users may re-head, restructure, or delete sections of a scaffolded `.md`. The
+  tooling must therefore **never parse prose structure or depend on its
+  headings** — a prose template is a write-once scaffold, applied by token
+  substitution only (a missing/renamed token is a harmless no-op, not an error).
+  Templates can only substitute values on hand at scaffold time.
+- **TOML facets are owned, locked formats.** The tooling reads, queries, and
+  round-trips them (edit-preserving append, fixed schema); their shape is not the
+  user's to restructure.
+
+Corollary — and this is just the storage rule from the tooling-contract angle:
+**anything the tooling must read or query lives in TOML, never prose.** It is why
+a design doc's queryable data (date, key files, governance refs, approval) belongs
+in a sister facet, not its markdown body (slice-003 design.md D5).
+
 ## Entity vs facet taxonomy
 
 The [glossary](glossary.md) groups already prefigure this. Target consolidation —
