@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 //! Kind-agnostic directory-entity scaffolding engine.
 //!
 //! One engine materialises every directory entity (slice, design-doc sibling,

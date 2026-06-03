@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #![allow(
     clippy::same_name_method,
     reason = "rust-embed derive generates conflicting method names"

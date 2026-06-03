@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 //! Project-root detection, shared by `install` and `skills`.
 
 use std::path::PathBuf;

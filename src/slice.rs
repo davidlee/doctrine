@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 //! `heresy slice` — create, list, and add design-doc siblings to slices,
 //! Heresiarch's unit of change.
 //!
