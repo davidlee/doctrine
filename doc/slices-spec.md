@@ -89,7 +89,7 @@ sections over time.
 id = 1
 slug = "add-skill-removal"
 title = "Add skill removal to heresy skills"
-status = "proposed"          # proposed | in-progress | done  (v1: unenforced)
+status = "proposed"          # proposed | ready | started | audit | done  (v1: unenforced)
 created = "2026-06-03"
 updated = "2026-06-03"
 
@@ -160,7 +160,7 @@ The current date is supplied by the caller (no clock in the pure layer,
 Enumerates slices under `.doctrine/slice/`, ordered by id:
 
 ```
-001  in-progress  add-skill-removal   Add skill removal to heresy skills
+001  started      add-skill-removal   Add skill removal to heresy skills
 002  proposed     vendor-skills       Vendor skills instead of npx delegation
 ```
 
@@ -191,10 +191,23 @@ detection). Shared code.
 
 ## Lifecycle
 
-`status ∈ {proposed, in-progress, done}` is recorded in `slice-<id>.toml` and
-advanced by hand in v1. There is **no `complete` command and no closure gate** —
-there is nothing to gate against until specs and verification artefacts exist.
-This is the deliberate "one thing at a time" boundary.
+`status ∈ {proposed, ready, started, audit, done}` is recorded in
+`slice-<id>.toml` and advanced by hand in v1. The stages track a slice from
+intent to reconciled change:
+
+- **proposed** — drafted; scope and motivation captured, not yet agreed.
+- **ready** — accepted and scoped; cleared to start, work not begun.
+- **started** — implementation under way.
+- **audit** — code shipped; reconciling what shipped against the slice's
+  declared scope (the seam for the future audit/patch lifecycle,
+  § Forward compatibility).
+- **done** — reconciled and closed.
+
+There is **no `complete` command and no closure gate** in v1 — there is nothing
+to gate against until specs and verification artefacts exist, so transitions are
+by hand and any value in the set is accepted. The richer vocabulary is recorded
+now so the lifecycle stages are deliberate, not retrofitted; gating attaches to
+them later. This is the deliberate "one thing at a time" boundary.
 
 ## Forward compatibility
 
