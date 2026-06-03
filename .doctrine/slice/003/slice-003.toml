@@ -1,9 +1,9 @@
 id = 3
 slug = "design-siblings-engine"
 title = "Slice design-doc siblings and entity-scaffold engine"
-status = "proposed"
+status = "ready"
 created = "2026-06-03"
-updated = "2026-06-03"
+updated = "2026-06-04"
 
 [relationships]
 # slice-to-slice supersession is the one relationship live in v1 (slice-002's
