@@ -261,3 +261,62 @@ them. Applied across design.md, slice-003.md, reservation-spec, and the template
   the `Artifact` writer; slug pure-helper/resolution-policy split named in § 4.
 
 Status stays `proposed`. No code touched (paper + template asset only).
+
+---
+
+# Round 2 (slice-003) — external review + disposition
+
+A second external pass after the WHAT/HOW edge and the templates-are-defaults
+rule landed. Verdict: **buildable, not quite build-ready** — the `Kind`
+abstraction is sound; the risk is *filesystem correctness* once arbitrary
+filesets and partial failures enter the engine (the writer/materialisation
+contract). All findings paper-stage. No code touched.
+
+## Review verbatim (condensed faithfully)
+
+- **H1 — `Artifact.path: PathBuf` too permissive.** A descriptor can return
+  `../../foo`, an absolute path, or a symlink outside the tree; the engine
+  "writes uniformly". Make paths relative + validate (reject absolute / `..`);
+  the engine is the sole joiner.
+- **H2 — failed materialisation leaves a ghost entity.** Local `mkdir` claims +
+  creates the dir; a later file-write failure leaves `003/` with missing
+  toml/md/symlink — a malformed entity, not the spec's harmless reserved gap.
+  Clean up the won dir on write failure (+ test); document the git-ref distinction.
+- **M1 — `reserve: bool` carries too much** (id-alloc, fresh-dir, missing-parent,
+  clobber). Replace with an explicit placement/mode enum before `false` accretes
+  "existing parent / row append / nested / overwrite / no id".
+- **M2 — future git-ref reservation needs a namespace field** (`slice/id/<n>`),
+  not derivable from `dir`. Add/reserve `reservation_namespace` on `Kind` so
+  git-ref doesn't "discover" it missing.
+- **M3 — "spec drops in as descriptor, not fork" overstated.** Engine does spec
+  *initial scaffold*; mutation/validation/FK/registry are separate. Tighten.
+- **M4 — scaffold purity contract underspecified.** `fn(&ScaffoldCtx)->Fileset`
+  must not read disk/clock/git/root; template loading is the danger. State it; say
+  whether `asset_text` is compile-time embedded.
+- **M5 — design-doc presence is workflow-significant but unobservable.** No gate
+  this slice; add a deferred `heresy slice validate` note (non-trivial slice has
+  design.md or a trivial marker; don't parse prose; facet carries queryable meta).
+- **L1 — "sub-artefacts don't reserve" → "file-creating sub-artefacts".** Engine
+  materialises filesets; it doesn't append rows / mutate tables / allocate row ids.
+- **L2 — status stays `proposed`.** Agree. **L3 — template/exemplar divergence is
+  a note, not a blocker** (`{{ref}}`+`{{title}}` resolved).
+
+## Disposition
+
+| Finding | Severity | Call | Landed in |
+|---|---|---|---|
+| H1 path escape | High | **Accept** — paths relative to entity-tree root (`Kind.dir`), engine sole joiner, reject absolute/`..`. *Corrected base:* tree root, **not** `ctx.dir` — the slug symlink legitimately sits at root level beside the numeric dir. | §5.2 `Artifact{rel_path}`; §5.5 Path containment; §9 test |
+| H2 ghost entity | High | **Accept** — `Won` ⟹ dir is ours ⟹ `remove_dir_all` on write failure + propagate; document local-collapses vs git-ref-gap. One deliberate improvement over pure behaviour-preservation (slice-001 has no opposing assertion). | §5.4 loop; §5.5 No-ghost; §9 test |
+| M1 `reserve` overloaded | Med | **Accept (cheaper form)** — `reserve: bool` → closed `MaterialiseMode` enum (no field-folding into variants). Names the branches; third mode = compiler-forced variant. | §5.2 enum; §5.4 match; D4 |
+| M2 namespace field | Med | **Reject-defer (with reason)** — `slice/id/<n>` already in reservation-spec § Key table; the field is additive when git-ref lands, and a set-but-unread field now trips the deny-level dead-code gate. Forward-note instead. | D1 (M2 note) |
+| M3 spec overstated | Med | **Accept** — "initial scaffold" vs lifecycle; "supports spec" ≠ "spec done". | §5.1 |
+| M4 purity contract | Med | **Accept** — state purity invariant; `asset_text` is rust-embed (compile-time, not disk IO), so scaffold calling it stays pure-ish (only fallibility: template presence/format). | §5.5 Scaffold purity |
+| M5 unobservable invariant | Med | **Accept (deferred note, no gate)** — future `heresy slice validate`; trivial marker is a TOML field (queryable ∈ TOML); never parse prose. | §6 Q5; slices-spec § Division of labour |
+| L1 rows vs filesets | Low | **Accept** — explicit "engine materialises filesets, not rows". | §5.4 |
+| L2 status proposed | Low | **Keep** — unchanged. | — |
+| L3 template divergence | Low | **Keep (note only)** — resolved. | — |
+
+Net: 7 accepts (2 High, 4 Med, 1 Low) + 1 reject-defer (M2) + 2 keeps. The High
+pair (path containment, ghost cleanup) hardens the writer contract — the genuinely
+new risk surface once arbitrary filesets and partial failure enter the engine.
+Status stays `proposed`. No code touched.
