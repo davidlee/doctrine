@@ -104,3 +104,115 @@ confirmed — SPEC-110's empty value hid it); spec carries **7** blocks, not 4.
 
 Open author-questions 2 and 3 are recorded as live open questions
 (spec-entity-spec § Open questions 3; drift-spec § Detection).
+
+---
+
+# Round 2 — adversarial review + adjudication
+
+A second fresh agent reviewed the entity model (focus: the spec entity). Unlike
+round 1, this review verified its claims against the live schema bundle, so most
+findings are real. It is a **notes-tightening** pass — every blocker resolves to
+a pinned decision or a corrected field, not a redesign — and it does **not**
+touch slice-003 (the engine + design-doc build), `src/slice.rs`, or the `acquire`
+seam, so nothing here blocks the active slice. No code changed.
+
+## Review verbatim
+
+**Verdict.** Direction sound, would not land as-is. Diagnosis right (embedded YAML
+blocks are relational data hidden in prose → parse-heavy queries, duplicated
+requirement lists, weak FK integrity, merge-hostile prose-in-data). Split into
+table TOML + prose siblings attacks the right disease. Problems are in the
+boundary conditions: canonical ids, schema compatibility, row/prose drift, and
+when validation becomes mandatory.
+
+**Blockers.**
+1. **Spec directory identity under-specified, probably collides.** `PRD/SPEC/REV`
+   share one shape but the example is `.doctrine/spec/110/`, `id=110`,
+   `kind="spec"` — only safe if numeric ids are globally unique across the three;
+   else `PRD-110`/`SPEC-110`/`REV-110` collide on disk. Fix: kind-scoped dirs
+   (`.doctrine/spec/SPEC/110/` or `.doctrine/spec/spec-110/`) and reservation
+   namespace `<kind>/id/<n>`. The reservation layer is already generic enough.
+2. **Requirement reference format inconsistent.** `coverage.toml` uses local
+   `requirement="FR-002"`; collaborators use qualified `SPEC-200.FR-010`.
+   spec-driver stores `primary` fully-qualified and `coverage.requirement` is
+   schema-patterned fully-qualified. Pick a rule: rows use local ids only for
+   owned rows; every cross-table FK stored fully-qualified, even within the
+   owning spec; CLI may render local shorthand.
+3. **Row/prose split breaks inherited schema unless Heresiarch defines a new
+   one.** `spec.requirements@v1` requires `description` and `acceptance_criteria`;
+   the mapping lifts both to prose — not lossless unless Heresiarch explicitly
+   replaces the schema. Fix: keep query-relevant fields (incl. acceptance) in
+   TOML, let prose expand them; don't lose acceptance-criteria queryability.
+4. **FK validation can't stay "later" once cross-spec refs exist.**
+   `collaborators.toml`/`interactions.toml` are cross-spec, so `heresy validate`
+   is part of minimum viable spec v1 (`spec new` · `req add` · `show` ·
+   `validate`). Without it the decomposition pays the file-count/read-locality
+   cost while keeping the dangling-FK failure.
+5. **Serde sketches too stringly; one field wrong.** Use raw-parse vs internal
+   model (newtyped FKs, parsed enums). `Interaction.description: String` is
+   required but the TOML uses `notes`, and the schema makes both `notes` and
+   `description` optional (only `type`+`spec` required).
+6. **Requirement moves need a decision before external refs accumulate.**
+   `SPEC-110.FR-001` isn't stable if requirements move. Decide now — Option A
+   (never move; move = retire+reintroduce+supersedes) or Option B (immutable UID
+   + display key). Recommends A for auditability.
+
+**Non-blocking.** Add a locality recovery command (`heresy spec req show
+SPEC-110.FR-001`) rendering row+prose+coverage+caps+refs together. Use
+`toml_edit` for mutations if comments/formatting/unknown-keys matter (plain
+serde reserialize drops them; slices-spec promises preservation). Capabilities:
+keep as a table only if stably-id'd and referenced, else collapse to tags later
+(already open).
+
+## Verification (author, against the schema bundle)
+
+- **§4 artefact map:** `prod`→`product/PROD-xxx/`, `spec`→`specs/tech/SPEC-xxx/`,
+  `revision`→`revisions/RE-xxx.md` — three kinds, three prefixes, three trees,
+  independently numbered (PROD-011 and SPEC-110 coexist). **B1 confirmed real.**
+- **`verification.coverage.requirement`** pattern `^(SPEC|PROD|ISSUE)-…\.(FR|NF|
+  NFR)-…$` — mandatorily fully-qualified. Note's local `FR-002` violated it.
+  **B2 confirmed**; `primary[]` example is FQ too, but the derive rule survives
+  (own rows, qualified) — no conflict with round-1's "derive, don't store."
+- **`spec.requirements`** item `required:[id,title,lifecycle,kind,description,
+  acceptance_criteria]`. **B3 half-real:** the fields are required, but
+  Heresiarch deliberately defines its *own* shape (it abandons the embedded
+  block), so "breaks the schema" over-claims. The substance — acceptance is a
+  testable list, not narrative — is right.
+- **`spec.relationships`** interaction `required:[type,spec]`; `notes`/
+  `description` optional; `type` is **free-text** (no enum). **B5 confirmed** —
+  and the note's own `InteractionType` closed-enum sketch contradicted its own
+  "free-text type" comment; both fixed to `String`.
+
+## Adjudication
+
+| Finding | Call | Reason | Landed in |
+|---|---|---|---|
+| B1 spec dir identity | **Accept (mod)** | Real per §4 — three independently-numbered kinds, not one space. Reframed: not a bare collision but kind-scoping → three engine descriptors (own dir/numbering/namespace `<kind>/id/<n>`). | spec-entity § Spec identity (new); § The decomposition; reservation-spec § Key table |
+| B2 ref format | **Accept** | `coverage.requirement` is schema-FQ; note's local form was wrong. Rule: bare id only as own row id, all FKs qualified. Derive-primary survives (rendered FQ) — no round-1 conflict. | spec-entity Three Rules r4; coverage example; Serde comments |
+| B3 schema break | **Accept fix, reject framing** | Keep `acceptance_criteria`/`success_criteria` as structured arrays (testable, queryable, per-row split already isolates merges); `description`/`summary`→prose. Reject "must replace schema / lossless translation": Heresiarch reshapes by design; fidelity is to data, not the block schema. | Diagnosis bullet 4; Mapping; requirements example; Serde `Requirement` |
+| B4 validate co-lands | **Accept (mod)** | Sharpening of the existing trigger, not new: the cross-spec tables *are* the trigger, so validate ships in the spec slice's minimum bundle, not after. Cheap + cache-independent. (No "v1 = spec-driver" claim made; round-1 M6 reject still holds.) | spec-entity § Known risks (integrity); relation-index § Two purposes |
+| B5 stringly + field | **Accept bug; defer layering** | `Interaction.description` required→optional, add `notes`, `type`→`String` (free-text per schema; fixes note-internal contradiction). Raw/model two-layer = build-time, noted not pinned in a deferred note. | spec-entity § Serde types |
+| B6 requirement moves | **Accept** | Not re-litigation (round-1 left it open, not rejected). Adopt Option A now — cheap policy, makes the compound key a permanent address, avoids early hidden UID and the expensive retrofit. | spec-entity § Known risks; § Open questions 3 (narrowed to refactor mechanics) |
+| NB locality CLI | **Accept** | `heresy spec/req show` reassembles the split at read time — the read-locality mitigation. `spec show` already in the B4 minimum bundle. | spec-entity § Follow-ups; read-locality risk |
+| NB toml_edit | **Accept** | Real: mutating verbs that serde-reserialize drop comments + unknown keys the notes promise to preserve; edit-preserving append required. | spec-entity orphans risk; drift-spec self-drift risk |
+| NB capabilities | **Reject (no-op)** | Already Open question 1; review concurs it's open. No change. | — |
+
+## New finding (surfaced by verification, not in the review)
+
+`PRD`/`REV` do **not** share `SPEC`'s fileset: §4 shows `prod` carries *no* fenced
+blocks (frontmatter + prose) and `revision` is a single `revision.change` file —
+so "the spec family shares one internal shape" holds for the row+prose
+*discipline* but not the fileset. The fileset-as-function engine (slice-003)
+already admits this; pinning each kind's fileset is recorded as spec-entity
+§ Open questions 4. No action now (deferred), but it strengthens B1's
+three-descriptor framing.
+
+## Open questions for the user
+
+1. **Spec-family directory layout.** B1's fix pins *kind-scoping*; the exact form
+   is left as `.doctrine/{prd,spec,rev}/<n>/` (sibling trees, matches the engine's
+   per-kind `dir`). spec-driver instead nests (`specs/tech/SPEC-xxx/`). Sibling
+   trees chosen for descriptor-simplicity; flag if a nested `.doctrine/spec/<kind>/`
+   is preferred.
+2. **PRD/REV filesets** (§ Open questions 4) — pinned when those kinds are
+   designed; no blocker now.

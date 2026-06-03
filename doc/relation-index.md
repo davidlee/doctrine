@@ -87,11 +87,14 @@ This note conflated *cache* with *registry*; they separate cleanly:
 
 - **The in-memory parsed graph** — built by lazy full-parse for graph queries,
   including **referential-integrity validation** (`heresy validate`: every FK
-  resolves to an existing entity). This needs **no cache** and can ship the day a
-  graph query is written. Its trigger is **not** scale — it is *the first
-  cross-spec foreign key authored* (the moment dangling refs become possible,
-  per spec-entity-spec § Diagnosis). FK validation is the registry's headline
-  value and it is **not** gated on the cache decision below.
+  resolves to an existing entity). This needs **no cache**. Its trigger is
+  **not** scale — it is *the first cross-spec foreign key authored* (the moment
+  dangling refs become possible, per spec-entity-spec § Diagnosis). Because the
+  spec entity is what *introduces* the cross-spec tables (`collaborators`,
+  `interactions`), that pass **co-lands in the spec entity's own slice** — it is
+  part of the minimum spec bundle, not a later deliverable (spec-entity-spec
+  § Known risks, integrity). FK validation is the registry's headline value and
+  it is **not** gated on the cache decision below.
 - **A persistent cache** (snapshot/sqlite) — purely a *speed* optimization for the
   full parse, deferred until it is felt.
 
