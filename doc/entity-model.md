@@ -12,7 +12,7 @@ the build roadmap (§ What this does not change) and starts nothing new.
 Spec-driver's schema is an accumulation of local fixes, not a target
 architecture: two validation layers (frontmatter + embedded fenced YAML blocks,
 each self-versioned), drift ledgers omitted from the registered surface, and
-per-kind status dialects that have drifted from their own enums. Heresiarch is
+per-kind status dialects that have drifted from their own enums. doctrine is
 greenfield, so it adopts the *shape* the per-entity notes already converge on:
 
 **Model a small set of durable authored entities; attach typed facets and tables

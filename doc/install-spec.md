@@ -2,7 +2,7 @@
 
 ## Overview
 
-`heresy install` embeds a set of text files into the binary at compile time and
+`doctrine install` embeds a set of text files into the binary at compile time and
 reproduces them into a target directory within a user's project.
 
 ## Source layout
@@ -48,10 +48,10 @@ All sections are optional. Omitted sections use defaults shown above.
 ## CLI
 
 ```
-heresy install              # print plan, prompt [y/N], execute
-heresy install --dry-run    # print plan, exit
-heresy install --yes        # print plan, execute (no prompt)
-heresy install --path <dir> # explicit project root (skip walk detection)
+doctrine install              # print plan, prompt [y/N], execute
+doctrine install --dry-run    # print plan, exit
+doctrine install --yes        # print plan, execute (no prompt)
+doctrine install --path <dir> # explicit project root (skip walk detection)
 ```
 
 ## Behaviour

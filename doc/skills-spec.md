@@ -2,18 +2,18 @@
 
 ## Overview
 
-Heresiarch ships a curated set of **agent skills** (Anthropic `SKILL.md`
+doctrine ships a curated set of **agent skills** (Anthropic `SKILL.md`
 format). They reach agents through two independent channels:
 
 1. **Published marketplace** — the repo is itself a Claude Code plugin
-   marketplace. Anyone can consume it with no Heresiarch binary:
-   `/plugin marketplace add heresiarch/heresiarch`, or
-   `npx skills add heresiarch/heresiarch`.
-2. **`heresy skills`** — for users who already have the binary. It carries the
+   marketplace. Anyone can consume it with no doctrine binary:
+   `/plugin marketplace add doctrine/doctrine`, or
+   `npx skills add doctrine/doctrine`.
+2. **`doctrine skills`** — for users who already have the binary. It carries the
    same skills embedded at compile time and installs them per agent. For
    **Claude** it installs **directly** (file copy, no Node). For **every other
    agent** it **delegates** to `npx skills` (vercel-labs/skills), which knows
-   ~71 agent layouts so Heresiarch does not have to.
+   ~71 agent layouts so doctrine does not have to.
 
 Both channels read one canonical source tree. No skill is duplicated.
 
@@ -22,13 +22,13 @@ Both channels read one canonical source tree. No skill is duplicated.
 - **`npx skills` (vercel-labs/skills) is the universal installer.** One CLI
   (`npx skills add <source>`) installs Anthropic `SKILL.md` skills into ~71
   agents, each with its own layout, and it already understands Claude plugin
-  marketplaces (`.claude-plugin/marketplace.json` / `plugin.json`). Heresiarch
+  marketplaces (`.claude-plugin/marketplace.json` / `plugin.json`). doctrine
   delegates to it rather than reimplementing per-agent install logic.
 - **Claude is installed directly instead of via `npx skills`** because the
-  binary already embeds the skills and owns a file-copy installer (`heresy
+  binary already embeds the skills and owns a file-copy installer (`doctrine
   install`). The direct path reuses that machinery, needs no Node on `PATH`,
   and keeps the default agent working offline. `npx skills` is the fallback
-  precisely for the agents Heresiarch does *not* special-case.
+  precisely for the agents doctrine does *not* special-case.
 - **Net rule:** target is Claude ⇒ direct file copy; any other agent ⇒ shell
   out to `npx skills`. See § Routing.
 
@@ -60,8 +60,8 @@ plugins/
 
 ```json
 {
-  "name": "heresiarch",
-  "owner": { "name": "heresiarch" },
+  "name": "doctrine",
+  "owner": { "name": "doctrine" },
   "plugins": [
     { "name": "review", "source": "./plugins/review", "description": "…" },
     { "name": "rust",   "source": "./plugins/rust",   "description": "…" }
@@ -71,7 +71,7 @@ plugins/
 
 ### `SKILL.md` frontmatter
 
-Heresiarch reads only `name` and `description` from each skill's frontmatter
+doctrine reads only `name` and `description` from each skill's frontmatter
 for listing, via `serde_yaml`. Everything else is opaque payload copied
 verbatim.
 
@@ -99,24 +99,24 @@ library functions that take data and return data — no `std::process`, no
 | delegate argv assembly → `Vec<String>`               | spawn `npx`, copy files        |
 
 The `npx` spawn and file copy sit behind a seam (a trait / fn pointer) so plans
-are asserted without Node or disk. Same split as `heresy install` today
+are asserted without Node or disk. Same split as `doctrine install` today
 (`build_plan` / `detect_project_root` pure; `run` / `execute_plan` imperative).
 Domain logic does not leak into the CLI, and IO does not leak into the planner.
 
 ## CLI
 
-`heresy skills` is a new subcommand group, parallel to `heresy install`.
+`doctrine skills` is a new subcommand group, parallel to `doctrine install`.
 
 ```
-heresy skills list [--agent <a>] [--installed]
-heresy skills install [--agent <a>]... [--skill <name>]... [--domain <d>]...
+doctrine skills list [--agent <a>] [--installed]
+doctrine skills install [--agent <a>]... [--skill <name>]... [--domain <d>]...
                       [--global] [--dry-run] [--yes]
 ```
 
 v1 scope is **list + install** only. Removal and update are out of scope
 (§ Out of scope).
 
-### `heresy skills list`
+### `doctrine skills list`
 
 Enumerates embedded skills grouped by domain — `name`, `description`, and
 install status for the detected (or `--agent`-named) agent. `--installed`
@@ -133,17 +133,17 @@ rust
 Status is authoritative for Claude (file presence under `.claude/skills/`).
 For delegated agents status is best-effort and may read `not tracked`.
 
-### `heresy skills install`
+### `doctrine skills install`
 
 ```
-heresy skills install                       # detect agent, plan, prompt [y/N], execute
-heresy skills install --dry-run             # plan only, exit
-heresy skills install --yes                 # plan, execute, no prompt
-heresy skills install --agent codex         # explicit target (delegated)
-heresy skills install --agent claude --agent cursor
-heresy skills install --skill code-review   # subset by skill name
-heresy skills install --domain review       # subset by domain
-heresy skills install --global              # user dir instead of project
+doctrine skills install                       # detect agent, plan, prompt [y/N], execute
+doctrine skills install --dry-run             # plan only, exit
+doctrine skills install --yes                 # plan, execute, no prompt
+doctrine skills install --agent codex         # explicit target (delegated)
+doctrine skills install --agent claude --agent cursor
+doctrine skills install --skill code-review   # subset by skill name
+doctrine skills install --domain review       # subset by domain
+doctrine skills install --global              # user dir instead of project
 ```
 
 - `--agent` is repeatable. Default: auto-detect (§ Agent detection).
@@ -158,10 +158,10 @@ When no `--agent` is given:
 
 1. If `.claude/` exists in the project root → target `claude`.
 2. Otherwise error, listing supported agents and asking for explicit
-   `--agent`. (Heresiarch does not guess non-Claude agents.)
+   `--agent`. (doctrine does not guess non-Claude agents.)
 
 Project root is resolved with the same walk-up logic and `root_markers` as
-`heresy install` (see install-spec § Project-root detection). Shared code.
+`doctrine install` (see install-spec § Project-root detection). Shared code.
 
 ### Routing
 
@@ -180,29 +180,29 @@ skills directory, flattened by skill name (Claude skills are flat):
 - project: `<root>/.claude/skills/<skill>/`
 - `--global`: `~/.claude/skills/<skill>/`
 
-Reuses the `heresy install` file-copy machinery. **Skip, never overwrite** an
+Reuses the `doctrine install` file-copy machinery. **Skip, never overwrite** an
 existing `<skill>/` directory (idempotent, like the installer). Node is not
 required on this path.
 
 Note: direct install copies **skills only**. A domain plugin's other
 components (commands, agents, hooks) are delivered only through the published
-marketplace channel, not by `heresy skills install`.
+marketplace channel, not by `doctrine skills install`.
 
 #### Delegate (other agents)
 
 Shell out once per agent:
 
 ```
-npx skills add heresiarch/heresiarch --agent <agent> [--global] \
+npx skills add doctrine/doctrine --agent <agent> [--global] \
     [--skill <name>]... --yes
 ```
 
-- Source is the **published repo shorthand** `heresiarch/heresiarch`.
+- Source is the **published repo shorthand** `doctrine/doctrine`.
 - `--skill` / `--domain` selections map to `skills`' `-s <skill>...`.
 - `--global` maps to `-g`; default is project-local.
-- `--yes` is always passed (Heresiarch already confirmed the plan).
+- `--yes` is always passed (doctrine already confirmed the plan).
 
-Prerequisite: `npx` (Node) on `PATH`. If absent, Heresiarch errors with
+Prerequisite: `npx` (Node) on `PATH`. If absent, doctrine errors with
 install guidance and does **not** fall back. The delegated command, verbatim,
 appears in the dry-run plan so the user can run it by hand.
 
@@ -232,10 +232,10 @@ planned actions:
 ## Out of scope (v1)
 
 - **Remove / update.** For Claude, delete `.claude/skills/<skill>/`. For other
-  agents, `npx skills remove|update`. Heresiarch does not wrap these yet.
+  agents, `npx skills remove|update`. doctrine does not wrap these yet.
 - **Authoring.** Use `npx skills init` to scaffold a new `SKILL.md`.
 - **Publishing.** `marketplace.json` / `plugin.json` are maintained in-repo by
-  hand (or a later `heresy` command); `heresy skills` only consumes them.
+  hand (or a later `doctrine` command); `doctrine skills` only consumes them.
 
 ## Known risks
 

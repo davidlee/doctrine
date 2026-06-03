@@ -1,6 +1,6 @@
-# Heresiarch
+# Doctrine
 
-Heresiarch is an opinionated but hackable set of tools and conventions for
+Doctrine is an opinionated but hackable set of tools and conventions for
 software engineering with LLM agents.
 
 ## Design Goals:

@@ -2,7 +2,7 @@
 
 ## Context
 
-slice-001 shipped `heresy slice new/list` and the directory-entity pattern
+slice-001 shipped `doctrine slice new/list` and the directory-entity pattern
 (numeric dir, sister TOML, scaffolded prose, slug symlink, local `mkdir`
 reservation). slice-002 proposed extracting that machinery into a reusable
 engine — but a standalone refactor with a single caller freezes the abstraction
@@ -23,7 +23,7 @@ shaped by real use, not anticipation. It **supersedes slice-002**.
 
 ## Scope & Objectives
 
-- **Design-doc sibling.** `heresy slice design <id>` (verb name TBD) scaffolds a
+- **Design-doc sibling.** `doctrine slice design <id>` (verb name TBD) scaffolds a
   `DES-<n>.md` (or single `design.md`) prose artefact inside `.doctrine/slice/<id>/`
   from an embedded template — pure prose, no TOML, no blocks. `slice list` /
   resolution unaffected.

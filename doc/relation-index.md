@@ -9,7 +9,7 @@ Doc-relation queries — context chains (`slice → spec → requirement`), cove
 validation — need a registry of parsed relationships across all entities.
 spec-driver builds this by parsing YAML frontmatter across every file on each
 invocation, which gets slow in large projects. The question was whether
-Heresiarch needs a cache (sqlite, or a binary snapshot) to stay fast.
+doctrine needs a cache (sqlite, or a binary snapshot) to stay fast.
 
 ## Decision
 
@@ -86,7 +86,7 @@ accordingly.
 This note conflated *cache* with *registry*; they separate cleanly:
 
 - **The in-memory parsed graph** — built by lazy full-parse for graph queries,
-  including **referential-integrity validation** (`heresy validate`: every FK
+  including **referential-integrity validation** (`doctrine validate`: every FK
   resolves to an existing entity). This needs **no cache**. Its trigger is
   **not** scale — it is *the first cross-spec foreign key authored* (the moment
   dangling refs become possible, per spec-entity-spec § Diagnosis). Because the

@@ -138,13 +138,13 @@ when validation becomes mandatory.
    schema-patterned fully-qualified. Pick a rule: rows use local ids only for
    owned rows; every cross-table FK stored fully-qualified, even within the
    owning spec; CLI may render local shorthand.
-3. **Row/prose split breaks inherited schema unless Heresiarch defines a new
+3. **Row/prose split breaks inherited schema unless doctrine defines a new
    one.** `spec.requirements@v1` requires `description` and `acceptance_criteria`;
-   the mapping lifts both to prose — not lossless unless Heresiarch explicitly
+   the mapping lifts both to prose — not lossless unless doctrine explicitly
    replaces the schema. Fix: keep query-relevant fields (incl. acceptance) in
    TOML, let prose expand them; don't lose acceptance-criteria queryability.
 4. **FK validation can't stay "later" once cross-spec refs exist.**
-   `collaborators.toml`/`interactions.toml` are cross-spec, so `heresy validate`
+   `collaborators.toml`/`interactions.toml` are cross-spec, so `doctrine validate`
    is part of minimum viable spec v1 (`spec new` · `req add` · `show` ·
    `validate`). Without it the decomposition pays the file-count/read-locality
    cost while keeping the dangling-FK failure.
@@ -157,7 +157,7 @@ when validation becomes mandatory.
    (never move; move = retire+reintroduce+supersedes) or Option B (immutable UID
    + display key). Recommends A for auditability.
 
-**Non-blocking.** Add a locality recovery command (`heresy spec req show
+**Non-blocking.** Add a locality recovery command (`doctrine spec req show
 SPEC-110.FR-001`) rendering row+prose+coverage+caps+refs together. Use
 `toml_edit` for mutations if comments/formatting/unknown-keys matter (plain
 serde reserialize drops them; slices-spec promises preservation). Capabilities:
@@ -175,7 +175,7 @@ keep as a table only if stably-id'd and referenced, else collapse to tags later
   (own rows, qualified) — no conflict with round-1's "derive, don't store."
 - **`spec.requirements`** item `required:[id,title,lifecycle,kind,description,
   acceptance_criteria]`. **B3 half-real:** the fields are required, but
-  Heresiarch deliberately defines its *own* shape (it abandons the embedded
+  doctrine deliberately defines its *own* shape (it abandons the embedded
   block), so "breaks the schema" over-claims. The substance — acceptance is a
   testable list, not narrative — is right.
 - **`spec.relationships`** interaction `required:[type,spec]`; `notes`/
@@ -189,11 +189,11 @@ keep as a table only if stably-id'd and referenced, else collapse to tags later
 |---|---|---|---|
 | B1 spec dir identity | **Accept (mod)** | Real per §4 — three independently-numbered kinds, not one space. Reframed: not a bare collision but kind-scoping → three engine descriptors (own dir/numbering/namespace `<kind>/id/<n>`). | spec-entity § Spec identity (new); § The decomposition; reservation-spec § Key table |
 | B2 ref format | **Accept** | `coverage.requirement` is schema-FQ; note's local form was wrong. Rule: bare id only as own row id, all FKs qualified. Derive-primary survives (rendered FQ) — no round-1 conflict. | spec-entity Three Rules r4; coverage example; Serde comments |
-| B3 schema break | **Accept fix, reject framing** | Keep `acceptance_criteria`/`success_criteria` as structured arrays (testable, queryable, per-row split already isolates merges); `description`/`summary`→prose. Reject "must replace schema / lossless translation": Heresiarch reshapes by design; fidelity is to data, not the block schema. | Diagnosis bullet 4; Mapping; requirements example; Serde `Requirement` |
+| B3 schema break | **Accept fix, reject framing** | Keep `acceptance_criteria`/`success_criteria` as structured arrays (testable, queryable, per-row split already isolates merges); `description`/`summary`→prose. Reject "must replace schema / lossless translation": doctrine reshapes by design; fidelity is to data, not the block schema. | Diagnosis bullet 4; Mapping; requirements example; Serde `Requirement` |
 | B4 validate co-lands | **Accept (mod)** | Sharpening of the existing trigger, not new: the cross-spec tables *are* the trigger, so validate ships in the spec slice's minimum bundle, not after. Cheap + cache-independent. (No "v1 = spec-driver" claim made; round-1 M6 reject still holds.) | spec-entity § Known risks (integrity); relation-index § Two purposes |
 | B5 stringly + field | **Accept bug; defer layering** | `Interaction.description` required→optional, add `notes`, `type`→`String` (free-text per schema; fixes note-internal contradiction). Raw/model two-layer = build-time, noted not pinned in a deferred note. | spec-entity § Serde types |
 | B6 requirement moves | **Accept** | Not re-litigation (round-1 left it open, not rejected). Adopt Option A now — cheap policy, makes the compound key a permanent address, avoids early hidden UID and the expensive retrofit. | spec-entity § Known risks; § Open questions 3 (narrowed to refactor mechanics) |
-| NB locality CLI | **Accept** | `heresy spec/req show` reassembles the split at read time — the read-locality mitigation. `spec show` already in the B4 minimum bundle. | spec-entity § Follow-ups; read-locality risk |
+| NB locality CLI | **Accept** | `doctrine spec/req show` reassembles the split at read time — the read-locality mitigation. `spec show` already in the B4 minimum bundle. | spec-entity § Follow-ups; read-locality risk |
 | NB toml_edit | **Accept** | Real: mutating verbs that serde-reserialize drop comments + unknown keys the notes promise to preserve; edit-preserving append required. | spec-entity orphans risk; drift-spec self-drift risk |
 | NB capabilities | **Reject (no-op)** | Already Open question 1; review concurs it's open. No change. | — |
 
@@ -253,7 +253,7 @@ canonical `extra` + progressive-strictness design. drift-spec mutating verbs kee
 the edit-preserving (`toml_edit`) requirement; `extra` is now what they must
 preserve (not the retired `observed`).
 
-Heresiarch's deliberate divergences are **kept** (not schema errors): the
+doctrine's deliberate divergences are **kept** (not schema errors): the
 directory-entity layout (`.doctrine/drift/<n>/` + sister toml/md vs the
 canonical single `DL-NNN-<slug>.md`), the slug+title naming, and lifting
 `analysis` out to prose (the canonical also keeps long narrative as freeform

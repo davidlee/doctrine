@@ -4,7 +4,7 @@
     reason = "rust-embed derive generates conflicting method names"
 )]
 
-//! `heresy skills` — list and install agent skills.
+//! `doctrine skills` — list and install agent skills.
 //!
 //! Skills are embedded from `plugins/<domain>/skills/<skill>/`. Claude is
 //! installed **directly** (file copy); every other agent is **delegated** to
@@ -26,7 +26,7 @@ use serde::Deserialize;
 struct PluginAssets;
 
 /// Source from which the delegated `npx skills` pulls non-Claude installs.
-const DELEGATE_SOURCE: &str = "heresiarch/heresiarch";
+const DELEGATE_SOURCE: &str = "doctrine/doctrine";
 
 // ---------------------------------------------------------------------------
 // Model
@@ -405,7 +405,7 @@ fn print_plan(plan: &Plan, out: &mut dyn Write) -> io::Result<()> {
 // CLI entry points (thin)
 // ---------------------------------------------------------------------------
 
-/// `heresy skills list`.
+/// `doctrine skills list`.
 pub(crate) fn run_list(agent: Option<&str>, installed_only: bool) -> anyhow::Result<()> {
     let catalog = discover()?;
     let root = crate::root::find(None, &crate::root::default_markers())?;
@@ -439,7 +439,7 @@ pub(crate) fn run_list(agent: Option<&str>, installed_only: bool) -> anyhow::Res
     Ok(())
 }
 
-/// `heresy skills install`.
+/// `doctrine skills install`.
 pub(crate) fn run_install(
     path: Option<PathBuf>,
     agents: &[String],
@@ -560,7 +560,7 @@ mod tests {
             vec![
                 "skills",
                 "add",
-                "heresiarch/heresiarch",
+                "doctrine/doctrine",
                 "--agent",
                 "codex",
                 "--yes"
@@ -577,7 +577,7 @@ mod tests {
             vec![
                 "skills",
                 "add",
-                "heresiarch/heresiarch",
+                "doctrine/doctrine",
                 "--agent",
                 "cursor",
                 "--global",

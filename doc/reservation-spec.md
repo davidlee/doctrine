@@ -2,7 +2,7 @@
 
 ## Overview
 
-Heresiarch courts parallel agents and multiple teams. The immediate hazard is
+doctrine courts parallel agents and multiple teams. The immediate hazard is
 **numbering collisions** — two agents in separate clones both mint `slice-003`
 and collide at merge (slices-spec § Known risks). A later hazard is **concurrent
 edits** of the same entity.
@@ -17,13 +17,13 @@ extension of the same primitive.
 The primitive is **generic** (any entity kind, any key), **coordination-only**
 (it never stores entity content — entities stay in the working tree and in PRs),
 and **backend-pluggable** (a shared git ref by default; a local directory with no
-remote; a hosted store such as Postgres later). It is the Heresiarch form of
+remote; a hosted store such as Postgres later). It is the doctrine form of
 lazyspec's RFC-030 (reservation) and RFC-035 (leases), collapsed into one
 primitive.
 
 ## The unification
 
-A lease is an *atomic exclusive claim on a name*. Heresiarch already has one:
+A lease is an *atomic exclusive claim on a name*. doctrine already has one:
 slices-spec allocates ids by `mkdir`-ing the numeric directory — the directory
 **is** the claim, and `EEXIST` **is** the compare-and-swap failure.
 
@@ -78,8 +78,8 @@ Crucially this is **engine-internal**: callers invoke `materialise`, never
 ## v1 scope
 
 **Ships:** id reservation (permanent claims) over two backends (`local`,
-`git-ref`), the `acquire` / `read` / `list` operations, and the `heresy reserve`
-/ `heresy lease list` CLI. Enough to make `heresy slice new` collision-free
+`git-ref`), the `acquire` / `read` / `list` operations, and the `doctrine reserve`
+/ `doctrine lease list` CLI. Enough to make `doctrine slice new` collision-free
 across teams.
 
 **Deferred** (§ Deferred: transient leasing): TTL, heartbeat, release,
@@ -126,7 +126,7 @@ Slices are the first caller; the primitive is not slice-specific.
 
 Recorded for attribution. Resolved by priority chain:
 
-1. `$HERESY_AGENT_ID` — explicit, for orchestrators.
+1. `$doctrine_AGENT_ID` — explicit, for orchestrators.
 2. `$CLAUDE_SESSION_ID` — auto-detected under Claude Code.
 3. `git config user.name` — fallback.
 
@@ -161,7 +161,7 @@ slices-spec's existing `mkdir` allocation, generalised — no new mechanism.
 
 ### Git-ref backend (`git-ref`)
 
-Claims are git custom refs under `refs/heresy/lease/<key>`, each pointing at a
+Claims are git custom refs under `refs/doctrine/lease/<key>`, each pointing at a
 commit whose tree holds the lease record. Lifted from lazyspec RFC-035, minus the
 expiry machinery (not needed for permanent claims):
 
@@ -209,14 +209,14 @@ a later optimization (§ Open questions), not a v1 concern.
 `max + 1`, and CAS-acquires a permanent ref, retrying on rejection. The returned
 number is globally unique across every clone of the remote.
 
-`heresy slice new` calls this instead of the bare local scan; the on-disk slice
+`doctrine slice new` calls this instead of the bare local scan; the on-disk slice
 shape (slices-spec) is unchanged.
 
 ## CLI
 
 ```
-heresy reserve <namespace>          # allocate + claim next id, print it
-heresy lease list [<prefix>]        # held claims: key, holder, acquired
+doctrine reserve <namespace>          # allocate + claim next id, print it
+doctrine lease list [<prefix>]        # held claims: key, holder, acquired
 ```
 
 Both accept `--agent-id <id>` (else the identity chain) and `--json`. The
@@ -225,7 +225,7 @@ transient verbs (`acquire --ttl`, `heartbeat`, `release`, `steal`) arrive with
 
 ## Architecture
 
-Same pure/imperative split as the rest of Heresiarch:
+Same pure/imperative split as the rest of doctrine:
 
 | Pure (library, unit-tested) | Imperative (thin shell) |
 |---|---|
@@ -244,7 +244,7 @@ remote.
 
 This spec governs *claims*, never *content*. Leases reference entities by key and
 never hold their bytes. Slices, specs, and every other entity remain ordinary
-working-tree files, visible in `git log` and PRs. Heresiarch deliberately does
+working-tree files, visible in `git log` and PRs. doctrine deliberately does
 **not** adopt lazyspec's git-ref *storage* (hiding documents in refs); that would
 suit a future ephemeral task/iteration entity, not the design artifacts this repo
 produces. Out of scope.
@@ -261,7 +261,7 @@ methods:
   `grace` window plus a `max_clock_skew` bound absorb honest NTP drift; under
   `git-ref` the committer timestamp is a tamper-evident cross-check. Split-brain
   is reachable only if `|Δ_clocks| > ttl + grace`.
-- **Write-gating** (refusing `heresy` mutations without a held claim) is wired
+- **Write-gating** (refusing `doctrine` mutations without a held claim) is wired
   **per kind**, not globally, and only when that kind's lifecycle defines
   mutations (slices-spec § Lifecycle currently has none).
 
@@ -294,7 +294,7 @@ retrofitted. Not v1.
   reachable here.
 - **Direct edits bypass claims.** Reservation only guards id *allocation*; it
   does not stop a human editing a working-tree file. That is the transient
-  layer's concern, and even then gates only writes through `heresy`.
+  layer's concern, and even then gates only writes through `doctrine`.
 
 ## Open questions
 
@@ -315,5 +315,5 @@ Unit tests (pure layer, mock backend):
 - Holder resolution — env chain precedence.
 
 The `git-ref` backend's real ref I/O sits behind the `LeaseBackend` seam (the
-same pattern as `heresy install` / `heresy skills`), asserted via a mock that
+same pattern as `doctrine install` / `doctrine skills`), asserted via a mock that
 records the push / fetch / CAS calls — no git and no remote in the test.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! `heresy slice` — create, list, and add design-doc siblings to slices,
-//! Heresiarch's unit of change.
+//! `doctrine slice` — create, list, and add design-doc siblings to slices,
+//! doctrine's unit of change.
 //!
 //! A slice is a numeric directory under `.doctrine/slice/` holding a sister
 //! TOML (structured metadata) and a scaffolded markdown prose body, with a
@@ -191,7 +191,7 @@ fn resolve_title(title: Option<String>) -> anyhow::Result<String> {
     Ok(entered)
 }
 
-/// `heresy slice new`.
+/// `doctrine slice new`.
 pub(crate) fn run_new(
     path: Option<PathBuf>,
     title: Option<String>,
@@ -230,7 +230,7 @@ pub(crate) fn run_new(
     Ok(())
 }
 
-/// `heresy slice design <id>` — scaffold `design.md` into an existing slice.
+/// `doctrine slice design <id>` — scaffold `design.md` into an existing slice.
 pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let slice_root = root.join(SLICE_DIR);
@@ -258,7 +258,7 @@ pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `heresy slice list`.
+/// `doctrine slice list`.
 pub(crate) fn run_list(path: Option<PathBuf>, status: Option<&str>) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let slice_root = root.join(SLICE_DIR);

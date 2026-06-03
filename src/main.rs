@@ -9,9 +9,9 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-/// Heresiarch — project tooling.
+/// doctrine — project tooling.
 #[derive(Parser)]
-#[command(name = "heresy", about = "Heresiarch CLI")]
+#[command(name = "doctrine", about = "doctrine CLI")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
