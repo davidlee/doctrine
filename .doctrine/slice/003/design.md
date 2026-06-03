@@ -75,7 +75,10 @@ Three pieces over one engine: the **`acquire` seam** (the one impure-critical
 claim, behind a trait), the **`Kind` descriptor** (data — fileset-as-function +
 optional reservation — what differs between kinds), and the **`materialise`
 loop** that drives them. A slice and a design doc are two `Kind` values; the
-engine is kind-blind. drift and spec later drop in as further `Kind`s, not forks.
+engine is kind-blind. drift and spec later drop in as further `Kind`s for their
+**initial scaffold** — spec's row/prose split, FK validation, derived
+relationships, and registry integration remain separate callers/features, not
+part of this engine (M3). "Engine supports spec" ≠ "spec is mostly done."
 
 ### 5.2 Interfaces & Contracts
 
@@ -111,16 +114,24 @@ A `Kind` is *data*, not a trait — one dispatch site, no per-kind state:
 
 ```rust
 pub struct Kind {
-    /// Entity tree relative to the project root, e.g. ".doctrine/slice".
+    /// Entity-tree root, relative to the project root, e.g. ".doctrine/slice".
     pub dir: &'static str,
     /// Canonical-id prefix, e.g. "SL" → "SL-003" (the `{{ref}}` token).
     pub prefix: &'static str,
-    /// Top-level kinds reserve a fresh id; sub-artefacts reuse a parent's id.
-    pub reserve: bool,
+    /// How the entity is placed — a closed enum, not a `bool`, so a third mode
+    /// is a compiler-forced new variant, never an overloaded `false` (M1).
+    pub mode: MaterialiseMode,
     /// Fileset as a function — NOT a fixed toml+md pair. A slice yields toml +
     /// md + symlink; a design doc yields one prose file; a spec yields its
-    /// subtype's set. This is the slice-002 fix (M3).
+    /// subtype's set. This is the slice-002 fix (M3-prior).
     pub scaffold: fn(&ScaffoldCtx) -> anyhow::Result<Fileset>,
+}
+
+pub enum MaterialiseMode {
+    /// Allocate a fresh reserved id under `dir` (slice, later spec).
+    AllocateFreshEntity,
+    /// Create file(s) in an existing parent entity (design doc, later phases).
+    CreateInExistingEntity,
 }
 
 pub struct ScaffoldCtx<'a> {
@@ -132,17 +143,23 @@ pub struct ScaffoldCtx<'a> {
     pub date: &'a str,
 }
 
+// Artifact paths are RELATIVE to the entity-tree root (`Kind.dir`). The engine
+// is the sole joiner: it rejects absolute paths and any `..` that escapes the
+// tree before any write (H1). The slug symlink sits at the tree root *beside*
+// the numeric dir (`003-slug`), which is why the base is the tree root, not the
+// entity dir — a descriptor still cannot reach outside `Kind.dir`.
 pub enum Artifact {
-    File { path: PathBuf, body: String },
-    Symlink { path: PathBuf, target: String },
+    File { rel_path: PathBuf, body: String },
+    Symlink { rel_path: PathBuf, target: String },
 }
 pub type Fileset = Vec<Artifact>;
 ```
 
 `Fileset` generalises today's `Scaffold` struct: the slice's hardcoded
-toml/md/symlink fields become three `Artifact`s; a design doc returns one `File`.
-The engine writes `Artifact`s uniformly (the symlink keeps today's
-`AlreadyExists`-tolerant create).
+toml/md/symlink fields become three `Artifact`s (the `003/slice-003.toml`,
+`003/slice-003.md`, and the `003-slug` symlink, all tree-root-relative); a design
+doc returns one `File`. The engine writes `Artifact`s uniformly (the symlink
+keeps today's `AlreadyExists`-tolerant create).
 
 The CLI contract gains one verb: `heresy slice design <id>` (D6), scaffolding
 `design.md` into the resolved slice dir.
@@ -151,7 +168,7 @@ The CLI contract gains one verb: `heresy slice design <id>` (D6), scaffolding
 
 | Path | Current | Target |
 |---|---|---|
-| `src/slice.rs` | all machinery + slice CLI inline; `Scaffold` struct; `reserve_create` inlines mkdir | the **slice `Kind`** (dir, reserve=true, scaffold fn building toml+md+symlink artifacts), the slice `Meta`/list, and thin CLI wiring; calls the engine |
+| `src/slice.rs` | all machinery + slice CLI inline; `Scaffold` struct; `reserve_create` inlines mkdir | the **slice `Kind`** (dir, mode=`AllocateFreshEntity`, scaffold fn building toml+md+symlink artifacts), the slice `Meta`/list, and thin CLI wiring; calls the engine |
 | `src/entity.rs` (new) | — | the engine: `candidate_id`, `scan_ids`, `materialise` loop, `write` (artifacts), `Kind`/`ScaffoldCtx`/`Artifact`/`Fileset`, `Reservation`/`Acquired`/`LocalFs`, `derive_slug` |
 | `install/templates/` | `slice.toml`, `slice.md` | + `design.md` template (prose, `{{ref}}` + `{{title}}`) |
 | slice CLI | `new`, `list` | + `design <id>` |
@@ -178,26 +195,41 @@ The engine loop is `reserve_create` generalised: the claim is now
 `reservation.acquire`, the output is now `kind.scaffold`, and the non-reserved
 branch is new (the design-doc path that proves the engine spans both shapes).
 
+This engine **materialises filesets**. It does not append rows, mutate TOML
+tables, or allocate row-local ids — those (e.g. a spec's `FR-001` requirement
+rows) are a different caller with its own load-time duplicate detection (L1).
+
 ```text
 materialise(kind, reservation, ctx_inputs):
-  create_dir_all(kind.dir)                     # parent tree; non-recursive mkdir
-                                               # below needs it (today's reserve_create)
-  if kind.reserve:
-    loop (bounded):
-      id   = candidate_id(scan(kind.dir))
-      dir  = kind.dir / format!("{id:03}")
-      ref  = format!("{}-{id:03}", kind.prefix)  # canonical id, e.g. "SL-003"
-      match reservation.acquire(dir):        # local: mkdir == dir creation
-        Won        => write(kind.scaffold(ctx(dir, id, ref, ...)?)); return dir
-        AlreadyHeld => continue                # lost race; recompute
-  else:                                        # sub-artefact: no claim
-    dir = resolve_existing(kind.dir, id)       # the parent dir; err if absent
-    ref = caller-supplied parent ref           # sub-artefact has no own id/ref
-    refuse if a target file already exists     # no silent clobber (file-creating
-                                               # sub-artefacts only; row-append is
-                                               # a separate mutate verb, not here)
-    write(kind.scaffold(ctx(dir, id, ref, ...))?)
+  create_dir_all(kind.dir)                     # entity-tree root; the non-recursive
+                                               # claim mkdir below needs it to exist
+  match kind.mode:
+    AllocateFreshEntity:                       # reserved top-level (slice, spec)
+      loop (bounded):
+        id   = candidate_id(scan(kind.dir))
+        dir  = kind.dir / format!("{id:03}")
+        ref  = format!("{}-{id:03}", kind.prefix)   # canonical id, e.g. "SL-003"
+        match reservation.acquire(dir):        # local: mkdir == dir creation
+          Won =>
+            # Won ⟹ we just created `dir` ⟹ it is ours; on any write failure
+            # remove it so a partial scaffold never leaves a ghost entity (H2).
+            write_all(kind.scaffold(ctx(dir, id, ref, ...))?)
+              or on error: remove_dir_all(dir); propagate the original error
+            return dir
+          AlreadyHeld => continue              # lost race; recompute
+    CreateInExistingEntity:                    # sub-artefact: no claim, no id alloc
+      dir = resolve_existing(kind.dir, id)     # the parent dir; err if absent
+      ref = caller-supplied parent ref         # sub-artefact has no own id/ref
+      refuse if a target file already exists   # no silent clobber, file-creating
+                                               # sub-artefacts only (D7)
+      write_all(kind.scaffold(ctx(dir, id, ref, ...))?)
 ```
+
+For the future `git-ref` backend this H2 cleanup does *not* apply: there the
+claim is a ref, the entity dir is created separately, and an abandoned claim is a
+harmless reserved gap (reservation-spec) — a missing entity is normal. The
+local "dir-is-claim" compromise (D1) collapses that separation, so for *local*
+v1 a failed write must clean up or it becomes a malformed entity, not a gap.
 
 **Build sequence (each step green against the slice-001 suite):**
 
@@ -219,11 +251,25 @@ materialise(kind, reservation, ctx_inputs):
   (`MAX_CLAIM_RETRIES`), exhaustion is a loud error.
 - **Symlink tolerance.** The slug symlink keeps today's `AlreadyExists`-tolerant
   create.
+- **Path containment (H1).** Artifact paths are relative to the entity-tree root
+  (`Kind.dir`); the engine rejects absolute paths and any `..` that escapes the
+  tree *before* writing, and is the only code that joins a descriptor path to the
+  filesystem. A bad descriptor cannot write outside its tree.
+- **Scaffold purity (M4).** `Kind.scaffold` is pure over `ScaffoldCtx` plus
+  compile-time-embedded template text (`crate::install::asset_text` is rust-embed,
+  not disk IO). It must not read disk, the clock, git, or resolve the project
+  root; all such IO sits in the shell before/after scaffold (the clock via
+  `today()` → `ctx.date`). Its only fallibility is template presence/format.
+- **No ghost entities (H2).** In `AllocateFreshEntity`, a `Won` claim means the
+  dir is ours, so a write failure removes it and propagates the error — no
+  half-written entity survives to break `slice list` (which `scan_ids` would count
+  but `read_metas` then fail to parse).
 - **Write policy lives in the writer/branch, not in `Artifact` data.** The
   reserved branch writes freely (the dir was just won, fresh — nothing to
-  clobber); the non-reserved branch refuses a pre-existing target (D7). Noted
-  coupling: no-clobber currently rides on `reserve`, not a per-write flag — fine
-  while reserve ⟺ fresh-dir, revisit if a kind ever wants the other pairing.
+  clobber); the existing-parent branch refuses a pre-existing target (D7). Noted
+  coupling: no-clobber currently rides on `mode`, not a per-write flag — fine
+  while `AllocateFreshEntity` ⟺ fresh-dir, revisit if a kind ever wants the other
+  pairing.
 - **Parent creation.** `materialise` ensures `kind.dir` exists (the first-ever
   entity case) before the non-recursive claim `mkdir`. The File-writer does
   `create_dir_all(path.parent())` so a future nested fileset needs no engine
@@ -246,6 +292,16 @@ materialise(kind, reservation, ctx_inputs):
   spec-family decomposition (entity-model.md: one model, three subtypes, own
   folders) recurring for backlog. Recorded so per-kind `prefix` is not mistaken
   for a per-family one.
+- **Q5 — Design-doc presence is workflow-significant but not yet observable
+  (M5).** The slices-spec rule makes a design doc default/mandatory (except
+  trivial + explicit approval), but no command sees whether a slice has one —
+  a slice can be `ready` with no `design.md` and nothing surfaces it. **No gate
+  this slice** (`slice list`/resolution stay unaffected). Deferred to a future
+  `heresy slice validate`: a non-trivial slice has a `design.md` or an explicit
+  trivial/no-design marker (a TOML field — *queryable lives in TOML, not prose*,
+  entity-model.md); `design.md` is never parsed for headings (templates are
+  defaults, not contracts); the design-doc facet, when it lands, carries the
+  queryable metadata. Recorded so the invariant is not lost between slices.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -264,16 +320,27 @@ materialise(kind, reservation, ctx_inputs):
   invoke `materialise`, never `acquire`, so the later `&Path`→key generalisation +
   dir-creation split is *engine-internal* (the loop + the impls), and the Kinds
   are untouched — the F1 hazard (slice-002) is avoided. The spec is reconciled.
+  *Reservation namespace (M2 — deferred, not now):* `git-ref` will key claims by a
+  namespaced string (`slice/id/<n>`, reservation-spec § Key table), which is *not*
+  cleanly derivable from `dir` (`.doctrine/slice` → `slice/id` needs the facet).
+  That namespace lands as a `Kind` field **when `git-ref` lands**, not now: an
+  unused field today buys nothing the spec's Key table doesn't already record, and
+  a set-but-never-read field would trip the deny-level dead-code gate. Recorded so
+  it is added deliberately, not "discovered" missing.
 - **D2 — `Kind` is a data struct with a `fn` pointer, not a trait.** One dispatch
   site, no per-kind state; a struct is the least machinery. A trait buys nothing
   until a kind needs behaviour the function signature can't carry.
 - **D3 — Fileset is `Vec<Artifact>` (File | Symlink), kind-supplied.** Directly
   answers slice-002 M3 (the fixed toml+md pair was the frozen-too-high boundary).
   A spec subtype later returns its own set; the engine never hardcodes a count.
-- **D4 — Reservation is optional per kind (`reserve: bool`).** Top-level kinds
-  (slice, later spec) claim an id; sub-artefacts (design doc, later requirement
-  rows) live under a parent and don't. The non-reserved branch is the second shape
-  that makes the generalisation real rather than nominal.
+- **D4 — Placement is a closed `MaterialiseMode` enum, not a `reserve: bool`.**
+  `AllocateFreshEntity` (slice, later spec) claims a fresh id; `CreateInExistingEntity`
+  (design doc, later phases) lives under a parent and doesn't. The second mode is
+  what makes the generalisation real rather than nominal. *An enum over a bool
+  (M1):* `reserve: false` would otherwise silently accrete meanings — "existing
+  parent", "no id", "clobber-allowed", "nested child" — and a third placement
+  would have nowhere loud to land. The closed enum forces each new mode to be an
+  explicit variant the compiler checks.
 - **D5 — In *this* slice the design doc is a single `design.md`, prose-only, no
   reservation, no sister TOML.** The slice dir already namespaces it; one design
   doc per slice in v1. Revisions are git history, not `DR-001`/`DR-002` files.
@@ -319,6 +386,11 @@ materialise(kind, reservation, ctx_inputs):
 - **Engine unit tests (kind-blind), driven by a test `Kind`:** candidate-id incl.
   the `AlreadyHeld`→retry path through the seam; scan; slug; fileset write (files
   + symlink); the bounded-retry exhaustion error.
+- **Path containment (H1):** a descriptor returning an absolute path or one with a
+  `..` escaping the tree is rejected before any write.
+- **Ghost cleanup (H2):** `reserved materialise write failure cleans up the won
+  directory` — inject a failing writer; assert the won dir is gone and the error
+  propagates.
 - **`acquire` seam:** `LocalFs::acquire` returns `Won` then `AlreadyHeld` on a
   re-claim of the same path.
 - **Design-doc `Kind`:** produces `design.md` under an *existing* slice dir, with

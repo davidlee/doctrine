@@ -145,6 +145,13 @@ whatever the `Summary` and `Follow-Ups` need; it does not grow the HOW sections
 back. The `Summary` is the one intentional overlap-by-altitude: a stable précis
 that gestures at the how without tracking the design doc's findings.
 
+This rule is, for now, a **convention no command enforces** — a slice can be
+`ready` with no `design.md` and nothing surfaces it. Enforcement is deferred to a
+future `heresy slice validate`: a non-trivial slice must have a `design.md` or an
+explicit trivial/no-design marker (a `slice-<id>.toml` field — anything queryable
+lives in TOML, not prose, entity-model.md); validation never parses the prose for
+headings (templates are defaults, not contracts). No gate ships with slice-003.
+
 ## CLI
 
 `heresy slice` is a new subcommand group, parallel to `heresy install` and
