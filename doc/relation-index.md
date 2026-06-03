@@ -47,6 +47,14 @@ not parsing (~5–30µs/file into a struct). Serial ≈ 100–150ms; **parallel 
 20–50ms warm**. Acceptable for the graph commands; the id/list commands are
 faster still. Comparable to what git eats on large repos.
 
+**Count in files, not entities.** The spec decomposition (spec-entity-spec) is
+the precondition this note protects, and it explodes the ratio: one spec becomes
+~8 sister files (identity + requirements/capabilities/coverage/… tables). So
+"a few thousand specs" is ~20–30k files — past the ~10k revisit line below. The
+parallel-parse numbers still hold (the files stay tiny and independent), but the
+budget must be tracked in **files**, not docs, and the revisit trigger restated
+accordingly.
+
 ## Staged path (only if scale demands it)
 
 1. **Now (≤ ~few thousand docs):** plain toml + lazy load + parallel typed parse.
@@ -73,7 +81,23 @@ faster still. Comparable to what git eats on large repos.
   state and carries no leases; coordination is the reservation layer's job
   (reservation-spec), kept cleanly separate.
 
-## Trigger to revisit
+## Two purposes, two triggers
 
-Graph-query commands feeling slow at real scale (order ~10k docs). Until then,
-the only "work" is *not* eagerly loading the registry.
+This note conflated *cache* with *registry*; they separate cleanly:
+
+- **The in-memory parsed graph** — built by lazy full-parse for graph queries,
+  including **referential-integrity validation** (`heresy validate`: every FK
+  resolves to an existing entity). This needs **no cache** and can ship the day a
+  graph query is written. Its trigger is **not** scale — it is *the first
+  cross-spec foreign key authored* (the moment dangling refs become possible,
+  per spec-entity-spec § Diagnosis). FK validation is the registry's headline
+  value and it is **not** gated on the cache decision below.
+- **A persistent cache** (snapshot/sqlite) — purely a *speed* optimization for the
+  full parse, deferred until it is felt.
+
+## Trigger to revisit (the cache only)
+
+Graph-query commands feeling slow at real scale (order ~10k **files**, per the
+count-in-files note above). Until then, the only "work" is *not* eagerly loading
+the registry. The FK-validation pass (above) is a separate, earlier deliverable
+and does not wait for this.

@@ -40,7 +40,29 @@ reserve_next(namespace):
 
 `mkdir` is simply the **local backend's `acquire`**. Point the same algorithm at
 a **shared git ref** and the identical logic becomes safe across teams. The
-caller never changes; only the backend's reach does.
+*algorithm* never changes; the backend's **reach and failure modes** do — local
+`acquire` is offline and instant (an `EEXIST` syscall), git-ref `acquire` costs a
+network round-trip (`fetch --prune`) and fails by push-rejection. So callers must
+sit behind the `acquire` seam itself (not a bare `fs::create_dir`), or the
+"swap the backend, not the caller" promise holds only on paper — see § Code
+seam.
+
+### Code seam
+
+The unification is real only if the claim is written against an `acquire`
+operation, not inlined as a filesystem call. v1's slice code (`reserve_create`)
+inlined `fs::create_dir` + `ErrorKind::AlreadyExists` as a shortcut; that is the
+one thing that must be lifted to a one-method seam —
+
+```rust
+fn acquire(&self, key: &str) -> Result<Acquired>;  // Won | AlreadyHeld
+```
+
+— with the local `mkdir` as its sole implementation, **before** a second backend
+or a second caller arrives. The retry loop, the candidate scan, and the
+materialisation then compose over the seam unchanged when `git-ref` lands. This
+is tracked as the first deliverable of the entity-engine work, not deferred with
+the `git-ref` backend itself.
 
 ## v1 scope
 
