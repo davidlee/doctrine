@@ -1,11 +1,14 @@
-#![allow(clippy::same_name_method, reason = "rust-embed derive generates conflicting method names")]
+#![allow(
+    clippy::same_name_method,
+    reason = "rust-embed derive generates conflicting method names"
+)]
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, bail};
+use anyhow::Context;
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 
@@ -49,25 +52,16 @@ struct GitignoreSection {
 
 #[derive(Debug, Deserialize)]
 struct RootMarkersSection {
-    #[serde(default = "default_markers")]
+    #[serde(default = "crate::root::default_markers")]
     markers: Vec<String>,
 }
 
 impl Default for RootMarkersSection {
     fn default() -> Self {
         Self {
-            markers: default_markers(),
+            markers: crate::root::default_markers(),
         }
     }
-}
-
-fn default_markers() -> Vec<String> {
-    vec![
-        ".git".to_string(),
-        ".jj".to_string(),
-        ".project".to_string(),
-        "Cargo.toml".to_string(),
-    ]
 }
 
 /// A planned action from the dry-run.
@@ -95,10 +89,14 @@ struct Plan {
 ///
 /// `project_path` is an explicit project root override; `dry_run_only` prints
 /// and exits; `yes` skips the interactive prompt.
-pub(crate) fn run(project_path: Option<PathBuf>, dry_run_only: bool, yes: bool) -> anyhow::Result<()> {
+pub(crate) fn run(
+    project_path: Option<PathBuf>,
+    dry_run_only: bool,
+    yes: bool,
+) -> anyhow::Result<()> {
     let manifest = load_manifest()?;
-    let project_root = detect_project_root(project_path, &manifest)
-        .context("Could not find project root")?;
+    let project_root =
+        detect_project_root(project_path, &manifest).context("Could not find project root")?;
     let plan = build_plan(&manifest, &project_root);
 
     print_plan(&plan)?;
@@ -124,10 +122,10 @@ pub(crate) fn run(project_path: Option<PathBuf>, dry_run_only: bool, yes: bool) 
 fn load_manifest() -> anyhow::Result<Manifest> {
     let file = Assets::get("manifest.toml")
         .context("install/manifest.toml is missing from embedded assets")?;
-    let text = std::str::from_utf8(&file.data)
-        .context("install/manifest.toml is not valid UTF-8")?;
-    let manifest: Manifest = toml::from_str(text)
-        .context("Failed to parse install/manifest.toml")?;
+    let text =
+        std::str::from_utf8(&file.data).context("install/manifest.toml is not valid UTF-8")?;
+    let manifest: Manifest =
+        toml::from_str(text).context("Failed to parse install/manifest.toml")?;
     Ok(manifest)
 }
 
@@ -135,30 +133,9 @@ fn load_manifest() -> anyhow::Result<Manifest> {
 // Project root detection
 // ---------------------------------------------------------------------------
 
-/// Walk up from `start` (or CWD) looking for any marker file/dir.
+/// Walk up from CWD looking for any marker file/dir (see `crate::root`).
 fn detect_project_root(explicit: Option<PathBuf>, manifest: &Manifest) -> anyhow::Result<PathBuf> {
-    if let Some(path) = explicit {
-        return Ok(path);
-    }
-
-    let cwd =
-        std::env::current_dir().context("Failed to get current working directory")?;
-    let markers = &manifest.root_markers.markers;
-
-    for ancestor in cwd.ancestors() {
-        for marker in markers {
-            let candidate = ancestor.join(marker);
-            if candidate.exists() {
-                return Ok(ancestor.to_path_buf());
-            }
-        }
-    }
-
-    bail!(
-        "No project root found. Walked up from '{}' looking for any of: {:?}",
-        cwd.display(),
-        markers,
-    )
+    crate::root::find(explicit, &manifest.root_markers.markers)
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +230,12 @@ fn print_plan(plan: &Plan) -> io::Result<()> {
                 writeln!(stdout, "  install      {} → {}", source, dest.display())?;
             }
             Step::Skip { source, dest } => {
-                writeln!(stdout, "  skip         {} → {} (exists)", source, dest.display())?;
+                writeln!(
+                    stdout,
+                    "  skip         {} → {} (exists)",
+                    source,
+                    dest.display()
+                )?;
             }
             Step::Gitignore { entry, dest } => {
                 writeln!(stdout, "  gitignore    + \"{entry}\"  ({})", dest.display())?;
@@ -263,7 +245,7 @@ fn print_plan(plan: &Plan) -> io::Result<()> {
     Ok(())
 }
 
-fn prompt_confirm(prompt: &str) -> anyhow::Result<bool> {
+pub(crate) fn prompt_confirm(prompt: &str) -> anyhow::Result<bool> {
     let mut stdout = io::stdout();
     write!(stdout, "{prompt}")?;
     stdout.flush()?;
@@ -288,8 +270,9 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<()> {
                 let file = Assets::get(source)
                     .with_context(|| format!("Embedded file '{source}' not found"))?;
                 if let Some(parent) = dest.parent() {
-                    fs::create_dir_all(parent)
-                        .with_context(|| format!("Failed to create parent dir for {}", dest.display()))?;
+                    fs::create_dir_all(parent).with_context(|| {
+                        format!("Failed to create parent dir for {}", dest.display())
+                    })?;
                 }
                 fs::write(dest, &file.data)
                     .with_context(|| format!("Failed to write {}", dest.display()))?;
@@ -303,8 +286,9 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<()> {
                     .append(true)
                     .open(dest)
                     .with_context(|| format!("Failed to open {} for appending", dest.display()))?;
-                writeln!(file, "{entry}")
-                    .with_context(|| format!("Failed to append gitignore entry to {}", dest.display()))?;
+                writeln!(file, "{entry}").with_context(|| {
+                    format!("Failed to append gitignore entry to {}", dest.display())
+                })?;
             }
         }
     }
@@ -401,9 +385,10 @@ mod tests {
         let manifest = Manifest::default_for_tests();
         let plan = build_plan(&manifest, dir.path());
 
-        let has_skip = plan.steps.iter().any(|s| {
-            matches!(s, Step::Skip { dest, .. } if dest == &existing)
-        });
+        let has_skip = plan
+            .steps
+            .iter()
+            .any(|s| matches!(s, Step::Skip { dest, .. } if dest == &existing));
         assert!(has_skip, "Expected a Skip step for the pre-existing file");
     }
 

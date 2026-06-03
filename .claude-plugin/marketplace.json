@@ -1,0 +1,11 @@
+{
+  "name": "heresiarch",
+  "owner": { "name": "heresiarch" },
+  "plugins": [
+    {
+      "name": "review",
+      "source": "./plugins/review",
+      "description": "Code & security review skills."
+    }
+  ]
+}
