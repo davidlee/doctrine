@@ -97,8 +97,8 @@
         };
 
         # Rust binary
-        heresyd = pkgs.rustPlatform.buildRustPackage {
-          pname = "heresyd";
+        doctrined = pkgs.rustPlatform.buildRustPackage {
+          pname = "doctrined";
           version = "0.1.0";
           src = lib.cleanSourceWith {
             src = ./.;
@@ -126,8 +126,8 @@
           cargoLock.lockFile = ./Cargo.lock;
           doCheck = false; # tests require a live Postgres
           meta = {
-            mainProgram = "heresyd";
-            description = "heresytable daemon";
+            mainProgram = "doctrined";
+            description = "doctrinetable daemon";
           };
         };
       in {
@@ -139,8 +139,8 @@
         packages =
           jailPkgs
           // {
-            inherit heresyd;
-            default = heresyd;
+            inherit doctrined;
+            default = doctrined;
           };
 
         devshells.default = {

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Project tooling CLI"
 license = "GPL-3.0-only"
-repository = "https://github.com/davidlee/heresiarch"
+repository = "https://github.com/davidlee/doctrine"
 keywords = ["cli", "project"]
 categories = ["command-line-utilities"]
 

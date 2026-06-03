@@ -1,7 +1,7 @@
 # Spec entity specification — design note
 
 **Status: deferred. No action now.** This records the *shape* of the spec
-entity so it can land without restructuring once Heresiarch grows a spec system.
+entity so it can land without restructuring once doctrine grows a spec system.
 It is the hairiest of the doc entities in the [glossary](glossary.md) and the
 one whose design forces the registry question — so it is specified early to pin
 the decisions the other notes ([relation-index](relation-index.md),
@@ -87,7 +87,7 @@ carries **seven** blocks, not the four `SPEC-110` happened to use:
 
 ### Mapping
 
-| spec-driver block | Heresiarch artefact(s) | prose lifted to `.md` |
+| spec-driver block | doctrine artefact(s) | prose lifted to `.md` |
 |---|---|---|
 | `spec.requirements@v1` | `requirements.toml` `[[req]]` (incl. `acceptance_criteria[]`) | `description` |
 | `spec.capabilities@v1` | `capabilities.toml` `[[capability]]` (incl. `success_criteria[]`) | `summary`, `responsibilities` |
@@ -202,8 +202,8 @@ responsibilities = [
 
 [[source]]
 language = "rust"
-identifier = "heresy/cli"
-module = "heresy::cli"
+identifier = "doctrine/cli"
+module = "doctrine::cli"
 ```
 
 `requirements.toml`:
@@ -376,7 +376,7 @@ on every agent tick is a different problem.**
   *introduces* the cross-spec tables (`collaborators`, `interactions`), so the
   trigger fires on its first real use. The pass therefore ships **in the same
   slice as the spec entity**, not after it: the minimum spec-landing bundle is
-  `heresy spec new` · `spec req add` · `spec show` · **`spec validate`**. Shipping
+  `doctrine spec new` · `spec req add` · `spec show` · **`spec validate`**. Shipping
   the tables without `validate` would pay the decomposition's file-count and
   read-locality cost up front while keeping the dangling-FK defect it was designed
   to remove — explicitly disallowed. The pass is cheap and cache-independent
@@ -386,20 +386,20 @@ on every agent tick is a different problem.**
 - **Row↔prose orphans (self-drift).** Each table entity is a `[[…]]` row *and* a
   `### id` prose heading — joined by id, not duplicated (the row carries facts,
   the prose carries narrative), but the *pairing* can desync under hand edits.
-  Inherits drift-spec's mitigation verbatim: an atomic `heresy spec <table> add`
+  Inherits drift-spec's mitigation verbatim: an atomic `doctrine spec <table> add`
   that writes both, and a `list`-time orphan lint per table. The hairiest entity
   must not get the weakest drift guard. The atomic add must be **edit-preserving**
   (`toml_edit` / structured append), not a full serde reserialize — a reserialize
   drops hand comments and the unknown keys slices-spec promises to preserve. (The
   read-only `Meta` parse stays plain serde; only the mutating verbs need the
-  edit-preserving document model — same caveat applies to `heresy drift add`.)
+  edit-preserving document model — same caveat applies to `doctrine drift add`.)
 - **More files per spec.** A full tech spec is now ~13 files (identity + prose +
   seven block pairs + interactions/collaborators), not 1. Two costs: (a) the
   relation-index budget must count *files*, ~13× specs (handled there); (b)
   **read-locality** — understanding one requirement now spans its row, its prose,
   its coverage rows, and any capability FK'ing it. Accepted as a real cost (not
   zero), bought for clean diffs/merges and parse-without-a-block-parser, and
-  recovered at read time by a `heresy spec req show <key>` that gathers the row,
+  recovered at read time by a `doctrine spec req show <key>` that gathers the row,
   its prose section, its coverage rows, and inbound/outbound refs into one view
   (§ Follow-ups). The split is the storage shape, not the reading shape.
 - **Requirement local-id collision across merges.** Ids are hand-assigned and
@@ -447,7 +447,7 @@ on every agent tick is a different problem.**
 - **Glossary.** The spec family already lists `PRD/SPEC/REV`; add the requirement
   (`FR-`/`NF-`) and coverage (`VT-`) referends as sub-entities when this leaves
   deferred.
-- **Locality recovery CLI.** `heresy spec show <SPEC-id>` and `heresy spec req
+- **Locality recovery CLI.** `doctrine spec show <SPEC-id>` and `doctrine spec req
   show <SPEC-110.FR-001>` reassemble the decomposed pieces (identity, prose,
   table rows, inbound/outbound refs) into one human view — the read-locality
   mitigation (§ Known risks). `spec show` is part of the minimum landing bundle

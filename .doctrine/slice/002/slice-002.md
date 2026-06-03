@@ -10,7 +10,7 @@
 
 ## Context
 
-`heresy slice` (slice-001) established the directory-entity pattern: a numeric
+`doctrine slice` (slice-001) established the directory-entity pattern: a numeric
 directory under `.doctrine/<kind>/`, a sister `<kind>-<id>.toml`, a scaffolded
 `<kind>-<id>.md`, an `<id>-<slug>` symlink alias, and a collision-free id
 allocated by the local `mkdir` reservation (reservation-spec § local backend).
@@ -39,7 +39,7 @@ descriptor — *one engine, many kinds*. Concretely:
   derivation.
 - A seam for the kind-specific parts: the metadata type (its serde struct), its
   template render, and its list formatting.
-- `heresy slice` re-expressed as the first caller of the engine, behaviour
+- `doctrine slice` re-expressed as the first caller of the engine, behaviour
   unchanged — the regression guard that the extraction is faithful.
 
 End state: adding the drift or spec kind is *implementing the descriptor + its
@@ -54,7 +54,7 @@ metadata/render/format*, not copying the scan/claim/scaffold code.
   claim; it does not add the `LeaseBackend` trait.
 - **The relation registry / FK validation.** doc/relation-index.md — separate,
   deferred. The engine reads and writes entity files; it does not index them.
-- **CLI surface changes to `heresy slice`.** `new` / `list` behaviour is
+- **CLI surface changes to `doctrine slice`.** `new` / `list` behaviour is
   preserved exactly; no flags added or removed.
 
 ## Approach
@@ -90,7 +90,7 @@ output `&mut dyn Write` seam are already shared and stay shared.
   structurally (array-of-tables, FK fields). The engine must parameterise over
   *the file mechanics*, not force a common `Meta` trait. Keep metadata
   read/format on the kind side until a second caller proves a shared shape.
-- **Regression in `heresy slice`.** Mitigated by keeping the slice-001 test
+- **Regression in `doctrine slice`.** Mitigated by keeping the slice-001 test
   suite green throughout — the extraction is behaviour-preserving by definition.
 
 ## Verification

@@ -86,7 +86,7 @@ struct Plan {
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-/// Run `heresy install`.
+/// Run `doctrine install`.
 ///
 /// `project_path` is an explicit project root override; `dry_run_only` prints
 /// and exits; `yes` skips the interactive prompt.

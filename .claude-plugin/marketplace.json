@@ -1,6 +1,6 @@
 {
-  "name": "heresiarch",
-  "owner": { "name": "heresiarch" },
+  "name": "doctrine",
+  "owner": { "name": "doctrine" },
   "plugins": [
     {
       "name": "review",

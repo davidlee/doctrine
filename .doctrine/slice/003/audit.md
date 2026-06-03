@@ -24,7 +24,7 @@ built in order, each green against slice-001.
 | D3 `Fileset = Vec<Artifact>` | `entity::{Artifact,Fileset}` | ✓ no hardcoded count |
 | D4 closed `MaterialiseMode` | `entity::MaterialiseMode` | ✓ no `reserve: bool` |
 | D5 design doc = single prose file | `slice::DESIGN_KIND`/`design_scaffold` | ✓ no TOML, no symlink |
-| D6 verb `heresy slice design <id>` | `main::SliceCommand::Design` → `run_design` | ✓ |
+| D6 verb `doctrine slice design <id>` | `main::SliceCommand::Design` → `run_design` | ✓ |
 | D7 no silent clobber | `entity::refuse_clobber` | ✓ tested |
 | D-Q2 `{{ref}}`+`{{title}}` | `slice::render_design`, prefix `SL` | ✓ → `Design SL-001: …` |
 | H1 path containment | `entity::safe_join` (sole joiner) | ✓ direct + via `materialise` |
@@ -100,7 +100,7 @@ coupling · `[L]` cosmetic.
   (M2 — lands *with* git-ref; an unused field trips the dead-code gate now).
 - The design-doc TOML facet, approval-as-slice-state, `RVW-` review entity (D5,
   sequence A — via supersede).
-- `heresy slice validate` (M5 — design-doc presence is workflow-significant but
+- `doctrine slice validate` (M5 — design-doc presence is workflow-significant but
   unobservable; deferred note only, queryable-lives-in-TOML when the facet lands).
 - drift / spec entities — the engine is now *fit to host* them, not building them.
 
@@ -210,7 +210,7 @@ rejecting `&str`-now. The cheapest fix is one sentence each side.
   Forces / Principles / Proposed Design 5.1–5.5 / Open Questions / Decisions /
   Risks / Quality Engineering / Review Notes) — distinct from both `slice.md`
   (7-section) and the hand-authored `slice/003/design.md` exemplar (Executive
-  Summary / Problem / Architecture Intent / ...). Future `heresy slice design`
+  Summary / Problem / Architecture Intent / ...). Future `doctrine slice design`
   output will not resemble this design doc. Not a blocker — the exemplar predates
   the tool and is grandfathered — but recorded so the divergence is deliberate.
 
@@ -304,7 +304,7 @@ contract). All findings paper-stage. No code touched.
   must not read disk/clock/git/root; template loading is the danger. State it; say
   whether `asset_text` is compile-time embedded.
 - **M5 — design-doc presence is workflow-significant but unobservable.** No gate
-  this slice; add a deferred `heresy slice validate` note (non-trivial slice has
+  this slice; add a deferred `doctrine slice validate` note (non-trivial slice has
   design.md or a trivial marker; don't parse prose; facet carries queryable meta).
 - **L1 — "sub-artefacts don't reserve" → "file-creating sub-artefacts".** Engine
   materialises filesets; it doesn't append rows / mutate tables / allocate row ids.
@@ -321,7 +321,7 @@ contract). All findings paper-stage. No code touched.
 | M2 namespace field | Med | **Reject-defer (with reason)** — `slice/id/<n>` already in reservation-spec § Key table; the field is additive when git-ref lands, and a set-but-unread field now trips the deny-level dead-code gate. Forward-note instead. | D1 (M2 note) |
 | M3 spec overstated | Med | **Accept** — "initial scaffold" vs lifecycle; "supports spec" ≠ "spec done". | §5.1 |
 | M4 purity contract | Med | **Accept** — state purity invariant; `asset_text` is rust-embed (compile-time, not disk IO), so scaffold calling it stays pure-ish (only fallibility: template presence/format). | §5.5 Scaffold purity |
-| M5 unobservable invariant | Med | **Accept (deferred note, no gate)** — future `heresy slice validate`; trivial marker is a TOML field (queryable ∈ TOML); never parse prose. | §6 Q5; slices-spec § Division of labour |
+| M5 unobservable invariant | Med | **Accept (deferred note, no gate)** — future `doctrine slice validate`; trivial marker is a TOML field (queryable ∈ TOML); never parse prose. | §6 Q5; slices-spec § Division of labour |
 | L1 rows vs filesets | Low | **Accept** — explicit "engine materialises filesets, not rows". | §5.4 |
 | L2 status proposed | Low | **Keep** — unchanged. | — |
 | L3 template divergence | Low | **Keep (note only)** — resolved. | — |

@@ -1,16 +1,16 @@
-# Implement slices: heresy slice new/list
+# Implement slices: doctrine slice new/list
 
 ## Summary & Context
 
-Add the **slice** — Heresiarch's unit of intentional change — as a real,
-scaffoldable entity. This slice implements the `heresy slice` subcommand group
+Add the **slice** — doctrine's unit of intentional change — as a real,
+scaffoldable entity. This slice implements the `doctrine slice` subcommand group
 (v1: `new` + `list`) and the on-disk artefact shape, dogfooding the workflow on
-Heresiarch itself (this very directory is its output).
+doctrine itself (this very directory is its output).
 
 Design is settled across three notes:
 
 - `doc/slices-spec.md` — the entity: directory + sister TOML + prose, numeric id
-  with slug symlink, `heresy slice new/list`, pure/imperative split.
+  with slug symlink, `doctrine slice new/list`, pure/imperative split.
 - `doc/reservation-spec.md` — collision-free id allocation. v1 uses the **local
   backend** only (the `mkdir`-claim); the `git-ref` backend is later.
 - `doc/relation-index.md` — confirms no cache/index work is needed now.
@@ -24,12 +24,12 @@ scaffolding exist. This is the first brick.
 
 ## Scope & Objectives
 
-- `heresy slice` subcommand group, parallel to `install` / `skills`.
-- **`heresy slice new [<title>] [--slug <slug>]`** — allocate the next id,
+- `doctrine slice` subcommand group, parallel to `install` / `skills`.
+- **`doctrine slice new [<title>] [--slug <slug>]`** — allocate the next id,
   create `.doctrine/slice/<id>/`, write `slice-<id>.toml` (created/updated = today)
   and a scaffolded `slice-<id>.md` from `install/templates/slice.{toml,md}`, and
   create the `<id>-<slug>` symlink. Print the new path.
-- **`heresy slice list [--status <s>]`** — enumerate slices by id: id, status,
+- **`doctrine slice list [--status <s>]`** — enumerate slices by id: id, status,
   slug, title, read from each `slice-<id>.toml`.
 - **Id allocation = local reservation** (reservation-spec § local backend): scan
   numeric dirs for `max + 1`, atomic `mkdir` claim, retry on `EEXIST`. Collision-
@@ -37,7 +37,7 @@ scaffolding exist. This is the first brick.
 - **Architecture**: pure planner (candidate id, slug derivation, toml/md render,
   list formatting) + thin IO shell (dir scan, the `mkdir` claim, file writes,
   symlink), reusing project-root detection and the file-copy/IO seam from
-  `heresy install` / `heresy skills`.
+  `doctrine install` / `doctrine skills`.
 - Templates ship via the installer (`.doctrine/templates/slice.{toml,md}`;
   `.doctrine/slice/` added to `manifest.toml` `[dirs]`).
 
@@ -64,9 +64,9 @@ in Rust render code.
 
 ## Done
 
-- `heresy slice new` creates a well-formed slice (dir, sister toml, scaffolded
+- `doctrine slice new` creates a well-formed slice (dir, sister toml, scaffolded
   md, symlink) with a reservation-allocated id; re-runs never collide.
-- `heresy slice list` enumerates with `--status` filter.
+- `doctrine slice list` enumerates with `--status` filter.
 - Unit tests per slices-spec § Testing (candidate-id incl. EEXIST→retry, slug
   derivation, scaffold plan, toml round-trip, list formatting) — passing.
 - Installer ships the templates and creates `.doctrine/slice/`.

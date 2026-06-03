@@ -1,7 +1,7 @@
 # Design SL-003: Entity-scaffold engine + design-doc sibling
 
-Design doc for slice-003, structured to the `heresy slice design` template (the
-tool this slice builds). Pure prose (the Heresiarch design-doc shape: no
+Design doc for slice-003, structured to the `doctrine slice design` template (the
+tool this slice builds). Pure prose (the doctrine design-doc shape: no
 frontmatter, no fenced data blocks — entity-model.md). Hand-authored: the
 scaffolder does not exist yet, so this first one is written by hand; later design
 docs are scaffolded from the same skeleton.
@@ -161,7 +161,7 @@ toml/md/symlink fields become three `Artifact`s (the `003/slice-003.toml`,
 doc returns one `File`. The engine writes `Artifact`s uniformly (the symlink
 keeps today's `AlreadyExists`-tolerant create).
 
-The CLI contract gains one verb: `heresy slice design <id>` (D6), scaffolding
+The CLI contract gains one verb: `doctrine slice design <id>` (D6), scaffolding
 `design.md` into the resolved slice dir.
 
 ### 5.3 Data, State & Ownership
@@ -241,7 +241,7 @@ v1 a failed write must clean up or it becomes a malformed entity, not a gap.
    `Kind` reproduces today's exact two-file + symlink output. Suite still green.
 3. **Design-doc `Kind` + `design.md` template.** The non-reserved, single-file
    kind. Engine unit test for the non-reserved path.
-4. **Wire `heresy slice design <id>`.** Thin CLI verb over the engine.
+4. **Wire `doctrine slice design <id>`.** Thin CLI verb over the engine.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -279,7 +279,7 @@ v1 a failed write must clean up or it becomes a malformed entity, not a gap.
 
 - **Q1 — `Kind` registry.** Two kinds can be two `const Kind`s referenced
   directly. A lookup table (`&str -> &Kind`) is only needed when a generic
-  `heresy <kind> new` dispatch exists; not this slice. Leave direct.
+  `doctrine <kind> new` dispatch exists; not this slice. Leave direct.
 - **Q3 — Does `list` ever go kind-generic?** `slice list` reads slice `Meta`.
   drift/spec will want their own `list`. Deferred until the second reader; the
   engine owns scaffolding only for now (no premature `Meta`).
@@ -297,7 +297,7 @@ v1 a failed write must clean up or it becomes a malformed entity, not a gap.
   trivial + explicit approval), but no command sees whether a slice has one —
   a slice can be `ready` with no `design.md` and nothing surfaces it. **No gate
   this slice** (`slice list`/resolution stay unaffected). Deferred to a future
-  `heresy slice validate`: a non-trivial slice has a `design.md` or an explicit
+  `doctrine slice validate`: a non-trivial slice has a `design.md` or an explicit
   trivial/no-design marker (a TOML field — *queryable lives in TOML, not prose*,
   entity-model.md); `design.md` is never parsed for headings (templates are
   defaults, not contracts); the design-doc facet, when it lands, carries the
@@ -352,7 +352,7 @@ v1 a failed write must clean up or it becomes a malformed entity, not a gap.
   globs, governance relationships); approval as slice state; structured review as
   a future `RVW-` entity. Engine-neutral — a toml+md design doc is a 2-`Artifact`
   non-reserved fileset (see § 5.3).
-- **D6 — Verb is `heresy slice design <id>`.** Scaffolds `design.md` into the
+- **D6 — Verb is `doctrine slice design <id>`.** Scaffolds `design.md` into the
   resolved slice dir. (Name over `dr`/`design-doc` for plain English; revisit if a
   `RVW-` review verb later wants a shared noun.)
 - **D7 — No silent clobber.** The non-reserved path refuses if the target file

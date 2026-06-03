@@ -2,12 +2,12 @@
 
 ## Overview
 
-A **slice** is the primary unit of intentional change in Heresiarch — a
+A **slice** is the primary unit of intentional change in doctrine — a
 *declarative change bundle*. It answers **"what changes, why, what it touches,
 what risks, and what 'done' looks like"** *before* code moves.
 
-It is the Heresiarch form of what `spec-driver` calls a *delta*. The concept is
-deliberately pared back: Heresiarch has no spec or requirement registry yet, so
+It is the doctrine form of what `spec-driver` calls a *delta*. The concept is
+deliberately pared back: doctrine has no spec or requirement registry yet, so
 a slice in v1 anchors to nothing and enforces no coverage gates. The artefact is
 shaped so that linkage and an audit/patch lifecycle can attach **later, without
 restructuring**, once product/tech specs exist (§ Forward compatibility).
@@ -37,7 +37,7 @@ carrying a human-readable slug:
 
 - The **numeric directory** (`001/`) is canonical. Tools resolve slices by id.
 - The **symlink** (`001-<slug>`) is a convenience alias for humans browsing the
-  tree. It is created and maintained by `heresy slice`; it is not authoritative.
+  tree. It is created and maintained by `doctrine slice`; it is not authoritative.
 - A slice is a directory (not a single file) so design/plan/phase siblings can
   be added later without moving the artefact. v1 ships only `slice-<id>.toml`
   and `slice-<id>.md`.
@@ -76,7 +76,7 @@ for v1 (§ Known risks).
 
 ## Metadata (`slice-<id>.toml`)
 
-Most Heresiarch entities carry their structured data as **TOML frontmatter** in
+Most doctrine entities carry their structured data as **TOML frontmatter** in
 the markdown file itself. Slices (and, later, specs) are the exception: they are
 folder-backed and carry **more matter than sits comfortably in frontmatter**, so
 their structured data lives in a **sister TOML file** instead.
@@ -88,7 +88,7 @@ sections over time.
 ```toml
 id = 1
 slug = "add-skill-removal"
-title = "Add skill removal to heresy skills"
+title = "Add skill removal to doctrine skills"
 status = "proposed"          # proposed | ready | started | audit | done  (v1: unenforced)
 created = "2026-06-03"
 updated = "2026-06-03"
@@ -124,12 +124,12 @@ slice body is the **contract** (the WHAT and whether), not the design (the HOW):
    paragraph of colour, deliberately not a task breakdown or a test list.
 5. **Follow-Ups** — deferred work and tracking (supersede links, later slices).
 
-`heresy slice new` scaffolds the file with these headings and empty bodies.
+`doctrine slice new` scaffolds the file with these headings and empty bodies.
 
 ### Division of labour with the design doc
 
 A guiding rule (entity-model.md: avoid duplication between artifacts — duplication
-breeds drift, and drift is the disease Heresiarch exists to kill): each fact lives
+breeds drift, and drift is the disease doctrine exists to kill): each fact lives
 in exactly **one** artifact. The slice body and its design-doc sibling have a hard,
 non-overlapping edge:
 
@@ -147,27 +147,27 @@ that gestures at the how without tracking the design doc's findings.
 
 This rule is, for now, a **convention no command enforces** — a slice can be
 `ready` with no `design.md` and nothing surfaces it. Enforcement is deferred to a
-future `heresy slice validate`: a non-trivial slice must have a `design.md` or an
+future `doctrine slice validate`: a non-trivial slice must have a `design.md` or an
 explicit trivial/no-design marker (a `slice-<id>.toml` field — anything queryable
 lives in TOML, not prose, entity-model.md); validation never parses the prose for
 headings (templates are defaults, not contracts). No gate ships with slice-003.
 
 ## CLI
 
-`heresy slice` is a new subcommand group, parallel to `heresy install` and
-`heresy skills`. v1 scope is **new + list** only.
+`doctrine slice` is a new subcommand group, parallel to `doctrine install` and
+`doctrine skills`. v1 scope is **new + list** only.
 
 ```
-heresy slice new [<title>] [--slug <slug>]
-heresy slice list [--status <status>]
+doctrine slice new [<title>] [--slug <slug>]
+doctrine slice list [--status <status>]
 ```
 
-### `heresy slice new`
+### `doctrine slice new`
 
 ```
-heresy slice new "Add skill removal"            # title given, slug derived
-heresy slice new "Add skill removal" --slug rm  # explicit slug
-heresy slice new                                # prompts for title
+doctrine slice new "Add skill removal"            # title given, slug derived
+doctrine slice new "Add skill removal" --slug rm  # explicit slug
+doctrine slice new                                # prompts for title
 ```
 
 Allocates the next id, creates `.doctrine/slice/<id>/`, writes
@@ -180,12 +180,12 @@ of the new slice.
 The current date is supplied by the caller (no clock in the pure layer,
 § Architecture).
 
-### `heresy slice list`
+### `doctrine slice list`
 
 Enumerates slices under `.doctrine/slice/`, ordered by id:
 
 ```
-001  started      add-skill-removal   Add skill removal to heresy skills
+001  started      add-skill-removal   Add skill removal to doctrine skills
 002  proposed     vendor-skills       Vendor skills instead of npx delegation
 ```
 
@@ -194,7 +194,7 @@ each `slice-<id>.toml`.
 
 ## Architecture
 
-Same split as `heresy install` and `heresy skills`: the CLI layer is thin and
+Same split as `doctrine install` and `doctrine skills`: the CLI layer is thin and
 dumb; all decisions live in pure functions over data.
 
 | Pure (library, unit-tested)                                  | Imperative (thin shell)                |
@@ -262,7 +262,7 @@ None of these require restructuring the v1 artefact.
 - **Audit / patch lifecycle.** Deferred to the spec work.
 - **Edit / remove / re-slug.** Slices are created and listed; mutation is manual
   (edit `slice-<id>.toml` / `slice-<id>.md`, fix the symlink by hand) in v1.
-- **Embedded structured YAML blocks.** Heresiarch uses the TOML sister instead;
+- **Embedded structured YAML blocks.** doctrine uses the TOML sister instead;
   risks and context stay in prose until a structured need is proven.
 
 ## Known risks
@@ -308,4 +308,4 @@ The atomic claim is exercised against the IO seam: an `EEXIST` on the first
 free id (a mock filesystem that fails the first claim, succeeds the second).
 
 Imperative IO (mkdir, file writes, symlink creation, directory scan) sits behind
-the same seam as `heresy install` / `heresy skills`, asserted without disk.
+the same seam as `doctrine install` / `doctrine skills`, asserted without disk.

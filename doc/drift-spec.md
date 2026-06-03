@@ -3,7 +3,7 @@
 **Status: deferred. No action now.** This specifies the artefact shape so it can
 land *without restructuring* once the things it tracks exist. A drift ledger
 records mismatches between a spec and what shipped (or between two
-representations of the same fact); Heresiarch has no spec or relationship
+representations of the same fact); doctrine has no spec or relationship
 registry yet, so there is **nothing to drift against**. Same boundary as
 [relation-index](relation-index.md): record the design, build when the caller
 arrives.
@@ -16,7 +16,7 @@ be fixed inline, the ledger captures it: what drifted, the evidence, the
 proposed resolution, and whether it's been actioned. It is the durable backlog
 of "we noticed this is inconsistent; here's the decision and its state."
 
-It is the Heresiarch form of spec-driver's drift ledger (e.g. `DL-048`). The
+It is the doctrine form of spec-driver's drift ledger (e.g. `DL-048`). The
 shape is the same in spirit — a document of entries — but the **data/prose
 split** is corrected (§ The split).
 
@@ -46,7 +46,7 @@ Co-locating them is *why* that format needs YAML (block scalars are the one
 thing YAML does best) and gives the worst of both: prose that doesn't render or
 diff as markdown, data buried in document syntax, and a hard YAML dependency.
 
-Heresiarch's sister-file discipline ([slices-spec](slices-spec.md) § Metadata)
+doctrine's sister-file discipline ([slices-spec](slices-spec.md) § Metadata)
 splits them:
 
 - **`drift-<id>.toml`** — facets only, as an array of tables. Machine-read,
@@ -75,7 +75,7 @@ symlink, reusing the slice machinery wholesale:
 Ids are allocated by the **same local reservation** as slices
 ([reservation-spec](reservation-spec.md): the `mkdir` claim), under namespace
 `drift/id/<n>`. The reservation primitive is already kind-agnostic; the
-directory-entity scan/claim/scaffold code from `heresy slice` generalises over
+directory-entity scan/claim/scaffold code from `doctrine slice` generalises over
 the kind — drift is its second caller, not a parallel implementation.
 
 ## Metadata (`drift-<id>.toml`)
@@ -154,7 +154,7 @@ the delta's PROD-level reach.
 (preserves the block as canonical; restores PROD-level visibility).
 ```
 
-`heresy drift new` scaffolds the preamble + `## Entries` heading; `heresy drift
+`doctrine drift new` scaffolds the preamble + `## Entries` heading; `doctrine drift
 add` appends a `### <id>` stub and the matching `[[entry]]` row in one step
 (so the two never drift apart — the ledger must not itself drift).
 
@@ -223,7 +223,7 @@ Each vocabulary enum (`EntryType`, `Severity`, `EntryStatus`, `Assessment`,
 `ResolutionPath`) carries its known set (§ Lifecycle) plus an `Other(String)`
 arm, so an unrecognised value from an external or version-skewed detector
 degrades to a single warned row, never a hard parse error that would take down
-`heresy drift list` for the *whole* ledger. `analysis` is **not** a field here —
+`doctrine drift list` for the *whole* ledger. `analysis` is **not** a field here —
 it is prose (§ Prose body), consistent with the canonical model keeping the long
 narrative as freeform markdown after the fence.
 
@@ -269,15 +269,15 @@ an external sweep; automated detection arrives with the spec system.
 ## Known risks
 
 - **Ledger self-drift.** The `.toml` row and the `.md` `###` for one entry can
-  fall out of sync if edited by hand. Mitigation: `heresy drift add` writes both
-  atomically, and `heresy drift list` warns on an `id` present in one file but
+  fall out of sync if edited by hand. Mitigation: `doctrine drift add` writes both
+  atomically, and `doctrine drift list` warns on an `id` present in one file but
   not the other. A linter, not a hard gate, in v1. The atomic add must append
   **edit-preservingly** (`toml_edit` / structured append), not by serde-
   reserialising the whole `Ledger` — a full reserialize drops hand comments and
   any `extra` keys (spec-entity-spec § Known risks carries the same caveat for
   its mutating verbs).
 - **Duplicate entry `id` across concurrent adds / merges.** Entry `id`s are
-  sequence-assigned (`max + 1` within the ledger), so two `heresy drift add`
+  sequence-assigned (`max + 1` within the ledger), so two `doctrine drift add`
   invocations on separate branches both mint `DL-001.004` and a clean git merge
   produces silent duplicates. A `mkdir`-style claim cannot arbitrate a *row* (rows
   aren't dirs), so prevention is impossible — detection is the lever: the
@@ -310,7 +310,7 @@ Pure layer, mirroring [slices-spec](slices-spec.md) § Testing:
 
 - **Glossary.** Add `drift ledger | DL-001 | y` (governance or a new "audit"
   group) once this leaves deferred.
-- **Generalise the slice machinery.** `heresy slice`'s scan/claim/scaffold and
+- **Generalise the slice machinery.** `doctrine slice`'s scan/claim/scaffold and
   the reservation namespace want to be kind-parameterised before drift becomes
   the second caller — otherwise it's a parallel implementation. Track as a
   refactor on the slice code, not a copy.
