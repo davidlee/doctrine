@@ -93,6 +93,8 @@ dispatch site, so a struct of fields + one function pointer is simplest:
 pub struct Kind {
     /// Entity tree relative to the project root, e.g. ".doctrine/slice".
     pub dir: &'static str,
+    /// Canonical-id prefix, e.g. "SL" → "SL-003" (the `{{ref}}` token).
+    pub prefix: &'static str,
     /// Top-level kinds reserve a fresh id; sub-artefacts reuse a parent's id.
     pub reserve: bool,
     /// Fileset as a function — NOT a fixed toml+md pair. A slice yields toml +
@@ -102,8 +104,9 @@ pub struct Kind {
 }
 
 pub struct ScaffoldCtx<'a> {
-    pub dir: &'a Path,    // the entity dir (new numeric dir, or existing parent)
+    pub dir: &'a Path,        // the entity dir (new numeric dir, or existing parent)
     pub id: u32,
+    pub canonical_id: &'a str, // "SL-003" — the {{ref}} token (Q2)
     pub slug: &'a str,
     pub title: &'a str,
     pub date: &'a str,
@@ -121,21 +124,35 @@ toml/md/symlink fields become three `Artifact`s; a design doc returns one
 `File`. The engine writes `Artifact`s uniformly (the symlink keeps today's
 `AlreadyExists`-tolerant create).
 
+Write policy lives in the *writer/branch*, not in `Artifact` data: the
+reserved branch writes freely (the dir was just won, fresh — nothing to
+clobber); the non-reserved branch refuses a pre-existing target (D7). Noted
+coupling: the no-clobber policy currently rides on `reserve`, not a per-write
+flag — fine while reserve ⟺ fresh-dir, revisit if a kind ever wants the other
+pairing. The File-writer does `create_dir_all(path.parent())` so a future
+nested fileset (a spec subtype's ~13 files) needs no engine change.
+
 ### The engine loop
 
 ```text
 materialise(kind, reservation, ctx_inputs):
+  create_dir_all(kind.dir)                     # parent tree; non-recursive mkdir
+                                               # below needs it (today's reserve_create)
   if kind.reserve:
     loop (bounded):
       id   = candidate_id(scan(kind.dir))
       dir  = kind.dir / format!("{id:03}")
+      ref  = format!("{}-{id:03}", kind.prefix)  # canonical id, e.g. "SL-003"
       match reservation.acquire(dir):        # local: mkdir == dir creation
-        Won        => write(kind.scaffold(ctx(dir, id, ...)?)); return dir
+        Won        => write(kind.scaffold(ctx(dir, id, ref, ...)?)); return dir
         AlreadyHeld => continue                # lost race; recompute
   else:                                        # sub-artefact: no claim
-    dir = resolve_existing(kind.dir, id)       # the parent slice dir
-    refuse if the artefact already exists      # no silent clobber
-    write(kind.scaffold(ctx(dir, id, ...))?)
+    dir = resolve_existing(kind.dir, id)       # the parent dir; err if absent
+    ref = caller-supplied parent ref           # sub-artefact has no own id/ref
+    refuse if a target file already exists     # no silent clobber (file-creating
+                                               # sub-artefacts only; row-append is
+                                               # a separate mutate verb, not here)
+    write(kind.scaffold(ctx(dir, id, ref, ...))?)
 ```
 
 This is `reserve_create` generalised: the claim is now `reservation.acquire`, the
@@ -148,14 +165,17 @@ path that proves the engine spans both shapes).
 |---|---|---|
 | `src/slice.rs` | all machinery + slice CLI inline; `Scaffold` struct; `reserve_create` inlines mkdir | the **slice `Kind`** (dir, reserve=true, scaffold fn building toml+md+symlink artifacts), the slice `Meta`/list, and thin CLI wiring; calls the engine |
 | `src/entity.rs` (new) | — | the engine: `candidate_id`, `scan_ids`, `materialise` loop, `write` (artifacts), `Kind`/`ScaffoldCtx`/`Artifact`/`Fileset`, `Reservation`/`Acquired`/`LocalFs`, `derive_slug` |
-| `install/templates/` | `slice.toml`, `slice.md` | + `design.md` template (prose, `{{title}}`) |
+| `install/templates/` | `slice.toml`, `slice.md` | + `design.md` template (prose, `{{ref}}` + `{{title}}`) |
 | slice CLI | `new`, `list` | + `design <id>` |
 
 `derive_slug`, `candidate_id`, `scan_ids`, `today`-injection and the symlink
-write are kind-blind → they move to the engine. `Meta`/`read_metas`/`format_list`
-are slice-specific *reading* (not scaffolding) → they stay slice-side until a
-second metadata-bearing caller proves a shared shape (Non-Goal: no premature
-`Meta` trait).
+write are kind-blind → they move to the engine. The pure `derive_slug` *helper*
+moves; the slug *resolution policy* (use `--slug` else derive, bail if empty)
+stays CLI-side — it is slice-Kind-specific (a design doc has no slug of its own).
+`Meta`/`read_metas`/`format_list` are slice-specific *reading* (not scaffolding)
+→ they stay slice-side until a second metadata-bearing caller proves a shared
+shape (Non-Goal: no premature `Meta` trait). The design-doc verb *reads* the
+parent slice `Meta` for its title — confirming the read stays slice-side.
 
 ## 5. Verification Alignment
 
@@ -181,7 +201,15 @@ second metadata-bearing caller proves a shared shape (Non-Goal: no premature
   key and the dir-creation splits out of `acquire` into the materialise step. That
   evolution is additive (a second impl + splitting one call); it does not rewrite
   callers, which is the whole point of having the seam. Recorded so the local
-  flavour is deliberate, not accidental.
+  flavour is deliberate, not accidental. **Reconciliation:** reservation-spec
+  § Code seam writes the seam as `acquire(&self, key: &str)`; this slice lands it
+  path-based on purpose (an abstract key now would force `LocalFs` either to know
+  the entity layout — the coupling the primitive forbids — or to claim a separate
+  lock tree, diverging from today's "the dir *is* the claim"). "Callers" here
+  means the **Kind** callers (slice, design-doc): they invoke `materialise`, never
+  `acquire`, so the later `&Path`→key generalisation + dir-creation split is
+  *engine-internal* (the loop + the impls), and the Kinds are untouched — the F1
+  hazard (slice-002) is avoided. The spec is reconciled to record this.
 - **D2 — `Kind` is a data struct with a `fn` pointer, not a trait.** One dispatch
   site, no per-kind state; a struct is the least machinery. A trait buys nothing
   until a kind needs behaviour the function signature can't carry.
@@ -192,11 +220,30 @@ second metadata-bearing caller proves a shared shape (Non-Goal: no premature
   (slice, later spec) claim an id; sub-artefacts (design doc, later requirements
   rows) live under a parent and don't. The non-reserved branch is the second shape
   that makes the generalisation real rather than nominal.
-- **D5 — Design doc is a single `design.md`, prose-only, no reservation, no
-  sister TOML.** The slice dir already namespaces it; one design doc per slice in
-  v1. Revisions are git history, not `DR-001`/`DR-002` files. If it ever grows
-  facets it becomes a metadata-bearing kind — but that is exactly the
-  premature-`Meta`-trait Non-Goal, held off.
+- **D5 — In *this* slice the design doc is a single `design.md`, prose-only, no
+  reservation, no sister TOML.** The slice dir already namespaces it; one design
+  doc per slice in v1. Revisions are git history, not `DR-001`/`DR-002` files.
+  This prose-only shape is a deliberate scoping choice: it keeps the second
+  caller minimal so the engine extraction is what gets proven here, and it holds
+  off the premature-`Meta`-trait Non-Goal (a *read* facet would be the second
+  metadata-bearing reader).
+  - **Known follow-up — design-doc TOML facet (deferred, sequence A).** A design
+    doc *does* carry structured data, and entity-model.md's storage rule says it
+    belongs in a sister facet, not prose (the canonical `design_revision`
+    frontmatter, dropped here, is exactly this). Deferred to a follow-up slice via
+    supersede, **not** built now — recorded so it is not relitigated:
+    - **Facet fields:** `date`, key files / globs, governance-doc relationships
+      (a `[relationships]` table, the shape slice.toml already reserves).
+    - **Design-doc *approval* is NOT a facet field — it is slice state.** It gates
+      planning, so it lives in the slice lifecycle (the `status` transition,
+      later `.doctrine/state/`), per entity-model.md *approval-separate*. Keep it
+      out of the design data.
+    - **Structured adversarial review (workflow / findings / disposition) is a
+      future `RVW-` entity** (this slice's Non-Goal). This handover's
+      hand-written review + disposition table is its precursor.
+    - **Engine impact: none.** A toml+md design doc is just a 2-`Artifact`
+      non-reserved fileset; `Fileset = Vec<Artifact>` already admits it. The facet
+      slice adds the fields + the reader, not engine surface.
 - **D6 — Verb is `heresy slice design <id>`.** Scaffolds `design.md` into the
   resolved slice dir. (Name over `dr`/`design-doc` for plain English; revisit if a
   `RVW-` review verb later wants a shared noun.)
@@ -208,12 +255,24 @@ second metadata-bearing caller proves a shared shape (Non-Goal: no premature
 - **Q1 — `Kind` registry.** Two kinds can be two `const Kind`s referenced
   directly. A lookup table (`&str -> &Kind`) is only needed when a generic
   `heresy <kind> new` dispatch exists; not this slice. Leave direct.
-- **Q2 — Title/slug for a sub-artefact.** A design doc has no slug of its own;
-  `ScaffoldCtx` carries the *parent* slice's slug/title. Confirm the design
-  template needs only `{{title}}` (parent title) — likely yes.
+- **Q2 — Title/id for a sub-artefact (resolved).** A design doc has no slug or id
+  of its own. The template uses two tokens: `{{ref}}` (the parent's canonical id,
+  e.g. `SL-003`) and `{{title}}` (the parent title). `ScaffoldCtx` carries
+  `canonical_id` + `title`; the verb supplies them from the parent slice — `id`
+  from the CLI arg, `title` read from the parent slice `Meta`. (Confirms the Meta
+  read stays slice-side, § 4.)
 - **Q3 — Does `list` ever go kind-generic?** `slice list` reads slice `Meta`.
   drift/spec will want their own `list`. Deferred until the second reader; the
   engine owns scaffolding only for now (no premature `Meta`).
+- **Q4 — Abstract rollup families vs `Kind.prefix`.** One `prefix` per `Kind`
+  fits a *concrete* kind. An abstract **rollup** — spec (product/tech/revision),
+  or backlog (idea/issue/risk/chore) — is N concrete subtype Kinds, each with its
+  own `dir` / `prefix` / numbering / reservation namespace, plus a rollup *view*;
+  it is **not** one polymorphic Kind. So `prefix` stays per-concrete-kind and the
+  rollup is a list/query concern (Q3), not a scaffold Kind. This is the settled
+  spec-family decomposition (entity-model.md: one model, three subtypes, own
+  folders) recurring for backlog. Recorded so per-kind `prefix` is not mistaken
+  for a per-family one.
 
 ## 8. Rollout (build sequence — each step green)
 
