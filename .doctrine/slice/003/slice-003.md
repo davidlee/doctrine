@@ -105,6 +105,11 @@ Split `src/slice.rs` along the line already latent in it:
 
 ## Follow-Ups
 
+- **Design-doc TOML facet** (sequence A — deferred, supersede). The prose-only
+  design doc gains a sister facet: `date`, key files / globs, governance-doc
+  relationships. Design-doc *approval* lands as slice state (not the facet — it
+  gates planning); structured adversarial review becomes a future `RVW-` entity.
+  Engine-neutral (a 2-`Artifact` non-reserved fileset). See design.md D5.
 - **IP + phases** sibling slice (relational `plan.overview`, runtime `phase.tracking`).
 - **Drift ledger / spec** entities become descriptor-sized once the engine lands
   (doc/drift-spec.md, doc/spec-entity-spec.md) — still registry-gated.

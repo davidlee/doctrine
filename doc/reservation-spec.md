@@ -64,6 +64,17 @@ materialisation then compose over the seam unchanged when `git-ref` lands. This
 is tracked as the first deliverable of the entity-engine work, not deferred with
 the `git-ref` backend itself.
 
+**Local lands path-based; the abstract key generalises with `git-ref`.** The
+`key: &str` signature above is the *end* shape. slice-003 lifts the seam as
+`acquire(&self, claim: &Path)` — for the local backend the claim path **is** the
+entity dir, so the `mkdir` both claims and creates, faithful to today's behaviour
+and adding nothing on disk. An abstract key now would force the local backend
+either to know the entity layout (the coupling this primitive forbids) or to
+claim a separate lock tree. When `git-ref` arrives the seam generalises to the
+abstract key and the dir-creation splits out of `acquire` into materialisation.
+Crucially this is **engine-internal**: callers invoke `materialise`, never
+`acquire`, so the generalisation does not rewrite them (slice-003 design.md D1).
+
 ## v1 scope
 
 **Ships:** id reservation (permanent claims) over two backends (`local`,
