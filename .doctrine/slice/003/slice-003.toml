@@ -1,7 +1,7 @@
 id = 3
 slug = "design-siblings-engine"
 title = "Slice design-doc siblings and entity-scaffold engine"
-status = "ready"
+status = "done"
 created = "2026-06-03"
 updated = "2026-06-04"
 
