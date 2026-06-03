@@ -199,15 +199,19 @@ intent to reconciled change:
 - **ready** — accepted and scoped; cleared to start, work not begun.
 - **started** — implementation under way.
 - **audit** — code shipped; reconciling what shipped against the slice's
-  declared scope (the seam for the future audit/patch lifecycle,
-  § Forward compatibility).
+  declared scope. This is the *status* a slice carries while its audit (the
+  `AUD-` artefact, glossary) is in progress — the stage produces the artefact;
+  the two are not the same thing and do not share an id.
 - **done** — reconciled and closed.
 
 There is **no `complete` command and no closure gate** in v1 — there is nothing
 to gate against until specs and verification artefacts exist, so transitions are
-by hand and any value in the set is accepted. The richer vocabulary is recorded
-now so the lifecycle stages are deliberate, not retrofitted; gating attaches to
-them later. This is the deliberate "one thing at a time" boundary.
+by hand and any value in the set is accepted. Note the seam is *entirely*
+manual: v1 ships `new` (which always writes `proposed`) and `list`, and **no
+transition verb** — the other four states are reached only by hand-editing
+`slice-<id>.toml`. The richer vocabulary is recorded now so the lifecycle stages
+are deliberate, not retrofitted; gating attaches to them later. This is the
+deliberate "one thing at a time" boundary.
 
 ## Forward compatibility
 

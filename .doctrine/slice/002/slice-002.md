@@ -1,5 +1,13 @@
 # Generalise slice machinery into a kind-parameterised entity engine
 
+> **Superseded by slice-003.** An adversarial review (see `handover.md`) showed a
+> standalone refactor with a single caller freezes the wrong abstraction boundary
+> (it assumed a fixed two-file scaffold; a spec needs ~13). The engine extraction
+> is folded into slice-003, where it lands against a genuine second caller (the
+> design-doc sibling) of a *different* shape. The load-bearing `acquire` seam and
+> the fileset-as-function boundary live there. This slice is retained for the
+> audit trail; do not build it.
+
 ## Context
 
 `heresy slice` (slice-001) established the directory-entity pattern: a numeric

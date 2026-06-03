@@ -1,0 +1,14 @@
+id = 3
+slug = "design-siblings-engine"
+title = "Slice design-doc siblings and entity-scaffold engine"
+status = "proposed"
+created = "2026-06-03"
+updated = "2026-06-03"
+
+[relationships]
+# slice-to-slice supersession is the one relationship live in v1 (slice-002's
+# standalone refactor is folded into this slice — see slice-002.md banner).
+supersedes = [2]
+# Spec/requirement linkage stays empty until that registry exists:
+#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
+#   requirements = ["..."]   # implements / updates / verifies

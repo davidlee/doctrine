@@ -185,16 +185,23 @@ enum DriftKind {
     DescriptionPlaceholder,
     AcceptancePlaceholder,
     BodyRiskNarrative,
+    /// Any kind the running binary doesn't know — captured verbatim, surfaced,
+    /// never fatal. (`#[serde(other)]` discards the string, so model this as a
+    /// catch-all that *keeps* it: e.g. an untagged `Known(..) | Other(String)`.)
+    Other(String),
 }
 ```
 
-`DriftKind` is a **closed enum on purpose**: kinds are *emitted by a drift
-detector*, not hand-authored, so the detector and the enum evolve together and
-an unknown kind is a parse error (a typo or a detector/schema version skew),
-not silently accepted. The seed set above is lifted from the spec-driver sweep
-that motivated this — it grows with Heresiarch's own spec system. `Disposition`
-(`amend | accept | defer | dismiss`) and the status enums are closed for the
-same reason: they are a fixed decision vocabulary, not data.
+`DriftKind`'s known set is closed, but an unknown kind degrades to `Other` —
+**not** a parse error. Kinds are *emitted by a drift detector* that may be
+external or version-skewed; the same future/external provenance that keeps the
+`observed` keys open (§ Metadata) applies here. A hard parse error would let one
+unrecognised kind take down `heresy drift list` for the *entire* ledger; `Other`
+instead makes it a single warned row that surfaces the skew. The known set is
+lifted from the spec-driver sweep that motivated this and leads the detector.
+`Disposition` (`amend | accept | defer | dismiss`) and the status enums *are*
+fully closed — they are hand-authored decision vocabulary, not detector output,
+so a typo there should fail loudly.
 
 ## Lifecycle
 
@@ -232,9 +239,16 @@ an external sweep; automated detection arrives with the spec system.
   fall out of sync if edited by hand. Mitigation: `heresy drift add` writes both
   atomically, and `heresy drift list` warns on a `ref` present in one file but
   not the other. A linter, not a hard gate, in v1.
-- **Closed `DriftKind` vs external sweeps.** An external detector emitting a kind
-  the enum doesn't know fails to parse. Intended (it surfaces version skew) but
-  means the enum must lead the detector. Accepted.
+- **Duplicate `ref` across concurrent adds / merges.** Entry `ref`s are sequence-
+  assigned (`max + 1` within the ledger), so two `heresy drift add` invocations on
+  separate branches both mint `DL-001.004` and a clean git merge produces silent
+  duplicates. A `mkdir`-style claim cannot arbitrate a *row* (rows aren't dirs),
+  so prevention is impossible — detection is the lever: the uniqueness check runs
+  at **load over the merged file**, not at write time against pre-add state, and a
+  collision is a **hard** lint, not a warning.
+- **Unknown `DriftKind` from external sweeps.** Degrades to `Other(String)` — a
+  warned row, not a dead file (§ Serde types). The known set must still lead the
+  detector so skew is visible.
 - **Distributed id collision.** Inherited from the shared reservation primitive;
   closed later by the `git-ref` backend (reservation-spec § Known risks).
 
@@ -243,9 +257,11 @@ an external sweep; automated detection arrives with the spec system.
 Pure layer, mirroring [slices-spec](slices-spec.md) § Testing:
 
 - `drift-<id>.toml` round-trip — render → parse → same facets; unknown `observed`
-  keys preserved; an unknown `DriftKind` is rejected.
+  keys preserved; an unknown `DriftKind` parses to `Other` (not an error).
 - Entry append — a new `[[entry]]` row and its `### <ref>` stub are produced
-  together; `ref`s are unique within a ledger.
+  together.
+- Duplicate-`ref` lint — over a *merged* file (two appends that each chose the
+  same `ref`), a duplicate is reported as a hard error, not a warning.
 - Ledger/entry status formatting and `--status` filter (as for `slice list`).
 - Self-drift lint — a `ref` in the TOML with no matching `###` (and vice versa)
   is reported.
