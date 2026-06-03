@@ -106,7 +106,7 @@ namespaces; the primitive is blind to meaning:
 | Caller | Key pattern | v1 |
 |---|---|---|
 | Slice id reservation | `slice/id/<n>` | yes |
-| (future) spec-family id reservation | `prd/id/<n>`, `spec/id/<n>`, `rev/id/<n>` | trait-ready |
+| (future) spec-family id reservation | `spec/product/id/<n>`, `spec/tech/id/<n>`, `spec/revision/id/<n>` | trait-ready |
 | (future) entity write-claim | `<kind>/claim/<id>` | deferred (transient) |
 
 Slices are the first caller; the primitive is not slice-specific.

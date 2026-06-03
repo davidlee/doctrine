@@ -261,3 +261,46 @@ markdown after the fence, so the split is consistent).
 
 No code touched — drift remains deferred (registry-gated). This is a
 note-faithfulness fix against the now-authoritative schema, committed separately.
+
+---
+
+# Round 2 addendum — spec-family layout + consolidation direction
+
+Two user inputs after the disposition:
+
+1. **Open q1 answered — sibling folders by subtype.** product/tech/revision each
+   own a folder, "as in spec-driver." Combined with the user's follow-up — *facet
+   combinations differ between product and tech, and they want their own folders*
+   — this settles both open questions:
+   - **Spec family = one model, three subtypes, separate folders.** Not one fused
+     number space (B1's collision), not three unrelated kinds (my round-2 framing,
+     now superseded). `.doctrine/spec/{product,tech,revision}/<n>/`, per-subtype
+     numbering + reservation namespace `spec/<subtype>/id/<n>`.
+   - **Per-subtype facet sets** (closes q4's decided-half): the facet combination
+     is subtype-specific; the engine's fileset-as-function supplies each. Exact
+     PRD/REV combos still open.
+   - Landed: spec-entity § Spec identity (rewritten), § The decomposition tree,
+     § Open questions 4; reservation-spec § Key table.
+
+2. **Consolidation critique ("food for thought") — accepted as direction.** A
+   broad evaluation of spec-driver's schema arguing for *fewer durable entities +
+   typed facets*. Recorded as a new umbrella note `doc/entity-model.md` (the
+   per-entity notes hang off it; the glossary groups already prefigured it), with
+   the adjudication baked in:
+   - **Accept as direction:** universal storage rule, no embedded blocks,
+     entity/facet consolidation, generic-edge-table + typed-table exceptions,
+     canonical+numeric ids, family-specific vocab, approval-separate, runtime
+     state under `.doctrine/state/`, three-layer Rust model, importer-not-port.
+     Most was already latent across the notes — the note *names* it.
+   - **Reject `status`→`state` rename:** churn on shipped slice code, no semantic
+     gain. Keep `status`.
+   - **Push back — `revision` as a spec subtype:** semantically closer to the
+     change side (slice/audit) than to spec identity; kept under the family per
+     the user's folder decision, but its home stays open.
+   - **Sequencing guard:** the note is the *target taxonomy, not the next build*.
+     The essay's "minimal v1" (spec+backlog+decision+audit at once) is more than
+     the roadmap sequences; entities still land one at a time behind their
+     registry gates via supersede, not by this note widening scope.
+
+No code touched; everything stays deferred. Roadmap (slice-003 → IP+phases →
+spec → backlog/decision/audit) unchanged.
