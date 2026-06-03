@@ -401,7 +401,7 @@ v1 a failed write must clean up or it becomes a malformed entity, not a gap.
 ## 10. Review Notes
 
 Adversarial design review + dispositions live in the audit trail
-([handover.md](handover.md), "Round 1 (slice-003)" onward), the same way
+([audit.md](audit.md) appendix, "Round 1 (slice-003)" onward), the same way
 slice-002 recorded its rounds. Round 1 verified D1 (the load-bearing seam claim)
 survives, reconciled it with reservation-spec, and landed the `{{ref}}` token,
 the deferred-facet decision (sequence A), and the minor pseudocode/scope fixes

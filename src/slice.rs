@@ -1,26 +1,44 @@
-//! `heresy slice` — create and list slices, Heresiarch's unit of change.
+//! `heresy slice` — create, list, and add design-doc siblings to slices,
+//! Heresiarch's unit of change.
 //!
 //! A slice is a numeric directory under `.doctrine/slice/` holding a sister
 //! TOML (structured metadata) and a scaffolded markdown prose body, with a
-//! `<id>-<slug>` symlink as a human alias (slices-spec).
+//! `<id>-<slug>` symlink as a human alias (slices-spec). A design-doc sibling is
+//! a single prose `design.md` under an existing slice dir.
 //!
-//! Same split as `install` / `skills`: pure functions decide everything from
-//! data — candidate id, slug derivation, template render, list formatting —
-//! and a thin IO shell performs the one impure-critical act, the atomic
-//! `mkdir` claim that arbitrates the id race (reservation-spec § local backend).
+//! Both are `entity::Kind` values over one kind-blind engine: the slice is a
+//! top-level reserved 2-file-plus-symlink kind, the design doc a non-reserved
+//! single-file sub-artefact. This module owns the *slice-specific* parts — the
+//! two Kinds and their scaffolds, the `Meta` reader, list formatting, and thin
+//! CLI wiring; the kind-agnostic machinery lives in `crate::entity`.
 
 use std::fs;
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
 use serde::Deserialize;
 
-/// Bounded retries for the reservation claim loop.
-const MAX_CLAIM_RETRIES: u32 = 128;
+use crate::entity::{self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseMode, ScaffoldCtx};
 
 /// Relative dir of the slice tree inside the project root.
 const SLICE_DIR: &str = ".doctrine/slice";
+
+/// The top-level reserved slice kind: toml + md + slug symlink.
+const SLICE_KIND: Kind = Kind {
+    dir: SLICE_DIR,
+    prefix: "SL",
+    mode: MaterialiseMode::AllocateFreshEntity,
+    scaffold: slice_scaffold,
+};
+
+/// The non-reserved design-doc sibling: one `design.md` under an existing slice.
+const DESIGN_KIND: Kind = Kind {
+    dir: SLICE_DIR,
+    prefix: "SL",
+    mode: MaterialiseMode::CreateInExistingEntity,
+    scaffold: design_scaffold,
+};
 
 // ---------------------------------------------------------------------------
 // Model
@@ -36,49 +54,9 @@ pub(crate) struct Meta {
     status: String,
 }
 
-/// A fully-resolved scaffold for one new slice: every path and byte payload,
-/// decided purely from inputs so it is asserted without disk or clock.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Scaffold {
-    id: u32,
-    dir: PathBuf,
-    toml_path: PathBuf,
-    toml_body: String,
-    md_path: PathBuf,
-    md_body: String,
-    symlink: PathBuf,
-    symlink_target: String,
-}
-
 // ---------------------------------------------------------------------------
-// Pure: id, slug, render, list
+// Pure: render, scaffolds, list
 // ---------------------------------------------------------------------------
-
-/// Next id from a directory listing: `max + 1`, or `1` when empty. Gaps are
-/// not back-filled — the id is monotonic (slices-spec § Id allocation).
-fn candidate_id(existing: &[u32]) -> u32 {
-    existing.iter().copied().max().map_or(1, |m| m + 1)
-}
-
-/// Derive a slug from a title: lowercase, runs of whitespace/`-`/`_` collapse
-/// to a single `-`, every other non-alphanumeric is stripped, no edge dashes.
-fn derive_slug(title: &str) -> String {
-    let mut slug = String::new();
-    let mut pending_dash = false;
-    for ch in title.chars() {
-        if ch.is_ascii_alphanumeric() {
-            if pending_dash && !slug.is_empty() {
-                slug.push('-');
-            }
-            pending_dash = false;
-            slug.push(ch.to_ascii_lowercase());
-        } else if ch.is_whitespace() || ch == '-' || ch == '_' {
-            pending_dash = true;
-        }
-        // any other character is stripped
-    }
-    slug
-}
 
 /// Render `slice-<id>.toml` from the embedded template by token substitution.
 fn render_toml(id: u32, slug: &str, title: &str, date: &str) -> anyhow::Result<String> {
@@ -94,26 +72,41 @@ fn render_md(title: &str) -> anyhow::Result<String> {
     Ok(crate::install::asset_text("templates/slice.md")?.replace("{{title}}", title))
 }
 
-/// Build the scaffold for `id` under `slice_root`, purely from inputs + date.
-fn build_scaffold(
-    slice_root: &Path,
-    id: u32,
-    slug: &str,
-    title: &str,
-    date: &str,
-) -> anyhow::Result<Scaffold> {
-    let name = format!("{id:03}");
-    let dir = slice_root.join(&name);
-    Ok(Scaffold {
-        id,
-        toml_path: dir.join(format!("slice-{name}.toml")),
-        toml_body: render_toml(id, slug, title, date)?,
-        md_path: dir.join(format!("slice-{name}.md")),
-        md_body: render_md(title)?,
-        symlink: slice_root.join(format!("{name}-{slug}")),
-        symlink_target: name,
-        dir,
-    })
+/// Render `design.md` from the embedded template: `{{ref}}` (parent canonical
+/// id) + `{{title}}` (parent title) — a design doc has no id/slug of its own.
+fn render_design(canonical_id: &str, title: &str) -> anyhow::Result<String> {
+    Ok(crate::install::asset_text("templates/design.md")?
+        .replace("{{ref}}", canonical_id)
+        .replace("{{title}}", title))
+}
+
+/// The slice fileset: sister TOML, prose body, and `<id>-<slug>` symlink, all
+/// relative to the slice tree root (the symlink sits beside the numeric dir).
+fn slice_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
+    let name = format!("{:03}", ctx.id);
+    Ok(vec![
+        Artifact::File {
+            rel_path: PathBuf::from(format!("{name}/slice-{name}.toml")),
+            body: render_toml(ctx.id, ctx.slug, ctx.title, ctx.date)?,
+        },
+        Artifact::File {
+            rel_path: PathBuf::from(format!("{name}/slice-{name}.md")),
+            body: render_md(ctx.title)?,
+        },
+        Artifact::Symlink {
+            rel_path: PathBuf::from(format!("{name}-{}", ctx.slug)),
+            target: name,
+        },
+    ])
+}
+
+/// The design-doc fileset: one prose `design.md` under the parent slice dir.
+fn design_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
+    let name = format!("{:03}", ctx.id);
+    Ok(vec![Artifact::File {
+        rel_path: PathBuf::from(format!("{name}/design.md")),
+        body: render_design(ctx.canonical_id, ctx.title)?,
+    }])
 }
 
 /// Sort by id and, when a status is given, keep only matching rows.
@@ -144,7 +137,7 @@ fn format_list(rows: &[Meta]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Imperative: scan, the atomic claim, write
+// Imperative: clock, the slice-specific reader
 // ---------------------------------------------------------------------------
 
 /// Today as `YYYY-MM-DD` (UTC). The clock lives only in the shell; the pure
@@ -154,87 +147,20 @@ fn today() -> String {
     format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())
 }
 
-/// Numeric slice ids present under `slice_root` (symlinks and files ignored).
-/// A missing directory yields an empty listing.
-fn scan_ids(slice_root: &Path) -> anyhow::Result<Vec<u32>> {
-    let mut ids = Vec::new();
-    let entries = match fs::read_dir(slice_root) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(ids),
-        Err(e) => {
-            return Err(e).with_context(|| format!("Failed to read {}", slice_root.display()));
-        }
-    };
-    for entry in entries {
-        let entry = entry?;
-        if !entry.file_type()?.is_dir() {
-            continue;
-        }
-        if let Some(name) = entry.file_name().to_str()
-            && let Ok(n) = name.parse::<u32>()
-        {
-            ids.push(n);
-        }
-    }
-    Ok(ids)
-}
-
-/// Reserve the next id and materialise the slice. `scan` supplies the current
-/// listing; the atomic `mkdir` is the claim — on `AlreadyExists` (another agent
-/// won the race) recompute and retry, bounded (reservation-spec § unification).
-fn reserve_create(
-    slice_root: &Path,
-    slug: &str,
-    title: &str,
-    date: &str,
-    mut scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
-) -> anyhow::Result<Scaffold> {
-    fs::create_dir_all(slice_root)
-        .with_context(|| format!("Failed to create {}", slice_root.display()))?;
-
-    for _ in 0..MAX_CLAIM_RETRIES {
-        let id = candidate_id(&scan()?);
-        let scaffold = build_scaffold(slice_root, id, slug, title, date)?;
-        match fs::create_dir(&scaffold.dir) {
-            Ok(()) => {
-                write_scaffold(&scaffold)?;
-                return Ok(scaffold);
-            }
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {} // lost the race; retry
-            Err(e) => {
-                return Err(e)
-                    .with_context(|| format!("Failed to claim {}", scaffold.dir.display()));
-            }
-        }
-    }
-    bail!("Could not reserve a slice id after {MAX_CLAIM_RETRIES} attempts");
-}
-
-/// Write the sister TOML, prose body, and slug symlink for a claimed slice.
-fn write_scaffold(s: &Scaffold) -> anyhow::Result<()> {
-    fs::write(&s.toml_path, &s.toml_body)
-        .with_context(|| format!("Failed to write {}", s.toml_path.display()))?;
-    fs::write(&s.md_path, &s.md_body)
-        .with_context(|| format!("Failed to write {}", s.md_path.display()))?;
-    if let Err(e) = std::os::unix::fs::symlink(&s.symlink_target, &s.symlink)
-        && e.kind() != ErrorKind::AlreadyExists
-    {
-        return Err(e).with_context(|| format!("Failed to symlink {}", s.symlink.display()));
-    }
-    Ok(())
+/// Parse the `Meta` of a single slice by id.
+fn read_meta(slice_root: &Path, id: u32) -> anyhow::Result<Meta> {
+    let name = format!("{id:03}");
+    let path = slice_root.join(&name).join(format!("slice-{name}.toml"));
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("Slice {name} not found at {}", path.display()))?;
+    toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
 /// Read and parse every `slice-<id>.toml` under `slice_root`.
 fn read_metas(slice_root: &Path) -> anyhow::Result<Vec<Meta>> {
     let mut metas = Vec::new();
-    for id in scan_ids(slice_root)? {
-        let name = format!("{id:03}");
-        let path = slice_root.join(&name).join(format!("slice-{name}.toml"));
-        let text = fs::read_to_string(&path)
-            .with_context(|| format!("Failed to read {}", path.display()))?;
-        let meta: Meta =
-            toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
-        metas.push(meta);
+    for id in entity::scan_ids(slice_root)? {
+        metas.push(read_meta(slice_root, id)?);
     }
     Ok(metas)
 }
@@ -271,24 +197,62 @@ pub(crate) fn run_new(
     slug: Option<String>,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let slice_root = root.join(SLICE_DIR);
     let title = resolve_title(title)?;
+    // Slug *resolution policy* is slice-specific (a design doc has no slug);
+    // only the pure `derive_slug` helper lives in the engine.
     let slug = match slug {
         Some(s) => s,
-        None => derive_slug(&title),
+        None => entity::derive_slug(&title),
     };
     if slug.is_empty() {
         bail!("Could not derive a slug from the title; pass --slug");
     }
     let date = today();
-    let scaffold = reserve_create(&slice_root, &slug, &title, &date, || scan_ids(&slice_root))?;
+    let out = entity::materialise(
+        &SLICE_KIND,
+        &LocalFs,
+        &root,
+        &Inputs {
+            existing_id: None,
+            slug: &slug,
+            title: &title,
+            date: &date,
+        },
+    )?;
 
-    let mut out = io::stdout();
     writeln!(
-        out,
+        io::stdout(),
         "Created slice {:03}: {}",
-        scaffold.id,
-        scaffold.dir.display()
+        out.id,
+        out.dir.display()
+    )?;
+    Ok(())
+}
+
+/// `heresy slice design <id>` — scaffold `design.md` into an existing slice.
+pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(SLICE_DIR);
+    // The design doc inherits its parent's title (the only context its template
+    // needs); reading it confirms the parent exists before we materialise.
+    let meta = read_meta(&slice_root, id)?;
+    let date = today();
+    let out = entity::materialise(
+        &DESIGN_KIND,
+        &LocalFs,
+        &root,
+        &Inputs {
+            existing_id: Some(id),
+            slug: "",
+            title: &meta.title,
+            date: &date,
+        },
+    )?;
+
+    writeln!(
+        io::stdout(),
+        "Created design doc: {}",
+        out.dir.join("design.md").display()
     )?;
     Ok(())
 }
@@ -311,7 +275,6 @@ pub(crate) fn run_list(path: Option<PathBuf>, status: Option<&str>) -> anyhow::R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
 
     fn meta(id: u32, status: &str, slug: &str, title: &str) -> Meta {
         Meta {
@@ -322,28 +285,21 @@ mod tests {
         }
     }
 
-    // --- candidate_id ---
-
-    #[test]
-    fn candidate_id_empty_is_one() {
-        assert_eq!(candidate_id(&[]), 1);
-    }
-
-    #[test]
-    fn candidate_id_is_max_plus_one_ignoring_gaps() {
-        assert_eq!(candidate_id(&[1, 2, 3]), 4);
-        assert_eq!(candidate_id(&[1, 3]), 4);
-        assert_eq!(candidate_id(&[5]), 6);
-    }
-
-    // --- derive_slug ---
-
-    #[test]
-    fn derive_slug_normalises_title() {
-        assert_eq!(derive_slug("Add skill removal"), "add-skill-removal");
-        assert_eq!(derive_slug("Hello, World!"), "hello-world");
-        assert_eq!(derive_slug("  trim  edges  "), "trim-edges");
-        assert_eq!(derive_slug("snake_and-dash"), "snake-and-dash");
+    /// Materialise a slice the way `run_new` does, for behaviour-preservation
+    /// tests (the slice-001 gate).
+    fn make_slice(root: &Path, slug: &str, title: &str, date: &str) -> entity::Materialised {
+        entity::materialise(
+            &SLICE_KIND,
+            &LocalFs,
+            root,
+            &Inputs {
+                existing_id: None,
+                slug,
+                title,
+                date,
+            },
+        )
+        .unwrap()
     }
 
     // --- render / round-trip ---
@@ -364,91 +320,76 @@ mod tests {
         assert!(!body.contains("{{title}}"));
     }
 
-    // --- build_scaffold ---
-
     #[test]
-    fn build_scaffold_lays_out_paths_and_symlink() {
-        let root = Path::new("/tmp/proj/.doctrine/slice");
-        let s = build_scaffold(root, 3, "vendor-skills", "Vendor skills", "2026-06-03").unwrap();
-
-        assert_eq!(s.dir, root.join("003"));
-        assert_eq!(s.toml_path, root.join("003/slice-003.toml"));
-        assert_eq!(s.md_path, root.join("003/slice-003.md"));
-        assert_eq!(s.symlink, root.join("003-vendor-skills"));
-        assert_eq!(s.symlink_target, "003");
-        assert!(s.toml_body.contains("2026-06-03"));
-        assert!(s.md_body.contains("Vendor skills"));
+    fn render_design_substitutes_ref_and_title() {
+        let body = render_design("SL-003", "My Title").unwrap();
+        assert!(body.contains("Design SL-003: My Title"));
+        assert!(!body.contains("{{ref}}"));
+        assert!(!body.contains("{{title}}"));
     }
 
-    // --- scan_ids ---
+    // --- scaffolds ---
 
     #[test]
-    fn scan_ids_collects_numeric_dirs_only() {
+    fn slice_scaffold_lays_out_two_files_and_a_symlink() {
+        let ctx = ScaffoldCtx {
+            id: 3,
+            canonical_id: "SL-003",
+            slug: "vendor-skills",
+            title: "Vendor skills",
+            date: "2026-06-03",
+        };
+        let fileset = slice_scaffold(&ctx).unwrap();
+        assert_eq!(fileset.len(), 3);
+        assert!(matches!(&fileset[0],
+            Artifact::File { rel_path, body }
+            if rel_path == Path::new("003/slice-003.toml") && body.contains("2026-06-03")));
+        assert!(matches!(&fileset[1],
+            Artifact::File { rel_path, body }
+            if rel_path == Path::new("003/slice-003.md") && body.contains("Vendor skills")));
+        assert!(matches!(&fileset[2],
+            Artifact::Symlink { rel_path, target }
+            if rel_path == Path::new("003-vendor-skills") && target == "003"));
+    }
+
+    #[test]
+    fn design_scaffold_is_a_single_file_no_symlink() {
+        let ctx = ScaffoldCtx {
+            id: 3,
+            canonical_id: "SL-003",
+            slug: "",
+            title: "Vendor skills",
+            date: "2026-06-03",
+        };
+        let fileset = design_scaffold(&ctx).unwrap();
+        assert_eq!(fileset.len(), 1);
+        assert!(matches!(&fileset[0],
+            Artifact::File { rel_path, body }
+            if rel_path == Path::new("003/design.md") && body.contains("Design SL-003: Vendor skills")));
+    }
+
+    // --- behaviour preservation: a materialised slice is well-formed ---
+
+    #[test]
+    fn materialise_writes_well_formed_slice() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        fs::create_dir(root.join("001")).unwrap();
-        fs::create_dir(root.join("002")).unwrap();
-        fs::create_dir(root.join("not-a-slice")).unwrap();
-        fs::write(root.join("003"), "a file, not a dir").unwrap();
-        std::os::unix::fs::symlink("001", root.join("001-some-slug")).unwrap();
 
-        let mut ids = scan_ids(root).unwrap();
-        ids.sort_unstable();
-        assert_eq!(ids, vec![1, 2]);
-    }
-
-    #[test]
-    fn scan_ids_missing_dir_is_empty() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(scan_ids(&dir.path().join("nope")).unwrap().is_empty());
-    }
-
-    // --- reserve_create ---
-
-    #[test]
-    fn reserve_create_writes_well_formed_slice() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join(".doctrine/slice");
-
-        let s = reserve_create(&root, "my-slug", "My Title", "2026-06-03", || {
-            scan_ids(&root)
-        })
-        .unwrap();
+        let s = make_slice(root, "my-slug", "My Title", "2026-06-03");
+        let slice_root = root.join(SLICE_DIR);
 
         assert_eq!(s.id, 1);
-        assert!(root.join("001").is_dir());
-        assert!(root.join("001/slice-001.toml").is_file());
-        assert!(root.join("001/slice-001.md").is_file());
+        assert!(slice_root.join("001").is_dir());
+        assert!(slice_root.join("001/slice-001.toml").is_file());
+        assert!(slice_root.join("001/slice-001.md").is_file());
         assert_eq!(
-            fs::read_link(root.join("001-my-slug")).unwrap(),
+            fs::read_link(slice_root.join("001-my-slug")).unwrap(),
             Path::new("001")
         );
 
-        let toml_body = fs::read_to_string(root.join("001/slice-001.toml")).unwrap();
+        let toml_body = fs::read_to_string(slice_root.join("001/slice-001.toml")).unwrap();
         assert!(toml_body.contains("id = 1"));
         assert!(toml_body.contains("2026-06-03"));
-    }
-
-    #[test]
-    fn reserve_create_retries_on_collision_and_lands_next_id() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join(".doctrine/slice");
-        fs::create_dir_all(&root).unwrap();
-        // Pre-claim 001 on disk, but feed a stale (empty) listing first so the
-        // candidate is 001 and the mkdir hits AlreadyExists → recompute.
-        fs::create_dir(root.join("001")).unwrap();
-
-        let calls = Cell::new(0u32);
-        let scan = || {
-            let n = calls.get();
-            calls.set(n + 1);
-            Ok(if n == 0 { vec![] } else { vec![1] })
-        };
-
-        let s = reserve_create(&root, "x", "T", "2026-06-03", scan).unwrap();
-        assert_eq!(s.id, 2);
-        assert!(root.join("002").is_dir());
-        assert_eq!(calls.get(), 2, "expected one collision then success");
     }
 
     // --- list ---
@@ -489,13 +430,66 @@ mod tests {
     #[test]
     fn read_metas_round_trips_a_created_slice() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join(".doctrine/slice");
-        reserve_create(&root, "my-slug", "My Title", "2026-06-03", || {
-            scan_ids(&root)
-        })
+        let root = dir.path();
+        make_slice(root, "my-slug", "My Title", "2026-06-03");
+
+        let metas = read_metas(&root.join(SLICE_DIR)).unwrap();
+        assert_eq!(metas, vec![meta(1, "proposed", "my-slug", "My Title")]);
+    }
+
+    // --- design verb: non-reserved sibling over an existing slice ---
+
+    #[test]
+    fn design_materialises_under_an_existing_slice_with_no_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "my-slug", "My Title", "2026-06-03");
+        let slice_root = root.join(SLICE_DIR);
+
+        let out = entity::materialise(
+            &DESIGN_KIND,
+            &LocalFs,
+            root,
+            &Inputs {
+                existing_id: Some(1),
+                slug: "",
+                title: "My Title",
+                date: "2026-06-03",
+            },
+        )
         .unwrap();
 
-        let metas = read_metas(&root).unwrap();
-        assert_eq!(metas, vec![meta(1, "proposed", "my-slug", "My Title")]);
+        assert_eq!(out.id, 1);
+        let body = fs::read_to_string(slice_root.join("001/design.md")).unwrap();
+        assert!(body.contains("Design SL-001: My Title"));
+        // no second numeric dir, no extra symlink
+        assert!(!slice_root.join("002").exists());
+    }
+
+    #[test]
+    fn design_refuses_to_clobber_an_existing_doc() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "my-slug", "My Title", "2026-06-03");
+        let slice_root = root.join(SLICE_DIR);
+        fs::write(slice_root.join("001/design.md"), "hand-written").unwrap();
+
+        let err = entity::materialise(
+            &DESIGN_KIND,
+            &LocalFs,
+            root,
+            &Inputs {
+                existing_id: Some(1),
+                slug: "",
+                title: "My Title",
+                date: "2026-06-03",
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Refusing to overwrite"));
+        assert_eq!(
+            fs::read_to_string(slice_root.join("001/design.md")).unwrap(),
+            "hand-written"
+        );
     }
 }

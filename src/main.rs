@@ -1,3 +1,4 @@
+mod entity;
 mod install;
 mod root;
 mod skills;
@@ -56,6 +57,16 @@ enum SliceCommand {
         /// Explicit slug (default: derived from the title).
         #[arg(long)]
         slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Scaffold a design-doc sibling into an existing slice.
+    Design {
+        /// Slice id to attach the design doc to.
+        id: u32,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -140,6 +151,7 @@ fn main() -> anyhow::Result<()> {
         },
         Command::Slice { command } => match command {
             SliceCommand::New { title, slug, path } => slice::run_new(path, title, slug),
+            SliceCommand::Design { id, path } => slice::run_design(path, id),
             SliceCommand::List { status, path } => slice::run_list(path, status.as_deref()),
         },
     }

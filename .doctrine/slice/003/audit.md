@@ -1,83 +1,117 @@
-# slice-003 handover — implementation brief
+# slice-003 audit
 
-Brief for a fresh agent **building** slice-003. The design is settled: two
-internal review rounds + two external passes, all dispositioned, every fix
-landed. Status is now `ready` (the user flipped the gate, 2026-06-04). No code
-yet. Your job is to implement [design.md](design.md) faithfully — it is the build
-spec, not a sketch. The audit trail below carries the *why* of every decision;
-read it, don't relitigate it.
+Post-build audit of the entity-scaffold engine + design-doc sibling. Status
+`done` (2026-06-04); gates green — `cargo test` (53), `cargo clippy` (deny-level,
+default targets; `--all-targets` is *not* the gate — it trips the pre-existing
+test-only `unwrap_used`), `cargo fmt`. The slice-001 suite passed unchanged at
+every step.
 
-## What you are building
+This file supersedes the build handover. §1 is the implementation-vs-design
+verdict, §2 the findings worth picking up, §3 the deferred set. The appendix
+preserves the pre-build design-review trail (rounds 1–2 + dispositions) verbatim
+— the *why* of D1–D7, the `{{ref}}` token, the deferred facet, and the round-2
+writer-contract hardening (H1/H2/M1/M4). Settled history; do not relitigate.
 
-Extract the kind-agnostic directory-entity machinery out of `src/slice.rs` into a
-new `src/entity.rs` engine, driven by a `Kind` descriptor, with **two callers of
-different shape**: the existing slice (top-level, reserved, toml+md+symlink) and a
-new **design-doc sibling** (sub-artefact, non-reserved, single prose file under an
-existing slice dir). Adds `heresy slice design <id>`. Supersedes slice-002.
+## 1. Implementation vs design — verdict: faithful
 
-## Read first, in this order
+Every § 7 decision and § 5.5 invariant landed as specified; § 8's four steps were
+built in order, each green against slice-001.
 
-1. [design.md](design.md) — **the build spec.** § 5.2 is the target interface
-   (`Reservation`/`Acquired`/`LocalFs`, `Kind`/`MaterialiseMode`/`ScaffoldCtx`/
-   `Artifact{rel_path}`/`Fileset`); § 5.4 is the `materialise` loop; § 8 is the
-   build sequence; § 5.5 is the invariant checklist you must satisfy.
-2. `src/slice.rs` — the starting code. `reserve_create` (the mkdir inline you
-   lift), `build_scaffold`/`Scaffold` (the fixed-pair struct that becomes
-   `Fileset`), `Meta`/`read_metas`/`format_list` (stay slice-side), and the
-   slice-001 test suite (the behaviour-preservation gate).
-3. **The audit trail below** — four rounds of review. The *why* of D1–D7, the
-   `{{ref}}` token, the deferred facet, and the round-2 writer-contract hardening
-   (H1/H2/M1/M4). Settled; do not re-open without genuinely new evidence.
-4. Specs the design leans on: [reservation-spec](../../../doc/reservation-spec.md)
-   § Code seam, [slices-spec](../../../doc/slices-spec.md) (on-disk shape,
-   pure/imperative split, the WHAT/HOW edge), [entity-model](../../../doc/entity-model.md)
-   (storage rule; templates-are-defaults).
+| Design item | Where | Status |
+|---|---|---|
+| D1 `acquire` seam, path-based | `entity::{Reservation,Acquired,LocalFs}` | ✓ `mkdir` lifted verbatim |
+| D2 `Kind` = data + `fn` ptr | `entity::Kind` | ✓ |
+| D3 `Fileset = Vec<Artifact>` | `entity::{Artifact,Fileset}` | ✓ no hardcoded count |
+| D4 closed `MaterialiseMode` | `entity::MaterialiseMode` | ✓ no `reserve: bool` |
+| D5 design doc = single prose file | `slice::DESIGN_KIND`/`design_scaffold` | ✓ no TOML, no symlink |
+| D6 verb `heresy slice design <id>` | `main::SliceCommand::Design` → `run_design` | ✓ |
+| D7 no silent clobber | `entity::refuse_clobber` | ✓ tested |
+| D-Q2 `{{ref}}`+`{{title}}` | `slice::render_design`, prefix `SL` | ✓ → `Design SL-001: …` |
+| H1 path containment | `entity::safe_join` (sole joiner) | ✓ direct + via `materialise` |
+| H2 no ghost entities | `entity::allocate_fresh` cleanup | ✓ tested |
+| M1 closed enum | as D4 | ✓ |
+| M4 scaffold purity | scaffolds pure over `ScaffoldCtx` + `asset_text` | ✓ clock/root in shell |
+| § 9 test plan | `entity`/`slice` test mods | ✓ incl. bounded-retry exhaustion (added this audit) |
 
-## Build sequence (design.md § 8 — each step green against slice-001)
+**Two deliberate reconciliations vs design.md (both faithful):**
 
-1. **`acquire` seam, in place.** Add `Reservation`/`Acquired`/`LocalFs`; rewrite
-   `reserve_create`'s claim against it. Pure refactor; suite green.
-2. **Engine module `src/entity.rs`.** Move the kind-blind pure fns + the
-   `materialise` loop + the `Artifact` writer behind `Kind`/`ScaffoldCtx`. The
-   slice `Kind` reproduces today's exact toml+md+symlink output. Suite still green.
-3. **Design-doc `Kind` + `design.md` template** (already in `install/templates/`).
-   The `CreateInExistingEntity` mode. Unit test the non-reserved path.
-4. **Wire `heresy slice design <id>`.** Thin CLI verb over the engine
-   (`SliceCommand::Design` in `src/main.rs`, reading the parent title via `Meta`).
+- **`ScaffoldCtx.dir` dropped.** The design listed an entity-dir field, but
+  artifact paths are tree-root-*relative* (H1), so a scaffold builds them from
+  `id` (`format!("{id:03}/…")`), never from an absolute dir — an unused field
+  would trip the deny-level dead-code gate. The five surviving fields (`id`,
+  `canonical_id`, `slug`, `title`, `date`) are each read by ≥1 scaffold.
+- **`materialise(kind, reservation, project_root, inputs)`** takes the *project
+  root* and derives `tree_root = project_root.join(kind.dir)` internally — so
+  `Kind.dir` is read (no dead field) and the scaffold stays root-resolution-free
+  (M4). The retry loop's injectable `scan` lives on the private `allocate_fresh`
+  (engine-tested); public `materialise` wires `|| scan_ids(&tree_root)`.
 
-## Must-honour invariants (the round-2 hardening — don't drop these)
+## 2. Findings — rough edges, drift, latent gaps
 
-- **H1 path containment.** `Artifact` paths are `rel_path`, relative to the
-  entity-tree root (`Kind.dir`, **not** `ctx.dir` — the slug symlink sits at the
-  root beside the numeric dir). The engine is the sole joiner; reject absolute
-  paths and any `..` escaping the tree *before* writing. Test it.
-- **H2 no ghost entities.** `AllocateFreshEntity`: a `Won` claim means the dir is
-  ours, so on any write failure `remove_dir_all` it and propagate the error. Test:
-  `reserved materialise write failure cleans up the won directory`.
-- **M1 closed mode enum.** `MaterialiseMode { AllocateFreshEntity,
-  CreateInExistingEntity }` — never a `reserve: bool`.
-- **M4 scaffold purity.** `Kind.scaffold` is pure over `ScaffoldCtx` + embedded
-  template text (`asset_text` is rust-embed, not disk IO). No clock/disk/git/root
-  inside scaffold — the clock is `today()` → `ctx.date` in the shell.
+None block; all are post-v1 pickups. `[M]` worth a follow-up · `[watch]` latent
+coupling · `[L]` cosmetic.
 
-## Do NOT build (deferred — stay in scope)
+- **[M] The non-reserved path has no partial-write cleanup — H2 is reserved-only.**
+  `create_in_existing` writes a fileset under a parent it does **not** own, so on
+  a mid-fileset write failure it cannot `remove_dir_all` the parent and leftover
+  files survive. Harmless today (design.md is one file), but the engine is sold as
+  *fit to host* multi-file sub-artefacts (future phases). The first `>1`-file
+  `CreateInExistingEntity` kind needs per-fileset transactionality (stage-and-
+  rename, or track-and-unlink written files on error). **Flag at the IP/phases
+  slice** — it inherits this writer.
 
-- `git-ref` backend / full `LeaseBackend` / the `Kind` reservation-namespace field
-  (M2 — lands with git-ref, not now; an unused field trips the dead-code gate).
-- The design-doc TOML facet, approval-as-state, `RVW-` review entity (D5).
-- `heresy slice validate` (M5 — deferred note only).
-- drift / spec entities. The engine only becomes *fit to host* them.
+- **[watch] `Inputs` is a two-mode bag.** `existing_id` is ignored when
+  allocating; `slug` is ignored (passed `""`) for the design doc. The same
+  drop-the-other-mode's-fields smell that M1 removed from `reserve: bool`, now one
+  layer up at the input struct. Fine at two callers. If a third placement adds
+  mode-specific inputs, split into per-mode input types rather than growing
+  `Option` fields.
 
-A finding mid-build is not a licence to widen scope; roadmap changes go via
-supersede, not creep.
+- **[L] Double `safe_join` on the non-reserved path.** `refuse_clobber` and
+  `write_fileset` each join every artifact. Correct, mildly wasteful — could
+  resolve the joined paths once and hand both the set.
 
-## The gate
+- **[L] Two different "parent missing" messages.** `run_design` fails first in
+  `read_meta` (`Slice 009 not found at …/slice-009.toml`); the engine's own guard
+  (`Parent entity 009 not found at …/009`) is only reachable from direct engine
+  use (engine tests hit it; the CLI never surfaces it). Collapse to one source of
+  truth if a second sub-artefact verb appears.
 
-`cargo test` + `cargo clippy` (deny-level; `--all-targets` is *not* the gate) +
-`cargo fmt`. Red/green/**refactor**. Behaviour-preserving extraction — the
-slice-001 suite stays green at **every** step (H2 cleanup is the one deliberate
-addition; slice-001 has no opposing assertion). Update slice-003.toml `updated`/
-`Done` per convention as you land steps. Append build notes below the audit trail.
+- **[L] `materialise` runs `create_dir_all(tree_root)` in both modes.** For
+  `CreateInExistingEntity` on a fresh project this creates an empty
+  `.doctrine/slice` before erroring "parent not found". Harmless, mildly
+  surprising side effect.
+
+- **[L] `canonical_id` formula duplicated** in `allocate_fresh` and
+  `create_in_existing` (`format!("{}-{name}", kind.prefix)`). One helper once a
+  third caller appears.
+
+- **[L] H2 cleanup swallows its own error** (`drop(fs::remove_dir_all(&dir))`).
+  Best-effort by design; a failed cleanup leaves the ghost with no breadcrumb. A
+  one-line stderr warn would aid debugging if it ever fires.
+
+- **[L doc] Minor doc drift.** `Kind.dir`'s doc says "the base every artifact path
+  is joined to" — the base is `project_root.join(kind.dir)`, not `kind.dir`
+  literally; `Inputs`'s doc mentions the engine filling "dir", which it does not.
+
+## 3. Deferred — unchanged, untouched (per § 3 / D5)
+
+- `git-ref` backend / full `LeaseBackend`; the `Kind` reservation-namespace field
+  (M2 — lands *with* git-ref; an unused field trips the dead-code gate now).
+- The design-doc TOML facet, approval-as-slice-state, `RVW-` review entity (D5,
+  sequence A — via supersede).
+- `heresy slice validate` (M5 — design-doc presence is workflow-significant but
+  unobservable; deferred note only, queryable-lives-in-TOML when the facet lands).
+- drift / spec entities — the engine is now *fit to host* them, not building them.
+
+A finding here is not a licence to widen scope; pickups land via supersede.
+
+---
+
+# Appendix — design-review trail (pre-build, verbatim)
+
+The adversarial rounds that shaped the design before any code. Retained as the
+decision record behind §1.
 
 ---
 
