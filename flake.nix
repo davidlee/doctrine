@@ -44,6 +44,8 @@
           else {};
 
         projectPkgs = with pkgs; [
+          jujutsu
+          jjui
           just
           rust-bin.beta.latest.default
           rust-analyzer
