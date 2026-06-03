@@ -114,18 +114,36 @@ The reader extracts only what it needs (`id`, `slug`, `title`, `status`) via
 
 ## Prose body (`slice-<id>.md`)
 
-Pure prose — no frontmatter (it lives in the sister TOML), no embedded YAML. A
-lean section set adapted from the delta template (delta's 7 sections, collapsed):
+Pure prose — no frontmatter (it lives in the sister TOML), no embedded YAML. The
+slice body is the **contract** (the WHAT and whether), not the design (the HOW):
 
-1. **Summary & Context** — what this is, in two sentences.
-2. **Motivation** — why now; the problem.
-3. **Scope & Objectives** — what changes; the desired end state.
-4. **Out of Scope** — explicit exclusions.
-5. **Approach** — overview of the how (not a task breakdown).
-6. **Done** — acceptance criteria; how "complete" is recognised.
-7. **Risks & Follow-ups** — known risks, deferred work, tracking.
+1. **Context** — the situation; why this slice exists.
+2. **Scope & Objectives** — what changes; the desired end state.
+3. **Non-Goals** — explicit exclusions; the scope boundary.
+4. **Summary** — a brief gesture at the how *and* how "done" is recognised; one
+   paragraph of colour, deliberately not a task breakdown or a test list.
+5. **Follow-Ups** — deferred work and tracking (supersede links, later slices).
 
 `heresy slice new` scaffolds the file with these headings and empty bodies.
+
+### Division of labour with the design doc
+
+A guiding rule (entity-model.md: avoid duplication between artifacts — duplication
+breeds drift, and drift is the disease Heresiarch exists to kill): each fact lives
+in exactly **one** artifact. The slice body and its design-doc sibling have a hard,
+non-overlapping edge:
+
+- **Slice body owns the WHAT** — context, scope, non-goals, summary, follow-ups.
+- **Design doc owns the HOW** — approach, architecture, decisions, **risks**, and
+  **validation design**. These were once duplicated in the slice body (`Approach`,
+  `Risks`, `Verification`); they are removed from it so a design-doc review finding
+  never has to be reconciled in two places.
+
+A slice has a design doc **by default** — mandatory except for a trivial change,
+and only with explicit user approval. A design-doc-less (trivial) slice writes
+whatever the `Summary` and `Follow-Ups` need; it does not grow the HOW sections
+back. The `Summary` is the one intentional overlap-by-altitude: a stable précis
+that gestures at the how without tracking the design doc's findings.
 
 ## CLI
 

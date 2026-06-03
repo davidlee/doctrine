@@ -6,10 +6,6 @@
 
 ## Non-Goals
 
-## Approach
-
-## Risks
-
-## Verification
+## Summary
 
 ## Follow-Ups
