@@ -62,46 +62,16 @@ not forks.
   (fileset, reservation), not a common `Meta`; metadata read/format stays
   kind-side until a second metadata-bearing caller proves a shared shape.
 
-## Approach
+## Summary
 
-Split `src/slice.rs` along the line already latent in it:
+Split `src/slice.rs` along its latent pure/imperative seam: lift the inlined
+`mkdir` claim to a one-method `acquire` seam, extract a kind-blind engine driven
+by a `Kind` descriptor (fileset-as-function + optional reservation), and add the
+design-doc as the non-reserved second caller that proves the engine spans two
+shapes. Behaviour-preserving — the slice-001 suite is the gate at every step.
 
-1. **`acquire` seam first** (cheap, load-bearing, valuable even alone). Rewrite
-   the claim loop against `acquire`; local `mkdir` impl behind it. slice-001 tests
-   stay green — behaviour-preserving.
-2. **Engine module.** Move candidate-id, scan, the loop, slug, `today`, write,
-   symlink behind a `Kind { dir, namespace, reserve: bool, scaffold: fn(...) ->
-   Vec<(PathBuf, Bytes)> }`. The slice `Kind` reproduces today's two-file output.
-3. **Design-doc `Kind`.** A sub-artefact kind: no reservation (it lives under an
-   existing slice id), a single-prose-file scaffold. Proves the engine spans both
-   shapes — the test that the generalisation is real, not nominal.
-4. Keep the pure/imperative discipline and the shared seams (`crate::root`,
-   `install::asset_text`, `&mut dyn Write`); reuse, don't duplicate.
-
-## Risks
-
-- **Over-abstraction (the slice-002 charge).** Mitigated structurally: extracted
-  against **two callers of different shape**, not one — the boundary is corrected
-  by use during this slice, and the fileset-as-function shape is forced by the
-  design doc not fitting the two-file mould.
-- **Scope creep into IP/phases.** Held off explicitly (Non-Goals); design doc is
-  prose-only, the simplest sibling, on purpose.
-- **`acquire` seam churn.** Small, behaviour-preserving, guarded by the slice-001
-  suite. The risk is doing *too much* (pulling the full trait) — resist; only the
-  one method.
-
-## Verification
-
-- slice-001's suite passes unchanged throughout (faithful extraction).
-- Engine unit tests own the kind-blind cases (candidate-id incl. the
-  `AlreadyHeld`→retry path through the `acquire` seam, scan, slug, fileset write,
-  symlink), driven by a test `Kind`.
-- The design-doc `Kind` produces a correctly-located prose file under an existing
-  slice dir, with **no** id reservation — exercising the non-reserved,
-  non-two-file path.
-- `acquire` seam: a local-backend test asserts `Won` then `AlreadyHeld` on a
-  re-claim; the retry loop lands the next free id.
-- Lint clean (zero warnings), formatted.
+Approach, decisions, risks, and validation design live in the design doc
+([design.md](design.md)).
 
 ## Follow-Ups
 
