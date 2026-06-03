@@ -216,3 +216,48 @@ three-descriptor framing.
    is preferred.
 2. **PRD/REV filesets** (§ Open questions 4) — pinned when those kinds are
    designed; no blocker now.
+
+---
+
+# Round 2 addendum — drift ledger schema reconciliation
+
+After the round-2 disposition, the user added the **canonical drift-ledger
+schema** to the bundle (§ 3c — `DriftEntry` / `DriftLedger` pydantic models),
+which had been missing. drift-spec could finally be *verified* rather than
+modelled on memory — and it diverged materially, because the round-1 note was
+built on the **legacy minimal sweep variant** (`target` / `drift_kind` /
+`disposition` / `detail`, § 3c "Observed minimal variant"), not the canonical
+model. That variant only parses because of progressive strictness (unknown keys
+→ `extra`); it is not the first-class shape.
+
+Verified gaps and the realignment (all in `doc/drift-spec.md`):
+
+| Was (round-1, legacy-variant) | Canonical model | Fix |
+|---|---|---|
+| `kinds: Vec<DriftKind>` (6 invented, **array**) | `entry_type` — 5 values, **singular** | `entry_type: EntryType` |
+| `disposition` (amend/accept/defer/dismiss) | **no such field** | split → `assessment` (confirmed/disputed/deferred/not_drift) + `resolution_path` (ADR/DE/RE/backlog/editorial/no_change) |
+| `EntryStatus` — 4 values | 7 values | + `triaged`, `adjudicated`, `superseded` |
+| (none) | `severity` | `Severity` (blocking/significant/cosmetic) |
+| `observed: BTreeMap` (open map) | typed `sources`/`claims`/`evidence`/`affected_artifacts`/`discovered_by` + `extra` | typed substructures + `#[serde(flatten)] extra` |
+| entry `ref` | entry `id` | renamed throughout (metadata, prose, lint, tests) |
+| (none) | ledger `delta_ref` | optional `slice_ref` |
+| closed enums **fail loud** on typo | **all vocab permissive** — unknown warns (DEC-057-08) | all enums soft (`+ Other(String)`) |
+
+**Round-1 M5 partial reversal (with reason).** M5 was accepted with the nuance
+"detector-emitted kinds open (`Other`), but hand-authored `disposition`/status
+closed and fail-loud." The canonical schema is new evidence that contradicts the
+closed half: *every* drift vocabulary is permissive (warn, not reject). So the
+soft-enum treatment now applies uniformly — the open/closed split is dropped.
+The graceful-degradation core of M5 stands and is in fact vindicated by the
+canonical `extra` + progressive-strictness design. drift-spec mutating verbs keep
+the edit-preserving (`toml_edit`) requirement; `extra` is now what they must
+preserve (not the retired `observed`).
+
+Heresiarch's deliberate divergences are **kept** (not schema errors): the
+directory-entity layout (`.doctrine/drift/<n>/` + sister toml/md vs the
+canonical single `DL-NNN-<slug>.md`), the slug+title naming, and lifting
+`analysis` out to prose (the canonical also keeps long narrative as freeform
+markdown after the fence, so the split is consistent).
+
+No code touched — drift remains deferred (registry-gated). This is a
+note-faithfulness fix against the now-authoritative schema, committed separately.
