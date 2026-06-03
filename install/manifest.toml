@@ -6,6 +6,7 @@ create = [
   ".doctrine/memory",
   ".doctrine/scripts",
   ".doctrine/skills",
+  ".doctrine/slice",
   ".doctrine/templates",
 ]
 

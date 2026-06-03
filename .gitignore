@@ -1,5 +1,8 @@
 # use flake:
 .envrc
+*.tmp
+*.temp
+*.local.*
 
 # Added by cargo
 
