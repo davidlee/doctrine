@@ -119,6 +119,15 @@ pub(crate) fn run(
 // Manifest
 // ---------------------------------------------------------------------------
 
+/// Fetch an embedded asset (relative to `install/`) as UTF-8 text.
+/// Shared with `slice` for template scaffolding.
+pub(crate) fn asset_text(name: &str) -> anyhow::Result<String> {
+    let file = Assets::get(name).with_context(|| format!("Embedded asset '{name}' is missing"))?;
+    let text = std::str::from_utf8(&file.data)
+        .with_context(|| format!("Embedded asset '{name}' is not valid UTF-8"))?;
+    Ok(text.to_string())
+}
+
 fn load_manifest() -> anyhow::Result<Manifest> {
     let file = Assets::get("manifest.toml")
         .context("install/manifest.toml is missing from embedded assets")?;

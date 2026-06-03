@@ -1,6 +1,7 @@
 mod install;
 mod root;
 mod skills;
+mod slice;
 
 use std::path::PathBuf;
 
@@ -36,6 +37,40 @@ enum Command {
     Skills {
         #[command(subcommand)]
         command: SkillsCommand,
+    },
+
+    /// Create and list slices — the unit of intentional change.
+    Slice {
+        #[command(subcommand)]
+        command: SliceCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum SliceCommand {
+    /// Allocate the next id and scaffold a new slice.
+    New {
+        /// Slice title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List slices by id: id, status, slug, title.
+    List {
+        /// Filter to a single status.
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
     },
 }
 
@@ -102,6 +137,10 @@ fn main() -> anyhow::Result<()> {
                 dry_run,
                 yes,
             } => skills::run_install(path, &agent, &skill, &domain, global, dry_run, yes),
+        },
+        Command::Slice { command } => match command {
+            SliceCommand::New { title, slug, path } => slice::run_new(path, title, slug),
+            SliceCommand::List { status, path } => slice::run_list(path, status.as_deref()),
         },
     }
 }

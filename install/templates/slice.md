@@ -1,15 +1,15 @@
 # {{title}}
 
-## Summary & Context
-
-## Motivation
+## Context
 
 ## Scope & Objectives
 
-## Out of Scope
+## Non-Goals
 
 ## Approach
 
-## Done
+## Risks
 
-## Risks & Follow-ups
+## Verification
+
+## Follow-Ups
