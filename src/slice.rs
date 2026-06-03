@@ -474,15 +474,16 @@ mod tests {
     #[test]
     fn format_list_renders_aligned_rows() {
         let rows = vec![
-            meta(1, "in-progress", "add-skill-removal", "Add skill removal"),
+            meta(1, "started", "add-skill-removal", "Add skill removal"),
             meta(2, "proposed", "vendor-skills", "Vendor skills"),
         ];
         let out = format_list(&rows);
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines.len(), 2);
-        assert!(lines[0].starts_with("001  in-progress  add-skill-removal"));
+        // "started" (7) pads to the width of "proposed" (8) for column alignment.
+        assert!(lines[0].starts_with("001  started   add-skill-removal"));
         assert!(lines[0].ends_with("Add skill removal"));
-        assert!(lines[1].starts_with("002  proposed   "));
+        assert!(lines[1].starts_with("002  proposed  vendor-skills"));
     }
 
     #[test]
