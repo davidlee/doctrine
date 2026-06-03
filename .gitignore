@@ -3,6 +3,9 @@
 *.tmp
 *.temp
 *.local.*
+handover.md
+/scratch
+/tmp
 
 # Added by cargo
 
