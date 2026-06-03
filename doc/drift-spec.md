@@ -238,7 +238,11 @@ an external sweep; automated detection arrives with the spec system.
 - **Ledger self-drift.** The `.toml` row and the `.md` `###` for one entry can
   fall out of sync if edited by hand. Mitigation: `heresy drift add` writes both
   atomically, and `heresy drift list` warns on a `ref` present in one file but
-  not the other. A linter, not a hard gate, in v1.
+  not the other. A linter, not a hard gate, in v1. The atomic add must append
+  **edit-preservingly** (`toml_edit` / structured append), not by serde-
+  reserialising the whole `Ledger` — a full reserialize drops hand comments and
+  any unknown `observed` keys (spec-entity-spec § Known risks carries the same
+  caveat for its mutating verbs).
 - **Duplicate `ref` across concurrent adds / merges.** Entry `ref`s are sequence-
   assigned (`max + 1` within the ledger), so two `heresy drift add` invocations on
   separate branches both mint `DL-001.004` and a clean git merge produces silent
