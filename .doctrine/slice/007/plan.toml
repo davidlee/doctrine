@@ -1,0 +1,200 @@
+# Implementation plan for SL-007 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-007"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Git seam — pure core (frame types, repo normalizer, checkout id)"
+objective = """
+src/git.rs's pure half: the types and derivations that reproduce forgettable's \
+frozen frame algorithm byte-for-byte (design D2/D7). Enable the sha2/hex/ \
+serde_json deps; mirror forgettable's canonical-bytes (DEC-009: sorted keys, \
+integer-only, minimal escaping) + sha256 helper; define Frame/RepoIdentity/ \
+AnchorKind/RepoIdKind/Confidence; implement normalize_remote_url \
+(forget.remote.v1) and the checkout_state_id composition (forget.checkout.v1). \
+No subprocess, no disk — this is where byte-identity with the interop seam is \
+proven by a pure repo_id table.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md re-review passed; decisions Q-A..Q-E locked (audit.md)" },
+  { id = "EN-2", text = "full cargo test + clippy green at HEAD (behaviour-preservation baseline)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Cargo.toml enables sha2/hex/serde_json (the commented workspace deps uncommented)" },
+  { id = "EX-2", text = "src/git.rs: canonical_bytes(&serde_json::Value)->Vec<u8> (sorted keys, integer-only, float-rejecting) + sha256(&[u8])->String hex — byte rules matching forgettable canonical.rs/hash.rs" },
+  { id = "EX-3", text = "types: AnchorKind{Commit,CheckoutState,None}; RepoIdKind{Explicit,Remote,LocalRoot}; Confidence{High,Medium,Low}; RepoIdentity{repo_id,kind,confidence}; Frame (design §5.2)" },
+  { id = "EX-4", text = "normalize_remote_url(&str)->Option<_>: ssh/https/http/git + scp-short; drops scheme+userinfo; preserves non-default ports; lowercases host, preserves path case; strips trailing .git/slash (forget.remote.v1)" },
+  { id = "EX-5", text = "checkout_state_id(index_tree,worktree_fp,untracked_fp)->String = sha256(canonical{normalizer:\"forget.checkout.v1\",...}); clippy zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "normalize_remote_url table (HTTPS, SSH, SSH-with-port, scp-short, credentialed, git://, trailing-slash, mixed-case-host) yields the same repo_ids as forgettable's reference table — the repo_id byte-identity proof" },
+  { id = "VT-2", expects = "checkout_state_id deterministic + field-sensitive (each of the three inputs changes it); canonical_bytes sorts keys, rejects a float" },
+  { id = "VT-3", expects = "cargo clippy zero warnings; pure module — no std::process/fs reference yet" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Git seam — impure capture + conformance golden-vector"
+objective = """
+src/git.rs's impure half: capture(repo_root) -> Result<Frame, CaptureError>, \
+shelling git under config-independent normative flags (design §5.2). Born/ \
+unborn/non-repo as three states; detached HEAD still anchored; content-based \
+dirty detection; repo-identity precedence (explicit→remote→local-root, \
+ambiguous-multi-remote → error); the unstable-frame guards (submodule/symlink/ \
+multi-root → named error, D8/Q-E). Temp-repo fixtures, plus the shared \
+conformance golden-vector pinning repo_id + checkout_state_id equal to \
+forgettable's reference output (the interop seam proof, D7/R3).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged (pure frame core available)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "NORMATIVE_FLAGS (-c core.autocrlf=false -c core.eol=lf -c core.fileMode=true) applied to every git invocation via a shared runner" },
+  { id = "EX-2", text = "capture: clean → AnchorKind::Commit (commit,tree,base_commit,ref_name); dirty → CheckoutState (checkout_state_id,base_commit; commit empty); detached → ref_name=\"\" still anchored; unborn/non-repo → None" },
+  { id = "EX-3", text = "derive_repo_identity precedence explicit(config)→remote(normalized)→local-root(repo:git-root:<root_sha>); select_remote preferred→origin→sole, >1 without origin → CaptureError::AmbiguousRemote; repo_id_kind/confidence set per path" },
+  { id = "EX-4", text = "unstable-frame guards: submodule(160000)/symlink(120000)/multi-root → distinct named CaptureError (never an unstable anchor); clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "temp-repo fixtures (clean/dirty/detached/unborn/non-repo) assert frame fields: commit empty iff dirty, detached anchored, none iff unborn/non-repo, never a panic" },
+  { id = "VT-2", expects = "repo-identity: origin → remote/high; two remotes no origin → AmbiguousRemote; no remote → local-root/medium; --repo override → explicit/high and userinfo-stripped" },
+  { id = "VT-3", expects = "submodule/symlink/multi-root trees error; conformance golden-vector: a fixed fixture tree's repo_id + checkout_state_id equal forgettable's reference values (byte-identity)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Parser + Memory widening (read path, legacy-compat)"
+objective = """
+Give the consumed-not-read blocks real fields and carry them into validated \
+Memory (design §5.3, D4). RawGit/RawScope/RawReview gain serde(default) fields; \
+validated Memory carries an Anchor + reviewed; Scope carries repo_id_kind/ \
+confidence. Explicit empty/absent → none normalization in validation (serde \
+gives \"\", not \"none\" — M1). Read path only; no write/verb change. Legacy \
+SL-005 files must still parse.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 merged (frame types finalised — the Anchor mirrors the persisted subset)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RawGit gains anchor_kind/commit/tree/ref_name/checkout_state_id/base_commit/verified_sha/normalizer (all serde default); NO dirty field (derived from anchor_kind)" },
+  { id = "EX-2", text = "RawScope gains repo_id_kind/repo_id_confidence; RawReview gains reviewed/review_by (all serde default)" },
+  { id = "EX-3", text = "validated Anchor (persisted subset + verified_sha + normalizer); Memory gains anchor + reviewed; Scope gains repo_id_kind/confidence; TryFrom reads them" },
+  { id = "EX-4", text = "validation normalizes empty/absent anchor_kind → None and empty repo_id_kind/confidence → lowest-trust default (explicit, not serde); clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "SL-005-shaped legacy memory.toml (no [git] fields, no reviewed) parses → anchor none, reviewed \"\" — the legacy-compat fixture" },
+  { id = "VT-2", expects = "a fully-populated [git]/[review]/[scope] round-trips through validation (commit/tree/checkout_state_id/verified_sha/repo_id_kind/confidence/reviewed all carried)" },
+  { id = "VT-3", expects = "entity/slice/state + existing memory suites green unchanged; clippy zero" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "record captures scope + born frame"
+objective = """
+The write path (design §5.3/§5.4, D1 capture half). Widen the template + \
+render_memory_toml to emit the full [git]/[scope]/[review] keys; add record's \
+repeatable --path/--glob/--command + --repo flags; build the born frame via \
+git::capture; enforce the repo-scoped (non-empty repo, m1) + anchor-none → \
+error gate (constraint 4). verified_sha is NEVER written, but the \
+verify-mutable keys (verified_sha/reviewed/review_by) are seeded empty so \
+PHASE-05's F-1 guard holds (B3). SL-005 record tests update for the new output.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 (capture) + PHASE-03 (Anchor/Memory) merged" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/templates/memory.toml widened: [scope] repo_id_kind/confidence; [git] commit/tree/ref_name/checkout_state_id/base_commit/verified_sha=\"\"/normalizer; [review] reviewed=\"\"/review_by=\"\"" },
+  { id = "EX-2", text = "record gains repeatable --path/--glob/--command + --repo flags; Draft widened to carry scope arrays + the captured Frame" },
+  { id = "EX-3", text = "run_record: git::capture(root); repo-scoped predicate = non-empty repo (derived or --repo); repo-scoped + anchor_kind=None → error (constraint 4); render writes the real [git]/[scope]; verified_sha stays empty" },
+  { id = "EX-4", text = "render_memory_toml builds [git]/[scope] from Frame + flags (repo in [scope], git facts in [git]); the SL-005 record tests updated for the new rendered output; clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "record --path X --command Y in a clean git repo writes [scope] arrays + [git] anchor_kind=commit (commit/tree/base_commit/ref_name) + verified_sha/reviewed/review_by seeded empty" },
+  { id = "VT-2", expects = "repo-scoped record in a non-git dir errors (constraint 4); a bare record (no scope flags) in a clean repo still succeeds, now anchored" },
+  { id = "VT-3", expects = "record in a dirty repo writes anchor_kind=checkout_state + checkout_state_id, commit empty; clippy zero" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "verify verb — verification axis, refuse-dirty, atomic edit"
+objective = """
+The one novel mutation (design §5.2/§5.4, D1 verify half / D6 / Q-B). \
+doctrine memory verify <uid|key>: capture the frame, refuse a dirty tree \
+(no false attestation), else toml_edit-stamp [review].verification_state/ \
+reviewed + [git].verified_sha and bump updated; a non-git context stamps the \
+review axis with empty verified_sha. Reuses the adr toml_edit shape incl. the \
+F-1 missing-key guard, written atomically (temp+rename, M6). CLI arm.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 merged (records carry the seeded verify-mutable keys)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "run_verify resolves via the resolve_show chokepoint, then git::capture" },
+  { id = "EX-2", text = "dirty → refuse (error: commit first); clean born → set [review].verification_state=\"verified\", [review].reviewed=today, [git].verified_sha=HEAD commit, bump updated; non-git → review axis only, verified_sha empty" },
+  { id = "EX-3", text = "edit-preserving toml_edit reusing adr's shape incl. the F-1 guard (refuse if verified_sha/verification_state/reviewed keys absent); atomic temp-then-rename write" },
+  { id = "EX-4", text = "main.rs MemoryCommand::Verify{reference,path} → memory::run_verify; clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "verify on a clean tree stamps verified_sha/reviewed/verification_state edit-preservingly (hand-added comments survive), updated bumped, write atomic" },
+  { id = "VT-2", expects = "verify on a dirty tree refuses with no write; verify in a non-git context stamps the review axis, leaves verified_sha empty" },
+  { id = "VT-3", expects = "a memory hand-broken to drop the keys is refused (F-1), not corrupted; clippy zero" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-06"
+name      = "show anchor + end-to-end + docs + close-out"
+objective = """
+The first consumer + the slice's seal (design §5.4, §9). render_show prints the \
+real anchor line; one tempdir integration across record/verify/show/list \
+against a real git repo; CLAUDE.md + manifest doc updates; harvest durable \
+findings. The slice ends green with the producer surface documented.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 merged (all verbs land)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "render_show replaces the hardcoded `anchor: none` with the real anchor (kind + commit/ref + verified_sha presence + repo_id_kind/confidence)" },
+  { id = "EX-2", text = "tempdir integration: init git repo → record --path → show (anchor commit) → verify → show (verified_sha present) → list" },
+  { id = "EX-3", text = "CLAUDE.md: `memory verify` added to the CLI surface, src/git.rs seam noted in the layout, find/retrieve still flagged SL-008; install manifest unchanged (items/ already split)" },
+  { id = "EX-4", text = "durable risks/decisions harvested to notes.md/audit.md; cargo fmt clean" },
+]
+verification = [
+  { id = "VT-1", expects = "the end-to-end test passes against the built binary (record anchored, verify stamps verified_sha, show reflects both before/after)" },
+  { id = "VT-2", expects = "full cargo test green incl. unchanged entity/slice/state suites (behaviour-preservation); clippy zero; cargo fmt clean" },
+  { id = "VT-3", expects = "just lint && just test green (no `just check` recipe — CLAUDE.md drift, not fixed here)" },
+]
+specs        = []
+requirements = []
