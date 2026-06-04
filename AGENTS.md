@@ -53,8 +53,13 @@ doctrine memory record --type T [--key K] [--status S] [--summary S] [--tag T]�
 doctrine memory show   <UID|KEY> [-p ROOT]           # header + body-as-data (+ real anchor line)
 doctrine memory verify <UID|KEY> [-p ROOT]           # attest vs the working tree (refuses a dirty tree)
 doctrine memory list   [--type T] [--status S] [--tag T] [-p ROOT]  # newest first; AND-filter
-                                                     #   scope+anchor capture, verify = SL-007 (done)
-                                                     #   find / retrieve (scope query) = SL-008
+doctrine memory find   [--path-scope P]… [--glob G]… [--command C]… [--tag T]… [--query Q]
+                       [--type T] [--status S] [--include-draft] [-p ROOT]  # ranked rows; risk visible
+doctrine memory retrieve <same query/filter flags> [--limit N] [--min-trust L] [-p ROOT]
+                                                     #   framed data-not-instruction blocks; trust
+                                                     #   holdback (low∧sev≥high suppressed, non-bypass)
+                                                     #   scope+anchor capture, verify = SL-007;
+                                                     #   find / retrieve (scope query) = SL-008 (done)
 
 doctrine adr new  [TITLE] [-p ROOT]                  # allocate next id, scaffold ADR
 doctrine adr list [--status S] [-p ROOT]             # rows: id status slug title
@@ -142,10 +147,11 @@ append, never renumber or reuse.
   command moves a slice proposed→…→done or links it to phase state.
 - **no standalone plan validation** — a malformed `plan.toml` only surfaces when
   `slice phases` parses it.
-- **memory retrieval** — `record/show/list` shipped (SL-005). SL-007 (producer —
-  `record` scope+git-anchor capture, `verify`, the `src/git.rs` seam) **done**.
-  SL-008 (reader — scope-aware `find`/`retrieve`, 9-key ranking, git staleness)
-  remains: read-by-id only until it lands.
+- **memory retrieval — SHIPPED.** `record/show/list` (SL-005); SL-007 producer
+  (`record` scope+git-anchor capture, `verify`, `src/git.rs` seam); SL-008 reader
+  (scope-aware `find`/`retrieve`, 9-key ranking, git staleness, the `retrieve`
+  trust holdback). No retrieval gap remains. Producer follow-up still open: `record`
+  has no `--trust`/`--severity` flag (audit A-3) — the risk axes are TOML-only.
 
 ## environment
 

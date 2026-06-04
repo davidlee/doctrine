@@ -456,3 +456,17 @@ External-review pass (2026-06-04, contract-tightening — no architecture change
 > *prefix* (`resolve_uid_prefix`, min 8 hex, ambiguity = error), so a hand-shortened
 > id still works when unique — but `find` does not pre-shorten. Read §5.2's
 > `uid-short` as "the uid column" only.
+>
+> **Implementation fold-in 2026-06-05 (PHASE-05, retrieve — ratified by the user).**
+> Two contract directions §5 left ambiguous, resolved and shipped (audit D-A1/D-A2):
+> (1) **suppress-then-take** — §5.1's `take(limit, [Ranked])` then "pre-render"
+> suppression is read as `take(limit, suppress([Ranked]))`: the trust floor filters
+> held-back memories across ALL ranked survivors BEFORE `take(limit)`, so a
+> top-ranked held-back memory never steals an agent-context slot (the shown count is
+> not silently shrunk below `--limit`). (2) **`--min-trust` = minimum-trust-to-PASS**
+> — floor is a `trust_rank`, default `medium`; `held_back = severity∈{critical,high}
+> ∧ trust_rank(m) > floor`; `--min-trust high` holds low+medium under high severity
+> while HIGH passes (not "all high-severity suppressed"). Also: `held_back` reuses
+> `severity_rank`'s "unknown ⇒ worst bucket", so a malformed severity reads as
+> least-severe and escapes the holdback — accepted in v1 (severity is a tool-authored
+> axis; audit A-1 flags the fail-safe for any future untrusted-severity store).
