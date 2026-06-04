@@ -70,6 +70,15 @@ doctrine skills install …                            # install skills into age
 - **Scaffolds refuse to clobber** — an existing target file is an error, not an
   overwrite. The writer is transactional (partial scaffolds roll back).
 - **`--prune` is destructive** — removes tracking sheets whose plan phase is gone.
+- **`skills install` (Claude) symlinks, never copies** (SL-010). It materialises a
+  canonical `.doctrine/skills/<id>` tree (derived/gitignored, always overwritten
+  from the embed) and links `.claude/skills/<id>` → it, so a re-install always
+  refreshes — no `--force`. Ownership is by target equality: a link is doctrine's
+  iff its value is our canonical target; anything else (a foreign symlink, or a
+  real dir) is **kept + warned**, never clobbered. **Override hatch:** replace the
+  managed symlink with a real copy (`rm` the link, `cp -rL`, then `git add -f` —
+  `.claude` is gitignored) and install reports `kept …`, leaving it untouched.
+  Non-Claude agents still delegate to `npx skills` (unchanged).
 
 ## core process
 
