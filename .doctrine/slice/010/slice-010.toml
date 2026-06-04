@@ -1,9 +1,9 @@
 id = 10
-slug = "skills-install-force"
-title = "Force-reinstall skills (overwrite existing)"
+slug = "skills-symlink-install"
+title = "Symlink skills from a canonical .doctrine/skills tree (Claude-first)"
 status = "proposed"
 created = "2026-06-04"
-updated = "2026-06-04"
+updated = "2026-06-05"
 
 [relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.

@@ -1,49 +1,67 @@
-# Force-reinstall skills (overwrite existing)
+# Symlink skills from a canonical .doctrine/skills tree (Claude-first)
 
 ## Context
 
-`doctrine skills install` is idempotent-by-skip: `claude_steps` (`src/skills.rs:188`)
-emits `Step::Skip` whenever the destination skill dir already exists, so an
-already-installed skill is never refreshed. The only way to pick up edited skill
-sources today is to `rm -rf .claude/skills/<id>` by hand, then reinstall.
+`doctrine skills install` copies each embedded skill into `.claude/skills/<id>`
+and *skips* when the dir already exists (`claude_steps`, `src/skills.rs:188`).
+Copies drift: editing a `SKILL.md` under `plugins/` then re-running `install` is
+a silent no-op, and the only refresh is a manual `rm -rf`.
 
-This bites the inner loop: editing a `SKILL.md` under `plugins/` and re-running
-`install` is a silent no-op. The new `doctrine` process-skill stubs make this
-routine — they will be edited and reinstalled repeatedly.
+The first cut at this (the slice's original `--force` scope) was a flag to opt
+into overwriting the copies. A **symlink model removes the whole staleness class
+instead, and needs no flag** — so it supersedes that idea rather than extending
+it. Design forks settled in conversation:
+
+- The `npx skills` delegate (vercel-labs/skills) has no force flag; it overwrites
+  by default and symlinks into Claude Code as its recommended method — so agents
+  honour symlinked skill dirs. (Confirmed.)
+- Reach: **Claude-first** — doctrine owns the local canonical tree + the Claude
+  links only; other agents keep delegating to `npx`. Chosen on complexity budget:
+  no agent→dir registry, no Node-ownership, smallest diff.
 
 ## Scope & Objectives
 
-- Add a `--force` flag to `skills install` (`SkillsCommand::Install`, `src/main.rs`).
-- Thread it through `run_install` → `build_plan` → `claude_steps`: when set, an
-  existing destination installs (overwrites) instead of skipping.
-- Overwrite is **clean** — the dest skill dir is replaced, not merged, so files
-  deleted from source don't linger (stale-file correctness).
-- Plan/report surface: a forced overwrite of an existing dir reports distinctly
-  from a fresh install and from a skip (so `--dry-run` tells the truth).
-- Delegate (non-Claude) path: pass the equivalent overwrite intent to
-  `npx skills add` in `delegate_argv` **iff** that tool exposes one; otherwise
-  document the gap. (Open question — settle in design.)
-- Behaviour-preservation: without `--force`, the skip behaviour is unchanged; the
-  existing skills suites stay green.
+- **Canonical tree.** `install` materialises `.doctrine/skills/<id>/` from the
+  rust-embed. It is **derived** (regenerable) — already gitignored under
+  `.doctrine/*`; rewritten on every install (always overwrite — it owns no
+  authored data).
+- **Claude path becomes symlinks.** `.claude/skills/<id>` → a *relative* symlink
+  to `.doctrine/skills/<id>`, replacing the copy mechanism for that path.
+- **Type-keyed, flag-free policy** per agent-dir target:
+  - missing → create the symlink;
+  - existing **symlink** → relink (overwrite) unconditionally;
+  - existing **real dir/file** → refuse + warn (never clobber — not doctrine's).
+- **Honest reporting.** Plan / `--dry-run` distinguishes *linked* (new),
+  *relinked* (refreshed), and *kept* (a foreign real dir left untouched).
+- **Delegation unchanged.** Non-Claude agents still resolve to `npx skills add …`
+  (`delegate_argv` untouched); they pull from GitHub, not the local canonical
+  tree. Claude-first means that split is accepted.
+- **`--force` is dropped** — the premise (opt-in copy overwrite) no longer exists.
 
 ## Non-Goals
 
-- No global "always overwrite" config/default — force is opt-in per invocation.
-- No partial/selective file merge, diffing, or backup of the replaced dir.
-- No change to discovery, selection, agent resolution, or the `npx` delegation
-  shape beyond the single overwrite signal.
-- No new uninstall verb.
+- doctrine does **not** own the `.agents` matrix or other agents' dirs — no
+  agent→dir registry; `npx` keeps the long tail.
+- No `--copy` fallback for the Claude path (symlink only; nixos target).
+- No Windows symlink handling.
+- No migration verb: a pre-existing real `.claude/skills/<id>` (e.g. an old
+  copy-install) is treated as foreign — kept + warned, not auto-converted.
+- No change to discovery, selection, agent resolution, or the npx delegate argv.
 
 ## Summary
 
-A one-flag change to the install planner: `--force` turns the `dest.exists()`
-skip into a clean overwrite, kept pure in the plan layer (a new/extended `Step`
-variant) so it's testable without disk, with the imperative replace behind the
-existing execution seam.
+Replace the Claude-path copy+skip with a canonical `.doctrine/skills/` tree plus
+relative symlinks, governed by a type-keyed policy: overwrite our own symlinks and
+the derived tree, never touch foreign real dirs. Kills skill staleness, needs no
+flag, and leaves `npx` delegation for other agents as-is. Pure plan layer (new
+`Step` variants) so the trichotomy is disk-free testable; the imperative
+link/relink/refuse lives behind the existing execution seam.
 
 ## Follow-Ups
 
-- If `npx skills add` lacks a force/overwrite flag, file the gap (and possibly a
-  Claude-only `--force` until the delegate catches up).
-- Consider whether `install` should warn when a skip *would have* refreshed a
-  changed source (drift hint) — separate slice if wanted.
+- **Migration nicety** (separate slice): detect a foreign real `.claude/skills/<id>`
+  that matches a doctrine skill and offer an opt-in convert-to-symlink.
+- **Latent bug**: `DELEGATE_SOURCE = "doctrine/doctrine"` vs the real
+  `davidlee/doctrine` — fix.
+- **Split source**: Claude uses the local canonical tree, npx-managed agents pull
+  from GitHub. Revisit only if frequent multi-agent local installs appear.
