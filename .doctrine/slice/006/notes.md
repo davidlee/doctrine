@@ -53,6 +53,26 @@ in `state/.../phases/`; this survives.
   (one clock) already met. ADR scaffolds call `crate::clock::today()`, same as slice.
   Logged in phase-01.md Findings + the P01 commit.
 
+## PHASE-03 outcomes (verbs landed; the seam P04 does NOT touch)
+
+- **`adr::run_new` / `adr::run_list` exist** (commit `dc807a5`), thin CLI shells
+  mirroring slice. `run_new` → `entity::materialise(&ADR_KIND, Fresh, …)` (monotonic
+  id + race-retry inherited); `run_list` → `meta::read_metas(adr_root,"adr")` →
+  `sort_and_filter` → `format_list`. `adr_root = root.join(ADR_DIR)`. `ADR_DIR` /
+  `ADR_KIND` are still `const`-private in adr.rs; the `#[expect(dead_code)]` is gone.
+- **The reuse seam resolved → `src/input.rs`** (the P03 DRY gate). New thin-shell
+  module = CLI-input resolution for a `new` verb, symmetric to `meta.rs` (list
+  *output*); `entity.rs` stays the kind-blind engine. Two `pub(crate)` fns:
+  `resolve_title(Option<String>)` (moved verbatim from slice — arg|stdin, non-empty)
+  and `resolve_slug(title, Option<String>)` (folds slice's old inline `--slug |
+  derive_slug` + empty-bail). **Both `slice::run_new` and `adr::run_new` call them**
+  — single-sourced, no copy. slice suite stayed green (behaviour-preservation).
+- **`main.rs` has `Command::Adr { AdrCommand::{New,List} }`** + dispatch arm
+  (mirror of `Command::Slice`). P04 extends `AdrCommand` with `Status`.
+- **`memory::run_record` keeps a third "Title must not be empty"** check on a
+  required `&str` (`memory.rs:551`, no Option/stdin) — left out of the input.rs lift
+  (different signature). Future DRY candidate if memory gains an arg|stdin path.
+
 ## Locked decisions (don't relitigate — design §7)
 
 - **D4** extract concrete fns only, **no `numeric_entity` trait/generic**.
