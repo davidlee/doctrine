@@ -1,7 +1,7 @@
 id = 10
 slug = "skills-symlink-install"
 title = "Symlink skills from a canonical .doctrine/skills tree (Claude-first)"
-status = "proposed"
+status = "done"
 created = "2026-06-04"
 updated = "2026-06-05"
 
