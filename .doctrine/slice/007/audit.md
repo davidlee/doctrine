@@ -406,3 +406,11 @@ ref_name + scrub show header`). Regression tests added; `just check` green
 small render/format fixes worth landing; F-A12 (🟠) is the ergonomic follow-on
 (prefix resolution) and touches the resolver. **Handed to a fresh agent** for
 implementation (all three) — see `handover.md`.
+
+**Update 2026-06-05:** F-A10 + F-A11 + F-A12 **fixed** (`fix(SL-007): scrub list
+title + full uid + uid-prefix resolve`). `format_list` scrubs the title via the
+F-A2 `scrub_line` helper and prints the full uid (`short_uid` removed); `show`/
+`verify` resolve a unique `mem_`+8..=31-hex uid prefix against `items/`, erroring
+on ambiguity (lists matches) or no-match. Regression tests added; `just check`
+green (222 lib + 1 e2e). Min-prefix-length decision (`MIN_UID_PREFIX_HEX=8`)
+recorded in `notes.md`.

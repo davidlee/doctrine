@@ -133,6 +133,23 @@ fn is_uid(s: &str) -> bool {
     })
 }
 
+/// Minimum hex digits after `mem_` accepted as a uid *prefix* for `show`/`verify`.
+/// Eight matches the old short-id width (F-A11); uuid-**v7** ids share a leading
+/// ms-timestamp bucket, so the first 8 hex already collide (F-A12) — a shorter
+/// prefix is near-useless and the residual collisions are caught by the ambiguity
+/// error, not a longer floor.
+const MIN_UID_PREFIX_HEX: usize = 8;
+
+/// `^mem_[0-9a-f]{MIN_UID_PREFIX_HEX..32}$` — a partial uid: same hex-only charset
+/// as `is_uid`, but shorter than a full uid (a full uid classifies as `Uid`, not a
+/// prefix). Resolved against `items/` by `resolve_uid_prefix`.
+fn is_uid_prefix(s: &str) -> bool {
+    s.strip_prefix("mem_").is_some_and(|hex| {
+        (MIN_UID_PREFIX_HEX..32).contains(&hex.len())
+            && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+    })
+}
+
 /// One key segment: `[a-z0-9]+(-[a-z0-9]+)*` — lowercase-alnum runs joined by
 /// single internal hyphens, no leading/trailing/double hyphen, non-empty.
 fn valid_segment(seg: &str) -> bool {
@@ -197,6 +214,7 @@ pub(crate) fn validate_tags(tags: &[String]) -> Result<Vec<String>> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum MemoryRef {
     Uid(String),
+    UidPrefix(String),
     Key(String),
 }
 
@@ -216,8 +234,22 @@ impl MemoryRef {
         if is_uid(arg) {
             return Ok(MemoryRef::Uid(arg.to_owned()));
         }
+        if is_uid_prefix(arg) {
+            return Ok(MemoryRef::UidPrefix(arg.to_owned()));
+        }
         if validate_key(arg).is_ok() {
             return Ok(MemoryRef::Key(arg.to_owned()));
+        }
+        // A `mem_<hex>` shorter than the prefix floor: a uid-prefix attempt, not a
+        // key — say so specifically rather than the generic "uid or key" reject.
+        if let Some(hex) = arg.strip_prefix("mem_")
+            && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        {
+            bail!(
+                "uid prefix too short: need at least {MIN_UID_PREFIX_HEX} hex after \
+                 'mem_', got {}: {arg:?}",
+                hex.len()
+            );
         }
         bail!("not a valid memory uid or key: {arg:?}");
     }
@@ -896,14 +928,13 @@ fn select_rows(
     rows
 }
 
-/// The first 12 chars of a uid (`mem_` + 8 hex) — the list's short id column.
-fn short_uid(uid: &str) -> &str {
-    uid.get(..12).unwrap_or(uid)
-}
-
-/// Format `list` rows: aligned `uid-short  type  status  key  title`. A keyless
-/// memory shows `-` for its key column.
+/// Format `list` rows: aligned `uid  type  status  key  title`. The **full** uid
+/// is printed (F-A11) so a listed id can drive `show`/`verify` — a short id is
+/// both unusable there and ambiguous (uuid-v7 ids share a leading bucket, F-A12).
+/// A keyless memory shows `-` for its key column; the title is `scrub_line`d
+/// (F-A10) so a newline in it cannot break the row or forge a second one.
 fn format_list(rows: &[Memory]) -> String {
+    let uid_w = rows.iter().map(|m| m.uid.len()).max().unwrap_or(0);
     let kind_w = rows
         .iter()
         .map(|m| m.kind.as_str().len())
@@ -923,12 +954,12 @@ fn format_list(rows: &[Memory]) -> String {
         .iter()
         .map(|m| {
             format!(
-                "{:<12}  {:<kind_w$}  {:<status_w$}  {:<key_w$}  {}",
-                short_uid(&m.uid),
+                "{:<uid_w$}  {:<kind_w$}  {:<status_w$}  {:<key_w$}  {}",
+                m.uid,
                 m.kind.as_str(),
                 m.status.as_str(),
                 m.key.as_deref().unwrap_or("-"),
-                m.title
+                scrub_line(&m.title)
             )
         })
         .collect();
@@ -956,11 +987,38 @@ fn format_list(rows: &[Memory]) -> String {
 /// Returns the parsed memory, its `.md` body, and the resolved **item dir** —
 /// `verify` writes `memory.toml` back through that dir, so one resolver serves
 /// both read (show) and mutate (verify) without a second chokepoint.
+/// Resolve a validated uid *prefix* to the single matching real uid dir under
+/// `items/`. Scans real dirs only (`scan_named` skips key symlinks, so an alias
+/// never double-counts), keeps the uid-shaped matches, and demands exactly one:
+/// **ambiguity is an error**, never a silent first-match (the determinism
+/// contract). The prefix is hex-only (validated at `MemoryRef::parse`) and is used
+/// purely for string comparison here — it never reaches the fs as a path segment.
+fn resolve_uid_prefix(items_root: &Path, prefix: &str) -> Result<String> {
+    let mut matches: Vec<String> = entity::scan_named(items_root)?
+        .into_iter()
+        .filter(|n| is_uid(n) && n.starts_with(prefix))
+        .collect();
+    matches.sort();
+    match matches.as_slice() {
+        [] => bail!("no memory matches uid prefix {prefix:?}"),
+        [one] => Ok(one.clone()),
+        many => bail!(
+            "ambiguous uid prefix {prefix:?} matches {} memories: {}",
+            many.len(),
+            many.join(", ")
+        ),
+    }
+}
+
 fn resolve_show(items_root: &Path, mref: &MemoryRef) -> Result<(Memory, String, PathBuf)> {
+    // A uid/key is the literal item name; a prefix is first resolved to a unique
+    // real uid dir (scan + ambiguity check) *before* the H1 join — the join still
+    // sees only a full, on-disk uid, never the user prefix (F-A12).
     let name = match mref {
-        MemoryRef::Uid(s) | MemoryRef::Key(s) => s.as_str(),
+        MemoryRef::Uid(s) | MemoryRef::Key(s) => s.clone(),
+        MemoryRef::UidPrefix(p) => resolve_uid_prefix(items_root, p)?,
     };
-    let dir = crate::fsutil::safe_join(items_root, Path::new(name))?;
+    let dir = crate::fsutil::safe_join(items_root, Path::new(&name))?;
     let text = fs::read_to_string(dir.join("memory.toml"))
         .with_context(|| format!("memory not found: {name}"))?;
     let memory = Memory::parse(&text)?;
@@ -1413,14 +1471,20 @@ ref = "src/main.rs"
     #[test]
     fn memory_ref_rejects_malformed_uid_shapes() {
         for bad in [
-            "mem_018F3A00000000000000000000000A",  // uppercase
-            "mem_018f3a",                          // too short
-            "mem_018f3a00000000000000000000000aa", // too long
-            "018f3a00000000000000000000000000",    // no prefix
+            "mem_018F3A00000000000000000000000A", // uppercase (not hex-lowercase)
+            "mem_018f3a",                         // below the prefix floor
+            "018f3a00000000000000000000000000",   // no `mem_` prefix
         ] {
-            // not a uid; and not a valid key either -> error
+            // not a uid, not a valid prefix, not a valid key -> error
             assert!(MemoryRef::parse(bad).is_err(), "should reject {bad:?}");
         }
+        // A 31-hex lowercase `mem_` is now a *valid* uid prefix (one short of a
+        // full uid), not malformed — classified as UidPrefix, resolved on disk.
+        let near = format!("mem_{}", "a".repeat(31));
+        assert_eq!(
+            MemoryRef::parse(&near).unwrap(),
+            MemoryRef::UidPrefix(near.clone())
+        );
     }
 
     // -- VT-4: key normalize + tags -----------------------------------------
@@ -1720,6 +1784,16 @@ ref = "src/main.rs"
 
     fn items_dir(root: &Path) -> PathBuf {
         root.join(MEMORY_ITEMS_DIR)
+    }
+
+    /// Write a real `items/<uid>/` dir with a parseable `memory.toml` (+ body) for
+    /// a chosen uid — lets a test fix the uid bytes (uuid-prefix collisions) that
+    /// `run_record`'s random uids cannot reproduce on demand.
+    fn write_memory_dir(items: &Path, uid: &str) {
+        let dir = items.join(uid);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("memory.toml"), full_toml().replace(UID, uid)).unwrap();
+        fs::write(dir.join("memory.md"), "body").unwrap();
     }
 
     /// Build `RecordArgs` with the pre-PHASE-04 positional shape (no scope flags,
@@ -2551,7 +2625,7 @@ ref = "src/main.rs"
     }
 
     #[test]
-    fn format_list_aligns_short_uid_type_status_key_title() {
+    fn format_list_aligns_full_uid_type_status_key_title() {
         let m = mem(
             UID,
             Some("mem.pattern.cli.skinny"),
@@ -2560,13 +2634,41 @@ ref = "src/main.rs"
             "2026-06-04",
         );
         let out = format_list(&[m]);
-        assert!(out.starts_with("mem_018f3a1b"), "short uid column: {out}");
+        // F-A11: the FULL uid leads the row, not a 12-char short form — a listed
+        // id must be copy-pasteable straight into `show`.
+        assert!(out.starts_with(UID), "full uid column: {out}");
         assert!(out.contains("pattern"));
         assert!(out.contains("active"));
         assert!(out.contains("mem.pattern.cli.skinny"));
         assert!(out.contains("Title"));
         assert!(out.ends_with('\n'));
         assert!(format_list(&[]).is_empty());
+    }
+
+    // F-A11 round-trip: the id a `list` row prints parses back to a `Uid` (so it
+    // can drive `show`/`verify`) — the short form never could (parse rejected it).
+    #[test]
+    fn the_listed_uid_parses_as_a_uid_for_show() {
+        let m = mem(UID, None, MemoryType::Fact, Status::Active, "2026-06-04");
+        let out = format_list(&[m]);
+        let listed = out.split_whitespace().next().unwrap();
+        assert_eq!(listed, UID);
+        assert_eq!(
+            MemoryRef::parse(listed).unwrap(),
+            MemoryRef::Uid(UID.to_owned())
+        );
+    }
+
+    // F-A10: a newline in a title is scrubbed (\n escaped) so it cannot break the
+    // single row into two or forge a second row. Same class as F-A2 in render_show.
+    #[test]
+    fn format_list_scrubs_a_newline_in_the_title() {
+        let mut m = mem(UID, None, MemoryType::Fact, Status::Active, "2026-06-04");
+        m.title = "real\nmem_forged00000000000000000000000000 fake".to_owned();
+        let out = format_list(&[m]);
+        assert!(out.contains("real\\nmem_forged"), "title scrubbed: {out:?}");
+        // exactly one row → one trailing newline, no embedded raw newline.
+        assert_eq!(out.matches('\n').count(), 1, "single row: {out:?}");
     }
 
     // VT-1: resolve a uid AND a key; a stale key with no symlink does NOT
@@ -2597,6 +2699,56 @@ ref = "src/main.rs"
             resolve_show(&items, &MemoryRef::Key("mem.pattern.cli.skinny".to_owned())).unwrap();
         assert_eq!(by_key.uid, uid);
         assert_eq!(by_key.key.as_deref(), Some("mem.pattern.cli.skinny"));
+    }
+
+    // F-A12: a uid prefix matching exactly one real dir resolves to that memory;
+    // `verify` shares `resolve_show`, so it inherits prefix resolution too.
+    #[test]
+    fn show_resolves_a_unique_uid_prefix() {
+        let root = tempfile::tempdir().unwrap();
+        let items = items_dir(root.path());
+        write_memory_dir(&items, UID); // mem_018f3a1b...d7
+        let mref = MemoryRef::parse("mem_018f3a1b").unwrap();
+        assert_eq!(mref, MemoryRef::UidPrefix("mem_018f3a1b".to_owned()));
+        let (m, _, dir) = resolve_show(&items, &mref).unwrap();
+        assert_eq!(m.uid, UID);
+        assert_eq!(dir, items.join(UID));
+    }
+
+    // F-A12: uuid-v7 ids share a leading bucket → a prefix can hit >1 dir. That is
+    // an error (lists the colliding uids), never a silent first-match.
+    #[test]
+    fn show_errors_on_an_ambiguous_uid_prefix() {
+        let root = tempfile::tempdir().unwrap();
+        let items = items_dir(root.path());
+        let a = "mem_018f3a1b0000000000000000000000aa";
+        let b = "mem_018f3a1b0000000000000000000000bb";
+        write_memory_dir(&items, a);
+        write_memory_dir(&items, b);
+        let mref = MemoryRef::parse("mem_018f3a1b").unwrap();
+        let err = resolve_show(&items, &mref).unwrap_err().to_string();
+        assert!(err.contains("ambiguous uid prefix"), "{err}");
+        assert!(err.contains(a) && err.contains(b), "lists matches: {err}");
+    }
+
+    // F-A12: a prefix matching nothing is a not-found, distinct from ambiguity.
+    #[test]
+    fn show_errors_on_an_unmatched_uid_prefix() {
+        let root = tempfile::tempdir().unwrap();
+        let items = items_dir(root.path());
+        write_memory_dir(&items, UID);
+        let err = resolve_show(&items, &MemoryRef::parse("mem_deadbeef").unwrap())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("no memory matches uid prefix"), "{err}");
+    }
+
+    // F-A12: a `mem_<hex>` below the prefix floor is rejected at parse with a
+    // specific message — it is a too-short prefix, not a malformed key.
+    #[test]
+    fn parse_rejects_a_too_short_uid_prefix() {
+        let err = MemoryRef::parse("mem_018f").unwrap_err().to_string();
+        assert!(err.contains("uid prefix too short"), "{err}");
     }
 
     #[test]

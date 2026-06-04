@@ -168,3 +168,19 @@ re-look:
 from `m.scope.repo_id_kind/confidence` — `Anchor` excludes repo identity (F6), so
 the line splices two model parts. Kept on one line (it sits inside the
 hostile-input data block; the body-guard framing is unchanged).
+
+### Decision — uid-prefix floor for `show`/`verify` (F-A12, MIN_UID_PREFIX_HEX=8)
+
+`MemoryRef` gained a `UidPrefix` variant: `mem_` + 8..=31 lowercase hex resolves
+against `items/` (real dirs only, via `scan_named`) to a single uid before the H1
+`safe_join`. **Min = 8 hex** (`MIN_UID_PREFIX_HEX`): matches the old 12-char short
+id width, so it is the natural length a user would type/paste. uids are uuid-**v7**
+(time-ordered: leading hex = ms-timestamp bucket), so the first 8 hex *do* collide
+for memories recorded close together — that residual is caught by an **ambiguity
+error** (lists the colliding uids), not by a longer floor. A `mem_<hex>` below 8 is
+rejected at parse with a specific "uid prefix too short" message (not the generic
+"uid or key" reject). Full-uid and key resolution are unchanged additional paths;
+a prefix is hex-only so it can never match a key symlink. `verify` shares
+`resolve_show`, so it inherits prefix resolution. Fixed in the same change:
+F-A10 (`format_list` routes the title through `scrub_line`) and F-A11 (`list`
+prints the full uid, `short_uid` removed).
