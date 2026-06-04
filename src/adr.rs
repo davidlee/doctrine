@@ -14,8 +14,9 @@
 //! keys match `Meta`; the `[relationships]` table is unknown-to-`Meta`, so it is
 //! ignored on read and preserved on disk).
 
+use std::fs;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 
@@ -36,6 +37,30 @@ const ADR_KIND: Kind = Kind {
     prefix: "ADR",
     scaffold: adr_scaffold,
 };
+
+/// The status transitions `adr status` writes. Distinct from the `proposed`
+/// scaffold seed: these are the moves an ADR makes over its life. A flat enum —
+/// no lifecycle ladder (unlike `state::PhaseStatus`), so no per-state stamping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum AdrStatus {
+    Proposed,
+    Accepted,
+    Rejected,
+    Superseded,
+    Deprecated,
+}
+
+impl AdrStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Proposed => "proposed",
+            Self::Accepted => "accepted",
+            Self::Rejected => "rejected",
+            Self::Superseded => "superseded",
+            Self::Deprecated => "deprecated",
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Pure: render, scaffold
@@ -131,6 +156,44 @@ pub(crate) fn run_list(path: Option<PathBuf>, status: Option<&str>) -> anyhow::R
     Ok(())
 }
 
+/// `doctrine adr status` — flip an ADR's authored status and bump `updated`.
+/// The clock is read here and passed in (the pure/imperative split); the
+/// transition itself is edit-preserving and no-ops when unchanged.
+pub(crate) fn run_status(path: Option<PathBuf>, id: u32, status: AdrStatus) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let adr_root = root.join(ADR_DIR);
+    set_adr_status(&adr_root, id, status, &crate::clock::today())?;
+    writeln!(io::stdout(), "ADR {id:03}: {}", status.as_str())?;
+    Ok(())
+}
+
+/// Edit-preserving status transition on one authored `adr-NNN.toml`: set
+/// `status`, stamp `updated`. `toml_edit` mutates the file in place, so the inert
+/// `[relationships]` table, hand-added comments, and unknown keys all survive
+/// (the file is never reserialised). Local to this module (D3 — single consumer);
+/// deliberately unlike `state::set_phase_status`: no `[[progress]]` row (git is
+/// the audit trail — Q1/Q2), no `started`/`completed` stamps (a flat enum, not a
+/// ladder), and it carries the I5 no-op guard. The date is supplied by the shell.
+fn set_adr_status(adr_root: &Path, id: u32, status: AdrStatus, today: &str) -> anyhow::Result<()> {
+    let name = format!("{id:03}");
+    let path = adr_root.join(&name).join(format!("adr-{name}.toml"));
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("adr {name} not found at {}", path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+    // I5 no-op guard: an unchanged status writes nothing, so mtime/content hold.
+    if doc.get("status").and_then(toml_edit::Item::as_str) == Some(status.as_str()) {
+        return Ok(());
+    }
+
+    let table = doc.as_table_mut();
+    table.insert("status", toml_edit::value(status.as_str()));
+    table.insert("updated", toml_edit::value(today));
+    fs::write(&path, doc.to_string()).with_context(|| format!("Failed to write {}", path.display()))
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -139,8 +202,6 @@ pub(crate) fn run_list(path: Option<PathBuf>, status: Option<&str>) -> anyhow::R
 mod tests {
     use super::*;
     use crate::meta::Meta;
-    use std::fs;
-    use std::path::Path;
 
     fn adr_root(root: &Path) -> PathBuf {
         root.join(ADR_DIR)
@@ -299,5 +360,64 @@ mod tests {
             meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), Some("accepted"));
         assert_eq!(accepted.len(), 1);
         assert_eq!(accepted[0].id, 2);
+    }
+
+    // --- VT-1: status flips, `updated` bumps, the rest of the file survives ---
+
+    #[test]
+    fn set_adr_status_flips_status_bumps_updated_and_preserves_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
+        let adr = adr_root(root);
+
+        // an injected date distinct from today() so the bump is visible (VT-1).
+        set_adr_status(&adr, 1, AdrStatus::Accepted, "2099-01-01").unwrap();
+
+        // re-read through the shared reader: the authored status flipped.
+        assert_eq!(meta::read_meta(&adr, "adr", 1).unwrap().status, "accepted");
+
+        let body = fs::read_to_string(adr.join("001/adr-001.toml")).unwrap();
+        // `updated` bumped to the injected date; `created` (the seed) untouched.
+        assert!(body.contains("updated = \"2099-01-01\""));
+        assert!(!body.contains("created = \"2099-01-01\""));
+        // toml_edit preserved the inert table and its hand-authored comments.
+        assert!(body.contains("[relationships]"));
+        assert!(body.contains("# Reserved."));
+        assert!(body.contains("supersedes"));
+    }
+
+    // --- VT-2: the I5 no-op guard — an unchanged status writes nothing ---
+
+    #[test]
+    fn set_adr_status_to_the_current_value_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
+        let p = adr_root(root).join("001/adr-001.toml");
+        let before = fs::read_to_string(&p).unwrap();
+
+        // seed status is "proposed"; the distinct date would bump `updated` IF it
+        // wrote — so byte-equality proves the guard short-circuited (I5).
+        set_adr_status(&adr_root(root), 1, AdrStatus::Proposed, "2099-01-01").unwrap();
+
+        assert_eq!(fs::read_to_string(&p).unwrap(), before);
+    }
+
+    // --- VT-3: missing id errors; an out-of-enum value is rejected at parse ---
+
+    #[test]
+    fn set_adr_status_on_a_missing_id_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = set_adr_status(&adr_root(dir.path()), 9, AdrStatus::Accepted, "2099-01-01")
+            .unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn adr_status_rejects_an_out_of_enum_value() {
+        use clap::ValueEnum;
+        assert!(AdrStatus::from_str("bogus", false).is_err());
+        assert!(AdrStatus::from_str("accepted", false).is_ok());
     }
 }
