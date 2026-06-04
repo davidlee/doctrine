@@ -765,6 +765,40 @@ fn untracked_fingerprint(root: &Path) -> Result<Option<String>, CaptureError> {
     Ok(Some(sha256(&acc)))
 }
 
+/// Count commits in `since..target` that touch any of `paths` — the per-candidate
+/// reachability fact PHASE-04 hands the pure ranker as
+/// [`crate::retrieve::GitFacts::commits_since`]: `Some(0)` ⇒ Fresh, `Some(≥1)` ⇒
+/// Stale, `None` ⇒ undecidable (design §5.2 / review B18).
+///
+/// Every failure folds to `None` so a single bad candidate degrades to
+/// `Staleness::Unknown` — never aborting the whole query. `target` is ALWAYS a
+/// frozen SHA resolved upstream, never the literal `HEAD` (codex F1): this seam
+/// does not resolve HEAD.
+pub(crate) fn commits_touching(
+    root: &Path,
+    paths: &[String],
+    since: &str,
+    target: &str,
+) -> Option<u32> {
+    // Cheap guards before any subprocess: empty paths (B17), and — defence in
+    // depth — empty endpoints a caller slipped past the PHASE-04 gate.
+    if paths.is_empty() || since.is_empty() || target.is_empty() {
+        return None;
+    }
+    // F2 (mandatory, not an optimisation): `since..target` is a set difference
+    // (`target`-reachable minus `since`-reachable), so a non-ancestor `since`
+    // silently over-counts. Exit 1 (not an ancestor) and exit ≥2 (object absent /
+    // shallow / error) both fail `success()` ⇒ None — no over-trust.
+    let ancestry = run_git(root, &["merge-base", "--is-ancestor", since, target]).ok()?;
+    if !ancestry.status.success() {
+        return None;
+    }
+    let range = format!("{since}..{target}");
+    let mut args = vec!["rev-list", "--count", &range, "--"];
+    args.extend(paths.iter().map(String::as_str));
+    git_opt(root, &args).ok().flatten()?.parse::<u32>().ok()
+}
+
 // ---------------------------------------------------------------------------
 // Unit tests — pure logic only (no git, no disk). The byte-identity proof for
 // the remote table is copied verbatim from the external decision register's reference (VT-1).
@@ -779,8 +813,8 @@ mod tests {
 
     use super::{
         AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, Frame, REMOTE_NORMALIZER,
-        RepoIdKind, RepoIdentity, canonical_bytes, capture, checkout_state_id, explicit_identity,
-        normalize_remote_url, sha256,
+        RepoIdKind, RepoIdentity, canonical_bytes, capture, checkout_state_id, commits_touching,
+        explicit_identity, normalize_remote_url, sha256,
     };
 
     /// Render canonical bytes as a `String` for readable assertions (canonical
@@ -1377,6 +1411,117 @@ mod tests {
             frame.checkout_state_id,
             "88d9489028e302700c2e6430e6df1d06539dccfd283d2ed99995258482ccf86c",
             "conformance golden checkout_state_id"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // commits_touching (PHASE-03) — the per-candidate staleness count.
+    // VT-1 counting · VT-2 guards/non-ancestor · VT-3 detached anchor survives.
+    // -----------------------------------------------------------------------
+
+    fn p(s: &str) -> Vec<String> {
+        vec![s.to_string()]
+    }
+
+    // --- VT-2: cheap guards short-circuit before any subprocess. ------------
+
+    #[test]
+    fn empty_paths_returns_none_without_spawning() {
+        // A bare (non-git) dir: a None here proves the guard fires before git.
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert_eq!(
+            commits_touching(dir.path(), &[], "deadbeef", "cafebabe"),
+            None
+        );
+    }
+
+    #[test]
+    fn empty_endpoints_return_none() {
+        let repo = ScratchRepo::new();
+        let head = repo.commit("a.txt", "x", "init");
+        assert_eq!(commits_touching(repo.path(), &p("a.txt"), "", &head), None);
+        assert_eq!(commits_touching(repo.path(), &p("a.txt"), &head, ""), None);
+    }
+
+    // --- VT-1: the count, with the pathspec narrowing. ---------------------
+
+    #[test]
+    fn no_commits_since_anchor_is_zero() {
+        let repo = ScratchRepo::new();
+        let head = repo.commit("a.txt", "x", "init");
+        // since == target ⇒ empty range ⇒ Some(0), not None.
+        assert_eq!(
+            commits_touching(repo.path(), &p("a.txt"), &head, &head),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn counts_commits_touching_scoped_path() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "1", "init");
+        repo.commit("a.txt", "2", "edit");
+        let tip = repo.commit("a.txt", "3", "edit again");
+        assert_eq!(
+            commits_touching(repo.path(), &p("a.txt"), &base, &tip),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn pathspec_narrows_out_other_paths() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "1", "init");
+        let tip = repo.commit("b.txt", "1", "unrelated");
+        // The commit since `base` touches only b.txt ⇒ a.txt scope sees Some(0).
+        assert_eq!(
+            commits_touching(repo.path(), &p("a.txt"), &base, &tip),
+            Some(0)
+        );
+    }
+
+    // --- VT-2: non-ancestor / missing object ⇒ None (no over-count). -------
+
+    #[test]
+    fn non_ancestor_since_returns_none_not_overcount() {
+        let repo = ScratchRepo::new();
+        let older = repo.commit("a.txt", "1", "init");
+        let newer = repo.commit("a.txt", "2", "edit");
+        // since=newer, target=older: newer is NOT an ancestor of older ⇒ None
+        // (a bare `newer..older` would over-count via set difference).
+        assert_eq!(
+            commits_touching(repo.path(), &p("a.txt"), &newer, &older),
+            None
+        );
+    }
+
+    #[test]
+    fn missing_object_returns_none() {
+        let repo = ScratchRepo::new();
+        let head = repo.commit("a.txt", "1", "init");
+        let bogus = "0000000000000000000000000000000000000000";
+        assert_eq!(
+            commits_touching(repo.path(), &p("a.txt"), bogus, &head),
+            None
+        );
+        assert_eq!(
+            commits_touching(repo.path(), &p("a.txt"), &head, bogus),
+            None
+        );
+    }
+
+    // --- VT-3: anchoring survives a detached HEAD (frozen target SHA). ------
+
+    #[test]
+    fn detached_head_with_frozen_target_still_counts() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "1", "init");
+        let tip = repo.commit("a.txt", "2", "edit");
+        repo.git(&["checkout", &base]); // detach HEAD at base
+        // Count is anchored on the passed SHAs, not HEAD ⇒ still Some(1).
+        assert_eq!(
+            commits_touching(repo.path(), &p("a.txt"), &base, &tip),
+            Some(1)
         );
     }
 }
