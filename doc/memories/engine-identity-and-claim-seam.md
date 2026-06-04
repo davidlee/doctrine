@@ -2,8 +2,14 @@
 
 Durable cross-cutting facts about `src/entity.rs` that outlive any one slice.
 Decided in SL-005 design ([../../.doctrine/slice/005/design.md](../../.doctrine/slice/005/design.md));
-**pending implementation** until SL-005 lands. Recorded here so the engine's next
-caller inherits them without re-deriving.
+**D1/D7/D8/D9 built in SL-005 PHASE-01** (commits `ffe18a0` rename + `b58318d`
+widening) — the numeric suite passed unchanged (the behaviour gate). The *named*
+path (`MaterialiseRequest::Named`, `allocate_named`, `scan_named`, `canonical_ref`)
+exists but has **no binary consumer until PHASE-02** wires the memory kind; those
+items carry a `#[cfg_attr(not(test), expect(dead_code, reason=…))]` (lib build = dead
+→ expectation met; test build = used → attr absent), which PHASE-02 deletes as it
+adds the consumer. Recorded here so the engine's next caller inherits them without
+re-deriving.
 
 ## 1. The engine serves two identity shapes (not just numeric)
 
@@ -32,9 +38,10 @@ parameter.
 
 ## 2. The claim seam is generic, not "reservation" (SL-005 D7)
 
-The atomic-claim trait is being renamed **`Reservation` → `Claim`**, **`acquire` →
-`claim`** (variants `Won` / `AlreadyHeld` kept). `mkdir` is still the mechanism;
-only the *interpretation* of an existing claim differs per caller:
+The atomic-claim trait was renamed **`Reservation` → `Claim`**, **`acquire` →
+`claim`** (variants `Won` / `AlreadyHeld` kept; `LocalFs` name unchanged). `mkdir`
+is still the mechanism; only the *interpretation* of an existing claim differs per
+caller:
 
 - numeric callers: `AlreadyHeld` = **lost a race** → recompute id and retry.
 - memory (named): `AlreadyHeld` = **duplicate** → hard error, no retry.
