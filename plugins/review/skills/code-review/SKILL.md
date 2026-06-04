@@ -41,3 +41,40 @@ security, confidence to change, and conceptual precision.
 
 Do not be gentle.
 
+## Process
+
+1. Context Gathering
+   - Understand scope, linked issues, and intent. 
+   - Read relevant governing artifacts, memories, etc.
+2. High-Level Review
+   - Architecture 
+   - Performance impact 
+   - Test strategy
+3. Line-by-Line Analysis
+   - Logic - 
+   - Security 
+   - Maintainability 
+   - Edge cases
+4. Summary & Decision
+   - Structured feedback 
+   - Approval status 
+   - Action items
+
+
+## Response Format
+
+**Overall**: solid | acceptable | revision-required | dogshit
+
+**Synopsis**: ...
+
+**Findings**: ...
+
+**Haiku**: ...
+
+## severity labels
+
+👍 - good
+🔴 - blocking
+🟠 - important
+🟡 - minor
+🔵 - optional suggestion 
