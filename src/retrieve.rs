@@ -17,9 +17,10 @@
               shell (SL-008). The expectation self-clears when that lands."
 )]
 
+use std::cmp::Reverse;
 use std::collections::BTreeSet;
 
-use crate::memory::{Memory, MemoryType, Status};
+use crate::memory::{Memory, MemoryType, Status, normalize_key};
 
 /// A `thread` memory is expired unless verified within this many days (design
 /// D6 — the verification window, distinct from `staleness`'s 30-day boundary).
@@ -211,6 +212,217 @@ pub(crate) fn days_between(a: &str, b: &str) -> Option<i64> {
     Some((to - from).whole_days())
 }
 
+// === PHASE-02: scoring, staleness & the total-order rank =====================
+// The ordering core over the PHASE-01 filter survivors (design § 5.2). Pure: git
+// arrives pre-resolved as `GitFacts`, `today` as a `&str`. Filters already dropped
+// disallowed memories; rank never re-encodes a dropped one (review B1).
+
+/// Case-fold + split on non-alphanumeric, dropping empties. The shared lexer for
+/// the lexical axis — `mem.foo.bar`/`src/x.rs` split on their separators too.
+fn tokenize(s: &str) -> Vec<String> {
+    s.split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// Bounded integer token-overlap of the free-text `--query` against a memory's
+/// `title + summary + tags + memory_key` segments (design Q1/B15 — body NOT
+/// scanned in v1). Score = count of *distinct* query tokens that hit the doc bag
+/// (set membership, not multiplicity — phase-02 OPEN resolved to SET). No query
+/// ⇒ 0.
+fn lexical_score(m: &Memory, q: &QueryContext) -> u32 {
+    let Some(query) = q.query.as_deref() else {
+        return 0;
+    };
+    let mut bag: BTreeSet<String> = BTreeSet::new();
+    bag.extend(tokenize(&m.title));
+    bag.extend(tokenize(&m.summary));
+    for t in &m.scope.tags {
+        bag.extend(tokenize(t));
+    }
+    if let Some(k) = &m.key {
+        bag.extend(tokenize(k));
+    }
+    let q_tokens: BTreeSet<String> = tokenize(query).into_iter().collect();
+    let hits = q_tokens.iter().filter(|t| bag.contains(*t)).count();
+    u32::try_from(hits).unwrap_or(u32::MAX)
+}
+
+/// FULL `memory_key` equality only (review B2): the normalized query equals the
+/// memory's key. Segment/prefix overlap is `lexical_score`'s job, not this. A
+/// non-key-shaped query (`normalize_key` errors) is a non-match, never a fault
+/// (B16). No query, or a keyless memory ⇒ false.
+fn exact_key_match(m: &Memory, q: &QueryContext) -> bool {
+    match (&m.key, q.query.as_deref()) {
+        (Some(k), Some(query)) => normalize_key(query).ok().as_deref() == Some(k.as_str()),
+        _ => false,
+    }
+}
+
+/// The explicit staleness state surfaced on both query surfaces (never a silent
+/// hide — design D19/§5.5). `Unknown` = undecidable; `Unanchored` = no git basis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Staleness {
+    Fresh,
+    Stale,
+    Unknown,
+    Unanchored,
+}
+
+/// Git reachability fact for one candidate, resolved at the shell (PHASE-04) and
+/// crossing the pure seam as plain data (design D3). `commits_since` counts
+/// commits touching the scoped paths since `verified_sha`; `None` = undecidable
+/// (non-ancestor anchor, shallow clone, no target, exec failure — review B18).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct GitFacts {
+    pub(crate) commits_since: Option<u32>,
+}
+
+/// Time-based fresh/stale boundary, inclusive (design § 5.2). Distinct from the
+/// 14-day thread verification window.
+const FRESH_DAYS: i64 = 30;
+
+/// Staleness by the spec's three modes → four explicit states (design § 5.5,
+/// review F6/B5/B6). First match wins, keyed on **attestation**, not `anchor_kind`:
+///  1. scoped (`!paths.is_empty()`) + attested (`verified_sha` set) ⇒ commit mode:
+///     `commits_since` `Some(0)` Fresh / `Some(≥1)` Stale / `None` Unknown (never
+///     Fresh — undecidable reachability). Target absence reaches here as `None`.
+///  2. else a parseable `reviewed` ⇒ time mode: `≤ FRESH_DAYS` Fresh, else Stale.
+///  3. else git-anchored (`kind != None`) with no usable date ⇒ Unknown.
+///  4. else no anchor at all ⇒ Unanchored.
+///
+/// A memory recorded dirty then `verify`-attested clean lands in branch 1 via its
+/// `verified_sha` (verify refuses a dirty tree, so the SHA is always clean).
+fn staleness(m: &Memory, facts: GitFacts, today: &str) -> Staleness {
+    if !m.scope.paths.is_empty() && !m.anchor.verified_sha.is_empty() {
+        return match facts.commits_since {
+            Some(0) => Staleness::Fresh,
+            Some(_) => Staleness::Stale,
+            None => Staleness::Unknown,
+        };
+    }
+    if let Some(days) = days_between(&m.reviewed, today) {
+        return if days <= FRESH_DAYS {
+            Staleness::Fresh
+        } else {
+            Staleness::Stale
+        };
+    }
+    if m.anchor.kind == crate::git::AnchorKind::None {
+        Staleness::Unanchored
+    } else {
+        Staleness::Unknown
+    }
+}
+
+/// `verification_state` → bounded ordinal, lower ranks first (design § 5.2):
+/// verified < unverified < stale < disputed; any unknown string ⇒ worst bucket
+/// (review B12 — never silently ranked best).
+fn verification_rank(s: &str) -> u8 {
+    match s {
+        "verified" => 0,
+        "unverified" => 1,
+        "stale" => 2,
+        "disputed" => 3,
+        _ => 4,
+    }
+}
+
+/// `trust_level` → bounded ordinal: high < medium < low; unknown ⇒ worst (B12/B13).
+fn trust_rank(s: &str) -> u8 {
+    match s {
+        "high" => 0,
+        "medium" => 1,
+        "low" => 2,
+        _ => 3,
+    }
+}
+
+/// `severity` → bounded ordinal: critical < high < medium < low < none; unknown
+/// ⇒ worst bucket (B12/B13).
+fn severity_rank(s: &str) -> u8 {
+    match s {
+        "critical" => 0,
+        "high" => 1,
+        "medium" => 2,
+        "low" => 3,
+        "none" => 4,
+        _ => 5,
+    }
+}
+
+/// A filter survivor with its per-query derived signals, ready to rank. Borrows
+/// the `Memory` (sort is by computed key, never the ref). `scope_match` is `None`
+/// for a bare `--query` (specificity 0 — design D20).
+pub(crate) struct Candidate<'a> {
+    pub(crate) memory: &'a Memory,
+    pub(crate) scope_match: Option<ScopeMatch>,
+    pub(crate) staleness: Staleness,
+    pub(crate) lexical: u32,
+    pub(crate) exact_key: bool,
+}
+
+impl<'a> Candidate<'a> {
+    /// Assemble a candidate, precomputing the lexical + exact-key + staleness
+    /// signals from the resolved git facts (the only impure input, as data).
+    pub(crate) fn new(
+        m: &'a Memory,
+        scope_match: Option<ScopeMatch>,
+        q: &QueryContext,
+        facts: GitFacts,
+        today: &str,
+    ) -> Self {
+        Self {
+            memory: m,
+            scope_match,
+            staleness: staleness(m, facts, today),
+            lexical: lexical_score(m, q),
+            exact_key: exact_key_match(m, q),
+        }
+    }
+}
+
+/// The 9-key total-order sort key (design § 5.2 table), `today` frozen by the
+/// caller. Polarity is load-bearing — asserted per key in tests; do not flip.
+/// `uid` then `memory_key` is the final tiebreak ⇒ scan order never perturbs
+/// output (review D5). Missing/malformed `reviewed` recency sorts last (`MAX`).
+type SortKey<'a> = (
+    bool,         // 1: !exact_key — exact-key hit first
+    Reverse<u32>, // 2: lexical — descending
+    Reverse<u8>,  // 3: scope specificity — descending (0 when unscoped)
+    u8,           // 4: verification — verified→disputed
+    u8,           // 5: trust — high→low
+    u8,           // 6: severity — critical→none
+    Reverse<i64>, // 7: weight — descending
+    i64,          // 8: review recency (age in days) — fewer first, missing last
+    &'a str,      // 9a: uid — ascending
+    &'a str,      // 9b: memory_key — ascending
+);
+
+fn sort_key<'a>(c: &Candidate<'a>, today: &str) -> SortKey<'a> {
+    let m = c.memory;
+    (
+        !c.exact_key,
+        Reverse(c.lexical),
+        Reverse(c.scope_match.map_or(0, |s| s.specificity)),
+        verification_rank(&m.verification_state),
+        trust_rank(&m.trust_level),
+        severity_rank(&m.severity),
+        Reverse(m.weight),
+        days_between(&m.reviewed, today).unwrap_or(i64::MAX),
+        m.uid.as_str(),
+        m.key.as_deref().unwrap_or(""),
+    )
+}
+
+/// Total-order rank over filter survivors (design § 5.2). Deterministic: a
+/// shuffled input yields identical output (the `uid` tiebreak — property test).
+pub(crate) fn rank<'a>(mut cands: Vec<Candidate<'a>>, today: &str) -> Vec<Candidate<'a>> {
+    cands.sort_by(|a, b| sort_key(a, today).cmp(&sort_key(b, today)));
+    cands
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,31 +435,49 @@ mod tests {
     /// Mirrors the SL-005 fixture shape so we exercise the real parser, not a
     /// hand-built struct (test behaviour over construction).
     struct Fixture {
+        uid: &'static str,
+        key: &'static str,
         kind: &'static str,
         status: &'static str,
+        title: &'static str,
+        summary: &'static str,
         workspace: &'static str,
         repo: &'static str,
         paths: &'static [&'static str],
         globs: &'static [&'static str],
         commands: &'static [&'static str],
         tags: &'static [&'static str],
+        anchor_kind: &'static str,
+        verified_sha: &'static str,
         verification_state: &'static str,
         reviewed: &'static str,
+        trust_level: &'static str,
+        severity: &'static str,
+        weight: i64,
     }
 
     impl Default for Fixture {
         fn default() -> Self {
             Self {
+                uid: UID,
+                key: "",
                 kind: "fact",
                 status: "active",
+                title: "t",
+                summary: "s",
                 workspace: "default",
                 repo: "",
                 paths: &[],
                 globs: &[],
                 commands: &[],
                 tags: &[],
+                anchor_kind: "",
+                verified_sha: "",
                 verification_state: "unverified",
                 reviewed: "2026-06-01",
+                trust_level: "medium",
+                severity: "none",
+                weight: 0,
             }
         }
     }
@@ -262,14 +492,19 @@ mod tests {
     }
 
     fn memory(f: &Fixture) -> Memory {
+        let key_line = if f.key.is_empty() {
+            String::new()
+        } else {
+            format!("memory_key = {:?}\n", f.key)
+        };
         let text = format!(
             r#"
-memory_uid = "{UID}"
-schema_version = 1
+memory_uid = "{uid}"
+{key_line}schema_version = 1
 memory_type = "{kind}"
 status = "{status}"
-title = "t"
-summary = "s"
+title = "{title}"
+summary = "{summary}"
 created = "2026-06-01"
 updated = "2026-06-01"
 
@@ -281,28 +516,40 @@ globs = {globs}
 commands = {commands}
 tags = {tags}
 
+[git]
+anchor_kind = "{anchor_kind}"
+verified_sha = "{verified_sha}"
+
 [review]
 verification_state = "{vs}"
 reviewed = "{reviewed}"
 review_by = ""
 
 [trust]
-trust_level = "medium"
+trust_level = "{trust_level}"
 
 [ranking]
-severity = "none"
-weight = 0
+severity = "{severity}"
+weight = {weight}
 "#,
+            uid = f.uid,
             kind = f.kind,
             status = f.status,
+            title = f.title,
+            summary = f.summary,
             workspace = f.workspace,
             repo = f.repo,
             paths = toml_list(f.paths),
             globs = toml_list(f.globs),
             commands = toml_list(f.commands),
             tags = toml_list(f.tags),
+            anchor_kind = f.anchor_kind,
+            verified_sha = f.verified_sha,
             vs = f.verification_state,
             reviewed = f.reviewed,
+            trust_level = f.trust_level,
+            severity = f.severity,
+            weight = f.weight,
         );
         Memory::parse(&text).unwrap()
     }
@@ -588,5 +835,445 @@ weight = 0
         assert_eq!(days_between("bad", "2026-06-01"), None);
         assert_eq!(days_between("2026-06-01", ""), None);
         assert_eq!(days_between("2026-13-01", "2026-06-01"), None); // bad month
+    }
+
+    // -- tokenize (the shared lexical lexer) --------------------------------
+
+    #[test]
+    fn tokenize_casefolds_and_splits_on_non_alphanumeric() {
+        assert_eq!(tokenize("Auth Bug"), vec!["auth", "bug"]);
+        // punctuation, underscore and slash all split; empties dropped
+        assert_eq!(
+            tokenize("src/memory.rs__OK"),
+            vec!["src", "memory", "rs", "ok"]
+        );
+        // key segments split on the dot
+        assert_eq!(tokenize("mem.auth.token"), vec!["mem", "auth", "token"]);
+        assert!(tokenize("   ").is_empty());
+    }
+
+    // -- lexical_score (EX-1 / EX-5 / VT-4) ---------------------------------
+
+    fn with_query(q: &str) -> QueryContext {
+        QueryContext {
+            query: Some(q.to_owned()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn lexical_score_zero_without_query() {
+        let m = memory(&Fixture {
+            title: "auth token expiry",
+            ..Default::default()
+        });
+        assert_eq!(lexical_score(&m, &QueryContext::default()), 0);
+    }
+
+    #[test]
+    fn lexical_score_counts_distinct_overlap_over_title_summary_tags_key() {
+        let m = memory(&Fixture {
+            key: "mem.auth.flow",
+            title: "Token expiry",
+            summary: "middleware check",
+            tags: &["rust"],
+            ..Default::default()
+        });
+        // hits: token(title) + middleware(summary) + rust(tag) + auth(key) = 4
+        assert_eq!(
+            lexical_score(&m, &with_query("token middleware rust auth")),
+            4
+        );
+        // distinct: a repeated query token counts once (SET semantics)
+        assert_eq!(lexical_score(&m, &with_query("token token token")), 1);
+        // no overlap ⇒ 0
+        assert_eq!(lexical_score(&m, &with_query("python django")), 0);
+    }
+
+    #[test]
+    fn lexical_score_ignores_body_only_terms() {
+        // `Memory` carries no body field; a term present nowhere in the indexed
+        // fields contributes nothing — the v1 body-not-scanned contract (B15).
+        let m = memory(&Fixture {
+            title: "auth",
+            summary: "tokens",
+            ..Default::default()
+        });
+        assert_eq!(lexical_score(&m, &with_query("kubernetes")), 0);
+    }
+
+    // -- exact_key_match (EX-1) ---------------------------------------------
+
+    #[test]
+    fn exact_key_match_full_key_only() {
+        let m = memory(&Fixture {
+            key: "mem.auth.flow",
+            ..Default::default()
+        });
+        // full key, with and without the `mem.` prefix the caller may omit
+        assert!(exact_key_match(&m, &with_query("mem.auth.flow")));
+        assert!(exact_key_match(&m, &with_query("auth.flow")));
+        // a prefix/segment of the key is NOT an exact match (lexical's job)
+        assert!(!exact_key_match(&m, &with_query("auth")));
+        // a non-key-shaped query is a non-match, never a fault
+        assert!(!exact_key_match(&m, &with_query("not a key!")));
+        // no query, and a keyless memory, both miss
+        assert!(!exact_key_match(&m, &QueryContext::default()));
+        let keyless = memory(&Fixture::default());
+        assert!(!exact_key_match(&keyless, &with_query("mem.auth.flow")));
+    }
+
+    // -- staleness (EX-2 / VT-2 — the 4-branch first-match) -----------------
+
+    fn facts(commits_since: Option<u32>) -> GitFacts {
+        GitFacts { commits_since }
+    }
+
+    #[test]
+    fn staleness_branch1_commit_mode_when_scoped_and_attested() {
+        let base = Fixture {
+            paths: &["src"],
+            anchor_kind: "commit",
+            verified_sha: "deadbeef",
+            ..Default::default()
+        };
+        let m = memory(&base);
+        assert_eq!(
+            staleness(&m, facts(Some(0)), "2026-06-05"),
+            Staleness::Fresh
+        );
+        assert_eq!(
+            staleness(&m, facts(Some(3)), "2026-06-05"),
+            Staleness::Stale
+        );
+        // undecidable reachability (or absent target) ⇒ Unknown, never Fresh
+        assert_eq!(staleness(&m, facts(None), "2026-06-05"), Staleness::Unknown);
+    }
+
+    #[test]
+    fn staleness_paths_empty_but_verified_falls_to_time_branch() {
+        // verified_sha set but no scope.paths ⇒ not commit mode (B5).
+        let m = memory(&Fixture {
+            paths: &[],
+            verified_sha: "deadbeef",
+            reviewed: "2026-06-01",
+            ..Default::default()
+        });
+        assert_eq!(
+            staleness(&m, facts(Some(9)), "2026-06-05"),
+            Staleness::Fresh
+        );
+    }
+
+    #[test]
+    fn staleness_time_branch_boundary_is_inclusive_30() {
+        let m = memory(&Fixture {
+            reviewed: "2026-05-01",
+            ..Default::default()
+        });
+        // exactly 30 days ⇒ Fresh (inclusive); 31 ⇒ Stale
+        assert_eq!(staleness(&m, facts(None), "2026-05-31"), Staleness::Fresh);
+        assert_eq!(staleness(&m, facts(None), "2026-06-01"), Staleness::Stale);
+    }
+
+    #[test]
+    fn staleness_anchored_unattested_no_date_is_unknown() {
+        let m = memory(&Fixture {
+            anchor_kind: "commit",
+            verified_sha: "",
+            reviewed: "not-a-date",
+            ..Default::default()
+        });
+        assert_eq!(staleness(&m, facts(None), "2026-06-05"), Staleness::Unknown);
+    }
+
+    #[test]
+    fn staleness_no_anchor_no_date_is_unanchored() {
+        let m = memory(&Fixture {
+            anchor_kind: "",
+            verified_sha: "",
+            reviewed: "",
+            ..Default::default()
+        });
+        assert_eq!(
+            staleness(&m, facts(None), "2026-06-05"),
+            Staleness::Unanchored
+        );
+    }
+
+    #[test]
+    fn staleness_dirty_then_verified_uses_verified_sha() {
+        // born checkout_state (dirty) but later verify-attested clean ⇒ branch 1.
+        let m = memory(&Fixture {
+            paths: &["src"],
+            anchor_kind: "checkout_state",
+            verified_sha: "cleansha",
+            ..Default::default()
+        });
+        assert_eq!(
+            staleness(&m, facts(Some(0)), "2026-06-05"),
+            Staleness::Fresh
+        );
+    }
+
+    // -- rank ordinals (EX-3 / VT-3) ----------------------------------------
+
+    #[test]
+    fn rank_ordinals_polarity_and_unknown_worst() {
+        assert!(verification_rank("verified") < verification_rank("unverified"));
+        assert!(verification_rank("unverified") < verification_rank("stale"));
+        assert!(verification_rank("stale") < verification_rank("disputed"));
+        assert!(verification_rank("disputed") < verification_rank("???"));
+
+        assert!(trust_rank("high") < trust_rank("medium"));
+        assert!(trust_rank("medium") < trust_rank("low"));
+        assert!(trust_rank("low") < trust_rank("???"));
+
+        assert!(severity_rank("critical") < severity_rank("high"));
+        assert!(severity_rank("high") < severity_rank("medium"));
+        assert!(severity_rank("medium") < severity_rank("low"));
+        assert!(severity_rank("low") < severity_rank("none"));
+        assert!(severity_rank("none") < severity_rank("???"));
+    }
+
+    // -- rank: the 9-key total order (VT-1 / VT-3) --------------------------
+
+    /// Build a candidate from a fixture + scope dim + lexical/exact signals.
+    fn cand<'a>(
+        m: &'a Memory,
+        lexical: u32,
+        exact_key: bool,
+        dim: Option<Dimension>,
+    ) -> Candidate<'a> {
+        Candidate {
+            memory: m,
+            scope_match: dim.map(ScopeMatch::of),
+            staleness: Staleness::Unknown,
+            lexical,
+            exact_key,
+        }
+    }
+
+    const TODAY: &str = "2026-06-05";
+
+    fn uids() -> [&'static str; 3] {
+        [
+            "mem_018f3a1b2c3d4e5f60718293a4b5c601",
+            "mem_018f3a1b2c3d4e5f60718293a4b5c602",
+            "mem_018f3a1b2c3d4e5f60718293a4b5c603",
+        ]
+    }
+
+    #[test]
+    fn rank_is_deterministic_under_shuffle() {
+        // three memories distinguished only by uid + lexical; every permutation
+        // of the input must yield one identical order (the total-order proof, D5).
+        let [u0, u1, u2] = uids();
+        let m0 = memory(&Fixture {
+            uid: u0,
+            ..Default::default()
+        });
+        let m1 = memory(&Fixture {
+            uid: u1,
+            ..Default::default()
+        });
+        let m2 = memory(&Fixture {
+            uid: u2,
+            ..Default::default()
+        });
+        let order_of = |cs: Vec<Candidate<'_>>| {
+            rank(cs, TODAY)
+                .iter()
+                .map(|c| c.memory.uid.clone())
+                .collect::<Vec<_>>()
+        };
+        // identical lexical/exact ⇒ tiebreak is uid ascending
+        let baseline = order_of(vec![
+            cand(&m0, 1, false, None),
+            cand(&m1, 1, false, None),
+            cand(&m2, 1, false, None),
+        ]);
+        assert_eq!(baseline, vec![u0.to_owned(), u1.to_owned(), u2.to_owned()]);
+        // fixed permutations (no rng — the layer is pure)
+        for perm in [[2usize, 0, 1], [1, 2, 0], [2, 1, 0], [0, 2, 1]] {
+            let ms = [&m0, &m1, &m2];
+            let cs = perm.iter().map(|&i| cand(ms[i], 1, false, None)).collect();
+            assert_eq!(order_of(cs), baseline, "perm {perm:?} must match");
+        }
+    }
+
+    /// Assert `win` outranks `lose` — i.e. rank places `win` first.
+    fn assert_ranks_first(win: Candidate<'_>, lose: Candidate<'_>) {
+        let win_uid = win.memory.uid.clone();
+        let ranked = rank(vec![lose, win], TODAY);
+        assert_eq!(ranked[0].memory.uid, win_uid);
+    }
+
+    #[test]
+    fn rank_key1_exact_key_beats_everything() {
+        // the loser dominates on lexical, yet an exact-key hit still wins (key 1).
+        let [u0, u1, _] = uids();
+        let exact = memory(&Fixture {
+            uid: u0,
+            key: "mem.k",
+            ..Default::default()
+        });
+        let lexy = memory(&Fixture {
+            uid: u1,
+            ..Default::default()
+        });
+        assert_ranks_first(
+            cand(&exact, 0, true, None),
+            cand(&lexy, 99, false, Some(Dimension::Paths)),
+        );
+    }
+
+    #[test]
+    fn rank_key2_higher_lexical_first() {
+        let [u0, u1, _] = uids();
+        let hi = memory(&Fixture {
+            uid: u0,
+            ..Default::default()
+        });
+        let lo = memory(&Fixture {
+            uid: u1,
+            ..Default::default()
+        });
+        assert_ranks_first(cand(&hi, 5, false, None), cand(&lo, 1, false, None));
+    }
+
+    #[test]
+    fn rank_key3_higher_specificity_first() {
+        let [u0, u1, _] = uids();
+        let paths = memory(&Fixture {
+            uid: u0,
+            ..Default::default()
+        });
+        let tags = memory(&Fixture {
+            uid: u1,
+            ..Default::default()
+        });
+        assert_ranks_first(
+            cand(&paths, 1, false, Some(Dimension::Paths)), // 3
+            cand(&tags, 1, false, Some(Dimension::Tags)),   // 0
+        );
+    }
+
+    #[test]
+    fn rank_key4_verification_better_first() {
+        let [u0, u1, _] = uids();
+        let verified = memory(&Fixture {
+            uid: u0,
+            verification_state: "verified",
+            ..Default::default()
+        });
+        let disputed = memory(&Fixture {
+            uid: u1,
+            verification_state: "disputed",
+            ..Default::default()
+        });
+        assert_ranks_first(
+            cand(&verified, 1, false, None),
+            cand(&disputed, 1, false, None),
+        );
+    }
+
+    #[test]
+    fn rank_key5_higher_trust_first() {
+        let [u0, u1, _] = uids();
+        let high = memory(&Fixture {
+            uid: u0,
+            trust_level: "high",
+            ..Default::default()
+        });
+        let low = memory(&Fixture {
+            uid: u1,
+            trust_level: "low",
+            ..Default::default()
+        });
+        assert_ranks_first(cand(&high, 1, false, None), cand(&low, 1, false, None));
+    }
+
+    #[test]
+    fn rank_key6_higher_severity_first() {
+        let [u0, u1, _] = uids();
+        let crit = memory(&Fixture {
+            uid: u0,
+            severity: "critical",
+            ..Default::default()
+        });
+        let none = memory(&Fixture {
+            uid: u1,
+            severity: "none",
+            ..Default::default()
+        });
+        assert_ranks_first(cand(&crit, 1, false, None), cand(&none, 1, false, None));
+    }
+
+    #[test]
+    fn rank_key7_higher_weight_first() {
+        let [u0, u1, _] = uids();
+        let heavy = memory(&Fixture {
+            uid: u0,
+            weight: 9,
+            ..Default::default()
+        });
+        let light = memory(&Fixture {
+            uid: u1,
+            weight: 0,
+            ..Default::default()
+        });
+        assert_ranks_first(cand(&heavy, 1, false, None), cand(&light, 1, false, None));
+    }
+
+    #[test]
+    fn rank_key8_more_recent_first_missing_last() {
+        let [u0, u1, u2] = uids();
+        let recent = memory(&Fixture {
+            uid: u0,
+            reviewed: "2026-06-04",
+            ..Default::default()
+        });
+        let old = memory(&Fixture {
+            uid: u1,
+            reviewed: "2026-01-01",
+            ..Default::default()
+        });
+        assert_ranks_first(cand(&recent, 1, false, None), cand(&old, 1, false, None));
+        // a missing/malformed reviewed date sorts LAST (i64::MAX recency)
+        let dated = memory(&Fixture {
+            uid: u0,
+            reviewed: "2026-01-01",
+            ..Default::default()
+        });
+        let undated = memory(&Fixture {
+            uid: u2,
+            reviewed: "garbage",
+            ..Default::default()
+        });
+        assert_ranks_first(cand(&dated, 1, false, None), cand(&undated, 1, false, None));
+    }
+
+    #[test]
+    fn rank_verification_stale_not_double_penalised_by_staleness() {
+        // verification_state and the Staleness column are separate axes: two
+        // candidates equal on every Ord key but differing in `staleness` must
+        // tiebreak on uid alone (staleness is display-only, never an Ord key).
+        let [u0, u1, _] = uids();
+        let a = memory(&Fixture {
+            uid: u0,
+            ..Default::default()
+        });
+        let b = memory(&Fixture {
+            uid: u1,
+            ..Default::default()
+        });
+        let mut ca = cand(&a, 1, false, None);
+        ca.staleness = Staleness::Stale;
+        let mut cb = cand(&b, 1, false, None);
+        cb.staleness = Staleness::Fresh;
+        // despite a=Stale, b=Fresh, order is uid-ascending (u0 before u1)
+        let ranked = rank(vec![cb, ca], TODAY);
+        assert_eq!(ranked[0].memory.uid, u0);
     }
 }
