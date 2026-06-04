@@ -62,12 +62,9 @@
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
         ];
 
-        workspaceDeps = [
-          "/home/david/dev/lazyspec/"
-          "/home/david/dev/spec-driver/"
-          "/home/david/dev/autobahn/"
-          "/home/david/dev/forgettable/"
-        ];
+        # workspaceDeps now sourced from the JAIL_WORKSPACE_DEPS env var
+        # (set in the gitignored .envrc; requires `use flake --impure`).
+        # makeJailedAgent reads + merges it, so nothing portable lives here.
 
         jailPkgs = lib.optionalAttrs isLinux {
           jailed-pi = jailLib.makeJailedPi {
@@ -77,7 +74,6 @@
             maxSubagentDepth = 2;
             extraPkgs = projectPkgs;
             extraOptions = jailEnvOptions;
-            inherit workspaceDeps;
           };
           # jailed-pi-research = jailLib.makeJailedPi {
           #   name = "pi-research";
@@ -90,7 +86,6 @@
             profile = "specDev";
             extraPkgs = projectPkgs;
             extraOptions = jailEnvOptions;
-            inherit workspaceDeps;
           };
           # jailed-codex = jailLib.makeJailedCodex {
           #   profile = "specDev";
