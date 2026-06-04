@@ -41,6 +41,25 @@ const DESIGN_KIND: Kind = Kind {
     scaffold: design_scaffold,
 };
 
+/// The implementation-plan facet: `plan.toml` (authored relational `plan.overview`
+/// rows) + `plan.md` (prose) under an existing slice — the first multi-file
+/// sub-artefact, on the transactional writer (slice-004 D1/D4).
+const PLAN_KIND: Kind = Kind {
+    dir: SLICE_DIR,
+    prefix: "SL",
+    mode: MaterialiseMode::CreateInExistingEntity,
+    scaffold: plan_scaffold,
+};
+
+/// The durable per-slice notes scratchpad: one `notes.md` under an existing
+/// slice (the `design.md` single-file pattern; on-demand, slice-004 D8).
+const NOTES_KIND: Kind = Kind {
+    dir: SLICE_DIR,
+    prefix: "SL",
+    mode: MaterialiseMode::CreateInExistingEntity,
+    scaffold: notes_scaffold,
+};
+
 // ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
@@ -53,6 +72,54 @@ pub(crate) struct Meta {
     slug: String,
     title: String,
     status: String,
+}
+
+/// The authored implementation plan, read from `plan.toml`. Only the ordered
+/// phase list is consumed in v1 (phase materialisation, slice-004 §5.2); the
+/// specs/requirements link tables exist in the file but are empty (no registry
+/// yet) and are not modelled. The first relational *read* model — slice-side,
+/// no shared `Meta` (slice-003 Non-Goal).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct Plan {
+    #[serde(default)]
+    pub phases: Vec<PlanPhase>,
+}
+
+/// One authored phase row. `id` is the canonical `PHASE-NN` join key; `name`
+/// and `objective` seed the disposable phase sheet. Criteria/verification/link
+/// fields exist in the file but are not consumed until a tracking consumer
+/// graduates them (D5/Q2), so they are not modelled here.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct PlanPhase {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub objective: String,
+}
+
+impl Plan {
+    /// Parse and validate a `plan.toml` body. Rejects a plan whose phase ids
+    /// are not unique — a duplicate would alias two phases onto one tracking
+    /// file (finding 6). Per-id well-formedness (`PHASE-<digits>`) is enforced
+    /// at the filesystem boundary by `state::phase_stem` (slice-004 §9), where
+    /// an id becomes a filename.
+    fn parse(text: &str) -> anyhow::Result<Plan> {
+        // serde renames the TOML `[[phase]]` array to the `phases` field.
+        #[derive(Deserialize)]
+        struct Raw {
+            #[serde(default)]
+            phase: Vec<PlanPhase>,
+        }
+        let raw: Raw = toml::from_str(text).context("Failed to parse plan.toml")?;
+        let mut seen = std::collections::BTreeSet::new();
+        for ph in &raw.phase {
+            if !seen.insert(ph.id.as_str()) {
+                bail!("Duplicate phase id {} in plan", ph.id);
+            }
+        }
+        Ok(Plan { phases: raw.phase })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +177,49 @@ fn design_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     }])
 }
 
+/// Render `plan.toml` from the template: `{{ref}}` is the parent canonical id.
+fn render_plan_toml(canonical_id: &str) -> anyhow::Result<String> {
+    Ok(crate::install::asset_text("templates/plan.toml")?.replace("{{ref}}", canonical_id))
+}
+
+/// Render `plan.md` from the template: `{{ref}}` + parent `{{title}}`.
+fn render_plan_md(canonical_id: &str, title: &str) -> anyhow::Result<String> {
+    Ok(crate::install::asset_text("templates/plan.md")?
+        .replace("{{ref}}", canonical_id)
+        .replace("{{title}}", title))
+}
+
+/// The IP fileset: authored `plan.toml` + prose `plan.md` under the slice dir.
+fn plan_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
+    let name = format!("{:03}", ctx.id);
+    Ok(vec![
+        Artifact::File {
+            rel_path: PathBuf::from(format!("{name}/plan.toml")),
+            body: render_plan_toml(ctx.canonical_id)?,
+        },
+        Artifact::File {
+            rel_path: PathBuf::from(format!("{name}/plan.md")),
+            body: render_plan_md(ctx.canonical_id, ctx.title)?,
+        },
+    ])
+}
+
+/// Render `notes.md` from the template: `{{ref}}` + parent `{{title}}`.
+fn render_notes(canonical_id: &str, title: &str) -> anyhow::Result<String> {
+    Ok(crate::install::asset_text("templates/notes.md")?
+        .replace("{{ref}}", canonical_id)
+        .replace("{{title}}", title))
+}
+
+/// The notes fileset: one durable `notes.md` under the parent slice dir.
+fn notes_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
+    let name = format!("{:03}", ctx.id);
+    Ok(vec![Artifact::File {
+        rel_path: PathBuf::from(format!("{name}/notes.md")),
+        body: render_notes(ctx.canonical_id, ctx.title)?,
+    }])
+}
+
 /// Sort by id and, when a status is given, keep only matching rows.
 fn sort_and_filter(mut rows: Vec<Meta>, status: Option<&str>) -> Vec<Meta> {
     rows.retain(|m| status.is_none_or(|s| m.status == s));
@@ -148,6 +258,15 @@ fn today() -> String {
     format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())
 }
 
+/// An RFC3339 UTC timestamp for the runtime progress log. The clock lives only
+/// in the shell; the pure layer takes the timestamp as a parameter.
+fn now_timestamp() -> anyhow::Result<String> {
+    use time::format_description::well_known::Rfc3339;
+    time::OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .context("Failed to format timestamp")
+}
+
 /// Parse the `Meta` of a single slice by id.
 fn read_meta(slice_root: &Path, id: u32) -> anyhow::Result<Meta> {
     let name = format!("{id:03}");
@@ -164,6 +283,15 @@ fn read_metas(slice_root: &Path) -> anyhow::Result<Vec<Meta>> {
         metas.push(read_meta(slice_root, id)?);
     }
     Ok(metas)
+}
+
+/// Read and validate a slice's authored `plan.toml`.
+fn read_plan(slice_root: &Path, id: u32) -> anyhow::Result<Plan> {
+    let name = format!("{id:03}");
+    let path = slice_root.join(&name).join("plan.toml");
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("Plan for slice {name} not found at {}", path.display()))?;
+    Plan::parse(&text)
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +383,102 @@ pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
         "Created design doc: {}",
         out.dir.join("design.md").display()
     )?;
+    Ok(())
+}
+
+/// `doctrine slice plan <id>` — scaffold `plan.{toml,md}` into an existing slice.
+pub(crate) fn run_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(SLICE_DIR);
+    // Reading the parent confirms it exists and supplies the prose title.
+    let meta = read_meta(&slice_root, id)?;
+    let date = today();
+    let out = entity::materialise(
+        &PLAN_KIND,
+        &LocalFs,
+        &root,
+        &Inputs {
+            existing_id: Some(id),
+            slug: "",
+            title: &meta.title,
+            date: &date,
+        },
+    )?;
+
+    writeln!(
+        io::stdout(),
+        "Created implementation plan: {}",
+        out.dir.join("plan.toml").display()
+    )?;
+    Ok(())
+}
+
+/// `doctrine slice phases <id>` — read the plan and materialise phase tracking
+/// into the state tree. Reports plan drift (orphans); `--prune` removes them.
+pub(crate) fn run_phases(path: Option<PathBuf>, id: u32, prune: bool) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(SLICE_DIR);
+    let plan = read_plan(&slice_root, id)?;
+    let report = crate::state::init_phases(&root, id, &plan, prune)?;
+
+    let mut out = io::stdout();
+    for phase_id in &report.created {
+        writeln!(out, "  materialised {phase_id}")?;
+    }
+    for stem in &report.orphan {
+        writeln!(
+            out,
+            "  orphan       {stem} (plan phase gone; --prune to remove)"
+        )?;
+    }
+    for stem in &report.pruned {
+        writeln!(out, "  pruned       {stem}")?;
+    }
+    if report.created.is_empty() && report.orphan.is_empty() && report.pruned.is_empty() {
+        writeln!(out, "Phases up to date.")?;
+    }
+    Ok(())
+}
+
+/// `doctrine slice notes <id>` — scaffold a durable `notes.md` into a slice.
+pub(crate) fn run_notes(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(SLICE_DIR);
+    let meta = read_meta(&slice_root, id)?;
+    let date = today();
+    let out = entity::materialise(
+        &NOTES_KIND,
+        &LocalFs,
+        &root,
+        &Inputs {
+            existing_id: Some(id),
+            slug: "",
+            title: &meta.title,
+            date: &date,
+        },
+    )?;
+
+    writeln!(
+        io::stdout(),
+        "Created notes: {}",
+        out.dir.join("notes.md").display()
+    )?;
+    Ok(())
+}
+
+/// `doctrine slice phase <id> <phase-id> --status <s> [--note …]` — fold a
+/// runtime status transition into the phase tracking (the `toml_edit` path).
+pub(crate) fn run_phase(
+    path: Option<PathBuf>,
+    id: u32,
+    phase_id: &str,
+    status: crate::state::PhaseStatus,
+    note: Option<&str>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let now = now_timestamp()?;
+    crate::state::set_phase_status(&root, id, phase_id, status, note, &now)?;
+    writeln!(io::stdout(), "Updated {phase_id}: {}", status.as_str())?;
     Ok(())
 }
 
@@ -351,6 +575,89 @@ mod tests {
         assert!(matches!(&fileset[2],
             Artifact::Symlink { rel_path, target }
             if rel_path == Path::new("003-vendor-skills") && target == "003"));
+    }
+
+    #[test]
+    fn render_plan_toml_substitutes_ref_and_parses() {
+        let body = render_plan_toml("SL-004").unwrap();
+        assert!(body.contains("slice   = \"SL-004\""));
+        assert!(!body.contains("{{ref}}"));
+        // it is valid TOML carrying the plan.overview shape
+        let doc: toml::Value = toml::from_str(&body).unwrap();
+        assert_eq!(doc["schema"].as_str(), Some("doctrine.plan.overview"));
+        assert_eq!(doc["version"].as_integer(), Some(1));
+        assert_eq!(doc["phase"][0]["id"].as_str(), Some("PHASE-01"));
+    }
+
+    #[test]
+    fn render_plan_md_substitutes_ref_and_title() {
+        let body = render_plan_md("SL-004", "My Title").unwrap();
+        assert!(body.contains("Implementation Plan SL-004: My Title"));
+        assert!(!body.contains("{{ref}}"));
+        assert!(!body.contains("{{title}}"));
+    }
+
+    #[test]
+    fn plan_scaffold_lays_out_toml_and_md() {
+        let ctx = ScaffoldCtx {
+            id: 4,
+            canonical_id: "SL-004",
+            slug: "",
+            title: "Plan title",
+            date: "2026-06-04",
+        };
+        let fileset = plan_scaffold(&ctx).unwrap();
+        assert_eq!(fileset.len(), 2);
+        assert!(matches!(&fileset[0],
+            Artifact::File { rel_path, body }
+            if rel_path == Path::new("004/plan.toml") && body.contains("SL-004")));
+        assert!(matches!(&fileset[1],
+            Artifact::File { rel_path, body }
+            if rel_path == Path::new("004/plan.md") && body.contains("Plan title")));
+    }
+
+    // --- Plan read model ---
+
+    #[test]
+    fn plan_parse_reads_ordered_phases() {
+        let text = r#"
+            schema = "doctrine.plan.overview"
+            version = 1
+            slice = "SL-004"
+            [[phase]]
+            id = "PHASE-01"
+            name = "First"
+            objective = "do a"
+            [[phase]]
+            id = "PHASE-02"
+            name = "Second"
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let ids: Vec<&str> = plan.phases.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["PHASE-01", "PHASE-02"]);
+        assert_eq!(plan.phases[0].objective, "do a");
+        // an absent objective defaults to empty, not an error
+        assert_eq!(plan.phases[1].objective, "");
+    }
+
+    #[test]
+    fn plan_parse_rejects_duplicate_phase_ids() {
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            [[phase]]
+            id = "PHASE-01"
+        "#;
+        let err = Plan::parse(text).unwrap_err();
+        assert!(err.to_string().contains("Duplicate phase id PHASE-01"));
+    }
+
+    #[test]
+    fn plan_parse_accepts_the_scaffold_template() {
+        let body = render_plan_toml("SL-004").unwrap();
+        let plan = Plan::parse(&body).unwrap();
+        assert_eq!(plan.phases.len(), 1);
+        assert_eq!(plan.phases[0].id, "PHASE-01");
     }
 
     #[test]
@@ -490,6 +797,119 @@ mod tests {
         assert!(err.to_string().contains("Refusing to overwrite"));
         assert_eq!(
             fs::read_to_string(slice_root.join("001/design.md")).unwrap(),
+            "hand-written"
+        );
+    }
+
+    // --- plan facet: the first multi-file sub-artefact ---
+
+    #[test]
+    fn plan_materialises_two_files_under_an_existing_slice() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "my-slug", "My Title", "2026-06-04");
+        let slice_root = root.join(SLICE_DIR);
+
+        let out = entity::materialise(
+            &PLAN_KIND,
+            &LocalFs,
+            root,
+            &Inputs {
+                existing_id: Some(1),
+                slug: "",
+                title: "My Title",
+                date: "2026-06-04",
+            },
+        )
+        .unwrap();
+
+        assert_eq!(out.id, 1);
+        let toml_body = fs::read_to_string(slice_root.join("001/plan.toml")).unwrap();
+        assert!(toml_body.contains("slice   = \"SL-001\""));
+        let md_body = fs::read_to_string(slice_root.join("001/plan.md")).unwrap();
+        assert!(md_body.contains("Implementation Plan SL-001: My Title"));
+        // no second numeric dir, no extra symlink
+        assert!(!slice_root.join("002").exists());
+    }
+
+    #[test]
+    fn plan_refuses_to_clobber_an_existing_plan() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "my-slug", "My Title", "2026-06-04");
+        let slice_root = root.join(SLICE_DIR);
+        fs::write(slice_root.join("001/plan.toml"), "hand-written").unwrap();
+
+        let err = entity::materialise(
+            &PLAN_KIND,
+            &LocalFs,
+            root,
+            &Inputs {
+                existing_id: Some(1),
+                slug: "",
+                title: "My Title",
+                date: "2026-06-04",
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Refusing to overwrite"));
+        assert_eq!(
+            fs::read_to_string(slice_root.join("001/plan.toml")).unwrap(),
+            "hand-written"
+        );
+        // the partial sibling write was rolled back — no plan.md leftover
+        assert!(!slice_root.join("001/plan.md").exists());
+    }
+
+    // --- notes facet: durable single-file scaffold ---
+
+    #[test]
+    fn notes_materialises_under_an_existing_slice() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "my-slug", "My Title", "2026-06-04");
+        let slice_root = root.join(SLICE_DIR);
+
+        entity::materialise(
+            &NOTES_KIND,
+            &LocalFs,
+            root,
+            &Inputs {
+                existing_id: Some(1),
+                slug: "",
+                title: "My Title",
+                date: "2026-06-04",
+            },
+        )
+        .unwrap();
+
+        let body = fs::read_to_string(slice_root.join("001/notes.md")).unwrap();
+        assert!(body.contains("Notes SL-001: My Title"));
+    }
+
+    #[test]
+    fn notes_refuses_to_clobber() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "my-slug", "My Title", "2026-06-04");
+        let slice_root = root.join(SLICE_DIR);
+        fs::write(slice_root.join("001/notes.md"), "hand-written").unwrap();
+
+        let err = entity::materialise(
+            &NOTES_KIND,
+            &LocalFs,
+            root,
+            &Inputs {
+                existing_id: Some(1),
+                slug: "",
+                title: "My Title",
+                date: "2026-06-04",
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Refusing to overwrite"));
+        assert_eq!(
+            fs::read_to_string(slice_root.join("001/notes.md")).unwrap(),
             "hand-written"
         );
     }

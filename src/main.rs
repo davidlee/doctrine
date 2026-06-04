@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod entity;
+mod fsutil;
 mod install;
 mod root;
 mod skills;
 mod slice;
+mod state;
 
 use std::path::PathBuf;
 
@@ -68,6 +70,61 @@ enum SliceCommand {
     Design {
         /// Slice id to attach the design doc to.
         id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Scaffold an implementation plan (plan.toml + plan.md) into a slice.
+    Plan {
+        /// Slice id to attach the plan to.
+        id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Materialise phase tracking from a slice's plan into the state tree.
+    Phases {
+        /// Slice id whose plan declares the phases.
+        id: u32,
+
+        /// Remove orphan tracking whose plan phase is gone (destructive).
+        #[arg(long)]
+        prune: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Scaffold a durable notes.md scratchpad into a slice (on-demand).
+    Notes {
+        /// Slice id to attach the notes file to.
+        id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Record a phase status transition into its runtime tracking.
+    Phase {
+        /// Slice id owning the phase.
+        id: u32,
+
+        /// Canonical phase id, e.g. PHASE-01.
+        phase_id: String,
+
+        /// New status.
+        #[arg(long)]
+        status: state::PhaseStatus,
+
+        /// Optional note appended to the progress log.
+        #[arg(long)]
+        note: Option<String>,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -153,6 +210,16 @@ fn main() -> anyhow::Result<()> {
         Command::Slice { command } => match command {
             SliceCommand::New { title, slug, path } => slice::run_new(path, title, slug),
             SliceCommand::Design { id, path } => slice::run_design(path, id),
+            SliceCommand::Plan { id, path } => slice::run_plan(path, id),
+            SliceCommand::Phases { id, prune, path } => slice::run_phases(path, id, prune),
+            SliceCommand::Notes { id, path } => slice::run_notes(path, id),
+            SliceCommand::Phase {
+                id,
+                phase_id,
+                status,
+                note,
+                path,
+            } => slice::run_phase(path, id, &phase_id, status, note.as_deref()),
             SliceCommand::List { status, path } => slice::run_list(path, status.as_deref()),
         },
     }

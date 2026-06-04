@@ -1,9 +1,9 @@
 id = 4
 slug = "implementation-plan-and-phase-siblings"
 title = "Implementation-plan and phase siblings"
-status = "proposed"
+status = "done"
 created = "2026-06-03"
-updated = "2026-06-03"
+updated = "2026-06-04"
 
 [relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.

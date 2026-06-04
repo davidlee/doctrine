@@ -450,6 +450,25 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
+    // embedded manifest
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn embedded_manifest_gitignores_the_runtime_state_surface() {
+        let manifest = load_manifest().unwrap();
+        for entry in [
+            ".doctrine/state/",
+            ".doctrine/slice/*/phases",
+            ".doctrine/slice/*/handover.md",
+        ] {
+            assert!(
+                manifest.gitignore.entries.iter().any(|e| e == entry),
+                "manifest must gitignore {entry}"
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------
     // execution
     // ---------------------------------------------------------------
 

@@ -12,10 +12,12 @@
 //! writer is the *sole* joiner of descriptor paths to the filesystem (H1).
 
 use std::fs;
-use std::io::ErrorKind;
-use std::path::{Component, Path, PathBuf};
+use std::io::{ErrorKind, Write};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
+
+use crate::fsutil;
 
 /// Bounded retries for the reservation claim loop.
 const MAX_CLAIM_RETRIES: u32 = 128;
@@ -284,7 +286,7 @@ fn scaffold_and_write(kind: &Kind, tree_root: &Path, ctx: &ScaffoldCtx<'_>) -> a
 /// only — the engine materialises filesets, not row appends / table mutations).
 fn refuse_clobber(tree_root: &Path, fileset: &Fileset) -> anyhow::Result<()> {
     for art in fileset {
-        let abs = safe_join(tree_root, artifact_rel(art))?;
+        let abs = fsutil::safe_join(tree_root, artifact_rel(art))?;
         if abs.exists() {
             bail!("Refusing to overwrite existing {}", abs.display());
         }
@@ -292,56 +294,113 @@ fn refuse_clobber(tree_root: &Path, fileset: &Fileset) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Write every artifact, joining each path under `tree_root` (the sole joiner).
+/// Write every artifact under `tree_root` transactionally: on any failure,
+/// every file/symlink and every directory component *this call* created is
+/// undone, leaving the parent exactly as it was pre-call (D4 — discharges the
+/// slice-003 `[M]` debt). The sub-artefact writer cannot `remove_dir_all` a
+/// parent it does not own, so it tracks precisely what it made and unwinds
+/// that. Pre-existing dirs and dirs a concurrent writer populated are left
+/// intact. This is the sole joiner of descriptor paths to the filesystem (H1).
 fn write_fileset(tree_root: &Path, fileset: &Fileset) -> anyhow::Result<()> {
+    let mut created_paths: Vec<PathBuf> = Vec::new(); // files AND symlinks, in order
+    let mut created_dirs: Vec<PathBuf> = Vec::new();
+    match write_fileset_tracked(tree_root, fileset, &mut created_paths, &mut created_dirs) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            rollback(&created_paths, &created_dirs);
+            Err(e)
+        }
+    }
+}
+
+/// The forward pass: create dirs component-wise and write artifacts, recording
+/// every path created so the caller can unwind on error. A created path is
+/// tracked *before* its content is written, so a mid-write failure still
+/// unlinks the just-created (empty/partial) file.
+fn write_fileset_tracked(
+    tree_root: &Path,
+    fileset: &Fileset,
+    created_paths: &mut Vec<PathBuf>,
+    created_dirs: &mut Vec<PathBuf>,
+) -> anyhow::Result<()> {
     for art in fileset {
-        let abs = safe_join(tree_root, artifact_rel(art))?;
+        let rel = artifact_rel(art);
+        let abs = fsutil::safe_join(tree_root, rel)?;
+        ensure_parent_dirs(tree_root, rel, created_dirs)?;
         match art {
             Artifact::File { body, .. } => {
-                // create_dir_all so a future nested fileset needs no engine
-                // change (the slice's numeric dir already exists).
-                if let Some(parent) = abs.parent() {
-                    fs::create_dir_all(parent)
-                        .with_context(|| format!("Failed to create {}", parent.display()))?;
-                }
-                fs::write(&abs, body)
+                // The atomic create-new IS the clobber refusal (one syscall,
+                // no TOCTOU). Track before the body write.
+                let mut f = fsutil::create_new_file(&abs)
+                    .with_context(|| format!("Failed to create {}", abs.display()))?;
+                created_paths.push(abs.clone());
+                f.write_all(body.as_bytes())
                     .with_context(|| format!("Failed to write {}", abs.display()))?;
             }
             Artifact::Symlink { target, .. } => {
-                if let Err(e) = std::os::unix::fs::symlink(target, &abs)
-                    && e.kind() != ErrorKind::AlreadyExists
-                {
-                    return Err(e).with_context(|| format!("Failed to symlink {}", abs.display()));
-                }
+                // symlink(2) is atomic; an existing target is a clobber → fail.
+                std::os::unix::fs::symlink(target, &abs)
+                    .with_context(|| format!("Failed to symlink {}", abs.display()))?;
+                created_paths.push(abs.clone());
             }
         }
     }
     Ok(())
 }
 
+/// Create each missing component of `rel`'s parent under `tree_root`, pushing
+/// only the ones *this call* creates onto `created_dirs`. `create_dir_all`
+/// cannot report which components it made, so the walk is component-wise
+/// `create_dir` (finding 2). An `AlreadyExists` that is a real dir is a
+/// pre-existing/concurrent parent (skip, do not track); anything else (a file
+/// or symlink squatting the path) is an error.
+fn ensure_parent_dirs(
+    tree_root: &Path,
+    rel: &Path,
+    created_dirs: &mut Vec<PathBuf>,
+) -> anyhow::Result<()> {
+    let Some(parent) = rel.parent() else {
+        return Ok(());
+    };
+    let mut cur = tree_root.to_path_buf();
+    for comp in parent.components() {
+        cur.push(comp);
+        match fs::create_dir(&cur) {
+            Ok(()) => created_dirs.push(cur.clone()),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                if !fsutil::is_real_dir(&cur) {
+                    bail!(
+                        "Failed to create {}: a non-directory squats that path",
+                        cur.display()
+                    );
+                }
+            }
+            Err(e) => {
+                return Err(e).with_context(|| format!("Failed to create {}", cur.display()));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Undo a partial fileset write: unlink created files/symlinks then remove
+/// created dirs, both in reverse order. Best-effort — `NotFound` and
+/// `DirectoryNotEmpty` (a dir a concurrent writer populated) are tolerated and
+/// any other failure is swallowed, since the original error is the one
+/// surfaced. Never `remove_dir_all`, never the parent.
+fn rollback(created_paths: &[PathBuf], created_dirs: &[PathBuf]) {
+    for path in created_paths.iter().rev() {
+        drop(fs::remove_file(path)); // unlinks a file or a symlink
+    }
+    for dir in created_dirs.iter().rev() {
+        drop(fs::remove_dir(dir));
+    }
+}
+
 fn artifact_rel(art: &Artifact) -> &Path {
     match art {
         Artifact::File { rel_path, .. } | Artifact::Symlink { rel_path, .. } => rel_path,
     }
-}
-
-/// Join a descriptor `rel` path under the entity-tree root, rejecting absolute
-/// paths and any `..` that would escape the tree (H1). The single chokepoint
-/// through which a Kind reaches the filesystem.
-fn safe_join(tree_root: &Path, rel: &Path) -> anyhow::Result<PathBuf> {
-    if rel.is_absolute() {
-        bail!(
-            "Artifact path {} must be relative to the entity tree",
-            rel.display()
-        );
-    }
-    if rel.components().any(|c| c == Component::ParentDir) {
-        bail!(
-            "Artifact path {} must not escape the entity tree",
-            rel.display()
-        );
-    }
-    Ok(tree_root.join(rel))
 }
 
 // ---------------------------------------------------------------------------
@@ -398,26 +457,6 @@ mod tests {
     fn scan_ids_missing_dir_is_empty() {
         let dir = tempfile::tempdir().unwrap();
         assert!(scan_ids(&dir.path().join("nope")).unwrap().is_empty());
-    }
-
-    // --- safe_join (H1 path containment) ---
-
-    #[test]
-    fn safe_join_accepts_a_tree_relative_path() {
-        let joined = safe_join(Path::new("/tree"), Path::new("003/x.toml")).unwrap();
-        assert_eq!(joined, Path::new("/tree/003/x.toml"));
-    }
-
-    #[test]
-    fn safe_join_rejects_absolute_paths() {
-        let err = safe_join(Path::new("/tree"), Path::new("/etc/passwd")).unwrap_err();
-        assert!(err.to_string().contains("must be relative"));
-    }
-
-    #[test]
-    fn safe_join_rejects_parent_escape() {
-        let err = safe_join(Path::new("/tree"), Path::new("../../etc/passwd")).unwrap_err();
-        assert!(err.to_string().contains("must not escape"));
     }
 
     // --- the acquire seam ---
@@ -517,7 +556,8 @@ mod tests {
 
     fn doomed_fileset(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
         let name = format!("{:03}", ctx.id);
-        // The second file's parent is the first file → create_dir_all fails.
+        // The second file's parent is the first file → the component-wise dir
+        // walk hits a non-directory squatting `<name>/a` and fails.
         Ok(vec![
             Artifact::File {
                 rel_path: PathBuf::from(format!("{name}/a")),
@@ -655,5 +695,118 @@ mod tests {
             fs::read_to_string(tree.join("003/body.md")).unwrap(),
             "already here"
         );
+    }
+
+    // --- D4: the multi-file sub-artefact writer is transactional ---
+
+    /// The real IP shape: two files under an existing parent, both succeed.
+    fn two_files(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
+        let name = format!("{:03}", ctx.id);
+        Ok(vec![
+            Artifact::File {
+                rel_path: PathBuf::from(format!("{name}/plan.toml")),
+                body: "p".to_string(),
+            },
+            Artifact::File {
+                rel_path: PathBuf::from(format!("{name}/plan.md")),
+                body: "m".to_string(),
+            },
+        ])
+    }
+
+    const SUB_TWO_KIND: Kind = Kind {
+        dir: "tree",
+        prefix: "TK",
+        mode: MaterialiseMode::CreateInExistingEntity,
+        scaffold: two_files,
+    };
+
+    #[test]
+    fn create_in_existing_writes_a_multi_file_fileset() {
+        let dir = tempfile::tempdir().unwrap();
+        let tree = dir.path().join("tree");
+        fs::create_dir_all(tree.join("003")).unwrap();
+
+        create_in_existing(
+            &SUB_TWO_KIND,
+            &tree,
+            &Inputs {
+                existing_id: Some(3),
+                slug: "",
+                title: "T",
+                date: "2026-06-04",
+            },
+        )
+        .unwrap();
+        assert_eq!(fs::read_to_string(tree.join("003/plan.toml")).unwrap(), "p");
+        assert_eq!(fs::read_to_string(tree.join("003/plan.md")).unwrap(), "m");
+    }
+
+    /// A sub-artefact that creates a dir, a file, and a symlink, then aborts on
+    /// its last file (a non-dir squats a path component) — exercising rollback
+    /// of files, symlinks, and the dir this call created, while a pre-existing
+    /// sibling is left untouched.
+    fn sub_doomed_fileset(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
+        let name = format!("{:03}", ctx.id);
+        Ok(vec![
+            Artifact::File {
+                rel_path: PathBuf::from(format!("{name}/sub/a")),
+                body: "x".to_string(),
+            },
+            Artifact::Symlink {
+                rel_path: PathBuf::from(format!("{name}/link")),
+                target: "sub".to_string(),
+            },
+            Artifact::File {
+                rel_path: PathBuf::from(format!("{name}/sub/a/b")),
+                body: "y".to_string(),
+            },
+        ])
+    }
+
+    const SUB_DOOMED_KIND: Kind = Kind {
+        dir: "tree",
+        prefix: "TK",
+        mode: MaterialiseMode::CreateInExistingEntity,
+        scaffold: sub_doomed_fileset,
+    };
+
+    #[test]
+    fn create_in_existing_rolls_back_partial_fileset_leaving_parent_intact() {
+        let dir = tempfile::tempdir().unwrap();
+        let tree = dir.path().join("tree");
+        fs::create_dir_all(tree.join("003")).unwrap();
+        // A pre-existing sibling the rollback must never touch.
+        fs::write(tree.join("003/keep.txt"), "keep").unwrap();
+
+        let err = create_in_existing(
+            &SUB_DOOMED_KIND,
+            &tree,
+            &Inputs {
+                existing_id: Some(3),
+                slug: "",
+                title: "T",
+                date: "2026-06-04",
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Failed to create"));
+
+        // Everything this call created is gone …
+        assert!(!tree.join("003/sub").exists(), "created dir unwound");
+        assert!(!tree.join("003/link").exists(), "created symlink unwound");
+        // … the pre-existing parent + sibling are byte-identical.
+        assert!(tree.join("003").is_dir());
+        assert_eq!(
+            fs::read_to_string(tree.join("003/keep.txt")).unwrap(),
+            "keep"
+        );
+        // and no other detritus survives
+        let mut left: Vec<String> = fs::read_dir(tree.join("003"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(left, vec!["keep.txt".to_string()]);
     }
 }

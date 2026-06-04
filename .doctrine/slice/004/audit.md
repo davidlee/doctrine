@@ -1,8 +1,93 @@
-# slice-004 audit — design review (pre-build)
+# slice-004 audit
+
+Post-build audit of the implementation-plan + phase siblings. Status `done`
+(2026-06-04); gates green — `cargo test` (84), `cargo clippy` (deny-level,
+default targets — `--all-targets` is *not* the gate, it trips the pre-existing
+test-only `unwrap_used`/`indexing_slicing`), `cargo fmt`. The slice-001 + slice-003
+suites passed unchanged at every step. End-to-end verified against a scratch
+project: install → `slice plan` → author phases → `slice phases` (symlink resolves)
+→ `slice phase` (toml_edit mutate) → `slice notes` → idempotent re-run → drift
+report → `--prune`; git ignores the whole runtime surface.
+
+§1 is the implementation-vs-design verdict, §2 the findings, §3 the deferred set.
+The **appendix** preserves the pre-build design-review trail (rounds 1–2 +
+dispositions) verbatim — the *why* of D1–D8 and the six gated revisions. Settled
+history; do not relitigate.
+
+## 1. Implementation vs design — verdict: faithful
+
+Every §7 decision and §5.5 invariant landed as specified; the §5.6 seven-step
+sequence was built in order, each step green against slice-001/003.
+
+| Design item | Where | Status |
+|---|---|---|
+| D1 IP = slice facet, 2-Artifact `CreateInExistingEntity` | `slice::PLAN_KIND`/`plan_scaffold` | ✓ no `IP-` entity |
+| D2 phase content sorts durability × structure | `plan.toml` (authored) · `phase-NN.toml` (status+log) · `phase-NN.md` (prose) | ✓ |
+| D3 tracking in `state.rs`, not the engine; shared IO | `src/state.rs` + `src/fsutil.rs` | ✓ no `MutateInPlace` |
+| D4 transactional sub-artefact writer | `entity::write_fileset` (component `create_dir` + `create_new` + symlink arm + reverse rollback) | ✓ **discharges 003 `[M]`** |
+| D5 `toml_edit` for the state writer; tracking graduates | `state::set_phase_status`; v1 = status + progress only | ✓ |
+| D6 gitignore state + `phases`; state not a managed `[dir]` | `install/manifest.toml [gitignore]` | ✓ recreated on demand |
+| D7 verbs `slice plan`/`phases`/`phase`/`notes` | `main::SliceCommand` → `slice::run_*` | ✓ |
+| D8 `notes.md` durable+scaffolded; `handover.md` toolless | `NOTES_KIND`/`run_notes`; handover = gitignore only, no verb | ✓ |
+| F1 atomic clobber (`create_new`) | `fsutil::create_new_file` | ✓ no TOCTOU |
+| F2 component-wise `create_dir` accounting | `entity::ensure_parent_dirs` | ✓ tested rollback |
+| F4 shared `fsutil` + `phase_id` validation | `fsutil::{safe_join,is_real_dir,set_symlink}` + `state::phase_stem` | ✓ |
+| F5 plan-drift report | `state::init_phases` → `InitReport` | ✓ orphan/prune tested |
+| F6 phase-id uniqueness (v1) + immutability rule | `Plan::parse` (dup reject); immutability = authoring contract | ✓ |
+| F10 verified symlink refresh | `fsutil::set_symlink` | ✓ wrong-link replaced, squat errors |
+| §5.5 tracked-tree purity / symlink-blind / edit-preserving | state writes only under `.doctrine/state`; resolve-by-id; comment/unknown-key survive | ✓ each tested |
+
+**Faithful reconciliations vs design.md:**
+
+- **`phase-NN.toml` is rendered inline (`state::render_tracking`), not an install
+  template.** The §5.3 template list names only the four `.md`/`plan.toml` assets;
+  the tiny machine-owned tracking skeleton is doctrine-controlled runtime, so it
+  lives in code, not `install/templates/`. (The disposable `phase.md` *is* a
+  template, as specified.)
+- **Validation split, single-source.** §5.6 step 3 attributed phase-id
+  well-formedness *and* uniqueness to the `Plan` read model. Uniqueness lands in
+  `Plan::parse` (a pure plan invariant); well-formedness lands in `phase_stem` —
+  the one `PHASE-<digits>` validator, fired at the filesystem boundary where an id
+  becomes a filename (no parallel regex). Matches §9 exactly.
+- **`Plan`/`PlanPhase` model only `id`/`name`/`objective`.** Criteria/verification/
+  link fields exist in `plan.toml` but are unconsumed in v1 (D5 graduation), so
+  modelling them would land dead fields under `deny(unused)`. They round-trip on
+  disk untouched.
+- **`set_phase_status` takes a `now` parameter** (the clock stays in the shell,
+  mirroring `slice::today()`); **`init_phases` takes `prune: bool`** (the `--prune`
+  flag the design signature elided).
+
+## 2. Findings — rough edges
+
+None block; all post-v1.
+
+- **[L] `toml_edit` re-renders a *mutated* key's whitespace.** Setting `status`/
+  `started`/`last_updated` collapses their cosmetic alignment (`status  =` →
+  `status =`). The contract held — comments, unknown keys, and *untouched* keys
+  survive byte-for-byte (tested) — only set-key alignment shifts. Cosmetic.
+- **[watch] `state.rs` depends on `slice::{Plan,PlanPhase}`.** A deliberate
+  consumer edge (state reads the plan), but it couples the runtime module to a
+  slice-side type. If a second consumer of `Plan` appears, lift it to a neutral
+  home. Fine for v1.
+- **No `slice show` reassembler** (Q3) — plan + tracking are queryable separately;
+  the read-locality CLI is deferred.
+
+## 3. Deferred (unchanged from design)
+
+- Graduation of per-criterion/verification/task *status* to TOML rows when a
+  consumer lands (D5/Q2/Q5) — v1 ships them as a `phase-NN.md` checklist.
+- Spec/requirement registry + FK validation (`plan.overview` link fields stay empty).
+- Slice close-out audit: harvest phase-sheet risks/decisions/findings into the
+  tracked audit; GC `handover.md`.
+- Broader `.doctrine/state/` surface (session/lease/review-index).
+
+---
+
+# Appendix — pre-build design-review trail
 
 Pre-build adversarial design review of [design.md](design.md) + [slice-004.md](slice-004.md).
 Status `proposed`; no code touched. Reviewer: gpt-5.5 (hostile pass, codex MCP),
-adjudicated here. This file is the disposition trail the `ready` gate reads; it
+adjudicated here. This was the disposition trail the `ready` gate read; it
 supersedes the review dialogue. Same rhythm as [003/audit.md](../003/audit.md).
 
 The reviewer's code claims were re-verified against `src/entity.rs` — all accurate
