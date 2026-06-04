@@ -45,27 +45,32 @@ slice is mostly honest implementation of a settled design. Three things shape it
   tuple, never the final word (no float, interop constraint 5).
 
 - **`commits_touching` (git seam extension).** Add to SL-007's `src/git.rs`:
-  `commits_touching(repo_root, paths, since_sha) -> Option<u32>` — the staleness
-  reachability query (`git rev-list --count <since>..<target> -- <paths>`),
-  resolved against the **frozen target commit** (not a live `HEAD`). `None` when
-  undecidable (non-ancestor sha, shallow clone, detached, non-git). The reader's
-  only git need.
+  `commits_touching(repo_root, paths, since_sha, target) -> Option<u32>` — the
+  staleness reachability query: a `git merge-base --is-ancestor` precheck (since
+  `<since>..<target>` is a set-difference, not an ancestry test), then
+  `git rev-list --count <since>..<target> -- <paths>`, resolved against the **frozen
+  target commit** (not a live `HEAD`). `None` when undecidable (non-ancestor sha,
+  shallow clone, non-git); a **detached** HEAD against a frozen target is *not* `None`
+  — still anchored, still countable. The reader's only git need.
 
 - **Git-anchored staleness (pure).** `staleness(&Memory, &GitFacts, today) -> Staleness`
   over SL-007's populated anchor + `reviewed`, realising the three spec modes —
   scoped+attested (has `verified_sha`: commits touching scoped paths since it,
   resolved into `GitFacts`), scoped-unattested (no `verified_sha`: days since
   `reviewed`), unscoped (days since `reviewed`) — to an **explicit**
-  `fresh | stale | unknown | unanchored`, never a silent hide/over-trust.
-  Undecidable reachability or a dirty (`checkout_state`) anchor → time-based or
-  `unknown`; no anchor → `unanchored`.
+  `fresh | stale | unknown | unanchored`, never a silent hide/over-trust. Mode is
+  keyed on `verified_sha` presence, **not** `anchor_kind`: a memory recorded dirty
+  then `verify`-attested clean uses its `verified_sha`. Undecidable reachability →
+  `unknown`; git-anchored but never attested → `unknown`; no anchor → `unanchored`.
 
 - **`doctrine memory find` (ranked rows).** Build `QueryContext` from flags
   (`--path`/`--glob`/`--command`/`--tag` repeatable, `--query` free-text), apply
   hard filters (workspace/repo, lifecycle status default-active, `--include-draft`,
   quarantine/trust), scope-match, rank, format
-  `uid-short type status staleness spec title` rows. Rides the `collect_memories` →
-  pure-filter/sort → format split `list` uses.
+  `uid-short type status staleness spec title` rows. Reuses `collect_memories` + the
+  hard-filter predicate `list` uses, but **not** its order or formatter — `find`
+  always applies the 9-key rank (not `created`-desc) and a `Ranked` formatter with
+  the staleness/spec columns.
 
 - **`doctrine memory retrieve` (agent-context block).** Same query+rank; emits each
   hit via SL-005's `render_show` (extended with the real `anchor:` + a `staleness:`

@@ -1,0 +1,13 @@
+id = 8
+slug = "memory-retrieval"
+title = "Memory retrieval: find/retrieve + scope ranking + staleness"
+status = "proposed"
+created = "2026-06-04"
+updated = "2026-06-04"
+
+[relationships]
+# Reserved. Empty in v1 — no spec/requirement registry to point at yet.
+# When specs land, this section gains (illustrative, not v1):
+#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
+#   requirements = ["..."]   # implements / updates / verifies
+#   supersedes   = [2]       # slice-to-slice links
