@@ -73,6 +73,20 @@ in `state/.../phases/`; this survives.
   required `&str` (`memory.rs:551`, no Option/stdin) — left out of the input.rs lift
   (different signature). Future DRY candidate if memory gains an arg|stdin path.
 
+## PHASE-05 outcomes (close-out: E2E + docs)
+
+- **E2E test = `adr::tests::end_to_end_new_x2_list_status_accept_then_filtered_list`**
+  (EX-1/VT-1). Drives the *real* verb cores in one tree — `run_new` x2 →
+  `read_metas`/`sort_and_filter` list → `set_adr_status` accept → filtered list (only
+  001). The earlier piecemeal tests flipped status by raw rewrite (the verb was P04);
+  this is the first test exercising the actual status mutation through the list path.
+  Kept in-process in the `adr.rs` test module — the project has no `tests/` dir; all
+  suites are inline (idiom + DRY on the `adr_root` helper).
+- **AGENTS.md (CLAUDE.md symlink) updated** (EX-2): `.doctrine/adr/nnn/` in the layout
+  block; ADRs folded into the storage-rule **authored** tier (status in `adr-nnn.toml`).
+  CLI surface lines (`adr new|list|status`) were already present from P03/P04.
+- **Slice closed**: phase-05 → completed, `slice-006.toml` status → done.
+
 ## Locked decisions (don't relitigate — design §7)
 
 - **D4** extract concrete fns only, **no `numeric_entity` trait/generic**.
