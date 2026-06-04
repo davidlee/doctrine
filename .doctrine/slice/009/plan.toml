@@ -25,29 +25,32 @@ dependencies = []
 id        = "PHASE-01"
 name      = "Extract neutral meta row helpers (behaviour-preserving)"
 objective = """
-Pull the column-measuring and single-row layout that meta::format_list already \
-performs into two neutral helpers (measure_meta_columns + format_meta_row), and \
-reimplement format_list over them with byte-identical output. This is the \
+Pull the one layout concern meta::format_list embeds — measure each column to its \
+max cell width, left-align, two-space gap, last column unpadded, empty→"", \
+trailing newline — into a neutral render_table(rows: &[Vec<String>]) -> String, \
+and reimplement format_list over it with byte-identical output. This is the \
 shared-machinery change (slice list AND adr list call meta), so it is a pure \
 refactor gated by behaviour-preservation: both listings stay byte-for-byte the \
-same. format_meta_row gains a presentation-neutral status_suffix (it carries the \
-later ⚠, but meta learns nothing about phases). Design D2 / R-F1. No rollup, no \
-phase concept yet.
+same. render_table is the single layout authority — not a column framework — and \
+later hosts slice's middle phases column and header row; markers (⚠/!N/?N) are \
+baked into cell strings by the caller, so meta learns nothing about phases. \
+Design D2 / R-F1 (refines the round-1 measure_meta_columns/format_meta_row sketch, \
+which can't host a middle column). No rollup, no phase concept yet.
 """
 entrance_criteria = [
   { id = "EN-1", text = "design.md locked (codex round dispositioned; § 10 decisions locked)" },
   { id = "EN-2", text = "full meta.rs + slice.rs + adr.rs suite green at HEAD" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "meta.rs adds pub(crate) measure_meta_columns(&[Meta]) -> MetaWidths and format_meta_row(&Meta, &MetaWidths, status_suffix: Option<&str>) -> String" },
-  { id = "EX-2", text = "format_list reimplemented over the two helpers; its existing tests pass UNCHANGED (byte-identical output is the regression lock)" },
+  { id = "EX-1", text = "meta.rs adds pub(crate) render_table(rows: &[Vec<String>]) -> String: per-column max-width left-align, two-space gap, last column unpadded, empty rows → \"\", else trailing newline" },
+  { id = "EX-2", text = "format_list reimplemented over render_table; its existing tests pass UNCHANGED (byte-identical output is the regression lock)" },
   { id = "EX-3", text = "Meta struct unchanged; no phase/rollup field or concept enters meta.rs (kept neutral for the adr caller)" },
-  { id = "EX-4", text = "cargo clippy zero warnings; no width/layout logic duplicated elsewhere" },
+  { id = "EX-4", text = "cargo clippy zero warnings; no width/gap/newline layout logic duplicated elsewhere" },
 ]
 verification = [
   { id = "VT-1", expects = "meta format_list tests pass verbatim; format_list(&[]) still \"\"" },
   { id = "VT-2", expects = "behaviour-preservation gate: slice list AND adr list output byte-identical to HEAD" },
-  { id = "VT-3", expects = "new unit: format_meta_row with status_suffix=Some(\"⚠\") appends the marker without breaking column alignment of following columns" },
+  { id = "VT-3", expects = "render_table units: ragged columns align; last column unpadded; empty → \"\"; a 5-cell grid with a middle column aligns (the slice case)" },
 ]
 specs        = []
 requirements = []
@@ -100,7 +103,7 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "pure is_divergent(authored, Option<&PhaseRollup>): anomalies>0 → false; None → false; terminal && completed<total → true; !terminal && total>0 && completed==total → true; else false" },
-  { id = "EX-2", text = "pure format_slice_rows(&[(Meta, Option<PhaseRollup>)]) -> String: header line (suppressed on empty rows); status gains ⚠ when divergent; phases = completed/total with !N when blocked, ?N when anomalies, — when None; columns aligned via meta::format_meta_row" },
+  { id = "EX-2", text = "pure format_slice_rows(&[(Meta, Option<PhaseRollup>)]) -> String: builds cell grid (header row + per slice: id, status+⚠-when-divergent, phases [completed/total, !N blocked, ?N anomalies, — None], slug, title) and renders via meta::render_table; header suppressed on empty rows" },
   { id = "EX-3", text = "run_list reads meta::read_metas(\"slice\") + sort_and_filter (shared, unchanged), maps each to (Meta, state::phase_rollup), prints format_slice_rows; --status still filters the authored status; no new CLI arm" },
   { id = "EX-4", text = "CLAUDE.md: \"no slice status rollup\" known-gap note removed; slice list line documents the phases column; cargo clippy zero warnings; just check green" },
 ]

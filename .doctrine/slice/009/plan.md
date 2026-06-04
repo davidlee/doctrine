@@ -31,13 +31,16 @@ own tests). PHASE-03 is the only phase that changes observable `slice list`
 output, and it lands last, composing the two finished seams.
 
 **PHASE-01 — keep `meta` neutral, don't fork it.** The rollup column is
-slice-only, but column-measuring and row layout are shared. The re-review (R-F1)
-rejected copying that layout into `slice.rs` — it would fork the two list
-surfaces the moment spacing changes. So `format_list` is refactored into
-`measure_meta_columns` + `format_meta_row` and reimplemented over them, output
-byte-unchanged; `slice.rs` later reuses the same helpers under its extra column.
-The `status_suffix` parameter is the one concession — presentation-neutral, it
-carries the `⚠` without `meta` ever learning what a phase is.
+slice-only, but the layout (measure, align, gap, newline) is shared. The
+re-review (R-F1) rejected copying that layout into `slice.rs` — it would fork the
+two list surfaces the moment spacing changes. So `format_list` is refactored over
+a neutral `render_table(rows: &[Vec<String>])` and reimplemented byte-unchanged;
+`slice.rs` later calls the same renderer with its own cells, including the middle
+`phases` column and the header row. (This refines the round-1
+`measure_meta_columns`/`format_meta_row` sketch — a whole-row meta formatter
+can't host a *middle* column, and a `status_suffix` arg would be dead in `meta`;
+a cell-grid renderer composes for any column set.) Markers (`⚠`/`!N`/`?N`) are
+baked into cell strings by the caller, so `meta` never learns what a phase is.
 
 **PHASE-02 — derive truthfully, hide nothing.** The re-review tightened three
 things this phase encodes: the phase set comes from the module's own
