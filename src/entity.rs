@@ -380,10 +380,11 @@ fn create_in_existing(
 }
 
 /// Named top-level placement (memory entity): the caller supplies the entity
-/// name (its uid), already unique, so there is no id scan and no retry — claim
-/// `tree_root/<name>` once. `Won` means the dir is ours, so a scaffold/write
-/// failure removes it (H2, as in `allocate_fresh`); `AlreadyHeld` is a duplicate
-/// uid and a hard error.
+/// name (its uid), already unique, so there is no id scan and no retry. The
+/// fileset is rendered from `kind.scaffold` *before* the claim — the render is
+/// pure and name-only, so it is independent of the claim outcome — then handed to
+/// the shared `claim_and_write_named` core (the H2/duplicate guarantees live
+/// there, shared with `materialise_named` — no parallel writer).
 fn allocate_named(
     kind: &Kind,
     claim: &dyn Claim,
@@ -391,29 +392,64 @@ fn allocate_named(
     name: &str,
     inputs: &Inputs<'_>,
 ) -> anyhow::Result<Materialised> {
+    let ctx = ScaffoldCtx {
+        eid: EntityId::Named { name },
+        slug: inputs.slug,
+        title: inputs.title,
+        date: inputs.date,
+    };
+    let fileset = (kind.scaffold)(&ctx)?;
+    let dir = claim_and_write_named(claim, tree_root, name, &fileset)?;
+    Ok(Materialised {
+        eid: OwnedEntityId::Named {
+            name: name.to_string(),
+        },
+        dir,
+    })
+}
+
+/// Materialise a named entity from a *pre-built* fileset (seam A — memory's
+/// record fields exceed `ScaffoldCtx`, so it renders eagerly in `memory.rs` and
+/// hands the fileset here rather than riding `Kind.scaffold`). Creates the entity
+/// tree, then claims and writes through the same core as `allocate_named`.
+pub(crate) fn materialise_named(
+    claim: &dyn Claim,
+    project_root: &Path,
+    dir: &str,
+    name: &str,
+    fileset: &Fileset,
+) -> anyhow::Result<Materialised> {
+    let tree_root = project_root.join(dir);
+    fs::create_dir_all(&tree_root)
+        .with_context(|| format!("Failed to create {}", tree_root.display()))?;
+    let entity_dir = claim_and_write_named(claim, &tree_root, name, fileset)?;
+    Ok(Materialised {
+        eid: OwnedEntityId::Named {
+            name: name.to_string(),
+        },
+        dir: entity_dir,
+    })
+}
+
+/// The shared claim+write+H2 core of the two named paths. Claim `tree_root/<name>`
+/// once: `Won` writes the fileset transactionally and, on a write failure, removes
+/// the won dir (Won ⟹ ours to clean, H2 — as in `allocate_fresh`); `AlreadyHeld`
+/// is a duplicate name and a hard error. Returns the entity dir.
+fn claim_and_write_named(
+    claim: &dyn Claim,
+    tree_root: &Path,
+    name: &str,
+    fileset: &Fileset,
+) -> anyhow::Result<PathBuf> {
     let dir = tree_root.join(name);
     match claim.claim(&dir)? {
-        Acquired::Won => {
-            let ctx = ScaffoldCtx {
-                eid: EntityId::Named { name },
-                slug: inputs.slug,
-                title: inputs.title,
-                date: inputs.date,
-            };
-            match scaffold_and_write(kind, tree_root, &ctx) {
-                Ok(()) => Ok(Materialised {
-                    eid: OwnedEntityId::Named {
-                        name: name.to_string(),
-                    },
-                    dir,
-                }),
-                // Won ⟹ we created `dir` ⟹ a partial scaffold is ours to clean.
-                Err(e) => {
-                    drop(fs::remove_dir_all(&dir));
-                    Err(e)
-                }
+        Acquired::Won => match write_fileset(tree_root, fileset) {
+            Ok(()) => Ok(dir),
+            Err(e) => {
+                drop(fs::remove_dir_all(&dir));
+                Err(e)
             }
-        }
+        },
         Acquired::AlreadyHeld => bail!("entity {name} already exists"),
     }
 }
@@ -1064,6 +1100,160 @@ mod tests {
             !tree.join("mem_abc").exists(),
             "the claimed dir must be removed"
         );
+    }
+
+    // --- materialise_named (seam A — pre-built fileset, no Kind) ---
+
+    /// A memory-shaped fileset relative to the items tree: `<uid>/memory.toml`,
+    /// `<uid>/memory.md`, and — iff `key` — a `<key> -> <uid>` symlink sibling.
+    fn named_fileset(uid: &str, key: Option<&str>) -> Fileset {
+        let mut fs = vec![
+            Artifact::File {
+                rel_path: PathBuf::from(format!("{uid}/memory.toml")),
+                body: "toml".to_string(),
+            },
+            Artifact::File {
+                rel_path: PathBuf::from(format!("{uid}/memory.md")),
+                body: "md".to_string(),
+            },
+        ];
+        if let Some(k) = key {
+            fs.push(Artifact::Symlink {
+                rel_path: PathBuf::from(k),
+                target: uid.to_string(),
+            });
+        }
+        fs
+    }
+
+    #[test]
+    fn materialise_named_writes_a_prebuilt_fileset_under_dir_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let out = materialise_named(
+            &LocalFs,
+            root,
+            "tree",
+            "mem_abc",
+            &named_fileset("mem_abc", None),
+        )
+        .unwrap();
+        assert_eq!(
+            out.eid,
+            OwnedEntityId::Named {
+                name: "mem_abc".to_string()
+            }
+        );
+        assert_eq!(out.dir, root.join("tree/mem_abc"));
+        assert_eq!(
+            fs::read_to_string(root.join("tree/mem_abc/memory.toml")).unwrap(),
+            "toml"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("tree/mem_abc/memory.md")).unwrap(),
+            "md"
+        );
+    }
+
+    #[test]
+    fn materialise_named_with_a_key_writes_the_alias_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        materialise_named(
+            &LocalFs,
+            root,
+            "tree",
+            "mem_abc",
+            &named_fileset("mem_abc", Some("mem.a.b")),
+        )
+        .unwrap();
+        // the alias resolves to the uid dir
+        let link = root.join("tree/mem.a.b");
+        assert_eq!(fs::read_link(&link).unwrap(), Path::new("mem_abc"));
+        assert!(
+            scan_named(&root.join("tree"))
+                .unwrap()
+                .contains(&"mem_abc".to_string())
+        );
+        // the symlink is not a real dir → excluded from the scan (VT-2 at engine level)
+        assert!(
+            !scan_named(&root.join("tree"))
+                .unwrap()
+                .contains(&"mem.a.b".to_string())
+        );
+    }
+
+    #[test]
+    fn materialise_named_errs_on_a_duplicate_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("tree/mem_abc")).unwrap();
+
+        let err = materialise_named(
+            &LocalFs,
+            root,
+            "tree",
+            "mem_abc",
+            &named_fileset("mem_abc", None),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("already exists"));
+    }
+
+    #[test]
+    fn materialise_named_write_failure_cleans_up_the_won_dir() {
+        // A self-squatting fileset: a file `<uid>/a`, then `<uid>/a/b` whose parent
+        // is that file → the dir walk fails; H2 removes the won uid dir.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let doomed = vec![
+            Artifact::File {
+                rel_path: PathBuf::from("mem_abc/a"),
+                body: "x".to_string(),
+            },
+            Artifact::File {
+                rel_path: PathBuf::from("mem_abc/a/b"),
+                body: "y".to_string(),
+            },
+        ];
+
+        let err = materialise_named(&LocalFs, root, "tree", "mem_abc", &doomed).unwrap_err();
+        assert!(err.to_string().contains("Failed to create"));
+        assert!(
+            !root.join("tree/mem_abc").exists(),
+            "the won dir must be removed"
+        );
+    }
+
+    #[test]
+    fn materialise_named_rolls_back_the_uid_dir_on_a_pre_existing_key_alias() {
+        // VT-3 at the engine level: the `<key>` path already exists, so the alias
+        // symlink in the fileset fails → the whole record rolls back, the uid dir
+        // included. No partial record survives.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let tree = root.join("tree");
+        fs::create_dir_all(&tree).unwrap();
+        // a stale alias squats the key name
+        fs::write(tree.join("mem.a.b"), "stale").unwrap();
+
+        let err = materialise_named(
+            &LocalFs,
+            root,
+            "tree",
+            "mem_abc",
+            &named_fileset("mem_abc", Some("mem.a.b")),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Failed to symlink"));
+        assert!(
+            !tree.join("mem_abc").exists(),
+            "the uid dir must be rolled back — no partial record"
+        );
+        // the pre-existing alias is untouched
+        assert_eq!(fs::read_to_string(tree.join("mem.a.b")).unwrap(), "stale");
     }
 
     // --- scan_named ---
