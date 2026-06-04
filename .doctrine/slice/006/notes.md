@@ -17,6 +17,35 @@ in `state/.../phases/`; this survives.
   read order.
 - **`Meta` fields are `pub(crate)`** so adr.rs (and its tests) can read/round-trip.
 
+## PHASE-02 outcomes (the ADR kind surface P03 wires)
+
+- **`src/adr.rs` exists** (commit `4d647b9`): `ADR_KIND` (Fresh, `prefix="ADR"`,
+  `dir=".doctrine/adr"`, `scaffold=adr_scaffold`), `render_adr_toml(id,slug,title,
+  date)`, `render_adr_md(canonical_ref, title)`, `adr_scaffold(ctx)->Fileset`
+  (2 files + `NNN-slug` symlink — the `slice_scaffold` shape). All `fn`-private;
+  P03 verbs (`run_new`/`run_list`) go in the same module.
+- **`ADR_KIND` carries `#[expect(dead_code, reason=…PHASE-03…)]`** — it has no
+  consumer until the verbs. **P03 must drop that attribute** the moment `run_new`
+  references it, or clippy flips (an `expect` that no longer fires is itself a warning).
+- **`adr.toml` template gained `schema="doctrine.adr"` + `version=1`** (slice.toml
+  has neither). `Meta` ignores both → round-trip unaffected. They exist for P04's
+  `toml_edit` mutation to assert it is editing a doctrine.adr.
+- **`[relationships]` is four inert empty arrays** (`supersedes`/`superseded_by`/
+  `related`/`tags`) — authored-but-inert; nothing reads them in v1.
+- **Templates need no manifest entry** — `install.rs` `build_plan` loops
+  `embedded_filenames()` (RustEmbed auto-embed of `install/`); slice.toml isn't
+  listed either. Don't invent install config for adr.{toml,md}.
+
+## P03 reuse seam (resolve before coding — DRY gate)
+
+- **`resolve_title` is private to `slice.rs:236`** and the **slug-resolution policy**
+  (`--slug` else `entity::derive_slug`, then empty-bail) is **inline in
+  `slice::run_new:264-272`**. VT-2 says ADR `run_new` *reuses* both. Two are
+  currently slice-local. Decision for P03: lift `resolve_title` (and ideally a small
+  `resolve_slug(title, slug)` helper) to a shared home (`entity` or a thin shared
+  module) and have both slice + adr call it — do **not** copy-paste (CLAUDE.md: no
+  parallel implementation). `derive_slug` is already `entity::derive_slug` (shared).
+
 ## Deviation from plan text (accepted)
 
 - Plan PHASE-01 EX-1 lists `today()` for meta.rs. **Not extracted** — `today()` was
