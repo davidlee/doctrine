@@ -225,7 +225,7 @@ doctrine memory list [--type <t>] [--status <s>] [--tag <t>]        [--path <roo
   real dir, a key hits the slug symlink (fs resolves it). **No `memory_key` scan
   fallback** in v1 — a scan would make stale hand-edited keys semi-authoritative and
   add O(n) to a direct-lookup command; the registry/index that could re-key safely
-  arrives in SL-008. (slice-005.md is updated to drop its "/ a `memory_key` scan"
+  arrives in SL-009. (slice-005.md is updated to drop its "/ a `memory_key` scan"
   clause.) **Security render (review #14 + codex-MAJOR-4):** `show` prints the full
   hostile-input metadata header the spec mandates (memory-spec § Security :365-367) —
   **`memory_uid` / `memory_key`, `trust_level`, `verification_state`, `scope`, and
@@ -246,7 +246,7 @@ verb. `show` therefore renders bounded, tool-authored prose.
 
 ### 5.3 Data, State & Ownership — schema & parse
 
-Two-layer parse (registry layer deferred to SL-008):
+Two-layer parse (registry layer deferred to SL-009):
 
 ```rust
 struct RawMemoryToml {            // tolerant; serde(default) on nested blocks
@@ -297,10 +297,10 @@ The `memory.toml` template substitutes values on hand at scaffold
 
 **`scope.workspace` is carried unconditionally (codex-BLOCKING-2 — interop
 constraint 6, memory-spec :84-86/:154/:294).** `workspace` is *not* part of the
-deferred git/anchoring work (that is `repo` + the frame, SL-007); it is a coordinate
+deferred git/anchoring work (that is `repo` + the frame, SL-008); it is a coordinate
 **carried on every memory from the first record**, even single-tenant. v1 scaffolds
 `scope.workspace = "default"` always, the model carries it (non-empty after
-validation), and `list`/`show` read it (it is a hard-filter key in the SL-006
+validation), and `list`/`show` read it (it is a hard-filter key in the SL-007
 deterministic sort, :314 — so it must exist now, not be back-filled later). The
 original scaffold-defaults list silently omitted it; restored.
 
@@ -340,7 +340,7 @@ an `Artifact::Symlink` **in the fileset**, so `write_fileset`'s transaction cove
 - **`active` ≠ retrieval-eligible (review #12).** Invariant to document:
   `status = active` is *lifecycle*-active; with `anchor_kind = none`, empty scope,
   and `verification_state = unverified`, the record is **not** retrieval-eligible —
-  retrieval suppression and scope-matching (SL-006/security) gate that separately.
+  retrieval suppression and scope-matching (SL-007/security) gate that separately.
   `active + unverified + unscoped` is consistent, not contradictory.
 - **key symlink — transactional, pre-existing is a hard error (review #5).** Created
   only with `--key`, **inside the fileset**: `symlink(2)` errors on any existing path
@@ -353,7 +353,7 @@ an `Artifact::Symlink` **in the fileset**, so `write_fileset`'s transaction cove
 - **non-git project**: irrelevant this slice — no frame is built, `anchor_kind = none`.
 - **unix symlinks assumed (review #15).** The engine already calls
   `std::os::unix::fs::symlink`; `show <key>` inherits that. Non-unix support, if ever
-  needed, degrades key aliasing to the SL-008 registry rather than a symlink.
+  needed, degrades key aliasing to the SL-009 registry rather than a symlink.
 
 ### 5.6 Identity format (resolves Q1 / review #11 / ed2)
 
@@ -408,7 +408,7 @@ an `Artifact::Symlink` **in the fileset**, so `write_fileset`'s transaction cove
   concern, not the uid's (corrects the earlier content-addressing mis-framing —
   codex-BLOCKING-1).
 - **D4 — `anchor_kind = none`, no git this slice.** Defers all `git_context` work to
-  SL-007; unanchored unscoped memory is permitted (memory-spec § Scope & anchoring).
+  SL-008; unanchored unscoped memory is permitted (memory-spec § Scope & anchoring).
 - **D5 — read path plain serde, no `toml_edit`.** Mutation (and its edit-preserving
   writer) is owed by the ledger seam, not v1.
 - **D6 — `--key` optional; resolution by dir/symlink, no scan.** Cheapest correct
@@ -537,7 +537,7 @@ migration surface — no change to those. New findings dispositioned:
 - **codex-BLOCKING-2 — `scope.workspace` silently dropped → ACCEPTED.** Interop
   constraint 6 (:84-86/:154/:294) carries `workspace` on every memory from the first
   record; it is a hard-filter key (:314). v1 now scaffolds `workspace = "default"`
-  unconditionally (§ 5.3). Distinct from the deferred `repo`/git frame (SL-007).
+  unconditionally (§ 5.3). Distinct from the deferred `repo`/git frame (SL-008).
 - **codex-MAJOR-3 — `show` read-path traversal → ACCEPTED.** `safe_join` was
   write-only (`entity.rs:289,328`); the `show` key arg is user input. v1 parses a
   validated `MemoryRef` and reuses `safe_join` on the read path (§ 5.2).
