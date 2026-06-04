@@ -60,11 +60,11 @@ core of this slice (design.md § 5).
 
 - **`doctrine memory show <uid|key>` and `memory list`.** `show` resolves the
   argument as a uid (directory under `items/`) or a key (via the slug symlink only —
-  no `memory_key` scan; the registry that re-keys safely is SL-008) and renders the
+  no `memory_key` scan; the registry that re-keys safely is SL-009) and renders the
   record. `list [--type --status --tag]` reads
   each `items/*/memory.toml` and formats id/type/status/key/title rows — the
   AND-filtered metadata pipeline, **no scope matching or ranking yet** (those are
-  SL-006). Reuses the pure-format / IO-seam split of `slice list`.
+  SL-007). Reuses the pure-format / IO-seam split of `slice list`.
 
 - **Install manifest split.** Replace the placeholder blanket
   `.doctrine/memory/*` gitignore with: create `.doctrine/memory/items`; gitignore
@@ -81,20 +81,20 @@ attach to a proven entity rather than a theoretical one.
 ## Non-Goals
 
 - **Scope retrieval and ranking** (`-p`/`-c`/`--match-tag`, the deterministic sort
-  tuple). The retrieval primitive — the *point* of memory — is **SL-006**. v1
+  tuple). The retrieval primitive — the *point* of memory — is **SL-007**. v1
   `list` is metadata-filter only. Deferring it keeps this slice to the entity and
   its identity decision, exactly as slices-spec deferred everything past `new`/`list`.
 
 - **Git anchoring and staleness.** No git context frame is built and no
   `verified_sha`/commit anchoring is computed; `record` writes `anchor_kind = none`
   and leaves the `[git]` block empty. Frame construction and the three-mode
-  staleness computation are **SL-007**. This keeps all `git_context` work out of
+  staleness computation are **SL-008**. This keeps all `git_context` work out of
   this slice (memory-spec § Scope & anchoring — unscoped/unanchored memory is
   permitted; repo-scoped anchoring arrives with its consumer).
 
 - **Links, backlinks, relation registry.** `[[...]]` resolution, derived
   backlinks, and `[[relation]]` FK validation fold into the relation-index
-  registry — **SL-008**. The `[[relation]]` rows may be *authored* in v1 but are
+  registry — **SL-009**. The `[[relation]]` rows may be *authored* in v1 but are
   inert (no resolution), the same posture as slice `[relationships]`.
 
 - **The reserved seam.** Lifecycle ledger (`events.toml`), NDJSON import/export,
@@ -123,7 +123,7 @@ the engine generalises (driven by memory, not speculatively) to materialise a
 caller-named entity with no id allocation. Numeric callers stay behaviour-
 preserving; their suites gate every step. Retrieval, git anchoring/staleness, links,
 and the reserved ledger/export/backend seams are explicitly out — they attach to
-this proven entity in later slices (SL-006/007/008 + the seam).
+this proven entity in later slices (SL-007/007/008 + the seam).
 
 The engine-identity mechanism, the schema/parse design, the uid-minting seam, and
 the manifest change live in the design doc ([design.md](design.md)) — authored with
@@ -131,13 +131,13 @@ this slice, pending adversarial review per the slice-002/003/004 rhythm.
 
 ## Follow-Ups
 
-- **SL-006 — retrieval & ranking.** Scope matching (paths/globs/commands/tags, OR
+- **SL-007 — retrieval & ranking.** Scope matching (paths/globs/commands/tags, OR
   with specificity) and the deterministic sort tuple (memory-spec § Retrieval).
   The value slice; this entity is its substrate.
-- **SL-007 — git anchoring & staleness.** Build the git context frame; compute the
+- **SL-008 — git anchoring & staleness.** Build the git context frame; compute the
   three-mode staleness; populate `[git]` on record/review. The first `git_context`
   work in doctrine.
-- **SL-008 — links & registry.** `[[...]]` resolution, derived backlinks, and
+- **SL-009 — links & registry.** `[[...]]` resolution, derived backlinks, and
   `[[relation]]` FK validation folded into the relation-index registry.
 - **Reserved seam.** Lifecycle ledger → NDJSON export → pluggable backend adapter,
   each behind its own caller (memory-spec § Roadmap). The uid minted here is the
