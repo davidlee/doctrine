@@ -71,9 +71,17 @@ entity dir, so the `mkdir` both claims and creates, faithful to today's behaviou
 and adding nothing on disk. An abstract key now would force the local backend
 either to know the entity layout (the coupling this primitive forbids) or to
 claim a separate lock tree. When `git-ref` arrives the seam generalises to the
-abstract key and the dir-creation splits out of `acquire` into materialisation.
-Crucially this is **engine-internal**: callers invoke `materialise`, never
-`acquire`, so the generalisation does not rewrite them (slice-003 design.md D1).
+abstract key and the dir-creation splits out of `claim` into materialisation.
+Crucially this is **engine-internal**: callers invoke `materialise`, never the
+seam, so the generalisation does not rewrite them (slice-003 design.md D1).
+
+**The seam is `Claim`, not `Reservation` (SL-005 D7).** As the engine grew a
+second, non-numeric caller (the memory entity), the seam was renamed
+`trait Claim { fn claim(&self, claim: &Path) -> Result<Acquired>; }`. *Reservation*
+is one caller's interpretation of a claim — the numeric `max + 1` id arbitration
+above. A `claim` is the generic atomic "this dir is mine" primitive; reservation
+is what the slice/spec callers build on it. The `Acquired { Won, AlreadyHeld }`
+outcome is unchanged.
 
 ## v1 scope
 
