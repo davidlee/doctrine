@@ -153,14 +153,18 @@ commands = ["doctrine slice"]       # command token-prefix triggers
 tags     = ["cli", "architecture"]  # stable categorization (not overloaded as scope)
 workspace = "default"               # coordinate — carried always (interop constraint 6)
 repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"             # explicit | remote | local_root — how repo was derived
+repo_id_confidence = "high"         # high | medium | low — convergence across clones
 
 [git]                               # anchor; doctrine builds it, the backend never does
-anchor_kind = "commit"              # commit | checkout_state | none
-commit = "..."                      # set iff anchor_kind = commit (clean tree)
+anchor_kind = "commit"              # commit | checkout_state | none (dirty is derived from this, not stored)
+commit = "..."                      # set iff anchor_kind = commit (clean tree); empty when dirty
+tree = "..."                        # HEAD^{tree}; part of the locked frame (decision 6)
 checkout_state_id = ""              # set iff anchor_kind = checkout_state (dirty tree)
 base_commit = "..."                 # HEAD the memory sits on
-ref_name = "refs/heads/main"
+ref_name = "refs/heads/main"        # empty when detached HEAD (still anchored to commit/checkout)
 verified_sha = "..."                # SHA at last verification — enables git staleness
+normalizer = "forget.checkout.v1"   # frozen frame-algorithm tag (the interop seam, § Backend abstraction)
 
 [review]                            # SEPARATE from lifecycle status (approval ≠ lifecycle)
 verification_state = "unverified"   # unverified | verified | stale | disputed
@@ -287,11 +291,29 @@ cannot be found by context-aware query. Every actionable memory carries at least
 one of `scope.paths` / `scope.globs` / `scope.commands`.
 
 The **git context frame** is built by doctrine (interop constraint 4); the backend
-never shells out to git. Minimum frame for a repo-scoped write/read: `repo` (+ id
-kind/confidence), HEAD `commit` + tree + `ref_name`, the `dirty` flag,
-`checkout_state_id` when dirty, and `base_commit`. A repo-scoped memory **requires**
-a born frame; an unborn/non-git context yields an `unanchored` memory, permitted
-only for unscoped memory. `workspace` is carried always.
+never shells out to git. Minimum frame for a repo-scoped write/read: `repo` (+
+`repo_id_kind`/`repo_id_confidence`), HEAD `commit` + `tree` + `ref_name`, the
+dirty distinction (carried as `anchor_kind`, not a separate stored `dirty` flag —
+derive-don't-store), `checkout_state_id` when dirty, and `base_commit`. A
+repo-scoped memory **requires** a born frame; an unborn/non-git context yields an
+`unanchored` memory, permitted only for unscoped memory. `workspace` is carried
+always.
+
+**The frame algorithm is frozen, and shared with the interop backend.** The
+event-store counterparty (`forgettable`, § Backend abstraction) already defines this
+frame as `GitContextFrameV1` under the normalizer tags `forget.remote.v1`
+(`repo_id`) and `forget.checkout.v1` (`checkout_state_id`). doctrine's git seam
+(`src/git.rs`) **reproduces that algorithm byte-for-byte** so a doctrine `record`
+and a backend claim derive identical ids and dedup at the seam (§ Identity,
+interop constraint 3); a shared conformance golden-vector pins the equivalence.
+Concretely: `repo_id` is derived by precedence explicit→remote→local-root (ambiguous
+multi-remote is an error, not a guess); `checkout_state_id` is a content-bearing hash
+(`git write-tree` index + `sha256(git diff HEAD --binary)` + sorted untracked
+content-hashes), so distinct edits to the same fileset do not collide; a detached
+HEAD is still anchored (`commit`/`checkout_state`, empty `ref_name`); and capture
+runs git under config-independent normative flags. doctrine adopts forgettable's
+unstable-frame guards: born/unborn/non-repo are three distinct states, and
+submodule/symlink/multi-root trees are rejected rather than anchored unstably.
 
 ## Retrieval & ranking
 
@@ -509,7 +531,7 @@ may be tuned before implementation.
 | 3 | `memory.toml` projection or editable? | **Editable canonical**, owned, edit-preserving (follows decision 1). |
 | 4 | First-class memory types in v1 | *(provisional)* All **6** spec-driver types (§ Memory types). |
 | 5 | Lifecycle states in v1 | *(provisional)* **6**: active/draft/superseded/retracted/archived/quarantined; review state a separate axis. |
-| 6 | Minimum git context frame | repo + HEAD commit/tree/ref + dirty + checkout_state_id (dirty) + base_commit; born frame required for repo scope (§ Scope & anchoring). |
+| 6 | Minimum git context frame | repo (+ repo_id_kind/confidence) + HEAD commit/tree/ref + checkout_state_id (dirty) + base_commit; dirty derived from `anchor_kind` (not stored); algorithm frozen as forgettable's `GitContextFrameV1` (`forget.remote.v1`/`forget.checkout.v1`), reproduced byte-for-byte; born frame required for repo scope (§ Scope & anchoring). |
 | 7 | Commit durable memory files? | **Commit `items/`**; gitignore `index/`/`embeddings/`/`state/` (§ Install changes). |
 | 8 | Prompt-injection rendering contract | Quoted, attributed, delimited data block; never instruction; suppress quarantined/retracted (§ Security). |
 | 9 | Canonical import/export format | NDJSON event bundle + bodies + rebuildable projections; integer-only payload (§ Import/export). |
