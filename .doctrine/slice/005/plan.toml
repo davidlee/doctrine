@@ -1,0 +1,192 @@
+# Implementation plan for SL-005 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-005"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Engine identity widening + claim-seam rename"
+objective = """
+Generalise src/entity.rs to serve a second (string) identity shape and rename \
+the claim seam, behaviour-preserving for the four numeric callers (slice / \
+design / plan / phases). Lands as TWO commits: (a) the D7 seam rename, isolated \
+and green; (b) the D1/D8/D9 identity widening + allocate_named + scan_named + \
+numeric-caller migration. The behaviour-preservation gate sits at the end.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md approved (two review passes dispositioned)" },
+  { id = "EN-2", text = "full entity.rs + slice.rs suite green at HEAD" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "D7: trait Reservation->Claim, fn acquire->claim (Acquired{Won,AlreadyHeld} kept); reservation-spec wording updated; suite green at commit (a)" },
+  { id = "EX-2", text = "D1: EntityId{Numbered{id,canonical},Named{name}}; ScaffoldCtx carries eid in place of id/canonical_id" },
+  { id = "EX-3", text = "D8: MaterialiseRequest{Fresh,InExisting{id},Named{name}}; Kind.mode field removed; Inputs drops existing_id; materialise dispatches on the request" },
+  { id = "EX-4", text = "D9: OwnedEntityId{Numbered,Named} in Materialised{eid,dir}, with numeric_id()/canonical_ref() accessors" },
+  { id = "EX-5", text = "allocate_named: claim-or-duplicate-error (no retry loop), reusing scaffold_and_write/write_fileset (H1/H2 unchanged)" },
+  { id = "EX-6", text = "scan_named(tree_root)->Vec<String>: non-symlink dirs of ANY name (sibling to numeric-only scan_ids), for memory list" },
+  { id = "EX-7", text = "4 numeric Kinds + 5 materialise call sites + 4 scaffolds + out.id reads migrated; clippy zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "the entire pre-existing entity.rs + slice.rs suite passes unchanged — the behaviour-preservation gate" },
+  { id = "VT-2", expects = "kind-blind allocate_named tests: Won writes named dir+fileset; a pre-existing name -> duplicate error (distinct from Fresh's retry); a scaffold failure after Won removes the named dir (H2)" },
+  { id = "VT-3", expects = "scan_named returns named dirs and skips symlinks and files" },
+  { id = "VT-4", expects = "cargo clippy: zero warnings" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Memory schema & parse (pure) + uuid dep"
+objective = """
+The memory.rs pure schema/parse core and the uuid dependency. No disk, no clock. \
+Two-layer parse (RawMemoryToml -> Memory), closed vocab enums, validated \
+schema_version, the always-carried workspace coordinate, and the MemoryRef / key \
+/ tag / uid validators that later phases depend on.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged (engine serves Named identity)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Cargo.toml enables uuid with the v7 feature (verify/extend the workspace feature set); crate builds" },
+  { id = "EX-2", text = "RawMemoryToml: tolerant, serde(default) on each nested block, single top-level #[serde(flatten)] extra; TryFrom<RawMemoryToml> for Memory" },
+  { id = "EX-3", text = "closed MemoryType/Status enums (rename_all=kebab-case); an unknown member is a parse error" },
+  { id = "EX-4", text = "schema_version validated == 1; missing or other version is a hard error" },
+  { id = "EX-5", text = "scope.workspace required non-empty after validation (default \"default\", hardcoded v1 — no flag)" },
+  { id = "EX-6", text = "MemoryRef::{Uid,Key} parser: uid ^mem_[0-9a-f]{32}$, key mem.<seg> grammar ([a-z0-9]+(-[a-z0-9]+)* x2-7), rejecting separator/absolute/.. before any fs use" },
+  { id = "EX-7", text = "key shorthand normalize (pattern.cli.skinny -> mem.pattern.cli.skinny) + segment validate; tag validate (free lowercase, trimmed, non-empty, deduped)" },
+]
+verification = [
+  { id = "VT-1", expects = "RawMemoryToml<->memory.toml round-trip; a top-level unknown key is preserved in extra; a nested-block unknown key is NOT preserved; a deleted [block] fills defaults" },
+  { id = "VT-2", expects = "an unknown memory_type/status is a parse error; schema_version != 1 is a hard error" },
+  { id = "VT-3", expects = "MemoryRef rejects ../separator/absolute args; accepts a valid uid and a valid key" },
+  { id = "VT-4", expects = "key normalization and tag validation table cases pass" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Scaffolds, templates, Named Kind (pure render)"
+objective = """
+The memory templates, render functions, the Named MEMORY_KIND, and the fileset \
+(incl. the optional <key>-><uid> symlink as an artifact so write_fileset's \
+transaction covers it). Pure render — no disk.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 merged (schema + types available)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/templates/memory.toml embedded: tokens uid/key/type/status/title/summary/date/schema_version/workspace; [scope] workspace=default + empty paths/globs/commands/tags; [git] anchor_kind=none; [review] unverified; [trust] medium; [ranking] severity=none weight=0" },
+  { id = "EX-2", text = "install/templates/memory.md embedded: title + summary body only (no editor/stdin/--body)" },
+  { id = "EX-3", text = "MEMORY_KIND { dir = \".doctrine/memory/items\", scaffold } — Named placement via MaterialiseRequest, no mode field" },
+  { id = "EX-4", text = "memory_scaffold builds items/<uid>/{memory.toml,memory.md}, plus a <key>-><uid> Artifact::Symlink iff a key is given" },
+]
+verification = [
+  { id = "VT-1", expects = "template token substitution: memory.toml parses, carries workspace + schema_version, no leftover {{tokens}}" },
+  { id = "VT-2", expects = "fileset shape: 2 files without a key; 3 artifacts incl Artifact::Symlink target==uid with a key" },
+  { id = "VT-3", expects = "the rendered memory.toml round-trips into Memory with all defaulted blocks present" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "record verb + CLI"
+objective = """
+doctrine memory record: mint the v7 uid in the shell (an input to the pure \
+scaffold beside the date), materialise via MaterialiseRequest::Named with the \
+transactional key alias, and print uid (+key) + path. workspace is hardcoded \
+\"default\" (no flag, per decision).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 merged (Named Kind + scaffolds)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "main.rs: a `memory` subcommand with `record <title> --type(req) [--key] [--status=active] [--summary] [--tag]... [--path]`" },
+  { id = "EX-2", text = "run_record: mint mem_+32hex v7 (shell-only), build the Named request, materialise; key alias rides the fileset; print uid(+key)+path" },
+  { id = "EX-3", text = "scope.workspace = \"default\" written unconditionally" },
+  { id = "EX-4", text = "duplicate uid -> hard error (AlreadyHeld); a pre-existing key alias -> hard error AND the uid dir is rolled back" },
+]
+verification = [
+  { id = "VT-1", expects = "record writes items/<uid>/{memory.toml,memory.md}; toml carries uid/type/status/workspace; uid matches ^mem_[0-9a-f]{32}$" },
+  { id = "VT-2", expects = "record --key writes a <key>-><uid> symlink that the real-dir scan skips" },
+  { id = "VT-3", expects = "a pre-existing key alias errors and the uid dir is rolled back — no partial record left" },
+  { id = "VT-4", expects = "cargo clippy: zero warnings" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "show + list + integration"
+objective = """
+doctrine memory show / list. show resolves via a validated MemoryRef through \
+fsutil::safe_join (no scan fallback) and renders the spec's hostile-input header \
++ body-as-data. list scans the real item dirs (scan_named), AND-filters, and \
+orders created-desc then uid-asc. One tempdir integration test exercises the \
+real symlink path end to end.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 merged (records exist to read)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "show: parse MemoryRef, safe_join(items_root, name), open memory.toml; uid hits the dir, key hits the symlink; NO memory_key scan fallback" },
+  { id = "EX-2", text = "show render: header carries memory_uid/memory_key, trust_level, verification_state, scope, anchor; body labelled as memory content, never instruction (memory-spec Security :365-367)" },
+  { id = "EX-3", text = "list: scan_named under items/, parse each memory.toml, AND-filter --type/--status/--tag, order created desc then uid asc, format uid-short/type/status/key/title rows" },
+  { id = "EX-4", text = "main.rs wiring for `memory show <uid|key>` and `memory list [--type --status --tag] [--path]`" },
+]
+verification = [
+  { id = "VT-1", expects = "show resolves a uid and a key; a stale memory_key with no symlink does NOT resolve; a ../separator/absolute arg is rejected before fs access" },
+  { id = "VT-2", expects = "show header includes scope and anchor (the full set); body is rendered as data" },
+  { id = "VT-3", expects = "list AND-filter semantics + created-desc/uid-asc ordering; symlink aliases excluded from rows" },
+  { id = "VT-4", expects = "tempdir integration: record -> show -> list end to end with a real symlink create/resolve" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-06"
+name      = "Manifest split + install"
+objective = """
+Commit authored memory items while ignoring derived subtrees. NOTE (plan-time \
+finding): there is no blanket .doctrine/memory/* gitignore to replace — the \
+manifest only creates .doctrine/memory. So this ADDS three narrower entries and \
+retargets the created dir; it does not replace anything.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 merged (the entity is complete)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "manifest [dirs].create: .doctrine/memory -> .doctrine/memory/items" },
+  { id = "EX-2", text = "manifest [gitignore].entries ADD: .doctrine/memory/index/*, .doctrine/memory/embeddings/*, .doctrine/memory/state/* (additive, no blanket entry exists)" },
+]
+verification = [
+  { id = "VT-1", expects = "install-plan test: items/ is created; the three gitignore entries are present; no blanket .doctrine/memory/* entry exists" },
+  { id = "VT-2", expects = "re-install is idempotent (additive no-op)" },
+]
+specs        = []
+requirements = []

@@ -1,7 +1,8 @@
 # bootstap doctrine:
 
-> just --list  # common tasks
-> just check   # pre-commit gate
+> just --list        # common tasks
+> just check         # pre-commit gate
+> just list-memories # do it - now - to see what's there.
 
 .doctrine/slice/nnn/
 - slice-nnn.toml - metadata, relations, progress
