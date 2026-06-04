@@ -102,3 +102,10 @@ link/relink/refuse lives behind the existing execution seam.
   `davidlee/doctrine` — fix.
 - **Split source**: Claude uses the local canonical tree, npx-managed agents pull
   from GitHub. Revisit only if frequent multi-agent local installs appear.
+- **Opt-in `just` module** (separate slice; depends on this one): ship
+  `.doctrine/doctrine.just` from the embed (derived/gitignored), adopted by users
+  via one line `mod doctrine '.doctrine/doctrine.just'` — never own their root
+  justfile. Recipes: `vendor-skill <id>` (the override hatch above, packaged as
+  rm-symlink → `cp -rL` real copy → `git add -f`), `slice show | glow`, fzf
+  pickers. Also needs a `doctrine slice show [--path]` verb, which does not yet
+  exist. See `doc/memories/doctrine-just-module.md`.
