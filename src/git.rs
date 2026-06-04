@@ -76,6 +76,79 @@ pub(crate) enum Confidence {
     Low,
 }
 
+// ---------------------------------------------------------------------------
+// Persisted string forms (the `[git]`/`[scope]` snake_case tokens). These pin
+// the frame's on-disk vocabulary — the read path (`memory.rs` validation) parses
+// them; the write/render paths (PHASE-04/06) emit them. Mirrors the
+// `MemoryType::parse`/`as_str` pattern in `memory.rs`; the persisted spelling is
+// fixed here and both ends must agree. Empty→default normalization is NOT here —
+// it is explicit in `memory.rs` validation (design D4/M1).
+// ---------------------------------------------------------------------------
+
+impl AnchorKind {
+    /// Parse a persisted `anchor_kind` token. `""`→`None` is handled by the
+    /// caller's explicit normalization, not here (a bare token only).
+    pub(crate) fn parse(s: &str) -> Result<Self, String> {
+        Ok(match s {
+            "commit" => Self::Commit,
+            "checkout_state" => Self::CheckoutState,
+            "none" => Self::None,
+            other => return Err(format!("unknown anchor_kind {other:?}")),
+        })
+    }
+
+    /// The persisted token (inverse of `parse`).
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Commit => "commit",
+            Self::CheckoutState => "checkout_state",
+            Self::None => "none",
+        }
+    }
+}
+
+impl RepoIdKind {
+    /// Parse a persisted `repo_id_kind` token.
+    pub(crate) fn parse(s: &str) -> Result<Self, String> {
+        Ok(match s {
+            "explicit" => Self::Explicit,
+            "remote" => Self::Remote,
+            "local_root" => Self::LocalRoot,
+            other => return Err(format!("unknown repo_id_kind {other:?}")),
+        })
+    }
+
+    /// The persisted token (inverse of `parse`).
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Explicit => "explicit",
+            Self::Remote => "remote",
+            Self::LocalRoot => "local_root",
+        }
+    }
+}
+
+impl Confidence {
+    /// Parse a persisted `confidence` token.
+    pub(crate) fn parse(s: &str) -> Result<Self, String> {
+        Ok(match s {
+            "high" => Self::High,
+            "medium" => Self::Medium,
+            "low" => Self::Low,
+            other => return Err(format!("unknown confidence {other:?}")),
+        })
+    }
+
+    /// The persisted token (inverse of `parse`).
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::High => "high",
+            Self::Medium => "medium",
+            Self::Low => "low",
+        }
+    }
+}
+
 /// Stable repository identity (design §5.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RepoIdentity {
@@ -715,6 +788,45 @@ mod tests {
     fn canon(v: &Value) -> String {
         let bytes = canonical_bytes(v).unwrap_or_default();
         String::from_utf8(bytes).unwrap_or_default()
+    }
+
+    // --- PHASE-03: persisted enum tokens round-trip (pins the on-disk vocab) -
+
+    #[test]
+    fn anchor_kind_token_round_trips() {
+        for k in [
+            AnchorKind::Commit,
+            AnchorKind::CheckoutState,
+            AnchorKind::None,
+        ] {
+            assert_eq!(AnchorKind::parse(k.as_str()).unwrap(), k);
+        }
+        assert_eq!(
+            AnchorKind::as_str(AnchorKind::CheckoutState),
+            "checkout_state"
+        );
+        assert!(AnchorKind::parse("bogus").is_err());
+    }
+
+    #[test]
+    fn repo_id_kind_token_round_trips() {
+        for k in [
+            RepoIdKind::Explicit,
+            RepoIdKind::Remote,
+            RepoIdKind::LocalRoot,
+        ] {
+            assert_eq!(RepoIdKind::parse(k.as_str()).unwrap(), k);
+        }
+        assert_eq!(RepoIdKind::as_str(RepoIdKind::LocalRoot), "local_root");
+        assert!(RepoIdKind::parse("bogus").is_err());
+    }
+
+    #[test]
+    fn confidence_token_round_trips() {
+        for c in [Confidence::High, Confidence::Medium, Confidence::Low] {
+            assert_eq!(Confidence::parse(c.as_str()).unwrap(), c);
+        }
+        assert!(Confidence::parse("bogus").is_err());
     }
 
     // --- EX-3: the frame types are constructible and field-addressable. -----
