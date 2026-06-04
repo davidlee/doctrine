@@ -28,6 +28,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::{self, Artifact, Fileset, LocalFs};
+use crate::git::{AnchorKind, Confidence, RepoIdKind};
 
 /// Workspace coordinate carried on every memory; hardcoded `"default"` in v1 (no
 /// flag — design § 5.3 / interop constraint 6). Read back by `list`/`show`.
@@ -282,12 +283,20 @@ struct RawScope {
     workspace: String,
     #[serde(default)]
     repo: String,
+    #[serde(default)]
+    repo_id_kind: String,
+    #[serde(default)]
+    repo_id_confidence: String,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 struct RawReview {
     #[serde(default)]
     verification_state: String,
+    #[serde(default)]
+    reviewed: String,
+    #[serde(default)]
+    review_by: String,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -304,13 +313,35 @@ struct RawRanking {
     weight: i64,
 }
 
-// Blocks carried for shape-faithful parse (so they are consumed, not leaked into
-// `extra`) but not read by any v1 verb: git anchoring is SL-007, relation/source
-// resolution is the SL-008 registry. Modelled fieldless — serde ignores their
-// keys, v1 stores nothing from them.
+// The `[git]` born-frame block (SL-007). All `#[serde(default)]` so a legacy
+// SL-005 file with no `[git]` keys still parses; `anchor_kind` empty/absent
+// normalizes to `none` explicitly in validation (design D4/M1 — serde gives `""`,
+// not `"none"`). `dirty` is NOT a field — it is derived from `anchor_kind`.
+// `verified_sha`/`normalizer` are persisted-only (written by `verify` / capture),
+// not present on `git::Frame`.
 #[derive(Debug, Default, Deserialize, Serialize)]
-struct RawGit {}
+struct RawGit {
+    #[serde(default)]
+    anchor_kind: String,
+    #[serde(default)]
+    commit: String,
+    #[serde(default)]
+    tree: String,
+    #[serde(default)]
+    ref_name: String,
+    #[serde(default)]
+    checkout_state_id: String,
+    #[serde(default)]
+    base_commit: String,
+    #[serde(default)]
+    verified_sha: String,
+    #[serde(default)]
+    normalizer: String,
+}
 
+// Carried for shape-faithful parse (consumed, not leaked into `extra`) but not
+// read by any v1 verb yet: relation/source resolution is the SL-008 registry.
+// Modelled fieldless — serde ignores their keys, v1 stores nothing from them.
 #[derive(Debug, Default, Deserialize, Serialize)]
 struct RawRelation {}
 
@@ -329,6 +360,48 @@ pub(crate) struct Scope {
     pub(crate) tags: Vec<String>,
     pub(crate) workspace: String,
     pub(crate) repo: String,
+    /// How `repo` was derived; empty/absent → lowest-trust `LocalRoot` (D4).
+    pub(crate) repo_id_kind: RepoIdKind,
+    /// Convergence confidence; empty/absent → lowest-trust `Low` (D4).
+    pub(crate) repo_id_confidence: Confidence,
+}
+
+/// The validated `[git]` born frame — `git::Frame`'s persisted subset (less the
+/// repo identity, which lives on `Scope`) plus `verified_sha` (the verification
+/// axis, written by `verify`) and the `normalizer` algorithm tag. `dirty` is not
+/// carried — it is derived from `kind`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Anchor {
+    pub(crate) kind: AnchorKind,
+    pub(crate) commit: String,
+    pub(crate) tree: String,
+    pub(crate) ref_name: String,
+    pub(crate) checkout_state_id: String,
+    pub(crate) base_commit: String,
+    pub(crate) verified_sha: String,
+    pub(crate) normalizer: String,
+}
+
+impl Anchor {
+    /// Project a parsed `[git]` block into the validated anchor, normalizing an
+    /// empty/absent `anchor_kind` to `None` explicitly (serde gives `""` — the
+    /// normalization is here, not in `AnchorKind::parse`; design D4/M1).
+    fn from_raw(raw: RawGit) -> Result<Anchor> {
+        let kind = match raw.anchor_kind.trim() {
+            "" => AnchorKind::None,
+            tok => AnchorKind::parse(tok).map_err(|e| anyhow::anyhow!(e))?,
+        };
+        Ok(Anchor {
+            kind,
+            commit: raw.commit,
+            tree: raw.tree,
+            ref_name: raw.ref_name,
+            checkout_state_id: raw.checkout_state_id,
+            base_commit: raw.base_commit,
+            verified_sha: raw.verified_sha,
+            normalizer: raw.normalizer,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -342,7 +415,10 @@ pub(crate) struct Memory {
     pub(crate) created: String,
     pub(crate) updated: String,
     pub(crate) scope: Scope,
+    pub(crate) anchor: Anchor,
     pub(crate) verification_state: String,
+    pub(crate) reviewed: String,
+    pub(crate) review_by: String,
     pub(crate) trust_level: String,
     pub(crate) severity: String,
     pub(crate) weight: i64,
@@ -363,6 +439,7 @@ impl TryFrom<RawMemoryToml> for Memory {
             created,
             updated,
             scope,
+            git,
             review,
             trust,
             ranking,
@@ -391,6 +468,19 @@ impl TryFrom<RawMemoryToml> for Memory {
         }
         let tags = validate_tags(&scope.tags)?;
 
+        // Trust fields normalize empty/absent → the lowest-trust default
+        // explicitly (a missing `[scope]` repo trust pair means least-trusted,
+        // never a parse error; design D4 / notes F2 `none_frame` = LocalRoot/Low).
+        let repo_id_kind = match scope.repo_id_kind.trim() {
+            "" => RepoIdKind::LocalRoot,
+            tok => RepoIdKind::parse(tok).map_err(|e| anyhow::anyhow!(e))?,
+        };
+        let repo_id_confidence = match scope.repo_id_confidence.trim() {
+            "" => Confidence::Low,
+            tok => Confidence::parse(tok).map_err(|e| anyhow::anyhow!(e))?,
+        };
+        let anchor = Anchor::from_raw(git)?;
+
         Ok(Memory {
             uid: memory_uid,
             key,
@@ -407,8 +497,13 @@ impl TryFrom<RawMemoryToml> for Memory {
                 tags,
                 workspace,
                 repo: scope.repo,
+                repo_id_kind,
+                repo_id_confidence,
             },
+            anchor,
             verification_state: review.verification_state,
+            reviewed: review.reviewed,
+            review_by: review.review_by,
             trust_level: trust.trust_level,
             severity: ranking.severity,
             weight: ranking.weight,
@@ -882,6 +977,127 @@ ref = "src/main.rs"
         assert_eq!(m.weight, 0);
     }
 
+    // -- PHASE-03: the [git]/[review]/[scope] widening ----------------------
+
+    // VT-1: an SL-005-shaped legacy memory.toml — NO [git] block at all and no
+    // `reviewed` — parses, with the anchor normalizing empty→`none` and the
+    // review/trust fields defaulting. The legacy-compat fixture (design §5.5).
+    #[test]
+    fn a_legacy_memory_with_no_git_block_parses_to_a_none_anchor() {
+        // Strip [git] entirely (the SL-005 file never had it) and [review] keeps
+        // only verification_state (no `reviewed`/`review_by`).
+        let toml = full_toml().replace("[git]\nanchor_kind = \"none\"\n\n", "");
+        assert!(
+            !toml.contains("[git]"),
+            "fixture really has no [git]: {toml}"
+        );
+
+        let m = Memory::parse(&toml).unwrap();
+        // anchor normalizes empty/absent → none; every frame field empty.
+        assert_eq!(m.anchor.kind, AnchorKind::None);
+        assert_eq!(m.anchor.commit, "");
+        assert_eq!(m.anchor.checkout_state_id, "");
+        assert_eq!(m.anchor.verified_sha, "");
+        assert_eq!(m.anchor.normalizer, "");
+        // review axis defaults — `reviewed`/`review_by` absent → "".
+        assert_eq!(m.reviewed, "");
+        assert_eq!(m.review_by, "");
+        // scope trust pair normalizes empty → the lowest-trust default.
+        assert_eq!(m.scope.repo_id_kind, RepoIdKind::LocalRoot);
+        assert_eq!(m.scope.repo_id_confidence, Confidence::Low);
+    }
+
+    // The empty-string boundary specifically (a present-but-`""` anchor_kind, the
+    // shape serde yields for a seeded-empty template key) also normalizes to none.
+    #[test]
+    fn an_empty_anchor_kind_string_normalizes_to_none() {
+        let toml = full_toml().replace("anchor_kind = \"none\"", "anchor_kind = \"\"");
+        assert_eq!(Memory::parse(&toml).unwrap().anchor.kind, AnchorKind::None);
+    }
+
+    // An unknown (non-empty) token is a real error, not silently normalized.
+    #[test]
+    fn an_unknown_anchor_kind_is_an_error() {
+        let toml = full_toml().replace("anchor_kind = \"none\"", "anchor_kind = \"bogus\"");
+        assert!(Memory::parse(&toml).is_err());
+    }
+
+    // VT-2: a fully-populated [git]/[review]/[scope] round-trips through
+    // validation — every carried field reads back on the validated Memory.
+    #[test]
+    fn a_fully_populated_git_review_scope_round_trips_through_validation() {
+        let toml = full_toml()
+            .replace(
+                "anchor_kind = \"none\"\n",
+                "anchor_kind = \"commit\"\n\
+                 commit = \"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\"\n\
+                 tree = \"feedfacefeedfacefeedfacefeedfacefeedface\"\n\
+                 ref_name = \"refs/heads/main\"\n\
+                 checkout_state_id = \"\"\n\
+                 base_commit = \"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\"\n\
+                 verified_sha = \"cafebabecafebabecafebabecafebabecafebabe\"\n\
+                 normalizer = \"forget.checkout.v1\"\n",
+            )
+            .replace(
+                "repo = \"github.com/davidlee/doctrine\"\n",
+                "repo = \"github.com/davidlee/doctrine\"\n\
+                 repo_id_kind = \"remote\"\n\
+                 repo_id_confidence = \"high\"\n",
+            )
+            .replace(
+                "verification_state = \"unverified\"\n",
+                "verification_state = \"verified\"\n\
+                 reviewed = \"2026-06-04\"\n\
+                 review_by = \"david\"\n",
+            );
+
+        let m = Memory::parse(&toml).unwrap();
+        assert_eq!(m.anchor.kind, AnchorKind::Commit);
+        assert_eq!(m.anchor.commit, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
+        assert_eq!(m.anchor.tree, "feedfacefeedfacefeedfacefeedfacefeedface");
+        assert_eq!(m.anchor.ref_name, "refs/heads/main");
+        assert_eq!(m.anchor.checkout_state_id, "");
+        assert_eq!(
+            m.anchor.base_commit,
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        );
+        assert_eq!(
+            m.anchor.verified_sha,
+            "cafebabecafebabecafebabecafebabecafebabe"
+        );
+        assert_eq!(m.anchor.normalizer, "forget.checkout.v1");
+        assert_eq!(m.scope.repo_id_kind, RepoIdKind::Remote);
+        assert_eq!(m.scope.repo_id_confidence, Confidence::High);
+        assert_eq!(m.verification_state, "verified");
+        assert_eq!(m.reviewed, "2026-06-04");
+        assert_eq!(m.review_by, "david");
+    }
+
+    // A dirty-tree anchor carries checkout_state_id with an empty commit.
+    #[test]
+    fn a_checkout_state_anchor_carries_the_state_id_and_empty_commit() {
+        let toml = full_toml().replace(
+            "anchor_kind = \"none\"\n",
+            "anchor_kind = \"checkout_state\"\n\
+             checkout_state_id = \"abc123\"\n\
+             base_commit = \"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\"\n",
+        );
+        let m = Memory::parse(&toml).unwrap();
+        assert_eq!(m.anchor.kind, AnchorKind::CheckoutState);
+        assert_eq!(m.anchor.checkout_state_id, "abc123");
+        assert_eq!(m.anchor.commit, "");
+    }
+
+    // Unknown scope trust tokens are real errors (not normalized like empty).
+    #[test]
+    fn an_unknown_repo_id_kind_is_an_error() {
+        let toml = full_toml().replace(
+            "repo = \"github.com/davidlee/doctrine\"\n",
+            "repo = \"github.com/davidlee/doctrine\"\nrepo_id_kind = \"bogus\"\n",
+        );
+        assert!(Memory::parse(&toml).is_err());
+    }
+
     // -- VT-2: closed vocab + schema_version --------------------------------
 
     #[test]
@@ -1340,11 +1556,31 @@ ref = "src/main.rs"
                 tags: vec![],
                 workspace: "default".to_owned(),
                 repo: String::new(),
+                repo_id_kind: RepoIdKind::LocalRoot,
+                repo_id_confidence: Confidence::Low,
             },
+            anchor: none_anchor(),
             verification_state: "unverified".to_owned(),
+            reviewed: String::new(),
+            review_by: String::new(),
             trust_level: "medium".to_owned(),
             severity: "none".to_owned(),
             weight: 0,
+        }
+    }
+
+    /// The `anchor_kind = none` anchor a legacy/unscoped memory carries — every
+    /// frame field empty (the `mem()` fixture default).
+    fn none_anchor() -> Anchor {
+        Anchor {
+            kind: AnchorKind::None,
+            commit: String::new(),
+            tree: String::new(),
+            ref_name: String::new(),
+            checkout_state_id: String::new(),
+            base_commit: String::new(),
+            verified_sha: String::new(),
+            normalizer: String::new(),
         }
     }
 

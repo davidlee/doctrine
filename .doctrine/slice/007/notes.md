@@ -73,3 +73,26 @@ fixture and diff. Low risk: drift in either impl breaks the literal.
 errors `invalid key`). The const is `doctrine.repo.preferredremote`. doctrine's own
 config namespace — no interop constraint with forgettable's `forget.repo.*` (only
 the frame *algorithm* must match byte-for-byte, not config key names).
+
+### F6 — `Anchor` excludes repo identity; the trust pair lives on `Scope` (PHASE-03)
+
+The validated `Anchor` is `git::Frame`'s persisted subset **minus** `repo`
+(`RepoIdentity`) plus `verified_sha` + `normalizer`. The repo identity splits:
+`repo_id` → the long-standing `scope.repo` string; `repo_id_kind`/`confidence` →
+new `Scope` fields (design §5.3). So `Anchor` carries only `kind/commit/tree/
+ref_name/checkout_state_id/base_commit/verified_sha/normalizer` — no repo. Don't
+re-add repo to Anchor in PHASE-04 render: build `[git]` from the Frame's frame
+fields and `[scope]` from `Frame.repo` + scope flags.
+
+Enum string forms are pinned on `git::{AnchorKind,RepoIdKind,Confidence}` as
+`parse`/`as_str` (snake_case: `commit`/`checkout_state`/`none`,
+`explicit`/`remote`/`local_root`, `high`/`medium`/`low`). PHASE-04 template/render
+and PHASE-06 render **must** emit via `as_str` (single source of spelling).
+
+Empty→default is **explicit in `memory.rs` `TryFrom`**, not in `parse` and not
+serde: empty/absent `anchor_kind`→`AnchorKind::None`; empty `repo_id_kind`→
+`LocalRoot`; empty `repo_id_confidence`→`Low` (lowest-trust, notes F2). `parse`
+errors on an unknown non-empty token (covered by tests). `RawReview.review_by` is
+carried through to `Memory.review_by` (read by no verb yet; surfaced so the parsed
+field is not a dead, never-read struct member — PHASE-05 verify edits it via
+`toml_edit`, PHASE-06 may render it).
