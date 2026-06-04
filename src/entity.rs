@@ -3,12 +3,12 @@
 //!
 //! One engine materialises every directory entity (slice, design-doc sibling,
 //! later drift/spec) from a `Kind` descriptor. The engine is kind-blind: the
-//! claim is behind the `acquire` seam (reservation-spec § Code seam), the
+//! claim is behind the `claim` seam (reservation-spec § Code seam), the
 //! fileset is a `Kind`-supplied function (not a frozen pair — slice-002 M3),
 //! and placement is a closed `MaterialiseMode` enum (never a `reserve: bool`).
 //!
 //! Pure/imperative split (slices-spec § Architecture): id, slug and the fileset
-//! are decided from inputs; only `acquire` and the writes touch disk, and the
+//! are decided from inputs; only `claim` and the writes touch disk, and the
 //! writer is the *sole* joiner of descriptor paths to the filesystem (H1).
 
 use std::fs;
@@ -23,7 +23,7 @@ use crate::fsutil;
 const MAX_CLAIM_RETRIES: u32 = 128;
 
 // ---------------------------------------------------------------------------
-// The `acquire` seam
+// The `claim` seam
 // ---------------------------------------------------------------------------
 
 /// Outcome of an atomic claim: this caller created it, or another agent already
@@ -35,10 +35,10 @@ pub(crate) enum Acquired {
 
 /// The one impure-critical operation, behind a one-method trait so the future
 /// `git-ref` backend drops in without a Kind-caller rewrite (reservation-spec).
-pub(crate) trait Reservation {
+pub(crate) trait Claim {
     /// Atomic, exclusive claim. `Won` if this caller created `claim`;
     /// `AlreadyHeld` if another agent won the race. Only this op arbitrates.
-    fn acquire(&self, claim: &Path) -> anyhow::Result<Acquired>;
+    fn claim(&self, claim: &Path) -> anyhow::Result<Acquired>;
 }
 
 /// The local-filesystem backend: the `mkdir` is the claim (D1 — the dir *is*
@@ -46,8 +46,8 @@ pub(crate) trait Reservation {
 /// retry test stays green.
 pub(crate) struct LocalFs;
 
-impl Reservation for LocalFs {
-    fn acquire(&self, claim: &Path) -> anyhow::Result<Acquired> {
+impl Claim for LocalFs {
+    fn claim(&self, claim: &Path) -> anyhow::Result<Acquired> {
         match fs::create_dir(claim) {
             Ok(()) => Ok(Acquired::Won),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(Acquired::AlreadyHeld),
@@ -185,7 +185,7 @@ pub(crate) fn scan_ids(tree_root: &Path) -> anyhow::Result<Vec<u32>> {
 /// entity dir.
 pub(crate) fn materialise(
     kind: &Kind,
-    reservation: &dyn Reservation,
+    claim: &dyn Claim,
     project_root: &Path,
     inputs: &Inputs<'_>,
 ) -> anyhow::Result<Materialised> {
@@ -197,9 +197,7 @@ pub(crate) fn materialise(
 
     match kind.mode {
         MaterialiseMode::AllocateFreshEntity => {
-            allocate_fresh(kind, reservation, &tree_root, inputs, || {
-                scan_ids(&tree_root)
-            })
+            allocate_fresh(kind, claim, &tree_root, inputs, || scan_ids(&tree_root))
         }
         MaterialiseMode::CreateInExistingEntity => create_in_existing(kind, &tree_root, inputs),
     }
@@ -210,7 +208,7 @@ pub(crate) fn materialise(
 /// any scaffold/write failure removes it — no ghost entity survives (H2).
 fn allocate_fresh(
     kind: &Kind,
-    reservation: &dyn Reservation,
+    claim: &dyn Claim,
     tree_root: &Path,
     inputs: &Inputs<'_>,
     mut scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
@@ -219,7 +217,7 @@ fn allocate_fresh(
         let id = candidate_id(&scan()?);
         let name = format!("{id:03}");
         let dir = tree_root.join(&name);
-        match reservation.acquire(&dir)? {
+        match claim.claim(&dir)? {
             Acquired::Won => {
                 let canonical_id = format!("{}-{name}", kind.prefix);
                 let ctx = ScaffoldCtx {
@@ -467,9 +465,9 @@ mod tests {
     fn local_fs_acquire_wins_then_already_held() {
         let dir = tempfile::tempdir().unwrap();
         let claim = dir.path().join("001");
-        assert!(matches!(LocalFs.acquire(&claim).unwrap(), Acquired::Won));
+        assert!(matches!(LocalFs.claim(&claim).unwrap(), Acquired::Won));
         assert!(matches!(
-            LocalFs.acquire(&claim).unwrap(),
+            LocalFs.claim(&claim).unwrap(),
             Acquired::AlreadyHeld
         ));
     }
@@ -540,8 +538,8 @@ mod tests {
         // A backend that never yields a claim, with a listing that never grows,
         // exhausts the bounded loop rather than spinning forever.
         struct AlwaysHeld;
-        impl Reservation for AlwaysHeld {
-            fn acquire(&self, _claim: &Path) -> anyhow::Result<Acquired> {
+        impl Claim for AlwaysHeld {
+            fn claim(&self, _claim: &Path) -> anyhow::Result<Acquired> {
                 Ok(Acquired::AlreadyHeld)
             }
         }
