@@ -306,7 +306,9 @@ self-anchored golden vector (F4) is therefore an adequate *regression* pin, not 
   **undocumented deviation** from the "reproduce byte-for-byte" claim, and the
   golden vector does not cover this path. *Action:* document the deviation in
   `design.md` §5.2 / notes, or (cleaner) have forgettable normalize too — a seam
-  question for the adapter slice, not a doctrine-only fix.
+  question for the adapter slice, not a doctrine-only fix. **Documented** in
+  `design.md` §5.2 (repo-identity para); the normalize-vs-verbatim resolution
+  carries to the adapter slice.
 
 ### Carried-decision re-tests (held)
 

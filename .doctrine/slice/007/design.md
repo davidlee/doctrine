@@ -193,7 +193,12 @@ forgettable; required for byte-identity).
   scheme/userinfo, preserves non-default ports, lowercases host, preserves path case.
   `--repo` overrides the derived `repo_id` (kind=`explicit`, confidence=high) — and is
   routed through the **same canonicalizer**, so a credentialed override is also
-  userinfo-stripped.
+  userinfo-stripped. *Deviation from byte-identity (audit F-A3):* doctrine
+  normalizes the **explicit-config** id too, but forgettable stores `forget.repo.id`
+  verbatim — a URL-shaped explicit id derives a different `repo_id` and would not
+  dedup. Defensible (R4 secret-strip extended to the config slot; non-URL ids pass
+  through verbatim both sides), uncovered by the golden vector — resolve on the
+  adapter slice (doc here, or have forgettable normalize too).
 
 **`record` flags (new).** `--path <P>` / `--glob <G>` / `--command <C>` (each
 repeatable) → the `scope` arrays; `--repo <R>` overrides the derived identity.
