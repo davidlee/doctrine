@@ -215,6 +215,25 @@ fn read_gitignore_lines(path: &Path) -> BTreeSet<String> {
     content.lines().map(str::to_string).collect()
 }
 
+/// Append `entry` to the project `.gitignore` when absent (idempotent, additive;
+/// creates the file if missing). Shared seam so each command can self-enforce its
+/// own derived-tree ignore invariant rather than depend on a prior `doctrine
+/// install` (SL-010 F4): `skills install` reuses this for `.doctrine/skills/*`.
+pub(crate) fn ensure_gitignored(root: &Path, entry: &str) -> anyhow::Result<()> {
+    let path = root.join(".gitignore");
+    if read_gitignore_lines(&path).contains(entry) {
+        return Ok(());
+    }
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .with_context(|| format!("Failed to open {} for appending", path.display()))?;
+    writeln!(file, "{entry}")
+        .with_context(|| format!("Failed to append gitignore entry to {}", path.display()))?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Printing
 // ---------------------------------------------------------------------------
@@ -290,15 +309,8 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<()> {
             Step::Skip { .. } => {
                 // nothing to do
             }
-            Step::Gitignore { entry, dest } => {
-                let mut file = fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(dest)
-                    .with_context(|| format!("Failed to open {} for appending", dest.display()))?;
-                writeln!(file, "{entry}").with_context(|| {
-                    format!("Failed to append gitignore entry to {}", dest.display())
-                })?;
+            Step::Gitignore { entry, .. } => {
+                ensure_gitignored(&plan.project_root, entry)?;
             }
         }
     }
@@ -507,6 +519,63 @@ mod tests {
                 .any(|e| e == ".doctrine/memory/*" || e == ".doctrine/memory/"),
             "manifest must not blanket-ignore the memory tree"
         );
+    }
+
+    #[test]
+    fn embedded_manifest_creates_and_ignores_the_skills_derived_tree() {
+        let manifest = load_manifest().unwrap();
+        // The canonical skills tree is created-and-ignored: the installer
+        // materialises the dir, but its contents are derived (regenerable from
+        // the embed) and must not be committed (SL-010 D2). Without the ignore
+        // entry a consumer would commit the derived tree — the blanket
+        // `.doctrine/*` only masks it in this repo, the manifest writes additive
+        // entries, not the blanket.
+        assert!(
+            manifest.dirs.create.iter().any(|d| d == ".doctrine/skills"),
+            "manifest must create the canonical skills dir"
+        );
+        assert!(
+            manifest
+                .gitignore
+                .entries
+                .iter()
+                .any(|e| e == ".doctrine/skills/*"),
+            "manifest must gitignore the derived skills tree"
+        );
+    }
+
+    #[test]
+    fn ensure_gitignored_appends_once_and_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let gi = dir.path().join(".gitignore");
+
+        // Creates the file when missing.
+        ensure_gitignored(dir.path(), ".doctrine/skills/*").unwrap();
+        assert!(gi.is_file());
+        let after_first = fs::read_to_string(&gi).unwrap();
+        assert!(after_first.contains(".doctrine/skills/*"));
+
+        // Second call is a no-op — no duplicate line.
+        ensure_gitignored(dir.path(), ".doctrine/skills/*").unwrap();
+        let after_second = fs::read_to_string(&gi).unwrap();
+        assert_eq!(after_first, after_second);
+        assert_eq!(
+            after_second.matches(".doctrine/skills/*").count(),
+            1,
+            "entry must appear exactly once"
+        );
+    }
+
+    #[test]
+    fn ensure_gitignored_preserves_existing_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let gi = dir.path().join(".gitignore");
+        fs::write(&gi, "/pre-existing\n").unwrap();
+
+        ensure_gitignored(dir.path(), ".doctrine/skills/*").unwrap();
+        let content = fs::read_to_string(&gi).unwrap();
+        assert!(content.contains("/pre-existing"));
+        assert!(content.contains(".doctrine/skills/*"));
     }
 
     // ---------------------------------------------------------------
