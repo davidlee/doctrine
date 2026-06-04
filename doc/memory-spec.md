@@ -399,6 +399,17 @@ backends realise them:
   stream; current state is a folded projection; integrity is a separate explicit
   call. Source of truth is the log.
 
+The concrete `event-store` backend is **forgettable**, which has accepted this
+client role: see forgettable `ADR-005` (generic append-only event substrate;
+clients ride opaque payloads). It binds doctrine's per-memory stream shape —
+`stream_type = "doctrine.memory"`, `natural_key = memory_uid`,
+`source_uri = "doctrine://memory/v1"`, `event_id` the deterministic `uuid5` —
+mandates the adapter use only the **generic event store** (never forgettable's
+first-party `/memory/*` domain — DEC-005-C), and commits the substrate to the
+read surfaces this contract's rebuild/export needs (stream catalog + workspace
+event feed — DEC-005-D). In agent jails forgettable lives at
+`/workspace/forgettable`.
+
 Differences the abstraction must keep neutral:
 
 | Concern | `local-text` | `event-store` | Abstraction rule |
