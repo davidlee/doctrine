@@ -37,12 +37,13 @@ slice is mostly honest implementation of a settled design. Three things shape it
   (excluded). `QueryContext` (caller paths/globs/commands/tags + free-text) is an
   input.
 
-- **Deterministic 9-key sort (pure).** The spec's tuple (§ Retrieval): hard filters
-  → lexical relevance + exact `memory_key` → scope specificity → verification state
-  → trust → severity → weight → review recency → `uid`/`key` tiebreak. A **total**
-  `Ord` over a derived `Ranked` row so the order is reproducible regardless of
-  directory-scan order; lexical score is a **bounded integer signal** into the
-  tuple, never the final word (no float, interop constraint 5).
+- **Deterministic sort (pure).** Spec § Retrieval lists hard filters as step 1, but
+  filters are **predicates that drop**, not `Ord` keys — they run *before* the rank.
+  The **8-key total `Ord`** over survivors: exact `memory_key` → lexical relevance →
+  scope specificity → verification state → trust → severity → weight → review recency
+  → `uid`/`key` tiebreak. Reproducible regardless of directory-scan order; lexical
+  score is a **bounded integer signal** into the tuple, never the final word (no float,
+  interop constraint 5).
 
 - **`commits_touching` (git seam extension).** Add to SL-007's `src/git.rs`:
   `commits_touching(repo_root, paths, since_sha, target) -> Option<u32>` — the
@@ -64,19 +65,21 @@ slice is mostly honest implementation of a settled design. Three things shape it
   `unknown`; git-anchored but never attested → `unknown`; no anchor → `unanchored`.
 
 - **`doctrine memory find` (ranked rows).** Build `QueryContext` from flags
-  (`--path`/`--glob`/`--command`/`--tag` repeatable, `--query` free-text), apply
-  hard filters (workspace/repo, lifecycle status default-active, `--include-draft`,
-  quarantine/trust), scope-match, rank, format
-  `uid-short type status staleness spec title` rows. Reuses `collect_memories` + the
+  (`--path`/`--glob`/`--command`/`--tag` repeatable, `--query` free-text — only the
+  flags are scope-bearing, `--query` alone is not), **drop** disallowed memories
+  (partition workspace/repo, lifecycle default-active + `--include-draft`,
+  quarantined/retracted always), scope-match, rank, format
+  `uid-short type status staleness trust sev spec title` rows (`trust`/`sev` visible —
+  `find` is exempt from the holdback, so risk shows). Reuses `collect_memories` + the
   hard-filter predicate `list` uses, but **not** its order or formatter — `find`
-  always applies the 9-key rank (not `created`-desc) and a `Ranked` formatter with
-  the staleness/spec columns.
+  always applies the 8-key rank (not `created`-desc) over the surviving set.
 
 - **`doctrine memory retrieve` (agent-context block).** Same query+rank; emits each
   hit via SL-005's `render_show` (extended with the real `anchor:` + a `staleness:`
   line), **a fresh per-hit nonce**, suppressing `quarantined`/`retracted`
-  unconditionally before rendering, plus an optional trust floor (low-trust +
-  high-severity held back). On-demand only.
+  unconditionally before rendering, plus the trust floor (low-trust + high-severity
+  held back, **non-bypassable** in v1). Bounded `--limit` (default 5, max 20). On-demand
+  only; never crosses repo partitions.
 
 - **Thread expiry (hard-filter stage).** A `thread` surfaces only with a scope match
   **and** `verification_state = verified` **and** `reviewed` within 14 days of the
@@ -119,7 +122,7 @@ End state: native memory v1's read surface is complete (`record`/`show`/`list`
 
 The reader half: scope-first, lexical-first, deterministic retrieval over the
 SL-007-populated store. Three pure cores — `match_scope` (OR with specificity
-weights), the 9-key total `Ord`, and `staleness` (three modes over a frozen
+weights), the 8-key total `Ord` (hard filters drop first), and `staleness` (three modes over a frozen
 `GitFacts` snapshot) — feed two verbs riding `collect_memories` → filter/sort →
 format: `find` (ranked rows) and `retrieve` (the security agent-context block,
 per-hit `render_show` with a fresh nonce each, quarantined/retracted suppressed).
