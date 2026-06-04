@@ -149,7 +149,7 @@ fn render_design(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 /// The slice fileset: sister TOML, prose body, and `<id>-<slug>` symlink, all
 /// relative to the slice tree root (the symlink sits beside the numeric dir).
 fn slice_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-    let (id, _) = ctx.numbered()?;
+    let id = ctx.id;
     let name = format!("{id:03}");
     Ok(vec![
         Artifact::File {
@@ -169,7 +169,7 @@ fn slice_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
 
 /// The design-doc fileset: one prose `design.md` under the parent slice dir.
 fn design_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-    let (id, canonical) = ctx.numbered()?;
+    let (id, canonical) = (ctx.id, ctx.canonical);
     let name = format!("{id:03}");
     Ok(vec![Artifact::File {
         rel_path: PathBuf::from(format!("{name}/design.md")),
@@ -191,7 +191,7 @@ fn render_plan_md(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 
 /// The IP fileset: authored `plan.toml` + prose `plan.md` under the slice dir.
 fn plan_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-    let (id, canonical) = ctx.numbered()?;
+    let (id, canonical) = (ctx.id, ctx.canonical);
     let name = format!("{id:03}");
     Ok(vec![
         Artifact::File {
@@ -214,7 +214,7 @@ fn render_notes(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 
 /// The notes fileset: one durable `notes.md` under the parent slice dir.
 fn notes_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-    let (id, canonical) = ctx.numbered()?;
+    let (id, canonical) = (ctx.id, ctx.canonical);
     let name = format!("{id:03}");
     Ok(vec![Artifact::File {
         rel_path: PathBuf::from(format!("{name}/notes.md")),
@@ -539,10 +539,8 @@ mod tests {
     #[test]
     fn slice_scaffold_lays_out_two_files_and_a_symlink() {
         let ctx = ScaffoldCtx {
-            eid: entity::EntityId::Numbered {
-                id: 3,
-                canonical: "SL-003",
-            },
+            id: 3,
+            canonical: "SL-003",
             slug: "vendor-skills",
             title: "Vendor skills",
             date: "2026-06-03",
@@ -583,10 +581,8 @@ mod tests {
     #[test]
     fn plan_scaffold_lays_out_toml_and_md() {
         let ctx = ScaffoldCtx {
-            eid: entity::EntityId::Numbered {
-                id: 4,
-                canonical: "SL-004",
-            },
+            id: 4,
+            canonical: "SL-004",
             slug: "",
             title: "Plan title",
             date: "2026-06-04",
@@ -648,10 +644,8 @@ mod tests {
     #[test]
     fn design_scaffold_is_a_single_file_no_symlink() {
         let ctx = ScaffoldCtx {
-            eid: entity::EntityId::Numbered {
-                id: 3,
-                canonical: "SL-003",
-            },
+            id: 3,
+            canonical: "SL-003",
             slug: "",
             title: "Vendor skills",
             date: "2026-06-03",
