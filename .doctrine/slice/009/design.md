@@ -69,13 +69,21 @@ Three pieces, each on the correct side of the IO seam:
    `.toml`-present (tolerant-parse its `status`) or `.md`-only (`missing_toml`),
    then fold. `None` only when no stem exists at all (dir absent or empty) — the
    *not tracked* signal. (R-F4: never re-derive the phase set from `*.toml` alone.)
-3. **Neutral row helpers (`meta.rs`).** Extract the column measuring + single-row
-   layout `meta::format_list` already performs into `measure_meta_columns(&[Meta])
-   -> MetaWidths` and `format_meta_row(&Meta, &MetaWidths, status_suffix:
-   Option<&str>) -> String`. `format_list` is reimplemented over them (its output
-   byte-unchanged); `slice.rs` reuses them and inserts its own `phases` column.
-   No width/layout logic is duplicated (R-F1), and `meta` learns nothing about
-   phases — `status_suffix` carries the `⚠`, which is presentation-neutral.
+3. **Neutral table renderer (`meta.rs`).** Extract the one layout concern
+   `meta::format_list` embeds — measure each column to its max cell width,
+   left-align, two-space gap, last column unpadded, empty→`""`, trailing newline —
+   into `render_table(rows: &[Vec<String>]) -> String`. `format_list` is
+   reimplemented over it (output byte-unchanged); `slice.rs` calls the same
+   renderer with its own cells, including the middle `phases` column and the
+   header row. This is the single layout authority — no width/gap/newline logic is
+   duplicated (R-F1) — and it is **not** a column framework: no per-column specs,
+   alignment enums, or header config, just "render a grid of strings". `meta`
+   learns nothing about phases; the `⚠`/`!N`/`?N` markers are baked into the cell
+   strings by `slice.rs` before rendering, so `meta` stays neutral.
+   *(Refines the round-1 `measure_meta_columns`/`format_meta_row(status_suffix)`
+   sketch: a whole-row meta formatter can't host slice's middle `phases` column,
+   and a `status_suffix` arg would be dead in `meta` — a cell-grid renderer
+   composes for any column set and carries no phase concept.)*
 4. **Slice-local presentation (`slice.rs`).** `run_list` reads metas (shared),
    sorts (shared), pairs each `Meta` with its `phase_rollup`, and renders via a
    slice-local formatter built on the `meta` helpers plus the `phases` column.
@@ -112,6 +120,9 @@ pub(crate) fn phase_rollup(root: &Path, slice_id: u32)
 // the terminal-status set — the ONE place "done" is named; the future
 // lifecycle-transition verb reuses this, never re-hardcodes (R-F2).
 pub(crate) fn is_terminal_status(authored: &str) -> bool;             // pure
+
+// meta.rs — the single layout authority for every *list surface
+pub(crate) fn render_table(rows: &[Vec<String>]) -> String;            // pure
 
 // slice.rs — pure divergence predicate + slice-local formatter
 fn is_divergent(authored: &str, rollup: Option<&PhaseRollup>) -> bool;  // pure
@@ -209,16 +220,20 @@ Remaining:
 - **D1 — Reader lives in `state.rs`, not `meta.rs`.** Phase state is `state.rs`'s
   domain; `meta` is the kind-neutral authored-toml substrate. *Alt:* put rollup in
   `meta` — rejected: pollutes the ADR-shared surface with a phase concept.
-- **D2 — Extract neutral row helpers in `meta.rs`; no duplicated layout (R-F1).**
-  The rollup column is slice-only, but column-measuring and single-row layout are
-  shared. Pull them out of `format_list` into `measure_meta_columns` +
-  `format_meta_row` (with a presentation-neutral `status_suffix`), reimplement
-  `format_list` over them (byte-unchanged), and let `slice.rs` reuse them under
-  its `phases` column. *Alt A:* add a rollup field to `Meta` — rejected (ADR
-  carries a dead field). *Alt B (drafted, overridden):* copy the alignment logic
-  into `slice.rs` — rejected on re-review: forks the two list surfaces the moment
-  spacing/layout changes. *Alt C:* a generic N-column framework — rejected as
-  premature; two callers want a shared *row*, not a column abstraction.
+- **D2 — Extract a neutral `render_table` in `meta.rs`; no duplicated layout
+  (R-F1).** The rollup column is slice-only, but the layout (measure, left-align,
+  two-space gap, last col unpadded, empty→`""`, trailing newline) is shared. Pull
+  it out of `format_list` into `render_table(rows: &[Vec<String>])`, reimplement
+  `format_list` over it (byte-unchanged), and let `slice.rs` call it with its own
+  cells — including the middle `phases` column and the header row. *Alt A:* add a
+  rollup field to `Meta` — rejected (ADR carries a dead field). *Alt B (drafted,
+  overridden):* copy the alignment logic into `slice.rs` — rejected on re-review:
+  forks the two list surfaces the moment spacing changes. *Alt C
+  (round-1 sketch, overridden):* `measure_meta_columns` + `format_meta_row(status_
+  suffix)` — rejected: a whole-row meta formatter can't host slice's *middle*
+  `phases` column, and the suffix arg is dead in `meta`. *Alt D:* a full N-column
+  framework (per-column align/width specs, header config) — rejected as
+  premature; `render_table` renders a string grid and nothing more.
 - **D3 — Compute a coarse divergence hint keyed on a terminal-set helper (Q3,
   R-F2).** `is_divergent` marks `⚠` on the two unambiguous mismatches, both keyed
   on `is_terminal_status` — never the bare string `"done"`. So the v1 set
@@ -280,9 +295,10 @@ Remaining:
 - **Divergence predicate (pure):** terminal + incomplete → true; non-terminal +
   complete → true; terminal + complete → false; `None` rollup → false; `anomalies
   > 0` → false (suppressed); both non-divergent directions.
-- **`meta` helpers (pure):** `measure_meta_columns` + `format_meta_row` reproduce
-  the old `format_list` output byte-for-byte (regression lock); `status_suffix`
-  appends without breaking alignment.
+- **`meta::render_table` (pure):** `format_list` reimplemented over it reproduces
+  the old output byte-for-byte (regression lock); empty→`""`; ragged column
+  widths align; last column unpadded; a multi-cell grid with a middle column
+  aligns (the slice case).
 - **Formatter (pure):** header present with rows, suppressed on empty; `—` for
   `None`; `!N` only when blocked; `?N` only on anomalies; `⚠` only when divergent
   and not suppressed; column alignment with mixed-width rollups.
