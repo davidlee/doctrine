@@ -386,14 +386,96 @@ pub(crate) fn run_phase(
     Ok(())
 }
 
+/// Whether an authored *slice* lifecycle status is terminal (work is meant to be
+/// finished). The single source of the terminal-token set — the deferred slice
+/// lifecycle-transition verb reuses this rather than re-hardcoding `"done"`
+/// (design D3 / R-F2). v1 set: `{"done"}`; membership is provisional, the
+/// predicate shape is not. Lives here, beside `is_divergent` and the future
+/// transition verb — slice-authored-status semantics, not phase-runtime state.
+fn is_terminal_status(authored: &str) -> bool {
+    authored == "done"
+}
+
+/// Whether the authored status and the derived phase rollup disagree (design
+/// § 5.5). Conservative: suppressed when tracking is anomalous (corruption is not
+/// a lifecycle mismatch) or untracked, and keyed on `is_terminal_status` — never
+/// a bare `"done"` literal — so a future terminal synonym stops false-flagging in
+/// one place.
+fn is_divergent(authored: &str, rollup: Option<&crate::state::PhaseRollup>) -> bool {
+    let Some(r) = rollup else { return false };
+    if r.anomalies() > 0 {
+        return false;
+    }
+    let terminal = is_terminal_status(authored);
+    // marked terminal, work outstanding | work complete, not marked terminal
+    (terminal && r.completed < r.total())
+        || (!terminal && r.total() > 0 && r.completed == r.total())
+}
+
+/// The `phases` cell: `completed/total`, with a `!N` blocked marker and a `?N`
+/// anomaly marker appended when non-zero; `—` when untracked.
+fn phases_cell(rollup: Option<&crate::state::PhaseRollup>) -> String {
+    let Some(r) = rollup else {
+        return "—".to_string();
+    };
+    let blocked = if r.blocked > 0 {
+        format!(" !{}", r.blocked)
+    } else {
+        String::new()
+    };
+    let anomalies = if r.anomalies() > 0 {
+        format!(" ?{}", r.anomalies())
+    } else {
+        String::new()
+    };
+    format!("{}/{}{blocked}{anomalies}", r.completed, r.total())
+}
+
+/// Render slice rows with the derived phase rollup. Human-only output: a header
+/// row plus `id status[⚠] phases slug title`, aligned via the shared
+/// `meta::render_table`. Empty input → `""` (header suppressed). Pure.
+fn format_slice_rows(rows: &[(meta::Meta, Option<crate::state::PhaseRollup>)]) -> String {
+    if rows.is_empty() {
+        return String::new();
+    }
+    let mut grid: Vec<Vec<String>> = vec![
+        ["id", "status", "phases", "slug", "title"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect(),
+    ];
+    for (m, rollup) in rows {
+        let status = if is_divergent(&m.status, rollup.as_ref()) {
+            format!("{} ⚠", m.status)
+        } else {
+            m.status.clone()
+        };
+        grid.push(vec![
+            format!("{:03}", m.id),
+            status,
+            phases_cell(rollup.as_ref()),
+            m.slug.clone(),
+            m.title.clone(),
+        ]);
+    }
+    meta::render_table(&grid)
+}
+
 /// `doctrine slice list`.
 pub(crate) fn run_list(path: Option<PathBuf>, status: Option<&str>) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let slice_root = root.join(SLICE_DIR);
-    let rows = meta::sort_and_filter(meta::read_metas(&slice_root, "slice")?, status);
+    let metas = meta::sort_and_filter(meta::read_metas(&slice_root, "slice")?, status);
+    let rows: Vec<(meta::Meta, Option<crate::state::PhaseRollup>)> = metas
+        .into_iter()
+        .map(|m| {
+            let rollup = crate::state::phase_rollup(&root, m.id)?;
+            Ok((m, rollup))
+        })
+        .collect::<anyhow::Result<_>>()?;
 
     let mut out = io::stdout();
-    write!(out, "{}", meta::format_list(&rows))?;
+    write!(out, "{}", format_slice_rows(&rows))?;
     Ok(())
 }
 
@@ -413,6 +495,99 @@ mod tests {
             title: title.to_string(),
             status: status.to_string(),
         }
+    }
+
+    use crate::state::PhaseRollup;
+
+    /// A rollup with the given completed/planned counts (total = sum); other
+    /// buckets default to zero unless a test overrides them.
+    fn rollup(completed: u32, planned: u32) -> PhaseRollup {
+        PhaseRollup {
+            completed,
+            planned,
+            ..Default::default()
+        }
+    }
+
+    // --- is_divergent ---
+
+    #[test]
+    fn divergence_flags_the_two_unambiguous_mismatches() {
+        // marked terminal ("done"), work outstanding
+        assert!(is_divergent("done", Some(&rollup(2, 4))));
+        // work complete, not marked terminal
+        assert!(is_divergent("proposed", Some(&rollup(6, 0))));
+    }
+
+    #[test]
+    fn divergence_is_quiet_when_consistent_untracked_or_anomalous() {
+        // terminal + complete → consistent
+        assert!(!is_divergent("done", Some(&rollup(6, 0))));
+        // non-terminal + incomplete → consistent
+        assert!(!is_divergent("proposed", Some(&rollup(2, 4))));
+        // untracked → nothing to compare
+        assert!(!is_divergent("done", None));
+        // anomalies present → corruption, not a lifecycle mismatch (suppressed)
+        let anomalous = PhaseRollup {
+            completed: 2,
+            planned: 3,
+            unknown: 1,
+            ..Default::default()
+        };
+        assert!(!is_divergent("done", Some(&anomalous)));
+    }
+
+    // --- phases_cell ---
+
+    #[test]
+    fn phases_cell_renders_markers() {
+        assert_eq!(phases_cell(None), "—");
+        assert_eq!(phases_cell(Some(&rollup(4, 2))), "4/6");
+        let blocked = PhaseRollup {
+            completed: 2,
+            planned: 3,
+            blocked: 1,
+            ..Default::default()
+        };
+        assert_eq!(phases_cell(Some(&blocked)), "2/6 !1");
+        let anomalous = PhaseRollup {
+            completed: 3,
+            planned: 2,
+            unknown: 1,
+            ..Default::default()
+        };
+        assert_eq!(phases_cell(Some(&anomalous)), "3/6 ?1");
+    }
+
+    // --- format_slice_rows ---
+
+    #[test]
+    fn format_slice_rows_empty_suppresses_the_header() {
+        assert_eq!(format_slice_rows(&[]), "");
+    }
+
+    #[test]
+    fn format_slice_rows_renders_header_rollup_and_divergence() {
+        let rows = vec![
+            (
+                meta(1, "done", "entity-v1", "Entity v1"),
+                Some(rollup(6, 0)),
+            ),
+            (
+                meta(7, "done", "anchoring", "Anchoring"),
+                Some(rollup(2, 4)),
+            ),
+            (meta(9, "proposed", "rollup", "Rollup"), None),
+        ];
+        let out = format_slice_rows(&rows);
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines[0], "id   status    phases  slug       title");
+        // consistent terminal slice: no ⚠, full rollup
+        assert!(lines[1].starts_with("001  done      6/6     entity-v1"));
+        // done but 2/6 → divergent ⚠
+        assert!(lines[2].starts_with("007  done ⚠    2/6     anchoring"));
+        // untracked → —
+        assert!(lines[3].starts_with("009  proposed  —       rollup"));
     }
 
     /// Materialise a slice the way `run_new` does, for behaviour-preservation

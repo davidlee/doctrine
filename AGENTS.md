@@ -46,7 +46,10 @@ doctrine slice phases  <ID> [--prune] [-p ROOT]      # materialise phase trackin
 doctrine slice phase   <ID> <PHASE-NN> --status <S> [--note N] [-p ROOT]
                                                      #   S = planned|in_progress|completed|blocked
 doctrine slice notes   <ID> [-p ROOT]                # scaffold durable notes.md (on-demand)
-doctrine slice list    [--status S] [-p ROOT]        # rows: id status slug title
+doctrine slice list    [--status S] [-p ROOT]        # rows: id status phases slug title
+                                                     #   phases = X/Y complete (derived);
+                                                     #   !N blocked, ?N anomalous, — untracked;
+                                                     #   status gains ⚠ when authored vs rollup diverge
 
 doctrine memory record --type T [--key K] [--status S] [--summary S] [--tag T]…  # mint uid, scaffold
                        [--path-scope P]… [--glob G]… [--command C]… [--repo R]   #   scope + born git anchor
@@ -140,11 +143,14 @@ append, never renumber or reuse.
 ## known CLI gaps (todo as the tooling surface expands)
 
 - **no `slice audit` scaffold** — every other artifact has one; `audit.md` is hand-made.
-- **no slice status rollup** — phase progress (`X/Y complete`) is invisible without
-  reading the per-phase state tomls; `slice list` shows only the hand-edited
-  `slice-nnn.toml` status, which is not derived from phase completion.
+- **slice status rollup — SHIPPED (SL-009).** `slice list` now derives `X/Y complete`
+  per slice from the phase state tree (`!N` blocked, `?N` anomalous, `—` untracked)
+  and flags `⚠` when the hand-edited status and the rollup diverge. Read-only — it
+  *reveals* divergence; reconciling it is the lifecycle-transition gap below.
 - **no slice lifecycle transition** — `slice-nnn.toml` `status` is hand-edited; no
-  command moves a slice proposed→…→done or links it to phase state.
+  command moves a slice proposed→…→done or links it to phase state. (SL-009 surfaces
+  the divergence this would resolve; the terminal-status set lives in
+  `slice::is_terminal_status` for that verb to reuse.)
 - **no standalone plan validation** — a malformed `plan.toml` only surfaces when
   `slice phases` parses it.
 - **memory retrieval — SHIPPED.** `record/show/list` (SL-005); SL-007 producer

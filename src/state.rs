@@ -14,6 +14,8 @@ use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use clap::ValueEnum;
+use serde::Deserialize;
 use toml_edit::Item;
 
 use crate::fsutil;
@@ -50,6 +52,69 @@ impl PhaseStatus {
             Self::Blocked => "blocked",
         }
     }
+}
+
+/// A phase's contribution to the rollup before folding: either a parsed status
+/// string from its `phase-NN.toml`, or a `.md`-only crash-partial whose status
+/// is unreadable. Keeping the latter explicit is what stops `total` from
+/// silently shrinking (design D8 / R-F4).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum StemStatus<'a> {
+    Toml(&'a str),
+    MissingToml,
+}
+
+/// Derived completion counts for one slice's phases. Every phase lands in exactly
+/// one bucket, so the total is their sum and can never undercount; `unknown` (a
+/// status string outside the `PhaseStatus` set) and `missing_toml` are kept
+/// distinct so corruption is surfaced, not folded into "incomplete" (R-F3/R-F5).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct PhaseRollup {
+    pub(crate) planned: u32,
+    pub(crate) in_progress: u32,
+    pub(crate) completed: u32,
+    pub(crate) blocked: u32,
+    pub(crate) unknown: u32,
+    pub(crate) missing_toml: u32,
+}
+
+impl PhaseRollup {
+    /// Every phase, summed across buckets — never undercounts.
+    pub(crate) fn total(&self) -> u32 {
+        self.planned
+            + self.in_progress
+            + self.completed
+            + self.blocked
+            + self.unknown
+            + self.missing_toml
+    }
+
+    /// Phases whose tracking is malformed (unrecognised status or unreadable
+    /// `.toml`) — surfaced as the `?N` marker, and suppresses divergence.
+    pub(crate) fn anomalies(&self) -> u32 {
+        self.unknown + self.missing_toml
+    }
+}
+
+/// Fold per-stem statuses into the bucket counts. Pure — no IO, no clock. An
+/// unrecognised status string lands in `unknown`; a `.md`-only stem in
+/// `missing_toml`. The known set is `PhaseStatus`'s own value names, so the
+/// vocabulary has one source (no parallel string list).
+pub(crate) fn fold_rollup(stems: &[StemStatus<'_>]) -> PhaseRollup {
+    let mut r = PhaseRollup::default();
+    for stem in stems {
+        match stem {
+            StemStatus::MissingToml => r.missing_toml += 1,
+            StemStatus::Toml(s) => match PhaseStatus::from_str(s, false) {
+                Ok(PhaseStatus::Planned) => r.planned += 1,
+                Ok(PhaseStatus::InProgress) => r.in_progress += 1,
+                Ok(PhaseStatus::Completed) => r.completed += 1,
+                Ok(PhaseStatus::Blocked) => r.blocked += 1,
+                Err(_) => r.unknown += 1,
+            },
+        }
+    }
+    r
 }
 
 /// What `init_phases` did, so the caller reports drift without this module
@@ -189,6 +254,59 @@ fn existing_phase_stems(dir: &Path) -> anyhow::Result<BTreeSet<String>> {
         }
     }
     Ok(stems)
+}
+
+/// The one field the rollup reads from a `phase-NN.toml`. Optional + tolerant:
+/// unknown keys are ignored, and a malformed file parses to `status = None`
+/// (treated as `missing_toml`, never an error — design § 5.5).
+#[derive(Deserialize)]
+struct TrackingStatus {
+    status: Option<String>,
+}
+
+/// Read one phase stem's status string. `None` when the `.toml` is absent (a
+/// `.md`-only crash-partial), unparseable, or carries no `status` — all of which
+/// the fold counts as `missing_toml` rather than dropping the phase (R-F4). A
+/// genuine IO error (not "not found") propagates.
+fn read_phase_status(dir: &Path, stem: &str) -> anyhow::Result<Option<String>> {
+    let path = dir.join(format!("{stem}.toml"));
+    let text = match fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    };
+    Ok(toml::from_str::<TrackingStatus>(&text)
+        .ok()
+        .and_then(|t| t.status))
+}
+
+/// Derive the phase-completion rollup for a slice from its runtime tracking tree.
+/// The phase set comes from `existing_phase_stems` — the same notion `init_phases`
+/// uses (either half of the pair) — so `.md`-only crash-partials count as
+/// `missing_toml` and the total never silently shrinks (D8). `None` only when no
+/// phase exists at all (dir absent or empty): the *untracked* signal. The path is
+/// id-derived; the convenience `phases` symlink is never followed.
+pub(crate) fn phase_rollup(
+    project_root: &Path,
+    slice_id: u32,
+) -> anyhow::Result<Option<PhaseRollup>> {
+    let dir = phases_dir(project_root, slice_id);
+    let stems = existing_phase_stems(&dir)?;
+    if stems.is_empty() {
+        return Ok(None);
+    }
+    let statuses: Vec<Option<String>> = stems
+        .iter()
+        .map(|stem| read_phase_status(&dir, stem))
+        .collect::<anyhow::Result<_>>()?;
+    let stem_statuses: Vec<StemStatus<'_>> = statuses
+        .iter()
+        .map(|s| match s {
+            Some(status) => StemStatus::Toml(status),
+            None => StemStatus::MissingToml,
+        })
+        .collect();
+    Ok(Some(fold_rollup(&stem_statuses)))
 }
 
 /// The minimal v1 phase-tracking skeleton (slice-004 §5.2): a phase-level
@@ -616,5 +734,115 @@ mod tests {
         let err =
             set_phase_status(root, 4, "PHASE-99", PhaseStatus::InProgress, None, "T1").unwrap_err();
         assert!(err.to_string().contains("Phase tracking not found"));
+    }
+
+    // --- fold_rollup (pure) ---
+
+    #[test]
+    fn fold_rollup_empty_is_all_zero() {
+        assert_eq!(fold_rollup(&[]), PhaseRollup::default());
+    }
+
+    #[test]
+    fn fold_rollup_counts_each_known_status_into_its_bucket() {
+        let stems = [
+            StemStatus::Toml("completed"),
+            StemStatus::Toml("completed"),
+            StemStatus::Toml("in_progress"),
+            StemStatus::Toml("planned"),
+            StemStatus::Toml("blocked"),
+        ];
+        let r = fold_rollup(&stems);
+        assert_eq!(
+            r,
+            PhaseRollup {
+                planned: 1,
+                in_progress: 1,
+                completed: 2,
+                blocked: 1,
+                unknown: 0,
+                missing_toml: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn fold_rollup_buckets_unknown_status_and_missing_toml_separately() {
+        let stems = [
+            StemStatus::Toml("completed"),
+            StemStatus::Toml("garbage"), // typo / outside the enum
+            StemStatus::MissingToml,     // .md-only crash-partial
+        ];
+        let r = fold_rollup(&stems);
+        assert_eq!(r.completed, 1);
+        assert_eq!(r.unknown, 1);
+        assert_eq!(r.missing_toml, 1);
+        // every stem is counted — nothing silently dropped (R-F4)
+        let counted =
+            r.planned + r.in_progress + r.completed + r.blocked + r.unknown + r.missing_toml;
+        assert_eq!(counted, 3);
+    }
+
+    // --- phase_rollup (IO) ---
+
+    fn write_phase_toml(dir: &Path, stem: &str, status: &str) {
+        fs::create_dir_all(dir).unwrap();
+        fs::write(
+            dir.join(format!("{stem}.toml")),
+            format!("status = \"{status}\"\n"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn phase_rollup_is_none_when_untracked() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // no state tree at all
+        assert_eq!(phase_rollup(root, 9).unwrap(), None);
+        // dir exists but holds no phase files
+        fs::create_dir_all(phases_dir(root, 9)).unwrap();
+        assert_eq!(phase_rollup(root, 9).unwrap(), None);
+    }
+
+    #[test]
+    fn phase_rollup_counts_materialised_phases() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let phases = phases_dir(root, 9);
+        write_phase_toml(&phases, "phase-01", "completed");
+        write_phase_toml(&phases, "phase-02", "completed");
+        write_phase_toml(&phases, "phase-03", "in_progress");
+
+        let r = phase_rollup(root, 9).unwrap().unwrap();
+        assert_eq!(r.completed, 2);
+        assert_eq!(r.in_progress, 1);
+    }
+
+    #[test]
+    fn phase_rollup_md_only_stem_is_missing_toml_not_dropped() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let phases = phases_dir(root, 9);
+        write_phase_toml(&phases, "phase-01", "completed");
+        // phase-02 has only its .md sheet (crash-partial) — still a phase
+        fs::write(phases.join("phase-02.md"), "# sheet\n").unwrap();
+
+        let r = phase_rollup(root, 9).unwrap().unwrap();
+        assert_eq!(r.completed, 1);
+        assert_eq!(r.missing_toml, 1);
+    }
+
+    #[test]
+    fn phase_rollup_unparseable_or_typo_status_is_surfaced() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let phases = phases_dir(root, 9);
+        write_phase_toml(&phases, "phase-01", "donezo"); // typo → unknown
+        fs::write(phases.join("phase-02.toml"), "this is not = valid toml\n").unwrap();
+
+        let r = phase_rollup(root, 9).unwrap().unwrap();
+        assert_eq!(r.unknown, 1, "typo status → unknown");
+        assert_eq!(r.missing_toml, 1, "unparseable .toml → missing_toml");
     }
 }
