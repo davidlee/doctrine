@@ -5,7 +5,7 @@
 //! later drift/spec) from a `Kind` descriptor. The engine is kind-blind: the
 //! claim is behind the `claim` seam (reservation-spec § Code seam), the
 //! fileset is a `Kind`-supplied function (not a frozen pair — slice-002 M3),
-//! and placement is a closed `MaterialiseMode` enum (never a `reserve: bool`).
+//! and placement is a closed `MaterialiseRequest` enum (never a `reserve: bool`).
 //!
 //! Pure/imperative split (slices-spec § Architecture): id, slug and the fileset
 //! are decided from inputs; only `claim` and the writes touch disk, and the
@@ -60,37 +60,49 @@ impl Claim for LocalFs {
 // The `Kind` descriptor
 // ---------------------------------------------------------------------------
 
-/// How an entity is placed — a closed enum, not a `bool`, so a third placement
-/// is a compiler-forced new variant, never an overloaded `false` (M1/D4).
-pub(crate) enum MaterialiseMode {
-    /// Allocate a fresh reserved id under `dir` (slice, later spec).
-    AllocateFreshEntity,
-    /// Create file(s) in an existing parent entity (design doc, later phases).
-    CreateInExistingEntity,
-}
-
 /// A `Kind` is *data*, not a trait: one dispatch site, no per-kind state (D2).
+/// Placement is no longer a `Kind` field — it is a runtime `MaterialiseRequest`,
+/// because a named entity carries its uid only at call time (D8).
 pub(crate) struct Kind {
     /// Entity-tree root, relative to the project root, e.g. `.doctrine/slice`.
     /// Also the base every artifact path is joined to (H1).
     pub dir: &'static str,
-    /// Canonical-id prefix, e.g. `SL` → `SL-003` (the `{{ref}}` token).
+    /// Canonical-id prefix, e.g. `SL` → `SL-003` (the `{{ref}}` token). Unused
+    /// by named kinds, which have no numeric canonical id.
     pub prefix: &'static str,
-    /// How the entity is placed.
-    pub mode: MaterialiseMode,
     /// Fileset as a function — kind-supplied, never a frozen file count (D3).
     pub scaffold: fn(&ScaffoldCtx<'_>) -> anyhow::Result<Fileset>,
+}
+
+/// The rendered identity a scaffold sees: a numbered entity carries its id and
+/// canonical `{{ref}}`; a named entity carries only its name (its uid). A closed
+/// enum so a scaffold that assumes one shape fails loudly on the other (D1/D8).
+#[derive(Clone, Copy)]
+pub(crate) enum EntityId<'a> {
+    Numbered { id: u32, canonical: &'a str },
+    Named { name: &'a str },
 }
 
 /// The resolved context a `scaffold` renders from. Pure over these inputs plus
 /// compile-time-embedded template text (M4): no disk, clock, git, or root.
 pub(crate) struct ScaffoldCtx<'a> {
-    pub id: u32,
-    /// The `{{ref}}` token, e.g. `SL-003`.
-    pub canonical_id: &'a str,
+    pub eid: EntityId<'a>,
     pub slug: &'a str,
     pub title: &'a str,
     pub date: &'a str,
+}
+
+impl ScaffoldCtx<'_> {
+    /// The numbered identity `(id, canonical)`, or an error for a named entity.
+    /// The numeric scaffolds (slice/design/plan/notes) render `<id>` dirs and
+    /// `<canonical>` refs and call this rather than re-match `eid` inline; the
+    /// error (not a panic) keeps a future kind/placement mismatch loud (D8).
+    pub(crate) fn numbered(&self) -> anyhow::Result<(u32, &str)> {
+        match self.eid {
+            EntityId::Numbered { id, canonical } => Ok((id, canonical)),
+            EntityId::Named { name } => bail!("numbered scaffold over named entity {name}"),
+        }
+    }
 }
 
 /// One file or symlink in a fileset. `rel_path` is *relative to the entity-tree
@@ -104,20 +116,71 @@ pub(crate) enum Artifact {
 /// A `Kind`'s fileset — `Vec`, so the engine never hardcodes a count (D3).
 pub(crate) type Fileset = Vec<Artifact>;
 
-/// Caller-supplied scaffold inputs. The engine fills id / canonical-id / dir.
+/// Caller-supplied scaffold inputs. The engine fills the identity (id /
+/// canonical / name) and dir; placement (and any parent id / name) is the
+/// `MaterialiseRequest`, not an input field.
 pub(crate) struct Inputs<'a> {
-    /// Parent entity id for `CreateInExistingEntity`; ignored when allocating.
-    pub existing_id: Option<u32>,
     pub slug: &'a str,
     pub title: &'a str,
     pub date: &'a str,
 }
 
-/// What a successful materialisation yields: the allocated/parent id and the
-/// entity dir on disk.
+/// Where to place an entity, resolved at call time — `Kind` is const, but a
+/// named entity's uid is only known per-call, so placement cannot live on the
+/// `Kind` (D8). A closed enum: a fourth placement is a compiler-forced variant.
+pub(crate) enum MaterialiseRequest<'a> {
+    /// Allocate a fresh reserved numeric id (slice, later spec).
+    Fresh,
+    /// Create file(s) under an existing numeric parent (design / plan / notes).
+    InExisting { id: u32 },
+    /// Claim a caller-named entity dir (memory; the name is its uid). No binary
+    /// caller constructs this until the memory kind lands; the engine path and
+    /// its tests already exercise it (PHASE-02 removes the attribute).
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "consumed by the memory kind (PHASE-02)")
+    )]
+    Named { name: &'a str },
+}
+
+/// A materialised entity's owned identity: a numbered entity owns its canonical
+/// `{{ref}}` string, a named entity owns its name. The shell keeps this past the
+/// borrowed `Inputs`, so it is owned, not borrowed (D9).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum OwnedEntityId {
+    Numbered { id: u32, canonical: String },
+    Named { name: String },
+}
+
+impl OwnedEntityId {
+    /// The numeric id, or `None` for a named entity — for callers that still
+    /// speak in ids (the slice CLI prints `out.eid.numeric_id()`).
+    pub(crate) fn numeric_id(&self) -> Option<u32> {
+        match self {
+            OwnedEntityId::Numbered { id, .. } => Some(*id),
+            OwnedEntityId::Named { .. } => None,
+        }
+    }
+
+    /// The canonical `{{ref}}` (numbered) or the name (named) — the on-disk dir
+    /// name and the cross-entity reference token. Every entity has one.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "consumed by the memory kind (PHASE-02)")
+    )]
+    pub(crate) fn canonical_ref(&self) -> &str {
+        match self {
+            OwnedEntityId::Numbered { canonical, .. } => canonical,
+            OwnedEntityId::Named { name } => name,
+        }
+    }
+}
+
+/// What a successful materialisation yields: the entity's owned identity and its
+/// dir on disk.
 #[derive(Debug)]
 pub(crate) struct Materialised {
-    pub id: u32,
+    pub eid: OwnedEntityId,
     pub dir: PathBuf,
 }
 
@@ -176,17 +239,48 @@ pub(crate) fn scan_ids(tree_root: &Path) -> anyhow::Result<Vec<u32>> {
     Ok(ids)
 }
 
+/// Entity names present directly under `tree_root` — every real subdirectory,
+/// whatever its name (numeric *or* `mem_…`); symlinks and files are ignored, and
+/// a missing directory yields an empty listing. Sibling to `scan_ids`, which is
+/// numeric-only and would skip a named (e.g. `mem_…`) dir (finding 1).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the memory kind (PHASE-02)")
+)]
+pub(crate) fn scan_named(tree_root: &Path) -> anyhow::Result<Vec<String>> {
+    let mut names = Vec::new();
+    let entries = match fs::read_dir(tree_root) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(names),
+        Err(e) => {
+            return Err(e).with_context(|| format!("Failed to read {}", tree_root.display()));
+        }
+    };
+    for entry in entries {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        if let Some(name) = entry.file_name().to_str() {
+            names.push(name.to_string());
+        }
+    }
+    Ok(names)
+}
+
 // ---------------------------------------------------------------------------
 // The materialise loop
 // ---------------------------------------------------------------------------
 
-/// Materialise `kind` under `project_root`. Dispatches on placement: allocate a
-/// fresh reserved id, or create files in an existing parent. Returns the id and
+/// Materialise `kind` under `project_root`. Dispatches on the placement
+/// `request`: allocate a fresh reserved id, create files under an existing
+/// numeric parent, or claim a caller-named dir. Returns the owned identity and
 /// entity dir.
 pub(crate) fn materialise(
     kind: &Kind,
     claim: &dyn Claim,
     project_root: &Path,
+    request: &MaterialiseRequest<'_>,
     inputs: &Inputs<'_>,
 ) -> anyhow::Result<Materialised> {
     let tree_root = project_root.join(kind.dir);
@@ -195,11 +289,12 @@ pub(crate) fn materialise(
     fs::create_dir_all(&tree_root)
         .with_context(|| format!("Failed to create {}", tree_root.display()))?;
 
-    match kind.mode {
-        MaterialiseMode::AllocateFreshEntity => {
+    match *request {
+        MaterialiseRequest::Fresh => {
             allocate_fresh(kind, claim, &tree_root, inputs, || scan_ids(&tree_root))
         }
-        MaterialiseMode::CreateInExistingEntity => create_in_existing(kind, &tree_root, inputs),
+        MaterialiseRequest::InExisting { id } => create_in_existing(kind, &tree_root, id, inputs),
+        MaterialiseRequest::Named { name } => allocate_named(kind, claim, &tree_root, name, inputs),
     }
 }
 
@@ -219,16 +314,21 @@ fn allocate_fresh(
         let dir = tree_root.join(&name);
         match claim.claim(&dir)? {
             Acquired::Won => {
-                let canonical_id = format!("{}-{name}", kind.prefix);
+                let canonical = format!("{}-{name}", kind.prefix);
                 let ctx = ScaffoldCtx {
-                    id,
-                    canonical_id: &canonical_id,
+                    eid: EntityId::Numbered {
+                        id,
+                        canonical: &canonical,
+                    },
                     slug: inputs.slug,
                     title: inputs.title,
                     date: inputs.date,
                 };
                 return match scaffold_and_write(kind, tree_root, &ctx) {
-                    Ok(()) => Ok(Materialised { id, dir }),
+                    Ok(()) => Ok(Materialised {
+                        eid: OwnedEntityId::Numbered { id, canonical },
+                        dir,
+                    }),
                     Err(e) => {
                         // Won ⟹ we created `dir` ⟹ a partial scaffold is our
                         // mess to clean (H2). git-ref will not need this — there
@@ -246,24 +346,25 @@ fn allocate_fresh(
 }
 
 /// Sub-artefact placement (design doc, later phases): no claim, no id alloc.
-/// Resolve the existing parent (err if absent), refuse to clobber, then write.
+/// Resolve the existing numeric parent (err if absent), refuse to clobber,
+/// then write. The parent `id` comes straight from the request.
 fn create_in_existing(
     kind: &Kind,
     tree_root: &Path,
+    id: u32,
     inputs: &Inputs<'_>,
 ) -> anyhow::Result<Materialised> {
-    let id = inputs
-        .existing_id
-        .context("CreateInExistingEntity requires a parent id")?;
     let name = format!("{id:03}");
     let dir = tree_root.join(&name);
     if !dir.is_dir() {
         bail!("Parent entity {name} not found at {}", dir.display());
     }
-    let canonical_id = format!("{}-{name}", kind.prefix);
+    let canonical = format!("{}-{name}", kind.prefix);
     let ctx = ScaffoldCtx {
-        id,
-        canonical_id: &canonical_id,
+        eid: EntityId::Numbered {
+            id,
+            canonical: &canonical,
+        },
         slug: inputs.slug,
         title: inputs.title,
         date: inputs.date,
@@ -271,7 +372,49 @@ fn create_in_existing(
     let fileset = (kind.scaffold)(&ctx)?;
     refuse_clobber(tree_root, &fileset)?; // no silent clobber (D7)
     write_fileset(tree_root, &fileset)?;
-    Ok(Materialised { id, dir })
+    Ok(Materialised {
+        eid: OwnedEntityId::Numbered { id, canonical },
+        dir,
+    })
+}
+
+/// Named top-level placement (memory entity): the caller supplies the entity
+/// name (its uid), already unique, so there is no id scan and no retry — claim
+/// `tree_root/<name>` once. `Won` means the dir is ours, so a scaffold/write
+/// failure removes it (H2, as in `allocate_fresh`); `AlreadyHeld` is a duplicate
+/// uid and a hard error.
+fn allocate_named(
+    kind: &Kind,
+    claim: &dyn Claim,
+    tree_root: &Path,
+    name: &str,
+    inputs: &Inputs<'_>,
+) -> anyhow::Result<Materialised> {
+    let dir = tree_root.join(name);
+    match claim.claim(&dir)? {
+        Acquired::Won => {
+            let ctx = ScaffoldCtx {
+                eid: EntityId::Named { name },
+                slug: inputs.slug,
+                title: inputs.title,
+                date: inputs.date,
+            };
+            match scaffold_and_write(kind, tree_root, &ctx) {
+                Ok(()) => Ok(Materialised {
+                    eid: OwnedEntityId::Named {
+                        name: name.to_string(),
+                    },
+                    dir,
+                }),
+                // Won ⟹ we created `dir` ⟹ a partial scaffold is ours to clean.
+                Err(e) => {
+                    drop(fs::remove_dir_all(&dir));
+                    Err(e)
+                }
+            }
+        }
+        Acquired::AlreadyHeld => bail!("entity {name} already exists"),
+    }
 }
 
 /// Render `kind`'s fileset for `ctx` and write it under `tree_root`.
@@ -475,23 +618,22 @@ mod tests {
     // --- a test Kind drives the kind-blind engine paths ---
 
     fn one_file(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-        let name = format!("{:03}", ctx.id);
+        let (id, canonical) = ctx.numbered()?;
+        let name = format!("{id:03}");
         Ok(vec![Artifact::File {
             rel_path: PathBuf::from(format!("{name}/body.md")),
-            body: format!("{} :: {}", ctx.canonical_id, ctx.title),
+            body: format!("{canonical} :: {}", ctx.title),
         }])
     }
 
     const TEST_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
-        mode: MaterialiseMode::AllocateFreshEntity,
         scaffold: one_file,
     };
 
     fn inputs() -> Inputs<'static> {
         Inputs {
-            existing_id: None,
             slug: "s",
             title: "T",
             date: "2026-06-04",
@@ -506,7 +648,7 @@ mod tests {
 
         let out =
             allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), || scan_ids(&tree)).unwrap();
-        assert_eq!(out.id, 1);
+        assert_eq!(out.eid.numeric_id(), Some(1));
         let body = fs::read_to_string(tree.join("001/body.md")).unwrap();
         assert_eq!(body, "TK-001 :: T");
     }
@@ -528,7 +670,7 @@ mod tests {
         };
 
         let out = allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), scan).unwrap();
-        assert_eq!(out.id, 2);
+        assert_eq!(out.eid.numeric_id(), Some(2));
         assert!(tree.join("002/body.md").is_file());
         assert_eq!(calls.get(), 2, "expected one collision then success");
     }
@@ -555,7 +697,8 @@ mod tests {
     // --- H2: a write failure cleans up the won directory ---
 
     fn doomed_fileset(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-        let name = format!("{:03}", ctx.id);
+        let (id, _) = ctx.numbered()?;
+        let name = format!("{id:03}");
         // The second file's parent is the first file → the component-wise dir
         // walk hits a non-directory squatting `<name>/a` and fails.
         Ok(vec![
@@ -573,7 +716,6 @@ mod tests {
     const DOOMED_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
-        mode: MaterialiseMode::AllocateFreshEntity,
         scaffold: doomed_fileset,
     };
 
@@ -601,7 +743,6 @@ mod tests {
     const ESCAPING_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
-        mode: MaterialiseMode::AllocateFreshEntity,
         scaffold: escaping_fileset,
     };
 
@@ -625,7 +766,6 @@ mod tests {
     const SUB_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
-        mode: MaterialiseMode::CreateInExistingEntity,
         scaffold: one_file,
     };
 
@@ -638,15 +778,15 @@ mod tests {
         let out = create_in_existing(
             &SUB_KIND,
             &tree,
+            3,
             &Inputs {
-                existing_id: Some(3),
                 slug: "",
                 title: "Parent",
                 date: "2026-06-04",
             },
         )
         .unwrap();
-        assert_eq!(out.id, 3);
+        assert_eq!(out.eid.numeric_id(), Some(3));
         let body = fs::read_to_string(tree.join("003/body.md")).unwrap();
         assert_eq!(body, "TK-003 :: Parent");
     }
@@ -660,8 +800,8 @@ mod tests {
         let err = create_in_existing(
             &SUB_KIND,
             &tree,
+            9,
             &Inputs {
-                existing_id: Some(9),
                 slug: "",
                 title: "T",
                 date: "2026-06-04",
@@ -681,8 +821,8 @@ mod tests {
         let err = create_in_existing(
             &SUB_KIND,
             &tree,
+            3,
             &Inputs {
-                existing_id: Some(3),
                 slug: "",
                 title: "T",
                 date: "2026-06-04",
@@ -701,7 +841,8 @@ mod tests {
 
     /// The real IP shape: two files under an existing parent, both succeed.
     fn two_files(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-        let name = format!("{:03}", ctx.id);
+        let (id, _) = ctx.numbered()?;
+        let name = format!("{id:03}");
         Ok(vec![
             Artifact::File {
                 rel_path: PathBuf::from(format!("{name}/plan.toml")),
@@ -717,7 +858,6 @@ mod tests {
     const SUB_TWO_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
-        mode: MaterialiseMode::CreateInExistingEntity,
         scaffold: two_files,
     };
 
@@ -730,8 +870,8 @@ mod tests {
         create_in_existing(
             &SUB_TWO_KIND,
             &tree,
+            3,
             &Inputs {
-                existing_id: Some(3),
                 slug: "",
                 title: "T",
                 date: "2026-06-04",
@@ -747,7 +887,8 @@ mod tests {
     /// of files, symlinks, and the dir this call created, while a pre-existing
     /// sibling is left untouched.
     fn sub_doomed_fileset(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-        let name = format!("{:03}", ctx.id);
+        let (id, _) = ctx.numbered()?;
+        let name = format!("{id:03}");
         Ok(vec![
             Artifact::File {
                 rel_path: PathBuf::from(format!("{name}/sub/a")),
@@ -767,7 +908,6 @@ mod tests {
     const SUB_DOOMED_KIND: Kind = Kind {
         dir: "tree",
         prefix: "TK",
-        mode: MaterialiseMode::CreateInExistingEntity,
         scaffold: sub_doomed_fileset,
     };
 
@@ -782,8 +922,8 @@ mod tests {
         let err = create_in_existing(
             &SUB_DOOMED_KIND,
             &tree,
+            3,
             &Inputs {
-                existing_id: Some(3),
                 slug: "",
                 title: "T",
                 date: "2026-06-04",
@@ -827,5 +967,123 @@ mod tests {
 
         assert!(created.is_dir(), "populated dir survives rollback");
         assert_eq!(fs::read_to_string(created.join("intruder")).unwrap(), "x");
+    }
+
+    // --- Named placement (allocate_named) ---
+
+    /// A named-entity scaffold: one file under the entity's own (named) dir.
+    fn named_file(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
+        let EntityId::Named { name } = ctx.eid else {
+            bail!("named scaffold over a numbered entity");
+        };
+        Ok(vec![Artifact::File {
+            rel_path: PathBuf::from(format!("{name}/body.md")),
+            body: format!("{name} :: {}", ctx.title),
+        }])
+    }
+
+    const NAMED_KIND: Kind = Kind {
+        dir: "tree",
+        prefix: "",
+        scaffold: named_file,
+    };
+
+    #[test]
+    fn named_materialise_claims_and_writes_under_the_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        // Driven through the public `materialise` so the `Named` request arm and
+        // its dispatch are exercised, not just `allocate_named` in isolation.
+        let out = materialise(
+            &NAMED_KIND,
+            &LocalFs,
+            root,
+            &MaterialiseRequest::Named { name: "mem_abc" },
+            &inputs(),
+        )
+        .unwrap();
+        assert_eq!(
+            out.eid,
+            OwnedEntityId::Named {
+                name: "mem_abc".to_string()
+            }
+        );
+        // a named entity has no numeric id; its canonical ref is the name itself
+        assert_eq!(out.eid.numeric_id(), None);
+        assert_eq!(out.eid.canonical_ref(), "mem_abc");
+        let body = fs::read_to_string(root.join("tree/mem_abc/body.md")).unwrap();
+        assert_eq!(body, "mem_abc :: T");
+    }
+
+    #[test]
+    fn allocate_named_errs_on_a_duplicate_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let tree = dir.path().join("tree");
+        // The name is pre-claimed on disk → the single mkdir claim loses.
+        fs::create_dir_all(tree.join("mem_abc")).unwrap();
+
+        let err = allocate_named(&NAMED_KIND, &LocalFs, &tree, "mem_abc", &inputs()).unwrap_err();
+        assert!(err.to_string().contains("already exists"));
+    }
+
+    #[test]
+    fn allocate_named_write_failure_cleans_up_the_claimed_dir() {
+        // A doomed named scaffold (the self-squat trick): the claim mkdir creates
+        // the named dir, then the scaffold fails — H2 must remove the won dir.
+        fn doomed(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
+            let EntityId::Named { name } = ctx.eid else {
+                bail!("named scaffold over a numbered entity");
+            };
+            Ok(vec![
+                Artifact::File {
+                    rel_path: PathBuf::from(format!("{name}/a")),
+                    body: "x".to_string(),
+                },
+                Artifact::File {
+                    rel_path: PathBuf::from(format!("{name}/a/b")),
+                    body: "y".to_string(),
+                },
+            ])
+        }
+        const DOOMED_NAMED_KIND: Kind = Kind {
+            dir: "tree",
+            prefix: "",
+            scaffold: doomed,
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let tree = dir.path().join("tree");
+        fs::create_dir_all(&tree).unwrap();
+
+        let err =
+            allocate_named(&DOOMED_NAMED_KIND, &LocalFs, &tree, "mem_abc", &inputs()).unwrap_err();
+        assert!(err.to_string().contains("Failed to create"));
+        assert!(
+            !tree.join("mem_abc").exists(),
+            "the claimed dir must be removed"
+        );
+    }
+
+    // --- scan_named ---
+
+    #[test]
+    fn scan_named_collects_every_real_subdir_skipping_files_and_symlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir(root.join("001")).unwrap(); // numeric name is fine
+        fs::create_dir(root.join("mem_abc")).unwrap(); // and so is a named one
+        fs::write(root.join("a-file"), "x").unwrap();
+        std::os::unix::fs::symlink("001", root.join("a-link")).unwrap();
+
+        let mut names = scan_named(root).unwrap();
+        names.sort();
+        assert_eq!(names, vec!["001".to_string(), "mem_abc".to_string()]);
+    }
+
+    #[test]
+    fn scan_named_missing_dir_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(scan_named(&dir.path().join("nope")).unwrap().is_empty());
     }
 }
