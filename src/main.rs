@@ -54,7 +54,7 @@ enum Command {
         command: SliceCommand,
     },
 
-    /// Record, show, and list memories (v1: record only).
+    /// Record, show, and list memories.
     Memory {
         #[command(subcommand)]
         command: MemoryCommand,
