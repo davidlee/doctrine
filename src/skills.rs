@@ -308,6 +308,42 @@ impl Runner for Npx {
     }
 }
 
+/// Materialise the canonical copy of `entry` at `canonical_dir/<id>`, staged via
+/// a sibling `.tmp-<id>` then swapped in with a minimal-window remove+rename.
+/// Always overwrites — the canonical tree is derived (owns no authored data).
+///
+/// Unix reality (design §5.1/§10 pass-2 F4): `rename` cannot replace a non-empty
+/// directory and std has no `renameat2(RENAME_EXCHANGE)`, so the swap is
+/// remove-then-rename — a one-syscall window where a crash leaves the agent link
+/// dangling, healed by the next idempotent install. A partial stage lives only
+/// under `.tmp-<id>`, never under `<id>`, so a live link never sees a half-tree.
+// Used by tests now; wired into execute's Claude arm in PHASE-04. Gate the
+// dead-code expectation to non-test builds (under `cfg(test)` it is exercised).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "wired into execute in PHASE-04")
+)]
+fn materialise_canonical(entry: &Entry, canonical_dir: &Path) -> anyhow::Result<()> {
+    let dest = canonical_dir.join(&entry.id);
+    let tmp = canonical_dir.join(format!(".tmp-{}", entry.id));
+
+    // Clear any crashed leftover from a prior interrupted stage.
+    if tmp.exists() {
+        fs::remove_dir_all(&tmp)
+            .with_context(|| format!("Failed to clear stale {}", tmp.display()))?;
+    }
+    // Stage the embed into the temp (same filesystem → the rename below is valid).
+    copy_skill(entry, &tmp)?;
+    // Minimal-window swap: drop the prior canonical, then rename the temp in.
+    if dest.exists() {
+        fs::remove_dir_all(&dest)
+            .with_context(|| format!("Failed to remove {}", dest.display()))?;
+    }
+    fs::rename(&tmp, &dest)
+        .with_context(|| format!("Failed to swap {} → {}", tmp.display(), dest.display()))?;
+    Ok(())
+}
+
 /// Copy an embedded skill's files into `dest`, stripping the source prefix.
 fn copy_skill(entry: &Entry, dest: &Path) -> anyhow::Result<()> {
     let prefix = format!("{}/skills/{}/", entry.domain, entry.id);
@@ -550,6 +586,63 @@ mod tests {
         fs::create_dir_all(dir.path().join("code-review")).unwrap();
         let steps = claude_steps(&sel, dir.path());
         assert!(matches!(steps.as_slice(), [Step::Skip { .. }]));
+    }
+
+    // --- canonical materialise ---
+
+    fn code_review_entry() -> Entry {
+        discover()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.id == "code-review")
+            .unwrap()
+    }
+
+    #[test]
+    fn materialise_overwrites_stale_canonical() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = code_review_entry();
+        let id_dir = dir.path().join(&e.id);
+
+        // Pre-seed a stale canonical from a prior embed version.
+        fs::create_dir_all(&id_dir).unwrap();
+        fs::write(id_dir.join("STALE.md"), "old").unwrap();
+
+        materialise_canonical(&e, dir.path()).unwrap();
+
+        // Stale file gone; the embed's SKILL.md present and byte-equal.
+        assert!(!id_dir.join("STALE.md").exists(), "stale file must be gone");
+        let embed = PluginAssets::get("review/skills/code-review/SKILL.md").unwrap();
+        let got = fs::read(id_dir.join("SKILL.md")).unwrap();
+        assert_eq!(got, embed.data.as_ref());
+        // No temp left behind.
+        assert!(!dir.path().join(format!(".tmp-{}", e.id)).exists());
+    }
+
+    #[test]
+    fn materialise_heals_an_interrupted_stage() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = code_review_entry();
+        let id_dir = dir.path().join(&e.id);
+        let tmp = dir.path().join(format!(".tmp-{}", e.id));
+
+        // A prior crash: a leftover temp from an interrupted stage, plus an
+        // intact prior canonical — the live state the next install must heal.
+        fs::create_dir_all(&tmp).unwrap();
+        fs::write(tmp.join("JUNK.md"), "partial").unwrap();
+        fs::create_dir_all(&id_dir).unwrap();
+        fs::write(id_dir.join("SKILL.md"), "prior").unwrap();
+
+        materialise_canonical(&e, dir.path()).unwrap();
+
+        // Temp cleared; canonical coherent (embed content, no junk leaked in).
+        assert!(!tmp.exists(), "leftover temp must be cleared");
+        assert!(!id_dir.join("JUNK.md").exists());
+        let embed = PluginAssets::get("review/skills/code-review/SKILL.md").unwrap();
+        assert_eq!(
+            fs::read(id_dir.join("SKILL.md")).unwrap(),
+            embed.data.as_ref()
+        );
     }
 
     // --- delegate argv ---
