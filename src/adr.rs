@@ -14,9 +14,15 @@
 //! keys match `Meta`; the `[relationships]` table is unknown-to-`Meta`, so it is
 //! ignored on read and preserved on disk).
 
+use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::entity::{Artifact, Fileset, Kind, ScaffoldCtx};
+use anyhow::Context;
+
+use crate::entity::{
+    self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
+};
+use crate::meta;
 
 /// Relative dir of the ADR tree inside the project root. Distinct top-level tree,
 /// not nested under slice (D2 — ADRs are project-global governance).
@@ -25,7 +31,6 @@ const ADR_DIR: &str = ".doctrine/adr";
 /// The top-level reserved ADR kind: `adr-NNN.toml` + `adr-NNN.md` + slug symlink.
 /// `prefix` is the canonical-id stem (`ADR-007`); the file stem is `"adr"` — see
 /// `meta` on why prefix ≠ stem.
-#[expect(dead_code, reason = "consumed by the adr verbs in PHASE-03 (SL-006)")]
 const ADR_KIND: Kind = Kind {
     dir: ADR_DIR,
     prefix: "ADR",
@@ -77,6 +82,56 @@ fn adr_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
 }
 
 // ---------------------------------------------------------------------------
+// CLI entry points (thin)
+// ---------------------------------------------------------------------------
+
+/// `doctrine adr new` — allocate the next id and scaffold a new ADR. ADRs always
+/// slug the title (no slug-less facet); `--slug` overrides. Touches disk via the
+/// shared `Fresh` engine path — the monotonic id and race-retry are inherited.
+pub(crate) fn run_new(
+    path: Option<PathBuf>,
+    title: Option<String>,
+    slug: Option<String>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let title = crate::input::resolve_title(title)?;
+    let slug = crate::input::resolve_slug(&title, slug)?;
+    let date = crate::clock::today();
+    let out = entity::materialise(
+        &ADR_KIND,
+        &LocalFs,
+        &root,
+        &MaterialiseRequest::Fresh,
+        &Inputs {
+            slug: &slug,
+            title: &title,
+            date: &date,
+        },
+    )?;
+
+    let id = out
+        .eid
+        .numeric_id()
+        .context("adr kind must yield a numeric id")?;
+    writeln!(io::stdout(), "Created ADR {id:03}: {}", out.dir.display())?;
+    Ok(())
+}
+
+/// `doctrine adr list` — rows of `id status slug title`, sorted by id; `--status`
+/// keeps only matching ADRs. Reads the authored `adr-NNN.toml` status field (D5 —
+/// status is authored, not symlink-indexed). The stem is `"adr"`, not the `ADR`
+/// prefix; `read_metas` is unsorted, so `sort_and_filter` owns the ordering.
+pub(crate) fn run_list(path: Option<PathBuf>, status: Option<&str>) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let adr_root = root.join(ADR_DIR);
+    let rows = meta::sort_and_filter(meta::read_metas(&adr_root, "adr")?, status);
+
+    let mut out = io::stdout();
+    write!(out, "{}", meta::format_list(&rows))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -84,7 +139,12 @@ fn adr_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
 mod tests {
     use super::*;
     use crate::meta::Meta;
+    use std::fs;
     use std::path::Path;
+
+    fn adr_root(root: &Path) -> PathBuf {
+        root.join(ADR_DIR)
+    }
 
     // --- VT-1 / VT-3: render + round-trip ---
 
@@ -168,5 +228,76 @@ mod tests {
         assert!(matches!(&fileset[2],
             Artifact::Symlink { rel_path, target }
             if rel_path == Path::new("007-use-rust") && target == "007"));
+    }
+
+    // --- VT-1: `adr new` writes the tree and allocates monotonically ---
+
+    #[test]
+    fn run_new_writes_the_adr_tree_and_allocates_monotonically() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // explicit path short-circuits root detection; the title arg avoids stdin.
+        run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
+        run_new(Some(root.to_path_buf()), Some("Adopt CI".into()), None).unwrap();
+
+        let adr = adr_root(root);
+        assert!(adr.join("001/adr-001.toml").is_file());
+        assert!(adr.join("001/adr-001.md").is_file());
+        assert_eq!(
+            fs::read_link(adr.join("001-use-rust")).unwrap(),
+            Path::new("001")
+        );
+        // a second `new` lands the next id (monotonic, engine race-retry inherited).
+        assert!(adr.join("002/adr-002.toml").is_file());
+        assert_eq!(
+            fs::read_link(adr.join("002-adopt-ci")).unwrap(),
+            Path::new("002")
+        );
+    }
+
+    // --- VT-2: an empty / symbol-only title bails for an explicit --slug ---
+
+    #[test]
+    fn run_new_bails_for_a_slug_on_a_symbol_only_title() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = run_new(Some(dir.path().to_path_buf()), Some("!!!".into()), None).unwrap_err();
+        assert!(err.to_string().contains("pass --slug"));
+    }
+
+    // --- VT-1 read + VT-3: `adr list`'s pipeline reads stem "adr" and filters ---
+
+    #[test]
+    fn read_metas_round_trips_created_adrs_and_filters_by_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
+        run_new(Some(root.to_path_buf()), Some("Adopt CI".into()), None).unwrap();
+        let adr = adr_root(root);
+
+        // flip 002 to accepted — the status verb is PHASE-04; a raw rewrite is
+        // enough to prove the list filter selects on the authored toml field (D5).
+        let p = adr.join("002/adr-002.toml");
+        let flipped = fs::read_to_string(&p)
+            .unwrap()
+            .replace("status = \"proposed\"", "status = \"accepted\"");
+        fs::write(&p, flipped).unwrap();
+
+        // read_metas is unsorted; sort_and_filter owns the ordering (VT-3).
+        let all = meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), None);
+        assert_eq!(all.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(
+            all[0],
+            Meta {
+                id: 1,
+                slug: "use-rust".into(),
+                title: "Use Rust".into(),
+                status: "proposed".into(),
+            }
+        );
+
+        let accepted =
+            meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), Some("accepted"));
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(accepted[0].id, 2);
     }
 }
