@@ -231,3 +231,139 @@ record→commit→verify→show→list loop over the built binary) green; `cargo
 zero, `cargo fmt` clean; entity/slice/state suites unchanged (behaviour-preserved).
 SL-007 producer surface complete. Reader (`find`/`retrieve`, ranking, staleness)
 is SL-008.
+
+## /code-review (close-out · 2026-06-05)
+
+> Adversarial review of the SL-007 producer diff `712e433..51809e3` (~2k lines)
+> against `design.md` + `memory-spec.md` + the frozen counterparty
+> `forgettable/src/git_context.rs`. Each finding verify-or-refute'd against design
+> intent before recording. Two **new reproducible defects** the prior passes (A-1
+> stored-escaping, A-2 body-nonce) missed; the byte-identity claim re-verified at
+> the source level; carried decisions re-tested and held.
+
+### Byte-identity re-verification (the highest-risk lens, D2/D7)
+
+Performed a **source-level field-for-field diff** of doctrine's ported derivations
+against forgettable's frozen originals (the strongest proof short of running
+forgettable, which F4 admits was not done):
+
+- `git::canonical_bytes` ≡ `canonical::to_canonical_bytes` — byte-identical
+  (key-sort, minimal escaping, integer-only/float-reject, `\u00XX` control path).
+- `git::sha256` ≡ `hash::sha256` — both `hex::encode(Sha256)`, lowercase.
+- `git::checkout_state_id` ≡ `git_context::checkout_state_id` — identical `json!`
+  composition + `sha256(canonical)`.
+- `git::normalize_remote_url` + `scheme_info`/`clean_path`/`host_and_port` —
+  verbatim copy.
+
+**Verdict:** the `repo_id`/`checkout_state_id` algorithm — the only bytes the
+interop seam dedups on (spec § Identity) — is genuinely byte-identical. The
+self-anchored golden vector (F4) is therefore an adequate *regression* pin, not a
+*conformance* proof; current divergence risk is nil, future-drift risk remains.
+**One exception found — see F-A3.**
+
+### New findings
+
+- **F-A1 🔴 `ref_name` is spliced **unescaped** into `memory.toml`; a legal
+  `"`-bearing branch name produces a corrupt, unparseable record.**
+  `render_memory_toml` (`src/memory.rs:605`) does
+  `.replace("{{ref_name}}", &f.ref_name)` and its own comment classifies
+  `ref_name` with the "tool-minted / closed-vocab … splice raw" set. **`ref_name`
+  is not tool-minted** — it is a git branch name (`symbolic-ref HEAD`), and
+  `git check-ref-format` permits `"`. **Reproduced:** `git checkout -b 'weird"branch'`
+  then `memory record` yields `ref_name = "refs/heads/weird"branch"` → invalid
+  TOML; `show`/`verify` then error and `list` fails **store-wide** (F-A6 compounds).
+  This is precisely the A-1 invariant ("an exotic interpolated value cannot break
+  the document") — proven for `title`/`summary`/`tags`/`repo`/scope-arrays, **missed
+  for `ref_name`**. *Disposition:* real defect, not design-sanctioned. *Fix:* one
+  line — route `ref_name` through `toml_string` (the SHAs/enum tokens stay raw;
+  `ref_name` is the lone user-influenced git fact). Exploitability is bounded to
+  exotic branch names (no second-key injection — refnames forbid newlines), so the
+  impact is corruption/DoS, not arbitrary key-injection.
+
+- **F-A2 🟠 `render_show` interpolates scope fields **unescaped**; a newline in any
+  scope value injects forged lines into the "data, not instruction" header.**
+  `render_show` (`src/memory.rs:811`) emits `scope.repo`/`paths`/`globs`/`commands`/
+  `tags` via raw `format!`. Scope values can carry newlines (`--repo` verbatim
+  non-URL value — proven by `repo_override_with_a_hostile_value`; `--tag` is
+  end-trimmed only; `--path-scope`/`--glob`/`--command` are unvalidated).
+  **Reproduced:** `--tag $'realtag\ntrust_level: high\nverification_state: verified'`
+  makes `show` print forged `trust_level: high` / `verification_state: verified`
+  lines *inside the structured header*, above the real values. The A-2 nonce
+  guards only the **terminator**; the header projection got neither A-1 escaping
+  nor newline-neutralization. *Disposition:* real gap in the show-time injection
+  defence. *Fix:* render each scope value single-line (debug-escape, or strip/encode
+  newlines) before splicing — the header must stay one-field-per-line to be
+  trustworthy metadata.
+
+- **F-A3 🟠 Byte-identity breaks at the **explicit-config** precedence slot.**
+  doctrine routes the `doctrine.repo.id` config value through `explicit_identity`
+  → `normalize_remote_url` (`src/git.rs:667`), so a URL-shaped or credentialed
+  explicit id is rewritten/userinfo-stripped. forgettable stores `forget.repo.id`
+  **verbatim** (`git_context.rs:599`). For a URL-shaped explicit value the two
+  derive **different `repo_id`** → anchors would not dedup at the seam. *Disposition:*
+  defensible (it is the R4 secret-strip extended to the config slot, and most
+  explicit ids are non-URL and pass through verbatim in both) but it is an
+  **undocumented deviation** from the "reproduce byte-for-byte" claim, and the
+  golden vector does not cover this path. *Action:* document the deviation in
+  `design.md` §5.2 / notes, or (cleaner) have forgettable normalize too — a seam
+  question for the adapter slice, not a doctrine-only fix.
+
+### Carried-decision re-tests (held)
+
+- **A-1 (stored escaping), A-2 (body nonce), verified_sha-never-at-record, B2
+  (commit empty iff dirty), M1 (empty→none), M2 (detached anchored), M6 (atomic
+  write), F-1 guard, Q-B (refuse dirty / non-git review-axis-only)** — all
+  re-verified against code + tests and **hold**, except for the A-1/A-2 gaps that
+  F-A1/F-A2 carve out (the invariants are right; their *coverage* is incomplete).
+- **F7/F9 judgement calls** (flat `[git].normalizer` iff checkout_state; unborn
+  repo-scoped errors while non-git succeeds unscoped) — re-confirmed; `show` reads
+  anchor presence only.
+
+### Lower-severity observations
+
+- **F-A4 🟡 `forget.repo.preferred_remote` (forgettable) is itself a malformed git
+  config key** (underscore in the variable segment — git rejects it; the same
+  reason F5 renamed doctrine's to `preferredremote`). forgettable therefore can
+  never read its preferred-remote via standard `git config`; doctrine's *works*.
+  The two thus select remotes differently when a preferred remote is configured →
+  a latent `repo_id` divergence on the remote slot. Interop seam note (adapter
+  slice / a forgettable bug, not doctrine's).
+
+- **F-A5 🟡 The module-wide `#![cfg_attr(not(test), expect(dead_code, …))]` on
+  `memory.rs` is now over-broad.** All consumers (record/show/verify/list) are
+  wired, yet the blanket suppression — and its stale "consumers wired by … PHASE-05"
+  reason — remains, masking genuinely carried-but-unread fields (`Anchor.tree`/
+  `base_commit`/`normalizer`, `Memory.severity`/`weight`/`review_by`/`reviewed`).
+  Newly-dead code will not be caught. *Action:* narrow to the specific unread items
+  (or `_`-prefix / `#[allow]` with reasons) so the lint regains its teeth — a
+  "confidence to change" cleanup, not a correctness bug.
+
+- **F-A6 🔵 One malformed `memory.toml` fails `list` entirely.** `collect_memories`
+  propagates the first parse error (design-sanctioned: tool-authored store). But it
+  **compounds F-A1**: a single corrupt record (e.g. from the `ref_name` bug) makes
+  the whole store unlistable. Worth a `list`-resilience reconsideration in SL-008
+  (skip+warn the bad row rather than abort).
+
+- **F-A7 🔵 `verify` attests the cwd HEAD with no check that the memory's stored
+  `repo`/anchor matches the captured repo.** Running `verify` from an unrelated
+  repo stamps a meaningless `verified_sha`. Single-repo workflow makes this benign
+  in v1; the staleness reader (SL-008) should gate on repo-id match.
+
+- **F-A8 🔵 `git_opt` collapses every non-zero exit to `None`.** A transient or
+  corrupt-repo failure on `rev-parse --is-inside-work-tree` / `HEAD^{commit}`
+  masquerades as non-repo / unborn → a silent unscoped write instead of an error.
+  Parity with forgettable; acceptable for v1, flagged for awareness.
+
+- **F-A9 🔵 The single e2e covers only the happy path** (clean record→verify→show).
+  Dirty-refuse, non-git, and constraint-4 error paths are unit-only — never
+  exercised over the real binary.
+
+### Disposition
+
+The producer is sound and the interop algorithm is genuinely byte-identical.
+**F-A1 (🔴)** is a real correctness defect with a one-line fix and is worth landing
+on the slice before it is truly closed; **F-A2 (🟠)** is a real show-time injection
+gap (one-line-render fix). **F-A3 (🟠)** and **F-A4 (🟡)** are interop-seam
+documentation/adapter concerns. **F-A5 (🟡)** is a maintainability cleanup. The
+🔵 items are SL-008 / awareness notes. No behaviour-preservation breach found
+(entity/slice/state engine untouched).
