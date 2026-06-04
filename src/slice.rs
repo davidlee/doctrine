@@ -20,7 +20,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use serde::Deserialize;
 
-use crate::entity::{self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseMode, ScaffoldCtx};
+use crate::entity::{
+    self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
+};
 
 /// Relative dir of the slice tree inside the project root.
 const SLICE_DIR: &str = ".doctrine/slice";
@@ -29,7 +31,6 @@ const SLICE_DIR: &str = ".doctrine/slice";
 const SLICE_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: "SL",
-    mode: MaterialiseMode::AllocateFreshEntity,
     scaffold: slice_scaffold,
 };
 
@@ -37,7 +38,6 @@ const SLICE_KIND: Kind = Kind {
 const DESIGN_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: "SL",
-    mode: MaterialiseMode::CreateInExistingEntity,
     scaffold: design_scaffold,
 };
 
@@ -47,7 +47,6 @@ const DESIGN_KIND: Kind = Kind {
 const PLAN_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: "SL",
-    mode: MaterialiseMode::CreateInExistingEntity,
     scaffold: plan_scaffold,
 };
 
@@ -56,7 +55,6 @@ const PLAN_KIND: Kind = Kind {
 const NOTES_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: "SL",
-    mode: MaterialiseMode::CreateInExistingEntity,
     scaffold: notes_scaffold,
 };
 
@@ -151,11 +149,12 @@ fn render_design(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 /// The slice fileset: sister TOML, prose body, and `<id>-<slug>` symlink, all
 /// relative to the slice tree root (the symlink sits beside the numeric dir).
 fn slice_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-    let name = format!("{:03}", ctx.id);
+    let (id, _) = ctx.numbered()?;
+    let name = format!("{id:03}");
     Ok(vec![
         Artifact::File {
             rel_path: PathBuf::from(format!("{name}/slice-{name}.toml")),
-            body: render_toml(ctx.id, ctx.slug, ctx.title, ctx.date)?,
+            body: render_toml(id, ctx.slug, ctx.title, ctx.date)?,
         },
         Artifact::File {
             rel_path: PathBuf::from(format!("{name}/slice-{name}.md")),
@@ -170,10 +169,11 @@ fn slice_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
 
 /// The design-doc fileset: one prose `design.md` under the parent slice dir.
 fn design_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-    let name = format!("{:03}", ctx.id);
+    let (id, canonical) = ctx.numbered()?;
+    let name = format!("{id:03}");
     Ok(vec![Artifact::File {
         rel_path: PathBuf::from(format!("{name}/design.md")),
-        body: render_design(ctx.canonical_id, ctx.title)?,
+        body: render_design(canonical, ctx.title)?,
     }])
 }
 
@@ -191,15 +191,16 @@ fn render_plan_md(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 
 /// The IP fileset: authored `plan.toml` + prose `plan.md` under the slice dir.
 fn plan_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-    let name = format!("{:03}", ctx.id);
+    let (id, canonical) = ctx.numbered()?;
+    let name = format!("{id:03}");
     Ok(vec![
         Artifact::File {
             rel_path: PathBuf::from(format!("{name}/plan.toml")),
-            body: render_plan_toml(ctx.canonical_id)?,
+            body: render_plan_toml(canonical)?,
         },
         Artifact::File {
             rel_path: PathBuf::from(format!("{name}/plan.md")),
-            body: render_plan_md(ctx.canonical_id, ctx.title)?,
+            body: render_plan_md(canonical, ctx.title)?,
         },
     ])
 }
@@ -213,10 +214,11 @@ fn render_notes(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 
 /// The notes fileset: one durable `notes.md` under the parent slice dir.
 fn notes_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
-    let name = format!("{:03}", ctx.id);
+    let (id, canonical) = ctx.numbered()?;
+    let name = format!("{id:03}");
     Ok(vec![Artifact::File {
         rel_path: PathBuf::from(format!("{name}/notes.md")),
-        body: render_notes(ctx.canonical_id, ctx.title)?,
+        body: render_notes(canonical, ctx.title)?,
     }])
 }
 
@@ -341,20 +343,19 @@ pub(crate) fn run_new(
         &SLICE_KIND,
         &LocalFs,
         &root,
+        &MaterialiseRequest::Fresh,
         &Inputs {
-            existing_id: None,
             slug: &slug,
             title: &title,
             date: &date,
         },
     )?;
 
-    writeln!(
-        io::stdout(),
-        "Created slice {:03}: {}",
-        out.id,
-        out.dir.display()
-    )?;
+    let id = out
+        .eid
+        .numeric_id()
+        .context("slice kind must yield a numeric id")?;
+    writeln!(io::stdout(), "Created slice {id:03}: {}", out.dir.display())?;
     Ok(())
 }
 
@@ -370,8 +371,8 @@ pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
         &DESIGN_KIND,
         &LocalFs,
         &root,
+        &MaterialiseRequest::InExisting { id },
         &Inputs {
-            existing_id: Some(id),
             slug: "",
             title: &meta.title,
             date: &date,
@@ -397,8 +398,8 @@ pub(crate) fn run_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
         &PLAN_KIND,
         &LocalFs,
         &root,
+        &MaterialiseRequest::InExisting { id },
         &Inputs {
-            existing_id: Some(id),
             slug: "",
             title: &meta.title,
             date: &date,
@@ -450,8 +451,8 @@ pub(crate) fn run_notes(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
         &NOTES_KIND,
         &LocalFs,
         &root,
+        &MaterialiseRequest::InExisting { id },
         &Inputs {
-            existing_id: Some(id),
             slug: "",
             title: &meta.title,
             date: &date,
@@ -517,12 +518,8 @@ mod tests {
             &SLICE_KIND,
             &LocalFs,
             root,
-            &Inputs {
-                existing_id: None,
-                slug,
-                title,
-                date,
-            },
+            &MaterialiseRequest::Fresh,
+            &Inputs { slug, title, date },
         )
         .unwrap()
     }
@@ -558,8 +555,10 @@ mod tests {
     #[test]
     fn slice_scaffold_lays_out_two_files_and_a_symlink() {
         let ctx = ScaffoldCtx {
-            id: 3,
-            canonical_id: "SL-003",
+            eid: entity::EntityId::Numbered {
+                id: 3,
+                canonical: "SL-003",
+            },
             slug: "vendor-skills",
             title: "Vendor skills",
             date: "2026-06-03",
@@ -600,8 +599,10 @@ mod tests {
     #[test]
     fn plan_scaffold_lays_out_toml_and_md() {
         let ctx = ScaffoldCtx {
-            id: 4,
-            canonical_id: "SL-004",
+            eid: entity::EntityId::Numbered {
+                id: 4,
+                canonical: "SL-004",
+            },
             slug: "",
             title: "Plan title",
             date: "2026-06-04",
@@ -663,8 +664,10 @@ mod tests {
     #[test]
     fn design_scaffold_is_a_single_file_no_symlink() {
         let ctx = ScaffoldCtx {
-            id: 3,
-            canonical_id: "SL-003",
+            eid: entity::EntityId::Numbered {
+                id: 3,
+                canonical: "SL-003",
+            },
             slug: "",
             title: "Vendor skills",
             date: "2026-06-03",
@@ -686,7 +689,7 @@ mod tests {
         let s = make_slice(root, "my-slug", "My Title", "2026-06-03");
         let slice_root = root.join(SLICE_DIR);
 
-        assert_eq!(s.id, 1);
+        assert_eq!(s.eid.numeric_id(), Some(1));
         assert!(slice_root.join("001").is_dir());
         assert!(slice_root.join("001/slice-001.toml").is_file());
         assert!(slice_root.join("001/slice-001.md").is_file());
@@ -758,8 +761,8 @@ mod tests {
             &DESIGN_KIND,
             &LocalFs,
             root,
+            &MaterialiseRequest::InExisting { id: 1 },
             &Inputs {
-                existing_id: Some(1),
                 slug: "",
                 title: "My Title",
                 date: "2026-06-03",
@@ -767,7 +770,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(out.id, 1);
+        assert_eq!(out.eid.numeric_id(), Some(1));
         let body = fs::read_to_string(slice_root.join("001/design.md")).unwrap();
         assert!(body.contains("Design SL-001: My Title"));
         // no second numeric dir, no extra symlink
@@ -786,8 +789,8 @@ mod tests {
             &DESIGN_KIND,
             &LocalFs,
             root,
+            &MaterialiseRequest::InExisting { id: 1 },
             &Inputs {
-                existing_id: Some(1),
                 slug: "",
                 title: "My Title",
                 date: "2026-06-03",
@@ -814,8 +817,8 @@ mod tests {
             &PLAN_KIND,
             &LocalFs,
             root,
+            &MaterialiseRequest::InExisting { id: 1 },
             &Inputs {
-                existing_id: Some(1),
                 slug: "",
                 title: "My Title",
                 date: "2026-06-04",
@@ -823,7 +826,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(out.id, 1);
+        assert_eq!(out.eid.numeric_id(), Some(1));
         let toml_body = fs::read_to_string(slice_root.join("001/plan.toml")).unwrap();
         assert!(toml_body.contains("slice   = \"SL-001\""));
         let md_body = fs::read_to_string(slice_root.join("001/plan.md")).unwrap();
@@ -844,8 +847,8 @@ mod tests {
             &PLAN_KIND,
             &LocalFs,
             root,
+            &MaterialiseRequest::InExisting { id: 1 },
             &Inputs {
-                existing_id: Some(1),
                 slug: "",
                 title: "My Title",
                 date: "2026-06-04",
@@ -874,8 +877,8 @@ mod tests {
             &NOTES_KIND,
             &LocalFs,
             root,
+            &MaterialiseRequest::InExisting { id: 1 },
             &Inputs {
-                existing_id: Some(1),
                 slug: "",
                 title: "My Title",
                 date: "2026-06-04",
@@ -899,8 +902,8 @@ mod tests {
             &NOTES_KIND,
             &LocalFs,
             root,
+            &MaterialiseRequest::InExisting { id: 1 },
             &Inputs {
-                existing_id: Some(1),
                 slug: "",
                 title: "My Title",
                 date: "2026-06-04",
