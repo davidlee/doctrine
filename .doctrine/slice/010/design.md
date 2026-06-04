@@ -62,11 +62,15 @@ Two independent installers, each with its own pure `Plan`/`Step` model:
 
 `skills install` (Claude target) becomes two ordered phases:
 
-1. **Materialise canonical — atomically.** For each selected skill, stage the
-   embedded files into a temp dir under `.doctrine/skills/.tmp-<id>/`, then
-   `rename` it over `.doctrine/skills/<id>` (atomic on unix; a live symlink's
-   target swaps whole, never dangles or half-writes). Always overwrite — derived,
-   owns no authored data. Reuses `copy_skill` to fill the temp dir.
+1. **Materialise canonical — staged, minimal-window.** For each selected skill:
+   clear any crashed leftover `.doctrine/skills/.tmp-<id>/`, stage the embedded
+   files into it (`copy_skill`, same filesystem so `rename` is valid), then
+   `remove_dir_all(.doctrine/skills/<id>)` and `rename(.tmp-<id> → <id>)`. **Note
+   the unix reality: `rename` does NOT replace a non-empty directory** (would
+   `ENOTEMPTY`), and `std` has no `renameat2(RENAME_EXCHANGE)`, so a full directory
+   swap cannot be a single atomic op. The window is one syscall wide (between the
+   `remove` and the `rename`); a crash there leaves the link dangling and the next
+   `skills install` heals it (idempotent, derived tree). Always overwrite.
 2. **Reconcile the agent link by proven ownership.** For each selected skill,
    classify `.claude/skills/<id>` by `symlink_metadata` + `read_link`:
    - **missing** → create the relative symlink → canonical (`Link`);
@@ -99,9 +103,12 @@ The `npx` delegate path is unchanged (Claude-first; accepted split-source).
   - `classify_link(dest, target) -> Link` — the ownership decision (read_link +
     compare).
 - New imperative helpers behind the seam:
-  - `materialise_canonical(entry, canonical_dir)` — stage to temp + `rename`.
-  - `write_link(dest, target)` — create the symlink via temp-name + `rename`
-    (atomic replace of a prior *owned* link).
+  - `materialise_canonical(entry, canonical_dir)` — clear stale temp, stage, then
+    `remove_dir_all` + `rename` (minimal-window; see §5.1).
+  - `write_link(dest, target)` — create the symlink via temp-name + `rename`. This
+    one **is** genuinely atomic: `rename` *does* replace an existing symlink/file
+    (only non-empty dirs are the exception), so an owned-link relink never leaves a
+    half-state.
   - `ensure_gitignored(root, "​.doctrine/skills/*")` — shared with `install.rs`
     (extract from its gitignore step): `skills install` enforces its own derived-
     tree ignore invariant rather than depending on a prior `doctrine install`
@@ -149,8 +156,22 @@ owns canonical *contents*, the agent links, **and** its own ignore invariant
 - **Detection** uses `symlink_metadata`/`read_link`, never `exists()` (which
   follows links). A dangling link with *our* target → ours → healed by the
   canonical re-materialise.
-- **Atomicity:** canonical swap and link write are both stage + `rename`. A crash
-  leaves either the old or the new whole tree/link — never a partial.
+- **Atomicity (asymmetric, by unix reality):** the **link** write is atomic
+  (`rename` replaces a symlink in one op). The **canonical dir** swap is *not* a
+  single atomic op (`rename` can't replace a non-empty dir; no `renameat2` in std)
+  — it is staged with a one-syscall window, crash-healed by an idempotent re-run.
+  A crash never corrupts a *partial* tree (the half-written copy lives in
+  `.tmp-<id>`, never under `<id>`); the only failure mode is a dangling link until
+  re-install.
+- **Ownership spelling (accepted limitation):** ownership is raw
+  `read_link(dest) == <relative target>`. An equivalent link in a *different
+  spelling* (absolute, or a normalised relative path — e.g. one a future version
+  emitted) classifies as **foreign** → kept + warned, **not healed**. This is
+  safe-degrading (never clobbers, never data-loss) but means a spelling change
+  across versions needs an explicit migration. v1 emits exactly one spelling, so
+  the case does not arise in-version. Normalising both sides before comparison is a
+  possible future hardening (rejected for v1 — budget; dangling-but-ours links
+  don't resolve, so canonicalisation isn't reliable anyway).
 - **Partial multi-agent failure** (F6): the Claude phase is atomic and
   non-destructive; if a later `npx` agent fails, the Claude side is correctly
   applied and the command errors — benign, idempotent on re-run. Cross-`npx`
@@ -182,9 +203,14 @@ owns canonical *contents*, the agent links, **and** its own ignore invariant
   regression against the never-clobber constraint.
 - **D4 — Claude-first; `npx` delegation untouched.** Smallest diff. Global
   detection/list deferred (Q4).
-- **D5 — atomic materialise (stage + rename), not rm-in-place.** Live links forbid
-  a destructive in-place refresh (F1). Alt (rejected): `rm -rf` + file-by-file
-  copy — dangles every managed link on interruption.
+- **D5 — staged materialise (stage to temp → remove → rename), not copy-in-place.**
+  Live links forbid a copy that half-writes under `<id>` (F1). The dir swap is
+  minimal-window, not atomic — `rename` can't replace a non-empty dir and std lacks
+  `renameat2` (review pass 2, finding 4). The leaf-link write *is* atomic. Alt
+  (rejected): file-by-file copy directly into `<id>` — exposes a half-written tree
+  to readers. Alt (rejected for v1): symlink-indirection canonical (`<id>` → a
+  content dir, swap the inner symlink atomically) — real atomicity but double
+  indirection, over budget.
 - **D6 — canonical owned by `skills install`, dir location by `doctrine install`;
   ignore invariant enforced by both.** (F4.)
 
@@ -239,8 +265,24 @@ findings. Disposition:
 - **F6 (multi-agent non-transactional)** — accepted-in-part: dissolves once F1/F2
   make the Claude phase atomic + non-destructive; residue documented (§5.5).
 
-Re-review the revised design (target equality + atomic rename) before lock —
-specifically whether `read_link` value comparison is robust to absolute-vs-relative
-or normalised targets (the installer always writes the relative form, so compare
-against that exact string; a normalised/absolute foreign link reads as foreign,
-which is the safe default).
+**Second codex pass** (revised design) — **verdict: red**, but four of six findings
+were category errors: the reviewer read the *committed code* and flagged that the
+design is not yet implemented (old `Step::{Install,Skip}`, no `ensure_gitignored`,
+`list` still `exists()`, old tests). Those are the implementation work, gated behind
+the plan — not design defects; they are correct observations of "not built yet."
+Two were genuine design bugs, both accepted:
+
+- **P2-F4 (load-bearing) — `rename` cannot replace a non-empty directory on unix;
+  no `renameat2` in std.** The draft's "stage + rename = atomic" was false for the
+  canonical *directory*. Fixed → §5.1/§5.2/§5.5/D5: staged + minimal-window swap
+  (remove + rename), one-syscall window, crash-healed by idempotent re-run; the
+  *leaf-link* write remains genuinely atomic.
+- **P2-F5 — raw `read_link` string equality misclassifies a differently-spelled own
+  link as foreign.** Accepted as a documented, safe-degrading limitation (kept +
+  warned, never clobbered); v1 emits one spelling. §5.5 + D3.
+
+Design is considered **locked** after these two fixes: further design-vs-code review
+will only re-surface "not implemented" until the plan executes. The atomicity and
+ownership-spelling trade-offs are explicit; remaining correctness (e.g. the exact
+swap sequence, stale-temp cleanup, `lexists`) is now a matter of faithful
+implementation + the §9 tests, which the plan owns.
