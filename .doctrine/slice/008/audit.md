@@ -84,3 +84,28 @@ phase sheets.
 - Behaviour-preservation gate: the SL-005 `show` goldens stayed green through the
   `render_show` arity change (None ⇒ byte-identical) — the proof the shared renderer
   was not disturbed.
+
+## second-pass: confirmed (independent /code-review, 2026-06-05)
+
+Adversarial second pass over `HEAD~3..HEAD` (PHASE-05 + DRY refactor + close-out).
+Tried to REFUTE the four crux claims; all hold. Gate re-run green: 303 unit + 4 e2e,
+clippy zero (bin).
+
+- **D2 nonce** — `retrieve.rs:783` mints inside the `for c in select_shown(…)` loop,
+  never hoisted; e2e asserts N blocks ⇒ N distinct close fences. Confirmed.
+- **B7/D8 holdback** — `select_shown` suppresses `held_back` PRE-`take`; `read_body`
+  runs only over the ≤limit shown set (`:780`). No `--include-held-back`. Traced all
+  three `--min-trust` tiers through `holdback_floor`'s `.min(default)` clamp: `low`
+  is a no-op, `high` raises — non-bypassable downward. Confirmed.
+- **A-1 (the live edge)** — independently agree with DEFER. The holdback already
+  trusts the store on the `trust_level` axis (a hostile author escapes via
+  `trust=high` regardless), so fail-safing only severity (`unknown ⇒ high`) closes a
+  strictly smaller hole than the trust axis leaves open — it buys nothing until the
+  store admits untrusted severity. Accepted v1 risk, not a defect; no re-open.
+- **render_show arity** — `:882` `map_or(String::new(), …)` ⇒ `None` is byte-identical;
+  SL-005 goldens + the with/without unit tests prove it. Confirmed.
+
+Independent checks beyond the four probes: body reads bounded by `limit ≤ 20` (no
+unbounded read); the `staleness:` header is a doctrine-computed enum label (F-A2
+injection-safe); the §10 design fold-in honestly records D-A1/D-A2/A-1 rather than
+retrofitting the old pseudocode. No defect found — close-out stands.
