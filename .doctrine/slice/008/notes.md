@@ -81,3 +81,37 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
   otherwise ambiguous); the pathspec genuinely narrows — a commit touching only
   other paths yields `Some(0)`. `let range = format!(…)` bound before the args vec
   borrows `&range`.
+
+## PHASE-04 — durable decisions (find shell + shared pipeline)
+
+- **The impure shell lives in `src/retrieve.rs`** alongside the pure core it drives
+  (mirrors `memory.rs`'s pure-render / impure-`run_*` split). `freeze` (one
+  `capture` + one `clock::today`), `git_facts` (the §5.1 gate), the shared `query`
+  pipeline, `format_find`, `run_find`. The PHASE-01 module-level
+  `#![expect(dead_code)]` is RETIRED — the shell makes the pure layer live.
+- **No `Ranked` type — `Candidate` post-`rank` IS the ranked unit.** Design writes
+  `Vec<Ranked>` conceptually; impl returns `Vec<Candidate<'a>>` borrowing an owned
+  `Vec<Memory>` the caller holds. The shared `query(mems, q, snap, include_draft,
+  root)` is surface-agnostic — **PHASE-05 retrieve reuses it verbatim** (EX-6/F3),
+  reading bodies per `take(limit)` hit via the existing `resolve_show` seam.
+- **GitFacts gate = staleness branch-1 cond + `Some` target:**
+  `!scope.paths.is_empty() && !verified_sha.is_empty() && target.is_some()` ⇒ call
+  `commits_touching`; else `GitFacts::default()` (no subprocess). Keeps git cost to
+  candidates whose staleness actually needs it.
+- **`capture` errors degrade, never fail** (B18/B19): `capture(root).ok()` ⇒
+  `target None` + `repo None`. A multi-root/submodule tree then finds only
+  repo-empty (global) memories, visibly `Unknown`/time-mode. Hides genuine git
+  breakage — accepted v1 (D19 visibility); a future `--explain`/warn could surface.
+- **DRY reuse, no parallel impl:** promoted `memory::{collect_memories, select_rows,
+  scrub_line, MEMORY_ITEMS_DIR, WORKSPACE}` to `pub(crate)`. `--type/--status` ride
+  `select_rows` (F2); `--tag` is a SCOPE dimension (`QueryContext.tags`), so
+  `select_rows` is called with `tag_f = None`. `format_find` reuses `scrub_line`
+  (F-A10) so a newline in a value cannot forge a row.
+- **find row uid = FULL uid**, superseding design §5.2 `uid-short` (F-A11 actionable
+  + F-A12 v7 prefixes collide). design.md §10 review log carries the fold-in
+  F-finding. find is holdback-EXEMPT (D8/D17): trust+sev are visible COLUMNS, not
+  filters; suppression is PHASE-05's job. `base_filter` already drops
+  quarantined/retracted/superseded/archived (draft unless `--include-draft`).
+- **CLI `--path-scope`** (not `--path` — `-p/--path` is the root flag, same
+  collision `record` resolved identically). `run_find` carries
+  `#[expect(clippy::too_many_arguments)]` (CLI surface fans flags 1:1).

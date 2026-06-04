@@ -447,3 +447,12 @@ External-review pass (2026-06-04, contract-tightening — no architecture change
 > divergence; B12-14 ordinal polarity locked (D18); B15 body not lexically scanned (Q1);
 > B17 empty-path ⇒ None; B18 per-candidate git Unknown; B19 dirty target = `base_commit`.
 > No open architectural questions remain; SL-007 landing (R5) is still the only gate.
+>
+> **Implementation fold-in 2026-06-05 (PHASE-04).** F-A11/F-A12 supersede the
+> `uid-short` find-column wording (§5.2 line 178): `find` rows print the **full**
+> uid, matching `list`. Rationale — a uuid-v7 short prefix shares the leading
+> ms-timestamp bucket so 8 hex already collide (F-A12), and the full uid is the
+> only form actionable for `show`/`verify` (F-A11). `show` does accept a uid
+> *prefix* (`resolve_uid_prefix`, min 8 hex, ambiguity = error), so a hand-shortened
+> id still works when unique — but `find` does not pre-shorten. Read §5.2's
+> `uid-short` as "the uid column" only.

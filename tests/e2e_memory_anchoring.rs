@@ -127,3 +127,67 @@ fn record_commit_verify_show_list_against_the_built_binary() {
         "list surfaces the recorded memory: {listed}"
     );
 }
+
+/// SL-008 PHASE-04 — `find` over the built binary: the shared shell freezes the
+/// snapshot, resolves per-candidate staleness via `commits_touching`, ranks, and
+/// renders rows. A scope-bearing query drops a non-matching memory; the matcher's
+/// row carries the full uid, the matched `paths` spec, the risk columns, and a
+/// commit-mode `fresh` staleness (verified SHA == frozen target ⇒ Some(0)).
+#[test]
+fn find_ranks_scope_matches_against_the_built_binary() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+
+    git(dir, &["init", "-q"]);
+    std::fs::write(dir.join("README.md"), "seed\n").expect("write seed");
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", "seed"]);
+
+    // A: scoped to README.md; B: scoped elsewhere (the non-match).
+    let a = parse_uid(&doctrine(
+        dir,
+        &[
+            "memory",
+            "record",
+            "readme fact",
+            "--type",
+            "fact",
+            "--path-scope",
+            "README.md",
+        ],
+    ));
+    let b = parse_uid(&doctrine(
+        dir,
+        &[
+            "memory",
+            "record",
+            "other fact",
+            "--type",
+            "fact",
+            "--path-scope",
+            "src/other.rs",
+        ],
+    ));
+
+    // Commit the store, then verify A so it enters commit-staleness mode.
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", "store"]);
+    doctrine(dir, &["memory", "verify", &a]);
+
+    // find scoped to README.md: A matches, B does not.
+    let rows = doctrine(dir, &["memory", "find", "--path-scope", "README.md"]);
+    assert!(rows.contains(&a), "A (README scope) is found: {rows}");
+    assert!(
+        !rows.contains(&b),
+        "B (other scope) is dropped by a README query: {rows}"
+    );
+    // A's row: matched dimension + commit-mode fresh (verified_sha == target).
+    assert!(
+        rows.contains("paths"),
+        "spec column shows the matched dimension: {rows}"
+    );
+    assert!(
+        rows.contains("fresh"),
+        "verified SHA == frozen target ⇒ Some(0) fresh: {rows}"
+    );
+}

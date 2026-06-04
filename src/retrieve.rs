@@ -11,11 +11,10 @@
 //! the query is a working location (`paths` ∪ `globs`, treated as path subjects)
 //! plus facets (`commands`, `tags`). A memory matches if its scope ADMITS that
 //! location via any dimension; the highest-specificity dimension wins.
-#![expect(
-    dead_code,
-    reason = "PHASE-01 pure predicate layer; its only caller is the PHASE-04 \
-              shell (SL-008). The expectation self-clears when that lands."
-)]
+//!
+//! PHASE-04 wires the impure shell (`freeze`/`query`/`run_find`) over this pure
+//! core, so the module is no longer dead — the PHASE-01 `#![expect(dead_code)]`
+//! is retired (its self-clearing condition has arrived).
 
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
@@ -44,6 +43,16 @@ impl Dimension {
             Self::Globs => 2,
             Self::Commands => 1,
             Self::Tags => 0,
+        }
+    }
+
+    /// The `spec` column label — the matched dimension name (PHASE-04 find rows).
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Paths => "paths",
+            Self::Globs => "globs",
+            Self::Commands => "commands",
+            Self::Tags => "tags",
         }
     }
 }
@@ -270,6 +279,18 @@ pub(crate) enum Staleness {
     Unanchored,
 }
 
+impl Staleness {
+    /// The `staleness` column / header label (PHASE-04 find + PHASE-05 retrieve).
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Fresh => "fresh",
+            Self::Stale => "stale",
+            Self::Unknown => "unknown",
+            Self::Unanchored => "unanchored",
+        }
+    }
+}
+
 /// Git reachability fact for one candidate, resolved at the shell (PHASE-04) and
 /// crossing the pure seam as plain data (design D3). `commits_since` counts
 /// commits touching the scoped paths since `verified_sha`; `None` = undecidable
@@ -421,6 +442,202 @@ fn sort_key<'a>(c: &Candidate<'a>, today: &str) -> SortKey<'a> {
 pub(crate) fn rank<'a>(mut cands: Vec<Candidate<'a>>, today: &str) -> Vec<Candidate<'a>> {
     cands.sort_by(|a, b| sort_key(a, today).cmp(&sort_key(b, today)));
     cands
+}
+
+// === PHASE-04: the impure shell (find) + the shared query pipeline ===========
+// Frozen-once-per-query git/clock facts cross into the pure core above as data
+// (design §5.1). The pure layer never reads a clock, git, or disk; this shell is
+// the only place that does. `retrieve` (PHASE-05) reuses `freeze` + `query`.
+
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+
+use anyhow::Result;
+
+/// The git/clock facts frozen once per query (design §5.1/§5.2). `target` is the
+/// born-frame `base_commit` (HEAD even on a dirty tree — D1/D9/B19), `None`
+/// outside a usable git context; a `capture` error degrades to `None` rather than
+/// failing the whole query (B18/B19).
+pub(crate) struct Snapshot {
+    pub(crate) today: String,
+    pub(crate) target: Option<String>,
+    pub(crate) part: QueryPartition,
+}
+
+/// Freeze the query snapshot at the shell edge. `capture(root).ok()` swallows an
+/// unstable-frame error (multi-root/submodule/…) into a degraded `target: None` +
+/// `repo: None` — a thinner, visibly-`Unknown` result set, never a hard failure
+/// (B18/B19). The single git capture + the single clock read per query.
+pub(crate) fn freeze(root: &Path) -> Snapshot {
+    let frame = crate::git::capture(root).ok();
+    let target = frame
+        .as_ref()
+        .map(|f| f.base_commit.clone())
+        .filter(|s| !s.is_empty());
+    let repo = frame
+        .as_ref()
+        .map(|f| f.repo.repo_id.clone())
+        .filter(|s| !s.is_empty());
+    Snapshot {
+        today: crate::clock::today(),
+        target,
+        part: QueryPartition {
+            workspace: crate::memory::WORKSPACE.to_owned(),
+            repo,
+        },
+    }
+}
+
+/// Resolve the per-candidate git facts under the §5.1 gate: a candidate counts
+/// commits only when it is path-scoped, attested (`verified_sha`), and the
+/// snapshot froze a target. Otherwise no subprocess — `commits_since: None`
+/// (staleness falls to a non-commit mode). A `commits_touching` failure is
+/// per-candidate (`None` ⇒ `Staleness::Unknown`), never a query abort (B18).
+fn git_facts(root: &Path, m: &Memory, snap: &Snapshot) -> GitFacts {
+    if m.scope.paths.is_empty() || m.anchor.verified_sha.is_empty() {
+        return GitFacts::default();
+    }
+    let Some(target) = snap.target.as_deref() else {
+        return GitFacts::default();
+    };
+    GitFacts {
+        commits_since: crate::git::commits_touching(
+            root,
+            &m.scope.paths,
+            &m.anchor.verified_sha,
+            target,
+        ),
+    }
+}
+
+/// The shared query pipeline (design §5.1, review B9) — surface-agnostic so
+/// `retrieve` reuses it (EX-6/F3). Borrows an owned `&[Memory]` the caller holds;
+/// returns the ranked survivors. Each memory runs the filter cascade
+/// `base_filter → match_scope → thread_expiry`, then crosses into the ordering
+/// core as a `Candidate` carrying its derived signals. A scope-bearing query
+/// requires a `match_scope` hit; a bare `--query` keeps every survivor with no
+/// scope match (specificity 0, D20).
+pub(crate) fn query<'a>(
+    mems: &'a [Memory],
+    q: &QueryContext,
+    snap: &Snapshot,
+    include_draft: bool,
+    root: &Path,
+) -> Vec<Candidate<'a>> {
+    let scoped = q.has_scope_constraints();
+    let cands: Vec<Candidate<'a>> = mems
+        .iter()
+        .filter(|m| base_filter(m, &snap.part, include_draft))
+        .filter_map(|m| {
+            let scope_match = match_scope(m, q);
+            // Scope-bearing query: a non-match drops. Bare --query: keep (None).
+            if scoped && scope_match.is_none() {
+                return None;
+            }
+            // thread_expiry reads only `m`; its ScopeMatch arg is vestigial.
+            let probe = scope_match.unwrap_or_else(|| ScopeMatch::of(Dimension::Tags));
+            if !thread_expiry(m, probe, &snap.today) {
+                return None;
+            }
+            let facts = git_facts(root, m, snap);
+            Some(Candidate::new(m, scope_match, q, facts, &snap.today))
+        })
+        .collect();
+    rank(cands, &snap.today)
+}
+
+/// Format `find` rows: aligned `uid type status staleness trust sev spec title`.
+/// The **full** uid is printed (F-A11 — actionable for `show`/`verify`, and v7
+/// short prefixes collide, F-A12), overriding design §5.2's `uid-short` wording.
+/// `trust`+`sev` are always present so a holdback-exempt `find` keeps risk visible
+/// (B8/D8/D17). `spec` is the matched dimension (`-` for a bare `--query`). Every
+/// free value is `scrub_line`d (F-A10) so a newline cannot forge a row.
+fn format_find(cands: &[Candidate<'_>]) -> String {
+    let scrub = |s: &str| crate::memory::scrub_line(s);
+    let rows: Vec<[String; 8]> = cands
+        .iter()
+        .map(|c| {
+            let m = c.memory;
+            [
+                m.uid.clone(),
+                m.kind.as_str().to_owned(),
+                m.status.as_str().to_owned(),
+                c.staleness.label().to_owned(),
+                scrub(&m.trust_level),
+                scrub(&m.severity),
+                c.scope_match.map_or("-", |s| s.dim.label()).to_owned(),
+                scrub(&m.title),
+            ]
+        })
+        .collect();
+    // Width-align every column but the last (title) for a scannable table. The
+    // zips stop at `widths.len()` (7), so the title (`r`'s 8th cell) is excluded.
+    let mut widths = [0usize; 7];
+    for r in &rows {
+        for (w, cell) in widths.iter_mut().zip(r.iter()) {
+            *w = (*w).max(cell.len());
+        }
+    }
+    let lines: Vec<String> = rows
+        .iter()
+        .map(|r| {
+            let mut parts: Vec<String> = r
+                .iter()
+                .take(widths.len())
+                .zip(widths.iter())
+                .map(|(cell, w)| format!("{cell:<w$}", w = *w))
+                .collect();
+            if let Some(title) = r.last() {
+                parts.push(title.clone());
+            }
+            parts.join("  ")
+        })
+        .collect();
+    if lines.is_empty() {
+        String::new()
+    } else {
+        lines.join("\n") + "\n"
+    }
+}
+
+/// `doctrine memory find [--path-scope/--glob/--command/--tag/--query] [--type]
+/// [--status] [--include-draft]`. The find surface over the shared pipeline:
+/// collect → `select_rows` hard-filter (`--type`/`--status`, reused not forked —
+/// F2) → `freeze` → `query` → `format_find`. find applies NO holdback (D8/D17);
+/// `base_filter` already excludes quarantined/retracted/superseded/archived (and
+/// draft unless `--include-draft`).
+#[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
+pub(crate) fn run_find(
+    path: Option<PathBuf>,
+    paths: Vec<String>,
+    globs: Vec<String>,
+    commands: Vec<String>,
+    tags: Vec<String>,
+    free_query: Option<String>,
+    type_f: Option<MemoryType>,
+    status_f: Option<Status>,
+    include_draft: bool,
+) -> Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let items_root = root.join(crate::memory::MEMORY_ITEMS_DIR);
+    // --tag is a SCOPE dimension here, not the select_rows tag hard-filter (None).
+    let mems = crate::memory::select_rows(
+        crate::memory::collect_memories(&items_root)?,
+        type_f,
+        status_f,
+        None,
+    );
+    let q = QueryContext {
+        paths,
+        globs,
+        commands,
+        tags,
+        query: free_query,
+    };
+    let snap = freeze(&root);
+    let ranked = query(&mems, &q, &snap, include_draft, &root);
+    write!(io::stdout(), "{}", format_find(&ranked))?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1275,5 +1492,188 @@ weight = {weight}
         // despite a=Stale, b=Fresh, order is uid-ascending (u0 before u1)
         let ranked = rank(vec![cb, ca], TODAY);
         assert_eq!(ranked[0].memory.uid, u0);
+    }
+
+    // === PHASE-04: shell — labels, freeze, the gate, query pipeline, rows. ====
+
+    fn snap(target: Option<&str>, repo: Option<&str>) -> Snapshot {
+        Snapshot {
+            today: TODAY.to_owned(),
+            target: target.map(str::to_owned),
+            part: part(repo),
+        }
+    }
+
+    #[test]
+    fn staleness_and_dimension_labels() {
+        assert_eq!(Staleness::Fresh.label(), "fresh");
+        assert_eq!(Staleness::Stale.label(), "stale");
+        assert_eq!(Staleness::Unknown.label(), "unknown");
+        assert_eq!(Staleness::Unanchored.label(), "unanchored");
+        assert_eq!(Dimension::Paths.label(), "paths");
+        assert_eq!(Dimension::Globs.label(), "globs");
+        assert_eq!(Dimension::Commands.label(), "commands");
+        assert_eq!(Dimension::Tags.label(), "tags");
+    }
+
+    #[test]
+    fn freeze_outside_a_repo_degrades_to_no_target_no_repo() {
+        // A bare temp dir is not a git repo ⇒ capture yields a None-anchor frame:
+        // target/repo both None, but the query still runs (today is set).
+        let dir = tempfile::tempdir().expect("tempdir");
+        let s = freeze(dir.path());
+        assert_eq!(s.target, None);
+        assert_eq!(s.part.repo, None);
+        assert_eq!(s.part.workspace, "default");
+        assert!(!s.today.is_empty());
+    }
+
+    #[test]
+    fn git_facts_gate_skips_without_spawning() {
+        // None of the three gate conditions reaches git, so a non-repo root is
+        // safe — each skip case yields commits_since None with no subprocess.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        // unscoped (no paths)
+        let unscoped = memory(&Fixture {
+            verified_sha: "abc",
+            ..Default::default()
+        });
+        assert_eq!(
+            git_facts(root, &unscoped, &snap(Some("dead"), None)).commits_since,
+            None
+        );
+        // scoped but unattested (no verified_sha)
+        let unattested = memory(&Fixture {
+            paths: &["src/x.rs"],
+            ..Default::default()
+        });
+        assert_eq!(
+            git_facts(root, &unattested, &snap(Some("dead"), None)).commits_since,
+            None
+        );
+        // scoped + attested but no frozen target
+        let no_target = memory(&Fixture {
+            paths: &["src/x.rs"],
+            verified_sha: "abc",
+            ..Default::default()
+        });
+        assert_eq!(
+            git_facts(root, &no_target, &snap(None, None)).commits_since,
+            None
+        );
+    }
+
+    #[test]
+    fn query_scope_bearing_drops_nonmatching() {
+        let [u0, u1, _] = uids();
+        let hit = memory(&Fixture {
+            uid: u0,
+            paths: &["src/main.rs"],
+            ..Default::default()
+        });
+        let miss = memory(&Fixture {
+            uid: u1,
+            paths: &["docs/guide.md"],
+            ..Default::default()
+        });
+        let mems = vec![hit, miss];
+        let ranked = query(
+            &mems,
+            &q(&["src/main.rs"]),
+            &snap(None, None),
+            false,
+            Path::new("."),
+        );
+        assert_eq!(ranked.len(), 1);
+        assert_eq!(ranked[0].memory.uid, u0);
+    }
+
+    #[test]
+    fn query_bare_query_keeps_all_active_ranked_lexically() {
+        let [u0, u1, _] = uids();
+        // u0 matches the query token, u1 does not — both kept (D20), u0 ranks first.
+        let matchy = memory(&Fixture {
+            uid: u0,
+            title: "auth token",
+            ..Default::default()
+        });
+        let other = memory(&Fixture {
+            uid: u1,
+            title: "unrelated",
+            ..Default::default()
+        });
+        let mems = vec![matchy, other];
+        let ranked = query(
+            &mems,
+            &with_query("auth"),
+            &snap(None, None),
+            false,
+            Path::new("."),
+        );
+        assert_eq!(ranked.len(), 2, "bare --query keeps all active");
+        assert_eq!(ranked[0].memory.uid, u0, "lexical hit ranks first");
+    }
+
+    #[test]
+    fn query_base_filter_excludes_non_active() {
+        let retracted = memory(&Fixture {
+            status: "retracted",
+            paths: &["src/main.rs"],
+            ..Default::default()
+        });
+        let mems = vec![retracted];
+        let ranked = query(
+            &mems,
+            &q(&["src/main.rs"]),
+            &snap(None, None),
+            false,
+            Path::new("."),
+        );
+        assert!(ranked.is_empty(), "retracted is dropped by base_filter");
+    }
+
+    #[test]
+    fn format_find_row_carries_full_uid_and_required_columns() {
+        let m = memory(&Fixture {
+            paths: &["src/main.rs"],
+            trust_level: "low",
+            severity: "high",
+            title: "be careful",
+            ..Default::default()
+        });
+        let mut c = cand(&m, 0, false, Some(Dimension::Paths));
+        c.staleness = Staleness::Unknown;
+        let out = format_find(&[c]);
+        // full uid (not a short prefix), the matched dim, and the risk columns.
+        assert!(out.contains(UID), "full uid printed");
+        assert!(out.contains("paths"), "spec column = matched dim");
+        assert!(out.contains("low"), "trust visible");
+        assert!(out.contains("high"), "severity visible");
+        assert!(out.contains("unknown"), "staleness column");
+        assert!(out.contains("be careful"), "title");
+        assert!(out.ends_with('\n'));
+    }
+
+    #[test]
+    fn format_find_scrubs_a_newline_title() {
+        let m = memory(&Fixture {
+            title: "real",
+            ..Default::default()
+        });
+        // Inject a newline post-parse to prove the row formatter scrubs it (F-A10).
+        let mut m2 = m.clone();
+        m2.title = "row1\nforged-row2".to_owned();
+        let out = format_find(&[cand(&m2, 0, false, None)]);
+        assert!(
+            !out.contains("\nforged-row2"),
+            "newline must not forge a row"
+        );
+        assert!(out.contains("\\nforged-row2"), "newline rendered as escape");
+    }
+
+    #[test]
+    fn format_find_empty_is_empty_string() {
+        assert_eq!(format_find(&[]), "");
     }
 }

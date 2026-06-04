@@ -199,6 +199,46 @@ enum MemoryCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Find memories by scope/query, ranked; rows carry trust + severity so the
+    /// holdback-exempt find surface keeps risk visible.
+    Find {
+        /// Path scope probe, repeatable (`-p`/`--path` is the project root).
+        #[arg(long = "path-scope")]
+        path_scope: Vec<String>,
+
+        /// Glob scope probe, repeatable.
+        #[arg(long = "glob")]
+        glob: Vec<String>,
+
+        /// Command scope probe, repeatable.
+        #[arg(long = "command")]
+        command: Vec<String>,
+
+        /// Tag scope probe, repeatable.
+        #[arg(long = "tag")]
+        tag: Vec<String>,
+
+        /// Free-text lexical query (not a scope constraint).
+        #[arg(long)]
+        query: Option<String>,
+
+        /// Hard filter by type: concept|fact|pattern|signpost|system|thread.
+        #[arg(long = "type", value_parser = memory::MemoryType::parse)]
+        memory_type: Option<memory::MemoryType>,
+
+        /// Hard filter by lifecycle status.
+        #[arg(long, value_parser = memory::Status::parse)]
+        status: Option<memory::Status>,
+
+        /// Include `draft` memories (excluded by default).
+        #[arg(long = "include-draft")]
+        include_draft: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -409,6 +449,27 @@ fn main() -> anyhow::Result<()> {
                 tag,
                 path,
             } => memory::run_list(path, memory_type, status, tag.as_deref()),
+            MemoryCommand::Find {
+                path_scope,
+                glob,
+                command,
+                tag,
+                query,
+                memory_type,
+                status,
+                include_draft,
+                path,
+            } => retrieve::run_find(
+                path,
+                path_scope,
+                glob,
+                command,
+                tag,
+                query,
+                memory_type,
+                status,
+                include_draft,
+            ),
         },
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),

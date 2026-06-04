@@ -32,7 +32,7 @@ use crate::git::{AnchorKind, Confidence, RepoIdKind};
 
 /// Workspace coordinate carried on every memory; hardcoded `"default"` in v1 (no
 /// flag — design § 5.3 / interop constraint 6). Read back by `list`/`show`.
-const WORKSPACE: &str = "default";
+pub(crate) const WORKSPACE: &str = "default";
 
 /// The only schema version v1 emits and accepts (validated `== 1` on read).
 const SCHEMA_VERSION: u32 = 1;
@@ -705,7 +705,7 @@ pub(crate) fn memory_scaffold(d: &Draft<'_>) -> Result<Fileset> {
 
 /// The memory-items tree, relative to the project root — the `materialise_named`
 /// tree root every record claims `<uid>/` under.
-const MEMORY_ITEMS_DIR: &str = ".doctrine/memory/items";
+pub(crate) const MEMORY_ITEMS_DIR: &str = ".doctrine/memory/items";
 
 /// The shell-side inputs to `record` — the user-facing flags, bundled (mirrors
 /// `Draft`, the pure-render bundle) so `run_record` stays a two-argument seam and
@@ -838,7 +838,7 @@ fn render_anchor_line(m: &Memory) -> String {
 /// "data, not instruction" block — the A-2 nonce guards only the terminator, not
 /// the header projection (F-A2). Printable text (incl. `"`/`]`) passes through;
 /// only line-structure-breaking control chars are escaped.
-fn scrub_line(s: &str) -> String {
+pub(crate) fn scrub_line(s: &str) -> String {
     /// Lowercase hex digit for a nibble (`0..=15` always maps).
     fn nibble(n: u32) -> char {
         char::from_digit(n, 16).unwrap_or('0')
@@ -913,7 +913,7 @@ fn render_show(m: &Memory, body: &str, guard: &str) -> String {
 /// AND-filter (a `None` filter passes everything) then order **`created`
 /// descending, then `uid` ascending** — a deterministic default and a contract,
 /// not an incidental sort (design § 5.2, review #13).
-fn select_rows(
+pub(crate) fn select_rows(
     mut rows: Vec<Memory>,
     type_f: Option<MemoryType>,
     status_f: Option<Status>,
@@ -1043,7 +1043,7 @@ pub(crate) fn run_show(path: Option<PathBuf>, reference: &str) -> Result<()> {
 /// dirs only, so key symlink aliases never double-count (design § 5.5). A
 /// malformed `memory.toml` fails the listing: the store is tool-authored, a bad
 /// row is a real fault, not noise to skip.
-fn collect_memories(items_root: &Path) -> Result<Vec<Memory>> {
+pub(crate) fn collect_memories(items_root: &Path) -> Result<Vec<Memory>> {
     let mut out = Vec::new();
     for name in entity::scan_named(items_root)? {
         let toml_path = items_root.join(&name).join("memory.toml");
