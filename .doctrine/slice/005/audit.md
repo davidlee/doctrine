@@ -121,11 +121,17 @@ Scope held to A-1/A-2 + the A-3/A-4 disposition. TDD, red first on both blockers
   `render_memory_toml_escapes_hostile_interpolation_and_round_trips` (`"`, newline, `]` in
   title/summary/tag) — re-parses + round-trips. Verified in the real binary: a title with
   `"`/`]`/newline records, lists, and shows clean (serializer chose a `"""…"""` literal).
-- **A-2** — `render_show` fences the body with a per-memory guard derived from the uid:
-  header gains `body-guard: <uid>`, terminator is `=== END MEMORY <uid> ===`. A static
-  spoofed bare sentinel inside the body no longer matches the real close. Residual noted in
-  code: an attacker who knows this exact uid could reproduce the guard — defeating that needs
-  a per-render secret, which belongs in the impure shell (no rng/clock in this pure layer).
+- **A-2 — DONE (shell nonce, 2026-06-04)** — `render_show` now fences the body with a
+  per-render random **nonce**, not the uid. A body author owns the dir named by the uid,
+  so a uid-derived guard was forgeable; the nonce is minted in the impure shell
+  (`run_show`: `uuid::Uuid::new_v4().simple()`, dep already enabled) and threaded into the
+  still-pure `render_show(&m, &body, &nonce)`. Header carries `body-guard: <nonce>`,
+  terminator `=== END MEMORY <nonce> ===`. RED strengthened to the case the uid-guard
+  could NOT defend: a body embedding the memory's OWN uid sentinel — now bounded, the real
+  close carries the unpredictable nonce. Real-binary smoke: the guard differs every render.
+  Residual (inherent, not deferrable): any sentinel frame is advisory — binds a cooperating
+  reader, not the bytes; the nonce defeats forging the close, it cannot compel a reader. No
+  "future secret" deferral — the nonce IS the secret.
   RED: `show_render_fences_a_body_that_spoofs_the_end_sentinel`.
 - **A-3/A-4/A-5** — see each finding's *Disposition* line above. Net engine change: the
   named placement path is singular (`materialise_named`); `EntityId`/`numbered()`/
