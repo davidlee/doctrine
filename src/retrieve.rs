@@ -600,14 +600,24 @@ fn format_find(cands: &[Candidate<'_>]) -> String {
     }
 }
 
-/// `doctrine memory find [--path-scope/--glob/--command/--tag/--query] [--type]
-/// [--status] [--include-draft]`. The find surface over the shared pipeline:
-/// collect → `select_rows` hard-filter (`--type`/`--status`, reused not forked —
-/// F2) → `freeze` → `query` → `format_find`. find applies NO holdback (D8/D17);
-/// `base_filter` already excludes quarantined/retracted/superseded/archived (and
-/// draft unless `--include-draft`).
+/// The frozen-snapshot bundle the `find`/`retrieve` verbs both stand on. The two
+/// surfaces diverge ONLY after `query()` (find renders rows, retrieve renders
+/// framed blocks), so everything up to the snapshot is one path — see `load_query`.
+struct Loaded {
+    root: PathBuf,
+    items_root: PathBuf,
+    mems: Vec<Memory>,
+    q: QueryContext,
+    snap: Snapshot,
+}
+
+/// The shared shell prologue for the query verbs (no parallel impl — CLAUDE.md):
+/// resolve the root, collect + hard-filter the store (`--type`/`--status` ride the
+/// existing `select_rows` AND-filter — F2; `--tag` is a SCOPE dimension, NOT the
+/// `select_rows` tag filter, so it passes `None`), build the `QueryContext`, and
+/// `freeze` the snapshot once. Callers run `query()` then render their own surface.
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
-pub(crate) fn run_find(
+fn load_query(
     path: Option<PathBuf>,
     paths: Vec<String>,
     globs: Vec<String>,
@@ -616,11 +626,9 @@ pub(crate) fn run_find(
     free_query: Option<String>,
     type_f: Option<MemoryType>,
     status_f: Option<Status>,
-    include_draft: bool,
-) -> Result<()> {
+) -> Result<Loaded> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let items_root = root.join(crate::memory::MEMORY_ITEMS_DIR);
-    // --tag is a SCOPE dimension here, not the select_rows tag hard-filter (None).
     let mems = crate::memory::select_rows(
         crate::memory::collect_memories(&items_root)?,
         type_f,
@@ -635,6 +643,41 @@ pub(crate) fn run_find(
         query: free_query,
     };
     let snap = freeze(&root);
+    Ok(Loaded {
+        root,
+        items_root,
+        mems,
+        q,
+        snap,
+    })
+}
+
+/// `doctrine memory find [--path-scope/--glob/--command/--tag/--query] [--type]
+/// [--status] [--include-draft]`. The find surface over the shared pipeline:
+/// `load_query` → `query` → `format_find`. find applies NO holdback (D8/D17);
+/// `base_filter` already excludes quarantined/retracted/superseded/archived (and
+/// draft unless `--include-draft`). It needs no body read, so `items_root` is unused.
+#[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
+pub(crate) fn run_find(
+    path: Option<PathBuf>,
+    paths: Vec<String>,
+    globs: Vec<String>,
+    commands: Vec<String>,
+    tags: Vec<String>,
+    free_query: Option<String>,
+    type_f: Option<MemoryType>,
+    status_f: Option<Status>,
+    include_draft: bool,
+) -> Result<()> {
+    let Loaded {
+        root,
+        mems,
+        q,
+        snap,
+        ..
+    } = load_query(
+        path, paths, globs, commands, tags, free_query, type_f, status_f,
+    )?;
     let ranked = query(&mems, &q, &snap, include_draft, &root);
     write!(io::stdout(), "{}", format_find(&ranked))?;
     Ok(())
@@ -717,22 +760,15 @@ pub(crate) fn run_retrieve(
     limit: Option<usize>,
     min_trust: Option<&str>,
 ) -> Result<()> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    let items_root = root.join(crate::memory::MEMORY_ITEMS_DIR);
-    let mems = crate::memory::select_rows(
-        crate::memory::collect_memories(&items_root)?,
-        type_f,
-        status_f,
-        None,
-    );
-    let q = QueryContext {
-        paths,
-        globs,
-        commands,
-        tags,
-        query: free_query,
-    };
-    let snap = freeze(&root);
+    let Loaded {
+        root,
+        items_root,
+        mems,
+        q,
+        snap,
+    } = load_query(
+        path, paths, globs, commands, tags, free_query, type_f, status_f,
+    )?;
     let ranked = query(&mems, &q, &snap, include_draft, &root);
 
     let floor = holdback_floor(min_trust);
