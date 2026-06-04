@@ -49,7 +49,8 @@ doctrine slice list    [--status S] [-p ROOT]        # rows: id status slug titl
 doctrine memory record --type T [--key K] [--status S] [--summary S] [--tag T]…  # mint uid, scaffold
 doctrine memory show   <UID|KEY> [-p ROOT]           # header + body-as-data
 doctrine memory list   [--type T] [--status S] [--tag T] [-p ROOT]  # newest first; AND-filter
-                                                     #   find / retrieve (scope query) = SL-007
+                                                     #   scope+anchor capture, verify = SL-007
+                                                     #   find / retrieve (scope query) = SL-008
 
 doctrine adr new  [TITLE] [-p ROOT]                  # allocate next id, scaffold ADR
 doctrine adr list [--status S] [-p ROOT]             # rows: id status slug title
@@ -127,9 +128,10 @@ append, never renumber or reuse.
   command moves a slice proposed→…→done or links it to phase state.
 - **no standalone plan validation** — a malformed `plan.toml` only surfaces when
   `slice phases` parses it.
-- **memory retrieval** — `record/show/list` shipped (SL-005, done); scope-aware
-  `find`/`retrieve` (ranking + git staleness) is SL-007 (proposed). Read-by-id
-  only until it lands.
+- **memory retrieval** — `record/show/list` shipped (SL-005, done). Split into two
+  proposed slices: SL-007 (producer — `record` scope+git-anchor capture, `verify`,
+  the `src/git.rs` seam) and SL-008 (reader — scope-aware `find`/`retrieve`, 9-key
+  ranking, git staleness). Read-by-id only until they land.
 
 ## environment
 

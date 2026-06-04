@@ -1,6 +1,6 @@
 id = 7
-slug = "memory-retrieval"
-title = "Memory retrieval: find/retrieve + scope ranking + staleness"
+slug = "memory-anchoring"
+title = "Memory anchoring & capture: record scope+git frame, verify, git seam"
 status = "proposed"
 created = "2026-06-04"
 updated = "2026-06-04"
