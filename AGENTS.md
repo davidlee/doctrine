@@ -27,11 +27,13 @@ The CLI is not on PATH during dev — invoke the built binary directly:
   audit.md        verification / code-review / drift findings (hand-made; no scaffold yet)
   phases ->       symlink into the runtime state tree (GITIGNORED)
 
+.doctrine/adr/nnn/   adr-nnn.{toml,md} + nnn-slug symlink — project-global ADRs (authored)
 .doctrine/state/slice/nnn/phases/   runtime phase tracking (phase-NN.{toml,md}) — GITIGNORED
 doc/*       evergreen, authoritative specs. not yet structurally supported by doctrine
 doc/memories/  the bargain-bin memory store (see above)
 install/    sources copied to .doctrine by the installer; plugins/skills handled special
-src/        rust code
+src/        rust code (incl. src/git.rs — the impure born-frame capture seam,
+            forgettable's forget.remote.v1/forget.checkout.v1 reproduced byte-for-byte)
 ```
 
 ## doctrine cli
@@ -47,9 +49,11 @@ doctrine slice notes   <ID> [-p ROOT]                # scaffold durable notes.md
 doctrine slice list    [--status S] [-p ROOT]        # rows: id status slug title
 
 doctrine memory record --type T [--key K] [--status S] [--summary S] [--tag T]…  # mint uid, scaffold
-doctrine memory show   <UID|KEY> [-p ROOT]           # header + body-as-data
+                       [--path-scope P]… [--glob G]… [--command C]… [--repo R]   #   scope + born git anchor
+doctrine memory show   <UID|KEY> [-p ROOT]           # header + body-as-data (+ real anchor line)
+doctrine memory verify <UID|KEY> [-p ROOT]           # attest vs the working tree (refuses a dirty tree)
 doctrine memory list   [--type T] [--status S] [--tag T] [-p ROOT]  # newest first; AND-filter
-                                                     #   scope+anchor capture, verify = SL-007
+                                                     #   scope+anchor capture, verify = SL-007 (done)
                                                      #   find / retrieve (scope query) = SL-008
 
 doctrine adr new  [TITLE] [-p ROOT]                  # allocate next id, scaffold ADR
@@ -94,8 +98,9 @@ harvest durable risks/decisions/findings from the disposable phase sheets into
 ## storage model (the storage rule)
 
 Three tiers — know which one you're writing:
-- **authored** (`*.toml` + `*.md` under `slice/nnn/`): committed, diffable, reviewed.
-  Structured data in TOML; prose in MD; **never queried/derived data in prose.**
+- **authored** (`*.toml` + `*.md` under `slice/nnn/` and `adr/nnn/`): committed,
+  diffable, reviewed. Structured data in TOML; prose in MD; **never queried/derived
+  data in prose.** ADRs are authored entities too — status lives in `adr-nnn.toml`.
 - **runtime state** (`.doctrine/state/`, the `phases` symlink, `handover.md`):
   GITIGNORED, disposable, `rm -rf`-able. Progress lives here, never in authored files.
 - **derived**: regenerable indexes/caches — gitignored.
@@ -128,10 +133,10 @@ append, never renumber or reuse.
   command moves a slice proposed→…→done or links it to phase state.
 - **no standalone plan validation** — a malformed `plan.toml` only surfaces when
   `slice phases` parses it.
-- **memory retrieval** — `record/show/list` shipped (SL-005, done). Split into two
-  proposed slices: SL-007 (producer — `record` scope+git-anchor capture, `verify`,
-  the `src/git.rs` seam) and SL-008 (reader — scope-aware `find`/`retrieve`, 9-key
-  ranking, git staleness). Read-by-id only until they land.
+- **memory retrieval** — `record/show/list` shipped (SL-005). SL-007 (producer —
+  `record` scope+git-anchor capture, `verify`, the `src/git.rs` seam) **done**.
+  SL-008 (reader — scope-aware `find`/`retrieve`, 9-key ranking, git staleness)
+  remains: read-by-id only until it lands.
 
 ## environment
 

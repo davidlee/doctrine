@@ -199,3 +199,35 @@ All decisions resolved — design.md folding + the Q-A spec edit can proceed.
   made by the reviewer** (correctness-first; LOCKED spec).
 - Gate held: no plan scaffolded, no code. `slice plan 7` only after the design
   holds.
+
+## Close-out (PHASE-06 — slice complete)
+
+All BLOCKING/MAJOR/MINOR findings landed across PHASE-01..06 and are green:
+
+- **B1/M3, B4, Q-A/D/E** — `src/git.rs` reproduces forgettable's
+  `forget.remote.v1`/`forget.checkout.v1` byte-for-byte; the conformance
+  golden-vector + verbatim normalize-url table pin byte-identity (PHASE-01/02).
+- **B2** — dirty → `anchor_kind=checkout_state`, `commit=""`, HEAD in `base_commit`
+  (PHASE-02, `record_in_a_dirty_repo`).
+- **B3/D6, M6** — `verify` reuses the adr `toml_edit` F-1 guard over
+  template-seeded keys, written via `fsutil::write_atomic` (temp+rename) (PHASE-04/05).
+- **M1** — explicit empty/absent→`None` normalization in `Anchor`/`Scope`
+  validation, with the legacy-compat fixture (PHASE-03).
+- **M2** — detached HEAD stays anchored (`ref_name=""`), `none` reserved for
+  unborn/non-repo (PHASE-02); `show` renders `ref detached`.
+- **m1** — repo-scoped predicate = non-empty `repo_id` (derived or `--repo`), the
+  constraint-4 gate (PHASE-04).
+- **Q-B/M4** — `verify` refuses a dirty tree; non-git stamps the review axis with
+  empty `verified_sha` (PHASE-05).
+- **m2** — `review_by` (the verification horizon) is parsed/carried but left empty
+  by `verify` in v1 (documented deferral, F6).
+
+Two committed-output judgement calls (notes F7) **confirmed**, see notes **F9**:
+the flat `[git].normalizer` placement and the unborn/non-git constraint-4
+asymmetry both hold for v1 — `show` reads anchor presence only.
+
+**Gate:** 214 lib tests + 1 e2e (`tests/e2e_memory_anchoring.rs`, the
+record→commit→verify→show→list loop over the built binary) green; `cargo clippy`
+zero, `cargo fmt` clean; entity/slice/state suites unchanged (behaviour-preserved).
+SL-007 producer surface complete. Reader (`find`/`retrieve`, ranking, staleness)
+is SL-008.

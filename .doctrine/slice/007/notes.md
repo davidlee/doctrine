@@ -127,3 +127,44 @@ token via `git::*::as_str` (single spelling source). User-influenceable values
 userinfo-stripped). `RecordArgs<'a>` is the shell-input bundle (parallels `Draft`).
 Template is **rust-embed**'d from `install/` → a rebuild (not `doctrine install`)
 picks up template edits.
+
+### F8 — `verify` refuses an uncommitted store; workflow is record→commit→verify (PHASE-05)
+
+`record` writes **untracked** files into the working tree, so the tree is dirty
+until the store is committed. `verify` attests the *project root* and refuses a
+dirty tree (Q-B, no false attestation) — so a memory cannot be verified in the same
+breath it is recorded. The workflow is **record → commit → verify**. Consequences:
+
+- The PHASE-06 e2e (`tests/e2e_memory_anchoring.rs`) commits the store between
+  `record` and `verify` — without the intervening commit, `verify` refuses.
+- Documented on the CLI surface (AGENTS.md `memory verify … # refuses a dirty tree`).
+- Strict same-HEAD byte-idempotency is only observable at `stamp_verification`
+  level (each real stamp+commit moves HEAD), tested there directly, not e2e.
+
+*Not a defect* — it is the honest-attestation invariant doing its job. The only
+ergonomic cost is the mandatory intervening commit, which is the point.
+
+### F9 — close-out audit: F7's two judgement calls CONFIRMED (PHASE-06)
+
+The two committed-output judgement calls flagged in F7 stand after the close-out
+re-look:
+
+1. **`[git].normalizer` present iff `anchor_kind=checkout_state`.** `show` (the
+   first consumer) reads only anchor *presence*, never the normalizer tag — so the
+   flat single-field placement carries no reader risk in v1. The repo-identity
+   algorithm stays implicit in `repo_id_kind` + the golden vector. Revisit only if
+   SL-008 staleness or the forgettable adapter needs an always-present remote tag.
+2. **Constraint-4 asymmetry (unborn repo-scoped record errors; non-git succeeds
+   unscoped).** Literal design (§5.4 m1 / §5.5) — intentional, exercised by
+   `record_in_a_dirty_repo` + the VT-2 non-git paths. Surprising but correct; left
+   as-is, surfaced here for the SL-008 reader's awareness.
+
+### F10 — `show` anchor line: trust pair sourced from `Scope`, not `Anchor` (PHASE-06)
+
+`render_anchor_line` (`src/memory.rs`) projects the one `anchor:` line:
+`none` | `<kind> <id> ref <ref|detached> verified <yes|no> repo-id <kind>/<conf>`.
+`<id>` = `commit` (clean) or `checkout_state_id` (dirty); `verified` reflects
+`verified_sha` **presence**, never the sha (design EX-1). The trust pair is read
+from `m.scope.repo_id_kind/confidence` — `Anchor` excludes repo identity (F6), so
+the line splices two model parts. Kept on one line (it sits inside the
+hostile-input data block; the body-guard framing is unchanged).
