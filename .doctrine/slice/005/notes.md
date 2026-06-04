@@ -85,3 +85,31 @@ pure/impure split mirroring `slice.rs` (`format_list` pure, `run_list` glues):
 **Audit flags**: `OwnedEntityId::canonical_ref` keeps its `dead_code` expect — show/list
 print uid/key strings directly, never a canonical ref. After PHASE-05 only **PHASE-06**
 (manifest split + install) remains before close-out.
+
+## PHASE-06 — Landed (manifest split + install gitignore)
+
+`install/manifest.toml`: `[dirs].create` `.doctrine/memory` → `.doctrine/memory/items`
+(only `items/` is materialised; `index`/`embeddings`/`state` gitignored-not-created,
+future-slice owners make them on demand). `[gitignore]` ADD 3 narrow entries
+(`index/*`/`embeddings/*`/`state/*`) — **additive, no blanket** (a blanket
+`.doctrine/memory/*` would swallow committed `items/`; VT-1 asserts its absence).
+Commit `ca948a8`. Gate: 138 tests, lint clean, re-install idempotent (VT-2).
+
+## Close-out review — HELD (blockers open) → see `audit.md`
+
+`/code-review` over PHASE-01..06 (2026-06-04). **Verdict revision-required**; close-out
+on hold. Two 🔴 escaping blockers on the I/O boundary (durable, survive this slice):
+
+- **A-1 — `render_memory_toml` (memory.rs:460) writes TOML by unescaped `str::replace`.**
+  A `"`/newline/`]` in title/summary/tag corrupts `memory.toml`; `record` reports
+  success (never round-trips), `list` then chokes for the whole store. Fix: serialise
+  via `toml`/`toml_edit`, not substitution. Tests use only benign input (theatre).
+- **A-2 — `render_show` (memory.rs:583) body frame is spoofable.** Body interpolated
+  verbatim between unescaped `=== END MEMORY ===` sentinels; a hostile `memory.md`
+  defeats the "data not instruction" guarantee. Fix: nonce/length-prefix the body.
+
+Non-blocking (in `audit.md`): A-3 parallel named path (`MaterialiseRequest::Named` +
+`allocate_named` dead in prod — record uses `materialise_named` seam A; design §5.1
+drift), A-4 false `dead_code` reasons, A-5 one-bad-row blacks out `list`, A-6 design
+§5.4/§9 "replaces blanket" never happened (no blanket existed). Close-out resumes after
+the 🔴s land + re-review.
