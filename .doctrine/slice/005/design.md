@@ -55,11 +55,10 @@ set.
 
 ## 3. Forces & Constraints
 
-- **Interop constraint 3** (memory-spec § Interoperability constraints): identity is
-  client-minted, stable, content-*addressed* → a UUID `memory_uid`. (See § 5.6 and
-  D3 for the v7 reading of "content-addressed" — v1 buys time-ordering and the
-  idempotency anchor's *shape*, not content-derived hashing, which is the ledger
-  seam's job.)
+- **Interop constraint 3** (memory-spec § Identity): `memory_uid` is a client-minted
+  UUID **minted once per logical memory and stored, never regenerated** (:268-270) —
+  *not* content-derived; the deterministic-`uuid5` "content-addressed" property is
+  `event_id`'s, at the deferred ledger seam (§ 5.6, D3). A stored v7 uid satisfies it.
 - **No reservation needed.** A UUID is collision-*resistant* enough across clones
   that v1 treats any collision as an exceptional duplicate, not a race to arbitrate
   (reservation-spec exists to arbitrate *numeric* `max+1` races; a uid has no race).
@@ -215,15 +214,24 @@ doctrine memory list [--type <t>] [--status <s>] [--tag <t>]        [--path <roo
   `--key` — creates a `<key> -> <uid>` symlink **as part of the fileset** so its
   creation is transactional (§ 5.5). Prints the uid (and key) + path. `--tag`
   values write `scope.tags` (not a top-level field — review #9).
-- `show <uid|key>` (**symlink-only resolution — review #6**): opens
-  `items/<arg>/memory.toml`; a uid hits the real dir, a key hits the slug symlink
-  (fs resolves it). **No `memory_key` scan fallback** in v1 — a scan would make
-  stale hand-edited keys semi-authoritative and add O(n) to a direct-lookup command;
-  the registry/index that could re-key safely arrives in SL-008. (slice-005.md is
-  updated to drop its "/ a `memory_key` scan" clause.) **Security render
-  (review #14):** `show` prints a metadata header (uid / key / status / trust /
-  verification_state) and then the body **labelled as memory content, never emitted
-  as instruction** (memory-spec § Security :362-369) — even at the CLI.
+- `show <uid|key>` (**symlink-only resolution — review #6**): the argument is first
+  parsed into a validated `MemoryRef::{Uid, Key}` — `Uid` matches `^mem_[0-9a-f]{32}$`,
+  `Key` matches the `mem.<seg>…` grammar (per-segment `[a-z0-9]+(-[a-z0-9]+)*`,
+  2–7 segments, memory-spec § Identity) — **rejecting any separator / absolute /
+  `..` before touching disk**. The path is then built through
+  `fsutil::safe_join(items_root, name)` (**codex-MAJOR-3**: the read path must reuse
+  the H1 chokepoint — `safe_join` is currently write-only, `entity.rs:289,328`; a raw
+  `items/<arg>/…` join is a traversal hole for the user-supplied key). A uid hits the
+  real dir, a key hits the slug symlink (fs resolves it). **No `memory_key` scan
+  fallback** in v1 — a scan would make stale hand-edited keys semi-authoritative and
+  add O(n) to a direct-lookup command; the registry/index that could re-key safely
+  arrives in SL-008. (slice-005.md is updated to drop its "/ a `memory_key` scan"
+  clause.) **Security render (review #14 + codex-MAJOR-4):** `show` prints the full
+  hostile-input metadata header the spec mandates (memory-spec § Security :365-367) —
+  **`memory_uid` / `memory_key`, `trust_level`, `verification_state`, `scope`, and
+  `anchor`** — then the body **labelled as memory content, never emitted as
+  instruction**. (The original header dropped `scope` and `anchor`; the spec lists
+  them explicitly, so both are restored. In v1 `anchor` renders as `none`.)
 - `list`: scans real dirs under `items/` (symlinks skipped by `file_type().is_dir()`,
   as `scan_ids` already does), parses each `memory.toml`, AND-filters on
   type/status/tag, formats rows (uid-short / type / status / key / title).
@@ -282,10 +290,19 @@ errors on missing or unsupported version.**
 
 The `memory.toml` template substitutes values on hand at scaffold
 (`{{uid}}`/`{{key}}`/`{{type}}`/`{{status}}`/`{{title}}`/`{{summary}}`/`{{date}}`/
-`{{schema_version}}`); `[scope]`/`[git]`/`[review]`/`[trust]`/`[ranking]` scaffold
-with defaults (`anchor_kind = none`, empty scope incl. empty `tags`,
-`verification_state = unverified`, `trust_level = medium`, `severity = none`,
-`weight = 0`).
+`{{schema_version}}`/`{{workspace}}`); `[scope]`/`[git]`/`[review]`/`[trust]`/
+`[ranking]` scaffold with defaults (`anchor_kind = none`, empty
+`paths`/`globs`/`commands`/`tags`, `verification_state = unverified`,
+`trust_level = medium`, `severity = none`, `weight = 0`).
+
+**`scope.workspace` is carried unconditionally (codex-BLOCKING-2 — interop
+constraint 6, memory-spec :84-86/:154/:294).** `workspace` is *not* part of the
+deferred git/anchoring work (that is `repo` + the frame, SL-007); it is a coordinate
+**carried on every memory from the first record**, even single-tenant. v1 scaffolds
+`scope.workspace = "default"` always, the model carries it (non-empty after
+validation), and `list`/`show` read it (it is a hard-filter key in the SL-006
+deterministic sort, :314 — so it must exist now, not be back-filled later). The
+original scaffold-defaults list silently omitted it; restored.
 
 **Tag validation (review #9):** `--tag` values are free lowercase strings
 (memory-spec calls tags "stable categorization", not scope segments) — trimmed,
@@ -315,8 +332,11 @@ an `Artifact::Symlink` **in the fileset**, so `write_fileset`'s transaction cove
   `AlreadyHeld` claim is nonetheless a hard error (defence in depth — a collision or
   a re-run with a fixed uid surfaces, it never silently merges).
 - **`record` is not idempotent** in v1: each call mints a fresh uid → a re-run makes
-  a second memory. Accepted; the uid-as-idempotency-anchor (content-derived) matters
-  at the reserved ledger seam, not the v1 CLI (D3).
+  a second memory. This is a CLI-UX matter, **not** a § Identity violation — the spec
+  requires the uid be minted *once per logical memory and stored* (it is), and reserves
+  *append*-idempotency for the `event_id`/`uuid5` ledger seam (§ 5.6, D3). Two
+  `record` calls are two logical memories. Accepted; dedup-on-replay lands with the
+  ledger.
 - **`active` ≠ retrieval-eligible (review #12).** Invariant to document:
   `status = active` is *lifecycle*-active; with `anchor_kind = none`, empty scope,
   and `verification_state = unverified`, the record is **not** retrieval-eligible —
@@ -344,11 +364,19 @@ an `Artifact::Symlink` **in the fileset**, so `write_fileset`'s transaction cove
 - **Grammar:** `mem_` + 32 lowercase hex (UUID *simple* form, no hyphens):
   `^mem_[0-9a-f]{32}$`. Minted lowercase; reject uppercase/hyphenated rather than
   normalize.
-- **Not content-addressed in v1 (ed2 tension surfaced).** Interop constraint 3 says
-  "content-addressed"; a v7 uid is *time*-addressed, not content-derived, so `record`
-  is non-idempotent (§ 5.5). v1 buys the anchor's *shape and stability*, not
-  content-derived idempotency — which is the ledger seam's job (D3). Documented so
-  the gap is intentional, not an oversight.
+- **v7 satisfies § Identity — the "content-addressed" adjective is `event_id`'s, not
+  the uid's (corrects ed2 / codex-BLOCKING-1).** A closer read of the *operative*
+  per-field spec resolves the apparent tension: memory-spec § Identity (:268-270)
+  defines `memory_uid` as a **"client-minted UUID, minted once per logical memory …
+  stored, never regenerated"** — explicitly *not* content-derived. It is `event_id`
+  that is the **deterministic `uuid5` over a fixed namespace** (:274), which is what
+  makes *append* idempotent (interop constraint 3, :73-75). The umbrella
+  "content-addressed" adjective is realised by `event_id` at the ledger seam, not by
+  the uid. A v7 uid minted once and stored is therefore **fully compliant** with
+  § Identity. `event_id`/uuid5 and append-idempotency belong to the deferred ledger
+  seam (slice-005 non-goals); v1 ships no events, so the property has nothing to
+  violate. (The earlier draft wrongly framed the uid as *owing* content-addressing —
+  it does not.)
 
 ## 6. Open Questions & Unknowns — all resolved
 
@@ -374,8 +402,11 @@ an `Artifact::Symlink` **in the fileset**, so `write_fileset`'s transaction cove
   (duplicate vs retry). Memory takes **no** reservation namespace.
 - **D3 — uid minted in the imperative shell, v7**, an input to the pure layer (date
   precedent). Keeps pure code clock/rng-free. v7 over v4 for time-ordering and
-  spec-example parity. Content-*derived* idempotency (a true content address) is
-  deferred to the ledger seam; v1's uid is the stable handle, not an idempotency key.
+  spec-example parity (`018f…`). Per § Identity the uid is the minted-once,
+  stored idempotency anchor — a stored v7 uid is compliant; the deterministic
+  `event_id`/`uuid5` that makes *append* idempotent is the deferred ledger seam's
+  concern, not the uid's (corrects the earlier content-addressing mis-framing —
+  codex-BLOCKING-1).
 - **D4 — `anchor_kind = none`, no git this slice.** Defers all `git_context` work to
   SL-007; unanchored unscoped memory is permitted (memory-spec § Scope & anchoring).
 - **D5 — read path plain serde, no `toml_edit`.** Mutation (and its edit-preserving
@@ -454,8 +485,15 @@ Pure-layer unit tests (the doctrine pattern — inputs in, no disk/clock):
   ordering** (review #13); symlink aliases excluded.
 - **show resolution (review #6)**: uid hits the dir, key hits the symlink; **no scan
   fallback** (a stale `memory_key` with no symlink does not resolve).
-- **show security (review #14)**: body is rendered as labelled data with a metadata
-  header, never as bare instruction-shaped output.
+- **show arg validation (codex-MAJOR-3)**: a `<uid|key>` carrying `..` / a separator /
+  an absolute path is **rejected at parse, before any fs access**; the resolved read
+  path goes through `safe_join` (a malicious arg cannot escape `items/`).
+- **show security (review #14 + codex-MAJOR-4)**: the rendered header carries the full
+  spec set — uid/key, trust_level, verification_state, **scope, and anchor** — and the
+  body is labelled data, never bare instruction-shaped output.
+- **workspace carried (codex-BLOCKING-2)**: a freshly recorded `memory.toml` has
+  `scope.workspace = "default"`; the model rejects an empty workspace; `list`/`show`
+  surface it.
 
 **Integration (review ed3) — one tempdir test** for `record`→`show`→`list` end to
 end, exercising the real symlink create/resolve and path cleanup that the
@@ -489,6 +527,29 @@ calls — 13 accepts, 1 reversal, 1 architectural rebuttal, 3 escalated decision
   (D7); #3 shape → **`MaterialiseRequest` runtime enum** (D8); uid generator →
   **v7** (D3/§ 5.6), with the content-addressed/v4 tension (ed2) surfaced and
   consciously deferred to the ledger seam.
+
+**Second adversarial pass (codex mcp, independent).** Tasked with finding what the
+first review + author missed. Corroborated D8 (only `entity.rs:198-205` reads
+`kind.mode`; the four call sites hard-code one placement each — removal is mechanical),
+alias-rollback transactionality, `schema_version == 1`, and the `OwnedEntityId`
+migration surface — no change to those. New findings dispositioned:
+
+- **codex-BLOCKING-2 — `scope.workspace` silently dropped → ACCEPTED.** Interop
+  constraint 6 (:84-86/:154/:294) carries `workspace` on every memory from the first
+  record; it is a hard-filter key (:314). v1 now scaffolds `workspace = "default"`
+  unconditionally (§ 5.3). Distinct from the deferred `repo`/git frame (SL-007).
+- **codex-MAJOR-3 — `show` read-path traversal → ACCEPTED.** `safe_join` was
+  write-only (`entity.rs:289,328`); the `show` key arg is user input. v1 parses a
+  validated `MemoryRef` and reuses `safe_join` on the read path (§ 5.2).
+- **codex-MAJOR-4 — `show` render dropped `scope`/`anchor` → ACCEPTED.** Spec § Security
+  (:365-367) lists both; header restored to the full set (§ 5.2).
+- **codex-BLOCKING-1 — "non-idempotent uid violates content-addressing" → REJECTED as
+  blocking, reclassified doc-fix.** § Identity (:268-270) defines `memory_uid` as a
+  *minted-once, stored* UUID — not content-derived; `event_id`/`uuid5` (:274) is what
+  carries the content-addressed/append-idempotent property, at the deferred ledger
+  seam. A stored v7 uid is compliant. The finding correctly exposed *mis-framing* in
+  the earlier §5.6/D3 wording, now corrected (§ 5.6, D3, § 5.5). v7 stands, on firmer
+  ground.
 
 Remaining for the plan step: confirm the seam-rename blast radius against
 reservation-spec wording, and sequence the numeric-caller signature migration so each
