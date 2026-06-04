@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+mod clock;
 mod entity;
 mod fsutil;
 mod install;
@@ -48,6 +49,45 @@ enum Command {
     Slice {
         #[command(subcommand)]
         command: SliceCommand,
+    },
+
+    /// Record, show, and list memories (v1: record only).
+    Memory {
+        #[command(subcommand)]
+        command: MemoryCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum MemoryCommand {
+    /// Mint a uid and scaffold a new memory under `.doctrine/memory/items`.
+    Record {
+        /// Memory title.
+        title: String,
+
+        /// Memory type (required): concept|fact|pattern|signpost|system|thread.
+        #[arg(long = "type", value_parser = memory::MemoryType::parse)]
+        memory_type: memory::MemoryType,
+
+        /// Key alias `mem.<type>.<domain>.<subject>` (shorthand normalized).
+        #[arg(long)]
+        key: Option<String>,
+
+        /// Lifecycle status (default: active).
+        #[arg(long, default_value = "active", value_parser = memory::Status::parse)]
+        status: memory::Status,
+
+        /// One-line summary.
+        #[arg(long)]
+        summary: Option<String>,
+
+        /// Tag, repeatable — written to `scope.tags`.
+        #[arg(long = "tag")]
+        tag: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
     },
 }
 
@@ -222,6 +262,25 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => slice::run_phase(path, id, &phase_id, status, note.as_deref()),
             SliceCommand::List { status, path } => slice::run_list(path, status.as_deref()),
+        },
+        Command::Memory { command } => match command {
+            MemoryCommand::Record {
+                title,
+                memory_type,
+                key,
+                status,
+                summary,
+                tag,
+                path,
+            } => memory::run_record(
+                path,
+                &title,
+                memory_type,
+                key.as_deref(),
+                status,
+                summary.as_deref(),
+                &tag,
+            ),
         },
     }
 }

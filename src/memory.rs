@@ -20,12 +20,13 @@
 )]
 
 use std::collections::BTreeMap;
+use std::io::{self, Write};
 use std::path::PathBuf;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{Artifact, Fileset};
+use crate::entity::{self, Artifact, Fileset, LocalFs};
 
 /// Workspace coordinate carried on every memory; hardcoded `"default"` in v1 (no
 /// flag — design § 5.3 / interop constraint 6). Read back by `list`/`show`.
@@ -53,7 +54,8 @@ pub(crate) enum MemoryType {
 }
 
 impl MemoryType {
-    fn parse(s: &str) -> Result<Self> {
+    /// Parse the kebab token (the `--type` value parser + the validation layer).
+    pub(crate) fn parse(s: &str) -> Result<Self> {
         Ok(match s {
             "concept" => Self::Concept,
             "fact" => Self::Fact,
@@ -89,7 +91,8 @@ pub(crate) enum Status {
 }
 
 impl Status {
-    fn parse(s: &str) -> Result<Self> {
+    /// Parse the kebab token (the `--status` value parser + the validation layer).
+    pub(crate) fn parse(s: &str) -> Result<Self> {
         Ok(match s {
             "active" => Self::Active,
             "draft" => Self::Draft,
@@ -434,42 +437,45 @@ impl Memory {
 // No clock, no disk here — values in, fileset out.
 // ---------------------------------------------------------------------------
 
+/// The record fields a scaffold renders from — the eager seam-A input bundle the
+/// shell (`run_record`) assembles once and the pure producers read. Collapsing
+/// the formerly-flat args also retires their `too_many_arguments` suppressions.
+#[derive(Debug)]
+pub(crate) struct Draft<'a> {
+    pub(crate) uid: &'a str,
+    pub(crate) key: Option<&'a str>,
+    pub(crate) memory_type: MemoryType,
+    pub(crate) status: Status,
+    pub(crate) title: &'a str,
+    pub(crate) summary: &'a str,
+    pub(crate) date: &'a str,
+    pub(crate) tags: &'a [String],
+}
+
 /// Render `memory.toml` from the embedded template. The `memory_key` line is
 /// present iff `key` is `Some` (an empty `memory_key = ""` would fail
 /// `validate_key` on read); `tags` becomes a TOML array literal; `workspace` and
 /// `schema_version` are the hardcoded v1 constants.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "flat record fields; a Draft struct lands with run_record (PHASE-04)"
-)]
-fn render_memory_toml(
-    uid: &str,
-    key: Option<&str>,
-    memory_type: MemoryType,
-    status: Status,
-    title: &str,
-    summary: &str,
-    date: &str,
-    tags: &[String],
-) -> Result<String> {
-    let key_line = match key {
+fn render_memory_toml(d: &Draft<'_>) -> Result<String> {
+    let key_line = match d.key {
         Some(k) => format!("memory_key = \"{k}\"\n"),
         None => String::new(),
     };
-    let tags_lit = tags
+    let tags_lit = d
+        .tags
         .iter()
         .map(|t| format!("\"{t}\""))
         .collect::<Vec<_>>()
         .join(", ");
     Ok(crate::install::asset_text("templates/memory.toml")?
-        .replace("{{uid}}", uid)
+        .replace("{{uid}}", d.uid)
         .replace("{{key_line}}", &key_line)
         .replace("{{schema_version}}", &SCHEMA_VERSION.to_string())
-        .replace("{{type}}", memory_type.as_str())
-        .replace("{{status}}", status.as_str())
-        .replace("{{title}}", title)
-        .replace("{{summary}}", summary)
-        .replace("{{date}}", date)
+        .replace("{{type}}", d.memory_type.as_str())
+        .replace("{{status}}", d.status.as_str())
+        .replace("{{title}}", d.title)
+        .replace("{{summary}}", d.summary)
+        .replace("{{date}}", d.date)
         .replace("{{tags}}", &tags_lit)
         .replace("{{workspace}}", WORKSPACE))
 }
@@ -485,37 +491,82 @@ fn render_memory_md(title: &str, summary: &str) -> Result<String> {
 /// `<uid>/memory.md`, and — iff `key` is given — a `<key> -> <uid>` symlink sibling
 /// to the uid dir, carried *in the fileset* so PHASE-04's `write_fileset`
 /// transaction covers it (a pre-existing alias fails the whole record, design § 5.5).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "flat record fields; a Draft struct lands with run_record (PHASE-04)"
-)]
-pub(crate) fn memory_scaffold(
-    uid: &str,
-    key: Option<&str>,
-    memory_type: MemoryType,
-    status: Status,
-    title: &str,
-    summary: &str,
-    date: &str,
-    tags: &[String],
-) -> Result<Fileset> {
+pub(crate) fn memory_scaffold(d: &Draft<'_>) -> Result<Fileset> {
     let mut fileset = vec![
         Artifact::File {
-            rel_path: PathBuf::from(format!("{uid}/memory.toml")),
-            body: render_memory_toml(uid, key, memory_type, status, title, summary, date, tags)?,
+            rel_path: PathBuf::from(format!("{}/memory.toml", d.uid)),
+            body: render_memory_toml(d)?,
         },
         Artifact::File {
-            rel_path: PathBuf::from(format!("{uid}/memory.md")),
-            body: render_memory_md(title, summary)?,
+            rel_path: PathBuf::from(format!("{}/memory.md", d.uid)),
+            body: render_memory_md(d.title, d.summary)?,
         },
     ];
-    if let Some(k) = key {
+    if let Some(k) = d.key {
         fileset.push(Artifact::Symlink {
             rel_path: PathBuf::from(k),
-            target: uid.to_string(),
+            target: d.uid.to_string(),
         });
     }
     Ok(fileset)
+}
+
+// ---------------------------------------------------------------------------
+// Shell: the `memory record` verb (PHASE-04).
+//
+// The impure seam — root resolution, the wall clock, and the v7 uid mint live
+// here and only here; the render/scaffold above stay pure (uid + date are inputs).
+// ---------------------------------------------------------------------------
+
+/// The memory-items tree, relative to the project root — the `materialise_named`
+/// tree root every record claims `<uid>/` under.
+const MEMORY_ITEMS_DIR: &str = ".doctrine/memory/items";
+
+/// `doctrine memory record` — mint a uid, scaffold `items/<uid>/`, and (iff a key)
+/// create the transactional `<key> -> <uid>` alias. Non-idempotent by design
+/// (design § 5.5): each call mints a fresh uid.
+pub(crate) fn run_record(
+    path: Option<PathBuf>,
+    title: &str,
+    memory_type: MemoryType,
+    key: Option<&str>,
+    status: Status,
+    summary: Option<&str>,
+    tags: &[String],
+) -> Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let title = title.trim();
+    if title.is_empty() {
+        bail!("Title must not be empty");
+    }
+    let key = key.map(normalize_key).transpose()?;
+    let tags = validate_tags(tags)?;
+    let summary = summary.unwrap_or_default();
+
+    // The two impure inputs to the pure scaffold: a v7 uid (timestamp+random) and
+    // today's date. `simple()` renders 32 lowercase hex (no hyphens) → `is_uid`.
+    let uid = format!("mem_{}", uuid::Uuid::now_v7().simple());
+    let date = crate::clock::today();
+
+    let fileset = memory_scaffold(&Draft {
+        uid: &uid,
+        key: key.as_deref(),
+        memory_type,
+        status,
+        title,
+        summary,
+        date: &date,
+        tags: &tags,
+    })?;
+    let out = entity::materialise_named(&LocalFs, &root, MEMORY_ITEMS_DIR, &uid, &fileset)
+        .context("Failed to record memory")?;
+
+    let mut stdout = io::stdout();
+    match &key {
+        Some(k) => writeln!(stdout, "Recorded memory {uid} ({k}): {}", out.dir.display())?,
+        None => writeln!(stdout, "Recorded memory {uid}: {}", out.dir.display())?,
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -790,16 +841,17 @@ ref = "src/main.rs"
     // leftover tokens; every rendered field reads back.
     #[test]
     fn render_memory_toml_substitutes_and_parses() {
-        let body = render_memory_toml(
-            UID,
-            Some("mem.pattern.cli.skinny"),
-            MemoryType::Pattern,
-            Status::Active,
-            "Skinny CLI",
-            "CLI delegates to domain logic.",
-            "2026-06-04",
-            &tags(&["cli", "architecture"]),
-        )
+        let t = tags(&["cli", "architecture"]);
+        let body = render_memory_toml(&Draft {
+            uid: UID,
+            key: Some("mem.pattern.cli.skinny"),
+            memory_type: MemoryType::Pattern,
+            status: Status::Active,
+            title: "Skinny CLI",
+            summary: "CLI delegates to domain logic.",
+            date: "2026-06-04",
+            tags: &t,
+        })
         .unwrap();
         assert!(!body.contains("{{"), "no leftover tokens: {body}");
         assert!(body.contains("workspace = \"default\""));
@@ -818,16 +870,16 @@ ref = "src/main.rs"
 
     #[test]
     fn render_memory_toml_omits_the_key_line_when_absent() {
-        let body = render_memory_toml(
-            UID,
-            None,
-            MemoryType::Fact,
-            Status::Draft,
-            "T",
-            "",
-            "2026-06-04",
-            &[],
-        )
+        let body = render_memory_toml(&Draft {
+            uid: UID,
+            key: None,
+            memory_type: MemoryType::Fact,
+            status: Status::Draft,
+            title: "T",
+            summary: "",
+            date: "2026-06-04",
+            tags: &[],
+        })
         .unwrap();
         assert!(!body.contains("memory_key"), "no empty key line: {body}");
         assert_eq!(Memory::parse(&body).unwrap().key, None);
@@ -837,16 +889,16 @@ ref = "src/main.rs"
     // present.
     #[test]
     fn rendered_toml_round_trips_with_defaulted_blocks() {
-        let body = render_memory_toml(
-            UID,
-            None,
-            MemoryType::System,
-            Status::Active,
-            "T",
-            "S",
-            "2026-06-04",
-            &[],
-        )
+        let body = render_memory_toml(&Draft {
+            uid: UID,
+            key: None,
+            memory_type: MemoryType::System,
+            status: Status::Active,
+            title: "T",
+            summary: "S",
+            date: "2026-06-04",
+            tags: &[],
+        })
         .unwrap();
         let m = Memory::parse(&body).unwrap();
         assert_eq!(m.verification_state, "unverified");
@@ -868,16 +920,16 @@ ref = "src/main.rs"
     // VT-2: fileset shape — 2 artifacts without a key.
     #[test]
     fn memory_scaffold_is_two_files_without_a_key() {
-        let fileset = memory_scaffold(
-            UID,
-            None,
-            MemoryType::Pattern,
-            Status::Active,
-            "T",
-            "S",
-            "2026-06-04",
-            &[],
-        )
+        let fileset = memory_scaffold(&Draft {
+            uid: UID,
+            key: None,
+            memory_type: MemoryType::Pattern,
+            status: Status::Active,
+            title: "T",
+            summary: "S",
+            date: "2026-06-04",
+            tags: &[],
+        })
         .unwrap();
         assert_eq!(fileset.len(), 2);
         assert!(matches!(&fileset[0],
@@ -893,20 +945,146 @@ ref = "src/main.rs"
     // covers it).
     #[test]
     fn memory_scaffold_adds_a_key_symlink_targeting_the_uid() {
-        let fileset = memory_scaffold(
-            UID,
-            Some("mem.pattern.cli.skinny"),
-            MemoryType::Pattern,
-            Status::Active,
-            "T",
-            "S",
-            "2026-06-04",
-            &[],
-        )
+        let fileset = memory_scaffold(&Draft {
+            uid: UID,
+            key: Some("mem.pattern.cli.skinny"),
+            memory_type: MemoryType::Pattern,
+            status: Status::Active,
+            title: "T",
+            summary: "S",
+            date: "2026-06-04",
+            tags: &[],
+        })
         .unwrap();
         assert_eq!(fileset.len(), 3);
         assert!(matches!(&fileset[2],
             Artifact::Symlink { rel_path, target }
             if rel_path == std::path::Path::new("mem.pattern.cli.skinny") && target == UID));
+    }
+
+    // -- PHASE-04: the `record` shell verb ----------------------------------
+
+    use std::fs;
+    use std::path::Path;
+
+    fn items_dir(root: &Path) -> PathBuf {
+        root.join(MEMORY_ITEMS_DIR)
+    }
+
+    /// The single recorded uid dir under `items/` (record writes exactly one).
+    fn sole_uid(root: &Path) -> String {
+        let mut names = entity::scan_named(&items_dir(root)).unwrap();
+        assert_eq!(
+            names.len(),
+            1,
+            "expected one recorded uid dir, got {names:?}"
+        );
+        names.pop().unwrap()
+    }
+
+    // VT-1: record writes items/<uid>/{memory.toml,memory.md}; the toml carries
+    // uid/type/status/workspace; the uid matches ^mem_[0-9a-f]{32}$.
+    #[test]
+    fn record_writes_the_item_files_with_a_valid_uid() {
+        let root = tempfile::tempdir().unwrap();
+        run_record(
+            Some(root.path().to_path_buf()),
+            "Skinny CLI",
+            MemoryType::Pattern,
+            None,
+            Status::Active,
+            Some("CLI delegates."),
+            &["Cli".to_string(), "cli".to_string()], // dedup/lowercase exercised
+        )
+        .unwrap();
+
+        let uid = sole_uid(root.path());
+        assert!(is_uid(&uid), "uid shape: {uid}");
+        let item = items_dir(root.path()).join(&uid);
+        assert!(item.join("memory.md").is_file());
+
+        let m = Memory::parse(&fs::read_to_string(item.join("memory.toml")).unwrap()).unwrap();
+        assert_eq!(m.uid, uid);
+        assert_eq!(m.kind, MemoryType::Pattern);
+        assert_eq!(m.status, Status::Active);
+        assert_eq!(m.scope.workspace, "default");
+        assert_eq!(m.scope.tags, ["cli"]);
+        assert_eq!(m.key, None);
+    }
+
+    // VT-2: record --key writes a <key> -> <uid> symlink that the real-dir scan
+    // skips (the alias never double-counts as an entity).
+    #[test]
+    fn record_with_a_key_writes_a_symlink_skipped_by_the_scan() {
+        let root = tempfile::tempdir().unwrap();
+        run_record(
+            Some(root.path().to_path_buf()),
+            "T",
+            MemoryType::Pattern,
+            Some("pattern.cli.skinny"), // shorthand → mem.pattern.cli.skinny
+            Status::Active,
+            None,
+            &[],
+        )
+        .unwrap();
+
+        let uid = sole_uid(root.path()); // scan returns the uid dir only, not the alias
+        let link = items_dir(root.path()).join("mem.pattern.cli.skinny");
+        assert_eq!(fs::read_link(&link).unwrap(), Path::new(&uid));
+        // and the parsed memory carries the normalized key
+        let m = Memory::parse(
+            &fs::read_to_string(items_dir(root.path()).join(&uid).join("memory.toml")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(m.key.as_deref(), Some("mem.pattern.cli.skinny"));
+    }
+
+    // VT-3: a pre-existing key alias errors AND the uid dir is rolled back — no
+    // partial record survives (the alias-in-fileset transactionality).
+    #[test]
+    fn record_with_a_pre_existing_key_alias_errors_and_rolls_back() {
+        let root = tempfile::tempdir().unwrap();
+        let items = items_dir(root.path());
+        fs::create_dir_all(&items).unwrap();
+        fs::write(items.join("mem.pattern.cli.skinny"), "stale").unwrap();
+
+        let err = run_record(
+            Some(root.path().to_path_buf()),
+            "T",
+            MemoryType::Pattern,
+            Some("pattern.cli.skinny"),
+            Status::Active,
+            None,
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Failed to record memory"));
+
+        // no uid dir survived the rollback …
+        assert!(
+            entity::scan_named(&items).unwrap().is_empty(),
+            "the uid dir must be rolled back — no partial record"
+        );
+        // … and the pre-existing alias is untouched.
+        assert_eq!(
+            fs::read_to_string(items.join("mem.pattern.cli.skinny")).unwrap(),
+            "stale"
+        );
+    }
+
+    #[test]
+    fn record_rejects_an_empty_title() {
+        let root = tempfile::tempdir().unwrap();
+        let err = run_record(
+            Some(root.path().to_path_buf()),
+            "   ",
+            MemoryType::Fact,
+            None,
+            Status::Active,
+            None,
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Title must not be empty"));
     }
 }

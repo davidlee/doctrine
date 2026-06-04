@@ -250,24 +250,8 @@ fn format_list(rows: &[Meta]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Imperative: clock, the slice-specific reader
+// Imperative: the slice-specific reader (clock lives in crate::clock)
 // ---------------------------------------------------------------------------
-
-/// Today as `YYYY-MM-DD` (UTC). The clock lives only in the shell; the pure
-/// layer takes the date as a parameter (slices-spec § Architecture).
-fn today() -> String {
-    let d = time::OffsetDateTime::now_utc().date();
-    format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())
-}
-
-/// An RFC3339 UTC timestamp for the runtime progress log. The clock lives only
-/// in the shell; the pure layer takes the timestamp as a parameter.
-fn now_timestamp() -> anyhow::Result<String> {
-    use time::format_description::well_known::Rfc3339;
-    time::OffsetDateTime::now_utc()
-        .format(&Rfc3339)
-        .context("Failed to format timestamp")
-}
 
 /// Parse the `Meta` of a single slice by id.
 fn read_meta(slice_root: &Path, id: u32) -> anyhow::Result<Meta> {
@@ -338,7 +322,7 @@ pub(crate) fn run_new(
     if slug.is_empty() {
         bail!("Could not derive a slug from the title; pass --slug");
     }
-    let date = today();
+    let date = crate::clock::today();
     let out = entity::materialise(
         &SLICE_KIND,
         &LocalFs,
@@ -366,7 +350,7 @@ pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     // The design doc inherits its parent's title (the only context its template
     // needs); reading it confirms the parent exists before we materialise.
     let meta = read_meta(&slice_root, id)?;
-    let date = today();
+    let date = crate::clock::today();
     let out = entity::materialise(
         &DESIGN_KIND,
         &LocalFs,
@@ -393,7 +377,7 @@ pub(crate) fn run_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let slice_root = root.join(SLICE_DIR);
     // Reading the parent confirms it exists and supplies the prose title.
     let meta = read_meta(&slice_root, id)?;
-    let date = today();
+    let date = crate::clock::today();
     let out = entity::materialise(
         &PLAN_KIND,
         &LocalFs,
@@ -446,7 +430,7 @@ pub(crate) fn run_notes(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let slice_root = root.join(SLICE_DIR);
     let meta = read_meta(&slice_root, id)?;
-    let date = today();
+    let date = crate::clock::today();
     let out = entity::materialise(
         &NOTES_KIND,
         &LocalFs,
@@ -477,7 +461,7 @@ pub(crate) fn run_phase(
     note: Option<&str>,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let now = now_timestamp()?;
+    let now = crate::clock::now_timestamp()?;
     crate::state::set_phase_status(&root, id, phase_id, status, note, &now)?;
     writeln!(io::stdout(), "Updated {phase_id}: {}", status.as_str())?;
     Ok(())
