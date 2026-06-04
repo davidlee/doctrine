@@ -3,6 +3,11 @@
   "owner": { "name": "doctrine" },
   "plugins": [
     {
+      "name": "doctrine",
+      "source": "./plugins/doctrine",
+      "description": "Doctrine's core process skills — route, spec, design, plan, execute, audit."
+    },
+    {
       "name": "review",
       "source": "./plugins/review",
       "description": "Code & security review skills."
