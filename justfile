@@ -1,5 +1,8 @@
 default: lint test install
 
+list-memories:
+  @fd . doc/memories
+
 lint:
   cargo clippy
 
