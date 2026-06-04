@@ -8,6 +8,7 @@ mod input;
 mod install;
 mod memory;
 mod meta;
+mod retrieve;
 mod root;
 mod skills;
 mod slice;
