@@ -383,11 +383,13 @@ fn ensure_parent_dirs(
     Ok(())
 }
 
-/// Undo a partial fileset write: unlink created files/symlinks then remove
-/// created dirs, both in reverse order. Best-effort — `NotFound` and
-/// `DirectoryNotEmpty` (a dir a concurrent writer populated) are tolerated and
-/// any other failure is swallowed, since the original error is the one
-/// surfaced. Never `remove_dir_all`, never the parent.
+/// Undo a partial fileset write: unlink created files/symlinks, then remove the
+/// dirs *this call* created, both in reverse order. Runs while unwinding a prior
+/// error, so it cannot itself fail — every error is ignored (the original error
+/// is the one surfaced). The guarantee that carries weight is structural, not in
+/// any error match: `remove_dir` (never `remove_dir_all`) means a dir a
+/// concurrent writer populated fails with `DirectoryNotEmpty` and is left intact
+/// — we never force. Never touches the parent.
 fn rollback(created_paths: &[PathBuf], created_dirs: &[PathBuf]) {
     for path in created_paths.iter().rev() {
         drop(fs::remove_file(path)); // unlinks a file or a symlink
@@ -808,5 +810,24 @@ mod tests {
             .collect();
         left.sort();
         assert_eq!(left, vec!["keep.txt".to_string()]);
+    }
+
+    /// The promised invariant (design §5.5/§9): a dir a concurrent writer
+    /// populated mid-call is left intact — `remove_dir` hits `DirectoryNotEmpty`
+    /// and tolerates it; we never `remove_dir_all`. Driven directly against
+    /// `rollback`, since the deterministic scaffold can't race a foreign write in.
+    #[test]
+    fn rollback_leaves_a_dir_a_concurrent_writer_populated_intact() {
+        let tmp = tempfile::tempdir().unwrap();
+        let created = tmp.path().join("created");
+        fs::create_dir(&created).unwrap();
+        // a concurrent writer dropped a file in after we created the dir but
+        // before rollback — tracked as a created dir, but now non-empty.
+        fs::write(created.join("intruder"), "x").unwrap();
+
+        rollback(&[], std::slice::from_ref(&created));
+
+        assert!(created.is_dir(), "populated dir survives rollback");
+        assert_eq!(fs::read_to_string(created.join("intruder")).unwrap(), "x");
     }
 }

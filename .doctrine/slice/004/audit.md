@@ -24,7 +24,7 @@ sequence was built in order, each step green against slice-001/003.
 | D1 IP = slice facet, 2-Artifact `CreateInExistingEntity` | `slice::PLAN_KIND`/`plan_scaffold` | ✓ no `IP-` entity |
 | D2 phase content sorts durability × structure | `plan.toml` (authored) · `phase-NN.toml` (status+log) · `phase-NN.md` (prose) | ✓ |
 | D3 tracking in `state.rs`, not the engine; shared IO | `src/state.rs` + `src/fsutil.rs` | ✓ no `MutateInPlace` |
-| D4 transactional sub-artefact writer | `entity::write_fileset` (component `create_dir` + `create_new` + symlink arm + reverse rollback) | ✓ **discharges 003 `[M]`** |
+| D4 transactional sub-artefact writer | `entity::write_fileset` (component `create_dir` + `create_new` + symlink arm + reverse rollback) | ✓ **discharges 003 `[M]`**; rollback tested both ways (parent-intact + concurrent-populate) |
 | D5 `toml_edit` for the state writer; tracking graduates | `state::set_phase_status`; v1 = status + progress only | ✓ |
 | D6 gitignore state + `phases`; state not a managed `[dir]` | `install/manifest.toml [gitignore]` | ✓ recreated on demand |
 | D7 verbs `slice plan`/`phases`/`phase`/`notes` | `main::SliceCommand` → `slice::run_*` | ✓ |
@@ -65,12 +65,43 @@ None block; all post-v1.
   `started`/`last_updated` collapses their cosmetic alignment (`status  =` →
   `status =`). The contract held — comments, unknown keys, and *untouched* keys
   survive byte-for-byte (tested) — only set-key alignment shifts. Cosmetic.
-- **[watch] `state.rs` depends on `slice::{Plan,PlanPhase}`.** A deliberate
-  consumer edge (state reads the plan), but it couples the runtime module to a
-  slice-side type. If a second consumer of `Plan` appears, lift it to a neutral
-  home. Fine for v1.
+- **[watch] `state.rs` reaches up into `slice` (and `clap`).** Two crossings of
+  the advertised D3 seam: the runtime module imports `slice::{Plan,PlanPhase}` for
+  its input model (state reads the plan), and `PhaseStatus` carries
+  `#[derive(clap::ValueEnum)]` — the arg parser leaking into the state layer. Both
+  are deliberate v1 debt for a single consumer (a note now sits at the import).
+  Lift `Plan` to a neutral home and split the CLI enum from the stored value if a
+  second consumer of either appears; "reusable" the layer is not until then.
 - **No `slice show` reassembler** (Q3) — plan + tracking are queryable separately;
   the read-locality CLI is deferred.
+
+### 2.1 Post-review hardening (second external pass, 2026-06-04)
+
+A second review (87 tests after) drove five precision fixes; none changed a design
+decision:
+
+- **Concurrent-populate rollback now pinned.** The §5.5/§9 promise "a dir a
+  concurrent writer populated mid-call is not removed" was asserted-as-tested but
+  had no test (only the parent-intact half existed). Added a direct `rollback`
+  unit test (`entity.rs`); the `rollback` doc no longer pretends the error *match*
+  carries the guarantee — it is structural (`remove_dir`, never `remove_dir_all`).
+- **`InitReport` speaks one dialect.** `orphan`/`pruned` leaked filename stems
+  (`phase-02`) while `created` held canonical `PHASE-02`; `run_phases` printed them
+  adjacent. Added `phase_id_from_stem`; the report is canonical throughout.
+- **Init validates all ids before any write.** `init_phases` now derives every
+  stem up front, so one malformed id fails clean instead of after earlier phases
+  are on disk (a non-atomic init rejecting knowable-bad input).
+- **Symlink test resolves, not string-matches.** The refresh test now asserts the
+  link *canonicalizes* to `phases_dir`, not just that `read_link` returns the
+  hand-written relative target (which would pass even if the two drifted).
+- **`completed` is cleared on reopen.** `Completed → InProgress` left a stale
+  completion stamp; `set_phase_status` now clears `completed` on any non-completed
+  status (stamp held iff completed).
+
+The 🔵 "ceremony outruns threat" note was accepted in spirit: the one duplicated
+restatement in §5.4 was trimmed, but the per-section design reasoning (pseudocode /
+narrative / decision / test) was kept — it is the settled "why" record, and the
+low-threat caveat already sits inline. The primitive stays; it is near-free.
 
 ## 3. Deferred (unchanged from design)
 
