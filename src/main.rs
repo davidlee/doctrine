@@ -89,6 +89,35 @@ enum MemoryCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Resolve a memory by uid or key and print its header + body-as-data.
+    Show {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List recorded memories, newest first; AND-filter by type/status/tag.
+    List {
+        /// Filter by type: concept|fact|pattern|signpost|system|thread.
+        #[arg(long = "type", value_parser = memory::MemoryType::parse)]
+        memory_type: Option<memory::MemoryType>,
+
+        /// Filter by lifecycle status.
+        #[arg(long, value_parser = memory::Status::parse)]
+        status: Option<memory::Status>,
+
+        /// Filter to memories carrying this tag.
+        #[arg(long = "tag")]
+        tag: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -281,6 +310,13 @@ fn main() -> anyhow::Result<()> {
                 summary.as_deref(),
                 &tag,
             ),
+            MemoryCommand::Show { reference, path } => memory::run_show(path, &reference),
+            MemoryCommand::List {
+                memory_type,
+                status,
+                tag,
+                path,
+            } => memory::run_list(path, memory_type, status, tag.as_deref()),
         },
     }
 }

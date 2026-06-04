@@ -244,10 +244,6 @@ pub(crate) fn scan_ids(tree_root: &Path) -> anyhow::Result<Vec<u32>> {
 /// whatever its name (numeric *or* `mem_…`); symlinks and files are ignored, and
 /// a missing directory yields an empty listing. Sibling to `scan_ids`, which is
 /// numeric-only and would skip a named (e.g. `mem_…`) dir (finding 1).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "drives `memory list` (SL-005 PHASE-05)")
-)]
 pub(crate) fn scan_named(tree_root: &Path) -> anyhow::Result<Vec<String>> {
     let mut names = Vec::new();
     let entries = match fs::read_dir(tree_root) {
