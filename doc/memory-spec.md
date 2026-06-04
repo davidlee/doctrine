@@ -35,12 +35,19 @@ is additive (§ Interoperability constraints, § Backend abstraction).
 The same "the apparatus arrives with the caller" line every doctrine spec draws
 ([reservation-spec](reservation-spec.md), [drift-spec](drift-spec.md)):
 
-- **v1 (native current-state memory).** A memory entity with the storage rule:
-  per-memory `memory.toml` (owned, edit-preserving) + `memory.md` (prose).
-  `record` / `show` / `list` / `find` / `retrieve`, scope-first lexical
-  retrieval, deterministic ranking, git-anchored staleness. Committed to git,
-  reviewable, greppable. Reuses the slice/drift entity engine — memory is its
-  next caller, not a parallel implementation.
+- **v1 (native current-state memory), in three slices.** A memory entity with
+  the storage rule: per-memory `memory.toml` (owned, edit-preserving) +
+  `memory.md` (prose). Committed to git, reviewable, greppable. Reuses the
+  slice/drift entity engine — memory is its next caller, not a parallel
+  implementation. Sequenced behind three gates:
+  - **SL-005 (done) — entity + skinny producer.** Schema, `record` / `show` /
+    `list`; read-by-id only.
+  - **SL-007 (memory-anchoring) — capture + provenance.** `record` scope + git
+    context-frame capture, `verify`, the `src/git.rs` seam (frame algorithm
+    frozen as the external decision register's `GitContextFrameV1`).
+  - **SL-008 (memory-retrieval) — reader.** Scope-aware `find` / `retrieve`,
+    scope-first lexical retrieval, the 9-key deterministic ranking, git-anchored
+    staleness.
 - **Reserved seam (designed here, built when its caller exists).** The
   append-only **lifecycle ledger** (`events.toml`), the **NDJSON event
   interchange**, the **event-store backend adapter**, and **vector/graph**
@@ -544,8 +551,13 @@ scope, it sequences it:
 
 1. **Entity engine generalisation** (already roadmapped for slice→drift→spec) gains
    a **UUID-identity, no-reservation** variant — memory is its next caller.
-2. **v1 native memory**: schema, `record`/`show`/`list`/`find`/`retrieve`, scope
-   retrieval + deterministic ranking + git staleness, commit policy, manifest split.
+2. **v1 native memory** — three slices, each behind its own gate:
+   - **SL-005 (done):** schema + entity, `record`/`show`/`list`, commit policy,
+     manifest split.
+   - **SL-007 (memory-anchoring):** `record` scope + git-frame capture, `verify`,
+     the `src/git.rs` seam.
+   - **SL-008 (memory-retrieval):** `find`/`retrieve`, scope retrieval +
+     deterministic ranking + git staleness.
 3. **Links/backlinks** fold into the relation-index registry.
 4. **Reserved seam (deferred)**: lifecycle ledger, NDJSON import/export, event-store
    backend adapter, vector/graph retrieval — each when its caller exists.
