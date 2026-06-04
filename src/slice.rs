@@ -425,14 +425,14 @@ pub(crate) fn run_phases(path: Option<PathBuf>, id: u32, prune: bool) -> anyhow:
     for phase_id in &report.created {
         writeln!(out, "  materialised {phase_id}")?;
     }
-    for stem in &report.orphan {
+    for phase_id in &report.orphan {
         writeln!(
             out,
-            "  orphan       {stem} (plan phase gone; --prune to remove)"
+            "  orphan       {phase_id} (plan phase gone; --prune to remove)"
         )?;
     }
-    for stem in &report.pruned {
-        writeln!(out, "  pruned       {stem}")?;
+    for phase_id in &report.pruned {
+        writeln!(out, "  pruned       {phase_id}")?;
     }
     if report.created.is_empty() && report.orphan.is_empty() && report.pruned.is_empty() {
         writeln!(out, "Phases up to date.")?;

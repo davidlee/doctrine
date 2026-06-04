@@ -382,15 +382,11 @@ create_in_existing(kind, tree_root, inputs):
       propagate the original error
 ```
 
-Only paths/dirs *this call* created are removed — pre-existing parents and any dir a
-concurrent writer populated are untouched (the `DirectoryNotEmpty`-tolerant `remove_dir`,
-not `remove_dir_all`). `create_new(true)` makes the file create atomically fail on an
-existing target, collapsing refuse-clobber and write into one race-free step (the threat
-is low on a local single-user CLI, but the atomic form is strictly better and near-free).
-Tracking the path *before* the content write means a write that fails after `create_new`
-still unwinds the empty/partial file. The `Symlink` arm is preserved (the IP/notes
-filesets are file-only today, but this writer is the shared `write_fileset`, so dropping
-the arm would silently break any future symlink-bearing sub-artefact).
+The four corrections are encoded inline above. The non-obvious *why*: `create_new(true)`
+is used on its merits — strictly better, near-free — though the concurrency threat on a
+local single-user CLI is low; and the `Symlink` arm is preserved because this writer is
+the shared `write_fileset` (the IP/notes filesets are file-only today, but dropping the
+arm would silently break any future symlink-bearing sub-artefact).
 This is weaker than `allocate_fresh`'s `remove_dir_all` (which can nuke the whole won
 dir) by necessity, and that asymmetry is the point: a sub-artefact is a guest. `init_phases`
 in the state tree is separately idempotent (skip-if-exists **per file**, so a phase left

@@ -17,6 +17,12 @@ use anyhow::Context;
 use toml_edit::Item;
 
 use crate::fsutil;
+// v1 debt (audit [watch]): the runtime layer reaches *up* into the slice-CLI
+// module for its input model. `Plan`/`PlanPhase` live next to their authoring
+// consumer (slice-003 Non-Goal: no shared `Meta`), and `PhaseStatus` below
+// carries `clap::ValueEnum` — the arg parser leaking into the state layer. Both
+// are deliberate for a one-consumer v1; lift `Plan` to a neutral home and split
+// the CLI enum from the stored value if a second consumer of either appears.
 use crate::slice::{Plan, PlanPhase};
 
 /// Slice-scoped runtime-state tree, relative to the project root.
@@ -79,28 +85,45 @@ pub(crate) fn phase_stem(phase_id: &str) -> anyhow::Result<String> {
     Ok(format!("phase-{digits}"))
 }
 
+/// Reverse of `phase_stem`: recover the canonical `PHASE-NN` id from an on-disk
+/// stem so the drift report speaks one dialect — `orphan`/`pruned` match
+/// `created`'s canonical ids, never the derived filename form. Stems reach this
+/// only from `existing_phase_stems`, which guarantees the `phase-` prefix.
+fn phase_id_from_stem(stem: &str) -> String {
+    format!("PHASE-{}", stem.strip_prefix("phase-").unwrap_or(stem))
+}
+
 /// Materialise, per declared phase, a `phase-NN.toml` (tracking) + `phase-NN.md`
 /// (disposable sheet) under the state tree. Ensures the (gitignored,
 /// possibly-absent) parent, then writes any **missing file of each pair** —
 /// per-file skip, so a phase left half-written by a crash completes on re-run.
 /// Diffs on-disk tracking against the plan: orphans (plan phase gone) are
 /// reported, removed only under `prune`. Refreshes the verified convenience
-/// symlink. Idempotent on the no-drift path. Phase ids are validated and
-/// uniqueness is guaranteed by `Plan::parse`.
+/// symlink. Idempotent on the no-drift path. All phase ids are validated up
+/// front (before any write); uniqueness is guaranteed by `Plan::parse`.
 pub(crate) fn init_phases(
     project_root: &Path,
     slice_id: u32,
     plan: &Plan,
     prune: bool,
 ) -> anyhow::Result<InitReport> {
+    // Validate + derive every phase stem before touching the filesystem, so one
+    // malformed id fails the whole init clean rather than after the earlier phases
+    // are already written (a non-atomic init rejecting input knowable up front).
+    // `phase_stem` is the single `PHASE-<digits>` validator.
+    let stems = plan
+        .phases
+        .iter()
+        .map(|phase| Ok((phase, phase_stem(&phase.id)?)))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
     let dir = phases_dir(project_root, slice_id);
     fs::create_dir_all(&dir).with_context(|| format!("Failed to create {}", dir.display()))?;
 
     let mut report = InitReport::default();
     let mut plan_stems = BTreeSet::new();
 
-    for phase in &plan.phases {
-        let stem = phase_stem(&phase.id)?;
+    for (phase, stem) in &stems {
         plan_stems.insert(stem.clone());
         let wrote_toml = write_if_absent(
             &dir.join(format!("{stem}.toml")),
@@ -120,9 +143,9 @@ pub(crate) fn init_phases(
         if prune {
             drop(fs::remove_file(dir.join(format!("{stem}.toml"))));
             drop(fs::remove_file(dir.join(format!("{stem}.md"))));
-            report.pruned.push(stem);
+            report.pruned.push(phase_id_from_stem(&stem));
         } else {
-            report.orphan.push(stem);
+            report.orphan.push(phase_id_from_stem(&stem));
         }
     }
 
@@ -240,9 +263,16 @@ pub(crate) fn set_phase_status(
     {
         table.insert("started", toml_edit::value(now));
     }
-    if status == PhaseStatus::Completed && table.get("completed").and_then(Item::as_str) == Some("")
-    {
-        table.insert("completed", toml_edit::value(now));
+    // `completed` holds a stamp iff the phase is completed: stamp once on first
+    // completion (a re-complete keeps the original time), and clear it on any
+    // non-completed status so a reopen leaves no stale completion time on an
+    // in-progress/blocked phase (an otherwise internally-contradictory record).
+    if status == PhaseStatus::Completed {
+        if table.get("completed").and_then(Item::as_str) == Some("") {
+            table.insert("completed", toml_edit::value(now));
+        }
+    } else {
+        table.insert("completed", toml_edit::value(""));
     }
 
     let mut row = toml_edit::Table::new();
@@ -395,10 +425,22 @@ mod tests {
         let report = init_phases(root, 4, &plan(&["PHASE-01", "PHASE-03"]), false).unwrap();
 
         assert_eq!(report.created, vec!["PHASE-03"]);
-        assert_eq!(report.orphan, vec!["phase-02"]);
+        assert_eq!(report.orphan, vec!["PHASE-02"]);
         assert!(report.pruned.is_empty());
         // orphan tracking is NOT silently removed
         assert!(phases_dir(root, 4).join("phase-02.toml").is_file());
+    }
+
+    #[test]
+    fn init_phases_rejects_a_malformed_id_before_writing_anything() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice_dir(root, 4);
+
+        let err = init_phases(root, 4, &plan(&["PHASE-01", "bad", "PHASE-03"]), false).unwrap_err();
+        assert!(err.to_string().contains("must match PHASE-<digits>"));
+        // the valid earlier phase did not leak — nothing was materialised
+        assert!(!phases_dir(root, 4).join("phase-01.toml").exists());
     }
 
     #[test]
@@ -410,7 +452,7 @@ mod tests {
         init_phases(root, 4, &plan(&["PHASE-01", "PHASE-02"]), false).unwrap();
         let report = init_phases(root, 4, &plan(&["PHASE-01"]), true).unwrap();
 
-        assert_eq!(report.pruned, vec!["phase-02"]);
+        assert_eq!(report.pruned, vec!["PHASE-02"]);
         assert!(report.orphan.is_empty());
         let phases = phases_dir(root, 4);
         assert!(!phases.join("phase-02.toml").exists());
@@ -426,9 +468,12 @@ mod tests {
 
         init_phases(root, 4, &plan(&["PHASE-01"]), false).unwrap();
         let link = root.join(SLICE_DIR).join("004/phases");
+        // the link must *resolve* to the canonical state dir — not merely string-
+        // match a hand-written relative target, which would pass even if the two
+        // sides of the convention drifted apart.
         assert_eq!(
-            fs::read_link(&link).unwrap(),
-            Path::new("../../state/slice/004/phases")
+            fs::canonicalize(&link).unwrap(),
+            fs::canonicalize(phases_dir(root, 4)).unwrap(),
         );
     }
 
@@ -503,6 +548,27 @@ mod tests {
         assert_eq!(doc["completed"].as_str(), Some("T3"));
         assert_eq!(doc["status"].as_str(), Some("completed"));
         assert_eq!(doc["progress"].as_array_of_tables().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn set_phase_status_clears_completed_on_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        init_one(root);
+
+        set_phase_status(root, 4, "PHASE-01", PhaseStatus::Completed, None, "T1").unwrap();
+        set_phase_status(root, 4, "PHASE-01", PhaseStatus::InProgress, None, "T2").unwrap();
+
+        let doc = fs::read_to_string(phases_dir(root, 4).join("phase-01.toml"))
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
+        assert_eq!(doc["status"].as_str(), Some("in_progress"));
+        assert_eq!(
+            doc["completed"].as_str(),
+            Some(""),
+            "reopen clears the stale completion stamp"
+        );
     }
 
     #[test]
