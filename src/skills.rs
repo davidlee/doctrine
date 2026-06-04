@@ -479,10 +479,18 @@ impl Runner for Npx {
 fn materialise_canonical(entry: &Entry, dest: &Path) -> anyhow::Result<()> {
     let tmp = staging_path(dest)?;
 
-    // Clear any crashed leftover from a prior interrupted stage.
-    if tmp.exists() {
-        fs::remove_dir_all(&tmp)
-            .with_context(|| format!("Failed to clear stale {}", tmp.display()))?;
+    // Clear any crashed leftover from a prior interrupted stage. Use lexists
+    // (symlink_metadata, not exists()): a leftover is normally a partial dir, but
+    // an odd dangling symlink must also be cleared — exists() follows it and would
+    // miss it, then `copy_skill`'s create_dir_all would fail on the stale link.
+    match fs::symlink_metadata(&tmp) {
+        Ok(m) if m.file_type().is_dir() => fs::remove_dir_all(&tmp)
+            .with_context(|| format!("Failed to clear stale {}", tmp.display()))?,
+        Ok(_) => {
+            fs::remove_file(&tmp)
+                .with_context(|| format!("Failed to clear stale {}", tmp.display()))?;
+        }
+        Err(_) => {}
     }
     // Stage the embed into the temp (same filesystem → the rename below is valid).
     copy_skill(entry, &tmp)?;
@@ -537,19 +545,35 @@ fn execute(
                     materialise_canonical(entry, &c.dest)?;
                     writeln!(out, "  refreshed {}", c.id)?;
                 }
-                // 2. Reconcile the agent links by proven ownership.
+                // 2. Reconcile the agent links by proven ownership. Re-classify
+                // at mutation time, not just from the plan: a foreign symlink/file
+                // could appear at `dest` between build_plan and here (the confirm
+                // window, or a concurrent install). `rename` would silently clobber
+                // it — so we re-prove ownership and keep-foreign if it changed,
+                // upholding the never-clobber invariant (design §5.5). A real dir
+                // is already safe (rename cannot replace a directory).
                 for link in links {
-                    match link {
-                        Link::Create { id, dest, target } => {
+                    let (id, dest, target) = match link {
+                        Link::Create { id, dest, target } | Link::Relink { id, dest, target } => {
+                            (id, dest, target)
+                        }
+                        Link::KeepForeign { id, dest, reason } => {
+                            let _ = dest;
+                            writeln!(out, "  kept      {id} ({})", foreign_reason(reason))?;
+                            continue;
+                        }
+                    };
+                    match classify_link(id, dest, target) {
+                        Link::Create { .. } => {
                             write_link(dest, target)?;
                             writeln!(out, "  linked    {id}")?;
                         }
-                        Link::Relink { id, dest, target } => {
+                        Link::Relink { .. } => {
                             write_link(dest, target)?;
                             writeln!(out, "  relinked  {id}")?;
                         }
-                        Link::KeepForeign { id, reason, .. } => {
-                            writeln!(out, "  kept      {id} ({})", foreign_reason(reason))?;
+                        Link::KeepForeign { reason, .. } => {
+                            writeln!(out, "  kept      {id} ({})", foreign_reason(&reason))?;
                         }
                     }
                 }
@@ -849,6 +873,26 @@ mod tests {
             fs::read(id_dir.join("SKILL.md")).unwrap(),
             embed.data.as_ref()
         );
+    }
+
+    #[test]
+    fn materialise_clears_a_dangling_temp_leftover() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let e = code_review_entry();
+        let id_dir = dir.path().join(&e.id);
+        let tmp = dir.path().join(format!(".tmp-{}", e.id));
+        // A crashed leftover that is a *dangling symlink*, not a partial dir —
+        // exists() would miss it (A1).
+        symlink("/no/such/target", &tmp).unwrap();
+
+        materialise_canonical(&e, &id_dir).unwrap();
+
+        assert!(
+            fs::symlink_metadata(&tmp).is_err(),
+            "dangling temp leftover must be cleared"
+        );
+        assert_eq!(fs::read(id_dir.join("SKILL.md")).unwrap(), embed_skill_md());
     }
 
     // --- canonical dir + relative target ---
@@ -1162,6 +1206,48 @@ mod tests {
             PathBuf::from("/some/other/place")
         );
         assert!(log.contains("kept      code-review (foreign symlink → /some/other/place)"));
+    }
+
+    #[test]
+    fn execute_re_keeps_a_dest_that_turned_foreign_after_planning() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = discover().unwrap();
+        // Plan while the dest is missing → Link::Create.
+        let plan = build_plan(
+            dir.path(),
+            &[Agent::Claude],
+            &catalog,
+            &["code-review".into()],
+            &[],
+            false,
+        )
+        .unwrap();
+
+        // A foreign symlink appears at dest AFTER planning (the TOCTOU window:
+        // confirm prompt, or a concurrent install).
+        let agent_dir = dir.path().join(".claude/skills");
+        fs::create_dir_all(&agent_dir).unwrap();
+        symlink("/some/other/place", agent_dir.join("code-review")).unwrap();
+
+        let runner = FakeRunner {
+            ok: true,
+            ..FakeRunner::default()
+        };
+        let mut out = Vec::new();
+        execute(&plan, &catalog, &runner, &mut out).unwrap();
+
+        // execute re-classifies at mutation time → keeps it, never clobbers (A2).
+        let log = String::from_utf8(out).unwrap();
+        assert!(
+            log.contains("kept      code-review (foreign symlink → /some/other/place)"),
+            "a dest that turned foreign after planning must be kept: {log}"
+        );
+        assert_eq!(
+            fs::read_link(agent_dir.join("code-review")).unwrap(),
+            PathBuf::from("/some/other/place"),
+            "the foreign symlink is untouched"
+        );
     }
 
     #[test]
