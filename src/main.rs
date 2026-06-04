@@ -2,6 +2,7 @@
 mod entity;
 mod fsutil;
 mod install;
+mod memory;
 mod root;
 mod skills;
 mod slice;
