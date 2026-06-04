@@ -6,6 +6,11 @@
       "name": "review",
       "source": "./plugins/review",
       "description": "Code & security review skills."
+    },
+    {
+      "name": "handover",
+      "source": "./plugins/handover",
+      "description": "Author the disposable handover.md for the next agent / phase."
     }
   ]
 }
