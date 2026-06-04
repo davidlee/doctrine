@@ -468,6 +468,47 @@ mod tests {
         }
     }
 
+    #[test]
+    fn embedded_manifest_creates_memory_items_and_ignores_derived_subtrees() {
+        let manifest = load_manifest().unwrap();
+
+        // items/ is the only memory subtree the installer materialises — it
+        // holds committed, authored memory entities.
+        assert!(
+            manifest
+                .dirs
+                .create
+                .iter()
+                .any(|d| d == ".doctrine/memory/items"),
+            "manifest must create the memory items tree"
+        );
+        // The derived subtrees are gitignored but NOT created (future slices own
+        // their on-demand creation).
+        for derived in [
+            ".doctrine/memory/index/*",
+            ".doctrine/memory/embeddings/*",
+            ".doctrine/memory/state/*",
+        ] {
+            assert!(
+                manifest.gitignore.entries.iter().any(|e| e == derived),
+                "manifest must gitignore {derived}"
+            );
+            assert!(
+                !manifest.dirs.create.iter().any(|d| d == derived),
+                "manifest must not create the derived subtree {derived}"
+            );
+        }
+        // A blanket ignore would swallow the committed items/ tree — must not exist.
+        assert!(
+            !manifest
+                .gitignore
+                .entries
+                .iter()
+                .any(|e| e == ".doctrine/memory/*" || e == ".doctrine/memory/"),
+            "manifest must not blanket-ignore the memory tree"
+        );
+    }
+
     // ---------------------------------------------------------------
     // execution
     // ---------------------------------------------------------------

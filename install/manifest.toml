@@ -4,7 +4,7 @@ target = ".doctrine"
 [dirs]
 create = [
   ".doctrine/agents",
-  ".doctrine/memory",
+  ".doctrine/memory/items",
   ".doctrine/scripts",
   ".doctrine/skills",
   ".doctrine/slice",
@@ -15,10 +15,18 @@ create = [
 # Runtime state is disposable and must never be committed; the convenience
 # `phases` symlink and ad-hoc `handover.md` are gitignored so they never enter
 # the tracked authored tree (slice-004 D6/D8). Additive — re-install is a no-op.
+#
+# Memory: `items/` holds committed authored entities (created above, NOT ignored).
+# The derived subtrees (index/embeddings/state) are regenerable — ignore the
+# contents narrowly; never blanket `.doctrine/memory/*`, which would swallow
+# the committed `items/` tree (slice-005 PHASE-06).
 entries = [
   ".doctrine/state/",
   ".doctrine/slice/*/phases",
   ".doctrine/slice/*/handover.md",
+  ".doctrine/memory/index/*",
+  ".doctrine/memory/embeddings/*",
+  ".doctrine/memory/state/*",
 ]
 
 [root_markers]
