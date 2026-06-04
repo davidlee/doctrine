@@ -239,6 +239,57 @@ enum MemoryCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Retrieve memories as bounded, security-framed `data, not instruction`
+    /// blocks for agent context. Applies the trust holdback (non-bypassable):
+    /// low-trust high-severity memories are suppressed; use `find`/`show` to
+    /// inspect them.
+    Retrieve {
+        /// Path scope probe, repeatable (`-p`/`--path` is the project root).
+        #[arg(long = "path-scope")]
+        path_scope: Vec<String>,
+
+        /// Glob scope probe, repeatable.
+        #[arg(long = "glob")]
+        glob: Vec<String>,
+
+        /// Command scope probe, repeatable.
+        #[arg(long = "command")]
+        command: Vec<String>,
+
+        /// Tag scope probe, repeatable.
+        #[arg(long = "tag")]
+        tag: Vec<String>,
+
+        /// Free-text lexical query (not a scope constraint).
+        #[arg(long)]
+        query: Option<String>,
+
+        /// Hard filter by type: concept|fact|pattern|signpost|system|thread.
+        #[arg(long = "type", value_parser = memory::MemoryType::parse)]
+        memory_type: Option<memory::MemoryType>,
+
+        /// Hard filter by lifecycle status.
+        #[arg(long, value_parser = memory::Status::parse)]
+        status: Option<memory::Status>,
+
+        /// Include `draft` memories (excluded by default).
+        #[arg(long = "include-draft")]
+        include_draft: bool,
+
+        /// Max blocks to render (default 5, capped at 20).
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Raise the trust floor: only show memories at this trust or higher under
+        /// high severity (high|medium|low; only raises the default `medium`).
+        #[arg(long = "min-trust", value_parser = retrieve::parse_min_trust)]
+        min_trust: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -469,6 +520,31 @@ fn main() -> anyhow::Result<()> {
                 memory_type,
                 status,
                 include_draft,
+            ),
+            MemoryCommand::Retrieve {
+                path_scope,
+                glob,
+                command,
+                tag,
+                query,
+                memory_type,
+                status,
+                include_draft,
+                limit,
+                min_trust,
+                path,
+            } => retrieve::run_retrieve(
+                path,
+                path_scope,
+                glob,
+                command,
+                tag,
+                query,
+                memory_type,
+                status,
+                include_draft,
+                limit,
+                min_trust.as_deref(),
             ),
         },
         Command::Adr { command } => match command {

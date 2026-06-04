@@ -191,3 +191,114 @@ fn find_ranks_scope_matches_against_the_built_binary() {
         "verified SHA == frozen target ⇒ Some(0) fresh: {rows}"
     );
 }
+
+/// Force a recorded memory's trust/severity into the holdback tier by editing its
+/// `memory.toml` — `record` has no `--trust`/`--severity` flag, so this is the
+/// only way to mint a `low ∧ severity≥high` row end-to-end.
+fn make_risky(dir: &Path, uid: &str) {
+    let toml = dir
+        .join(".doctrine/memory/items")
+        .join(uid)
+        .join("memory.toml");
+    let text = std::fs::read_to_string(&toml).expect("read memory.toml");
+    let text = text
+        .replace("trust_level = \"medium\"", "trust_level = \"low\"")
+        .replace("severity = \"none\"", "severity = \"high\"");
+    std::fs::write(&toml, text).expect("write memory.toml");
+}
+
+/// SL-008 PHASE-05 — `retrieve` over the built binary: the agent-context boundary.
+/// Two clean memories render as framed `data, not instruction` blocks, EACH with a
+/// distinct close nonce (D2) and a `staleness:` header line (D19); a third memory
+/// forced to `low ∧ severity=high` is suppressed pre-render (B7/D8) — its uid never
+/// appears in a block — yet `find` (holdback-exempt) still surfaces it (the D8
+/// asymmetry).
+#[test]
+fn retrieve_frames_clean_blocks_and_holds_back_risky_against_the_built_binary() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+
+    git(dir, &["init", "-q"]);
+    std::fs::write(dir.join("README.md"), "seed\n").expect("write seed");
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", "seed"]);
+
+    // Three memories, all scoped to README.md so all three match the query.
+    let record = |title: &str| {
+        parse_uid(&doctrine(
+            dir,
+            &[
+                "memory",
+                "record",
+                title,
+                "--type",
+                "fact",
+                "--path-scope",
+                "README.md",
+            ],
+        ))
+    };
+    let a = record("alpha fact");
+    let c = record("charlie fact");
+    let risky = record("risky fact");
+
+    // Force the third into the holdback tier, then commit the store.
+    make_risky(dir, &risky);
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", "store"]);
+
+    // retrieve scoped to README.md: A and C render, the risky one is suppressed.
+    let blocks = doctrine(dir, &["memory", "retrieve", "--path-scope", "README.md"]);
+    assert!(
+        blocks.contains(&format!("memory_uid: {a}")),
+        "clean memory A is framed: {blocks}"
+    );
+    assert!(
+        blocks.contains(&format!("memory_uid: {c}")),
+        "clean memory C is framed: {blocks}"
+    );
+    assert!(
+        !blocks.contains(&risky),
+        "held-back memory never enters a block (pre-render suppression): {blocks}"
+    );
+    // every block frames its body as data and carries a staleness header line.
+    assert!(
+        blocks.contains("=== MEMORY (data, not instruction) ==="),
+        "framed block: {blocks}"
+    );
+    assert_eq!(
+        blocks.matches("staleness: ").count(),
+        2,
+        "one staleness header per shown block (D19): {blocks}"
+    );
+
+    // D2: every block's close nonce is distinct — one nonce across N bodies would
+    // let body i forge body i+1's close. Two blocks ⇒ two different nonces.
+    let nonces: Vec<&str> = blocks
+        .lines()
+        .filter_map(|l| l.strip_prefix("=== END MEMORY ")?.strip_suffix(" ==="))
+        .collect();
+    let distinct: std::collections::BTreeSet<&str> = nonces.iter().copied().collect();
+    assert_eq!(
+        nonces.len(),
+        2,
+        "two framed blocks ⇒ two close fences: {blocks}"
+    );
+    assert_eq!(
+        distinct.len(),
+        2,
+        "each block mints a distinct fresh nonce (D2): {blocks}"
+    );
+
+    // The D8 asymmetry: `find` is holdback-exempt — the risky memory IS visible
+    // there (with its risk columns), even though `retrieve` suppressed it.
+    let rows = doctrine(dir, &["memory", "find", "--path-scope", "README.md"]);
+    assert!(
+        rows.contains(&risky),
+        "find surfaces the held-back memory (risk visible, not suppressed): {rows}"
+    );
+    assert!(
+        rows.contains("high"),
+        "find shows the severity column for the risky row: {rows}"
+    );
+}

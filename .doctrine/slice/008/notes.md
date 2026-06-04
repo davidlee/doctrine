@@ -115,3 +115,44 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 - **CLI `--path-scope`** (not `--path` — `-p/--path` is the root flag, same
   collision `record` resolved identically). `run_find` carries
   `#[expect(clippy::too_many_arguments)]` (CLI surface fans flags 1:1).
+
+## PHASE-05 — durable decisions (retrieve surface)
+
+- **`render_show` gained a 4th param `staleness: Option<&str>`, promoted to
+  `pub(crate)` (K1).** The `staleness:` header line renders INSIDE the frame, after
+  `verification_state` — a doctrine-spoken metadata line beside `trust_level`, not
+  out-of-frame prose. `show` passes `None` (byte-identical to SL-005 output, proven
+  by the unchanged show goldens). One renderer, no batch fork (D2/EX-1 forbid a
+  `render_retrieve` — it would weaken the per-block close-nonce contract).
+- **Body-read seam = `memory::read_body(items_root, uid)` (K2), NOT a re-run of
+  `resolve_show`.** `collect_memories` already parsed the `Memory`; `resolve_show`
+  would re-scan + re-parse the TOML per hit. `read_body` reuses `fsutil::safe_join`
+  (the H1 chokepoint, defence in depth) for the one new `.md` read, mirroring
+  `resolve_show`'s `read_to_string(...).unwrap_or_default()` degrade. Bodies are
+  read lazily — only for the ≤limit SHOWN hits, never all candidates.
+- **Suppress-then-take (K3), ratified by the user against the §5.1 pseudocode's
+  literal `take(limit,[Ranked])`-then-suppress.** `select_shown` filters held-back
+  across ALL ranked survivors, THEN `take(limit)` — a held-back memory never
+  consumes an agent-context slot (a top-ranked risky memory would otherwise shrink
+  the visible block count below the limit). Security invariant (suppressed body
+  unrendered) holds under either order; K3 is the more-useful fill-the-budget
+  reading. → flagged for the close-out audit / design §5.1 fold-in.
+- **`--min-trust` = minimum trust to PASS (K4), ratified.** Floor is a `trust_rank`;
+  default `medium` (rank 1). `held_back = severity∈{critical,high} ∧ trust_rank(m) >
+  floor`. At default this is exactly D8's `low ∧ severity≥high`. `--min-trust L`
+  raises the floor via `min(trust_rank(L), default)` — it can only RAISE (require
+  more trust); `--min-trust low` is a no-op (non-bypassable downward, B7).
+  `--min-trust high` ⇒ floor 0 ⇒ low+medium held under high severity, HIGH passes.
+  Low-severity memories are NEVER held (the holdback targets the high-severity
+  untrusted-claim / injection-risk tier, not low quality). Validated CLI
+  value_parser rejects anything but high|medium|low — no silent worst-rank default.
+- **`take(limit)` clamp:** `limit.unwrap_or(5).min(20)` (D17/B10) — upper cap only;
+  `--limit 0` is a valid "render nothing". `RETRIEVE_LIMIT_DEFAULT/MAX` consts.
+- **Per-block nonce minted INSIDE the render loop** (`uuid::Uuid::new_v4().simple()`
+  per hit, D2) — never hoisted. The e2e proves N blocks ⇒ N distinct close fences.
+- **quarantined/retracted need NO retrieve-side filter** — `base_filter` (inside
+  the shared `query`) already drops them upstream; retrieve adds ONLY the trust
+  floor. Adding a second lifecycle filter would be parallel impl.
+- **`select_shown` extracted as a pure seam** (suppress→take, no fs/nonce) so the
+  security-critical suppression + K3 order are unit-tested without stdout capture;
+  the impure render (body + nonce + `render_show`) is the thin loop over its result.
