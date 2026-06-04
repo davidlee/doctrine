@@ -7,6 +7,9 @@
 .pi
 .agents
 .codex
+.doctrine/*
+!.doctrine/slice/
+!.doctrine/memory/
 
 handover.md
 /scratch
@@ -15,3 +18,6 @@ handover.md
 # Added by cargo
 
 /target
+.doctrine/state/
+.doctrine/slice/*/phases
+.doctrine/slice/*/handover.md
