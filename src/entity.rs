@@ -134,11 +134,12 @@ pub(crate) enum MaterialiseRequest<'a> {
     /// Create file(s) under an existing numeric parent (design / plan / notes).
     InExisting { id: u32 },
     /// Claim a caller-named entity dir (memory; the name is its uid). No binary
-    /// caller constructs this until the memory kind lands; the engine path and
-    /// its tests already exercise it (PHASE-02 removes the attribute).
+    /// caller constructs this until `doctrine memory record` (SL-005 PHASE-04);
+    /// the engine path and its tests already exercise it. The attribute comes off
+    /// when `run_record` builds the request.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "consumed by the memory kind (PHASE-02)")
+        expect(dead_code, reason = "constructed by `memory record` (SL-005 PHASE-04)")
     )]
     Named { name: &'a str },
 }
@@ -166,7 +167,7 @@ impl OwnedEntityId {
     /// name and the cross-entity reference token. Every entity has one.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "consumed by the memory kind (PHASE-02)")
+        expect(dead_code, reason = "read by the memory verbs (SL-005 PHASE-04/05)")
     )]
     pub(crate) fn canonical_ref(&self) -> &str {
         match self {
@@ -245,7 +246,7 @@ pub(crate) fn scan_ids(tree_root: &Path) -> anyhow::Result<Vec<u32>> {
 /// numeric-only and would skip a named (e.g. `mem_…`) dir (finding 1).
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "consumed by the memory kind (PHASE-02)")
+    expect(dead_code, reason = "drives `memory list` (SL-005 PHASE-05)")
 )]
 pub(crate) fn scan_named(tree_root: &Path) -> anyhow::Result<Vec<String>> {
     let mut names = Vec::new();

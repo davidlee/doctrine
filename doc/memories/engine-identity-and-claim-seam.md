@@ -4,12 +4,14 @@ Durable cross-cutting facts about `src/entity.rs` that outlive any one slice.
 Decided in SL-005 design ([../../.doctrine/slice/005/design.md](../../.doctrine/slice/005/design.md));
 **D1/D7/D8/D9 built in SL-005 PHASE-01** (commits `ffe18a0` rename + `b58318d`
 widening) — the numeric suite passed unchanged (the behaviour gate). The *named*
-path (`MaterialiseRequest::Named`, `allocate_named`, `scan_named`, `canonical_ref`)
-exists but has **no binary consumer until PHASE-02** wires the memory kind; those
-items carry a `#[cfg_attr(not(test), expect(dead_code, reason=…))]` (lib build = dead
-→ expectation met; test build = used → attr absent), which PHASE-02 deletes as it
-adds the consumer. Recorded here so the engine's next caller inherits them without
-re-deriving.
+path exists but has **no binary consumer yet** (PHASE-02 is pure schema/parse and
+does NOT wire it). Three items carry a `#[cfg_attr(not(test), expect(dead_code,
+reason=…))]` (lib build = dead → expectation met; test build = used → attr absent),
+each removed when its first caller lands: **`MaterialiseRequest::Named`** →
+`memory record` (PHASE-04); **`scan_named`** → `memory list` (PHASE-05);
+**`canonical_ref`** → memory render (PHASE-04/05). `allocate_named` and the two
+`Named` enum variants are already live (reached via `materialise` dispatch + tests).
+Recorded here so the engine's next caller inherits them without re-deriving.
 
 ## 1. The engine serves two identity shapes (not just numeric)
 
