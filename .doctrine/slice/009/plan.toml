@@ -1,0 +1,113 @@
+# Implementation plan for SL-009 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-009"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Extract neutral meta row helpers (behaviour-preserving)"
+objective = """
+Pull the column-measuring and single-row layout that meta::format_list already \
+performs into two neutral helpers (measure_meta_columns + format_meta_row), and \
+reimplement format_list over them with byte-identical output. This is the \
+shared-machinery change (slice list AND adr list call meta), so it is a pure \
+refactor gated by behaviour-preservation: both listings stay byte-for-byte the \
+same. format_meta_row gains a presentation-neutral status_suffix (it carries the \
+later ⚠, but meta learns nothing about phases). Design D2 / R-F1. No rollup, no \
+phase concept yet.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (codex round dispositioned; § 10 decisions locked)" },
+  { id = "EN-2", text = "full meta.rs + slice.rs + adr.rs suite green at HEAD" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "meta.rs adds pub(crate) measure_meta_columns(&[Meta]) -> MetaWidths and format_meta_row(&Meta, &MetaWidths, status_suffix: Option<&str>) -> String" },
+  { id = "EX-2", text = "format_list reimplemented over the two helpers; its existing tests pass UNCHANGED (byte-identical output is the regression lock)" },
+  { id = "EX-3", text = "Meta struct unchanged; no phase/rollup field or concept enters meta.rs (kept neutral for the adr caller)" },
+  { id = "EX-4", text = "cargo clippy zero warnings; no width/layout logic duplicated elsewhere" },
+]
+verification = [
+  { id = "VT-1", expects = "meta format_list tests pass verbatim; format_list(&[]) still \"\"" },
+  { id = "VT-2", expects = "behaviour-preservation gate: slice list AND adr list output byte-identical to HEAD" },
+  { id = "VT-3", expects = "new unit: format_meta_row with status_suffix=Some(\"⚠\") appends the marker without breaking column alignment of following columns" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Phase rollup core: buckets, pure fold, terminal-set, IO reader"
+objective = """
+The derivation, all on the correct side of the IO seam. PhaseRollup carries \
+every status bucket so total() can never undercount and anomalies() is explicit \
+(D7/R-F5/R-F3). Pure fold_rollup folds a per-stem StemStatus slice; \
+is_terminal_status is the ONE place a terminal authored token is named \
+(D3/R-F2); the IO reader phase_rollup discovers the phase set via the existing \
+existing_phase_stems (so it agrees with init_phases) and classifies each stem \
+.toml-present vs .md-only (D8/R-F4). No presentation here.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (PHASE-02 is independent of PHASE-01; either order is sound)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "PhaseRollup { planned, in_progress, completed, blocked, unknown, missing_toml } with total() = sum of all buckets and anomalies() = unknown + missing_toml" },
+  { id = "EX-2", text = "enum StemStatus { Toml(&str), MissingToml }; pure fold_rollup(&[StemStatus]) -> PhaseRollup — unknown status string → unknown bucket, MissingToml → missing_toml" },
+  { id = "EX-3", text = "pub(crate) is_terminal_status(&str) -> bool, v1 set {\"done\"} — the single terminal-token source the deferred lifecycle verb reuses" },
+  { id = "EX-4", text = "phase_rollup(root, id) -> Result<Option<PhaseRollup>>: phase set from existing_phase_stems (either half of the pair); .toml tolerant-parsed for status, .md-only stem → MissingToml; None iff no stem; path id-derived (phases symlink never followed)" },
+]
+verification = [
+  { id = "VT-1", expects = "fold_rollup units: empty; all completed; mixed; blocked present; unknown status → unknown bucket only; MissingToml → missing_toml; total()=sum; anomalies()=unknown+missing_toml" },
+  { id = "VT-2", expects = "is_terminal_status: \"done\" true; \"proposed\"/\"in_progress\"/garbage false" },
+  { id = "VT-3", expects = "phase_rollup tempdir: absent dir → None; empty dir → None; .md-only stem counted as missing_toml (total not shrunk); typo status → unknown; symlink/non-phase entries skipped; result agrees with existing_phase_stems set" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "slice list presentation + wiring + docs"
+objective = """
+Wire the column in. Pure is_divergent keys on is_terminal_status and is \
+suppressed when anomalies > 0 (§ 5.5). Pure format_slice_rows renders the header \
+(suppressed on empty), and per row id / status(+⚠) / phases (X/Y, !N blocked, ?N \
+anomalies, — untracked) / slug / title — built on the PHASE-01 meta helpers plus \
+the slice-only phases column. run_list pairs each sorted Meta with its \
+phase_rollup; no new main.rs arm (the existing slice list arm is enriched). Close \
+out: drop the CLAUDE.md \"no slice status rollup\" gap note and document the column.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged (meta row helpers) and PHASE-02 merged (phase_rollup + is_terminal_status)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "pure is_divergent(authored, Option<&PhaseRollup>): anomalies>0 → false; None → false; terminal && completed<total → true; !terminal && total>0 && completed==total → true; else false" },
+  { id = "EX-2", text = "pure format_slice_rows(&[(Meta, Option<PhaseRollup>)]) -> String: header line (suppressed on empty rows); status gains ⚠ when divergent; phases = completed/total with !N when blocked, ?N when anomalies, — when None; columns aligned via meta::format_meta_row" },
+  { id = "EX-3", text = "run_list reads meta::read_metas(\"slice\") + sort_and_filter (shared, unchanged), maps each to (Meta, state::phase_rollup), prints format_slice_rows; --status still filters the authored status; no new CLI arm" },
+  { id = "EX-4", text = "CLAUDE.md: \"no slice status rollup\" known-gap note removed; slice list line documents the phases column; cargo clippy zero warnings; just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "is_divergent table: terminal+incomplete → true; non-terminal+complete → true; terminal+complete → false; None → false; anomalies>0 → false (both directions covered)" },
+  { id = "VT-2", expects = "format_slice_rows units: header present with rows / absent on empty; — for None; !N only when blocked; ?N only on anomalies; ⚠ only when divergent and not suppressed; alignment holds across mixed-width phases cells" },
+  { id = "VT-3", expects = "run_list integration: a slice with materialised phases shows X/Y; one without shows —; --status filter applies to authored status; adr list output byte-identical (behaviour gate restated)" },
+]
+specs        = []
+requirements = []
