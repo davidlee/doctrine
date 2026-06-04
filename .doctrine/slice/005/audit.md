@@ -107,8 +107,29 @@ does not sanitise — and they live exactly where the design flagged the risk
 - [x] A-1 fixed + hostile-interpolation tests green.
 - [x] A-2 fixed + sentinel-spoof test green.
 - [x] A-3/A-4 dispositioned (delete or unify the named path).
-- [ ] Re-review (warm reviewer) → verdict ≥ acceptable.
-- [ ] Then: `slice-005.toml` status `proposed` → done; harvest residuals.
+- [x] Re-review (warm reviewer) → **verdict acceptable** (2026-06-04).
+- [x] `slice-005.toml` status `proposed` → `done`.
+
+## Final re-review (2026-06-04 — warm reviewer)
+
+**Verdict: acceptable. Close-out cleared.** All six findings resolved; the two 🔴
+escaping blockers are properly dead, not papered over.
+
+- **A-1** ✅ — serializer-escaped (`toml_string`), round-trip test drives `"`/newline/`]`.
+  Independently re-verified the original repro (`record 'broke"n title'`) now records,
+  lists, and shows clean.
+- **A-2** ✅ — shell-minted v4 nonce; `render_show` stays pure (nonce threaded like
+  uid/date). The strengthened test drives the uid-keyed spoof the old guard could not
+  defend. Real-binary smoke: the close fence differs every render — unforgeable. Residual
+  is the inherent advisory-frame limit, stated truthfully, not a deferral.
+- **A-3/A-4** ✅ — Option 2 (collapse) landed: `EntityId`/`numbered()`/`canonical_ref`/
+  `MaterialiseRequest::Named` deleted; `materialise_named` is the single named path; no
+  lying `dead_code` reasons remain. Numeric suites green unchanged (behaviour gate held).
+- **A-5/A-6** ✅ — dispositioned note-only (A-5 acceptable now the writer can't emit
+  corruption; A-6 design drift recorded, design left unpatched).
+
+Gate (re-verified): `just lint` (clippy lib+bin) zero, `cargo test` 137 green, `cargo fmt`
+clean. Commits `12d826e` (A-2 fix) + `590c803` (A-1/A-3/A-4) + `4dea6a1` (audit).
 
 ## Fix-up record (2026-06-04 — for the warm re-reviewer)
 
