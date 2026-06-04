@@ -26,6 +26,18 @@ Why not the alternatives: an `Option<&MemoryRender>` on `ScaffoldCtx` reintroduc
 exact Option-bag D8 removed; a `Box<dyn Fn>` scaffold breaks the `const` numeric
 kinds. A is the only one with no invalid-state surface and zero numeric-caller churn.
 
+**Landed (PHASE-04, commit `9515a20`):**
+- Signature is `entity::materialise_named(claim, project_root, dir, name, &Fileset)` —
+  **`&Fileset` by ref, not by value** (the body only borrows it for `write_fileset`;
+  `needless_pass_by_value` is denied). Shares `claim_and_write_named` (the claim+write+H2
+  core) with `allocate_named`; the latter now builds its fileset *before* the claim.
+- `run_record` lives in a `// Shell` section of `memory.rs` (the v7 mint + `clock::today`
+  are the only impurity). `MemoryType::parse`/`Status::parse` are `pub(crate)`, doubling
+  as clap `value_parser`s — no separate CLI-arg enum.
+- `clock.rs` now owns the shell time seam (`today`/`now_timestamp`), moved out of slice.rs.
+- The 8 flat scaffold args collapsed into `memory::Draft<'a>`; both
+  `too_many_arguments` expects gone.
+
 **Consequences (also flagged for the audit):**
 - **EX-3 reinterpreted** — no const `MEMORY_KIND { dir, scaffold }`; the `dir` const +
   the `memory_scaffold` builder play that role. Phase criteria are immutable, so this
