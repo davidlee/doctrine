@@ -169,6 +169,17 @@ enum MemoryCommand {
         path: Option<PathBuf>,
     },
 
+    /// Attest a memory against the current working tree: stamp its verification
+    /// axis (refuses a dirty tree — no false attestation).
+    Verify {
+        /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// List recorded memories, newest first; AND-filter by type/status/tag.
     List {
         /// Filter by type: concept|fact|pattern|signpost|system|thread.
@@ -390,6 +401,7 @@ fn main() -> anyhow::Result<()> {
                 },
             ),
             MemoryCommand::Show { reference, path } => memory::run_show(path, &reference),
+            MemoryCommand::Verify { reference, path } => memory::run_verify(path, &reference),
             MemoryCommand::List {
                 memory_type,
                 status,

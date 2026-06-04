@@ -877,7 +877,10 @@ fn format_list(rows: &[Memory]) -> String {
 /// no live symlink is a not-found. The path is built through
 /// `fsutil::safe_join` (codex-MAJOR-3 — defence in depth over `MemoryRef`'s
 /// pre-screen), never a raw join of the user-supplied name.
-fn resolve_show(items_root: &Path, mref: &MemoryRef) -> Result<(Memory, String)> {
+/// Returns the parsed memory, its `.md` body, and the resolved **item dir** —
+/// `verify` writes `memory.toml` back through that dir, so one resolver serves
+/// both read (show) and mutate (verify) without a second chokepoint.
+fn resolve_show(items_root: &Path, mref: &MemoryRef) -> Result<(Memory, String, PathBuf)> {
     let name = match mref {
         MemoryRef::Uid(s) | MemoryRef::Key(s) => s.as_str(),
     };
@@ -886,7 +889,7 @@ fn resolve_show(items_root: &Path, mref: &MemoryRef) -> Result<(Memory, String)>
         .with_context(|| format!("memory not found: {name}"))?;
     let memory = Memory::parse(&text)?;
     let body = fs::read_to_string(dir.join("memory.md")).unwrap_or_default();
-    Ok((memory, body))
+    Ok((memory, body, dir))
 }
 
 /// `doctrine memory show <uid|key>`.
@@ -894,7 +897,7 @@ pub(crate) fn run_show(path: Option<PathBuf>, reference: &str) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let items_root = root.join(MEMORY_ITEMS_DIR);
     let mref = MemoryRef::parse(reference)?;
-    let (memory, body) = resolve_show(&items_root, &mref)?;
+    let (memory, body, _dir) = resolve_show(&items_root, &mref)?;
     // Per-render nonce: the close-fence secret a hostile body cannot predict (A-2).
     // The sole new impurity on this seam — `render_show` stays pure (nonce in).
     let nonce = uuid::Uuid::new_v4().simple().to_string();
@@ -931,6 +934,87 @@ pub(crate) fn run_list(
     let items_root = root.join(MEMORY_ITEMS_DIR);
     let rows = select_rows(collect_memories(&items_root)?, type_f, status_f, tag_f);
     write!(io::stdout(), "{}", format_list(&rows))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Shell: the `memory verify` mutation verb (PHASE-05) — the slice's one novel
+// write path. Capture the born frame, refuse a dirty tree (no false
+// attestation), else stamp the verification axis edit-preservingly + atomically.
+// ---------------------------------------------------------------------------
+
+/// Edit-preserving verification stamp on one `memory.toml`, reusing
+/// `adr::set_adr_status`'s `toml_edit` shape one table-level down. Sets
+/// `[review].verification_state="verified"` / `reviewed`, `[git].verified_sha`
+/// (`frame.commit` — HEAD on a born tree, `""` for a non-git context since
+/// `commit` is empty when `anchor_kind == None`, Q-B), and bumps top-level
+/// `updated`. `toml_edit` mutates in place, so hand-added comments / unknown keys
+/// survive (the file is never reserialised). The write is atomic (M6).
+fn stamp_verification(toml_path: &Path, frame: &crate::git::Frame, today: &str) -> Result<()> {
+    let text = fs::read_to_string(toml_path)
+        .with_context(|| format!("memory not found: {}", toml_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+
+    // F-1: the verify-mutable keys are scaffold-seeded (PHASE-04). This verb edits
+    // in place, never creates — a tail `insert` into a missing nested table would
+    // land the key inside whatever subtable trails it (silent corruption). Their
+    // absence means a hand-broken/legacy file; refuse instead. Mirrors `adr`'s
+    // top-level guard, one level down (nested `[git]`/`[review]` tables). The
+    // refusal precedes the sole write below, so a malformed file is never touched.
+    let malformed = || {
+        anyhow::anyhow!(
+            "malformed memory at {}: missing [git].verified_sha / \
+             [review].verification_state/reviewed / updated (regenerate via `memory record`)",
+            toml_path.display()
+        )
+    };
+    if !doc.as_table().contains_key("updated") {
+        return Err(malformed());
+    }
+    let review = doc
+        .get_mut("review")
+        .and_then(toml_edit::Item::as_table_mut)
+        .filter(|t| t.contains_key("verification_state") && t.contains_key("reviewed"))
+        .ok_or_else(malformed)?;
+    review.insert("verification_state", toml_edit::value("verified"));
+    review.insert("reviewed", toml_edit::value(today));
+    let git = doc
+        .get_mut("git")
+        .and_then(toml_edit::Item::as_table_mut)
+        .filter(|t| t.contains_key("verified_sha"))
+        .ok_or_else(malformed)?;
+    git.insert("verified_sha", toml_edit::value(frame.commit.as_str()));
+    doc.as_table_mut()
+        .insert("updated", toml_edit::value(today));
+
+    crate::fsutil::write_atomic(toml_path, doc.to_string().as_bytes())
+}
+
+/// `doctrine memory verify <uid|key>` — attest that the memory holds against the
+/// current working tree. Resolves via the `resolve_show` chokepoint, then
+/// captures the **project root**'s frame (the tree being attested, not the
+/// store). A dirty tree is **refused** — verifying a dirty tree would record a
+/// false attestation (design §5.2, D1/Q-B). A clean born tree stamps
+/// `verified_sha=HEAD`; a non-git context stamps the review axis only.
+pub(crate) fn run_verify(path: Option<PathBuf>, reference: &str) -> Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let items_root = root.join(MEMORY_ITEMS_DIR);
+    let mref = MemoryRef::parse(reference)?;
+    let (_memory, _body, dir) = resolve_show(&items_root, &mref)?;
+
+    let frame = crate::git::capture(&root)?;
+    if frame.anchor_kind == AnchorKind::CheckoutState {
+        bail!(
+            "working tree is dirty: refusing to verify (a dirty tree cannot be \
+             attested). Commit first, then verify."
+        );
+    }
+
+    let today = crate::clock::today();
+    stamp_verification(&dir.join("memory.toml"), &frame, &today)?;
+    writeln!(io::stdout(), "Verified memory {reference}")?;
     Ok(())
 }
 
@@ -1930,6 +2014,161 @@ ref = "src/main.rs"
         );
     }
 
+    // -- PHASE-05: the `verify` mutation verb -------------------------------
+
+    /// The sole recorded memory's `memory.toml` path under a root.
+    fn sole_toml(root: &Path) -> PathBuf {
+        items_dir(root).join(sole_uid(root)).join("memory.toml")
+    }
+
+    // VT-1: verify on a clean tree stamps verified_sha/reviewed/verification_state
+    // edit-preservingly (a hand-added comment survives), bumps updated, atomically.
+    // The store is committed first — verify attests the *committed* working tree,
+    // so an uncommitted store is itself dirty (and would be refused, by design).
+    #[test]
+    fn verify_on_a_clean_tree_stamps_the_axis_edit_preservingly() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        run_record(
+            Some(repo.path.clone()),
+            &record_args("V", MemoryType::Fact, None, Status::Active, None, &[]),
+        )
+        .unwrap();
+
+        // a hand-added comment proves the edit preserves unknown content.
+        let toml_path = sole_toml(&repo.path);
+        let original = fs::read_to_string(&toml_path).unwrap();
+        fs::write(&toml_path, format!("# hand-added note\n{original}")).unwrap();
+        repo.git(&["add", "-A"]);
+        repo.git(&["commit", "-m", "store"]);
+        let head = repo.head();
+
+        run_verify(Some(repo.path.clone()), &sole_uid(&repo.path)).unwrap();
+
+        let m = repo.parsed_sole_memory();
+        assert_eq!(m.verification_state, "verified");
+        assert_eq!(m.reviewed, crate::clock::today());
+        assert_eq!(m.updated, crate::clock::today());
+        assert_eq!(m.anchor.verified_sha, head, "verified_sha = clean HEAD");
+        // edit-preserving: the comment survives.
+        let after = fs::read_to_string(&toml_path).unwrap();
+        assert!(after.contains("# hand-added note"), "comment must survive");
+    }
+
+    // VT-1 (idempotency, design §5.4): re-stamping with the same frame + day
+    // rewrites byte-identical values — no document corruption. Tested at
+    // `stamp_verification` directly (in a real repo each stamp+commit moves HEAD).
+    #[test]
+    fn stamp_verification_is_idempotent_for_the_same_frame() {
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join("memory.toml");
+        // a minimal tool-authored file carrying the seeded verify-mutable keys.
+        fs::write(
+            &toml_path,
+            "updated = \"2026-06-04\"\n\n[git]\nverified_sha = \"\"\n\n\
+             [review]\nverification_state = \"unverified\"\nreviewed = \"\"\n",
+        )
+        .unwrap();
+        let sha = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let frame = crate::git::Frame {
+            anchor_kind: AnchorKind::Commit,
+            repo: crate::git::RepoIdentity {
+                repo_id: String::new(),
+                kind: RepoIdKind::LocalRoot,
+                confidence: Confidence::Medium,
+            },
+            commit: sha.to_owned(),
+            tree: String::new(),
+            ref_name: String::new(),
+            checkout_state_id: String::new(),
+            base_commit: sha.to_owned(),
+        };
+        stamp_verification(&toml_path, &frame, "2026-06-05").unwrap();
+        let once = fs::read_to_string(&toml_path).unwrap();
+        stamp_verification(&toml_path, &frame, "2026-06-05").unwrap();
+        let twice = fs::read_to_string(&toml_path).unwrap();
+        assert_eq!(once, twice, "same frame + day → byte-identical");
+        assert!(twice.contains(&format!("verified_sha = \"{sha}\"")));
+        assert!(twice.contains("verification_state = \"verified\""));
+        assert!(twice.contains("reviewed = \"2026-06-05\""));
+        assert!(twice.contains("updated = \"2026-06-05\""));
+    }
+
+    // VT-2a: verify on a dirty tree refuses with no write — the seeded empty
+    // verified_sha is left untouched (no false attestation). The freshly-recorded
+    // store is itself untracked, so the tree is dirty without any extra edit.
+    #[test]
+    fn verify_on_a_dirty_tree_refuses_without_writing() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        run_record(
+            Some(repo.path.clone()),
+            &record_args("V", MemoryType::Fact, None, Status::Active, None, &[]),
+        )
+        .unwrap();
+        let before = fs::read_to_string(sole_toml(&repo.path)).unwrap();
+
+        let err = run_verify(Some(repo.path.clone()), &sole_uid(&repo.path)).unwrap_err();
+        assert!(err.to_string().contains("dirty"), "{err}");
+        assert_eq!(
+            fs::read_to_string(sole_toml(&repo.path)).unwrap(),
+            before,
+            "a refused verify writes nothing"
+        );
+        assert_eq!(repo.parsed_sole_memory().anchor.verified_sha, "");
+    }
+
+    // VT-2b: verify in a non-git context stamps the review axis but leaves
+    // verified_sha empty — there is no commit to attest (Q-B).
+    #[test]
+    fn verify_in_a_non_git_context_stamps_review_axis_only() {
+        let root = tempfile::tempdir().unwrap();
+        run_record(
+            Some(root.path().to_path_buf()),
+            &record_args("V", MemoryType::Fact, None, Status::Active, None, &[]),
+        )
+        .unwrap();
+        run_verify(Some(root.path().to_path_buf()), &sole_uid(root.path())).unwrap();
+
+        let m = Memory::parse(&fs::read_to_string(sole_toml(root.path())).unwrap()).unwrap();
+        assert_eq!(m.verification_state, "verified");
+        assert_eq!(m.reviewed, crate::clock::today());
+        assert_eq!(m.anchor.verified_sha, "", "non-git → no commit to attest");
+    }
+
+    // VT-3: a memory hand-broken to drop a verify-mutable key is refused (F-1),
+    // not corrupted — the file is left byte-for-byte intact.
+    #[test]
+    fn verify_refuses_a_memory_missing_a_seeded_key() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        run_record(
+            Some(repo.path.clone()),
+            &record_args("V", MemoryType::Fact, None, Status::Active, None, &[]),
+        )
+        .unwrap();
+        let toml_path = sole_toml(&repo.path);
+        // drop the seeded `verified_sha` line → F-1 territory.
+        let broken = fs::read_to_string(&toml_path)
+            .unwrap()
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("verified_sha"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&toml_path, &broken).unwrap();
+        // commit so the tree is clean — the refusal must be F-1, not dirty.
+        repo.git(&["add", "-A"]);
+        repo.git(&["commit", "-m", "store"]);
+
+        let err = run_verify(Some(repo.path.clone()), &sole_uid(&repo.path)).unwrap_err();
+        assert!(err.to_string().contains("malformed"), "{err}");
+        assert_eq!(
+            fs::read_to_string(&toml_path).unwrap(),
+            broken,
+            "a refused (F-1) verify must not corrupt the file"
+        );
+    }
+
     // -- PHASE-05: show render + list select/format ------------------------
 
     /// A `Memory` fixture for the pure render/select/format tests.
@@ -2173,10 +2412,10 @@ ref = "src/main.rs"
         let uid = sole_uid(root.path());
 
         // uid hits the real dir …
-        let (by_uid, _) = resolve_show(&items, &MemoryRef::Uid(uid.clone())).unwrap();
+        let (by_uid, _, _) = resolve_show(&items, &MemoryRef::Uid(uid.clone())).unwrap();
         assert_eq!(by_uid.uid, uid);
         // … and the key hits the slug symlink the fs resolves to the same memory.
-        let (by_key, _) =
+        let (by_key, _, _) =
             resolve_show(&items, &MemoryRef::Key("mem.pattern.cli.skinny".to_owned())).unwrap();
         assert_eq!(by_key.uid, uid);
         assert_eq!(by_key.key.as_deref(), Some("mem.pattern.cli.skinny"));
@@ -2237,7 +2476,7 @@ ref = "src/main.rs"
         let items = items_dir(root.path());
 
         // show via the key resolves through the real symlink to the body.
-        let (m, body) =
+        let (m, body, _) =
             resolve_show(&items, &MemoryRef::Key("mem.pattern.cli.skinny".to_owned())).unwrap();
         assert_eq!(m.title, "First");
         assert!(body.contains("first body"));

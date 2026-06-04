@@ -41,6 +41,30 @@ pub(crate) fn create_new_file(path: &Path) -> std::io::Result<File> {
     OpenOptions::new().write(true).create_new(true).open(path)
 }
 
+/// Write `bytes` to `path` atomically: write a sibling temp file in the *same
+/// directory*, then `rename` it over the target. The rename is atomic on a
+/// single filesystem, so a concurrent reader sees either the old file or the
+/// fully-written new one — never a torn write (slice-007 M6). The temp sits
+/// beside the target (not `$TMPDIR`) so the rename never crosses a mount.
+/// The pid keeps two processes' temps from colliding.
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+    let dir = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("path has no parent dir: {}", path.display()))?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("path has no file name: {}", path.display()))?;
+    let tmp = dir.join(format!(
+        ".{}.{}.tmp",
+        name.to_string_lossy(),
+        std::process::id()
+    ));
+    fs::write(&tmp, bytes).with_context(|| format!("Failed to write temp {}", tmp.display()))?;
+    fs::rename(&tmp, path)
+        .with_context(|| format!("Failed to rename {} -> {}", tmp.display(), path.display()))
+}
+
 /// Whether a *real* directory sits at `path` — `symlink_metadata` does not
 /// follow links, so a symlink (even one pointing at a directory) reports
 /// `false`. Used to tell a pre-existing/concurrently-created dir apart from a
@@ -117,6 +141,27 @@ mod tests {
         assert!(create_new_file(&path).is_ok());
         let err = create_new_file(&path).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+    }
+
+    // --- write_atomic (temp+rename swap) ---
+
+    #[test]
+    fn write_atomic_creates_then_overwrites_leaving_no_temp() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("x.toml");
+
+        write_atomic(&path, b"v1").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "v1");
+
+        write_atomic(&path, b"v2").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "v2");
+
+        // the swap leaves only the target — no stray `.tmp` sibling.
+        let names: Vec<String> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["x.toml"]);
     }
 
     // --- is_real_dir (squat detection) ---
