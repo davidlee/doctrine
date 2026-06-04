@@ -22,7 +22,8 @@ immediate work.
       hand-forward) and the slice `notes.md` for durable decisions.
 - [ ] Confirm the next phase's scope from `plan.toml` (EX/VT are authoritative).
 - [ ] record any information worth durably persisting in `notes.md`, or as appropriate.
-- [ ] Emit the sections below into `handover.md`, then STOP — do not start the next phase's code.
+- [ ] Emit the sections below into `handover.md`
+- [ ] Print the path to `handover.md` then STOP — do not start the next phase's code.
 
 ## Shape (sections to emit)
 
