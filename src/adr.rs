@@ -189,6 +189,15 @@ fn set_adr_status(adr_root: &Path, id: u32, status: AdrStatus, today: &str) -> a
     }
 
     let table = doc.as_table_mut();
+    // F-1: `status`/`updated` are scaffold-seeded — this verb edits in place, never
+    // creates. Their absence means a malformed (hand-edited) ADR; a tail `insert`
+    // would append the key *after* the trailing `[relationships]` header, landing it
+    // inside that subtable (silent corruption). Refuse instead.
+    if !table.contains_key("status") || !table.contains_key("updated") {
+        anyhow::bail!(
+            "malformed adr {name}: missing `status`/`updated` (regenerate via `adr new`)"
+        );
+    }
     table.insert("status", toml_edit::value(status.as_str()));
     table.insert("updated", toml_edit::value(today));
     fs::write(&path, doc.to_string()).with_context(|| format!("Failed to write {}", path.display()))
@@ -404,20 +413,35 @@ mod tests {
         assert_eq!(fs::read_to_string(&p).unwrap(), before);
     }
 
-    // --- VT-3: missing id errors; an out-of-enum value is rejected at parse ---
+    // --- VT-3: a missing id among existing ADRs is a hard error (I3) ---
 
     #[test]
-    fn set_adr_status_on_a_missing_id_errors() {
+    fn set_adr_status_on_a_missing_id_among_existing_adrs_errors() {
+        // F-2: prove I3 — a missing id *among existing ADRs* is a hard error, not an
+        // implicit create. (The bare empty-root case only proved "file absent".)
         let dir = tempfile::tempdir().unwrap();
-        let err = set_adr_status(&adr_root(dir.path()), 9, AdrStatus::Accepted, "2099-01-01")
-            .unwrap_err();
+        let root = dir.path();
+        run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
+        let err =
+            set_adr_status(&adr_root(root), 9, AdrStatus::Accepted, "2099-01-01").unwrap_err();
         assert!(err.to_string().contains("not found"));
     }
 
+    // --- F-1: a malformed ADR missing template-seeded keys is refused, not corrupted ---
+
     #[test]
-    fn adr_status_rejects_an_out_of_enum_value() {
-        use clap::ValueEnum;
-        assert!(AdrStatus::from_str("bogus", false).is_err());
-        assert!(AdrStatus::from_str("accepted", false).is_ok());
+    fn set_adr_status_on_an_adr_missing_updated_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = adr_root(dir.path()).join("003/adr-003.toml");
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        // `updated` omitted; a tail `insert` would have landed it in `[relationships]`.
+        fs::write(
+            &p,
+            "status = \"proposed\"\n\n[relationships]\nsupersedes = []\n",
+        )
+        .unwrap();
+        let err = set_adr_status(&adr_root(dir.path()), 3, AdrStatus::Accepted, "2099-01-01")
+            .unwrap_err();
+        assert!(err.to_string().contains("malformed"));
     }
 }
