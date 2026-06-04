@@ -184,6 +184,142 @@ fn claude_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Pure: canonical tree + ownership-by-target-equality (SL-010 D3)
+//
+// A managed agent link is doctrine's *iff its value equals the relative target
+// we would write* — type (is_symlink) is necessary but not sufficient. Anything
+// else (a foreign symlink, or a real dir/file) is kept untouched. This is both
+// the never-clobber guarantee and the override hatch.
+// ---------------------------------------------------------------------------
+
+/// The canonical skills tree (project-local, or under `$HOME` with `global`).
+/// Mirrors `claude_dir`'s base so the relative link target is stable.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by build_plan in PHASE-04")
+)]
+fn canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    if global {
+        let home = std::env::var_os("HOME").context("HOME is not set; cannot resolve --global")?;
+        Ok(PathBuf::from(home).join(".doctrine/skills"))
+    } else {
+        Ok(root.join(".doctrine/skills"))
+    }
+}
+
+/// Relative path from `from` to `to`. Both must be absolute and normalised
+/// (no `.`/`..` components) — the root-/`$HOME`-derived dirs always are.
+fn relative_path(from: &Path, to: &Path) -> PathBuf {
+    let from_c: Vec<_> = from.components().collect();
+    let to_c: Vec<_> = to.components().collect();
+    let common = from_c.iter().zip(&to_c).take_while(|(a, b)| a == b).count();
+    let mut rel = PathBuf::new();
+    for _ in common..from_c.len() {
+        rel.push("..");
+    }
+    for c in to_c.iter().skip(common) {
+        rel.push(c.as_os_str());
+    }
+    rel
+}
+
+/// The relative symlink value for `<id>`: from the agent skills dir (where the
+/// link lives) to `canonical_dir/<id>`. Derived from the two dirs, never
+/// hard-coded — `../../.doctrine/skills/<id>` in the common project-local case,
+/// and correct under a shared `--global` base.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by build_plan in PHASE-04")
+)]
+fn relative_target(agent_skills_dir: &Path, canonical_dir: &Path, id: &str) -> PathBuf {
+    relative_path(agent_skills_dir, &canonical_dir.join(id))
+}
+
+/// Why an agent skill path is foreign — left untouched and warned.
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by execute in PHASE-04")
+)]
+enum ForeignReason {
+    /// A real directory or file the user owns (e.g. a pinned copy override).
+    RealDir,
+    /// A symlink whose value is not our canonical target — points elsewhere.
+    ForeignSymlink(PathBuf),
+}
+
+/// Reconciliation action for one agent skill link, by proven ownership.
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by execute in PHASE-04")
+)]
+enum Link {
+    /// Nothing there → create the relative symlink.
+    Create {
+        id: String,
+        dest: PathBuf,
+        target: PathBuf,
+    },
+    /// A symlink already equal to our target → ensure it (no-op, or heal a
+    /// dangling-but-ours link once its canonical is re-materialised).
+    Relink {
+        id: String,
+        dest: PathBuf,
+        target: PathBuf,
+    },
+    /// Foreign (a real dir, or a symlink pointing elsewhere) → never touched.
+    KeepForeign {
+        id: String,
+        dest: PathBuf,
+        reason: ForeignReason,
+    },
+}
+
+/// Classify `dest` (an agent skill path) against the canonical `target` by
+/// proven ownership. Uses `symlink_metadata`/`read_link`, never `exists()`
+/// (which follows links): a dangling link whose value equals our target is
+/// still ours and is healed, not recreated.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by build_plan in PHASE-04")
+)]
+fn classify_link(id: &str, dest: &Path, target: &Path) -> Link {
+    let Ok(meta) = fs::symlink_metadata(dest) else {
+        return Link::Create {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            target: target.to_path_buf(),
+        };
+    };
+    if !meta.file_type().is_symlink() {
+        return Link::KeepForeign {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            reason: ForeignReason::RealDir,
+        };
+    }
+    match fs::read_link(dest) {
+        Ok(value) if value == target => Link::Relink {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            target: target.to_path_buf(),
+        },
+        Ok(value) => Link::KeepForeign {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            reason: ForeignReason::ForeignSymlink(value),
+        },
+        // Unreadable symlink (race/perm) — treat as foreign, never clobber.
+        Err(_) => Link::KeepForeign {
+            id: id.to_string(),
+            dest: dest.to_path_buf(),
+            reason: ForeignReason::ForeignSymlink(PathBuf::new()),
+        },
+    }
+}
+
 /// Build the Claude direct-install steps (skip existing skill dirs).
 fn claude_steps(skills: &[&Entry], dir: &Path) -> Vec<Step> {
     skills
@@ -643,6 +779,89 @@ mod tests {
             fs::read(id_dir.join("SKILL.md")).unwrap(),
             embed.data.as_ref()
         );
+    }
+
+    // --- canonical dir + relative target ---
+
+    #[test]
+    fn canonical_dir_is_project_local_or_home() {
+        let root = Path::new("/proj");
+        assert_eq!(
+            canonical_dir(root, false).unwrap(),
+            Path::new("/proj/.doctrine/skills")
+        );
+        let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+        assert_eq!(
+            canonical_dir(root, true).unwrap(),
+            home.join(".doctrine/skills")
+        );
+    }
+
+    #[test]
+    fn relative_target_is_computed_from_the_two_dirs() {
+        // Project-local: .claude/skills → .doctrine/skills/<id>.
+        let agent = Path::new("/proj/.claude/skills");
+        let canon = Path::new("/proj/.doctrine/skills");
+        assert_eq!(
+            relative_target(agent, canon, "code-review"),
+            PathBuf::from("../../.doctrine/skills/code-review")
+        );
+        // A shared --global base ($HOME) stays correct — same relative shape,
+        // computed not hard-coded.
+        let g_agent = Path::new("/home/u/.claude/skills");
+        let g_canon = Path::new("/home/u/.doctrine/skills");
+        assert_eq!(
+            relative_target(g_agent, g_canon, "code-review"),
+            PathBuf::from("../../.doctrine/skills/code-review")
+        );
+    }
+
+    // --- ownership classification ---
+
+    #[test]
+    fn classify_link_covers_the_ownership_trichotomy() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let target = PathBuf::from("../../.doctrine/skills/code-review");
+
+        // missing → Create
+        let missing = dir.path().join("missing");
+        assert!(matches!(
+            classify_link("code-review", &missing, &target),
+            Link::Create { .. }
+        ));
+
+        // symlink whose value == target → Relink (dangling-but-ours: the target
+        // need not resolve — ownership is the value, not resolvability).
+        let ours = dir.path().join("ours");
+        symlink(&target, &ours).unwrap();
+        assert!(matches!(
+            classify_link("code-review", &ours, &target),
+            Link::Relink { .. }
+        ));
+
+        // symlink pointing elsewhere → KeepForeign(foreign-symlink → where)
+        let foreign = dir.path().join("foreign");
+        symlink("somewhere/else", &foreign).unwrap();
+        match classify_link("code-review", &foreign, &target) {
+            Link::KeepForeign {
+                reason: ForeignReason::ForeignSymlink(where_),
+                ..
+            } => assert_eq!(where_, PathBuf::from("somewhere/else")),
+            other => panic!("expected foreign-symlink, got {other:?}"),
+        }
+
+        // real dir → KeepForeign(real-dir)
+        let real = dir.path().join("real");
+        fs::create_dir_all(&real).unwrap();
+        assert!(matches!(
+            classify_link("code-review", &real, &target),
+            Link::KeepForeign {
+                reason: ForeignReason::RealDir,
+                ..
+            }
+        ));
     }
 
     // --- delegate argv ---
