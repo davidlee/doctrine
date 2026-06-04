@@ -20,9 +20,19 @@
 )]
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
+
+use crate::entity::{Artifact, Fileset};
+
+/// Workspace coordinate carried on every memory; hardcoded `"default"` in v1 (no
+/// flag — design § 5.3 / interop constraint 6). Read back by `list`/`show`.
+const WORKSPACE: &str = "default";
+
+/// The only schema version v1 emits and accepts (validated `== 1` on read).
+const SCHEMA_VERSION: u32 = 1;
 
 // ---------------------------------------------------------------------------
 // Closed vocabularies (memory-spec § Memory types / Lifecycle status).
@@ -54,6 +64,18 @@ impl MemoryType {
             other => bail!("unknown memory_type {other:?}"),
         })
     }
+
+    /// The stored kebab token (inverse of `parse`) — the `{{type}}` substitution.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Concept => "concept",
+            Self::Fact => "fact",
+            Self::Pattern => "pattern",
+            Self::Signpost => "signpost",
+            Self::System => "system",
+            Self::Thread => "thread",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +99,18 @@ impl Status {
             "quarantined" => Self::Quarantined,
             other => bail!("unknown status {other:?}"),
         })
+    }
+
+    /// The stored kebab token (inverse of `parse`) — the `{{status}}` substitution.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Draft => "draft",
+            Self::Superseded => "superseded",
+            Self::Retracted => "retracted",
+            Self::Archived => "archived",
+            Self::Quarantined => "quarantined",
+        }
     }
 }
 
@@ -388,6 +422,102 @@ impl Memory {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Pure render + the memory fileset (PHASE-03).
+//
+// Memory's render needs more than the engine's uniform `ScaffoldCtx`
+// (eid/slug/title/date) carries — `type`/`status`/`summary`/`key`/`tags` — so it
+// does not ride `Kind.scaffold: fn(&ScaffoldCtx)`. Instead the shell mints the uid
+// (PHASE-04), the record fields are known up front, and `memory_scaffold` renders
+// the whole `Fileset` eagerly; PHASE-04's `materialise_named` claims `items/<uid>/`
+// and hands this fileset to the existing transactional `write_fileset` (seam A).
+// No clock, no disk here — values in, fileset out.
+// ---------------------------------------------------------------------------
+
+/// Render `memory.toml` from the embedded template. The `memory_key` line is
+/// present iff `key` is `Some` (an empty `memory_key = ""` would fail
+/// `validate_key` on read); `tags` becomes a TOML array literal; `workspace` and
+/// `schema_version` are the hardcoded v1 constants.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "flat record fields; a Draft struct lands with run_record (PHASE-04)"
+)]
+fn render_memory_toml(
+    uid: &str,
+    key: Option<&str>,
+    memory_type: MemoryType,
+    status: Status,
+    title: &str,
+    summary: &str,
+    date: &str,
+    tags: &[String],
+) -> Result<String> {
+    let key_line = match key {
+        Some(k) => format!("memory_key = \"{k}\"\n"),
+        None => String::new(),
+    };
+    let tags_lit = tags
+        .iter()
+        .map(|t| format!("\"{t}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Ok(crate::install::asset_text("templates/memory.toml")?
+        .replace("{{uid}}", uid)
+        .replace("{{key_line}}", &key_line)
+        .replace("{{schema_version}}", &SCHEMA_VERSION.to_string())
+        .replace("{{type}}", memory_type.as_str())
+        .replace("{{status}}", status.as_str())
+        .replace("{{title}}", title)
+        .replace("{{summary}}", summary)
+        .replace("{{date}}", date)
+        .replace("{{tags}}", &tags_lit)
+        .replace("{{workspace}}", WORKSPACE))
+}
+
+/// Render `memory.md` — the tool-authored body: title + summary only (design § 5.2).
+fn render_memory_md(title: &str, summary: &str) -> Result<String> {
+    Ok(crate::install::asset_text("templates/memory.md")?
+        .replace("{{title}}", title)
+        .replace("{{summary}}", summary))
+}
+
+/// The memory fileset, relative to the `items/` tree root: `<uid>/memory.toml`,
+/// `<uid>/memory.md`, and — iff `key` is given — a `<key> -> <uid>` symlink sibling
+/// to the uid dir, carried *in the fileset* so PHASE-04's `write_fileset`
+/// transaction covers it (a pre-existing alias fails the whole record, design § 5.5).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "flat record fields; a Draft struct lands with run_record (PHASE-04)"
+)]
+pub(crate) fn memory_scaffold(
+    uid: &str,
+    key: Option<&str>,
+    memory_type: MemoryType,
+    status: Status,
+    title: &str,
+    summary: &str,
+    date: &str,
+    tags: &[String],
+) -> Result<Fileset> {
+    let mut fileset = vec![
+        Artifact::File {
+            rel_path: PathBuf::from(format!("{uid}/memory.toml")),
+            body: render_memory_toml(uid, key, memory_type, status, title, summary, date, tags)?,
+        },
+        Artifact::File {
+            rel_path: PathBuf::from(format!("{uid}/memory.md")),
+            body: render_memory_md(title, summary)?,
+        },
+    ];
+    if let Some(k) = key {
+        fileset.push(Artifact::Symlink {
+            rel_path: PathBuf::from(k),
+            target: uid.to_string(),
+        });
+    }
+    Ok(fileset)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -648,5 +778,135 @@ ref = "src/main.rs"
     #[test]
     fn validate_tags_rejects_blank() {
         assert!(validate_tags(&["  ".to_owned()]).is_err());
+    }
+
+    // -- PHASE-03: render + scaffold ----------------------------------------
+
+    fn tags(xs: &[&str]) -> Vec<String> {
+        xs.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    // VT-1: token substitution — parses, carries workspace + schema_version, no
+    // leftover tokens; every rendered field reads back.
+    #[test]
+    fn render_memory_toml_substitutes_and_parses() {
+        let body = render_memory_toml(
+            UID,
+            Some("mem.pattern.cli.skinny"),
+            MemoryType::Pattern,
+            Status::Active,
+            "Skinny CLI",
+            "CLI delegates to domain logic.",
+            "2026-06-04",
+            &tags(&["cli", "architecture"]),
+        )
+        .unwrap();
+        assert!(!body.contains("{{"), "no leftover tokens: {body}");
+        assert!(body.contains("workspace = \"default\""));
+        assert!(body.contains("schema_version = 1"));
+
+        let m = Memory::parse(&body).unwrap();
+        assert_eq!(m.uid, UID);
+        assert_eq!(m.key.as_deref(), Some("mem.pattern.cli.skinny"));
+        assert_eq!(m.kind, MemoryType::Pattern);
+        assert_eq!(m.status, Status::Active);
+        assert_eq!(m.title, "Skinny CLI");
+        assert_eq!(m.summary, "CLI delegates to domain logic.");
+        assert_eq!(m.scope.tags, ["cli", "architecture"]);
+        assert_eq!(m.scope.workspace, "default");
+    }
+
+    #[test]
+    fn render_memory_toml_omits_the_key_line_when_absent() {
+        let body = render_memory_toml(
+            UID,
+            None,
+            MemoryType::Fact,
+            Status::Draft,
+            "T",
+            "",
+            "2026-06-04",
+            &[],
+        )
+        .unwrap();
+        assert!(!body.contains("memory_key"), "no empty key line: {body}");
+        assert_eq!(Memory::parse(&body).unwrap().key, None);
+    }
+
+    // VT-3: the rendered toml round-trips into Memory with every defaulted block
+    // present.
+    #[test]
+    fn rendered_toml_round_trips_with_defaulted_blocks() {
+        let body = render_memory_toml(
+            UID,
+            None,
+            MemoryType::System,
+            Status::Active,
+            "T",
+            "S",
+            "2026-06-04",
+            &[],
+        )
+        .unwrap();
+        let m = Memory::parse(&body).unwrap();
+        assert_eq!(m.verification_state, "unverified");
+        assert_eq!(m.trust_level, "medium");
+        assert_eq!(m.severity, "none");
+        assert_eq!(m.weight, 0);
+        assert_eq!(m.scope.workspace, "default");
+        assert!(m.scope.tags.is_empty());
+    }
+
+    #[test]
+    fn render_memory_md_is_title_and_summary() {
+        let body = render_memory_md("My Title", "My summary.").unwrap();
+        assert!(body.contains("# My Title"));
+        assert!(body.contains("My summary."));
+        assert!(!body.contains("{{"));
+    }
+
+    // VT-2: fileset shape — 2 artifacts without a key.
+    #[test]
+    fn memory_scaffold_is_two_files_without_a_key() {
+        let fileset = memory_scaffold(
+            UID,
+            None,
+            MemoryType::Pattern,
+            Status::Active,
+            "T",
+            "S",
+            "2026-06-04",
+            &[],
+        )
+        .unwrap();
+        assert_eq!(fileset.len(), 2);
+        assert!(matches!(&fileset[0],
+            Artifact::File { rel_path, .. }
+            if rel_path == std::path::Path::new(&format!("{UID}/memory.toml"))));
+        assert!(matches!(&fileset[1],
+            Artifact::File { rel_path, .. }
+            if rel_path == std::path::Path::new(&format!("{UID}/memory.md"))));
+    }
+
+    // VT-2: with a key — a third artifact, an Artifact::Symlink whose target is the
+    // uid (the alias rides the fileset so PHASE-04's write_fileset transaction
+    // covers it).
+    #[test]
+    fn memory_scaffold_adds_a_key_symlink_targeting_the_uid() {
+        let fileset = memory_scaffold(
+            UID,
+            Some("mem.pattern.cli.skinny"),
+            MemoryType::Pattern,
+            Status::Active,
+            "T",
+            "S",
+            "2026-06-04",
+            &[],
+        )
+        .unwrap();
+        assert_eq!(fileset.len(), 3);
+        assert!(matches!(&fileset[2],
+            Artifact::Symlink { rel_path, target }
+            if rel_path == std::path::Path::new("mem.pattern.cli.skinny") && target == UID));
     }
 }
