@@ -133,3 +133,11 @@ Both 🔴 fixed TDD (red first); A-3/A-4/A-5 dispositioned. Full record in `audi
   `id`/`canonical` as fields. Numeric suites green **unchanged** (behaviour gate held).
 
 Gate: clippy (lib+bin) zero, 137 tests green, fmt clean. `slice-005.toml` left `proposed`.
+
+## Close-out — DONE (2026-06-04)
+
+Final warm re-review **acceptable** — all six audit findings (A-1..A-6) resolved; both
+🔴 escaping blockers properly dead (serializer-escaped TOML write; shell-nonce show fence,
+unforgeable per real-binary smoke). Gate re-verified: clippy lib+bin zero, 137 tests, fmt
+clean. `slice-005.toml` status `proposed` → `done`. Full record: `audit.md` (Final
+re-review section). SL-005 Memory entity v1 closed.
