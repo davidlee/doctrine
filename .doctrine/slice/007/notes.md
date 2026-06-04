@@ -96,3 +96,34 @@ errors on an unknown non-empty token (covered by tests). `RawReview.review_by` i
 carried through to `Memory.review_by` (read by no verb yet; surfaced so the parsed
 field is not a dead, never-read struct member — PHASE-05 verify edits it via
 `toml_edit`, PHASE-06 may render it).
+
+### F7 — record write path: normalizer + constraint-4 calls (PHASE-04) — AUDIT
+
+Two judgement calls baked into committed output — **confirm at close-out audit**:
+
+1. **`[git].normalizer` = `CHECKOUT_NORMALIZER` iff `anchor_kind=checkout_state`,
+   else `""`.** doctrine's flat `[git]` has a single `normalizer` field where
+   forgettable puts it on `RepoIdentity` (=`forget.remote.v1`). Chosen to tag the
+   only per-record content hash whose algorithm must travel with the anchor (the
+   `checkout_state_id`); a clean commit / none anchor leaves it empty (no content
+   hash to version). repo-identity algorithm stays implicit in `repo_id_kind` + the
+   golden vector. *Risk:* if the reader (SL-008 staleness) or forgettable expects a
+   always-present remote tag here, revisit. PHASE-06 `show` only reads presence.
+
+2. **Constraint-4 predicate fires on ANY non-empty `repo_id`, including the
+   auto-derived `repo:git-root:unborn` an unborn repo yields.** So a *bare* record
+   in an **unborn** git repo (no commits, no remote, no `--repo`) ERRORS
+   ("no git anchor"), while a bare record in a **non-git** dir SUCCEEDS unscoped
+   (capture → empty `repo_id`). This is the literal design (§5.4 m1: "derived or
+   --repo" counts; §5.5: "unborn … a repo-scoped record here errors"). Asymmetry is
+   intentional per spec but surprising — flagged. The clean repo-scoped-in-non-git
+   error path is exercised via `--repo` in a non-git dir (VT-2a).
+
+**Render seams (ride in PHASE-06):** `render_memory_toml` emits every git/scope
+token via `git::*::as_str` (single spelling source). User-influenceable values
+(`title`/`summary`/`tags`/scope arrays/`repo`) route through `toml_string` /
+`toml_array_inner` (A-1 escaping — proven by `repo_override_with_a_hostile_value`).
+`--repo` overrides `frame.repo` via `git::explicit_identity` (kind=explicit/high,
+userinfo-stripped). `RecordArgs<'a>` is the shell-input bundle (parallels `Draft`).
+Template is **rust-embed**'d from `install/` → a rebuild (not `doctrine install`)
+picks up template edits.

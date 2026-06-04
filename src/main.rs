@@ -137,6 +137,23 @@ enum MemoryCommand {
         #[arg(long = "tag")]
         tag: Vec<String>,
 
+        /// Path scope, repeatable — written to `scope.paths`.
+        #[arg(long = "path-scope")]
+        path_scope: Vec<String>,
+
+        /// Glob scope, repeatable — written to `scope.globs`.
+        #[arg(long = "glob")]
+        glob: Vec<String>,
+
+        /// Command scope, repeatable — written to `scope.commands`.
+        #[arg(long = "command")]
+        command: Vec<String>,
+
+        /// Repo identity override (`--repo`), e.g. `github.com/org/repo` — kind
+        /// `explicit`, confidence `high`; userinfo is stripped.
+        #[arg(long = "repo")]
+        repo: Option<String>,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -352,15 +369,25 @@ fn main() -> anyhow::Result<()> {
                 status,
                 summary,
                 tag,
+                path_scope,
+                glob,
+                command,
+                repo,
                 path,
             } => memory::run_record(
                 path,
-                &title,
-                memory_type,
-                key.as_deref(),
-                status,
-                summary.as_deref(),
-                &tag,
+                &memory::RecordArgs {
+                    title: &title,
+                    memory_type,
+                    key: key.as_deref(),
+                    status,
+                    summary: summary.as_deref(),
+                    tags: &tag,
+                    paths: &path_scope,
+                    globs: &glob,
+                    commands: &command,
+                    repo: repo.as_deref(),
+                },
             ),
             MemoryCommand::Show { reference, path } => memory::run_show(path, &reference),
             MemoryCommand::List {

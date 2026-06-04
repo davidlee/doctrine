@@ -546,6 +546,13 @@ pub(crate) struct Draft<'a> {
     pub(crate) summary: &'a str,
     pub(crate) date: &'a str,
     pub(crate) tags: &'a [String],
+    pub(crate) paths: &'a [String],
+    pub(crate) globs: &'a [String],
+    pub(crate) commands: &'a [String],
+    /// The captured born frame — `[git]` facts + the resolved repo identity
+    /// (`[scope].repo`/`repo_id_kind`/`confidence`). Capture is the shell's job;
+    /// the render reads it as data (pure/imperative split).
+    pub(crate) frame: &'a crate::git::Frame,
 }
 
 /// Render `memory.toml` from the embedded template. The `memory_key` line is
@@ -557,16 +564,24 @@ fn render_memory_toml(d: &Draft<'_>) -> Result<String> {
         Some(k) => format!("memory_key = {}\n", toml_string(k)),
         None => String::new(),
     };
-    let tags_lit = d
-        .tags
-        .iter()
-        .map(|t| toml_string(t))
-        .collect::<Vec<_>>()
-        .join(", ");
-    // `uid`/`type`/`status`/`date` are tool-minted from closed vocabularies /
-    // shape-checked formats, so they carry no TOML metacharacters; the
-    // user-supplied `title`/`summary`/`tags`/`key` are escaped through the
-    // serializer (`toml_string`) — never spliced raw (A-1).
+    let f = d.frame;
+    // The `normalizer` tags the algorithm behind the content-bearing
+    // `checkout_state_id` — only meaningful when the anchor *is* a checkout state;
+    // a clean commit / none anchor leaves it empty (it pairs with that hash). The
+    // repo-identity algorithm is implicit in `repo_id_kind` + the golden vector.
+    let normalizer = if f.anchor_kind == AnchorKind::CheckoutState {
+        crate::git::CHECKOUT_NORMALIZER
+    } else {
+        ""
+    };
+    // `uid`/`type`/`status`/`date` and the frame-derived git facts (SHAs, enum
+    // `as_str` tokens, the normalizer const) are tool-minted / closed-vocab, so
+    // they carry no TOML metacharacters and splice raw inside the template's
+    // quotes. The user-supplied `title`/`summary`/`tags`/`key`/scope arrays and
+    // `repo` (`--repo` is verbatim for a non-URL value) are escaped through the
+    // serializer (`toml_string`) — never spliced raw (A-1). `verified_sha`/
+    // `reviewed`/`review_by` are seeded empty: capture writes neither axis (D1);
+    // `verify` (PHASE-05) stamps them under its missing-key guard.
     Ok(crate::install::asset_text("templates/memory.toml")?
         .replace("{{uid}}", d.uid)
         .replace("{{key_line}}", &key_line)
@@ -576,8 +591,24 @@ fn render_memory_toml(d: &Draft<'_>) -> Result<String> {
         .replace("{{title}}", &toml_string(d.title))
         .replace("{{summary}}", &toml_string(d.summary))
         .replace("{{date}}", d.date)
-        .replace("{{tags}}", &tags_lit)
-        .replace("{{workspace}}", WORKSPACE))
+        .replace("{{tags}}", &toml_array_inner(d.tags))
+        .replace("{{paths}}", &toml_array_inner(d.paths))
+        .replace("{{globs}}", &toml_array_inner(d.globs))
+        .replace("{{commands}}", &toml_array_inner(d.commands))
+        .replace("{{workspace}}", WORKSPACE)
+        .replace("{{repo}}", &toml_string(&f.repo.repo_id))
+        .replace("{{repo_id_kind}}", f.repo.kind.as_str())
+        .replace("{{repo_id_confidence}}", f.repo.confidence.as_str())
+        .replace("{{anchor_kind}}", f.anchor_kind.as_str())
+        .replace("{{commit}}", &f.commit)
+        .replace("{{tree}}", &f.tree)
+        .replace("{{ref_name}}", &f.ref_name)
+        .replace("{{checkout_state_id}}", &f.checkout_state_id)
+        .replace("{{base_commit}}", &f.base_commit)
+        .replace("{{verified_sha}}", "")
+        .replace("{{normalizer}}", normalizer)
+        .replace("{{reviewed}}", "")
+        .replace("{{review_by}}", ""))
 }
 
 /// Render `s` as a TOML basic-string literal — quoted and fully escaped by the
@@ -586,6 +617,17 @@ fn render_memory_toml(d: &Draft<'_>) -> Result<String> {
 /// neither break the document nor inject a key (A-1).
 fn toml_string(s: &str) -> String {
     toml::Value::String(s.to_owned()).to_string()
+}
+
+/// Render the *inner* of a TOML array literal — each element escaped through
+/// `toml_string`, comma-joined (the template supplies the surrounding `[ ]`).
+/// The single escaping seam for every scope array (`tags`/`paths`/`globs`/
+/// `commands`), so a hostile element cannot break out of the array (A-1).
+fn toml_array_inner(xs: &[String]) -> String {
+    xs.iter()
+        .map(|s| toml_string(s))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Render `memory.md` — the tool-authored body: title + summary only (design § 5.2).
@@ -630,26 +672,55 @@ pub(crate) fn memory_scaffold(d: &Draft<'_>) -> Result<Fileset> {
 /// tree root every record claims `<uid>/` under.
 const MEMORY_ITEMS_DIR: &str = ".doctrine/memory/items";
 
-/// `doctrine memory record` — mint a uid, scaffold `items/<uid>/`, and (iff a key)
-/// create the transactional `<key> -> <uid>` alias. Non-idempotent by design
-/// (design § 5.5): each call mints a fresh uid.
-pub(crate) fn run_record(
-    path: Option<PathBuf>,
-    title: &str,
-    memory_type: MemoryType,
-    key: Option<&str>,
-    status: Status,
-    summary: Option<&str>,
-    tags: &[String],
-) -> Result<()> {
+/// The shell-side inputs to `record` — the user-facing flags, bundled (mirrors
+/// `Draft`, the pure-render bundle) so `run_record` stays a two-argument seam and
+/// no `too_many_arguments` suppression is needed. `path` (root override) stays a
+/// separate argument: it is resolved away before the record fields are touched.
+#[derive(Debug)]
+pub(crate) struct RecordArgs<'a> {
+    pub(crate) title: &'a str,
+    pub(crate) memory_type: MemoryType,
+    pub(crate) key: Option<&'a str>,
+    pub(crate) status: Status,
+    pub(crate) summary: Option<&'a str>,
+    pub(crate) tags: &'a [String],
+    pub(crate) paths: &'a [String],
+    pub(crate) globs: &'a [String],
+    pub(crate) commands: &'a [String],
+    /// `--repo` override — replaces the captured identity with an explicit/high
+    /// one (design §5.2, F3). Empty/absent ⇒ keep the derived identity.
+    pub(crate) repo: Option<&'a str>,
+}
+
+/// `doctrine memory record` — capture the born frame + scope, mint a uid, scaffold
+/// `items/<uid>/`, and (iff a key) create the transactional `<key> -> <uid>` alias.
+/// Non-idempotent by design (design § 5.5): each call mints a fresh uid.
+pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let title = title.trim();
+    let title = args.title.trim();
     if title.is_empty() {
         bail!("Title must not be empty");
     }
-    let key = key.map(normalize_key).transpose()?;
-    let tags = validate_tags(tags)?;
-    let summary = summary.unwrap_or_default();
+    let key = args.key.map(normalize_key).transpose()?;
+    let tags = validate_tags(args.tags)?;
+    let summary = args.summary.unwrap_or_default();
+
+    // Capture the born frame at the edge (design principle 3): one `git::capture`
+    // per record; `--repo` overrides the derived identity with an explicit/high
+    // one, routed through the same canonicalizer (F3).
+    let mut frame = crate::git::capture(&root)?;
+    if let Some(repo) = args.repo.map(str::trim).filter(|r| !r.is_empty()) {
+        frame.repo = crate::git::explicit_identity(repo);
+    }
+    // Constraint 4: a repo-scoped memory (a non-empty `repo` coordinate, derived
+    // or `--repo`) requires a born anchor — an unanchorable frame is a hard error,
+    // never a silent unscoped write. Path/glob/command scopes alone do not gate.
+    if !frame.repo.repo_id.is_empty() && frame.anchor_kind == AnchorKind::None {
+        bail!(
+            "repo-scoped memory has no git anchor: the working tree is unborn or \
+             not a git repo. Commit first, or drop the repo scope."
+        );
+    }
 
     // The two impure inputs to the pure scaffold: a v7 uid (timestamp+random) and
     // today's date. `simple()` renders 32 lowercase hex (no hyphens) → `is_uid`.
@@ -659,12 +730,16 @@ pub(crate) fn run_record(
     let fileset = memory_scaffold(&Draft {
         uid: &uid,
         key: key.as_deref(),
-        memory_type,
-        status,
+        memory_type: args.memory_type,
+        status: args.status,
         title,
         summary,
         date: &date,
         tags: &tags,
+        paths: args.paths,
+        globs: args.globs,
+        commands: args.commands,
+        frame: &frame,
     })?;
     let out = entity::materialise_named(&LocalFs, &root, MEMORY_ITEMS_DIR, &uid, &fileset)
         .context("Failed to record memory")?;
@@ -1248,6 +1323,26 @@ ref = "src/main.rs"
         xs.iter().map(|s| (*s).to_owned()).collect()
     }
 
+    /// A `git::Frame` fixture for the pure render tests — a `none` anchor
+    /// (unscoped, lowest trust), matching what `capture` yields outside a git
+    /// repo. PHASE-04 record tests that want a real anchor drive `capture`
+    /// against a temp git repo (`git_init`/`git_commit` helpers below).
+    fn none_frame() -> crate::git::Frame {
+        crate::git::Frame {
+            anchor_kind: AnchorKind::None,
+            repo: crate::git::RepoIdentity {
+                repo_id: String::new(),
+                kind: RepoIdKind::LocalRoot,
+                confidence: Confidence::Low,
+            },
+            commit: String::new(),
+            tree: String::new(),
+            ref_name: String::new(),
+            checkout_state_id: String::new(),
+            base_commit: String::new(),
+        }
+    }
+
     // VT-1: token substitution — parses, carries workspace + schema_version, no
     // leftover tokens; every rendered field reads back.
     #[test]
@@ -1262,6 +1357,10 @@ ref = "src/main.rs"
             summary: "CLI delegates to domain logic.",
             date: "2026-06-04",
             tags: &t,
+            paths: &[],
+            globs: &[],
+            commands: &[],
+            frame: &none_frame(),
         })
         .unwrap();
         assert!(!body.contains("{{"), "no leftover tokens: {body}");
@@ -1298,6 +1397,10 @@ ref = "src/main.rs"
             summary: nasty_summary,
             date: "2026-06-04",
             tags: &nasty_tags,
+            paths: &[],
+            globs: &[],
+            commands: &[],
+            frame: &none_frame(),
         })
         .unwrap();
 
@@ -1321,6 +1424,10 @@ ref = "src/main.rs"
             summary: "",
             date: "2026-06-04",
             tags: &[],
+            paths: &[],
+            globs: &[],
+            commands: &[],
+            frame: &none_frame(),
         })
         .unwrap();
         assert!(!body.contains("memory_key"), "no empty key line: {body}");
@@ -1340,6 +1447,10 @@ ref = "src/main.rs"
             summary: "S",
             date: "2026-06-04",
             tags: &[],
+            paths: &[],
+            globs: &[],
+            commands: &[],
+            frame: &none_frame(),
         })
         .unwrap();
         let m = Memory::parse(&body).unwrap();
@@ -1371,6 +1482,10 @@ ref = "src/main.rs"
             summary: "S",
             date: "2026-06-04",
             tags: &[],
+            paths: &[],
+            globs: &[],
+            commands: &[],
+            frame: &none_frame(),
         })
         .unwrap();
         assert_eq!(fileset.len(), 2);
@@ -1396,6 +1511,10 @@ ref = "src/main.rs"
             summary: "S",
             date: "2026-06-04",
             tags: &[],
+            paths: &[],
+            globs: &[],
+            commands: &[],
+            frame: &none_frame(),
         })
         .unwrap();
         assert_eq!(fileset.len(), 3);
@@ -1411,6 +1530,31 @@ ref = "src/main.rs"
 
     fn items_dir(root: &Path) -> PathBuf {
         root.join(MEMORY_ITEMS_DIR)
+    }
+
+    /// Build `RecordArgs` with the pre-PHASE-04 positional shape (no scope flags,
+    /// no `--repo`) — the SL-005 record tests exercise the uid/key/scaffold path
+    /// unchanged; PHASE-04 scope/anchor behaviour has its own git-repo fixtures.
+    fn record_args<'a>(
+        title: &'a str,
+        memory_type: MemoryType,
+        key: Option<&'a str>,
+        status: Status,
+        summary: Option<&'a str>,
+        tags: &'a [String],
+    ) -> RecordArgs<'a> {
+        RecordArgs {
+            title,
+            memory_type,
+            key,
+            status,
+            summary,
+            tags,
+            paths: &[],
+            globs: &[],
+            commands: &[],
+            repo: None,
+        }
     }
 
     /// The single recorded uid dir under `items/` (record writes exactly one).
@@ -1431,12 +1575,14 @@ ref = "src/main.rs"
         let root = tempfile::tempdir().unwrap();
         run_record(
             Some(root.path().to_path_buf()),
-            "Skinny CLI",
-            MemoryType::Pattern,
-            None,
-            Status::Active,
-            Some("CLI delegates."),
-            &["Cli".to_string(), "cli".to_string()], // dedup/lowercase exercised
+            &record_args(
+                "Skinny CLI",
+                MemoryType::Pattern,
+                None,
+                Status::Active,
+                Some("CLI delegates."),
+                &["Cli".to_string(), "cli".to_string()], // dedup/lowercase exercised
+            ),
         )
         .unwrap();
 
@@ -1461,12 +1607,14 @@ ref = "src/main.rs"
         let root = tempfile::tempdir().unwrap();
         run_record(
             Some(root.path().to_path_buf()),
-            "T",
-            MemoryType::Pattern,
-            Some("pattern.cli.skinny"), // shorthand → mem.pattern.cli.skinny
-            Status::Active,
-            None,
-            &[],
+            &record_args(
+                "T",
+                MemoryType::Pattern,
+                Some("pattern.cli.skinny"), // shorthand → mem.pattern.cli.skinny
+                Status::Active,
+                None,
+                &[],
+            ),
         )
         .unwrap();
 
@@ -1492,12 +1640,14 @@ ref = "src/main.rs"
 
         let err = run_record(
             Some(root.path().to_path_buf()),
-            "T",
-            MemoryType::Pattern,
-            Some("pattern.cli.skinny"),
-            Status::Active,
-            None,
-            &[],
+            &record_args(
+                "T",
+                MemoryType::Pattern,
+                Some("pattern.cli.skinny"),
+                Status::Active,
+                None,
+                &[],
+            ),
         )
         .unwrap_err();
         assert!(err.to_string().contains("Failed to record memory"));
@@ -1519,15 +1669,265 @@ ref = "src/main.rs"
         let root = tempfile::tempdir().unwrap();
         let err = run_record(
             Some(root.path().to_path_buf()),
-            "   ",
-            MemoryType::Fact,
-            None,
-            Status::Active,
-            None,
-            &[],
+            &record_args("   ", MemoryType::Fact, None, Status::Active, None, &[]),
         )
         .unwrap_err();
         assert!(err.to_string().contains("Title must not be empty"));
+    }
+
+    // -- PHASE-04: born-frame capture + scope flags -------------------------
+
+    /// A throwaway git repo for the anchor tests: `git init -b main` + a pinned
+    /// identity. Plain git — `capture` applies its own normative flags; the
+    /// fixture only needs valid objects. (Distinct from `git.rs`'s `ScratchRepo`,
+    /// which is private to that module.)
+    struct GitScratch {
+        _dir: tempfile::TempDir,
+        path: PathBuf,
+    }
+
+    impl GitScratch {
+        fn new() -> Self {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().to_path_buf();
+            let s = Self { _dir: dir, path };
+            s.git(&["init", "-b", "main"]);
+            s.git(&["config", "user.name", "T"]);
+            s.git(&["config", "user.email", "t@t.invalid"]);
+            s
+        }
+
+        fn git(&self, args: &[&str]) -> String {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&self.path)
+                .args(args)
+                .output()
+                .expect("spawn git");
+            assert!(
+                out.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        }
+
+        /// Write, stage, and commit `rel`.
+        fn commit(&self, rel: &str, contents: &str) {
+            std::fs::write(self.path.join(rel), contents).unwrap();
+            self.git(&["add", rel]);
+            self.git(&["commit", "-m", "c"]);
+        }
+
+        fn head(&self) -> String {
+            self.git(&["rev-parse", "HEAD"])
+        }
+
+        fn parsed_sole_memory(&self) -> Memory {
+            let uid = sole_uid(&self.path);
+            let toml =
+                fs::read_to_string(items_dir(&self.path).join(&uid).join("memory.toml")).unwrap();
+            Memory::parse(&toml).unwrap()
+        }
+    }
+
+    fn strings(xs: &[&str]) -> Vec<String> {
+        xs.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    // VT-1: record --path X --command Y in a clean repo writes the scope arrays +
+    // a real [git] anchor (commit/tree/base_commit/ref_name) with the verify axis
+    // (verified_sha/reviewed/review_by) seeded empty.
+    #[test]
+    fn record_in_a_clean_repo_anchors_to_head_commit_with_scope_arrays() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        let head = repo.head();
+
+        let paths = strings(&["src/main.rs"]);
+        let commands = strings(&["cargo test"]);
+        run_record(
+            Some(repo.path.clone()),
+            &RecordArgs {
+                title: "Anchored",
+                memory_type: MemoryType::Fact,
+                key: None,
+                status: Status::Active,
+                summary: Some("s"),
+                tags: &[],
+                paths: &paths,
+                globs: &[],
+                commands: &commands,
+                repo: None,
+            },
+        )
+        .unwrap();
+
+        let m = repo.parsed_sole_memory();
+        // anchor: clean → commit, with the full HEAD coordinate.
+        assert_eq!(m.anchor.kind, AnchorKind::Commit);
+        assert_eq!(m.anchor.commit, head);
+        assert_eq!(m.anchor.base_commit, head);
+        assert_eq!(m.anchor.ref_name, "refs/heads/main");
+        assert!(!m.anchor.tree.is_empty());
+        assert!(m.anchor.checkout_state_id.is_empty());
+        // verify axis seeded empty — record writes neither attestation (D1/B3).
+        assert_eq!(m.anchor.verified_sha, "");
+        assert_eq!(m.reviewed, "");
+        assert_eq!(m.review_by, "");
+        // scope arrays carried.
+        assert_eq!(m.scope.paths, ["src/main.rs"]);
+        assert_eq!(m.scope.commands, ["cargo test"]);
+        // no remote → local-root/medium, non-empty repo_id.
+        assert_eq!(m.scope.repo_id_kind, RepoIdKind::LocalRoot);
+        assert_eq!(m.scope.repo_id_confidence, Confidence::Medium);
+        assert!(m.scope.repo.starts_with("repo:git-root:"));
+    }
+
+    // VT-2a: a repo-scoped record (here via `--repo`) in a non-git dir has no
+    // anchor → constraint-4 error, nothing written.
+    #[test]
+    fn repo_scoped_record_in_a_non_git_dir_errors_and_writes_nothing() {
+        let root = tempfile::tempdir().unwrap();
+        let err = run_record(
+            Some(root.path().to_path_buf()),
+            &RecordArgs {
+                title: "X",
+                memory_type: MemoryType::Fact,
+                key: None,
+                status: Status::Active,
+                summary: None,
+                tags: &[],
+                paths: &[],
+                globs: &[],
+                commands: &[],
+                repo: Some("github.com/org/repo"),
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("no git anchor"), "{err}");
+        assert!(
+            !items_dir(root.path()).exists(),
+            "constraint-4 must bail before any write"
+        );
+    }
+
+    // VT-2b: a bare record (no scope flags, no --repo) in a clean repo still
+    // succeeds — and is now anchored to HEAD.
+    #[test]
+    fn a_bare_record_in_a_clean_repo_succeeds_and_is_anchored() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        run_record(
+            Some(repo.path.clone()),
+            &record_args("Bare", MemoryType::Fact, None, Status::Active, None, &[]),
+        )
+        .unwrap();
+        assert_eq!(repo.parsed_sole_memory().anchor.kind, AnchorKind::Commit);
+    }
+
+    // VT-3: record in a dirty repo anchors to checkout_state — checkout_state_id
+    // set, commit empty, the checkout normalizer tag stamped.
+    #[test]
+    fn record_in_a_dirty_repo_anchors_to_checkout_state() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        std::fs::write(repo.path.join("a.txt"), "hello world").unwrap(); // unstaged edit
+
+        run_record(
+            Some(repo.path.clone()),
+            &record_args("Dirty", MemoryType::Fact, None, Status::Active, None, &[]),
+        )
+        .unwrap();
+
+        let m = repo.parsed_sole_memory();
+        assert_eq!(m.anchor.kind, AnchorKind::CheckoutState);
+        assert!(!m.anchor.checkout_state_id.is_empty());
+        assert_eq!(m.anchor.commit, "", "commit empty iff dirty");
+        assert!(!m.anchor.base_commit.is_empty(), "base_commit carries HEAD");
+        assert_eq!(m.anchor.normalizer, crate::git::CHECKOUT_NORMALIZER);
+    }
+
+    // EX-4 (pure): the render builds [git]/[scope] from a Frame via `as_str`, and
+    // the result round-trips back through PHASE-03 validation — no git binary.
+    #[test]
+    fn render_builds_git_and_scope_blocks_from_a_commit_frame() {
+        let sha = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let frame = crate::git::Frame {
+            anchor_kind: AnchorKind::Commit,
+            repo: crate::git::RepoIdentity {
+                repo_id: "github.com/org/repo".to_owned(),
+                kind: RepoIdKind::Remote,
+                confidence: Confidence::High,
+            },
+            commit: sha.to_owned(),
+            tree: "feedfacefeedfacefeedfacefeedfacefeedface".to_owned(),
+            ref_name: "refs/heads/main".to_owned(),
+            checkout_state_id: String::new(),
+            base_commit: sha.to_owned(),
+        };
+        let paths = strings(&["src/main.rs"]);
+        let body = render_memory_toml(&Draft {
+            uid: UID,
+            key: None,
+            memory_type: MemoryType::Fact,
+            status: Status::Active,
+            title: "T",
+            summary: "S",
+            date: "2026-06-04",
+            tags: &[],
+            paths: &paths,
+            globs: &[],
+            commands: &[],
+            frame: &frame,
+        })
+        .unwrap();
+        assert!(!body.contains("{{"), "no leftover tokens: {body}");
+
+        let m = Memory::parse(&body).unwrap();
+        assert_eq!(m.anchor.kind, AnchorKind::Commit);
+        assert_eq!(m.anchor.commit, sha);
+        assert_eq!(m.anchor.ref_name, "refs/heads/main");
+        assert_eq!(m.anchor.verified_sha, "");
+        assert_eq!(m.anchor.normalizer, "", "clean commit → empty normalizer");
+        assert_eq!(m.scope.paths, ["src/main.rs"]);
+        assert_eq!(m.scope.repo, "github.com/org/repo");
+        assert_eq!(m.scope.repo_id_kind, RepoIdKind::Remote);
+        assert_eq!(m.scope.repo_id_confidence, Confidence::High);
+    }
+
+    // A `--repo` override (a verbatim non-URL value) lands as explicit/high and is
+    // escaped through `toml_string` — a hostile value cannot break the document.
+    #[test]
+    fn repo_override_with_a_hostile_value_is_escaped_and_round_trips() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        let hostile = "org/repo\"\nstatus = \"spoofed";
+        run_record(
+            Some(repo.path.clone()),
+            &RecordArgs {
+                title: "Over",
+                memory_type: MemoryType::Fact,
+                key: None,
+                status: Status::Active,
+                summary: None,
+                tags: &[],
+                paths: &[],
+                globs: &[],
+                commands: &[],
+                repo: Some(hostile),
+            },
+        )
+        .unwrap();
+        let m = repo.parsed_sole_memory();
+        assert_eq!(m.scope.repo, hostile); // verbatim, not injected
+        assert_eq!(m.scope.repo_id_kind, RepoIdKind::Explicit);
+        assert_eq!(m.scope.repo_id_confidence, Confidence::High);
+        assert_eq!(
+            m.status,
+            Status::Active,
+            "no key injection from the repo value"
+        );
     }
 
     // -- PHASE-05: show render + list select/format ------------------------
@@ -1759,12 +2159,14 @@ ref = "src/main.rs"
         let root = tempfile::tempdir().unwrap();
         run_record(
             Some(root.path().to_path_buf()),
-            "Skinny CLI",
-            MemoryType::Pattern,
-            Some("pattern.cli.skinny"),
-            Status::Active,
-            Some("body"),
-            &[],
+            &record_args(
+                "Skinny CLI",
+                MemoryType::Pattern,
+                Some("pattern.cli.skinny"),
+                Status::Active,
+                Some("body"),
+                &[],
+            ),
         )
         .unwrap();
         let items = items_dir(root.path());
@@ -1786,12 +2188,7 @@ ref = "src/main.rs"
         // record WITHOUT a key → no symlink exists for any key…
         run_record(
             Some(root.path().to_path_buf()),
-            "T",
-            MemoryType::Fact,
-            None,
-            Status::Active,
-            None,
-            &[],
+            &record_args("T", MemoryType::Fact, None, Status::Active, None, &[]),
         )
         .unwrap();
         let items = items_dir(root.path());
@@ -1822,22 +2219,19 @@ ref = "src/main.rs"
         // two memories; one carries a key (a real symlink alias is created).
         run_record(
             Some(root.path().to_path_buf()),
-            "First",
-            MemoryType::Pattern,
-            Some("pattern.cli.skinny"),
-            Status::Active,
-            Some("first body"),
-            &["cli".to_owned()],
+            &record_args(
+                "First",
+                MemoryType::Pattern,
+                Some("pattern.cli.skinny"),
+                Status::Active,
+                Some("first body"),
+                &["cli".to_owned()],
+            ),
         )
         .unwrap();
         run_record(
             Some(root.path().to_path_buf()),
-            "Second",
-            MemoryType::Fact,
-            None,
-            Status::Draft,
-            None,
-            &[],
+            &record_args("Second", MemoryType::Fact, None, Status::Draft, None, &[]),
         )
         .unwrap();
         let items = items_dir(root.path());
