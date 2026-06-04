@@ -55,3 +55,29 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 - **Test `Fixture` widened** to carry uid/key/title/summary/`[git]`/trust/severity/
   weight so ranking + staleness branches drive the real `Memory::parse`, not
   hand-built structs (test behaviour via the real parser).
+
+## PHASE-03 — durable decisions (impure git seam)
+
+- **`commits_touching(root, paths, since, target) -> Option<u32>` in `src/git.rs`**
+  is the ONE new git the reader needs; its return IS `GitFacts.commits_since`
+  (`Some(0)` Fresh / `Some(≥1)` Stale / `None` Unknown). Rides the SL-007 runners
+  (`run_git` for the precheck — needs raw `ExitStatus`; `git_opt` for the count),
+  adds no new SL-007 surface, resolves no HEAD (codex F1 — `target` is always a
+  frozen SHA the PHASE-04 shell hands in).
+- **F2 ancestry gate is mandatory, not an optimisation.** `git merge-base
+  --is-ancestor since target` runs *before* the count; non-success ⇒ `None`. Exit 1
+  (non-ancestor) and exit ≥2 (object absent / shallow) both fold to `None` via one
+  `status.success()` check. Skipping it lets `since..target` (a set difference)
+  silently over-count a non-ancestor `since` — the slice's headline trap.
+- **Everything folds to `None` (Option, never Result).** Per-candidate degradation
+  (B18): exec/parse/non-ancestor/missing-object all ⇒ `None` ⇒ `Staleness::Unknown`,
+  so one bad candidate never aborts the query. Cost — real git breakage reads as
+  `Unknown` — accepted because staleness stays visible (D19). `CaptureError`
+  swallowed with `.ok()`.
+- **Guards short-circuit before any subprocess:** empty `paths` (B17) AND empty
+  `since`/`target` (defence in depth past the PHASE-04 gate). Proven by a `None`
+  against a non-repo temp dir (no spawn dependency).
+- **`--` pathspec separator is load-bearing** (a path equal to a ref name is
+  otherwise ambiguous); the pathspec genuinely narrows — a commit touching only
+  other paths yields `Some(0)`. `let range = format!(…)` bound before the args vec
+  borrows `&range`.
