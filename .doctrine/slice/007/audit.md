@@ -367,3 +367,42 @@ gap (one-line-render fix). **F-A3 (🟠)** and **F-A4 (🟡)** are interop-seam
 documentation/adapter concerns. **F-A5 (🟡)** is a maintainability cleanup. The
 🔵 items are SL-008 / awareness notes. No behaviour-preservation breach found
 (entity/slice/state engine untouched).
+
+**Update 2026-06-05:** F-A1 + F-A2 fixed (`8b19370`, `fix(SL-007): escape
+ref_name + scrub show header`). Regression tests added; `just check` green
+(216 lib + 1 e2e). F-A3/A4/A5 and the 🔵 items remain as recorded.
+
+## /code-review (close-out · 2026-06-05 · round 2 — `list`/`show` ergonomics)
+
+> Surfaced by real use (`doctrine memory list` then `show` a listed id). Three
+> read-path defects in the SL-005 surface widened by SL-007. The first is the
+> same unescaped-render class as F-A2 but in `format_list`; the other two make
+> `list` output non-actionable.
+
+- **F-A10 🟠 `format_list` emits `m.title` unescaped — a newline in a title
+  breaks the row (and can forge a fake row).** Same class as F-A2 (which fixed
+  `render_show`), missed in `format_list` (`src/memory.rs`). Observed live: a
+  title `"this is a test memory\npew pew i'm remembenening"` renders as two
+  lines under one uid. *Fix:* `scrub_line` the title in `format_list` (the helper
+  added for F-A2). Titles should also arguably be newline-rejected at `record`,
+  but scrubbing the render is the defensive fix that also covers legacy rows.
+
+- **F-A11 🟠 `list`'s id column is non-actionable: it prints `short_uid` (12
+  chars = `mem_` + 8 hex), but `show`/`MemoryRef::parse` require the full
+  `mem_` + 32-hex uid.** Copy-pasting a listed id into `show` always errors
+  (`not a valid memory uid or key`). *Fix:* print the full uid in `list` (widen
+  the column) so the output drives `show`.
+
+- **F-A12 🟠 `short_uid` collides for uuid-v7 ids.** uids are time-ordered
+  (uuid-v7: leading bytes = ms timestamp), so the first 8 hex are a coarse
+  timestamp bucket shared by memories recorded close together. Observed live:
+  two distinct memories both rendered `mem_019e922c`. So a short-id column is
+  inherently ambiguous, and "let `show` accept the short form" is unsafe without
+  unique-prefix resolution. *Fix (optional, ergonomics):* teach `show`/
+  `MemoryRef` to resolve a **unique uid prefix** (scan `items/`, require ≥N hex,
+  error on ambiguity) — needs a collision check, more surface than F-A10/A11.
+
+*Disposition:* F-A10 (🟠, injection class) + F-A11 (🟠, broken affordance) are
+small render/format fixes worth landing; F-A12 (🟠) is the ergonomic follow-on
+(prefix resolution) and touches the resolver. **Handed to a fresh agent** for
+implementation (all three) — see `handover.md`.
