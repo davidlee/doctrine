@@ -57,18 +57,25 @@ pub(crate) enum Agent {
     Other(String),
 }
 
-/// One planned action for the Claude direct path.
+/// A canonical skill to (re)materialise — `dest` is `.doctrine/skills/<id>`.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Step {
-    Install { id: String, dest: PathBuf },
-    Skip { id: String, dest: PathBuf },
+pub(crate) struct Canonical {
+    id: String,
+    dest: PathBuf,
 }
 
-/// Per-agent plan: Claude copies files; others delegate to `npx skills`.
+/// Per-agent plan: Claude materialises a canonical tree and reconciles relative
+/// symlinks into it (`Link` trichotomy); others delegate to `npx skills`.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum AgentPlan {
-    Claude(Vec<Step>),
-    Delegate { agent: String, argv: Vec<String> },
+    Claude {
+        canonical: Vec<Canonical>,
+        links: Vec<Link>,
+    },
+    Delegate {
+        agent: String,
+        argv: Vec<String>,
+    },
 }
 
 /// A full install plan across the selected agents.
@@ -195,10 +202,6 @@ fn claude_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
 
 /// The canonical skills tree (project-local, or under `$HOME` with `global`).
 /// Mirrors `claude_dir`'s base so the relative link target is stable.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by build_plan in PHASE-04")
-)]
 fn canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
     if global {
         let home = std::env::var_os("HOME").context("HOME is not set; cannot resolve --global")?;
@@ -228,21 +231,13 @@ fn relative_path(from: &Path, to: &Path) -> PathBuf {
 /// link lives) to `canonical_dir/<id>`. Derived from the two dirs, never
 /// hard-coded — `../../.doctrine/skills/<id>` in the common project-local case,
 /// and correct under a shared `--global` base.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by build_plan in PHASE-04")
-)]
 fn relative_target(agent_skills_dir: &Path, canonical_dir: &Path, id: &str) -> PathBuf {
     relative_path(agent_skills_dir, &canonical_dir.join(id))
 }
 
 /// Why an agent skill path is foreign — left untouched and warned.
 #[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by execute in PHASE-04")
-)]
-enum ForeignReason {
+pub(crate) enum ForeignReason {
     /// A real directory or file the user owns (e.g. a pinned copy override).
     RealDir,
     /// A symlink whose value is not our canonical target — points elsewhere.
@@ -251,11 +246,7 @@ enum ForeignReason {
 
 /// Reconciliation action for one agent skill link, by proven ownership.
 #[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by execute in PHASE-04")
-)]
-enum Link {
+pub(crate) enum Link {
     /// Nothing there → create the relative symlink.
     Create {
         id: String,
@@ -281,10 +272,6 @@ enum Link {
 /// proven ownership. Uses `symlink_metadata`/`read_link`, never `exists()`
 /// (which follows links): a dangling link whose value equals our target is
 /// still ours and is healed, not recreated.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by build_plan in PHASE-04")
-)]
 fn classify_link(id: &str, dest: &Path, target: &Path) -> Link {
     let Ok(meta) = fs::symlink_metadata(dest) else {
         return Link::Create {
@@ -320,25 +307,51 @@ fn classify_link(id: &str, dest: &Path, target: &Path) -> Link {
     }
 }
 
-/// Build the Claude direct-install steps (skip existing skill dirs).
-fn claude_steps(skills: &[&Entry], dir: &Path) -> Vec<Step> {
+/// Classify each selected skill's agent link against its canonical target.
+fn claude_links(skills: &[&Entry], agent_dir: &Path, canon_dir: &Path) -> Vec<Link> {
     skills
         .iter()
         .map(|e| {
-            let dest = dir.join(&e.id);
-            if dest.exists() {
-                Step::Skip {
-                    id: e.id.clone(),
-                    dest,
-                }
-            } else {
-                Step::Install {
-                    id: e.id.clone(),
-                    dest,
-                }
-            }
+            let dest = agent_dir.join(&e.id);
+            let target = relative_target(agent_dir, canon_dir, &e.id);
+            classify_link(&e.id, &dest, &target)
         })
         .collect()
+}
+
+/// A `.tmp-<name>` sibling of `path`, the staging name for an atomic swap.
+fn staging_path(path: &Path) -> anyhow::Result<PathBuf> {
+    let parent = path.parent().context("path has no parent directory")?;
+    let name = path.file_name().context("path has no file name")?;
+    Ok(parent.join(format!(".tmp-{}", name.to_string_lossy())))
+}
+
+/// Create the relative symlink `dest -> target` atomically: symlink at a temp
+/// name then `rename` over `dest`. `rename` DOES replace an existing symlink (only
+/// a non-empty *directory* is the exception), so an owned-link relink never leaves
+/// a half-state. Callers pass only Create/Relink dests (missing or proven ours).
+fn write_link(dest: &Path, target: &Path) -> anyhow::Result<()> {
+    use std::os::unix::fs::symlink;
+    let tmp = staging_path(dest)?;
+    // Clear any crashed leftover from a prior interrupted write (a stale symlink
+    // may dangle, so remove unconditionally and ignore a not-found error).
+    fs::remove_file(&tmp).ok();
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
+    }
+    symlink(target, &tmp).with_context(|| format!("Failed to stage link {}", tmp.display()))?;
+    fs::rename(&tmp, dest)
+        .with_context(|| format!("Failed to swap link {} → {}", tmp.display(), dest.display()))?;
+    Ok(())
+}
+
+/// Human-readable `kept` reason for an honest warning.
+fn foreign_reason(reason: &ForeignReason) -> String {
+    match reason {
+        ForeignReason::RealDir => "real dir".to_string(),
+        ForeignReason::ForeignSymlink(to) => format!("foreign symlink → {}", to.display()),
+    }
 }
 
 /// Assemble the `npx skills add …` argv (program `npx` excluded).
@@ -379,8 +392,17 @@ fn build_plan(
     for agent in agents {
         match agent {
             Agent::Claude => {
-                let dir = claude_dir(root, global)?;
-                items.push(AgentPlan::Claude(claude_steps(&selected, &dir)));
+                let agent_dir = claude_dir(root, global)?;
+                let canon_dir = canonical_dir(root, global)?;
+                let canonical = selected
+                    .iter()
+                    .map(|e| Canonical {
+                        id: e.id.clone(),
+                        dest: canon_dir.join(&e.id),
+                    })
+                    .collect();
+                let links = claude_links(&selected, &agent_dir, &canon_dir);
+                items.push(AgentPlan::Claude { canonical, links });
             }
             Agent::Other(name) => items.push(AgentPlan::Delegate {
                 agent: name.clone(),
@@ -444,24 +466,18 @@ impl Runner for Npx {
     }
 }
 
-/// Materialise the canonical copy of `entry` at `canonical_dir/<id>`, staged via
-/// a sibling `.tmp-<id>` then swapped in with a minimal-window remove+rename.
-/// Always overwrites — the canonical tree is derived (owns no authored data).
+/// Materialise the canonical copy of `entry` at `dest` (`.doctrine/skills/<id>`),
+/// staged via a `.tmp-<id>` sibling then swapped in with a minimal-window
+/// remove+rename. Always overwrites — the canonical tree is derived (owns no
+/// authored data).
 ///
 /// Unix reality (design §5.1/§10 pass-2 F4): `rename` cannot replace a non-empty
 /// directory and std has no `renameat2(RENAME_EXCHANGE)`, so the swap is
 /// remove-then-rename — a one-syscall window where a crash leaves the agent link
 /// dangling, healed by the next idempotent install. A partial stage lives only
 /// under `.tmp-<id>`, never under `<id>`, so a live link never sees a half-tree.
-// Used by tests now; wired into execute's Claude arm in PHASE-04. Gate the
-// dead-code expectation to non-test builds (under `cfg(test)` it is exercised).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "wired into execute in PHASE-04")
-)]
-fn materialise_canonical(entry: &Entry, canonical_dir: &Path) -> anyhow::Result<()> {
-    let dest = canonical_dir.join(&entry.id);
-    let tmp = canonical_dir.join(format!(".tmp-{}", entry.id));
+fn materialise_canonical(entry: &Entry, dest: &Path) -> anyhow::Result<()> {
+    let tmp = staging_path(dest)?;
 
     // Clear any crashed leftover from a prior interrupted stage.
     if tmp.exists() {
@@ -472,10 +488,9 @@ fn materialise_canonical(entry: &Entry, canonical_dir: &Path) -> anyhow::Result<
     copy_skill(entry, &tmp)?;
     // Minimal-window swap: drop the prior canonical, then rename the temp in.
     if dest.exists() {
-        fs::remove_dir_all(&dest)
-            .with_context(|| format!("Failed to remove {}", dest.display()))?;
+        fs::remove_dir_all(dest).with_context(|| format!("Failed to remove {}", dest.display()))?;
     }
-    fs::rename(&tmp, &dest)
+    fs::rename(&tmp, dest)
         .with_context(|| format!("Failed to swap {} → {}", tmp.display(), dest.display()))?;
     Ok(())
 }
@@ -511,19 +526,31 @@ fn execute(
 
     for item in &plan.items {
         match item {
-            AgentPlan::Claude(steps) => {
+            AgentPlan::Claude { canonical, links } => {
                 writeln!(out, "agent claude (direct):")?;
-                for step in steps {
-                    match step {
-                        Step::Install { id, dest } => {
-                            let entry = catalog
-                                .iter()
-                                .find(|e| &e.id == id)
-                                .with_context(|| format!("Skill '{id}' vanished from catalog"))?;
-                            copy_skill(entry, dest)?;
-                            writeln!(out, "  installed {id}")?;
+                // 1. Refresh the canonical tree (always overwrite — derived).
+                for c in canonical {
+                    let entry = catalog
+                        .iter()
+                        .find(|e| e.id == c.id)
+                        .with_context(|| format!("Skill '{}' vanished from catalog", c.id))?;
+                    materialise_canonical(entry, &c.dest)?;
+                    writeln!(out, "  refreshed {}", c.id)?;
+                }
+                // 2. Reconcile the agent links by proven ownership.
+                for link in links {
+                    match link {
+                        Link::Create { id, dest, target } => {
+                            write_link(dest, target)?;
+                            writeln!(out, "  linked    {id}")?;
                         }
-                        Step::Skip { id, .. } => writeln!(out, "  skip      {id} (exists)")?,
+                        Link::Relink { id, dest, target } => {
+                            write_link(dest, target)?;
+                            writeln!(out, "  relinked  {id}")?;
+                        }
+                        Link::KeepForeign { id, reason, .. } => {
+                            writeln!(out, "  kept      {id} ({})", foreign_reason(reason))?;
+                        }
                     }
                 }
             }
@@ -551,15 +578,36 @@ fn print_plan(plan: &Plan, out: &mut dyn Write) -> io::Result<()> {
     writeln!(out)?;
     for item in &plan.items {
         match item {
-            AgentPlan::Claude(steps) => {
+            AgentPlan::Claude { canonical, links } => {
                 writeln!(out, "agent claude (direct):")?;
-                for step in steps {
-                    match step {
-                        Step::Install { id, dest } => {
-                            writeln!(out, "  install   {id} → {}", dest.display())?;
+                for c in canonical {
+                    writeln!(out, "  refresh   {} → {}", c.id, c.dest.display())?;
+                }
+                for link in links {
+                    match link {
+                        Link::Create { id, dest, target } => {
+                            writeln!(
+                                out,
+                                "  link      {id} → {} ⇒ {}",
+                                dest.display(),
+                                target.display()
+                            )?;
                         }
-                        Step::Skip { id, dest } => {
-                            writeln!(out, "  skip      {id} → {} (exists)", dest.display())?;
+                        Link::Relink { id, dest, target } => {
+                            writeln!(
+                                out,
+                                "  relink    {id} → {} ⇒ {}",
+                                dest.display(),
+                                target.display()
+                            )?;
+                        }
+                        Link::KeepForeign { id, dest, reason } => {
+                            writeln!(
+                                out,
+                                "  keep      {id} → {} ({})",
+                                dest.display(),
+                                foreign_reason(reason)
+                            )?;
                         }
                     }
                 }
@@ -577,6 +625,13 @@ fn print_plan(plan: &Plan, out: &mut dyn Write) -> io::Result<()> {
 // CLI entry points (thin)
 // ---------------------------------------------------------------------------
 
+/// Does a path exist *without following symlinks*? A managed agent link — even
+/// momentarily dangling during a canonical refresh — counts as installed
+/// (SL-010 F5); `Path::exists` follows the link and would hide it.
+fn lexists(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok()
+}
+
 /// `doctrine skills list`.
 pub(crate) fn run_list(agent: Option<&str>, installed_only: bool) -> anyhow::Result<()> {
     let catalog = discover()?;
@@ -587,7 +642,7 @@ pub(crate) fn run_list(agent: Option<&str>, installed_only: bool) -> anyhow::Res
     let mut out = io::stdout();
     let mut domain = String::new();
     for entry in &catalog {
-        let installed = dir.join(&entry.id).exists();
+        let installed = lexists(&dir.join(&entry.id));
         if installed_only && !installed {
             continue;
         }
@@ -708,20 +763,35 @@ mod tests {
         assert!(validate_filters(&all, &["code-review".into()], &["review".into()]).is_ok());
     }
 
-    // --- claude steps ---
+    // --- claude links (the plan builder) ---
 
     #[test]
-    fn claude_steps_install_then_skip_existing() {
+    fn claude_links_creates_then_relinks_an_owned_link() {
+        use std::os::unix::fs::symlink;
+
         let dir = tempfile::tempdir().unwrap();
+        let agent_dir = dir.path().join(".claude/skills");
+        let canon_dir = dir.path().join(".doctrine/skills");
+        fs::create_dir_all(&agent_dir).unwrap();
         let e = entry("review", "code-review");
         let sel = vec![&e];
 
-        let steps = claude_steps(&sel, dir.path());
-        assert!(matches!(steps.as_slice(), [Step::Install { .. }]));
+        // Nothing there → Create with the computed relative target.
+        let links = claude_links(&sel, &agent_dir, &canon_dir);
+        assert!(matches!(
+            links.as_slice(),
+            [Link::Create { target, .. }]
+                if target == &PathBuf::from("../../.doctrine/skills/code-review")
+        ));
 
-        fs::create_dir_all(dir.path().join("code-review")).unwrap();
-        let steps = claude_steps(&sel, dir.path());
-        assert!(matches!(steps.as_slice(), [Step::Skip { .. }]));
+        // An existing link with our target → Relink (ours).
+        symlink(
+            "../../.doctrine/skills/code-review",
+            agent_dir.join("code-review"),
+        )
+        .unwrap();
+        let links = claude_links(&sel, &agent_dir, &canon_dir);
+        assert!(matches!(links.as_slice(), [Link::Relink { .. }]));
     }
 
     // --- canonical materialise ---
@@ -744,7 +814,7 @@ mod tests {
         fs::create_dir_all(&id_dir).unwrap();
         fs::write(id_dir.join("STALE.md"), "old").unwrap();
 
-        materialise_canonical(&e, dir.path()).unwrap();
+        materialise_canonical(&e, &id_dir).unwrap();
 
         // Stale file gone; the embed's SKILL.md present and byte-equal.
         assert!(!id_dir.join("STALE.md").exists(), "stale file must be gone");
@@ -769,7 +839,7 @@ mod tests {
         fs::create_dir_all(&id_dir).unwrap();
         fs::write(id_dir.join("SKILL.md"), "prior").unwrap();
 
-        materialise_canonical(&e, dir.path()).unwrap();
+        materialise_canonical(&e, &id_dir).unwrap();
 
         // Temp cleared; canonical coherent (embed content, no junk leaked in).
         assert!(!tmp.exists(), "leftover temp must be cleared");
@@ -944,7 +1014,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(matches!(plan.items.first(), Some(AgentPlan::Claude(_))));
+        assert!(matches!(plan.items.first(), Some(AgentPlan::Claude { .. })));
         assert!(matches!(
             plan.items.get(1),
             Some(AgentPlan::Delegate { agent, .. }) if agent == "codex"
@@ -966,22 +1036,132 @@ mod tests {
         }
     }
 
-    #[test]
-    fn execute_copies_claude_skill_files() {
-        let dir = tempfile::tempdir().unwrap();
+    fn run_claude(root: &Path) -> String {
         let catalog = discover().unwrap();
-        let plan = build_plan(dir.path(), &[Agent::Claude], &catalog, &[], &[], false).unwrap();
-
+        let plan = build_plan(
+            root,
+            &[Agent::Claude],
+            &catalog,
+            &["code-review".into()],
+            &[],
+            false,
+        )
+        .unwrap();
         let runner = FakeRunner {
             ok: true,
             ..FakeRunner::default()
         };
         let mut out = Vec::new();
         execute(&plan, &catalog, &runner, &mut out).unwrap();
+        assert!(runner.calls.borrow().is_empty(), "no npx for Claude");
+        String::from_utf8(out).unwrap()
+    }
 
-        let installed = dir.path().join(".claude/skills/code-review/SKILL.md");
-        assert!(installed.is_file());
-        assert!(runner.calls.borrow().is_empty());
+    fn embed_skill_md() -> Vec<u8> {
+        PluginAssets::get("review/skills/code-review/SKILL.md")
+            .unwrap()
+            .data
+            .to_vec()
+    }
+
+    #[test]
+    fn execute_creates_link_resolving_to_canonical() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = run_claude(dir.path());
+
+        let link = dir.path().join(".claude/skills/code-review");
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        // Resolves through the symlink to the materialised canonical content.
+        assert_eq!(fs::read(link.join("SKILL.md")).unwrap(), embed_skill_md());
+        assert!(
+            dir.path()
+                .join(".doctrine/skills/code-review/SKILL.md")
+                .is_file()
+        );
+        assert!(log.contains("refreshed code-review"));
+        assert!(log.contains("linked    code-review"));
+    }
+
+    #[test]
+    fn execute_relink_heals_a_dangling_owned_link() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let agent_dir = dir.path().join(".claude/skills");
+        fs::create_dir_all(&agent_dir).unwrap();
+        // An owned link that dangles because the canonical does not exist yet.
+        symlink(
+            "../../.doctrine/skills/code-review",
+            agent_dir.join("code-review"),
+        )
+        .unwrap();
+        assert!(
+            !agent_dir.join("code-review").exists(),
+            "dangling pre-state"
+        );
+
+        let log = run_claude(dir.path());
+
+        // Materialise + relink heals it — it now resolves to canonical content.
+        assert_eq!(
+            fs::read(agent_dir.join("code-review/SKILL.md")).unwrap(),
+            embed_skill_md()
+        );
+        assert!(log.contains("relinked  code-review"));
+    }
+
+    #[test]
+    fn execute_keeps_a_foreign_real_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join(".claude/skills/code-review");
+        fs::create_dir_all(&real).unwrap();
+        fs::write(real.join("MINE.md"), "pinned").unwrap();
+
+        let log = run_claude(dir.path());
+
+        // Untouched: still a real dir, the user's file intact.
+        assert!(
+            !fs::symlink_metadata(&real)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_to_string(real.join("MINE.md")).unwrap(), "pinned");
+        assert!(log.contains("kept      code-review (real dir)"));
+    }
+
+    #[test]
+    fn lexists_reports_a_dangling_managed_link_as_installed() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let link = dir.path().join("code-review");
+        // A managed link whose canonical target does not resolve.
+        symlink("../../.doctrine/skills/code-review", &link).unwrap();
+
+        assert!(!link.exists(), "exists() follows the link → hidden");
+        assert!(lexists(&link), "lexists sees the link → installed (F5)");
+    }
+
+    #[test]
+    fn execute_keeps_a_foreign_symlink() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let agent_dir = dir.path().join(".claude/skills");
+        fs::create_dir_all(&agent_dir).unwrap();
+        symlink("/some/other/place", agent_dir.join("code-review")).unwrap();
+
+        let log = run_claude(dir.path());
+
+        // Left byte/target-identical; never repointed.
+        assert_eq!(
+            fs::read_link(agent_dir.join("code-review")).unwrap(),
+            PathBuf::from("/some/other/place")
+        );
+        assert!(log.contains("kept      code-review (foreign symlink → /some/other/place)"));
     }
 
     #[test]
