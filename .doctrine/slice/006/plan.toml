@@ -1,0 +1,155 @@
+# Implementation plan for SL-006 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-006"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Extract shared metadata-list substrate (behaviour-preserving)"
+objective = """
+Lift the status/path-parametric list helpers out of slice.rs into a new shared \
+module (src/meta.rs — presentation, deliberately not entity.rs), so slice and \
+the coming ADR caller single-source them (design D4). Pure refactor: slice's \
+observable behaviour is unchanged and its suite is the gate. The moved tests \
+move with the code. No ADR code yet.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md approved (round-1 review dispositioned; decisions locked)" },
+  { id = "EN-2", text = "full slice.rs + entity.rs suite green at HEAD" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/meta.rs holds: pub(crate) Meta{id,slug,title,status}; sort_and_filter(Vec<Meta>,Option<&str>); format_list(&[Meta]); read_meta(tree_root,stem,id); read_metas(tree_root,stem); today()" },
+  { id = "EX-2", text = "read_metas/read_meta parameterised by toml stem (\"slice\"/\"adr\") — distinct from Kind.prefix; builds {stem}-{NNN}.toml; reuses entity::scan_ids" },
+  { id = "EX-3", text = "slice.rs deletes its copies and calls meta:: (read_metas(root,\"slice\"), today, etc.); no behaviour change" },
+  { id = "EX-4", text = "the Meta/sort_and_filter/format_list/read_metas tests move from slice.rs into meta.rs; clippy zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "the entire pre-existing slice.rs + entity.rs suite passes — the behaviour-preservation gate (slice new/list output byte-identical)" },
+  { id = "VT-2", expects = "meta.rs unit tests: sort_and_filter status filter; format_list alignment; read_metas over a stem skips symlinks/non-numeric (via scan_ids)" },
+  { id = "VT-3", expects = "cargo clippy: zero warnings; no duplicated Meta/list helper remains in slice.rs" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "ADR kind, templates, scaffold (pure render)"
+objective = """
+The ADR templates, render functions, ADR_KIND (Fresh numeric, prefix ADR, dir \
+.doctrine/adr), and adr_scaffold — structurally slice_scaffold (toml + md + \
+NNN-slug symlink). Pure render, no disk. No verbs yet.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged (shared meta module available)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/templates/adr.toml embedded: tokens id/slug/title/date; schema=doctrine.adr, version=1, status=\"proposed\", created/updated; [relationships] supersedes/superseded_by/related/tags = [] (authored-but-inert)" },
+  { id = "EX-2", text = "install/templates/adr.md embedded: tokens ref/title; # {{ref}}: {{title}} + Context/Decision/Consequences(Positive/Negative/Neutral)/Verification/References; NO frontmatter" },
+  { id = "EX-3", text = "ADR_KIND { dir = \".doctrine/adr\", prefix = \"ADR\", scaffold = adr_scaffold }; render_adr_toml/render_adr_md helpers" },
+  { id = "EX-4", text = "adr_scaffold yields Fileset: NNN/adr-NNN.toml, NNN/adr-NNN.md, NNN-slug -> NNN (Artifact::Symlink)" },
+]
+verification = [
+  { id = "VT-1", expects = "template token substitution: rendered adr.toml parses, status=proposed, no leftover {{tokens}}; adr.md has no YAML frontmatter" },
+  { id = "VT-2", expects = "adr_scaffold fileset shape: exactly 3 artifacts (2 files + symlink); symlink target == NNN" },
+  { id = "VT-3", expects = "rendered adr.toml round-trips into meta::Meta (id/slug/title/status); [relationships] preserved/ignored" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "adr new + adr list + CLI"
+objective = """
+The create and read verbs. run_new materialises via MaterialiseRequest::Fresh \
+(the slice new path minus slug-policy nuance — ADR always slugs the title); \
+run_list reuses the shared meta module with stem \"adr\". main.rs gains the Adr \
+subcommand tree.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 merged (ADR_KIND + scaffolds)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "main.rs: Command::Adr { AdrCommand::{New{title,slug,path}, List{status,path}} }, dispatched to adr::run_new/run_list" },
+  { id = "EX-2", text = "run_new: resolve_title (arg|stdin, non-empty), slug = --slug | derive_slug, today(); entity::materialise(&ADR_KIND, &LocalFs, root, Fresh, Inputs); print Created ADR NNN: <dir>" },
+  { id = "EX-3", text = "run_list: meta::read_metas(adr_root,\"adr\") -> sort_and_filter -> format_list; --status filters" },
+  { id = "EX-4", text = "clippy zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "adr new writes adr/NNN/adr-NNN.{toml,md} + NNN-slug symlink; second new lands NNN+1 (monotonic, engine race-retry inherited)" },
+  { id = "VT-2", expects = "adr new with empty/symbol-only title errors asking for --slug (reused resolve_title/derive_slug)" },
+  { id = "VT-3", expects = "adr list rows id/status/slug/title sorted by id; --status filters to matching only" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "adr status — authored toml_edit mutation"
+objective = """
+The one novel verb: flip status in the COMMITTED authored adr-NNN.toml via \
+toml_edit (edit-preserving), bump updated, with the no-op guard (I5). No in-file \
+log — git history is the audit trail (Q1/Q2). set_adr_status stays local to \
+adr.rs (D3 — single consumer; differs from state::set_phase_status).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 merged (ADRs exist to transition)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "AdrStatus clap ValueEnum: proposed|accepted|rejected|superseded|deprecated" },
+  { id = "EX-2", text = "set_adr_status(root,id,status,today): read adr-NNN.toml; if status unchanged -> return without writing (I5); else toml_edit set status + updated, write back; missing id -> error" },
+  { id = "EX-3", text = "main.rs: AdrCommand::Status{id,status,path} -> adr::run_status; status flag required" },
+  { id = "EX-4", text = "clippy zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "round-trip: new -> status accepted -> re-read status=accepted, updated bumped, [relationships]/comments preserved" },
+  { id = "VT-2", expects = "no-op guard: status set to current value writes nothing (file mtime/content unchanged) — I5" },
+  { id = "VT-3", expects = "missing id errors; an out-of-enum --status value is rejected at parse (no file touched)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "End-to-end + docs + close-out"
+objective = """
+One tempdir integration test across the real verbs, the CLAUDE.md doc updates, \
+and harvest of durable findings. The slice ends green with the storage surface \
+documented.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 merged (all three verbs land)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "tempdir integration: adr new x2 -> list -> status 1 accepted -> list --status accepted (only 001)" },
+  { id = "EX-2", text = "CLAUDE.md: adr new|list|status added to the CLI surface; .doctrine/adr/ in the layout block; ADRs noted in the storage-tier section" },
+  { id = "EX-3", text = "durable risks/decisions harvested to notes.md/audit.md if any surfaced; just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "the end-to-end test passes against the built binary path semantics (Fresh alloc, authored mutation, filtered list)" },
+  { id = "VT-2", expects = "full cargo test green incl. unchanged entity/slice/state suites (behaviour-preservation); clippy zero warnings; cargo fmt clean" },
+  { id = "VT-3", expects = "just check passes" },
+]
+specs        = []
+requirements = []
