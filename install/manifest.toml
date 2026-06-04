@@ -27,6 +27,7 @@ entries = [
   ".doctrine/memory/index/*",
   ".doctrine/memory/embeddings/*",
   ".doctrine/memory/state/*",
+  ".doctrine/skills/*",
 ]
 
 [root_markers]

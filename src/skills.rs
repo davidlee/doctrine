@@ -466,6 +466,9 @@ pub(crate) fn run_install(
         return Ok(());
     }
 
+    // Self-enforce the derived-tree ignore invariant (SL-010 F4): `skills install`
+    // owns `.doctrine/skills/*` regardless of whether `doctrine install` ran first.
+    crate::install::ensure_gitignored(&root, ".doctrine/skills/*")?;
     execute(&plan, &catalog, &Npx, &mut out)?;
     writeln!(out, "Done.")?;
     Ok(())
@@ -695,6 +698,28 @@ mod tests {
         let first = calls.first().unwrap();
         assert_eq!(first.first().map(String::as_str), Some("skills"));
         assert!(first.iter().any(|a| a == "codex"));
+    }
+
+    #[test]
+    fn run_install_self_enforces_the_skills_gitignore() {
+        let dir = tempfile::tempdir().unwrap();
+        // No prior `doctrine install`: no .gitignore, no .doctrine tree.
+        run_install(
+            Some(dir.path().to_path_buf()),
+            &["claude".into()],
+            &["code-review".into()],
+            &[],
+            false,
+            false,
+            true,
+        )
+        .unwrap();
+
+        let gi = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        assert!(
+            gi.contains(".doctrine/skills/*"),
+            "skills install must self-enforce the derived-tree ignore"
+        );
     }
 
     #[test]
