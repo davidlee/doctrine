@@ -93,6 +93,20 @@ enum AdrCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Set an ADR's status (edit-preserving; a no-op if unchanged).
+    Status {
+        /// ADR id (numeric).
+        id: u32,
+
+        /// New status (required): proposed|accepted|rejected|superseded|deprecated.
+        #[arg(long)]
+        status: adr::AdrStatus,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -358,6 +372,7 @@ fn main() -> anyhow::Result<()> {
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
             AdrCommand::List { status, path } => adr::run_list(path, status.as_deref()),
+            AdrCommand::Status { id, status, path } => adr::run_status(path, id, status),
         },
     }
 }
