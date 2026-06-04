@@ -184,6 +184,7 @@ dependencies = [
  "thiserror",
  "time",
  "toml",
+ "toml_edit",
  "tower",
 ]
 

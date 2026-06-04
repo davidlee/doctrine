@@ -23,6 +23,7 @@ time.workspace = true
 clap.workspace = true
 rust-embed = { workspace = true }
 toml.workspace = true
+toml_edit.workspace = true
 
 [dev-dependencies]
 tower = { workspace = true }
@@ -70,6 +71,7 @@ hex = "0.4"
 clap = { version = "4", features = ["derive", "env"] }
 rust-embed = { version = "8", features = ["debug-embed"] }
 toml = "0.8"
+toml_edit = "0.22"
 # Dev-only: drive the assembled axum Router in-process (no bound socket) for the
 # HTTP VTs — tower's oneshot + http-body-util to collect response bodies.
 tower = { version = "0.5", default-features = false, features = ["util"] }

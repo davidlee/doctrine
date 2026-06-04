@@ -12,7 +12,14 @@ create = [
 ]
 
 [gitignore]
-entries = []
+# Runtime state is disposable and must never be committed; the convenience
+# `phases` symlink and ad-hoc `handover.md` are gitignored so they never enter
+# the tracked authored tree (slice-004 D6/D8). Additive — re-install is a no-op.
+entries = [
+  ".doctrine/state/",
+  ".doctrine/slice/*/phases",
+  ".doctrine/slice/*/handover.md",
+]
 
 [root_markers]
 markers = [
