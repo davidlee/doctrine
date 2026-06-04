@@ -3,6 +3,7 @@ mod adr;
 mod clock;
 mod entity;
 mod fsutil;
+mod input;
 mod install;
 mod memory;
 mod meta;
@@ -57,6 +58,40 @@ enum Command {
     Memory {
         #[command(subcommand)]
         command: MemoryCommand,
+    },
+
+    /// Create and list architecture decision records.
+    Adr {
+        #[command(subcommand)]
+        command: AdrCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum AdrCommand {
+    /// Allocate the next id and scaffold a new ADR.
+    New {
+        /// ADR title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List ADRs by id: id, status, slug, title.
+    List {
+        /// Filter to a single status.
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
     },
 }
 
@@ -319,6 +354,10 @@ fn main() -> anyhow::Result<()> {
                 tag,
                 path,
             } => memory::run_list(path, memory_type, status, tag.as_deref()),
+        },
+        Command::Adr { command } => match command {
+            AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
+            AdrCommand::List { status, path } => adr::run_list(path, status.as_deref()),
         },
     }
 }

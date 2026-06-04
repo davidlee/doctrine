@@ -232,27 +232,6 @@ fn read_plan(slice_root: &Path, id: u32) -> anyhow::Result<Plan> {
 // CLI entry points (thin)
 // ---------------------------------------------------------------------------
 
-/// Resolve the title: use the argument, else prompt on stdin. Must be non-empty.
-fn resolve_title(title: Option<String>) -> anyhow::Result<String> {
-    if let Some(t) = title {
-        let t = t.trim().to_string();
-        if t.is_empty() {
-            bail!("Title must not be empty");
-        }
-        return Ok(t);
-    }
-    let mut stdout = io::stdout();
-    write!(stdout, "Title: ")?;
-    stdout.flush()?;
-    let mut line = String::new();
-    io::stdin().read_line(&mut line)?;
-    let entered = line.trim().to_string();
-    if entered.is_empty() {
-        bail!("Title must not be empty");
-    }
-    Ok(entered)
-}
-
 /// `doctrine slice new`.
 pub(crate) fn run_new(
     path: Option<PathBuf>,
@@ -260,16 +239,8 @@ pub(crate) fn run_new(
     slug: Option<String>,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let title = resolve_title(title)?;
-    // Slug *resolution policy* is slice-specific (a design doc has no slug);
-    // only the pure `derive_slug` helper lives in the engine.
-    let slug = match slug {
-        Some(s) => s,
-        None => entity::derive_slug(&title),
-    };
-    if slug.is_empty() {
-        bail!("Could not derive a slug from the title; pass --slug");
-    }
+    let title = crate::input::resolve_title(title)?;
+    let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let out = entity::materialise(
         &SLICE_KIND,
