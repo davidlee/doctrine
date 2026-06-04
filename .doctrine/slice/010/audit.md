@@ -58,6 +58,58 @@ the design's load-bearing invariants, plus dispositions.
 - **Behaviour preservation.** `delegate_argv` + `AgentPlan::Delegate` + entity/
   slice/state suites green unchanged.
 
+## Second independent pass (post-close-out)
+
+A fresh `/code-review` over the same diff (`097370c~1..6f2f3e2`), tree green at
+HEAD (277 unit + 2 e2e, clippy `-D warnings` clean). Goal: break what the above
+claims green. A1/A2 confirmed held; the project-local never-clobber path could not
+be broken. New findings (none blocking; no code changed — `no code without an
+approved plan`):
+
+- **B1 (bug, reachable, FIXED) — F4 ignore was wrong under `--global`.**
+  `run_install` (`skills.rs:722`) unconditionally `ensure_gitignored(&root,
+  ".doctrine/skills/*")`, but `--global` materialises the canonical tree at
+  `$HOME/.doctrine/skills` (`canonical_dir`, `:206`), not under `root`. So on the
+  reachable global path (`SkillsCommand::Install { global }`, main.rs:330) the
+  invariant inverts: the tree written ($HOME) is left un-ignored, and a spurious
+  `.doctrine/skills/*` is appended to the *project* `.gitignore`. F4's promise
+  ("ignore the derived tree I just wrote") fails for global. No test covers
+  `run_install` with `global=true`. Harm low ($HOME rarely a repo) but it is a
+  load-bearing invariant breaking on a shipped path. Fix: derive the ignore root
+  from the canonical base, or document `--global` ignore as out of scope.
+  **Fixed:** extracted `install_base(root, global)` — the single base both
+  `.claude/skills` and `.doctrine/skills` hang off — and anchored the F4 ignore
+  there (`run_install:722`), so global writes the ignore beside its `$HOME` tree.
+  Also kills the HOME/root duplication that `claude_dir`/`canonical_dir` carried.
+  Test: `install_base_anchors_both_trees_and_the_ignore` locks "ignore base ==
+  tree base" (global e2e not run — it would write the developer's real `$HOME`).
+- **B2 (robustness, OPEN, low likelihood) — canonical `dest` removal not
+  type-aware (asymmetric vs A1).** `materialise_canonical:399` still does
+  `if dest.exists() { remove_dir_all(dest) }` two lines below the A1-hardened
+  type-aware temp cleanup. A stray regular file / live symlink-to-dir at
+  `.doctrine/skills/<id>` errors (`ENOTDIR`) instead of self-healing — the exact
+  mode A1 fixed for the temp. Derived/gitignored tree so unlikely; the asymmetry is
+  the trap. (A *dangling* symlink at `<id>` is safe — `exists()` false, `rename`
+  heals.)
+- **B3 (hardening, accepted-residual) — `write_link` Create not atomically
+  clobber-safe.** `write_link:319` uses temp+`rename` for both Create and Relink;
+  `rename` always wins, so A2's residual TOCTOU (foreign symlink appearing between
+  mutation-time `classify_link` and the `rename`) is real for Create. A direct
+  `symlink(target, dest)` on the Create arm fails closed (`EEXIST`) — true
+  never-clobber, and simpler (temp+rename is only needed to *replace* on Relink).
+  Design §5.5 accepts the residual window, so opportunity not blocker; recorded so
+  the guarantee is read as "narrow window", not "closed", for Create.
+- **B4..B6 (cosmetic/cohesion, optional).** `let _ = dest;` pointless bind in the
+  `execute` KeepForeign arm (`skills.rs:448`); `Step::Gitignore.dest` is now
+  display-only while `execute_plan` recomputes the path independently
+  (`install.rs:270` vs `:313` / `ensure_gitignored`) — two sources that happen to
+  agree; "refreshed" logged on first install (no prior canonical); unreadable
+  symlink renders `(foreign symlink → )` with an empty path.
+
+Disposition: B1 is the only one worth a fix decision (small, reachable). B2/B3 are
+defensible-as-is given the derived-tree + §5.5-accepts-residual framing. B4–B6 are
+cleanup. None block the slice; left for the owner to triage.
+
 ## Known limitations (documented, accepted)
 
 - Ownership-spelling: a differently-spelled own link classifies foreign → kept,

@@ -181,14 +181,23 @@ fn validate_filters(all: &[Entry], ids: &[String], domains: &[String]) -> anyhow
     Ok(())
 }
 
-/// The Claude skills directory (project-local or, with `global`, user home).
-fn claude_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+/// The base both skill trees hang off: the project `root`, or the user home with
+/// `global`. Single source for the `.claude/skills` link dir, the
+/// `.doctrine/skills` canonical dir, AND the F4 derived-tree gitignore — so under
+/// `--global` the ignore follows the tree to `$HOME` rather than landing in the
+/// project for a tree that isn't there (SL-010 B1).
+fn install_base(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
     if global {
         let home = std::env::var_os("HOME").context("HOME is not set; cannot resolve --global")?;
-        Ok(PathBuf::from(home).join(".claude/skills"))
+        Ok(PathBuf::from(home))
     } else {
-        Ok(root.join(".claude/skills"))
+        Ok(root.to_path_buf())
     }
+}
+
+/// The Claude skills directory (project-local or, with `global`, user home).
+fn claude_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".claude/skills"))
 }
 
 // ---------------------------------------------------------------------------
@@ -203,12 +212,7 @@ fn claude_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
 /// The canonical skills tree (project-local, or under `$HOME` with `global`).
 /// Mirrors `claude_dir`'s base so the relative link target is stable.
 fn canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
-    if global {
-        let home = std::env::var_os("HOME").context("HOME is not set; cannot resolve --global")?;
-        Ok(PathBuf::from(home).join(".doctrine/skills"))
-    } else {
-        Ok(root.join(".doctrine/skills"))
-    }
+    Ok(install_base(root, global)?.join(".doctrine/skills"))
 }
 
 /// Relative path from `from` to `to`. Both must be absolute and normalised
@@ -719,7 +723,9 @@ pub(crate) fn run_install(
 
     // Self-enforce the derived-tree ignore invariant (SL-010 F4): `skills install`
     // owns `.doctrine/skills/*` regardless of whether `doctrine install` ran first.
-    crate::install::ensure_gitignored(&root, ".doctrine/skills/*")?;
+    // Anchor the ignore at the same base the canonical tree is written to, so
+    // `--global` ignores its $HOME tree rather than the project (SL-010 B1).
+    crate::install::ensure_gitignored(&install_base(&root, global)?, ".doctrine/skills/*")?;
     execute(&plan, &catalog, &Npx, &mut out)?;
     writeln!(out, "Done.")?;
     Ok(())
@@ -908,6 +914,32 @@ mod tests {
         assert_eq!(
             canonical_dir(root, true).unwrap(),
             home.join(".doctrine/skills")
+        );
+    }
+
+    #[test]
+    fn install_base_anchors_both_trees_and_the_ignore() {
+        // F4's gitignore must land at the SAME base the canonical tree is written
+        // to — `install_base` is that single source (SL-010 B1). Project-local: the
+        // base IS the root; global: the base is $HOME, so the ignore follows the
+        // tree to $HOME instead of polluting the project with an entry for a tree
+        // that isn't there.
+        let root = Path::new("/proj");
+        assert_eq!(install_base(root, false).unwrap(), root);
+        assert_eq!(
+            canonical_dir(root, false).unwrap(),
+            install_base(root, false).unwrap().join(".doctrine/skills")
+        );
+        assert_eq!(
+            claude_dir(root, false).unwrap(),
+            install_base(root, false).unwrap().join(".claude/skills")
+        );
+
+        let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+        assert_eq!(install_base(root, true).unwrap(), home);
+        assert_eq!(
+            canonical_dir(root, true).unwrap(),
+            install_base(root, true).unwrap().join(".doctrine/skills")
         );
     }
 
