@@ -22,13 +22,20 @@ schema widening. Three things shape it:
   excluded from scope-filtered queries. The validated `Memory` already carries the
   full `Scope` (`src/memory.rs`), so matching is a pure function over data that is
   already in hand.
-- **Staleness needs a git frame the current `Memory` throws away.** Raw parse keeps
-  `[git]` as the empty `RawGit{}`; `Memory` never carries the anchor. The
-  scoped+attested staleness mode needs `verified_sha` + the scope paths to count
-  intervening commits. So this slice **widens `Memory` to carry the git anchor**
-  and adds the IO-seam git-reachability query — the pure/imperative split holds
-  (doctrine builds the frame, the pure ranker takes it as input; interop
-  constraint 4).
+- **Retrieval has no producer yet — `record` writes neither scope nor anchor.**
+  SL-005 `record` captures *only tags* (+ workspace); `paths`/`globs`/`commands`/
+  `repo` render empty and `[git]` is `anchor_kind = "none"`. So scope-first
+  matching (`paths`=3) and the attested staleness mode are *consumers with no
+  producer*. This slice therefore builds the **producer side too**: `record` gains
+  scope-capture flags and constructs the git **born frame** at capture — without
+  it, `find --path` returns nothing forever and `verified_sha` is never written.
+- **Staleness needs a git seam that does not exist.** doctrine has *no* git
+  surface today (`.git` appears only as a root marker). The scoped+attested mode
+  needs `verified_sha` + scope paths to count intervening commits, so this slice
+  **builds a new `src/git.rs` IO seam** (frame construction + reachability/commit-
+  count) and **widens `Memory`** to carry the `[git]` anchor and `reviewed` date
+  the raw layer reads but discards. The pure/imperative split holds: the shell
+  resolves git facts, the pure ranker takes them as input (interop constraint 4).
 - **Retrieval is a security boundary.** Stored memory is hostile input. `find`
   returns ranked rows for a human/tool; `retrieve` assembles the agent-context
   block — quoted, attributed, delimited, never instruction — and is where the
@@ -36,6 +43,22 @@ schema widening. Three things shape it:
   hard filters live (§ Security).
 
 ## Scope & Objectives
+
+- **Producer: `record` captures scope + builds the git born frame.** Add
+  repeatable `--path` / `--glob` / `--command` flags and `--repo` (auto-detected
+  from the git seam when absent) so a recorded memory carries the scope the
+  retrieval key matches on. At capture, the new git seam builds the born frame
+  (interop constraint 4): clean tree → `anchor_kind = commit`, `commit` /
+  `base_commit` / `ref_name` set, `verified_sha = commit`; dirty tree →
+  `checkout_state`; unborn/non-git → `none` (permitted only for unscoped memory, a
+  repo-scoped memory in an unborn context is an error). This is the minimum write
+  side that makes the read side non-inert; the re-stamp verbs (`verify` /
+  `reanchor` / `review`) stay deferred (F1).
+
+- **Git IO seam (`src/git.rs`).** The first git surface in doctrine: `head_frame`
+  (resolve HEAD commit / ref / dirty / base for the born frame) and
+  `commits_touching(paths, since_sha)` (the staleness reachability query, `None`
+  when undecidable). Impure shell only; the pure layer never shells out.
 
 - **Scope matching (pure).** A `match_scope(&Memory, &QueryContext) -> Option<ScopeMatch>`
   over the validated `Scope`: OR across the four dimensions, specificity weight
@@ -52,16 +75,16 @@ schema widening. Three things shape it:
   lexical score is a **bounded signal into the tuple**, never the final word.
 
 - **Git-anchored staleness.** Widen `Memory` to carry the `[git]` anchor
-  (`anchor_kind`, `verified_sha`, `base_commit`, `ref_name`) the raw layer already
-  reads but currently discards. A `staleness(&Memory, &GitFrame, today) -> Staleness`
-  pure function realising the three modes — scoped+attested (commits touching
-  scoped paths since `verified_sha`), scoped-unattested (days since `reviewed`),
-  unscoped (days since `reviewed`) — resolving to an **explicit**
-  `fresh | stale | unknown | unanchored`, never a silent hide or over-trust.
-  Undecidable reachability (shallow/partial clone, detached HEAD, non-ancestor
-  anchor, non-git) → `unknown` / `unanchored`. The commit-count query sits behind
-  the existing IO seam (the `doctrine install` / `slice` git surface); the pure
-  layer takes a resolved `GitFrame`.
+  (`anchor_kind`, `verified_sha`, `base_commit`, `ref_name`) and the `reviewed`
+  date the raw layer already reads but currently discards. A
+  `staleness(&Memory, &GitFacts, today) -> Staleness` pure function realising the
+  three modes — scoped+attested (commits touching scoped paths since
+  `verified_sha`, resolved by the seam into `GitFacts`), scoped-unattested (days
+  since `reviewed`), unscoped (days since `reviewed`) — resolving to an
+  **explicit** `fresh | stale | unknown | unanchored`, never a silent hide or
+  over-trust. Undecidable reachability (shallow/partial clone, detached HEAD,
+  non-ancestor anchor, non-git) → `unknown` / `unanchored`. The shell resolves the
+  commit-count via `src/git.rs`; the pure function takes the resolved facts.
 
 - **`doctrine memory find` (ranked search).** The human/tool query verb: take a
   `QueryContext` from flags (`--path`, `--glob`, `--command`, `--tag`, free-text
@@ -116,42 +139,49 @@ security-safe agent-context block. Native v1's read surface is then complete
   not yet contribute a ranking signal. Kept separate so this slice stays the
   retrieval primitive and step 3 is purely additive.
 
-- **Lifecycle / review *mutation* verbs.** `supersede` / `retract` / `review` /
-  `reanchor` / `promote` (which advance `status` and `verification_state`, and
-  write `verified_sha`) are the mutation half; they belong with the reserved
-  ledger seam (every mutation is also an event, interop constraint 1). v1 retrieval
-  **reads** verification/anchor state; it does not advance it. Without a `review`
-  verb, `verified_sha` is whatever `record` wrote — staleness still computes
-  honestly (an unattested memory simply takes the days-since-`reviewed` mode).
+- **Lifecycle / review *re-stamp* verbs.** `record` writes the born anchor
+  (`verified_sha` = HEAD at capture), which is enough for attested staleness to
+  *work* — commits accrue against that baseline and the memory ages honestly. What
+  v1 omits is **re-stamping**: `verify` (confirm a memory still holds, advance
+  `verified_sha` + `reviewed` + horizon), `reanchor` (rebind to a new commit),
+  `supersede` / `retract` / `promote`. These advance `status` /
+  `verification_state` and belong with the reserved ledger seam (every mutation is
+  also an event, interop constraint 1). v1 retrieval **reads** verification/anchor
+  state and never advances it (F1).
 
 - **Reserved seam.** `events.toml` ledger, NDJSON import/export, the event-store
   backend adapter — all deferred (spec § reserved seam). Retrieval is a pure-read
   projection over the current-state files; it does not touch the ledger.
 
-- **Engine change.** Retrieval adds query functions to `src/memory.rs` and CLI
-  arms to `main.rs`; it does not touch `src/entity.rs`. The existing entity /
-  slice / state / memory suites are the behaviour-preservation proof and stay green
-  unchanged. The one `Memory` widening (git anchor) is additive — every existing
-  `Memory` field and its readers are untouched.
+- **Engine change.** SL-007 adds query functions to `src/memory.rs`, a new
+  `src/git.rs` IO module, scope/anchor capture to `record`, and CLI arms to
+  `main.rs`; it does not touch `src/entity.rs`. The existing entity / slice /
+  state / memory suites are the behaviour-preservation proof and stay green
+  unchanged. The `Memory` widenings (git anchor + `reviewed`) and the `record`
+  flag additions are additive — every existing field, reader, and the default
+  record flow are untouched.
 
 ## Summary
 
-The query half of native memory v1: scope-first, lexical-first, deterministic
-retrieval over the SL-005 store. Two pure cores — `match_scope` (OR across
-paths/globs/commands/tags with specificity weights) and the 9-key deterministic
-sort — plus a `staleness` function that needs the one real schema change here:
-widening validated `Memory` to carry the `[git]` anchor the raw layer already
-parses but discards, so the scoped+attested mode can count commits touching scoped
-paths since `verified_sha`. Two verbs ride the existing `collect_memories` →
-pure-filter/sort → format split: `find` (ranked human/tool rows) and `retrieve`
-(the security-contract agent-context block — quoted, attributed, data-never-
-instruction, quarantined/retracted suppressed). Thread 14-day expiry folds into
-the hard-filter stage. Git reachability sits behind the established IO seam; the
-pure layer takes a resolved `GitFrame`.
+The query half of native memory v1, end-to-end — both the missing producer and
+the read side, because scope-first retrieval is inert without scope, and attested
+staleness is dead without an anchor. **Producer:** `record` gains scope-capture
+flags (`--path`/`--glob`/`--command`/`--repo`) and builds the git born frame via
+a new `src/git.rs` seam (the first git surface in doctrine). **Read side:** two
+pure cores — `match_scope` (OR across paths/globs/commands/tags with specificity
+weights) and the 9-key deterministic sort — plus a `staleness` function over a
+widened `Memory` (carrying the `[git]` anchor + `reviewed` date the raw layer
+discards), the scoped+attested mode counting commits touching scoped paths since
+`verified_sha`. Two verbs ride the existing `collect_memories` → pure-filter/sort
+→ format split: `find` (ranked human/tool rows) and `retrieve` (the security
+agent-context block — reusing `render_show`'s data-never-instruction framing,
+quarantined/retracted suppressed). Thread 14-day expiry folds into the
+hard-filter stage.
 
-The lexical-backend choice (open question #1), the exact `QueryContext` flag set,
-the `Ranked` row and its `Ord`, the `GitFrame` shape + the reachability query, and
-the `retrieve` block format live in the design doc ([design.md](design.md)) —
+The lexical-backend choice (open question #1), the `record` scope/anchor capture
+contract, the exact `QueryContext` flag set, the `Ranked` row and its `Ord`, the
+`src/git.rs` `GitFrame`/`GitFacts` shapes + the reachability commands, and the
+`retrieve` block format live in the design doc ([design.md](design.md)) —
 authored with this slice, pending adversarial review per the slice-002/003/004
 rhythm.
 
