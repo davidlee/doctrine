@@ -59,16 +59,26 @@ phase-tracking schema, or polluting the machinery `slice list` shares with
 Three pieces, each on the correct side of the IO seam:
 
 1. **Pure fold (`state.rs`).** `fn fold_rollup(statuses: &[&str]) -> PhaseRollup`
-   — count `total`, `completed`, `blocked` from a slice of status strings.
-   Unknown/typo statuses count toward `total` only (tolerant). No IO, no clock.
+   — fold a per-stem status slice into the full bucket set. No IO, no clock.
+   Each stem carries either its `.toml` status string or a *missing-toml* marker
+   (a `.md`-only crash-partial), so the fold never undercounts `total` (R-F4).
 2. **IO reader (`state.rs`).** `fn phase_rollup(project_root, slice_id)
-   -> anyhow::Result<Option<PhaseRollup>>` — list `phase-*.toml` under the
-   id-derived `phases_dir`, tolerant-parse each `status`, fold. `None` when the
-   dir is absent or holds no phase tomls (the *not tracked* signal).
-3. **Slice-local presentation (`slice.rs`).** `run_list` reads metas (shared),
-   sorts (shared), then pairs each `Meta` with its `phase_rollup`, and renders via
-   a **slice-local** formatter that adds the rollup column. `meta::format_list` is
-   left for the no-rollup callers (and `adr list`) untouched.
+   -> anyhow::Result<Option<PhaseRollup>>` — discover the phase set via the
+   **existing** `existing_phase_stems` (which counts a stem from *either* half of
+   the pair — the same notion `init_phases` uses), classify each stem as
+   `.toml`-present (tolerant-parse its `status`) or `.md`-only (`missing_toml`),
+   then fold. `None` only when no stem exists at all (dir absent or empty) — the
+   *not tracked* signal. (R-F4: never re-derive the phase set from `*.toml` alone.)
+3. **Neutral row helpers (`meta.rs`).** Extract the column measuring + single-row
+   layout `meta::format_list` already performs into `measure_meta_columns(&[Meta])
+   -> MetaWidths` and `format_meta_row(&Meta, &MetaWidths, status_suffix:
+   Option<&str>) -> String`. `format_list` is reimplemented over them (its output
+   byte-unchanged); `slice.rs` reuses them and inserts its own `phases` column.
+   No width/layout logic is duplicated (R-F1), and `meta` learns nothing about
+   phases — `status_suffix` carries the `⚠`, which is presentation-neutral.
+4. **Slice-local presentation (`slice.rs`).** `run_list` reads metas (shared),
+   sorts (shared), pairs each `Meta` with its `phase_rollup`, and renders via a
+   slice-local formatter built on the `meta` helpers plus the `phases` column.
 
 ```text
 run_list:
@@ -81,15 +91,27 @@ run_list:
 ### 5.2 Interfaces & Contracts
 
 ```rust
-// state.rs
+// state.rs — all status buckets carried; total is their sum (R-F3, R-F5)
 pub(crate) struct PhaseRollup {
-    pub total: u32,
+    pub planned: u32,
+    pub in_progress: u32,
     pub completed: u32,
-    pub blocked: u32,        // surfaced: a stall signal, not just incomplete
+    pub blocked: u32,        // stall signal
+    pub unknown: u32,        // status string outside the known enum (corruption)
+    pub missing_toml: u32,   // .md-only stem: phase exists, status unreadable
 }
-pub(crate) fn fold_rollup(statuses: &[&str]) -> PhaseRollup;            // pure
+impl PhaseRollup {
+    pub fn total(&self) -> u32;          // sum of every bucket — never undercounts
+    pub fn anomalies(&self) -> u32;      // unknown + missing_toml
+}
+// each stem reduces to one of these before the fold
+enum StemStatus<'a> { Toml(&'a str), MissingToml }
+pub(crate) fn fold_rollup(stems: &[StemStatus]) -> PhaseRollup;        // pure
 pub(crate) fn phase_rollup(root: &Path, slice_id: u32)
     -> anyhow::Result<Option<PhaseRollup>>;                            // IO seam
+// the terminal-status set — the ONE place "done" is named; the future
+// lifecycle-transition verb reuses this, never re-hardcodes (R-F2).
+pub(crate) fn is_terminal_status(authored: &str) -> bool;             // pure
 
 // slice.rs — pure divergence predicate + slice-local formatter
 fn is_divergent(authored: &str, rollup: Option<&PhaseRollup>) -> bool;  // pure
@@ -102,14 +124,20 @@ fn format_slice_rows(rows: &[(Meta, Option<PhaseRollup>)]) -> String;   // pure
   precedes the rows (the only output-shape change to `slice list`).
 - Rendered row: `NNN  <status>  <rollup>  <slug>  <title>`:
   - `<rollup>` = `completed/total` (e.g. `4/6`); `—` when not tracked; trailing
-    `!N` when `blocked > 0` (e.g. `4/6 !1`) — decision Q1.
-  - `<status>` gains a trailing `⚠` when the authored status and the rollup
-    **diverge** (decision Q3 / D3) — see § 5.5 for the rule.
+    `!N` when `blocked > 0`; trailing `?N` when `anomalies > 0` (`unknown +
+    missing_toml`) — decision Q1, extended by R-F3/R-F4.
+  - `<status>` gains a trailing `⚠` when authored status and rollup **diverge**
+    (decision Q3 / D3) — see § 5.5. Divergence is **suppressed when anomalies > 0**
+    (corrupt tracking is not a lifecycle mismatch — R-F3).
+- **`slice list` output is human-only.** The header + `phases` column make it
+  structurally distinct from `adr list`; machine consumers wait for the
+  `--format=tsv` follow-up (R-F6). `adr list` output stays byte-identical.
 
 ```text
 id   status     phases   slug                 title
 001  done       4/6      memory-entity-v1     Memory entity v1
 007  done ⚠     2/6 !1   memory-anchoring     Memory anchoring …
+008  proposed   3/6 ?1   memory-retrieval     Memory retrieval …
 009  proposed   —        slice-status-rollup  Slice status rollup
 ```
 
@@ -133,24 +161,29 @@ id   status     phases   slug                 title
 ### 5.5 Invariants, Assumptions & Edge Cases
 
 - **No `phases/` dir / empty dir** → `None` → `—`. Never `0/0`.
-- **Typo/unknown status** (hand edit) → counted in `total`, excluded from
-  `completed`/`blocked`. `slice list` never errors on a malformed phase status.
-- **`.md` sheet without its `.toml`** (crash-partial) → not counted (enumerate
-  `phase-*.toml` only; the `.toml` is the status authority).
+- **Typo/unknown status** (hand edit) → counted in `total` *and* in `unknown`;
+  surfaced as `?N`, never silently bucketed (R-F3). `slice list` never errors.
+- **`.md` sheet without its `.toml`** (crash-partial) → the stem still counts
+  toward `total` as `missing_toml` (R-F4); surfaced in `?N`. The phase set is the
+  one `existing_phase_stems`/`init_phases` see, so `total` never silently shrinks.
 - **Divergence rule** (decision Q3 / D3). A pure predicate over
-  `(authored_status, Option<PhaseRollup>)`:
-  - `done` + rollup present + `completed < total` → **divergent** (marked done,
-    work outstanding).
-  - rollup present + `total > 0` + `completed == total` + `authored != "done"`
-    → **divergent** (work complete, not marked done).
+  `(authored_status, Option<&PhaseRollup>)`, keyed on `is_terminal_status` — never
+  the bare string `"done"` (R-F2):
+  - `anomalies > 0` → **never** divergent (corruption ≠ lifecycle mismatch).
   - `None` rollup (untracked) → **never** divergent (nothing to compare).
+  - `is_terminal_status(authored)` + `completed < total` → **divergent** (marked
+    terminal, work outstanding).
+  - `!is_terminal_status(authored)` + `total > 0` + `completed == total` →
+    **divergent** (work complete, not marked terminal).
   - all other pairs → not divergent.
-  `"done"` is the single hardcoded terminal token (the only terminal authored
-  status in use). It is **provisional** — the slice status vocabulary is not
-  locked and there is no lifecycle-transition verb yet; the constant moves to a
-  shared place when that verb lands (the deferred follow-up).
-- **Empty repo / no slices** → header only (or empty — Q: suppress header on zero
-  rows; lean: suppress, matching `format_list`'s empty-string contract).
+  `is_terminal_status` is the **single** place a terminal token is named (v1 set:
+  `{"done"}`). Because both directions key on it, a future synonym (`completed`,
+  `closed`) is added in one tested function and stops false-flagging everywhere at
+  once — and the deferred lifecycle-transition verb *reuses* this set rather than
+  re-deriving it. The set is provisional; its membership, not the predicate shape,
+  is what may change.
+- **Empty repo / no slices** → empty output, header suppressed (matches
+  `format_list`'s empty-string contract).
 
 ## 6. Open Questions & Unknowns
 
@@ -163,73 +196,119 @@ Resolved in interview (2026-06-04):
 
 Remaining:
 
-4. **`in_progress` column** — not surfaced in v1; `completed/total` + blocked is
-   the signal. Revisit if a per-phase detail view (follow-up) lands.
-5. **Where the `"done"` terminal constant lives** — local to `slice.rs` for v1;
-   moves to a shared home with the deferred lifecycle-transition verb.
+4. **`in_progress` column** — carried in `PhaseRollup` but not rendered in v1;
+   `completed/total` + `!N` + `?N` is the surfaced signal. The detail-view
+   follow-up renders the full bucket set.
+5. **Untracked-vs-empty distinction** — both fold to `None` → `—` in v1 (R-F5
+   partial). If the `slice status <ID>` detail view needs to tell "no phases dir"
+   from "dir, zero phases" apart, promote the reader return to a `PhaseTracking`
+   enum then — deferred, not built unused now.
 
 ## 7. Decisions, Rationale & Alternatives
 
 - **D1 — Reader lives in `state.rs`, not `meta.rs`.** Phase state is `state.rs`'s
   domain; `meta` is the kind-neutral authored-toml substrate. *Alt:* put rollup in
   `meta` — rejected: pollutes the ADR-shared surface with a phase concept.
-- **D2 — Slice-local formatter; `meta::format_list` untouched.** The rollup column
-  is slice-only. *Alt A:* add `rollup: Option<…>` to `Meta` — rejected (shared
-  struct, ADR carries a dead field). *Alt B:* generalise `format_list` to accept
-  extra columns — rejected as premature; one extra caller doesn't justify a
-  column abstraction (YAGNI). Accept small alignment duplication in `slice.rs`;
-  extract a shared aligner only if a third caller appears.
-- **D3 — Compute a coarse divergence hint (interview Q3).** A pure predicate over
-  `(authored_status, Option<PhaseRollup>)` marks the status with `⚠` on the two
-  unambiguous mismatches (done-but-incomplete; complete-but-not-done), anchored on
-  a single provisional `"done"` terminal token (§ 5.5). The mapping is deliberately
-  minimal — one constant, no per-status table — so it carries no commitment the
-  deferred lifecycle-transition verb must honour; that verb will own the real
-  vocabulary and relocate the constant. *Alt (drafted, overridden):* juxtapose-only,
-  no computed flag — cleaner but leaves the reader to spot every mismatch by eye;
-  rejected in interview as too passive for the gap this slice exists to close.
-  *Alt:* a full status-mapping table — rejected as premature (no locked vocab).
+- **D2 — Extract neutral row helpers in `meta.rs`; no duplicated layout (R-F1).**
+  The rollup column is slice-only, but column-measuring and single-row layout are
+  shared. Pull them out of `format_list` into `measure_meta_columns` +
+  `format_meta_row` (with a presentation-neutral `status_suffix`), reimplement
+  `format_list` over them (byte-unchanged), and let `slice.rs` reuse them under
+  its `phases` column. *Alt A:* add a rollup field to `Meta` — rejected (ADR
+  carries a dead field). *Alt B (drafted, overridden):* copy the alignment logic
+  into `slice.rs` — rejected on re-review: forks the two list surfaces the moment
+  spacing/layout changes. *Alt C:* a generic N-column framework — rejected as
+  premature; two callers want a shared *row*, not a column abstraction.
+- **D3 — Compute a coarse divergence hint keyed on a terminal-set helper (Q3,
+  R-F2).** `is_divergent` marks `⚠` on the two unambiguous mismatches, both keyed
+  on `is_terminal_status` — never the bare string `"done"`. So the v1 set
+  `{"done"}` extends in one tested place (synonyms `completed`/`closed` stop
+  false-flagging at once) and the deferred lifecycle verb reuses it. Suppressed
+  when anomalies present. *Alt (drafted, overridden):* hardcode `"done"` inline —
+  rejected on re-review: a latent false-flag trap against the unlocked free-text
+  vocabulary. *Alt:* juxtapose-only — rejected in interview (too passive).
+  *Alt:* full status-mapping table — premature (no locked vocab).
 - **D4 — `None` for untracked, not `0/0`.** Explicit absence; never reads as done.
-- **D5 — Tolerant fold over a `PhaseStatus` parse-back.** A read-only display must
-  not crash on a hand-edited typo. *Alt:* add `FromStr for PhaseStatus` and error
-  on unknown — rejected for the list path; counting by string match is robust and
-  needs no change to the `clap::ValueEnum`.
+- **D5 — Tolerant fold, but surface anomalies explicitly (R-F3).** A read-only
+  display must not crash on a hand-edited typo — but it must not *hide* the
+  corruption either. Unknown statuses and `.md`-only stems are counted in dedicated
+  buckets (`unknown`, `missing_toml`), rendered `?N`, and suppress the divergence
+  hint. *Alt (drafted, overridden):* count unknowns in `total` only — rejected:
+  makes corrupt tracking look like authoritative progress. *Alt:* `FromStr`-error
+  on unknown — rejected; crashes the list path on one bad keystroke.
 - **D6 — Recompute, no cache/index.** Disposability over a stale-cache failure
   mode; trivial cost at scale.
+- **D7 — `PhaseRollup` carries every bucket; `total()`/`anomalies()` derived
+  (R-F5).** All six status buckets are stored so `total` is their sum (cannot
+  undercount) and the detail-view / `--format=tsv` follow-ups need no reshape. The
+  reader still returns `Option` (None = untracked); the richer `PhaseTracking` enum
+  is deferred until a caller needs untracked-vs-empty (Open Q5) — carry the data,
+  not an unused type.
+- **D8 — Phase set comes from `existing_phase_stems`, not a fresh `*.toml` scan
+  (R-F4).** Reuse the module's own definition of "what is a phase" (either half of
+  the pair) so the rollup agrees with `init_phases`; a `.md`-only crash-partial is
+  `missing_toml`, never a vanished phase. No parallel enumeration.
 
 ## 8. Risks & Mitigations
 
 - **`meta` pollution creep** — a later "just add it to `Meta`" shortcut. Mitigation:
-  D2 + a test asserting `adr list` output is byte-unchanged.
-- **Output-format churn** breaking anyone parsing `slice list`. Mitigation: append
-  the column in a fixed position; defer machine output to the `--format=tsv`
-  follow-up rather than reshaping the human listing.
+  D2's neutral row helpers give the clean alternative + a test asserting `adr list`
+  output is byte-unchanged.
+- **Output-format churn** breaking anyone parsing `slice list`. Mitigation: fixed
+  column position; `slice list` documented human-only; machine output deferred to
+  the `--format=tsv` follow-up (R-F6).
 - **Misread absence** — `—` mistaken for an error. Mitigation: `—` is the
   documented "not tracked" token; covered in tests and the CLAUDE.md note.
-- **Tolerant parse hides real corruption.** Accepted: a malformed phase toml is a
-  state-tree problem `slice phases` surfaces; the list stays robust by design.
+- **Anomaly markers misread as progress** — `?N` taken for a count. Mitigation:
+  `?N` is documented as the corruption marker; divergence suppressed under it so a
+  corrupt slice never also reads as a lifecycle mismatch (R-F3).
+- **Terminal-set drift** — `is_terminal_status` and a future lifecycle verb
+  disagree. Mitigation: one shared function, reused not re-derived (D3/R-F2);
+  membership change is one tested edit.
 
 ## 9. Quality Engineering & Validation
 
-- **Pure fold unit tests:** empty → `0/0`; all completed; mixed; blocked present;
-  unknown status counted in total only.
-- **IO reader tests:** absent dir → `None`; empty dir → `None`; populated dir →
-  correct counts; `.md`-only stem ignored; symlink/non-phase entries ignored
-  (mirror `read_metas` fixture style).
-- **Divergence predicate (pure):** `done` + incomplete → true; complete +
-  non-`done` → true; `done` + complete → false; `None` rollup → false; both
-  directions of the non-divergent cases.
+- **Pure fold unit tests:** empty; all completed; mixed; blocked present; unknown
+  status → `unknown` bucket; `missing_toml` stem counted in `total`; `total()` =
+  sum of buckets; `anomalies()` correct.
+- **IO reader tests:** absent dir → `None`; empty dir → `None`; populated → correct
+  buckets; `.md`-only stem → `missing_toml` (counted, not dropped — R-F4);
+  `.toml` typo status → `unknown`; symlink/non-phase entries ignored (mirror
+  `read_metas` fixture style); phase set agrees with `existing_phase_stems`.
+- **`is_terminal_status` (pure):** `"done"` true; `"proposed"`/unknown false —
+  the single tested terminal-set gate (R-F2).
+- **Divergence predicate (pure):** terminal + incomplete → true; non-terminal +
+  complete → true; terminal + complete → false; `None` rollup → false; `anomalies
+  > 0` → false (suppressed); both non-divergent directions.
+- **`meta` helpers (pure):** `measure_meta_columns` + `format_meta_row` reproduce
+  the old `format_list` output byte-for-byte (regression lock); `status_suffix`
+  appends without breaking alignment.
 - **Formatter (pure):** header present with rows, suppressed on empty; `—` for
-  `None`; `!N` only when blocked; `⚠` only when divergent; column alignment.
-- **`run_list` integration:** a slice with phases shows `X/Y`; a slice without
-  shows `—`; `--status` filter still applies to authored status.
-- **Behaviour-preservation:** `meta`, `entity`, state-writer, and `adr list`
-  suites green unchanged; an explicit `adr list` byte-stability assertion.
+  `None`; `!N` only when blocked; `?N` only on anomalies; `⚠` only when divergent
+  and not suppressed; column alignment with mixed-width rollups.
+- **`run_list` integration:** a slice with phases shows `X/Y`; without → `—`;
+  `--status` still filters authored status.
+- **Behaviour-preservation:** `meta`, `entity`, state-writer suites green
+  unchanged; an explicit `adr list` **byte-identical** assertion (R-F1/R-F6).
 - `just check` green (clippy zero-warnings, fmt) before commit.
 
 ## 10. Review Notes
 
-Pending adversarial review (the slice-002/003/004 rhythm — second agent or codex
-mcp). Focus areas for the reviewer: D2 (is the small alignment duplication the
-right call vs a shared aligner?), D3 (is juxtaposition-only honest enough, or does
-v1 owe at least a coarse divergence hint?), and Open Q1/Q2 (glyph + header).
+**Adversarial review — codex (gpt-5), 2026-06-04.** 5 MAJOR + 1 MINOR, all
+adjudicated and folded:
+- **R-F1** (alignment fork) → accepted. D2 now extracts neutral `meta` row helpers
+  instead of copying layout into `slice.rs`.
+- **R-F2** (`"done"`-only divergence trap) → accepted. `is_terminal_status` helper;
+  both predicate directions key on it; future verb reuses it (D3, § 5.5).
+- **R-F3** (tolerant fold hides corruption) → accepted. `unknown` bucket, `?N`
+  marker, divergence suppressed under anomalies (D5).
+- **R-F4** (`*.toml`-only undercounts total) → accepted. Phase set via
+  `existing_phase_stems`; `.md`-only stem → `missing_toml` (D8).
+- **R-F5** (lossy interface) → partially accepted. `PhaseRollup` carries every
+  bucket (D7); the 4-variant `PhaseTracking` enum deferred to its first caller
+  (Open Q5) rather than built unused.
+- **R-F6** (header churn) → kept the header (interview Q2) + `adr list`
+  byte-stability test + `slice list` documented human-only; `--format=tsv`
+  remains the follow-up.
+
+Decisions locked. Ready for `slice plan`.
