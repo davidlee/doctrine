@@ -46,6 +46,15 @@ doctrine slice phase   <ID> <PHASE-NN> --status <S> [--note N] [-p ROOT]
 doctrine slice notes   <ID> [-p ROOT]                # scaffold durable notes.md (on-demand)
 doctrine slice list    [--status S] [-p ROOT]        # rows: id status slug title
 
+doctrine memory record --type T [--key K] [--status S] [--summary S] [--tag T]…  # mint uid, scaffold
+doctrine memory show   <UID|KEY> [-p ROOT]           # header + body-as-data
+doctrine memory list   [--type T] [--status S] [--tag T] [-p ROOT]  # newest first; AND-filter
+                                                     #   find / retrieve (scope query) = SL-007
+
+doctrine adr new  [TITLE] [-p ROOT]                  # allocate next id, scaffold ADR
+doctrine adr list [--status S] [-p ROOT]             # rows: id status slug title
+doctrine adr status <ID> --status S [-p ROOT]        # edit-preserving lifecycle transition
+
 doctrine install [-p ROOT]                           # install/refresh .doctrine from embedded sources
 doctrine skills list                                 # available skills + install status
 doctrine skills install …                            # install skills into agents
@@ -118,7 +127,9 @@ append, never renumber or reuse.
   command moves a slice proposed→…→done or links it to phase state.
 - **no standalone plan validation** — a malformed `plan.toml` only surfaces when
   `slice phases` parses it.
-- **memory verbs** — `doctrine memory record/show/list` is SL-005 (in flight).
+- **memory retrieval** — `record/show/list` shipped (SL-005, done); scope-aware
+  `find`/`retrieve` (ranking + git staleness) is SL-007 (proposed). Read-by-id
+  only until it lands.
 
 ## environment
 
