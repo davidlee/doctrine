@@ -62,7 +62,12 @@
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
         ];
 
-        workspaceDeps = ["/home/david/.emacs.d/"];
+        workspaceDeps = [
+          "/home/david/dev/lazyspec/"
+          "/home/david/dev/spec-driver/"
+          "/home/david/dev/autobahn/"
+          "/home/david/dev/the external decision register/"
+        ];
 
         jailPkgs = lib.optionalAttrs isLinux {
           jailed-pi = jailLib.makeJailedPi {
