@@ -3,6 +3,11 @@
 *.tmp
 *.temp
 *.local.*
+.claude
+.pi
+.agents
+.codex
+
 handover.md
 /scratch
 /tmp
