@@ -22,9 +22,13 @@ it. Design forks settled in conversation:
 ## Scope & Objectives
 
 - **Canonical tree.** `install` materialises `.doctrine/skills/<id>/` from the
-  rust-embed. It is **derived** (regenerable) — already gitignored under
-  `.doctrine/*`; rewritten on every install (always overwrite — it owns no
-  authored data).
+  rust-embed. It is **derived** (regenerable), rewritten on every install (always
+  overwrite — it owns no authored data). The `dirs.create` list already makes the
+  dir; this slice adds `.doctrine/skills/*` to the manifest's `[gitignore].entries`
+  so a downstream `doctrine install` ignores it too (today it's masked only by this
+  repo's blanket `.doctrine/*` — the manifest writes additive entries, not the
+  blanket, so without this a consumer would commit the derived tree). Mirrors the
+  memory pattern: `items/` created-and-tracked, the derived subtrees ignored.
 - **Claude path becomes symlinks.** `.claude/skills/<id>` → a *relative* symlink
   to `.doctrine/skills/<id>`, replacing the copy mechanism for that path.
 - **Type-keyed, flag-free policy** per agent-dir target:
@@ -37,6 +41,39 @@ it. Design forks settled in conversation:
   (`delegate_argv` untouched); they pull from GitHub, not the local canonical
   tree. Claude-first means that split is accepted.
 - **`--force` is dropped** — the premise (opt-in copy overwrite) no longer exists.
+
+## Decision: `.doctrine/skills` is derived (gitignored)
+
+Source of truth is the embed (`plugins/` in this repo, the binary downstream);
+`.doctrine/skills/` is its regeneration, so it is **derived → gitignored**,
+materialised by `install` (node-modules-style: a fresh clone runs `doctrine
+install`). Not committed, not configurable — committing a copy invites drift
+against the embed, and a commit/ignore config knob spends complexity budget for a
+case the override hatch below already covers.
+
+## Overrides (the escape hatch)
+
+The type-keyed policy *is* the override mechanism — no flag needed:
+
+- A managed skill is a **symlink** → `install` owns it, relinks freely.
+- To pin / hand-edit a skill, make it a **real copy** in the agent dir; `install`
+  sees a foreign real dir and **refuses + warns** (`kept .claude/skills/<id>
+  (not a symlink)`). The copy is sacrosanct.
+
+Ready answer to *"pin these skills, keep them in git, stop install clobbering
+them"*:
+
+```sh
+rm .claude/skills/<id>                       # drop the managed symlink
+cp -r .doctrine/skills/<id> .claude/skills/<id>   # your own real copy (then edit)
+git add -f .claude/skills/<id>               # force-track (.claude is gitignored)
+```
+
+Reversible: `rm -rf .claude/skills/<id> && doctrine install` restores the managed
+symlink. Two distinct concerns, do not conflate: the **real-copy** stops the
+clobber (type policy); `git add -f` only versions it (`.claude` is blanket-ignored).
+The `kept …` warning is a required affordance — it tells the user every install
+that their override is respected.
 
 ## Non-Goals
 
