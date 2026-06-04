@@ -269,12 +269,15 @@ for human inspection of held-back memory. `--min-trust L` only *raises* the floo
    back" is normative, not opt-in). `--min-trust L` raises the floor to `L`. **`find`
    does *not* apply the holdback** — it is a human/tool query surface that annotates
    trust instead; `quarantined`/`retracted` stay excluded from *both*.
-3. **Staleness as a filter (open Q4).** v1 treats staleness as display + a feed into
-   the verification-recency sort key, never a hide. *Confirm no `--fresh-only`*
-   (lean: defer).
-4. **`find` lexical without scope.** A bare `--query` with no scope flags — rank by
-   lexical alone over all active memories? *Lean:* yes, lexical is a valid
-   scope-free entry; no-scope exclusion applies only to scope-*bearing* queries.
+3. **Staleness as a filter (open Q4) — RESOLVED (lock, D19).** v1 treats staleness as
+   display + a feed into the verification-recency sort key, **never a hide**. No
+   `--fresh-only` in v1. Condition: staleness stays *visible* on both surfaces — the
+   `find` `staleness` column and the `retrieve` `staleness:` header line are
+   load-bearing, not optional.
+4. **`find` lexical without scope (open Q5) — RESOLVED (lock, D20).** A bare `--query`
+   with no scope flags ranks by lexical alone over all active memories. The no-scope
+   exclusion applies only to scope-*bearing* queries; lexical is a valid scope-free
+   entry.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -349,6 +352,16 @@ External-review pass (2026-06-04, contract-tightening — no architecture change
   `critical<…<none`; weight desc; review-recency fewer-days-first, missing/malformed
   **last**. `verification_state=stale` is not double-penalised against the `Staleness`
   column (separate axes, spec § "separate axis").
+- **D19 — staleness never hides; no `--fresh-only` in v1 (open Q4).** *Rationale:* spec
+  mandates holdback for *trust*, not staleness; both axes (git `commits_since`, time
+  `reviewed`-age) only badge + feed sort-key 8. *Condition:* the `find` `staleness`
+  column and `retrieve` `staleness:` header stay load-bearing — defer is honest only
+  while staleness is visible. *Alternative rejected:* a `--fresh-only` filter — surface
+  + tests for a hide the spec does not require.
+- **D20 — bare `--query` (no scope flags) ranks by lexical alone over all active
+  memories (open Q5).** *Rationale:* the no-scope exclusion guards scope-*bearing*
+  queries only; lexical is a valid scope-free entry. *Alternative rejected:* require a
+  scope flag — blocks the obvious "search titles" use.
 
 ## 8. Risks & Mitigations
 

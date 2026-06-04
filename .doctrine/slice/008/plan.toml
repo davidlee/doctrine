@@ -1,0 +1,205 @@
+# Implementation plan for SL-008 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-008"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Scope matching & hard filters (pure predicate layer)"
+objective = """
+The reader's pure predicate half — the stage that DROPS, never orders (design \
+B1). QueryContext{paths,globs,commands,tags,query} + has_scope_constraints \
+(free-text --query is NOT scope-bearing; only flags are — D15/B3). \
+match_scope -> Option<ScopeMatch{specificity,dim}> with specificity \
+paths3/globs2/commands1/tags0. base_filter (partition + lifecycle): workspace \
+equality, repo partition (a repo-scoped memory needs part.repo == Some(its \
+repo); outside git part.repo == None admits only repo-empty memories — B20), \
+lifecycle active-only default, --include-draft adds draft, quarantined/ \
+retracted ALWAYS excluded (B4). thread_expiry runs AFTER match_scope because \
+it needs ScopeMatch (B9) — a thread passes only if scope-matched AND \
+verification_state == verified AND reviewed within 14 days (D6). Plain Memory \
+in, bool/Option out — no clock except the passed-in today, no git, no disk.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked: open Qs closed, D1-D20 settled; full cargo test + clippy green at HEAD (behaviour-preservation baseline)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "QueryContext{paths,globs,commands,tags,query:Option} + has_scope_constraints(&q)->bool true iff any of paths/globs/commands/tags non-empty (--query alone false — D15/B3)" },
+  { id = "EX-2", text = "match_scope(m,q)->Option<ScopeMatch{specificity:u8,dim}>; specificity paths=3/globs=2/commands=1/tags=0; None when no dimension matches" },
+  { id = "EX-3", text = "base_filter(m,part,include_draft)->bool: workspace eq; repo partition per B20 (repo-empty admitted only when part.repo None or equal); active default, draft gated; quarantined/retracted always false" },
+  { id = "EX-4", text = "thread_expiry(m,sm,today)->bool: thread passes only scope-matched AND verified AND reviewed within 14d (D6); non-thread always passes; clippy zero warnings" },
+  { id = "EX-5", text = "match_scope is OR-across-dimensions with the normative per-dimension rules (spec § Retrieval): paths exact-or-prefix, globs **-aware glob, commands token-prefix, tags set-intersection; ScopeMatch.dim records the winning (highest-specificity) dimension (codex F1)" },
+]
+verification = [
+  { id = "VT-1", expects = "match_scope specificity table: paths>globs>commands>tags ordinal; a non-matching query yields None (dropped, not ranked low)" },
+  { id = "VT-2", expects = "base_filter drops cross-workspace, cross-repo, quarantined, retracted; admits repo-empty when part.repo None; draft only with include_draft" },
+  { id = "VT-3", expects = "thread_expiry: unverified thread dropped; verified-but->14d thread dropped; fresh verified thread passes; non-thread unaffected" },
+  { id = "VT-4", expects = "per-dimension match behaviour: a path prefix matches (not just exact); a ** glob matches a nested path; a command token-prefix matches; a tag matches by intersection; a near-miss in each dimension does NOT match (codex F1)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Scoring, staleness & total-order rank (pure ordering core)"
+objective = """
+The ordering core over filter survivors — rank never re-encodes a dropped \
+memory (B1). lexical_score(m,q)->u32: bounded integer token-overlap (case-fold, \
+split non-alphanumeric) over title+summary+tags + memory_key segments, body \
+NOT scanned in v1 (Q1/B15). exact_key_match: FULL memory_key only, reusing \
+SL-005 normalize_key (B2/B16). days_between(a,b)->Option<i64>: pure YYYY-MM-DD \
+diff, None on unparseable (F3). staleness(m,facts,today)->Staleness keyed on \
+ATTESTATION not anchor_kind, 4 branches first-match-wins (F6): (1) scoped + \
+verified_sha + Some target ⇒ commits_since 0=Fresh / >=1=Stale / None=Unknown; \
+(2) else time mode ⇒ reviewed within FRESH_DAYS=30 Fresh / else Stale / \
+unparseable Unknown (B5/B6); (3) anchored-but-never-attested ⇒ Unknown; (4) no \
+anchor ⇒ Unanchored. The three ordinal ranks (verification verified<unverified< \
+stale<disputed; trust high<med<low; severity critical<...<none; unknown ⇒ worst \
+bucket — B12/B13). rank(): the 8-key total Ord (design §5.2 table) ending on \
+uid then memory_key (D5) so collect order never perturbs output. Consumes \
+GitFacts as plain data — git stays in the shell (D3).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged (QueryContext, ScopeMatch, filters available)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "lexical_score bounded integer over title+summary+tags+key-segments; body never scanned; exact_key_match on FULL normalize_key(q) only (B2/B16)" },
+  { id = "EX-2", text = "days_between pure YYYY-MM-DD, None unparseable; staleness 4-branch attestation-keyed per design §5.5 (dirty-then-verified uses verified_sha -> branch 1)" },
+  { id = "EX-3", text = "verification_rank/trust_rank/severity_rank: string->bounded index, unknown string ⇒ worst bucket; all integer (float ban)" },
+  { id = "EX-4", text = "rank(): 8-key total Ord, polarity per design table, final tiebreak uid then memory_key; review-recency missing/malformed sorts last; clippy zero" },
+  { id = "EX-5", text = "lexical path is pure in-memory: case-fold + split-on-non-alphanumeric tokenization, score = bounded match count; NO persistent index and NO derived write in v1 (D4/B15)" },
+]
+verification = [
+  { id = "VT-1", expects = "property test: shuffled candidate input ⇒ byte-identical rank order (total order proof, R1/D5)" },
+  { id = "VT-2", expects = "staleness 4 branches each exercised; commits_since None ⇒ Unknown never Fresh; scope.paths-empty verified memory falls to time branch (B5)" },
+  { id = "VT-3", expects = "rank tuple decisiveness per key in order (exact_key>lexical>specificity>verification>trust>severity>weight>recency>uid); verification=stale not double-penalised vs Staleness column" },
+  { id = "VT-4", expects = "lexical tokenization: case-insensitive match, non-alphanumeric splits tokens, key segments tokenize, body text does NOT contribute to score (D4/B15)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Git seam extension — commits_touching (impure)"
+objective = """
+The only new git the reader needs, added to src/git.rs and reusing SL-007's \
+locked seam — capture() for the frozen target (D9), NORMATIVE_FLAGS for every \
+invocation, NO new head_commit surface (F1). commits_touching(root,paths,since, \
+target)->Option<u32>: first git merge-base --is-ancestor since target (F2 — \
+since..target is a set-difference, not an ancestry test, so a non-ancestor \
+since silently over-counts, violating no-silent-over-trust); precheck non-zero \
+(not an ancestor, or object absent in a shallow clone) ⇒ None. Only on success \
+does it shell git rev-list --count since..target -- paths; exec/parse failure \
+⇒ None. Empty paths ⇒ None (defensive; callers gate — B17). Detached HEAD is \
+NOT a None case (still anchored). target is always the frozen SHA, never the \
+literal HEAD.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-007 src/git.rs capture() + NORMATIVE_FLAGS runner present (locked seam)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "commits_touching(root,&[String],since,target)->Option<u32> added to src/git.rs; empty paths ⇒ None before any subprocess (B17)" },
+  { id = "EX-2", text = "merge-base --is-ancestor precheck gates the count; non-ancestor / absent-object ⇒ None (no over-count — F2)" },
+  { id = "EX-3", text = "on precheck success: rev-list --count since..target -- paths via NORMATIVE_FLAGS runner; exec or parse failure ⇒ None; clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "temp-repo: no commit since anchor ⇒ Some(0); n commits touching a scoped path ⇒ Some(n); commits touching only other paths ⇒ Some(0)" },
+  { id = "VT-2", expects = "non-ancestor since ⇒ None (not an over-count); missing object ⇒ None; empty paths ⇒ None without spawning git" },
+  { id = "VT-3", expects = "detached HEAD with a frozen target SHA still decides a count (not None); reuses capture/NORMATIVE_FLAGS — no new SL-007 surface" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "find command + shared shell pipeline"
+objective = """
+The impure shell, frozen once per query, plus the find surface. Freeze Snapshot \
+{today: clock::today(), target: capture().base_commit filtered non-empty (HEAD \
+even on a dirty tree — D1/D9/B19), part: QueryPartition{workspace:default, \
+repo: current repo_id|None — D16}}. collect_memories, then per-candidate \
+GitFacts resolution gated on scoped AND verified_sha AND Some target (otherwise \
+no git cost). The ordered pipeline base_filter -> match_scope -> thread_expiry \
+-> staleness -> rank (B9). Git-fact failure is PER-CANDIDATE (Staleness::Unknown), \
+never a whole-query failure (B18); CaptureError / non-git ⇒ target None, query \
+degrades not fails. format_find rows: uid-short type status staleness trust sev \
+spec title — trust+sev are REQUIRED (find is exempt from the holdback, so risk \
+must be visible — D8/D17/B8). find applies NO holdback; quarantined/retracted \
+still excluded. A bare --query (no scope flags) ranks by lexical alone over all \
+active memories (D20). CLI: memory find [--path/--glob/--command/--tag/--query] \
+[--type] [--status] [--include-draft] [-p ROOT].
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01/02/03 merged: filters, rank, staleness, commits_touching all available" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Snapshot frozen once: today via clock::today, target via capture().base_commit (non-empty filter), part workspace=default + repo_id|None (D1/D9/D16)" },
+  { id = "EX-2", text = "GitFacts resolved per-candidate only when scoped+verified_sha+Some target; commits_touching failure ⇒ Unknown for that memory, never query failure (B18)" },
+  { id = "EX-3", text = "pipeline order base_filter->match_scope->thread_expiry->staleness->rank (B9); quarantined/retracted excluded; no holdback applied" },
+  { id = "EX-4", text = "format_find rows uid-short/type/status/staleness/trust/sev/spec/title (trust+sev required — B8); CLI flags wired; clippy zero" },
+  { id = "EX-5", text = "--type/--status are hard filters riding the existing select_rows AND-filter pattern (src/memory.rs select_rows) — no parallel filter impl (codex F2); a None flag passes everything" },
+  { id = "EX-6", text = "the shared query stage returns Vec<Ranked> where each Ranked carries the Memory (uid/dir + matched dim + staleness + scores), surface-agnostic so PHASE-05 reuses it without a PHASE-04 refactor (codex F3); format_find is the only find-specific layer" },
+]
+verification = [
+  { id = "VT-1", expects = "golden find output deterministic across runs; staleness column rendered for every row (D19 visibility condition)" },
+  { id = "VT-2", expects = "bare --query ranks lexically over all active memories (D20); a scope-bearing query excludes a no-scope memory (has_scope_constraints)" },
+  { id = "VT-3", expects = "non-git root ⇒ target None, query still returns (staleness Unknown/Unanchored); a low∧high-severity memory IS shown in find (holdback exempt)" },
+  { id = "VT-4", expects = "--type filters to that kind; --status filters to that lifecycle; combined --type+--status AND together; absent flags pass everything (codex F2)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "retrieve command — bounded agent-context block"
+objective = """
+The retrieve surface over PHASE-04's shared shell — the agent-context boundary. \
+take(limit) over the ranked survivors, then PER HIT render_show with a FRESH \
+nonce each (D2 — the A-2 forged-close-fence defense is per-block; one nonce \
+across N bodies lets body i forge the close of body i+1). --limit defaults to \
+RETRIEVE_LIMIT_DEFAULT=5, clamped to RETRIEVE_LIMIT_MAX=20 (D17/B10). The trust \
+floor suppresses low AND severity>=high PRE-RENDER (a suppressed memory never \
+reaches render_show, so its body cannot leak inside a framed block); \
+non-bypassable in v1 — no --include-held-back (B7); --min-trust L only RAISES \
+the floor (D8). quarantined/retracted suppressed pre-render too. A staleness: \
+header line per block (D19 visibility). CLI: memory retrieve <same query/filter \
+flags> [--limit N] [--min-trust L] [-p ROOT].
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 merged (shared shell, Snapshot, pipeline, GitFacts resolution)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "retrieve renders take(limit) ranked hits; per-hit render_show with a freshly minted nonce each (D2); reuses SL-005 render_show, not a batch fork" },
+  { id = "EX-2", text = "--limit default 5, clamped to 20 (D17/B10); trust floor low∧severity>=high suppressed pre-render; --min-trust raises only; no --include-held-back (B7)" },
+  { id = "EX-3", text = "quarantined/retracted + held-back suppressed BEFORE render_show (body never enters a framed block); staleness: header line per block; clippy zero" },
+  { id = "EX-4", text = "retrieve consumes PHASE-04's Vec<Ranked> + select_rows --type/--status filter unchanged (codex F2/F3); bodies read per take(limit) hit via the existing resolve_show/read seam — no new collect path" },
+]
+verification = [
+  { id = "VT-1", expects = "a low∧severity>=high memory absent from retrieve but present in find (D8 asymmetry); --min-trust raises the floor; --include-held-back is not a flag" },
+  { id = "VT-2", expects = "N hits ⇒ N distinct nonces (per-block defense, D2); a suppressed memory's body never appears in output" },
+  { id = "VT-3", expects = "--limit default 5, >20 clamped to 20; each block carries a staleness: header (D19)" },
+  { id = "VT-4", expects = "retrieve honors --type/--status identically to find (shared filter); the same query flags yield the same survivor set pre-limit (codex F2)" },
+]
+specs        = []
+requirements = []
