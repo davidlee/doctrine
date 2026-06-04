@@ -1,6 +1,6 @@
 ---
 name: handover
-description: Author or replace the disposable handover.md that bootstraps a clean start on the next slice phase.
+description: Create a context packet and continuation prompt to continue with the next phase in a slice (or audit & close). Use whenever a phase is completed and a fresh agent would more efficiently continue.
 ---
 
 # Handover
@@ -23,7 +23,8 @@ immediate work.
 - [ ] Confirm the next phase's scope from `plan.toml` (EX/VT are authoritative).
 - [ ] record any information worth durably persisting in `notes.md`, or as appropriate.
 - [ ] Emit the sections below into `handover.md`
-- [ ] Print the path to `handover.md` then STOP — do not start the next phase's code.
+- [ ] Print instructions (with path to `handover.md`) addressed to the next agent
+- [ ] STOP
 
 ## Shape (sections to emit)
 
@@ -39,7 +40,7 @@ immediate work.
 
 ## Rules
 
-- Gitignored + `rm -rf`-able — never put the only copy of a durable fact here.
+- handover is gitignored + will be deleted — never put the only copy of a durable fact here.
 - Link to durable artifacts, don't repeat their contents.
 - Supersede stale notes explicitly; do not leave contradictory guidance.
-- Terse. Fragments fine. The reader is an agent, not a human reviewer.
+- Terse. Fragments fine. Reader is an agent, not human reviewer.
