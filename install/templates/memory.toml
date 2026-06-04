@@ -2,8 +2,8 @@ memory_uid = "{{uid}}"
 {{key_line}}schema_version = {{schema_version}}
 memory_type = "{{type}}"
 status = "{{status}}"
-title = "{{title}}"
-summary = "{{summary}}"
+title = {{title}}
+summary = {{summary}}
 created = "{{date}}"
 updated = "{{date}}"
 

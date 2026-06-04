@@ -113,3 +113,23 @@ Non-blocking (in `audit.md`): A-3 parallel named path (`MaterialiseRequest::Name
 drift), A-4 false `dead_code` reasons, A-5 one-bad-row blacks out `list`, A-6 design
 §5.4/§9 "replaces blanket" never happened (no blanket existed). Close-out resumes after
 the 🔴s land + re-review.
+
+## Close-out blockers — CLEARED (fix-up, 2026-06-04) → re-review pending
+
+Both 🔴 fixed TDD (red first); A-3/A-4/A-5 dispositioned. Full record in `audit.md`
+(Fix-up record + per-finding *Disposition* lines). Durable deltas:
+
+- **A-1** — `render_memory_toml` escapes via `toml_string` (`toml::Value` serializer),
+  not `str::replace`; template dropped hand-quotes on `title`/`summary`. Hostile input
+  round-trips (verified in-binary). A-5 thereby accepted as-is (writer can't emit
+  corruption; only a hand-edit can → a real fault, fail-the-listing stays sound).
+- **A-2** — `render_show` body fenced with a uid-derived guard (`body-guard:` header +
+  `=== END MEMORY <uid> ===`). Residual (uid-knowing attacker) documented in code; a true
+  per-render secret is deferred to the impure shell.
+- **A-3/A-4** — named placement collapsed to the single `materialise_named` seam.
+  **Deleted**: `MaterialiseRequest::Named`, `allocate_named` (+ 3 tests), `EntityId` enum,
+  `ScaffoldCtx::numbered()`, `OwnedEntityId::canonical_ref` (supersedes the PHASE-05 note
+  above that it kept a `dead_code` expect — it is gone). `ScaffoldCtx` now carries
+  `id`/`canonical` as fields. Numeric suites green **unchanged** (behaviour gate held).
+
+Gate: clippy (lib+bin) zero, 137 tests green, fmt clean. `slice-005.toml` left `proposed`.

@@ -55,8 +55,14 @@ does not sanitise — and they live exactly where the design flagged the risk
 - Design §5.1 promised memory rides `materialise(MaterialiseRequest::Named)`; seam A
   diverged (correctly — `ScaffoldCtx` can't carry type/status/summary/tags) but the
   abandoned arm was never retired. CLAUDE.md: *no parallel implementation*.
-- **Disposition**: decide at fix-up — delete the dead arm + its tests, OR keep a single
-  named entry point. If kept, the engine should expose **one** named path, not two.
+- **Disposition (fix-up, 2026-06-04 — DONE, delete)**: deleted `MaterialiseRequest::Named`
+  + `allocate_named` + their three tests. `materialise_named` (seam A) is now the **single**
+  named path; its tests already prove the shared `claim_and_write_named` core (duplicate,
+  H2 won-dir cleanup, pre-existing-alias rollback) the dead arm re-proved. Cascade: with no
+  named entity ever riding `ScaffoldCtx`, `EntityId` was orphaned — collapsed it entirely;
+  `ScaffoldCtx` now carries `id: u32` + `canonical: &str` directly and `numbered()` is gone
+  (numeric scaffolds read the fields). Numeric suites (slice/state) stayed green unchanged —
+  the behaviour-preservation gate held.
 
 ### A-4 🟠 `#[expect(dead_code, reason=…)]` strings that lie
 
@@ -64,6 +70,10 @@ does not sanitise — and they live exactly where the design flagged the risk
   not. `entity.rs:168` `canonical_ref` reason claims "read by the memory verbs" — only
   an entity test reads it (`:1047`; notes.md already flagged this). Suppressions hold,
   reasons rot. Wire them or correct the reason. Folds into A-3.
+- **Disposition (fix-up, 2026-06-04 — DONE)**: both lying suppressions are gone with the
+  code they guarded — the `Named` variant and `allocate_named` were deleted (A-3), and
+  `canonical_ref` (its false reason) was deleted as genuinely dead. No suppression was
+  retained; no honest one was needed.
 
 ### A-5 🟡 One bad row blacks out `list`
 
@@ -71,6 +81,10 @@ does not sanitise — and they live exactly where the design flagged the risk
   `memory.toml`. Design accepted this on "tool-authored ⇒ a bad row is a real fault" —
   but A-1 shows the tool itself writes malformed rows. Re-evaluate once A-1 lands; may
   be acceptable when the writer can no longer emit corruption.
+- **Disposition (fix-up, 2026-06-04 — accept, no code)**: A-1 closed the only path by
+  which the tool emitted corruption — the writer now serialises through `toml`, so a
+  malformed `memory.toml` can only arrive by hand-edit, which *is* a real fault. The
+  design's "fail the listing" stance is now sound; left as-is.
 
 ### A-6 🟡 Design drift — manifest "replaces blanket" never happened
 
@@ -90,8 +104,33 @@ does not sanitise — and they live exactly where the design flagged the risk
 
 ## Close-out gate (blocked on A-1, A-2)
 
-- [ ] A-1 fixed + hostile-interpolation tests green.
-- [ ] A-2 fixed + sentinel-spoof test green.
-- [ ] A-3/A-4 dispositioned (delete or unify the named path).
+- [x] A-1 fixed + hostile-interpolation tests green.
+- [x] A-2 fixed + sentinel-spoof test green.
+- [x] A-3/A-4 dispositioned (delete or unify the named path).
 - [ ] Re-review (warm reviewer) → verdict ≥ acceptable.
 - [ ] Then: `slice-005.toml` status `proposed` → done; harvest residuals.
+
+## Fix-up record (2026-06-04 — for the warm re-reviewer)
+
+Scope held to A-1/A-2 + the A-3/A-4 disposition. TDD, red first on both blockers.
+
+- **A-1** — `render_memory_toml` no longer splices values with `str::replace`. The four
+  user-supplied lines (`title`/`summary`/`tags`/`key`) emit through `toml_string` (a thin
+  `toml::Value::String(_).to_string()`) — the serializer owns escaping. Template lost the
+  hand-quotes on the `title`/`summary` lines (the literal is now quoted). RED:
+  `render_memory_toml_escapes_hostile_interpolation_and_round_trips` (`"`, newline, `]` in
+  title/summary/tag) — re-parses + round-trips. Verified in the real binary: a title with
+  `"`/`]`/newline records, lists, and shows clean (serializer chose a `"""…"""` literal).
+- **A-2** — `render_show` fences the body with a per-memory guard derived from the uid:
+  header gains `body-guard: <uid>`, terminator is `=== END MEMORY <uid> ===`. A static
+  spoofed bare sentinel inside the body no longer matches the real close. Residual noted in
+  code: an attacker who knows this exact uid could reproduce the guard — defeating that needs
+  a per-render secret, which belongs in the impure shell (no rng/clock in this pure layer).
+  RED: `show_render_fences_a_body_that_spoofs_the_end_sentinel`.
+- **A-3/A-4/A-5** — see each finding's *Disposition* line above. Net engine change: the
+  named placement path is singular (`materialise_named`); `EntityId`/`numbered()`/
+  `canonical_ref`/`MaterialiseRequest::Named` deleted.
+
+**Gate**: `cargo clippy` (lib+bin) zero, `cargo test` 137 green (was 138; net −1 from the
+3 deleted dead-named tests + 2 new hostile-input tests), `cargo fmt` clean. Slice status
+left `proposed` (not flipped) pending re-review.
