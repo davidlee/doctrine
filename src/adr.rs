@@ -325,6 +325,33 @@ mod tests {
         );
     }
 
+    // --- EX-1 / VT-1: the full chain through the real verbs end to end ---
+
+    #[test]
+    fn end_to_end_new_x2_list_status_accept_then_filtered_list() {
+        // EX-1: new x2 -> list (both) -> status 1 accepted -> list --status accepted
+        // (only 001). Unlike the piecemeal tests above, this drives the *real*
+        // status verb (no raw rewrite) across a single tree — Fresh alloc, authored
+        // mutation, filtered list, all composed (VT-1).
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        run_new(Some(root.clone()), Some("Use Rust".into()), None).unwrap();
+        run_new(Some(root.clone()), Some("Adopt CI".into()), None).unwrap();
+        let adr = adr_root(&root);
+
+        // list (the run_list pipeline): both ADRs, sorted by id.
+        let all = meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), None);
+        assert_eq!(all.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1, 2]);
+
+        // authored mutation via the real verb core (not a rewrite).
+        set_adr_status(&adr, 1, AdrStatus::Accepted, &crate::clock::today()).unwrap();
+
+        // list --status accepted: only 001 survives the filter.
+        let accepted =
+            meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), Some("accepted"));
+        assert_eq!(accepted.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1]);
+    }
+
     // --- VT-2: an empty / symbol-only title bails for an explicit --slug ---
 
     #[test]
