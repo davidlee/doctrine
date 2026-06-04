@@ -640,6 +640,122 @@ pub(crate) fn run_find(
     Ok(())
 }
 
+// === PHASE-05: the retrieve surface (agent-context boundary) =================
+// The bounded, security-framed read. Reuses the PHASE-04 shell verbatim (freeze +
+// query — same survivors as find pre-limit), then layers the retrieve-only
+// concerns: the trust holdback (pre-render), the limit, and the per-block framed
+// render with a fresh nonce each (design §5.1, D2/D8/D17/D19/B7/B10).
+
+/// `--limit` default — an agent-context boundary is bounded by default (B10).
+const RETRIEVE_LIMIT_DEFAULT: usize = 5;
+/// `--limit` cap — a single query cannot flood the context (D17).
+const RETRIEVE_LIMIT_MAX: usize = 20;
+
+/// Validate a `--min-trust` value at the CLI edge (clap `value_parser`). Only the
+/// three trust tiers are floors; anything else is a hard error, never a silent
+/// worst-rank default.
+pub(crate) fn parse_min_trust(s: &str) -> std::result::Result<String, String> {
+    match s {
+        "high" | "medium" | "low" => Ok(s.to_owned()),
+        other => Err(format!(
+            "invalid trust level {other:?} (expected high|medium|low)"
+        )),
+    }
+}
+
+/// The trust-floor rank for the holdback (D8). Default `medium` (rank 1) suppresses
+/// `low ∧ severity≥high`. `--min-trust L` may only RAISE the floor (require more
+/// trust): the `min` clamps a lower-trust request back to the default, so the
+/// holdback is non-bypassable downward (B7) — `--min-trust low` is a no-op.
+fn holdback_floor(min_trust: Option<&str>) -> u8 {
+    let default = trust_rank("medium");
+    min_trust.map_or(default, |l| trust_rank(l).min(default))
+}
+
+/// The trust holdback (design §5.4, D8): a memory is held back from `retrieve`
+/// when it is high-severity AND less trusted than the floor. Read pre-render off
+/// the `Memory` fields — a held-back body is never read, never framed (B7). `find`
+/// is exempt (it annotates risk instead — the D8 asymmetry).
+fn held_back(m: &Memory, floor: u8) -> bool {
+    severity_rank(&m.severity) <= severity_rank("high") && trust_rank(&m.trust_level) > floor
+}
+
+/// The candidates `retrieve` actually renders: suppress held-back PRE-render, THEN
+/// `take(limit)` (suppress-then-take, K3 — a held-back memory never consumes a
+/// slot). Pure: the impure render (body read + nonce) happens over the result.
+fn select_shown<'r, 'a>(
+    ranked: &'r [Candidate<'a>],
+    floor: u8,
+    limit: usize,
+) -> Vec<&'r Candidate<'a>> {
+    ranked
+        .iter()
+        .filter(|c| !held_back(c.memory, floor))
+        .take(limit)
+        .collect()
+}
+
+/// `doctrine memory retrieve <query/filter flags> [--limit N] [--min-trust L]`.
+/// The agent-context surface over the shared pipeline: collect → `select_rows` →
+/// `freeze` → `query` (identical survivor set to `find` pre-limit), then the
+/// retrieve-only layer — the trust floor suppresses held-back memories PRE-render
+/// (B7/D8), `take(limit)` over the survivors (suppress-then-take: a held-back
+/// memory never steals a slot, K3), and per hit `render_show` with a FRESHLY
+/// minted nonce each (D2) plus a `staleness:` header line (D19). Bodies are read
+/// lazily for the ≤limit shown hits only.
+#[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
+pub(crate) fn run_retrieve(
+    path: Option<PathBuf>,
+    paths: Vec<String>,
+    globs: Vec<String>,
+    commands: Vec<String>,
+    tags: Vec<String>,
+    free_query: Option<String>,
+    type_f: Option<MemoryType>,
+    status_f: Option<Status>,
+    include_draft: bool,
+    limit: Option<usize>,
+    min_trust: Option<&str>,
+) -> Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let items_root = root.join(crate::memory::MEMORY_ITEMS_DIR);
+    let mems = crate::memory::select_rows(
+        crate::memory::collect_memories(&items_root)?,
+        type_f,
+        status_f,
+        None,
+    );
+    let q = QueryContext {
+        paths,
+        globs,
+        commands,
+        tags,
+        query: free_query,
+    };
+    let snap = freeze(&root);
+    let ranked = query(&mems, &q, &snap, include_draft, &root);
+
+    let floor = holdback_floor(min_trust);
+    let limit = limit
+        .unwrap_or(RETRIEVE_LIMIT_DEFAULT)
+        .min(RETRIEVE_LIMIT_MAX);
+    let mut out = String::new();
+    for c in select_shown(&ranked, floor, limit) {
+        let body = crate::memory::read_body(&items_root, &c.memory.uid);
+        // FRESH nonce per BLOCK: one nonce across N bodies lets body i forge body
+        // i+1's close (D2). Minted inside the loop, never hoisted.
+        let nonce = uuid::Uuid::new_v4().simple().to_string();
+        out.push_str(&crate::memory::render_show(
+            c.memory,
+            &body,
+            &nonce,
+            Some(c.staleness.label()),
+        ));
+    }
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1675,5 +1791,130 @@ weight = {weight}
     #[test]
     fn format_find_empty_is_empty_string() {
         assert_eq!(format_find(&[]), "");
+    }
+
+    // === PHASE-05: the retrieve holdback, floor, and suppress-then-take. =======
+
+    // EX-2 / R2: `--min-trust` validates at the edge — no silent worst-rank default.
+    #[test]
+    fn parse_min_trust_accepts_only_the_three_tiers() {
+        for ok in ["high", "medium", "low"] {
+            assert_eq!(parse_min_trust(ok).as_deref(), Ok(ok));
+        }
+        assert!(parse_min_trust("banana").is_err());
+        assert!(parse_min_trust("").is_err());
+        assert!(parse_min_trust("High").is_err()); // case-sensitive, like the store
+    }
+
+    // EX-2 / D8 / B7: the floor defaults to medium and only RAISES.
+    #[test]
+    fn holdback_floor_defaults_medium_and_only_raises() {
+        let medium = trust_rank("medium");
+        assert_eq!(holdback_floor(None), medium, "default floor is medium");
+        assert_eq!(
+            holdback_floor(Some("high")),
+            trust_rank("high"),
+            "high raises"
+        );
+        assert_eq!(
+            holdback_floor(Some("medium")),
+            medium,
+            "medium is the default"
+        );
+        // --min-trust low cannot LOWER below the default (non-bypassable, B7).
+        assert_eq!(holdback_floor(Some("low")), medium, "low is clamped up");
+    }
+
+    fn risky(uid: &'static str, trust: &'static str, severity: &'static str) -> Memory {
+        memory(&Fixture {
+            uid,
+            trust_level: trust,
+            severity,
+            ..Default::default()
+        })
+    }
+
+    // VT-1 / EX-2 / D8: the holdback predicate — `low ∧ severity≥high` at default.
+    #[test]
+    fn held_back_is_low_trust_and_high_severity_at_default_floor() {
+        let floor = holdback_floor(None);
+        // suppressed: low trust ∧ {critical, high}
+        assert!(held_back(&risky(UID, "low", "critical"), floor));
+        assert!(held_back(&risky(UID, "low", "high"), floor));
+        // NOT suppressed: low trust but the severity is below high (just low quality)
+        assert!(!held_back(&risky(UID, "low", "medium"), floor));
+        assert!(!held_back(&risky(UID, "low", "none"), floor));
+        // NOT suppressed at default: medium/high trust, even at high severity
+        assert!(!held_back(&risky(UID, "medium", "high"), floor));
+        assert!(!held_back(&risky(UID, "high", "critical"), floor));
+    }
+
+    // VT-1 / EX-2: `--min-trust high` raises the floor — now medium∧high is held too,
+    // but a high-trust memory always passes.
+    #[test]
+    fn min_trust_high_raises_the_floor_over_medium() {
+        let floor = holdback_floor(Some("high"));
+        assert!(
+            held_back(&risky(UID, "medium", "high"), floor),
+            "medium now held"
+        );
+        assert!(
+            held_back(&risky(UID, "low", "high"), floor),
+            "low still held"
+        );
+        assert!(
+            !held_back(&risky(UID, "high", "critical"), floor),
+            "high passes"
+        );
+        // low severity is never held, whatever the floor (holdback targets risk).
+        assert!(!held_back(&risky(UID, "low", "none"), floor));
+    }
+
+    fn ranked_cand(m: &Memory) -> Candidate<'_> {
+        cand(m, 1, false, None)
+    }
+
+    // VT-2 / EX-3: a held-back memory is dropped before render (its body is never
+    // read), while clean memories pass through.
+    #[test]
+    fn select_shown_suppresses_held_back_pre_render() {
+        let [u0, u1, _] = uids();
+        let clean = risky(u0, "medium", "high"); // medium trust ⇒ kept
+        let held = risky(u1, "low", "critical"); // low ∧ critical ⇒ suppressed
+        let ranked = vec![ranked_cand(&clean), ranked_cand(&held)];
+        let shown = select_shown(&ranked, holdback_floor(None), 10);
+        let uids: Vec<&str> = shown.iter().map(|c| c.memory.uid.as_str()).collect();
+        assert_eq!(uids, vec![u0], "held-back memory absent from the shown set");
+    }
+
+    // K3: suppress-then-take — a held-back memory ranked first does NOT steal the
+    // single slot; the clean memory behind it is still shown.
+    #[test]
+    fn select_shown_held_back_does_not_consume_a_limit_slot() {
+        let [u0, u1, _] = uids();
+        // `held` ranks first (uid u0 < u1), but is suppressed; `clean` takes the slot.
+        let held = risky(u0, "low", "high");
+        let clean = risky(u1, "high", "high");
+        let ranked = vec![ranked_cand(&held), ranked_cand(&clean)];
+        let shown = select_shown(&ranked, holdback_floor(None), 1);
+        assert_eq!(shown.len(), 1);
+        assert_eq!(
+            shown[0].memory.uid, u1,
+            "clean memory takes the slot, not held"
+        );
+    }
+
+    // EX-2 / VT-3: the limit caps the shown count.
+    #[test]
+    fn select_shown_caps_at_limit() {
+        let [u0, u1, u2] = uids();
+        let ms = [
+            risky(u0, "high", "none"),
+            risky(u1, "high", "none"),
+            risky(u2, "high", "none"),
+        ];
+        let ranked: Vec<Candidate<'_>> = ms.iter().map(ranked_cand).collect();
+        assert_eq!(select_shown(&ranked, holdback_floor(None), 2).len(), 2);
+        assert_eq!(select_shown(&ranked, holdback_floor(None), 10).len(), 3);
     }
 }
