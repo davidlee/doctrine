@@ -1,0 +1,187 @@
+# Implementation plan for SL-010 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-010"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Shared gitignore enforcement + manifest derived-tree entry"
+objective = """
+Land F4's foundation with the smallest diff and no behaviour change to the \
+install path yet. Add `.doctrine/skills/*` to the manifest's [gitignore].entries \
+so a downstream `doctrine install` ignores the derived tree (today masked only by \
+this repo's blanket `.doctrine/*`, which the manifest does not write — §5.3, D2). \
+Extract a shared imperative `ensure_gitignored(root, entry)` from install.rs's \
+gitignore step (read existing lines, append iff absent — idempotent/additive, \
+create the file when missing) and reuse it in both install.rs's execute arm and \
+`skills install`, so the latter self-enforces its derived-tree ignore invariant \
+regardless of whether `doctrine install` ran first (F4, D6). No canonical tree, \
+no symlink, no Claude-path change yet — the copy mechanism is untouched this phase.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (two codex passes, §10); slice scope + override hatch settled (slice-010.md)" },
+  { id = "EN-2", text = "full cargo test + clippy green at HEAD — the behaviour-preservation baseline (delegate_argv + entity/slice/state suites)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/manifest.toml [gitignore].entries gains `.doctrine/skills/*` (additive — re-install is a no-op); `.doctrine/skills` stays in [dirs].create" },
+  { id = "EX-2", text = "ensure_gitignored(root, entry) extracted as a shared pub(crate) imperative helper: reads existing lines, appends only when absent, creates .gitignore when missing; install.rs's Gitignore execute arm routes through it (no duplicated append logic — DRY)" },
+  { id = "EX-3", text = "skills::run_install calls ensure_gitignored(root, \".doctrine/skills/*\") before executing the plan; clippy zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "manifest test: `.doctrine/skills/*` present in [gitignore].entries and `.doctrine/skills` still in [dirs].create (the derived dir is created-and-ignored, mirroring the memory items/ vs derived-subtrees split)" },
+  { id = "VT-2", expects = "ensure_gitignored is idempotent: first call appends the entry, second is a no-op (no duplicate line); a missing .gitignore is created with the entry — existing install.rs gitignore tests stay green unchanged" },
+  { id = "VT-3", expects = "skills install in a tempdir writes `.doctrine/skills/*` into .gitignore even with no prior `doctrine install`; clippy zero" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Canonical materialise — staged, minimal-window swap"
+objective = """
+The imperative canonical writer behind the seam (D5, §5.1). \
+`materialise_canonical(entry, canonical_dir)`: clear any crashed leftover \
+`.tmp-<id>`, stage the embedded files into it via the reused `copy_skill` (same \
+filesystem so `rename` is valid), then `remove_dir_all(<id>)` if present and \
+`rename(.tmp-<id> → <id>)`. Always overwrite — canonical owns no authored data \
+(derived tree). Unix reality (review pass-2 F4): `rename` cannot replace a \
+non-empty directory and std has no `renameat2(RENAME_EXCHANGE)`, so the dir swap \
+is remove-then-rename — a one-syscall window, not a single atomic op; a crash \
+there leaves a dangling link healed by the next idempotent install. A partial \
+copy lives only under `.tmp-<id>`, never under `<id>` (no half-written tree \
+exposed to live links — F1). Standalone, unit-tested; not wired into execute yet.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 merged (manifest ignore entry + ensure_gitignored landed)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "materialise_canonical(entry, canonical_dir) behind the seam: remove stale `.tmp-<id>`, stage via copy_skill into `.tmp-<id>`, remove_dir_all(<id>) if it exists, rename(.tmp-<id> → <id>); copy_skill reused unchanged (no parallel copier)" },
+  { id = "EX-2", text = "always-overwrite: a pre-existing `<id>` carrying a stale file from a prior embed is fully replaced — the staged temp never lands under `<id>` until the rename; clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "atomic-overwrite test: an `<id>` pre-seeded with a stale file is, after materialise, byte-equal to the embed and the stale file is gone (the refresh the old skip silently dropped, at the canonical layer)" },
+  { id = "VT-2", expects = "crash-heal test: a leftover `.tmp-<id>` plus an intact prior `<id>` — re-run clears the temp and leaves a coherent `<id>` (a partial stage never corrupts the live canonical)" },
+  { id = "VT-3", expects = "copy_skill is reused, not forked; clippy zero warnings" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Pure link classification + new Claude plan model"
+objective = """
+The pure decision layer (§5.2/§5.5, D3 — ownership by target equality). New pure \
+helpers: `canonical_dir(root, global)` mirroring `claude_dir`'s base (root, or \
+$HOME under --global) so both trees share a base; \
+`relative_target(agent_skills_dir, canonical_dir, id)` deriving the link value \
+from the two dirs — not hard-coded — (`../../.doctrine/skills/<id>` project-local, \
+still correct under a shared --global base); `classify_link(dest, target) -> Link` \
+via `symlink_metadata` + `read_link`, never `exists()` (which follows links). \
+Ownership is proven, not assumed: a link is ours iff `read_link == target` \
+exactly; everything else (foreign symlink OR real dir) is foreign-by-default. A \
+differently-spelled own link classifies foreign → kept (documented safe-degrade, \
+v1 emits one spelling — review pass-2 F5). Replace Step{Install,Skip} with \
+`Link{Create,Relink,KeepForeign}` + `AgentPlan::Claude{canonical, links}`; rebuild \
+build_plan to emit both. Disk-free tempdir tests over the trichotomy.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 merged (materialise available — the plan's canonical entries feed it at execute time)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "canonical_dir(root, global) → `.doctrine/skills` under root, or under $HOME for --global (mirrors claude_dir's base so the relative target is stable)" },
+  { id = "EX-2", text = "relative_target(agent_skills_dir, canonical_dir, id) computes the relative symlink value from the two dirs (not hard-coded): project-local → `../../.doctrine/skills/<id>`; correct under a shared --global base" },
+  { id = "EX-3", text = "classify_link(dest, target) -> Link via symlink_metadata + read_link (never exists()): missing → Create; symlink whose value == target → Relink; symlink whose value != target → KeepForeign{reason=foreign-symlink→<where>}; real dir/file → KeepForeign{reason=real-dir}; dangling link whose value == target → Relink" },
+  { id = "EX-4", text = "Step{Install,Skip} replaced by Link{Create{id,dest,target}, Relink{id,dest,target}, KeepForeign{id,dest,reason}} and AgentPlan::Claude{canonical: Vec<Canonical{id,dest}>, links: Vec<Link>}; build_plan emits both vectors; clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "classify trichotomy (tempdir states): missing → Create; symlink with our target → Relink; symlink pointing elsewhere → KeepForeign(foreign-symlink); real dir → KeepForeign(real-dir); dangling-but-ours → Relink" },
+  { id = "VT-2", expects = "relative_target over a project-local base = `../../.doctrine/skills/<id>`; over a shared --global base stays correct (computed, not hard-coded); canonical_dir honours --global ($HOME) vs root" },
+  { id = "VT-3", expects = "build_plan emits AgentPlan::Claude{canonical, links} for the selected skills; AgentPlan::Delegate + delegate_argv unchanged; clippy zero" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "Execute the trichotomy + list lexists; retire copy-and-skip"
+objective = """
+Wire the imperative path (§5.4, D3/D5) and delete the old copy mechanism. Rewrite \
+execute's Claude arm: materialise each Canonical (PHASE-02), then per Link — \
+Create/Relink call `write_link(dest, target)` (temp-name symlink + rename, \
+genuinely atomic: rename DOES replace an existing symlink/missing dest, only \
+non-empty dirs are the exception); KeepForeign mutates nothing and warns. Honest \
+reporting: `refreshed <id>` (canonical) · `linked`/`relinked` · `kept <id> \
+(<reason>)`. run_list's installed test changes `.exists()` → a lexists \
+(`symlink_metadata().is_ok()`) so a managed — even momentarily dangling — link \
+reports installed (F5, R5). Delete Step::{Install,Skip} copy-and-skip from execute \
+and print_plan; rewrite claude_steps' old tests for the trichotomy (R4). The \
+ownership invariant holds: only missing-or-exactly-ours links are ever mutated.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 merged (Link model + classify_link + relative_target/canonical_dir available)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "write_link(dest, target) behind the seam: create the symlink at a temp name then rename over dest — atomic (rename replaces an existing symlink or missing dest); invoked only for Create/Relink (dest missing or proven ours)" },
+  { id = "EX-2", text = "execute Claude arm: for each Canonical → materialise_canonical + `refreshed <id>`; for each Link → Create/Relink → write_link + `linked`/`relinked`, KeepForeign → no mutation + `kept <id> (<reason>)`; print_plan + --dry-run render the classified plan" },
+  { id = "EX-3", text = "run_list installed-presence test → lexists (symlink_metadata().is_ok()), not exists(); a dangling managed link reports installed (F5)" },
+  { id = "EX-4", text = "Step::{Install,Skip} copy-and-skip deleted from execute + print_plan; claude_steps tests rewritten for the trichotomy; delegate_argv tests + entity engine untouched (behaviour-preservation gate); clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "execute (fs via tempdir): Create → the link resolves to canonical content; Relink-ours over a dangling link heals it (now resolves) — the no-skip refresh end-to-end at the link layer" },
+  { id = "VT-2", expects = "a foreign symlink and a real dir are both left byte/target-identical and emit the `kept` warning; only missing-or-ours links are mutated (the ownership invariant, R1 retired)" },
+  { id = "VT-3", expects = "run_list reports a managed (dangling) link as installed via lexists; delegate_argv tests green unchanged; clippy zero" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "End-to-end + docs + close-out"
+objective = """
+The seal (§9). One tempdir end-to-end against the built binary exercising the \
+whole Claude path: install links a skill (resolves to canonical); a re-install \
+over a stale canonical refreshes it to embed content (the silent no-op the old \
+skip dropped); a foreign real dir is kept + warned across re-install (override \
+hatch). Document the canonical-tree symlink model + override hatch where the \
+skills surface is described (CLAUDE.md / AGENTS.md). Harvest durable \
+risks/decisions/findings into notes.md (on demand) / audit.md. The slice ends \
+green with the refresh-on-reinstall behaviour proven and the npx delegate path \
+demonstrably untouched.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 merged (all behaviour lands — materialise + classify + execute + list)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "tempdir e2e (built binary): skills install → `.claude/skills/<id>` resolves to canonical content; re-install over a pre-seeded stale canonical `<id>` refreshes it to embed content (no silent skip); a real-dir override survives re-install + emits `kept`" },
+  { id = "EX-2", text = "docs: CLAUDE.md / AGENTS.md describe the canonical `.doctrine/skills` symlink model + override hatch (real copy → kept) where skills install is documented; the SL-008 find/retrieve note left as-is" },
+  { id = "EX-3", text = "durable decisions/risks harvested to notes.md (created on demand) + audit.md if findings warrant; cargo fmt clean" },
+]
+verification = [
+  { id = "VT-1", expects = "e2e passes against the built binary: install links + resolves; a stale canonical is refreshed on re-install (refresh-on-reinstall, the slice's whole point); a real-dir override is kept + warned" },
+  { id = "VT-2", expects = "full cargo test green incl. unchanged delegate_argv + entity/slice/state suites (behaviour-preservation); clippy zero warnings; cargo fmt clean" },
+  { id = "VT-3", expects = "just check green (fmt + lint + test + build)" },
+]
+specs        = []
+requirements = []
