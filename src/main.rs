@@ -3,6 +3,7 @@ mod adr;
 mod clock;
 mod entity;
 mod fsutil;
+mod git;
 mod input;
 mod install;
 mod memory;
