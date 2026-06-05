@@ -168,15 +168,64 @@ fn write_if_changed(path: &Path, content: &str) -> anyhow::Result<bool> {
     Ok(true)
 }
 
+/// Produce every section's body in the declared order — the single render path
+/// shared by `regenerate` (which writes it) and `boot_check` (which diffs it).
+/// One source of the snapshot, never a second fork (Charge V).
+fn build_sections(root: &Path, exec: &Path) -> Vec<Section> {
+    boot_sequence()
+        .iter()
+        .map(|(heading, kind)| produce(heading, kind, root, exec))
+        .collect()
+}
+
 /// Regenerate `.doctrine/state/boot.md` under `root`, resolving section bodies
 /// against `exec`. Returns whether the file changed. Pure assembly, single write.
 fn regenerate(root: &Path, exec: &Path) -> anyhow::Result<bool> {
-    let sections: Vec<Section> = boot_sequence()
-        .iter()
-        .map(|(heading, kind)| produce(heading, kind, root, exec))
-        .collect();
-    let content = render_boot(&sections);
+    let content = render_boot(&build_sections(root, exec));
     write_if_changed(&root.join(BOOT_REL), &content)
+}
+
+/// Whether a section still carries its not-yet-populated marker body — i.e. its
+/// source was missing or empty at render time. Exact, not a substring grep: a
+/// section is unpopulated iff its body is byte-equal to `marker(heading)`.
+fn is_marker(section: &Section) -> bool {
+    section.body == marker(&section.heading)
+}
+
+/// The disk freshness/health report (Charge II/III). DETERMINISTIC — built from
+/// a recompute and a single on-disk read, no clock, no embedded timestamp (which
+/// would bust the cache every session, §5.5). `stale` ⇒ on-disk `boot.md` differs
+/// from the recompute; `marker_sections` ⇒ sections whose source is unpopulated.
+#[derive(Debug, PartialEq, Eq)]
+struct CheckReport {
+    stale: bool,
+    marker_sections: Vec<String>,
+}
+
+impl CheckReport {
+    /// A current, fully-populated file: in sync on disk, every source projected.
+    fn is_clean(&self) -> bool {
+        !self.stale && self.marker_sections.is_empty()
+    }
+}
+
+/// Recompute the snapshot and compare it to what is on disk (Charge II). A DISK
+/// sentry, not a session sentry (§5.4, codex F2): it sees the *file* fresh while
+/// the *current inlined prefix* stays stale until `/clear`/restart — so callers
+/// must NOT read a clean report as proof the live context is fresh. Absent /
+/// unreadable on-disk file ⇒ stale (the recompute differs from nothing).
+fn boot_check(root: &Path, exec: &Path) -> CheckReport {
+    let sections = build_sections(root, exec);
+    let recomputed = render_boot(&sections);
+    let on_disk = fs::read_to_string(root.join(BOOT_REL)).ok();
+    CheckReport {
+        stale: on_disk.as_deref() != Some(recomputed.as_str()),
+        marker_sections: sections
+            .iter()
+            .filter(|s| is_marker(s))
+            .map(|s| s.heading.clone())
+            .collect(),
+    }
 }
 
 /// `doctrine boot [-p ROOT]` — resolve the root, resolve `current_exe()` in the
@@ -191,6 +240,37 @@ pub(crate) fn run(path: Option<PathBuf>) -> anyhow::Result<()> {
         "Unchanged"
     };
     writeln!(io::stdout(), "{verb} {}", dest.display())?;
+    Ok(())
+}
+
+/// `doctrine boot --check` — resolve the root + `current_exe()` in the shell,
+/// run the disk sentry, and report. DISK-scoped wording only: never claim the
+/// current session's inlined prefix is fresh (§5.4 — that is `/route`'s lag
+/// warning + the freshen-now ritual, not this verb).
+pub(crate) fn run_check(path: Option<PathBuf>) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let exec = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
+    let report = boot_check(&root, &exec);
+    let dest = root.join(BOOT_REL);
+    let mut out = io::stdout();
+    if report.is_clean() {
+        writeln!(out, "clean {} — on-disk snapshot in sync", dest.display())?;
+        return Ok(());
+    }
+    if report.stale {
+        writeln!(
+            out,
+            "stale {} — differs from current governance; run `doctrine boot`, then `/clear` or restart",
+            dest.display()
+        )?;
+    }
+    if !report.marker_sections.is_empty() {
+        writeln!(
+            out,
+            "unpopulated sections: {}",
+            report.marker_sections.join(", ")
+        )?;
+    }
     Ok(())
 }
 
@@ -915,6 +995,131 @@ mod tests {
         assert!(
             !snap.contains("<!-- Governance (project):"),
             "governance marker replaced"
+        );
+    }
+
+    // =======================================================================
+    // PHASE-05 — `boot --check` disk sentry
+    // =======================================================================
+
+    // --- VT-1: a fully-populated, in-sync file reports clean ---
+
+    #[test]
+    fn boot_check_reports_clean_when_populated_and_in_sync() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // populate every disk/store-backed source so no section markers.
+        let gov = root.join(GOVERNANCE_REL);
+        fs::create_dir_all(gov.parent().unwrap()).unwrap();
+        fs::write(&gov, "# Governance\n\npoint at doc/spec.md\n").unwrap();
+        adr::run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
+        adr::run_status(Some(root.to_path_buf()), 1, adr::AdrStatus::Accepted).unwrap();
+        memory::run_record(
+            Some(root.to_path_buf()),
+            &memory::RecordArgs {
+                title: "Boot pointer note",
+                memory_type: memory::MemoryType::Pattern,
+                key: None,
+                status: memory::Status::Active,
+                summary: None,
+                tags: &[],
+                paths: &[],
+                globs: &[],
+                commands: &[],
+                repo: None,
+            },
+        )
+        .unwrap();
+
+        assert!(regenerate(root, exec).unwrap(), "seed the on-disk snapshot");
+        let report = boot_check(root, exec);
+        assert!(
+            report.is_clean(),
+            "fully populated + in sync → clean: stale={}, markers={:?}",
+            report.stale,
+            report.marker_sections
+        );
+    }
+
+    // --- VT-1: an edited / absent on-disk file trips stale ---
+
+    #[test]
+    fn boot_check_flags_disk_staleness() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // absent file: recompute differs from nothing → stale.
+        assert!(boot_check(root, exec).stale, "absent boot.md → stale");
+
+        // a hand-edited file diverges from the recompute → stale.
+        regenerate(root, exec).unwrap();
+        let dest = root.join(BOOT_REL);
+        fs::write(&dest, "# tampered\n").unwrap();
+        assert!(boot_check(root, exec).stale, "edited boot.md → stale");
+
+        // regenerate restores byte-equality → clean.
+        regenerate(root, exec).unwrap();
+        assert!(!boot_check(root, exec).stale, "regenerated → not stale");
+    }
+
+    // --- VT-1: unpopulated sources surface as marker_sections ---
+
+    #[test]
+    fn boot_check_tallies_marker_sections() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // bare root: no ADRs, no memory, no governance.md → those sections marker.
+        regenerate(root, exec).unwrap();
+        let bare = boot_check(root, exec);
+        assert!(!bare.stale, "freshly written → not stale");
+        assert!(
+            bare.marker_sections
+                .contains(&"Governance (project)".to_string()),
+            "absent governance.md is an unpopulated section: {:?}",
+            bare.marker_sections
+        );
+        // the exec-path section is always populated — never a marker.
+        assert!(
+            !bare
+                .marker_sections
+                .contains(&"Invoking doctrine".to_string()),
+            "exec path is always populated: {:?}",
+            bare.marker_sections
+        );
+        assert!(!bare.is_clean(), "marker sections present → not clean");
+
+        // seed governance.md → that section is no longer a marker.
+        let gov = root.join(GOVERNANCE_REL);
+        fs::create_dir_all(gov.parent().unwrap()).unwrap();
+        fs::write(&gov, "# Governance\n\npoint at doc/spec.md\n").unwrap();
+        regenerate(root, exec).unwrap();
+        let seeded = boot_check(root, exec);
+        assert!(
+            !seeded
+                .marker_sections
+                .contains(&"Governance (project)".to_string()),
+            "seeded governance.md drops the marker: {:?}",
+            seeded.marker_sections
+        );
+    }
+
+    // --- determinism: no clock — repeated checks are byte-identical ---
+
+    #[test]
+    fn boot_check_is_deterministic() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+        regenerate(root, exec).unwrap();
+        assert_eq!(
+            boot_check(root, exec),
+            boot_check(root, exec),
+            "no clock/rng → identical reports"
         );
     }
 

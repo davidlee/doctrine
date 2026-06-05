@@ -75,6 +75,11 @@ enum Command {
         #[command(subcommand)]
         command: Option<BootCommand>,
 
+        /// Report disk staleness + unpopulated sections without writing (the
+        /// disk sentry). Ignored when the `install` subcommand is given.
+        #[arg(long)]
+        check: bool,
+
         /// Explicit project root (default: auto-detect). Used by the bare
         /// regenerate; `boot install` carries its own `-p`.
         #[arg(short = 'p', long)]
@@ -590,8 +595,10 @@ fn main() -> anyhow::Result<()> {
         },
         Command::Boot {
             command,
+            check,
             path: boot_path,
         } => match command {
+            None if check => boot::run_check(boot_path),
             None => boot::run(boot_path),
             Some(BootCommand::Install {
                 path,

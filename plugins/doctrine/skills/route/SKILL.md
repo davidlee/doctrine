@@ -27,6 +27,22 @@ When unsure, route to the stricter skill, not the looser one.
 `doctrine --help` (dev: `./target/debug/doctrine --help`). If `doctrine` is
 unavailable, STOP and alert the user.
 
+## Boot snapshot freshness
+
+The governance snapshot (`@.doctrine/state/boot.md`) is inlined into this
+session's cached prefix. Two distinct checks — keep them apart:
+
+- **Disk health.** Run `doctrine boot --check` (the disk sentry). It reports
+  whether the on-disk snapshot is *stale* (≠ a recompute from current
+  governance) or has *unpopulated sections*. `stale` → run `doctrine boot` to
+  rewrite it. This is a DISK check only — a `clean` report does **not** prove
+  *this* session's inlined prefix is current.
+- **In-session lag.** Your inlined prefix was written by a prior session's
+  hook, so a recent governance edit can lag **up to two sessions** behind. To
+  guarantee *this* context reflects a just-made edit, use the freshen-now
+  ritual: run `doctrine boot`, **then** `/clear` or restart (regenerate THEN
+  clear — `doctrine boot` alone cannot refresh the already-inlined prefix).
+
 ## Choose the governing skill
 
 1. Correctness depends on project governance, an unfamiliar subsystem, or "what

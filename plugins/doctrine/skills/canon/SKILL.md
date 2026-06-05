@@ -21,6 +21,13 @@ meaning for it — not all of them, every time:
 For subsystem-level truth (gotchas, patterns, invariants tied to files or
 commands), `/retrieve-memory` rather than rediscovering it.
 
+The governance prefix you are reading (`@.doctrine/state/boot.md`) was inlined
+at session start. If you just edited governance (`governance.md`, an ADR, a
+memory) and need *this* context to reflect it, run `doctrine boot` to regenerate
+the snapshot, **then** `/clear` or restart — regenerate THEN clear. `doctrine
+boot` alone cannot refresh an already-inlined prefix, and `/clear` alone serves
+the pre-edit snapshot.
+
 ## The mortal sins
 
 Beware — and refuse to commit:
