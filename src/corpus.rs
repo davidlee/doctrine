@@ -25,6 +25,8 @@
 //! refuses to delete anything it does not recognise as its own.
 
 use std::collections::BTreeMap;
+#[cfg(test)]
+use std::fmt;
 use std::fs;
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
@@ -102,6 +104,121 @@ impl CorpusPlan {
 /// scope floor is a master-lint concern (PHASE-04), not a prune concern.
 fn is_inv(m: &Memory) -> bool {
     m.scope.repo.is_empty() && m.anchor.kind == AnchorKind::None
+}
+
+// ---------------------------------------------------------------------------
+// master-lint (SL-018 PHASE-04, Charges VII/VIII/X) — author-time validation of a
+// global orientation master, layered ON TOP of the INV check. `is_inv` (the prune
+// gate) stays repo+anchor only; the lint re-expresses the two INV halves as
+// distinct signals and adds the type-≠-`reference` and scope-floor gates.
+// ---------------------------------------------------------------------------
+
+/// A master-lint violation. Distinct variants so each planted defect fails with
+/// its own author-time signal (PHASE-04 VT-2).
+///
+/// Master-lint is a test/validation gate THIS phase (PHASE-04) — exercised by the
+/// fixture + embedded-corpus tests, not yet on a runtime path — so it is
+/// `#[cfg(test)]` (repo rule: a test-only item is `cfg(test)`, never dead code). It
+/// becomes load-bearing over the real corpus in PHASE-05, still via the test gate.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Violation {
+    /// A repo coordinate is present — a master must be global (`repo=""`).
+    NonEmptyRepo(String),
+    /// A born anchor is present — a master must be unanchored (`anchor_kind=none`).
+    Anchored(&'static str),
+    /// `memory_type = "reference"` — references are authored as `signpost`
+    /// (Charge VIII / OQ-B); `MemoryType::parse` would otherwise hard-bail, so the
+    /// literal is caught on the raw token for a clear signal.
+    ReferenceType,
+    /// The `memory.toml` fails schema validation (a bad field, or an unknown
+    /// `memory_type` other than the special-cased `reference`).
+    Schema(String),
+    /// The scope floor (Charge X): a master needs ≥1 of paths/globs/commands —
+    /// never tag-only (memory-spec §299/§333).
+    ScopeFloor,
+}
+
+#[cfg(test)]
+impl fmt::Display for Violation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NonEmptyRepo(r) => {
+                write!(
+                    f,
+                    "repo coordinate must be empty for a global master (found '{r}')"
+                )
+            }
+            Self::Anchored(k) => {
+                write!(
+                    f,
+                    "master must be unanchored (anchor_kind=none), found '{k}'"
+                )
+            }
+            Self::ReferenceType => write!(
+                f,
+                "memory_type \"reference\" is forbidden — author references as \"signpost\""
+            ),
+            Self::Schema(e) => write!(f, "master fails schema validation: {e}"),
+            Self::ScopeFloor => write!(
+                f,
+                "scope floor unmet — a master needs >=1 of paths/globs/commands (never tag-only)"
+            ),
+        }
+    }
+}
+
+/// Master-lint one master's `memory.toml` text. Asserts the global-orientation
+/// class invariants: the INV signature (`repo=""` AND `anchor_kind=none`), a valid
+/// `memory_type` that is NOT the `reference` literal, and the scope floor
+/// (>=1 path/glob/command). Returns every violation found (not just the first).
+///
+/// Text-level (not `&Memory`) by necessity: a `reference` master fails
+/// `Memory::parse`, so the raw token must be inspected before parsing to give the
+/// author a dedicated signal rather than a generic schema bail.
+#[cfg(test)]
+pub(crate) fn lint_master(toml: &str) -> Result<(), Vec<Violation>> {
+    let mut violations = Vec::new();
+    let is_reference = raw_memory_type(toml).as_deref() == Some("reference");
+    if is_reference {
+        violations.push(Violation::ReferenceType);
+    }
+    match Memory::parse(toml) {
+        Ok(m) => {
+            // The two INV halves, surfaced separately (distinct signals); `is_inv`
+            // itself remains the repo+anchor prune gate, untouched.
+            if !m.scope.repo.is_empty() {
+                violations.push(Violation::NonEmptyRepo(m.scope.repo.clone()));
+            }
+            if m.anchor.kind != AnchorKind::None {
+                violations.push(Violation::Anchored(m.anchor.kind.as_str()));
+            }
+            if m.scope.paths.is_empty() && m.scope.globs.is_empty() && m.scope.commands.is_empty() {
+                violations.push(Violation::ScopeFloor);
+            }
+        }
+        // A `reference` literal already carries its own signal; any OTHER parse
+        // failure (bad field, unknown type) is a schema violation.
+        Err(e) if !is_reference => violations.push(Violation::Schema(e.to_string())),
+        Err(_) => {}
+    }
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
+/// Read the raw `memory_type` token before `Memory::parse` rejects it — so a
+/// `reference` literal yields a dedicated author signal. `None` when the TOML is
+/// unparseable or the field is missing / non-string.
+#[cfg(test)]
+fn raw_memory_type(toml: &str) -> Option<String> {
+    toml.parse::<toml::Value>()
+        .ok()?
+        .get("memory_type")?
+        .as_str()
+        .map(str::to_owned)
 }
 
 /// Pure diff: embedded `assets` vs the on-disk shipped `children`. Identical input
@@ -190,6 +307,12 @@ where
         let (Some(uid), Some(file)) = (parts.next(), parts.next()) else {
             continue;
         };
+        // Admit only canonical uid dirs; skip `mem.<key>` alias symlinks (RustEmbed
+        // follows them, yielding each master a second time under its alias name).
+        // Mirrors `memory::scan_named`, which scans real dirs only (design § 5.5).
+        if !crate::memory::is_uid(uid) {
+            continue;
+        }
         let Ok(text) = String::from_utf8(data) else {
             continue;
         };
@@ -588,6 +711,30 @@ weight = 0
         assert!(gather_assets(files).is_empty());
     }
 
+    #[test]
+    fn gather_assets_skips_key_symlink_aliases() {
+        // The authored corpus carries `mem.<key>` alias symlinks beside each uid
+        // dir; RustEmbed follows them, so the embed yields the master twice — once
+        // under the uid, once under the alias name. Only the canonical uid dir is a
+        // master (mirrors `memory::scan_named`, which skips key symlinks). An alias
+        // path must not contribute a duplicate asset.
+        let files = vec![
+            (format!("{UID_A}/memory.toml"), b"toml-a".to_vec()),
+            (format!("{UID_A}/memory.md"), b"md-a".to_vec()),
+            (
+                "mem.signpost.doctrine.overview/memory.toml".to_owned(),
+                b"toml-a".to_vec(),
+            ),
+            (
+                "mem.signpost.doctrine.overview/memory.md".to_owned(),
+                b"md-a".to_vec(),
+            ),
+        ];
+        let assets = gather_assets(files);
+        assert_eq!(assets.len(), 1, "the alias must not double the master");
+        assert_eq!(assets[0].uid, UID_A);
+    }
+
     // --- T4: impure sync_corpus over a temp dir ---
 
     fn shipped_dir(root: &Path) -> PathBuf {
@@ -651,5 +798,133 @@ weight = 0
         let tmp = tempfile::tempdir().unwrap();
         let report = sync_corpus(tmp.path(), &[], false).unwrap();
         assert!(report.plan.is_inert());
+    }
+
+    // --- PHASE-04: master-lint (Charges VII/VIII/X) ---
+
+    /// A clean global master: `repo=""`, anchor `none`, a valid type, and a path
+    /// scope (the floor). Each bad-fixture test mutates exactly one axis.
+    fn clean_master_toml() -> String {
+        r#"memory_uid = "mem_00000000000000000000000000000009"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "t"
+summary = "s"
+created = "2026-01-01"
+updated = "2026-01-01"
+
+[scope]
+workspace = "global"
+repo = ""
+paths = ["doc/"]
+
+[git]
+anchor_kind = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "standard"
+
+[ranking]
+severity = "info"
+weight = 0
+"#
+        .to_owned()
+    }
+
+    #[test]
+    fn lint_passes_a_clean_master() {
+        assert!(
+            lint_master(&clean_master_toml()).is_ok(),
+            "a repo=\"\"/anchor-none master with a path scope must lint clean"
+        );
+    }
+
+    #[test]
+    fn lint_flags_a_non_empty_repo() {
+        // repo set, anchor still none — parses fine (the repo⇒anchor gate is a
+        // write-path concern, not a parse one), so the repo signal is isolated.
+        let toml = clean_master_toml().replace(r#"repo = """#, r#"repo = "github.com/x/y""#);
+        let v = lint_master(&toml).unwrap_err();
+        assert!(
+            v.iter()
+                .any(|x| matches!(x, Violation::NonEmptyRepo(r) if r == "github.com/x/y")),
+            "expected NonEmptyRepo, got {v:?}"
+        );
+    }
+
+    #[test]
+    fn lint_flags_a_present_anchor() {
+        // anchor=commit, repo still "" — isolates the anchor signal.
+        let toml = clean_master_toml().replace(
+            r#"anchor_kind = """#,
+            "anchor_kind = \"commit\"\ncommit = \"abc\"\ntree = \"def\"",
+        );
+        let v = lint_master(&toml).unwrap_err();
+        assert!(
+            v.iter().any(|x| matches!(x, Violation::Anchored("commit"))),
+            "expected Anchored(commit), got {v:?}"
+        );
+    }
+
+    #[test]
+    fn lint_flags_a_reference_type_with_a_dedicated_signal() {
+        // `reference` fails Memory::parse, so the raw token is caught first —
+        // a ReferenceType signal, NOT a generic Schema bail.
+        let toml =
+            clean_master_toml().replace(r#"memory_type = "fact""#, r#"memory_type = "reference""#);
+        let v = lint_master(&toml).unwrap_err();
+        assert!(
+            v.contains(&Violation::ReferenceType),
+            "expected ReferenceType, got {v:?}"
+        );
+        assert!(
+            !v.iter().any(|x| matches!(x, Violation::Schema(_))),
+            "the reference literal must not also surface as a generic Schema bail: {v:?}"
+        );
+    }
+
+    #[test]
+    fn lint_flags_a_tag_only_scope() {
+        // Drop the path scope, add a tag — tag-only fails the floor (Charge X).
+        let toml = clean_master_toml().replace(r#"paths = ["doc/"]"#, r#"tags = ["doctrine"]"#);
+        let v = lint_master(&toml).unwrap_err();
+        assert!(
+            v.contains(&Violation::ScopeFloor),
+            "expected ScopeFloor, got {v:?}"
+        );
+    }
+
+    #[test]
+    fn lint_flags_an_unknown_type_as_schema() {
+        let toml =
+            clean_master_toml().replace(r#"memory_type = "fact""#, r#"memory_type = "bogus""#);
+        let v = lint_master(&toml).unwrap_err();
+        assert!(
+            v.iter().any(|x| matches!(x, Violation::Schema(_))),
+            "an unknown (non-reference) type must surface as Schema, got {v:?}"
+        );
+    }
+
+    /// PHASE-04 EX-2: every EMBEDDED master lints clean. The embed is empty this
+    /// phase (only `.gitkeep` ⇒ zero assets), so this passes trivially now and
+    /// becomes load-bearing over the real corpus in PHASE-05.
+    #[test]
+    fn every_embedded_master_lints_clean() {
+        for asset in embedded_assets() {
+            if let Err(violations) = lint_master(&asset.toml) {
+                let detail: Vec<String> = violations.iter().map(ToString::to_string).collect();
+                panic!(
+                    "embedded master {} fails master-lint: {}",
+                    asset.uid,
+                    detail.join("; ")
+                );
+            }
+        }
     }
 }

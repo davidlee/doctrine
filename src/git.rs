@@ -619,6 +619,15 @@ pub(crate) fn capture(repo_root: &Path) -> Result<Frame, CaptureError> {
     }
 }
 
+/// The unanchored, repo-empty frame a `record --global` master is minted from
+/// (SL-018 PHASE-04): the global orientation class carries no repo coordinate and
+/// asserts nothing about client git (design §5.3), so its born frame is suppressed
+/// — identical to the unborn/non-repo frame (`repo_id=""`, anchor `none`). Riding
+/// `none_frame` keeps a single construction site.
+pub(crate) fn unanchored_frame() -> Frame {
+    none_frame()
+}
+
 /// The `None`-anchor frame for an unborn/non-repo context: unscoped, lowest trust.
 fn none_frame() -> Frame {
     Frame {

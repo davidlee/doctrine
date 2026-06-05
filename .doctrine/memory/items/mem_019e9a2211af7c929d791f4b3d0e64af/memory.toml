@@ -1,0 +1,41 @@
+memory_uid = "mem_019e9a2211af7c929d791f4b3d0e64af"
+memory_key = "mem.system.memory.global-master-authoring"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "Authoring global orientation masters via record --global"
+summary = "Global orientation masters: record --global suppresses the born frame and writes to repo-root memory/, riding past the repo-anchor gate"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["memory/", "src/corpus.rs", "src/memory.rs"]
+globs = []
+commands = ["doctrine memory record", "doctrine memory sync"]
+tags = ["doctrine", "memory", "corpus", "global"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f552b563c273f192de14fc487d0ca63b36605778"
+ref_name = "refs/heads/SL-018-work"
+checkout_state_id = "1f6d9dac9b6053691af5d52fb88017722df21e4e51e969f40a369fa3e868603f"
+base_commit = "4e3cb65ce82dbbd3d6c3f0d38646d7f11e130d58"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

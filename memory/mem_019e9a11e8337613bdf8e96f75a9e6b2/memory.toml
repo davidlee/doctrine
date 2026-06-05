@@ -1,0 +1,41 @@
+memory_uid = "mem_019e9a11e8337613bdf8e96f75a9e6b2"
+memory_key = "mem.signpost.doctrine.lifecycle-start"
+schema_version = 1
+memory_type = "signpost"
+status = "active"
+title = "Doctrine lifecycle start: route to slice to design to plan to phase to audit to close"
+summary = ""
+created = "2026-06-05"
+updated = "2026-06-06"
+
+[scope]
+paths = [".doctrine/slice/", ".doctrine/state/boot.md"]
+globs = []
+commands = ["doctrine slice"]
+tags = []
+workspace = "default"
+repo = ""
+repo_id_kind = "local_root"
+repo_id_confidence = "low"
+
+[git]
+anchor_kind = "none"
+commit = ""
+tree = ""
+ref_name = ""
+checkout_state_id = ""
+base_commit = ""
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = "2026-06-06"
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
