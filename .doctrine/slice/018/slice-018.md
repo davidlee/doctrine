@@ -62,10 +62,11 @@ should cover.
   captured memory's scoped paths. Deferred to a follow-up slice + behaviour-hooks
   ADR.
 - **No override/suppress of shipped memories (M3)** — local shadowing by
-  `memory_key`. Deferred; the `collect_all` uid-dedup seam is left open for it.
-  Local *additive* orientation already works (an `items/` memory, repo=<client>,
-  unscoped/tag-scoped, unanchored) and is **not** stored in shipped/, so sync
-  never touches it (D8).
+  `memory_key` (a future key-precedence pass added to `collect_all`; uid-dedup is
+  v1 behaviour, not itself the seam). Local *additive* orientation already works
+  via a `record`-captured `items/` memory (repo=<client>, **real anchor**),
+  composed by `collect_all`, never stored in shipped/. A *genuinely-unanchored*
+  local convention needs the M3 gate-relax (`memory.rs:753`) — deferred, not free.
 - **No `memory sync --check` sentry** in v1 — sync is idempotent, so the M1 hook
   needs none; a dedicated sentry is deferred.
 
@@ -75,7 +76,12 @@ should cover.
 - `src/memory.rs` — new `sync` verb (+ `sync install` hook wiring) + pure
   idempotent materializer; a `collect_all` composite over the unchanged
   `collect_memories` leaf (gate); `read_body` cross-root fallback.
-- `src/retrieve.rs` — candidate collection + `list_rows` switch to `collect_all`.
+- `src/retrieve.rs` — candidate collection + `list_rows` switch to `collect_all`;
+  staleness gains the **evergreen `reference` disposition** for the global/derived
+  class (Charge IV).
+- master-authoring path — a `doctrine memory record --global` mode (mint+validate,
+  `repo=""`/`anchor=none`, write to repo-root `memory/`) or a `scripts/` helper
+  (Charge VII).
 - hook wiring (SessionStart → `memory sync`), reusing `boot install`'s mechanism
   (settings.json / agent hook surface).
 - a new `#[derive(RustEmbed)] #[folder = "memory/"]` (parallel to `install/`,
