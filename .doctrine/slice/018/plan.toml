@@ -1,0 +1,259 @@
+# Implementation plan for SL-018 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-018"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Sanction the class: ADR + memory-spec amendment (the GATE)"
+objective = """
+Amend scripture BEFORE a master is authored or a line of admission/staleness code \
+is written (design D10, Charge II) — the corpus is spec-violating (memory-spec \
+§306: "unanchored permitted only for unscoped") and the `repo=""` admission path \
+unblessed until the class is sanctioned. Allocate the next ADR via `doctrine adr \
+new` (lands ADR-002; ADR-001 is the only extant record) blessing the \
+**global / unanchored / path-scoped / derived** memory class: `repo=""` (admitted \
+in every partition — repo-id is the cross-repo filter, so a real id self-excludes), \
+`anchor_kind=none` (asserts nothing about client git), native entity, second \
+indexer scan root. The ADR MUST also define the **fourth staleness disposition** \
+(Charge IV): the global/unanchored/derived class is **evergreen / reference-grade**, \
+exempt from the days-since-`reviewed` decay, rendering an explicit non-decaying \
+`reference` state rather than a decaying `stale` (bumping `reviewed` at sync would \
+break the idempotent diff that makes the M1 hook cheap — so exemption, not \
+re-stamping). Amend `doc/memory-spec.md`: the anchoring section (§295-308) gains \
+the carve-out sanctioning scoped+unanchored for this class; the retrieval section \
+(§326-368) records the `repo=""` admission; the staleness model gains the \
+evergreen disposition. This phase is **scripture only** — NO master, NO code, NO \
+test code. It exists so every downstream phase has canon to ride. Set the ADR \
+status to accepted (`doctrine adr status`).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked through inquisition round 2 (D1-D10, all 12 charges dispositioned in inquisition.md Part VI); HEAD `just check` green (behaviour-preservation baseline)" },
+  { id = "EN-2", text = "memory-spec.md §295-368 (anchoring + retrieval + staleness) read; the §306 contradiction and the days-since-reviewed decay path located" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ADR-002 allocated via `doctrine adr new`, status `accepted` via `doctrine adr status`; it blesses the global/unanchored/path-scoped/derived class (repo=\"\", anchor_kind=none, native entity, 2nd scan root) AND the evergreen/reference-grade staleness disposition (decay-exempt)" },
+  { id = "EX-2", text = "doc/memory-spec.md amended: anchoring carve-out (scoped+unanchored sanctioned for this class, reconciling §306), retrieval admission (repo=\"\" admitted in every partition), and the 4th staleness disposition (evergreen reference, non-decaying) — all three present and internally consistent" },
+  { id = "EX-3", text = "no master authored, no source touched, no test added in this phase (gate is scripture-only); `just check` still green at phase end" },
+]
+verification = [
+  { id = "VT-1", expects = "`doctrine adr list` shows ADR-002 accepted; the ADR text names the class's four properties (global/unanchored/path-scoped/derived) and the evergreen staleness exemption explicitly" },
+  { id = "VT-2", expects = "a read of the memory-spec diff confirms it sanctions the repo=\"\"/anchor=none admission path and defines the non-decaying `reference` state for the class — no longer contradicting the corpus the later phases author" },
+  { id = "VT-3", expects = "`git diff --stat` for the phase touches only the ADR tree and doc/memory-spec.md (no src/, no memory/, no tests/) — the gate did not leak into code" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Retrieval reach for the global class: collect_all, body fallback, admission golden, evergreen staleness"
+objective = """
+Make the retrieval/index surface correctly COMPOSE, READ, ADMIT, and AGE the \
+global/derived class — fixture-tested, no embed or real corpus needed yet. \
+Preserve the leaf (gate, design §5.2): `collect_memories(items_root)` \
+(`memory.rs:1069`) stays byte-for-byte — existing tests call it directly \
+(`memory.rs:2896-2900`). Add the composite `collect_all(root)` over it: union the \
+capture root (`items/`) and the shipped root (`.doctrine/memory/shipped/`), dedup \
+by uid with **items/ winning** (committed capture outranks a shipped default; the \
+dropped duplicate is logged at `find` debug, not an error), shipped-absent ⇒ \
+identical to `collect_memories(items)`. Switch the three callers to it: \
+`retrieve.rs:633` (find+retrieve), `memory.rs:1092` (run_list), `memory.rs:1109` \
+(list_rows → boot via `boot.rs:127`) — so shipped memories surface in \
+find/retrieve/list **and the boot snapshot** (the orientation reach). Fix \
+`read_body` (`retrieve.rs:780`, items_root-only): try the capture root, fall back \
+to the shipped root (a shipped uid is absent from `items/`). Pin the **required \
+admission golden** (Charge IX / R3): the `base_filter` global hatch \
+(`retrieve.rs:174`, repo="" admitted) is DORMANT today — zero `repo=""` memories \
+exist in production, so there is no lived baseline; a mandatory golden asserts \
+base_filter admits AND scope-match surfaces a `repo=""`/anchor=none memory in an \
+arbitrary client partition (extend the existing B20 test). Implement the **evergreen \
+staleness** disposition gated by PHASE-01: the staleness fn (`retrieve.rs` \
+~309-319/:361) special-cases `repo=""`+anchor=none+no verified_sha to render the \
+non-decaying `reference` state, never a decaying `stale`. The whole phase rides \
+synthetic shipped/ fixtures; the SL-005/007/008 suites stay green UNCHANGED.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: ADR-002 accepted, memory-spec amendment defines the class + evergreen staleness disposition (the code here is gated by that sanction); HEAD green" },
+  { id = "EN-2", text = "the leaf and its direct test callers re-confirmed at `memory.rs:1069` / `:2896-2900`; the three callers (`retrieve.rs:633`, `memory.rs:1092`, `:1109`) and `base_filter` (`retrieve.rs:174`) / `read_body` (`retrieve.rs:780`) / staleness fn located" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`collect_memories` signature UNCHANGED; new `collect_all(root)` unions items/+shipped/, dedups by uid (items wins), shipped-absent ⇒ equals `collect_memories(items)`; the three callers (retrieve, run_list, list_rows) switched to it" },
+  { id = "EX-2", text = "`read_body` falls back capture-root → shipped-root; a shipped memory's body renders through `retrieve`/`find`" },
+  { id = "EX-3", text = "required admission golden lands: `base_filter` admits + scope-match surfaces a `repo=\"\"`/anchor=none memory in an arbitrary client partition (the newly-lit dormant hatch is pinned, not assumed)" },
+  { id = "EX-4", text = "evergreen staleness disposition implemented: a `repo=\"\"`, anchor=none, no-`verified_sha` memory renders the non-decaying `reference` state, never a decaying `stale`; no crash on the unattested-but-scoped path" },
+  { id = "EX-5", text = "behaviour-preservation gate held: SL-005/007/008 memory suites pass UNCHANGED; `just check` / `cargo clippy` zero-warning (bins+lib)" },
+]
+verification = [
+  { id = "VT-1", expects = "collect_all unit tests: union, items/-wins dedup on uid collision, shipped-root-absent equals `collect_memories(items)`; the existing direct-`collect_memories` tests are untouched and green (gate proof)" },
+  { id = "VT-2", expects = "read_body fallback test: a uid present only under shipped/ resolves its body; list_rows/boot include a synthetic shipped memory once a shipped root exists" },
+  { id = "VT-3", expects = "the required golden: base_filter admits the repo=\"\" shipped memory in a foreign partition AND scope-match surfaces it on a path hit; a scope-MISS does not surface it (no dilution of focused queries)" },
+  { id = "VT-4", expects = "staleness test: the global/unanchored/derived class renders `reference` (non-decaying) across an arbitrary elapsed `reviewed` gap; a normal anchored memory still decays (the special-case is scoped to the class)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "The sync mechanism: embed + pure materializer + `memory sync` verb + hook + gitignore"
+objective = """
+Build the write path that lands the embedded masters into the gitignored \
+`.doctrine/memory/shipped/` — the skills-precedent materialize pattern (design D4/ \
+D5/D6), NOT folded into install/boot. New `#[derive(RustEmbed)] #[folder="memory/"]` \
+(`CorpusAssets`), parallel to `install/`'s and `plugins/`'s embeds; `memory/` is \
+repo-root and committed (outside `.doctrine/*`, no negation needed — F2). It may \
+be EMPTY this phase (RustEmbed embeds zero files ⇒ sync no-ops) — the real corpus \
+is PHASE-05; tests here drive synthetic assets + temp dirs. **Pure materializer** \
+(ADR-001): `plan_corpus(assets) -> Vec<MaterialisedFile>` computes the idempotent \
+diff — new / changed / prune / unchanged — from embedded assets vs the on-disk \
+shipped state; identical input ⇒ all-unchanged, zero writes; it NEVER references \
+`items/`. **Impure shell**: `sync_corpus(root, plan)` writes the plan and reports \
+a `SyncReport`. **Bounded prune** (Charge III): remove ONLY a shipped/ dir that \
+parses as a memory AND bears the INV signature (`repo=""`, `anchor_kind=none`) AND \
+whose uid is absent from the embedded set; a foreign file or unparseable dir is \
+left UNTOUCHED and surfaced in `--dry-run`. **Safety**: the target is always \
+`<validated-root>/.doctrine/memory/shipped`, computed from `root::find`, never a \
+user path; sync never touches `items/`. **No-root no-op** (Charge XI): outside a \
+doctrine repo `root::find` errors ⇒ `memory sync` exits clean, writes nothing (so \
+the M1 hook is harmless in foreign repos). Command shell: `memory sync` \
+[`--dry-run` prints the plan and exits | `--yes` no prompt] + **`memory sync \
+install`** wiring a **separate** SessionStart hook (OQ-E: separate entry, not \
+chained onto boot's — cohesion; degrades to the clean no-op in non-doctrine repos), \
+mirroring `boot install`. **Gitignore both surfaces** (Charge F3, the inverted \
+authored-entity-wiring trap): doctrine's own `.gitignore` adds \
+`.doctrine/memory/shipped/` beside the `index|embeddings|state/*` re-ignores \
+(L33-35, under the `!.doctrine/memory/` negation at L17, else committed-by-default \
+here); the client `install/manifest.toml` `[gitignore].entries += \
+".doctrine/memory/shipped/"` for the denylist model.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: collect_all reads the shipped root, so a sync'd corpus is immediately retrievable; HEAD green" },
+  { id = "EN-2", text = "the skills embed/materialize precedent re-read (`src/skills.rs:24` `#[folder=\"plugins/\"]`, `:287` classify_link); `boot install`'s hook-wiring mechanism (settings.json / SessionStart) located; `.gitignore` L17/33-35 and `install/manifest.toml` `[gitignore]` located" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`CorpusAssets` RustEmbed over repo-root `memory/` compiles (empty tree tolerated, embeds zero files); `memory/` is committed (no gitignore negation needed)" },
+  { id = "EX-2", text = "`plan_corpus` (pure) emits the new/changed/prune/unchanged diff; idempotent (identical input ⇒ zero writes); never references `items/`. `sync_corpus` (impure) applies it and reports" },
+  { id = "EX-3", text = "bounded prune: only INV-signatured (`repo=\"\"`/anchor=none) orphan masters are removed; a foreign file AND an unparseable dir under shipped/ are left untouched (and shown in `--dry-run`)" },
+  { id = "EX-4", text = "`memory sync` [`--dry-run` | `--yes`] works; `memory sync install` wires a separate SessionStart entry idempotently; no-root invocation exits clean writing nothing" },
+  { id = "EX-5", text = "gitignore wired on both surfaces: doctrine's `.gitignore` ignores `.doctrine/memory/shipped/`; `install/manifest.toml` appends it to `[gitignore].entries`; `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "plan_corpus unit tests: new/changed/prune/unchanged from synthetic assets vs on-disk state; idempotency (identical ⇒ all-unchanged, zero writes); removed master ⇒ prune; the plan never names an items/ path" },
+  { id = "VT-2", expects = "bounded-prune test: a planted foreign file and an unparseable dir under shipped/ survive a sync; only the INV-signatured orphan is pruned (skills' ours-vs-foreign discipline, made stateless by the INV signature)" },
+  { id = "VT-3", expects = "no-root no-op test: `memory sync` outside a doctrine repo exits 0 and writes nothing; `memory sync install` hook-install test mirrors boot's (idempotent, separate entry)" },
+  { id = "VT-4", expects = "gitignore-wiring tests: a doctrine-repo check asserts `.doctrine/memory/shipped/` is ignored here; a fresh-install check asserts the manifest adds it to the client denylist; E2E: sync into a temp repo populates shipped/, gitignored (mind stale-CARGO_BIN_EXE — rebuild before e2e)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "Master authoring path + validation: `record --global` mode + master-lint"
+objective = """
+Give the corpus a sanctioned way to be authored and a gate that keeps it honest — \
+the tooling PHASE-05 will use, landed and proven against fixtures first. \
+**Authoring path** (Charge VII, design §5.3): a `doctrine memory record --global` \
+mode that reuses the existing uid-mint + schema validation but writes a \
+`repo=""`, `anchor_kind=none` master into the **repo-root `memory/`** tree, \
+bypassing the repo-anchor write gate (`memory.rs:753`, which bails on \
+repo-non-empty + unanchored) **by explicit intent** — `--global` is the declared \
+escape hatch, not a relaxation of the gate for the normal path. (The earlier \
+"uuid v7" requirement is dropped as unenforced decoration — `is_uid` \
+(`memory.rs:484`) accepts any `mem_<32hex>`.) **master-lint** (Charges VII/VIII/X): \
+a test/validation pass asserting every embedded master satisfies the class \
+invariants — `repo=""` AND `anchor_kind=none` (INV); a **valid `memory_type` ≠ \
+`reference`** (the enum is `concept|fact|pattern|signpost|system|thread`; \
+`MemoryType::parse` (`memory.rs:68`) BAILS on `reference`, so an authored \
+`reference` master would hard-error collect_all/sync — references are authored as \
+`signpost`, and the lint **forbids the `reference` literal**); and the **scope \
+floor** (Charge X) — **≥1 of `paths`/`globs`/`commands`** (never tag-only, whose \
+retrievability is spec-ambiguous per memory-spec §299/§333; broad memories take a \
+coarse scope, e.g. overview→`commands=["doctrine"]`, file-map→`paths=[".doctrine/"]`). \
+**OQ-C** (sync autorun): `doctrine install` PRINTS A HINT to run `memory sync`; it \
+does NOT orchestrate it (skills parity, verb stays standalone). master-lint runs \
+green against fixture masters this phase; it becomes load-bearing over the real \
+corpus in PHASE-05.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: the embed + `memory/` tree + sync verb exist, so `record --global` has a target to write into and a path to ship through; HEAD green" },
+  { id = "EN-2", text = "the write gate (`memory.rs:753`), uid-mint + schema validation in `record`, `MemoryType::parse` (`memory.rs:68`), `is_uid` (`memory.rs:484`), and the install hint surface located" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine memory record --global` mints a `repo=\"\"`/`anchor_kind=none` master into repo-root `memory/`, reusing the existing uid-mint + schema validation, bypassing the repo-anchor gate by explicit intent (the normal-path gate is unchanged)" },
+  { id = "EX-2", text = "master-lint asserts, per embedded master: the INV signature (`repo=\"\"`, `anchor_kind=none`); a valid `memory_type` and that it is NOT the `reference` literal; the scope floor (≥1 path/glob/command, never tag-only)" },
+  { id = "EX-3", text = "OQ-C resolved: `doctrine install` prints a hint to run `memory sync` (no orchestration); the verb stays standalone (skills parity)" },
+  { id = "EX-4", text = "`just check` green; SL-005/007/008 suites still unchanged & green (record's normal path untouched)" },
+]
+verification = [
+  { id = "VT-1", expects = "`record --global` test: produces a master with `repo=\"\"`/anchor=none under `memory/`; the normal (non-global) `record` still requires + derives a non-empty repo and an anchor (gate intact for the default path)" },
+  { id = "VT-2", expects = "master-lint catches each violation on a planted bad fixture: a non-empty repo; a present anchor; a `reference` literal type; a tag-only (no path/glob/command) scope — each fails the lint with a clear signal" },
+  { id = "VT-3", expects = "install-hint test: `doctrine install` output references `memory sync`; install does not itself run sync (no shipped/ written by install alone)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "Author the corpus: triage 86 → skeleton → masters → E2E (the content phase)"
+objective = """
+The content phase — the slice may NOT go green on plumbing alone with an empty \
+corpus (Charge XII). **Triage** all 86 spec-driver shipped memories into a \
+disposition table: (a) directly transferable (rewrite for doctrine), (b) \
+topic-applicable (doctrine authors fresh), (c) inapplicable — spec-driver-internal \
+/ stack-specific (Python/Typer/Textual/pylint) AND **doctrine-repo dev gotchas** \
+(rust/clippy/cargo — those stay in doctrine's own `items/`, not for downstream \
+drivers; design D7). **Author** the doctrine orientation corpus (~12-18 masters, \
+NOT 86) via `record --global`, covering every OQ-A skeleton topic: `signpost` \
+(overview · file-map/layout · lifecycle-start route→slice→design→plan→phase→audit \
+→close · skill/route map · CLI command map — the latter authored as `signpost`, \
+NOT `reference`, Charge VIII); `concept` (storage model + storage rule · entity \
+engine · memory model: capture vs this shipped corpus · the routing gate); \
+`pattern` (the core loop · conventions: conventional commits, pure/imperative \
+split, behaviour-preservation gate, immutable PHASE/EN-EX-VT ids · TDD \
+red/green/refactor); `fact` (CLI-is-source-of-truth · authored vs runtime vs \
+derived tiers). Audience = the downstream agent DRIVING doctrine, not the doctrine \
+contributor (D7). Each master carries the scope floor (≥1 path/glob/command), \
+`repo=""`/anchor=none, and seeds `reviewed` to the authoring date (OQ-D: moot for \
+staleness under the evergreen exemption, but seeded for the recency tiebreak, sort \
+key #8 — stable across syncs). The corpus points TOWARD boot/skills/`doc/*`, never \
+restates them (D-principle 4 / scope OQ-3). master-lint green over the WHOLE real \
+corpus; the now-non-empty embed ships through `memory sync`; E2E confirms the reach.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete: `record --global` + master-lint exist; PHASE-01 amendment sanctions the class (so authoring is in-bounds); HEAD green" },
+  { id = "EN-2", text = "spec-driver's 86 shipped memories accessible for triage; the OQ-A skeleton topics (design §6) in hand as the coverage target" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "a triage table dispositions ALL 86 spec-driver memories into transferable / topic-applicable / inapplicable, with the drop rationale for the inapplicable set (spec-driver-internal, stack-specific, doctrine-dev gotchas)" },
+  { id = "EX-2", text = "the doctrine orientation corpus is authored under `memory/` (committed) covering every OQ-A skeleton topic — **every skeleton topic has ≥1 master**; each carries `repo=\"\"`/anchor=none, ≥1 path/glob/command scope, a valid `memory_type` ≠ `reference`, and `reviewed` seeded to the authoring date" },
+  { id = "EX-3", text = "master-lint passes over the WHOLE real corpus (schema + INVs + scope floor + type); the corpus orients toward boot/skills/doc rather than restating them (no parallel implementation)" },
+  { id = "EX-4", text = "the populated embed ships: `memory sync` into a fresh repo lands the corpus in shipped/ (gitignored); `retrieve --path-scope <p>` surfaces a shipped master; the boot snapshot Memory section lists shipped masters; `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "the triage table has 86 rows, each dispositioned; a spot-check confirms drops are spec-driver-internal/stack-specific/doctrine-dev, and kept topics map to the skeleton" },
+  { id = "VT-2", expects = "a coverage assertion: every OQ-A skeleton topic resolves to ≥1 authored master; master-lint is green over the full corpus (the slice does not pass on a trivial/empty corpus)" },
+  { id = "VT-3", expects = "E2E: fresh repo → `memory sync` → shipped/ populated + gitignored → `retrieve --path-scope` surfaces a shipped master, its body renders (read_body fallback), and it shows the non-decaying `reference` staleness; boot snapshot lists it; a foreign items/ file is untouched (mind stale-CARGO_BIN_EXE — rebuild before e2e)" },
+]
+specs        = []
+requirements = []
