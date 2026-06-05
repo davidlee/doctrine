@@ -205,3 +205,54 @@ cross-phase implementation decisions the design didn't pin.
   `mem.system.spec.composition-seam` — durable `REQ-NNN` FK + mobile `FR-`/`NF-`
   label + `order` in `members.toml`, tech-only `interactions.toml [[edge]]`,
   `collaborators` dissolved, `spec validate` FK gate.
+
+## Post-audit code-review (held-open close gate)
+
+Code-review over `git diff 11359db..HEAD -- src/ install/` (the slice src diff,
+post-audit). Two findings fixed before close; the rest named as follow-ups. No
+slice re-open ceremony — surgical fix on a held-open slice, gate re-green.
+
+- **F-P7-1 — FK identity was split between two readers (🟠, FIXED).** `spec show`
+  resolved a member FK by *parsing* (`requirement::load` → `id_from_fk`, so
+  `REQ-1` → dir `001`), but `spec validate` compared FK strings **byte-exact**
+  (`build_registry` pushed the raw `m.requirement`; `Registry` does
+  `BTreeSet::contains`). So a hand-authored non-canonical FK (`REQ-1`, `SPEC-2`)
+  pointing at a real entity rendered fine in `show` yet was flagged **dangling**
+  by `validate` — and its target double-flagged **orphan**. Two notions of
+  identity for the same byte. **Fix:** unify on parse→reformat at registry-build.
+  New `requirement::canonicalize_fk(&str) -> String` (best-effort:
+  `id_from_fk().map_or_else(verbatim, canonical_id)`) — junk (`garbage`, `REQ-x`,
+  wrong prefix) passes through verbatim, so genuinely-dangling FKs stay flagged.
+  `build_registry` now canonicalizes `m.requirement` through it, and each
+  interaction `e.target` through `resolve_spec_ref(..).map(|(s,n)| s.canonical_id(n))
+  .unwrap_or(e.target)`. The canonicalizer matches `load`'s existing tolerance, so
+  `show` and `validate` now share one identity notion. Test
+  `build_registry_canonicalizes_member_and_interaction_fks` (spec.rs) +
+  `canonicalize_fk_normalises_and_passes_through_garbage` (requirement.rs).
+
+- **F-P7-2 — `render` reinvented `canonical_id` (🟡, FIXED).** `render`'s opening
+  `format!("{}-{:03}", spec.kind.kind().prefix, spec.id)` duplicated
+  `SpecSubtype::canonical_id` (which the *same fn* reuses for requirement refs 13
+  lines down). Replaced with `spec.kind.canonical_id(spec.id)`.
+
+- **F-P7-3 — named follow-ups, NOT fixed (out of surgical scope).**
+  - `spec show` hard-fails the whole document on one dangling member FK
+    (`run_show` propagates `requirement::load`'s error) — no partial/degraded
+    render. Conscious (D-P4-1) but a resilience gap: the readable-whole is
+    unreadable until the FK is hand-fixed. A `⚠ <REQ> unresolved` line would keep
+    `show` usable. Candidate for the registry-surface slice (inbound refs, R3).
+  - `as_str()` on `SpecStatus`/`C4Level`/`ReqStatus` hand-mirrors the
+    `#[serde(rename_all = "kebab-case")]` mapping — compiler catches a *missing*
+    variant (exhaustive match) but not a *typo* divergence, which would split
+    `spec show` (uses `as_str`) from `spec list` (reads the raw toml string).
+  - `read_members`/`read_interactions` are the same NotFound-tolerant
+    parse-into-`Doc`-wrapper twice; `spec.rs` at 1.6k lines mixes parse types +
+    four verbs + pure render + the impure `build_registry` scan. Cohesion debt,
+    not a defect; `render` is the clean amputation point if a sixth verb lands.
+
+- **F-P7-4 — gate re-green post-fix.** `cargo clippy` (bins/lib) zero warnings;
+  `cargo test --bin doctrine` **406 passed** (404 audit baseline + 2 new); `cargo
+  fmt --check` clean. Touched only `src/spec.rs` + `src/requirement.rs` — engine,
+  `meta.rs`, `registry.rs` logic all unchanged (behaviour gate intact). e2e
+  unaffected (pure-Rust change; the off-PATH e2e skips are the pre-existing
+  `mem.pattern.testing.stale-cargo-bin-exe` condition, not a regression).
