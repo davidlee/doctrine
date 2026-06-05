@@ -1,0 +1,41 @@
+memory_uid = "mem_019e9837483e7270bf13378958d87a09"
+memory_key = "mem.pattern.lint.as-conversions-ban"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Repo bans `as` casts: guarded saturating float→int with expect"
+summary = "Repo bans bare `as`; float→int needs a guarded saturating cast + stacked expect"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["src"]
+globs = ["src/**/*.rs"]
+commands = ["cargo clippy", "just check"]
+tags = ["rust", "clippy", "lint", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9422187ba6a20e5514cbe85dac1aaa5d5d85e30f"
+ref_name = "refs/heads/SL-015"
+checkout_state_id = "3d50c524c73593e8f2cb0405c5b65b6655b6fc89ed6df3ec47fb5363daa565ac"
+base_commit = "658a808f1bbffafeb677fff7f95329d1424bba00"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

@@ -180,6 +180,17 @@ pub fn quantize(score: f32) -> u32 {
 }
 ```
 
+**Non-finite is profile-split (clarification, SL-017 PHASE-02 consult).** `quantize`
+is total in **release** builds: non-finite input returns `0` so invalid evidence
+never becomes maximal. In **debug** builds, non-finite input trips the `debug_assert!`
+*before* the release fallback, surfacing scorer bugs during development — a non-finite
+BM25 score is not ordinary bad input but evidence of a scorer bug or violated
+invariant. The two are not testable in one profile: tests are **profile-split** —
+debug asserts the panic (`#[cfg(debug_assertions)]` `should_panic`), release asserts
+fallback-to-zero (`#[cfg(not(debug_assertions))]`). The finite-negative case
+(`-1.0 → 0`) exercises the defensive `max(0.0)` in all builds without conflicting
+with the assert.
+
 `SortKey` / `sort_key` / `rank` / `exact_key_match` are **unchanged**: Key 2 stays
 `Reverse<u32>`, fed from `Candidate.lexical`. `exact_key` remains a separate Key-1
 component dominating Key 2.
@@ -370,8 +381,13 @@ covered by *new* tests + re-baselined integration/e2e.
 
 **`lexical.rs` units:**
 - `quantize`: `quantize_zero_is_zero`, `quantize_is_monotonic_non_decreasing`,
-  `quantize_saturates` (`f32::MAX → u32::MAX`), `quantize_non_finite_is_zero`
-  (`NaN`, `INFINITY` → 0).
+  `quantize_saturates` (`f32::MAX → u32::MAX`), `quantize_negative_is_zero`
+  (defensive `max(0.0)`, all builds), and the **profile-split** non-finite pair —
+  `quantize_non_finite_panics_in_debug` (`#[cfg(debug_assertions)]` `should_panic`,
+  A8) and `quantize_non_finite_is_zero_in_release` (`#[cfg(not(debug_assertions))]`,
+  the total-fallback). Normal `cargo test` proves bug-surfacing; a release-profile
+  test pass is required if the closure gate wants direct proof of the
+  non-finite→0 fallback.
 - `tokenize`: moved cases (separator splitting, case-fold, empty drop).
 - `OverlapRanker`: parity vs retired `lexical_score` (set-membership over
   title+summary+tags+key; no-query ⇒ 0).

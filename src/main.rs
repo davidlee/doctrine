@@ -7,6 +7,7 @@ mod fsutil;
 mod git;
 mod input;
 mod install;
+mod lexical;
 mod memory;
 mod meta;
 mod plan;
