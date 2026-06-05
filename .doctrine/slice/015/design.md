@@ -115,9 +115,20 @@ spec-mediated):
   surface, not local `show`). v1 ephemeral; `--write` (`*.rendered.md`) deferred
   (§7 D9).
 - `spec validate [<spec-ref>]` — the FK-validation pass (§5.4); whole-corpus by
-  default, one spec's outbound FKs if given. Exit non-zero on any hard finding.
+  default. **Scoped** to one spec it checks **only that spec's outbound FKs +
+  label uniqueness**; the orphan check is corpus-level (a requirement's membership
+  is unknowable from a single spec) and runs **whole-corpus only**. Exit non-zero
+  on any hard finding.
 - `spec list [--status S]` — rows per subtype: id, status, slug, `#members`. Mirror
   of `adr list` / `slice list`.
+
+**Deferred verb, named (external review item 5).** The model's many-to-many lives
+in storage (one `REQ-NNN` membered by N specs with distinct labels), but v1 has no
+CLI to *add an existing* requirement to another spec — `req add` only **creates**.
+`spec req link <spec-ref> <REQ-NNN> [--label …]` (append a membership row to an
+existing requirement) is **designed-deferred** (§7 D-Q4): a pure additive mirror of
+`req add` step 4, no new machinery. Until it lands, requirement reuse exists at rest
+but not in the workflow — named here so the gap is explicit, not silent.
 
 `<spec-ref>` **requires the canonical prefix** (`PRD-NNN` / `SPEC-NNN`) on `req
 add` / `show` / `validate` — those verbs carry no subtype selector, so a bare
@@ -159,7 +170,7 @@ struct Spec {
 }
 struct Member      { requirement: String, label: String, order: u32 }   // FK open
 struct Interaction { target: String, #[serde(rename = "type")] kind: String,
-                     #[serde(default)] notes: Option<String> }           // FK open
+                     #[serde(default)] notes: Option<String> }           // FK open; target = SPEC-NNN (tech only)
 ```
 
 Ownership: a spec **owns** its `members.toml` and `interactions.toml` (forward
@@ -222,9 +233,9 @@ scan the three trees into id sets + an edge list, then check:
 | check | severity |
 |---|---|
 | every `members[].requirement` (canonical `REQ-NNN`) resolves to a requirement | **hard** (dangling FK) |
-| every `interactions[].target` resolves to a spec id | **hard** (dangling FK) |
+| every `interactions[].target` (`SPEC-NNN`, **tech only**) resolves to a tech spec | **hard** (dangling FK) |
 | `label` unique within a spec's members | **hard** (duplicate) |
-| requirement membered by ≥1 spec | **hard** (orphan = torn write) |
+| requirement membered by ≥1 spec *(whole-corpus pass only)* | **hard** (orphan = torn write) |
 
 FK strings are stored **canonical** (`REQ-007`, `SPEC-012`) and parsed to the
 numeric dir on resolve. No **id-collision** check: like slice/adr, `mkdir`
@@ -336,8 +347,9 @@ design adds:
   carry payload ⇒ typed (entity-model rule). Generic table deferred until the
   payload-free feature DAG forces its shape.
 - **D-Q4 — pragmatic v1 boundary.** interactions hand-authored (no verb), status
-  hand-edited, requirement CLI spec-mediated. *Why:* keeps the surface minimal;
-  each deferred verb is an additive mirror.
+  hand-edited, requirement CLI spec-mediated, and **no `spec req link`** (reuse an
+  existing requirement under another spec — §5.2). *Why:* keeps the surface minimal;
+  each deferred verb is an additive mirror (`req link` = `req add` step 4 alone).
 - **D-Q5 — product reuses the requirement entity + membership verbatim**; differs
   from tech only by the absent `interactions.toml` + tech flat fields. *Rejected:*
   a separate `product_requirements` model (parallel implementation).
@@ -365,7 +377,8 @@ design adds:
   relation-index budget ("thousands of edges/files, single-digit MB") covers it.
 - **Render correctness** — load-bearing as the only readable whole. *Mitigation:*
   pure function, directly tested; one-way (D8) keeps it trivially correct.
-- **Two-tree orphan requirement** — benign + validate warn (§5.4).
+- **Two-tree orphan requirement** — a torn write (reserve OK, append failed);
+  **hard** validate finding, reserved dir left uncommitted (§5.4).
 - **Label immutability is a process rule** — not enforceable at rest.
   *Mitigation:* auto-assign + uniqueness/duplicate hard lints; never renumber.
 - **Behaviour-preservation** — extending nothing in `entity.rs`; new callers only.
@@ -398,9 +411,10 @@ Gate: `cargo clippy` zero warnings (bins/lib, not `--all-targets`); `just check`
 
 ### Internal adversarial pass (integrated)
 
-- **R1 — requirement lacked a structured `name`.** `req add "<title>"` + render's
-  heading imply a stored title; struct only had `slug`. **Fixed** (§5.3 adds
-  `name`; slug derives from it).
+- **R1 — requirement lacked a structured title.** `req add "<title>"` + render's
+  heading imply a stored title; struct only had `slug`. **Fixed** — §5.3 adds the
+  field; slug derives from it. (Field named **`title`**, not `name` — the shared
+  `Meta` convention; see inquisition C2 below.)
 - **R2 — id-collision check was over-built.** `mkdir`-reserved ids git-conflict
   (add/add) before any lint, exactly as slice/adr already trust; only a duplicate
   *label row* is a silent merge risk. **Fixed** — dropped the id-dup check, kept
@@ -455,3 +469,24 @@ rack) — and raised six seam-level charges. All dispositioned and integrated ab
 
 Verdict: **venial seam heresies, not mortal** — scope/reconciliation corrections,
 no redesign. The thesis stands; the consistency surface is now closed.
+
+### External review (independent, integrated)
+
+A second independent review **accepted the direction** (specs as thin aggregate
+roots, requirements as peer entities, membership as labelled edge — "architecturally
+better, implementation-ready after small consistency repairs, not a speculative
+rewrite"). Five repairs raised, all accepted and integrated:
+
+1. **§8 contradicted §5.4 on orphan severity** (stale "benign + warn" after the C5
+   hardening). **Fixed** — §8 now reads hard/torn-write.
+2. **R1 named the field `name`** (stale after C2 → `title`). **Fixed** — R1
+   rewritten to `title` with the shared-`Meta` rationale.
+3. **Scoped `validate` vs corpus-level orphan check undefined.** **Fixed** — §5.2/
+   §5.4: scoped checks outbound FKs + label uniqueness only; orphan detection is
+   whole-corpus only (membership is unknowable from one spec).
+4. **`interactions[].target` prefix unpinned.** **Fixed** — pinned `SPEC-NNN`,
+   **tech-only** (a product spec is a what/why doc, not an interaction participant);
+   §5.3 struct comment + §5.4 table updated.
+5. **No workflow to reuse an existing requirement** (many-to-many at rest, not in
+   CLI). **Fixed (named)** — `spec req link` designed-deferred in §5.2 + D-Q4; the
+   gap is now explicit, not silent.
