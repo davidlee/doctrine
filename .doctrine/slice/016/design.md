@@ -151,8 +151,14 @@ the cycle. Out of scope (user decision, 2026-06-05); noted follow-up.
 
 ## 9. Quality Engineering & Validation
 
-- **Behaviour-preservation**: full suite green, assertions unchanged. Parse unit
-  tests (`slice.rs:711/727/734`) relocate to `plan.rs` verbatim. `state.rs` test
+- **Behaviour-preservation**: full suite green, assertions unchanged. Test
+  relocation is **selective** (adversarial finding A3): the two pure-parser tests
+  — `slice.rs:711` (multi-phase parse) and `:727` (duplicate-id reject), both
+  inline-TOML → `Plan::parse` — move to `plan.rs`. The scaffold-acceptance test
+  `:734` calls slice-private `render_plan_toml`, so it is a slice-side *contract*
+  test (renderer × parser) and **stays in `slice.rs`**, now calling
+  `plan::Plan::parse` cross-module. `slice.rs:657`
+  (`render_plan_toml_substitutes_ref_and_parses`) likewise stays. `state.rs` test
   helper `fn plan()` (`state.rs:420`) keeps working via the new import path.
 - **Structural proof** (new, cheap): `cargo build` (acyclic compile) + a grep
   confirming `state.rs` no longer imports `crate::slice` and no module imports
@@ -162,4 +168,20 @@ the cycle. Out of scope (user decision, 2026-06-05); noted follow-up.
 
 ## 10. Review Notes
 
-(adversarial pass appended below)
+Internal adversarial pass (2026-06-05), claims verified against source:
+
+- **A1 — `main.rs` blast radius (checked, clean).** `main.rs:432`/`:565` `Plan`
+  are the clap `SliceCommand::Plan` *subcommand variant*, not the data type.
+  main.rs never names the `Plan` type. Confirms §5.5 assumption.
+- **A2 — `state.rs` residual coupling (checked, clean).** state.rs has many
+  `slice` tokens, but all are doc comments, path string consts (`SLICE_DIR`,
+  `STATE_SLICE_DIR`), `slice_id` params, or the `make_slice_dir` test helper —
+  none are module deps. The only `crate::slice` edge is line 28; removing it
+  fully severs the prod cycle.
+- **A3 — test relocation was overstated (REAL; integrated into §9).** The
+  scaffold-acceptance test (`slice.rs:734`) calls slice-private
+  `render_plan_toml`, so it is not a pure-parser test. Corrected: only the two
+  self-contained tests (`:711`, `:727`) move to `plan.rs`; the contract tests
+  (`:734`, `:657`) stay in `slice.rs`.
+
+No governance conflict surfaced; ADR-001 + pure/imperative split fully satisfied.
