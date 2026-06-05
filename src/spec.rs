@@ -13,16 +13,16 @@
 //! files, tech 4) and the tech-only flat fields — D-Q5.
 //!
 //! This module owns the *spec-specific* parts — the two `Kind`s, their scaffolds,
-//! the render fns, the parse-layer structs, and `new`/`list`. The kind-agnostic
-//! engine is `crate::entity` (unchanged — three new `Fresh` callers only, R6
-//! gate); the shared metadata-list substrate is `crate::meta`, reused **additively**
-//! — `spec list` rides `read_metas`/`render_table` with zero `meta.rs` edits.
+//! the render fns, the parse-layer structs, and `new`/`list`/`req add`/`show`. The
+//! kind-agnostic engine is `crate::entity` (unchanged — three new `Fresh` callers
+//! only, R6 gate); the shared metadata-list substrate is `crate::meta`, reused
+//! **additively** — `spec list` rides `read_metas`/`render_table` with zero
+//! `meta.rs` edits.
 //!
-//! `req add` / `show` / `validate` are later phases; the parse structs they consume
-//! (`Spec`, `Interaction`, `Source`, `SpecStatus`, `C4Level`) have no production
-//! caller until then, so they ride the `cfg_attr(not(test), expect(dead_code, …))`
-//! bridge (D-2 / memory `mem.pattern.lint.expect-not-allow`), which self-erases on
-//! the first real caller. `Member` is exempt — `spec list` counts members through it.
+//! `spec show` (PHASE-04) is the pure local reassembly that reads every parse
+//! struct (`Spec`, `Member`, `Source`, `SpecStatus`, `C4Level`, `Interaction`) —
+//! the last of the D-2 `dead_code` bridges erased. The only remaining later phase
+//! is `validate` (PHASE-05), which reuses these readers + `requirement::load`.
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -34,7 +34,7 @@ use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
 use crate::meta;
-use crate::requirement::{self, ReqKind};
+use crate::requirement::{self, ReqKind, Requirement};
 
 /// The toml/md file stem — shared by both subtypes (`spec-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`PRD`/`SPEC`) and from the tree dirs below.
@@ -106,14 +106,7 @@ impl SpecSubtype {
 
 /// A code anchor a tech spec governs (tech-only; `[[source]]`). Shape mirrors the
 /// legacy canon `doc/spec-entity-spec.md` (D-3): the language + a code identifier,
-/// with an optional finer module path.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-04 (spec show render); remove then"
-    )
-)]
+/// with an optional finer module path. Read by `spec show` render (PHASE-04).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct Source {
     pub(crate) language: String,
@@ -124,13 +117,6 @@ pub(crate) struct Source {
 
 /// A spec's lifecycle status. Closed set, kebab serde; hand-edited, git is the
 /// trail (no date stamps — §5.4).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-04 (spec show render); remove then"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum SpecStatus {
@@ -140,15 +126,20 @@ pub(crate) enum SpecStatus {
     Superseded,
 }
 
+impl SpecStatus {
+    /// The kebab string for `spec show` render (matches the serde rename). Pure.
+    const fn as_str(self) -> &'static str {
+        match self {
+            SpecStatus::Draft => "draft",
+            SpecStatus::Active => "active",
+            SpecStatus::Deprecated => "deprecated",
+            SpecStatus::Superseded => "superseded",
+        }
+    }
+}
+
 /// The C4 architectural level of a tech spec. Closed set (C6 ruling), kebab serde;
 /// tech-only, optional.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-04 (spec show render); remove then"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum C4Level {
@@ -158,16 +149,21 @@ pub(crate) enum C4Level {
     Code,
 }
 
+impl C4Level {
+    /// The kebab string for `spec show` render (matches the serde rename). Pure.
+    const fn as_str(self) -> &'static str {
+        match self {
+            C4Level::Context => "context",
+            C4Level::Container => "container",
+            C4Level::Component => "component",
+            C4Level::Code => "code",
+        }
+    }
+}
+
 /// The spec identity parse layer. `title` keys the shared-`Meta` convention (C2).
 /// `category` is deliberately OPEN vocabulary (`Option<String>`, C6); the tech flat
-/// fields default to absent/empty for a product spec.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-04 (spec show render); remove then"
-    )
-)]
+/// fields default to absent/empty for a product spec. Read by `spec show` render.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct Spec {
     pub(crate) id: u32,
@@ -207,14 +203,8 @@ struct MembersDoc {
 
 /// One outbound spec→spec edge in a tech spec's `interactions.toml`. `type` is
 /// free-text per the relation schema (not an enum); the `target` FK is canonical
-/// (`SPEC-NNN`). Hand-authored in v1 (no verb — D-Q4).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-05 (spec validate); remove then"
-    )
-)]
+/// (`SPEC-NNN`). Hand-authored in v1 (no verb — D-Q4). First prod caller is `spec
+/// show` render (PHASE-04 — render shows outbound interactions), not validate.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct Interaction {
     pub(crate) target: String,
@@ -222,6 +212,15 @@ pub(crate) struct Interaction {
     pub(crate) kind: String,
     #[serde(default)]
     pub(crate) notes: Option<String>,
+}
+
+/// A tech spec's `interactions.toml` document: the `[[edge]]` array (the seed's
+/// array key — NOT `[[interaction]]`). Seeded empty; `#[serde(default)]` lets the
+/// comment-only seed parse to zero edges.
+#[derive(Debug, Default, Deserialize)]
+struct InteractionsDoc {
+    #[serde(default)]
+    edge: Vec<Interaction>,
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +305,116 @@ fn spec_scaffold(subtype: SpecSubtype, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<
     Ok(fileset)
 }
 
+/// Reassemble a spec into its readable whole (design §5.4) — the PURE compose half
+/// of `spec show`. Takes already-parsed inputs and returns the document `String`;
+/// touches no disk (the shell does all I/O — §8 purity thesis). Members are
+/// stable-sorted by their advisory `order` here (gaps/dups cosmetic — EX-2). An
+/// empty `interactions` slice omits that block entirely, covering a product spec's
+/// absent file and a tech spec with zero edges uniformly (VT-3). The spec's own
+/// prose body is emitted **verbatim** — never structurally parsed (D8 / storage
+/// rule); per-requirement fields come from the structured toml, not their prose.
+fn render(
+    spec: &Spec,
+    prose_body: &str,
+    members: &[(Member, Requirement)],
+    interactions: &[Interaction],
+) -> String {
+    let canonical_ref = format!("{}-{:03}", spec.kind.kind().prefix, spec.id);
+    // House style: collect pre-formatted pieces (each carrying its own newlines)
+    // and `concat()` — avoids the `push_str(&format!(…))` lint and stays pure.
+    let mut parts: Vec<String> = Vec::new();
+
+    // identity + flat fields. The identity is NOT an H1 — the verbatim prose body
+    // below carries the spec's own `# <ref>: <title>` heading, so a synthetic H1
+    // here would double it. This line is the authoritative structured identity
+    // (title/status from the toml, which can drift from the prose H1).
+    parts.push(format!("`{canonical_ref}` — {}\n", spec.title));
+    parts.push(format!(
+        "{} · {} · {}\n",
+        spec.slug,
+        spec.status.as_str(),
+        spec.kind.label(),
+    ));
+    if !spec.tags.is_empty() {
+        parts.push(format!("tags: {}\n", spec.tags.join(", ")));
+    }
+    if let Some(category) = &spec.category {
+        parts.push(format!("category: {category}\n"));
+    }
+    if let Some(level) = spec.c4_level {
+        parts.push(format!("c4 level: {}\n", level.as_str()));
+    }
+    if !spec.responsibilities.is_empty() {
+        parts.push("responsibilities:\n".to_string());
+        for r in &spec.responsibilities {
+            parts.push(format!("  - {r}\n"));
+        }
+    }
+    if !spec.sources.is_empty() {
+        parts.push("sources:\n".to_string());
+        for s in &spec.sources {
+            let module = match &s.module {
+                Some(m) => format!(" ({m})"),
+                None => String::new(),
+            };
+            parts.push(format!("  - {} {}{module}\n", s.language, s.identifier));
+        }
+    }
+
+    // prose body, verbatim.
+    parts.push("\n".to_string());
+    parts.push(prose_body.to_string());
+    if !prose_body.ends_with('\n') {
+        parts.push("\n".to_string());
+    }
+
+    // Requirements — each member in advisory `order`, its requirement read by FK.
+    parts.push("\n## Requirements\n".to_string());
+    let mut ordered: Vec<&(Member, Requirement)> = members.iter().collect();
+    ordered.sort_by_key(|(m, _)| m.order);
+    for (member, req) in ordered {
+        let req_ref = requirement::canonical_id(req.id);
+        parts.push(format!(
+            "\n### {} ({req_ref}) — {}\n\n",
+            member.label, req.title
+        ));
+        parts.push(format!(
+            "{} · {} · {}\n",
+            req.slug,
+            req.kind.as_str(),
+            req.status.as_str(),
+        ));
+        if !req.tags.is_empty() {
+            parts.push(format!("tags: {}\n", req.tags.join(", ")));
+        }
+        // "statement" is the structured `description` (D-P4-1): the storage rule
+        // forbids parsing the requirement's prose; absent → no line.
+        if let Some(statement) = &req.description {
+            parts.push(format!("\n{statement}\n"));
+        }
+        if !req.acceptance_criteria.is_empty() {
+            parts.push("\nacceptance criteria:\n".to_string());
+            for c in &req.acceptance_criteria {
+                parts.push(format!("  - {c}\n"));
+            }
+        }
+    }
+
+    // outbound interactions (tech only; omitted when empty — VT-3).
+    if !interactions.is_empty() {
+        parts.push("\n## Interactions\n\n".to_string());
+        for i in interactions {
+            let notes = match &i.notes {
+                Some(n) => format!(": {n}"),
+                None => String::new(),
+            };
+            parts.push(format!("- {} — {}{notes}\n", i.target, i.kind));
+        }
+    }
+
+    parts.concat()
+}
+
 // ---------------------------------------------------------------------------
 // `#members` — list's derived column
 // ---------------------------------------------------------------------------
@@ -330,6 +439,24 @@ fn read_members(members_path: &Path) -> anyhow::Result<Vec<Member>> {
 /// file). The `#members` list column.
 fn member_count(spec_dir: &Path) -> anyhow::Result<usize> {
     Ok(read_members(&spec_dir.join("members.toml"))?.len())
+}
+
+/// Parse a tech spec's `interactions.toml` into its outbound edges. A missing file
+/// → no interactions (a product spec has none — absent, not empty; §5.4), so a
+/// product spec and a tech spec with zero edges both yield `[]`. Read-only; mirrors
+/// `read_members`.
+fn read_interactions(interactions_path: &Path) -> anyhow::Result<Vec<Interaction>> {
+    let text = match std::fs::read_to_string(interactions_path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => {
+            return Err(e)
+                .with_context(|| format!("Failed to read {}", interactions_path.display()));
+        }
+    };
+    let doc: InteractionsDoc = toml::from_str(&text)
+        .with_context(|| format!("Failed to parse {}", interactions_path.display()))?;
+    Ok(doc.edge)
 }
 
 // ---------------------------------------------------------------------------
@@ -517,6 +644,51 @@ pub(crate) fn run_req_add(
     Ok(())
 }
 
+/// `doctrine spec show <spec-ref>` — reassemble a spec into its readable whole and
+/// write it to stdout (design §5.4). The impure shell: resolve the canonical ref
+/// (C4), read the spec's own toml + prose body + members + (tech) interactions,
+/// resolve each member's requirement by FK, then hand the parsed data to the pure
+/// `render`. READ-ONLY: no write, no mutation, and **no cross-corpus scan** — only
+/// this spec's dir and the requirement dirs reached by FK are opened (EX-2).
+/// Ephemeral stdout, no `*.rendered.md` (D9).
+pub(crate) fn run_show(path: Option<PathBuf>, spec_ref: &str) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (subtype, spec_id) = resolve_spec_ref(spec_ref)?;
+    let name = format!("{spec_id:03}");
+    let spec_dir = root.join(subtype.kind().dir).join(&name);
+    anyhow::ensure!(
+        spec_dir.is_dir(),
+        "no {} spec {spec_ref} at {}",
+        subtype.label(),
+        spec_dir.display()
+    );
+
+    let spec_toml = spec_dir.join(format!("{SPEC_STEM}-{name}.toml"));
+    let spec_text = std::fs::read_to_string(&spec_toml)
+        .with_context(|| format!("Failed to read {}", spec_toml.display()))?;
+    let spec: Spec = toml::from_str(&spec_text)
+        .with_context(|| format!("Failed to parse {}", spec_toml.display()))?;
+
+    let prose_path = spec_dir.join(format!("{SPEC_STEM}-{name}.md"));
+    let prose_body = std::fs::read_to_string(&prose_path)
+        .with_context(|| format!("Failed to read {}", prose_path.display()))?;
+
+    // Resolve members → their requirement entities by canonical FK. Only the
+    // membered requirement dirs are touched — no whole-tree scan (EX-2).
+    let members = read_members(&spec_dir.join("members.toml"))?;
+    let mut resolved = Vec::with_capacity(members.len());
+    for member in members {
+        let req = requirement::load(&root, &member.requirement)?;
+        resolved.push((member, req));
+    }
+
+    let interactions = read_interactions(&spec_dir.join("interactions.toml"))?;
+
+    let document = render(&spec, &prose_body, &resolved, &interactions);
+    write!(io::stdout(), "{document}")?;
+    Ok(())
+}
+
 /// `doctrine spec list [--status S]` — per-subtype blocks of `id status slug
 /// #members`, sorted by id. Each block rides the shared `meta::render_table` (the
 /// `#members` cell is derived in this module, exactly as `slice list` derives its
@@ -576,6 +748,8 @@ fn format_spec_rows(subtype: SpecSubtype, rows: &[(meta::Meta, usize)]) -> Strin
 mod tests {
     use super::*;
     use crate::meta::Meta;
+    use crate::requirement::ReqStatus;
+    use std::collections::BTreeMap;
     use std::fs;
 
     fn fresh(root: &Path, subtype: SpecSubtype, slug: &str, title: &str) -> entity::Materialised {
@@ -1035,5 +1209,245 @@ tags = []
         );
         let members = read_members(&members_path).unwrap();
         assert!(members.is_empty(), "no partial member row written");
+    }
+
+    // --- PHASE-04: the pure render compose fn (VT-1 / VT-3) ---
+
+    /// A `Requirement` fixture for the pure render tests — `description` doubles as
+    /// the rendered "statement" (D-P4-1).
+    fn req(id: u32, title: &str, kind: ReqKind) -> Requirement {
+        Requirement {
+            id,
+            title: title.to_string(),
+            slug: title.to_lowercase().replace(' ', "-"),
+            status: ReqStatus::Active,
+            kind,
+            description: Some(format!("{title} statement")),
+            tags: Vec::new(),
+            acceptance_criteria: Vec::new(),
+        }
+    }
+
+    fn member(fk: &str, label: &str, order: u32) -> Member {
+        Member {
+            requirement: fk.to_string(),
+            label: label.to_string(),
+            order,
+        }
+    }
+
+    fn tech_spec(id: u32) -> Spec {
+        Spec {
+            id,
+            slug: "cli".to_string(),
+            title: "CLI".to_string(),
+            status: SpecStatus::Active,
+            kind: SpecSubtype::Tech,
+            tags: Vec::new(),
+            category: None,
+            c4_level: None,
+            responsibilities: Vec::new(),
+            sources: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn render_reassembles_members_in_order() {
+        let spec = tech_spec(7);
+        // input order 3,1,2 — render must sort by advisory `order`.
+        let members = vec![
+            (
+                member("REQ-003", "FR-003", 3),
+                req(3, "Third", ReqKind::Functional),
+            ),
+            (
+                member("REQ-001", "FR-001", 1),
+                req(1, "First", ReqKind::Functional),
+            ),
+            (
+                member("REQ-002", "NF-001", 2),
+                req(2, "Second", ReqKind::Quality),
+            ),
+        ];
+        let out = render(&spec, "## Body\n\nverbatim prose\n", &members, &[]);
+
+        // structured identity (single non-H1 line) + prose body verbatim.
+        assert!(out.starts_with("`SPEC-007` — CLI\n"));
+        assert!(out.contains("cli · active · tech"));
+        assert!(out.contains("## Body"));
+        assert!(out.contains("verbatim prose"));
+        // render emits no H1 of its own — the sole H1 (when present) is the prose's.
+        // This `## Body` fixture has none, so the total is zero (no synthetic dup).
+        assert_eq!(
+            out.matches("\n# ").count() + usize::from(out.starts_with("# ")),
+            0
+        );
+
+        // headings sorted by order; FK derived from req.id; shape per §5.4.
+        let h1 = out.find("### FR-001 (REQ-001) — First").unwrap();
+        let h2 = out.find("### NF-001 (REQ-002) — Second").unwrap();
+        let h3 = out.find("### FR-003 (REQ-003) — Third").unwrap();
+        assert!(
+            h1 < h2 && h2 < h3,
+            "members render sorted by order, not input order"
+        );
+        // the per-requirement facet line + statement (from description).
+        assert!(out.contains("first · functional · active"));
+        assert!(out.contains("First statement"));
+        // no interactions block when the slice is empty.
+        assert!(!out.contains("## Interactions"));
+    }
+
+    #[test]
+    fn render_includes_tech_flat_fields_and_requirement_facets() {
+        let spec = Spec {
+            tags: vec!["infra".to_string()],
+            category: Some("cli".to_string()),
+            c4_level: Some(C4Level::Container),
+            responsibilities: vec!["route subcommands".to_string()],
+            sources: vec![Source {
+                language: "rust".to_string(),
+                identifier: "doctrine/cli".to_string(),
+                module: Some("doctrine::cli".to_string()),
+            }],
+            ..tech_spec(1)
+        };
+        let mut r = req(1, "Route", ReqKind::Functional);
+        r.tags = vec!["core".to_string()];
+        r.acceptance_criteria = vec!["dispatch works".to_string()];
+        let members = vec![(member("REQ-001", "FR-001", 1), r)];
+
+        let out = render(&spec, "## Overview\n", &members, &[]);
+        // every tech flat field renders (un-deads Spec/SpecStatus/C4Level/Source).
+        assert!(out.contains("tags: infra"));
+        assert!(out.contains("category: cli"));
+        assert!(out.contains("c4 level: container"));
+        assert!(out.contains("  - route subcommands"));
+        assert!(out.contains("  - rust doctrine/cli (doctrine::cli)"));
+        // requirement facets: tags, statement, acceptance criteria.
+        assert!(out.contains("tags: core"));
+        assert!(out.contains("Route statement"));
+        assert!(out.contains("  - dispatch works"));
+    }
+
+    #[test]
+    fn render_omits_statement_line_when_description_absent() {
+        let spec = tech_spec(1);
+        let mut r = req(1, "Bare", ReqKind::Functional);
+        r.description = None; // no statement (D-P4-1: absent → no line)
+        let members = vec![(member("REQ-001", "FR-001", 1), r)];
+        let out = render(&spec, "p\n", &members, &[]);
+        assert!(out.contains("### FR-001 (REQ-001) — Bare"));
+        assert!(!out.contains("statement"));
+    }
+
+    #[test]
+    fn render_emits_outbound_interactions_for_tech_omits_when_empty() {
+        let spec = tech_spec(1);
+        let edges = vec![
+            Interaction {
+                target: "SPEC-002".to_string(),
+                kind: "uses".to_string(),
+                notes: Some("calls boot".to_string()),
+            },
+            Interaction {
+                target: "SPEC-003".to_string(),
+                kind: "extends".to_string(),
+                notes: None,
+            },
+        ];
+        let with = render(&spec, "p\n", &[], &edges);
+        assert!(with.contains("## Interactions"));
+        assert!(with.contains("- SPEC-002 — uses: calls boot"));
+        assert!(with.contains("- SPEC-003 — extends\n"));
+
+        // empty (product spec or a tech spec with zero edges) → block omitted.
+        let without = render(&spec, "p\n", &[], &[]);
+        assert!(!without.contains("## Interactions"));
+    }
+
+    // --- PHASE-04: read_interactions (the [[edge]] reader) ---
+
+    #[test]
+    fn read_interactions_parses_edges_and_tolerates_absence() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI");
+        let ipath = root.join(".doctrine/spec/tech/001/interactions.toml");
+        // seeded-empty → zero edges.
+        assert!(read_interactions(&ipath).unwrap().is_empty());
+        // a hand-authored [[edge]] parses.
+        let seeded = fs::read_to_string(&ipath).unwrap();
+        fs::write(
+            &ipath,
+            format!("{seeded}\n[[edge]]\ntarget = \"SPEC-002\"\ntype = \"uses\"\nnotes = \"x\"\n"),
+        )
+        .unwrap();
+        let edges = read_interactions(&ipath).unwrap();
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].target, "SPEC-002");
+        assert_eq!(edges[0].kind, "uses");
+        // a product spec has no interactions.toml → absent, not empty → [].
+        fresh(root, SpecSubtype::Product, "onb", "Onboarding");
+        assert!(
+            read_interactions(&root.join(".doctrine/spec/product/001/interactions.toml"))
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    // --- PHASE-04 VT-2: show is pure (no write, no mutation) ---
+
+    /// Snapshot every file body + symlink target under a tree into a sorted map —
+    /// equality catches content mutation AND any added/removed path.
+    fn snapshot_tree(root: &Path) -> BTreeMap<PathBuf, String> {
+        let mut map = BTreeMap::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            for entry in fs::read_dir(&dir).unwrap() {
+                let entry = entry.unwrap();
+                let p = entry.path();
+                let ft = entry.file_type().unwrap();
+                if ft.is_symlink() {
+                    map.insert(
+                        p.clone(),
+                        format!("symlink->{}", fs::read_link(&p).unwrap().display()),
+                    );
+                } else if ft.is_dir() {
+                    stack.push(p);
+                } else {
+                    map.insert(p.clone(), fs::read_to_string(&p).unwrap_or_default());
+                }
+            }
+        }
+        map
+    }
+
+    #[test]
+    fn render_is_pure_no_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI");
+        run_req_add(
+            Some(root.to_path_buf()),
+            "SPEC-001",
+            Some("Route".into()),
+            ReqKind::Functional,
+            None,
+        )
+        .unwrap();
+
+        let before = snapshot_tree(&root.join(".doctrine"));
+        run_show(Some(root.to_path_buf()), "SPEC-001").unwrap();
+        let after = snapshot_tree(&root.join(".doctrine"));
+
+        assert_eq!(before, after, "spec show mutates nothing on disk");
+        // no `*.rendered.md` materialised (D9 — ephemeral v1).
+        assert!(
+            !after
+                .keys()
+                .any(|p| p.to_string_lossy().ends_with(".rendered.md")),
+            "no rendered file written"
+        );
     }
 }
