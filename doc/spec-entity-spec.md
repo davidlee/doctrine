@@ -1,15 +1,22 @@
 # Spec entity specification — design note
 
-**Status: deferred. No action now.** This records the *shape* of the spec
-entity so it can land without restructuring once doctrine grows a spec system.
-It is the hairiest of the doc entities in the [glossary](glossary.md) and the
-one whose design forces the registry question — so it is specified early to pin
-the decisions the other notes ([relation-index](relation-index.md),
-[drift-spec](drift-spec.md)) lean on.
+**Status: SHIPPED (SL-015 v1).** This note recorded the *shape* of the spec
+entity so it could land without restructuring once doctrine grew a spec system.
+It landed in **SL-015** — `spec new`, `spec list`, `spec req add`, `spec show`,
+`spec validate` plus the `requirement` peer entity — and this note is now
+**reconciled to the as-built model**. The enduring thesis (relational data does
+not belong in a prose document — § The pathology / § Diagnosis) is unchanged; the
+**decomposition mechanics changed** from what the deferred draft proposed: a
+requirement is a **reserved numeric peer entity (`REQ-NNN`)**, not a compound-key
+facet row, and the seven-block facet richness collapsed to **members +
+interactions** (the rest deferred). Where the old draft said `SPEC-110.FR-001`
+(a compound key), the shipped model uses a durable FK `REQ-NNN` carried by a
+spec-side membership row with a mobile `FR-`/`NF-` *label*.
 
-Scope: the **spec family** — product requirements (`PRD-`), technical spec
-(`SPEC-`), revision (`REV-`). They share one internal shape; the technical spec
-(spec-driver's `SPEC-110`) is the worked example because it carries the most.
+Scope as shipped: the **spec family** — product requirements (`PRD-`) and
+technical spec (`SPEC-`). Revision (`REV-`) is **deferred** (no subtype in v1).
+The technical spec is the worked example because it carries the most (the only
+subtype with `interactions`).
 
 ## The pathology
 
@@ -44,417 +51,374 @@ caused by *embedding a queried registry in a hand-edited document*:
 - **Unenforced referential integrity.** `SPEC-110`'s relationships block carries
   `spec: SPEC-TBD` four times — dangling foreign keys, committed. A typo'd
   `FR-099` parses fine in any format. Only a registry that validates keys on load
-  catches this; no serialization syntax does.
+  catches this; no serialization syntax does. (Shipped: `spec validate`.)
 - **Self-inflicted drift.** Requirements are stored **twice** — as `requirements`
   rows and as the `relationships.primary[]` id list. That duplication is the
   precise FM-vs-block mismatch [drift-spec](drift-spec.md) (`DL-048`) exists to
   clean up. Embedding *manufactures* the drift the ledger then tracks.
 - **Prose-in-data + merge collisions.** `notes`, `summary`, `description: ""`
   are *narrative* holes inside the data; two deltas editing different
-  requirements of one spec collide in one block. (The fix is the per-row split,
-  not exiling every list: testable-criteria arrays — `acceptance_criteria`,
-  `success_criteria` — are short structured strings and **stay** in TOML, where
-  they remain queryable; only narrative lifts to prose. See § The decomposition.)
+  requirements of one spec collide in one block. (The fix the slice took is
+  stronger than the per-row split: a requirement is its **own entity directory** —
+  see § Requirement identity — so two deltas touch two different trees, never one
+  shared block. Testable lists — `acceptance_criteria` — stay structured TOML on
+  that entity.)
 
-## The decomposition
+## The decomposition (as shipped)
 
-A spec is a **directory** (it already is — `sources.variants.path` points at
-`contracts/*.md`). Normalize the three hats apart, reusing the slice
-directory-entity shape and the shared reservation primitive (per-subtype
-namespace `spec/{product,tech,revision}/id/<n>` — see § Spec identity):
-
-The live schema bundle (Section 4, the artefact→blocks map) shows a tech spec
-carries **seven** blocks, not the four `SPEC-110` happened to use:
-`spec.requirements`, `spec.capabilities`, `spec.relationships`,
-`verification.coverage`, plus `spec.concerns`, `spec.hypotheses`,
-`spec.decisions`. Each table-shaped block becomes a `<name>.toml` + a
-`<name>.md` prose sibling; the prose-heavy ones (`decisions`, `concerns`) are the
-*strongest* case for the split, not the weakest.
+A spec is a **directory**, reusing the slice directory-entity shape and the shared
+reservation primitive (per-subtype namespace `spec/{product,tech}/id/<n>` — see
+§ Spec identity). The v1 fileset is **light** — identity + prose + the membership
+edge file, plus (tech only) the spec→spec interactions file:
 
 ```
-.doctrine/spec/tech/110/      # subtype folder (product/ | tech/ | revision/)
-  spec-110.toml        # identity + flat fields
-  spec-110.md          # sections 1–7, pure prose
-  requirements.{toml,md}   # [[req]] facets   | ### FR-001 → description, acceptance criteria
-  capabilities.{toml,md}   # [[capability]]   | ### → summary, success criteria
-  coverage.{toml,md}       # [[entry]] join   | ### → notes
-  concerns.{toml,md}       # [[concern]]      | ### → narrative
-  hypotheses.{toml,md}     # [[hypothesis]]   | ### → narrative
-  decisions.{toml,md}      # [[decision]]     | ### → rationale, consequences
-  interactions.toml        # [[edge]] spec→spec FK rows
-  collaborators.toml       # [[collaborator]] cross-spec requirement FK rows
+.doctrine/spec/tech/110/      # subtype folder (product/ | tech/)
+  spec-110.toml        # identity + flat fields (title-keyed; see Metadata)
+  spec-110.md          # prose body, pure narrative
+  members.toml         # [[member]] rows: requirement FK + label + order
+  interactions.toml    # [[edge]] spec→spec FK rows (TECH ONLY; absent on product)
+
+.doctrine/requirement/7/      # the requirement PEER entity — its own tree
+  requirement-7.toml   # id REQ-007, kind, status, description, acceptance_criteria
+  requirement-7.md     # the requirement's prose statement
 ```
 
-### Mapping
+A requirement is **not** a facet row of the spec; it is a peer entity with its
+own reserved numeric id (`REQ-007`) and directory. The spec *members* it — a
+spec-side `members.toml` row holds the durable FK plus a sticky display label.
 
-| spec-driver block | doctrine artefact(s) | prose lifted to `.md` |
+The seven-block facet richness of the deferred draft (`capabilities`,
+`coverage`, `concerns`, `hypotheses`, `decisions`) is **not shipped in v1** —
+deferred until a consumer forces each. v1 structures only what `spec show` /
+`spec validate` need: the requirement entity, its membership edge, and the
+tech-only spec→spec interaction edge. Prose-heavy material lives in the entity
+`.md` bodies.
+
+### Mapping (spec-driver block → as-built artefact)
+
+| spec-driver block | doctrine artefact (v1) | status |
 |---|---|---|
-| `spec.requirements@v1` | `requirements.toml` `[[req]]` (incl. `acceptance_criteria[]`) | `description` |
-| `spec.capabilities@v1` | `capabilities.toml` `[[capability]]` (incl. `success_criteria[]`) | `summary`, `responsibilities` |
-| `verification.coverage@v1` | `coverage.toml` `[[entry]]` | `notes` |
-| `spec.concerns@v1` | `concerns.toml` `[[concern]]` | narrative |
-| `spec.hypotheses@v1` | `hypotheses.toml` `[[hypothesis]]` | narrative |
-| `spec.decisions@v1` | `decisions.toml` `[[decision]]` | `rationale`, `consequences` |
-| `spec.relationships@v1` · `interactions` | `interactions.toml` `[[edge]]` (`type` + target spec + `notes`) | — |
-| `spec.relationships@v1` · `requirements.collaborators` | `collaborators.toml` `[[collaborator]]` (fully-qualified cross-spec req FK) | — |
-| `spec.relationships@v1` · `requirements.primary` | **derived, not stored** | — |
+| `spec.requirements@v1` (a row table) | the **`requirement` peer entity** (`requirement/NNN/`), membered via `members.toml` `[[member]]` | shipped |
+| `spec.relationships@v1` · `interactions` | `interactions.toml` `[[edge]]` (`type` + target spec + notes) — **tech only** | shipped |
+| `spec.relationships@v1` · `requirements.primary` | the spec's `members.toml` rows (membership *is* the primary set) | shipped |
+| `spec.relationships@v1` · `requirements.collaborators` | **dissolved** — cross-spec requirement reuse (`spec req link`) is deferred (no v1 verb); no `collaborators.toml` | deferred |
+| `spec.capabilities@v1` | — | deferred |
+| `verification.coverage@v1` | — | deferred |
+| `spec.concerns / hypotheses / decisions` | entity `.md` prose | deferred-as-prose |
 
-`relationships` is **three-way**, not two (this is the gap the first review
-caught: `SPEC-110` has `collaborators: []`, hiding it). Per the
-`spec.relationships@v1` schema: `primary[]` is *"requirement IDs owned by this
-spec"* — exactly the rows in `requirements.toml`, so **derived**.
-`collaborators[]` is *"collaborator requirement IDs from other specs"*
-(e.g. `SPEC-200.FR-010`) — a fully-qualified, cross-spec, requirement-level FK
-that is **neither** derivable (not local) **nor** a spec→spec `interaction` (those
-are typed edges between specs, not requirement refs). It needs its own
-registry-validated table; dropping it makes the decomposition lossy.
+The old draft's three-way `relationships` (primary / collaborators / interactions)
+collapses: **membership** subsumes `primary`; `collaborators` (cross-spec
+requirement FK) is dissolved — sharing one requirement under a second spec is the
+deferred `spec req link` verb (an additive mirror of `spec req add`'s membership
+step), so v1 carries no `collaborators.toml`. Only the spec→spec `interactions`
+edge survives as a structured cross-entity table.
 
-## Three rules
+## Identity rules (as shipped)
 
-1. **Derive, don't store.** `relationships.primary[]` is *exactly the ids in
-   `requirements.toml`* — compute it, never write it twice. This deletes the
-   denormalization that drifts. Only `interactions[]` (genuine cross-spec edges)
-   is irreducible.
-2. **Tables, not trees.** Once prose is lifted into the `.md` siblings, every
-   remaining structure is flat: arrays-of-tables in TOML, nothing deep. The
-   "complex nesting" was prose + duplication; both are gone. No richer format
-   needed.
-3. **Foreign keys are the registry's job.** `coverage.requirement =
-   "SPEC-110.FR-005"`, `interactions.target = "SPEC-123"` are validated *on load*
-   by the `relation-index.md` registry — which can then flag `SPEC-TBD` as
-   dangling. Small per-table sister files are exactly what make that registry
-   cheap.
-4. **One reference rule: bare local, qualified everywhere else.** A bare
-   `FR-001`/`NF-002` appears in exactly one place — the `id` of its own row in
-   `requirements.toml`. *Every* cross-table FK is **fully qualified**
-   (`SPEC-110.FR-001`): coverage rows, collaborators, interaction targets,
-   external refs. This matches the inherited schema (`verification.coverage`'s
-   `requirement` is FQ-patterned; `relationships.primary[]`/`collaborators[]` are
-   FQ) and removes the local/qualified ambiguity the first review flagged. The
-   CLI may render a local shorthand in an owning-spec context; storage is always
-   qualified. (Derived `primary[]` is the row ids **qualified** — derive still
-   holds, it just prefixes the owning spec id.)
+1. **A requirement is identified by its durable peer id, not a compound key.**
+   The id `REQ-007` is reserved (engine `Fresh`, `mkdir` claim) and **immutable**.
+   Every FK to a requirement — a spec's membership row, a future coverage/feature
+   edge — stores that durable `REQ-NNN`. There is **no** `SPEC-110.FR-001`
+   compound key: the requirement is not owned by, nor namespaced under, any spec.
+2. **`FR-`/`NF-` are membership *labels*, not identities.** A spec's
+   `members.toml` row carries `requirement = "REQ-007"` (durable FK) plus
+   `label = "FR-001"` — a sticky, per-spec, human-facing display label
+   (`FR-` functional, `NF-` quality). The label is **mobile**: it lives on the
+   membership edge, so the same requirement membered by two specs can carry a
+   different label in each, and a spec can renumber its labels without touching
+   requirement identity. `order` is an advisory stable-sort key (gaps/dups
+   cosmetic, not validated).
+3. **Foreign keys are the registry's job.** `members[].requirement = "REQ-007"`
+   and `interactions[].target = "SPEC-123"` are validated by `spec validate`
+   (the `relation-index.md` registry seed) — dangling FKs, dangling tech-only
+   interaction targets, duplicate labels within a spec, and orphan requirements
+   (membered by no spec) are all hard findings. FK *strings* are open; the
+   registry decides whether they resolve.
 
 ## Requirement identity (central design decision)
 
-A requirement is **referenced everywhere** (capabilities, coverage, other specs'
-interactions, deltas, drift ledgers) — so it must have a stable, addressable id.
-But it does **not** warrant its own directory or a global reservation.
+A requirement is **referenced from many places** (a spec's membership, future
+coverage/feature edges, deltas, drift ledgers) — so it needs a stable, addressable
+id. The deferred draft proposed a *compound-key facet row* `(spec_id, local_id)`;
+the slice **overturned that**:
 
-**Decision: requirements are table rows with a compound key, not standalone
-artefacts.** Identity is `(spec_id, local_id)` — `FR-001` within `spec-110/`,
-fully qualified as `SPEC-110.FR-001` when referenced from outside. The local id
-is hand-assigned and unique within the spec's `requirements.toml`; no
-cross-spec reservation needed because the spec id already namespaces it.
+**Decision (as shipped): a requirement is a reserved numeric peer entity
+`REQ-NNN`** — its own directory under `requirement/NNN/`, reserved through the
+same `entity.rs` `Fresh` materialiser + `mkdir` claim that specs and slices use.
+It is **spec-mediated** (no standalone CLI surface): `spec req add` reserves the
+requirement *and* appends the membership row in one (two-tree) operation.
 
-- *Why not per-file* (`requirements/FR-001.toml`): hundreds of micro-files, and
-  the compound key already gives the integrity that per-file existence would.
-- *Why not global reservation*: the spec id namespaces requirement ids, so two
-  specs both having `FR-001` never collide. Reservation is for the spec dir only.
+- *Why a peer entity, not a compound-key row:* reservation turns the merge-
+  collision risk of hand-assigned `FR-` ids into an impossibility, and a durable
+  identity that no spec owns is what lets membership (and its label) move without
+  the address dangling. The integrity the compound key was meant to give now comes
+  from the FK + `spec validate`, not from the key shape.
+- *Why not per-file under the spec* (`requirements/FR-001.toml`): that re-imposes
+  single-owner identity — the very thing the reframe removed.
 
-The registry validates that every `(spec, req)` FK resolves to a row that exists.
+The requirement parse struct (kebab-serde, title-keyed for the shared `Meta`):
+`Requirement { id, title, slug, status, kind, description, tags,
+acceptance_criteria }` with closed `ReqKind { Functional, Quality }` and
+`ReqStatus { Pending, Active, Deprecated, Superseded }`.
 
-## Spec identity (one family, three subtypes, separate folders)
+## Spec identity (one family, two subtypes, separate folders)
 
-`PRD`/`SPEC`/`REV` are **one entity family with three subtypes**, not one fused
-number space and not three unrelated kinds. The schema bundle numbers and locates
-them independently — `product/PROD-xxx/`, `specs/tech/SPEC-xxx/`,
-`revisions/RE-xxx.md` — so `PROD-011` and `SPEC-110` coexist with no relation. A
-single `.doctrine/spec/<n>/` tree under one `spec/id/<n>` sequence cannot
-reproduce that: it fuses the sequences (losing per-subtype numbering) or collides
-`PROD-001` and `SPEC-001` on the same `001/` directory.
+`PRD`/`SPEC` are **one entity family with two shipped subtypes**, not one fused
+number space and not unrelated kinds. They number and locate independently —
+`spec/product/<n>/`, `spec/tech/<n>/` — so `PRD-011` and `SPEC-110` coexist with
+no relation.
 
-**Decision: each subtype gets its own folder.** Sibling trees under the spec
-family root — `.doctrine/spec/{product,tech,revision}/<n>/` — mirroring
-spec-driver's layout. Each has its own monotonic numbering and its own reservation
-namespace (`spec/product/id/<n>`, `spec/tech/id/<n>`, `spec/revision/id/<n>`). The
-canonical key is `(subtype, n)`, rendered `PRD-110` / `SPEC-110` / `REV-001`;
-numeric ids are unique only **within** a subtype. The worked decomposition above
-is the `tech` subtype (`.doctrine/spec/tech/110/`).
+**Decision: each subtype gets its own folder + reservation namespace** —
+`.doctrine/spec/{product,tech}/<n>/`, each its own monotonic numbering
+(`spec/product/id/<n>`, `spec/tech/id/<n>`). The canonical key is `(subtype, n)`,
+rendered `PRD-110` / `SPEC-110`; numeric ids are unique only **within** a subtype.
+(`REV-` revision is deferred — not a v1 subtype.)
 
 **Decision: the facet set is per-subtype, not shared.** They share the entity
-*model* (the storage rule — identity TOML + prose body + flat facet tables — and
-the scaffold engine), **not** an identical fileset. The bundle confirms the
-shape diverges: `product` carries *no* fenced blocks (frontmatter + prose only),
-`revision` is a single `revision.change`-style file, only `tech` carries the seven
-table blocks above. The engine's fileset-as-function (slice-003) supplies each
-subtype's own combination as a descriptor; the exact PRD/REV facet sets are pinned
-when those subtypes are designed (§ Open questions). This sits under the broader
-consolidation direction in [entity-model](entity-model.md).
+*model* (the storage rule — identity TOML + prose body + facet edge files — and
+the scaffold engine), **not** an identical fileset. Product carries `members.toml`
+only (3-file scaffold); tech adds `interactions.toml` (4-file scaffold). The
+engine's fileset-as-function (slice-003) supplies each subtype's own combination
+as a descriptor.
 
-## Metadata & table schemas
+## Metadata & table schemas (as shipped)
 
-`spec-110.toml`:
+`spec-110.toml` — note the identity key is **`title`** (not `name`), so the shared
+`meta.rs` `Meta` parses it (the `spec list` path):
 ```toml
 id = 110
 slug = "supekku-cli"
-name = "supekku/cli Specification"
+title = "supekku/cli Specification"
 status = "draft"            # draft | active | deprecated | superseded
-kind = "spec"               # prd | spec | rev
-category = "unit"
-c4_level = "code"
-created = "2025-11-02"
-updated = "2025-11-03"
+kind = "tech"               # product | tech
+category = "unit"           # OPEN — Option<String>, deliberately not an enum
+c4_level = "code"           # context | container | component | code (tech)
 responsibilities = [
   "Provide a unified command-line interface",
   "Orchestrate thin command layers that delegate to registries",
 ]
 
-[[source]]
+[[source]]                  # tech-only code anchor (Source); seeded empty
 language = "rust"
 identifier = "doctrine/cli"
-module = "doctrine::cli"
+module = "doctrine::cli"    # optional
 ```
 
-`requirements.toml`:
+`members.toml` (the spec → requirement membership edge; the `spec req add`
+append target — seeded empty at scaffold, appended edit-preservingly):
 ```toml
-[[req]]
-id = "FR-001"
+[[member]]
+requirement = "REQ-007"     # durable FK → requirement peer entity (registry-validated)
+label = "FR-001"            # sticky per-spec display label (FR- functional | NF- quality)
+order = 1                   # advisory stable-sort key (gaps/dups cosmetic)
+```
+
+`interactions.toml` (spec→spec edges; **tech only**; array key is `[[edge]]`):
+```toml
+[[edge]]
+target = "SPEC-123"          # cross-spec FK → registry-validated (must be a tech spec)
+type = "uses"                # free-text type (not an enum)
+notes = "Uses SpecRegistry to load and filter specifications"
+```
+
+The requirement entity's own `requirement-7.toml`:
+```toml
+id = 7
+slug = "unified-entry-point"
 title = "CLI MUST provide a single unified entry point routing to all subcommands"
-kind = "functional"          # functional | non-functional  (schema enum)
-category = "cli"
-lifecycle = "pending"        # enum from spec.requirements@v1 (e.g. pending, active, …)
-acceptance_criteria = [      # testable list — structured, not prose
+kind = "functional"          # functional | quality  (ReqKind, kebab serde)
+status = "pending"           # pending | active | deprecated | superseded
+description = "..."          # the structured statement (rendered by `spec show`)
+acceptance_criteria = [      # testable list — structured, queryable, not prose
   "Routes to every registered subcommand",
   "Unknown subcommand returns a diagnostic and a non-zero exit",
 ]
 ```
 
-(`lifecycle` and `kind` take their vocab from the `spec.requirements@v1` schema —
-not reinvented here; `id`/`title`/`lifecycle`/`kind`/`description`/
-`acceptance_criteria` are its required fields. `description` is the only one
-lifted to prose; `acceptance_criteria` stays a structured array — it is a
-testable list, queryable, and the per-row split already isolates merges, so it
-need not become prose to dodge collisions.)
-
-`coverage.toml` (the join table):
-```toml
-[[entry]]
-requirement = "SPEC-110.FR-002"   # FK → fully-qualified (registry-validated)
-artefact = "VT-CLI-LIST-001"
-kind = "VT"
-status = "verified"          # verified | partial | uncovered
-```
-
-`interactions.toml` (spec→spec edges; schema field `spec` → `target` here):
-```toml
-[[edge]]
-target = "SPEC-123"          # cross-spec FK → registry-validated
-type = "uses"                # schema: type + spec (+ notes/description), free-text type
-notes = "Uses SpecRegistry to load and filter specifications"
-```
-
-`collaborators.toml` (cross-spec requirement FKs — the third arm of
-`relationships`, requirement-level not spec-level):
-```toml
-[[collaborator]]
-requirement = "SPEC-200.FR-010"   # fully-qualified external req FK → registry-validated
-```
-
-## Serde types
+## Serde types (as shipped)
 
 FK fields are plain strings; their integrity is the registry's, not the type's.
 
 ```rust
-#[derive(Debug, Deserialize, Serialize)]
 struct Spec {
     id: u32,
     slug: String,
-    name: String,
+    title: String,
     status: SpecStatus,
-    kind: SpecKind,
+    kind: SpecSubtype,            // Product | Tech
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    category: Option<String>,    // OPEN by design (C6)
+    #[serde(default)]
+    c4_level: Option<C4Level>,   // Context | Container | Component | Code
     #[serde(default)]
     responsibilities: Vec<String>,
     #[serde(default, rename = "source")]
-    sources: Vec<Source>,
+    sources: Vec<Source>,        // tech-only code anchors
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct Requirement {
-    id: String,                 // local: "FR-001" — the one place a bare id is stored
-    title: String,
-    kind: ReqKind,
+struct Member {                  // members.toml [[member]]
+    requirement: String,         // durable FK "REQ-NNN" — registry-validated
+    label: String,               // "FR-001" / "NF-001" — sticky per-spec label
     #[serde(default)]
-    category: Option<String>,
-    lifecycle: ReqLifecycle,
-    #[serde(default)]
-    acceptance_criteria: Vec<String>,   // testable list — stays structured
+    order: i64,                  // advisory sort key
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct CoverageEntry {
-    requirement: String,        // FK (local) — registry-validated
-    artefact: String,           // FK (external test id)
-    kind: String,
-    status: CoverageStatus,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Interaction {
-    target: String,             // FK (cross-spec) — registry-validated
+struct Interaction {             // interactions.toml [[edge]]
+    target: String,              // cross-spec FK — registry-validated (tech)
     #[serde(rename = "type")]
-    kind: String,               // free-text per schema (calls/extends/…); not an enum
+    kind: String,                // free-text per schema; not an enum
     #[serde(default)]
-    notes: Option<String>,      // schema: notes + description both optional
+    notes: Option<String>,
     #[serde(default)]
     description: Option<String>,
 }
+
+struct Source {                  // tech-only code anchor
+    language: String,
+    identifier: String,
+    #[serde(default)]
+    module: Option<String>,
+}
 ```
 
-`SpecStatus`, `ReqLifecycle`, `ReqKind`, `CoverageStatus` are closed enums
-(`#[serde(rename_all = "kebab-case")]`) — fixed vocabulary, parse errors on
-typos. Interaction `type` is **not** among them: the `spec.relationships` schema
-makes it a free-text string (only `type` + `spec`/`target` are required, `notes`
-and `description` optional), so it is a `String`. The FK *strings* are open (any
-id is syntactically valid); the *registry* decides whether they resolve.
+`Requirement` (the peer entity) is defined in § Requirement identity. `SpecStatus`,
+`SpecSubtype`, `C4Level`, `ReqKind`, `ReqStatus` are closed enums
+(`#[serde(rename_all = "kebab-case")]`) — fixed vocabulary, parse errors on typos.
+`category` and Interaction `type` are deliberately **open** strings. These structs
+are the **parse layer**; the registry (`spec validate`) resolves the FK strings.
 
-These structs are the **parse layer**. When the engine lands, the validated
-*internal* model newtypes the FK strings (`SpecId`, `RequirementKey`) and parses
-the open `type` — but that two-layer split is a build-time concern, not pinned
-in this deferred note.
+## Reading a spec — `spec show` (the load-bearing reassembly)
+
+A spec is only readable as a whole document through `spec show <spec-ref>` — a
+**pure, local, ephemeral** reassembly (D8/D9): STDOUT only, no mutation, no
+write, no cross-corpus scan. It composes: spec identity + flat fields → the spec's
+own `spec-NNN.md` prose body **verbatim** → a **Requirements** section (each
+`members.toml` row in `order`: heading `### FR-001 (REQ-007) — <title>`, then
+kind, the requirement's structured `description` as its statement line, and
+acceptance criteria — each member's requirement read by canonical FK
+`REQ-NNN` → `requirement/NNN/`) → outbound **interactions** (tech only). Inbound
+refs are **not** shown (a registry query — deferred). Because the render is a pure
+function of present local state, it **cannot go stale**; a materialised
+`*.rendered.md` is derived-tier and deferred (§ Lifecycle / D9).
+
+## Validation — `spec validate` (the FK-integrity pass)
+
+`spec validate [<spec-ref>]` is the cache-independent registry seed
+(`src/registry.rs`). It scans the requirement + spec trees into id sets + an edge
+list and checks — all **hard**, non-zero exit on any:
+
+- every `members[].requirement` resolves to a requirement [dangling FK];
+- every `interactions[].target` resolves to a **tech** spec [dangling, tech-only];
+- `label` is unique within a spec's members [duplicate label];
+- every requirement is membered by ≥1 spec [orphan = torn `spec req add`].
+
+**Scoped vs corpus:** `spec validate <spec-ref>` checks only that spec's outbound
+FKs + label uniqueness; the orphan check is corpus-level (a requirement's
+membership is unknowable from one spec) and runs whole-corpus only. No id-collision
+check (the `mkdir` reservation + git add handle it) and no cycle detection
+(arrives with the feature DAG — deferred).
 
 ## Lifecycle
 
 - **Spec status** `draft → active → deprecated → superseded` — recorded, by hand,
   ungated in v1 (as slices/drift).
-- **Requirement lifecycle** — the enum is the `spec.requirements@v1` schema's
-  (e.g. `pending`, `active`, …; *not* reinvented here). It is advanced by the
-  *change process*, not edited in place: a delta/slice that implements `FR-001`
-  flips it on completion (spec-driver's "complete delta updates requirement
-  statuses"). The requirement's source of truth is `requirements.toml`; the
-  change record is what *moves* it. Gating waits on the change lifecycle.
+- **Requirement status** `pending → active → deprecated → superseded` — advanced by
+  the *change process*, not edited in place (a delta/slice implementing a
+  requirement flips it on completion). The requirement's source of truth is its own
+  `requirement-NNN.toml`.
+- **Supersede / relocation.** Because requirement **identity is immutable and
+  membership is mobile** (a label lives on the edge, not the id), relocating a
+  requirement between specs is a membership move — re-point the `members.toml` row,
+  the durable `REQ-NNN` address never dangles. A genuine replacement is *deprecate
+  the old requirement + introduce a new one*, linked by a future `supersedes` edge;
+  the durable id stays resolvable forever. (This **inverts** the deferred draft's
+  Option A, which froze a compound key by forbidding moves — the peer-entity model
+  makes moves safe instead of forbidding them.)
 
 ## Relationship to the other notes
 
-- **[relation-index](relation-index.md)** — the registry this entity *needs*. The
-  per-table sister files are the small-files precondition that note protects;
-  SPEC-110 is the stress case that justifies "no eager parse, keep relations
-  small." FK validation lives there.
-- **[drift-spec](drift-spec.md)** — what embedding *causes*. Decomposing + deriving
-  removes the duplication that produces FM-vs-block drift; the drift ledger then
-  handles only genuine spec-vs-shipped mismatches, not self-inflicted ones.
+- **[relation-index](relation-index.md)** — the registry this entity needs;
+  `spec validate` is its shipped seed (FK validation; cache + cycle detection
+  deferred). The small per-entity sister files are the small-files precondition it
+  protects.
+- **[drift-spec](drift-spec.md)** — what embedding *causes*. Decomposing into peer
+  entities + edges removes the duplication that produces FM-vs-block drift.
 - **[slices-spec](slices-spec.md) / reservation** — the directory-entity shape and
-  the `mkdir` reservation are reused, not reinvented; spec is another caller.
+  the `mkdir` reservation are reused, not reinvented; spec + requirement are the
+  engine's later callers.
+- **[entity-model](entity-model.md)** — the umbrella taxonomy this sits under
+  (fewer entity kinds, typed facet/edge files).
 
 ## Design-data vs runtime-state (a boundary the schema bundle exposes)
 
-Not every `supekku:*` block is authored design data. Two kinds the bundle
-carries are **mutable runtime state** and do **not** belong to this entity model:
+Not every `supekku:*` block is authored design data. Two kinds are **mutable
+runtime state** and do **not** belong to this entity model:
 
-- **`workflow.*`** (`state`, `sessions`, `handoff`, `review-findings`,
-  `review-index`) — agent-orchestration state, written continuously by tooling.
-  This is coordination, adjacent to the deferred transient-lease layer
-  (reservation-spec § Deferred), **not** a design artefact. Out of scope here.
-- **`phase.tracking`** (`tasks_completed/total/blocked`, `started`/`completed`, a
-  timestamped progress log) — the one *change-side* artefact that carries live
-  state. It is high-write and merge-churny, unlike prose+facets. Flagged: when
-  the phase entity is designed (the roadmap's IP+phases slice), its tracking
-  state may want a different home/treatment than the static row+prose split — do
-  not assume it fits this mould.
+- **`workflow.*`** (`state`, `sessions`, `handoff`, `review-*`) — agent-
+  orchestration state, written continuously by tooling. Coordination, adjacent to
+  the deferred transient-lease layer (reservation-spec § Deferred). Out of scope.
+- **`phase.tracking`** — the one change-side artefact carrying live state;
+  high-write and merge-churny. In doctrine it lives under `.doctrine/state/`
+  (gitignored runtime tier), never in this authored model.
 
-The line: **this model is for data authored once and referenced; state mutated
-on every agent tick is a different problem.**
+The line: **this model is for data authored once and referenced; state mutated on
+every agent tick is a different problem, in a different tier.**
 
-## Out of scope
+## Out of scope / deferred
 
-- **The registry / index, FK validation engine** — [relation-index](relation-index.md).
-  The *FK-validation pass* is an early, cache-independent deliverable triggered by
-  the first cross-spec FK (relation-index § Two purposes); the *cache* is the part
-  deferred to scale.
-- **Code↔spec sync adapters** (spec-driver's `sync`) — needs a code parser; later.
-- **Coverage computation** (deriving uncovered requirements) — a registry query;
-  the artefact only *stores* coverage rows, it doesn't compute gaps.
-- **PRD/REV-specific fields** beyond the shared shape — folded in when those kinds
-  are designed.
+- **The registry cache + cycle detection** — `spec validate` ships the FK-integrity
+  seed; the cache and cycle detection arrive with the feature DAG.
+- **`spec req link`** — reuse an existing requirement under a second spec (the old
+  `collaborators` arm). An additive mirror of `spec req add`'s membership step.
+- **Capabilities, coverage, concerns/hypotheses/decisions facets** — deferred until
+  a consumer forces each; not v1.
+- **Revision (`REV-`) subtype**, **PRD-specific fields** beyond the shared shape —
+  folded in when those are designed.
+- **Materialised `*.rendered.md`** (derived-tier), **code↔spec sync adapters**,
+  **coverage computation** — all deferred.
 
 ## Known risks
 
-- **Integrity value must co-land — it is not a later slice.** The headline win (FK
-  validation catching `SPEC-TBD`-class dangling refs) arrives with the registry's
-  FK-validation pass, which is **not** scale-gated — its trigger is *the first
-  cross-spec FK authored* (relation-index § Two purposes). But this entity
-  *introduces* the cross-spec tables (`collaborators`, `interactions`), so the
-  trigger fires on its first real use. The pass therefore ships **in the same
-  slice as the spec entity**, not after it: the minimum spec-landing bundle is
-  `doctrine spec new` · `spec req add` · `spec show` · **`spec validate`**. Shipping
-  the tables without `validate` would pay the decomposition's file-count and
-  read-locality cost up front while keeping the dangling-FK defect it was designed
-  to remove — explicitly disallowed. The pass is cheap and cache-independent
-  (relation-index § Two purposes), so co-landing is not a scope problem. Until the
-  spec entity lands, there are no cross-spec refs to validate; the question is
-  sequencing *within* its slice, and it is answered: together.
-- **Row↔prose orphans (self-drift).** Each table entity is a `[[…]]` row *and* a
-  `### id` prose heading — joined by id, not duplicated (the row carries facts,
-  the prose carries narrative), but the *pairing* can desync under hand edits.
-  Inherits drift-spec's mitigation verbatim: an atomic `doctrine spec <table> add`
-  that writes both, and a `list`-time orphan lint per table. The hairiest entity
-  must not get the weakest drift guard. The atomic add must be **edit-preserving**
-  (`toml_edit` / structured append), not a full serde reserialize — a reserialize
-  drops hand comments and the unknown keys slices-spec promises to preserve. (The
-  read-only `Meta` parse stays plain serde; only the mutating verbs need the
-  edit-preserving document model — same caveat applies to `doctrine drift add`.)
-- **More files per spec.** A full tech spec is now ~13 files (identity + prose +
-  seven block pairs + interactions/collaborators), not 1. Two costs: (a) the
-  relation-index budget must count *files*, ~13× specs (handled there); (b)
-  **read-locality** — understanding one requirement now spans its row, its prose,
-  its coverage rows, and any capability FK'ing it. Accepted as a real cost (not
-  zero), bought for clean diffs/merges and parse-without-a-block-parser, and
-  recovered at read time by a `doctrine spec req show <key>` that gathers the row,
-  its prose section, its coverage rows, and inbound/outbound refs into one view
-  (§ Follow-ups). The split is the storage shape, not the reading shape.
-- **Requirement local-id collision across merges.** Ids are hand-assigned and
-  semantic (`FR-`/`NF-`), so `max+1` does not apply and a `mkdir` claim cannot
-  arbitrate a *row*. Two branches both adding `FR-009` merge cleanly into a silent
-  duplicate. Lever is detection, not prevention: duplicate-`id` is a **hard** lint
-  at **load over the merged file** (same shape as drift-spec § Known risks).
-  Treat ids as immutable (never reuse a retired number).
-- **Requirements moving between specs.** A spec split/merge could change a
-  requirement's owning spec, making the compound key `SPEC-110.FR-001` an
-  unstable global address — external links and audit trails would dangle on the
-  move. **Decided (Option A): requirements never move.** A relocation is *retire
-  the old id + introduce a new one*, linked by a `supersedes` edge; the old key
-  stays resolvable forever (to the retired row), so `SPEC-110.FR-001` is a
-  permanent address by construction. This is decided now — before external refs
-  accumulate — because the alternative (a hidden internal UID + display key)
-  introduces invisible ids too early, and retrofitting stability after refs pile
-  up is the expensive path. Pairs with the immutability rule below (never reuse a
-  retired number).
+- **Torn two-tree write (orphan requirement).** `spec req add` reserves a
+  `REQ-NNN` then appends the `members.toml` row — two trees, not transactional. The
+  one failure window (reserve OK, append fails) leaves an **orphan** requirement:
+  the reserved dir is left uncommitted, operator-cleaned, and `spec validate` flags
+  it **hard** (orphan = membered by no spec). The engine still guarantees the
+  append step left no partial dir.
+- **Requirement label collision within a spec.** Labels (`FR-`/`NF-`) are
+  per-spec and auto-assigned `max+1` by kind (explicit `--label` honoured). Two
+  branches both adding `FR-009` to one spec merge into a silent duplicate; the
+  lever is detection — `spec validate`'s duplicate-label check is **hard**. Treat
+  labels as stable once external refs exist.
+- **Read-locality.** A requirement's facts span its own entity (row + prose) and
+  its membership row in each spec. Bought for clean diffs/merges and parse-without-
+  a-block-parser, recovered at read time by `spec show` (whole-spec reassembly).
+  The split is the storage shape, not the reading shape.
 
 ## Open questions
 
-1. **Capabilities — entity or grouping?** Capabilities are essentially named
-   bundles of requirements + prose. Whether they earn their own table or collapse
-   into a `group` tag on requirements is unresolved; kept as a table here because
-   they carry their own prose and success criteria.
-2. **Where the requirement lifecycle source of truth sits** once the change
-   process exists — `requirements.toml` vs derived from completed changes. Decided
-   with the change/delta lifecycle.
-3. **Spec-refactoring mechanics.** The *policy* is decided — requirements never
-   move (§ Known risks, Option A: retire + reintroduce under `supersedes`). What
-   stays open is the workflow that enacts a split/merge: how the `supersedes`
-   edge is recorded, and whether a redirect from a retired key to its successor
-   is surfaced in queries. Decided with the spec-refactoring workflow; the key
-   stability it depends on is now guaranteed.
-4. **PRD / REV facet sets.** *Decided:* the facet set differs per subtype and
-   each subtype owns its folder (§ Spec identity). *Open:* the exact combination
-   for `product` (no table blocks in the bundle — likely identity + prose + a
-   light requirements/capabilities set) and `revision` (a single change-record
-   facet), pinned when those subtypes are designed. The fileset-as-function
-   engine (slice-003) already admits the difference.
+1. **Capabilities — entity or grouping?** Deferred; unresolved whether they earn
+   their own entity/edge or collapse into a `group` tag on requirements.
+2. **Requirement lifecycle source of truth** once the change process exists —
+   `requirement-NNN.toml` vs derived from completed changes. Decided with the
+   change/delta lifecycle.
+3. **`spec req link` mechanics** (cross-spec requirement reuse) — the membership
+   model already admits it (a second `members.toml` row); the verb + any
+   relabelling policy are pinned when first needed.
+4. **PRD / REV facet sets** — product ships identity + members; the richer PRD set
+   and the REV change-record facet are pinned when those subtypes are designed.
 
 ## Follow-ups
 
-- **Glossary.** The spec family already lists `PRD/SPEC/REV`; add the requirement
-  (`FR-`/`NF-`) and coverage (`VT-`) referends as sub-entities when this leaves
-  deferred.
-- **Locality recovery CLI.** `doctrine spec show <SPEC-id>` and `doctrine spec req
-  show <SPEC-110.FR-001>` reassemble the decomposed pieces (identity, prose,
-  table rows, inbound/outbound refs) into one human view — the read-locality
-  mitigation (§ Known risks). `spec show` is part of the minimum landing bundle
-  (§ Known risks, integrity).
-- **Entity engine.** The scaffold/scan/claim machinery is generalised *before*
-  spec needs it — extracted against the slice + design-doc callers (the roadmap's
-  design-doc slice, which folds in the former slice-002), with a kind-supplied
-  *fileset* (a spec scaffolds ~13 files, a slice 2) and an optional reservation
-  (specs reserve a top-level id; sub-artefacts like requirements do not). Spec is
-  the engine's *third* caller, not its justification.
+- **Glossary.** Add the requirement durable id (`REQ-`) and the membership labels
+  (`FR-`/`NF-`) — done in this slice's canon sweep.
+- **Locality recovery CLI.** `spec show <spec-ref>` (shipped) reassembles identity,
+  prose, member requirements, and outbound interactions into one human view. A
+  per-requirement `spec req show` (inbound + outbound refs for one requirement) is
+  a deferred registry-query follow-up.
+- **Entity engine.** The scaffold/scan/claim machinery was generalised *before*
+  spec needed it (the SL-005 work); spec + requirement are later callers, each a
+  kind-supplied fileset (tech ~4 files, product 3, requirement 2) with an optional
+  reservation.

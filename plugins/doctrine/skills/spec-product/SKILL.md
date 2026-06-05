@@ -8,10 +8,13 @@ description: Use when authoring or revising the product specification — the wh
 You are authoring the product spec — the *what* and *why*, upstream of
 implementation.
 
-> **Not yet structural.** Doctrine does not manage specs as first-class entities
-> yet. Product specs are evergreen, authoritative prose under `doc/*`, authored
-> and committed by hand. There is no CLI scaffold; create the file under `doc/`
-> following the existing conventions there.
+> **Structural (SL-015).** Doctrine manages specs as first-class entities.
+> Scaffold with `doctrine spec new product "<title>"`; add requirements with
+> `doctrine spec req add <PRD-ref> "<title>" --kind functional|quality`; read the
+> reassembled whole with `doctrine spec show <PRD-ref>`; check FK integrity with
+> `doctrine spec validate`; list with `doctrine spec list`. Identity + flat fields
+> live in `spec-NNN.toml`, the narrative in `spec-NNN.md`, and requirements are
+> **peer entities** (`REQ-NNN`) membered via `members.toml`.
 
 Capture:
 

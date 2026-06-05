@@ -67,7 +67,7 @@ The [glossary](glossary.md) groups already prefigure this. Target consolidation 
 
 | Durable entity | Subsumes | Facets / notes |
 |---|---|---|
-| `spec` family | product / tech / revision | one model, **three subtypes, separate folders, per-subtype facet sets** (spec-entity-spec § Spec identity). Requirements/capabilities/coverage/… are rows, not artefacts. |
+| `spec` family | product / tech (revision later) | one model, **per-subtype folders + facet sets** (spec-entity-spec § Spec identity). A requirement is a **peer entity** (`REQ-NNN`), membered via `members.toml`; capabilities/coverage are deferred facets. |
 | `slice` | delta, most of design-revision, parts of plan | the change contract (slices-spec). Design/IP/phase land as siblings/facets (slice-003, IP+phases slice). |
 | `phase` / run | executable phase sheet only | keep only if resumable multi-agent execution needs it; else a slice facet. Carries mutable runtime state — different treatment (spec-entity-spec § Design-data vs runtime-state). |
 | `audit` | audit + findings + coverage result | findings are rows; evidence stays prose/files. |
@@ -78,21 +78,27 @@ The [glossary](glossary.md) groups already prefigure this. Target consolidation 
 ## Identity and references
 
 - **Canonical string id externally, numeric internally.** `id = "SPEC-110"`,
-  `number = 110`. Cross-entity references use the **fully qualified** form
-  (`SPEC-110.FR-001`); bare local ids only inside the owning entity
-  (spec-entity-spec § Three rules, rule 4).
-- **Edges.** A generic edge table carries payload-free links:
+  `number = 110`. Cross-entity references use the target's **durable peer id**
+  (`REQ-007`, `SPEC-110`) — every entity is addressable on its own, so there is no
+  compound/owner-qualified key. Display labels like a requirement's `FR-001` /
+  `NF-001` are **per-membership labels carried on the edge** (a spec's
+  `members.toml` row), not identities (spec-entity-spec § Identity rules).
+- **Edges.** A generic edge table carries payload-free links, targeting durable
+  peer ids:
   ```toml
   [[edge]]
   from = "SL-001"
   rel  = "implements"
-  to   = "SPEC-110.FR-001"
+  to   = "REQ-007"
   ```
   Validity is restricted by source/target family in Rust validation, not a global
-  enum. **Edges that carry payload stay typed tables** — `coverage.toml` (status,
-  artefact), `collaborators.toml`, `interactions.toml` (notes) — because a generic
-  edge would be lossy (the essay concedes this; the notes already model them so).
-  `relationships.primary` stays **derived**, never an edge (spec-entity-spec).
+  enum. **Edges that carry payload stay typed tables** — a spec's `members.toml`
+  (`[[member]]`: requirement FK + label + order) and tech `interactions.toml`
+  (`[[edge]]`: spec→spec, notes); future `coverage.toml` (status, artefact) — a
+  generic edge would be lossy. The spec→requirement membership *is* the primary
+  set, derived from `members.toml`, never stored twice (spec-entity-spec). The old
+  `collaborators.toml` (cross-spec requirement reuse) is **dissolved** — that is
+  the deferred `spec req link` verb, a second membership row.
 
 ## State vocabulary
 

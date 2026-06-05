@@ -9,6 +9,8 @@ The kinds below group into a small set of durable entities + typed facets — se
 | product requirements doc     | PRD-001  |   y    |
 | technical specification      | SPEC-001 |   y    |
 | revision                     | REV-001  |   y    |
+| requirement                  | REQ-001  |   y    |
+| requirement label (membership) | FR-001 / NF-001 |  |
 | **slices**                   | --       |        |
 | slice                        | SL-001   |   y    |
 | tech design                  | DES-001  |        |
