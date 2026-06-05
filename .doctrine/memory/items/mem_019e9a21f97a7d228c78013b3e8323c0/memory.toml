@@ -1,0 +1,41 @@
+memory_uid = "mem_019e9a21f97a7d228c78013b3e8323c0"
+memory_key = "mem.pattern.embed.rustembed-recompile-and-symlinks"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "RustEmbed re-embeds at compile time and follows symlinks"
+summary = "RustEmbed embeds at compile time and follows symlinks — rebuild before e2e; filter alias symlinks to canonical dirs"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["src/corpus.rs", "src/skills.rs", "memory/"]
+globs = []
+commands = ["cargo build"]
+tags = ["doctrine", "rustembed", "embed", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "4e3cb65ce82dbbd3d6c3f0d38646d7f11e130d58"
+tree = "f552b563c273f192de14fc487d0ca63b36605778"
+ref_name = "refs/heads/SL-018-work"
+checkout_state_id = ""
+base_commit = "4e3cb65ce82dbbd3d6c3f0d38646d7f11e130d58"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
