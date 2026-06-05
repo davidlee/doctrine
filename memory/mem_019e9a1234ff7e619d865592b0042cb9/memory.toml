@@ -1,0 +1,41 @@
+memory_uid = "mem_019e9a1234ff7e619d865592b0042cb9"
+memory_key = "mem.concept.doctrine.storage-model"
+schema_version = 1
+memory_type = "concept"
+status = "active"
+title = "Doctrine storage model and the storage rule"
+summary = ""
+created = "2026-06-05"
+updated = "2026-06-06"
+
+[scope]
+paths = [".doctrine/slice/", ".doctrine/adr/"]
+globs = [".doctrine/slice/**/*.toml", ".doctrine/slice/**/*.md"]
+commands = []
+tags = []
+workspace = "default"
+repo = ""
+repo_id_kind = "local_root"
+repo_id_confidence = "low"
+
+[git]
+anchor_kind = "none"
+commit = ""
+tree = ""
+ref_name = ""
+checkout_state_id = ""
+base_commit = ""
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = "2026-06-06"
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

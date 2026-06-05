@@ -127,7 +127,7 @@ impl Status {
 
 /// `^mem_[0-9a-f]{32}$` — the stored uid shape (lowercase simple-form UUID).
 /// Uppercase / hyphenated forms are rejected, not normalized (design § 5.6).
-fn is_uid(s: &str) -> bool {
+pub(crate) fn is_uid(s: &str) -> bool {
     s.strip_prefix("mem_").is_some_and(|hex| {
         hex.len() == 32 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
     })

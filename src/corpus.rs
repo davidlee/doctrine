@@ -307,6 +307,12 @@ where
         let (Some(uid), Some(file)) = (parts.next(), parts.next()) else {
             continue;
         };
+        // Admit only canonical uid dirs; skip `mem.<key>` alias symlinks (RustEmbed
+        // follows them, yielding each master a second time under its alias name).
+        // Mirrors `memory::scan_named`, which scans real dirs only (design § 5.5).
+        if !crate::memory::is_uid(uid) {
+            continue;
+        }
         let Ok(text) = String::from_utf8(data) else {
             continue;
         };
@@ -703,6 +709,30 @@ weight = 0
     fn gather_assets_drops_incomplete_pair() {
         let files = vec![(format!("{UID_A}/memory.toml"), b"lonely".to_vec())];
         assert!(gather_assets(files).is_empty());
+    }
+
+    #[test]
+    fn gather_assets_skips_key_symlink_aliases() {
+        // The authored corpus carries `mem.<key>` alias symlinks beside each uid
+        // dir; RustEmbed follows them, so the embed yields the master twice — once
+        // under the uid, once under the alias name. Only the canonical uid dir is a
+        // master (mirrors `memory::scan_named`, which skips key symlinks). An alias
+        // path must not contribute a duplicate asset.
+        let files = vec![
+            (format!("{UID_A}/memory.toml"), b"toml-a".to_vec()),
+            (format!("{UID_A}/memory.md"), b"md-a".to_vec()),
+            (
+                "mem.signpost.doctrine.overview/memory.toml".to_owned(),
+                b"toml-a".to_vec(),
+            ),
+            (
+                "mem.signpost.doctrine.overview/memory.md".to_owned(),
+                b"md-a".to_vec(),
+            ),
+        ];
+        let assets = gather_assets(files);
+        assert_eq!(assets.len(), 1, "the alias must not double the master");
+        assert_eq!(assets[0].uid, UID_A);
     }
 
     // --- T4: impure sync_corpus over a temp dir ---
