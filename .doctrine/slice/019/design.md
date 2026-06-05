@@ -161,10 +161,13 @@ non-obvious traps (both VERIFIED by the SL-019 inquisition):
   the fresh binary via `cargo metadata --format-version=1` (`target_directory`)
   or just invoke `cargo run -- spec …`.
 
-Entry ritual for PHASE-02 (the gate — never trust `Finished` as proof of embed):
+Entry ritual for PHASE-02 (the gate — never trust `Finished` as proof of embed).
+Note only the **template** is embedded by `spec new`; the skill is *not* embedded
+and its rework is exemplar-driven, so it lands in PHASE-03, not here.
 
-1. Commit the template edit **and** the reworked skill (CHARGE III — a dirty
-   working tree is not a "fixed target").
+1. Apply the §4 reword (§10) and commit the template edit (CHARGE III — a dirty
+   working-tree template is not a "fixed target"). The skill stays in-flight
+   until PHASE-03.
 2. Force a re-embedding rebuild: `touch src/install.rs && cargo build`.
 3. **Verify the embed:** scaffold a throwaway product spec; `spec show` MUST
    contain `## 1. Intent` and MUST NOT contain `## Problem`. Only then author
@@ -226,8 +229,8 @@ the only guard.
 
 ## 11. Plan-time gates (from the inquisition)
 
-- **PHASE-02 entry** = §7a ritual passed (committed template+skill; re-embedding
-  rebuild; `spec show` grep gate green).
+- **PHASE-02 entry** = §7a ritual passed (committed template with §4 reword;
+  re-embedding rebuild; `spec show` grep gate green). Skill rework is PHASE-03.
 - **PHASE-03 entry** = PHASE-02 exemplar locked/accepted (the skill rework is
   exemplar-driven — CHARGE VIII).
 - **PHASE-05** = grep the committed diff for any taxonomy/source-map artifact

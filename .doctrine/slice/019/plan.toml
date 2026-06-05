@@ -1,0 +1,122 @@
+# Implementation plan for SL-019 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-019"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Taxonomy"
+objective = "Derive and confirm the set of Doctrine product capabilities (the PRD map) and a per-capability source map, mining doc/*, the CLI surface, ADRs, src/, and memory. The taxonomy is scaffolding — it lives in the gitignored phase sheet / handover, never committed as authored canon."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and committed; exemplar = Slices recorded." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Capability set enumerated and agreed with the user; the drift-ledger / reservations boundary (capability vs internal mechanism) resolved." },
+  { id = "EX-2", text = "Per-capability source map drafted (which doc/* + CLI + ADRs + memories feed each PRD's what/why)." },
+  { id = "EX-3", text = "Taxonomy + source map recorded in the runtime phase sheet / handover only — not under doc/ or slice/019/." },
+]
+verification = [
+  { id = "VT-1", expects = "User accepts the capability list and boundary calls." },
+  { id = "VT-2", expects = "git status shows no committed taxonomy/source-map artifact under doc/ or .doctrine/slice/019/." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Exemplar"
+objective = "Author the PRD for Slices end-to-end against the new eight-section template — identity toml fields, the 8-section md body (FR/NF-free §4: constraints/invariants/commentary), and the functional/quality requirements as REQ-NNN peer entities via `spec req add`. Lock it as the reference bar every other spec and the reconciled skill point at."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 taxonomy accepted." },
+  { id = "EN-2", text = "Template §4 guidance line reworded (design §10) and the template committed; the binary re-embeds it — `touch src/install.rs && cargo build` (no build.rs, so plain build is a no-op for the asset)." },
+  { id = "EN-3", text = "Embed verified: a throwaway `spec show` contains `## 1. Intent` and NOT `## Problem`. Author binary resolved via `cargo metadata` target_directory or `cargo run` — never a hardcoded ./target path." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "PRD-Slices authored: identity toml (title/slug/status/tags/responsibilities), 8-section md body with an FR/NF-free §4, and FR/NF requirements added as REQ-NNN entities." },
+  { id = "EX-2", text = "`spec validate` clean for PRD-Slices; `spec show` reassembles it with FR/NF only under the synthesized `## Requirements`." },
+  { id = "EX-3", text = "User accepts PRD-Slices as the locked reference bar." },
+]
+verification = [
+  { id = "VT-1", expects = "`spec show PRD-NNN` renders the 8 sections + synthesized `## Requirements`; §4 carries NO `FR-`/`NF-` prose rows." },
+  { id = "VT-2", expects = "`spec validate` reports the spec clean (no orphan reqs, no dangling FKs, no duplicate labels)." },
+  { id = "VT-3", expects = "git diff shows the committed §4-reworded template before any spec is scaffolded." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Reconcile skill"
+objective = "Rework plugins/doctrine/skills/spec-product/SKILL.md (the canonical source; the web-authored draft was blind to the spec-entity code) to match the as-built model and be exemplar-driven: requirements authored as `spec req add` entities (not prose §4 rows), labels FR-/NF- (not NFR-), the internal prose-rows contradiction removed, commands grounded in the real CLI, and the PRD-Slices exemplar named as the canonical shape. Must precede fan-out so agents read corrected guidance."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 exemplar (PRD-Slices) locked/accepted — the rework is exemplar-driven." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Skill's §4 prescribes FR/NF as `spec req add` entities; the prose-FR/NFR example is removed; §4 prose is constraints/invariants only." },
+  { id = "EX-2", text = "`NFR-` replaced with `NF-`; CON-/INV- noted as prose-only (no requirement kind)." },
+  { id = "EX-3", text = "Internal contradiction resolved; §7 follows the coverage-table decision (no per-req table; durable REQ-NNN refs only); skill points at the exemplar; salvageable web-draft sections (boundary, review checklist, handoff) preserved where consistent." },
+  { id = "EX-4", text = "Skill committed; install copies (.doctrine/skills, .claude/skills) reconciled with the canonical source." },
+]
+verification = [
+  { id = "VT-1", expects = "`grep -n 'NFR-' SKILL.md` returns nothing; no `### Functional Requirements` prose-row block remains." },
+  { id = "VT-2", expects = "Skill's command examples match `doctrine spec --help` (new/req add/show/validate/list)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Backfill fan-out"
+objective = "Author the remaining product capabilities, one PRD per agent in parallel, each following the locked exemplar + reconciled skill + its source-map entry. Each spec is durable what/why, implementation-agnostic; FR/NF are REQ entities. Bound fan-out width (corpus ~6) to stay clear of reservation-claim retry exhaustion."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 skill reconciled and committed; exemplar locked." },
+  { id = "EN-2", text = "Source map (PHASE-01) available per remaining capability." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every capability in the confirmed taxonomy (beyond the exemplar) has an authored PRD: identity toml, 8-section md, FR/NF as REQ entities." },
+  { id = "EX-2", text = "Each authored spec follows the exemplar's shape (what/why, not how; FR/NF-free §4)." },
+]
+verification = [
+  { id = "VT-1", expects = "`spec list` shows one product spec per confirmed capability." },
+  { id = "VT-2", expects = "Each `spec show` renders cleanly with FR/NF under the synthesized `## Requirements`, §4 prose free of FR/NF rows." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Validate"
+objective = "Prove the corpus coherent and conformant: corpus-wide FK integrity, clean reassembly, full taxonomy coverage, and storage-rule compliance (no committed taxonomy artifact)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 backfill complete — all taxonomy capabilities authored." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine spec validate` clean corpus-wide: no dangling member FKs, no duplicate labels within a spec, no orphan requirements." },
+  { id = "EX-2", text = "`doctrine spec show <PRD>` reassembles every spec cleanly." },
+  { id = "EX-3", text = "Every confirmed-taxonomy capability has a PRD; coverage audited against the taxonomy." },
+  { id = "EX-4", text = "`just check` green; no taxonomy/source-map artifact committed under doc/ or slice/019/." },
+]
+verification = [
+  { id = "VT-1", expects = "`doctrine spec validate` exits clean across the corpus." },
+  { id = "VT-2", expects = "`spec list` count == confirmed capability count; each shows ≥1 member." },
+  { id = "VT-3", expects = "`git diff --stat` shows no committed taxonomy file; `just check` passes." },
+]
+specs        = []
+requirements = []
