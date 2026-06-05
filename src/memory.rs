@@ -707,6 +707,11 @@ pub(crate) fn memory_scaffold(d: &Draft<'_>) -> Result<Fileset> {
 /// tree root every record claims `<uid>/` under.
 pub(crate) const MEMORY_ITEMS_DIR: &str = ".doctrine/memory/items";
 
+/// The shipped (derived) corpus tree — the global/orientation class materialised
+/// from the binary, unioned with `items/` by `collect_all` (SL-018 ADR-002). It is
+/// gitignored and `rm -rf`-able; `items/` (committed capture) wins any uid collision.
+pub(crate) const MEMORY_SHIPPED_DIR: &str = ".doctrine/memory/shipped";
+
 /// The shell-side inputs to `record` — the user-facing flags, bundled (mirrors
 /// `Draft`, the pure-render bundle) so `run_record` stays a two-argument seam and
 /// no `too_many_arguments` suppression is needed. `path` (root override) stays a
@@ -1052,13 +1057,22 @@ pub(crate) fn run_show(path: Option<PathBuf>, reference: &str) -> Result<()> {
 }
 
 /// Read a memory's `.md` body by uid, for the `retrieve` render loop (SL-008).
-/// Reuses `safe_join` (the H1 chokepoint, defence in depth) and mirrors
-/// `resolve_show`'s body read — a missing/unreadable body degrades to empty, the
-/// same contract `show` honours. The `uid` is a real on-disk dir name (from
-/// `collect_memories`), never user input; the chokepoint is belt-and-braces.
-pub(crate) fn read_body(items_root: &Path, uid: &str) -> String {
-    crate::fsutil::safe_join(items_root, Path::new(uid))
-        .map(|dir| fs::read_to_string(dir.join("memory.md")).unwrap_or_default())
+/// Keyed on the project `root` (not a single sub-root) so it mirrors `collect_all`:
+/// try the committed capture tree (`items/`) first, fall back to the derived
+/// `shipped/` corpus (a shipped-only uid is absent from `items/` — SL-018). Reuses
+/// `safe_join` (the H1 chokepoint, defence in depth) and `resolve_show`'s body
+/// read — a missing/unreadable body degrades to empty, the same contract `show`
+/// honours. The `uid` is a real on-disk dir name (from `collect_all`), never user
+/// input; the chokepoint is belt-and-braces.
+pub(crate) fn read_body(root: &Path, uid: &str) -> String {
+    let read = |base: PathBuf| {
+        crate::fsutil::safe_join(&base, Path::new(uid))
+            .map(|dir| fs::read_to_string(dir.join("memory.md")).unwrap_or_default())
+            .ok()
+            .filter(|body| !body.is_empty())
+    };
+    read(root.join(MEMORY_ITEMS_DIR))
+        .or_else(|| read(root.join(MEMORY_SHIPPED_DIR)))
         .unwrap_or_default()
 }
 
@@ -1080,6 +1094,25 @@ pub(crate) fn collect_memories(items_root: &Path) -> Result<Vec<Memory>> {
     Ok(out)
 }
 
+/// Read every memory the query surfaces sees: the committed capture tree
+/// (`items/`) unioned with the derived/shipped corpus (`shipped/`, SL-018
+/// ADR-002), deduped by uid with **`items/` winning** — a committed capture
+/// outranks a shipped default of the same uid (the dropped shipped duplicate is
+/// silently skipped; the repo has no debug-log facility, print is denied). Built
+/// over the unchanged `collect_memories` leaf (called once per root): a missing
+/// `shipped/` yields an empty scan, so a shipped-absent store is byte-identical to
+/// `collect_memories(items/)` — the behaviour-preservation contract (design §5.2).
+pub(crate) fn collect_all(root: &Path) -> Result<Vec<Memory>> {
+    let mut out = collect_memories(&root.join(MEMORY_ITEMS_DIR))?;
+    let seen: std::collections::BTreeSet<String> = out.iter().map(|m| m.uid.clone()).collect();
+    for m in collect_memories(&root.join(MEMORY_SHIPPED_DIR))? {
+        if !seen.contains(&m.uid) {
+            out.push(m);
+        }
+    }
+    Ok(out)
+}
+
 /// `doctrine memory list [--type --status --tag]`.
 pub(crate) fn run_list(
     path: Option<PathBuf>,
@@ -1088,8 +1121,7 @@ pub(crate) fn run_list(
     tag_f: Option<&str>,
 ) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let items_root = root.join(MEMORY_ITEMS_DIR);
-    let rows = select_rows(collect_memories(&items_root)?, type_f, status_f, tag_f);
+    let rows = select_rows(collect_all(&root)?, type_f, status_f, tag_f);
     write!(io::stdout(), "{}", format_list(&rows))?;
     Ok(())
 }
@@ -1105,8 +1137,7 @@ pub(crate) fn list_rows(
     status_f: Option<Status>,
     tag_f: Option<&str>,
 ) -> Result<String> {
-    let items_root = root.join(MEMORY_ITEMS_DIR);
-    let rows = select_rows(collect_memories(&items_root)?, type_f, status_f, tag_f);
+    let rows = select_rows(collect_all(root)?, type_f, status_f, tag_f);
     Ok(format_list(&rows))
 }
 
@@ -1829,10 +1860,105 @@ ref = "src/main.rs"
     /// a chosen uid — lets a test fix the uid bytes (uuid-prefix collisions) that
     /// `run_record`'s random uids cannot reproduce on demand.
     fn write_memory_dir(items: &Path, uid: &str) {
-        let dir = items.join(uid);
+        write_memory_full(items, uid, &full_toml().replace(UID, uid), "body");
+    }
+
+    /// Write a real `<base>/<uid>/` memory dir with caller-chosen toml + body —
+    /// the primitive `write_memory_dir` delegates to. Lets a test plant the same
+    /// uid under two roots with DISTINGUISHABLE content (the items-win proof) or a
+    /// shipped-only uid with a known body (the read_body fallback proof).
+    fn write_memory_full(base: &Path, uid: &str, toml: &str, md: &str) {
+        let dir = base.join(uid);
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("memory.toml"), full_toml().replace(UID, uid)).unwrap();
-        fs::write(dir.join("memory.md"), "body").unwrap();
+        fs::write(dir.join("memory.toml"), toml).unwrap();
+        fs::write(dir.join("memory.md"), md).unwrap();
+    }
+
+    /// `full_toml` for `uid` with a chosen title — the title is the distinguishing
+    /// field collect_all dedup is asserted on (items-wins).
+    fn titled_toml(uid: &str, title: &str) -> String {
+        full_toml().replace(UID, uid).replace("Skinny CLI", title)
+    }
+
+    // --- SL-018 PHASE-02: collect_all unions items/ + shipped/, items wins ---
+
+    #[test]
+    fn collect_all_unions_items_and_shipped_with_items_winning_on_collision() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        let shipped = root.join(MEMORY_SHIPPED_DIR);
+
+        let uid_a = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7"; // items-only
+        let uid_b = "mem_018f3a1b2c3d4e5f60718293a4b5c6d8"; // collision (both roots)
+        let uid_c = "mem_018f3a1b2c3d4e5f60718293a4b5c6d9"; // shipped-only
+
+        write_memory_full(&items, uid_a, &titled_toml(uid_a, "ITEMS-A"), "a");
+        write_memory_full(&items, uid_b, &titled_toml(uid_b, "ITEMS-B"), "ib");
+        write_memory_full(&shipped, uid_b, &titled_toml(uid_b, "SHIPPED-B"), "sb");
+        write_memory_full(&shipped, uid_c, &titled_toml(uid_c, "SHIPPED-C"), "c");
+
+        let all = collect_all(root).unwrap();
+        let uids: std::collections::BTreeSet<&str> = all.iter().map(|m| m.uid.as_str()).collect();
+        assert_eq!(
+            uids,
+            [uid_a, uid_b, uid_c].into_iter().collect(),
+            "union of both roots, deduped by uid"
+        );
+        // items wins the uid_b collision — its title, not shipped's, survives.
+        let b = all.iter().find(|m| m.uid == uid_b).unwrap();
+        assert_eq!(
+            b.title, "ITEMS-B",
+            "committed capture outranks the shipped default"
+        );
+    }
+
+    #[test]
+    fn collect_all_with_no_shipped_root_equals_collect_memories_of_items() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        let uid = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7";
+        write_memory_dir(&items, uid);
+
+        // shipped/ absent ⇒ collect_all is byte-identical to the leaf over items/.
+        assert_eq!(
+            collect_all(root).unwrap(),
+            collect_memories(&items).unwrap()
+        );
+    }
+
+    // --- SL-018 PHASE-02: read_body falls back items/ → shipped/ ---
+
+    #[test]
+    fn read_body_resolves_shipped_only_uid_and_items_wins_collision() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        let shipped = root.join(MEMORY_SHIPPED_DIR);
+
+        let uid_shipped = "mem_018f3a1b2c3d4e5f60718293a4b5c6d9"; // shipped-only
+        let uid_both = "mem_018f3a1b2c3d4e5f60718293a4b5c6d8"; // both roots
+        write_memory_full(
+            &shipped,
+            uid_shipped,
+            &titled_toml(uid_shipped, "S"),
+            "shipped-body",
+        );
+        write_memory_full(
+            &shipped,
+            uid_both,
+            &titled_toml(uid_both, "S"),
+            "shipped-dup",
+        );
+        write_memory_full(&items, uid_both, &titled_toml(uid_both, "I"), "items-body");
+
+        // a uid present only under shipped/ resolves its body (the fallback)
+        assert_eq!(read_body(root, uid_shipped), "shipped-body");
+        // a uid under items/ wins — items is tried first
+        assert_eq!(read_body(root, uid_both), "items-body");
+        // an unknown uid degrades to empty (the show contract, unchanged)
+        assert_eq!(read_body(root, "mem_0000000000000000000000000000ffff"), "");
     }
 
     // --- SL-011: list_rows is the additive string sibling of run_list ---
@@ -1857,6 +1983,33 @@ ref = "src/main.rs"
         assert!(out.contains(uid_b), "lists the second pointer");
         // composes select_rows + format_list: full uid printed, trailing newline.
         assert!(out.ends_with('\n'));
+    }
+
+    #[test]
+    fn list_rows_includes_a_shipped_memory_once_and_is_unchanged_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        let shipped = root.join(MEMORY_SHIPPED_DIR);
+
+        let uid_item = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7";
+        let uid_ship = "mem_018f3a1b2c3d4e5f60718293a4b5c6d9";
+        write_memory_dir(&items, uid_item);
+
+        // shipped/ absent ⇒ only the items pointer (collect_all == items-only).
+        let before = list_rows(root, None, None, None).unwrap();
+        assert!(before.contains(uid_item));
+        assert!(!before.contains(uid_ship));
+
+        // a shipped memory present ⇒ the boot/list seam surfaces it, exactly once.
+        write_memory_full(&shipped, uid_ship, &titled_toml(uid_ship, "Shipped"), "s");
+        let after = list_rows(root, None, None, None).unwrap();
+        assert!(after.contains(uid_item), "items pointer still present");
+        assert_eq!(
+            after.matches(uid_ship).count(),
+            1,
+            "shipped pointer surfaces exactly once (no double-count)"
+        );
     }
 
     /// Build `RecordArgs` with the pre-PHASE-04 positional shape (no scope flags,
