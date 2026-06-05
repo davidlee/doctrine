@@ -1,0 +1,41 @@
+memory_uid = "mem_019e95a992607db3a9805d492e69ff97"
+memory_key = "mem.system.engine.identity-claim-seam"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "Entity-engine identity + claim seam"
+summary = "src/entity.rs serves numeric+named identity through one materialiser; Claim seam, uid v7 minted-once, invariants gating engine changes"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["src/entity.rs", "src/git.rs"]
+globs = []
+commands = []
+tags = ["entity-engine", "sl-005"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "eac3a4a10481cebb0b2944906daaf643ede515c8"
+tree = "f640e41ff4260e395248c68c5c9d2d4a2e9910cf"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "eac3a4a10481cebb0b2944906daaf643ede515c8"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0

@@ -1,0 +1,41 @@
+memory_uid = "mem_019e95a992767af3909e6456d6293230"
+memory_key = "mem.thread.sl-011.governance-surface"
+schema_version = 1
+memory_type = "thread"
+status = "active"
+title = "User-customizable governance surface (doctrine.md analog)"
+summary = "Parked into SL-011: user-editable canon hook surviving install, loaded at /canon. Retire when SL-011 closes"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = []
+globs = []
+commands = ["canon"]
+tags = ["sl-011", "canon", "governance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f640e41ff4260e395248c68c5c9d2d4a2e9910cf"
+ref_name = "refs/heads/main"
+checkout_state_id = "623134541d479c1451344df7188c7333a9a11cf64d12dedf78bae205040001ec"
+base_commit = "eac3a4a10481cebb0b2944906daaf643ede515c8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

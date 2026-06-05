@@ -1,0 +1,41 @@
+memory_uid = "mem_019e95a9926b74218d80c0d3d2398fd1"
+memory_key = "mem.fact.backend.forgettable-event-store"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "forgettable is the event-store backend (DEC-005-C)"
+summary = "Deferred event-store backend = forgettable; adapter MUST NOT depend on forgettable /memory/* domain — generic event store only"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["doc/memory-spec.md"]
+globs = []
+commands = []
+tags = ["backend", "forgettable", "sl-005"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f640e41ff4260e395248c68c5c9d2d4a2e9910cf"
+ref_name = "refs/heads/main"
+checkout_state_id = "1ed2ae0276ee67fb7392017284a364d92dfebf324c1e78e5a5a7283644376c74"
+base_commit = "eac3a4a10481cebb0b2944906daaf643ede515c8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
