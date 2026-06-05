@@ -5,6 +5,8 @@ software engineering with LLM agents.
 
 ![HERESIS URITUR; DOCTRINA MANET.](./doctrine.png) 
 
+> Heresy burns; Doctrine remains.
+
 ## Design Goals:
 
 1. Correctness 
