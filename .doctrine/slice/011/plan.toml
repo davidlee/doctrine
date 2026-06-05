@@ -1,0 +1,214 @@
+# Implementation plan for SL-011 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-011"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Pure snapshot core + `doctrine boot` regenerate verb"
+objective = """
+Stand up `src/boot.rs` with the pure assembly seam and the regenerate verb, all \
+sections still markers. Pure layer (no clock/rng/disk — §4): `Section`, \
+`SourceKind`, `boot_sequence()` (declared heading+source order with the ExecPath \
+section ordered LAST so a build-volatile path change hits only the cache tail — \
+§5.3/F4), `render_boot()` (deterministic header + concat). Impure shell: \
+`produce()` (miss/err → benign `<!-- … -->` marker body, never a crash — the \
+ordering-knot break, review fix #3), `write_if_changed()` (content-diff cache-key \
+writer returning the wrote-bool — §5.2), and `current_exe()` resolution for the \
+ExecPath body. Wire `doctrine boot [-p ROOT]` end to end: ensure `.doctrine/state/`, \
+render every section, write-if-changed. No install, no listing reuse, no authored \
+assets yet — governance/adr/memory render as markers this phase.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked: inquisition (7 charges) + codex (5 findings) passes dispositioned, §10; lag-law/sentry/seam corrections folded" },
+  { id = "EN-2", text = "full cargo test + clippy green at HEAD — the behaviour-preservation baseline (entity/slice/state/adr/memory/skills suites)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/boot.rs exists; pure `Section`/`SourceKind`/`boot_sequence`/`render_boot` with the ExecPath section ordered last; render is deterministic (no clock/rng) — same inputs, byte-identical output" },
+  { id = "EX-2", text = "`produce` returns a benign `<!-- … -->` marker body on miss/err and never panics; `write_if_changed` writes only on content change and returns the wrote bool (no-op when byte-equal)" },
+  { id = "EX-3", text = "`doctrine boot` regenerates `.doctrine/state/boot.md` with the header + all ordered headings; ExecPath carries the resolved `current_exe()`; non-authored sections render markers; clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "pure unit: render_boot determinism + section order (ExecPath last); an absent source renders a marker, not a crash" },
+  { id = "VT-2", expects = "write_if_changed: writes + returns true on change; no-op + returns false when content is byte-equal" },
+  { id = "VT-3", expects = "integration: `doctrine boot` in a tempdir writes boot.md carrying the header, every declared heading, and the resolved exec path; a second run is a no-op write" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "ADR + memory listing reuse → real sections"
+objective = """
+Feed the Adrs/Memories producers from the existing list logic without forking it \
+(Charge V — the two touches are NOT both \"additive\"). `memory::list_rows(root, \
+filter) -> Result<String>` is a genuinely ADDITIVE wrapper composing the existing \
+`select_rows()` + `format_list()` — no existing memory.rs line changed (the safe, \
+allowed touch on the SL-012-contended file). `adr::list_rows(root, status) -> \
+Result<String>` is a behaviour-preserving EXTRACT of `run_list`: split the compute \
+(`read_metas → sort_and_filter → meta::format_list`) from the `write!`; `run_list` \
+then prints the returned string byte-identically (`write!`, no extra newline). \
+adr.rs is uncontended by SL-012, so the riskier deed lands on the safe file; the \
+e2e at adr.rs:331 is the proof obligation. Wire `produce(Adrs)`/`produce(Memories)`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green — boot renders the section frame and write_if_changed works" },
+  { id = "EN-2", text = "adr + memory CLI suites green at HEAD (incl. adr.rs:331) — the behaviour-preservation gate for the extract" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`memory::list_rows` added additively (composes select_rows + format_list); no pre-existing memory.rs line modified" },
+  { id = "EX-2", text = "`adr::list_rows` extracted; `run_list` delegates to it and prints byte-identical output; adr.rs:331 e2e stays green unchanged" },
+  { id = "EX-3", text = "boot's Accepted-ADRs section shows `adr list -s accepted` rows (or the empty marker); Memory section shows the memory pointers; clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "adr/memory list_rows unit: returned rows match the CLI rendering; empty input → the agreed empty marker" },
+  { id = "VT-2", expects = "existing adr (incl. 331) + memory list suites green unchanged — behaviour preserved across the extract" },
+  { id = "VT-3", expects = "integration: `doctrine boot` emits real accepted-ADR rows + memory pointers in their sections" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Authored assets — governance surface + routing/process digest"
+objective = """
+Author the two embed assets the snapshot projects, flipping Governance + Routing \
+from marker to real (P1's produce() marker tolerance means no hard ordering \
+dependency). Ship `install/governance.md` — the pointer/digest layer with the \
+§5.3 remit boundary honoured (cross-references + \"where things live\"; never \
+restating CLAUDE.md / doc/* / ADRs); `doctrine install` seeds it via the existing \
+Skip-if-exists path (no install.rs change). Author the embedded Routing/Process \
+digest Static asset(s) — a condensed /route decision table + core process — so \
+routing rides the cached prefix, not a skill turn. Wire `produce(Governance)` \
+(read .doctrine/governance.md or marker) + `produce(Static)`. This repo adds \
+`!.doctrine/governance.md` to its .gitignore for dogfooding (downstream commits \
+it normally; the manifest writes additive ignores, not the blanket).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 marker tolerance in place — produce() renders a benign marker when an asset is absent (so boot already works without these assets)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`install/governance.md` shipped; `doctrine install` seeds it create-if-missing and never clobbers an existing one; its content stays within the §5.3 remit (no restating the three authoritative surfaces)" },
+  { id = "EX-2", text = "the routing/process digest Static asset(s) authored + embedded; `produce(Static)` renders them; a missing asset still renders a marker (no crash)" },
+  { id = "EX-3", text = "boot's Routing/Process + Governance sections populate from the assets; `governance.md` absent → marker; clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "install seed: governance.md created when missing, Skip (left untouched) when present; existing install suite green" },
+  { id = "VT-2", expects = "produce(Static)/produce(Governance): body from the asset when present, benign marker when absent" },
+  { id = "VT-3", expects = "integration: `doctrine boot` emits the routing digest + governance body in their sections" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Harness seam + `doctrine boot install` wiring"
+objective = """
+The per-harness wiring behind the enum+match seam — NO trait/Box<dyn>/registry \
+(Charge IV). `enum Harness { Claude, Codex }`; `import_targets` (Claude=[CLAUDE.md], \
+codex=[AGENTS.md] — one file each so the snapshot never inlines twice, review fix \
+#1); `resolve_harnesses` (explicit `--agent` wins, else marker auto-detect, ≥1 \
+required — mirrors skills::resolve_agents); `ensure_boot_import` (idempotent \
+prepend, create-if-missing, canonicalize/inode-dedup → one write for the \
+CLAUDE.md→AGENTS.md symlink); `install_refresh` — Claude full (settings.local.json \
+SessionStart hook merge: own-by-pattern with the SPACE-HARDENED match \
+[program file_name == doctrine AND last-arg == boot — Charge VII], refresh on \
+path change, preserve foreign hooks, fail-soft PrintedFallback on malformed JSON), \
+codex import-only. `doctrine boot install [--dry-run] [--yes]`: resolve → union \
+import_targets → dedup → ensure_boot_import once → each install_refresh; one \
+harness's failure must not abort the others.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01–03 green — `doctrine boot` generates a fully-populated snapshot worth wiring" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ensure_boot_import` prepends the `@.doctrine/state/boot.md` ref once, creates a missing target, dedups same-inode targets to a single write, preserves existing file content" },
+  { id = "EX-2", text = "Claude `install_refresh` merges the hook into empty/missing settings, refreshes the doctrine-owned entry on path change, preserves foreign SessionStart hooks, fails soft (prints) on malformed JSON; ownership match survives spaces in the exec path" },
+  { id = "EX-3", text = "`doctrine boot install` runs the full flow (Claude full, codex import-only); `--dry-run` mutates nothing; a single harness failure does not abort the rest; clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "ensure_boot_import: prepend-once idempotent, create-missing, symlink/same-inode → exactly one write, preserves existing content" },
+  { id = "VT-2", expects = "install_refresh: empty/missing merge, refresh-on-path-change, preserve-foreign-hooks, fail-soft on malformed JSON, ownership match with a spaced exec path" },
+  { id = "VT-3", expects = "integration: `boot install` in a tempdir wires the @-import + the SessionStart hook; a re-run is idempotent" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "`boot --check` disk sentry + /route & /canon integration"
+objective = """
+The disk freshness/health sentry and its skill consumers (Charge II/III, codex F2). \
+`boot_check(root, exec) -> CheckReport`: recompute the render, diff vs on-disk \
+boot.md (disk-stale?), tally marker-vs-populated sections — DETERMINISTIC, no clock, \
+no in-content timestamp (a timestamp would bust the cache every session). \
+`doctrine boot --check` prints the report. `/route` gains (a) a `boot --check` \
+disk-health call AND (b) the ≤2-session in-session lag warning pointing at the \
+freshen-now ritual — it must NOT claim --check proves in-session freshness (the \
+disk-vs-session distinction, codex F2). `/canon` carries the corrected ritual note \
+(\"regenerate `doctrine boot` THEN /clear or restart\"). The optional governance- \
+hash in-session detector stays deferred unless the lag warning proves insufficient.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01–04 green — snapshot generation + install exist for --check to compare against and for the skills to reference" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine boot --check` reports disk staleness (on-disk ≠ recompute-from-current-governance) and partial-population (marker sections); reports clean on a fully-populated current file" },
+  { id = "EX-2", text = "`/route` runs --check for disk health and warns of the inherent in-session lag (ritual pointer); `/canon` states the regenerate-then-clear ritual; neither over-claims in-session freshness" },
+  { id = "EX-3", text = "boot_check carries no clock/timestamp (cache-safe); clippy zero" },
+]
+verification = [
+  { id = "VT-1", expects = "boot_check: a stale on-disk file trips a visible stale warning; a marker section trips a visible population warning; a current, fully-populated file reports clean" },
+  { id = "VT-2", expects = "`doctrine boot --check` CLI surfaces the report as designed" },
+  { id = "VT-3", expects = "skill-copy review: /route + /canon text matches the disk-vs-session distinction — no over-claim that --check proves the current prefix is fresh" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "AGENTS.md rewrite, dogfood, close-out"
+objective = """
+Collapse the duplication and seal the slice. Rewrite this repo's root AGENTS.md \
+(= CLAUDE.md via the symlink) to lean on the snapshot: drop the recited full CLI, \
+the `just list-memories` nag, and the process recital — all now carried into the \
+SAME cached prefix by the snapshot, so the prose double-spends the budget — and \
+orient around `/route` + the skill set. Wire this repo via `doctrine boot install` \
+(@-import + hook); regenerate; dogfood. Harvest durable risks/decisions/findings \
+into notes.md. The live ordeal (≤2-session lag + the startup|clear matcher) and \
+the live codex run are the POST-BUILD, USER-RUN closure verification — recorded as \
+such, with the codex cut-from-v1 fallback if the import does not inline or the \
+unbounded staleness is unacceptable.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01–05 green — the full mechanism exists and self-installs (`boot`, `boot install`, `boot --check`)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "root AGENTS.md no longer recites the CLI / nag / process; it orients around /route + skills; the moved governance is carried by the snapshot (no governance lost, no double-spend)" },
+  { id = "EX-2", text = "this repo's @-import + SessionStart hook are wired via `doctrine boot install`; `doctrine boot` regenerates a fully-populated snapshot; `just check` green" },
+  { id = "EX-3", text = "durable findings harvested to notes.md; the live ordeal + live codex run documented as the post-build user closure gate, with the codex cut-from-v1 fallback" },
+]
+verification = [
+  { id = "VT-1", expects = "AGENTS.md diff: the recited CLI/nag/process are gone and present in the boot snapshot instead — governance preserved, prefix not double-spent" },
+  { id = "VT-2", expects = "`just check` (lint + test + format) green; `doctrine boot --check` reports clean on this repo" },
+  { id = "VT-3", expects = "closure (user-run, documented): the live ordeal witnesses the ≤2-session lag + matcher firing; the live codex run confirms the snapshot loads + routing honoured — or triggers the codex cut" },
+]
+specs        = []
+requirements = []
