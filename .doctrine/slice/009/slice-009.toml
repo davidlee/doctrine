@@ -1,9 +1,9 @@
 id = 9
 slug = "slice-status-rollup"
 title = "Slice status rollup"
-status = "proposed"
+status = "done"
 created = "2026-06-04"
-updated = "2026-06-04"
+updated = "2026-06-05"
 
 [relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
