@@ -43,10 +43,12 @@ Consumer wiring already diverges:
 
 ## 4. Guiding Principles
 
-Fix at the source of truth, not in the mirror. doctrine's frame algorithm is a
-byte-for-byte reproduction of the external decision register's; the symlink-tolerance decision
-belongs **in the external decision register**, then propagates here as a re-sync — the DEC-005-D
-coordination pattern, not a local fork.
+Fix at the source of truth, not in the mirror. doctrine's frame algorithm is
+output-conformant (DEC-010-06), not source-identical, to the external decision register's; the
+symlink-tolerance decision belongs **in the external decision register**, then propagates here as a
+re-sync — the DEC-005-D coordination pattern, not a local fork. (The re-sync took
+the external decision register's symlink half but deliberately left its IMPR-003 untracked-hash
+batching unported — see A-1 in `audit.md` and the drift note in `notes.md`.)
 
 ## 5. Proposed Design
 
@@ -67,7 +69,8 @@ coordination pattern, not a local fork.
    behavioural set. No literal golden csid exists to re-sync — conformance is
    structural (identical composition + VT-1 remote table copied verbatim).
 
-Plan folded in (mechanical byte-mirror; the existing capture test suite is the
+Plan folded in (output-conformant (DEC-010-06), not source-identical — IMPR-003
+batching deliberately unported, see A-1; the existing capture test suite is the
 gate). Slice **unblocked → in_progress**.
 
 ### 5.2 Interfaces & Contracts
