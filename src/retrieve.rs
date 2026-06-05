@@ -19,7 +19,7 @@
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
 
-use crate::lexical::tokenize;
+use crate::lexical::{Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker};
 use crate::memory::{Memory, MemoryType, Status, normalize_key};
 
 /// A `thread` memory is expired unless verified within this many days (design
@@ -227,31 +227,28 @@ pub(crate) fn days_between(a: &str, b: &str) -> Option<i64> {
 // arrives pre-resolved as `GitFacts`, `today` as a `&str`. Filters already dropped
 // disallowed memories; rank never re-encodes a dropped one (review B1).
 
-/// Bounded integer token-overlap of the free-text `--query` against a memory's
-/// `title + summary + tags + memory_key` segments (design Q1/B15 — body NOT
-/// scanned in v1). Score = count of *distinct* query tokens that hit the doc bag
-/// (set membership, not multiplicity — phase-02 OPEN resolved to SET). No query
-/// ⇒ 0.
-fn lexical_score(m: &Memory, q: &QueryContext) -> u32 {
-    let Some(query) = q.query.as_deref() else {
-        return 0;
-    };
-    let mut bag: BTreeSet<String> = BTreeSet::new();
-    bag.extend(tokenize(&m.title));
-    bag.extend(tokenize(&m.summary));
-    for t in &m.scope.tags {
-        bag.extend(tokenize(t));
+/// The §5.3 doc-bag projection of a `Memory` into the lexical leaf's `LexDoc`:
+/// `id` = uid, `text` = `title summary tags key`, space-joined (body NOT scanned
+/// in v1 — Q1/B15). The ONE adapter from `Memory` into the lexical axis (design
+/// D6) — `query` builds the fit corpus through it, and the behaviour-preservation
+/// parity test scores through it, so there is no parallel projection.
+fn lex_doc(m: &Memory) -> LexDoc {
+    let tags = m.scope.tags.join(" ");
+    let text = [
+        m.title.as_str(),
+        m.summary.as_str(),
+        tags.as_str(),
+        m.key.as_deref().unwrap_or_default(),
+    ]
+    .join(" ");
+    LexDoc {
+        id: m.uid.clone(),
+        text,
     }
-    if let Some(k) = &m.key {
-        bag.extend(tokenize(k));
-    }
-    let q_tokens: BTreeSet<String> = tokenize(query).into_iter().collect();
-    let hits = q_tokens.iter().filter(|t| bag.contains(*t)).count();
-    u32::try_from(hits).unwrap_or(u32::MAX)
 }
 
 /// FULL `memory_key` equality only (review B2): the normalized query equals the
-/// memory's key. Segment/prefix overlap is `lexical_score`'s job, not this. A
+/// memory's key. Segment/prefix overlap is the lexical ranker's job, not this. A
 /// non-key-shaped query (`normalize_key` errors) is a non-match, never a fault
 /// (B16). No query, or a keyless memory ⇒ false.
 fn exact_key_match(m: &Memory, q: &QueryContext) -> bool {
@@ -413,12 +410,13 @@ impl<'a> Candidate<'a> {
         q: &QueryContext,
         facts: GitFacts,
         today: &str,
+        lexical: u32,
     ) -> Self {
         Self {
             memory: m,
             scope_match,
             staleness: staleness(m, facts, today),
-            lexical: lexical_score(m, q),
+            lexical,
             exact_key: exact_key_match(m, q),
         }
     }
@@ -543,12 +541,24 @@ pub(crate) fn query<'a>(
     snap: &Snapshot,
     include_draft: bool,
     root: &Path,
+    ranker: &dyn LexicalRanker,
 ) -> Vec<Candidate<'a>> {
     let scoped = q.has_scope_constraints();
-    let cands: Vec<Candidate<'a>> = mems
+    // The fit corpus: every `base_filter` survivor (honouring `include_draft`).
+    // BM25 df/avgdl fit over this active set; the narrower survivor subset is then
+    // scored against it (design §5.3 — fit corpus ⊇ scored targets).
+    let active: Vec<&'a Memory> = mems
         .iter()
         .filter(|m| base_filter(m, &snap.part, include_draft))
-        .filter_map(|m| {
+        .collect();
+    let docs: Vec<LexDoc> = active.iter().map(|m| lex_doc(m)).collect();
+    let corpus = LexicalCorpus::Raw(&docs);
+    // Survivors: the active set further narrowed by `match_scope` + `thread_expiry`,
+    // each carrying its (Copy) ScopeMatch. survivors ⊆ active = corpus, so the
+    // ranker's hard `targets ⊆ corpus` precondition holds by construction.
+    let survivors: Vec<(&'a Memory, Option<ScopeMatch>)> = active
+        .iter()
+        .filter_map(|&m| {
             let scope_match = match_scope(m, q);
             // Scope-bearing query: a non-match drops. Bare --query: keep (None).
             if scoped && scope_match.is_none() {
@@ -559,8 +569,19 @@ pub(crate) fn query<'a>(
             if !thread_expiry(m, probe, &snap.today) {
                 return None;
             }
+            Some((m, scope_match))
+        })
+        .collect();
+    let targets: Vec<&str> = survivors.iter().map(|(m, _)| m.uid.as_str()).collect();
+    // One `(uid, u32)` per survivor, in order — A1 totality, indexed POSITIONALLY
+    // (never `unwrap_or`: an absent entry is a ranker-contract bug, not a 0).
+    let scores = ranker.score(q.query.as_deref(), &corpus, &targets);
+    let cands: Vec<Candidate<'a>> = survivors
+        .iter()
+        .zip(scores.iter())
+        .map(|(&(m, scope_match), &(_, lexical))| {
             let facts = git_facts(root, m, snap);
-            Some(Candidate::new(m, scope_match, q, facts, &snap.today))
+            Candidate::new(m, scope_match, q, facts, &snap.today, lexical)
         })
         .collect();
     rank(cands, &snap.today)
@@ -692,7 +713,9 @@ pub(crate) fn run_find(
     } = load_query(
         path, paths, globs, commands, tags, free_query, type_f, status_f,
     )?;
-    let ranked = query(&mems, &q, &snap, include_draft, &root);
+    // BM25 is the hard default on both surfaces — no user-facing selector (D5).
+    let ranker = Bm25Ranker;
+    let ranked = query(&mems, &q, &snap, include_draft, &root, &ranker);
     write!(io::stdout(), "{}", format_find(&ranked))?;
     Ok(())
 }
@@ -782,7 +805,9 @@ pub(crate) fn run_retrieve(
     } = load_query(
         path, paths, globs, commands, tags, free_query, type_f, status_f,
     )?;
-    let ranked = query(&mems, &q, &snap, include_draft, &root);
+    // BM25 is the hard default on both surfaces — no user-facing selector (D5).
+    let ranker = Bm25Ranker;
+    let ranked = query(&mems, &q, &snap, include_draft, &root, &ranker);
 
     let floor = holdback_floor(min_trust);
     let limit = limit
@@ -1252,7 +1277,7 @@ weight = {weight}
 
     // tokenize's own unit tests moved with the fn to `lexical` (SL-017 PHASE-02).
 
-    // -- lexical_score (EX-1 / EX-5 / VT-4) ---------------------------------
+    // -- lexical query helper -----------------------------------------------
 
     fn with_query(q: &str) -> QueryContext {
         QueryContext {
@@ -1261,116 +1286,72 @@ weight = {weight}
         }
     }
 
+    // -- OverlapRanker preserves the retired overlap (SL-017 PHASE-04, EX-4) -
+    // The behaviour-preservation proof. `lexical_score` is retired (PHASE-04);
+    // its outputs are FROZEN here as a regression vector. `OverlapRanker` over the
+    // §5.3 space-joined `lex_doc` projection must reproduce them byte-for-byte —
+    // the concat-vs-segment equivalence (design §5.4/§9): `tokenize` splits on the
+    // join space, so the distinct-hit set, hence the count, is unchanged. The
+    // literals are lifted verbatim from the deleted `lexical_score` unit tests
+    // (and what they pinned), NOT recomputed by eye. A divergence here means the
+    // seam extraction altered overlap — a behaviour breach, not a test edit.
     #[test]
-    fn lexical_score_zero_without_query() {
-        let m = memory(&Fixture {
-            title: "auth token expiry",
-            ..Default::default()
-        });
-        assert_eq!(lexical_score(&m, &QueryContext::default()), 0);
-    }
+    fn overlap_ranker_preserves_retired_overlap() {
+        use crate::lexical::{LexicalCorpus, LexicalRanker, OverlapRanker};
 
-    #[test]
-    fn lexical_score_counts_distinct_overlap_over_title_summary_tags_key() {
-        let m = memory(&Fixture {
-            key: "mem.auth.flow",
-            title: "Token expiry",
-            summary: "middleware check",
-            tags: &["rust"],
-            ..Default::default()
-        });
-        // hits: token(title) + middleware(summary) + rust(tag) + auth(key) = 4
-        assert_eq!(
-            lexical_score(&m, &with_query("token middleware rust auth")),
-            4
-        );
-        // distinct: a repeated query token counts once (SET semantics)
-        assert_eq!(lexical_score(&m, &with_query("token token token")), 1);
-        // no overlap ⇒ 0
-        assert_eq!(lexical_score(&m, &with_query("python django")), 0);
-    }
-
-    #[test]
-    fn lexical_score_ignores_body_only_terms() {
-        // `Memory` carries no body field; a term present nowhere in the indexed
-        // fields contributes nothing — the v1 body-not-scanned contract (B15).
-        let m = memory(&Fixture {
-            title: "auth",
-            summary: "tokens",
-            ..Default::default()
-        });
-        assert_eq!(lexical_score(&m, &with_query("kubernetes")), 0);
-    }
-
-    // -- OverlapRanker parity vs lexical_score (SL-017 PHASE-02, VT-2) -------
-    // The behaviour-preservation proof: `OverlapRanker` over a space-joined
-    // `LexDoc.text` (design §5.3) is byte-identical to the segment-wise
-    // `lexical_score` it retires. `tokenize` splits on the join space, so the
-    // distinct-hit *set* — hence the count — is the same (concat-vs-segment
-    // equivalence, design §5.4). `retrieve` owns this test: it sees both
-    // `Memory`/`lexical_score` and the leaf, which the leaf may not.
-    #[test]
-    fn overlap_ranker_matches_lexical_score() {
-        use crate::lexical::{LexDoc, LexicalCorpus, LexicalRanker, OverlapRanker};
-
-        // The §5.3 doc-bag projection: title summary tags key, space-joined.
-        fn lexdoc_of(m: &Memory) -> LexDoc {
-            let key = m.key.clone().unwrap_or_default();
-            let text = [
-                m.title.as_str(),
-                m.summary.as_str(),
-                &m.scope.tags.join(" "),
-                &key,
-            ]
-            .join(" ");
-            LexDoc {
-                id: m.uid.clone(),
-                text,
-            }
-        }
-
-        let fixtures = [
-            Fixture {
-                key: "mem.auth.flow",
-                title: "Token expiry",
-                summary: "middleware check",
-                tags: &["rust"],
-                ..Default::default()
-            },
+        // (fixture, [(query, frozen overlap count)]). Bag = tokenize(title summary
+        // tags key) as a SET; count = distinct query tokens hitting the bag.
+        let cases = [
+            (
+                Fixture {
+                    key: "mem.auth.flow",
+                    title: "Token expiry",
+                    summary: "middleware check",
+                    tags: &["rust"],
+                    ..Default::default()
+                },
+                [
+                    ("token middleware rust auth", 4), // token+middleware+rust+auth
+                    ("token token token", 1),          // SET: repeats count once
+                    ("python django", 0),              // no overlap
+                    ("src memory rs lint clippy", 0),  // no overlap
+                    ("", 0),                           // empty query
+                ],
+            ),
             // separator-laden segments (dots/slashes) — the equivalence stressor
-            Fixture {
-                key: "mem.pattern.lint",
-                title: "src/memory.rs clippy",
-                summary: "expiry token",
-                tags: &["lint", "rust"],
-                ..Default::default()
-            },
-        ];
-        let queries = [
-            "token middleware rust auth",
-            "token token token",
-            "python django",
-            "src memory rs lint clippy",
-            "",
+            (
+                Fixture {
+                    key: "mem.pattern.lint",
+                    title: "src/memory.rs clippy",
+                    summary: "expiry token",
+                    tags: &["lint", "rust"],
+                    ..Default::default()
+                },
+                [
+                    ("token middleware rust auth", 2), // token+rust
+                    ("token token token", 1),
+                    ("python django", 0),
+                    ("src memory rs lint clippy", 5), // src+memory+rs+lint+clippy
+                    ("", 0),
+                ],
+            ),
         ];
 
-        for f in &fixtures {
+        for (f, expected) in &cases {
             let m = memory(f);
-            let docs = vec![lexdoc_of(&m)];
+            let docs = vec![lex_doc(&m)]; // the ONE production projection (T2)
             let corpus = LexicalCorpus::Raw(&docs);
             let uid = m.uid.as_str();
-            for q in &queries {
-                let expected = lexical_score(&m, &with_query(q));
+            for (q, want) in expected {
                 let got = OverlapRanker.score(Some(q), &corpus, &[uid]);
                 assert_eq!(got.len(), 1, "positional: one entry per target");
                 assert_eq!(
                     got[0],
-                    (m.uid.clone(), expected),
-                    "OverlapRanker diverged from lexical_score for query {q:?}"
+                    (m.uid.clone(), *want),
+                    "OverlapRanker diverged from frozen overlap for query {q:?}"
                 );
             }
-            // no query: both axes ⇒ 0
-            assert_eq!(lexical_score(&m, &QueryContext::default()), 0);
+            // no query ⇒ 0
             assert_eq!(
                 OverlapRanker.score(None, &corpus, &[uid]),
                 vec![(m.uid.clone(), 0)]
@@ -1912,6 +1893,7 @@ weight = {weight}
             &snap(None, None),
             false,
             Path::new("."),
+            &Bm25Ranker,
         );
         assert_eq!(ranked.len(), 1);
         assert_eq!(ranked[0].memory.uid, u0);
@@ -1932,12 +1914,16 @@ weight = {weight}
             ..Default::default()
         });
         let mems = vec![matchy, other];
+        // Re-pointed through OverlapRanker (the retired overlap): this pins the
+        // pre-BM25 ordering, so its assertions are the behaviour-preservation
+        // witness and stay UNCHANGED across the seam extraction (EX-4).
         let ranked = query(
             &mems,
             &with_query("auth"),
             &snap(None, None),
             false,
             Path::new("."),
+            &crate::lexical::OverlapRanker,
         );
         assert_eq!(ranked.len(), 2, "bare --query keeps all active");
         assert_eq!(ranked[0].memory.uid, u0, "lexical hit ranks first");
@@ -1957,6 +1943,7 @@ weight = {weight}
             &snap(None, None),
             false,
             Path::new("."),
+            &Bm25Ranker,
         );
         assert!(ranked.is_empty(), "retracted is dropped by base_filter");
     }

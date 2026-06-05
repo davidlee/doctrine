@@ -5,17 +5,11 @@
 //! nothing of `retrieve` or `memory` (ADR-001 layering, design D6) — `retrieve`
 //! adapts `Memory` into the leaf's `LexDoc`, never the reverse.
 //!
-//! Staged `dead_code` bridge (design §9): through PHASE-02–03 every item except
-//! the moved `tokenize` (still called by `retrieve::lexical_score`) is reachable
-//! only from tests; `retrieve` wires the ranker at PHASE-04, the self-clearing
-//! condition under which this attribute is removed.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "lexical consumers wired into retrieve at PHASE-04"
-    )
-)]
+//! PHASE-04 wired `Bm25Ranker` into `retrieve` as the hard default ranker, so the
+//! staged `dead_code` bridge has self-cleared. `OverlapRanker` has no production
+//! caller post-wiring (BM25 is the only runtime ranker, no selector — design D5),
+//! so it lives behind `#[cfg(test)]` as the behaviour-preservation instrument that
+//! proves the seam extraction did not alter overlap (design §5.4 retirement).
 
 use bm25::{EmbedderBuilder, Scorer, Tokenizer};
 use std::collections::{BTreeMap, BTreeSet};
@@ -78,9 +72,11 @@ pub(crate) trait LexicalRanker {
 }
 
 /// Distinct-query-token set-membership over `LexDoc.text` (re-tokenized). Returns
-/// the `u32` count directly — **no quantize** — byte-identical to the SL-008
-/// `lexical_score` it will retire (design §5.4). Corpus statistics are ignored:
-/// this is a per-document signal.
+/// the `u32` count directly — **no quantize** — byte-identical to the retired
+/// SL-008 `lexical_score` (design §5.4). Corpus statistics are ignored: this is a
+/// per-document signal. Test-only post-PHASE-04: BM25 is the runtime ranker (D5),
+/// so this survives solely as the behaviour-preservation instrument.
+#[cfg(test)]
 pub(crate) struct OverlapRanker;
 
 /// BM25 f32 (>= 0 under Lucene IDF) -> Key-2 u32 (design §5.2). Monotonic
@@ -130,6 +126,7 @@ fn assert_targets_subset(corpus: &LexicalCorpus<'_>, targets: &[&str]) {
     }
 }
 
+#[cfg(test)]
 impl LexicalRanker for OverlapRanker {
     fn score(
         &self,
