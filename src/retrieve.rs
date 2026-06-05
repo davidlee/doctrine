@@ -269,6 +269,9 @@ pub(crate) enum Staleness {
     Stale,
     Unknown,
     Unanchored,
+    /// The global/orientation class (ADR-002): evergreen / non-decaying. Derived
+    /// from the class signature, never stored — exempt from days-since-`reviewed`.
+    Reference,
 }
 
 impl Staleness {
@@ -279,6 +282,7 @@ impl Staleness {
             Self::Stale => "stale",
             Self::Unknown => "unknown",
             Self::Unanchored => "unanchored",
+            Self::Reference => "reference",
         }
     }
 }
@@ -296,17 +300,38 @@ pub(crate) struct GitFacts {
 /// 14-day thread verification window.
 const FRESH_DAYS: i64 = 30;
 
-/// Staleness by the spec's three modes → four explicit states (design § 5.5,
-/// review F6/B5/B6). First match wins, keyed on **attestation**, not `anchor_kind`:
+/// The global/orientation class signature for the evergreen disposition (ADR-002):
+/// `repo=""` (global), `anchor_kind=none` (unanchored), **path/glob/command-scoped**
+/// (≥1 — a tag-only global is illegal, so tags do NOT count), and unattested (no
+/// `verified_sha` — an attested member earns commit mode instead). The scope floor
+/// is load-bearing: it is what distinguishes a class member from a plain unanchored
+/// `repo=""` memory, so the special-case never perturbs the latter's decay.
+fn is_global_reference(m: &Memory) -> bool {
+    let scoped =
+        !m.scope.paths.is_empty() || !m.scope.globs.is_empty() || !m.scope.commands.is_empty();
+    scoped
+        && m.scope.repo.is_empty()
+        && m.anchor.kind == crate::git::AnchorKind::None
+        && m.anchor.verified_sha.is_empty()
+}
+
+/// Staleness by the spec's modes → five explicit states (design § 5.5/§5.4,
+/// review F6/B5/B6; SL-018 ADR-002 adds Reference). First match wins, keyed on
+/// **attestation**, not `anchor_kind`:
 ///  1. scoped (`!paths.is_empty()`) + attested (`verified_sha` set) ⇒ commit mode:
 ///     `commits_since` `Some(0)` Fresh / `Some(≥1)` Stale / `None` Unknown (never
 ///     Fresh — undecidable reachability). Target absence reaches here as `None`.
-///  2. else a parseable `reviewed` ⇒ time mode: `≤ FRESH_DAYS` Fresh, else Stale.
-///  3. else git-anchored (`kind != None`) with no usable date ⇒ Unknown.
-///  4. else no anchor at all ⇒ Unanchored.
+///  2. else the global/orientation class — `repo=""` + anchor=none + path/glob/
+///     command-scoped + unattested (ADR-002 signature) ⇒ evergreen `Reference`,
+///     exempt from the days-since-`reviewed` decay that would brand it `stale`.
+///  3. else a parseable `reviewed` ⇒ time mode: `≤ FRESH_DAYS` Fresh, else Stale.
+///  4. else git-anchored (`kind != None`) with no usable date ⇒ Unknown.
+///  5. else no anchor at all ⇒ Unanchored.
 ///
 /// A memory recorded dirty then `verify`-attested clean lands in branch 1 via its
-/// `verified_sha` (verify refuses a dirty tree, so the SHA is always clean).
+/// `verified_sha` (verify refuses a dirty tree, so the SHA is always clean). The
+/// Reference branch sits AFTER branch 1 (an attested global memory still earns
+/// commit mode) and BEFORE the time branch (or the evergreen corpus would decay).
 fn staleness(m: &Memory, facts: GitFacts, today: &str) -> Staleness {
     if !m.scope.paths.is_empty() && !m.anchor.verified_sha.is_empty() {
         return match facts.commits_since {
@@ -314,6 +339,9 @@ fn staleness(m: &Memory, facts: GitFacts, today: &str) -> Staleness {
             Some(_) => Staleness::Stale,
             None => Staleness::Unknown,
         };
+    }
+    if is_global_reference(m) {
+        return Staleness::Reference;
     }
     if let Some(days) = days_between(&m.reviewed, today) {
         return if days <= FRESH_DAYS {
@@ -597,7 +625,6 @@ fn format_find(cands: &[Candidate<'_>]) -> String {
 /// framed blocks), so everything up to the snapshot is one path — see `load_query`.
 struct Loaded {
     root: PathBuf,
-    items_root: PathBuf,
     mems: Vec<Memory>,
     q: QueryContext,
     snap: Snapshot,
@@ -620,13 +647,8 @@ fn load_query(
     status_f: Option<Status>,
 ) -> Result<Loaded> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let items_root = root.join(crate::memory::MEMORY_ITEMS_DIR);
-    let mems = crate::memory::select_rows(
-        crate::memory::collect_memories(&items_root)?,
-        type_f,
-        status_f,
-        None,
-    );
+    let mems =
+        crate::memory::select_rows(crate::memory::collect_all(&root)?, type_f, status_f, None);
     let q = QueryContext {
         paths,
         globs,
@@ -637,7 +659,6 @@ fn load_query(
     let snap = freeze(&root);
     Ok(Loaded {
         root,
-        items_root,
         mems,
         q,
         snap,
@@ -648,7 +669,8 @@ fn load_query(
 /// [--status] [--include-draft]`. The find surface over the shared pipeline:
 /// `load_query` → `query` → `format_find`. find applies NO holdback (D8/D17);
 /// `base_filter` already excludes quarantined/retracted/superseded/archived (and
-/// draft unless `--include-draft`). It needs no body read, so `items_root` is unused.
+/// draft unless `--include-draft`). It needs no body read (find renders rows, not
+/// framed bodies), so it ignores everything past `mems`/`q`/`snap`.
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
 pub(crate) fn run_find(
     path: Option<PathBuf>,
@@ -754,7 +776,6 @@ pub(crate) fn run_retrieve(
 ) -> Result<()> {
     let Loaded {
         root,
-        items_root,
         mems,
         q,
         snap,
@@ -769,7 +790,7 @@ pub(crate) fn run_retrieve(
         .min(RETRIEVE_LIMIT_MAX);
     let mut out = String::new();
     for c in select_shown(&ranked, floor, limit) {
-        let body = crate::memory::read_body(&items_root, &c.memory.uid);
+        let body = crate::memory::read_body(&root, &c.memory.uid);
         // FRESH nonce per BLOCK: one nonce across N bodies lets body i forge body
         // i+1's close (D2). Minted inside the loop, never hoisted.
         let nonce = uuid::Uuid::new_v4().simple().to_string();
@@ -1109,6 +1130,37 @@ weight = {weight}
         assert!(base_filter(&global, &part(Some("repo:abc")), false));
     }
 
+    /// REQUIRED ADMISSION GOLDEN (ADR-002 / Charge IX / EX-3). The `repo=""` global
+    /// hatch in `base_filter` is DORMANT in production (record always derives a
+    /// non-empty repo), so there is no lived baseline — this golden IS the baseline.
+    /// A `repo=""`/anchor=none/path-scoped memory in an ARBITRARY (foreign) client
+    /// partition: base_filter admits it, match_scope surfaces it on a path hit, and
+    /// a scope MISS does not surface it (the global class must not dilute focused
+    /// queries). No code change to base_filter — this only pins the lit hatch.
+    #[test]
+    fn global_class_admitted_in_any_partition_and_surfaces_only_on_scope_hit() {
+        let global = memory(&Fixture {
+            repo: "",
+            anchor_kind: "none",
+            paths: &["install/manifest.toml"],
+            ..Default::default()
+        });
+        // admitted in a foreign repo partition (and in the no-repo partition).
+        assert!(base_filter(
+            &global,
+            &part(Some("repo:some-other-client")),
+            false
+        ));
+        assert!(base_filter(&global, &part(None), false));
+        // surfaces on a path hit …
+        assert_eq!(
+            match_scope(&global, &q(&["install/manifest.toml"])),
+            Some(ScopeMatch::of(Dimension::Paths))
+        );
+        // … but a scope miss does NOT surface it — no dilution of focused queries.
+        assert_eq!(match_scope(&global, &q(&["src/main.rs"])), None);
+    }
+
     #[test]
     fn base_filter_lifecycle() {
         let active = memory(&Fixture::default());
@@ -1440,6 +1492,74 @@ weight = {weight}
         );
     }
 
+    // -- SL-018 PHASE-02: the evergreen `reference` disposition (EX-4 / VT-4) --
+
+    /// The global/orientation class signature (ADR-002): `repo=""`, anchor=none,
+    /// path-scoped, unattested. The default Fixture is repo=""/none/unattested but
+    /// SCOPELESS — adding a path is what makes it a class member.
+    fn global_class_fixture() -> Fixture {
+        Fixture {
+            repo: "",
+            anchor_kind: "none",
+            verified_sha: "",
+            paths: &["install/manifest.toml"],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn global_class_renders_reference_never_decaying() {
+        let m = memory(&global_class_fixture());
+        // an arbitrarily-old `reviewed` does NOT decay it — evergreen.
+        let aeons_later = "2099-01-01";
+        assert_eq!(
+            staleness(&m, facts(None), aeons_later),
+            Staleness::Reference,
+            "the global class is exempt from days-since-reviewed decay"
+        );
+    }
+
+    #[test]
+    fn an_attested_global_scoped_memory_uses_commit_mode_not_reference() {
+        // verified_sha present ⇒ branch 1 (commit mode) wins; Reference is the
+        // UNATTESTED disposition (ADR-002: "+ no verified_sha").
+        let m = memory(&Fixture {
+            verified_sha: "deadbeef",
+            ..global_class_fixture()
+        });
+        assert_eq!(
+            staleness(&m, facts(Some(0)), "2026-06-05"),
+            Staleness::Fresh
+        );
+        assert_eq!(
+            staleness(&m, facts(Some(2)), "2026-06-05"),
+            Staleness::Stale
+        );
+    }
+
+    #[test]
+    fn a_scopeless_repo_empty_memory_is_not_reference() {
+        // the default Fixture (repo=""/none/unattested but SCOPELESS) is NOT a
+        // class member — it keeps its pre-SL-018 disposition (the gate proof that
+        // the special-case is scoped to the class, not all repo="" memories).
+        let dated = memory(&Fixture {
+            reviewed: "2026-06-01",
+            ..Default::default()
+        });
+        assert_eq!(
+            staleness(&dated, facts(None), "2026-06-05"),
+            Staleness::Fresh
+        );
+        let undated = memory(&Fixture {
+            reviewed: "",
+            ..Default::default()
+        });
+        assert_eq!(
+            staleness(&undated, facts(None), "2026-06-05"),
+            Staleness::Unanchored
+        );
+    }
+
     // -- rank ordinals (EX-3 / VT-3) ----------------------------------------
 
     #[test]
@@ -1717,6 +1837,7 @@ weight = {weight}
         assert_eq!(Staleness::Stale.label(), "stale");
         assert_eq!(Staleness::Unknown.label(), "unknown");
         assert_eq!(Staleness::Unanchored.label(), "unanchored");
+        assert_eq!(Staleness::Reference.label(), "reference");
         assert_eq!(Dimension::Paths.label(), "paths");
         assert_eq!(Dimension::Globs.label(), "globs");
         assert_eq!(Dimension::Commands.label(), "commands");
