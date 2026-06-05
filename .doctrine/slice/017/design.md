@@ -213,13 +213,20 @@ component dominating Key 2.
 1. `query` is `None`, or tokenizes to empty, or `corpus` is empty ⇒ return
    `targets.iter().map(|id| (id.to_string(), 0)).collect()` **without** invoking
    bm25 (avoids `avgdl` div-by-zero on an empty fit).
-2. Build the `Embedder` with the **custom tokenizer** (`lexical::tokenize`) and a
-   **self-computed `avgdl`** = mean `tokenize(doc.text).len()` over the active
-   corpus. NB the README's `EmbedderBuilder::with_fit_to_corpus(Language, &corpus)`
-   path is **unavailable** here: `Language`/`LanguageMode` are gated behind the
-   `default_tokenizer` feature, which `--no-default-features` removes. We supply
-   `avgdl` directly (`with_avgdl` or equivalent — exact method pinned by the
-   PHASE-01 probe, OQ-3).
+2. Build the `Embedder` over the corpus `text`s with the **custom tokenizer**
+   (`lexical::tokenize`) via
+   `EmbedderBuilder::<u32, _>::with_tokenizer_and_fit_to_corpus(LexTokenizer, &texts).build()`
+   — the **non-`Language` custom-tokenizer corpus-fit path** pinned by the PHASE-01
+   probe (OQ-3.2). NB the README's `with_fit_to_corpus(Language, &corpus)` path is
+   **unavailable** here: `Language`/`LanguageMode` are gated behind the
+   `default_tokenizer` feature, which `--no-default-features` removes.
+   **`avgdl` is NOT self-computed** (superseding the original `with_avgdl` plan):
+   this builder computes `avgdl = mean(tokenizer.tokenize(doc).len())` over the
+   corpus using the *same* tokenizer instance the embedder uses for per-doc length,
+   so the A3 avgdl/doc_len equivalence is **structural, not hand-maintained** —
+   stronger than the design's prior plan (PHASE-01 Finding A, notes.md).
+   `DefaultTokenEmbedder` is unexported, so the embedding space `D` is the concrete
+   `u32` (as the crate's own tests do; irrelevant to the BM25 maths).
 3. Upsert every active `LexDoc` into a `Scorer` keyed by uid; df/IDF describe the
    searchable set.
 4. `matches(embed(query))` → `(uid, f32)` for docs a query term touched. **We use
@@ -237,8 +244,14 @@ attributes to each document — i.e. `avgdl = mean(custom_tokenizer.tokenize(tex
 over the active corpus, using the *same* `Tokenizer` instance the `Embedder`/`Scorer`
 use. If `avgdl`'s token-stream semantics diverge from the scorer's internal
 `doc_len` (borrowed vs owned, normalised vs raw, deduped vs multiset), length
-normalisation is silently wrong while design-level tests still pass. PHASE-01 pins
-this by a differential check (see §9).
+normalisation is silently wrong while design-level tests still pass. **PHASE-01
+proved this equivalence STRUCTURAL** (Finding A): `with_tokenizer_and_fit_to_corpus`
+computes `avgdl` and `Embedder::embed` computes per-doc length through the *same*
+`tokenizer.tokenize(text).len()` call path (multiset), so divergence is impossible
+by construction — the differential (§9) confirmed it (incl. a repeated-token doc)
+and showed a deduping tokenizer diverges. PHASE-03 VT-5 carries the regression
+guard onto the *real* `lexical::tokenize`; the EX-3 STOP→`/consult` backstop stays,
+now expected unreachable.
 
 `OverlapRanker::score`: per-target distinct-query-token set-membership over its
 `LexDoc.text` (re-tokenized), returning the `u32` count directly — **no quantize**,
