@@ -1,0 +1,17 @@
+schema = "doctrine.adr"
+version = 1
+
+id = 2
+slug = "global-orientation-memory-class-repo-empty-unanchored-evergreen"
+title = "Global orientation memory class: repo-empty, unanchored, evergreen"
+status = "accepted"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[relationships]
+# Reserved. Empty in v1 — supersession (F1) and tagging are not wired yet.
+# Authored-but-inert: present so the shape is stable when those land.
+supersedes    = []   # ADR ids this one replaces (F1 `adr supersede`)
+superseded_by = []   # set on the old ADR by F1; reverse link is derived
+related       = [1]  # non-superseding cross-references (rides ADR-001 layering)
+tags          = []   # free-form classification
