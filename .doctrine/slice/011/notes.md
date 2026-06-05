@@ -128,7 +128,37 @@ The live ordeal CONFIRMED the `startup` SessionStart matcher fires the hook
   still UNIMPLEMENTED, but now only matters for the dev-build case (`boot install`
   run from `./target/debug`). Deferred follow-up, not blocking.
 
-**Codex cut-from-v1 fallback:** if the import does not inline for codex, or the
-unbounded codex staleness is unacceptable, cut codex from v1 — keep `import_targets`
-Claude-only and leave the `Harness::Codex` arm as the staged seam for a later
-slice. Claude (with its hook) is the supported v1 harness regardless.
+## Codex closure finding — @-import dead, SessionStart-emit is the path (2026-06-05)
+
+Live codex run (codex-cli 0.133.0, `gpt-5.4`) settled the §6 open question.
+
+- **Codex reads AGENTS.md but does NOT expand the `@`-import.** Verified with
+  `codex debug prompt-input` (renders the exact model-visible prompt, no model
+  call): `bootstrap doctrine`, `known CLI gaps`, the literal `@.doctrine/state/
+  boot.md` line — all FOUND; the snapshot BODY (`Route before you act`,
+  `Doctrine Boot Context`) — ABSENT. Codex sees the `@`-line as plain text. So
+  `boot install`'s codex arm (import-only, design D8/§5.2) is **known-broken**:
+  governance never reaches codex.
+- **BUT codex 0.133.0 has a hook system with a `SessionStart` event whose stdout
+  is injected as developer context** (`developers.openai.com/codex/hooks`,
+  captured in `scratch/codex/`). Matcher applies to `source`
+  (`startup|resume|clear|compact`). "Plain text on stdout is added as extra
+  developer context" (or JSON `hookSpecificOutput.additionalContext`). The design
+  premise "codex has no SessionStart equivalent" (§5.4/§6) is STALE.
+- **The real codex path (supersedes both import-only AND the cut fallback):** a
+  codex `SessionStart` hook that runs `doctrine boot` (regenerate) then EMITS the
+  snapshot on stdout → codex inlines it as developer context. This solves refresh
+  AND injection in one hook, and is BETTER than the Claude path: codex injects
+  into the CURRENT session → **zero lag** (vs Claude's ≤2-session `@`-import lag).
+- **Cost: it's a design change + new code, NOT PHASE-06.** The `Harness::Codex`
+  arm must write a `.codex/hooks.json` (or `[hooks]` in config.toml) SessionStart
+  entry instead of the `@`-import; likely a small `doctrine boot --emit`
+  (regenerate-and-print-to-stdout) verb so the hook is one clean call rather than
+  `doctrine boot >/dev/null; cat boot.md`. Trust: non-managed codex hooks need
+  `/hooks` review (hash-pinned) or a managed `requirements.toml` source.
+- **DISPOSITION:** for SL-011 v1, codex is **cut** (Claude-only `import_targets`;
+  the `Harness::Codex` arm stays the staged seam) — but the cut is now a DEFERRAL
+  to a scoped follow-up slice ("codex SessionStart-emit wiring") with the
+  mechanism above, NOT an open question. Claude (import + refresh hook) is the
+  supported v1 harness. This finding should also revise design §5.4/§6 (open
+  question resolved) when that slice is shaped.
