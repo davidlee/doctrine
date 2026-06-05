@@ -1948,6 +1948,178 @@ weight = {weight}
         assert!(ranked.is_empty(), "retracted is dropped by base_filter");
     }
 
+    // VT-1 — Key-1 (exact_key) dominates Key-2 (BM25 magnitude). An exact
+    // memory_key hit with a LOW bm25 (long, length-normalised-down doc) still
+    // outranks a non-key hit with a HIGHER bm25 (short doc), through the wired
+    // query(…, &Bm25Ranker). The polarity is structural, not score-tuned.
+    #[test]
+    fn query_exact_key_dominates_higher_bm25() {
+        let [u0, u1, _] = uids();
+        // keyhit: "mem.zzz" hits its key exactly (exact_key); doc padded long so
+        // its bm25 on mem/zzz is length-normalised DOWN.
+        let keyhit = memory(&Fixture {
+            uid: u0,
+            key: "mem.zzz",
+            title: "zzz",
+            summary: "alpha beta gamma delta epsilon zeta eta theta iota kappa",
+            ..Default::default()
+        });
+        // lexhit: no key, SHORT doc on the same tokens ⇒ HIGHER bm25.
+        let lexhit = memory(&Fixture {
+            uid: u1,
+            title: "mem zzz",
+            summary: "",
+            ..Default::default()
+        });
+        let mems = vec![keyhit, lexhit];
+        let ranked = query(
+            &mems,
+            &with_query("mem.zzz"),
+            &snap(None, None),
+            false,
+            Path::new("."),
+            &Bm25Ranker,
+        );
+        assert_eq!(ranked.len(), 2);
+        assert!(ranked[0].exact_key, "exact-key memory ranks first");
+        assert_eq!(ranked[0].memory.uid, u0);
+        assert!(
+            ranked[0].lexical < ranked[1].lexical,
+            "exact-key wins DESPITE a lower BM25 (Key-1 over Key-2): {} vs {}",
+            ranked[0].lexical,
+            ranked[1].lexical
+        );
+    }
+
+    // VT-2 — determinism: a permuted input store yields byte-identical query
+    // output (corpus-order-independent BM25 + uid tiebreak). Shuffle-invariance
+    // with Bm25Ranker wired through query().
+    #[test]
+    fn query_is_shuffle_invariant_under_bm25() {
+        let [u0, u1, u2] = uids();
+        let mk = |uid, title| {
+            memory(&Fixture {
+                uid,
+                title,
+                ..Default::default()
+            })
+        };
+        let a = mk(u0, "rare token");
+        let b = mk(u1, "common token");
+        let c = mk(u2, "common other");
+        let forward = vec![a.clone(), b.clone(), c.clone()];
+        let reversed = vec![c, b, a];
+        let run = |mems: &[Memory]| -> Vec<(String, u32)> {
+            query(
+                mems,
+                &with_query("rare token"),
+                &snap(None, None),
+                false,
+                Path::new("."),
+                &Bm25Ranker,
+            )
+            .iter()
+            .map(|c| (c.memory.uid.clone(), c.lexical))
+            .collect()
+        };
+        assert_eq!(
+            run(&forward),
+            run(&reversed),
+            "permuted store ⇒ identical ranked (uid, lexical)"
+        );
+    }
+
+    // VT-4 — the intended quality change: BM25 (rare-term IDF) and the retired
+    // overlap (raw distinct-hit count) order the SAME survivors OPPOSITELY. `a`
+    // matches TWO common query tokens (overlap 2); `b` matches ONE rare token
+    // (overlap 1) whose IDF — inflated by common-term fillers in the fit corpus
+    // — lifts its BM25 above `a`'s. Two rankers, one query, reversed first place.
+    #[test]
+    fn query_bm25_and_overlap_order_oppositely() {
+        let uids5 = [
+            "mem_018f3a1b2c3d4e5f60718293a4b5c601",
+            "mem_018f3a1b2c3d4e5f60718293a4b5c602",
+            "mem_018f3a1b2c3d4e5f60718293a4b5c6f3",
+            "mem_018f3a1b2c3d4e5f60718293a4b5c6f4",
+            "mem_018f3a1b2c3d4e5f60718293a4b5c6f5",
+        ];
+        let mk = |uid, title| {
+            memory(&Fixture {
+                uid,
+                title,
+                ..Default::default()
+            })
+        };
+        let a = mk(uids5[0], "common ubiq"); // overlap 2 (both common terms)
+        let b = mk(uids5[1], "rare"); // overlap 1 (rare term, high IDF)
+        // fillers inflate df(common)/df(ubiq), depressing their IDF below rare's
+        let f1 = mk(uids5[2], "common ubiq");
+        let f2 = mk(uids5[3], "common ubiq");
+        let f3 = mk(uids5[4], "common ubiq");
+        let mems = vec![a, b, f1, f2, f3];
+        let qctx = with_query("common ubiq rare");
+        let order = |ranker: &dyn LexicalRanker| -> Vec<String> {
+            query(
+                &mems,
+                &qctx,
+                &snap(None, None),
+                false,
+                Path::new("."),
+                ranker,
+            )
+            .iter()
+            .map(|c| c.memory.uid.clone())
+            .collect()
+        };
+        let bm25 = order(&Bm25Ranker);
+        let overlap = order(&crate::lexical::OverlapRanker);
+        assert_eq!(
+            bm25[0], uids5[1],
+            "BM25 lifts the rare-term match: {bm25:?}"
+        );
+        assert_eq!(
+            overlap[0], uids5[0],
+            "overlap ranks the higher raw-count first: {overlap:?}"
+        );
+        assert_ne!(
+            bm25[0], overlap[0],
+            "the two rankers disagree — the intended quality change"
+        );
+    }
+
+    // VT-5 — the lexical signal is DERIVED per query, never persisted: the Memory
+    // storage model gains no field and no float this slice (R3, by construction).
+    // Debug enumerates every Memory field, so its absence of `lexical` is the
+    // structural guard; and scoring borrows `&Memory` immutably, so the
+    // representation is unchanged after a nonzero BM25 score.
+    #[test]
+    fn query_bm25_score_is_derived_not_persisted_on_memory() {
+        let m = memory(&Fixture {
+            title: "rare token",
+            ..Default::default()
+        });
+        let before = format!("{m:?}");
+        assert!(
+            !before.contains("lexical"),
+            "Memory carries no lexical field"
+        );
+        let mems = vec![m];
+        let ranked = query(
+            &mems,
+            &with_query("rare token"),
+            &snap(None, None),
+            false,
+            Path::new("."),
+            &Bm25Ranker,
+        );
+        assert!(ranked[0].lexical > 0, "BM25 scored the survivor nonzero");
+        assert_eq!(
+            format!("{:?}", mems[0]),
+            before,
+            "Memory representation unchanged by scoring (immutable borrow)"
+        );
+    }
+
     #[test]
     fn format_find_row_carries_full_uid_and_required_columns() {
         let m = memory(&Fixture {

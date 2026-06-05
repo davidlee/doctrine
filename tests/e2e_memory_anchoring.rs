@@ -302,3 +302,54 @@ fn retrieve_frames_clean_blocks_and_holds_back_risky_against_the_built_binary() 
         "find shows the severity column for the risky row: {rows}"
     );
 }
+
+/// SL-017 PHASE-04 VT-3 — cross-process determinism of the BM25-ranked `find`.
+/// Two SEPARATE `doctrine` processes over the SAME seeded store must emit
+/// byte-identical ranked stdout: BM25 fits corpus statistics deterministically
+/// (no rng/clock in the ranker) and the 9-key sort has a total uid tiebreak
+/// (OQ-5/R7). This is the empirical cross-process guard for the determinism the
+/// unit tests prove in-process. A divergence ⇒ STOP→/consult (the R7 coarsen rung).
+#[test]
+fn find_bm25_ranking_is_cross_process_deterministic() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+
+    git(dir, &["init", "-q"]);
+    std::fs::write(dir.join("README.md"), "seed\n").expect("write seed");
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", "seed"]);
+
+    // A fixed corpus with shared common terms plus distinguishing rare ones, so
+    // the BM25 order is non-trivial (IDF + length-norm both in play, not a tie).
+    for title in [
+        "alpha rare unique signal",
+        "alpha common shared token",
+        "beta common shared token noise",
+        "gamma common token",
+    ] {
+        doctrine(
+            dir,
+            &[
+                "memory",
+                "record",
+                title,
+                "--type",
+                "fact",
+                "--path-scope",
+                "README.md",
+            ],
+        );
+    }
+
+    let query = &["memory", "find", "--query", "alpha rare common token"];
+    let first = doctrine(dir, query);
+    let second = doctrine(dir, query);
+    assert!(
+        !first.trim().is_empty(),
+        "the query matches the seeded corpus: {first}"
+    );
+    assert_eq!(
+        first, second,
+        "two processes must emit byte-identical BM25-ranked rows"
+    );
+}
