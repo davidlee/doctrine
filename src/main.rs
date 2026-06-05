@@ -190,6 +190,16 @@ enum SpecCommand {
         path: Option<PathBuf>,
     },
 
+    /// Reassemble a spec into its readable whole and print it to stdout.
+    Show {
+        /// Canonical spec ref: `PRD-NNN` (product) or `SPEC-NNN` (tech).
+        spec_ref: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Operate on a spec's requirements (membership).
     Req {
         #[command(subcommand)]
@@ -670,6 +680,7 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => spec::run_new(path, subtype, title, slug),
             SpecCommand::List { status, path } => spec::run_list(path, status.as_deref()),
+            SpecCommand::Show { spec_ref, path } => spec::run_show(path, &spec_ref),
             SpecCommand::Req { command } => match command {
                 SpecReqCommand::Add {
                     spec_ref,

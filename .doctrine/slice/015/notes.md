@@ -43,6 +43,23 @@ cross-phase implementation decisions the design didn't pin.
   `set_adr_status` shape). Verified on the built binary: a `--kind quality` add
   lands `kind = "quality"` on the reserved requirement. No engine edit.
 
+- **D-2 — CLOSED (PHASE-04).** `spec show`'s `render` reads every spec parse struct
+  (`Spec`/`SpecStatus`/`C4Level`/`Source`/`Interaction`) and `requirement::load`
+  reads `Requirement`, so all `cfg_attr(not(test), expect(dead_code …))` bridges
+  are erased. Verified: `rg "expect\(\s*dead_code" src/` finds only the *other*
+  modules' bridges (git/memory), none in spec/requirement. `Interaction`'s bridge
+  reason said PHASE-05 but render (P4) was its real first caller — dropped in P4.
+
+- **D-P4-1 — "statement" in `spec show` = the requirement's `description` field,
+  NOT its `.md` prose.** Design §5.4's requirement entry wants "kind, statement,
+  acceptance criteria"; §5.3 puts the full statement in `requirement-NNN.md` prose.
+  The storage rule (§3, "tooling never parses prose structure") forbids extracting
+  the `## Statement` section, and render is a pure fn over *parsed facets*. So the
+  structured `description` (`Option<String>`) is rendered as the statement line;
+  absent → no line. The spec's *own* `spec-NNN.md` is still emitted **verbatim**
+  (whole-body dump is not a structural parse). No `/consult` — the storage rule
+  resolves the design tension cleanly.
+
 ## Findings
 
 - **F-4 — `resolve_spec_ref` is the shared canonical-ref parser (`spec.rs`).**
@@ -76,3 +93,32 @@ cross-phase implementation decisions the design didn't pin.
   derived cell is built in `spec.rs`, mirroring `slice.rs`'s `phases` cell. The
   shared 4-column `format_list` path is untouched — the strongest form of the
   behaviour-preservation gate (PHASE-02 VT-3).
+
+- **F-6 — `requirement::load(root, "REQ-NNN")` is the by-FK reader seam (PHASE-04).**
+  Parses the canonical FK with `REQUIREMENT_KIND.prefix` (single source, mirrors
+  `resolve_spec_ref`) and reads `requirement-NNN.toml` → `Requirement`. `spec show`
+  resolves each member through it; **PHASE-05 `spec validate` reuses it** for the
+  dangling-FK check (currently `pub(crate)`). It opens only the membered dirs —
+  never scans the requirement tree (EX-2 "no cross-corpus scan").
+
+- **F-7 — String assembly: NOT `push_str(&format!(…))`, NOT `write!(…).expect()`.**
+  This repo denies `clippy::format_push_string` AND `clippy::expect_used` /
+  `unwrap_used` for **non-test** code (`Cargo.toml [lints]`), and
+  `let_underscore_must_use` kills `let _ = write!(…)`. So the infallible-`fmt::Write`
+  idioms are all closed. House style (cf. `retrieve::format_find`): build a
+  `Vec<String>` of pre-formatted pieces (`parts.push(format!(…))` — `Vec::push` is
+  not the lint) and `parts.concat()`. `render` is built this way. A memory was
+  recorded; see `mem.pattern.lint.string-build-no-push-format`.
+
+- **F-8 — `interactions.toml` uses `[[edge]]`, not `[[interaction]]`** (the seed
+  template's array key). `read_interactions` parses via an `InteractionsDoc { edge:
+  Vec<Interaction> }` wrapper, mirroring `read_members`/`MembersDoc`. A missing file
+  → `[]` (product specs have none — absent, not empty), so render's
+  empty-slice-omits-the-block rule (VT-3) covers product and zero-edge tech alike.
+
+- **F-9 — render emits no H1 of its own.** The spec's `spec-NNN.md` prose body
+  (dumped verbatim) already carries `# <ref>: <title>`; a synthetic identity H1
+  would double it. So the identity line is non-H1 (`` `SPEC-001` — Title `` +
+  a `slug · status · kind` line), and the prose's H1 is the sole one. Trade-off:
+  if an author strips the prose H1, the rendered doc has no H1 — acceptable under
+  "prose verbatim, structured identity is authoritative".

@@ -18,11 +18,10 @@
 //!
 //! A requirement has **no standalone CLI** in v1 — it is spec-mediated (§5.2):
 //! `spec req add` (PHASE-03) is the producer, calling `reserve` → `set_kind`
-//! (the D-1 overwrite) below. Those callers make the kind/scaffold/render chain
-//! production-live. The parse-layer `Requirement` has no production reader until
-//! `spec show` (PHASE-04), so it alone keeps the `cfg_attr(not(test),
-//! expect(dead_code, …))` bridge (D-2 / memory `mem.pattern.lint.expect-not-allow`),
-//! which self-erases the moment that caller lands.
+//! (the D-1 overwrite) below. The parse-layer `Requirement` is read in production
+//! by `load` (PHASE-04), the by-FK reader `spec show` resolves each member
+//! through (and `spec validate` PHASE-05 reuses) — the last D-2 `dead_code` bridge
+//! erased.
 
 use std::path::{Path, PathBuf};
 
@@ -76,17 +75,23 @@ pub(crate) enum ReqStatus {
     Superseded,
 }
 
+impl ReqStatus {
+    /// The kebab string for `spec show` render (matches the serde rename). Pure.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            ReqStatus::Pending => "pending",
+            ReqStatus::Active => "active",
+            ReqStatus::Deprecated => "deprecated",
+            ReqStatus::Superseded => "superseded",
+        }
+    }
+}
+
 /// The parse layer (entity-model tolerant-parse tier — §5.3). `title` keys the
 /// shared-`Meta` convention (inquisition C2 — NOT `name`); `slug` is derived from
 /// it. `description`/`tags`/`acceptance_criteria` default, so a minimal toml
-/// parses and the optional facets round-trip edit-preservingly.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-04 (spec show render); remove then"
-    )
-)]
+/// parses and the optional facets round-trip edit-preservingly. Read in
+/// production by `load` (the `spec show` reader, PHASE-04).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct Requirement {
     pub(crate) id: u32,
@@ -174,6 +179,39 @@ pub(crate) fn reserve(
 /// is the single source of the prefix.
 pub(crate) fn canonical_id(id: u32) -> String {
     format!("{}-{id:03}", REQUIREMENT_KIND.prefix)
+}
+
+/// Parse a canonical requirement FK (`REQ-NNN`) into its numeric id. The prefix
+/// is required and matched against `REQUIREMENT_KIND.prefix` — the single source,
+/// never hardcoded at the call site (mirrors `spec::resolve_spec_ref`).
+fn id_from_fk(canonical_fk: &str) -> anyhow::Result<u32> {
+    let (prefix, num) = canonical_fk.rsplit_once('-').with_context(|| {
+        format!("`{canonical_fk}` is not a canonical requirement ref (expected REQ-NNN)")
+    })?;
+    anyhow::ensure!(
+        prefix == REQUIREMENT_KIND.prefix,
+        "unexpected requirement prefix `{prefix}` in `{canonical_fk}` (expected {})",
+        REQUIREMENT_KIND.prefix
+    );
+    num.parse()
+        .with_context(|| format!("`{num}` is not a numeric id in `{canonical_fk}`"))
+}
+
+/// Read and parse a requirement by its canonical FK (`REQ-NNN`) — the production
+/// reader `spec show` (PHASE-04) resolves each member through, and `spec validate`
+/// (PHASE-05) reuses. Reads `requirement/NNN/requirement-NNN.toml` only (no
+/// corpus scan). An absent dir or unparsable toml is an error (a dangling FK is
+/// `validate`'s concern; here it surfaces as a read failure).
+pub(crate) fn load(root: &Path, canonical_fk: &str) -> anyhow::Result<Requirement> {
+    let id = id_from_fk(canonical_fk)?;
+    let name = format!("{id:03}");
+    let path = root
+        .join(REQUIREMENT_DIR)
+        .join(&name)
+        .join(format!("requirement-{name}.toml"));
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("requirement {canonical_fk} not found at {}", path.display()))?;
+    toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
 /// Overwrite the template-seeded `kind` on a reserved requirement (D-1). Edit-
@@ -381,6 +419,26 @@ kind = \"functional\"
         assert!(!body.contains("kind = \"functional\""));
         assert!(body.contains("# description — optional"));
         assert!(body.contains("acceptance_criteria = []"));
+    }
+
+    #[test]
+    fn load_reads_requirement_by_canonical_fk() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        reserve(root, "fast-boot", "Fast boot", "2026-06-05").unwrap();
+        set_kind(root, 1, ReqKind::Quality).unwrap();
+
+        let req = load(root, "REQ-001").unwrap();
+        assert_eq!(req.id, 1);
+        assert_eq!(req.title, "Fast boot");
+        assert_eq!(req.slug, "fast-boot");
+        assert_eq!(req.kind, ReqKind::Quality); // the D-1 overwrite is observed
+
+        // wrong prefix, missing id, and a non-numeric tail all error.
+        assert!(load(root, "PRD-001").is_err());
+        assert!(load(root, "REQ-099").is_err());
+        assert!(load(root, "REQ-x").is_err());
+        assert!(load(root, "001").is_err());
     }
 
     #[test]
