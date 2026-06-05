@@ -1,0 +1,41 @@
+memory_uid = "mem_019e985ca2017bd0bccc5a5cbc422b76"
+memory_key = "mem.pattern.lint.disallowed-types-collections"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Repo clippy bans HashSet/HashMap (disallowed-types) — use BTreeSet/BTreeMap"
+summary = "clippy::disallowed-types denies std HashSet/HashMap; use BTreeSet/BTreeMap unless hash nondeterminism is intended"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["src"]
+globs = ["src/**/*.rs"]
+commands = ["cargo clippy", "just check"]
+tags = ["lint", "clippy", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9bc9389a8eedaa73a40bad856701b3d7191a7704"
+ref_name = "refs/heads/SL-015"
+checkout_state_id = "757eee563c87c253980951274aa6f31adbec56b911bf75741ce2e7a27782a138"
+base_commit = "a02fb26cfb736e3e68005df3db156e4519908a65"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
