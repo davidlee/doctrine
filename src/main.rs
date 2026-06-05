@@ -14,6 +14,7 @@ mod retrieve;
 mod root;
 mod skills;
 mod slice;
+mod spec;
 mod state;
 
 use std::path::PathBuf;
@@ -68,6 +69,12 @@ enum Command {
     Adr {
         #[command(subcommand)]
         command: AdrCommand,
+    },
+
+    /// Create and list product / technical specifications.
+    Spec {
+        #[command(subcommand)]
+        command: SpecCommand,
     },
 
     /// Regenerate the cache-friendly governance snapshot, or `boot install` to wire it.
@@ -146,6 +153,37 @@ enum AdrCommand {
         /// New status (required): proposed|accepted|rejected|superseded|deprecated.
         #[arg(long)]
         status: adr::AdrStatus,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum SpecCommand {
+    /// Allocate the next id in the subtype's namespace and scaffold a new spec.
+    New {
+        /// Spec subtype: product | tech.
+        subtype: spec::SpecSubtype,
+
+        /// Spec title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List specs per subtype: id, status, slug, #members.
+    List {
+        /// Filter to a single status.
+        #[arg(long)]
+        status: Option<String>,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -593,6 +631,15 @@ fn main() -> anyhow::Result<()> {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
             AdrCommand::List { status, path } => adr::run_list(path, status.as_deref()),
             AdrCommand::Status { id, status, path } => adr::run_status(path, id, status),
+        },
+        Command::Spec { command } => match command {
+            SpecCommand::New {
+                subtype,
+                title,
+                slug,
+                path,
+            } => spec::run_new(path, subtype, title, slug),
+            SpecCommand::List { status, path } => spec::run_list(path, status.as_deref()),
         },
         Command::Boot {
             command,
