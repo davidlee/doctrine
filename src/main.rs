@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod adr;
+mod boot;
 mod clock;
 mod entity;
 mod fsutil;
@@ -66,6 +67,13 @@ enum Command {
     Adr {
         #[command(subcommand)]
         command: AdrCommand,
+    },
+
+    /// Regenerate the cache-friendly governance snapshot (`.doctrine/state/boot.md`).
+    Boot {
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
     },
 }
 
@@ -552,5 +560,6 @@ fn main() -> anyhow::Result<()> {
             AdrCommand::List { status, path } => adr::run_list(path, status.as_deref()),
             AdrCommand::Status { id, status, path } => adr::run_status(path, id, status),
         },
+        Command::Boot { path } => boot::run(path),
     }
 }
