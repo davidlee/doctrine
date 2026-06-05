@@ -1,0 +1,13 @@
+id = 15
+slug = "spec-entity-v1"
+title = "Spec entity v1: product + technical specs"
+status = "proposed"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[relationships]
+# Reserved. Empty in v1 — no spec/requirement registry to point at yet.
+# When specs land, this section gains (illustrative, not v1):
+#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
+#   requirements = ["..."]   # implements / updates / verifies
+#   supersedes   = [2]       # slice-to-slice links
