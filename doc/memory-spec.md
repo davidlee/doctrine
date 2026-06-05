@@ -1,16 +1,18 @@
 # Memory specification — umbrella
 
-**Status: direction. Decisions locked, build sequenced, most deferred.** This is
-the umbrella for doctrine's memory subsystem. It locks the architecture and the
-schema so the v1 entity can land without restructuring, and reserves the seams
+**Status: v1 shipped (SL-005/007/008); reserved seams deferred.** This is the
+umbrella for doctrine's memory subsystem. It locks the architecture and the
+schema so the v1 entity lands without restructuring, and reserves the seams
 (lifecycle ledger, event interchange, pluggable event-store backend, vector/graph
-retrieval) so each attaches later additively. It does **not** start a build; it
-pins the decisions the build will lean on. Sits under
-[entity-model](entity-model.md) and reuses the slice/drift entity machinery
-([slices-spec](slices-spec.md), [drift-spec](drift-spec.md)).
+retrieval) so each attaches later additively. Native v1 (entity, capture +
+provenance, scope-aware retrieval) is built; the reserved seams are designed here
+and built when their callers exist. Sits under [entity-model](entity-model.md)
+and reuses the slice/drift entity machinery ([slices-spec](slices-spec.md),
+[drift-spec](drift-spec.md)).
 
-doctrine has no memory subsystem today; the installer already reserves
-`.doctrine/memory`. The design below resolves what that directory holds.
+The installer reserves `.doctrine/memory`; v1 populates `items/` (committed) and
+gitignores `index/`/`embeddings/`/`state/`. The design below resolves what that
+directory holds.
 
 ## Thesis
 
@@ -35,17 +37,17 @@ is additive (§ Interoperability constraints, § Backend abstraction).
 The same "the apparatus arrives with the caller" line every doctrine spec draws
 ([reservation-spec](reservation-spec.md), [drift-spec](drift-spec.md)):
 
-- **v1 (native current-state memory), in three slices.** A memory entity with
-  the storage rule: per-memory `memory.toml` (owned, edit-preserving) +
+- **v1 (native current-state memory) — shipped, three slices.** A memory entity
+  with the storage rule: per-memory `memory.toml` (owned, edit-preserving) +
   `memory.md` (prose). Committed to git, reviewable, greppable. Reuses the
   slice/drift entity engine — memory is its next caller, not a parallel
-  implementation. Sequenced behind three gates:
+  implementation. Sequenced behind three gates, all landed:
   - **SL-005 (done) — entity + skinny producer.** Schema, `record` / `show` /
     `list`; read-by-id only.
-  - **SL-007 (memory-anchoring) — capture + provenance.** `record` scope + git
+  - **SL-007 (done) — capture + provenance.** `record` scope + git
     context-frame capture, `verify`, the `src/git.rs` seam (frame algorithm
     frozen as forgettable's `GitContextFrameV1`).
-  - **SL-008 (memory-retrieval) — reader.** Scope-aware `find` / `retrieve`,
+  - **SL-008 (done) — reader.** Scope-aware `find` / `retrieve`,
     scope-first lexical retrieval, the 9-key deterministic ranking, git-anchored
     staleness.
 - **Reserved seam (designed here, built when its caller exists).** The
@@ -204,12 +206,11 @@ note = ""
 backlinks; `[[...]]` resolution from the body; any "ids owned by this memory"
 list. Computed by the registry at query time, not written into the file.
 
-### Memory types (6, provisional)
+### Memory types (6)
 
 Lifted from spec-driver — proven, and just enum values in a payload field
-(interop widens kind in payload, never in substrate schema). The *set* is
-provisional; members may be tuned before implementation. The model does not
-depend on the exact membership.
+(interop widens kind in payload, never in substrate schema). Shipped as-is in v1;
+the model does not depend on the exact membership.
 
 | Type | Purpose | Lifespan |
 |---|---|---|
@@ -223,7 +224,7 @@ depend on the exact membership.
 Rule: use the narrowest type that fits. A durable `thread` is **promoted**
 (`fact`/`pattern`/`system`), not left to linger (§ Retrieval, thread expiry).
 
-### Lifecycle status (6, provisional) — separate from review
+### Lifecycle status (6) — separate from review
 
 `status ∈ {active, draft, superseded, retracted, archived, quarantined}`. Drops
 spec-driver's `deprecated`/`obsolete` (folded into `superseded`/`archived` —
@@ -371,6 +372,11 @@ verification within 14 days to surface; otherwise excluded. Durable thread conte
 is promoted to `fact`/`pattern`/`signpost`/`system`, not left as a thread.
 
 ## Links & relations
+
+**Status: designed, not built in v1.** The `[[relation]]` / `[[source]]` rows
+parse but are inert (`RawRelation` is an empty stub; no verb reads them); wikilink
+resolution and backlink computation await the relation-index registry (Roadmap
+step 3). The model below is the target shape.
 
 Two mechanisms, the same split spec-driver and entity-model draw:
 
@@ -528,16 +534,16 @@ entries = [
 ## Locked decisions
 
 The ten must-decide open questions, resolved. Decisions 4 and 5 (type and status
-vocabularies) are **provisional** — the shape is locked, the exact enum members
-may be tuned before implementation.
+vocabularies) were provisional through design; v1 shipped both enums as specified
+below.
 
 | # | Question | Decision |
 |---|---|---|
 | 1 | Append-only history canonical in the native backend? | **No.** Native canonical = mutable `memory.{toml,md}`; the append-only ledger is the audit/export seam, canonical only on the event-store backend. |
 | 2 | `memory_uid` / `event_id` algorithm | Client-minted UUID (uid, minted once); deterministic `uuid5` over a fixed namespace keyed by natural identity (event_id). § Identity. |
 | 3 | `memory.toml` projection or editable? | **Editable canonical**, owned, edit-preserving (follows decision 1). |
-| 4 | First-class memory types in v1 | *(provisional)* All **6** spec-driver types (§ Memory types). |
-| 5 | Lifecycle states in v1 | *(provisional)* **6**: active/draft/superseded/retracted/archived/quarantined; review state a separate axis. |
+| 4 | First-class memory types in v1 | All **6** spec-driver types (§ Memory types). **Shipped.** |
+| 5 | Lifecycle states in v1 | **6**: active/draft/superseded/retracted/archived/quarantined; review state a separate axis. **Shipped.** |
 | 6 | Minimum git context frame | repo (+ repo_id_kind/confidence) + HEAD commit/tree/ref + checkout_state_id (dirty) + base_commit; dirty derived from `anchor_kind` (not stored); algorithm frozen as forgettable's `GitContextFrameV1` (`forget.remote.v1`/`forget.checkout.v1`), reproduced byte-for-byte; born frame required for repo scope (§ Scope & anchoring). |
 | 7 | Commit durable memory files? | **Commit `items/`**; gitignore `index/`/`embeddings/`/`state/` (§ Install changes). |
 | 8 | Prompt-injection rendering contract | Quoted, attributed, delimited data block; never instruction; suppress quarantined/retracted (§ Security). |
@@ -551,20 +557,25 @@ scope, it sequences it:
 
 1. **Entity engine generalisation** (already roadmapped for slice→drift→spec) gains
    a **UUID-identity, no-reservation** variant — memory is its next caller.
-2. **v1 native memory** — three slices, each behind its own gate:
+   **Done:** `entity::materialise_named`/`scan_named`, `OwnedEntityId` dual-mode;
+   memory rides the named variant, no fork.
+2. **v1 native memory — done.** Three slices, each behind its own gate:
    - **SL-005 (done):** schema + entity, `record`/`show`/`list`, commit policy,
      manifest split.
-   - **SL-007 (memory-anchoring):** `record` scope + git-frame capture, `verify`,
+   - **SL-007 (done):** `record` scope + git-frame capture, `verify`,
      the `src/git.rs` seam.
-   - **SL-008 (memory-retrieval):** `find`/`retrieve`, scope retrieval +
+   - **SL-008 (done):** `find`/`retrieve`, scope retrieval +
      deterministic ranking + git staleness.
-3. **Links/backlinks** fold into the relation-index registry.
+3. **Links/backlinks** fold into the relation-index registry. **Not built** —
+   relation/source rows parse but are inert (§ Links & relations).
 4. **Reserved seam (deferred)**: lifecycle ledger, NDJSON import/export, event-store
    backend adapter, vector/graph retrieval — each when its caller exists.
 
 ## Open questions (deferred)
 
-1. **Lexical backend choice** — embedded index vs grep-class scan at v1 scale.
+1. **Lexical backend choice** — ~~embedded index vs grep-class scan at v1 scale.~~
+   **Resolved by v1:** in-memory scope-first lexical scan at v1 scale (`src/retrieve.rs`);
+   an embedded index is revisited only if scale demands it.
 2. **Embedding sidecar contract** — when dense retrieval lands; out-of-band keying.
 3. **`memory_key` default** — required vs optional, and the auto-derivation rule.
 4. **Pre-hook surfacing** (`visibility = pre`) — whether v1 ships proactive memory
@@ -601,10 +612,17 @@ scope, it sequences it:
 
 ## Follow-ups
 
-- **Glossary.** Add the memory kind and its `mem.*` referends to
-  [glossary](glossary.md) when this leaves direction.
-- **Entity engine.** Track the UUID-identity / no-reservation variant as a
-  capability of the generalised engine, not a memory-specific fork.
-- **Locality recovery CLI.** `doctrine memory show <key-or-uid>` reassembles the
-  record, prose, derived backlinks, and staleness into one human view — the read
-  analogue of `spec req show`.
+- **Glossary (open).** Add the memory kind and its `mem.*` referends to
+  [glossary](glossary.md) — v1 has shipped, but `glossary.md` carries no `mem.*`
+  entries yet.
+- **Entity engine — done.** The UUID-identity / no-reservation variant landed as a
+  capability of the shared engine (`materialise_named`/`scan_named`), not a memory
+  fork (§ Roadmap step 1).
+- **Locality recovery CLI (partial).** `doctrine memory show <key-or-uid>` resolves
+  the record + prose-as-data, but does **not** yet fold in derived backlinks
+  (await the relation-index registry, § Links & relations) or staleness (currently
+  surfaced only on `find`/`retrieve`). Completing it is the read analogue of
+  `spec req show`.
+- **Producer trust/severity flags (open, audit A-3).** `record` exposes no
+  `--trust`/`--severity`/`--weight`/`--confidence` flags; the `[trust]`/`[ranking]`
+  axes default in code and are settable only by hand-editing `memory.toml`.
