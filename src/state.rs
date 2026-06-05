@@ -19,13 +19,13 @@ use serde::Deserialize;
 use toml_edit::Item;
 
 use crate::fsutil;
-// v1 debt (audit [watch]): the runtime layer reaches *up* into the slice-CLI
-// module for its input model. `Plan`/`PlanPhase` live next to their authoring
-// consumer (slice-003 Non-Goal: no shared `Meta`), and `PhaseStatus` below
-// carries `clap::ValueEnum` — the arg parser leaking into the state layer. Both
-// are deliberate for a one-consumer v1; lift `Plan` to a neutral home and split
-// the CLI enum from the stored value if a second consumer of either appears.
-use crate::slice::{Plan, PlanPhase};
+// `Plan`/`PlanPhase` are now an engine-tier leaf (`crate::plan`, SL-016): the
+// state layer depends *down* on a neutral home, not up into the slice-CLI
+// module — the slice↔state cycle is gone (ADR-001). Residual debt: `PhaseStatus`
+// below still carries `clap::ValueEnum`, so the arg parser leaks into the state
+// layer — out of scope here; split the CLI enum from the stored value if a
+// second consumer appears.
+use crate::plan::{Plan, PlanPhase};
 
 /// Slice-scoped runtime-state tree, relative to the project root.
 const STATE_SLICE_DIR: &str = ".doctrine/state/slice";
