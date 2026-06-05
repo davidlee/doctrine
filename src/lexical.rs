@@ -17,6 +17,7 @@
     )
 )]
 
+use bm25::{EmbedderBuilder, Scorer, Tokenizer};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Case-fold + split on non-alphanumeric, dropping empties. The shared lexer for
@@ -157,6 +158,76 @@ impl LexicalRanker for OverlapRanker {
                     _ => 0,
                 };
                 ((*t).to_string(), u32::try_from(hits).unwrap_or(u32::MAX))
+            })
+            .collect()
+    }
+}
+
+/// The bm25 embedding space `D`. `DefaultTokenEmbedder`/`DefaultEmbeddingSpace`
+/// are unexported, so we name a concrete hash space — `u32`, as the crate's own
+/// tests do. The space is irrelevant to the BM25 maths (PHASE-01 probe).
+type Space = u32;
+
+/// The custom bm25 `Tokenizer` — a ZST adapter delegating to `lexical::tokenize`,
+/// so there is ONE lexer across the lexical axis (design D2). No `DefaultTokenizer`
+/// / stemming / stopwords; `--no-default-features` keeps that stack absent.
+struct LexTokenizer;
+
+impl Tokenizer for LexTokenizer {
+    fn tokenize(&self, input_text: &str) -> Vec<String> {
+        tokenize(input_text) // the module free fn, not this method (no receiver → no recursion)
+    }
+}
+
+/// Corpus-relative Okapi BM25 behind the trait (design §5.4). Fits `avgdl`/IDF
+/// over the FULL fit corpus via `with_tokenizer_and_fit_to_corpus` (the avgdl /
+/// `doc_len` equivalence is STRUCTURAL — same tokenizer both sides, PHASE-01
+/// Finding A), scores targets, `quantize`s each match, fills `0` for no-evidence
+/// targets (A1). bm25's own descending order is discarded — doctrine's `sort_key`
+/// re-orders downstream. Scores are non-negative (Lucene IDF), so `quantize`'s
+/// `max(0)` is defensive only.
+pub(crate) struct Bm25Ranker;
+
+/// One `(id, 0)` per target, in order — the no-evidence / empty-input result (A1
+/// totality without invoking bm25; also the avgdl div-by-zero guard, §5.4 step 1).
+fn zeros(targets: &[&str]) -> Vec<(String, u32)> {
+    targets.iter().map(|t| ((*t).to_string(), 0)).collect()
+}
+
+impl LexicalRanker for Bm25Ranker {
+    fn score(
+        &self,
+        query: Option<&str>,
+        corpus: &LexicalCorpus<'_>,
+        targets: &[&str],
+    ) -> Vec<(String, u32)> {
+        assert_targets_subset(corpus, targets);
+        let docs = corpus.docs();
+        let q = match query {
+            Some(q) if !tokenize(q).is_empty() && !docs.is_empty() => q,
+            _ => return zeros(targets), // None / empty-after-tokenize / empty corpus
+        };
+        // Fit avgdl/IDF over the whole corpus (D3), then score the query. The
+        // builder computes avgdl with the SAME tokenizer the embedder uses per
+        // doc (structural A3); we consume id→score and discard bm25's ordering.
+        let texts: Vec<&str> = docs.iter().map(|d| d.text.as_str()).collect();
+        let embedder =
+            EmbedderBuilder::<Space, _>::with_tokenizer_and_fit_to_corpus(LexTokenizer, &texts)
+                .build();
+        let mut scorer = Scorer::<String, Space>::new();
+        for d in docs {
+            scorer.upsert(&d.id, embedder.embed(d.text.as_str()));
+        }
+        let matched = scorer.matches(&embedder.embed(q));
+        let scored: BTreeMap<&str, f32> =
+            matched.iter().map(|m| (m.id.as_str(), m.score)).collect();
+        targets
+            .iter()
+            .map(|t| {
+                (
+                    (*t).to_string(),
+                    quantize(scored.get(t).copied().unwrap_or(0.0)),
+                )
             })
             .collect()
     }
@@ -312,5 +383,137 @@ mod tests {
         let docs = vec![doc("a", "token"), doc("a", "other")];
         let corpus = LexicalCorpus::Raw(&docs);
         let _ = OverlapRanker.score(Some("token"), &corpus, &["a"]);
+    }
+
+    // -- Bm25Ranker (design §5.4, §9 test list; VT-1..VT-5) -----------------
+
+    // VT-1 — IDF: a target on a RARE corpus term outranks one on a UBIQUITOUS
+    // term, length held equal. ("common" df=3, "rare" df=1; both targets len 2.)
+    #[test]
+    fn bm25_idf_rare_outranks_common() {
+        let docs = vec![
+            doc("a", "common alpha"),
+            doc("b", "rare beta"),
+            doc("c", "common gamma"),
+            doc("d", "common delta"),
+        ];
+        let corpus = LexicalCorpus::Raw(&docs);
+        let got = Bm25Ranker.score(Some("common rare"), &corpus, &["a", "b"]);
+        let (sa, sb) = (got[0].1, got[1].1);
+        assert!(
+            sb > sa,
+            "rare-term target must outrank common-term: a={sa} b={sb}"
+        );
+    }
+
+    // VT-2 — length normalisation (b-effect): equal TF, the SHORTER doc outranks
+    // the longer. Both contain "term" once; avgdl=(1+5)/2=3, short<avgdl<long.
+    #[test]
+    fn bm25_length_norm_shorter_outranks_longer() {
+        let docs = vec![
+            doc("short", "term"),
+            doc("long", "term alpha beta gamma delta"),
+        ];
+        let corpus = LexicalCorpus::Raw(&docs);
+        let got = Bm25Ranker.score(Some("term"), &corpus, &["short", "long"]);
+        assert!(
+            got[0].1 > got[1].1,
+            "shorter doc must outrank longer at equal TF: {got:?}"
+        );
+    }
+
+    // VT-3 — determinism: permuted corpus/upsert order ⇒ identical per-target
+    // scores (positional over targets, so corpus order cannot leak); and a
+    // same-process repeat call is byte-identical (OQ-5/R7, by construction).
+    #[test]
+    fn bm25_is_shuffle_invariant_and_repeatable() {
+        let d1 = vec![
+            doc("a", "alpha beta"),
+            doc("b", "beta gamma gamma"),
+            doc("c", "alpha"),
+        ];
+        let d2 = vec![
+            doc("c", "alpha"),
+            doc("a", "alpha beta"),
+            doc("b", "beta gamma gamma"),
+        ];
+        let c1 = LexicalCorpus::Raw(&d1);
+        let c2 = LexicalCorpus::Raw(&d2);
+        let targets = ["a", "b", "c"];
+        let r1 = Bm25Ranker.score(Some("beta gamma"), &c1, &targets);
+        let r2 = Bm25Ranker.score(Some("beta gamma"), &c2, &targets);
+        assert_eq!(
+            r1, r2,
+            "permuted corpus order must yield identical per-target scores"
+        );
+        assert_eq!(r1, Bm25Ranker.score(Some("beta gamma"), &c1, &targets));
+    }
+
+    // VT-4 — edges: None / "" / separators-only / empty corpus ⇒ all-zero with
+    // exactly targets.len() entries; a survivor no query term touches ⇒ 0; df is
+    // taken over the FULL corpus, not the target subset (D3).
+    #[test]
+    fn bm25_edges_are_all_zero_with_exact_arity() {
+        let docs = vec![doc("a", "token auth"), doc("b", "rust")];
+        let corpus = LexicalCorpus::Raw(&docs);
+        let z = vec![("a".to_string(), 0), ("b".to_string(), 0)];
+        assert_eq!(Bm25Ranker.score(None, &corpus, &["a", "b"]), z);
+        assert_eq!(Bm25Ranker.score(Some(""), &corpus, &["a", "b"]), z);
+        assert_eq!(Bm25Ranker.score(Some("  ... "), &corpus, &["a", "b"]), z);
+    }
+
+    #[test]
+    fn bm25_empty_corpus_returns_empty_vec() {
+        let docs: Vec<LexDoc> = vec![];
+        let corpus = LexicalCorpus::Raw(&docs);
+        assert!(Bm25Ranker.score(Some("token"), &corpus, &[]).is_empty());
+    }
+
+    #[test]
+    fn bm25_survivor_untouched_by_query_is_zero() {
+        let docs = vec![doc("a", "token auth"), doc("b", "python django")];
+        let corpus = LexicalCorpus::Raw(&docs);
+        let got = Bm25Ranker.score(Some("token"), &corpus, &["a", "b"]);
+        assert!(got[0].1 > 0, "matched target must be nonzero");
+        assert_eq!(got[1].1, 0, "survivor no query term touches ⇒ 0");
+    }
+
+    // df over the full corpus: non-target "common" docs inflate df(common),
+    // depressing its IDF below rare's — even though those docs are not targets.
+    #[test]
+    fn bm25_df_reflects_full_corpus_not_targets() {
+        let docs = vec![
+            doc("a", "common"),
+            doc("b", "rare"),
+            doc("x", "common"),
+            doc("y", "common"),
+            doc("z", "common"),
+        ];
+        let corpus = LexicalCorpus::Raw(&docs);
+        let got = Bm25Ranker.score(Some("common rare"), &corpus, &["a", "b"]);
+        assert!(
+            got[1].1 > got[0].1,
+            "df over full corpus must depress common: {got:?}"
+        );
+    }
+
+    // VT-5 — avgdl equivalence on the REAL `lexical::tokenize` (carries PHASE-01
+    // EX-3 to the production lexer): the builder's fitted avgdl equals the
+    // independent multiset mean of token-output length over the corpus (A3).
+    #[test]
+    fn bm25_avgdl_equals_multiset_mean_on_real_tokenizer() {
+        let texts = ["mem.auth.token", "src/x.rs ok", "single"];
+        let reference_mean = {
+            let total: usize = texts.iter().map(|t| tokenize(t).len()).sum();
+            total as f32 / texts.len() as f32
+        };
+        let embedder =
+            EmbedderBuilder::<Space, _>::with_tokenizer_and_fit_to_corpus(LexTokenizer, &texts)
+                .build();
+        assert_eq!(
+            embedder.avgdl(),
+            reference_mean,
+            "self-computed avgdl must equal multiset mean over real tokenize (A3, VT-5)"
+        );
     }
 }

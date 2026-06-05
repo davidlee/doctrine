@@ -153,3 +153,55 @@ and the leaf, which the leaf may not import (ADR-001). Concat-vs-segment
 equivalence held across separator-laden fixtures (`mem.x.y`, `src/x.rs`) and the
 empty query. `just check` green: clippy zero-warning, full suite + e2e pass,
 `cargo fmt --check` clean.
+
+## PHASE-03 — Bm25Ranker: corpus-relative BM25 behind the trait — DONE
+
+`Bm25Ranker` implemented in `src/lexical.rs` on the PHASE-01 recipe + PHASE-02
+trait, still a pure leaf. 9 new tests green, `just check` exit 0 (bm25 now in the
+bin/lib build — the PHASE-01 "bm25 test-only" caveat is resolved; clippy compiles
+bm25 usage). NOT yet wired into retrieve (PHASE-04).
+
+### Recipe as shipped (matches `tests/bm25_probe.rs` verbatim)
+
+`type Space = u32` (DefaultTokenEmbedder unexported); `struct LexTokenizer`
+(ZST) `impl bm25::Tokenizer` delegates to the module free `tokenize` — bare
+`tokenize(s)` resolves to the free fn, not the method (no receiver ⇒ no
+recursion), so ONE lexer (D2). `score`: `assert_targets_subset` first; guard
+`Some(q) if !tokenize(q).is_empty() && !docs.is_empty()` else `zeros(targets)`
+(None / empty-after-tokenize / empty corpus — the §5.4 step-1 avgdl div-by-zero
+guard); else `with_tokenizer_and_fit_to_corpus(LexTokenizer, &texts)`, upsert
+every doc into `Scorer::<String,Space>`, `matches(embed(q))` → `BTreeMap<&str,
+f32>`, map targets POSITIONALLY to `quantize(scored.get(t).copied()
+.unwrap_or(0.0))`. bm25's descending order discarded.
+
+### A3 STRUCTURAL — confirmed on the real lexer (VT-5, EX-3)
+
+`with_tokenizer_and_fit_to_corpus` computes avgdl with the SAME tokenizer the
+embedder uses per-doc, so the avgdl/doc_len equivalence is structural, not
+hand-maintained — no `with_avgdl`, no self-computed mean (plan.toml's "manual
+avgdl" prose is superseded, §5.4 reconciled at fd172fb; criterion intent met more
+strongly, no id change). `bm25_avgdl_equals_multiset_mean_on_real_tokenizer`
+carries PHASE-01 EX-3 to the production `lexical::tokenize`: `embedder.avgdl()`
+== `mean(tokenize(t).len())`. EX-3's STOP→/consult backstop stayed unreached.
+
+### VT evidence
+
+VT-1 IDF (`bm25_idf_rare_outranks_common`): "rare" df=1 target > "common" df=3
+target at equal length. VT-2 length-norm (`..shorter_outranks_longer`): equal TF,
+short(len1) > long(len5), avgdl=3. VT-3 determinism
+(`..shuffle_invariant_and_repeatable`): permuted corpus ⇒ identical per-target
+scores (positional over targets, corpus order cannot leak) + repeat-call
+identical — OQ-5/R7 by construction, no LEX_SCALE coarsening needed. VT-4 edges
+(`..all_zero_with_exact_arity`, `..empty_corpus_returns_empty_vec`,
+`..survivor_untouched..`, `..df_reflects_full_corpus_not_targets`): None/""/seps
+/empty ⇒ all-zero exact arity; untouched survivor ⇒ 0; df over FULL corpus (D3).
+
+### Notes for PHASE-04
+
+- `zeros(targets)` is a private module helper (one `(id,0)` per target) — reused
+  by the wiring if a no-evidence path needs it; assembly must stay positional, no
+  `unwrap_or` (A1).
+- The §9 staged `dead_code` bridge still covers `Bm25Ranker`/`LexTokenizer`/
+  `zeros`/`Space` — its self-clearing condition is the PHASE-04 wiring (remove the
+  `#![cfg_attr(not(test), expect(dead_code…))]` then; a now-unfulfilled
+  expectation would warn).
