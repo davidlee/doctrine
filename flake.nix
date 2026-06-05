@@ -60,6 +60,18 @@
         jailEnvOptions = with jailLib.combinators; [
           (try-fwd-env "OPENROUTER_API_KEY")
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
+          # Share the HOST doctrine binary into the jail. persist-home already
+          # mounts an isolated, writable ~/.cargo; this ro-binds the host's real
+          # install on top (extraOptions applies after persist-home, so it wins)
+          # so host + jail execute ONE physical binary at one path string. Kills
+          # the boot-snapshot version-skew thrash — single source of truth is the
+          # host `cargo install --path .`. ro-bind-try: jail still launches if the
+          # binary isn't installed yet. Tilde expands in the host launcher shell;
+          # in-jail $HOME is also /home/david, so src == dst.
+          (try-readonly (noescape "~/.cargo/bin/doctrine"))
+          # Put cargo-bin on the jail PATH so the SessionStart hook's bare
+          # `doctrine boot` resolves to the shared binary above.
+          (add-path "/home/david/.cargo/bin")
         ];
 
         # workspaceDeps now sourced from the JAIL_WORKSPACE_DEPS env var
