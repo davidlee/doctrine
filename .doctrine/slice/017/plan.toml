@@ -130,7 +130,7 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "custom bm25 `Tokenizer` delegates to `lexical::tokenize`; no DefaultTokenizer / stemming / stopwords / second regime; `--no-default-features` preserved" },
   { id = "EX-2", text = "`Bm25Ranker` implements `LexicalRanker`: fit avgdl/IDF over the full corpus, score targets, return exactly one entry per target in order with no-evidence⇒0; hard targets⊆corpus assert; empty-input short-circuit avoids the avgdl div-by-zero" },
-  { id = "EX-3", text = "self-computed avgdl uses the SAME tokenizer instance semantics the Embedder/Scorer use (A3); IDF/df computed over the whole corpus, not the target subset (D3)" },
+  { id = "EX-3", text = "self-computed avgdl uses the SAME tokenizer instance semantics the Embedder/Scorer use (A3); IDF/df computed over the whole corpus, not the target subset (D3). STOP→/consult if VT-5 shows the REAL `lexical::tokenize` diverges from the scorer's doc_len basis (PHASE-01 proved the mechanism on the probe tokenizer; A3 is a design §5.4 STOP condition — never silently coerce avgdl to match)" },
   { id = "EX-4", text = "`cargo clippy` zero warnings (the §9 staged `dead_code` bridge still covers Bm25Ranker — also non-test-reachable until PHASE-04); full suite green; Bm25Ranker not yet the wired default (PHASE-04)" },
 ]
 verification = [
