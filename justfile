@@ -3,7 +3,7 @@ default: lint test install
 check: fmt lint test build
 
 list-memories:
-  @fd . doc/memories
+  @cargo run -q -- memory list
 
 fmt:
   cargo fmt
