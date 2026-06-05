@@ -307,6 +307,17 @@ repo-scoped memory **requires** a born frame; an unborn/non-git context yields a
 `unanchored` memory, permitted only for unscoped memory. `workspace` is carried
 always.
 
+**Carve-out — the global/derived class (ADR-002).** One sanctioned class is
+*scoped **and** unanchored*: a **global / unanchored / path-scoped / derived**
+orientation memory carries `repo = ""` **and** `anchor_kind = none` yet still
+bears scope (≥1 `paths`/`globs`/`commands`). It is minted upstream of any client
+repo (a framework master shipped with the binary), so a real anchor would assert
+something false about the client's git and a non-empty `repo` would self-exclude
+it from every client (see Retrieval, partition). The class is defined by that
+signature, not a new `memory_type`, and lives in a derived/gitignored tree
+outside the committed capture store — the scoped⇒anchored rule above is
+unchanged for captured memory.
+
 **The frame algorithm is frozen, and shared with the interop backend.** The
 event-store counterparty (`forgettable`, § Backend abstraction) already defines this
 frame as `GitContextFrameV1` under the normalizer tags `forget.remote.v1`
@@ -354,18 +365,27 @@ without scope are excluded from scope-filtered queries:
 Dense reranking or graph expansion, when added, contribute **bounded signals into
 this tuple** — they never break the deterministic final ordering.
 
-**Staleness** — three modes, the metric chosen by what anchoring is available:
+**Staleness** — four modes, the metric chosen by what anchoring is available:
 
 | Mode | Condition | Metric |
 |---|---|---|
 | scoped + attested | has scope + `verified_sha` | commits touching scoped paths since the SHA |
 | scoped, unattested | has scope, no `verified_sha` | days since `reviewed` |
 | unscoped | no path/git scope | days since `reviewed` |
+| global / derived (evergreen) | `repo = ""` + `anchor_kind = none` (the global class), no `verified_sha` | **none — non-decaying `reference`** (decay-exempt) |
+
+The fourth mode (ADR-002) is the staleness disposition of the global/derived
+class. It is **evergreen / reference-grade**: exempt from the days-since-
+`reviewed` decay, it renders an explicit non-decaying **`reference`** state rather
+than a decaying `stale`. Evergreen-ness is *derived* from the class signature —
+not stored, and `reviewed` is **never re-stamped** to keep it fresh (that would
+break the idempotent sync of the derived corpus); `reviewed` is retained only for
+the recency tiebreak (sort key #8).
 
 Undecidable reachability (shallow/partial clone, detached HEAD, rebase,
 non-ancestor anchor, non-git project) resolves to an **explicit** state —
-`fresh` / `stale` / `unknown` / `unanchored` — never a silent hide or a silent
-over-trust.
+`fresh` / `stale` / `unknown` / `unanchored` / `reference` — never a silent hide
+or a silent over-trust.
 
 **Thread expiry.** A `thread` additionally requires a scope-matched context **and**
 verification within 14 days to surface; otherwise excluded. Durable thread content
@@ -408,7 +428,11 @@ posture is non-negotiable and backend-independent:
   scope/coordinate/anchor fields (`repo`, refs, `source_uri`) — on the interop
   backend those feed hashes and projections and are not encrypted.
 - **Partition** by workspace and repo; cross-workspace/cross-repo leakage is a
-  modelled threat.
+  modelled threat. A memory whose `repo` is non-empty and ≠ the querying repo is
+  hard-filtered out — that filter *is* the cross-repo boundary. The **`repo = ""`
+  global class** (§ Scope & anchoring carve-out, ADR-002) is the deliberate
+  exception: an empty repo-id is admitted in **every** partition, which is why a
+  repo-agnostic orientation master must carry `repo = ""` to reach any client.
 - **Audit survives redaction:** retraction suppresses the body from default recall
   but the ledger/history preserves it for audit (subject to policy-driven local
   redaction of generated projections).
