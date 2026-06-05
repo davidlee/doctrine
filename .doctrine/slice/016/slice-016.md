@@ -45,8 +45,9 @@ the dependency graph becomes acyclic.
 - Behaviour-preserving: this is a pure move. Every existing suite stays green
   **unchanged** (the behaviour-preservation gate). No new behaviour, no API
   shape change beyond the module path.
-- Decide where disk-reading `read_plan` lands (pure `Plan::parse` belongs in
-  `plan`; the disk read may stay in `slice` or move) — a `/design` question.
+- Disk-reading `read_plan` **stays in `slice`** (resolved, design.md §7 D1):
+  pure `Plan::parse` moves to `plan`; `state` consumes `&Plan` and never reads,
+  so the disk IO has no reason to leave the shell.
 
 ## Non-Goals
 
