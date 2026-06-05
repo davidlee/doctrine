@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 5
+slug = "preserve-an-audit-trail-across-the-storage-tiers"
+title = "Preserve an audit trail across the storage tiers"
+status = "pending"
+kind = "quality"
+
+description = "A slice's authored contract and lifecycle history remain reviewable and reconcilable against what shipped, so a change can always be audited after the fact."
+tags = []
+acceptance_criteria = [
+  "The authored contract is committed, diffable, and reviewable.",
+  "A shipped change can be reconciled against the slice's declared scope.",
+  "Lifecycle standing is recoverable for review without recourse to chat history.",
+]

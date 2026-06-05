@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 16
+slug = "reserve-collision-free-durable-memory-identity"
+title = "Reserve collision-free durable memory identity"
+status = "pending"
+kind = "functional"
+
+description = "Each memory is minted a durable identity that is stable for its whole life and collision-free across independent clones without a central allocator."
+tags = []
+acceptance_criteria = [
+  "A memory's identity is minted once and never changes across edits, retries, or re-anchoring.",
+  "Independent recordings in separate clones never collide on identity.",
+  "Identity is reserved without relying on a lock, daemon, or central authority.",
+]

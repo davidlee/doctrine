@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 39
+slug = "advance-a-decision-through-its-status-lifecycle"
+title = "Advance a decision through its status lifecycle"
+status = "pending"
+kind = "functional"
+
+description = "A decision can move from proposed to a terminal standing — accepted, rejected, superseded, or deprecated — as an authored act that preserves its rationale."
+tags = []
+acceptance_criteria = [
+  "The status vocabulary is a closed set spanning proposed and the terminal standings.",
+  "A transition records the new standing and stamps when it moved, leaving the rationale prose and relationship seam intact.",
+  "Setting a decision to the standing it already holds is a no-op that leaves the record unchanged.",
+]

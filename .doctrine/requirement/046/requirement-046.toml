@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 46
+slug = "maintain-the-version-control-ignore-boundary"
+title = "Maintain the version-control ignore boundary"
+status = "pending"
+kind = "functional"
+
+description = "Provisioning keeps the project's version-control ignore boundary correct so Doctrine's disposable, private, and derived files stay out of version control."
+tags = []
+acceptance_criteria = [
+  "Required ignore entries are appended so Doctrine's disposable and private files are not committed.",
+  "The ignore file is created if it does not already exist when an entry must be added.",
+  "An ignore entry already present is never duplicated.",
+]

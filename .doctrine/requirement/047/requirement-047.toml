@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 47
+slug = "converge-non-destructively-on-repeated-provisioning"
+title = "Converge non-destructively on repeated provisioning"
+status = "pending"
+kind = "quality"
+
+description = "Repeated provisioning converges to the same end state without overwriting existing files, re-making directories, duplicating entries, or undoing prior work."
+tags = []
+acceptance_criteria = [
+  "A file already present at its destination is never overwritten and is left byte-for-byte unchanged.",
+  "A second run on an already-provisioned project plans and effects no change.",
+  "A partially provisioned project is completed without disturbing the part already in place.",
+]

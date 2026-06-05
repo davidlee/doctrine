@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 37
+slug = "record-a-new-decision-as-a-durable-project-global-artefact"
+title = "Record a new decision as a durable project-global artefact"
+status = "pending"
+kind = "functional"
+
+description = "An operator can record a new decision, reserving its project-global identity and materialising its durable record seeded for authoring context, decision, consequences, verification, and references."
+tags = []
+acceptance_criteria = [
+  "A recorded decision has a stable project-global identity and a durable home that persists across reads.",
+  "The record opens seeded for authoring rationale — context, decision, consequences — not mechanism.",
+  "The new record opens in the proposed standing.",
+]

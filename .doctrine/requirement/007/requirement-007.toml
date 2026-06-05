@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 7
+slug = "declare-a-specification-for-an-evergreen-capability"
+title = "Declare a specification for an evergreen capability"
+status = "pending"
+kind = "functional"
+
+description = "An operator can declare a specification under a subtype, reserving its identity and scaffolding its durable home and prose body seeded for the canonical sections."
+tags = []
+acceptance_criteria = [
+  "A declared spec has a stable identity in its subtype namespace and a durable home that persists across reads.",
+  "The prose body opens seeded for the eight canonical sections, ready for authoring the what/why.",
+  "The new spec opens in the draft stage.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 29
+slug = "impose-orientation-cost-only-when-governance-changes"
+title = "Impose orientation cost only when governance changes"
+status = "pending"
+kind = "quality"
+
+description = "The orientation surface imposes its full cost only when the governance it reflects changes; regenerating from unchanged governance leaves the recorded surface untouched so no fresh cost is incurred."
+tags = []
+acceptance_criteria = [
+  "Regenerating from unchanged governance produces an identical surface and records no change.",
+  "Across sessions with no governance change, the surface imposes no fresh orientation cost.",
+  "A governance change is reflected in the surface on the next regeneration.",
+]

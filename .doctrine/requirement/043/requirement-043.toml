@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 43
+slug = "provision-doctrines-files-into-a-project"
+title = "Provision Doctrine's files into a project"
+status = "pending"
+kind = "functional"
+
+description = "An operator can provision Doctrine's working files into a target project, creating the directories it needs and writing the files it ships."
+tags = []
+acceptance_criteria = [
+  "Provisioning creates the directories Doctrine requires and writes the files it ships into the resolved target location.",
+  "The provisioned files travel with the tool itself, requiring no external source to fetch from.",
+  "On completion the operator is told which directories were created, files written, and entries appended.",
+]

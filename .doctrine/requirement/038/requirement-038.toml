@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 38
+slug = "survey-decisions-by-identity-with-their-standing"
+title = "Survey decisions by identity with their standing"
+status = "pending"
+kind = "functional"
+
+description = "An operator can survey the project's decisions ordered by identity, each showing its standing, alias, and title, and can narrow the survey to one status."
+tags = []
+acceptance_criteria = [
+  "The survey lists decisions ordered by identity.",
+  "Each row shows standing, alias, and title.",
+  "The survey can be filtered to a single status, yielding an empty result when none match.",
+]

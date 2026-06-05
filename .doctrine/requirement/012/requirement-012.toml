@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 12
+slug = "maintain-storage-tier-separation-between-structured-entities-and-prose"
+title = "Maintain storage-tier separation between structured entities and prose"
+status = "pending"
+kind = "quality"
+
+description = "Structured, queryable requirement data lives as entities in TOML and narrative lives in prose, with neither tier restating the other."
+tags = []
+acceptance_criteria = [
+  "Functional and quality requirements exist only as entities; no FR-/NF- requirement row appears in the spec's prose body.",
+  "Queryable data such as a requirement's statement and acceptance criteria lives in structured TOML, not in narrative.",
+  "The structured entity is the single source of truth; the prose and the entities never disagree.",
+]

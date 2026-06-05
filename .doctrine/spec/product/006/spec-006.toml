@@ -1,0 +1,17 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 6
+slug = "install"
+title = "Install"
+status = "draft"
+kind = "product"
+category = "bootstrap"
+tags = ["install", "bootstrap", "idempotent", "provisioning", "project-root"]
+responsibilities = [
+  "Establish Doctrine's working files inside an arbitrary project so the rest of the system has a home to operate from.",
+  "Locate the project's root reliably from anywhere inside it, so files land in the right place without the operator stating where.",
+  "Show the operator exactly what will change before anything is written, so provisioning is reviewable rather than blind.",
+  "Preserve operator-owned edits across repeated runs — provisioning adds what is missing and never overwrites what already exists.",
+  "Keep the project's ignore boundary correct so Doctrine's disposable and private files stay out of version control.",
+]

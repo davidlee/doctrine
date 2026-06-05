@@ -1,0 +1,17 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 4
+slug = "memory"
+title = "Memory"
+status = "draft"
+kind = "product"
+category = "knowledge-recall"
+tags = ["memory", "recall", "provenance", "scope", "retrieval", "agent-context"]
+responsibilities = [
+  "Hold durable, typed, scoped units of recalled knowledge so an agent or human need not rediscover them each session.",
+  "Anchor each memory to the context it was learned in, so its present trustworthiness can be judged rather than assumed.",
+  "Surface the right memories for a working context in a deterministic, reproducible order, suppressing the untrustworthy.",
+  "Carry a memory through its lifecycle — recorded, reviewed, superseded, retracted — while keeping lifecycle separate from verification standing.",
+  "Treat stored knowledge as hostile data, never trusted instruction, so durable recall cannot become a latent injection or leakage channel.",
+]

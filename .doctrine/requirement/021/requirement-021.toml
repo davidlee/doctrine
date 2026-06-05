@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 21
+slug = "select-claim-reach-by-configuration-without-changing-callers"
+title = "Select claim reach by configuration without changing callers"
+status = "pending"
+kind = "functional"
+
+description = "The reach of a claim — a single working tree or every clone of a shared remote — is selected by configuration without changing what callers request, falling back to the narrower reach when the broader one is unavailable."
+tags = []
+acceptance_criteria = [
+  "Callers request an identity identically regardless of the configured reach.",
+  "Automatic selection resolves to broader reach when the shared remote is reachable and to single-tree reach otherwise, surfacing the reduced reach rather than assuming it silently.",
+  "An explicit reach choice overrides automatic selection.",
+]

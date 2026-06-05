@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 14
+slug = "recall-memories-relevant-to-a-working-context"
+title = "Recall memories relevant to a working context"
+status = "pending"
+kind = "functional"
+
+description = "A caller can recall the memories relevant to a working context, ordered deterministically by relevance and trust, with the untrustworthy suppressed."
+tags = []
+acceptance_criteria = [
+  "Only memories whose declared scope matches the working context are selected.",
+  "The returned ordering is a total, reproducible function of the query and candidates.",
+  "Each returned memory carries an explicit trust standing.",
+]

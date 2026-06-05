@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 24
+slug = "hold-claims-as-coordination-only-references-never-content"
+title = "Hold claims as coordination-only references, never content"
+status = "pending"
+kind = "quality"
+
+description = "A claim references an entity only by a namespaced name and never stores its bytes, keeping the primitive blind to entity meaning and free of entity content."
+tags = []
+acceptance_criteria = [
+  "A claim records only a namespaced key, holder, and acquisition time — never the entity's content.",
+  "The primitive carries no knowledge of any entity's internal layout or meaning.",
+  "An entity can be authored, edited, or removed in the working tree independently of its claim.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 8
+slug = "record-a-functional-or-quality-requirement-as-a-membered-peer-entity"
+title = "Record a functional or quality requirement as a membered peer entity"
+status = "pending"
+kind = "functional"
+
+description = "An operator can record a functional or quality requirement, reserving it as a peer entity and binding it to a spec as a labelled member in one operation."
+tags = []
+acceptance_criteria = [
+  "The requirement is reserved as a peer entity with its own durable identity, owned by no spec.",
+  "The same operation appends a membership row binding the requirement to the spec under the next free label for its kind.",
+  "The requirement opens pending; functional requirements take an FR- label and quality requirements an NF- label.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 31
+slug = "survey-shipped-skills-with-per-agent-install-status"
+title = "Survey shipped skills with per-agent install status"
+status = "pending"
+kind = "functional"
+
+description = "An operator can survey the shipped skills grouped by domain, each with its description and its install status for the detected or named agent, and can restrict the view to skills already installed."
+tags = []
+acceptance_criteria = [
+  "Skills are listed grouped by their domain, each with a name and description.",
+  "Each skill shows its install status for the detected or named agent.",
+  "The survey can be narrowed to only the skills already installed.",
+]

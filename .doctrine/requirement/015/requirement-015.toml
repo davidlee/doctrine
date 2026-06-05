@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 15
+slug = "advance-a-memory-through-lifecycle-and-verification-standing"
+title = "Advance a memory through lifecycle and verification standing"
+status = "pending"
+kind = "functional"
+
+description = "A memory can advance through its lifecycle standing and, independently, through its verification standing as it is checked against reality."
+tags = []
+acceptance_criteria = [
+  "A memory's lifecycle standing can move through a closed set of recorded stages.",
+  "Verification standing advances on a separate axis from lifecycle standing.",
+  "A memory may hold any combination of lifecycle and verification standing.",
+]

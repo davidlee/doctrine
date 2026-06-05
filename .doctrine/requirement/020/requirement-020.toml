@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 20
+slug = "arbitrate-contended-allocation-so-exactly-one-holder-wins"
+title = "Arbitrate contended allocation so exactly one holder wins"
+status = "pending"
+kind = "functional"
+
+description = "When agents contend for the same candidate identity, exactly one wins the atomic claim and the rest recompute and retry until each lands a free identity, with no lock, daemon, or central authority."
+tags = []
+acceptance_criteria = [
+  "When two callers compute the same candidate, exactly one wins and the loser recomputes the next free identity.",
+  "No caller ever proceeds on a contested or duplicated identity.",
+  "Arbitration requires no lock, daemon, or central coordinating authority.",
+]

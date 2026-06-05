@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 36
+slug = "keep-installation-additive-and-idempotent"
+title = "Keep installation additive and idempotent"
+status = "pending"
+kind = "quality"
+
+description = "Installation is additive and idempotent: an existing installed skill is never overwritten, and re-running an install changes nothing already in place."
+tags = []
+acceptance_criteria = [
+  "A direct install skips any skill already present and leaves it untouched.",
+  "Re-running the same install reports that nothing changed.",
+  "A missing delegated runtime is reported with guidance and aborts that path without a silent fallback.",
+]

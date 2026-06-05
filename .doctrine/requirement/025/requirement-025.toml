@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 25
+slug = "project-current-governance-into-a-session-start-orientation-surface"
+title = "Project current governance into a session-start orientation surface"
+status = "pending"
+kind = "functional"
+
+description = "The tool assembles the project's current stable governance state — routing/process orientation, accepted decisions, durable memory pointers, and the resolved invocation handle — into a single agent-readable orientation surface."
+tags = []
+acceptance_criteria = [
+  "The surface carries routing/process orientation, accepted decisions, durable memory pointers, and a resolved handle for invoking the tool.",
+  "A governance category with nothing to contribute renders a benign placeholder rather than failing.",
+  "The surface is assembled only from existing authoritative governance, introducing no new place a fact originates.",
+]

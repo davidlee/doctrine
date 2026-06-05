@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 32
+slug = "install-a-selected-subset-of-skills-into-an-agent"
+title = "Install a selected subset of skills into an agent"
+status = "pending"
+kind = "functional"
+
+description = "An operator can install a chosen subset of skills into an agent, narrowing the selection by skill or by domain and choosing either the project or the user scope."
+tags = []
+acceptance_criteria = [
+  "The selection can be narrowed by skill or by domain; omitting a selection installs all skills.",
+  "The operator can target either the project scope or the user scope.",
+  "The planned actions are surfaced for consent before any skill is written.",
+]

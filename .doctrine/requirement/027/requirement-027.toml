@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 27
+slug = "report-drift-between-the-projected-surface-and-current-governance"
+title = "Report drift between the projected surface and current governance"
+status = "pending"
+kind = "functional"
+
+description = "On request the tool reports whether the recorded orientation surface has drifted from current governance and whether any category is unpopulated, without claiming the orientation already resident in the running session is fresh."
+tags = []
+acceptance_criteria = [
+  "A fresh surface, a drifted surface, and an absent surface are each reported distinctly.",
+  "An unpopulated category is reported as such rather than presented as populated.",
+  "The report scopes its claims to the recorded surface and never asserts the running session's resident orientation is fresh.",
+]

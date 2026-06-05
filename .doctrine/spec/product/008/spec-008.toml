@@ -1,0 +1,17 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 8
+slug = "adrs"
+title = "ADRs"
+status = "draft"
+kind = "product"
+category = "governance"
+tags = ["adr", "decision-record", "rationale", "lifecycle", "project-global"]
+responsibilities = [
+  "Record a project-global architecture decision — the context that forced it, the choice made, and the consequences accepted — as a durable, reviewable artefact.",
+  "Preserve the rationale behind a decision so a future agent inherits the why, not just the resulting code.",
+  "Give each decision a permanent project-global identity that prose, commits, and sibling artefacts can cite.",
+  "Carry a decision through its status lifecycle from proposed to a terminal standing without rewriting its history.",
+  "Hold a reserved seam for cross-decision relationships (supersession, related links, tags) that attaches later without reshaping the record.",
+]

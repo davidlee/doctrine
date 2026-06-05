@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 23
+slug = "keep-coordination-invisible-to-the-entity-record"
+title = "Keep coordination invisible to the entity record"
+status = "pending"
+kind = "quality"
+
+description = "Coordination bookkeeping never enters an entity's content, version history, or review surface; entities remain ordinary, visible working-tree artefacts."
+tags = []
+acceptance_criteria = [
+  "A claim never appears in the identified entity's content or in the project's version history and review surface.",
+  "Entities stay ordinary working-tree files, unaffected by the coordination layer.",
+  "Removing or rebuilding the coordination store leaves the entity record intact.",
+]

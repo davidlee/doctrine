@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 26
+slug = "establish-the-orientation-surface-in-an-agent-harnesss-session-start"
+title = "Establish the orientation surface in an agent harness's session start"
+status = "pending"
+kind = "functional"
+
+description = "The tool wires the orientation surface into a given agent harness's session-start context so future sessions arrive oriented without manual action."
+tags = []
+acceptance_criteria = [
+  "After establishment, a new session in the harness arrives with the orientation surface present in its context.",
+  "The wiring is idempotent — repeating it does not duplicate or corrupt the harness configuration.",
+  "Maintainer-owned harness configuration encountered during wiring is preserved, never clobbered.",
+]
