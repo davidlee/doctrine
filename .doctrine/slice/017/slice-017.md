@@ -69,11 +69,18 @@ Design (`design.md`) resolves the original open questions; status below.
   `LexicalRanker::score(query, &LexicalCorpus, targets)`. Fit IDF/avgdl over **all
   active memories** (the searchable set); score only survivors (bare `--query`:
   active = corpus = targets, SL-008 D20). Scoring stays pure.
-- **OQ-3 — `bm25` crate fit & jail build. PARTIALLY RESOLVED.** `bm25 = 2.3.2`
-  (MIT) fetches over the live network. **Gated on a PHASE-01 build probe:** that
-  `Tokenizer`/`EmbedderBuilder`/`Scorer` remain exposed under
-  `default-features = false`. If core scoring is feature-gated, STOP and
-  `/consult` — never silently enable the default tokenizer deps.
+- **OQ-3 — `bm25` API surface under `--no-default-features`. PARTIALLY RESOLVED.**
+  `bm25 = 2.3.2` (MIT) fetches over the live network. Confirmed: `Language`/the
+  `with_fit_to_corpus(Language, …)` path is gated behind `default_tokenizer` →
+  unavailable; `Bm25Ranker` self-computes `avgdl`. **PHASE-01 probe** pins the
+  `Tokenizer` trait signature, the custom-tokenizer + `with_avgdl` builder path,
+  and `Scorer`'s key bound. If the core path is unreachable without `default`,
+  STOP and `/consult` — never silently enable the default tokenizer deps.
+- **OQ-5 — cross-process determinism. PHASE-01 probe.** bm25 uses std
+  `HashMap`/`HashSet` internally; doctrine discards bm25's ordering, so only the
+  per-doc score *value* matters. Empirically assert byte-identical `find` output
+  across two separate process runs; a 1-ULP drift at scale 1e6 could flip a
+  quantize bucket. Fallback: coarsen `LEX_SCALE` (determinism over resolution).
 - **OQ-4 — default selection. RESOLVED (design D5).** `Bm25Ranker` is the hard
   default; `OverlapRanker` retained only behind the trait (parity/fallback/future
   measurement). No CLI/env/config switch in SL-017. Determinism preserved

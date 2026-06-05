@@ -113,7 +113,7 @@ the leaf's `LexDoc`, constructs the corpus, and consumes scores into `Candidate`
 **Data flow in `query()`** (the single chained filter splits into two sets):
 
 ```
-active    = mems.filter(base_filter)                    // fit corpus (searchable set; honours include_draft)
+active    = mems.filter(base_filter)                    // fit corpus = partition-scoped active set (base_filter applies snap.part + include_draft)
 survivors = active.filter(scope_match? + thread_expiry) // score targets + Candidates
 corpus    = LexicalCorpus::Raw(&active_lexdocs)
 targets   = survivor uids
@@ -197,15 +197,29 @@ component dominating Key 2.
 1. `query` is `None`, or tokenizes to empty, or `corpus` is empty ⇒ return
    `targets.iter().map(|id| (id.to_string(), 0)).collect()` **without** invoking
    bm25 (avoids `avgdl` div-by-zero on an empty fit).
-2. Fit `Embedder` to the active corpus; upsert every active `LexDoc` into a
-   `Scorer` (keyed by uid). df/IDF and avgdl now describe the searchable set.
-3. `matches(embed(query))` → ranked `(uid, f32)` for docs a query term touched.
-4. Filter to `targets`, `quantize` each f32, assemble `Vec<(uid, u32)>`; targets
+2. Build the `Embedder` with the **custom tokenizer** (`lexical::tokenize`) and a
+   **self-computed `avgdl`** = mean `tokenize(doc.text).len()` over the active
+   corpus. NB the README's `EmbedderBuilder::with_fit_to_corpus(Language, &corpus)`
+   path is **unavailable** here: `Language`/`LanguageMode` are gated behind the
+   `default_tokenizer` feature, which `--no-default-features` removes. We supply
+   `avgdl` directly (`with_avgdl` or equivalent — exact method pinned by the
+   PHASE-01 probe, OQ-3).
+3. Upsert every active `LexDoc` into a `Scorer` keyed by uid; df/IDF describe the
+   searchable set.
+4. `matches(embed(query))` → `(uid, f32)` for docs a query term touched. **We use
+   `matches()` purely as a score map — bm25's own descending-by-score ordering is
+   discarded** (its tie-order derives from `HashSet` iteration and is not
+   cross-process stable; doctrine's `sort_key` re-imposes the total order).
+5. Filter to `targets`, `quantize` each f32, assemble `Vec<(uid, u32)>`; targets
    not in `matches` are left for the caller's `unwrap_or(0)`.
 
 `OverlapRanker::score`: per-target distinct-query-token set-membership over its
 `LexDoc.text` (re-tokenized), returning the `u32` count directly — **no quantize**,
 byte-identical to the retired `lexical_score`. Corpus is ignored (per-document).
+*Equivalence note:* `lexical_score` tokenized title/summary/tags/key separately
+then unioned into a `BTreeSet`; `LexDoc.text` is those segments space-joined, and
+`tokenize` splits on the joins, so the resulting token *set* — and the distinct-hit
+count — is identical. The parity test pins this.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -225,12 +239,27 @@ byte-identical to the retired `lexical_score`. Corpus is ignored (per-document).
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-3 (build) — partially resolved, gated on PHASE-01 probe.** `bm25 = 2.3.2`
-  (MIT) fetches over the live network. Unconfirmed until built: that
-  `Tokenizer` / `EmbedderBuilder` (fit-to-corpus) / `Scorer` (`upsert`/`matches`)
-  remain exposed under `default-features = false`. If any core scoring API is
-  feature-gated behind `default`/`default_tokenizer`, **do not silently broaden
-  dependencies — stop and `/consult`.**
+- **OQ-3 (build + API surface) — partially resolved, gated on PHASE-01 probe.**
+  `bm25 = 2.3.2` (MIT) fetches over the live network. **Confirmed feature-gated:**
+  `Language`/`LanguageMode` (and thus the `with_fit_to_corpus(Language, …)` fit
+  path) live behind `default_tokenizer` — removed by `--no-default-features`. The
+  probe must pin, under `--no-default-features`:
+  1. the `Tokenizer` trait signature (method + return type) — the adapter shape;
+  2. the exact builder method to set a custom tokenizer **and** a precomputed
+     `avgdl` (e.g. `with_tokenizer` + `with_avgdl`) — the corpus-fit path that does
+     **not** route through `Language`;
+  3. `Scorer`'s generic bound (must admit a `String`/uid key) and `matches()`'s
+     return type.
+  If the core scoring path (custom tokenizer + manual `avgdl` + `Scorer`) is not
+  reachable without `default`, **stop and `/consult`** — never silently enable the
+  default tokenizer deps.
+- **OQ-5 (determinism) — gated on PHASE-01 probe.** bm25's inverted index and
+  `matches()` use std `HashMap`/`HashSet` (per-process randomized order). doctrine
+  discards bm25's ordering, so the only exposure is whether a per-document score
+  *value* (`Σ idf·doc_value` over query terms) is **bitwise-identical across
+  process runs**. Summation likely follows deterministic query-token order, but
+  this is unverified; a 1-ULP drift at 1e6 scale could flip a quantize bucket.
+  Resolve empirically (R7).
 - **Corpus cost (deferred).** Embedding all active memories per query is O(active).
   Acceptable at current store size; a precomputed `Indexed` corpus is the
   non-breaking follow-up if the active set grows large.
@@ -290,6 +319,15 @@ byte-identical to the retired `lexical_score`. Corpus is ignored (per-document).
   (current scale); `Indexed` follow-up reserved by D7.
 - **R6 — Two tokenization regimes drift.** *Mitigation:* avoided — bm25 `Tokenizer`
   delegates to the same `lexical::tokenize`; one lexer.
+- **R7 — Cross-process non-determinism from bm25's internal `HashMap`.** A
+  per-document score differing by 1 ULP across runs could flip a quantize bucket
+  and reorder results, breaking SL-008's determinism contract. *Mitigation:*
+  (a) we never consume bm25's ordering — only the per-doc `f32`, re-sorted by
+  `sort_key`; (b) PHASE-01 empirically asserts score-value stability across two
+  separate process runs (OQ-5) plus a same-process repeat-call test; (c) **fallback
+  if unstable:** coarsen `LEX_SCALE` (fewer buckets ⇒ ULP noise cannot cross a
+  boundary ⇒ ties fall through to deterministic keys 3–9), trading lexical
+  resolution for determinism. Determinism wins if they conflict.
 
 ## 9. Quality Engineering & Validation
 
@@ -307,9 +345,12 @@ covered by *new* tests + re-baselined integration/e2e.
   title+summary+tags+key; no-query ⇒ 0).
 - `Bm25Ranker`: rare-term-outranks-common (IDF effect); shorter-doc-outranks-longer
   at equal TF (length norm, `b`); shuffle-invariance (permuted upsert ⇒ identical
-  scores); empty query / empty-after-tokenize / empty corpus ⇒ all-zero; non-matching
-  survivor ⇒ 0; IDF drawn from full corpus not just targets (a target's score
-  reflects df over active, not over the target subset).
+  scores); **same-process repeat-call** (two `score` calls on identical inputs ⇒
+  identical `u32`s — guards summation-order noise, OQ-5/R7); empty query /
+  empty-after-tokenize / empty corpus ⇒ all-zero; non-matching survivor ⇒ 0; IDF
+  drawn from full corpus not just targets (a target's score reflects df over
+  active, not over the target subset); self-computed `avgdl` matches the mean
+  token length of the active corpus.
 - Contract invariants: `targets ⊄ corpus` trips the debug assert; duplicate corpus
   ids trip the debug assert.
 
@@ -320,7 +361,11 @@ covered by *new* tests + re-baselined integration/e2e.
 - one crafted case where BM25 reorders vs overlap (the intended quality change).
 - `Memory` serialization unchanged (no float payload / new field).
 
-**e2e/VT:** `doctrine memory find --query …` default path uses BM25, deterministic.
+**e2e/VT:** `doctrine memory find --query …` default path uses BM25. **Cross-process
+determinism VT:** run the same `find --query` invocation twice in *separate
+processes* against a fixed store and assert byte-identical output — the empirical
+guard for OQ-5/R7 (no reliance on bm25 internals). A failure here triggers the R7
+coarsen-scale fallback before close.
 
 **Lint:** guarded `as` casts in `quantize` carry a narrow
 `#[expect(clippy::cast_possible_truncation, reason = "…")]` (and
@@ -330,4 +375,55 @@ warnings.
 
 ## 10. Review Notes
 
-(Adversarial pass pending — to be recorded here.)
+### Adversarial self-review (round 1)
+
+- **A1 (critical) — wrong corpus-fit API under `--no-default-features`.** The first
+  draft fit via `EmbedderBuilder::with_fit_to_corpus(Language::English, …)`, but
+  `Language`/`LanguageMode` are gated behind `default_tokenizer` (confirmed in the
+  crate `lib.rs`), which `--no-default-features` removes. *Disposition: fixed* —
+  §5.4 now self-computes `avgdl` and builds via the custom-tokenizer + `with_avgdl`
+  path; OQ-3 enumerates the exact builder methods to pin in the PHASE-01 probe.
+- **A2 (high) — over-claimed determinism.** §5.5 asserted the f32 "fixed by inputs"
+  while bm25 uses std `HashMap`/`HashSet` internally (confirmed in `scorer.rs`).
+  *Disposition: bounded* — doctrine discards bm25's ordering (consumes only the
+  per-doc score, re-sorts via `sort_key`), so the residual exposure is score-*value*
+  stability across processes. Captured as OQ-5 + R7 with an empirical cross-process
+  VT and a coarsen-`LEX_SCALE` fallback (determinism wins over resolution).
+- **A3 (medium) — `Tokenizer` trait signature unverified.** lib.rs only re-exports
+  it; the adapter shape (`fn tokenize(&self, &str) -> ?`) is assumed. *Disposition:
+  PHASE-01 probe item (OQ-3.1); a non-`Vec<String>` return changes only the thin
+  adapter, not the design.*
+- **A4 (low) — "all active" imprecise.** It is the *partition-scoped* active set
+  (`base_filter` applies `snap.part` + `include_draft`), not a global active set.
+  *Disposition: fixed* in §5.1/§5.3 wording.
+- **A5 (low) — OverlapRanker concat-vs-segment equivalence unstated.** A reviewer
+  could doubt that space-joining segments then tokenizing equals the old
+  per-segment union. *Disposition: fixed* — equivalence note added to §5.4; the
+  parity test pins it.
+- **A6 (low) — moving `tokenize()` may orphan callers.** *Disposition: PHASE-01
+  must `grep` every `tokenize(` use in `retrieve` before the move; only
+  `lexical_score` is expected, but verify.*
+- **A7 (low) — "Memory serialization unchanged" is a claim, not a test.**
+  *Disposition: it is structurally true (SL-017 edits no serialization path); the
+  assertion is belt-and-suspenders, not the primary guarantee. Wording in §5.5/R3
+  reflects "by construction."*
+
+### Doctrinal alignment
+
+- **New runtime dependency (`bm25`) — ADR needed?** *Judged no.* ADR-001 governs
+  module layering, not dependency admission; the project adds libraries
+  (`clap`/`serde`/`glob`/…) at slice altitude without ADRs. `bm25` is a scoped
+  scoring implementation detail, not a project-global architecture decision (unlike
+  the the external decision register event-store backend, which is an ADR). If the user disagrees,
+  promote to `doctrine adr new` before PHASE-01.
+- **Storage rule / float ban — respected.** Score is derived, never stored; no
+  `f32` in payload/export/backend; no new persisted field (R3, by construction).
+- **Pure/impure split — respected.** Scoring is pure; the shell constructs the
+  ranker and loads memories. `avgdl` is computed from in-memory `LexDoc` text, no
+  I/O in the leaf.
+- **Behaviour-preservation gate — honoured.** Existing SL-008 suites stay green via
+  `OverlapRanker` parity; the BM25 default is proven by new + re-baselined tests.
+
+Round-1 findings integrated. No unresolved governance conflict — the two PHASE-01
+probes (OQ-3 API surface, OQ-5 determinism) are the gating unknowns; both have a
+defined `/consult`/fallback path if they fail.
