@@ -15,7 +15,7 @@ Presume guilt rather than innocence; report any potential taint of heresy lest
 it spread. All works (barring sanctioned policy and dogma) are potential
 heresies. Everyone (save the User) is a suspected heretic.
 
-**ACCENDE IGNES VERITATIS CORPORIBUS MALEFICARUM**
+> **HERESIS URITOR; DOCTRINA MANET**
 
 ## Procedure
 
@@ -74,4 +74,4 @@ occasionally be explained as "confessed" or "revealed under cross-examination".
 
 The output should end with:
 
-**ACCENDE IGNES VERITATIS CORPORIBUS MALEFICARUM**
+> **HERESIS URITOR; DOCTRINA MANET**
