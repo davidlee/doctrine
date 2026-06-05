@@ -25,7 +25,7 @@ software engineering with LLM agents.
 - composability; provide "orchestration primitives"
 - avoidance of vendor lockin
 - single binary distribution
-- do more with less
+- more with less: focused ambition, not minimalism.
 
 ## Non-Goals
 
