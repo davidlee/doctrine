@@ -2,6 +2,7 @@
 mod adr;
 mod boot;
 mod clock;
+mod corpus;
 mod entity;
 mod fsutil;
 mod git;
@@ -425,6 +426,46 @@ enum MemoryCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Materialize the embedded global-memory corpus into the gitignored
+    /// `.doctrine/memory/shipped/`, or `memory sync install` to wire the
+    /// session hook. Outside a doctrine repo this is a clean no-op.
+    Sync {
+        /// Wire the `SessionStart` refresh hook (omit to run the sync).
+        #[command(subcommand)]
+        command: Option<SyncCommand>,
+
+        /// Compute and print the plan without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum SyncCommand {
+    /// Wire a separate `SessionStart` hook running `doctrine memory sync` (mirrors
+    /// `boot install`; the hook degrades to a clean no-op in non-doctrine repos).
+    Install {
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+
+        /// Compute and report the plan without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -698,6 +739,19 @@ fn main() -> anyhow::Result<()> {
                 limit,
                 min_trust.as_deref(),
             ),
+            MemoryCommand::Sync {
+                command,
+                dry_run: sync_dry_run,
+                yes: sync_yes,
+                path: sync_path,
+            } => match command {
+                None => corpus::run_sync(sync_path, sync_dry_run, sync_yes),
+                Some(SyncCommand::Install {
+                    path,
+                    dry_run,
+                    yes,
+                }) => corpus::run_sync_install(path, dry_run, yes),
+            },
         },
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),

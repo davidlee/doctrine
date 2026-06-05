@@ -23,7 +23,8 @@ create = [
 # Memory: `items/` holds committed authored entities (created above, NOT ignored).
 # The derived subtrees (index/embeddings/state) are regenerable — ignore the
 # contents narrowly; never blanket `.doctrine/memory/*`, which would swallow
-# the committed `items/` tree (slice-005 PHASE-06).
+# the committed `items/` tree (slice-005 PHASE-06). `shipped/` is the
+# binary-materialized global-memory corpus (SL-018) — derived, gitignored.
 entries = [
   ".doctrine/state/",
   ".doctrine/slice/*/phases",
@@ -31,6 +32,7 @@ entries = [
   ".doctrine/memory/index/*",
   ".doctrine/memory/embeddings/*",
   ".doctrine/memory/state/*",
+  ".doctrine/memory/shipped/",
   ".doctrine/skills/*",
 ]
 

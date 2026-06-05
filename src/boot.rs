@@ -446,7 +446,7 @@ fn ensure_boot_import(
 
 /// What the hook merge did, for reporting. The carried string is the command.
 #[derive(Debug, PartialEq, Eq)]
-enum RefreshOutcome {
+pub(crate) enum RefreshOutcome {
     /// No doctrine hook existed; one was appended.
     Wired(String),
     /// A doctrine hook existed with a stale command; it was refreshed.
@@ -502,6 +502,54 @@ fn is_doctrine_boot_command(cmd: &str) -> bool {
     arg == "boot" && Path::new(program.trim_end()).file_name() == Some(OsStr::new("doctrine"))
 }
 
+/// The hook command for `exec`: `<exec> memory sync`. TWO trailing args, so the
+/// single-arg `rsplit_once` shape `is_doctrine_boot_command` leans on does NOT
+/// apply — ownership matches by suffix-strip (see `is_doctrine_sync_command`).
+fn sync_command(exec: &Path) -> String {
+    format!("{} memory sync", exec.display())
+}
+
+/// Whether `cmd` is doctrine's own `memory sync` hook. The command is
+/// `<program> memory sync` where `program` may bear spaces, so strip the fixed
+/// ` memory sync` suffix and check the remaining program's file name is
+/// `doctrine`. Disjoint from `is_doctrine_boot_command` (trailing arg `boot`):
+/// neither predicate matches the other's command, so the two `SessionStart`
+/// entries never clobber one another.
+fn is_doctrine_sync_command(cmd: &str) -> bool {
+    let Some(program) = cmd.trim().strip_suffix(" memory sync") else {
+        return false;
+    };
+    Path::new(program.trim_end()).file_name() == Some(OsStr::new("doctrine"))
+}
+
+/// A `SessionStart` hook doctrine owns: its canonical `command` plus the predicate
+/// that recognizes a prior (possibly stale) copy in foreign settings JSON. The
+/// merge core (`plan_hook`/`find_owned`/`fallback_for`/`install_claude_hook`) is
+/// generic over this; `boot install` and `memory sync install` are the two thin
+/// callers (no-parallel-impl), differing only in command string + ownership.
+pub(crate) struct HookSpec {
+    command: String,
+    is_ours: fn(&str) -> bool,
+}
+
+impl HookSpec {
+    /// The `<exec> boot` hook (SL-011).
+    fn boot(exec: &Path) -> Self {
+        Self {
+            command: boot_command(exec),
+            is_ours: is_doctrine_boot_command,
+        }
+    }
+
+    /// The `<exec> memory sync` hook (SL-018) — a SEPARATE `SessionStart` entry.
+    pub(crate) fn sync(exec: &Path) -> Self {
+        Self {
+            command: sync_command(exec),
+            is_ours: is_doctrine_sync_command,
+        }
+    }
+}
+
 /// Where a doctrine-owned `SessionStart` hook sits, relative to a desired command.
 enum Owned {
     /// Present and already current — no write.
@@ -512,7 +560,7 @@ enum Owned {
     Absent,
 }
 
-fn find_owned(arr: &[Value], desired_cmd: &str) -> Owned {
+fn find_owned(arr: &[Value], desired_cmd: &str, is_ours: fn(&str) -> bool) -> Owned {
     for (ei, entry) in arr.iter().enumerate() {
         let Some(inner) = entry.get("hooks").and_then(Value::as_array) else {
             continue;
@@ -521,7 +569,7 @@ fn find_owned(arr: &[Value], desired_cmd: &str) -> Owned {
             let Some(cmd) = hook.get("command").and_then(Value::as_str) else {
                 continue;
             };
-            if is_doctrine_boot_command(cmd) {
+            if is_ours(cmd) {
                 return if cmd == desired_cmd {
                     Owned::Current
                 } else {
@@ -560,12 +608,22 @@ fn set_command(arr: &mut [Value], ei: usize, hi: usize, command: &str) -> Option
     Some(())
 }
 
-/// Pure merge of the doctrine `SessionStart` hook into existing settings `JSON`.
-/// Preserves every foreign hook and unrelated key (mutates a `serde_json::Value`
-/// at the narrow path — never a typed round-trip that could drop unknown keys).
-/// Malformed JSON or an unexpectedly-typed `hooks`/`SessionStart` → fail soft.
+/// `boot`'s thin caller over the generic merge core (`plan_hook`) — exercised by
+/// boot's hook test matrix (the production refresh path goes via
+/// `install_claude_hook`, so this wrapper is test-only).
+#[cfg(test)]
 fn plan_session_hook(existing_json: Option<&str>, exec: &Path) -> HookPlan {
-    let command = boot_command(exec);
+    plan_hook(existing_json, &HookSpec::boot(exec))
+}
+
+/// The generic merge core: plan `spec`'s `SessionStart` hook into existing
+/// settings `JSON`. Preserves every foreign hook and unrelated key (mutates a
+/// `serde_json::Value` at the narrow path — never a typed round-trip that could
+/// drop unknown keys). Malformed JSON or an unexpectedly-typed
+/// `hooks`/`SessionStart` → fail soft. Both `boot install` and `memory sync
+/// install` ride this — see `HookSpec`.
+fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
+    let command = spec.command.clone();
     let mut value: Value = match existing_json.map(str::trim) {
         None | Some("") => Value::Object(Map::new()),
         Some(text) => match serde_json::from_str(text) {
@@ -576,7 +634,7 @@ fn plan_session_hook(existing_json: Option<&str>, exec: &Path) -> HookPlan {
     let Some(arr) = session_start_array_mut(&mut value) else {
         return printed_fallback();
     };
-    let outcome = match find_owned(arr, &command) {
+    let outcome = match find_owned(arr, &command, spec.is_ours) {
         Owned::Current => {
             return HookPlan {
                 outcome: RefreshOutcome::None,
@@ -603,10 +661,16 @@ fn plan_session_hook(existing_json: Option<&str>, exec: &Path) -> HookPlan {
     }
 }
 
-/// The snippet printed when the settings file can't be merged automatically.
+/// The snippet printed when the settings file can't be merged automatically —
+/// generic over a `HookSpec`.
+pub(crate) fn fallback_for(spec: &HookSpec) -> String {
+    let entry = desired_entry(&spec.command);
+    serde_json::to_string_pretty(&entry).unwrap_or_else(|_| spec.command.clone())
+}
+
+/// `boot install`'s fallback snippet over the generic `fallback_for`.
 fn fallback_snippet(exec: &Path) -> String {
-    let entry = desired_entry(&boot_command(exec));
-    serde_json::to_string_pretty(&entry).unwrap_or_else(|_| boot_command(exec))
+    fallback_for(&HookSpec::boot(exec))
 }
 
 /// Imperative per-harness refresh. Claude merges the `SessionStart` hook into
@@ -621,20 +685,29 @@ fn install_refresh(
 ) -> anyhow::Result<RefreshOutcome> {
     match h {
         Harness::Codex => Ok(RefreshOutcome::None),
-        Harness::Claude => {
-            let path = root.join(SETTINGS_REL);
-            let existing = fs::read_to_string(&path).ok();
-            let plan = plan_session_hook(existing.as_deref(), exec);
-            if let (Some(json), false) = (&plan.new_json, dry_run) {
-                if let Some(parent) = path.parent() {
-                    fs::create_dir_all(parent)
-                        .with_context(|| format!("Failed to create {}", parent.display()))?;
-                }
-                fsutil::write_atomic(&path, json.as_bytes())?;
-            }
-            Ok(plan.outcome)
-        }
+        Harness::Claude => install_claude_hook(root, &HookSpec::boot(exec), dry_run),
     }
+}
+
+/// Merge a `HookSpec`'s `SessionStart` hook into `.claude/settings.local.json`,
+/// writing only on change (unless `dry_run`). The generic Claude installer behind
+/// both `boot install`'s refresh and `memory sync install` (SL-018).
+pub(crate) fn install_claude_hook(
+    root: &Path,
+    spec: &HookSpec,
+    dry_run: bool,
+) -> anyhow::Result<RefreshOutcome> {
+    let path = root.join(SETTINGS_REL);
+    let existing = fs::read_to_string(&path).ok();
+    let plan = plan_hook(existing.as_deref(), spec);
+    if let (Some(json), false) = (&plan.new_json, dry_run) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        fsutil::write_atomic(&path, json.as_bytes())?;
+    }
+    Ok(plan.outcome)
 }
 
 // ---------------------------------------------------------------------------
@@ -1396,6 +1469,69 @@ mod tests {
         // codex is import-only — no hook, no file.
         let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
         assert!(matches!(out, RefreshOutcome::None));
+    }
+
+    // --- T6 (SL-018): the generalized seam carries a SEPARATE `memory sync` hook.
+
+    #[test]
+    fn sync_ownership_is_disjoint_from_boot() {
+        // sync predicate recognises its own command (spaced exec included)...
+        assert!(is_doctrine_sync_command("/usr/bin/doctrine memory sync"));
+        assert!(is_doctrine_sync_command("doctrine memory sync"));
+        assert!(is_doctrine_sync_command("/nix/store/a b/doctrine memory sync"));
+        // ...and rejects foreign / boot commands.
+        assert!(!is_doctrine_sync_command("/usr/bin/tool memory sync"));
+        assert!(!is_doctrine_sync_command("/abs/doctrine boot"));
+        assert!(!is_doctrine_sync_command("/abs/doctrine memory"));
+        // the two predicates never cross: neither owns the other's command.
+        assert!(!is_doctrine_boot_command("/abs/doctrine memory sync"));
+        assert!(!is_doctrine_sync_command("/abs/doctrine boot"));
+    }
+
+    #[test]
+    fn install_claude_hook_wires_boot_and_sync_as_two_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+
+        // wire boot, then sync — two independent SessionStart entries.
+        install_claude_hook(root, &HookSpec::boot(exec), false).unwrap();
+        let out = install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+
+        let json = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        let cmds = commands(&json);
+        assert!(cmds.contains(&"/abs/doctrine boot".to_string()), "boot kept");
+        assert!(
+            cmds.contains(&"/abs/doctrine memory sync".to_string()),
+            "sync wired"
+        );
+
+        // re-running sync is a no-op; the boot entry is untouched.
+        let again = install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
+        assert!(matches!(again, RefreshOutcome::None));
+        let json = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        assert_eq!(
+            commands(&json),
+            vec![
+                "/abs/doctrine boot".to_string(),
+                "/abs/doctrine memory sync".to_string(),
+            ],
+            "two entries, neither duplicated nor clobbered"
+        );
+    }
+
+    #[test]
+    fn install_claude_hook_sync_respects_dry_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let out = install_claude_hook(root, &HookSpec::sync(Path::new("/abs/doctrine")), true)
+            .unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        assert!(
+            !root.join(SETTINGS_REL).exists(),
+            "dry-run must not write settings"
+        );
     }
 
     // --- T4: `wire` orchestration (integration, tempdir). Exec is injected with

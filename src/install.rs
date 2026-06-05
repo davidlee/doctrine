@@ -495,11 +495,13 @@ mod tests {
             "manifest must create the memory items tree"
         );
         // The derived subtrees are gitignored but NOT created (future slices own
-        // their on-demand creation).
+        // their on-demand creation). `shipped/` is the SL-018 binary-materialized
+        // corpus — derived/gitignored, never committed in a client repo.
         for derived in [
             ".doctrine/memory/index/*",
             ".doctrine/memory/embeddings/*",
             ".doctrine/memory/state/*",
+            ".doctrine/memory/shipped/",
         ] {
             assert!(
                 manifest.gitignore.entries.iter().any(|e| e == derived),

@@ -32,3 +32,4 @@ handover.md
 .doctrine/memory/index/*
 .doctrine/memory/embeddings/*
 .doctrine/memory/state/*
+.doctrine/memory/shipped/
