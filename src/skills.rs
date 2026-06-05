@@ -25,10 +25,15 @@ use serde::Deserialize;
 #[folder = "plugins/"]
 struct PluginAssets;
 
+/// The subset domain whose enumerated skills `--only-memory` resolves to. It is
+/// also the (sole) marketplace-only domain — its skills are symlinks into the
+/// canonical `doctrine` domain, so it is excluded from the install catalog.
+const MEMORY_SUBSET_DOMAIN: &str = "doctrine-memory";
+
 /// Marketplace-only domains the CLI does not install: their skills are symlinks
 /// to a canonical domain (e.g. `doctrine-memory` → `doctrine`), so the embed
 /// carries duplicates that would collide on skill id. Excluded at discovery.
-const MARKETPLACE_ONLY_DOMAINS: &[&str] = &["doctrine-memory"];
+const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN];
 
 /// Source from which the delegated `npx skills` pulls non-Claude installs.
 const DELEGATE_SOURCE: &str = "doctrine/doctrine";
@@ -187,6 +192,39 @@ fn validate_filters(all: &[Entry], ids: &[String], domains: &[String]) -> anyhow
         }
     }
     Ok(())
+}
+
+/// Skill ids a marketplace subset domain enumerates, read from embedded paths.
+/// `<domain>/skills/<id>/…` → {id}. Pure: the caller supplies the path iterator,
+/// so it is unit-testable without the embed or disk.
+fn subset_ids<'a>(paths: impl Iterator<Item = &'a str>, domain: &str) -> BTreeSet<String> {
+    paths
+        .filter_map(|p| match p.split('/').collect::<Vec<_>>().as_slice() {
+            [d, "skills", id, ..] if *d == domain => Some((*id).to_string()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Effective skill-id selection for `skills install`. When `only_memory`, derive
+/// the subset from `paths` and bail loud if empty — the `select([]) == all` guard
+/// (D3): an empty id set would otherwise install the entire catalog. Otherwise
+/// pass `skills` through unchanged. clap guarantees `only_memory` is exclusive
+/// with explicit `--skill`/`--domain`, so no exclusion check belongs here.
+fn resolve_install_ids<'a>(
+    only_memory: bool,
+    skills: &[String],
+    paths: impl Iterator<Item = &'a str>,
+    subset_domain: &str,
+) -> anyhow::Result<Vec<String>> {
+    if !only_memory {
+        return Ok(skills.to_vec());
+    }
+    let ids = subset_ids(paths, subset_domain);
+    if ids.is_empty() {
+        bail!("--only-memory: no skills enumerated under '{subset_domain}'");
+    }
+    Ok(ids.into_iter().collect())
 }
 
 /// The base both skill trees hang off: the project `root`, or the user home with
@@ -703,28 +741,45 @@ pub(crate) fn run_list(agent: Option<&str>, installed_only: bool) -> anyhow::Res
 }
 
 /// `doctrine skills install`.
-pub(crate) fn run_install(
-    path: Option<PathBuf>,
-    agents: &[String],
-    skills: &[String],
-    domains: &[String],
-    global: bool,
-    dry_run: bool,
-    yes: bool,
-) -> anyhow::Result<()> {
+/// `doctrine skills install` arguments (selection + flags). Mirrors the
+/// `memory::RecordArgs` pattern so the command handler stays under the bool/arg
+/// clippy ceilings; `path` stays a separate param, as in `run_record`.
+pub(crate) struct InstallArgs<'a> {
+    pub(crate) agents: &'a [String],
+    pub(crate) skills: &'a [String],
+    pub(crate) domains: &'a [String],
+    /// `--only-memory`: derive the subset from the `doctrine-memory` plugin.
+    pub(crate) only_memory: bool,
+    pub(crate) global: bool,
+    pub(crate) dry_run: bool,
+    pub(crate) yes: bool,
+}
+
+pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyhow::Result<()> {
     let catalog = discover()?;
-    validate_filters(&catalog, skills, domains)?;
+    // `--only-memory` derives the subset from the embed; otherwise pass `skills`
+    // through. The thin shell supplies the live paths; the resolver is pure.
+    let live: Vec<String> = PluginAssets::iter()
+        .map(|p| p.as_ref().to_string())
+        .collect();
+    let skills = resolve_install_ids(
+        args.only_memory,
+        args.skills,
+        live.iter().map(String::as_str),
+        MEMORY_SUBSET_DOMAIN,
+    )?;
+    validate_filters(&catalog, &skills, args.domains)?;
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let agents = resolve_agents(agents, &root)?;
-    let plan = build_plan(&root, &agents, &catalog, skills, domains, global)?;
+    let agents = resolve_agents(args.agents, &root)?;
+    let plan = build_plan(&root, &agents, &catalog, &skills, args.domains, args.global)?;
 
     let mut out = io::stdout();
     print_plan(&plan, &mut out)?;
 
-    if dry_run {
+    if args.dry_run {
         return Ok(());
     }
-    if !yes && !crate::install::prompt_confirm("\nProceed? [y/N] ")? {
+    if !args.yes && !crate::install::prompt_confirm("\nProceed? [y/N] ")? {
         writeln!(out, "Aborted.")?;
         return Ok(());
     }
@@ -733,7 +788,7 @@ pub(crate) fn run_install(
     // owns `.doctrine/skills/*` regardless of whether `doctrine install` ran first.
     // Anchor the ignore at the same base the canonical tree is written to, so
     // `--global` ignores its $HOME tree rather than the project (SL-010 B1).
-    crate::install::ensure_gitignored(&install_base(&root, global)?, ".doctrine/skills/*")?;
+    crate::install::ensure_gitignored(&install_base(&root, args.global)?, ".doctrine/skills/*")?;
     execute(&plan, &catalog, &Npx, &mut out)?;
     writeln!(out, "Done.")?;
     Ok(())
@@ -812,6 +867,113 @@ mod tests {
         assert!(validate_filters(&all, &["nope".into()], &[]).is_err());
         assert!(validate_filters(&all, &[], &["nope".into()]).is_err());
         assert!(validate_filters(&all, &["code-review".into()], &["review".into()]).is_ok());
+    }
+
+    // --- subset derivation (--only-memory) ---
+
+    #[test]
+    fn subset_ids_extracts_only_the_named_domain() {
+        // VT-1: `<domain>/skills/<id>/…` → {id}; other domains and non-skill
+        // paths (README, plugin.json) are ignored.
+        let paths = [
+            "doctrine-memory/skills/record-memory/SKILL.md",
+            "doctrine-memory/skills/retrieve-memory/SKILL.md",
+            "doctrine-memory/README.md",
+            "doctrine-memory/.claude-plugin/plugin.json",
+            "doctrine/skills/route/SKILL.md",
+        ];
+        let ids = subset_ids(paths.iter().copied(), "doctrine-memory");
+        assert_eq!(
+            ids,
+            ["record-memory".to_string(), "retrieve-memory".to_string()]
+                .into_iter()
+                .collect()
+        );
+    }
+
+    #[test]
+    fn subset_ids_absent_domain_is_empty() {
+        let paths = ["doctrine/skills/route/SKILL.md"];
+        assert!(subset_ids(paths.iter().copied(), "doctrine-memory").is_empty());
+    }
+
+    #[test]
+    fn resolve_install_ids_passes_skills_through_when_not_only_memory() {
+        let got = resolve_install_ids(
+            false,
+            &["foo".into()],
+            std::iter::empty(),
+            MEMORY_SUBSET_DOMAIN,
+        )
+        .unwrap();
+        assert_eq!(got, vec!["foo".to_string()]);
+    }
+
+    #[test]
+    fn resolve_install_ids_derives_the_subset_when_only_memory() {
+        let paths = [
+            "doctrine-memory/skills/record-memory/SKILL.md",
+            "doctrine-memory/skills/retrieve-memory/SKILL.md",
+        ];
+        let got = resolve_install_ids(true, &[], paths.iter().copied(), "doctrine-memory").unwrap();
+        assert_eq!(
+            got,
+            vec!["record-memory".to_string(), "retrieve-memory".to_string()]
+        );
+    }
+
+    #[test]
+    fn resolve_install_ids_bails_on_empty_derivation() {
+        // The select([]) == all guard (D3): an empty subset must fail loud, never
+        // silently fall through to installing the entire catalog. Pure — no embed.
+        let paths = ["doctrine/skills/route/SKILL.md"];
+        assert!(resolve_install_ids(true, &[], paths.iter().copied(), "doctrine-memory").is_err());
+    }
+
+    #[test]
+    fn resolve_install_ids_live_embed_yields_the_memory_pair() {
+        // VT-2: pins embed-follows-symlinks. If rust-embed stops descending the
+        // doctrine-memory symlinks this goes red — the flag is broken, not the test.
+        let live: Vec<String> = PluginAssets::iter()
+            .map(|p| p.as_ref().to_string())
+            .collect();
+        let got = resolve_install_ids(
+            true,
+            &[],
+            live.iter().map(String::as_str),
+            MEMORY_SUBSET_DOMAIN,
+        )
+        .unwrap();
+        assert_eq!(
+            got,
+            vec!["record-memory".to_string(), "retrieve-memory".to_string()]
+        );
+    }
+
+    #[test]
+    fn only_memory_selects_exactly_the_two_canonical_skills() {
+        // VT-3: cross-domain identity (§5.5). Ids derived from the discover-EXCLUDED
+        // doctrine-memory domain validate against the catalog where they live under
+        // the doctrine domain, and select exactly those two — no more, no less.
+        let catalog = discover().unwrap();
+        let live: Vec<String> = PluginAssets::iter()
+            .map(|p| p.as_ref().to_string())
+            .collect();
+        let ids = resolve_install_ids(
+            true,
+            &[],
+            live.iter().map(String::as_str),
+            MEMORY_SUBSET_DOMAIN,
+        )
+        .unwrap();
+        validate_filters(&catalog, &ids, &[]).unwrap();
+        let selected = select(&catalog, &ids, &[]);
+        let got: BTreeSet<&str> = selected.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(
+            got,
+            ["record-memory", "retrieve-memory"].into_iter().collect()
+        );
+        assert!(selected.iter().all(|e| e.domain == "doctrine"));
     }
 
     // --- claude links (the plan builder) ---
@@ -1337,12 +1499,15 @@ mod tests {
         // No prior `doctrine install`: no .gitignore, no .doctrine tree.
         run_install(
             Some(dir.path().to_path_buf()),
-            &["claude".into()],
-            &["code-review".into()],
-            &[],
-            false,
-            false,
-            true,
+            &InstallArgs {
+                agents: &["claude".into()],
+                skills: &["code-review".into()],
+                domains: &[],
+                only_memory: false,
+                global: false,
+                dry_run: false,
+                yes: true,
+            },
         )
         .unwrap();
 
