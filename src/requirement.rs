@@ -16,18 +16,20 @@
 //! `Meta`; `kind`/`tags`/`acceptance_criteria` are unknown-to-`Meta`, so they are
 //! ignored on read and preserved on disk).
 //!
-//! A requirement has **no standalone CLI** in v1 — it is spec-mediated (§5.2): the
-//! `spec` verbs (PHASE-02+) are its only callers, so the items here are
-//! production-dead until that first caller lands. The `cfg_attr(not(test),
-//! expect(dead_code, …))` bridge below holds the gate green meanwhile and
-//! self-erases the moment `spec.rs` references them (D-2 / memory
-//! `mem.pattern.lint.expect-not-allow`).
+//! A requirement has **no standalone CLI** in v1 — it is spec-mediated (§5.2):
+//! `spec req add` (PHASE-03) is the producer, calling `reserve` → `set_kind`
+//! (the D-1 overwrite) below. Those callers make the kind/scaffold/render chain
+//! production-live. The parse-layer `Requirement` has no production reader until
+//! `spec show` (PHASE-04), so it alone keeps the `cfg_attr(not(test),
+//! expect(dead_code, …))` bridge (D-2 / memory `mem.pattern.lint.expect-not-allow`),
+//! which self-erases the moment that caller lands.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{self, Artifact, Fileset, Kind, ScaffoldCtx};
 
 /// Relative dir of the requirement tree inside the project root — one global tree,
 /// one reservation namespace (§5.1). Distinct top-level tree, like ADR.
@@ -36,13 +38,6 @@ const REQUIREMENT_DIR: &str = ".doctrine/requirement";
 /// The top-level reserved requirement kind: `requirement-NNN.toml` +
 /// `requirement-NNN.md` + slug symlink. `prefix` is the canonical-id stem
 /// (`REQ-007`); the file stem is `"requirement"`.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-02 (spec.rs); remove then"
-    )
-)]
 const REQUIREMENT_KIND: Kind = Kind {
     dir: REQUIREMENT_DIR,
     prefix: "REQ",
@@ -50,13 +45,24 @@ const REQUIREMENT_KIND: Kind = Kind {
 };
 
 /// A requirement's nature: a functional behaviour or a quality attribute. Closed
-/// set, kebab serde. NOT a `clap::ValueEnum` yet — `spec req add --kind` is
-/// PHASE-03. Seeded `functional` by the template; overwritten post-reserve (D-1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// set, kebab serde + `clap::ValueEnum` (the `spec req add --kind` selector).
+/// Seeded `functional` by the template; overwritten post-reserve (D-1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum ReqKind {
     Functional,
     Quality,
+}
+
+impl ReqKind {
+    /// The kebab `kind` string written to `requirement-NNN.toml` (matches the
+    /// serde rename). Used by the D-1 post-reserve overwrite.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            ReqKind::Functional => "functional",
+            ReqKind::Quality => "quality",
+        }
+    }
 }
 
 /// A requirement's lifecycle status. Closed set, kebab serde; hand-edited, git is
@@ -78,7 +84,7 @@ pub(crate) enum ReqStatus {
     not(test),
     expect(
         dead_code,
-        reason = "first prod caller PHASE-02 (spec.rs); remove then"
+        reason = "first prod caller PHASE-04 (spec show render); remove then"
     )
 )]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -103,13 +109,6 @@ pub(crate) struct Requirement {
 /// Render `requirement-<id>.toml` from the embedded template by token
 /// substitution. The `id/slug/title/status` keys round-trip into `meta::Meta`
 /// (VT-2). No `date` arg — the toml carries no date fields (§5.1/§5.3).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-02 (spec.rs); remove then"
-    )
-)]
 fn render_requirement_toml(id: u32, slug: &str, title: &str) -> anyhow::Result<String> {
     Ok(crate::install::asset_text("templates/requirement.toml")?
         .replace("{{id}}", &id.to_string())
@@ -120,13 +119,6 @@ fn render_requirement_toml(id: u32, slug: &str, title: &str) -> anyhow::Result<S
 /// Render `requirement-<id>.md` from the embedded template: `{{ref}}` (the
 /// canonical id, e.g. `REQ-007`) + `{{title}}`. No YAML frontmatter — metadata
 /// lives in the sister toml, not the prose.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-02 (spec.rs); remove then"
-    )
-)]
 fn render_requirement_md(canonical_id: &str, title: &str) -> anyhow::Result<String> {
     Ok(crate::install::asset_text("templates/requirement.md")?
         .replace("{{ref}}", canonical_id)
@@ -137,13 +129,6 @@ fn render_requirement_md(canonical_id: &str, title: &str) -> anyhow::Result<Stri
 /// all relative to the requirement-tree root — structurally `adr_scaffold` (§5.6).
 /// Only reachable via `REQUIREMENT_KIND`, so it inherits its production-dead
 /// status until the first spec caller.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "first prod caller PHASE-02 (spec.rs); remove then"
-    )
-)]
 fn requirement_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let id = ctx.id;
     let name = format!("{id:03}");
@@ -161,6 +146,58 @@ fn requirement_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
             target: name,
         },
     ])
+}
+
+// ---------------------------------------------------------------------------
+// Imperative: reserve + the D-1 kind overwrite (spec-mediated entry points)
+// ---------------------------------------------------------------------------
+
+/// Reserve the next `REQ-NNN` and scaffold its fileset — the engine `Fresh`
+/// claim (atomic; collision-proof). Step 2 of the `spec req add` two-tree write
+/// (§5.4); the only requirement producer in v1 (no standalone CLI — spec-mediated).
+pub(crate) fn reserve(
+    root: &Path,
+    slug: &str,
+    title: &str,
+    date: &str,
+) -> anyhow::Result<entity::Materialised> {
+    entity::materialise(
+        &REQUIREMENT_KIND,
+        &entity::LocalFs,
+        root,
+        &entity::MaterialiseRequest::Fresh,
+        &entity::Inputs { slug, title, date },
+    )
+}
+
+/// The canonical FK string for a reserved requirement id (`REQ-007`). The `Kind`
+/// is the single source of the prefix.
+pub(crate) fn canonical_id(id: u32) -> String {
+    format!("{}-{id:03}", REQUIREMENT_KIND.prefix)
+}
+
+/// Overwrite the template-seeded `kind` on a reserved requirement (D-1). Edit-
+/// preserving `toml_edit` on `requirement-NNN.toml`, mirroring
+/// `adr::set_adr_status`: parse → mutate in place → write, so comments / unknown
+/// keys survive. `kind` is scaffold-seeded, so its absence is a malformed file.
+pub(crate) fn set_kind(root: &Path, id: u32, kind: ReqKind) -> anyhow::Result<()> {
+    let name = format!("{id:03}");
+    let path = root
+        .join(REQUIREMENT_DIR)
+        .join(&name)
+        .join(format!("requirement-{name}.toml"));
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("requirement {name} not found at {}", path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+    let table = doc.as_table_mut();
+    if !table.contains_key("kind") {
+        anyhow::bail!("malformed requirement {name}: missing `kind` (regenerate via the scaffold)");
+    }
+    table.insert("kind", toml_edit::value(kind.as_str()));
+    std::fs::write(&path, doc.to_string())
+        .with_context(|| format!("Failed to write {}", path.display()))
 }
 
 // ---------------------------------------------------------------------------
@@ -314,6 +351,57 @@ kind = \"functional\"
         assert_eq!(req.description, None);
         assert!(req.tags.is_empty());
         assert!(req.acceptance_criteria.is_empty());
+    }
+
+    // --- PHASE-03: reserve + the D-1 kind overwrite (the spec-mediated seam) ---
+
+    #[test]
+    fn reserve_then_set_kind_overwrites_seed_edit_preservingly() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let m = reserve(root, "fast-boot", "Fast boot", "2026-06-05").unwrap();
+        let id = m.eid.numeric_id().unwrap();
+        assert_eq!(id, 1);
+        assert_eq!(canonical_id(id), "REQ-001");
+
+        let toml = root.join(REQUIREMENT_DIR).join("001/requirement-001.toml");
+        // the template seeds `functional` (D-1) …
+        assert!(
+            fs::read_to_string(&toml)
+                .unwrap()
+                .contains("kind = \"functional\"")
+        );
+
+        set_kind(root, id, ReqKind::Quality).unwrap();
+        let body = fs::read_to_string(&toml).unwrap();
+        // … overwritten to the real kind, edit-preservingly (unrelated comments +
+        // keys survive — toml_edit, not a reserialize).
+        assert!(body.contains("kind = \"quality\""));
+        assert!(!body.contains("kind = \"functional\""));
+        assert!(body.contains("# description — optional"));
+        assert!(body.contains("acceptance_criteria = []"));
+    }
+
+    #[test]
+    fn set_kind_on_a_malformed_requirement_missing_kind_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let id = reserve(root, "s", "T", "2026-06-05")
+            .unwrap()
+            .eid
+            .numeric_id()
+            .unwrap();
+        // strip the seeded `kind` line → malformed; the verb refuses (no blind insert).
+        let toml = root.join(REQUIREMENT_DIR).join("001/requirement-001.toml");
+        let stripped: String = fs::read_to_string(&toml)
+            .unwrap()
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("kind ="))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&toml, stripped).unwrap();
+        assert!(set_kind(root, id, ReqKind::Quality).is_err());
     }
 
     #[test]

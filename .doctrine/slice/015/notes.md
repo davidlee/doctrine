@@ -38,7 +38,27 @@ cross-phase implementation decisions the design didn't pin.
   a labelled `id status slug #members` table over the shared `meta::render_table`.
   Empty subtype → suppressed. (PHASE-02.)
 
+- **D-1 — CLOSED (PHASE-03).** The seeded `kind = "functional"` is overwritten
+  post-reserve by `requirement::set_kind` (edit-preserving `toml_edit`, the
+  `set_adr_status` shape). Verified on the built binary: a `--kind quality` add
+  lands `kind = "quality"` on the reserved requirement. No engine edit.
+
 ## Findings
+
+- **F-4 — `resolve_spec_ref` is the shared canonical-ref parser (`spec.rs`).**
+  PHASE-03 added it: `<spec-ref>` (`PRD-NNN`/`SPEC-NNN`) → `(SpecSubtype, u32)`,
+  bare numeric rejected (C4), prefixes derived from the two `Kind`s (single
+  source). **PHASE-04 `spec show` and PHASE-05 `spec validate` take the same
+  `<spec-ref>` — reuse this fn, do not refork.** It is currently `fn` (private to
+  `spec.rs`); both later callers live in `spec.rs`/`registry.rs`, so widen to
+  `pub(crate)` when P5's `registry.rs` needs it.
+
+- **F-5 — `toml_edit` `Table` index-assign (`tbl["k"] = …`) trips
+  `clippy::indexing_slicing`** (a repo deny). Use `Table::insert("k", value(…))`
+  for the edit-preserving member append (and any future row writer). The
+  array-of-tables `push` lands new rows *above* a file's trailing document
+  comment — cosmetic, comment survives, valid toml (the edit-preserving guarantee
+  is survival, not position).
 
 - **F-1 — lint suppression form** captured durably as memory
   `mem.pattern.lint.expect-not-allow` (not repeated here; the storage rule).

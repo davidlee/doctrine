@@ -189,6 +189,36 @@ enum SpecCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Operate on a spec's requirements (membership).
+    Req {
+        #[command(subcommand)]
+        command: SpecReqCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum SpecReqCommand {
+    /// Reserve a requirement and append it to a spec as a labelled member.
+    Add {
+        /// Canonical spec ref: `PRD-NNN` (product) or `SPEC-NNN` (tech).
+        spec_ref: String,
+
+        /// Requirement title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Requirement kind: functional | quality.
+        #[arg(long)]
+        kind: requirement::ReqKind,
+
+        /// Explicit membership label (default: next free FR-/NF- for the kind).
+        #[arg(long)]
+        label: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -640,6 +670,15 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => spec::run_new(path, subtype, title, slug),
             SpecCommand::List { status, path } => spec::run_list(path, status.as_deref()),
+            SpecCommand::Req { command } => match command {
+                SpecReqCommand::Add {
+                    spec_ref,
+                    title,
+                    kind,
+                    label,
+                    path,
+                } => spec::run_req_add(path, &spec_ref, title, kind, label),
+            },
         },
         Command::Boot {
             command,
