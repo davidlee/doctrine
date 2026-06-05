@@ -382,7 +382,7 @@ Verdict accepted: proceed to `/plan`, conditions folded into the design.
 | II — `cargo build` doesn't re-embed | MATERIAL | **ACCEPT (re-verified):** no `build.rs`, `debug-embed`. §7a now mandates `touch src/install.rs && cargo build` + grep gate. Memory harvest queued (§11). |
 | III — uncommitted template | MINOR | **ACCEPT.** §7a step 1 elevated: commit template+skill as first act of PHASE-02 entry. |
 | IV — D-2 skill conflicts real | ACQUITTAL | Noted; the rework executes all three fixes (prose-FR kill, `NFR-→NF-`, contradiction). |
-| V — template §4 line invites prose-FR | MATERIAL | **ACCEPT.** Was SILENT in §10 — now an explicit open question. Recommend rewording the one §4 guidance line (option a); needs user sign-off (brushes "no template re-edit" non-goal). |
+| V — template §4 line invites prose-FR | MATERIAL | **ACCEPT + DECIDED (user):** reword the one §4 guidance line (option a) → "Constraints and invariants. (Functional/quality requirements are `REQ` entities — add via `spec req add`.)" Sanctioned one-line edit; lands at PHASE-02 entry. Non-goal updated. |
 | VI — concurrency claim | ACQUITTAL | Re-verified: `MAX_CLAIM_RETRIES=128`, `allocate_fresh`, `mkdir` claim. |
 | VII — taxonomy not gated | MINOR | **ACCEPT.** PHASE-05 grep gate added (§11). |
 | VIII — phase ordering | ACQUITTAL/MINOR | **ACCEPT.** PHASE-03 entry = "exemplar locked" (§11). |

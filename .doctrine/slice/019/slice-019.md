@@ -48,7 +48,9 @@ with `--kind functional|quality`.
 - **Tech specs** — `/spec-tech` and the `tech` subtype are out of scope; this
   slice is the *what/why* layer only.
 - **Re-editing the template** — the restructured template is the fixed target,
-  not a thing this slice revises.
+  not a thing this slice revises. **Exception (SL-019 inquisition, CHARGE V):**
+  the §4 *guidance* line is reworded to stop inviting prose FR/NF (a one-line
+  clarification, eight headings unchanged) — see design §10.
 - **Rewriting `doc/*`** — the evergreen specs stay as the *how*; they are a
   source, not a deliverable.
 - **Slice→spec relationship wiring** — the `relationships` block stays reserved
