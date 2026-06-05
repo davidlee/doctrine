@@ -66,17 +66,25 @@ governance change.**
   and referenced by `/canon`. This is the "articles of truth" pointer layer —
   not a competing source of truth to ADRs / `doc/*`.
 
-- **Load wiring (install), symlink-aware.** `doctrine install` ensures the
-  boot-file `@`-import exists for both Claude (`CLAUDE.md`) and codex
-  (`AGENTS.md`) — idempotent prepend / create-if-missing, the spec-driver
-  `ensure_file_reference` shape. **But the two paths may be the same inode**:
-  this repo has `CLAUDE.md → AGENTS.md` (symlink), and downstream repos vary
-  (separate files / symlinked either direction / only one present). Install must
-  detect same-target/same-inode and write the ref **once** — never double-prepend
-  it, never replace the symlink with a divergent real file. The snapshot content
-  is agent-neutral — one generated file, one ref, resolved through whatever
-  CLAUDE/AGENTS topology the repo has. The boot file itself is
-  **derived → gitignored** (regenerated each session; manifest `[gitignore]`).
+- **New `src/boot.rs` module, two verbs.** `doctrine boot` regenerates the
+  snapshot (the hook target); `doctrine boot install` wires the `@`-import + the
+  per-harness session refresh. `install.rs`/`skills.rs` stay untouched (dodges the
+  concurrent slice-012 edits). Boot file is **derived → gitignored**
+  (`.doctrine/state/boot.md`).
+
+- **Harness seam — Claude is not core-special (loosely coupled).** Vendor-specific
+  wiring lives behind a `Harness` trait; core only produces the neutral snapshot +
+  iterates selected harnesses. Ship two adapters: **Claude** (import into
+  `CLAUDE.md` + a `settings.local.json` SessionStart hook) and **codex** (import
+  into `AGENTS.md`, no hook). Each harness claims exactly **one** import file (so a
+  ref never inlines the snapshot twice); the union is deduped by inode — this
+  repo's `CLAUDE.md → AGENTS.md` symlink collapses to a single write. A third
+  harness is a new impl, no core edit (static registry; not dynamic plugin
+  loading — YAGNI). The `@`-import is an idempotent, never-clobber prepend.
+
+- **Snapshot carries the resolved CLI path.** `doctrine boot` bakes its own
+  `current_exe()` into the snapshot ("Invoking doctrine") so the agent reliably
+  invokes the off-PATH binary — the same path the Claude hook uses (single source).
 
 - **SessionStart hook (install).** Install writes/refreshes a `.claude/` hook +
   settings wiring that runs `doctrine boot` at session start (and on `clear`),
@@ -94,11 +102,11 @@ governance change.**
   prose **duplicates the snapshot and double-spends the prefix budget**. The
   rewrite: (a) delegate the recited CLI / governance listings to the boot snapshot
   (carry the `@`-import, not a copy); (b) orient around `/route` + the skill set
-  rather than reciting commands (skills now drive the process); (c) reconcile the
-  memory story — the `doctrine memory` entity store + `/record-memory` /
-  `/retrieve-memory` skills vs the legacy `doc/memories/` bargain-bin nag. Net:
-  AGENTS.md shrinks to durable orientation the snapshot can't carry; the snapshot
-  carries the volatile/derived governance.
+  rather than reciting commands (skills now drive the process). (The memory-story
+  reconciliation — entity store vs the legacy `doc/memories/` bargain-bin — was
+  **subsumed by SL-012**, which retired the bargain-bin and ported its notes; this
+  rewrite no longer owns it.) Net: AGENTS.md shrinks to durable orientation the
+  snapshot can't carry; the snapshot carries the volatile/derived governance.
 
 ## Decision: load via CLAUDE.md `@`-import, not a `.claude/rules` symlink
 
@@ -133,14 +141,10 @@ open scope question.)
 
 ## Risks / open questions
 
-- **CLAUDE.md ↔ AGENTS.md topology (this repo + downstream).** This repo's
-  `CLAUDE.md` is a symlink to `AGENTS.md`; the `@`-import wiring must resolve to
-  a single ref through the link, not two. Design fork: (a) **unpick** the symlink
-  into two real files (explicit, diverges the two agents' headers if ever wanted)
-  vs (b) **keep the symlink, make install symlink-/inode-aware** (write once,
-  preserve the link — the smaller, more general rule that also covers downstream
-  repos). Resolve in design; this repo's own symlink is fixed up as part of the
-  slice either way.
+- **CLAUDE.md ↔ AGENTS.md topology — RESOLVED in design (b).** Keep the
+  `CLAUDE.md → AGENTS.md` symlink; the harness seam claims one import file each and
+  dedups the union by inode, so the symlink collapses to a single ref-write. No
+  unpicking needed.
 - **Hook binary resolution.** spec-driver used `uv run spec-driver`; doctrine has
   no PATH entry in dev (`./target/debug/doctrine`) and an unknown invocation
   downstream (installed binary vs `cargo`). The hook must locate `doctrine`
