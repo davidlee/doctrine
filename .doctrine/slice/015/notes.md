@@ -62,6 +62,42 @@ cross-phase implementation decisions the design didn't pin.
 
 ## Findings
 
+- **D-P5-1 — the registry stores CANONICAL-STRING id sets, not numerics
+  (PHASE-05).** `Registry { requirements: BTreeSet<String>, tech_specs:
+  BTreeSet<String>, members, interactions }` holds `"REQ-NNN"`/`"SPEC-NNN"`. FKs are
+  stored canonical too, so every check is a direct `BTreeSet::contains` — no
+  FK→numeric parse at the check site (`requirement::id_from_fk` and
+  `resolve_spec_ref` stay out of the pure checks). The **tech-only interaction rule
+  falls out for free**: a `PRD-*` target is simply absent from `tech_specs` → flagged
+  as "resolves to no tech spec" by the same membership test (no subtype branch).
+
+- **D-P5-2 — registry seam split (PHASE-05).** `registry.rs` = the pure index type
+  + check fns (disk-free, unit-tested over literal `Registry` values) + the
+  `validate(scope)` aggregator that encodes the scope policy (3 outbound/intra-spec
+  checks always; orphan corpus-only). `spec.rs` = `build_registry` (the impure scan,
+  rides its own private `read_members`/`read_interactions`, no widening) +
+  `run_validate` (the verb). This is the relation-index *seed*; the cache and cycle
+  detection arrive with the feature DAG (deferred).
+
+- **D-P5-3 — the scan reaches members on BOTH subtypes; interactions tech-only.**
+  Products member requirements too, so dangling-member + orphan coverage iterates
+  product *and* tech trees. No product *id set* is materialised (no check resolves
+  against one — "generalise only as far as forced"). `tech_specs` is the only spec
+  id set built (interaction targets resolve against it).
+
+- **D-P5-4 — exit code via `bail!` after the report.** Findings → stdout report
+  (`Vec<String>` + `concat()`, F-7), then `anyhow::bail!("validate: N hard
+  finding(s) in <target>")` → anyhow's `fn main() -> Result` reporter exits non-zero.
+  Clean → `validate: <target> clean` to stdout + `Ok(())` → 0. `<target>` is the
+  canonical scope ref or `"corpus"`.
+
+- **F-10 — two widenings P5 added (PHASE-05).** `SpecSubtype::canonical_id(self, id)
+  -> String` (the inverse of `resolve_spec_ref`; DRYs `run_new`'s print + the scan)
+  and `requirement::tree_root(root) -> PathBuf` (the requirement tree dir for
+  `scan_ids`, keeping `REQUIREMENT_DIR` private). `resolve_spec_ref` stayed `fn`
+  (private) — the scoped-validate ref parse lives in `spec.rs::run_validate`, so the
+  long-flagged `pub(crate)` widening (F-4) was **not** needed after all.
+
 - **F-4 — `resolve_spec_ref` is the shared canonical-ref parser (`spec.rs`).**
   PHASE-03 added it: `<spec-ref>` (`PRD-NNN`/`SPEC-NNN`) → `(SpecSubtype, u32)`,
   bare numeric rejected (C4), prefixes derived from the two `Kind`s (single

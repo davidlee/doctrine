@@ -34,6 +34,7 @@ use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
 use crate::meta;
+use crate::registry::{InteractionEdge, MemberEdge, Registry};
 use crate::requirement::{self, ReqKind, Requirement};
 
 /// The toml/md file stem — shared by both subtypes (`spec-NNN.toml`). Distinct
@@ -93,6 +94,13 @@ impl SpecSubtype {
             SpecSubtype::Product => "templates/spec-product.md",
             SpecSubtype::Tech => "templates/spec-tech.md",
         }
+    }
+
+    /// The canonical ref for an id in this subtype's namespace (`PRD-007` /
+    /// `SPEC-012`) — the inverse of `resolve_spec_ref`, prefix from the `Kind`
+    /// (single source). Used by `spec new`'s print and the registry scan.
+    fn canonical_id(self, id: u32) -> String {
+        format!("{}-{id:03}", self.kind().prefix)
     }
 
     /// Human label for `spec list` section headers.
@@ -583,8 +591,8 @@ pub(crate) fn run_new(
         .context("spec kind must yield a numeric id")?;
     writeln!(
         io::stdout(),
-        "Created {}-{id:03}: {}",
-        subtype.kind().prefix,
+        "Created {}: {}",
+        subtype.canonical_id(id),
         out.dir.display()
     )?;
     Ok(())
@@ -689,6 +697,86 @@ pub(crate) fn run_show(path: Option<PathBuf>, spec_ref: &str) -> anyhow::Result<
     Ok(())
 }
 
+/// Scan the three trees into a `Registry` (design §5.6) — the impure half of
+/// `validate`, cache-independent and built fresh per invocation. Requirement ids
+/// and tech-spec ids are stored canonical (the check-site needs no FK parsing);
+/// member edges are collected from **both** subtypes (products member requirements
+/// too), interaction edges from tech only (products have no `interactions.toml`).
+fn build_registry(root: &Path) -> anyhow::Result<Registry> {
+    let mut reg = Registry::default();
+
+    for id in entity::scan_ids(&requirement::tree_root(root))? {
+        reg.requirements.insert(requirement::canonical_id(id));
+    }
+
+    for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
+        let tree = root.join(subtype.kind().dir);
+        for id in entity::scan_ids(&tree)? {
+            let spec_ref = subtype.canonical_id(id);
+            let dir = tree.join(format!("{id:03}"));
+            for m in read_members(&dir.join("members.toml"))? {
+                reg.members.push(MemberEdge {
+                    spec: spec_ref.clone(),
+                    requirement: m.requirement,
+                    label: m.label,
+                });
+            }
+            if subtype == SpecSubtype::Tech {
+                reg.tech_specs.insert(spec_ref.clone());
+                for e in read_interactions(&dir.join("interactions.toml"))? {
+                    reg.interactions.push(InteractionEdge {
+                        spec: spec_ref.clone(),
+                        target: e.target,
+                    });
+                }
+            }
+        }
+    }
+    Ok(reg)
+}
+
+/// `doctrine spec validate [<spec-ref>]` — the FK-integrity pass (§5.4). Whole-
+/// corpus by default; a canonical `<spec-ref>` scopes it to that spec's outbound
+/// FKs + label uniqueness (the corpus-only orphan check is suppressed). Prints each
+/// hard finding to stdout and exits non-zero (via `bail!`) if any; a clean run
+/// prints a one-line all-clear and exits zero. Read-only — pure over parsed facets.
+pub(crate) fn run_validate(path: Option<PathBuf>, spec_ref: Option<&str>) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    // A scoped ref must name an existing spec, and the scope key is its canonical
+    // form (the registry stores edges keyed by canonical ref).
+    let scope = match spec_ref {
+        Some(r) => {
+            let (subtype, id) = resolve_spec_ref(r)?;
+            let dir = root.join(subtype.kind().dir).join(format!("{id:03}"));
+            anyhow::ensure!(
+                dir.is_dir(),
+                "no {} spec {r} at {}",
+                subtype.label(),
+                dir.display()
+            );
+            Some(subtype.canonical_id(id))
+        }
+        None => None,
+    };
+
+    let registry = build_registry(&root)?;
+    let findings = registry.validate(scope.as_deref());
+
+    let target = scope.as_deref().unwrap_or("corpus");
+    if findings.is_empty() {
+        writeln!(io::stdout(), "validate: {target} clean")?;
+        return Ok(());
+    }
+
+    let mut lines = Vec::with_capacity(findings.len() + 1);
+    for f in &findings {
+        lines.push(format!("  {f}\n"));
+    }
+    write!(io::stdout(), "{}", lines.concat())?;
+    anyhow::bail!("validate: {} hard finding(s) in {target}", findings.len())
+}
+
 /// `doctrine spec list [--status S]` — per-subtype blocks of `id status slug
 /// #members`, sorted by id. Each block rides the shared `meta::render_table` (the
 /// `#members` cell is derived in this module, exactly as `slice list` derives its
@@ -749,7 +837,7 @@ mod tests {
     use super::*;
     use crate::meta::Meta;
     use crate::requirement::ReqStatus;
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
 
     fn fresh(root: &Path, subtype: SpecSubtype, slug: &str, title: &str) -> entity::Materialised {
@@ -765,6 +853,71 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    // --- PHASE-05: the registry scan (build_registry) ---
+
+    /// The impure scan reaches all three trees: requirement ids (canonical),
+    /// tech-spec ids (canonical, tech only), member edges from BOTH subtypes, and
+    /// interaction edges from tech only. The pure checks are unit-tested in
+    /// `registry.rs`; this covers the disk→`Registry` half.
+    #[test]
+    fn build_registry_scans_all_three_trees() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+        fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+        for slug in ["a", "b", "c"] {
+            requirement::reserve(root, slug, slug, "2026-06-05").unwrap(); // REQ-001..003
+        }
+        // A tech member and a PRODUCT member — both must be collected. REQ-003 is
+        // left unmembered (an orphan, for the checks' benefit, not asserted here).
+        append_member(
+            &root.join(".doctrine/spec/tech/001/members.toml"),
+            "REQ-001",
+            "FR-001",
+            1,
+        )
+        .unwrap();
+        append_member(
+            &root.join(".doctrine/spec/product/001/members.toml"),
+            "REQ-002",
+            "FR-001",
+            1,
+        )
+        .unwrap();
+        // A hand-authored interaction (no verb in v1 — D-Q4): SPEC-001 → SPEC-002.
+        let ix = root.join(".doctrine/spec/tech/001/interactions.toml");
+        let mut s = fs::read_to_string(&ix).unwrap();
+        s.push_str("\n[[edge]]\ntarget = \"SPEC-002\"\ntype = \"calls\"\n");
+        fs::write(&ix, s).unwrap();
+
+        let reg = build_registry(root).unwrap();
+
+        let want_reqs: BTreeSet<String> = ["REQ-001", "REQ-002", "REQ-003"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert_eq!(reg.requirements, want_reqs);
+        let want_techs: BTreeSet<String> = ["SPEC-001", "SPEC-002"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert_eq!(reg.tech_specs, want_techs); // products excluded from the set
+        assert_eq!(reg.members.len(), 2, "members from both subtypes");
+        assert!(
+            reg.members
+                .iter()
+                .any(|m| m.spec == "PRD-001" && m.requirement == "REQ-002"),
+            "the product member edge is collected"
+        );
+        assert_eq!(reg.interactions.len(), 1, "tech-only interaction edge");
+        assert!(
+            reg.interactions
+                .iter()
+                .any(|e| e.spec == "SPEC-001" && e.target == "SPEC-002")
+        );
     }
 
     // --- VT-1: per-subtype scaffold filesets ---
