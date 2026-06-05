@@ -10,10 +10,28 @@ software engineering with LLM agents.
 ## Design Goals:
 
 1. Correctness 
-2. Autonomy
-3. Adaptability
-3. Efficiency
-4. Simplicity
+2. Laziness
+3. Hackability
+4. Efficiency
+
+- DX for solo developers, teams
+- time and token efficiency
+- suitability for systems of any size & complexity profile
+- useful support for "pre-rational" stages of specification (e.g. product design, backlog)
+- quality engineering: robust auditability; formal verification gates
+- separation of structured, relational data from prose
+- separation of mutable, disposable state from useful artifacts
+- thoughfully designed memory retrieval, relevance & decay
+- composability; provide "orchestration primitives"
+- avoidance of vendor lockin
+- single binary distribution
+- do more with less
+
+## Non-Goals
+
+- SaaS integration (in core)
+- Windows support (for now)
+- Integrated TUI (for now)
 
 ## License
 
