@@ -1,0 +1,48 @@
+# Implementation plan for SL-016 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-016"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+[[phase]]
+id        = "PHASE-01"
+name      = "Lift plan types to a neutral module"
+objective = """
+Move Plan/PlanPhase + Plan::parse from slice.rs into a new pure plan module and \
+repoint every consumer, so state→slice becomes state→plan and the slice↔state \
+import cycle is gone. Pure structural move — no behaviour change. Atomic: the \
+crate does not compile until all imports repoint, so this is one phase."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked + scope reconciled (design.md §7 D1 resolves the read/parse split; slice-016.md updated)" },
+  { id = "EN-2", text = "cycle confirmed as the single edge state.rs:28 `use crate::slice::{Plan, PlanPhase}`; full suite green at start" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/plan.rs exists: pub(crate) Plan, PlanPhase, pub(crate) fn parse + Raw shim; declared `mod plan;` in main.rs" },
+  { id = "EX-2", text = "slice.rs: type defns + impl Plan removed; read_plan calls plan::Plan::parse and stays in slice (disk IO in the shell); imports plan::{Plan, PlanPhase}" },
+  { id = "EX-3", text = "state.rs: `use crate::slice::{Plan, PlanPhase}` → `use crate::plan::{Plan, PlanPhase}`; the discharged debt comment (state.rs:22-27) updated" },
+  { id = "EX-4", text = "the two pure-parser tests (slice.rs:711, :727) relocated to plan.rs; scaffold-template contract tests (:734, :657) stay in slice.rs, now calling plan::Plan::parse" },
+  { id = "EX-5", text = "clippy zero warnings; `just check` green; suite assertions unchanged (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo build` succeeds — the graph compiles acyclically with plan as an engine-tier leaf (zero crate:: deps)" },
+  { id = "VT-2", expects = "`grep -nE 'crate::slice' src/state.rs` returns nothing — the upward edge is severed (cycle broken)" },
+  { id = "VT-3", expects = "the two relocated parse tests pass in plan.rs (multi-phase parse; duplicate-id reject) with assertions unchanged" },
+  { id = "VT-4", expects = "full `just check` green — every pre-existing suite passes unchanged, proving behaviour preserved" },
+]
+specs             = []
+requirements      = []
