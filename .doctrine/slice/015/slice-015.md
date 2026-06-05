@@ -207,16 +207,20 @@ only genuinely-shared substrate, as SL-006 did.
 - **Behaviour-preservation gate.** Extending `src/entity.rs` touches shared
   machinery — existing slice/ADR/memory suites must stay green unchanged.
 
-**Open questions (for `/design`):**
-1. **Durable requirement id scheme** — `REQ-NNNN` global vs another shape; how the
-   sticky local label is stored and resolved through membership (D2).
-2. **Which tech facet tables survive** — the note's seven (requirements,
-   capabilities, coverage, concerns, hypotheses, decisions, relationships): which
-   are genuine payload facets vs collapsible into components + edges (the original
-   "challenge the decomposition" mandate, now narrowed by the reframe).
-3. **Exact v1 subset boundary** (D7) — whether any feature scaffolding is cheap
-   enough to pull forward.
-4. **Product facet set** — the light subtype's exact combination.
+**Open questions — resolved in [`design.md`](design.md) (§7 D-Q1–Q5):**
+1. **Requirement identity** → reserved numeric peer entity `REQ-NNN`; sticky
+   `FR-`/`NF-` label on the `members.toml` row (D-Q1).
+2. **Tech facet collapse** → only `members` + `interactions` structured; coverage
+   deferred; concerns/hypotheses/decisions → prose (D-Q2).
+3. **v1 subset** → requirement + spec(product|tech) + new/req-add/show/validate/list;
+   feature/DAG/coverage designed-deferred (D-Q4).
+4. **Product facet set** → light: identity + prose + `members.toml`, reusing the
+   requirement entity verbatim (D-Q5).
+5. **FK-validation home** → standalone `src/registry.rs` (relation-index seed).
+
+Still open (carried to plan/later, design §6): auto-label cross-merge collision
+(detection-only); requirement lifecycle source-of-truth once a change process
+exists.
 
 ## Verification / Closure Intent
 
@@ -226,7 +230,8 @@ only genuinely-shared substrate, as SL-006 did.
   and writes row + prose companion atomically and edit-preservingly (round-trips
   without dropping comments / unknown keys).
 - `spec show` / render reassembles identity + own facets + component requirements
-  into one readable view.
+  + outbound interactions into one readable view (inbound refs deferred to the
+  registry surface).
 - `spec validate` catches a deliberately-dangling cross-entity ref; passes a clean
   corpus.
 - The full `requirement + feature + spec` model is designed and locked
