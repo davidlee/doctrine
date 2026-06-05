@@ -1,4 +1,11 @@
 @.doctrine/state/boot.md
+# jail
+
+if `/workspace` exists, you're in a bubblewrap jail with the system defined in flake.nix,
+including some additional readonly repos mounted ro at `/workspace` plus my ro 
+`~/.cargo/bin/doctrine` - if you need a rw doctrine use the build target.
+
+If you need something else that's missing, STOP and ask the User.
 
 # bootstrap doctrine
 
