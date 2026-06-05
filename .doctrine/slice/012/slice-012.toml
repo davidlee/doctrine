@@ -1,7 +1,7 @@
 id = 12
 slug = "memory-record-symlink-tolerance"
 title = "memory-record symlink tolerance"
-status = "in_progress"
+status = "done"
 created = "2026-06-05"
 updated = "2026-06-05"
 
