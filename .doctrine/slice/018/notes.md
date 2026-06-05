@@ -41,6 +41,34 @@ of stale line refs. These are the real ones:
   byte-unchanged; `collect_all(root)` is added *over* it. `MEMORY_ITEMS_DIR` const
   at `memory.rs:708` (add `MEMORY_SHIPPED_DIR` beside).
 
+## PHASE-02 — DONE (commit `a02fb26`; memory `92f498a`)
+
+Retrieval reach for the global class. Landed in `src/memory.rs` + `src/retrieve.rs`,
+444 unit + e2e green, behaviour-preservation gate held (SL-005/007/008 unchanged).
+
+- **`collect_all(root)`** (`memory.rs`, over the byte-unchanged `collect_memories`
+  leaf): unions `items/` + `shipped/`, dedup by uid **items-win**, via a
+  `BTreeSet<uid>` (NOT HashSet — `clippy::disallowed-types`, see new memory
+  `mem.pattern.lint.disallowed-types-collections`). shipped-absent ⇒ byte-identical
+  to the leaf. `MEMORY_SHIPPED_DIR` const added at `memory.rs:712`.
+- **Three callers switched** to `collect_all`: `load_query` (retrieve), `run_list`,
+  `list_rows` (the boot seam) — shipped now surfaces in find/retrieve/list + boot.
+- **`read_body` re-keyed to `root`** (`memory.rs`): try `items/`, fall back to
+  `shipped/`. Needs a non-empty filter (safe_join succeeds on a missing dir → empty
+  read), so a present-but-EMPTY items body falls through to shipped — benign
+  (empty == missing per the show contract). `Loaded.items_root` dropped.
+- **`Staleness::Reference`** evergreen disposition (`retrieve.rs`), via predicate
+  `is_global_reference`.
+
+**SUPERSEDES the staleness ref above (lines ~33-38):** the bare key
+`repo.is_empty() && anchor.kind==None` is WRONG — it catches the *scopeless*
+default test fixtures (e.g. `staleness_no_anchor_no_date_is_unanchored`) and breaks
+the SL-008 gate. The correct key carries the **scope floor** (ADR-002: the class is
+path/glob/command-scoped; a scopeless `repo=""` memory is illegal/lint-target). The
+shipped `is_global_reference` keys on **scoped ∧ `repo=""` ∧ anchor=none ∧ no
+`verified_sha`**; branch placed after attested (1), before reviewed-time (3).
+Canon (ADR-002 + design §5.4) outranks the plan/sheet snippet here.
+
 ## Decisions carried forward
 
 - **read_body re-keyed to `root`** (not a second `shipped_root` arg) → drops the
