@@ -48,12 +48,14 @@ not parsing (~5–30µs/file into a struct). Serial ≈ 100–150ms; **parallel 
 faster still. Comparable to what git eats on large repos.
 
 **Count in files, not entities.** The spec decomposition (spec-entity-spec) is
-the precondition this note protects, and it explodes the ratio: one spec becomes
-~8 sister files (identity + requirements/capabilities/coverage/… tables). So
-"a few thousand specs" is ~20–30k files — past the ~10k revisit line below. The
-parallel-parse numbers still hold (the files stay tiny and independent), but the
-budget must be tracked in **files**, not docs, and the revisit trigger restated
-accordingly.
+the precondition this note protects, and it explodes the ratio. A spec itself is
+light — ~3–4 sister files (identity + prose + `members.toml`, plus tech
+`interactions.toml`) — but each requirement it members is its **own peer entity
+directory** (`requirement/NNN/`, 2 files), so a spec with N requirements spans
+~`4 + 2N` files across trees. "A few thousand specs" is still tens of thousands of
+files — past the ~10k revisit line below. The parallel-parse numbers still hold
+(the files stay tiny and independent), but the budget must be tracked in
+**files**, not docs, and the revisit trigger restated accordingly.
 
 ## Staged path (only if scale demands it)
 
@@ -88,10 +90,11 @@ This note conflated *cache* with *registry*; they separate cleanly:
 - **The in-memory parsed graph** — built by lazy full-parse for graph queries,
   including **referential-integrity validation** (`doctrine validate`: every FK
   resolves to an existing entity). This needs **no cache**. Its trigger is
-  **not** scale — it is *the first cross-spec foreign key authored* (the moment
-  dangling refs become possible, per spec-entity-spec § Diagnosis). Because the
-  spec entity is what *introduces* the cross-spec tables (`collaborators`,
-  `interactions`), that pass **co-lands in the spec entity's own slice** — it is
+  **not** scale — it is *the first foreign key authored* (the moment dangling refs
+  become possible, per spec-entity-spec § Diagnosis). Because the spec entity is
+  what *introduces* the cross-entity edge tables (`members` spec→requirement,
+  `interactions` spec→spec), that pass **co-lands in the spec entity's own slice**
+  — it shipped as `spec validate` (SL-015); it is
   part of the minimum spec bundle, not a later deliverable (spec-entity-spec
   § Known risks, integrity). FK validation is the registry's headline value and
   it is **not** gated on the cache decision below.

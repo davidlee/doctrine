@@ -158,3 +158,50 @@ cross-phase implementation decisions the design didn't pin.
   a `slug · status · kind` line), and the prose's H1 is the sole one. Trade-off:
   if an author strips the prose H1, the rendered doc has no H1 — acceptable under
   "prose verbatim, structured identity is authoritative".
+
+## PHASE-06 — canon sweep + close-out
+
+- **D-P6-1 — canon reconciled to the as-built peer-entity model (four-file
+  sweep).** `doc/spec-entity-spec.md` rewritten (status deferred→SHIPPED; thesis
+  pathology/diagnosis kept; decomposition/identity/schemas/serde/lifecycle/risks
+  rewritten); `doc/entity-model.md` three spots (spec-family row, identity/
+  references, edges); `doc/relation-index.md` facet-row count (:52) + the edge-
+  tables list (:93); `doc/glossary.md` additively gained `requirement`/`REQ-` +
+  the `FR-`/`NF-` membership-label rows. The overturned creed in one line: a
+  requirement is a **reserved numeric peer entity `REQ-NNN`** (not a compound-key
+  facet row), membered by a spec-side `members.toml` `[[member]]` carrying the
+  durable FK + a **mobile** `FR-`/`NF-` label + advisory `order`; `collaborators.toml`
+  dissolved (cross-spec reuse = deferred `spec req link`); render is ephemeral
+  one-way `spec show` (D8/D9); FK integrity is `spec validate`, not creed. This
+  **inverts** the draft's Option A (which froze a compound key by *forbidding*
+  requirement moves — the peer model makes moves safe instead).
+
+- **D-P6-2 — intended grep-gate residue (VT-1).** Gate
+  `grep -rnE 'rows, not artefacts|SPEC-[0-9]+\.(FR|NF)' doc/` returns ONLY
+  `spec-entity-spec.md:12` and `:121` — both deliberate superseding callouts
+  ("the old draft said `SPEC-110.FR-001`; the shipped model uses `REQ-NNN`").
+  Named historical keeps, not live creed. No `rows, not artefacts` survives.
+
+- **D-P6-3 — out-of-scope `collaborators`/old-model residue, deliberately left.**
+  `slices-spec.md:99` and `drift-spec.md:153` carry `specs.collaborators` — that
+  is the **slice** spec-scope field (primary ∪ collaborators, coverage-gate
+  scope), a *different* concept from the dissolved spec `collaborators.toml`; both
+  are outside P6's named four-file scope. `drift-spec.md` is gate-clean already (no
+  `SPEC-N.FR` / rows-not-artefacts) but still describes the old block model in
+  places — a future drift-ledger slice reconciles it; not P6's mandate.
+
+- **D-P6-4 — skills now point at shipped verbs.** `spec-product`/`spec-tech`
+  dropped the "Not yet structural" caveat; each points at `spec new product|tech`,
+  `spec req add`, `spec show`, `spec validate`, `spec list` and names the
+  `spec-NNN.toml`/`.md` + `members.toml` (+ tech `interactions.toml`) fileset.
+
+- **F-P6-1 — `Source` back-filled into spec-entity-spec.md.** Notes D-3's resolved
+  `Source { language, identifier, module? }` (tech-only code anchor) now appears in
+  the Metadata + Serde sections (the §5.3-undefined gap closed in the canon, the
+  "natural home" D-3 flagged).
+
+- **F-P6-2 — the new identity/edge seam recorded as memory** (distinct from the
+  engine's `mem.system.engine.identity-claim-seam`): see
+  `mem.system.spec.composition-seam` — durable `REQ-NNN` FK + mobile `FR-`/`NF-`
+  label + `order` in `members.toml`, tech-only `interactions.toml [[edge]]`,
+  `collaborators` dissolved, `spec validate` FK gate.

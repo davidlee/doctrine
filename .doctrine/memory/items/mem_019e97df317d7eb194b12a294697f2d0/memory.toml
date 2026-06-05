@@ -1,0 +1,41 @@
+memory_uid = "mem_019e97df317d7eb194b12a294697f2d0"
+memory_key = "mem.system.spec.composition-seam"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "Spec composition seam — requirement peer entity, membership labels, edges"
+summary = "Spec↔requirement identity + edge seam: durable REQ-NNN FK, mobile FR-/NF- label, members/interactions edges"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["src/spec.rs", "src/requirement.rs", "src/registry.rs"]
+globs = []
+commands = []
+tags = ["spec-entity", "sl-015", "requirement"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "dc201c6a6e7b426921602a4e421e2752dadaa060"
+ref_name = "refs/heads/SL-015"
+checkout_state_id = "86336817f7b673ba326d3d3d127282b5be492c21783aa8216e02fd23d3132c71"
+base_commit = "8c0dfa32e0092d3443d41f18ea65c9e0fe1b2ac2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
