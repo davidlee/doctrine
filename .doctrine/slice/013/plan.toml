@@ -1,0 +1,55 @@
+# Implementation plan for SL-013 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-013"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+[[phase]]
+id        = "PHASE-01"
+name      = "--only-memory flag (pure resolver + CLI wiring)"
+objective = """
+Add the `--only-memory` convenience selector to `doctrine skills install`: derive \
+the memory subset from the `doctrine-memory` plugin (not a hardcoded id list), \
+feed it through the unchanged select pipeline. Land the safety guard where a test \
+can reach it — a pure `resolve_install_ids` owning the derivation and the \
+empty-set bail — and enforce mutual exclusion declaratively via clap. One small \
+code surface, no change to downstream planning."""
+
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (re-locked post-inquisition, §10) and the slice scope agrees with it." },
+  { id = "EN-2", text = "existing `skills install` suites are green — the behaviour-preservation baseline." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "`skills install` accepts `--only-memory`, declared `conflicts_with_all = [\"skill\", \"domain\"]` (parse-time exclusion, no hand-rolled runtime bail)." },
+  { id = "EX-2", text = "pure `subset_ids(paths, domain)` and pure `resolve_install_ids(only_memory, skills, paths, domain)` land in `src/skills.rs`; `run_install` gains `only_memory: bool` and is a thin shell that supplies the live embed paths." },
+  { id = "EX-3", text = "empty derivation bails loud (D3) inside the pure resolver — `--only-memory` never installs more than the subset; derived ids still flow through `validate_filters`." },
+  { id = "EX-4", text = "existing `skills install` suites stay green unchanged (behaviour preservation); `cargo clippy` zero warnings (bins/lib, no `--all-targets`); `just check` passes." },
+]
+
+verification = [
+  { id = "VT-1", expects = "PURE. `subset_ids` over synthetic paths → correct id set; empty/absent domain → {}. AND `resolve_install_ids(only_memory=true, &[], synthetic-empty, domain)` bails — the D3 guard fires in the pure layer, no embed or disk." },
+  { id = "VT-2", expects = "LIVE. `resolve_install_ids(true, &[], PluginAssets::iter(), MEMORY_SUBSET_DOMAIN)` against the real embed → {record-memory, retrieve-memory}; pins embed-follows-symlinks." },
+  { id = "VT-3", expects = "PURE INTEGRATION. Derived ids through `validate_filters` + `build_plan`/`select` against the catalog select exactly those two skills — no more, no less. Drives the cross-domain identity invariant (§5.5), no IO-bound `run_install`." },
+  { id = "VT-4", expects = "CLAP PARSE. `--only-memory --skill X` (or `--domain Y`) → parse-time conflict/usage error (asserts `conflicts_with_all`)." },
+  { id = "VT-5", expects = "MANUAL, discharged at /audit. Marketplace install-smoke: install `doctrine-memory` from the marketplace, confirm both memory skills resolve. Recorded in `audit.md`, not automated." },
+  { id = "VT-6", expects = "RECORD, attested at /close. Deliverable 2 (off-script skill-port history, scope item 1) is discharged by the slice-013.md Context + Scope sections; /close attests its existence, does not re-author." },
+]
+
+specs             = []           # per-phase narrowing of the plan's specs
+requirements      = []
