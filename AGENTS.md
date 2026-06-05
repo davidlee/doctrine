@@ -4,9 +4,11 @@
 > just check         # pre-commit gate (lint + test + format) — must pass before commit
 > just list-memories # do it - now - to see what's there
 
-Use this "system" for recording / retrieving memories instead of claude built-in
-memory. Add a memory by dropping a markdown file in `doc/memories/`; recall via
-`just list-memories`.
+Record / recall durable knowledge through doctrine's own memory system (not
+claude's built-in memory): `doctrine memory record|find|retrieve|show|list` (see
+the CLI section). Items live under `.doctrine/memory/items/`; the `/record-memory`
+and `/retrieve-memory` skills wrap the common flows. (The old `doc/memories/`
+bargain-bin store was retired in SL-012 — its notes were ported into the store.)
 
 The CLI is not on PATH during dev — invoke the built binary directly:
 `./target/debug/doctrine …` (after `cargo build`). Examples below use `doctrine`.
@@ -30,7 +32,8 @@ The CLI is not on PATH during dev — invoke the built binary directly:
 .doctrine/adr/nnn/   adr-nnn.{toml,md} + nnn-slug symlink — project-global ADRs (authored)
 .doctrine/state/slice/nnn/phases/   runtime phase tracking (phase-NN.{toml,md}) — GITIGNORED
 doc/*       evergreen, authoritative specs. not yet structurally supported by doctrine
-doc/memories/  the bargain-bin memory store (see above)
+.doctrine/memory/items/nnn/  memory store — memory.toml + memory.md per item;
+            mem.<key> symlink alias. Query via `doctrine memory find|retrieve`.
 install/    sources copied to .doctrine by the installer; plugins/skills handled special
 src/        rust code (incl. src/git.rs — the impure born-frame capture seam,
             the external decision register's forget.remote.v1/forget.checkout.v1 reproduced byte-for-byte)

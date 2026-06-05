@@ -8,7 +8,7 @@ description: Create a context packet and continuation prompt to continue with th
 Write `.doctrine/slice/<nnn>/handover.md` — the disposable, gitignored "start
 here" for the agent picking up the next phase. It is scaffolding for the next
 session, not a durable record: durable facts live in `design.md` / `plan.toml` /
-`notes.md` / `doc/memories/`; the handover only points at them and frames the
+`notes.md` / the memory store (`doctrine memory`); the handover only points at them and frames the
 immediate work.
 
 ## When to use
