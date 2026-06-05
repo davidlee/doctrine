@@ -108,3 +108,48 @@ now expected unreachable.
 - Determinism probe spawned directly (not `CARGO_BIN_EXE`), sidestepping the
   stale-mount gotcha (`mem.pattern.testing.stale-cargo-bin-exe`); it still bites
   the `tests/e2e_*` spawn suites — `touch tests/*.rs` before a cold `cargo test`.
+
+## PHASE-02 — pure lexical leaf (tokenize, trait, OverlapRanker, quantize)
+
+`src/lexical.rs` landed: `tokenize` MOVED from retrieve (retrieve now
+`use crate::lexical::tokenize;`), `LexDoc{id,text}`, 1-variant `LexicalCorpus::Raw`,
+the `LexicalRanker` trait (A1-total contract), `OverlapRanker`, `quantize`,
+`LEX_SCALE`. Module-level `#![cfg_attr(not(test), expect(dead_code, …))]` bridge
+(mirrors memory.rs); self-clears at PHASE-04. `lexical_score` retained unchanged
+(retires at PHASE-04). All `pub` → `pub(crate)`: repo denies `unreachable_pub`
+(bin crate) — design §5.2's `pub` was illustrative.
+
+### Decision A — `quantize` non-finite is profile-split (consult, approved)
+
+Design §5.2 mandated `debug_assert!(is_finite)` AND §9 mandated a
+`non_finite → 0` test; both cannot pass in one debug run (`debug_assert!` is live
+under `cargo test`). Resolved as a **design clarification** (not deviation):
+- debug build: non-finite is a scorer bug → the assert panics (A8).
+- release build: `quantize` stays total → non-finite returns 0.
+Tests are profile-split: `quantize_non_finite_panics_in_debug`
+(`#[cfg(debug_assertions)]` `should_panic`), `quantize_non_finite_is_zero_in_release`
+(`#[cfg(not(debug_assertions))]`), plus `quantize_negative_is_zero` (all builds,
+the `max(0.0)` guard). Design §5.2/§9 patched.
+**Gate implication:** normal `cargo test` proves bug-surfacing; a **release-profile
+test pass** is required for direct proof of the non-finite→0 fallback (carry to
+/audit). `cargo test --release --bin doctrine quantize_non_finite` is green.
+
+### Decision B — `quantize` uses one guarded saturating `as`
+
+Repo blanket-denies `as_conversions` + `cast_sign_loss` (+ truncation/precision)
+— there is **no `as` anywhere else in `src`** (memory.rs:125). No safe std
+float→int API exists. Rust's float→int `as` is *saturating* (≥1.45): out-of-range
+→ `u32::MAX`, and `scaled` is finite & ≥0 by construction, so a single
+`scaled as u32` is total + monotonic + saturating — the design's explicit
+ceiling branch is unnecessary. Carries the house-style stacked
+`#[expect(as_conversions, cast_possible_truncation, cast_sign_loss, reason=…)]`
+(expect+reason, never bare allow). Behaviour identical to design §5.2's sketch.
+
+### Parity proof (VT-2)
+
+`OverlapRanker` parity vs `lexical_score` lives in **retrieve**'s test module
+(`overlap_ranker_matches_lexical_score`) — it needs both `Memory`/`lexical_score`
+and the leaf, which the leaf may not import (ADR-001). Concat-vs-segment
+equivalence held across separator-laden fixtures (`mem.x.y`, `src/x.rs`) and the
+empty query. `just check` green: clippy zero-warning, full suite + e2e pass,
+`cargo fmt --check` clean.

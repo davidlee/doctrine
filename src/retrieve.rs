@@ -19,6 +19,7 @@
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
 
+use crate::lexical::tokenize;
 use crate::memory::{Memory, MemoryType, Status, normalize_key};
 
 /// A `thread` memory is expired unless verified within this many days (design
@@ -225,15 +226,6 @@ pub(crate) fn days_between(a: &str, b: &str) -> Option<i64> {
 // The ordering core over the PHASE-01 filter survivors (design § 5.2). Pure: git
 // arrives pre-resolved as `GitFacts`, `today` as a `&str`. Filters already dropped
 // disallowed memories; rank never re-encodes a dropped one (review B1).
-
-/// Case-fold + split on non-alphanumeric, dropping empties. The shared lexer for
-/// the lexical axis — `mem.foo.bar`/`src/x.rs` split on their separators too.
-fn tokenize(s: &str) -> Vec<String> {
-    s.split(|c: char| !c.is_alphanumeric())
-        .filter(|t| !t.is_empty())
-        .map(str::to_lowercase)
-        .collect()
-}
 
 /// Bounded integer token-overlap of the free-text `--query` against a memory's
 /// `title + summary + tags + memory_key` segments (design Q1/B15 — body NOT
@@ -1206,20 +1198,7 @@ weight = {weight}
         assert_eq!(days_between("2026-13-01", "2026-06-01"), None); // bad month
     }
 
-    // -- tokenize (the shared lexical lexer) --------------------------------
-
-    #[test]
-    fn tokenize_casefolds_and_splits_on_non_alphanumeric() {
-        assert_eq!(tokenize("Auth Bug"), vec!["auth", "bug"]);
-        // punctuation, underscore and slash all split; empties dropped
-        assert_eq!(
-            tokenize("src/memory.rs__OK"),
-            vec!["src", "memory", "rs", "ok"]
-        );
-        // key segments split on the dot
-        assert_eq!(tokenize("mem.auth.token"), vec!["mem", "auth", "token"]);
-        assert!(tokenize("   ").is_empty());
-    }
+    // tokenize's own unit tests moved with the fn to `lexical` (SL-017 PHASE-02).
 
     // -- lexical_score (EX-1 / EX-5 / VT-4) ---------------------------------
 
@@ -1269,6 +1248,82 @@ weight = {weight}
             ..Default::default()
         });
         assert_eq!(lexical_score(&m, &with_query("kubernetes")), 0);
+    }
+
+    // -- OverlapRanker parity vs lexical_score (SL-017 PHASE-02, VT-2) -------
+    // The behaviour-preservation proof: `OverlapRanker` over a space-joined
+    // `LexDoc.text` (design §5.3) is byte-identical to the segment-wise
+    // `lexical_score` it retires. `tokenize` splits on the join space, so the
+    // distinct-hit *set* — hence the count — is the same (concat-vs-segment
+    // equivalence, design §5.4). `retrieve` owns this test: it sees both
+    // `Memory`/`lexical_score` and the leaf, which the leaf may not.
+    #[test]
+    fn overlap_ranker_matches_lexical_score() {
+        use crate::lexical::{LexDoc, LexicalCorpus, LexicalRanker, OverlapRanker};
+
+        // The §5.3 doc-bag projection: title summary tags key, space-joined.
+        fn lexdoc_of(m: &Memory) -> LexDoc {
+            let key = m.key.clone().unwrap_or_default();
+            let text = [
+                m.title.as_str(),
+                m.summary.as_str(),
+                &m.scope.tags.join(" "),
+                &key,
+            ]
+            .join(" ");
+            LexDoc {
+                id: m.uid.clone(),
+                text,
+            }
+        }
+
+        let fixtures = [
+            Fixture {
+                key: "mem.auth.flow",
+                title: "Token expiry",
+                summary: "middleware check",
+                tags: &["rust"],
+                ..Default::default()
+            },
+            // separator-laden segments (dots/slashes) — the equivalence stressor
+            Fixture {
+                key: "mem.pattern.lint",
+                title: "src/memory.rs clippy",
+                summary: "expiry token",
+                tags: &["lint", "rust"],
+                ..Default::default()
+            },
+        ];
+        let queries = [
+            "token middleware rust auth",
+            "token token token",
+            "python django",
+            "src memory rs lint clippy",
+            "",
+        ];
+
+        for f in &fixtures {
+            let m = memory(f);
+            let docs = vec![lexdoc_of(&m)];
+            let corpus = LexicalCorpus::Raw(&docs);
+            let uid = m.uid.as_str();
+            for q in &queries {
+                let expected = lexical_score(&m, &with_query(q));
+                let got = OverlapRanker.score(Some(q), &corpus, &[uid]);
+                assert_eq!(got.len(), 1, "positional: one entry per target");
+                assert_eq!(
+                    got[0],
+                    (m.uid.clone(), expected),
+                    "OverlapRanker diverged from lexical_score for query {q:?}"
+                );
+            }
+            // no query: both axes ⇒ 0
+            assert_eq!(lexical_score(&m, &QueryContext::default()), 0);
+            assert_eq!(
+                OverlapRanker.score(None, &corpus, &[uid]),
+                vec![(m.uid.clone(), 0)]
+            );
+        }
     }
 
     // -- exact_key_match (EX-1) ---------------------------------------------
