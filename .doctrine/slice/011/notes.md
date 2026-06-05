@@ -150,6 +150,15 @@ Live codex run (codex-cli 0.133.0, `gpt-5.4`) settled the §6 open question.
   snapshot on stdout → codex inlines it as developer context. This solves refresh
   AND injection in one hook, and is BETTER than the Claude path: codex injects
   into the CURRENT session → **zero lag** (vs Claude's ≤2-session `@`-import lag).
+- **SPIKE CONFIRMED (2026-06-05).** `.codex/hooks.json` SessionStart →
+  `sh -c 'doctrine boot >/dev/null 2>&1; cat "$(git rev-parse --show-toplevel)/
+  .doctrine/state/boot.md"'` injects the snapshot body as developer context —
+  verified live (codex saw "Route before you act"). GOTCHA: project-local hooks
+  load ONLY when the `.codex/` LAYER is trusted — that is SEPARATE from per-hook
+  trust; `--dangerously-bypass-hook-trust` bypasses the latter, NOT the former.
+  First spike (untrusted project layer) didn't load the hook; granting project
+  trust made it work. The follow-up slice must handle project-layer trust (or
+  user/managed scope).
 - **Cost: it's a design change + new code, NOT PHASE-06.** The `Harness::Codex`
   arm must write a `.codex/hooks.json` (or `[hooks]` in config.toml) SessionStart
   entry instead of the `@`-import; likely a small `doctrine boot --emit`
