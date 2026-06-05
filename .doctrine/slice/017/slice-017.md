@@ -58,30 +58,31 @@ lexical ordering and is intentionally re-baselined to the new scorer.
 
 ## Risks, Assumptions, Open Questions
 
-- **OQ-1 — float → `Ord` quantization (primary tension).** BM25 produces `f64`
-  scores; Rust floats are not `Ord` and the SortKey tuple is `Ord`. The lexical
-  axis must remain totally ordered and deterministic. Open: quantize BM25 floats
-  to a bounded integer rank for Key 2, or wrap in an ordered representation, and
-  how to keep the mapping stable/tie-deterministic. The memory-spec **float ban**
-  (`doc/memory-spec.md` §584-585) targets *payload / event-store / export* only;
-  in-process ephemeral scoring is spec-legal, but Key 2 must still be `Ord`.
-- **OQ-2 — corpus-relative scoring vs the per-doc signature.** BM25 IDF needs
-  document-frequency statistics across the candidate set; today's
-  `lexical_score(m, q)` scores one memory in isolation. The trait shape must
-  admit a corpus pass (score the survivor set together) without breaking the
-  pure/impure split — scoring stays pure, fed pre-resolved inputs. Open: does
-  the corpus = post-filter survivors, all active memories, or the unfiltered
-  set, and how does that interact with scope filtering ordering?
-- **OQ-3 — `bm25` crate fit & jail build.** Unverified: the crate's API, its
-  transitive deps, tokenizer assumptions, and whether the bubblewrap jail can
-  fetch it (offline-build risk; ro cargo). If it cannot be vendored/fetched,
-  STOP and ask the User per the jail rule.
-- **OQ-4 — default selection & determinism.** Which scorer is the default, and
-  whether selection is fixed, env/flag-gated, or config. Ranking must stay
-  deterministic (the shuffle-invariance property in SL-008).
-- **Assumption** — the `exact_key_match` signal stays a separate component of
-  Key 2 and continues to dominate lexical overlap (SL-008 D-decisions); the new
-  scorer changes only the overlap sub-signal.
+Design (`design.md`) resolves the original open questions; status below.
+
+- **OQ-1 — float → `Ord` quantization. RESOLVED (design D4).** BM25 emits `f32`
+  (>= 0 under Lucene IDF). Quantize per-score to a Key-2 `u32` (`quantize`, scale
+  1e6, monotonic non-decreasing, saturating, non-finite→0). Key 2 stays
+  `Reverse<u32>`. Float ban (`doc/memory-spec.md` §584-585) targets
+  payload/export/backend only; lexical score is derived/never-stored.
+- **OQ-2 — corpus-relative scoring. RESOLVED (design D3).** Batch trait
+  `LexicalRanker::score(query, &LexicalCorpus, targets)`. Fit IDF/avgdl over **all
+  active memories** (the searchable set); score only survivors (bare `--query`:
+  active = corpus = targets, SL-008 D20). Scoring stays pure.
+- **OQ-3 — `bm25` crate fit & jail build. PARTIALLY RESOLVED.** `bm25 = 2.3.2`
+  (MIT) fetches over the live network. **Gated on a PHASE-01 build probe:** that
+  `Tokenizer`/`EmbedderBuilder`/`Scorer` remain exposed under
+  `default-features = false`. If core scoring is feature-gated, STOP and
+  `/consult` — never silently enable the default tokenizer deps.
+- **OQ-4 — default selection. RESOLVED (design D5).** `Bm25Ranker` is the hard
+  default; `OverlapRanker` retained only behind the trait (parity/fallback/future
+  measurement). No CLI/env/config switch in SL-017. Determinism preserved
+  (shuffle-invariance — IDF/avgdl are set-, not order-, dependent).
+- **Assumption (held)** — `exact_key_match` stays a separate Key-1 component
+  dominating Key 2; the new scorer changes only the lexical sub-signal.
+- **Tokenizer policy (design D2):** reuse doctrine `tokenize()` via a custom bm25
+  `Tokenizer`; no stemming/stopwords; preserve technical tokens. Stemming and
+  technical-token expansion are deferred, measured experiments — out of scope.
 
 ## Verification / Closure Intent
 
