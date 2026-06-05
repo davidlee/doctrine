@@ -27,6 +27,45 @@ whether all seven tech facet tables earn their place) before it locks. That
 contest happens in `/design` → `/inquisition`; this scope fixes *what* lands, not
 the internal shape.
 
+## Context Bundles & Sources
+
+Where a `/design` agent should read in, grouped by authority:
+
+**Governing design (committed, the seed):**
+- [`doc/spec-entity-spec.md`](../../../doc/spec-entity-spec.md) — the worked spec
+  entity: decomposition, requirement identity, serde structs, known risks, open
+  questions. *The primary read; the thing `/design` challenges.*
+- [`doc/entity-model.md`](../../../doc/entity-model.md) — umbrella taxonomy +
+  adjudication (storage rule, entity/facet, edges, three-layer model).
+
+**Supporting doc notes the spec note leans on (committed):**
+- [`doc/relation-index.md`](../../../doc/relation-index.md) — the registry / FK
+  validation; the *in-scope* `spec validate` rides its cache-independent pass.
+- [`doc/drift-spec.md`](../../../doc/drift-spec.md) — row↔prose orphan mitigation
+  this slice inherits verbatim.
+- [`doc/slices-spec.md`](../../../doc/slices-spec.md) — the directory-entity shape
+  + reservation primitive reused, not reinvented.
+- [`doc/reservation-spec.md`](../../../doc/reservation-spec.md) — the per-subtype
+  `mkdir` reservation namespace.
+- [`doc/glossary.md`](../../../doc/glossary.md) — the reserved id schemes
+  (`PRD-`/`SPEC-`/`REV-`, `FR-`/`NF-`, `VT-`).
+
+**Reference entities (code — the reuse seams, do not fork):**
+- `src/entity.rs` — the kind-parameterised scaffold engine (SL-003, done).
+- `src/adr.rs` + [`slice/006/design.md`](../006/design.md) — the worked
+  "new entity rides the engine unchanged" precedent; `src/spec.rs` mirrors it.
+- `src/slice.rs` — the other substrate caller.
+
+**External source corpus (read-only, `/workspace/spec-driver/`):**
+- `.spec-driver/tech/SPEC-110/` — the worked tech spec (the 7-block pathology).
+- `.spec-driver/tech/SPEC-134/` — a `stub`-status tech spec.
+- `.spec-driver/product/PROD-008/` + `requirements/FR-00{1,2,3}.md` — product
+  spec with standalone-file requirements.
+
+**Local research (GITIGNORED, disposable — `scratch/`):**
+- `scratch/spec-driver-schemas.local.md` — the full Spec-Driver block schemas
+  (275KB; the source the spec note's mappings derive from). Sample, don't dump.
+
 ## Scope & Objectives
 
 **Subtypes: `product` + `tech`.** Two folders, two per-subtype facet sets, one
