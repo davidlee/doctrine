@@ -34,6 +34,7 @@ use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
 use crate::meta;
+use crate::requirement::{self, ReqKind};
 
 /// The toml/md file stem — shared by both subtypes (`spec-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`PRD`/`SPEC`) and from the tree dirs below.
@@ -309,19 +310,116 @@ fn spec_scaffold(subtype: SpecSubtype, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<
 // `#members` — list's derived column
 // ---------------------------------------------------------------------------
 
-/// Count the members of the spec rooted at `spec_dir` by parsing its `members.toml`
-/// (`0` for the seeded-empty file). A missing file counts as zero — a spec always
-/// has the seed, but tolerance keeps the list robust.
-fn member_count(spec_dir: &Path) -> anyhow::Result<usize> {
-    let path = spec_dir.join("members.toml");
-    let text = match std::fs::read_to_string(&path) {
+/// Parse a spec's `members.toml` into its rows. A missing file → no members (a
+/// spec always carries the seed, but tolerance keeps callers robust). Shared by
+/// the `#members` column and `req add`'s label/order scan.
+fn read_members(members_path: &Path) -> anyhow::Result<Vec<Member>> {
+    let text = match std::fs::read_to_string(members_path) {
         Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
-        Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => {
+            return Err(e).with_context(|| format!("Failed to read {}", members_path.display()));
+        }
     };
-    let doc: MembersDoc =
-        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
-    Ok(doc.member.len())
+    let doc: MembersDoc = toml::from_str(&text)
+        .with_context(|| format!("Failed to parse {}", members_path.display()))?;
+    Ok(doc.member)
+}
+
+/// Count the members of the spec rooted at `spec_dir` (`0` for the seeded-empty
+/// file). The `#members` list column.
+fn member_count(spec_dir: &Path) -> anyhow::Result<usize> {
+    Ok(read_members(&spec_dir.join("members.toml"))?.len())
+}
+
+// ---------------------------------------------------------------------------
+// `req add` — resolver, label/order, the edit-preserving member append
+// ---------------------------------------------------------------------------
+
+/// Parse a canonical `<spec-ref>` (`PRD-NNN` / `SPEC-NNN`) into its subtype +
+/// numeric id. The prefix is REQUIRED (C4): a bare numeric is ambiguous across
+/// the two independent reservation namespaces, so it is rejected. Prefixes are
+/// derived from the two `Kind`s — the single source — never hardcoded here.
+fn resolve_spec_ref(spec_ref: &str) -> anyhow::Result<(SpecSubtype, u32)> {
+    let (prefix, num) = spec_ref.rsplit_once('-').with_context(|| {
+        format!("`{spec_ref}` is not a canonical spec ref (expected PRD-NNN or SPEC-NNN)")
+    })?;
+    let subtype = [SpecSubtype::Product, SpecSubtype::Tech]
+        .into_iter()
+        .find(|s| s.kind().prefix == prefix)
+        .with_context(|| {
+            format!("unknown spec prefix `{prefix}` in `{spec_ref}` (expected PRD or SPEC)")
+        })?;
+    let id: u32 = num
+        .parse()
+        .with_context(|| format!("`{num}` is not a numeric id in `{spec_ref}`"))?;
+    Ok((subtype, id))
+}
+
+/// The membership-label prefix for a requirement kind: `FR` (functional) / `NF`
+/// (quality). The label is membership state, not requirement state (§5.3), so it
+/// lives spec-side.
+fn label_prefix(kind: ReqKind) -> &'static str {
+    match kind {
+        ReqKind::Functional => "FR",
+        ReqKind::Quality => "NF",
+    }
+}
+
+/// Next free `<prefix>-NNN` label for `kind` among existing members (max + 1,
+/// zero-padded, first is 001). Labels of the other kind are ignored. Racy under
+/// concurrent `req add` (TOCTOU); the P5 uniqueness lint is the backstop (§5.4).
+fn next_label(members: &[Member], kind: ReqKind) -> String {
+    let prefix = label_prefix(kind);
+    let max = members
+        .iter()
+        .filter_map(|m| {
+            m.label
+                .strip_prefix(prefix)?
+                .strip_prefix('-')?
+                .parse::<u32>()
+                .ok()
+        })
+        .max()
+        .unwrap_or(0);
+    format!("{prefix}-{:03}", max + 1)
+}
+
+/// Next `order` for a new member: max existing + 1 (empty → 1). Advisory sort key.
+fn next_order(members: &[Member]) -> u32 {
+    members.iter().map(|m| m.order).max().unwrap_or(0) + 1
+}
+
+/// Edit-preserving append of one `[[member]]` row to a spec's `members.toml`
+/// (§5.4 step 4). A `toml_edit` array-of-tables `push` — never a serde
+/// reserialize — so the seeded comment, hand-added comments, and unknown keys
+/// survive; pushing a table is header-safe (unlike a trailing key insert).
+/// Mirrors `adr::set_adr_status`'s parse → mutate → write shape.
+fn append_member(
+    members_path: &Path,
+    requirement_fk: &str,
+    label: &str,
+    order: u32,
+) -> anyhow::Result<()> {
+    let text = std::fs::read_to_string(members_path)
+        .with_context(|| format!("Failed to read {}", members_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", members_path.display()))?;
+    let members = doc
+        .entry("member")
+        .or_insert(toml_edit::Item::ArrayOfTables(
+            toml_edit::ArrayOfTables::new(),
+        ))
+        .as_array_of_tables_mut()
+        .context("`member` is not an array of tables")?;
+    let mut row = toml_edit::Table::new();
+    row.insert("requirement", toml_edit::value(requirement_fk));
+    row.insert("label", toml_edit::value(label));
+    row.insert("order", toml_edit::value(i64::from(order)));
+    members.push(row);
+    std::fs::write(members_path, doc.to_string())
+        .with_context(|| format!("Failed to write {}", members_path.display()))
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +460,60 @@ pub(crate) fn run_new(
         subtype.kind().prefix,
         out.dir.display()
     )?;
+    Ok(())
+}
+
+/// `doctrine spec req add <spec-ref> "<title>" --kind <functional|quality>
+/// [--label …]` — the two-tree write (§5.4). Resolve the spec (canonical ref,
+/// C4); reserve a `REQ-NNN`; overwrite its seeded kind (D-1); append a membership
+/// row to the spec's `members.toml`. NOT transactional by design (C5): an append
+/// failure after the reserve leaves an orphan requirement (uncommitted, operator-
+/// cleaned; P5 `validate` flags it hard). Pure label/order compute precedes any
+/// write so the torn-write window is as tight as possible.
+pub(crate) fn run_req_add(
+    path: Option<PathBuf>,
+    spec_ref: &str,
+    title: Option<String>,
+    kind: ReqKind,
+    label: Option<String>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (subtype, spec_id) = resolve_spec_ref(spec_ref)?;
+    let spec_dir = root.join(subtype.kind().dir).join(format!("{spec_id:03}"));
+    anyhow::ensure!(
+        spec_dir.is_dir(),
+        "no {} spec {spec_ref} at {}",
+        subtype.label(),
+        spec_dir.display()
+    );
+
+    // Pure compute before any write — keeps the torn-write window minimal.
+    let members_path = spec_dir.join("members.toml");
+    let members = read_members(&members_path)?;
+    let label = match label {
+        Some(l) => l,
+        None => next_label(&members, kind),
+    };
+    let order = next_order(&members);
+
+    // Step 2 (§5.4): reserve the requirement — H2-atomic, collision-proof.
+    let title = crate::input::resolve_title(title)?;
+    let slug = crate::input::resolve_slug(&title, None)?;
+    let date = crate::clock::today();
+    let reserved = requirement::reserve(&root, &slug, &title, &date)?;
+    let req_id = reserved
+        .eid
+        .numeric_id()
+        .context("requirement kind must yield a numeric id")?;
+    let fk = requirement::canonical_id(req_id);
+
+    // D-1: overwrite the template-seeded kind now that we know it.
+    requirement::set_kind(&root, req_id, kind)?;
+
+    // Step 4 (§5.4): append the membership row — the orphan window (C5).
+    append_member(&members_path, &fk, &label, order)?;
+
+    writeln!(io::stdout(), "Added {label} ({fk}) to {spec_ref}")?;
     Ok(())
 }
 
@@ -703,5 +855,185 @@ tags = []
         // the comment-only template is valid toml and yields no members.
         let doc: MembersDoc = toml::from_str(&members_seed().unwrap()).unwrap();
         assert!(doc.member.is_empty());
+    }
+
+    // --- PHASE-03 VT-2: the canonical-ref resolver + label/order ---
+
+    #[test]
+    fn req_add_resolver_rejects_bare_numeric() {
+        assert_eq!(
+            resolve_spec_ref("PRD-7").unwrap(),
+            (SpecSubtype::Product, 7)
+        );
+        assert_eq!(
+            resolve_spec_ref("SPEC-012").unwrap(),
+            (SpecSubtype::Tech, 12)
+        );
+        // bare numeric is ambiguous across the two namespaces → rejected (C4).
+        assert!(resolve_spec_ref("7").is_err());
+        // wrong/unknown prefix, and a non-numeric tail.
+        assert!(resolve_spec_ref("REQ-1").is_err());
+        assert!(resolve_spec_ref("PRD-x").is_err());
+    }
+
+    #[test]
+    fn next_label_and_order_fill_per_kind_independently() {
+        let members = vec![
+            Member {
+                requirement: "REQ-001".into(),
+                label: "FR-001".into(),
+                order: 1,
+            },
+            Member {
+                requirement: "REQ-002".into(),
+                label: "FR-002".into(),
+                order: 2,
+            },
+            Member {
+                requirement: "REQ-003".into(),
+                label: "NF-001".into(),
+                order: 3,
+            },
+        ];
+        assert_eq!(next_label(&members, ReqKind::Functional), "FR-003");
+        assert_eq!(next_label(&members, ReqKind::Quality), "NF-002");
+        assert_eq!(next_label(&[], ReqKind::Functional), "FR-001");
+        assert_eq!(next_order(&members), 4);
+        assert_eq!(next_order(&[]), 1);
+    }
+
+    // --- PHASE-03 VT-1 / VT-2 / VT-3: the two-tree write end-to-end ---
+
+    #[test]
+    fn spec_req_add_reserves_requirement_and_appends_member() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
+
+        run_req_add(
+            Some(root.to_path_buf()),
+            "PRD-001",
+            Some("User can sign up".into()),
+            ReqKind::Functional,
+            None,
+        )
+        .unwrap();
+
+        // a requirement was reserved in its own tree, kind overwritten (D-1).
+        let req_toml = root.join(".doctrine/requirement/001/requirement-001.toml");
+        assert!(req_toml.is_file());
+        assert!(
+            fs::read_to_string(&req_toml)
+                .unwrap()
+                .contains("kind = \"functional\"")
+        );
+
+        // the membership row carries FK + auto label + order.
+        let members = read_members(&root.join(".doctrine/spec/product/001/members.toml")).unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].requirement, "REQ-001");
+        assert_eq!(members[0].label, "FR-001");
+        assert_eq!(members[0].order, 1);
+    }
+
+    #[test]
+    fn spec_req_add_is_edit_preserving() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
+
+        // hand-edit the seeded members.toml: a comment + an unknown top-level key.
+        let members_path = root.join(".doctrine/spec/product/001/members.toml");
+        let seeded = fs::read_to_string(&members_path).unwrap();
+        fs::write(
+            &members_path,
+            format!("{seeded}\n# hand-added note\nschema_hint = \"survives\"\n"),
+        )
+        .unwrap();
+
+        run_req_add(
+            Some(root.to_path_buf()),
+            "PRD-001",
+            Some("X".into()),
+            ReqKind::Functional,
+            None,
+        )
+        .unwrap();
+
+        let after = fs::read_to_string(&members_path).unwrap();
+        // comment + unknown key survive the append (toml_edit, not reserialize) …
+        assert!(after.contains("# hand-added note"));
+        assert!(after.contains("schema_hint = \"survives\""));
+        // … and the new row is present.
+        assert!(after.contains("[[member]]"));
+        assert!(after.contains("requirement = \"REQ-001\""));
+    }
+
+    #[test]
+    fn spec_req_add_auto_labels_fr_then_nf_by_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI");
+        let add = |title: &str, kind: ReqKind, label: Option<&str>| {
+            run_req_add(
+                Some(root.to_path_buf()),
+                "SPEC-001",
+                Some(title.into()),
+                kind,
+                label.map(str::to_string),
+            )
+            .unwrap();
+        };
+        add("route subcommands", ReqKind::Functional, None); // FR-001
+        add("parse flags", ReqKind::Functional, None); // FR-002
+        add("fast startup", ReqKind::Quality, None); // NF-001
+        add("explicit", ReqKind::Functional, Some("FR-099")); // override honoured
+
+        let members = read_members(&root.join(".doctrine/spec/tech/001/members.toml")).unwrap();
+        let labels: Vec<&str> = members.iter().map(|m| m.label.as_str()).collect();
+        assert_eq!(labels, vec!["FR-001", "FR-002", "NF-001", "FR-099"]);
+        // each reserved a distinct REQ-NNN in order.
+        let fks: Vec<&str> = members.iter().map(|m| m.requirement.as_str()).collect();
+        assert_eq!(fks, vec!["REQ-001", "REQ-002", "REQ-003", "REQ-004"]);
+        // D-1: the quality requirement's kind was overwritten off the functional seed.
+        let q = fs::read_to_string(root.join(".doctrine/requirement/003/requirement-003.toml"))
+            .unwrap();
+        assert!(q.contains("kind = \"quality\""));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn spec_req_add_orphan_on_append_failure_left_uncommitted() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
+
+        // make the append target read-only: the label/order scan still reads it
+        // (valid seed), the reserve succeeds, the final write fails → torn write.
+        let members_path = root.join(".doctrine/spec/product/001/members.toml");
+        let mut perms = fs::metadata(&members_path).unwrap().permissions();
+        perms.set_mode(0o444);
+        fs::set_permissions(&members_path, perms).unwrap();
+
+        let err = run_req_add(
+            Some(root.to_path_buf()),
+            "PRD-001",
+            Some("X".into()),
+            ReqKind::Functional,
+            None,
+        );
+        assert!(
+            err.is_err(),
+            "append must fail on the read-only members.toml"
+        );
+
+        // the reserved requirement is an orphan: present (uncommitted), no member row.
+        assert!(
+            root.join(".doctrine/requirement/001/requirement-001.toml")
+                .is_file()
+        );
+        let members = read_members(&members_path).unwrap();
+        assert!(members.is_empty(), "no partial member row written");
     }
 }
