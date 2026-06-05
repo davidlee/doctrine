@@ -3,6 +3,8 @@
 Doctrine is an opinionated but hackable set of tools and conventions for
 software engineering with LLM agents.
 
+> LUX VERITATIS CORPORIBUS HAERETICORUM ALITUR
+
 ## Design Goals:
 
 1. Correctness 

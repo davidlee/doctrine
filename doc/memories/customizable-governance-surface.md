@@ -1,6 +1,7 @@
 # Memory: user-customizable governance surface (the `doctrine.md` analog)
 
-A future-slice idea (not yet scoped), parked here so it isn't re-derived.
+**Scoped into SL-011** (cache-friendly session boot context) — folded in as a
+boot input + `/canon` reference. Retire/realize there. Kept until SL-011 closes.
 Surfaced while porting the `/canon` skill from spec-driver's `doctrine` skill.
 
 ## The idea
