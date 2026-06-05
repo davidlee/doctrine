@@ -12,6 +12,8 @@
 .doctrine/*
 !.doctrine/slice/
 !.doctrine/memory/
+# SL-011 dogfood: commit the seeded boot governance layer
+!.doctrine/governance.md
 
 handover.md
 /scratch

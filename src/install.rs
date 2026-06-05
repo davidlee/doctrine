@@ -640,6 +640,38 @@ mod tests {
         assert_eq!(content, original);
     }
 
+    // SL-011 VT-1: the boot governance layer rides the existing seed path —
+    // created create-if-missing, left untouched when already present.
+    #[test]
+    fn seeds_governance_when_missing_and_skips_when_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = Manifest {
+            target: ".doctrine".to_string(),
+            ..Manifest::default_for_tests()
+        };
+        let dest = dir.path().join(".doctrine/governance.md");
+
+        // missing → seeded with the embedded template.
+        execute_plan(&build_plan(&manifest, dir.path())).unwrap();
+        assert!(dest.is_file(), "governance.md seeded when missing");
+        assert!(
+            fs::read_to_string(&dest)
+                .unwrap()
+                .contains("Governance (project)"),
+            "seeded from the embedded template",
+        );
+
+        // present → a re-install leaves the user's edits untouched (Skip).
+        let edited = "# Governance (project)\n\nmy own pointers\n";
+        fs::write(&dest, edited).unwrap();
+        execute_plan(&build_plan(&manifest, dir.path())).unwrap();
+        assert_eq!(
+            fs::read_to_string(&dest).unwrap(),
+            edited,
+            "an existing governance.md is never clobbered",
+        );
+    }
+
     // ---------------------------------------------------------------
     // helpers
     // ---------------------------------------------------------------
