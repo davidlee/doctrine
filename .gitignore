@@ -25,7 +25,6 @@ handover.md
 # Added by cargo
 
 /target
-/target-jail
 .doctrine/state/
 .doctrine/slice/*/phases
 .doctrine/slice/*/handover.md

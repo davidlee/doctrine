@@ -61,13 +61,15 @@
           (try-fwd-env "OPENROUTER_API_KEY")
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
           # Jail builds into its own target dir so it never clobbers the host's.
-          # The repo binds into the jail at a different absolute path, but cargo
-          # bakes CARGO_BIN_EXE (the e2e-test spawn path) at compile time — a
-          # shared target/ leaves a jail-built test binary pointing at the jail
-          # mount path, which spawn-fails when the same binary is run on the
-          # host (and vice versa). A relative dir keeps it mount-agnostic;
-          # cargo resolves it under the repo root. Host stays on default target/.
-          (set-env "CARGO_TARGET_DIR" "target-jail")
+          # The repo binds rw into the jail at a different absolute path, but
+          # cargo bakes CARGO_BIN_EXE (the e2e-test spawn path) at compile time —
+          # a shared target/ leaves a jail-built test binary pointing at the jail
+          # mount path, which spawn-fails when run on the host (and vice versa).
+          # Park it under the persisted, out-of-tree ~/.cargo (in-jail HOME
+          # appears as /home/david, backed by host /home/agent): survives
+          # launches (warm cache) and keeps the bound working tree clean. Host
+          # stays on default target/.
+          (set-env "CARGO_TARGET_DIR" "/home/david/.cargo/doctrine-target-jail")
           # Share the HOST doctrine binary into the jail. persist-home already
           # mounts an isolated, writable ~/.cargo; this ro-binds the host's real
           # install on top (extraOptions applies after persist-home, so it wins)
