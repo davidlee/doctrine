@@ -1,0 +1,41 @@
+memory_uid = "mem_019e98921f31772295edbe66537ebe34"
+memory_key = "mem.pattern.testing.no-root-find-walk"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "root::find walks CWD to / — no-root tests need a marker-free temp base"
+summary = "A stray marker (e.g. /tmp/.git) above the system tempdir makes root::find resolve a root, defeating no-root e2e cases; pick a marker-free base."
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["src/root.rs", "tests"]
+globs = []
+commands = []
+tags = ["testing", "root"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1cee487d50f99737c7242619d48e0113378a6637"
+ref_name = "refs/heads/SL-015"
+checkout_state_id = "a80db81f634969b3f479b1638f8d9ebe0fecf7fc8b17538fe0620120fd53a998"
+base_commit = "5be766135bbad45b0ac2c66928d28e493969156f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
