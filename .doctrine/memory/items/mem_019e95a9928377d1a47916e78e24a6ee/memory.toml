@@ -1,0 +1,41 @@
+memory_uid = "mem_019e95a9928377d1a47916e78e24a6ee"
+memory_key = "mem.thread.backlog.just-module"
+schema_version = 1
+memory_type = "thread"
+status = "active"
+title = "Ship an opt-in just module into .doctrine"
+summary = "Future-slice idea: materialise .doctrine/doctrine.just; adopt via one-line mod. Depends SL-010; needs slice show --path"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = []
+globs = []
+commands = ["just"]
+tags = ["just", "backlog", "sl-010"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f640e41ff4260e395248c68c5c9d2d4a2e9910cf"
+ref_name = "refs/heads/main"
+checkout_state_id = "05a2a2e2a79460e810b2fa770cb5f1e480614b66c353ae8cb77022cd814fbb28"
+base_commit = "eac3a4a10481cebb0b2944906daaf643ede515c8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
