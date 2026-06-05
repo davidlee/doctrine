@@ -48,6 +48,10 @@ heresies. Everyone (save the User) is a suspected heretic.
 
 ## Output contract
 
+Note: If the target of the inquisition is a slice or other artifact
+with a containing folder, save `inquisition.md` (`inquisition-2.md` ... )
+inside.
+
 Produce results in this order:
 
 1. **Charges**: numbered list of suspected heresies. For each: doctrine
