@@ -413,6 +413,26 @@ coarsen-scale fallback before close.
 `allow` (`mem.pattern.lint.expect-not-allow`). `just check` / `cargo clippy` zero
 warnings.
 
+**Staged `dead_code` bridge.** `lexical.rs` lands its public surface (trait,
+`OverlapRanker`, `quantize`, `LexDoc`, `LexicalCorpus` — PHASE-02; `Bm25Ranker` —
+PHASE-03) before any non-test consumer; `retrieve` wires the ranker only at
+PHASE-04. doctrine is **bin-only** (no `lib.rs`; `main.rs` declares the modules)
+and the gate is plain `cargo clippy` (bins/lib, non-test — not `--all-targets`),
+under which `#[cfg(test)]` is invisible. So through PHASE-02–03 every `lexical`
+item except the moved `tokenize` (still called by `lexical_score`) is reachable
+only from tests ⇒ `unused`/`dead_code` (`deny`) fires. Carry the project's
+standard self-clearing bridge: a module-level
+`#![cfg_attr(not(test), expect(dead_code, reason = "lexical consumers wired into retrieve at PHASE-04"))]`
+(mirrors `git.rs`/`memory.rs`; the `not(test)` gate avoids
+`unfulfilled_lint_expectations` in the test build, where the items ARE used).
+PHASE-04 wiring is the self-clearing condition — once `retrieve` consumes the
+ranker the expectation lifts and the attribute is removed (an unfulfilled
+expectation then warns, so removal is enforced, not optional). NB the bm25 dep
+itself is reached only from the PHASE-01 probe test/example, both outside the
+bins/lib gate; `unused_crate_dependencies` is disabled (`Cargo.toml`), so this is
+informational — `just check` green in PHASE-01 does not by itself compile the bm25
+usage (`cargo test` does).
+
 ## 10. Review Notes
 
 ### Adversarial self-review (round 1)
@@ -498,3 +518,14 @@ defined `/consult`/fallback path if they fail.
 Round-2 required fixes (A1–A3, A5–A6) integrated; A4/A7/A8 also applied. Gating
 unknowns unchanged (OQ-3 API surface incl. avgdl equivalence; OQ-5 determinism) —
 both PHASE-01 probes with explicit escape hatches. Design cleared to plan.
+
+### Post-lock amendment (PHASE-01 critical-eval, Finding A)
+
+- **A9 (medium) — staged `dead_code` not specified.** The pre-lock §9 Lint
+  subsection covered only the `quantize` cast `expect`s, leaving the staged-build
+  gap implicit: `lexical.rs`'s surface is non-test-reachable only at PHASE-04, but
+  the bins/lib clippy gate denies `unused`/`dead_code`, so PHASE-02 EX-5 / PHASE-03
+  EX-4 "clippy zero warnings" were unsatisfiable as written. *Applied:* §9 gains the
+  **Staged `dead_code` bridge** note (the `#![cfg_attr(not(test), expect(dead_code,
+  reason=…))]` idiom, mirroring `git.rs`/`memory.rs`, self-clearing at PHASE-04).
+  No architectural change; plan PHASE-02/03 EX reconcile to reference it.

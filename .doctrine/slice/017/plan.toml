@@ -95,7 +95,7 @@ exit_criteria = [
   { id = "EX-2", text = "`LexDoc{id:String,text:String}`, `LexicalCorpus::Raw(&[LexDoc])` (1-variant enum), and `LexicalRanker::score(query:Option<&str>,&LexicalCorpus,targets:&[&str])->Vec<(String,u32)>` defined; doc-comment states the A1 total/positional contract + hard targets⊆corpus assert + the future A4 Indexed construction-time-failure constraint" },
   { id = "EX-3", text = "`OverlapRanker` implements the trait: one entry per target in order, no-query/empty⇒0, set-membership count over LexDoc.text; corpus arg ignored; no quantize" },
   { id = "EX-4", text = "`quantize` per design §5.2 incl. `debug_assert!(score.is_finite())`; the narrow `#[expect(clippy::cast_possible_truncation|cast_precision_loss, reason=…)]` (expect+reason, never bare allow) keeps clippy zero-warning" },
-  { id = "EX-5", text = "`mod lexical;` declared; `cargo clippy` zero warnings; full suite green (lexical_score still present and unchanged)" },
+  { id = "EX-5", text = "`mod lexical;` declared with the staged `dead_code` bridge `#![cfg_attr(not(test), expect(dead_code, reason=\"lexical consumers wired into retrieve at PHASE-04\"))]` (design §9; mirrors git.rs/memory.rs — the not(test) gate avoids unfulfilled_lint_expectations); `cargo clippy` zero warnings; full suite green (lexical_score still present and unchanged)" },
 ]
 verification = [
   { id = "VT-1", expects = "tokenize moved-cases: separator splitting (mem.pattern.lint, src/x.rs), case-fold, empty drop — identical to pre-move outputs" },
@@ -131,7 +131,7 @@ exit_criteria = [
   { id = "EX-1", text = "custom bm25 `Tokenizer` delegates to `lexical::tokenize`; no DefaultTokenizer / stemming / stopwords / second regime; `--no-default-features` preserved" },
   { id = "EX-2", text = "`Bm25Ranker` implements `LexicalRanker`: fit avgdl/IDF over the full corpus, score targets, return exactly one entry per target in order with no-evidence⇒0; hard targets⊆corpus assert; empty-input short-circuit avoids the avgdl div-by-zero" },
   { id = "EX-3", text = "self-computed avgdl uses the SAME tokenizer instance semantics the Embedder/Scorer use (A3); IDF/df computed over the whole corpus, not the target subset (D3)" },
-  { id = "EX-4", text = "`cargo clippy` zero warnings; full suite green; Bm25Ranker not yet the wired default (PHASE-04)" },
+  { id = "EX-4", text = "`cargo clippy` zero warnings (the §9 staged `dead_code` bridge still covers Bm25Ranker — also non-test-reachable until PHASE-04); full suite green; Bm25Ranker not yet the wired default (PHASE-04)" },
 ]
 verification = [
   { id = "VT-1", expects = "IDF effect: a target containing a RARE corpus term outranks one containing only a UBIQUITOUS term, holding length constant" },
@@ -173,7 +173,7 @@ exit_criteria = [
   { id = "EX-2", text = "old `lexical_score` deleted; `tokenize` now sourced from `lexical`; `exact_key_match` + the 9-key SortKey + Key-2 `Reverse<u32>` polarity unchanged" },
   { id = "EX-3", text = "the impure shell constructs `Bm25Ranker` as the default and passes `&dyn LexicalRanker` into `query`; no CLI/env/config selector added (D5); `find` and `retrieve` both use it" },
   { id = "EX-4", text = "behaviour-preservation: every pre-existing SL-008 retrieval test that pinned overlap ordering passes UNCHANGED when re-pointed through OverlapRanker; trust holdback, staleness, filters, partition all untouched" },
-  { id = "EX-5", text = "`just check` / `cargo clippy` zero warnings; full suite + e2e green; task card (notes.md) updated per conventions" },
+  { id = "EX-5", text = "the §9 staged `dead_code` bridge in `lexical.rs` is REMOVED (wiring is its self-clearing condition — a now-unfulfilled expectation would warn); `just check` / `cargo clippy` zero warnings; full suite + e2e green; task card (notes.md) updated per conventions" },
 ]
 verification = [
   { id = "VT-1", expects = "exact_key still dominates Key 2 under BM25: an exact memory_key hit outranks a higher-BM25 non-key hit" },
