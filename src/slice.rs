@@ -18,13 +18,13 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, bail};
-use serde::Deserialize;
+use anyhow::Context;
 
 use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
 use crate::meta;
+use crate::plan::Plan;
 
 /// Relative dir of the slice tree inside the project root.
 const SLICE_DIR: &str = ".doctrine/slice";
@@ -59,58 +59,6 @@ const NOTES_KIND: Kind = Kind {
     prefix: "SL",
     scaffold: notes_scaffold,
 };
-
-// ---------------------------------------------------------------------------
-// Model
-// ---------------------------------------------------------------------------
-
-/// The authored implementation plan, read from `plan.toml`. Only the ordered
-/// phase list is consumed in v1 (phase materialisation, slice-004 §5.2); the
-/// specs/requirements link tables exist in the file but are empty (no registry
-/// yet) and are not modelled. The first relational *read* model — slice-side,
-/// no shared `Meta` (slice-003 Non-Goal).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub(crate) struct Plan {
-    #[serde(default)]
-    pub phases: Vec<PlanPhase>,
-}
-
-/// One authored phase row. `id` is the canonical `PHASE-NN` join key; `name`
-/// and `objective` seed the disposable phase sheet. Criteria/verification/link
-/// fields exist in the file but are not consumed until a tracking consumer
-/// graduates them (D5/Q2), so they are not modelled here.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub(crate) struct PlanPhase {
-    pub id: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub objective: String,
-}
-
-impl Plan {
-    /// Parse and validate a `plan.toml` body. Rejects a plan whose phase ids
-    /// are not unique — a duplicate would alias two phases onto one tracking
-    /// file (finding 6). Per-id well-formedness (`PHASE-<digits>`) is enforced
-    /// at the filesystem boundary by `state::phase_stem` (slice-004 §9), where
-    /// an id becomes a filename.
-    fn parse(text: &str) -> anyhow::Result<Plan> {
-        // serde renames the TOML `[[phase]]` array to the `phases` field.
-        #[derive(Deserialize)]
-        struct Raw {
-            #[serde(default)]
-            phase: Vec<PlanPhase>,
-        }
-        let raw: Raw = toml::from_str(text).context("Failed to parse plan.toml")?;
-        let mut seen = std::collections::BTreeSet::new();
-        for ph in &raw.phase {
-            if !seen.insert(ph.id.as_str()) {
-                bail!("Duplicate phase id {} in plan", ph.id);
-            }
-        }
-        Ok(Plan { phases: raw.phase })
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Pure: render, scaffolds, list
@@ -692,41 +640,7 @@ mod tests {
             if rel_path == Path::new("004/plan.md") && body.contains("Plan title")));
     }
 
-    // --- Plan read model ---
-
-    #[test]
-    fn plan_parse_reads_ordered_phases() {
-        let text = r#"
-            schema = "doctrine.plan.overview"
-            version = 1
-            slice = "SL-004"
-            [[phase]]
-            id = "PHASE-01"
-            name = "First"
-            objective = "do a"
-            [[phase]]
-            id = "PHASE-02"
-            name = "Second"
-        "#;
-        let plan = Plan::parse(text).unwrap();
-        let ids: Vec<&str> = plan.phases.iter().map(|p| p.id.as_str()).collect();
-        assert_eq!(ids, vec!["PHASE-01", "PHASE-02"]);
-        assert_eq!(plan.phases[0].objective, "do a");
-        // an absent objective defaults to empty, not an error
-        assert_eq!(plan.phases[1].objective, "");
-    }
-
-    #[test]
-    fn plan_parse_rejects_duplicate_phase_ids() {
-        let text = r#"
-            [[phase]]
-            id = "PHASE-01"
-            [[phase]]
-            id = "PHASE-01"
-        "#;
-        let err = Plan::parse(text).unwrap_err();
-        assert!(err.to_string().contains("Duplicate phase id PHASE-01"));
-    }
+    // --- Plan read model (pure parser tests live in `crate::plan`; SL-016) ---
 
     #[test]
     fn plan_parse_accepts_the_scaffold_template() {

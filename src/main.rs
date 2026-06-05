@@ -9,6 +9,7 @@ mod input;
 mod install;
 mod memory;
 mod meta;
+mod plan;
 mod registry;
 mod requirement;
 mod retrieve;
