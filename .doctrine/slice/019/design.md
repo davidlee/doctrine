@@ -211,17 +211,15 @@ the only guard.
   verification *approach* (what proves the capability, observability, gates); any
   unavoidable requirement reference uses the durable `REQ-NNN`, never the label.
   The reworked skill's §7 and the exemplar both follow this.
-- **Template §4 guidance line vs D-1 — OPEN, needs decision (CHARGE V).** The new
-  template's §4 body line literally reads "Functional requirements, non-functional
-  requirements, constraints, and invariants" (install/templates/spec-product.md:
-  12–13) — inviting the prose-FR/NF double-storage D-1 forbids. An author copying
-  the scaffold (not the skill) reintroduces the heresy; `spec validate` won't
-  catch it. Two resolutions: **(a)** reword that one §4 *guidance* line to
-  "Constraints and invariants (functional/quality requirements are `REQ` entities
-  — add via `spec req add`)" — a one-line clarification, not a structural
-  re-edit; or **(b)** leave the template, rely on the reworked skill + the
-  exemplar's FR/NF-free §4 to set the shape. Recommend (a) (closes the hole at
-  source); needs user sign-off as it brushes the "no template re-edit" non-goal.
+- **Template §4 guidance line vs D-1 — DECIDED (CHARGE V): reword (option a).**
+  The §4 body line "Functional requirements, non-functional requirements,
+  constraints, and invariants" (install/templates/spec-product.md:12–13) invites
+  the prose-FR/NF double-storage D-1 forbids (`spec validate` won't catch it). It
+  is reworded to: **"Constraints and invariants. (Functional/quality requirements
+  are `REQ` entities — add via `spec req add`.)"** This is a sanctioned one-line
+  *guidance* clarification, not a structural re-edit — the eight section headings
+  are unchanged. The edit lands at PHASE-02 entry, committed with the template +
+  reworked skill, before the re-embedding rebuild.
 - **Double "Requirements" heading** in `spec show` (prose §4 + synthesized) is
   accepted; the exemplar may title its §4 "Constraints & Invariants" to avoid
   it, at the cost of diverging from the template's section label.
