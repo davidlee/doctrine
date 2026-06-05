@@ -1,0 +1,41 @@
+memory_uid = "mem_019e95d842007cf29fe80eca71146492"
+memory_key = "mem.pattern.testing.stale-cargo-bin-exe"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Stale CARGO_BIN_EXE makes e2e tests spawn-fail"
+summary = "e2e spawn NotFound after cross-mount rebuild — touch tests/*.rs to fix"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["tests/e2e_memory_anchoring.rs"]
+globs = ["tests/**"]
+commands = ["cargo", "just"]
+tags = ["testing", "build", "gotcha"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "da4b749f3dfb830e1893793ddeed591aa9daaf19"
+ref_name = "refs/heads/main"
+checkout_state_id = "ff2e517b2527812644b73cb9bf96875f685124a74f4e97cab79fd89ae48e9f8b"
+base_commit = "f072fc085259bada9c5bcb1bb64475e33e734d9c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "low"
+weight = 2

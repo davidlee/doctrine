@@ -1400,6 +1400,40 @@ mod tests {
         assert!(frame.checkout_state_id.is_empty());
     }
 
+    // A-3 (SL-012 audit) — proves design §3/§5's load-bearing claim that a *changed*
+    // tracked symlink rides `worktree_fingerprint` (git's `diff --binary` of the
+    // 120000 blob), not the untracked path. Commit a symlink, repoint it in the
+    // worktree → CheckoutState with a non-empty csid, deterministic across captures.
+    // Passes immediately: it is a characterization test pinning git's diff-based
+    // worktree_fingerprint codepath (the repoint never touches `untracked_fingerprint`).
+    #[cfg(unix)]
+    #[test]
+    fn tracked_symlink_repoint_is_dirty() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init");
+        std::os::unix::fs::symlink("a.txt", repo.path().join("link")).expect("symlink");
+        repo.git(&["add", "link"]);
+        repo.git(&["commit", "-m", "add symlink"]);
+
+        // Repoint the tracked symlink in the worktree (rm + re-symlink elsewhere).
+        let link = repo.path().join("link");
+        std::fs::remove_file(&link).expect("rm link");
+        std::os::unix::fs::symlink("a.txt.other", &link).expect("re-symlink");
+
+        let a = capture(repo.path()).expect("capture repointed");
+        let b = capture(repo.path()).expect("recapture");
+        assert_eq!(
+            a.anchor_kind,
+            AnchorKind::CheckoutState,
+            "a changed tracked symlink makes the tree dirty"
+        );
+        assert!(
+            !a.checkout_state_id.is_empty(),
+            "the dirty tracked symlink carries a checkout_state_id"
+        );
+        assert_eq!(a, b, "tracked-symlink-repoint capture is deterministic");
+    }
+
     // NF-001 (SL-012, mirrors forgettable DE-010, RISK-03) — an untracked symlink
     // is encoded by its link text, never followed: mutating the *pointee's content*
     // leaves the csid unchanged. The pointee lives outside the repo, so the only
@@ -1488,6 +1522,33 @@ mod tests {
         let b = capture(repo.path()).expect("recapture");
         assert_eq!(a.anchor_kind, AnchorKind::CheckoutState);
         assert_eq!(a, b, "non-utf8 symlink target capture is deterministic");
+    }
+
+    // A-2 (SL-012 audit) — an untracked *regular* file whose name contains a `\n`
+    // hashes correctly and deterministically. doctrine forks `git hash-object -- path`
+    // once per path, which is newline-safe; this guards against a future batch-port
+    // (forgettable IMPR-003 / `untracked_hashes`) silently reintroducing Finding A,
+    // where LF-separated `--stdin-paths` cannot carry a newline-bearing path.
+    // A newline in a filename needs raw bytes — go through OsStr/std::fs directly.
+    #[cfg(unix)]
+    #[test]
+    fn untracked_newline_in_name_is_deterministic() {
+        use std::os::unix::ffi::OsStrExt;
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init");
+        // "wei\nrd.txt" — a legal Unix filename with an embedded newline.
+        let name = std::ffi::OsStr::from_bytes(b"wei\nrd.txt");
+        std::fs::write(repo.path().join(name), "contents").expect("write newline file");
+
+        let a = capture(repo.path()).expect("capture newline-name file");
+        let b = capture(repo.path()).expect("recapture");
+        assert_eq!(
+            a.anchor_kind,
+            AnchorKind::CheckoutState,
+            "an untracked newline-named file makes the tree dirty"
+        );
+        assert!(!a.checkout_state_id.is_empty());
+        assert_eq!(a, b, "newline-in-name capture is deterministic");
     }
 
     #[test]
