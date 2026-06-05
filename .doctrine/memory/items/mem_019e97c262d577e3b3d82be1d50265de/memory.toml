@@ -1,0 +1,41 @@
+memory_uid = "mem_019e97c262d577e3b3d82be1d50265de"
+memory_key = "mem.pattern.lint.string-build-no-push-format"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "String assembly under repo clippy denies"
+summary = "Build Strings via Vec<String>+concat — push_str(&format!) and write!().expect() both denied"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["src"]
+globs = []
+commands = []
+tags = ["rust", "clippy", "lint"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c5c987dbfd141fbe492bcec50637ec30de80889f"
+ref_name = "refs/heads/SL-015"
+checkout_state_id = "5a39b3d5981250de9e704a43f8236dbc02c101fcfd6f718cba315fac0040e981"
+base_commit = "c27b954a3b6079711c4eec0ac1607ab66b53e60d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
