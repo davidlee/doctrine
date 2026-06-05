@@ -113,7 +113,16 @@ pub(crate) fn run(
 
     execute_plan(&plan)?;
     stdout_line("Done.")?;
+    stdout_line(sync_hint())?;
     Ok(())
+}
+
+/// The post-install next-step hint (SL-018 OQ-C): point the user at the standalone
+/// `memory sync` verb. `install` does NOT orchestrate sync — the verb stays
+/// standalone (skills parity), so the global corpus is materialized on demand, not
+/// as a hidden side effect of install.
+fn sync_hint() -> &'static str {
+    "Next: run `doctrine memory sync` to materialize the global memory corpus."
 }
 
 // ---------------------------------------------------------------------------
@@ -620,6 +629,35 @@ mod tests {
 
         let gi_content = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert!(gi_content.contains("/doctest-entry"));
+    }
+
+    // SL-018 OQ-C / EX-3: install hints at `memory sync` but does NOT run it.
+    #[test]
+    fn install_hints_at_the_standalone_memory_sync_verb() {
+        assert!(
+            sync_hint().contains("memory sync"),
+            "the post-install hint must point at `memory sync`"
+        );
+    }
+
+    // SL-018 VT-3: install alone writes no shipped/ — sync is the standalone verb
+    // that populates the derived corpus, never install (OQ-C).
+    #[test]
+    fn install_writes_no_shipped_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        // The REAL manifest: items/ is created, shipped/ is gitignored-not-created.
+        let manifest = load_manifest().unwrap();
+        let plan = build_plan(&manifest, dir.path());
+        execute_plan(&plan).unwrap();
+
+        assert!(
+            dir.path().join(".doctrine/memory/items").is_dir(),
+            "install materializes the committed items/ tree"
+        );
+        assert!(
+            !dir.path().join(".doctrine/memory/shipped").exists(),
+            "install must not create the derived shipped/ tree — that is `memory sync`'s job"
+        );
     }
 
     #[test]
