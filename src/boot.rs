@@ -16,11 +16,14 @@
 //! marker except `Invoking doctrine`, which carries the resolved exec path.
 //! Later phases feed the ADR/memory/governance/static producers real bodies.
 
+use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
+use anyhow::{Context, bail};
+use serde_json::{Map, Value};
 
 use crate::{adr, fsutil, install, memory, root};
 
@@ -188,6 +191,447 @@ pub(crate) fn run(path: Option<PathBuf>) -> anyhow::Result<()> {
         "Unchanged"
     };
     writeln!(io::stdout(), "{verb} {}", dest.display())?;
+    Ok(())
+}
+
+// ===========================================================================
+// PHASE-04 — harness seam + `doctrine boot install` wiring
+// ===========================================================================
+//
+// Per-harness wiring behind an `enum Harness` + `match` seam (NOT trait/Box<dyn>
+// — design D8/Charge IV; mirrors `skills.rs`'s Claude-vs-Other shape). Decision
+// logic is pure (`plan_boot_import`, `plan_session_hook`); the disk read/write is
+// a thin imperative wrapper (`ensure_boot_import`, `install_refresh`), so §9's
+// merge matrix is plain unit tests with no disk (house rule, A1).
+
+/// The machine-local Claude settings file carrying the `SessionStart` hook —
+/// gitignored (the absolute exec path belongs out of git, §5.3/D6).
+const SETTINGS_REL: &str = ".claude/settings.local.json";
+
+/// The `SessionStart` matcher token — fires on a fresh session and on `/clear`
+/// (`clear` firing a `SessionStart` hook is already witnessed; the OR-token is
+/// confirmed live at closure, §6/PHASE-06).
+const SESSION_MATCHER: &str = "startup|clear";
+
+// ---------------------------------------------------------------------------
+// The harness seam (R2) — enum + match, one local id per wired harness.
+// ---------------------------------------------------------------------------
+
+/// A wired harness. A third harness is a new arm, no framework (design D8).
+/// Identity-unification with `skills::Agent` is deferred debt until SL-012 frees
+/// `skills.rs` (the §3 concurrency gate forbids touching it now).
+#[derive(Debug, PartialEq, Eq)]
+enum Harness {
+    Claude,
+    Codex,
+}
+
+/// Parse an explicit `--agent` token. Unlike `skills::parse_agent` (which
+/// delegates unknowns to `npx`), boot wires only the harnesses it knows, so an
+/// unknown name is an error, not a passthrough.
+fn parse_harness(s: &str) -> anyhow::Result<Harness> {
+    if s.eq_ignore_ascii_case("claude") {
+        Ok(Harness::Claude)
+    } else if s.eq_ignore_ascii_case("codex") {
+        Ok(Harness::Codex)
+    } else {
+        bail!("Unknown harness '{s}'. Known harnesses: claude, codex.")
+    }
+}
+
+fn harness_label(h: &Harness) -> &'static str {
+    match h {
+        Harness::Claude => "claude",
+        Harness::Codex => "codex",
+    }
+}
+
+/// The committed file each harness `@`-imports the snapshot from. **One file per
+/// harness** (review fix #1): Claude reads `CLAUDE.md`, codex `AGENTS.md` — never
+/// both for one agent, else the snapshot would inline twice. This repo's
+/// `CLAUDE.md → AGENTS.md` symlink makes the union dedup to a single inode.
+fn import_targets(h: &Harness, root: &Path) -> Vec<PathBuf> {
+    match h {
+        Harness::Claude => vec![root.join("CLAUDE.md")],
+        Harness::Codex => vec![root.join("AGENTS.md")],
+    }
+}
+
+/// Resolve target harnesses: explicit `--agent` wins; else auto-detect by marker
+/// (`.claude/` → Claude; `.codex/`, or an `AGENTS.md` without a `.claude/` →
+/// Codex); ≥1 required (mirrors `skills::resolve_agents`). The `!.claude`
+/// guard keeps this repo (both markers present) Claude-only — its `AGENTS.md` is
+/// Claude's import target via the symlink, not a separate codex surface.
+fn resolve_harnesses(explicit: &[String], root: &Path) -> anyhow::Result<Vec<Harness>> {
+    if !explicit.is_empty() {
+        return explicit.iter().map(|s| parse_harness(s)).collect();
+    }
+    let claude = root.join(".claude").exists();
+    let mut found = Vec::new();
+    if claude {
+        found.push(Harness::Claude);
+    }
+    if root.join(".codex").exists() || (root.join("AGENTS.md").exists() && !claude) {
+        found.push(Harness::Codex);
+    }
+    if found.is_empty() {
+        bail!(
+            "No --agent given and no .claude/ or .codex/ (or AGENTS.md) found. \
+             Pass --agent <claude|codex>."
+        );
+    }
+    Ok(found)
+}
+
+// ---------------------------------------------------------------------------
+// Shared `@`-import wiring (harness-agnostic): pure plan + imperative apply.
+// ---------------------------------------------------------------------------
+
+/// The reportable result of wiring the import ref into one committed file.
+#[derive(Debug, PartialEq, Eq)]
+enum RefOutcome {
+    /// The file was absent and created carrying just the ref.
+    Created(PathBuf),
+    /// The ref was prepended ahead of existing content.
+    Added(PathBuf),
+    /// The ref was already present — no write.
+    Present(PathBuf),
+}
+
+/// Pure decision for one target's current content. Returns the action and the
+/// new file body to write (`None` when nothing should be written). Idempotent:
+/// a body already carrying the ref line plans no write.
+fn plan_boot_import(existing: Option<&str>, reference: &str) -> (RefAction, Option<String>) {
+    match existing {
+        None => (RefAction::Create, Some(format!("{reference}\n"))),
+        Some(content) if content.lines().any(|l| l.trim() == reference) => {
+            (RefAction::Present, None)
+        }
+        Some(content) => (RefAction::Add, Some(format!("{reference}\n\n{content}"))),
+    }
+}
+
+/// The pure action `plan_boot_import` chose; the wrapper pairs it with the path.
+enum RefAction {
+    Create,
+    Add,
+    Present,
+}
+
+/// Resolve a target to the path actually written: its canonical real path when it
+/// exists (so a symlink target — `CLAUDE.md → AGENTS.md` — is updated through to
+/// the one inode, never replaced by a regular file), else the path as given (a
+/// to-be-created file has no inode to canonicalize). The dedup key is this same
+/// resolved path, so two views of one inode collapse to a single write (A5/§5.5).
+fn resolve_target(target: &Path) -> PathBuf {
+    fs::canonicalize(target).unwrap_or_else(|_| target.to_path_buf())
+}
+
+/// Idempotent prepend of `reference` into each committed `target`: create the
+/// file when absent, dedup same-inode targets to one write, preserve existing
+/// content. `dry_run` computes outcomes but writes nothing (A7).
+fn ensure_boot_import(
+    targets: &[PathBuf],
+    reference: &str,
+    dry_run: bool,
+) -> anyhow::Result<Vec<RefOutcome>> {
+    let mut seen = BTreeSet::new();
+    let mut outcomes = Vec::new();
+    for target in targets {
+        let resolved = resolve_target(target);
+        if !seen.insert(resolved.clone()) {
+            continue;
+        }
+        let existing = fs::read_to_string(&resolved).ok();
+        let (action, new_body) = plan_boot_import(existing.as_deref(), reference);
+        if let (Some(body), false) = (&new_body, dry_run) {
+            if let Some(parent) = resolved.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Failed to create {}", parent.display()))?;
+            }
+            fsutil::write_atomic(&resolved, body.as_bytes())?;
+        }
+        outcomes.push(match action {
+            RefAction::Create => RefOutcome::Created(resolved),
+            RefAction::Add => RefOutcome::Added(resolved),
+            RefAction::Present => RefOutcome::Present(resolved),
+        });
+    }
+    Ok(outcomes)
+}
+
+// ---------------------------------------------------------------------------
+// Claude SessionStart hook merge: pure plan + imperative apply.
+// ---------------------------------------------------------------------------
+
+/// What the hook merge did, for reporting. The carried string is the command.
+#[derive(Debug, PartialEq, Eq)]
+enum RefreshOutcome {
+    /// No doctrine hook existed; one was appended.
+    Wired(String),
+    /// A doctrine hook existed with a stale command; it was refreshed.
+    Refreshed(String),
+    /// The settings file was malformed (or oddly shaped); left untouched, snippet
+    /// printed by the caller — never clobbered (§5.3/D3).
+    PrintedFallback,
+    /// Nothing to do: the doctrine hook is already current, or codex (import-only).
+    None,
+}
+
+/// A planned merge: the outcome plus the new settings JSON to write (`None` when
+/// no write is needed).
+struct HookPlan {
+    outcome: RefreshOutcome,
+    new_json: Option<String>,
+}
+
+fn printed_fallback() -> HookPlan {
+    HookPlan {
+        outcome: RefreshOutcome::PrintedFallback,
+        new_json: None,
+    }
+}
+
+/// The hook command for `exec`: `<exec> boot`. A **single** space-free argument
+/// (`boot`) — the invariant the ownership match leans on (see
+/// `is_doctrine_boot_command`).
+fn boot_command(exec: &Path) -> String {
+    format!("{} boot", exec.display())
+}
+
+/// The canonical `SessionStart` entry doctrine writes.
+fn desired_entry(command: &str) -> Value {
+    serde_json::json!({
+        "matcher": SESSION_MATCHER,
+        "hooks": [ { "type": "command", "command": command } ],
+    })
+}
+
+/// Whether `cmd` is doctrine's own `boot` hook — robust to spaces in the exec
+/// path (Charge VII). The hook command is always `<program> boot`: a single
+/// space-free trailing arg. So splitting on the **last** whitespace cleanly
+/// separates the (possibly space-bearing) program from the `boot` arg — no shell
+/// tokeniser needed while the command keeps that shape. Ours iff the trailing arg
+/// is `boot` and the program's file name is `doctrine`. A foreign hook
+/// (`tool boot`, `/x/doctrine-helper run`) never matches. NOTE: if the hook ever
+/// grows a second/spaced arg, this must move to a real shell-word split.
+fn is_doctrine_boot_command(cmd: &str) -> bool {
+    let Some((program, arg)) = cmd.trim().rsplit_once(char::is_whitespace) else {
+        return false;
+    };
+    arg == "boot" && Path::new(program.trim_end()).file_name() == Some(OsStr::new("doctrine"))
+}
+
+/// Where a doctrine-owned `SessionStart` hook sits, relative to a desired command.
+enum Owned {
+    /// Present and already current — no write.
+    Current,
+    /// Present but stale — refresh the entry at `(entry_idx, hook_idx)`.
+    Stale(usize, usize),
+    /// Absent — append a fresh entry.
+    Absent,
+}
+
+fn find_owned(arr: &[Value], desired_cmd: &str) -> Owned {
+    for (ei, entry) in arr.iter().enumerate() {
+        let Some(inner) = entry.get("hooks").and_then(Value::as_array) else {
+            continue;
+        };
+        for (hi, hook) in inner.iter().enumerate() {
+            let Some(cmd) = hook.get("command").and_then(Value::as_str) else {
+                continue;
+            };
+            if is_doctrine_boot_command(cmd) {
+                return if cmd == desired_cmd {
+                    Owned::Current
+                } else {
+                    Owned::Stale(ei, hi)
+                };
+            }
+        }
+    }
+    Owned::Absent
+}
+
+/// Navigate (creating as needed) to the `hooks.SessionStart` array. Returns
+/// `None` — caller treats as `PrintedFallback` — when `hooks` or `SessionStart`
+/// exists but is the wrong JSON type, so a malformed-but-valid structure is never
+/// clobbered.
+fn session_start_array_mut(value: &mut Value) -> Option<&mut Vec<Value>> {
+    let obj = value.as_object_mut()?;
+    let hooks = obj
+        .entry("hooks")
+        .or_insert_with(|| Value::Object(Map::new()));
+    let sessions = hooks
+        .as_object_mut()?
+        .entry("SessionStart")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    sessions.as_array_mut()
+}
+
+fn set_command(arr: &mut [Value], ei: usize, hi: usize, command: &str) -> Option<()> {
+    let hook = arr
+        .get_mut(ei)?
+        .get_mut("hooks")?
+        .as_array_mut()?
+        .get_mut(hi)?
+        .as_object_mut()?;
+    hook.insert("command".to_string(), Value::String(command.to_string()));
+    Some(())
+}
+
+/// Pure merge of the doctrine `SessionStart` hook into existing settings `JSON`.
+/// Preserves every foreign hook and unrelated key (mutates a `serde_json::Value`
+/// at the narrow path — never a typed round-trip that could drop unknown keys).
+/// Malformed JSON or an unexpectedly-typed `hooks`/`SessionStart` → fail soft.
+fn plan_session_hook(existing_json: Option<&str>, exec: &Path) -> HookPlan {
+    let command = boot_command(exec);
+    let mut value: Value = match existing_json.map(str::trim) {
+        None | Some("") => Value::Object(Map::new()),
+        Some(text) => match serde_json::from_str(text) {
+            Ok(parsed) => parsed,
+            Err(_) => return printed_fallback(),
+        },
+    };
+    let Some(arr) = session_start_array_mut(&mut value) else {
+        return printed_fallback();
+    };
+    let outcome = match find_owned(arr, &command) {
+        Owned::Current => {
+            return HookPlan {
+                outcome: RefreshOutcome::None,
+                new_json: None,
+            };
+        }
+        Owned::Stale(ei, hi) => {
+            if set_command(arr, ei, hi, &command).is_none() {
+                return printed_fallback();
+            }
+            RefreshOutcome::Refreshed(command.clone())
+        }
+        Owned::Absent => {
+            arr.push(desired_entry(&command));
+            RefreshOutcome::Wired(command.clone())
+        }
+    };
+    match serde_json::to_string_pretty(&value) {
+        Ok(json) => HookPlan {
+            outcome,
+            new_json: Some(json),
+        },
+        Err(_) => printed_fallback(),
+    }
+}
+
+/// The snippet printed when the settings file can't be merged automatically.
+fn fallback_snippet(exec: &Path) -> String {
+    let entry = desired_entry(&boot_command(exec));
+    serde_json::to_string_pretty(&entry).unwrap_or_else(|_| boot_command(exec))
+}
+
+/// Imperative per-harness refresh. Claude merges the `SessionStart` hook into
+/// `.claude/settings.local.json` (writes only on change, `!dry_run`); codex is
+/// import-only → `None` (its `AGENTS.md` ref is the shared `ensure_boot_import`
+/// work, no hook). A malformed settings file is left untouched (`PrintedFallback`).
+fn install_refresh(
+    h: &Harness,
+    root: &Path,
+    exec: &Path,
+    dry_run: bool,
+) -> anyhow::Result<RefreshOutcome> {
+    match h {
+        Harness::Codex => Ok(RefreshOutcome::None),
+        Harness::Claude => {
+            let path = root.join(SETTINGS_REL);
+            let existing = fs::read_to_string(&path).ok();
+            let plan = plan_session_hook(existing.as_deref(), exec);
+            if let (Some(json), false) = (&plan.new_json, dry_run) {
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent)
+                        .with_context(|| format!("Failed to create {}", parent.display()))?;
+                }
+                fsutil::write_atomic(&path, json.as_bytes())?;
+            }
+            Ok(plan.outcome)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// `doctrine boot install` orchestration.
+// ---------------------------------------------------------------------------
+
+/// `doctrine boot install` — resolve harnesses, union + dedup their import
+/// targets, prepend the `@`-import **once**, then refresh each harness, isolating
+/// a single harness's failure (it is printed; the others still run — A9/§5.5).
+pub(crate) fn run_install(
+    path: Option<PathBuf>,
+    agents: &[String],
+    dry_run: bool,
+    yes: bool,
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let exec = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
+    let harnesses = resolve_harnesses(agents, &root)?;
+
+    if !yes && !dry_run {
+        let label: Vec<&str> = harnesses.iter().map(harness_label).collect();
+        let proceed = install::prompt_confirm(&format!(
+            "Wire doctrine boot ({}) into {}? [y/N] ",
+            label.join(", "),
+            root.display()
+        ))?;
+        if !proceed {
+            writeln!(io::stdout(), "Aborted.")?;
+            return Ok(());
+        }
+    }
+    wire(&root, &exec, &harnesses, dry_run)
+}
+
+/// The exec-injected orchestration core: the shell (`run_install`) resolves
+/// `current_exe()` and prompts; this does the work — union + dedup import
+/// targets, prepend the `@`-import **once**, then refresh each harness, isolating
+/// a single harness's failure (it is printed; the others still run — A9/§5.5).
+fn wire(root: &Path, exec: &Path, harnesses: &[Harness], dry_run: bool) -> anyhow::Result<()> {
+    let reference = format!("@{BOOT_REL}");
+    let targets: Vec<PathBuf> = harnesses
+        .iter()
+        .flat_map(|h| import_targets(h, root))
+        .collect();
+
+    let mut stdout = io::stdout();
+    let tag = if dry_run { "[dry-run] " } else { "" };
+
+    for outcome in ensure_boot_import(&targets, &reference, dry_run)? {
+        let (verb, target) = match &outcome {
+            RefOutcome::Created(p) => ("created", p),
+            RefOutcome::Added(p) => ("added ref", p),
+            RefOutcome::Present(p) => ("ref present", p),
+        };
+        writeln!(stdout, "  {tag}{verb}: {}", target.display())?;
+    }
+
+    for h in harnesses {
+        match install_refresh(h, root, exec, dry_run) {
+            Ok(RefreshOutcome::Wired(cmd)) => {
+                writeln!(stdout, "  {tag}{}: wired hook: {cmd}", harness_label(h))?;
+            }
+            Ok(RefreshOutcome::Refreshed(cmd)) => {
+                writeln!(stdout, "  {tag}{}: refreshed hook: {cmd}", harness_label(h))?;
+            }
+            Ok(RefreshOutcome::PrintedFallback) => {
+                writeln!(
+                    stdout,
+                    "  {}: {SETTINGS_REL} is malformed — add this hook manually:",
+                    harness_label(h)
+                )?;
+                writeln!(stdout, "{}", fallback_snippet(exec))?;
+            }
+            Ok(RefreshOutcome::None) => {}
+            Err(e) => writeln!(stdout, "  {}: refresh failed: {e:#}", harness_label(h))?,
+        }
+    }
     Ok(())
 }
 
@@ -471,6 +915,362 @@ mod tests {
         assert!(
             !snap.contains("<!-- Governance (project):"),
             "governance marker replaced"
+        );
+    }
+
+    // =======================================================================
+    // PHASE-04 — harness seam + `boot install`
+    // =======================================================================
+
+    const REF: &str = "@.doctrine/state/boot.md";
+
+    fn session_entries(json: &str) -> Vec<Value> {
+        let value: Value = serde_json::from_str(json).expect("valid JSON");
+        value
+            .get("hooks")
+            .and_then(|h| h.get("SessionStart"))
+            .and_then(Value::as_array)
+            .expect("SessionStart array")
+            .clone()
+    }
+
+    fn commands(json: &str) -> Vec<String> {
+        session_entries(json)
+            .iter()
+            .filter_map(|e| e.get("hooks").and_then(Value::as_array))
+            .flatten()
+            .filter_map(|h| h.get("command").and_then(Value::as_str))
+            .map(str::to_string)
+            .collect()
+    }
+
+    // --- T3: parse / resolve / import_targets ---
+
+    #[test]
+    fn parse_harness_known_and_unknown() {
+        assert_eq!(parse_harness("claude").unwrap(), Harness::Claude);
+        assert_eq!(parse_harness("CODEX").unwrap(), Harness::Codex);
+        assert!(
+            parse_harness("cursor")
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown harness")
+        );
+    }
+
+    #[test]
+    fn import_targets_is_one_file_per_harness() {
+        let root = Path::new("/r");
+        assert_eq!(
+            import_targets(&Harness::Claude, root),
+            vec![root.join("CLAUDE.md")]
+        );
+        assert_eq!(
+            import_targets(&Harness::Codex, root),
+            vec![root.join("AGENTS.md")]
+        );
+    }
+
+    #[test]
+    fn resolve_harnesses_explicit_wins() {
+        let root = Path::new("/r");
+        let got = resolve_harnesses(&["codex".into(), "claude".into()], root).unwrap();
+        assert_eq!(got, vec![Harness::Codex, Harness::Claude]);
+    }
+
+    #[test]
+    fn resolve_harnesses_auto_detects_by_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        // .claude present → Claude only (its AGENTS.md is Claude's target, not codex).
+        fs::create_dir(root.join(".claude")).unwrap();
+        fs::write(root.join("AGENTS.md"), "x").unwrap();
+        assert_eq!(resolve_harnesses(&[], root).unwrap(), vec![Harness::Claude]);
+
+        // a bare AGENTS.md without .claude → codex.
+        let codex_dir = tempfile::tempdir().unwrap();
+        fs::write(codex_dir.path().join("AGENTS.md"), "x").unwrap();
+        assert_eq!(
+            resolve_harnesses(&[], codex_dir.path()).unwrap(),
+            vec![Harness::Codex]
+        );
+    }
+
+    #[test]
+    fn resolve_harnesses_errors_when_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = resolve_harnesses(&[], dir.path()).unwrap_err();
+        assert!(err.to_string().contains("No --agent given"));
+    }
+
+    // --- T1: plan_boot_import (pure) ---
+
+    #[test]
+    fn plan_boot_import_creates_adds_and_is_idempotent() {
+        // absent → create with just the ref.
+        let (action, body) = plan_boot_import(None, REF);
+        assert!(matches!(action, RefAction::Create));
+        assert_eq!(body.unwrap(), format!("{REF}\n"));
+
+        // present without the ref → prepend ahead of existing content.
+        let (action, body) = plan_boot_import(Some("# Title\n\nbody\n"), REF);
+        assert!(matches!(action, RefAction::Add));
+        assert_eq!(body.unwrap(), format!("{REF}\n\n# Title\n\nbody\n"));
+
+        // already present → no write.
+        let (action, body) = plan_boot_import(Some("@.doctrine/state/boot.md\n\nrest\n"), REF);
+        assert!(matches!(action, RefAction::Present));
+        assert!(body.is_none());
+    }
+
+    // --- T1: ensure_boot_import (imperative) ---
+
+    #[test]
+    fn ensure_boot_import_creates_prepends_and_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("CLAUDE.md");
+
+        let out = ensure_boot_import(&[target.clone()], REF, false).unwrap();
+        assert_eq!(out, vec![RefOutcome::Created(target.clone())]);
+        assert_eq!(fs::read_to_string(&target).unwrap(), format!("{REF}\n"));
+
+        // a second run is a no-op (Present), content unchanged.
+        let out = ensure_boot_import(&[target.clone()], REF, false).unwrap();
+        assert_eq!(out, vec![RefOutcome::Present(target.clone())]);
+        assert_eq!(fs::read_to_string(&target).unwrap(), format!("{REF}\n"));
+    }
+
+    #[test]
+    fn ensure_boot_import_preserves_existing_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("AGENTS.md");
+        fs::write(&target, "# Existing\n\nkeep me\n").unwrap();
+
+        let out = ensure_boot_import(&[target.clone()], REF, false).unwrap();
+        assert_eq!(out, vec![RefOutcome::Added(target.clone())]);
+        let body = fs::read_to_string(&target).unwrap();
+        assert_eq!(body, format!("{REF}\n\n# Existing\n\nkeep me\n"));
+    }
+
+    #[test]
+    fn ensure_boot_import_dedups_same_inode_to_one_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let agents = dir.path().join("AGENTS.md");
+        let claude = dir.path().join("CLAUDE.md");
+        fs::write(&agents, "real\n").unwrap();
+        std::os::unix::fs::symlink(&agents, &claude).unwrap();
+
+        // union order is [CLAUDE.md, AGENTS.md]; both canonicalize to one inode.
+        let out = ensure_boot_import(&[claude.clone(), agents.clone()], REF, false).unwrap();
+        assert_eq!(out.len(), 1, "same inode → exactly one outcome");
+
+        let body = fs::read_to_string(&agents).unwrap();
+        assert_eq!(body.matches(REF).count(), 1, "ref written exactly once");
+        // the symlink survives (we wrote through to the real file, not over the link).
+        assert!(
+            fs::symlink_metadata(&claude)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_to_string(&claude).unwrap(), body);
+    }
+
+    #[test]
+    fn ensure_boot_import_dry_run_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("CLAUDE.md");
+
+        let out = ensure_boot_import(&[target.clone()], REF, true).unwrap();
+        assert_eq!(out, vec![RefOutcome::Created(target.clone())]);
+        assert!(!target.exists(), "dry-run must not write");
+    }
+
+    // --- T2: is_doctrine_boot_command (ownership, spaced paths) ---
+
+    #[test]
+    fn ownership_match_survives_spaces_and_rejects_foreign() {
+        assert!(is_doctrine_boot_command("/usr/bin/doctrine boot"));
+        assert!(is_doctrine_boot_command("doctrine boot"));
+        // spaced exec path — the Charge VII case.
+        assert!(is_doctrine_boot_command("/nix/store/a b/doctrine boot"));
+        // foreign hooks never match.
+        assert!(!is_doctrine_boot_command("/usr/bin/tool boot"));
+        assert!(!is_doctrine_boot_command("/x/doctrine-helper run"));
+        assert!(!is_doctrine_boot_command("/x/doctrine check"));
+        assert!(!is_doctrine_boot_command("doctrine"));
+    }
+
+    // --- T2: plan_session_hook (pure merge matrix) ---
+
+    #[test]
+    fn plan_session_hook_wires_into_empty_or_missing() {
+        let exec = Path::new("/abs/doctrine");
+        for existing in [None, Some(""), Some("{}")] {
+            let plan = plan_session_hook(existing, exec);
+            assert!(matches!(plan.outcome, RefreshOutcome::Wired(_)));
+            let json = plan.new_json.unwrap();
+            assert_eq!(commands(&json), vec!["/abs/doctrine boot".to_string()]);
+            assert!(json.contains(SESSION_MATCHER));
+        }
+    }
+
+    #[test]
+    fn plan_session_hook_noops_when_current() {
+        let exec = Path::new("/abs/doctrine");
+        let wired = plan_session_hook(None, exec).new_json.unwrap();
+        let again = plan_session_hook(Some(&wired), exec);
+        assert!(matches!(again.outcome, RefreshOutcome::None));
+        assert!(again.new_json.is_none(), "current hook → no rewrite");
+    }
+
+    #[test]
+    fn plan_session_hook_refreshes_on_path_change_preserving_foreign() {
+        let old_exec = Path::new("/old/doctrine");
+        let new_exec = Path::new("/new path/doctrine"); // spaced new path
+
+        // start from a settings file carrying BOTH a foreign hook and our stale one.
+        let seeded = serde_json::to_string_pretty(&serde_json::json!({
+            "model": "opus",
+            "hooks": {
+                "SessionStart": [
+                    { "matcher": "startup", "hooks": [ { "type": "command", "command": "/usr/bin/notify start" } ] },
+                    { "matcher": SESSION_MATCHER, "hooks": [ { "type": "command", "command": boot_command(old_exec) } ] }
+                ]
+            }
+        })).unwrap();
+
+        let plan = plan_session_hook(Some(&seeded), new_exec);
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.unwrap();
+
+        let cmds = commands(&json);
+        assert!(
+            cmds.contains(&"/usr/bin/notify start".to_string()),
+            "foreign hook preserved"
+        );
+        assert!(
+            cmds.contains(&"/new path/doctrine boot".to_string()),
+            "command refreshed"
+        );
+        assert!(
+            !cmds.contains(&"/old/doctrine boot".to_string()),
+            "stale command gone"
+        );
+        assert!(json.contains("\"model\""), "unrelated key preserved");
+    }
+
+    #[test]
+    fn plan_session_hook_fails_soft_on_malformed_json() {
+        let plan = plan_session_hook(Some("{ not json"), Path::new("/abs/doctrine"));
+        assert!(matches!(plan.outcome, RefreshOutcome::PrintedFallback));
+        assert!(plan.new_json.is_none(), "malformed → never clobber");
+    }
+
+    // --- T2: install_refresh (imperative — dry_run + codex) ---
+
+    #[test]
+    fn install_refresh_writes_settings_and_respects_dry_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+        let settings = root.join(SETTINGS_REL);
+
+        // dry-run plans a wire but writes nothing.
+        let out = install_refresh(&Harness::Claude, root, exec, true).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        assert!(!settings.exists(), "dry-run must not write settings");
+
+        // real run creates the file with the hook.
+        let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        let json = fs::read_to_string(&settings).unwrap();
+        assert_eq!(commands(&json), vec!["/abs/doctrine boot".to_string()]);
+
+        // codex is import-only — no hook, no file.
+        let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
+        assert!(matches!(out, RefreshOutcome::None));
+    }
+
+    // --- T4: `wire` orchestration (integration, tempdir). Exec is injected with
+    //     a `doctrine` file name — the real verb resolves `current_exe()`, but the
+    //     test binary is named `doctrine-<hash>`, which the ownership match would
+    //     (correctly) not recognise as ours (mirrors PHASE-01 testing `regenerate`,
+    //     not `run`). ---
+
+    const FAKE_EXEC: &str = "/fake/doctrine";
+
+    #[test]
+    fn wire_adds_import_and_hook_then_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new(FAKE_EXEC);
+
+        wire(root, exec, &[Harness::Claude], false).unwrap();
+
+        let claude_md = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
+        assert_eq!(claude_md.matches(REF).count(), 1, "import ref wired once");
+        let settings = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        assert_eq!(
+            commands(&settings),
+            vec![format!("{FAKE_EXEC} boot")],
+            "hook wired once"
+        );
+
+        // re-run: import Present, hook current (None) — no duplication.
+        wire(root, exec, &[Harness::Claude], false).unwrap();
+        let claude_md = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
+        assert_eq!(
+            claude_md.matches(REF).count(),
+            1,
+            "re-run does not duplicate ref"
+        );
+        let settings = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        assert_eq!(
+            commands(&settings).len(),
+            1,
+            "re-run does not duplicate hook"
+        );
+    }
+
+    #[test]
+    fn wire_dry_run_mutates_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        wire(root, Path::new(FAKE_EXEC), &[Harness::Claude], true).unwrap();
+        assert!(!root.join("CLAUDE.md").exists(), "dry-run wrote no import");
+        assert!(
+            !root.join(SETTINGS_REL).exists(),
+            "dry-run wrote no settings"
+        );
+    }
+
+    #[test]
+    fn wire_isolates_one_harness_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        // force Claude's refresh to fail: a directory squatting the settings path
+        // makes write_atomic's rename fail.
+        fs::create_dir_all(root.join(SETTINGS_REL)).unwrap();
+
+        // both harnesses; Claude refresh errs, codex import must still be wired and
+        // the verb must not abort (A9).
+        wire(
+            root,
+            Path::new(FAKE_EXEC),
+            &[Harness::Claude, Harness::Codex],
+            false,
+        )
+        .unwrap();
+
+        let agents = fs::read_to_string(root.join("AGENTS.md")).unwrap();
+        assert_eq!(
+            agents.matches(REF).count(),
+            1,
+            "codex import survived the claude failure"
         );
     }
 }

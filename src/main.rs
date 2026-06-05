@@ -69,11 +69,39 @@ enum Command {
         command: AdrCommand,
     },
 
-    /// Regenerate the cache-friendly governance snapshot (`.doctrine/state/boot.md`).
+    /// Regenerate the cache-friendly governance snapshot, or `boot install` to wire it.
     Boot {
+        /// Wire the `@`-import + per-harness session refresh (omit to regenerate).
+        #[command(subcommand)]
+        command: Option<BootCommand>,
+
+        /// Explicit project root (default: auto-detect). Used by the bare
+        /// regenerate; `boot install` carries its own `-p`.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum BootCommand {
+    /// Wire the `@`-import into CLAUDE.md/AGENTS.md and refresh each harness's
+    /// session hook.
+    Install {
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
+
+        /// Target harness(es): claude, codex. Repeatable. Default: auto-detect.
+        #[arg(long = "agent")]
+        agent: Vec<String>,
+
+        /// Compute and report the plan without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 }
 
@@ -560,6 +588,17 @@ fn main() -> anyhow::Result<()> {
             AdrCommand::List { status, path } => adr::run_list(path, status.as_deref()),
             AdrCommand::Status { id, status, path } => adr::run_status(path, id, status),
         },
-        Command::Boot { path } => boot::run(path),
+        Command::Boot {
+            command,
+            path: boot_path,
+        } => match command {
+            None => boot::run(boot_path),
+            Some(BootCommand::Install {
+                path,
+                agent,
+                dry_run,
+                yes,
+            }) => boot::run_install(path, &agent, dry_run, yes),
+        },
     }
 }
