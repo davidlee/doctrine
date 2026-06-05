@@ -3,11 +3,15 @@ target = ".doctrine"
 
 [dirs]
 create = [
+  ".doctrine/adr",
   ".doctrine/agents",
   ".doctrine/memory/items",
+  ".doctrine/requirement",
   ".doctrine/scripts",
   ".doctrine/skills",
   ".doctrine/slice",
+  ".doctrine/spec/product",
+  ".doctrine/spec/tech",
   ".doctrine/templates",
 ]
 

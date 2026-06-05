@@ -12,6 +12,8 @@
 .doctrine/*
 !.doctrine/slice/
 !.doctrine/adr/
+!.doctrine/requirement/
+!.doctrine/spec/
 !.doctrine/memory/
 # SL-011 dogfood: commit the seeded boot governance layer
 !.doctrine/governance.md

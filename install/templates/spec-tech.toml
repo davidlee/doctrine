@@ -1,0 +1,20 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = {{id}}
+slug = "{{slug}}"
+title = "{{title}}"
+status = "draft"
+kind = "tech"
+tags = []
+responsibilities = []
+
+# category — OPEN domain vocabulary (a taxonomy that drifts by design). Add as:
+#   category = "cli"
+# c4_level — closed C4 set: context | container | component | code. Add as:
+#   c4_level = "container"
+# [[source]] — code anchors this spec governs (tech-only, repeatable). Add as:
+#   [[source]]
+#   language = "rust"
+#   identifier = "doctrine/cli"
+#   module = "doctrine::cli"   # optional
