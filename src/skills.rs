@@ -740,7 +740,6 @@ pub(crate) fn run_list(agent: Option<&str>, installed_only: bool) -> anyhow::Res
     Ok(())
 }
 
-/// `doctrine skills install`.
 /// `doctrine skills install` arguments (selection + flags). Mirrors the
 /// `memory::RecordArgs` pattern so the command handler stays under the bool/arg
 /// clippy ceilings; `path` stays a separate param, as in `run_record`.
