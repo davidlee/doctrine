@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 
-use crate::{fsutil, root};
+use crate::{adr, fsutil, memory, root};
 
 /// The snapshot lives in the runtime-state tree — derived, gitignored
 /// (inherits the `.doctrine/*` ignore), `rm -rf`-able. Never authoritative.
@@ -106,17 +106,32 @@ fn marker(label: &str) -> String {
 /// Produce one section's body. `ExecPath` carries the resolved exec path; every
 /// other kind renders the benign marker this phase. Never panics on a missing
 /// source — a miss is a marker, not a crash (the ordering-knot break, §5.5).
-fn produce(heading: &str, kind: &SourceKind, _root: &Path, exec: &Path) -> Section {
+fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Section {
     let body = match kind {
         SourceKind::ExecPath => exec.display().to_string(),
-        SourceKind::Static(_)
-        | SourceKind::Governance
-        | SourceKind::Adrs
-        | SourceKind::Memories => marker(heading),
+        // accepted ADRs only — the cache-stable decisions worth the prefix.
+        SourceKind::Adrs => section_or_marker(heading, adr::list_rows(root, Some("accepted"))),
+        // every memory pointer (the `just list-memories` index, paid once).
+        SourceKind::Memories => {
+            section_or_marker(heading, memory::list_rows(root, None, None, None))
+        }
+        // fed in PHASE-03 — marker until then.
+        SourceKind::Static(_) | SourceKind::Governance => marker(heading),
     };
     Section {
         heading: heading.to_string(),
         body,
+    }
+}
+
+/// Map a producer's result to a section body: the real rows when present, else
+/// the benign marker. An error OR an empty listing both fall back to the marker —
+/// a miss is never a crash (§5.5). The trailing newline is trimmed so a section
+/// never grows a blank tail line under `render_boot`.
+fn section_or_marker(heading: &str, produced: anyhow::Result<String>) -> String {
+    match produced {
+        Ok(rows) if !rows.trim().is_empty() => rows.trim_end().to_string(),
+        _ => marker(heading),
     }
 }
 
@@ -280,5 +295,75 @@ mod tests {
             !regenerate(root, exec).unwrap(),
             "second regenerate is a no-op write"
         );
+    }
+
+    // --- VT-1: section_or_marker — real rows, else the benign marker ---
+
+    #[test]
+    fn section_or_marker_keeps_rows_and_falls_back_on_empty_or_error() {
+        assert_eq!(
+            section_or_marker("Accepted ADRs", Ok("a\nb\n".into())),
+            "a\nb"
+        );
+        assert_eq!(
+            section_or_marker("Accepted ADRs", Ok("  \n".into())),
+            "<!-- Accepted ADRs: not yet populated -->",
+            "empty listing → marker",
+        );
+        assert_eq!(
+            section_or_marker("Memory", Err(anyhow::anyhow!("boom"))),
+            "<!-- Memory: not yet populated -->",
+            "producer error → marker, never a crash",
+        );
+    }
+
+    // --- VT-3: real producers — accepted ADRs (filtered) + memory pointers ---
+
+    #[test]
+    fn regenerate_projects_accepted_adrs_and_memory_pointers() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // two ADRs, only the first accepted.
+        adr::run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
+        adr::run_new(Some(root.to_path_buf()), Some("Adopt CI".into()), None).unwrap();
+        adr::run_status(Some(root.to_path_buf()), 1, adr::AdrStatus::Accepted).unwrap();
+
+        // one memory pointer.
+        memory::run_record(
+            Some(root.to_path_buf()),
+            &memory::RecordArgs {
+                title: "Boot pointer note",
+                memory_type: memory::MemoryType::Pattern,
+                key: None,
+                status: memory::Status::Active,
+                summary: None,
+                tags: &[],
+                paths: &[],
+                globs: &[],
+                commands: &[],
+                repo: None,
+            },
+        )
+        .unwrap();
+
+        assert!(regenerate(root, exec).unwrap());
+        let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
+
+        assert!(
+            snap.contains("001  accepted"),
+            "accepted ADR row projected:\n{snap}"
+        );
+        assert!(
+            !snap.contains("adopt-ci"),
+            "non-accepted ADR filtered:\n{snap}"
+        );
+        assert!(
+            snap.contains("Boot pointer note"),
+            "memory pointer projected:\n{snap}"
+        );
+        assert!(!snap.contains("<!-- Accepted ADRs:"), "ADR marker replaced");
+        assert!(!snap.contains("<!-- Memory:"), "memory marker replaced");
     }
 }
