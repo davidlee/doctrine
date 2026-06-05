@@ -1,0 +1,41 @@
+memory_uid = "mem_019e961170f574518910860a61a4e982"
+memory_key = "mem.gitignore.no-inline-comments"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "gitignore: no inline comments — a trailing # is part of the pattern"
+summary = "gitignore has no inline comments — trailing # silently breaks the pattern"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = [".gitignore"]
+globs = ["**/.gitignore"]
+commands = ["git check-ignore -v"]
+tags = ["gitignore", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f45d2a0c42d6da03d364321c415539d4d3a766e1"
+ref_name = "refs/heads/main"
+checkout_state_id = "60e122319eff5f165a66d0273515816c80b8971c69bd5e2e9dc7e320fb7bfc08"
+base_commit = "1ab633fed28a5fa3a051bed6f6b4b321c8919e5c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
