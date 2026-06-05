@@ -20,6 +20,10 @@ Cause is purely **data-type placement**: the authored phase-plan model
 but `state.rs` needs those types to materialise phase tracking sheets. Not a
 behavioural entanglement — a misplaced struct.
 
+The layering rule this slice enforces is recorded project-wide in **ADR-001**
+(module layering: leaf ← engine ← command, no cycles). SL-016 is its first
+application.
+
 A false alarm was ruled out in the same pass: `git -> retrieve` is a
 doc-comment link, not code. `git` is a clean leaf seam. The only real cycle is
 this one.
