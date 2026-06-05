@@ -181,6 +181,12 @@ pub(crate) fn canonical_id(id: u32) -> String {
     format!("{}-{id:03}", REQUIREMENT_KIND.prefix)
 }
 
+/// The requirement tree root under a project `root` — the dir `entity::scan_ids`
+/// enumerates for the `spec validate` corpus scan. Keeps `REQUIREMENT_DIR` private.
+pub(crate) fn tree_root(root: &Path) -> PathBuf {
+    root.join(REQUIREMENT_DIR)
+}
+
 /// Parse a canonical requirement FK (`REQ-NNN`) into its numeric id. The prefix
 /// is required and matched against `REQUIREMENT_KIND.prefix` — the single source,
 /// never hardcoded at the call site (mirrors `spec::resolve_spec_ref`).
