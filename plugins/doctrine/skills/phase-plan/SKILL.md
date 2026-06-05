@@ -1,14 +1,49 @@
 ---
 name: phase-plan
-description: Expand a single plan phase into its runtime phase sheet, just before execution.
+description: Use just before executing a specific phase — expand its authored plan entry (objective + EN/EX/VT) into the disposable runtime phase sheet with a concrete task breakdown, assumptions, and verification steps. Routed to from /plan or /execute.
 ---
 
 # Phase Plan
 
-> **Stub.** Not yet implemented. Expand a single plan phase into its runtime phase sheet, just before execution.
+You are expanding one authored phase into its runtime sheet, immediately before
+executing it. The authored plan (`plan.toml`) says *what* the phase must achieve;
+this skill works out *how*, in the disposable state tree.
 
-## TODO
+Plan each phase in detail **just prior to execution** — not all phases up front.
 
-- [ ] Define when this skill triggers and its STOP condition.
-- [ ] Spell out the steps it drives and the artifacts it touches.
-- [ ] Cross-link the doctrine CLI verbs and the storage rule it must honour.
+Inputs:
+
+- the phase's `plan.toml` entry — its `objective`, `exit_criteria` (`EX-`), and
+  `verification` (`VT-`)
+- `design.md` (canonical design reference) and `slice-nnn.md` (scope)
+- the materialised runtime sheet `state/.../phases/phase-NN.{toml,md}`
+
+## Process
+
+1. Confirm the phase's `entrance_criteria` (`EN-`) are met before planning the
+   detail. If they are not, resolve that first (an earlier phase, a design gap).
+2. Re-read `design.md` and the phase's `plan.toml` entry — objective, exit
+   criteria, verification expectations.
+3. Run `/retrieve-memory` against the concrete files and subsystems you expect to
+   touch, so scope-bound gotchas and patterns surface before you commit to a
+   task breakdown.
+4. Fill the runtime sheet `phase-NN.md` (under `.doctrine/state/`, GITIGNORED and
+   disposable) with:
+   - a concrete task breakdown — small, coherent units of work
+   - assumptions and constraints carried into execution
+   - the verification steps that will satisfy each `VT-` expectation
+   - the files / components each task is expected to touch
+5. This is **runtime state**. Never write task detail or progress back into the
+   authored `plan.toml` / `plan.md` (the storage rule) — those stay the durable
+   record; the sheet is `rm -rf`-able working context.
+6. If detailing the phase surfaces new design problems, unresolved tradeoffs, or
+   policy ambiguity, stop — `/consult`, or return to `/design` if the design
+   itself is the gap. Do not invent your way past it.
+7. When the sheet tells a coherent story, flip the phase status and hand off:
+   `doctrine slice phase <ID> PHASE-NN --status in_progress`, then `/execute`.
+
+## Outcomes
+
+- The phase has a concrete, executable task breakdown grounded in the design.
+- Verification steps map to the phase's `VT-` criteria.
+- Authored plan and runtime state stay on their correct sides of the storage rule.
