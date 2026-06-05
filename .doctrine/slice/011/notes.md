@@ -73,6 +73,61 @@ a live harness can give — recorded here as the closure verification:
    its system prompt (no SessionStart equivalent → unbounded staleness if it does
    not) and honours the routing.
 
+## Closure finding — jailed-dev hook path (live ordeal, 2026-06-05)
+
+The live ordeal CONFIRMED the `startup` SessionStart matcher fires the hook
+(half the ordeal passes). It also surfaced a real gap:
+
+- **`current_exe()` is jail-internal; the harness runs hooks on the host.** The
+  agent runs inside a bubblewrap jail (`/workspace/doctrine`); Claude Code runs
+  the SessionStart hook *outside* the jail, where that mount does not exist →
+  `/workspace/doctrine/target/debug/doctrine: No such file or directory`
+  (non-blocking — the session continued, the snapshot just did not auto-refresh).
+- The `@`-import is RELATIVE (`@.doctrine/state/boot.md`) so it resolves fine
+  regardless — only the absolute hook command breaks. The hook is the only
+  host-context invocation, so it is the only thing exposed to the mismatch.
+- **Root cause = design R1 (`current_exe()`) under a jail.** §5.3 R1 anticipated
+  dev/installed/nix-store path volatility but NOT a mount-namespace split where
+  the path resolver (in-jail agent) and the hook runner (host harness) see
+  different roots. `boot install` has **no `--exec` override**, so run from inside
+  the jail it can only ever bake the jail-internal path.
+- **The hook fires in BOTH contexts (host AND jail)** — confirmed live. The bare
+  hook fired on the HOST and succeeded (regenerated the snapshot with
+  `current_exe()` = `/home/david/.cargo/bin/doctrine`). A jailed firing resolves
+  a different binary/path.
+- **THRASH — two shapes, one root (snapshot must be byte-identical per regen).**
+  (a) *Path-string skew* (the dev-build symptom first seen): a jail regen via
+  `./target/debug/doctrine` bakes `/workspace/doctrine/target/debug/doctrine`
+  into `Invoking doctrine` while a host regen bakes `/home/david/.cargo/bin/
+  doctrine` → the line flips per firing context → perpetual `stale` + cache-tail
+  bust. (b) *Version skew* (the deeper one, given the jail isolates its own home):
+  the jail's `persist-home "agent"` already rw-binds an isolated, writable,
+  persistent home at in-jail `/home/david` (`.cargo` included) — so the path
+  STRING can be identical in both contexts yet resolve to a DIFFERENT physical
+  binary (host real install vs agent-store install). Same string keeps the
+  `Invoking` line stable, but two installs at different versions render different
+  snapshot CONTENT → thrash. Two installs = two currency points = the real cost.
+- **RESOLUTION (operator, jail flake — LANDED): share one host binary, ro-bind on
+  top of the persisted copy.** `persist-home` already gives the jail its isolated
+  `/home/david` — no separate `.cargo` mount needed. `extraOptions` applies AFTER
+  `persist-home`, so ro-binding the host binary over the persisted path wins:
+  ```nix
+  (try-readonly (noescape "~/.cargo/bin/doctrine"))  # ro-bind host doctrine OVER persisted copy
+  (add-path "/home/david/.cargo/bin")                # bare `doctrine boot` resolves in jail
+  ```
+  One physical binary, one currency point (host `cargo install --path .`).
+  `--ro-bind-try` → the jail still launches if the binary is unbuilt. Bare
+  `doctrine boot` (hook, already set) resolves; satisfies the ownership match
+  (program token `doctrine`, last arg `boot`). (Rejected stopgap: in-jail
+  `/bin/doctrine` → `target/debug/doctrine` — bakes the divergent `/workspace`
+  path, CAUSES path-skew thrash; removed.)
+- **§5.3 bare-emit follow-up → LOW priority now.** With the ro-bind, in-jail
+  `current_exe()` = `/home/david/.cargo/bin/doctrine` = the host string, so even
+  the current `boot install` (bakes `current_exe()`, no bare-emit branch yet) is
+  stable across host/jail. The §5.3 R1 "on PATH → emit bare `doctrine`" branch
+  still UNIMPLEMENTED, but now only matters for the dev-build case (`boot install`
+  run from `./target/debug`). Deferred follow-up, not blocking.
+
 **Codex cut-from-v1 fallback:** if the import does not inline for codex, or the
 unbounded codex staleness is unacceptable, cut codex from v1 — keep `import_targets`
 Claude-only and leave the `Harness::Codex` arm as the staged seam for a later
