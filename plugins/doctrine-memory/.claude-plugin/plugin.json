@@ -1,0 +1,5 @@
+{
+  "name": "doctrine-memory",
+  "version": "0.1.0",
+  "description": "Doctrine's memory skills alone — capture and retrieve durable, scope-anchored project memory via the doctrine CLI. A standalone subset of the doctrine plugin; install one or the other, not both."
+}
