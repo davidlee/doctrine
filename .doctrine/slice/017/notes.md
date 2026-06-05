@@ -205,3 +205,12 @@ identical — OQ-5/R7 by construction, no LEX_SCALE coarsening needed. VT-4 edge
   `zeros`/`Space` — its self-clearing condition is the PHASE-04 wiring (remove the
   `#![cfg_attr(not(test), expect(dead_code…))]` then; a now-unfulfilled
   expectation would warn).
+- **PHASE-04 seam decision (planned, flag for audit): `OverlapRanker` →
+  `#[cfg(test)]`.** Post-wiring it has NO production caller — BM25 is the hard
+  default, no selector (D5). Removing the module `dead_code` bridge (EX-5) would
+  otherwise leave `OverlapRanker` dead in the bins/lib build. Gating its struct +
+  impl behind `cfg(test)` makes it a pure behaviour-preservation test instrument
+  (the SL-008 overlap tests re-point through it) and lets the bridge vanish
+  cleanly. Faithful to §5.4 "retiring `lexical_score`" — it retires INTO the test
+  harness; a future selector would un-gate in its own slice (YAGNI). No external
+  behaviour change. Captured here so it survives the gitignored phase sheet.
