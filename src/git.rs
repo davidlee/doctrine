@@ -478,15 +478,15 @@ pub(crate) enum CaptureError {
     /// A gitlink (submodule) index entry (mode 160000) — unstable to hash.
     #[error("unsupported: submodule entry (gitlink mode 160000)")]
     Submodule,
-    /// A symlink index entry (mode 120000) — handling deferred.
-    #[error("unsupported: symlink entry (mode 120000)")]
-    Symlink,
     /// Multiple remotes with no `origin`/preferred remote — no deterministic pick.
     #[error("ambiguous remote selection: multiple remotes without origin: {0:?}")]
     AmbiguousRemote(Vec<String>),
     /// A git invocation failed to spawn, exited non-zero, or returned non-UTF-8.
     #[error("git command failed: {0}")]
     Git(String),
+    /// A filesystem operation (e.g. `readlink` on an untracked symlink) failed.
+    #[error("io error during capture: {0}")]
+    Io(String),
 }
 
 /// Run `git -C <root> <normative-flags> <args>`, capturing output. The single
@@ -539,8 +539,10 @@ fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, CaptureError> {
 /// Three Ok states: clean → [`AnchorKind::Commit`] (`commit`/`tree`/`base_commit`/
 /// `ref_name`); dirty → [`AnchorKind::CheckoutState`] (`checkout_state_id`/`base_commit`,
 /// `commit` empty); unborn or non-repo → [`AnchorKind::None`]. Detached HEAD is
-/// still anchored with an empty `ref_name`. Submodule/symlink/multi-root/
-/// ambiguous-remote trees error rather than emit an unstable anchor (D8).
+/// still anchored with an empty `ref_name`. Submodule/multi-root/ambiguous-remote
+/// trees error rather than emit an unstable anchor (D8). Symlinks are supported
+/// (SL-012, mirrors the external decision register DE-010): tracked symlinks ride `index_tree`/
+/// `worktree_fingerprint`, untracked symlinks hash by link text.
 ///
 /// # Errors
 ///
@@ -580,8 +582,8 @@ pub(crate) fn capture(repo_root: &Path) -> Result<Frame, CaptureError> {
     let tree = git_text(repo_root, &["rev-parse", "HEAD^{tree}"])?;
     let ref_name = git_opt(repo_root, &["symbolic-ref", "--quiet", "HEAD"])?.unwrap_or_default();
 
-    // Reject unstable index entries before hashing.
-    reject_unsupported_modes(repo_root)?;
+    // Reject submodules before hashing (symlinks supported — SL-012/DE-010).
+    reject_submodules(repo_root)?;
 
     // Content-based dirty detection (design §5.2).
     let index_tree = git_text(repo_root, &["write-tree"])?;
@@ -728,22 +730,32 @@ fn select_remote(root: &Path, remotes: &[String]) -> Result<Option<String>, Capt
     }
 }
 
-/// Reject submodule (160000) / symlink (120000) index entries before hashing (D8).
-fn reject_unsupported_modes(root: &Path) -> Result<(), CaptureError> {
+/// Reject submodule (160000) index entries before hashing (D8).
+///
+/// Symlinks (120000) are supported (SL-012, mirrors the external decision register DE-010):
+/// [`untracked_fingerprint`] encodes an untracked symlink by its link text, and
+/// tracked symlinks ride `index_tree` / `worktree_fingerprint` as their `120000`
+/// blob — so the up-front reject is unnecessary and over-rejected clean/tracked-only
+/// trees. Submodules remain a distinct identity question (gitlink → nested-repo
+/// commit) and stay deferred. Every `ls-files --stage` line is scanned, so a
+/// `160000` entry at any merge stage is still caught.
+fn reject_submodules(root: &Path) -> Result<(), CaptureError> {
     let staged = git_text(root, &["ls-files", "--stage"])?;
     for line in staged.lines() {
         // Format: "<mode> <sha> <stage>\t<path>".
-        match line.split_whitespace().next() {
-            Some("160000") => return Err(CaptureError::Submodule),
-            Some("120000") => return Err(CaptureError::Symlink),
-            _ => {}
+        if let Some("160000") = line.split_whitespace().next() {
+            return Err(CaptureError::Submodule);
         }
     }
     Ok(())
 }
 
-/// sha256 over sorted untracked-file `path\0<blob-sha>\n` records; `None` when there
-/// are no untracked files. Uses git's frozen blob hashing, so it is reproducible.
+/// sha256 over sorted untracked-entry `path\0<hash>\n` records; `None` when there
+/// are no untracked files. Each path is hashed by *identity*, never by following
+/// links: a regular file via git's frozen blob hashing (`hash-object`), a symlink
+/// via [`symlink_target_hash`] over its raw `readlink(2)` target bytes (SL-012,
+/// mirrors the external decision register DE-010 §3.1). Regular-entry encoding is byte-identical to
+/// before, so symlink-free csids do not move (DEC-010-06).
 fn untracked_fingerprint(root: &Path) -> Result<Option<String>, CaptureError> {
     let raw = git_bytes(root, &["ls-files", "--others", "--exclude-standard", "-z"])?;
     let mut paths: Vec<&[u8]> = raw.split(|b| *b == 0).filter(|p| !p.is_empty()).collect();
@@ -754,15 +766,46 @@ fn untracked_fingerprint(root: &Path) -> Result<Option<String>, CaptureError> {
 
     let mut acc: Vec<u8> = Vec::new();
     for path in paths {
+        // Path key stays UTF-8 (pre-existing constraint); only a symlink *target*
+        // is hashed as raw bytes.
         let path_str = std::str::from_utf8(path)
             .map_err(|_ignored| CaptureError::Git("non-utf8 untracked path".to_string()))?;
-        let hash = git_text(root, &["hash-object", "--", path_str])?;
+        let full = root.join(path_str);
+        let is_symlink =
+            std::fs::symlink_metadata(&full).is_ok_and(|meta| meta.file_type().is_symlink());
+        let hash = if is_symlink {
+            symlink_target_hash(&full)?
+        } else {
+            git_text(root, &["hash-object", "--", path_str])?
+        };
         acc.extend_from_slice(path);
         acc.push(0);
         acc.extend_from_slice(hash.as_bytes());
         acc.push(b'\n');
     }
     Ok(Some(sha256(&acc)))
+}
+
+/// Hash an untracked symlink by its link-text identity: `sha256(` raw `readlink(2)`
+/// target bytes `)`, never following the link (SL-012, mirrors the external decision register DE-010
+/// §3.1) — robust to dangling/non-UTF-8 targets that `git hash-object` cannot read.
+#[cfg(unix)]
+fn symlink_target_hash(full: &Path) -> Result<String, CaptureError> {
+    use std::os::unix::ffi::OsStrExt;
+    let target = std::fs::read_link(full)
+        .map_err(|e| CaptureError::Io(format!("readlink {}: {e}", full.display())))?;
+    Ok(sha256(target.as_os_str().as_bytes()))
+}
+
+/// Non-Unix fallback. Symlink support is Unix-only in v0 (DEC-010-07); on
+/// `core.symlinks=false` platforms a `120000` entry materializes as a regular
+/// link-text file, so `is_symlink()` is false and this is not reached. Defined for
+/// compilation parity, hashing the target's lossy bytes.
+#[cfg(not(unix))]
+fn symlink_target_hash(full: &Path) -> Result<String, CaptureError> {
+    let target = std::fs::read_link(full)
+        .map_err(|e| CaptureError::Io(format!("readlink {}: {e}", full.display())))?;
+    Ok(sha256(target.to_string_lossy().as_bytes()))
 }
 
 /// Count commits in `since..target` that touch any of `paths` — the per-candidate
@@ -1336,19 +1379,115 @@ mod tests {
         );
     }
 
+    // FR-001 (SL-012, mirrors the external decision register DE-010) — a repo with a tracked symlink
+    // captures a frame instead of being rejected. Clean tree → Commit anchor.
+    // (Was: symlink_entry_is_rejected, which asserted CaptureError::Symlink.)
     #[cfg(unix)]
     #[test]
-    fn symlink_entry_is_rejected() {
+    fn symlink_repo_captures_clean() {
         let repo = ScratchRepo::new();
         repo.commit("a.txt", "hello", "init");
         std::os::unix::fs::symlink("a.txt", repo.path().join("link")).expect("symlink");
         repo.git(&["add", "link"]);
+        repo.git(&["commit", "-m", "add symlink"]);
 
-        let result = capture(repo.path());
-        assert!(
-            matches!(result, Err(CaptureError::Symlink)),
-            "got {result:?}"
+        let frame = capture(repo.path()).expect("capture symlink repo");
+        assert_eq!(
+            frame.anchor_kind,
+            AnchorKind::Commit,
+            "clean symlink tree anchors on its commit"
         );
+        assert!(frame.checkout_state_id.is_empty());
+    }
+
+    // NF-001 (SL-012, mirrors the external decision register DE-010, RISK-03) — an untracked symlink
+    // is encoded by its link text, never followed: mutating the *pointee's content*
+    // leaves the csid unchanged. The pointee lives outside the repo, so the only
+    // way its content could move the csid is a dereference.
+    #[cfg(unix)]
+    #[test]
+    fn untracked_symlink_ignores_pointee_content() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init");
+
+        let ext = tempfile::tempdir().expect("ext tempdir");
+        let pointee = ext.path().join("pointee");
+        std::fs::write(&pointee, "original").expect("write pointee");
+        std::os::unix::fs::symlink(&pointee, repo.path().join("link")).expect("symlink");
+
+        let csid1 = capture(repo.path()).expect("capture 1").checkout_state_id;
+        std::fs::write(&pointee, "mutated content, a different length entirely")
+            .expect("rewrite pointee");
+        let csid2 = capture(repo.path()).expect("capture 2").checkout_state_id;
+
+        assert!(!csid1.is_empty(), "untracked symlink makes the tree dirty");
+        assert_eq!(
+            csid1, csid2,
+            "csid must be invariant to symlink target *content* (no-follow)"
+        );
+    }
+
+    // NF-001 — repointing an untracked symlink to a different target changes the
+    // csid (the link text *is* captured, not ignored).
+    #[cfg(unix)]
+    #[test]
+    fn untracked_symlink_tracks_target_path() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init");
+        let link = repo.path().join("link");
+        std::os::unix::fs::symlink("first", &link).expect("symlink first");
+        let csid1 = capture(repo.path())
+            .expect("capture first")
+            .checkout_state_id;
+
+        std::fs::remove_file(&link).expect("rm link");
+        std::os::unix::fs::symlink("second", &link).expect("symlink second");
+        let csid2 = capture(repo.path())
+            .expect("capture second")
+            .checkout_state_id;
+
+        assert_ne!(
+            csid1, csid2,
+            "repointing the symlink must change the csid (link text captured)"
+        );
+    }
+
+    // NF-001 — a dangling untracked symlink captures cleanly and deterministically
+    // (readlink succeeds even though the target is missing; the old
+    // `git hash-object` path errored).
+    #[cfg(unix)]
+    #[test]
+    fn dangling_untracked_symlink_ok() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init");
+        std::os::unix::fs::symlink("does/not/exist", repo.path().join("link")).expect("symlink");
+
+        let a = capture(repo.path()).expect("capture dangling symlink");
+        let b = capture(repo.path()).expect("recapture");
+        assert_eq!(
+            a.anchor_kind,
+            AnchorKind::CheckoutState,
+            "untracked symlink makes the tree dirty"
+        );
+        assert_eq!(a, b, "dangling-symlink capture is deterministic");
+    }
+
+    // NF-001 / §3.1 — a symlink whose target is non-UTF-8 bytes captures and hashes
+    // the raw readlink bytes (no `str` round-trip). Unix-only.
+    #[cfg(unix)]
+    #[test]
+    fn untracked_symlink_non_utf8_target_bytes() {
+        use std::os::unix::ffi::OsStrExt;
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init");
+        // 0xFF 0xFE is not valid UTF-8; a legal symlink target on Unix.
+        let target = std::ffi::OsStr::from_bytes(&[0xFF, 0xFE]);
+        std::os::unix::fs::symlink(target, repo.path().join("link")).expect("symlink");
+
+        let a = capture(repo.path()).expect("capture non-utf8 symlink target");
+        let b = capture(repo.path()).expect("recapture");
+        assert_eq!(a.anchor_kind, AnchorKind::CheckoutState);
+        assert_eq!(a, b, "non-utf8 symlink target capture is deterministic");
     }
 
     #[test]

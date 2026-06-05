@@ -54,17 +54,21 @@ coordination pattern, not a local fork.
 
 **Decision: direction 3 — upstream-first (D1).** Sequence:
 
-1. **the external decision register un-defers m12.** Upstream narrows `reject_unsupported_modes` (or
-   defines a conformant symlink encoding) so a symlink-bearing tree captures a
-   frame instead of erroring. Expected lighter form: *narrow the gate* to reject
-   only symlinks participating in the dirty fingerprint (diff ∪ untracked),
-   leaving `checkout_state_id` composition unchanged → no normalizer version bump,
-   existing frames/vectors stay valid.
-2. **doctrine re-syncs.** Mirror the external decision register's updated gate byte-for-byte and
-   re-sync the conformance golden vector (VT-3) to the external decision register's new reference
-   values, adding a symlink-bearing fixture.
+1. **the external decision register un-defers m12 — LANDED (DE-010).** Confirmed against
+   `the external decision register/src/git_context.rs`: `reject_unsupported_modes` → `reject_submodules`
+   (only 160000 now; symlinks supported). Untracked symlinks hash by **link text**
+   — `sha256(readlink(2) target bytes)`, never following the link (`symlink_target_hash`,
+   unix + a non-unix lossy fallback, DEC-010-07). Tracked symlinks ride `index_tree`/
+   `worktree_fingerprint` as their 120000 blob. **Normalizer tag unchanged**
+   (`forget.checkout.v1`) — regular-entry encoding byte-identical (DEC-010-06), so
+   symlink-free csids do not move. The lighter (gate-narrowing) form, as predicted.
+2. **doctrine re-syncs — THIS EXECUTION.** Mirror the rename + link-text untracked
+   hashing; flip the `symlink_entry_is_rejected` test to the external decision register's FR-001/NF-001
+   behavioural set. No literal golden csid exists to re-sync — conformance is
+   structural (identical composition + VT-1 remote table copied verbatim).
 
-This slice is **blocked** until step 1 lands.
+Plan folded in (mechanical byte-mirror; the existing capture test suite is the
+gate). Slice **unblocked → in_progress**.
 
 ### 5.2 Interfaces & Contracts
 
@@ -95,13 +99,14 @@ Blocked → (the external decision register m12 lands) → re-sync algorithm + g
 
 ## 6. Open Questions & Unknowns
 
-- **Q1 — the external decision register's chosen form:** narrow-the-gate (no hash change) vs
-  define-symlink-encoding (hash change + version bump)? Determines re-sync size.
-- **Q2 — does anyone drive the the external decision register change**, and on what timeline? (This
-  session's user owns the call.)
-- **Q3 — `record`/`verify` soft-fail:** still wanted as defence-in-depth even
-  after the gate narrows, for *other* symlink-changing repos? Or leave hard-fail
-  and let those genuinely error (mirroring the external decision register)?
+- **Q1 — the external decision register's chosen form? RESOLVED:** narrow-the-gate, no hash change,
+  no normalizer bump (DE-010 / DEC-010-06). Light re-sync.
+- **Q2 — who drives the external decision register? RESOLVED:** landed upstream (DE-010 phase 1, green).
+- **Q3 — `record`/`verify` soft-fail? RESOLVED: leave hard-fail.** With link-text
+  untracked hashing, capture no longer errors on any symlink (tracked or untracked);
+  the remaining `CaptureError`s (submodule, multi-root, ambiguous-remote, git
+  failure) are *genuine* faults that should surface, not be swallowed. `retrieve`'s
+  `.ok()` is its own read-path leniency, untouched.
 
 ## 7. Decisions, Rationale & Alternatives
 
