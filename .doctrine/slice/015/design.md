@@ -109,10 +109,13 @@ spec-mediated):
   subtype `Kind`. Prints `PRD-NNN` / `SPEC-NNN`.
 - `spec req add <spec-ref> "<title>" --kind <functional|quality> [--label FR-001]`
   — reserve a requirement, assign a label, append the membership row (§5.4).
-- `spec show <spec-ref>` — render the readable whole to **stdout** (§5.4). v1 is
-  ephemeral; `--write` (materialised `*.rendered.md`) is deferred (§7 D9).
-- `spec validate [--path-scope …]` — the FK-validation pass (§5.4). Exit non-zero
-  on any hard finding.
+- `spec show <spec-ref>` — render the readable whole to **stdout** (§5.4): own
+  content + members + outbound interactions. **Inbound refs deferred** (R3 — they
+  force a full-corpus scan + the unpersisted registry; they belong to the registry
+  surface, not local `show`). v1 ephemeral; `--write` (`*.rendered.md`) deferred
+  (§7 D9).
+- `spec validate [<spec-ref>]` — the FK-validation pass (§5.4); whole-corpus by
+  default, one spec's outbound FKs if given. Exit non-zero on any hard finding.
 - `spec list [--status S]` — rows per subtype: id, status, slug, `#members`. Mirror
   of `adr list` / `slice list`.
 
@@ -130,7 +133,11 @@ registry; only the parse layer is pinned here):
 enum ReqKind   { Functional, Quality }                       // closed; kebab serde
 enum ReqStatus { Pending, Active, Deprecated, Superseded }   // closed
 struct Requirement {
-    id: u32, slug: String, status: ReqStatus, kind: ReqKind,
+    id: u32, name: String, slug: String,                     // name = short title; slug derived from it
+    status: ReqStatus, kind: ReqKind,
+    #[serde(default)] description: Option<String>,           // optional one-line summary (queryable);
+                                                             //   full statement/rationale stays prose in .md
+    #[serde(default)] tags: Vec<String>,                     // uniform tag seam (see below)
     #[serde(default)] acceptance_criteria: Vec<String>,      // testable list — stays structured
 }
 
@@ -139,6 +146,7 @@ enum SpecSubtype { Product, Tech }                           // closed; selects 
 enum SpecStatus  { Draft, Active, Deprecated, Superseded }   // closed
 struct Spec {
     id: u32, slug: String, name: String, status: SpecStatus, kind: SpecSubtype,
+    #[serde(default)] tags: Vec<String>,                     // uniform tag seam (see below)
     // tech-only flat fields; absent/default for product:
     #[serde(default)] category: Option<String>,
     #[serde(default)] c4_level: Option<String>,
@@ -156,6 +164,17 @@ facts (kind, status, criteria, statement); it does not know who members it
 (reverse = registry traversal). The sticky label is **membership state**, not
 requirement state — so the same `REQ-NNN` carries different labels under different
 specs (the many-to-many the reframe bought).
+
+**Tags — a uniform cross-entity seam (D10).** Every authored entity (requirement,
+spec, and `feature` when it lands) carries an optional `tags: Vec<String>`
+(`#[serde(default)]`, on the identity TOML). v1 **parses and round-trips** the
+field edit-preservingly — nothing more. Tag *semantics* (a tag index, `--tag`
+query/filter, a controlled vocabulary, tag-scoped views) are **designed-deferred**:
+deliberately one design, applied uniformly, not reinvented per entity. There is a
+latent unification with memory's existing tag scoping (`doctrine memory find
+--tag`, `scope.tags`) — the eventual tag query should reuse that vocabulary rather
+than fork it (§6 Q5). The seam is added now (while "design is free") so the field
+exists from day one and a later tag feature needs no migration of authored files.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -178,11 +197,14 @@ failure window (reserve succeeds, append fails) yields an **orphan requirement**
 reserved, un-membered, inert and harmless; `validate` warns on it. Accepted
 (slice-015.md). Engine H2 still guarantees step 2 itself leaves no partial dir.
 
-**`spec show` / render** — pure reassembly over parsed facets (no mutation, no
-write): spec identity + flat fields → prose body verbatim → a **Requirements**
-section (per member in `order`: `### FR-001 (REQ-007) — <title>`, then kind,
-statement, acceptance criteria) → interactions → registry-resolved inbound refs.
-**v1 is stdout-only and ephemeral**, so it is a pure function of present state and
+**`spec show` / render** — pure, **local** reassembly over parsed facets (no
+mutation, no write, no cross-corpus scan): spec identity + flat fields → prose body
+verbatim → a **Requirements** section (per member in `order`: `### FR-001 (REQ-007)
+— <name>`, then kind, statement, acceptance criteria — each member's requirement
+read by canonical FK `REQ-NNN` → `requirement/NNN/`) → outbound interactions.
+Inbound refs are **not** shown (R3 — a registry query, deferred). `order` is
+advisory (stable-sort key); gaps/dups are cosmetic, not validated. **v1 is
+stdout-only and ephemeral**, so it is a pure function of present *local* state and
 **cannot go stale** (§7 D9).
 
 **`spec validate`** — lazy, command-scoped load (relation-index § lazy loading):
@@ -190,15 +212,20 @@ scan the three trees into id sets + an edge list, then check:
 
 | check | severity |
 |---|---|
-| every `members[].requirement` resolves to a requirement id | **hard** (dangling FK) |
+| every `members[].requirement` (canonical `REQ-NNN`) resolves to a requirement | **hard** (dangling FK) |
 | every `interactions[].target` resolves to a spec id | **hard** (dangling FK) |
 | `label` unique within a spec's members | **hard** (duplicate) |
-| duplicate requirement id / spec id across a merged tree | **hard** |
 | requirement membered by ≥1 spec | **warn** (orphan) |
 
-Cache-independent (no index persisted — the relation-index *cache* is deferred).
-**Cycle detection** arrives with the feature DAG (deferred), so v1 validates
-existence/uniqueness only.
+FK strings are stored **canonical** (`REQ-007`, `SPEC-012`) and parsed to the
+numeric dir on resolve. No **id-collision** check: like slice/adr, `mkdir`
+reservation + git add/add conflict handle duplicate *entity* ids before any lint
+(R2) — the only silent merge risk is a duplicate **label row**, which the
+uniqueness check above covers. Label assignment + `order` are racy under
+concurrent `req add` to one spec (TOCTOU); the uniqueness lint is the backstop,
+consistent with the accepted two-tree non-atomicity. Cache-independent (the
+relation-index *cache* is deferred); **cycle detection** arrives with the feature
+DAG (deferred) — v1 validates existence/uniqueness only.
 
 **Status** — `spec` and `requirement` `status` are **hand-edited** in v1 (ungated,
 git is the trail), consistent with slices today. No `spec status` verb (the
@@ -220,6 +247,27 @@ advanced by the *change process* when it exists (deferred); v1 source of truth i
   membered by both a product and a tech spec (valid — distinct labels); merge
   introduces a duplicate label (caught hard at validate over the merged file).
 
+### 5.6 Code Impact
+
+- `src/requirement.rs` *(new)* — `REQUIREMENT_KIND` (dir `requirement`, prefix
+  `REQ`), scaffold, `render_*_toml`/`_md`. Mirror of `adr.rs`.
+- `src/spec.rs` *(new)* — `PRODUCT_SPEC_KIND` (dir `spec/product`, prefix `PRD`) +
+  `TECH_SPEC_KIND` (dir `spec/tech`, prefix `SPEC`); commands `new` / `req add` /
+  `show` / `validate` / `list`; the `members.toml` edit-preserving append.
+- `src/registry.rs` *(new — relation-index seed)* — the cache-independent
+  FK-validation pass; kept minimal (generalise only as far as forced).
+- `src/entity.rs` — **unchanged**; gains three `Kind`/`Fresh` callers only (R6 gate).
+- `src/meta.rs` — spec/requirement `Meta` for `list`, **additive only** — the
+  shared slice/adr `Meta` path must not change (R6: behaviour gate's sharp edge).
+- `src/main.rs` / cli — `spec` subcommand tree wiring.
+- `install/templates` — product / tech / requirement prose scaffolds.
+- **`doc/` consistency sweep (R5)** — rewrite `spec-entity-spec.md` § Requirement
+  identity + § Spec identity to the peer-entity model, **and** repair the
+  now-stranded compound-key (`SPEC-110.FR-001`) references it leaves behind in
+  `relation-index.md` (its stress case) and `glossary.md` (promote `FR-`/`NF-`,
+  note the `REQ-` durable id). A two-section edit that strands those is incomplete.
+- `.claude/skills/spec-product`, `spec-tech` — drop the "not yet structural" caveat.
+
 ## 6. Open Questions & Unknowns
 
 1. **Requirement durable-id width** — `{id:03}` (`REQ-007`) follows the engine; no
@@ -233,6 +281,10 @@ advanced by the *change process* when it exists (deferred); v1 source of truth i
 4. **Requirement lifecycle source-of-truth** once the change process exists —
    `requirement-NNN.toml` vs derived from completed changes. Deferred with that
    process.
+5. **Tag semantics (D10)** — index, `--tag` query/filter, controlled vocabulary,
+   tag-scoped views; and whether they unify with memory's `--tag`/`scope.tags`
+   surface (they should). Field-only seam in v1; the feature is designed when first
+   needed, once, across all entities.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -305,9 +357,41 @@ TDD red/green/refactor. Behaviour gate: `entity.rs` + slice/adr/memory suites gr
   · `validate_passes_clean_corpus`.
 - `render_reassembles_members_in_order` · `render_is_pure_no_write`.
 - `spec_list_rows_per_subtype_with_member_count`.
+- `tags_and_description_round_trip_on_requirement_and_spec` (seam: parsed +
+  preserved, no semantics).
 
 Gate: `cargo clippy` zero warnings (bins/lib, not `--all-targets`); `just check`.
 
 ## 10. Review Notes
 
-_(Adversarial pass pending — to be recorded here.)_
+### Internal adversarial pass (integrated)
+
+- **R1 — requirement lacked a structured `name`.** `req add "<title>"` + render's
+  heading imply a stored title; struct only had `slug`. **Fixed** (§5.3 adds
+  `name`; slug derives from it).
+- **R2 — id-collision check was over-built.** `mkdir`-reserved ids git-conflict
+  (add/add) before any lint, exactly as slice/adr already trust; only a duplicate
+  *label row* is a silent merge risk. **Fixed** — dropped the id-dup check, kept
+  label-uniqueness (§5.4).
+- **R3 — inbound refs in `show` smuggled a full-corpus scan + unpersisted
+  registry.** **Fixed** — deferred to the registry surface; v1 `show` is local
+  (own content + members + outbound interactions), which also hardens D9's purity
+  claim (§5.2/§5.4).
+- **R4 — `spec validate --path-scope` was cargo-culted** from memory's flags.
+  **Fixed** — whole-corpus by default, optional `[<spec-ref>]` (§5.2).
+- **R5 — rewriting two `spec-entity-spec.md` sections strands compound-key refs**
+  in `relation-index.md` / `glossary.md`. **Fixed** — §5.6 makes it a doc/
+  consistency sweep, not a two-section edit.
+- **R6 — `meta.rs` is shared.** **Fixed** — §4/§5.6 require the spec/requirement
+  `Meta` parse to be additive; the slice/adr path must not change (the behaviour
+  gate's sharp edge).
+- **R7 — the design doc had no explicit Code Impact section** (scaffold lacked the
+  slot). **Fixed** — added §5.6.
+
+Residual (accepted, carried to §6/§8, not blocking): label/order TOCTOU under
+concurrent `req add` (uniqueness lint is the backstop); auto-label cross-merge
+collision (detection-only).
+
+### External challenge
+
+_Pending user choice: `/inquisition` (formal hostile pass) or proceed to `/plan`._
