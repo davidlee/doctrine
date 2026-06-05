@@ -119,9 +119,12 @@ spec-mediated):
 - `spec list [--status S]` — rows per subtype: id, status, slug, `#members`. Mirror
   of `adr list` / `slice list`.
 
-`<spec-ref>` accepts `PRD-3` / `SPEC-12` (canonical) or the numeric id within a
-subtype context. `spec req add … --label`-less auto-assigns the next `FR-`/`NF-`
-for the kind within that spec.
+`<spec-ref>` **requires the canonical prefix** (`PRD-NNN` / `SPEC-NNN`) on `req
+add` / `show` / `validate` — those verbs carry no subtype selector, so a bare
+numeric is ambiguous across the two independent reservation namespaces
+(`spec/product/NNN` and `spec/tech/NNN` each start at 1). `spec new` is the only
+verb that names the subtype. `spec req add … --label`-less auto-assigns the next
+`FR-`/`NF-` for the kind within that spec.
 
 ### 5.3 Data, State & Ownership
 
@@ -133,7 +136,7 @@ registry; only the parse layer is pinned here):
 enum ReqKind   { Functional, Quality }                       // closed; kebab serde
 enum ReqStatus { Pending, Active, Deprecated, Superseded }   // closed
 struct Requirement {
-    id: u32, name: String, slug: String,                     // name = short title; slug derived from it
+    id: u32, title: String, slug: String,                    // title (shared-Meta convention); slug derived from it
     status: ReqStatus, kind: ReqKind,
     #[serde(default)] description: Option<String>,           // optional one-line summary (queryable);
                                                              //   full statement/rationale stays prose in .md
@@ -144,12 +147,13 @@ struct Requirement {
 // spec.rs
 enum SpecSubtype { Product, Tech }                           // closed; selects tree/prefix/fileset
 enum SpecStatus  { Draft, Active, Deprecated, Superseded }   // closed
+enum C4Level     { Context, Container, Component, Code }      // closed; kebab serde; tech-only
 struct Spec {
-    id: u32, slug: String, name: String, status: SpecStatus, kind: SpecSubtype,
+    id: u32, slug: String, title: String, status: SpecStatus, kind: SpecSubtype,
     #[serde(default)] tags: Vec<String>,                     // uniform tag seam (see below)
     // tech-only flat fields; absent/default for product:
-    #[serde(default)] category: Option<String>,
-    #[serde(default)] c4_level: Option<String>,
+    #[serde(default)] category: Option<String>,              // deliberately OPEN vocab (domain taxonomy, drifts by design)
+    #[serde(default)] c4_level: Option<C4Level>,             // closed C4 set (C6 ruling)
     #[serde(default)] responsibilities: Vec<String>,
     #[serde(default, rename = "source")] sources: Vec<Source>,
 }
@@ -190,12 +194,17 @@ files; tech: 4). Pure mirror of `adr run_new`.
    (functional) / `NF-NNN` (quality) scanning the spec's existing `members.toml`.
 4. **Edit-preserving** append (`toml_edit`, not serde reserialize — preserves
    comments / unknown keys) of `[[member]] requirement="REQ-NNN" label="…"
-   order=<max+1>` to the spec's `members.toml`.
+   order=<max+1>` to the spec's `members.toml`. The file is **scaffold-seeded
+   empty** by `spec new` (precondition, §5.1), so the append always has a file to
+   open.
 
 Atomicity: steps 2 and 4 cross two trees and are **not** transactional. The only
-failure window (reserve succeeds, append fails) yields an **orphan requirement** —
-reserved, un-membered, inert and harmless; `validate` warns on it. Accepted
-(slice-015.md). Engine H2 still guarantees step 2 itself leaves no partial dir.
+failure window (reserve succeeds, append fails) yields an **orphan requirement**.
+Since every requirement is born membered, an orphan is **evidence of a torn write**,
+not benign drift — so `validate` flags it **hard** (exit non-zero), not warn (C5
+ruling). The reserved dir is left uncommitted; cleanup is the operator's
+(`git`-clean / `rm`). Engine H2 still guarantees step 2 itself leaves no partial
+dir.
 
 **`spec show` / render** — pure, **local** reassembly over parsed facets (no
 mutation, no write, no cross-corpus scan): spec identity + flat fields → prose body
@@ -215,7 +224,7 @@ scan the three trees into id sets + an edge list, then check:
 | every `members[].requirement` (canonical `REQ-NNN`) resolves to a requirement | **hard** (dangling FK) |
 | every `interactions[].target` resolves to a spec id | **hard** (dangling FK) |
 | `label` unique within a spec's members | **hard** (duplicate) |
-| requirement membered by ≥1 spec | **warn** (orphan) |
+| requirement membered by ≥1 spec | **hard** (orphan = torn write) |
 
 FK strings are stored **canonical** (`REQ-007`, `SPEC-012`) and parsed to the
 numeric dir on resolve. No **id-collision** check: like slice/adr, `mkdir`
@@ -259,13 +268,34 @@ advanced by the *change process* when it exists (deferred); v1 source of truth i
 - `src/entity.rs` — **unchanged**; gains three `Kind`/`Fresh` callers only (R6 gate).
 - `src/meta.rs` — spec/requirement `Meta` for `list`, **additive only** — the
   shared slice/adr `Meta` path must not change (R6: behaviour gate's sharp edge).
+  The identity toml carries **`title`** (not `name`) so `read_metas` →
+  `toml::from_str::<Meta>` parses it (C2 — `Meta` requires `title`, no default).
+  `spec list`'s `#members` column rides the generic `meta::render_table` (the
+  SL-009 slice-rollup path), **not** the fixed 4-column `meta::format_list` —
+  genuinely additive, no shared mutation.
 - `src/main.rs` / cli — `spec` subcommand tree wiring.
 - `install/templates` — product / tech / requirement prose scaffolds.
-- **`doc/` consistency sweep (R5)** — rewrite `spec-entity-spec.md` § Requirement
-  identity + § Spec identity to the peer-entity model, **and** repair the
-  now-stranded compound-key (`SPEC-110.FR-001`) references it leaves behind in
-  `relation-index.md` (its stress case) and `glossary.md` (promote `FR-`/`NF-`,
-  note the `REQ-` durable id). A two-section edit that strands those is incomplete.
+- **`doc/` consistency sweep (R5, widened by inquisition C1/C3)** — the overturned
+  compound-key + facet-row creed spans **four** files; a partial sweep leaves the
+  canon self-contradictory (the gravest `/canon` sin):
+  - `spec-entity-spec.md` — rewrite the **full** model, not two sections: §§ The
+    decomposition + Mapping, Requirement identity, Spec identity, Metadata & table
+    schemas (FK examples `:233`/`:251`), Lifecycle (supersede — `SPEC-110.FR-001`
+    "resolvable forever", contradicted by D3 identity-immutable/membership-mobile),
+    Follow-ups (the `show <SPEC-110.FR-001>` render example) (C3).
+  - `entity-model.md` — the umbrella taxonomy, omitted by the original sweep (C1):
+    § Entity-vs-facet ("rows, not artefacts", `:70` → now a peer **artefact**); §
+    Identity and references (compound key `:82`/`:89` → durable `REQ-NNN` FK with
+    `FR-`/`NF-` as membership labels); § Edges (`collaborators.toml`, `:93` →
+    **dissolved** by the decomposition).
+  - `relation-index.md` — **not** a compound-key strand (grep confirms none); the
+    real taint is the facet-row taxonomy at `:52` ("~8 sister files … requirements/
+    capabilities/coverage/… tables") — correct that, not a phantom FK repair.
+  - `glossary.md` — holds only `PRD-001`/`SPEC-001`; **additively** add `REQ-` (the
+    durable requirement id) + `FR-`/`NF-` (membership labels) rows — no repair.
+  *Verify:* `grep -rE 'rows, not artefacts|SPEC-[0-9]+\.(FR|NF)' doc/` returns
+  nothing the sweep does not name. A sweep that strands any of these is incomplete
+  by §5.6's own standard.
 - `.claude/skills/spec-product`, `spec-tech` — drop the "not yet structural" caveat.
 
 ## 6. Open Questions & Unknowns
@@ -351,14 +381,16 @@ TDD red/green/refactor. Behaviour gate: `entity.rs` + slice/adr/memory suites gr
 - `spec_req_add_reserves_requirement_and_appends_member` ·
   `spec_req_add_is_edit_preserving` (comments/unknown keys survive) ·
   `spec_req_add_auto_labels_fr_then_nf_by_kind` ·
-  `spec_req_add_orphan_on_append_failure_is_inert`.
+  `spec_req_add_orphan_on_append_failure_left_uncommitted`.
 - `validate_flags_dangling_member_fk` · `validate_flags_dangling_interaction_target`
-  · `validate_flags_duplicate_label_in_spec` · `validate_warns_orphan_requirement`
+  · `validate_flags_duplicate_label_in_spec` · `validate_flags_orphan_requirement_hard`
   · `validate_passes_clean_corpus`.
 - `render_reassembles_members_in_order` · `render_is_pure_no_write`.
 - `spec_list_rows_per_subtype_with_member_count`.
 - `tags_and_description_round_trip_on_requirement_and_spec` (seam: parsed +
   preserved, no semantics).
+- `spec_list_meta_parses_scaffolded_spec_toml` (C2: `meta::read_metas` reads the
+  `title`-keyed identity toml the scaffold writes — the shared `Meta` round-trips).
 
 Gate: `cargo clippy` zero warnings (bins/lib, not `--all-targets`); `just check`.
 
@@ -392,6 +424,34 @@ Residual (accepted, carried to §6/§8, not blocking): label/order TOCTOU under
 concurrent `req add` (uniqueness lint is the backstop); auto-label cross-merge
 collision (detection-only).
 
-### External challenge
+### External challenge — `/inquisition` pass (integrated)
 
-_Pending user choice: `/inquisition` (formal hostile pass) or proceed to `/plan`._
+The formal hostile pass (`inquisition.md`) **acquitted the load-bearing thesis** —
+requirement-as-peer-entity riding `entity.rs` unchanged (§II gate held against the
+rack) — and raised six seam-level charges. All dispositioned and integrated above:
+
+- **C1 (grave) — incomplete + misdirected canon sweep. Accepted.** §5.6 widened to
+  a **four-file** sweep (adds `entity-model.md` `:70`/`:82`/`:89`/`:93`); the false
+  witness corrected — `relation-index.md` has no compound-key (facet-row at `:52`),
+  `glossary.md` is additive (`REQ-`/`FR-`/`NF-` rows), not a repair.
+- **C2 (grave) — `Meta` requires `title`, structs stored `name`. Accepted.** §5.3
+  adopts `title` (the adr/slice convention; `name` was a gratuitous neologism that
+  broke `read_metas`). §5.6 records `#members` rides `render_table`, not the fixed
+  `format_list`; §9 adds `spec_list_meta_parses_scaffolded_spec_toml`.
+- **C3 (serious) — primary target under-scoped. Accepted.** §5.6's
+  `spec-entity-spec.md` clause widened from two sections to the full compound-key/
+  facet model (decomposition, identity, schemas, supersede, render).
+- **C4 (serious) — ambiguous bare-numeric `<spec-ref>`. Accepted.** §5.2 now
+  **requires** the canonical `PRD-`/`SPEC-` prefix on `req add`/`show`/`validate`
+  (no subtype selector on those verbs); bare-numeric struck.
+- **C5 (moderate) — orphan severity. Accepted, hardened.** An orphan = evidence of
+  a torn write (every requirement is born membered) ⇒ `validate` flags it **hard**,
+  not warn (§5.4 + table); reserved dir uncommitted, operator-cleaned.
+- **C6 (minor) — soft vocabulary. Accepted, split.** `c4_level` → closed `C4Level`
+  enum (context/container/component/code); `category` stays deliberately-open
+  `Option<String>` (domain taxonomy) (§5.3).
+- **Q4 — Spec-Driver `decisions` were narrative-only** (never id'd / cross-
+  referenced), so D-Q2's prose collapse loses no query — the trim is clean.
+
+Verdict: **venial seam heresies, not mortal** — scope/reconciliation corrections,
+no redesign. The thesis stands; the consistency surface is now closed.
