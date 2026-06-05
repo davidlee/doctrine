@@ -146,17 +146,34 @@ following the exemplar + reconciled skill + its source-map entry.
 
 Templates are **embedded at build time** (`rust_embed`, `#[folder = "install/"]`
 src/install.rs:17). The installed ro `~/.cargo/bin/doctrine` was built from the
-*old committed* template — the uncommitted 8-section edit is invisible to it.
-Therefore, before any spec is scaffolded:
+*old committed* template — the uncommitted 8-section edit is invisible to it. Two
+non-obvious traps (both VERIFIED by the SL-019 inquisition):
 
-1. Commit the template edit (and the reworked skill).
-2. `cargo build`.
-3. **Author with `./target/debug/doctrine`** (carries the new embedded template),
-   not the stale `~/.cargo/bin/doctrine`.
+- **Re-embed trap (CHARGE II).** There is no `build.rs` / `rerun-if-changed` for
+  `install/`, and rust-embed uses `debug-embed`. A lone template edit + plain
+  `cargo build` reports `Finished` but does **not** re-embed — the binary keeps
+  the old template. The embedding crate must be forced to recompile:
+  `touch src/install.rs && cargo build` (or `cargo clean -p doctrine`).
+- **Path trap (CHARGE I).** Do not hardcode a binary path. The cargo
+  `target_directory` is redirected out of the repo
+  (`/home/david/.cargo/doctrine-target-jail`); `./target-jail/` and
+  `~/.cargo/bin/doctrine` are *stale* copies carrying the old template. Resolve
+  the fresh binary via `cargo metadata --format-version=1` (`target_directory`)
+  or just invoke `cargo run -- spec …`.
 
-This is the entry condition for PHASE-02. A spec scaffolded with the stale binary
-would carry the old `Problem/Value/Outcomes` headings — a silent corpus-wide
-defect.
+Entry ritual for PHASE-02 (the gate — never trust `Finished` as proof of embed):
+
+1. Commit the template edit **and** the reworked skill (CHARGE III — a dirty
+   working tree is not a "fixed target").
+2. Force a re-embedding rebuild: `touch src/install.rs && cargo build`.
+3. **Verify the embed:** scaffold a throwaway product spec; `spec show` MUST
+   contain `## 1. Intent` and MUST NOT contain `## Problem`. Only then author
+   real specs (via `cargo run -- spec …` or the `cargo metadata`-derived binary).
+
+A spec scaffolded with a stale binary carries the old
+`Problem/Value/Outcomes` headings — a silent corpus-wide defect. `spec validate`
+will **not** catch it (it checks FK integrity, not prose), so the grep gate is
+the only guard.
 
 ## 8. Phase shape (provisional — for `/plan`)
 
@@ -187,11 +204,37 @@ defect.
 - Final capability count + the drift/reservations boundary call (→ PHASE-01).
 - Execution mechanism for the fan-out: Workflow vs serial `/execute`
   (→ `/phase-plan`).
-- **§7 Verification coverage table** (skill prescribes `| Requirement | … |`):
-  should it reference durable `REQ-NNN` or the mobile `FR-`/`NF-` label?
-  Referencing labels in committed prose is fragile under relabel. Resolve in the
-  exemplar (PHASE-02) — likely reference behaviour/durable id, or omit the
-  per-requirement table (coverage@v1 is deferred in the entity model).
+- **§7 Verification coverage table — DECIDED (CHARGE IX).** No per-requirement
+  coverage table in the corpus: `verification.coverage@v1` is deferred in the
+  entity model (`doc/spec-entity-spec.md`), and a prose table keyed on the
+  *mobile* `FR-`/`NF-` labels is fragile under relabel. §7 prose carries the
+  verification *approach* (what proves the capability, observability, gates); any
+  unavoidable requirement reference uses the durable `REQ-NNN`, never the label.
+  The reworked skill's §7 and the exemplar both follow this.
+- **Template §4 guidance line vs D-1 — OPEN, needs decision (CHARGE V).** The new
+  template's §4 body line literally reads "Functional requirements, non-functional
+  requirements, constraints, and invariants" (install/templates/spec-product.md:
+  12–13) — inviting the prose-FR/NF double-storage D-1 forbids. An author copying
+  the scaffold (not the skill) reintroduces the heresy; `spec validate` won't
+  catch it. Two resolutions: **(a)** reword that one §4 *guidance* line to
+  "Constraints and invariants (functional/quality requirements are `REQ` entities
+  — add via `spec req add`)" — a one-line clarification, not a structural
+  re-edit; or **(b)** leave the template, rely on the reworked skill + the
+  exemplar's FR/NF-free §4 to set the shape. Recommend (a) (closes the hole at
+  source); needs user sign-off as it brushes the "no template re-edit" non-goal.
 - **Double "Requirements" heading** in `spec show` (prose §4 + synthesized) is
   accepted; the exemplar may title its §4 "Constraints & Invariants" to avoid
   it, at the cost of diverging from the template's section label.
+
+## 11. Plan-time gates (from the inquisition)
+
+- **PHASE-02 entry** = §7a ritual passed (committed template+skill; re-embedding
+  rebuild; `spec show` grep gate green).
+- **PHASE-03 entry** = PHASE-02 exemplar locked/accepted (the skill rework is
+  exemplar-driven — CHARGE VIII).
+- **PHASE-05** = grep the committed diff for any taxonomy/source-map artifact
+  under `doc/` or `slice/019/` and reject it — the taxonomy stays in the
+  gitignored phase sheet / handover (CHARGE VII).
+- **Post-slice** = harvest a memory: rust-embed `debug-embed` + no
+  `rerun-if-changed` for `install/` ⇒ a lone template edit is invisible until the
+  embedding crate is forced to recompile (CHARGE II footgun).
