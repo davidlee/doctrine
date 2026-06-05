@@ -551,6 +551,11 @@ enum SkillsCommand {
         #[arg(short = 'd', long)]
         domain: Vec<String>,
 
+        /// Install only the memory skills (record-memory + retrieve-memory).
+        /// Mutually exclusive with --skill / --domain.
+        #[arg(long, conflicts_with_all = ["skill", "domain"])]
+        only_memory: bool,
+
         /// Install to the user directory instead of the project.
         #[arg(short = 'g', long)]
         global: bool,
@@ -579,10 +584,22 @@ fn main() -> anyhow::Result<()> {
                 agent,
                 skill,
                 domain,
+                only_memory,
                 global,
                 dry_run,
                 yes,
-            } => skills::run_install(path, &agent, &skill, &domain, global, dry_run, yes),
+            } => skills::run_install(
+                path,
+                &skills::InstallArgs {
+                    agents: &agent,
+                    skills: &skill,
+                    domains: &domain,
+                    only_memory,
+                    global,
+                    dry_run,
+                    yes,
+                },
+            ),
         },
         Command::Slice { command } => match command {
             SliceCommand::New { title, slug, path } => slice::run_new(path, title, slug),
@@ -723,5 +740,45 @@ fn main() -> anyhow::Result<()> {
                 yes,
             }) => boot::run_install(path, &agent, dry_run, yes),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // VT-4: `--only-memory` is declared `conflicts_with_all = ["skill", "domain"]`,
+    // so clap rejects it at parse time alongside an explicit selector. `try_parse_from`
+    // returns the error rather than exiting the process.
+    #[test]
+    fn only_memory_conflicts_with_skill() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "skills",
+            "install",
+            "--only-memory",
+            "--skill",
+            "code-review",
+        ]);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn only_memory_conflicts_with_domain() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "skills",
+            "install",
+            "--only-memory",
+            "--domain",
+            "doctrine",
+        ]);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn only_memory_alone_parses() {
+        let r = Cli::try_parse_from(["doctrine", "skills", "install", "--only-memory"]);
+        assert!(r.is_ok());
     }
 }

@@ -1,0 +1,41 @@
+memory_uid = "mem_019e985028947ef2ad86d43997214aca"
+memory_key = "mem.pattern.lint.cli-handler-args-struct"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Adding a flag to a CLI command handler can trip clippy bool/arg ceilings"
+summary = "Adding a bool param to a doctrine CLI handler trips too_many_arguments/fn_params_excessive_bools; fix = args struct (RecordArgs/InstallArgs)"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["src/skills.rs", "src/main.rs"]
+globs = []
+commands = []
+tags = ["rust", "clippy", "cli"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "97af859ec2c50036531ec2f0166700db491cd08a"
+ref_name = "refs/heads/SL-015"
+checkout_state_id = "1596b8a013f47c7a092acb72630689a69b1c29fc444d09679fb4c90da7d684b8"
+base_commit = "c82950ed320be9c0cbc41090dae9253b9e5db8f2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
