@@ -1,0 +1,41 @@
+memory_uid = "mem_019e9796299d7443bd9bb7b61e1f5249"
+memory_key = "mem.pattern.install.authored-entity-wiring"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "New authored entity type needs manifest dir + gitignore negation"
+summary = "Adding an authored entity type under .doctrine: wire install/manifest.toml [dirs].create AND a !.doctrine/<type>/ gitignore negation, else silently uncommittable"
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["install/manifest.toml", ".gitignore"]
+globs = []
+commands = []
+tags = ["install", "gitignore", "gotcha"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "9b210ecca0fa73021b69da95474cde84372b45e0"
+tree = "476537a97ad4b5271f6951794e763fb463dc5435"
+ref_name = "refs/heads/SL-015"
+checkout_state_id = ""
+base_commit = "9b210ecca0fa73021b69da95474cde84372b45e0"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
