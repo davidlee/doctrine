@@ -1,7 +1,7 @@
 id = 16
 slug = "plan-types-extraction"
 title = "Break slice↔state cycle: extract plan types"
-status = "proposed"
+status = "done"
 created = "2026-06-05"
 updated = "2026-06-05"
 
