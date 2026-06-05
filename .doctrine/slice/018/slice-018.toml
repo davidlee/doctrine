@@ -1,9 +1,9 @@
 id = 18
 slug = "shipped-memory-corpus"
 title = "Shipped orientation memory corpus"
-status = "proposed"
+status = "done"
 created = "2026-06-05"
-updated = "2026-06-05"
+updated = "2026-06-06"
 
 [relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
