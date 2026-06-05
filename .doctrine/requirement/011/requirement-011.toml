@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 11
+slug = "enforce-referential-integrity-across-the-spec-corpus"
+title = "Enforce referential integrity across the spec corpus"
+status = "pending"
+kind = "quality"
+
+description = "An integrity pass over the spec corpus surfaces every dangling reference, duplicate label, and orphaned requirement as a hard finding rather than carrying it silently."
+tags = []
+acceptance_criteria = [
+  "Every membership and cross-spec reference resolves to an existing entity, or is reported as a dangling reference.",
+  "A display label is unique within a single spec's membership, or the duplicate is reported.",
+  "A requirement membered by no spec is reported as an orphan, and the whole-corpus pass returns a non-zero result on any finding.",
+]

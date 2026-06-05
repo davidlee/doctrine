@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 10
+slug = "reserve-requirement-identity-collision-free-under-concurrent-local-agents"
+title = "Reserve requirement identity collision-free under concurrent local agents"
+status = "pending"
+kind = "functional"
+
+description = "Concurrent agents sharing one working tree can each reserve a requirement identity without colliding, without a lock, daemon, or central authority."
+tags = []
+acceptance_criteria = [
+  "An empty corpus yields the first requirement identity.",
+  "When two agents contend for an identity, exactly one wins and the loser retakes the next free identity.",
+  "No agent ever proceeds on a duplicated requirement identity.",
+]

@@ -1,0 +1,18 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 3
+slug = "skills"
+title = "Skills"
+status = "draft"
+kind = "product"
+category = "agent-enablement"
+tags = ["skills", "agents", "distribution", "marketplace", "install"]
+
+responsibilities = [
+  "Curate the set of agent skills doctrine ships as one canonical, non-duplicated source of truth.",
+  "Deliver those skills to any consuming agent through both an unauthenticated marketplace channel and the doctrine binary.",
+  "Let an operator survey which skills exist and whether each is installed for a given agent.",
+  "Install a selected subset of skills into an agent's own layout without overwriting what is already present.",
+  "Keep skill distribution honest about reach — direct where doctrine owns the layout, delegated everywhere else — and surface that routing to the operator.",
+]

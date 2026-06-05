@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 34
+slug = "detect-the-target-agent-or-stop-and-ask"
+title = "Detect the target agent or stop and ask"
+status = "pending"
+kind = "functional"
+
+description = "When no target agent is named, the system targets the owned agent if its presence is detected, and otherwise stops and asks for an explicit target rather than guessing a foreign agent."
+tags = []
+acceptance_criteria = [
+  "With no agent named and the owned agent detected, the owned agent is targeted.",
+  "With no agent named and no owned agent detected, the system stops and requests an explicit target.",
+  "The system never guesses a non-owned agent.",
+]

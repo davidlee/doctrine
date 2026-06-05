@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 3
+slug = "advance-a-slice-through-its-lifecycle-stages"
+title = "Advance a slice through its lifecycle stages"
+status = "pending"
+kind = "functional"
+
+description = "A slice can move through its ordered lifecycle vocabulary from proposed intent to reconciled and closed; any value in the closed set is a valid standing."
+tags = []
+acceptance_criteria = [
+  "The lifecycle stages are a closed, ordered set.",
+  "A slice's recorded standing is one of those stages.",
+  "Advancing standing never alters the slice's identity or contract.",
+]

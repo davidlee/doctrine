@@ -1,0 +1,17 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 7
+slug = "boot-governance"
+title = "Boot & Governance"
+status = "draft"
+kind = "product"
+category = "agent-orientation"
+tags = ["boot", "governance", "context", "session", "snapshot"]
+responsibilities = [
+  "Project the project's stable governance state into agent context once per change, not once per session, so orientation costs no repeated rediscovery.",
+  "Give the project a user-owned governance pointer layer that orients agents without competing with the authoritative sources it points at.",
+  "Keep the projected surface honest — when governance drifts from what context carries, the drift is detectable, never silently stale.",
+  "Carry the project's own resolved invocation handle so an agent reliably reaches the tool regardless of how it is installed.",
+  "Wire the projection into each agent harness's session start so orientation arrives without per-session manual action.",
+]

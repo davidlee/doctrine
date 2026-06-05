@@ -1,0 +1,17 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 1
+slug = "slices"
+title = "Slices"
+status = "draft"
+kind = "product"
+category = "change-management"
+tags = ["slice", "change-bundle", "lifecycle", "scope"]
+responsibilities = [
+  "Name a unit of intentional change before code moves — what changes, why, what it touches, and what done looks like.",
+  "Hold the declarative change contract (the what/whether) distinct from the design (the how) and from runtime progress.",
+  "Carry a slice through its lifecycle from proposed intent to reconciled, closed change.",
+  "Anchor sibling artefacts (design, plan, phases, audit) to one durable change identity without restructuring.",
+  "Provide a forward seam for spec/requirement linkage and coverage gates that attaches later without reshaping the artefact.",
+]

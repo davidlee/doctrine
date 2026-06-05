@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 19
+slug = "reserve-a-durable-collision-free-identity-for-any-entity-kind"
+title = "Reserve a durable collision-free identity for any entity kind"
+status = "pending"
+kind = "functional"
+
+description = "A caller can reserve the next free identity in a namespace for any numbered entity kind as a durable, permanent claim, decoupled from whether the entity's contents exist yet."
+tags = []
+acceptance_criteria = [
+  "An empty namespace yields the first identity.",
+  "A reserved identity persists durably and is never reissued, even if no entity is authored behind it.",
+  "The same reservation works for any entity kind via a namespaced key, with no knowledge of the entity's layout or contents.",
+]

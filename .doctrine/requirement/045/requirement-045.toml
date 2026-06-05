@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 45
+slug = "resolve-the-project-root-or-refuse-to-act"
+title = "Resolve the project root or refuse to act"
+status = "pending"
+kind = "functional"
+
+description = "Provisioning resolves the target project's root — honouring an explicit root or discovering one by marker — and refuses to act when none can be found."
+tags = []
+acceptance_criteria = [
+  "An explicitly named project root is honoured verbatim.",
+  "Absent an explicit root, the root is discovered by searching outward from the current location for a recognised project marker.",
+  "When no marker is found up to the top of the filesystem, provisioning refuses to act rather than writing to an arbitrary location.",
+]

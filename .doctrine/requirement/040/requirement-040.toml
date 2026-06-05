@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 40
+slug = "reserve-decision-identity-collision-free-under-concurrent-local-agents"
+title = "Reserve decision identity collision-free under concurrent local agents"
+status = "pending"
+kind = "functional"
+
+description = "Concurrent agents sharing one working tree can each reserve a decision identity without colliding, without a lock, daemon, or central authority."
+tags = []
+acceptance_criteria = [
+  "An empty project yields the first identity.",
+  "When two agents contend for an identity, exactly one wins and the loser retakes the next free identity.",
+  "No agent ever proceeds on a duplicated identity.",
+]

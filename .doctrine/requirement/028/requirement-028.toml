@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 28
+slug = "preserve-a-maintainer-owned-governance-pointer-layer-across-regeneration"
+title = "Preserve a maintainer-owned governance pointer layer across regeneration"
+status = "pending"
+kind = "functional"
+
+description = "The tool seeds a maintainer-owned governance pointer layer for a project once, then only reads it — folding its content into the surface while preserving maintainer edits across every regeneration."
+tags = []
+acceptance_criteria = [
+  "On first establishment a maintainer-owned pointer file is seeded for the project.",
+  "Once authored, the pointer file is never overwritten by the tool.",
+  "The pointer layer's content is folded into the projected surface on each regeneration.",
+]

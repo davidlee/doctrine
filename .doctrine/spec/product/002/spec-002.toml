@@ -1,0 +1,17 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 2
+slug = "specifications"
+title = "Specifications"
+status = "draft"
+kind = "product"
+category = "knowledge-architecture"
+tags = ["spec", "requirement", "what-why", "evergreen", "corpus-integrity"]
+responsibilities = [
+  "Hold the durable what and why of an evergreen capability — its intent, scope, principles, and proof obligations — upstream of any single change.",
+  "Carry functional and quality requirements as first-class peer entities with stable identity, so a requirement can be referenced, moved, and re-labelled without dangling.",
+  "Keep relational requirement data out of prose: structured obligations live as entities, narrative lives in the spec body, and the two never restate one another.",
+  "Reassemble a fragmented spec — identity, prose, and membered requirements — into one readable whole on demand, without a stale materialised copy.",
+  "Guarantee referential integrity across the spec corpus so dangling references, duplicate labels, and orphaned requirements are surfaced rather than silently carried.",
+]

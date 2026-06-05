@@ -1,0 +1,17 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 5
+slug = "reservation-leasing"
+title = "Reservation & Leasing"
+status = "draft"
+kind = "product"
+category = "coordination"
+tags = ["reservation", "lease", "identity", "concurrency", "coordination"]
+responsibilities = [
+  "Hand every entity kind a durable, collision-free identity before its content exists, so a number can be claimed now and authored later.",
+  "Arbitrate concurrent identity allocation so that, among contending agents, exactly one wins a given id and the rest retake the next free one.",
+  "Carry the reach of a claim — one working tree or every clone of a shared remote — as a backend choice, without changing what callers ask for.",
+  "Coordinate by claiming names only: a claim references an entity, never holds its content, so entities stay ordinary working-tree files.",
+  "Survey the held claims — who holds what, since when — across the active coordination store.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 22
+slug = "survey-held-claims-with-holder-and-acquisition-time"
+title = "Survey held claims with holder and acquisition time"
+status = "pending"
+kind = "functional"
+
+description = "An operator can survey the held claims under a namespace and see, for each, who holds it and when it was acquired, across the active coordination store."
+tags = []
+acceptance_criteria = [
+  "The survey lists the held claims under a requested namespace.",
+  "Each held claim reports its holder and its acquisition time.",
+  "The survey reflects the active coordination store's reach.",
+]

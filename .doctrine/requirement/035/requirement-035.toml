@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 35
+slug = "distribute-one-canonical-skill-source-through-every-channel-unduplicated"
+title = "Distribute one canonical skill source through every channel unduplicated"
+status = "pending"
+kind = "quality"
+
+description = "The shipped skills are served from a single canonical source, so both the marketplace channel and the binary channel deliver the same set with no duplicated or forked copy."
+tags = []
+acceptance_criteria = [
+  "The marketplace channel and the binary channel resolve to the same canonical skill tree.",
+  "No skill is duplicated or forked to serve a second channel.",
+  "The marketplace channel is consumable with no doctrine binary present.",
+]

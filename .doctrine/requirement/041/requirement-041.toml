@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 41
+slug = "preserve-recorded-rationale-across-status-transitions"
+title = "Preserve recorded rationale across status transitions"
+status = "pending"
+kind = "quality"
+
+description = "A decision's recorded reasoning survives every change of standing intact, so the why is always recoverable after the fact."
+tags = []
+acceptance_criteria = [
+  "Changing a decision's standing never alters its context, decision, or consequences.",
+  "A superseded or deprecated decision retains its full original rationale for review.",
+  "The reasoning is recoverable without recourse to chat history or commit archaeology.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 48
+slug = "provision-self-contained-from-shipped-defaults"
+title = "Provision self-contained from shipped defaults"
+status = "pending"
+kind = "quality"
+
+description = "A project with no Doctrine knowledge and no special configuration is provisioned correctly from the tool's shipped defaults alone, VCS-agnostically."
+tags = []
+acceptance_criteria = [
+  "Provisioning a project with no configuration present yields a correct layout from shipped defaults.",
+  "Every configurable section (target, directories, ignore entries, root markers) is optional and has a working default.",
+  "Root detection depends on no single version-control system and recognises any of several marker conventions.",
+]

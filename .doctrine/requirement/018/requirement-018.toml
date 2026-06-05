@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 18
+slug = "render-recalled-knowledge-as-data-never-instruction"
+title = "Render recalled knowledge as data, never instruction"
+status = "pending"
+kind = "quality"
+
+description = "Recalled knowledge is surfaced as attributed, quoted data that can never displace the governing instructions of the system, operator, or reading agent."
+tags = []
+acceptance_criteria = [
+  "Recalled memory is rendered as a quoted, attributed block bearing its identity, trust standing, and context.",
+  "Stored memory text can never override system, operator, or agent instructions.",
+  "Memory is treated as hostile, untrusted input on every substrate.",
+]

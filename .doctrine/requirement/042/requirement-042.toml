@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 42
+slug = "maintain-storage-tier-integrity-between-authored-and-derived-data"
+title = "Maintain storage-tier integrity between authored and derived data"
+status = "pending"
+kind = "quality"
+
+description = "Authored decision data lives in TOML, prose rationale in markdown, and derived indexes stay regenerable; queryable data never leaks into prose."
+tags = []
+acceptance_criteria = [
+  "Structured standing and relationship data lives in TOML; rationale prose lives in markdown.",
+  "No queried or derived data is duplicated into the prose body.",
+  "Derived indexes and aliases are regenerable and never the source of truth.",
+]

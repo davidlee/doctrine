@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 1
+slug = "declare-a-new-slice-as-a-durable-change-contract"
+title = "Declare a new slice as a durable change contract"
+status = "pending"
+kind = "functional"
+
+description = "An operator can declare a new slice, reserving its identity and materialising its durable contract document seeded for authoring."
+tags = []
+acceptance_criteria = [
+  "A declared slice has a stable identity and a durable home that persists across reads.",
+  "The contract document opens seeded for authoring the what/whether, not the design.",
+  "The new slice opens in the initial lifecycle stage.",
+]

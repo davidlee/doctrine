@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 17
+slug = "suppress-untrustworthy-memory-from-agent-context-while-preserving-audit"
+title = "Suppress untrustworthy memory from agent context while preserving audit"
+status = "pending"
+kind = "quality"
+
+description = "Memory that cannot be trusted is withheld from any agent-facing recall while remaining recoverable for audit, and every recall outcome carries an explicit trust standing."
+tags = []
+acceptance_criteria = [
+  "Quarantined and retracted memories never reach an agent's working context.",
+  "A suppressed memory remains visible in the audit record.",
+  "No candidate is silently hidden and none silently over-trusted; an undecidable trust judgement resolves to an explicit standing.",
+]
