@@ -1,0 +1,41 @@
+memory_uid = "mem_019e95ec587b71a2866e5fd97ffab45c"
+memory_key = "mem.pattern.lint.clippy-denies"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Repo clippy denies: print_stdout, let_underscore_must_use, unused/dead_code"
+summary = "Repo denies print_stdout, let_underscore_must_use, unused/dead_code. Use writeln!(io::stdout()), push_str (not let _ = write!), #[expect(dead_code, reason)] for fields a later phase reads. Gate is plain 'cargo clippy', not --all-targets."
+created = "2026-06-05"
+updated = "2026-06-05"
+
+[scope]
+paths = ["src"]
+globs = ["src/**/*.rs"]
+commands = ["cargo clippy", "just check"]
+tags = ["lint", "clippy", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "885add2acd97be527b7c5fbe1a29536775b0a1b7"
+ref_name = "refs/heads/main"
+checkout_state_id = "6f119cf304a641b14c3b911c1009c0873692b71707f0c3fdaf4fa157676c8a97"
+base_commit = "320bfcf2d7b359f67e89f1c89f57f6c78a19aced"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
