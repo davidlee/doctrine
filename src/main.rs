@@ -9,6 +9,7 @@ mod input;
 mod install;
 mod memory;
 mod meta;
+mod requirement;
 mod retrieve;
 mod root;
 mod skills;
