@@ -32,7 +32,14 @@ Make `memory record` succeed in a repo containing committed symlinks, **without
 breaking the the external decision register conformance contract** (SL-007 VT-3 golden vector must
 stay byte-identical for symlink-free trees).
 
-Candidate directions (design picks — not decided here):
+**DECIDED (design D1): direction 3 — upstream-first.** the external decision register un-defers m12
+(the gate is a verbatim copy of `the external decision register/src/git_context.rs:727`); doctrine
+then re-syncs the mirrored gate + the VT-3 golden vector. **Slice is `blocked`
+on the the external decision register change.** Directions 1 (record soft-fail) and 2 (doctrine-local
+seam narrowing) were rejected: both fork the byte-for-byte mirror unilaterally.
+See `design.md` §7.
+
+Candidate directions (decided — direction 3):
 
 1. **Soft-fail the frame** — a capture that hits an unsupported mode degrades to
    a `None`/partial anchor at the `record` layer instead of aborting the command.
