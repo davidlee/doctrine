@@ -148,12 +148,19 @@ pub(crate) fn run_new(
 /// prefix; `read_metas` is unsorted, so `sort_and_filter` owns the ordering.
 pub(crate) fn run_list(path: Option<PathBuf>, status: Option<&str>) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
+    let mut out = io::stdout();
+    write!(out, "{}", list_rows(&root, status)?)?;
+    Ok(())
+}
+
+/// The `adr list` rows as a string — the compute half of `run_list`, extracted so
+/// the boot snapshot (SL-011) can project the same rows in-process without a
+/// subprocess. `run_list` prints this verbatim, so output is byte-identical
+/// (`format_list` already carries its own trailing newline; no extra is added).
+pub(crate) fn list_rows(root: &Path, status: Option<&str>) -> anyhow::Result<String> {
     let adr_root = root.join(ADR_DIR);
     let rows = meta::sort_and_filter(meta::read_metas(&adr_root, "adr")?, status);
-
-    let mut out = io::stdout();
-    write!(out, "{}", meta::format_list(&rows))?;
-    Ok(())
+    Ok(meta::format_list(&rows))
 }
 
 /// `doctrine adr status` — flip an ADR's authored status and bump `updated`.
@@ -350,6 +357,35 @@ mod tests {
         let accepted =
             meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), Some("accepted"));
         assert_eq!(accepted.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1]);
+    }
+
+    // --- SL-011: list_rows is run_list's compute, byte-identical to format_list ---
+
+    #[test]
+    fn list_rows_filters_by_status_and_is_empty_when_none_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        run_new(Some(root.clone()), Some("Use Rust".into()), None).unwrap();
+        run_new(Some(root.clone()), Some("Adopt CI".into()), None).unwrap();
+        set_adr_status(
+            &adr_root(&root),
+            1,
+            AdrStatus::Accepted,
+            &crate::clock::today(),
+        )
+        .unwrap();
+
+        // unfiltered → both rows, exactly what format_list renders for the pipeline.
+        let all = meta::sort_and_filter(meta::read_metas(&adr_root(&root), "adr").unwrap(), None);
+        assert_eq!(list_rows(&root, None).unwrap(), meta::format_list(&all));
+
+        // accepted → only 001's row.
+        let accepted = list_rows(&root, Some("accepted")).unwrap();
+        assert!(accepted.contains("001  accepted"));
+        assert!(!accepted.contains("adopt-ci"));
+
+        // a status nobody holds → the empty string (the agreed empty marker upstream).
+        assert_eq!(list_rows(&root, Some("superseded")).unwrap(), "");
     }
 
     // --- VT-2: an empty / symbol-only title bails for an explicit --slug ---

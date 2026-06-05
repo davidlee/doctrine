@@ -1094,6 +1094,22 @@ pub(crate) fn run_list(
     Ok(())
 }
 
+/// The `memory list` rows as a string — an **additive** sibling to `run_list`
+/// (no existing line touched: memory.rs is SL-012-contended) so the boot snapshot
+/// (SL-011) can project the memory pointers in-process. Composes the same
+/// `collect_memories → select_rows → format_list` chain; `format_list` is private
+/// to this module, so the wrapper lives here rather than in `boot`.
+pub(crate) fn list_rows(
+    root: &Path,
+    type_f: Option<MemoryType>,
+    status_f: Option<Status>,
+    tag_f: Option<&str>,
+) -> Result<String> {
+    let items_root = root.join(MEMORY_ITEMS_DIR);
+    let rows = select_rows(collect_memories(&items_root)?, type_f, status_f, tag_f);
+    Ok(format_list(&rows))
+}
+
 // ---------------------------------------------------------------------------
 // Shell: the `memory verify` mutation verb (PHASE-05) — the slice's one novel
 // write path. Capture the born frame, refuse a dirty tree (no false
@@ -1817,6 +1833,30 @@ ref = "src/main.rs"
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("memory.toml"), full_toml().replace(UID, uid)).unwrap();
         fs::write(dir.join("memory.md"), "body").unwrap();
+    }
+
+    // --- SL-011: list_rows is the additive string sibling of run_list ---
+
+    #[test]
+    fn list_rows_renders_seeded_pointers_and_is_empty_when_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        fs::create_dir_all(&items).unwrap();
+
+        // empty store → the empty string (the agreed empty marker upstream).
+        assert_eq!(list_rows(root, None, None, None).unwrap(), "");
+
+        let uid_a = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7";
+        let uid_b = "mem_018f3a1b2c3d4e5f60718293a4b5c6d8";
+        write_memory_dir(&items, uid_a);
+        write_memory_dir(&items, uid_b);
+
+        let out = list_rows(root, None, None, None).unwrap();
+        assert!(out.contains(uid_a), "lists the first pointer");
+        assert!(out.contains(uid_b), "lists the second pointer");
+        // composes select_rows + format_list: full uid printed, trailing newline.
+        assert!(out.ends_with('\n'));
     }
 
     /// Build `RecordArgs` with the pre-PHASE-04 positional shape (no scope flags,
