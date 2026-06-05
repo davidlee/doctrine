@@ -181,6 +181,16 @@ pub(crate) fn canonical_id(id: u32) -> String {
     format!("{}-{id:03}", REQUIREMENT_KIND.prefix)
 }
 
+/// Best-effort FK canonicalizer: parse-and-reformat if the FK is a valid (possibly
+/// non-canonical) requirement ref, else pass it through unchanged.
+///
+/// `"REQ-1"` → `"REQ-001"`, `"REQ-007"` → `"REQ-007"`, `"garbage"` → `"garbage"`.
+/// Unresolvable junk (bad prefix, non-numeric suffix, unknown prefix) is returned
+/// verbatim so the registry still flags it as dangling.
+pub(crate) fn canonicalize_fk(fk: &str) -> String {
+    id_from_fk(fk).map_or_else(|_| fk.to_string(), canonical_id)
+}
+
 /// The requirement tree root under a project `root` — the dir `entity::scan_ids`
 /// enumerates for the `spec validate` corpus scan. Keeps `REQUIREMENT_DIR` private.
 pub(crate) fn tree_root(root: &Path) -> PathBuf {
@@ -466,6 +476,18 @@ kind = \"functional\"
             .join("\n");
         fs::write(&toml, stripped).unwrap();
         assert!(set_kind(root, id, ReqKind::Quality).is_err());
+    }
+
+    #[test]
+    fn canonicalize_fk_normalises_and_passes_through_garbage() {
+        // non-canonical (short number) → canonical zero-padded.
+        assert_eq!(canonicalize_fk("REQ-1"), "REQ-001");
+        assert_eq!(canonicalize_fk("REQ-007"), "REQ-007");
+        // unresolvable junk is returned verbatim.
+        assert_eq!(canonicalize_fk("garbage"), "garbage");
+        assert_eq!(canonicalize_fk("REQ-x"), "REQ-x");
+        // wrong prefix is also verbatim.
+        assert_eq!(canonicalize_fk("PRD-001"), "PRD-001");
     }
 
     #[test]

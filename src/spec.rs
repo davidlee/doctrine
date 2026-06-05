@@ -327,7 +327,7 @@ fn render(
     members: &[(Member, Requirement)],
     interactions: &[Interaction],
 ) -> String {
-    let canonical_ref = format!("{}-{:03}", spec.kind.kind().prefix, spec.id);
+    let canonical_ref = spec.kind.canonical_id(spec.id);
     // House style: collect pre-formatted pieces (each carrying its own newlines)
     // and `concat()` — avoids the `push_str(&format!(…))` lint and stays pure.
     let mut parts: Vec<String> = Vec::new();
@@ -717,16 +717,19 @@ fn build_registry(root: &Path) -> anyhow::Result<Registry> {
             for m in read_members(&dir.join("members.toml"))? {
                 reg.members.push(MemberEdge {
                     spec: spec_ref.clone(),
-                    requirement: m.requirement,
+                    requirement: requirement::canonicalize_fk(&m.requirement),
                     label: m.label,
                 });
             }
             if subtype == SpecSubtype::Tech {
                 reg.tech_specs.insert(spec_ref.clone());
                 for e in read_interactions(&dir.join("interactions.toml"))? {
+                    let target = resolve_spec_ref(&e.target)
+                        .map(|(s, n)| s.canonical_id(n))
+                        .unwrap_or(e.target);
                     reg.interactions.push(InteractionEdge {
                         spec: spec_ref.clone(),
-                        target: e.target,
+                        target,
                     });
                 }
             }
@@ -1517,6 +1520,64 @@ tags = []
         // empty (product spec or a tech spec with zero edges) → block omitted.
         let without = render(&spec, "p\n", &[], &[]);
         assert!(!without.contains("## Interactions"));
+    }
+
+    // --- FIX 2: build_registry canonicalizes non-canonical author-supplied FKs ---
+
+    /// Non-canonical FKs in hand-authored `members.toml` and `interactions.toml`
+    /// must be canonicalized by `build_registry` so that `Registry::validate` can
+    /// resolve them against the canonical id sets. Genuinely unresolvable junk must
+    /// still be stored verbatim (and flagged dangling by validate).
+    #[test]
+    fn build_registry_canonicalizes_member_and_interaction_fks() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "a", "Spec A"); // SPEC-001
+        fresh(root, SpecSubtype::Tech, "b", "Spec B"); // SPEC-002
+        requirement::reserve(root, "x", "X", "2026-06-05").unwrap(); // REQ-001
+
+        // Hand-author a non-canonical member FK ("REQ-1" instead of "REQ-001").
+        let members_path = root.join(".doctrine/spec/tech/001/members.toml");
+        append_member(&members_path, "REQ-1", "FR-001", 1).unwrap();
+
+        // Hand-author a non-canonical interaction target ("SPEC-2" instead of "SPEC-002").
+        let ix_path = root.join(".doctrine/spec/tech/001/interactions.toml");
+        let seeded = fs::read_to_string(&ix_path).unwrap();
+        fs::write(
+            &ix_path,
+            format!("{seeded}\n[[edge]]\ntarget = \"SPEC-2\"\ntype = \"calls\"\n"),
+        )
+        .unwrap();
+
+        let reg = build_registry(root).unwrap();
+
+        // Both edges must be stored in canonical form after registry build.
+        let member_edge = reg
+            .members
+            .iter()
+            .find(|m| m.spec == "SPEC-001")
+            .expect("member edge for SPEC-001");
+        assert_eq!(
+            member_edge.requirement, "REQ-001",
+            "non-canonical REQ-1 must be canonicalized to REQ-001"
+        );
+
+        let ix_edge = reg
+            .interactions
+            .iter()
+            .find(|e| e.spec == "SPEC-001")
+            .expect("interaction edge for SPEC-001");
+        assert_eq!(
+            ix_edge.target, "SPEC-002",
+            "non-canonical SPEC-2 must be canonicalized to SPEC-002"
+        );
+
+        // validate must report no findings — the corpus is internally consistent.
+        let findings = reg.validate(None);
+        assert!(
+            findings.is_empty(),
+            "non-canonical-but-valid FKs must not produce dangling findings: {findings:?}"
+        );
     }
 
     // --- PHASE-04: read_interactions (the [[edge]] reader) ---
