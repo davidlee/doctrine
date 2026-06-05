@@ -214,3 +214,48 @@ identical — OQ-5/R7 by construction, no LEX_SCALE coarsening needed. VT-4 edge
   cleanly. Faithful to §5.4 "retiring `lexical_score`" — it retires INTO the test
   harness; a future selector would un-gate in its own slice (YAGNI). No external
   behaviour change. Captured here so it survives the gitignored phase sheet.
+
+## PHASE-04 outcome — BM25 wired as the hard default (commit 984165f + this)
+
+`query()` restructured (design §5.1/§5.3): build `active` = `base_filter`
+survivors (the BM25 fit corpus, honours `include_draft`), project once through
+the new production `lex_doc` (§5.3 bag: `title summary tags key`, space-joined),
+narrow to `survivors` (scope + thread-expiry, carrying the Copy `ScopeMatch`),
+score via an injected `&dyn LexicalRanker`, and assign `Candidate.lexical`
+POSITIONALLY from `scores[i].1` (A1 — no `unwrap_or`). The impure shell
+(`run_find`/`run_retrieve`) constructs the default `Bm25Ranker` and passes `&dyn`
+in — the purity boundary: `query` never picks the ranker (D5, no selector on
+either surface).
+
+`survivors ⊆ active = corpus` holds by construction, so the ranker's hard
+`targets ⊆ corpus` assert cannot fire from `query`.
+
+Retirement landed: `lexical_score` + its 3 unit tests DELETED; `tokenize` import
+dropped from `retrieve`. `OverlapRanker` struct+impl now `#[cfg(test)]`; the
+module `#![cfg_attr(not(test), expect(dead_code…))]` bridge REMOVED and clippy
+stays zero-warning — the §9 self-clear realised (EX-5). The seam decision
+(OverlapRanker → cfg(test)) is flagged above for audit harvest.
+
+### Behaviour-preservation (EX-4)
+- Parity test re-based: `overlap_ranker_preserves_retired_overlap` scores through
+  the production `lex_doc` and asserts FROZEN overlap counts lifted verbatim from
+  the deleted `lexical_score` unit tests (fixture-2 "src memory rs lint clippy" ⇒
+  5, etc). `lexical_score` is gone, so parity-vs-fn became parity-vs-frozen-vector.
+- `query_bare_query_keeps_all_active_ranked_lexically` re-pointed through
+  `&OverlapRanker`, assertions UNCHANGED — the witness the seam did not alter
+  overlap ordering.
+
+### VT evidence (PHASE-04)
+- VT-1 `query_exact_key_dominates_higher_bm25`: exact-key hit with LOWER bm25
+  still ranks first (Key-1 over Key-2 magnitude), asserted on the live scores.
+- VT-2 `query_is_shuffle_invariant_under_bm25`: permuted store ⇒ identical
+  `(uid, lexical)` sequence.
+- VT-3 `find_bm25_ranking_is_cross_process_deterministic` (e2e): two separate
+  `doctrine memory find --query …` processes over one seeded store ⇒ byte-
+  identical stdout. R7 coarsen rung stayed unreached.
+- VT-4 `query_bm25_and_overlap_order_oppositely`: same query, `&Bm25Ranker` puts
+  the rare-term match first while `&OverlapRanker` puts the higher raw-overlap
+  match first — the intended quality change, made visible.
+- VT-5 `query_bm25_score_is_derived_not_persisted_on_memory`: `Memory` Debug
+  carries no `lexical` field; a nonzero-scored memory's representation is
+  unchanged by scoring (immutable borrow). No persisted float, by construction (R3).
