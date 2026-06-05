@@ -1,0 +1,222 @@
+# Implementation plan for SL-015 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-015"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Requirement peer entity — the durable atom"
+objective = """
+Stand up `src/requirement.rs` as a pure new caller of the unchanged `entity.rs` \
+engine, mirroring `adr.rs` (design §5.6). `REQUIREMENT_KIND` (dir `requirement`, \
+prefix `REQ`, one global tree + one reservation namespace) + its scaffold fileset \
+(two files: `requirement-NNN.toml`, `requirement-NNN.md`) + `render_*_toml`/`_md`. \
+The parse-layer struct `Requirement { id, title, slug, status, kind, \
+#[serde(default)] description, tags, acceptance_criteria }` with closed `ReqKind \
+{ Functional, Quality }` / `ReqStatus { Pending, Active, Deprecated, Superseded }` \
+(kebab serde) — note the title field is `title`, not `name`, so the shared `Meta` \
+parses it (inquisition C2). Author `install/templates` for the requirement prose \
+scaffold. NO standalone CLI surface this phase (requirement is spec-mediated, §5.2) \
+— the atom is exercised at the module/scaffold level. The engine gains one \
+`Kind`/`Fresh` caller and is not modified (R6 gate).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked: inquisition (C1–C6 + Q4) + external review (5 repairs) dispositioned in §10; full cargo test + clippy green at HEAD (entity/slice/adr/memory/skills suites — the behaviour-preservation baseline)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/requirement.rs` exists: `REQUIREMENT_KIND` + scaffold (toml+md) + render fns mirror adr.rs; `materialise(Fresh)` reserves `REQ-NNN` under `requirement/NNN/`" },
+  { id = "EX-2", text = "`Requirement` parse struct + closed `ReqKind`/`ReqStatus` (kebab serde); title field is `title` (shared-Meta convention); `description`/`tags`/`acceptance_criteria` are `#[serde(default)]` and round-trip edit-preservingly" },
+  { id = "EX-3", text = "`entity.rs` unchanged (gate); requirement templates shipped under install/; clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`requirement_scaffold_lays_out_toml_md`: materialise lays the two files under the reserved numeric dir; the canonical id is `REQ-NNN`" },
+  { id = "VT-2", expects = "round-trip unit: a requirement toml carrying `title`/`tags`/`description`/`acceptance_criteria` parses and re-serialises preserving comments + unknown keys" },
+  { id = "VT-3", expects = "behaviour gate: entity/slice/adr/memory suites green unchanged after the new caller lands" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Spec entities (product | tech) + `spec new` + `spec list`"
+objective = """
+`src/spec.rs` as the second engine caller: `PRODUCT_SPEC_KIND` (dir `spec/product`, \
+prefix `PRD`) + `TECH_SPEC_KIND` (dir `spec/tech`, prefix `SPEC`), each its own tree \
++ reservation namespace. Per-subtype scaffold filesets — product 3 files \
+(`spec-NNN.toml`, `spec-NNN.md`, `members.toml` seeded empty); tech 4 (+ \
+`interactions.toml` seeded empty) — the seeded-empty members/interactions are the \
+precondition PHASE-03's append relies on (§5.4). Parse structs `Spec { id, slug, \
+title, status, kind, tags, category, c4_level, responsibilities, sources }`, `Member`, \
+`Interaction` with closed `SpecSubtype`/`SpecStatus` and the closed `C4Level \
+{ Context, Container, Component, Code }`; `category` stays deliberately-open \
+`Option<String>` (C6). CLI `spec new <product|tech> "<title>" [--slug S]` (pure \
+mirror of `adr run_new`) and `spec list [--status S]` — the latter rides the shared \
+`meta.rs` ADDITIVELY: `Meta` parses the `title`-keyed toml, and the `#members` column \
+rides the generic `meta::render_table` (the SL-009 slice-rollup path), NOT the fixed \
+4-column `format_list` (C2). `#members` counts the seeded (0) members. Templates for \
+both subtypes shipped.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green — the requirement entity + the new-caller pattern on `entity.rs` are proven" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`spec new product`/`spec new tech` scaffold their filesets via `materialise(Fresh)`: product 3 files, tech 4; `members.toml` (+ tech `interactions.toml`) are seeded empty; prints `PRD-NNN`/`SPEC-NNN`" },
+  { id = "EX-2", text = "`Spec`/`Member`/`Interaction` parse structs with closed `SpecSubtype`/`SpecStatus`/`C4Level` and open `category`; `entity.rs` + `meta.rs` shared path unchanged (additive only)" },
+  { id = "EX-3", text = "`spec list [--status S]` prints id/status/slug/#members per subtype over `meta::render_table`; `meta::read_metas` parses the scaffolded `spec-NNN.toml`; clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`product_spec_scaffold_is_light_3_files` + `tech_spec_scaffold_has_members_and_interactions`: filesets + seeded-empty edge files materialise per subtype" },
+  { id = "VT-2", expects = "`spec_list_meta_parses_scaffolded_spec_toml` + `spec_list_rows_per_subtype_with_member_count`: shared `Meta` round-trips the `title` toml; list renders the member-count column; `tags_*_round_trip` on spec" },
+  { id = "VT-3", expects = "behaviour gate: slice/adr/memory list suites green unchanged — the meta.rs additions did not alter the shared 4-column path" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "`spec req add` — the two-tree write"
+objective = """
+The atomic-as-possible two-tree write (§5.4): `spec req add <spec-ref> "<title>" \
+--kind <functional|quality> [--label FR-001]`. Resolve the spec dir (err if absent) \
+— `<spec-ref>` REQUIRES the canonical prefix (`PRD-NNN`/`SPEC-NNN`); a bare numeric \
+is rejected (no subtype selector on this verb, C4). `materialise(Fresh)` a \
+`REQ-NNN` (PHASE-01 kind) + scaffold its files; assign the label (explicit `--label`, \
+else auto = next free `FR-NNN` functional / `NF-NNN` quality by scanning the spec's \
+`members.toml`); then an EDIT-PRESERVING `toml_edit` append (not serde reserialize) \
+of `[[member]] requirement="REQ-NNN" label="…" order=<max+1>` to that spec's \
+`members.toml` (seeded-empty precondition from PHASE-02). The two steps cross two \
+trees and are NOT transactional: the one failure window (reserve OK, append fails) \
+leaves an ORPHAN requirement — reserved dir left UNCOMMITTED, operator-cleaned; \
+PHASE-05 `validate` flags it HARD (C5). Mirrors `set_adr_status`'s toml_edit-on- \
+committed-file pattern (the engine refuses row-appends — §II gate acquittal).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 + PHASE-02 green — the requirement kind reserves, and a spec dir with a seeded-empty `members.toml` exists to append to" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`spec req add` resolves a canonical `<spec-ref>` (bare numeric rejected), reserves `REQ-NNN`, and appends a `[[member]]` row carrying requirement FK + label + order to the spec's `members.toml`" },
+  { id = "EX-2", text = "label auto-assign fills the next free `FR-`/`NF-` by kind (explicit `--label` honoured); the append is edit-preserving (comments + unknown keys survive); `order = max+1`" },
+  { id = "EX-3", text = "an append failure after reservation leaves an inert orphan requirement dir (uncommitted, not auto-cleaned); engine H2 still guarantees step 2 left no partial dir; clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`spec_req_add_reserves_requirement_and_appends_member` + `spec_req_add_is_edit_preserving` (a hand-added comment / unknown key in members.toml survives the append)" },
+  { id = "VT-2", expects = "`spec_req_add_auto_labels_fr_then_nf_by_kind`: functional → FR-001/FR-002, quality → NF-001; explicit --label overrides; a canonical-prefix resolver unit rejects the ambiguous bare numeric" },
+  { id = "VT-3", expects = "`spec_req_add_orphan_on_append_failure_left_uncommitted`: a forced append failure leaves the reserved requirement dir present + uncommitted, no partial member row" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "`spec show` / render — the load-bearing readable whole"
+objective = """
+The pure, LOCAL reassembly that is the only way to read a spec as a document (D5/D9) \
+— `spec show <spec-ref>` to STDOUT, no mutation, no write, no cross-corpus scan. \
+Compose: spec identity + flat fields → prose body verbatim → a Requirements section \
+(per `members.toml` member in `order`: `### FR-001 (REQ-007) — <title>`, then kind, \
+statement, acceptance criteria — each member's requirement read by canonical FK \
+`REQ-NNN` → `requirement/NNN/`) → outbound interactions (tech only). Inbound refs \
+are NOT shown (R3 — a registry query, deferred). `order` is an advisory stable-sort \
+key (gaps/dups cosmetic, not validated). v1 is stdout-only + ephemeral ⇒ a pure \
+function of present local state that CANNOT go stale; `*.rendered.md` materialisation \
+is derived-tier and deferred (§7 D9). Canonical `<spec-ref>` required (C4).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 + PHASE-03 green — requirement entities exist and `members.toml` carries member rows to reassemble" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`spec show <spec-ref>` reassembles identity + flat fields + prose body + a Requirements section (members in `order`, each requirement read by FK) + outbound interactions, to stdout" },
+  { id = "EX-2", text = "render is a PURE function — no write, no mutation, no cross-corpus scan; inbound refs absent (deferred); `order` advisory" },
+  { id = "EX-3", text = "no `*.rendered.md` written in v1; clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`render_reassembles_members_in_order`: a spec with out-of-`order` member rows renders its Requirements section sorted by `order`, each heading `### <label> (REQ-NNN) — <title>`" },
+  { id = "VT-2", expects = "`render_is_pure_no_write`: `spec show` mutates nothing on disk (corpus byte-identical before/after) and writes no file" },
+  { id = "VT-3", expects = "a tech spec with an `interactions.toml` renders the outbound interactions block; a product spec (no interactions) omits it cleanly" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "`spec validate` — the FK-integrity pass (registry seed)"
+objective = """
+`src/registry.rs` (the relation-index seed, kept minimal — generalise only as far \
+as forced) + `spec validate [<spec-ref>]` (§5.4). Lazy command-scoped load: scan \
+the three trees into id sets + an edge list, then check — every `members[].requirement` \
+(canonical `REQ-NNN`) resolves to a requirement [HARD dangling FK]; every \
+`interactions[].target` (`SPEC-NNN`, TECH-ONLY) resolves to a tech spec [HARD]; \
+`label` unique within a spec's members [HARD duplicate]; every requirement membered \
+by ≥1 spec [HARD orphan = torn write — C5]. SCOPED vs CORPUS semantics (external \
+review item 3): `spec validate <spec-ref>` checks ONLY that spec's outbound FKs + \
+label uniqueness; the orphan check is corpus-level (a requirement's membership is \
+unknowable from a single spec) and runs WHOLE-CORPUS ONLY. No id-collision check \
+(mkdir reservation + git add/add handle it — R2). No cycle detection (arrives with \
+the feature DAG, deferred). Exit non-zero on any hard finding.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01–03 green — requirement/spec trees + member rows (and hand-authorable interactions) exist for the scan to validate" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/registry.rs` scans the three trees (cache-independent) into id sets + edge list; `spec validate` whole-corpus checks dangling member FK, dangling tech-only interaction target, duplicate label, and orphan — all HARD; exit non-zero on any" },
+  { id = "EX-2", text = "scoped `spec validate <spec-ref>` checks only that spec's outbound FKs + label uniqueness; the orphan check runs whole-corpus only (suppressed when scoped)" },
+  { id = "EX-3", text = "no id-collision check, no cycle detection (both out of scope); a clean corpus exits 0; clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`validate_flags_dangling_member_fk` + `validate_flags_dangling_interaction_target` (a `SPEC-NNN` target with no tech spec) + `validate_flags_duplicate_label_in_spec` — each HARD, exit non-zero" },
+  { id = "VT-2", expects = "`validate_flags_orphan_requirement_hard`: an un-membered requirement is a HARD finding on the whole-corpus pass; a SCOPED run of a clean spec does NOT trip the corpus orphan check" },
+  { id = "VT-3", expects = "`validate_passes_clean_corpus`: a corpus with all FKs resolved + unique labels + no orphans exits 0" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Canon consistency sweep + skills + close-out"
+objective = """
+Reconcile the canon the slice overturns (inquisition C1/C3 — the four-file sweep) \
+and seal the slice. Rewrite the FULL compound-key + facet-row model, not fragments: \
+`spec-entity-spec.md` (§§ decomposition/mapping, requirement identity, spec identity, \
+metadata schemas incl. FK examples, lifecycle supersede, follow-ups render example) \
+to the peer-entity model; `entity-model.md` (§ entity-vs-facet `:70` rows→artefact, \
+§ identity/references `:82`/`:89` compound-key→durable `REQ-NNN` FK + `FR-`/`NF-` \
+labels, § edges `:93` collaborators DISSOLVED); `relation-index.md:52` facet-row \
+taxonomy corrected (NOT a compound-key strand — it has none); `glossary.md` \
+ADDITIVELY gains `REQ-`/`FR-`/`NF-` rows. Drop the \"not yet structural\" caveat from \
+the `spec-product`/`spec-tech` skills. Harvest durable risks/decisions/findings into \
+notes.md; record memories (`/record-memory`) for the new identity/edge seams. \
+Gate: `grep -rE 'rows, not artefacts|SPEC-[0-9]+\\.(FR|NF)' doc/` returns nothing the \
+sweep does not intend (the sweep's own acceptance test).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01–05 green — the mechanism ships end-to-end (requirement + spec new/list/req-add/show/validate), so the canon can be rewritten to describe shipped reality" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "all four docs swept: `spec-entity-spec.md` full compound-key/facet model rewritten; `entity-model.md` (70/82/89/93) reconciled; `relation-index.md:52` facet-row corrected; `glossary.md` gains `REQ-`/`FR-`/`NF-` rows additively" },
+  { id = "EX-2", text = "`grep -rE 'rows, not artefacts|SPEC-[0-9]+\\.(FR|NF)' doc/` returns nothing the sweep did not intend; the `spec-product`/`spec-tech` skills drop the \"not yet structural\" caveat" },
+  { id = "EX-3", text = "durable findings harvested to notes.md + memories recorded; `just check` green on the slice; ready for `/audit` → `/close`" },
+]
+verification = [
+  { id = "VT-1", expects = "the grep gate over `doc/` returns only intended residue (e.g. historical/quoted references the rewrite deliberately keeps), no live compound-key or rows-not-artefacts creed" },
+  { id = "VT-2", expects = "skill review: `spec-product`/`spec-tech` no longer declare \"not yet structural\"; they point at the shipped `spec` verbs" },
+  { id = "VT-3", expects = "`just check` (lint + test + format) green across the slice; notes.md carries the durable risks/decisions; memories recorded for the identity + edge seams" },
+]
+specs        = []
+requirements = []
