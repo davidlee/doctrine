@@ -14,9 +14,10 @@ the same as rare, discriminating ones, so overlap is a coarse relevance signal.
 The intent is to (a) lift the lexical axis behind a **trait** so the scoring
 strategy is pluggable rather than hard-wired, (b) provide a backend built on the
 `bm25` crate (github.com/Michael-JB/bm25) that ranks by term frequency × inverse
-document frequency with length normalisation, and (c) make a chosen scorer the
-**default** for memory retrieval — preserving the existing token-overlap scorer
-as a selectable/ fallback implementation behind the same trait.
+document frequency with length normalisation, and (c) make BM25 the hard
+**default** for memory retrieval — retaining the existing token-overlap scorer as
+an **internal parity/fallback implementation behind the same trait; no
+user-facing selector in SL-017** (design D5).
 
 ## Scope & Objectives
 
@@ -24,8 +25,9 @@ as a selectable/ fallback implementation behind the same trait.
   with the current token-overlap logic refactored into one implementation
   behind it (no-parallel-implementation: it rides the existing seam).
 - Add a `bm25`-backed implementation behind the same trait.
-- Select the default scorer for `doctrine memory find` / `doctrine memory
-  retrieve`; the other scorer remains available behind the abstraction.
+- Wire BM25 as the hard default for `doctrine memory find` / `doctrine memory
+  retrieve`; the token-overlap scorer stays an internal parity/fallback behind the
+  trait — no CLI/env/config selector in SL-017.
 - Preserve the surrounding contract: the other 8 sort keys, their polarity, the
   `exact_key_match` dominance within Key 2, hard filters, scope specificity,
   staleness, trust holdback. The lexical axis feeds the same slot in the tuple.
@@ -66,9 +68,12 @@ Design (`design.md`) resolves the original open questions; status below.
   `Reverse<u32>`. Float ban (`doc/memory-spec.md` §584-585) targets
   payload/export/backend only; lexical score is derived/never-stored.
 - **OQ-2 — corpus-relative scoring. RESOLVED (design D3).** Batch trait
-  `LexicalRanker::score(query, &LexicalCorpus, targets)`. Fit IDF/avgdl over **all
-  active memories** (the searchable set); score only survivors (bare `--query`:
-  active = corpus = targets, SL-008 D20). Scoring stays pure.
+  `LexicalRanker::score(query, &LexicalCorpus, targets)`. Fit IDF/avgdl over the
+  **`base_filter` survivors — the partition-scoped searchable active set,
+  including drafts only when `include_draft` is true**; score only the
+  scope/thread survivors (bare `--query`: active = corpus = targets, SL-008 D20).
+  `score` returns exactly one entry per target (positional, no caller default);
+  `targets ⊆ corpus` is a hard precondition. Scoring stays pure.
 - **OQ-3 — `bm25` API surface under `--no-default-features`. PARTIALLY RESOLVED.**
   `bm25 = 2.3.2` (MIT) fetches over the live network. Confirmed: `Language`/the
   `with_fit_to_corpus(Language, …)` path is gated behind `default_tokenizer` →
