@@ -47,14 +47,15 @@ Durable decisions taken this session:
 2. **`--only-memory` flag** for `doctrine skills install` — convenience sugar
    selecting record-memory + retrieve-memory. The capability already exists via
    `--skill record-memory --skill retrieve-memory`; this is ergonomics only.
-   Open question: implement the sugar vs. rely on `--skill`. If implemented,
-   avoid hardcoding skill ids in the CLI — prefer a small skill group/tag concept
-   (or a named group) over a literal id list.
+   **Design outcome (design.md D1):** implement it; derive the id set from the
+   `doctrine-memory` subset plugin (mechanism B), not a hardcoded CLI list.
+   Mutually exclusive with `--skill`/`--domain`; empty-derivation bails.
 3. **Resolve doctrine-memory marketplace viability**: confirm Claude Code
-   dereferences within-marketplace symlinks at install. If it does, the subset
-   plugin stands. If it does not, remove `plugins/doctrine-memory` + the
-   `MARKETPLACE_ONLY_DOMAINS` guard and rely on the CLI flag for the
-   memory-only path.
+   dereferences within-marketplace symlinks at install.
+   **Design outcome (design.md §6, D4): RESOLVED — keep.** Claude Code clones the
+   whole marketplace repo locally, so the relative symlinks resolve at install;
+   the subset plugin and `MARKETPLACE_ONLY_DOMAINS` guard stand. No deletion.
+   Residual confidence is soft → a manual install-smoke (VT-05) backs it.
 
 ## Non-Goals
 

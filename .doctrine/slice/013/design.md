@@ -208,4 +208,26 @@ each commit.
 
 ## 10. Review Notes
 
-(Adversarial pass appended below before locking.)
+### Adversarial pass (pre-lock)
+
+- **R1 (critical, resolved) — embed-follows-symlinks was unproven.** The whole of
+  mechanism B (§5.1) rests on `PluginAssets::iter()` descending the
+  `doctrine-memory/skills/*` symlinks. The existing
+  `discover_excludes_marketplace_only_domains` test does **not** prove this — its
+  "no doctrine-memory domain" assertion passes vacuously if the embed never
+  included those paths. `walkdir` defaults to `follow_links=false`, so this was a
+  real failure mode: empty derivation → D3 bail → `--only-memory` permanently
+  broken. **Verified empirically** (throwaway probe, since removed): rust-embed 8
+  with `debug-embed` *does* embed
+  `doctrine-memory/skills/{record-memory,retrieve-memory}/SKILL.md`. Assumption
+  holds; VT-02 now pins it as a standing regression guard. The probe also
+  confirmed the plugin's `README.md`/`.claude-plugin/plugin.json` are embedded
+  but correctly excluded by the `<domain>/skills/<id>/…` match in `subset_ids`.
+- **R2 — mutual-exclusion scope.** Confirmed the exclusion is only vs
+  `--skill`/`--domain`; `--only-memory` composes freely with
+  `--agent`/`--global`/`--dry-run`/`-y`. No over-broad rejection.
+- **R3 — derived-id validation.** Confirmed derived ids still flow through
+  `validate_filters`, so a renamed canonical skill surfaces as `Unknown skill`
+  rather than silently shrinking the install set.
+
+No unresolved findings. Design ready to lock.
