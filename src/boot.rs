@@ -1478,7 +1478,9 @@ mod tests {
         // sync predicate recognises its own command (spaced exec included)...
         assert!(is_doctrine_sync_command("/usr/bin/doctrine memory sync"));
         assert!(is_doctrine_sync_command("doctrine memory sync"));
-        assert!(is_doctrine_sync_command("/nix/store/a b/doctrine memory sync"));
+        assert!(is_doctrine_sync_command(
+            "/nix/store/a b/doctrine memory sync"
+        ));
         // ...and rejects foreign / boot commands.
         assert!(!is_doctrine_sync_command("/usr/bin/tool memory sync"));
         assert!(!is_doctrine_sync_command("/abs/doctrine boot"));
@@ -1501,7 +1503,10 @@ mod tests {
 
         let json = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
         let cmds = commands(&json);
-        assert!(cmds.contains(&"/abs/doctrine boot".to_string()), "boot kept");
+        assert!(
+            cmds.contains(&"/abs/doctrine boot".to_string()),
+            "boot kept"
+        );
         assert!(
             cmds.contains(&"/abs/doctrine memory sync".to_string()),
             "sync wired"
@@ -1525,8 +1530,8 @@ mod tests {
     fn install_claude_hook_sync_respects_dry_run() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        let out = install_claude_hook(root, &HookSpec::sync(Path::new("/abs/doctrine")), true)
-            .unwrap();
+        let out =
+            install_claude_hook(root, &HookSpec::sync(Path::new("/abs/doctrine")), true).unwrap();
         assert!(matches!(out, RefreshOutcome::Wired(_)));
         assert!(
             !root.join(SETTINGS_REL).exists(),

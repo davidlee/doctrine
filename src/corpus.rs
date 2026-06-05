@@ -356,8 +356,7 @@ fn print_plan(plan: &CorpusPlan, shipped: &Path, dry_run: bool) -> Result<()> {
 /// a `.claude/settings.local.json` `SessionStart` command (codex has no equivalent).
 pub(crate) fn run_sync_install(path: Option<PathBuf>, dry_run: bool, yes: bool) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let exec =
-        std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
+    let exec = std::env::current_exe().context("Failed to resolve the doctrine executable path")?;
     let spec = crate::boot::HookSpec::sync(&exec);
 
     if !yes && !dry_run {
@@ -545,7 +544,9 @@ weight = 0
     fn parseable_non_inv_dir_survives() {
         // A real memory but repo-scoped (non-INV) — not doctrine's to prune.
         let mut scoped = inv_master(UID_A, "scoped");
-        scoped.toml = scoped.toml.replace(r#"repo = """#, r#"repo = "github.com/x/y""#);
+        scoped.toml = scoped
+            .toml
+            .replace(r#"repo = """#, r#"repo = "github.com/x/y""#);
         // A repo-scoped memory needs an anchor to parse; give it a commit anchor.
         scoped.toml = scoped.toml.replace(
             r#"anchor_kind = """#,
@@ -571,10 +572,7 @@ weight = 0
     fn gather_assets_pairs_toml_and_md_and_ignores_gitkeep() {
         let files = vec![
             (".gitkeep".to_owned(), Vec::new()),
-            (
-                format!("{UID_A}/memory.toml"),
-                b"toml-a".to_vec(),
-            ),
+            (format!("{UID_A}/memory.toml"), b"toml-a".to_vec()),
             (format!("{UID_A}/memory.md"), b"md-a".to_vec()),
         ];
         let assets = gather_assets(files);

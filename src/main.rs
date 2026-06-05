@@ -746,11 +746,9 @@ fn main() -> anyhow::Result<()> {
                 path: sync_path,
             } => match command {
                 None => corpus::run_sync(sync_path, sync_dry_run, sync_yes),
-                Some(SyncCommand::Install {
-                    path,
-                    dry_run,
-                    yes,
-                }) => corpus::run_sync_install(path, dry_run, yes),
+                Some(SyncCommand::Install { path, dry_run, yes }) => {
+                    corpus::run_sync_install(path, dry_run, yes)
+                }
             },
         },
         Command::Adr { command } => match command {
