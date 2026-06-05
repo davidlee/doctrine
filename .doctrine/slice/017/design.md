@@ -117,8 +117,8 @@ active    = mems.filter(base_filter)                    // fit corpus = partitio
 survivors = active.filter(scope_match? + thread_expiry) // score targets + Candidates
 corpus    = LexicalCorpus::Raw(&active_lexdocs)
 targets   = survivor uids
-scores    = ranker.score(q.query, &corpus, &targets)    // id -> u32
-Candidate.lexical = scores.get(uid).copied().unwrap_or(0)
+scores    = ranker.score(q.query, &corpus, &targets)    // one (id,u32) per target, in order
+Candidate.lexical = scores[i].1   // positional — no unwrap_or; absent entry is a bug (A1)
 ```
 
 **Purity boundary (explicit):** the impure shell (`run_find`/`run_retrieve`)
@@ -144,16 +144,20 @@ pub struct LexDoc { pub id: String, pub text: String }
 pub enum LexicalCorpus<'a> { Raw(&'a [LexDoc]) }
 
 pub trait LexicalRanker {
-    /// Fit corpus-level statistics over `corpus`, score only `targets`, and
-    /// return id -> quantized lexical score (Key-2 magnitude).
+    /// Fit corpus-level statistics over `corpus`, score `targets`, and return one
+    /// `(id, u32)` entry **per target, in `targets` order** (Key-2 magnitude).
     ///
-    /// Contract:
-    /// - Every `target` is scorable; a target absent from the result means a
-    ///   *legitimate* zero (query None / empty after tokenize / no term matched),
-    ///   assembled as 0 by the caller — never a silent lookup miss.
-    /// - `debug_assert!` every target id is present in `corpus` (targets ⊆ corpus).
-    /// - Duplicate ids in `corpus` violate the uniqueness contract
-    ///   (`debug_assert!` rejects; release behaviour is last-wins, undefined-but-safe).
+    /// Contract (A1 — completeness is total, not best-effort):
+    /// - The result has **exactly `targets.len()` entries, one per target, in
+    ///   order.** A no-evidence target (query None / empty after tokenize / no term
+    ///   matched) is filled with `0` *inside the ranker*. Candidate assembly indexes
+    ///   positionally — it never uses `unwrap_or(0)`; an absent entry is a bug.
+    /// - **Hard precondition (all builds):** `assert!` every target id is present in
+    ///   `corpus` (targets ⊆ corpus). A target outside the fit corpus is an
+    ///   internal invariant violation (survivors ⊆ active = corpus) — fail loud,
+    ///   never silently demote to 0. Cost is one membership pass per query.
+    /// - Duplicate ids in `corpus` violate uniqueness (`debug_assert!`; release is
+    ///   last-wins, undefined-but-safe).
     fn score(
         &self,
         query: Option<&str>,
@@ -169,6 +173,7 @@ pub const LEX_SCALE: f32 = 1_000_000.0;
 /// BM25 f32 (>= 0 under Lucene IDF) -> Key-2 u32. Monotonic non-decreasing,
 /// saturating, total (non-finite -> 0: invalid evidence, never maximal).
 pub fn quantize(score: f32) -> u32 {
+    debug_assert!(score.is_finite(), "non-finite lexical score: scorer bug");  // A8: surface upstream bugs
     if !score.is_finite() { return 0; }
     let scaled = (score.max(0.0) * LEX_SCALE).round();
     if scaled >= u32::MAX as f32 { u32::MAX } else { scaled as u32 }
@@ -210,8 +215,19 @@ component dominating Key 2.
    `matches()` purely as a score map — bm25's own descending-by-score ordering is
    discarded** (its tie-order derives from `HashSet` iteration and is not
    cross-process stable; doctrine's `sort_key` re-imposes the total order).
-5. Filter to `targets`, `quantize` each f32, assemble `Vec<(uid, u32)>`; targets
-   not in `matches` are left for the caller's `unwrap_or(0)`.
+5. Build the result **positionally over `targets`**: for each target, `quantize`
+   its `matches()` f32 if present, else `0` (no-evidence). Returns exactly one
+   `(uid, u32)` per target, in order (A1). The `assert!(targets ⊆ corpus)`
+   precondition runs first.
+
+**avgdl/doc-len equivalence (A3 — load-bearing for length normalisation):** the
+self-computed `avgdl` denominator MUST equal the token count the crate's scorer
+attributes to each document — i.e. `avgdl = mean(custom_tokenizer.tokenize(text).len())`
+over the active corpus, using the *same* `Tokenizer` instance the `Embedder`/`Scorer`
+use. If `avgdl`'s token-stream semantics diverge from the scorer's internal
+`doc_len` (borrowed vs owned, normalised vs raw, deduped vs multiset), length
+normalisation is silently wrong while design-level tests still pass. PHASE-01 pins
+this by a differential check (see §9).
 
 `OverlapRanker::score`: per-target distinct-query-token set-membership over its
 `LexDoc.text` (re-tokenized), returning the `u32` count directly — **no quantize**,
@@ -234,7 +250,10 @@ count — is identical. The parity test pins this.
   non-negative TF weights ⇒ scores never negative. `max(0.0)` is defensive only.
 - **No query ⇒ 0** preserved (contract parity with `lexical_score`).
 - **`exact_key_match` unchanged** — still FULL key equality, still dominates Key 2.
-- **Targets ⊆ corpus** (`debug_assert`); **unique corpus ids** (`debug_assert`).
+- **Targets ⊆ corpus** — **hard `assert!`, all builds** (A1: fail loud, never
+  silently demote a mis-sliced target to 0); **unique corpus ids** (`debug_assert`).
+- **Per-target completeness** — `score` returns exactly one entry per target, in
+  order; assembly is positional, never `unwrap_or` (A1).
 - **`Memory` serialization unchanged** (asserted) — no float-bearing payload.
 
 ## 6. Open Questions & Unknowns
@@ -250,6 +269,8 @@ count — is identical. The parity test pins this.
      **not** route through `Language`;
   3. `Scorer`'s generic bound (must admit a `String`/uid key) and `matches()`'s
      return type.
+  4. the scorer's internal per-document token-count semantics, to confirm
+     `avgdl` equivalence (A3) — see §9.
   If the core scoring path (custom tokenizer + manual `avgdl` + `Scorer`) is not
   reachable without `default`, **stop and `/consult`** — never silently enable the
   default tokenizer deps.
@@ -299,7 +320,12 @@ count — is identical. The parity test pins this.
   name). *Alternative rejected:* `MemoryLexDoc` — leaks the memory layer.
 - **D7 — One-variant `LexicalCorpus::Raw` enum now.** Small ceremony; makes the
   `Indexed(&LexicalIndex)` follow-up non-breaking. *Alternative rejected:* a bare
-  slice — would force a signature change later.
+  slice — would force a signature change later. **A4 future-seam constraint:** a
+  BM25 index is not meaningful to `OverlapRanker` (and vice versa), so when
+  `Indexed` lands, an unsupported ranker/corpus pairing MUST fail at construction
+  time (or be adapted before `score`) — `score` must never silently fall back to
+  incorrect semantics. No SL-017 code impact; recorded so the seam does not pretend
+  all indexes are universal.
 
 ## 8. Risks & Mitigations
 
@@ -321,13 +347,19 @@ count — is identical. The parity test pins this.
   delegates to the same `lexical::tokenize`; one lexer.
 - **R7 — Cross-process non-determinism from bm25's internal `HashMap`.** A
   per-document score differing by 1 ULP across runs could flip a quantize bucket
-  and reorder results, breaking SL-008's determinism contract. *Mitigation:*
-  (a) we never consume bm25's ordering — only the per-doc `f32`, re-sorted by
-  `sort_key`; (b) PHASE-01 empirically asserts score-value stability across two
-  separate process runs (OQ-5) plus a same-process repeat-call test; (c) **fallback
-  if unstable:** coarsen `LEX_SCALE` (fewer buckets ⇒ ULP noise cannot cross a
-  boundary ⇒ ties fall through to deterministic keys 3–9), trading lexical
-  resolution for determinism. Determinism wins if they conflict.
+  and reorder results, breaking SL-008's determinism contract. *Mitigation —
+  fallback ladder (A2), determinism wins over resolution:*
+  1. Never consume bm25's ordering — only the per-doc `f32`, re-sorted by
+     `sort_key` (always in force).
+  2. PHASE-01 empirically asserts score-value stability across two separate process
+     runs (OQ-5) + a same-process repeat-call test.
+  3. If values vary: prefer a *deterministic-summation* fix (sorted query tokens /
+     stable postings iteration) if the crate exposes enough internals.
+  4. Else coarsen `LEX_SCALE` — **allowed only if the cross-process VT passes
+     *after* coarsening** (stress-run the corpus/query for byte-identical output).
+     Coarsening reduces risk; it does not *prove* no boundary crossing by
+     construction.
+  5. Still unstable ⇒ **stop and `/consult`; do not ship BM25 as default.**
 
 ## 9. Quality Engineering & Validation
 
@@ -349,10 +381,18 @@ covered by *new* tests + re-baselined integration/e2e.
   identical `u32`s — guards summation-order noise, OQ-5/R7); empty query /
   empty-after-tokenize / empty corpus ⇒ all-zero; non-matching survivor ⇒ 0; IDF
   drawn from full corpus not just targets (a target's score reflects df over
-  active, not over the target subset); self-computed `avgdl` matches the mean
-  token length of the active corpus.
-- Contract invariants: `targets ⊄ corpus` trips the debug assert; duplicate corpus
-  ids trip the debug assert.
+  active, not over the target subset); **per-target completeness** (result length ==
+  `targets.len()`, positional, no-evidence target == 0 — A1).
+- **avgdl equivalence (A3, PHASE-01 differential):** assert the self-computed
+  `avgdl` denominator equals the crate scorer's internal per-doc token count. Pin
+  by a differential run against the crate's *default-features* fit path on an
+  equivalent simple tokenizer + corpus (or by source inspection if the internal
+  `doc_len` is reachable). Proves length-normalisation correctness, not just "our
+  arithmetic is self-consistent."
+- **Query-edge cases (A7):** `None`, `Some("")`, and `Some("…only separators…")`
+  all ⇒ all-zero, exactly one entry per target.
+- Contract invariants: `targets ⊄ corpus` trips the **hard `assert!`** (all builds,
+  A1); duplicate corpus ids trip the `debug_assert!`.
 
 **`retrieve` integration:**
 - `exact_key` still dominates Key 2 under BM25 (an exact-key hit outranks a
@@ -427,3 +467,34 @@ warnings.
 Round-1 findings integrated. No unresolved governance conflict — the two PHASE-01
 probes (OQ-3 API surface, OQ-5 determinism) are the gating unknowns; both have a
 defined `/consult`/fallback path if they fail.
+
+### Inquisition (round 2) — no architectural veto; 4 required fixes applied
+
+- **A1 (critical) — absent-vs-zero ambiguity.** `score` was best-effort + caller
+  `unwrap_or(0)`, so a mis-sliced target silently demoted to 0 in release.
+  *Applied:* trait now returns exactly one entry per target in order (ranker fills
+  no-evidence zeros); assembly is positional; `targets ⊆ corpus` promoted to a
+  **hard `assert!` (all builds)**. §5.1/§5.2/§5.4/§5.5.
+- **A2 (high) — determinism fallback underspecified.** Coarsening `LEX_SCALE` was
+  implied sufficient by construction. *Applied:* R7 is now a 5-rung ladder
+  (discard ordering → empirical VT → deterministic-summation → coarsen *only if
+  the VT passes after* → `/consult`/don't-ship). §8 R7.
+- **A3 (high) — `avgdl`/doc-len equivalence unproven.** Self-computed `avgdl` could
+  diverge from the scorer's internal `doc_len`, corrupting length normalisation
+  while tests pass. *Applied:* §5.4 pins the equivalence invariant; §9 + OQ-3.4 add
+  a PHASE-01 differential probe.
+- **A4 (medium) — future `Indexed` seam not universal.** *Applied:* D7 records the
+  construction-time-failure constraint for unsupported ranker/corpus pairings.
+- **A5 (medium) — "all active" overloaded in the slice.** *Applied:* slice OQ-2
+  reworded to "partition-scoped `base_filter` survivors, drafts only when
+  `include_draft`."
+- **A6 (medium) — "selectable/fallback" scope-leak in the slice.** *Applied:* slice
+  reworded to "internal parity/fallback behind the trait; no user-facing selector."
+- **A7 (low) — query edge cases.** *Applied:* §9 explicitly tests `None`,
+  `Some("")`, `Some("…separators…")`.
+- **A8 (low) — silent `quantize(∞)==0` hides scorer bugs.** *Applied:* `quantize`
+  gains `debug_assert!(score.is_finite())` before the defensive guard.
+
+Round-2 required fixes (A1–A3, A5–A6) integrated; A4/A7/A8 also applied. Gating
+unknowns unchanged (OQ-3 API surface incl. avgdl equivalence; OQ-5 determinism) —
+both PHASE-01 probes with explicit escape hatches. Design cleared to plan.
