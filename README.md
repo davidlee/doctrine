@@ -3,7 +3,7 @@
 Doctrine is an opinionated but hackable set of tools and conventions for
 software engineering with LLM agents.
 
-> LUX VERITATIS CORPORIBUS HAERETICORUM ALITUR
+![HERESIS URITUR; DOCTRINA MANET.](./doctrine.png) 
 
 ## Design Goals:
 
