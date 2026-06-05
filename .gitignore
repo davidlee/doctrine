@@ -26,3 +26,6 @@ handover.md
 .doctrine/slice/*/phases
 .doctrine/slice/*/handover.md
 .doctrine/skills/*
+.doctrine/memory/index/*
+.doctrine/memory/embeddings/*
+.doctrine/memory/state/*
