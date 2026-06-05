@@ -1,21 +1,25 @@
 # {{ref}}: {{title}}
 
-## Problem
+## 1. Intent
+Problem, value, and desired outcome.
 
-<!-- The need this product capability answers — whose, and why it matters. -->
+## 2. Scope
+In scope, out of scope, and boundaries.
 
-## Value
+## 3. Principles
+Non-negotiable product/domain stances.
 
-<!-- The outcome delivered; why it is worth doing. -->
+## 4. Requirements
+Constraints and invariants. (Functional/quality requirements are `REQ` entities — add via `spec req add`.)
 
-## Principles
+## 5. Success Measures
+Expected outcomes, metrics, signals.
 
-<!-- The non-negotiable stances that shape every decision under this spec. -->
+## 6. Behaviour
+Primary flows, alternate flows, edge cases, guards, and failure modes.
 
-## Outcomes
+## 7. Verification
+Requirement coverage, tests, observability, and acceptance gates.
 
-<!-- Observable end states that mark this delivered. -->
-
-## Out of scope
-
-<!-- What this deliberately does not cover — the boundary. -->
+## 8. Open Questions
+Unresolved decisions requiring exploration, judgement or further information.
