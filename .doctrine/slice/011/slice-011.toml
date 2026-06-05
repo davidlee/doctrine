@@ -1,7 +1,7 @@
 id = 11
 slug = "session-boot"
 title = "Cache-friendly session boot context"
-status = "proposed"
+status = "in_progress"
 created = "2026-06-05"
 updated = "2026-06-05"
 
