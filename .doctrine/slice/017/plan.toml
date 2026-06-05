@@ -1,0 +1,186 @@
+# Implementation plan for SL-017 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-017"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "bm25 probe: API surface + avgdl equivalence + determinism (the risk gate)"
+objective = """
+De-risk the two gating unknowns BEFORE building against them (design OQ-3/OQ-5, \
+R1/R7) — the design mandated PHASE-01 leads with this. Add `bm25 = 2.3.2` with \
+`default-features = false` to the workspace + crate deps. Stand up a keeper \
+characterization test that confirms, under `--no-default-features`, the exact \
+integration recipe: (1) the `Tokenizer` trait method+return signature; (2) the \
+builder path to set a CUSTOM tokenizer AND a precomputed `avgdl` without routing \
+through `Language` (confirmed gated behind `default_tokenizer`) — e.g. \
+`with_tokenizer` + `with_avgdl`; (3) `Scorer` keyed by an owned `String`/uid with \
+`matches()` returning per-doc scores. The probe uses a trivial local whitespace \
+tokenizer (NOT doctrine `tokenize`, which lands in PHASE-02) — it characterizes \
+bm25 mechanics, not doctrine's lexer. Pin the A3 invariant: the scorer's internal \
+per-document token count equals the tokenizer's output length (so a self-computed \
+`avgdl = mean(tokenizer(text).len())` matches `doc_len`). Pin OQ-5/R7: a per-doc \
+score VALUE is byte-identical across two separate process runs for a fixed \
+corpus+query (bm25 uses std HashMap internally; we only ever consume the score \
+value, never bm25's ordering). If the custom-tokenizer + manual-avgdl + Scorer \
+path is unreachable without `default`, OR avgdl/doc-len diverge, OR scores are \
+cross-process unstable and neither deterministic-summation nor a coarser \
+`LEX_SCALE` (verified by the VT) restores it — STOP and `/consult`; do not proceed \
+to a BM25 default. No doctrine source touched beyond the dep + the probe test.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked through inquisition round 2 (A1-A8, D1-D7, OQ-3/OQ-5, R7 integrated); full `cargo test` + `cargo clippy` green at HEAD (behaviour-preservation baseline)" },
+  { id = "EN-2", text = "network reachable for the one-time `bm25` fetch; jail build target usable (CLAUDE.md)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`bm25 = { version = \"2.3.2\", default-features = false }` in [workspace.dependencies] + `bm25.workspace = true` in the crate; `just check` / `cargo clippy` green (no unused-dependency: the probe test exercises it)" },
+  { id = "EX-2", text = "recipe confirmed under --no-default-features and captured in notes.md: Tokenizer trait sig (OQ-3.1), the with_tokenizer+with_avgdl (or equivalent) custom-fit builder path NOT via Language (OQ-3.2), Scorer<String> key bound + matches() return shape (OQ-3.3)" },
+  { id = "EX-3", text = "A3 avgdl equivalence pinned: a differential test shows `mean(tokenizer(doc).len())` equals the scorer's attributed per-doc length (length-normalisation correctness, not mere self-consistency)" },
+  { id = "EX-4", text = "OQ-5/R7 resolved: per-doc score values are byte-identical across two separate OS processes for a fixed corpus+query; the chosen LEX_SCALE (or fallback rung) is the one under which that holds — recorded in notes.md" },
+  { id = "EX-5", text = "go/no-go recorded: if any of EX-2..EX-4 is unattainable, the phase ends in a /consult decision, NOT a silent workaround (no `default` features enabled to dodge a gap)" },
+]
+verification = [
+  { id = "VT-1", expects = "the crate builds and the probe test passes with `default-features = false`; toggling default features OFF does not remove Tokenizer/Embedder-with-avgdl/Scorer/matches from the probe's use" },
+  { id = "VT-2", expects = "differential avgdl test: a corpus of known token lengths yields a self-computed avgdl equal to the scorer's doc-length basis; a deliberately wrong tokenizer (different counting) makes it diverge (the test can detect divergence)" },
+  { id = "VT-3", expects = "determinism test: the same corpus+query scored in two freshly-spawned processes prints identical per-doc score values (repeat across several runs); a same-process repeat-call is also identical" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Pure lexical leaf: tokenize, trait, OverlapRanker, quantize (no bm25)"
+objective = """
+Build the bm25-INDEPENDENT half of `src/lexical.rs` — a pure leaf importing \
+neither `retrieve` nor `memory` (ADR-001 layering, design D6). MOVE `tokenize()` \
+out of `retrieve` into `lexical` as the general-purpose lexer (grep every \
+`tokenize(` caller first — A6; only `lexical_score` is expected); retrieve \
+imports it back. Define `LexDoc{id,text}`, the one-variant `LexicalCorpus::Raw` \
+enum (D7), and the `LexicalRanker` trait with the A1-total contract: returns \
+exactly one `(id,u32)` per target IN ORDER, ranker fills no-evidence zeros, \
+`assert!(targets ⊆ corpus)` is a HARD all-builds precondition, duplicate corpus \
+ids `debug_assert`. Implement `OverlapRanker` (distinct-query-token set-membership \
+over LexDoc.text — corpus ignored, returns the u32 count directly, NO quantize) \
+proven byte-identical to the still-present `lexical_score` (the behaviour- \
+preservation parity proof; concat-vs-segment equivalence, design §5.4). Implement \
+`quantize(f32)->u32`: monotonic non-decreasing, saturating, non-finite→0 with a \
+`debug_assert!(is_finite)` (A8). `OverlapRanker` and `quantize` are not yet wired \
+into retrieve (PHASE-04); `lexical_score` still lives until then.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: bm25 recipe confirmed (or its absence is irrelevant here — this phase has no bm25 dependency); HEAD green" },
+  { id = "EN-2", text = "every `tokenize(` caller in `retrieve` enumerated (A6) — the move list is known and bounded" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`lexical::tokenize` is the moved general-purpose lexer (byte-identical behaviour to the old retrieve fn); retrieve imports it; no second tokenization regime introduced" },
+  { id = "EX-2", text = "`LexDoc{id:String,text:String}`, `LexicalCorpus::Raw(&[LexDoc])` (1-variant enum), and `LexicalRanker::score(query:Option<&str>,&LexicalCorpus,targets:&[&str])->Vec<(String,u32)>` defined; doc-comment states the A1 total/positional contract + hard targets⊆corpus assert + the future A4 Indexed construction-time-failure constraint" },
+  { id = "EX-3", text = "`OverlapRanker` implements the trait: one entry per target in order, no-query/empty⇒0, set-membership count over LexDoc.text; corpus arg ignored; no quantize" },
+  { id = "EX-4", text = "`quantize` per design §5.2 incl. `debug_assert!(score.is_finite())`; the narrow `#[expect(clippy::cast_possible_truncation|cast_precision_loss, reason=…)]` (expect+reason, never bare allow) keeps clippy zero-warning" },
+  { id = "EX-5", text = "`mod lexical;` declared; `cargo clippy` zero warnings; full suite green (lexical_score still present and unchanged)" },
+]
+verification = [
+  { id = "VT-1", expects = "tokenize moved-cases: separator splitting (mem.pattern.lint, src/x.rs), case-fold, empty drop — identical to pre-move outputs" },
+  { id = "VT-2", expects = "OverlapRanker parity: for a fixed (query, doc-set) its per-target scores equal `lexical_score` over the same memories (frozen-vector or direct comparison); no-query⇒all-zero; result length == targets.len(), positional" },
+  { id = "VT-3", expects = "quantize: zero_is_zero, monotonic_non_decreasing over [0,1e-6,0.1,1,2.5,30,1000], saturates (f32::MAX→u32::MAX), non_finite_is_zero (NaN, +INF → 0)" },
+  { id = "VT-4", expects = "contract: `targets ⊄ corpus` panics in ALL builds (hard assert, A1); duplicate corpus ids trip the debug_assert; an empty targets slice returns an empty vec" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Bm25Ranker: corpus-relative BM25 behind the trait"
+objective = """
+Implement `Bm25Ranker` in `src/lexical.rs` using the PHASE-01 recipe + the \
+PHASE-02 trait, staying a pure leaf. A custom bm25 `Tokenizer` delegates to \
+`lexical::tokenize` (one lexer, design D2). `score`: short-circuit \
+None/empty-after-tokenize/empty-corpus ⇒ one `0` per target without invoking \
+bm25 (avgdl div-by-zero guard, §5.4 step 1); else self-compute `avgdl` = mean \
+`tokenize(text).len()` over the corpus (A3 equivalence held), build the Embedder \
+with the custom tokenizer + manual avgdl, upsert every active LexDoc into a \
+`Scorer` keyed by uid (df/IDF over the searchable set — D3), `matches(embed(q))`, \
+and assemble POSITIONALLY over targets: quantize each match f32, fill 0 for \
+no-evidence targets (A1). bm25's own ordering is discarded; doctrine's sort_key \
+will re-order later (R7 rung 1). Run the hard `assert!(targets ⊆ corpus)` first. \
+Scores are non-negative (Lucene IDF), so quantize's max(0) is defensive only.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 go decision (recipe + avgdl equivalence + determinism confirmed); PHASE-02 trait + LexDoc + LexicalCorpus + quantize landed and green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "custom bm25 `Tokenizer` delegates to `lexical::tokenize`; no DefaultTokenizer / stemming / stopwords / second regime; `--no-default-features` preserved" },
+  { id = "EX-2", text = "`Bm25Ranker` implements `LexicalRanker`: fit avgdl/IDF over the full corpus, score targets, return exactly one entry per target in order with no-evidence⇒0; hard targets⊆corpus assert; empty-input short-circuit avoids the avgdl div-by-zero" },
+  { id = "EX-3", text = "self-computed avgdl uses the SAME tokenizer instance semantics the Embedder/Scorer use (A3); IDF/df computed over the whole corpus, not the target subset (D3)" },
+  { id = "EX-4", text = "`cargo clippy` zero warnings; full suite green; Bm25Ranker not yet the wired default (PHASE-04)" },
+]
+verification = [
+  { id = "VT-1", expects = "IDF effect: a target containing a RARE corpus term outranks one containing only a UBIQUITOUS term, holding length constant" },
+  { id = "VT-2", expects = "length normalisation: at equal term frequency, the SHORTER document outranks the longer (b-parameter effect)" },
+  { id = "VT-3", expects = "determinism: permuted upsert order ⇒ identical scores (shuffle-invariance); a same-process repeat call ⇒ identical u32s (OQ-5/R7)" },
+  { id = "VT-4", expects = "edges: query None / Some(\"\") / Some(\"…only separators…\") / empty corpus ⇒ all-zero, exactly targets.len() entries; a survivor no query term touches ⇒ 0; corpus larger than targets ⇒ a target's score reflects df over the full corpus" },
+  { id = "VT-5", expects = "avgdl equivalence regression: the self-computed avgdl equals the mean tokenizer-output length over the corpus (carries PHASE-01 EX-3 into the real tokenizer)" },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "Wire into retrieve: BM25 default, behaviour-preservation, determinism VT"
+objective = """
+Make BM25 the hard default on both query surfaces (design D1/D5) by wiring the \
+trait into `retrieve`, with NO user-facing selector. Restructure `query()`: build \
+the partition-scoped `active` set (base_filter survivors = fit corpus, honouring \
+include_draft), then `survivors` (scope_match? + thread_expiry = targets); build \
+`LexDoc{id:uid, text:title+summary+tags+key}` (body excluded, §5.3) from active; \
+add a `ranker:&dyn LexicalRanker` parameter; call `ranker.score(q.query,&corpus, \
+&targets)` and assign `Candidate.lexical` POSITIONALLY (no unwrap_or — A1). DELETE \
+the old `lexical_score` (superseded by OverlapRanker; exact_key_match stays). The \
+impure shell (`run_find`/`run_retrieve`) constructs the default `Bm25Ranker` and \
+passes `&dyn` in — the purity boundary (design §5.1): the pure `query` never picks \
+the ranker. SortKey/sort_key/rank/Key-2 `Reverse<u32>`/exact_key unchanged. \
+Behaviour-preservation gate: existing SL-008 overlap-ordering tests re-point \
+through `OverlapRanker` explicitly and stay GREEN UNCHANGED (proof the seam \
+extraction did not alter overlap); the BM25 default path is covered by new + \
+re-baselined tests. Prove the storage model intact: zero new persisted fields, no \
+f32 in payload, Memory serialization unchanged (R3, by construction).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 (trait + OverlapRanker + quantize) and PHASE-03 (Bm25Ranker) landed and green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`query()` takes `ranker:&dyn LexicalRanker`; splits active(fit)/survivors(targets); builds LexDoc per active memory (title+summary+tags+key, body excluded); Candidate.lexical assigned positionally from the per-target result (no unwrap_or)" },
+  { id = "EX-2", text = "old `lexical_score` deleted; `tokenize` now sourced from `lexical`; `exact_key_match` + the 9-key SortKey + Key-2 `Reverse<u32>` polarity unchanged" },
+  { id = "EX-3", text = "the impure shell constructs `Bm25Ranker` as the default and passes `&dyn LexicalRanker` into `query`; no CLI/env/config selector added (D5); `find` and `retrieve` both use it" },
+  { id = "EX-4", text = "behaviour-preservation: every pre-existing SL-008 retrieval test that pinned overlap ordering passes UNCHANGED when re-pointed through OverlapRanker; trust holdback, staleness, filters, partition all untouched" },
+  { id = "EX-5", text = "`just check` / `cargo clippy` zero warnings; full suite + e2e green; task card (notes.md) updated per conventions" },
+]
+verification = [
+  { id = "VT-1", expects = "exact_key still dominates Key 2 under BM25: an exact memory_key hit outranks a higher-BM25 non-key hit" },
+  { id = "VT-2", expects = "shuffle-invariance property test green with Bm25Ranker wired (a shuffled store yields identical find/retrieve output — the uid tiebreak + deterministic scores)" },
+  { id = "VT-3", expects = "cross-process determinism VT: `doctrine memory find --query X` run twice in SEPARATE processes against a fixed store yields byte-identical output (R7 empirical guard; a failure triggers the coarsen-LEX_SCALE rung, re-verified)" },
+  { id = "VT-4", expects = "a crafted case where BM25 reorders vs overlap (the intended quality change): a rare-term match outranks a higher raw-overlap common-term match" },
+  { id = "VT-5", expects = "storage model: Memory serialization unchanged (no new/float field); a round-trip of a stored memory is byte-identical to pre-SL-017" },
+]
+specs        = []
+requirements = []
