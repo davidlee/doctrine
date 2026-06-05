@@ -69,6 +69,46 @@ shipped `is_global_reference` keys on **scoped ∧ `repo=""` ∧ anchor=none ∧
 `verified_sha`**; branch placed after attested (1), before reviewed-time (3).
 Canon (ADR-002 + design §5.4) outranks the plan/sheet snippet here.
 
+## PHASE-03 — DONE (commits `c68fee3` feat, `5be7661` test)
+
+The sync **write** path. New `src/corpus.rs`; boot's hook seam generalized; both
+gitignore surfaces. 463 unit/bin + e2e green, clippy zero-warning, fmt clean.
+
+- **`src/corpus.rs`** — `#[folder="memory/"] CorpusAssets` embed (repo-root
+  `memory/`, committed, `.gitkeep`-seeded so it derives while empty); pure
+  `plan_corpus(assets, children) -> CorpusPlan` (new/changed/unchanged/prune/skipped,
+  idempotent, BTreeMap-keyed, never names `items/`); impure `sync_corpus(root,
+  assets, dry_run) -> SyncReport` gather→plan→apply. INV-prune gate is `is_inv` =
+  `scope.repo.is_empty() && anchor.kind==None` — **repo+anchor only, NO scope floor**
+  (D8: shipped/ is doctrine-owned; the floor is PHASE-04 master-lint, NOT a prune
+  gate — deliberately narrower than PHASE-02's `is_global_reference`).
+- **Prune safety (Charge III):** stray files + unparseable/non-INV dirs classify as
+  `Skipped` (never `Prune`), proven RED-first. Target is always
+  `root.join(MEMORY_SHIPPED_DIR)`; `apply` only `remove_dir_all`s uids that passed
+  parse∧INV∧absent-from-embed.
+- **Hook seam generalized, not copied (no-parallel-impl).** `boot::HookSpec
+  { command, is_ours: fn }` + `HookSpec::boot`/`::sync`; `plan_hook`/`fallback_for`/
+  `install_claude_hook` are the generic core, `find_owned` takes `is_ours`. Boot's
+  `plan_session_hook`/`fallback_snippet`/`install_refresh` keep exact signatures as
+  thin callers → **33 boot tests passed byte-unchanged** (no STOP). `is_doctrine_sync_command`
+  uses **suffix-strip `" memory sync"`** (two args ≠ boot's single-arg `rsplit_once`);
+  disjoint from boot → two independent `SessionStart` entries (OQ-E).
+- **Single live write path:** `run_sync` drives `sync_corpus` for both preview
+  (`dry_run`) and apply — no dead `sync_corpus` (clippy `-D dead-code` bins+lib).
+  `plan_session_hook` became `#[cfg(test)]` (production refresh now via
+  `install_claude_hook`).
+- **`SyncCommand::Install` dropped `--agent`** (sheet suggested it): the sync hook
+  is Claude-`SessionStart`-only; codex has no equivalent. YAGNI vs dead surface.
+- **gitignore both surfaces:** `.gitignore` + `install/manifest.toml` denylist add
+  `.doctrine/memory/shipped/`. Verified live via `git check-ignore` (shipped ignored,
+  items/ + repo-root `memory/` still tracked).
+- **Empty-embed reality:** populate-from-embed (VT-4) proven at integration
+  (synthetic assets through the full write path); binary e2e proves wiring + no-op
+  + gitignore only. The real corpus is PHASE-05.
+- **No-root e2e footgun:** `root::find` walks CWD→`/`; a stray `/tmp/.git` made
+  default tempdirs resolve a root. e2e picks a marker-free base. Captured as memory
+  `mem.pattern.testing.no-root-find-walk`.
+
 ## Decisions carried forward
 
 - **read_body re-keyed to `root`** (not a second `shipped_root` arg) → drops the
