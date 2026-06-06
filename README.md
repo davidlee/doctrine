@@ -136,6 +136,20 @@ cat .gitignore # check & adjust to taste
 git add -A && git commit -m "chore: doctrine install"
 ```
 
+## Memory-only use 
+
+Use Doctrine's memory system with your preferred tooling for the rest:
+
+```zsh
+cd my-project
+doctrine skills install --memory-only -y 
+
+# doctrine memory help
+# doctrine memory record --type pattern "red/green/refactor TDD" --glob "src/lib/**/*" --summary "..."
+# doctrine memory list
+```
+
+
 ## Usage
 
 ``` zsh
