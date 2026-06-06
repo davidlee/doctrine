@@ -1014,6 +1014,7 @@ mod tests {
                 globs: &[],
                 commands: &[],
                 repo: None,
+                global: false,
             },
         )
         .unwrap();
@@ -1102,6 +1103,7 @@ mod tests {
                 globs: &[],
                 commands: &[],
                 repo: None,
+                global: false,
             },
         )
         .unwrap();

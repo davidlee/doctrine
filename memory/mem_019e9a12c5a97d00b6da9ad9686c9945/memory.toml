@@ -1,0 +1,41 @@
+memory_uid = "mem_019e9a12c5a97d00b6da9ad9686c9945"
+memory_key = "mem.fact.doctrine.storage-tiers"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Doctrine storage tiers: authored vs runtime vs derived"
+summary = ""
+created = "2026-06-05"
+updated = "2026-06-06"
+
+[scope]
+paths = [".doctrine/"]
+globs = [".doctrine/state/**"]
+commands = []
+tags = []
+workspace = "default"
+repo = ""
+repo_id_kind = "local_root"
+repo_id_confidence = "low"
+
+[git]
+anchor_kind = "none"
+commit = ""
+tree = ""
+ref_name = ""
+checkout_state_id = ""
+base_commit = ""
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = "2026-06-06"
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

@@ -291,6 +291,12 @@ enum MemoryCommand {
         #[arg(long = "repo")]
         repo: Option<String>,
 
+        /// Mint a GLOBAL orientation master: suppress the git born frame
+        /// (`repo=""`, anchor `none`) and write into the repo-root `memory/` tree
+        /// instead of `items/` (SL-018 — the corpus authoring path).
+        #[arg(long = "global")]
+        global: bool,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -669,6 +675,7 @@ fn main() -> anyhow::Result<()> {
                 glob,
                 command,
                 repo,
+                global,
                 path,
             } => memory::run_record(
                 path,
@@ -683,6 +690,7 @@ fn main() -> anyhow::Result<()> {
                     globs: &glob,
                     commands: &command,
                     repo: repo.as_deref(),
+                    global,
                 },
             ),
             MemoryCommand::Show { reference, path } => memory::run_show(path, &reference),

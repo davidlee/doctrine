@@ -109,6 +109,35 @@ gitignore surfaces. 463 unit/bin + e2e green, clippy zero-warning, fmt clean.
   default tempdirs resolve a root. e2e picks a marker-free base. Captured as memory
   `mem.pattern.testing.no-root-find-walk`.
 
+## PHASE-04 — DONE (master authoring path + master-lint)
+
+`record --global` mints a `repo=""`/anchor=none master under repo-root `memory/`
+(`MEMORY_MASTERS_DIR`), reusing the uid-mint + schema validation and bypassing the
+repo-anchor gate by explicit intent (`git::unanchored_frame`); the normal-path gate
+is byte-unchanged. `corpus::lint_master` (test gate, not a runtime verb — F-3) asserts
+per master: INV signature, valid `memory_type` ≠ `reference` literal, scope floor
+(≥1 path/glob/command). `install::sync_hint()` points at the standalone `memory sync`
+verb without orchestrating it; install never writes `shipped/`. Behaviour-preservation
+gate (SL-005/007/008) held — only mechanical `global: false` field initializers added.
+
+## PHASE-05 — DONE (the real corpus)
+
+`triage.md` dispositions all 86 spec-driver memories (5 transferable / 17
+topic-applicable / 64 inapplicable, each with rationale). 14 masters authored under
+`memory/` (5 signpost, 4 concept, 3 pattern, 2 fact), every OQ-A topic ≥1 master, all
+`repo=""`/anchor=none/scope-floored/typed/reviewed-seeded. `every_embedded_master_lints_clean`
+runs master-lint over the full 14-master embed in `just check`. E2E
+`sync_populates_the_shipped_corpus...` proves populate→idempotent→`retrieve` surfaces a
+shipped master at `staleness: reference`→alias-dedup; boot snapshot lists all 14 live.
+
+## Closure (SL-018)
+
+Audit `overall=pass` (audit.md, HEAD `4e3cb65`): all PHASE-04/05 EX/VT aligned; F-1
+(test-locality nuance) + F-3 (lint is a test gate by design) aligned, F-2 (ADR clock
+one-day lag) tolerated cosmetic drift. Rollup `5/5`, lifecycle `done`, `⚠` divergence
+cleared. State tree was re-materialized this session, so PHASE-01/02/03 were re-flipped
+`completed` to match their committed work.
+
 ## Decisions carried forward
 
 - **read_body re-keyed to `root`** (not a second `shipped_root` arg) → drops the

@@ -127,7 +127,7 @@ impl Status {
 
 /// `^mem_[0-9a-f]{32}$` — the stored uid shape (lowercase simple-form UUID).
 /// Uppercase / hyphenated forms are rejected, not normalized (design § 5.6).
-fn is_uid(s: &str) -> bool {
+pub(crate) fn is_uid(s: &str) -> bool {
     s.strip_prefix("mem_").is_some_and(|hex| {
         hex.len() == 32 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
     })
@@ -712,6 +712,12 @@ pub(crate) const MEMORY_ITEMS_DIR: &str = ".doctrine/memory/items";
 /// gitignored and `rm -rf`-able; `items/` (committed capture) wins any uid collision.
 pub(crate) const MEMORY_SHIPPED_DIR: &str = ".doctrine/memory/shipped";
 
+/// The authored masters tree — the repo-root `memory/` folder `CorpusAssets`
+/// embeds (SL-018 PHASE-04). `record --global` writes here, NOT into `items/`:
+/// committed, hand-authored global orientation masters that ship through the
+/// binary. Repo-root relative (not under `.doctrine/`), parallel to the embed.
+pub(crate) const MEMORY_MASTERS_DIR: &str = "memory";
+
 /// The shell-side inputs to `record` — the user-facing flags, bundled (mirrors
 /// `Draft`, the pure-render bundle) so `run_record` stays a two-argument seam and
 /// no `too_many_arguments` suppression is needed. `path` (root override) stays a
@@ -730,6 +736,11 @@ pub(crate) struct RecordArgs<'a> {
     /// `--repo` override — replaces the captured identity with an explicit/high
     /// one (design §5.2, F3). Empty/absent ⇒ keep the derived identity.
     pub(crate) repo: Option<&'a str>,
+    /// `--global` — mint a global orientation MASTER (SL-018 PHASE-04): suppress
+    /// the born-frame capture (`repo=""`, anchor `none`) and write into the
+    /// repo-root `memory/` tree instead of `items/`. The declared escape hatch
+    /// past the repo-anchor write gate; the normal path is unchanged.
+    pub(crate) global: bool,
 }
 
 /// `doctrine memory record` — capture the born frame + scope, mint a uid, scaffold
@@ -747,14 +758,23 @@ pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>) -> Result
 
     // Capture the born frame at the edge (design principle 3): one `git::capture`
     // per record; `--repo` overrides the derived identity with an explicit/high
-    // one, routed through the same canonicalizer (F3).
-    let mut frame = crate::git::capture(&root)?;
-    if let Some(repo) = args.repo.map(str::trim).filter(|r| !r.is_empty()) {
-        frame.repo = crate::git::explicit_identity(repo);
-    }
+    // one, routed through the same canonicalizer (F3). `--global` suppresses the
+    // capture entirely — a master asserts nothing about client git (design §5.3),
+    // so it is minted from the unanchored `repo=""`/anchor-`none` frame.
+    let frame = if args.global {
+        crate::git::unanchored_frame()
+    } else {
+        let mut frame = crate::git::capture(&root)?;
+        if let Some(repo) = args.repo.map(str::trim).filter(|r| !r.is_empty()) {
+            frame.repo = crate::git::explicit_identity(repo);
+        }
+        frame
+    };
     // Constraint 4: a repo-scoped memory (a non-empty `repo` coordinate, derived
     // or `--repo`) requires a born anchor — an unanchorable frame is a hard error,
     // never a silent unscoped write. Path/glob/command scopes alone do not gate.
+    // `--global` clears `repo`, so it rides past this gate by explicit intent (the
+    // normal-path gate is unchanged).
     if !frame.repo.repo_id.is_empty() && frame.anchor_kind == AnchorKind::None {
         bail!(
             "repo-scoped memory has no git anchor: the working tree is unborn or \
@@ -781,7 +801,14 @@ pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>) -> Result
         commands: args.commands,
         frame: &frame,
     })?;
-    let out = entity::materialise_named(&LocalFs, &root, MEMORY_ITEMS_DIR, &uid, &fileset)
+    // `--global` masters land in the repo-root `memory/` tree (the embed source);
+    // normal records claim `<uid>/` under `items/`. Only the target dir differs.
+    let target_dir = if args.global {
+        MEMORY_MASTERS_DIR
+    } else {
+        MEMORY_ITEMS_DIR
+    };
+    let out = entity::materialise_named(&LocalFs, &root, target_dir, &uid, &fileset)
         .context("Failed to record memory")?;
 
     let mut stdout = io::stdout();
@@ -2034,6 +2061,7 @@ ref = "src/main.rs"
             globs: &[],
             commands: &[],
             repo: None,
+            global: false,
         }
     }
 
@@ -2239,6 +2267,7 @@ ref = "src/main.rs"
                 globs: &[],
                 commands: &commands,
                 repo: None,
+                global: false,
             },
         )
         .unwrap();
@@ -2282,6 +2311,7 @@ ref = "src/main.rs"
                 globs: &[],
                 commands: &[],
                 repo: Some("github.com/org/repo"),
+                global: false,
             },
         )
         .unwrap_err();
@@ -2396,6 +2426,7 @@ ref = "src/main.rs"
                 globs: &[],
                 commands: &[],
                 repo: Some(hostile),
+                global: false,
             },
         )
         .unwrap();
@@ -2407,6 +2438,57 @@ ref = "src/main.rs"
             m.status,
             Status::Active,
             "no key injection from the repo value"
+        );
+    }
+
+    // VT-1 (PHASE-04): `record --global` mints a master with repo=""/anchor=none
+    // under the repo-root `memory/` tree — NOT items/ — even inside a born git repo
+    // (the born frame is suppressed by `--global`, not derived-then-cleared).
+    #[test]
+    fn record_global_mints_an_unanchored_master_under_memory_not_items() {
+        let repo = GitScratch::new();
+        repo.commit("a.txt", "hello");
+        let paths = strings(&["doc/"]);
+        run_record(
+            Some(repo.path.clone()),
+            &RecordArgs {
+                title: "Overview",
+                memory_type: MemoryType::Signpost,
+                key: None,
+                status: Status::Active,
+                summary: Some("s"),
+                tags: &[],
+                paths: &paths,
+                globs: &[],
+                commands: &[],
+                repo: None,
+                global: true,
+            },
+        )
+        .unwrap();
+
+        // Nothing under items/ — the master lives in the repo-root masters tree.
+        assert!(
+            !items_dir(&repo.path).exists(),
+            "a --global record must not write into items/"
+        );
+        let masters = repo.path.join(MEMORY_MASTERS_DIR);
+        let uid = {
+            let mut names = entity::scan_named(&masters).unwrap();
+            assert_eq!(names.len(), 1, "exactly one master, got {names:?}");
+            names.pop().unwrap()
+        };
+        let toml = fs::read_to_string(masters.join(&uid).join("memory.toml")).unwrap();
+        let m = Memory::parse(&toml).unwrap();
+
+        // The INV signature: global (repo="") and unanchored (anchor none), even
+        // though the working tree is a born git repo a normal record would anchor.
+        assert_eq!(m.scope.repo, "", "a master carries no repo coordinate");
+        assert_eq!(m.anchor.kind, AnchorKind::None, "a master is unanchored");
+        // And it satisfies master-lint (the scope floor is met by the path scope).
+        assert!(
+            crate::corpus::lint_master(&toml).is_ok(),
+            "a freshly-minted master must lint clean"
         );
     }
 
