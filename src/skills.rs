@@ -36,7 +36,7 @@ const MEMORY_SUBSET_DOMAIN: &str = "doctrine-memory";
 const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN];
 
 /// Source from which the delegated `npx skills` pulls non-Claude installs.
-const DELEGATE_SOURCE: &str = "doctrine/doctrine";
+const DELEGATE_SOURCE: &str = "davidlee/doctrine";
 
 // ---------------------------------------------------------------------------
 // Model
@@ -1203,7 +1203,7 @@ mod tests {
             vec![
                 "skills",
                 "add",
-                "doctrine/doctrine",
+                "davidlee/doctrine",
                 "--agent",
                 "codex",
                 "--yes"
@@ -1220,7 +1220,7 @@ mod tests {
             vec![
                 "skills",
                 "add",
-                "doctrine/doctrine",
+                "davidlee/doctrine",
                 "--agent",
                 "cursor",
                 "--global",
