@@ -42,7 +42,8 @@ add_subtype() {
   local subdir="$SPEC_ROOT/$1" prefix="$2" heading="$3"
   local sym base id md toml title status block=""
   [[ -d "$subdir" ]] || return 0
-  for sym in $(find "$subdir" -maxdepth 1 -type l -name '[0-9]*' | sort); do
+  # Real NNN dirs only — GitHub does not traverse the NNN-slug symlinks (404).
+  for sym in $(find "$subdir" -maxdepth 1 -type d -name '[0-9]*' | sort); do
     base="$(basename "$sym")"
     id="${base%%-*}"
     md="$sym/spec-$id.md"
@@ -63,7 +64,8 @@ add_subtype tech SPEC "Technical Specifications"
 # Compact slice index: title -> design, "scope" -> scope doc, (rollup) from CLI.
 add_slices() {
   local sym base id title rollup design block=""
-  for sym in $(find ".doctrine/slice" -maxdepth 1 -type l -name '[0-9]*' | sort); do
+  # Real NNN dirs only — GitHub does not traverse the NNN-slug symlinks (404).
+  for sym in $(find ".doctrine/slice" -maxdepth 1 -type d -name '[0-9]*' | sort); do
     base="$(basename "$sym")"
     id="${base%%-*}"
     [[ -f "$sym/slice-$id.toml" ]] || continue
