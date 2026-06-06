@@ -96,10 +96,44 @@ npx skills add davidlee/doctrine  # or `doctrine skills install` for claude code
 doctrine slice new "add killer feature"
 ```
 
-or from source:
+or install from source (customise templates / skills):
+
 ``` zsh
 gh repo clone davidlee/doctrine && cd doctrine
+
+# optional: 
+# customise install/templates and/or plugins/skills
+# they'll get bundled into the binary for installation
+
 cargo install --path .
+```
+
+to install skills for other agents:
+
+```zsh
+npx skills add davidlee/doctrine # or your fork 
+```
+
+## Setup 
+
+```zsh
+
+mkdir my-project && cd my-project
+git init 
+mkdir .claude 
+
+doctrine install -y 
+doctrine skills install # .claude
+doctrine skills install --agent universal --yes
+
+doctrine memory sync 
+
+doctrine boot install # .claude/settings.local.json
+doctrine boot install --agent codex # works for most 
+
+cat .gitignore # check & adjust to taste
+
+git add -A && git commit -m "chore: doctrine install"
 ```
 
 ## Usage
@@ -107,6 +141,11 @@ cargo install --path .
 ``` zsh
 doctrine slice new "add killer feature"
 ```
+
+Doctrine ships with self-documenting agent memories. 
+
+The agent should be able to steer while you get used to
+the default workflow.
 
 ## Hack
 
