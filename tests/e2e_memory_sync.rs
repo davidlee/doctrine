@@ -1,12 +1,10 @@
 //! SL-018 PHASE-03 EX-4/EX-5 — end-to-end over the built binary.
 //!
 //! Drives the real `doctrine` executable through the corpus-sync surface in temp
-//! dirs: the empty-embed in-repo no-op, the no-root clean no-op (Charge XI), the
-//! `memory sync install` hook wiring (a SEPARATE `SessionStart` entry coexisting
-//! with `boot install`'s, OQ-E), and the client gitignore denylist via the full
-//! installer. The populate-from-embed path is proven at integration level
-//! (`corpus::tests`) with injected synthetic assets — the embed is empty until
-//! PHASE-05, so the binary here can only witness the no-op + wiring.
+//! dirs: the populate-from-embed reach (PHASE-05 — the embed now carries the real
+//! orientation corpus), the no-root clean no-op (Charge XI), the `memory sync
+//! install` hook wiring (a SEPARATE `SessionStart` entry coexisting with `boot
+//! install`'s, OQ-E), and the client gitignore denylist via the full installer.
 
 #![allow(
     clippy::expect_used,
@@ -41,17 +39,64 @@ fn doctrine_repo() -> tempfile::TempDir {
 }
 
 #[test]
-fn sync_in_repo_with_empty_embed_is_a_clean_noop() {
+fn sync_populates_the_shipped_corpus_then_is_idempotent_and_retrievable() {
+    // PHASE-05: the embed now carries the real orientation corpus, so an in-repo
+    // sync lands every master under shipped/ (gitignored), a re-sync is inert, and
+    // a shipped master surfaces through `retrieve` on its scope — the end-to-end
+    // reach over the built binary. The `mem.<key>` alias symlinks beside each uid
+    // dir are NOT shipped as duplicates (gather_assets admits canonical uids only).
     let repo = doctrine_repo();
-    let (ok, stdout) = run(repo.path(), &["memory", "sync", "-p", &path(&repo)]);
+
+    let (ok, stdout) = run(repo.path(), &["memory", "sync", "-y", "-p", &path(&repo)]);
     assert!(ok, "in-repo sync must exit 0: {stdout}");
     assert!(
-        stdout.contains("0 new, 0 changed"),
-        "empty embed must plan no writes: {stdout}"
+        stdout.contains(" new, 0 changed") && !stdout.contains("0 new,"),
+        "the populated embed must plan writes: {stdout}"
+    );
+    let shipped = repo.path().join(".doctrine/memory/shipped");
+    assert!(shipped.is_dir(), "sync must create shipped/");
+    let masters: Vec<_> = std::fs::read_dir(&shipped)
+        .expect("read shipped/")
+        .filter_map(|e| {
+            e.ok()
+                .map(|e| e.file_name().into_string().unwrap_or_default())
+        })
+        .collect();
+    assert!(
+        masters.len() >= 12,
+        "the corpus must ship ≥12 masters (OQ-A skeleton), got {}: {masters:?}",
+        masters.len()
     );
     assert!(
-        !repo.path().join(".doctrine/memory/shipped").exists(),
-        "an inert sync must not create shipped/"
+        masters.iter().all(|n| n.starts_with("mem_")),
+        "only canonical uid dirs ship — no `mem.<key>` alias duplicates: {masters:?}"
+    );
+
+    // Re-sync is inert (idempotent) — identical embed vs disk plans no writes.
+    let (ok, stdout) = run(repo.path(), &["memory", "sync", "-y", "-p", &path(&repo)]);
+    assert!(ok, "re-sync must exit 0: {stdout}");
+    assert!(
+        stdout.contains("0 new, 0 changed"),
+        "a re-sync of the identical corpus must be inert: {stdout}"
+    );
+
+    // A shipped master surfaces through retrieve on its command scope.
+    let (ok, stdout) = run(
+        repo.path(),
+        &[
+            "memory",
+            "retrieve",
+            "-p",
+            &path(&repo),
+            "--command",
+            "doctrine",
+        ],
+    );
+    assert!(ok, "retrieve must exit 0: {stdout}");
+    assert!(
+        stdout.contains("mem.signpost.doctrine.overview")
+            && stdout.contains("staleness: reference"),
+        "a shipped master must surface via its scope with non-decaying staleness: {stdout}"
     );
 }
 
