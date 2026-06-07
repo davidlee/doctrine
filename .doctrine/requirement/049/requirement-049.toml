@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 49
+slug = "capture-a-work-item-as-a-first-class-backlog-entity"
+title = "Capture a work item as a first-class backlog entity"
+status = "pending"
+kind = "functional"
+
+description = "An operator can capture a unit of work intent as a durable backlog item of a chosen kind, reserving its identity and seeding kind-correct default facets."
+tags = []
+acceptance_criteria = [
+  "Capturing an item reserves the next free id in the chosen kind's namespace and persists the item across reads.",
+  "The item opens with status `open` and the kind's default facets.",
+  "The captured kind is fixed on the item and resolvable from its id prefix.",
+]

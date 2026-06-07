@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 54
+slug = "order-the-backlog-by-priority"
+title = "Order the backlog by priority"
+status = "pending"
+kind = "functional"
+
+description = "An operator can establish a relative ordering across backlog items, recorded against durable item identities, so the set answers 'what next'."
+tags = []
+acceptance_criteria = [
+  "An ordering can be established and recorded against item identities, not slugs.",
+  "The survey reflects the recorded ordering.",
+  "Re-ordering never alters any item's identity or kind.",
+]

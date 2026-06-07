@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 57
+slug = "mutate-a-backlog-item-atomically-and-edit-preservingly"
+title = "Mutate a backlog item atomically and edit-preservingly"
+status = "pending"
+kind = "quality"
+
+description = "Every mutation of a backlog item is atomic and edit-preserving, round-tripping the file without dropping comments or unknown keys."
+tags = []
+acceptance_criteria = [
+  "A status or facet change preserves comments and unknown keys verbatim.",
+  "A mutation is atomic — an interrupted write never leaves a partially-written item.",
+  "The item round-trips through read-modify-write unchanged except for the intended field.",
+]

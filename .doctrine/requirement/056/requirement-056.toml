@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 56
+slug = "link-a-backlog-item-to-related-artefacts"
+title = "Link a backlog item to related artefacts"
+status = "pending"
+kind = "functional"
+
+description = "A backlog item carries a relation seam linking it to slices, specs, and drift records, present even when empty."
+tags = []
+acceptance_criteria = [
+  "An item can record outbound relations to slices, specs, and drift records.",
+  "The relation seam is present even when an item has no relations.",
+  "Adding or removing a relation never alters the item's identity or kind.",
+]
