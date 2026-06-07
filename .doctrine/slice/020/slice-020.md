@@ -35,9 +35,11 @@ Where a `/design` agent should read in, grouped by authority:
 **Governing canon (committed — these win over the research corpus):**
 - [`PRD-009`](../../spec/product/009/spec-009.md) — **the parent product spec**: the
   what/why, requirements (REQ-049..059), the work-intake membership test, kind
-  boundaries + precedence, and the resolved open questions (kind set, resolution vs
-  risk facet). Read this first; it distils and supersedes the raw `doc/` notes below
-  for product intent.
+  boundaries + precedence, and the resolved open questions — kind set (OQ-001),
+  resolution vs risk facet (OQ-006), priority shape (OQ-002 → PRD-011),
+  promotion-consumes (OQ-003), reciprocity (OQ-004 → ADR-004), epistemic home
+  (OQ-005 → PRD-010). Read this first; it distils and supersedes the raw `doc/`
+  notes below for product intent.
 - [`doc/entity-model.md`](../../../doc/entity-model.md) — the umbrella taxonomy.
   `:74` fixes `backlog_item` = one kind + `item_kind`, risk gets extra facets.
   `:109` fixes the status vocabulary. `:147` places backlog in the roadmap
@@ -46,6 +48,15 @@ Where a `/design` agent should read in, grouped by authority:
 - [`doc/glossary.md`](../../../doc/glossary.md) — the reserved ids and folder
   flags: `issue ISS`, `improvement IMP`, `chore CHR`, `risk RSK`, `idea IDE`
   (all `folder = y`; `./research/*` + `./context/*` subdirs permitted).
+- [`ADR-004`](../../adr/004/adr-004.md) — relations are stored **outbound-only**
+  on the durable entity; reciprocity (inbound refs) is *derived* by the registry
+  scan, never authored on the target. Settles PRD-009 OQ-004. The backlog item
+  authors its outbound edges; the slice→item promotion-origin edge is authored
+  **slice-side** (ADR-004 §1), not on the item.
+- [`ADR-003`](../../adr/003/adr-003.md) — the canonical change loop
+  (`slice → design → plan → phases → … → audit → reconcile → close`); backlog is
+  its *capture* step. The slice-lifecycle transitions that promotion's un-promote
+  path (OQ-003) leans on are still nascent under it (§8/§11).
 
 **Reference entities (code — the reuse seams, do NOT fork):**
 - `src/entity.rs` — the kind-parameterised scaffold engine (SL-003, done).
@@ -90,6 +101,33 @@ how the research corpus reconciles with canon, and the v1 implement subset.
 | Risk states | +accepted, +expired | not in canon vocab | **resolved** — PRD-009 OQ-006: `resolution` owns accepted/expired; risk facet is descriptive only |
 | Layout | `backlog/{kind}s/<ID>/` | one entity → engine's per-kind reservation dir | **canon** — engine layout |
 
+### Product OQs resolved since this slice was scoped — honour in the design-whole
+
+PRD-009 resolved four further open questions *after* SL-020's first reconcile
+(cfc267b). The v1 *implement* subset is unchanged, but the **design-whole** must
+encode the resolved semantics so the deferred layers stay forward-compatible:
+
+- **OQ-002 — priority shape → [PRD-011](../../spec/product/011/spec-011.md).**
+  Two-layer head-tail model: a minimal **authored** seam (rank/band/pin, PRD-009
+  FR-006 / `REQ-054`; exact field still open as PRD-011 OQ-001) over a
+  registry-backed **derived** layer (PRD-011 — actionability, blockers,
+  consequence, explanations; never persisted as truth). v1 builds neither; the
+  design reserves the authored seam and the outbound relation graph PRD-011 reads.
+- **OQ-003 — promotion consumes.** Promotion moves the item to a terminal status
+  carrying `resolution = promoted`; the default survey hides promoted items
+  (PRD-011 `REQ-075`). There is **no backlog un-promote verb** — a mistaken
+  promotion is corrected slice-side (abandoning the slice tears down the
+  slice-authored origin edge, ADR-004 §1). The bridge command stays deferred
+  (Non-Goals), but `promoted` is a first-class `resolution` value the design fixes.
+- **OQ-004 — reciprocity → [ADR-004](../../adr/004/adr-004.md).** Relations are
+  outbound-only on the item; inbound refs are derived by the registry scan. The
+  design stores only outbound edges; inbound-completeness is the registry
+  surface's claim (consumed by PRD-011), never the sync-free reader's.
+- **OQ-005 — epistemic home → [PRD-010](../../spec/product/010/spec-010.md).**
+  Non-work records (assumption / decision / question / constraint) are the
+  `knowledge_record` family, not the backlog. The membership test still arbitrates;
+  the skill-wiring boundary text (below) now cites PRD-010 as the epistemic home.
+
 ### Open questions for `/design` (D-Q)
 
 - **Q1 — the kind set. RESOLVED at product level (PRD-009 OQ-001).** The
@@ -113,8 +151,9 @@ how the research corpus reconciles with canon, and the v1 implement subset.
   Per-kind mirrors `spec/product` vs `spec/tech` (SL-015) and yields the
   `ISS-NNN`/`IMP-NNN` independent counters glossary shows.
 - **Q5 — v1 implement subset.** Confirm the create/list/show/edit surface below;
-  confirm priority registry + prioritise + sync + the `--from-backlog` bridge are
-  deferred. (The consult/capture **skill wiring** is in scope — see Q6.)
+  confirm the authored priority seam, the derived priority view (PRD-011), `sync`,
+  and the `--from-backlog` bridge are deferred. (The consult/capture **skill
+  wiring** is in scope — see Q6.)
 - **Q6 — workflow integration points.** Which skills / routing rows *consult* vs
   *capture* the backlog, and at what moment in the loop? Lock the loop-point map
   (route/preflight consult; consult/notes capture; audit/close harvest) and the
@@ -125,10 +164,12 @@ how the research corpus reconciles with canon, and the v1 implement subset.
 
 **Design (whole):** the `backlog_item` entity — `item_kind` discriminator, the
 per-kind descriptive facet sets (incl. the risk facet), the canon status lifecycle,
-the orthogonal `resolution` close-reason (PRD-009 FR-009: `status` = whether active,
+the orthogonal `resolution` close-reason (PRD-009 REQ-059: `status` = whether active,
 `resolution` = why it stopped, facets = descriptive shape — the three never overlap),
-the reservation namespace, and the relation participation (edges to slices / specs /
-drift). Reconcile every divergence row above.
+the reservation namespace, and the relation participation — **outbound-only** edges
+from the item to slices / specs / drift (ADR-004: reciprocity is derived, never
+authored on the item; the slice→item promotion-origin edge is authored slice-side).
+Reconcile every divergence row above.
 
 **Implement (coherent subset) — candidate v1, confirmed in `/design`:**
 
@@ -136,16 +177,19 @@ drift). Reconcile every divergence row above.
   per-kind reservation (Q4); template frontmatter with kind defaults
   (status `open`, kind facets). `<kind>` ∈ the Q1-locked enum.
 - **`backlog list`** — table view; filters `--kind`, `--status`, `--tag`,
-  title substring; resolved/closed hidden by default (`--all` to show). Mirrors
-  `slice list`'s derived-rollup style where it applies.
+  title substring; resolved/closed/promoted items hidden by default (`--all` to
+  show; PRD-009 OQ-003 / PRD-011 `REQ-075`). Mirrors `slice list`'s derived-rollup
+  style where it applies.
 - **`backlog show <ID>`** — auto-detect kind from the id prefix; render
   identity + kind-specific facets + timestamps + outbound relations. (Inbound
-  reverse-refs deferred to the registry surface, as SL-015 deferred them.)
+  reverse-refs are the registry surface's to compute — outbound-only storage,
+  ADR-004; deferred as SL-015 deferred them, and consumed by PRD-011.)
 - **`backlog edit <ID> --status <s> [--resolution <r>]`** — atomic, edit-preserving
-  (`toml_edit`) transition of `status` and/or `resolution` (PRD-009 FR-009). Both ride
+  (`toml_edit`) transition of `status` and/or `resolution` (PRD-009 REQ-059). Both ride
   the same edit-preserving seam; `resolution` is the orthogonal close-reason, never a
-  status state nor a facet field. (Editor-open edit optional; the two flags are the v1
-  floor.)
+  status state nor a facet field. The `resolution` domain includes `promoted`
+  (PRD-009 OQ-003), though the promotion *bridge* is deferred (Non-Goals). (Editor-open
+  edit optional; the two flags are the v1 floor.)
 
 - **Workflow integration — consult & capture at the right loop points.** Revise the
   routing table (`.doctrine/state/boot.md`) and the affected skills so the backlog is
@@ -160,9 +204,11 @@ drift). Reconcile every divergence row above.
     when an obstacle, tradeoff, or follow-up surfaces, instead of losing it.
   - `/audit`, `/close` — **harvest** durable findings into backlog items (risks,
     issues, chores) alongside the existing `audit.md` / memory harvest.
-  - **Boundary guidance** so skills route correctly: backlog = latent *work*; memory =
-    durable *knowledge*; ADR = *decisions*. The arbiter is the work-intake membership
-    test (`mem.concept.backlog.work-intake-membership`).
+  - **Boundary guidance** so skills route correctly: backlog = latent *work*;
+    `knowledge_record` (PRD-010) = epistemic/governance records (assumption,
+    decision, question, constraint); ADR = high-impact architectural *decisions*;
+    memory = durable *knowledge*. The arbiter is the work-intake membership test
+    (`mem.concept.backlog.work-intake-membership`).
   Rides the v1 `new`/`list`/`show` surface; sequence as a phase **after** the CLI
   verbs land (behaviour-preservation on the shared skill/boot surface). The deeper
   `slice new --from-backlog` bridge stays a follow-up (Non-Goals).
@@ -177,17 +223,25 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
 
 ## Non-Goals
 
-- **Priority registry + interactive prioritise** (`backlog.yaml` ordering,
-  `--prioritize` editor flow, head-tail partition merge) — the prioritisation
-  layer; designed-noted, built in a follow-up. v1 has no global ordering.
+- **Priority** — both layers. The **authored** seam (rank/band/pin, PRD-009
+  FR-006 / `REQ-054`; exact field open as PRD-011 OQ-001) and the **derived**
+  graph-priority layer ([PRD-011](../../spec/product/011/spec-011.md):
+  actionability, blockers, consequence, explanations over the relation graph). v1
+  has no ordering; the design reserves the authored seam and the outbound edges
+  PRD-011 reads.
 - **`sync`** — registry↔filesystem reconciliation (append/prune/dry-run). Needs
   the registry; later, with the relation-index cache.
-- **Delta/slice integration** (`slice new --from-backlog <ID>`) — the capture→
-  scope *bridge command*; the prime follow-up, but a separate change. Distinct from
-  the consult/capture **skill wiring**, which IS in scope above — the wiring tells
-  agents *when* to reach for the backlog; the bridge is the later automation.
-- **Relation-index *cache* + reverse-reference scan** — only relation *storage*
-  lands; inbound-ref queries deferred (as SL-015 deferred them).
+- **Promotion bridge** (`slice new --from-backlog <ID>`) — the capture→scope
+  *bridge command*; the prime follow-up, but a separate change. Its product
+  semantics are **resolved** (PRD-009 OQ-003): promotion *consumes* the item
+  (terminal status + `resolution = promoted`), there is no backlog un-promote verb,
+  and a mistaken promotion is undone slice-side (ADR-004 §1). The design-whole
+  honours this; only the command is deferred. Distinct from the consult/capture
+  **skill wiring**, which IS in scope above — the wiring tells agents *when* to
+  reach for the backlog; the bridge is the later automation.
+- **Relation-index *cache* + reverse-reference scan** — only outbound relation
+  *storage* lands (ADR-004); inbound-ref queries and the derived priority graph
+  that consumes them are deferred (PRD-011; as SL-015 deferred them).
 - **TUI artifact browser** integration — no TUI in Doctrine yet.
 - **Auto-generated `backlog.md` summary index** — a derived view; deferred.
 - **Backlog lifecycle gating / approval** — `status` hand-edited or flag-set,
@@ -226,8 +280,8 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
 "Done" (v1 subset) is judged by:
 - `backlog new <kind>` scaffolds each locked `item_kind`'s fileset via the
   engine, with kind-correct template facets and a reserved `XXX-NNN` id.
-- `backlog list` filters by kind/status/tag, hides resolved/closed by default,
-  shows them under `--all`.
+- `backlog list` filters by kind/status/tag, hides resolved/closed/promoted by
+  default, shows them under `--all`.
 - `backlog show <ID>` auto-detects kind from the prefix and renders identity +
   kind facets + outbound relations.
 - `backlog edit <ID> --status` / `--resolution` transition status and the orthogonal
@@ -249,16 +303,17 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
 
 ## Follow-Ups
 
-- **Priority registry + interactive prioritise** — the ordering layer; head-tail
-  partition merge. The prime backlog follow-up.
+- **Priority** — the authored seam (PRD-009 FR-006 / `REQ-054`) and the derived
+  graph-priority layer ([PRD-011](../../spec/product/011/spec-011.md)). The prime
+  backlog follow-up.
 - **`slice new --from-backlog <ID>`** — the capture→scope bridge into the
-  spec-driver loop.
+  spec-driver loop (promotion semantics resolved, PRD-009 OQ-003).
 - **`sync`** — registry↔filesystem reconciliation; pairs with the relation-index
   cache (the scale-gated half SL-015 also deferred).
 - **Reverse-reference scan** — inbound refs in `show`, once the registry surface
-  lands.
+  lands (ADR-004; the surface PRD-011 builds on).
 - **Auto-generated `backlog.md` summary index** (derived view).
 - **Spec-Driver backlog corpus importer** — status re-mapping included.
 - **The `problem` kind** — if it earns a reserved id (Q1).
 - **Backlog lifecycle transitions / approval** — pairs with the absent
-  slice-lifecycle transition gap (CLAUDE.md known gaps).
+  slice-lifecycle transition gap (CLAUDE.md known gaps; ADR-003 §8/§11).
