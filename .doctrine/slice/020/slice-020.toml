@@ -1,0 +1,15 @@
+id = 20
+slug = "backlog-entity-v1"
+title = "Backlog entity v1: work-intake items (one kind + item_kind facet)"
+status = "proposed"
+created = "2026-06-07"
+updated = "2026-06-07"
+
+[relationships]
+# Backlog is the next entity to land behind its registry gate via the
+# supersede pattern (entity-model.md:147), after spec (SL-015).
+# Lineage (not edges): rides the same engine seam ADR (SL-006) + spec (SL-015) proved.
+# Canon that governs this slice (prose links in slice-020.md § Context Bundles):
+#   doc/entity-model.md  — one backlog_item + item_kind facet (:74); status (:109)
+#   doc/glossary.md      — reserved ids ISS/IMP/CHR/RSK/IDE
+# Forward edges (slices/specs/drift <-> backlog items) materialise once items exist.
