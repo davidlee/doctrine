@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 68
+slug = "preserve-existing-entity-suites-when-extending-the-shared-scaffold"
+title = "Preserve existing entity suites when extending the shared scaffold"
+status = "pending"
+kind = "quality"
+
+description = "Introducing this family reuses the shared entity/scaffold substrate and must not regress the existing entity callers (slice, ADR, spec, backlog, memory)."
+tags = []
+acceptance_criteria = [
+  "The family rides the shared entity scaffold rather than forking it.",
+  "The existing slice / ADR / spec / backlog / memory suites stay green unchanged.",
+]

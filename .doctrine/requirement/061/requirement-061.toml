@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 61
+slug = "inspect-a-records-identity-facets-evidence-and-relations"
+title = "Inspect a record's identity, facets, evidence, and relations"
+status = "pending"
+kind = "functional"
+
+description = "A contributor names a record id; the system detects its kind from the prefix and renders identity, kind, lifecycle state, summary, typed facets, evidence, and relations."
+tags = []
+acceptance_criteria = [
+  "Inspection resolves the record_kind from the id prefix.",
+  "Inspection renders the common fields, the kind-specific facets, the evidence block, and the relation seam.",
+  "A record with no relations or evidence still renders the empty seams rather than omitting them.",
+]

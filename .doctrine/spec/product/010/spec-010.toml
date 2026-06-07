@@ -1,0 +1,18 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 10
+slug = "epistemic-governance-records"
+title = "Epistemic and Governance Records"
+status = "draft"
+kind = "product"
+category = "knowledge-governance"
+tags = ["epistemic", "governance", "assumption", "decision", "question", "constraint", "knowledge-record"]
+responsibilities = [
+  "Give assumptions, decisions, questions, and constraints a durable, typed, citable home below ADR weight and above disposable notes.",
+  "Model the family as one knowledge_record entity discriminated by a record_kind facet, never a fork of parallel per-kind schemas.",
+  "Carry each kind through its own lifecycle vocabulary — truth lifecycles, not the work-intake lifecycle the backlog owns.",
+  "Hold kind-specific facets and a minimal evidence support structure as typed, enumerated storage, never an untyped bag.",
+  "Expose outbound relations from a record to backlog items, risks, slices, specs, ADRs, requirements, and drift records.",
+  "Let a record spawn backlog work or relate to artefacts without itself becoming work — truth is not work.",
+]

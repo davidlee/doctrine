@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 65
+slug = "spawn-a-backlog-item-from-a-record-without-converting-it-into-work"
+title = "Spawn a backlog item from a record without converting it into work"
+status = "pending"
+kind = "functional"
+
+description = "A contributor creates a backlog item from a record; the new item records its origin and the source record records the spawned item, while the record retains its own epistemic/governance lifecycle."
+tags = []
+acceptance_criteria = [
+  "A record can spawn a backlog item, recording a durable bidirectional origin relation.",
+  "Spawning work does not change the source record's kind or move it onto the work-intake lifecycle.",
+  "The spawned backlog item is authoritative for the work; the record remains authoritative for its own state.",
+]

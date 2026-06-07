@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 69
+slug = "address-every-record-by-a-durable-kind-stable-identity"
+title = "Address every record by a durable, kind-stable identity"
+status = "pending"
+kind = "quality"
+
+description = "Every record is addressable by a durable id whose kind prefix and number are permanent; a reader or agent resolves a record only by id, never by slug, and can trust its kind is stable."
+tags = []
+acceptance_criteria = [
+  "A record is addressable by its id, and its kind is resolved from the id prefix.",
+  "A record's kind prefix and number are permanent; the slug is never authoritative.",
+  "A record's record_kind is fixed at capture and never silently changes.",
+]
