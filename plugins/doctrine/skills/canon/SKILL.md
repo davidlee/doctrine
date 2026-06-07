@@ -21,6 +21,14 @@ meaning for it — not all of them, every time:
 For subsystem-level truth (gotchas, patterns, invariants tied to files or
 commands), `/retrieve-memory` rather than rediscovering it.
 
+**Read entities tier-aware.** Doctrine splits entity storage — structured/queried
+data in `*.toml`, prose in `*.md` (the storage rule). To read an entity's
+*substance*, use its CLI `show` (`doctrine spec show PRD-009`, `slice show`,
+`adr show`, `memory show`) — `show` synthesizes both tiers. Never judge an entity
+from a single raw file: a `.md` body is often prose-only, with the statement,
+acceptance criteria, status, and relations all in the sibling `.toml`. Reading one
+tier and concluding "empty" is false witness.
+
 The governance prefix you are reading (`@.doctrine/state/boot.md`) was inlined
 at session start. If you just edited governance (`governance.md`, an ADR, a
 memory) and need *this* context to reflect it, run `doctrine boot` to regenerate

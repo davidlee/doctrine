@@ -25,6 +25,9 @@ review until locked) → `slice plan` → `slice phases` → per phase: `phase-p
 the runtime sheet, flip `in_progress`, implement TDD red/green/**refactor**, end
 green, flip `completed` → `/audit` → `/close`.
 
-**Guardrails:** use the CLI, don't guess ids / command shapes / paths. The plan is
-not higher authority than the design or `/canon`. Phase ids (`PHASE-NN`) and
-criteria ids (`EN-/EX-/VT-`) are immutable — edits append, never renumber.
+**Guardrails:** use the CLI, don't guess ids / command shapes / paths — and **read
+entities via `doctrine <kind> show <ID>`, not raw files**: structured/queried data
+lives in `*.toml`, prose in `*.md`, and `show` synthesizes both tiers (a `.md` body
+may be empty by design — never judge an entity from one tier). The plan is not
+higher authority than the design or `/canon`. Phase ids (`PHASE-NN`) and criteria
+ids (`EN-/EX-/VT-`) are immutable — edits append, never renumber.
