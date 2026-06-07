@@ -24,8 +24,9 @@ assumptions (held→validated), decisions (proposed→accepted→superseded — 
 decision/governance family already owns these; ADR ships), questions, findings,
 tradeoffs, constraint statements. Putting any of these in the backlog would break
 the uniform work-status lifecycle and duplicate an existing family. Their home is
-a risk facet, the decision/governance family, or a future epistemic entity group
-(PRD-009 OQ-005).
+a risk facet, ADR (high-impact decisions), or the `knowledge_record` family
+(PRD-010 — assumption/decision/question/constraint, each with its own lifecycle).
+PRD-009 OQ-005 resolved this: the epistemic home is PRD-010, not the backlog.
 
 **Two further rules from the same model:**
 - Each kind carries a discriminating boundary; when several fit, precedence
