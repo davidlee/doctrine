@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea298bcee7b93bd0ad3d3e139a117"
+memory_key = "mem.concept.workflow.canonical-change-loop"
+schema_version = 1
+memory_type = "concept"
+status = "active"
+title = "Doctrine canonical change loop (ADR-003)"
+summary = "slice=delta; loop slice→design→plan→phases→[review]→audit→reconcile→close; audit identifies, reconcile writes, close gates"
+created = "2026-06-07"
+updated = "2026-06-07"
+
+[scope]
+paths = ["doc/slices-spec.md"]
+globs = [".doctrine/adr/**", ".doctrine/slice/**"]
+commands = []
+tags = ["workflow", "lifecycle", "governance", "adr-003"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "de3f75db8778dbadec2a77193eea95e7d40be038"
+ref_name = "refs/heads/main"
+checkout_state_id = "c8cc2fcd41a479e0191bbfee15e59578e9de0c00a62de160e68d4148d1d991d3"
+base_commit = "1d03c67aeebaab04e51f69fc1575c529d4b57943"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
