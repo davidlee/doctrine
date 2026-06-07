@@ -87,8 +87,15 @@ become them. The membership test below is the arbiter.
   enumerated lifecycle. There is no untyped frontmatter bag — the storage rule holds.
 - **Relations make consequences visible.** A record shows what it affects: the risks,
   backlog items, slices, specs, ADRs, requirements, and drift records downstream of it.
-- **Supersession is normal.** These records are expected to age, be replaced, or be
-  invalidated; supersession is a first-class, traceable transition, not a deletion.
+- **Supersession is normal, and it may cross kinds.** These records are expected to
+  age, be replaced, or be invalidated; supersession is a first-class, traceable
+  transition, not a deletion. It is the answer to "what should I read now — is this
+  still authoritative, and what replaced it?", which a plain relation cannot give.
+  Supersession is *replacement lineage*: the successor takes over the authoritative
+  role for the same underlying claim, question, choice, or rule — and may be a
+  different kind from its predecessor (a believed assumption hardening into a
+  constraint, an open question answered by a decision). Mere influence, evidence,
+  consequence, or origin is a relation, **not** supersession.
 - **Membership test — what belongs here.** A candidate belongs to this family if its
   primary lifecycle is one of: a belief becoming validated or invalidated; a question
   becoming answered or obsolete; a decision becoming accepted, rejected, or superseded;
@@ -144,6 +151,12 @@ Constraints:
   regress the existing entity callers (slice, ADR, spec, backlog, memory).
 - A record's status is hand-settable and ungated, consistent with how slices, ADRs,
   specs, and backlog items ship today.
+- Supersession is a replacement edge distinct from a relation, and is admitted only
+  when the successor becomes the authoritative continuation of the predecessor — never
+  for mere influence, evidence, consequence, or origin. It may cross `record_kind`
+  boundaries only along the allowed matrix (§6); reopening directions (e.g.
+  `constraint → assumption`, `decision → question`) are reconsideration, not
+  replacement, and are not supersession.
 
 Invariants:
 
@@ -153,6 +166,9 @@ Invariants:
 - A record's identity — its kind prefix plus number — is permanent; the slug is never
   authoritative and tooling resolves a record only by its id.
 - A record's `record_kind` is fixed at capture; a record never silently changes kind.
+  Cross-kind supersession is lineage between two records, not mutation: the predecessor
+  keeps its kind and moves to a terminal status valid for that kind, while the successor
+  is a separate record of its own kind.
 - A record is only ever in a state drawn from its own kind's lifecycle vocabulary.
 - Every facet and evidence entry is typed, enumerated storage; untyped record data
   never persists.
@@ -228,6 +244,37 @@ item records its origin and the source record records the spawned item — for e
 `ASM-001 → RSK-004`, `QUE-002 → CHR-011`, `DEC-003 → SL-020`. The record does not move
 onto the work lifecycle and does not change kind.
 
+Primary flow — supersede: a contributor records that a newer record takes over the
+authoritative role of an older one. The supersession is written on both records
+(`supersedes` / `superseded_by`); the predecessor moves to a terminal status valid for
+its own kind while keeping that kind, and the successor stays a separate record of its
+own kind. The successor may be a different kind from the predecessor — the canonical
+case is an assumption hardening into a constraint:
+
+```toml
+# ASM-004              # CON-002
+record_kind = "assumption"   record_kind = "constraint"
+status = "validated"         status = "active"
+[relations]                  [relations]
+superseded_by = ["CON-002"]  supersedes = ["ASM-004"]
+```
+
+Cross-kind supersession is bounded by an allowed matrix — admitted only where the
+successor is the authoritative continuation of the predecessor, never for mere
+influence/evidence/consequence/origin:
+
+| Predecessor  | May be superseded by                     | Reading                                          |
+| ------------ | ---------------------------------------- | ------------------------------------------------ |
+| `assumption` | assumption, decision, constraint         | claim revised, decided away, or hardened to rule |
+| `question`   | question, decision, constraint, assumption | reframed, answered by choice/rule, or made a working claim |
+| `decision`   | decision, constraint                     | choice revised, or hardened into a standing rule |
+| `constraint` | constraint, decision                     | rule revised/retired; decision only when a rule is consciously waived and replaced by a choice |
+
+Reopening directions — `constraint → assumption`, `decision → question`, and the like
+— are reconsideration, not replacement, and are modelled as relations, not
+supersession. (ADR escalation of a decision is likewise a relation, not supersession,
+unless ADRs join the same replacement model — open.)
+
 Kind lifecycles and facets — each kind resolves to its own vocabulary and typed facet
 shape:
 
@@ -287,8 +334,11 @@ record can spawn a backlog item with a durable bidirectional origin relation whi
 record itself neither changes kind nor moves onto the work-intake lifecycle (REQ-065),
 and by confirming an assumption, decision, question, or constraint is rejected as a
 `backlog_item` kind. Supersession is proven by confirming a record can supersede and be
-superseded, recording the link both ways and moving the superseded record to its kind's
-terminal state (REQ-066).
+superseded — recording the link both ways and moving the superseded record to a
+terminal status valid for its own kind without changing that kind — that a cross-kind
+crossing is accepted only along the allowed matrix when the successor is the
+authoritative continuation, and that a reopening direction is rejected as supersession
+(REQ-066).
 
 The single-entity, typed-storage discipline is proven by confirming every kind,
 including its facet variation, is carried by one `knowledge_record` entity discriminated
@@ -312,11 +362,15 @@ and quality requirements is tracked against those entities, not duplicated here.
   a decision, not an omission; revisit only if evidence-traceability demands a kind that
   the question `answer`, assumption evidence, decision rationale, memory, and review
   findings cannot jointly cover.
-- OQ-002 — Is supersession restricted to same-kind records, or may a record of one kind
-  supersede another (e.g. an assumption settling into a constraint)? §6 describes the
-  assumption→constraint case as a *link*, not a supersession; this question fixes
-  whether cross-kind supersession is a first-class transition or always modelled as
-  relate-plus-terminal. Blocks the supersession edge's domain.
+(OQ-002 — cross-kind supersession — is resolved: supersession is a first-class
+replacement edge and may cross `record_kind` boundaries within the family. It is valid
+only when the successor becomes the authoritative continuation of the predecessor — not
+merely when one record is related to, caused by, supported by, or spawned from the
+other. The predecessor moves to a terminal status valid for its own kind and never
+changes kind; the successor is a separate record of its own kind. The allowed crossings
+are bounded by the §6 matrix; reopening directions (`constraint → assumption`,
+`decision → question`) are reconsideration modelled as relations, not supersession. The
+§6 assumption→constraint case is the canonical cross-kind supersession, not a link.)
 - OQ-003 — Are record↔artefact relations reciprocal (a slice/spec/risk shows inbound
   references from the records that shape it), or outbound-only in the durable record
   with reverse lookups deferred to a registry surface? Mirrors PRD-009 OQ-004; blocks
