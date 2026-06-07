@@ -169,10 +169,11 @@ quality requirements is tracked against those entities, not duplicated here.
 
 ## 8. Open Questions
 
-- Should prose and commit messages adopt a prefixed reference shorthand for
-  decisions (mirroring the slice convention) for greppability, or remain bare
-  numeric? This blocks any convention that cites a decision from outside its
-  directory.
+(Resolved — reference form, the same rule PRD-001 cites. Decisions are cited by their
+prefixed canonical id (`ADR-004`, and `DEC-NNN` for the lower-weight knowledge-record
+decision of PRD-010) in prose, commits, and comments; the id is identity, the slug never
+authoritative. The canonical statement lives in the conventions block of
+`CLAUDE.md`/`AGENTS.md`; this OQ resolves by reference.)
 (Resolved by ADR-004 §5 — the supersession reverse link. The reverse `superseded_by`
 is **stored** on the predecessor, not derived: supersession moves the predecessor to a
 terminal `superseded` status and rewrites its file regardless, so co-writing the reverse

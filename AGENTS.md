@@ -67,6 +67,11 @@ These are the project-specific additions.)
 
 - **frequent conventional commits**; scope with the slice id, e.g.
   `fix(SL-004): …`, `doc(SL-005): …`, `plan(SL-005): …`. Commit on `main`.
+- **reference form** — cite entities by their prefixed canonical id everywhere
+  (prose, commits, comments): `SL-020`, `ADR-004`, `PRD-010`, `REQ-060`,
+  `RSK-004`, `ASM-001`. The id is identity; the slug is never authoritative. Cite
+  the **durable** id, never a mobile membership label (`FR-`/`NF-` move per spec —
+  use the `REQ-NNN` they label).
 - **ask, don't infer.** correctness comes first and last.
 - **pure/imperative split** (slices-spec § Architecture): no clock, rng, git, or disk
   in the pure layer — pass them in as inputs (the date/uid pattern). Impurity lives in
