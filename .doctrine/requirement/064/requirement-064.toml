@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 64
+slug = "relate-a-record-to-work-and-governance-artefacts"
+title = "Relate a record to work and governance artefacts"
+status = "pending"
+kind = "functional"
+
+description = "A contributor links a record to backlog items, risks, slices, specs, ADRs, requirements, or drift records; the record stays authoritative for its own state and the linked artefact stays authoritative for its own lifecycle."
+tags = []
+acceptance_criteria = [
+  "A record can record outbound relations to backlog items, risks, slices, specs, ADRs, requirements, and drift records.",
+  "Linking a record to an artefact changes neither artefact's lifecycle state.",
+  "The relation seam is present even when a record has no relations.",
+]

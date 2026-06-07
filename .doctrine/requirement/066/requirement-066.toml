@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 66
+slug = "supersede-a-record-with-another-record"
+title = "Supersede a record with another record"
+status = "pending"
+kind = "functional"
+
+description = "A record can be superseded by another record of the same kind, recording the supersession both ways so the lineage of an aged or replaced claim, choice, question, or rule stays traceable."
+tags = []
+acceptance_criteria = [
+  "A record can record that it supersedes, and is superseded by, another record.",
+  "Supersession records the link on both records and moves the superseded record to its kind's terminal state.",
+]

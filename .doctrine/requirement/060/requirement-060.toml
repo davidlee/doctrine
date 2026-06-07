@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 60
+slug = "capture-an-epistemic-or-governance-record-of-a-given-kind"
+title = "Capture an epistemic or governance record of a given kind"
+status = "pending"
+kind = "functional"
+
+description = "A contributor records an assumption, decision, question, or constraint by kind and title; the system reserves a kind-correct id, seeds the kind's default lifecycle state and typed facets, and writes an empty relation seam."
+tags = []
+acceptance_criteria = [
+  "Each in-scope record_kind can be captured with a reserved, kind-correct id (ASM/DEC/QUE/CON-NNN).",
+  "Capture seeds the kind's default lifecycle state — assumption held, decision proposed, question open, constraint active.",
+  "Capture seeds the kind's typed facet block and an empty relation seam.",
+]
