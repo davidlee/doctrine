@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea47314bd72c2b1f720017449a909"
+memory_key = "mem.system.governance.ship-usage-guidance-to-clients"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "Usage guidance must ship to clients, not hide in the build-repo CLAUDE.md"
+summary = "Client-facing usage guidance must ship via install assets/boot/skills, never live only in the build-repo CLAUDE.md"
+created = "2026-06-07"
+updated = "2026-06-07"
+
+[scope]
+paths = ["CLAUDE.md", "install/routing-process.md"]
+globs = []
+commands = ["boot"]
+tags = ["governance", "boot", "skills", "distribution"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b3039f2f81613ec3fd515c5b9e38392e43fc69f8"
+ref_name = "refs/heads/main"
+checkout_state_id = "d0f6301f42d529548be82027825ef65a72ffb1e76e29664b219e6d38903f7578"
+base_commit = "8206b6730149033f29de941da34c65c11aa40208"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
