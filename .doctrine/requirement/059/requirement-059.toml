@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 59
+slug = "record-an-items-resolution-distinct-from-its-status"
+title = "Record an item's resolution distinct from its status"
+status = "pending"
+kind = "functional"
+
+description = "A backlog item records why it left the active flow as a `resolution` field orthogonal to `status` — status says whether it is active, resolution says why it stopped."
+tags = []
+acceptance_criteria = [
+  "A closed or resolved item carries a `resolution` (e.g. fixed, done, mitigated, accepted, duplicate, wont_do, obsolete, promoted).",
+  "No close-reason is encoded as a `status` state; `status` stays the canon five.",
+  "An active item has no resolution; promotion records `resolution = promoted`.",
+]

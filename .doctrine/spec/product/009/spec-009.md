@@ -35,6 +35,13 @@ In scope:
 
 Out of scope:
 
+- Non-work / epistemic records — assumptions, decisions, questions, findings,
+  tradeoffs, constraint statements. They fail the work-intake membership test
+  (§3) and belong to the decision/governance family (where ADR already lives) or a
+  future epistemic group (OQ-005), never to the backlog.
+- The `problem` kind — excluded until it earns a reserved id and a decomposition
+  boundary distinguishing it from `issue` (a broad problem decomposes into issues /
+  improvements / ideas; an issue is one concrete broken thing).
 - The technical design and storage mechanism of items — engine, fileset descriptors,
   reservation primitive (those belong to `/spec-tech` and per-slice `/design`).
 - Runtime execution progress of any work an item spawns — that lives on the slice and
@@ -56,15 +63,22 @@ from.
 - **One entity, one schema.** Every kind of work item is the *same* `backlog_item`
   entity discriminated by an `item_kind` facet — never parallel per-kind schemas or
   directories. Kind variation is facet fields on one entity, not a fork.
-- **Backlog holds latent work, not epistemic state.** A kind belongs only if it
-  passes the membership test: it can be triaged and promoted into a slice, and its
-  standing fits the work-status lifecycle. Beliefs (assumptions) and choices
-  (decisions) fail this test — an assumption's standing is held→validated, a
-  decision's is proposed→accepted→superseded; neither is work to be done. They live
-  in their own families (a risk facet, the separate decision/governance family, or a
-  future epistemic group), never as an `item_kind`.
+- **Backlog holds latent work, not epistemic state.** This is normative, not
+  advisory: a backlog item *is* a latent unit of work intent that can be triaged,
+  prioritised, and promoted into a slice. **If a candidate does not fit the
+  work-intake lifecycle, it is not a backlog item.** This excludes assumptions,
+  decisions, questions, findings, tradeoffs, and constraint statements — their
+  standings are epistemic or governance lifecycles (an assumption is held→validated, a
+  decision proposed→accepted→superseded), not work to be done. They live in their own
+  families (a risk facet, the separate decision/governance family, or a future
+  epistemic group — OQ-005), never as an `item_kind`.
+- **Risk belongs because it is unresolved work-risk.** A risk is admitted not as a
+  general epistemic record but because it is uncertain future harm that may require
+  mitigation, acceptance, expiry, or promotion into scoped work — work-intake
+  adjacent. Strip that and it would not qualify.
 - **Each kind has a discriminating boundary.** Adjacent kinds are separated by an
-  explicit test, not left to judgement, so an item resolves to exactly one kind.
+  explicit test, not left to judgement, so an item resolves to exactly one kind; where
+  more than one fits, a fixed precedence decides.
 - **Capture is cheap; losing intent is not.** The bar to record an item is low, so
   intent lands the moment it surfaces rather than being deferred into oblivion.
 - **Canon fixes the vocabulary.** The kind set and id schemes (glossary) and the
@@ -90,13 +104,20 @@ Constraints:
 - Every `item_kind` is carried by the single `backlog_item` entity discriminated by an
   `item_kind` facet; no implementation may introduce parallel per-kind schemas or
   directories.
-- The kind set and its id schemes are canon-fixed by the glossary — issue (`ISS`),
+- The kind set is exactly the five glossary-reserved kinds — issue (`ISS`),
   improvement (`IMP`), chore (`CHR`), risk (`RSK`), idea (`IDE`), three-character
-  prefixes — and may not be extended without a reserved id.
+  prefixes — and may not be extended without a reserved id. `problem` is excluded
+  until it earns one.
 - Every `item_kind` must pass the work-intake membership test (promotable to a slice,
   standing fits the work-status lifecycle) and carry a discriminating boundary test
   that resolves an item to exactly one kind; a candidate that fails either is not an
   `item_kind`.
+- When an item satisfies more than one kind's boundary, a fixed precedence resolves it
+  deterministically: `risk > issue > improvement > chore > idea`.
+- Why an item left the active flow is recorded as a `resolution` field orthogonal to
+  `status`: `status` answers whether the item is active, `resolution` answers why it
+  stopped (e.g. fixed, done, mitigated, accepted, duplicate, wont_do, obsolete,
+  promoted). No close-reason is ever encoded as a `status` state.
 - The status lifecycle is the closed canon set `open | triaged | started | resolved |
   closed`; no kind may add or rename a status state. `risk` is the lifecycle outlier
   — a risk is mitigated/accepted/expired rather than "resolved"; that standing is
@@ -110,6 +131,9 @@ Constraints:
 
 Invariants:
 
+- Every backlog item is a latent unit of work intent — promotable into a slice and on
+  the work-status lifecycle; nothing that fails the membership test is ever a backlog
+  item.
 - An item's identity — its kind prefix plus number — is permanent; the slug is never
   authoritative and tooling resolves an item only by its id.
 - An item's `item_kind` is fixed at capture; an item never silently changes kind.
@@ -162,7 +186,16 @@ id prefix and renders the item's identity, its kind-specific facets, its timesta
 and its outbound relations.
 
 Primary flow — transition: an operator moves an item to another state in the canon
-lifecycle; the change is atomic and preserves the rest of the item verbatim.
+lifecycle; the change is atomic and preserves the rest of the item verbatim. When an
+item leaves the active flow (resolved or closed), a `resolution` records *why* —
+distinct from the `status` that records *whether* it is active.
+
+Kind boundaries — an item resolves to exactly one kind: an **issue** is expected
+behaviour gone wrong; an **improvement** works but should be better; a **chore** is
+maintenance or housekeeping work; a **risk** is uncertain future harm that may need
+mitigation, acceptance, expiry, or promotion into scoped work; an **idea** is a
+speculative possibility not yet shaped as work. When more than one boundary fits,
+precedence decides: `risk > issue > improvement > chore > idea`.
 
 Primary flow — prioritise: an operator establishes a relative ordering across backlog
 items so the set carries a defensible "what next"; the ordering is recorded against
@@ -170,11 +203,13 @@ durable item identities.
 
 Primary flow — promote: an operator promotes a captured item into a scoped slice; the
 new slice records the originating item, and the item reflects that it has been carried
-into scope.
+into scope, its `resolution` recording `promoted`.
 
 Risk flow: a risk item carries likelihood, impact, controls, and origin as facet
 fields, and its acceptance standing (`accepted` / `expired` / none) as a facet field —
-distinct from its lifecycle status.
+distinct from its lifecycle status. A risk leaves the active flow by mitigation,
+acceptance, or expiry rather than being "resolved" like a defect; that close-reason is
+the pressure point reconciled in OQ-006.
 
 Edge cases and guards: an empty backlog yields the first id in each kind's namespace; a
 resolved or closed item stays addressable and re-openable; promoting an already-promoted
@@ -196,7 +231,10 @@ explicit reveal, and ordered by recorded priority. Inspection is proven by confi
 kind is resolved from the id prefix and the item's identity, facets, timestamps, and
 outbound relations render. The lifecycle is proven by confirming a status transition is
 atomic and edit-preserving — it round-trips without dropping comments or unknown keys —
-and that only canon states are reachable. The single-entity discipline is proven by
+that only canon states are reachable, and that a closed item carries a `resolution`
+distinct from its `status`. The kind boundaries are proven by confirming an item
+satisfying more than one boundary resolves deterministically under the precedence
+`risk > issue > improvement > chore > idea`. The single-entity discipline is proven by
 confirming every kind, including risk with its extra facets, is carried by one entity
 discriminated by `item_kind`, with no parallel schema. The bridge is proven by
 confirming a promoted item yields a slice that records its origin. The behaviour-
@@ -209,25 +247,26 @@ requirements is tracked against those entities, not duplicated here.
 
 ## 8. Open Questions
 
-- OQ-001 — The final `item_kind` set. The glossary reserves five
-  (issue/improvement/chore/risk/idea); `entity-model.md:74` also names `problem` but
-  reserves no id. Resolve: (a) does `problem` enter the set — recommended yes, with the
-  decompose boundary (a problem decomposes into issues/improvements; an issue is one
-  identified defect with a fix), else folded into `issue`? (b) confirm `assumption` and
-  `decision` stay **out**: an assumption is epistemic (held→validated, not work-status;
-  an unvalidated assumption is a `risk` with `origin = assumption`), and a `decision`
-  belongs to the separate decision/governance family (`entity-model` taxonomy) where
-  ADR already lives — admitting either breaks the uniform work-status lifecycle and
-  duplicates an existing family. Blocks the enum and any capture surface that
-  enumerates kinds.
+(OQ-001 — the `item_kind` set — is resolved: exactly the five glossary-reserved kinds;
+`problem` excluded pending a reserved id and a decomposition boundary; `assumption` /
+`decision` and other epistemic records excluded by the membership test. Recorded in §2,
+§3, and §4 rather than left open.)
+
 - OQ-005 — A future home for non-work / epistemic items. ADRs capture high-impact,
-  architecturally-significant decisions; lower-stakes decisions and assumptions have no
-  home today and might warrant a risk-analogous treatment (typed facets, their own
-  lifecycle). They are deliberately excluded from the backlog by the work-intake
-  membership test (above). Does a distinct epistemic entity group — decisions and
-  assumptions, on a held→validated / proposed→accepted→superseded lifecycle — earn its
-  own entity later? Out of scope for the backlog; recorded so the exclusion is a
-  decision, not an omission.
+  architecturally-significant decisions; lower-stakes decisions, assumptions, and open
+  questions have no home today and might warrant a risk-analogous treatment (typed
+  facets, their own lifecycle). They are deliberately excluded from the backlog by the
+  work-intake membership test. Does a distinct epistemic/governance entity group earn
+  its own entity later — `assumption` (held → testing → validated / invalidated /
+  obsolete), `decision` (proposed → accepted → superseded / rejected), `question`
+  (open → answered → obsolete)? Out of scope for the backlog; recorded so the exclusion
+  is a decision, not an omission.
+- OQ-006 — `resolution` vs the risk `acceptance` facet. Both can carry "accepted" /
+  "expired" for a risk, which risks two homes for one fact (one-fact-one-artefact).
+  Reconcile: is `resolution` the single generic close-reason and the risk facet holds
+  only likelihood/impact/controls/origin, or does the risk facet own accepted/expired
+  (with dates/rationale) and `resolution` derive from it for risks? Blocks the
+  `resolution` domain for the risk kind.
 - OQ-002 — What is the product shape of priority: a single global total order, a
   per-kind ordering, or a head-tail partition (an explicitly-ranked head over an
   unranked tail)? Blocks the prioritise behaviour and how survey renders order.
