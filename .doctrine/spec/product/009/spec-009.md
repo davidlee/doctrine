@@ -25,8 +25,8 @@ In scope:
 - Capturing a unit of work intent as a durable first-class item across the kinds the
   glossary reserves — issue, improvement, chore, risk, idea — as **one** entity
   discriminated by an `item_kind` facet.
-- Holding kind-specific facets, notably the risk facet (likelihood, impact, controls,
-  origin, acceptance), as typed storage.
+- Holding kind-specific descriptive facets, notably the risk facet (likelihood,
+  impact, origin, controls), as typed storage.
 - Carrying an item through its work-intake status lifecycle.
 - Surveying and filtering the backlog as a set.
 - Ordering the backlog by priority.
@@ -84,8 +84,9 @@ from.
 - **Canon fixes the vocabulary.** The kind set and id schemes (glossary) and the
   status lifecycle (`entity-model`) are closed, deliberately-recorded sets — not
   per-item invention, and not silently re-mapped from any source corpus.
-- **Approval is not lifecycle.** Accepting or expiring a risk is a facet field, not a
-  status state; the status vocabulary is uniform across all kinds.
+- **Approval is not lifecycle.** Accepting or expiring a risk is a `resolution` (the
+  reason it left active attention), not a `status` state and not a kind facet; the
+  status vocabulary is uniform across all kinds.
 - **Typed storage, never a bag.** Every facet is enumerated, typed storage; there is
   no untyped frontmatter catch-all holding product data.
 - **The structure anticipates the bridge without prebuilding it.** Prioritisation,
@@ -120,10 +121,12 @@ Constraints:
   promoted). No close-reason is ever encoded as a `status` state.
 - The status lifecycle is the closed canon set `open | triaged | started | resolved |
   closed`; no kind may add or rename a status state. `risk` is the lifecycle outlier
-  — a risk is mitigated/accepted/expired rather than "resolved"; that standing is
-  absorbed by the risk acceptance facet, not by extending the status vocabulary.
-- Risk acceptance is a facet field (`accepted` / `expired` / none), never a lifecycle
-  state.
+  — a risk is mitigated/accepted/expired rather than "resolved"; that exit reason is
+  recorded via `resolution`, never by extending the status vocabulary.
+- A kind facet holds only descriptive facts about an item's *shape*; no close-reason
+  (accepted, expired, mitigated, …) is ever stored in a kind facet — close-reasons are
+  `resolution` values. The risk facet therefore carries likelihood, impact, origin,
+  and controls only; its acceptance/expiry is the item-level `resolution`.
 - The capability must reuse the shared entity/scaffold substrate; extending it must not
   regress the existing entity callers (slice, ADR, spec, memory).
 - An item's status is hand-settable and ungated, consistent with how slices, ADRs, and
@@ -134,6 +137,9 @@ Invariants:
 - Every backlog item is a latent unit of work intent — promotable into a slice and on
   the work-status lifecycle; nothing that fails the membership test is ever a backlog
   item.
+- `status` records lifecycle position, `resolution` records why an item left active
+  attention, and kind facets record kind-specific descriptive facts only. The three
+  never overlap — no close-reason is ever stored in a kind facet.
 - An item's identity — its kind prefix plus number — is permanent; the slug is never
   authoritative and tooling resolves an item only by its id.
 - An item's `item_kind` is fixed at capture; an item never silently changes kind.
@@ -154,8 +160,9 @@ Invariants:
   rather than from memory.
 - The capture→scope hand-off is explicit: an item can be promoted into a slice, and the
   resulting slice records where it came from.
-- Risk is first-class: a risk item carries its likelihood, impact, controls, origin,
-  and acceptance standing without contorting the shared model.
+- Risk is first-class: a risk item carries its likelihood, impact, origin, and controls
+  as descriptive facets, and its accepted/expired exit as a `resolution`, without
+  contorting the shared model.
 - A reader (human or agent) can trust that every field is typed and that an item's kind
   and identity are stable — no untyped bags, no kind drift, no id churn.
 
@@ -205,11 +212,11 @@ Primary flow — promote: an operator promotes a captured item into a scoped sli
 new slice records the originating item, and the item reflects that it has been carried
 into scope, its `resolution` recording `promoted`.
 
-Risk flow: a risk item carries likelihood, impact, controls, and origin as facet
-fields, and its acceptance standing (`accepted` / `expired` / none) as a facet field —
-distinct from its lifecycle status. A risk leaves the active flow by mitigation,
-acceptance, or expiry rather than being "resolved" like a defect; that close-reason is
-the pressure point reconciled in OQ-006.
+Risk flow: a risk item carries likelihood, impact, origin, and controls as descriptive
+facet fields — the risk's shape, not its closure. A risk leaves the active flow by
+mitigation, acceptance, or expiry rather than being "resolved" like a defect; that exit
+reason is the item-level `resolution` (e.g. `mitigated` / `accepted` / `expired`), not a
+field on the risk facet.
 
 Edge cases and guards: an empty backlog yields the first id in each kind's namespace; a
 resolved or closed item stays addressable and re-openable; promoting an already-promoted
@@ -261,12 +268,11 @@ requirements is tracked against those entities, not duplicated here.
   obsolete), `decision` (proposed → accepted → superseded / rejected), `question`
   (open → answered → obsolete)? Out of scope for the backlog; recorded so the exclusion
   is a decision, not an omission.
-- OQ-006 — `resolution` vs the risk `acceptance` facet. Both can carry "accepted" /
-  "expired" for a risk, which risks two homes for one fact (one-fact-one-artefact).
-  Reconcile: is `resolution` the single generic close-reason and the risk facet holds
-  only likelihood/impact/controls/origin, or does the risk facet own accepted/expired
-  (with dates/rationale) and `resolution` derive from it for risks? Blocks the
-  `resolution` domain for the risk kind.
+(OQ-006 — `resolution` vs the risk `acceptance` facet — is resolved: `resolution` is
+the single generic close-reason for every kind; the risk facet holds only descriptive
+shape (likelihood/impact/origin/controls) and owns no accepted/expired field. The
+invariant "no close-reason is ever stored in a kind facet" (§4) records this; the risk
+kind stays first-class without a lifecycle-special field.)
 - OQ-002 — What is the product shape of priority: a single global total order, a
   per-kind ordering, or a head-tail partition (an explicitly-ranked head over an
   unranked tail)? Blocks the prioritise behaviour and how survey renders order.
