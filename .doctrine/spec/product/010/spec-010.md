@@ -239,16 +239,22 @@ Primary flow — relate: a contributor links a record to backlog items, risks, s
 specs, ADRs, requirements, or drift records. The record stays authoritative for its own
 state; the linked artefact stays authoritative for its own lifecycle.
 
-Primary flow — spawn work: a contributor creates a backlog item from a record; the new
-item records its origin and the source record records the spawned item — for example
-`ASM-001 → RSK-004`, `QUE-002 → CHR-011`, `DEC-003 → SL-020`. The record does not move
+Primary flow — spawn work: a contributor creates a backlog item from a record; the
+source record records the spawned item as an outbound relation — for example
+`ASM-001 → RSK-004`, `QUE-002 → CHR-011`, `DEC-003 → SL-020`. Per ADR-004 the edge is
+authored once, on the record (the side that shows what it affects); the item's inbound
+origin is derived by the registry scan, not stored on the item. The record does not move
 onto the work lifecycle and does not change kind.
 
 Primary flow — supersede: a contributor records that a newer record takes over the
 authoritative role of an older one. The supersession is written on both records
-(`supersedes` / `superseded_by`); the predecessor moves to a terminal status valid for
-its own kind while keeping that kind, and the successor stays a separate record of its
-own kind. The successor may be a different kind from the predecessor — the canonical
+(`supersedes` on the successor, `superseded_by` on the predecessor); the predecessor
+moves to a terminal status valid for its own kind while keeping that kind, and the
+successor stays a separate record of its own kind. Co-writing the reverse `superseded_by`
+is the ADR-004 §5 carve-out — sanctioned because supersession already moves the
+predecessor to a terminal status and rewrites its file, so the reverse edge adds zero
+marginal coupling. It is not a general licence for bidirectional relations; every
+non-lifecycle relation stays outbound-only with its reverse derived. The successor may be a different kind from the predecessor — the canonical
 case is an assumption hardening into a constraint:
 
 ```toml
@@ -330,8 +336,9 @@ terminal records hidden by default yet addressable under an explicit reveal (REQ
 The relation seam is proven by confirming a record links to backlog items, risks,
 slices, specs, ADRs, requirements, and drift records without changing any linked
 artefact's lifecycle (REQ-064). The truth/work boundary is proven by confirming a
-record can spawn a backlog item with a durable bidirectional origin relation while the
-record itself neither changes kind nor moves onto the work-intake lifecycle (REQ-065),
+record can spawn a backlog item — the spawn edge authored once on the record, the item's
+inbound origin derived per ADR-004 — while the record itself neither changes kind nor
+moves onto the work-intake lifecycle (REQ-065),
 and by confirming an assumption, decision, question, or constraint is rejected as a
 `backlog_item` kind. Supersession is proven by confirming a record can supersede and be
 superseded — recording the link both ways and moving the superseded record to a
