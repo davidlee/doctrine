@@ -466,11 +466,11 @@ External inquisition pass (`inquisition.md`, 2026-06-08) — dispositions:
   interaction + §5.5 invariant — bare backlog-side re-open of a `promoted` item is
   the improper half; correction is slice-side (OQ-003/ADR-004 §1); the residual
   dangling edge is the deferred registry reverse-scan's to surface (PRD-011).
-- **C4 — REQ-049..059 bodies are empty stubs.** PRD-009's requirement entities carry
-  placeholder Statement/Rationale, so conformance rests on titles. **Blocking
-  dependency on the lock:** PRD-009 must fill REQ-049..059 bodies before SL-020's
-  §9 traceability is verifiable. Tracked as a follow-up (a `backlog new chore`
-  candidate once the CLI ships); not a SL-020 design defect.
+- **C4 — RECANTED (false charge).** The Inquisitor read the empty `requirement-0NN.md`
+  prose tier and cried "hollow"; the requirement `description` + `acceptance_criteria`
+  live in `requirement-0NN.toml`, fully populated (verified; `spec show PRD-009`
+  synthesizes all eleven). The storage rule working as written — structured → TOML,
+  prose → MD. §9 traceability has real acceptance criteria to conform to. No blocker.
 - **C5/C6 — minor.** *Fixed:* stripped redundant `FR-006 /` (kept durable `REQ-054`)
   at `slice-020.md` ×3; §9 round-trip now asserts seeded keys for all five kinds.
 

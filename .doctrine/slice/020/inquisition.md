@@ -53,17 +53,17 @@ backlog-side re-open of a `promoted` item improper (correction is slice-side per
 or accept the dangling edge explicitly as a derived-surface reconciliation concern with a
 named owner. Do not leave it unspoken.
 
-### C4 — Conformance to hollow requirements. MEDIUM (taint inherited from PRD-009).
-**Doctrine:** the storage rule (testable, stated requirements); PRD-009 as conformance
-basis. **Evidence:** `design.md` §9 maps every test class "→ PRD-009 acceptance gates /
-`REQ-049..053,057,058,059`." Under examination each requirement entity
-(`.doctrine/requirement/0NN/requirement-0NN.md`) confessed an **empty body** — Statement
-and Rationale are placeholder HTML comments. The v1-reach claim rests on requirement
-**titles alone**; there is no testable statement to conform to. **Risk:** "REQ-NNN
-satisfied" is unfalsifiable; `/audit` and `/close` will have nothing to check against.
-**Sentence:** upstream — PRD-009 must fill REQ-049..059 Statement/Rationale before SL-020
-can claim conformance. SL-020 inherits the taint, not the origin; flag it as a blocking
-dependency for the design lock, not a SL-020 rewrite.
+### C4 — ~~Conformance to hollow requirements~~. **RECANTED — false charge.**
+The Inquisitor bore false witness and recants. **Original charge:** REQ-049..059 are
+empty stubs (read from `requirement-0NN.md`, whose body is a placeholder HTML comment),
+so §9 traceability conforms to titles alone. **Recantation:** the requirement statement
+(`description`) and `acceptance_criteria` live in `requirement-0NN.**toml**` — the
+structured/queried tier — **fully populated** (verified: `requirement-059.toml` carries
+the statement + three acceptance criteria; `spec show PRD-009` synthesizes all eleven).
+The empty `.md` body is the *prose* tier, legitimately optional. This is the storage rule
+working as written — **structured data → TOML, prose → MD**. The Inquisitor read the
+wrong tier. SL-020 §9 has real, testable acceptance criteria to conform to. **No charge;
+no blocker.** *Penance falls on the Inquisitor, not the accused.*
 
 ### C5 — Redundant invocation of the mobile label (`FR-006 / REQ-054`). LOW.
 **Doctrine:** CLAUDE.md reference-form — "cite the **durable** id, never a mobile
@@ -108,8 +108,8 @@ Noted only so a reviewer does not "harmonise" them into a wrong wire value.
    (spec parity), or tolerate-missing in the reader? State and test it.
 2. **C3** — is hand re-opening a `promoted` item proper, or must correction route through
    the slice (OQ-003)? If proper, who reconciles the now-dangling slice-side origin edge?
-3. **C4** — will PRD-009's REQ-049..059 bodies be written before this design locks, or does
-   SL-020 lock against requirement titles alone?
+3. ~~**C4**~~ — **withdrawn** (false charge; see C4 recantation). PRD-009's requirement
+   statements + acceptance criteria are populated in the `requirement-0NN.toml` tier.
 
 ## Pronounce Judgement
 **The accused is not a heretic in substance.** The umbrella decision holds, the reuse
@@ -117,12 +117,12 @@ seams are real and verified in the code, the canon is — with one self-contradi
 exception (C1) — quoted faithfully, and the deferred layers attach without reshaping the
 item. The internal adversarial pass (R1–R7) was honest work.
 
-But the design **is not yet clean enough to lock.** Three medium taints — a false
-citation (C1), an unconsecrated read path (C2), and an unreconciled re-open/origin-edge
-interaction (C3) — are concrete deviations, not stylistic quibbles, and C4 reveals the
-conformance basis (PRD-009's requirements) is presently **hollow**. Lock is withheld
-until C1–C3 are remediated in the design text and C4's upstream dependency is acknowledged
-as blocking.
+Three medium taints required penance — a false citation (C1), an unconsecrated read path
+(C2), and an unreconciled re-open/origin-edge interaction (C3) — all concrete deviations,
+all now remediated in the design text. A fourth charge (C4 — "hollow requirements") was
+the **Inquisitor's own error**: the requirement statements live in the TOML tier, fully
+populated, and the charge is recanted. With C1–C3 cleared and C5/C6 dispatched, **no
+blocker to the lock remains.**
 
 ## Sentencing (ordered penance)
 1. **C1** — correct `slice-020.md` divergence row: `(glossary:109)` → `(entity-model:109)`.
@@ -135,16 +135,15 @@ as blocking.
 4. **C6** — extend §9's round-trip class to assert seeded mutable keys for **all five**
    kinds. *Verify:* the test class names "all kinds," not "risk."
 5. **C5** — strip `FR-006 /`, keep `REQ-054`, at `slice-020.md:112,227,311`.
-6. **C4** — record PRD-009 REQ-049..059 body-fill as a **blocking dependency** on the lock
-   (a `backlog new chore` candidate once the CLI ships, or a note in PRD-009). *Verify:*
-   the dependency is written down where the next agent will see it.
-7. Re-submit for a second inquisition (`inquisition-2.md`) confirming C1–C3 cleared, then
-   advance to `/plan`.
+6. ~~**C4**~~ — **withdrawn** (recanted false charge; requirement statements are in TOML).
+7. **C1–C6 all dispatched** (commit `32c9d57` + this recant). No blocker remains; the
+   design is clean to **lock** and advance to `/plan`. No second inquisition required —
+   the cleared charges were text fixes, independently verifiable above.
 
 *Penance for the scribe who wrote `glossary:109`: to copy `doc/glossary.md` by hand, all
 forty lines, and find no status vocab among them — that the false pointer be felt, not
-merely told. Let the unconsecrated read path (C2) be drawn and quartered into its two
-honest halves — manifest or reader — and one chosen in daylight. And let the dangling
-edge (C3) not fester in silence: name it, or burn it.*
+merely told. And penance upon the Inquisitor himself, who read the prose tier and cried
+"hollow" while the statements sat consecrated in the TOML: let him recite the storage
+rule — structured data to TOML, prose to MD — until it is graven on the bone.*
 
 > **HERESIS URITOR; DOCTRINA MANET**
