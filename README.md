@@ -49,6 +49,9 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [PRD-006 — Install](.doctrine/spec/product/006/spec-006.md) — `draft`
 - [PRD-007 — Boot & Governance](.doctrine/spec/product/007/spec-007.md) — `draft`
 - [PRD-008 — ADRs](.doctrine/spec/product/008/spec-008.md) — `draft`
+- [PRD-009 — Backlog](.doctrine/spec/product/009/spec-009.md) — `draft`
+- [PRD-010 — Epistemic and Governance Records](.doctrine/spec/product/010/spec-010.md) — `draft`
+- [PRD-011 — Graph-Derived Backlog Priority](.doctrine/spec/product/011/spec-011.md) — `draft`
 
 ### Slices
 
@@ -71,6 +74,14 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [Pluggable lexical scorer: trait + BM25 backend for memory retrieval](.doctrine/slice/017/design.md) | [scope](.doctrine/slice/017/slice-017.md) (4/4)
 - [Shipped orientation memory corpus](.doctrine/slice/018/design.md) | [scope](.doctrine/slice/018/slice-018.md) (3/5)
 - [Backfill Doctrine product-spec corpus](.doctrine/slice/019/design.md) | [scope](.doctrine/slice/019/slice-019.md) (5/5)
+- Backlog entity v1: work-intake items (one kind + item_kind facet) | [scope](.doctrine/slice/020/slice-020.md) (—)
+
+### Architecture Decision Records
+
+- [ADR-001 — Module layering: leaf ← engine ← command, no cycles](.doctrine/adr/001/adr-001.md) — `proposed`
+- [ADR-002 — Global orientation memory class: repo-empty, unanchored, evergreen](.doctrine/adr/002/adr-002.md) — `accepted`
+- [ADR-003 — Canonical change loop: slice-first, observe, reconcile, close](.doctrine/adr/003/adr-003.md) — `proposed`
+- [ADR-004 — Relations stored outbound-only; reciprocity is derived](.doctrine/adr/004/adr-004.md) — `proposed`
 <!-- END:readme-index -->
 
 ## License
