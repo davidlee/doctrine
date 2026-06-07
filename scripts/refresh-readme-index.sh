@@ -36,18 +36,19 @@ fi
 
 section=""
 
-# Append one spec-subtype block. $1 = subtype dir, $2 = id prefix, $3 = heading.
+# Append one authored-entity block. $1 = dir, $2 = id prefix, $3 = heading,
+# $4 = file stem (spec|adr). title + status live in `<stem>-NNN.toml`.
 # Iterates the `NNN-slug` symlinks so id, slug, and link path come from one name.
 add_subtype() {
-  local subdir="$SPEC_ROOT/$1" prefix="$2" heading="$3"
+  local subdir="$1" prefix="$2" heading="$3" stem="$4"
   local sym base id md toml title status block=""
   [[ -d "$subdir" ]] || return 0
   # Real NNN dirs only — GitHub does not traverse the NNN-slug symlinks (404).
   for sym in $(find "$subdir" -maxdepth 1 -type d -name '[0-9]*' | sort); do
     base="$(basename "$sym")"
     id="${base%%-*}"
-    md="$sym/spec-$id.md"
-    toml="$sym/spec-$id.toml"
+    md="$sym/$stem-$id.md"
+    toml="$sym/$stem-$id.toml"
     [[ -f "$md" && -f "$toml" ]] || continue
     title="$(toml_str "$toml" title)"
     status="$(toml_str "$toml" status)"
@@ -58,8 +59,8 @@ add_subtype() {
   fi
 }
 
-add_subtype product PRD "Product Specifications"
-add_subtype tech SPEC "Technical Specifications"
+add_subtype "$SPEC_ROOT/product" PRD "Product Specifications" spec
+add_subtype "$SPEC_ROOT/tech" SPEC "Technical Specifications" spec
 
 # Compact slice index: title -> design, "scope" -> scope doc, (rollup) from CLI.
 add_slices() {
@@ -84,6 +85,8 @@ add_slices() {
 }
 
 add_slices
+
+add_subtype ".doctrine/adr" ADR "Architecture Decision Records" adr
 
 # Drop the leading literal "\n" so the first heading abuts the BEGIN marker.
 section="${section#\\n}"
