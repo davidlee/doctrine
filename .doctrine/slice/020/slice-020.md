@@ -303,6 +303,11 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
 
 ## Follow-Ups
 
+- **ADR — inline-authored vs registry-derived edges** (surfaced in `/design`).
+  Codify corpus-wide: payload-free relations authored inline (`[relationships]`);
+  the generic `[[edge]] from/rel/to` is the registry's *derived* form; sister edge
+  files are for payload-carrying edges only. Harmonise slice/ADR/backlog array
+  naming. A `backlog new` candidate once the CLI ships.
 - **Priority** — the authored seam (PRD-009 FR-006 / `REQ-054`) and the derived
   graph-priority layer ([PRD-011](../../spec/product/011/spec-011.md)). The prime
   backlog follow-up.
