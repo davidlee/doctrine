@@ -140,9 +140,11 @@ quality requirements is tracked against those entities, not duplicated here.
 
 ## 8. Open Questions
 
-- Should prose and commit messages adopt a prefixed reference shorthand (for example a
-  letter-prefixed id) for greppability, or remain bare numeric? This blocks any
-  convention that wants to link to a slice from outside its directory.
+(Resolved — reference form. Prose, commits, and comments cite entities by their
+prefixed canonical id (`SL-020`, `PRD-010`, `REQ-060`, …); the id is identity, the slug
+is never authoritative, and the durable id is cited, never a mobile `FR-`/`NF-`
+membership label. The canonical statement lives in the conventions block of
+`CLAUDE.md`/`AGENTS.md`; this OQ resolves by reference rather than restating it.)
 - Distributed identity collision across separate working trees or clones is not closed
   by the single-tree claim. Resolving it needs a shared reservation authority; until
   that exists, cross-tree concurrent creation can still collide at merge. What is the
