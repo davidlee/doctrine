@@ -34,8 +34,9 @@ In scope:
   discriminated by a `record_kind` facet.
 - The four initial record kinds: **assumption**, **decision**, **question**,
   **constraint**.
-- A common record schema (identity, summary, tags, confidence where it applies, scope)
-  plus a typed, kind-specific facet block for each kind.
+- A common record schema (identity, summary, tags) plus a typed, kind-specific facet
+  block for each kind. Confidence is an assumption-only facet, not a common field; a
+  record's scope over other artefacts is expressed through typed relations, not a field.
 - A distinct lifecycle vocabulary per kind — truth lifecycles, not the work-intake
   lifecycle.
 - A minimal evidence support structure (`supports`, `contradicts`, `notes` of
@@ -285,9 +286,10 @@ Kind lifecycles and facets — each kind resolves to its own vocabulary and type
 shape:
 
 - **assumption** — a claim treated as true enough to proceed, but not yet proven.
-  Lifecycle `held → testing → validated | invalidated | obsolete`. Facets: the claim,
-  its basis (observation / prior art / design inference / external source / operator
-  judgement), a validation plan, and the validated/invalidated by-and-on records.
+  Lifecycle `held → testing → validated | invalidated | obsolete`. Facets: the claim, a
+  **confidence** (low / medium / high) registering how firmly it is held, its basis
+  (observation / prior art / design inference / external source / operator judgement), a
+  validation plan, and the validated/invalidated by-and-on records.
   Boundary: if it implies uncertain future harm, link a risk; if validating it needs
   work, spawn a backlog item; if it settles into a durable rule, supersede it with a
   constraint.
@@ -386,10 +388,17 @@ side authors each relation (the record, here). Inbound completeness belongs to t
 registry-backed inspect surface, not the one-way reader. Leans OQ-005 toward
 relation-not-field: if scope is a typed relation, "what is scoped to me" is derived like
 any other inbound reference.)
-- OQ-004 — Should `confidence` (low/medium/high) be a common field across all kinds, or
-  an assumption-only facet? It reads naturally on an assumption and a question, less so
-  on an accepted decision or an active constraint. Blocks the common-schema shape.
-- OQ-005 — Does a record need a `scope` field distinct from its relations (e.g.
-  `scope = "slice-020"` versus a typed slice relation), or does the relation seam make a
-  free-text scope redundant? Blocks whether scope is a first-class field or derived from
-  relations.
+(OQ-004 — `confidence` placement — is resolved: confidence is an **assumption-only
+facet**, not a common field. It measures the "true enough to proceed, not yet proven"
+gap intrinsic to an assumption. The other kinds carry their nuance elsewhere — a
+question's weight in `why it matters`, a decision's in rationale/consequences — and a
+`proposed → accepted` decision or an `active` constraint is authoritative once in state,
+so a confidence scalar there would be malformed. The common schema is identity, summary,
+and tags only.)
+(OQ-005 — `scope` field vs relation — is resolved by ADR-004: there is **no free-text
+`scope` field**. A record's scope over an artefact is a typed outbound relation (the seam
+already carries it); "what is scoped to me" is derived like any other inbound reference,
+so a `scope = "slice-020"` string would be a stringly-typed, unvalidatable shadow of that
+relation. The one scope that is not an artefact pointer — a rule bounding a path/glob
+region like `src/**` — is out of v1; if it is ever needed it borrows memory's typed
+`scope.globs` shape, never a prose field.)
