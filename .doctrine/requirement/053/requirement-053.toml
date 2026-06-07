@@ -7,10 +7,10 @@ title = "Carry kind-specific facets including the risk facet"
 status = "pending"
 kind = "functional"
 
-description = "A backlog item carries the facet fields its kind defines, including the risk facet (likelihood, impact, controls, origin, acceptance), within the single shared entity."
+description = "A backlog item carries the descriptive facet fields its kind defines, including the risk facet (likelihood, impact, origin, controls), within the single shared entity."
 tags = []
 acceptance_criteria = [
-  "Each kind carries its defined facet set; a risk item carries likelihood, impact, controls, origin, and acceptance.",
-  "Risk acceptance (accepted / expired / none) is a facet field distinct from lifecycle status.",
+  "Each kind carries its defined descriptive facet set; a risk item carries likelihood, impact, origin, and controls.",
+  "A kind facet holds only the item's shape; no close-reason (accepted/expired/mitigated/…) is stored in it — those are `resolution` values.",
   "All kinds, including risk, are the one `backlog_item` entity discriminated by `item_kind` — no parallel schema.",
 ]

@@ -30,9 +30,11 @@ a risk facet, the decision/governance family, or a future epistemic entity group
 **Two further rules from the same model:**
 - Each kind carries a discriminating boundary; when several fit, precedence
   resolves deterministically: `risk > issue > improvement > chore > idea`.
-- `status` (whether active) is orthogonal to `resolution` (why it stopped);
-  no close-reason — accepted, expired, duplicate, promoted, wont_do — is ever
-  encoded as a `status` state.
+- `status` (whether active) is orthogonal to `resolution` (why it stopped), and
+  both are distinct from kind facets (descriptive shape only). No close-reason —
+  accepted, expired, duplicate, promoted, wont_do — is ever encoded as a `status`
+  state *or* stored in a kind facet; e.g. a risk facet is likelihood/impact/origin/
+  controls, and its accepted/expired exit is the item-level `resolution`.
 
 Why: the backlog is the capture layer for *work intent*. Conflating it with
 truth-state (assumptions) or governance-state (decisions) is the drift this rule
