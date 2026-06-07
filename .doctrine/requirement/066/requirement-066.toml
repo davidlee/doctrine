@@ -7,9 +7,10 @@ title = "Supersede a record with another record"
 status = "pending"
 kind = "functional"
 
-description = "A record can be superseded by another record of the same kind, recording the supersession both ways so the lineage of an aged or replaced claim, choice, question, or rule stays traceable."
+description = "A record can be superseded by another record — of the same or, along the allowed matrix, a different kind — when the successor becomes the authoritative continuation of the predecessor; the supersession is recorded both ways so the lineage of an aged or replaced claim, choice, question, or rule stays traceable."
 tags = []
 acceptance_criteria = [
-  "A record can record that it supersedes, and is superseded by, another record.",
-  "Supersession records the link on both records and moves the superseded record to its kind's terminal state.",
+  "A record can record that it supersedes, and is superseded by, another record, on both records.",
+  "Supersession may cross record_kind only along the allowed matrix, and only when the successor is the authoritative continuation of the predecessor — not for mere influence, evidence, consequence, or origin.",
+  "Supersession moves the superseded record to a terminal status valid for its own kind; the predecessor never changes kind.",
 ]
