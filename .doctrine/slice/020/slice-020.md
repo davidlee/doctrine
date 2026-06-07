@@ -97,8 +97,14 @@ how the research corpus reconciles with canon, and the v1 implement subset.
   per-prefix sequential ids glossary implies, vs one shared `backlog/id/<n>`.
   Per-kind mirrors `spec/product` vs `spec/tech` (SL-015) and yields the
   `ISS-NNN`/`IMP-NNN` independent counters glossary shows.
-- **Q5 — v1 implement subset.** Confirm the create/list/show surface below;
-  confirm priority registry + prioritise + sync + delta-integration are deferred.
+- **Q5 — v1 implement subset.** Confirm the create/list/show/edit surface below;
+  confirm priority registry + prioritise + sync + the `--from-backlog` bridge are
+  deferred. (The consult/capture **skill wiring** is in scope — see Q6.)
+- **Q6 — workflow integration points.** Which skills / routing rows *consult* vs
+  *capture* the backlog, and at what moment in the loop? Lock the loop-point map
+  (route/preflight consult; consult/notes capture; audit/close harvest) and the
+  work / knowledge / decision boundary text the skills cite. Sequence as a phase
+  after the CLI verbs (behaviour-preservation on the shared skill/boot surface).
 
 ## Scope & Objectives
 
@@ -121,6 +127,26 @@ drift). Reconcile every divergence row above.
 - **`backlog edit <ID> --status <s>`** — atomic, edit-preserving (`toml_edit`)
   status transition. (Editor-open edit optional; status flag is the v1 floor.)
 
+- **Workflow integration — consult & capture at the right loop points.** Revise the
+  routing table (`.doctrine/state/boot.md`) and the affected skills so the backlog is
+  consulted and captured at the appropriate moments in the spec-driver loop — closing
+  the gap where work intent is stranded in conversation. PRD-009 §5 makes "intake
+  stops leaking" a success measure; the CLI verbs are necessary but not sufficient
+  without the surfaces that prompt their use:
+  - `/route`, `/preflight` — **consult** the backlog (`backlog list`/`show`) at the
+    start of substantive work: is this intent already captured? which open items bear
+    on it?
+  - `/consult`, `/notes` — **capture** emergent issues / risks / ideas (`backlog new`)
+    when an obstacle, tradeoff, or follow-up surfaces, instead of losing it.
+  - `/audit`, `/close` — **harvest** durable findings into backlog items (risks,
+    issues, chores) alongside the existing `audit.md` / memory harvest.
+  - **Boundary guidance** so skills route correctly: backlog = latent *work*; memory =
+    durable *knowledge*; ADR = *decisions*. The arbiter is the work-intake membership
+    test (`mem.concept.backlog.work-intake-membership`).
+  Rides the v1 `new`/`list`/`show` surface; sequence as a phase **after** the CLI
+  verbs land (behaviour-preservation on the shared skill/boot surface). The deeper
+  `slice new --from-backlog` bridge stays a follow-up (Non-Goals).
+
 **Reuse, don't fork.** `src/backlog.rs` mirrors `src/spec.rs`/`src/adr.rs` over
 the shared `src/entity.rs` substrate; the fileset descriptor supplies each
 `item_kind`'s facet combination. Extract only genuinely-shared substrate.
@@ -137,7 +163,9 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
 - **`sync`** — registry↔filesystem reconciliation (append/prune/dry-run). Needs
   the registry; later, with the relation-index cache.
 - **Delta/slice integration** (`slice new --from-backlog <ID>`) — the capture→
-  scope bridge; the prime follow-up, but a separate change.
+  scope *bridge command*; the prime follow-up, but a separate change. Distinct from
+  the consult/capture **skill wiring**, which IS in scope above — the wiring tells
+  agents *when* to reach for the backlog; the bridge is the later automation.
 - **Relation-index *cache* + reverse-reference scan** — only relation *storage*
   lands; inbound-ref queries deferred (as SL-015 deferred them).
 - **TUI artifact browser** integration — no TUI in Doctrine yet.
@@ -171,7 +199,7 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
   for extensibility; Doctrine's storage rule forbids un-typed prose-as-data.
   Per-kind facet sets must be enumerated, not deferred to a bag (Q3).
 
-**Open questions** — all resolved in [`design.md`](design.md): §Q1–Q5 above.
+**Open questions** — all resolved in [`design.md`](design.md): §Q1–Q6 above.
 
 ## Verification / Closure Intent
 
@@ -184,6 +212,11 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
   kind facets + outbound relations.
 - `backlog edit <ID> --status` transitions status atomically and
   edit-preservingly (round-trips without dropping comments / unknown keys).
+- The routing table (`boot.md`) + affected skills (`/route`, `/preflight`,
+  `/consult`, `/notes`, `/audit`, `/close`) are revised to consult / capture /
+  harvest the backlog at the right loop points, citing the work / knowledge /
+  decision boundary (membership test) as the arbiter; existing skill behaviour is
+  otherwise preserved.
 - The whole `backlog_item` model (all `item_kind`s incl. the risk facet, the
   deferred prioritisation/sync/integration layer) is designed and locked
   (`/inquisition`) — the deferred layer shown forward-compatible.

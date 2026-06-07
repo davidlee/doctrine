@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea25af18d77e2b0f981473c50753e"
+memory_key = "mem.concept.backlog.work-intake-membership"
+schema_version = 1
+memory_type = "concept"
+status = "active"
+title = "Backlog work-intake membership test"
+summary = "Backlog holds latent work only; epistemic/governance items excluded by the work-intake membership test"
+created = "2026-06-07"
+updated = "2026-06-07"
+
+[scope]
+paths = ["doc/entity-model.md", ".doctrine/spec/product/009"]
+globs = []
+commands = ["backlog"]
+tags = ["backlog", "taxonomy", "entity-model"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "1863c4dff0b66e370c2543f17bc1383ca08684d6"
+tree = "180ae412eca9f16b58b78d26f1435fd21e7af8d4"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "1863c4dff0b66e370c2543f17bc1383ca08684d6"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
