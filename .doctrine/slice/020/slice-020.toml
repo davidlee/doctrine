@@ -3,13 +3,21 @@ slug = "backlog-entity-v1"
 title = "Backlog entity v1: work-intake items (one kind + item_kind facet)"
 status = "proposed"
 created = "2026-06-07"
-updated = "2026-06-07"
+updated = "2026-06-08"
 
 [relationships]
-# Backlog is the next entity to land behind its registry gate via the
-# supersede pattern (entity-model.md:147), after spec (SL-015).
-# Lineage (not edges): rides the same engine seam ADR (SL-006) + spec (SL-015) proved.
-# Canon that governs this slice (prose links in slice-020.md § Context Bundles):
+# Parent product spec — SL-020 descends from PRD-009 (Backlog). The design-whole
+# covers the entire PRD; the v1 implement subset satisfies the requirements below.
+# (Hand-authored per SL-019's reserved shape; no `slice link` verb yet.)
+specs = ["PRD-009"]
+# Requirements the v1 subset implements: capture, survey, inspect, status lifecycle,
+# descriptive facets, resolution, atomic edit-preserving, typed storage. The whole PRD
+# is *designed*; prioritise/promote/relations (REQ-054/055/056) are designed-only,
+# built in follow-ups (see Non-Goals).
+requirements = ["REQ-049", "REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-057", "REQ-058", "REQ-059"]
+# Lineage (not edges): rides the same engine seam ADR (SL-006) + spec (SL-015) proved;
+# lands behind its registry gate via the supersede pattern (entity-model.md:147).
+# Canon that also governs (prose links in slice-020.md § Context Bundles):
 #   doc/entity-model.md  — one backlog_item + item_kind facet (:74); status (:109)
 #   doc/glossary.md      — reserved ids ISS/IMP/CHR/RSK/IDE
 # Forward edges (slices/specs/drift <-> backlog items) materialise once items exist.

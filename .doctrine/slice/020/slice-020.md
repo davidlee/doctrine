@@ -13,6 +13,12 @@ modelled on Spec-Driver's backlog but simpler and cleaner. It rides the shipped
 scaffold engine (`src/entity.rs`, SL-003) the way ADR (SL-006) and spec
 (SL-015) did — backlog is the engine's next caller, not a reason to fork it.
 
+**Parent product spec — [PRD-009](../../spec/product/009/spec-009.md).** SL-020 is the
+first change descending from PRD-009 (Backlog); the product intent, requirements
+(REQ-049..059), success measures, and resolved open questions live there. This slice
+designs the whole model and implements the v1 subset against it. Where this scope and
+PRD-009 differ, PRD-009 governs.
+
 **The modelling is already decided by canon, and it diverges from the research
 corpus.** `entity-model.md:74` fixes the umbrella choice: *one* `backlog_item`
 entity discriminated by an `item_kind` facet — **not** Spec-Driver's four
@@ -27,6 +33,11 @@ test are tabulated under *Design Direction*.
 Where a `/design` agent should read in, grouped by authority:
 
 **Governing canon (committed — these win over the research corpus):**
+- [`PRD-009`](../../spec/product/009/spec-009.md) — **the parent product spec**: the
+  what/why, requirements (REQ-049..059), the work-intake membership test, kind
+  boundaries + precedence, and the resolved open questions (kind set, resolution vs
+  risk facet). Read this first; it distils and supersedes the raw `doc/` notes below
+  for product intent.
 - [`doc/entity-model.md`](../../../doc/entity-model.md) — the umbrella taxonomy.
   `:74` fixes `backlog_item` = one kind + `item_kind`, risk gets extra facets.
   `:109` fixes the status vocabulary. `:147` places backlog in the roadmap
@@ -73,22 +84,26 @@ how the research corpus reconciles with canon, and the v1 implement subset.
 | Axis | `backlog.local.md` (Spec-Driver) | Doctrine canon | Resolution |
 |---|---|---|---|
 | Modelling | 4 kinds · 4 dirs · 4 schemas | one entity + `item_kind` facet (`entity-model:74`) | **canon** — single kind |
-| Kind set | issue, problem, improvement, risk | issue, improvement, chore, risk, idea (`glossary`) — `problem` in `entity-model:74` prose only, **no reserved id** | open: §Q1 |
+| Kind set | issue, problem, improvement, risk | issue, improvement, chore, risk, idea (`glossary`) — `problem` in `entity-model:74` prose only, **no reserved id** | **resolved** — PRD-009 OQ-001: the five; `problem` excluded |
 | ID scheme | `ISSUE-010` (5-char, 3-digit) | `ISS-/IMP-/CHR-/RSK-/IDE-NNN` (3-char) | **canon** — 3-char prefixes |
 | Status | open→triaged→in-progress→resolved | `open\|triaged\|started\|resolved\|closed` (`glossary:109`) | **canon** — `started` not `in-progress`, adds `closed` |
-| Risk states | +accepted, +expired | not in canon vocab | open: §Q2 |
+| Risk states | +accepted, +expired | not in canon vocab | **resolved** — PRD-009 OQ-006: `resolution` owns accepted/expired; risk facet is descriptive only |
 | Layout | `backlog/{kind}s/<ID>/` | one entity → engine's per-kind reservation dir | **canon** — engine layout |
 
 ### Open questions for `/design` (D-Q)
 
-- **Q1 — the kind set.** Glossary reserves five (issue/improvement/chore/risk/
-  idea); `entity-model:74` prose also names `problem`; Spec-Driver has `problem`
-  but not chore/idea. Lock the v1 `item_kind` enum. Candidate: the five
-  glossary-reserved kinds; `problem` deferred unless it earns a reserved id.
-- **Q2 — risk facet + extra states.** `entity-model:74` says "risk gets extra
-  facet fields" (likelihood/impact/controls/origin). Are `accepted`/`expired`
-  adopted into the status vocab for risk, or is acceptance a separate field
-  (entity-model:110 — "approval is not lifecycle")? Decide the risk facet set.
+- **Q1 — the kind set. RESOLVED at product level (PRD-009 OQ-001).** The
+  `item_kind` enum is exactly the five glossary-reserved kinds
+  (issue/improvement/chore/risk/idea); `problem` is excluded until it earns a
+  reserved id + a decomposition boundary. Membership is governed by the work-intake
+  test (`mem.concept.backlog.work-intake-membership`). `/design` formalises only the
+  *technical* realisation (the enum type, prefix→kind resolution), not the set.
+- **Q2 — risk facet + close-reason. RESOLVED at product level (PRD-009 OQ-006).**
+  The risk facet is descriptive only: likelihood, impact, origin, controls.
+  `accepted`/`expired` are **not** status states and **not** facet fields — they are
+  item-level `resolution` values (the single generic close-reason for every kind). No
+  close-reason is ever stored in a kind facet. `/design` fixes the typed shape of the
+  risk facet and the `resolution` domain, not whether acceptance is lifecycle.
 - **Q3 — facet storage shape.** Which fields are structured TOML facets per kind
   (severity, categories, impact, likelihood) vs the catch-all the research
   corpus uses? Doctrine has no "raw frontmatter hashmap" escape hatch — the
@@ -109,8 +124,10 @@ how the research corpus reconciles with canon, and the v1 implement subset.
 ## Scope & Objectives
 
 **Design (whole):** the `backlog_item` entity — `item_kind` discriminator, the
-per-kind facet sets (incl. the risk facet), the canon status lifecycle, the
-reservation namespace, and the relation participation (edges to slices / specs /
+per-kind descriptive facet sets (incl. the risk facet), the canon status lifecycle,
+the orthogonal `resolution` close-reason (PRD-009 FR-009: `status` = whether active,
+`resolution` = why it stopped, facets = descriptive shape — the three never overlap),
+the reservation namespace, and the relation participation (edges to slices / specs /
 drift). Reconcile every divergence row above.
 
 **Implement (coherent subset) — candidate v1, confirmed in `/design`:**
@@ -124,8 +141,11 @@ drift). Reconcile every divergence row above.
 - **`backlog show <ID>`** — auto-detect kind from the id prefix; render
   identity + kind-specific facets + timestamps + outbound relations. (Inbound
   reverse-refs deferred to the registry surface, as SL-015 deferred them.)
-- **`backlog edit <ID> --status <s>`** — atomic, edit-preserving (`toml_edit`)
-  status transition. (Editor-open edit optional; status flag is the v1 floor.)
+- **`backlog edit <ID> --status <s> [--resolution <r>]`** — atomic, edit-preserving
+  (`toml_edit`) transition of `status` and/or `resolution` (PRD-009 FR-009). Both ride
+  the same edit-preserving seam; `resolution` is the orthogonal close-reason, never a
+  status state nor a facet field. (Editor-open edit optional; the two flags are the v1
+  floor.)
 
 - **Workflow integration — consult & capture at the right loop points.** Revise the
   routing table (`.doctrine/state/boot.md`) and the affected skills so the backlog is
@@ -210,8 +230,9 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
   shows them under `--all`.
 - `backlog show <ID>` auto-detects kind from the prefix and renders identity +
   kind facets + outbound relations.
-- `backlog edit <ID> --status` transitions status atomically and
-  edit-preservingly (round-trips without dropping comments / unknown keys).
+- `backlog edit <ID> --status` / `--resolution` transition status and the orthogonal
+  close-reason atomically and edit-preservingly (round-trips without dropping
+  comments / unknown keys); no close-reason is encoded as a status state or facet.
 - The routing table (`boot.md`) + affected skills (`/route`, `/preflight`,
   `/consult`, `/notes`, `/audit`, `/close`) are revised to consult / capture /
   harvest the backlog at the right loop points, citing the work / knowledge /
