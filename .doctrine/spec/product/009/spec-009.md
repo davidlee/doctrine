@@ -37,8 +37,9 @@ Out of scope:
 
 - Non-work / epistemic records — assumptions, decisions, questions, findings,
   tradeoffs, constraint statements. They fail the work-intake membership test
-  (§3) and belong to the decision/governance family (where ADR already lives) or a
-  future epistemic group (OQ-005), never to the backlog.
+  (§3) and belong to the decision/governance family (where ADR already lives) or the
+  epistemic/governance records family (PRD-010, the OQ-005 resolution), never to the
+  backlog.
 - The `problem` kind — excluded until it earns a reserved id and a decomposition
   boundary distinguishing it from `issue` (a broad problem decomposes into issues /
   improvements / ideas; an issue is one concrete broken thing).
@@ -70,8 +71,9 @@ from.
   decisions, questions, findings, tradeoffs, and constraint statements — their
   standings are epistemic or governance lifecycles (an assumption is held→validated, a
   decision proposed→accepted→superseded), not work to be done. They live in their own
-  families (a risk facet, the separate decision/governance family, or a future
-  epistemic group — OQ-005), never as an `item_kind`.
+  families (a risk facet, the separate decision/governance family, or the
+  epistemic/governance records family — PRD-010, the OQ-005 resolution), never as an
+  `item_kind`.
 - **Risk belongs because it is unresolved work-risk.** A risk is admitted not as a
   general epistemic record but because it is uncertain future harm that may require
   mitigation, acceptance, expiry, or promotion into scoped work — work-intake
@@ -259,15 +261,17 @@ requirements is tracked against those entities, not duplicated here.
 `decision` and other epistemic records excluded by the membership test. Recorded in §2,
 §3, and §4 rather than left open.)
 
-- OQ-005 — A future home for non-work / epistemic items. ADRs capture high-impact,
-  architecturally-significant decisions; lower-stakes decisions, assumptions, and open
-  questions have no home today and might warrant a risk-analogous treatment (typed
-  facets, their own lifecycle). They are deliberately excluded from the backlog by the
-  work-intake membership test. Does a distinct epistemic/governance entity group earn
-  its own entity later — `assumption` (held → testing → validated / invalidated /
-  obsolete), `decision` (proposed → accepted → superseded / rejected), `question`
-  (open → answered → obsolete)? Out of scope for the backlog; recorded so the exclusion
-  is a decision, not an omission.
+(OQ-005 — a future home for non-work / epistemic items — is resolved: it earned its
+own entity family, specified in PRD-010 (Epistemic and Governance Records). ADRs keep
+high-impact, architecturally-significant decisions; lower-stakes decisions,
+assumptions, questions, and durable constraints become one `knowledge_record` entity
+discriminated by `record_kind` — `assumption` (held → testing → validated / invalidated
+/ obsolete), `decision` (proposed → accepted / rejected / superseded), `question`
+(open → answered / obsolete), `constraint` (active → waived / superseded / retired) —
+each with typed facets and its own lifecycle. They remain deliberately excluded from
+the backlog by the work-intake membership test; the backlog links to them, never
+admits them as an `item_kind`. The exclusion was a decision, not an omission, and
+PRD-010 is where these records now live.)
 (OQ-006 — `resolution` vs the risk `acceptance` facet — is resolved: `resolution` is
 the single generic close-reason for every kind; the risk facet holds only descriptive
 shape (likelihood/impact/origin/controls) and owns no accepted/expired field. The
