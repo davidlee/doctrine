@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 80
+slug = "preserve-the-richer-engine-consumption-seam"
+title = "Preserve the richer-engine consumption seam"
+status = "pending"
+kind = "quality"
+
+description = "The graph view and doctrine policy are shaped so a future richer engine can consume the same adapter output and emit additional channels without changing authored backlog storage."
+tags = []
+acceptance_criteria = [
+  "Graph node IDs are opaque and stable for the evaluation run, relation kinds are typed rather than encoded as prose, and the policy version is explicit in derived output.",
+  "Derived channels are open-ended — storage does not assume the doctrine v1 channel set is exhaustive.",
+  "Explanations are structured enough to preserve paths, contributors, masks, and reductions for a downstream consumer.",
+]

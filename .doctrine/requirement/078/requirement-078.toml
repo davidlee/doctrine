@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 78
+slug = "keep-derived-outputs-disposable-and-never-authored-as-truth"
+title = "Keep derived outputs disposable and never authored as truth"
+status = "pending"
+kind = "quality"
+
+description = "Derived priority, actionability, blockers, reverse references, and explanations are either ephemeral or stored only as disposable cache; they are never authored as backlog truth."
+tags = []
+acceptance_criteria = [
+  "No derived output is written into entity TOML as canonical truth.",
+  "Deleting any derived cache and recomputing yields equivalent derived output from unchanged authored state.",
+  "Derived actionability never mutates an item's status, resolution, item_kind, priority metadata, or relations.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 74
+slug = "show-derived-inbound-references-computed-from-authored-outbound-edges"
+title = "Show derived inbound references computed from authored outbound edges"
+status = "pending"
+kind = "functional"
+
+description = "Inspecting an item through the registry-backed surface shows its derived inbound references, computed from authored outbound edges alone."
+tags = []
+acceptance_criteria = [
+  "Inbound references shown in derived inspect output are computed from authored outbound edges, never from a separately authored inbound field.",
+  "Inspect shows both the item's authored outbound relations and its derived inbound context.",
+  "No new durable reverse-link field is introduced on any authored entity to support the inbound view.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 72
+slug = "explain-an-items-ordering-or-masking-from-structured-reasons"
+title = "Explain an item's ordering or masking from structured reasons"
+status = "pending"
+kind = "functional"
+
+description = "An operator can ask why an item is ordered or masked as it is and receive a readable account rendered from structured machine-readable reasons, not free prose."
+tags = []
+acceptance_criteria = [
+  "Every derived classification carries structured reasons identifying local authored priority, lifecycle eligibility, relation-derived blockers, relation-derived pressure or consequence, and deterministic tie-breakers.",
+  "The explanation names the relation path or lifecycle fact that caused a blocked, actionable, or priority classification.",
+  "The user-facing account is rendered from the structured reasons, which remain the source of truth.",
+]

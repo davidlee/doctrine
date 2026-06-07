@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 76
+slug = "report-cycle-diagnostics-on-acyclic-overlays-and-degrade-safely"
+title = "Report cycle diagnostics on acyclic overlays and degrade safely"
+status = "pending"
+kind = "functional"
+
+description = "When a relation kind declared acyclic contains a cycle, the derived surface reports a diagnostic and degrades rather than emitting a false topological order."
+tags = []
+acceptance_criteria = [
+  "A cycle in an acyclic overlay is reported as a diagnostic naming the involved node IDs and edge kinds.",
+  "Affected queries either exclude the cyclic component or degrade to local authored priority plus the stable fallback.",
+  "The surface never silently emits a false topological result for an overlay declared acyclic.",
+]

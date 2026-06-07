@@ -1,0 +1,19 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 11
+slug = "graph-derived-backlog-priority"
+title = "Graph-Derived Backlog Priority"
+status = "draft"
+kind = "product"
+category = "prioritisation"
+tags = ["priority", "backlog", "graph", "actionability", "dependency-resolution", "explanation"]
+
+responsibilities = [
+  "Derive an explainable priority and actionability view over the registry graph without storing derived judgement as backlog truth.",
+  "Answer 'what should I look at next, and why?' across every work kind in one comparable view.",
+  "Resolve typed blockers, blocking, and reverse inbound references from authored outbound relations alone.",
+  "Keep authored backlog priority deliberately minimal — operator intent only — while richer ordering is derived and disposable.",
+  "Report cycle diagnostics under a relation-kind acyclicity contract and degrade rather than emit a false topological order.",
+  "Preserve a seam for a future richer evaluation engine to consume the same graph view and emit additional channels without reshaping authored storage.",
+]

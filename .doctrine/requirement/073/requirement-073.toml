@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 73
+slug = "resolve-typed-blockers-and-blocking-over-the-relation-graph"
+title = "Resolve typed blockers and blocking over the relation graph"
+status = "pending"
+kind = "functional"
+
+description = "An operator can ask what blocks an item, or what an item blocks, and the system resolves typed graph reachability over the relation kinds the policy admits."
+tags = []
+acceptance_criteria = [
+  "Direct blockers and direct dependents are reported over the admitted relation kinds.",
+  "Transitive blockers are available where requested.",
+  "Authored outbound edges are distinguished from derived inbound edges in the result.",
+]
