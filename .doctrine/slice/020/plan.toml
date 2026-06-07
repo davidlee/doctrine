@@ -1,0 +1,239 @@
+# Implementation plan for SL-020 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-020"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (doc/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "ItemKind + enums + parse model + templates + scaffold"
+objective = """
+Stand up `src/backlog.rs` as a pure new caller of the unchanged `entity.rs` engine \
+(design §5.1), mirroring `src/adr.rs`/`src/spec.rs`. The `ItemKind` discriminator \
+(Issue|Improvement|Chore|Risk|Idea, kebab `ValueEnum`) selecting one of five const \
+`Kind`s — `ISSUE_KIND`..`IDEA_KIND`, each own `dir` (`.doctrine/backlog/<kind>`) + \
+own `prefix` (`ISS|IMP|CHR|RSK|IDE`) + own `scaffold` closure (the spec subtype seam \
+×5, D4) → independent per-kind id counters. `ItemKind::{kind,prefix,as_str,\
+from_prefix,has_facet}`; boundary precedence `risk>issue>improvement>chore>idea` \
+(PRD-009 §4) recorded as an inert const/comment, never exercised by v1. The closed \
+enums `Status {Open,Triaged,Started,Resolved,Closed}`, `Resolution {Fixed,Done,\
+Mitigated,Accepted,Expired,Duplicate,WontDo,Obsolete,Promoted}`, `RiskLevel {Low,\
+Medium,High,Critical}` (kebab serde + `as_str()` render mirrors; `Status::is_terminal\
+() = Resolved|Closed` — a backlog-LOCAL predicate, NOT `slice::is_terminal_status`, \
+R4). The three-layer parse model (§5.1): `RawBacklogToml` tolerant parse, validated \
+`BacklogItem { id, slug, title, kind, status, resolution: Option, created, updated, \
+tags, facet: Option<RiskFacet>, relationships: Relationships }` with `RiskFacet` and \
+outbound-only `Relationships { slices, specs, drift }`; the `"" -> None` validation \
+seam (R2) for `resolution`/risk levels. Pure `backlog_scaffold(item_kind, ctx)`, \
+`render_backlog_toml`, `render_backlog_md`. Three rust-embed templates (D7): \
+`templates/backlog.toml` (four plain kinds), `templates/backlog-risk.toml` (adds \
+`[facet]`), `templates/backlog.md` — all seed the mutable `status`/`resolution`/\
+`updated`/`tags` keys (the `edit`-in-place precondition, §5.3). NO CLI surface this \
+phase — the model is exercised at the scaffold/round-trip level. The engine gains \
+one `Kind`/`Fresh` caller and is NOT modified (R6 gate).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked: internal review (R1–R7) + external inquisition (C1–C6, C4 recanted) dispositioned in §10; full `cargo test` + `cargo clippy` (bins/lib) green at HEAD — the behaviour-preservation baseline (entity/slice/adr/spec/memory suites)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/backlog.rs` exists: `ItemKind` + five const `Kind`s (own dir/prefix/scaffold) + `backlog_scaffold`/`render_*` mirror adr/spec; `materialise(Fresh)` reserves `XXX-NNN` under `.doctrine/backlog/<kind>/NNN/`" },
+  { id = "EX-2", text = "closed `Status`/`Resolution`/`RiskLevel` (kebab serde + `as_str()`); `Status::is_terminal` is backlog-local; `BacklogItem`/`RiskFacet`/`Relationships` parse structs with `#[serde(default)]` and the `\"\" -> None` validation seam; only Risk carries `[facet]`" },
+  { id = "EX-3", text = "three templates shipped under `templates/` (backlog.toml, backlog-risk.toml, backlog.md), each seeding `status`/`resolution`/`updated`/`tags`; `entity.rs` unchanged (gate); clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`backlog_scaffold_lays_out_toml_md_symlink` per kind: materialise lays toml + md (+ `NNN-slug` symlink) under the reserved numeric dir; risk includes `[facet]`, the four plain kinds omit it; paths tree-relative; canonical id is `XXX-NNN`" },
+  { id = "VT-2", expects = "round-trip unit: a `backlog-NNN.toml` parses into `meta::Meta` (4 keys) AND the full `BacklogItem`; no `{{token}}` survives render; `\"\" -> None` maps the seeded empty resolution/risk levels; an unknown enum token errors" },
+  { id = "VT-3", expects = "`all_five_kinds_seed_mutable_keys`: every kind's scaffold seeds `status`/`resolution`/`updated`/`tags` (the edit-in-place seam, §5.3) — asserted per kind, not risk alone" },
+  { id = "VT-4", expects = "behaviour gate: entity/slice/adr/spec/memory suites green unchanged after the new caller lands (engine untouched)" },
+]
+specs        = []
+requirements = ["REQ-053", "REQ-058"]
+
+[[phase]]
+id        = "PHASE-02"
+name      = "`backlog new <kind>` + install wiring (the authored-entity trap)"
+objective = """
+The capture verb (PRD-009 REQ-049): `backlog new <kind> \"Title\" [--slug S]` as the \
+thin shell (§5.4) — resolve title/slug (`input::resolve_*`), read `clock::today()`, \
+`materialise(item_kind.kind(), &LocalFs, &root, &MaterialiseRequest::Fresh, &Inputs{\
+slug,title,date})`, print `Created ISS-007: <dir>`. `<kind>` is the PHASE-01 \
+`ItemKind` `ValueEnum`; allocation is monotonic per kind with the engine's race-retry \
+inherited, and the five counters are INDEPENDENT (separate `dir`s — `ISS-001` and \
+`RSK-001` coexist). Close the authored-entity wiring trap \
+(`mem.pattern.install.authored-entity-wiring`, R5/§5.3): add `.doctrine/backlog` to \
+`install/manifest.toml` `[dirs].create` AND the `!.doctrine/backlog/` gitignore \
+negation (recursive — covers the five kind subdirs under the ignored `.doctrine/`). \
+The manifest seeds only the `.doctrine/backlog` PARENT; per-kind dirs are engine-\
+created lazily on first `new` (the PHASE-03 missing-dir tolerance, C2/D4).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green — the `ItemKind` kinds reserve via `materialise(Fresh)` and the templates render" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`backlog new <kind> \"Title\" [--slug S]` scaffolds the kind's fileset via `materialise(Fresh)`, seeds kind-correct template facets (status `open`, risk `[facet]`), reserves + prints the canonical `XXX-NNN` id; clock injected (`today` passed in, adr precedent)" },
+  { id = "EX-2", text = "`install/manifest.toml` `[dirs].create` carries `.doctrine/backlog`; `.gitignore` carries the `!.doctrine/backlog/` negation; a freshly created item is `git add`-able" },
+  { id = "EX-3", text = "`entity.rs` unchanged; clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`backlog_new_reserves_monotonic_per_kind` + `backlog_new_counters_isolated_across_kinds`: an `ISS` create does not advance the `RSK` counter; race-retry inherited from the engine" },
+  { id = "VT-2", expects = "`backlog_new_seeds_kind_template`: risk seeds `[facet]`, plain kinds do not; status defaults `open`; the printed id matches the reserved dir" },
+  { id = "VT-3", expects = "`created_backlog_item_is_git_addable`: with the manifest dir + gitignore negation wired, `git add` of a new item succeeds (R5 wiring proof)" },
+]
+specs        = []
+requirements = ["REQ-049"]
+
+[[phase]]
+id        = "PHASE-03"
+name      = "`backlog list` — survey with the visibility matrix"
+objective = """
+The survey verb (PRD-009 REQ-050): `backlog list [--kind K] [--status S] [--tag T] \
+[--all] [<substr>]` (§5.4). For each `ItemKind`, read its tree into `Vec<BacklogItem>`, \
+merge, filter, sort KIND-then-ascending-id, render via `meta::render_table` (the \
+SL-009 derived-rollup path, additive — NOT the fixed 4-column `format_list`). \
+Total-function reads (inquisition Doctrine §): a kind whose reservation dir does not \
+yet exist contributes the EMPTY SET, never an error (C2/§5.4) — `list` on a virgin \
+repo prints an empty table. Filters AND together (`--kind`/`--status`/`--tag`/title \
+substring). VISIBILITY (D5): with no `--status`/`--all`, show only active \
+(`open|triaged|started`); `--all` shows every state; an explicit `--status \
+resolved|closed` shows that terminal state. Promoted items are terminal, so the \
+hide-terminal rule already excludes them (PRD-011 REQ-075) — no special branch. The \
+kind-then-id order is a deterministic GROUPING, explicitly NOT a priority claim \
+(R7; priority is PRD-011, deferred).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 green — `backlog new` populates per-kind trees to survey, and the missing-dir-tolerant reader has real and absent kinds to read" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`backlog list` reads all five kinds (missing dir → empty set, not error), merges, sorts kind-then-ascending-id, renders id/kind/status/slug/title over `meta::render_table`; a virgin repo prints an empty table" },
+  { id = "EX-2", text = "default hides terminal (`resolved|closed`, promoted falls out by the terminal rule); `--all` and explicit `--status` reveal; `--kind`/`--status`/`--tag`/substring AND together" },
+  { id = "EX-3", text = "`meta.rs`/`entity.rs` shared path unchanged (additive only); clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`backlog_list_default_hides_terminal` + `backlog_list_all_and_explicit_status_reveal`: the visibility matrix — active-only default, `--all` shows all, `--status resolved` shows that terminal state, promoted hidden by the terminal rule" },
+  { id = "VT-2", expects = "`backlog_list_filters_and_together` + `backlog_list_kind_then_id_order`: `--kind`/`--tag`/substring intersect; rows ordered kind-declaration then ascending id (stable, not priority)" },
+  { id = "VT-3", expects = "`backlog_list_missing_dir_is_empty_set` + `backlog_list_virgin_repo_empty_table`: a kind with no reservation dir contributes the empty set; `list` before any `new` prints an empty table, never an error" },
+]
+specs        = []
+requirements = ["REQ-050"]
+
+[[phase]]
+id        = "PHASE-04"
+name      = "`backlog show <ID>` — prefix auto-detect, local reassembly"
+objective = """
+The inspect verb (PRD-009 REQ-051): `backlog show <ID>` (e.g. `ISS-007`) to STDOUT, \
+no mutation (§5.4). Split the id on the LAST `-`, upper-case the prefix, parse the \
+numeric tail as `u32` (`ItemKind::from_prefix`; tolerates `ISS-7` and `ISS-007`, \
+rejects an unknown prefix or non-numeric tail — R3/§5.5; the five counters are \
+independent so the prefix is load-bearing for disambiguation). Read \
+`<kind>/<NNN>/backlog-<NNN>.toml`, render identity + (risk only) facet + timestamps \
++ OUTBOUND relationships (slices/specs/drift). Pure stdout reassembly from the item's \
+own file (\"cannot go stale\"); INBOUND reverse-refs are the deferred registry \
+surface's to compute (ADR-004; consumed by PRD-011), NOT shown here. An unknown \
+prefix is a hard error (never implicit create).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 + PHASE-02 green — `BacklogItem` parses and `backlog new` has produced addressable items to inspect" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`backlog show <ID>` auto-detects the kind from the prefix (`from_prefix`, last-`-` split, `u32` tail, `ISS-7`/`ISS-007` tolerated) and renders identity + (risk) facet + timestamps + outbound relations to stdout" },
+  { id = "EX-2", text = "inbound refs are NOT shown (deferred registry surface, ADR-004); an unknown prefix or non-numeric tail is a hard error; render is a pure function of the item's own local state" },
+  { id = "EX-3", text = "no mutation; clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`backlog_show_auto_detects_kind_from_prefix`: `ISS-007` resolves to the issue tree, `RSK-001` to risk; identity + outbound relations render; risk shows the facet, plain kinds do not" },
+  { id = "VT-2", expects = "`backlog_show_id_parse_tolerance` + `backlog_show_unknown_prefix_errors`: `ISS-7`/`ISS-007` both parse; an unknown prefix and a non-numeric tail each hard-error" },
+]
+specs        = []
+requirements = ["REQ-051"]
+
+[[phase]]
+id        = "PHASE-05"
+name      = "`backlog edit --status [--resolution]` — atomic coupled transition"
+objective = """
+The transition verb (PRD-009 REQ-057/REQ-059): `backlog edit <ID> --status <s> \
+[--resolution <r>]` — a `toml_edit` IN-PLACE mutation (§5.4) of `status`, optionally \
+`resolution`, bumping `updated`. Edit-preserving (no reserialise; inert tables/\
+comments/unknown keys survive); a NO-OP guard writes nothing when values are \
+unchanged; F-1 REFUSE if the seeded `status`/`resolution`/`updated` keys are absent \
+(malformed → regenerate, never corrupt by tail-insert into a subtable). COUPLING \
+(`validate_transition`, PRD-009 REQ-059 / §5.5): a terminal status REQUIRES a \
+`resolution`; a non-terminal status FORBIDS one — both directions. RE-OPEN (D9): \
+moving to a non-terminal status AUTO-CLEARS `resolution` to `\"\"`, so the \
+`resolution ⟺ terminal` invariant always holds post-write and re-opening is one \
+command. `--resolution promoted` by hand is legal (the promote BRIDGE is deferred). \
+The OQ-003 origin-edge boundary (§5.4): a bare backlog-side re-open of a `promoted` \
+item touches the ITEM only — the slice-authored promotion-origin edge (ADR-004 §1) \
+is NOT torn down here; the residual dangling edge is the deferred registry reverse-\
+scan's to surface (PRD-011), never authored-tier truth to repair in this verb. \
+Missing id → hard error (never implicit create).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 + PHASE-02 green — the seeded mutable keys exist on every kind and `backlog new` produces items to transition" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`backlog edit <ID> --status <s> [--resolution <r>]` sets the field(s) in place via `toml_edit`, bumps `updated`, preserves comments/unknown keys; a no-op (unchanged values) writes nothing; a missing-seeded-key file is refused, not corrupted" },
+  { id = "EX-2", text = "coupling holds both directions: a terminal status requires a `resolution`, a non-terminal forbids one; moving to a non-terminal status auto-clears `resolution` (D9 re-open); `--resolution promoted` by hand is accepted" },
+  { id = "EX-3", text = "a missing id hard-errors (never implicit create); the bare backlog-side re-open touches only the item (slice-authored origin edge untouched, OQ-003 boundary); clippy zero, `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "`backlog_edit_coupling_both_directions`: terminal-without-resolution rejected; `--status started --resolution X` rejected (non-terminal takes no resolution); a valid terminal+resolution accepted" },
+  { id = "VT-2", expects = "`backlog_edit_reopen_auto_clears_resolution` (D9): moving a resolved item to `open` clears `resolution` to `\"\"`; the invariant holds post-write; a `promoted` item is hand-re-openable (ungated)" },
+  { id = "VT-3", expects = "`backlog_edit_is_edit_preserving` + `backlog_edit_noop_and_malformed_and_missing`: a hand-added comment/unknown key survives; a no-op writes nothing; a missing-seeded-key file is refused; a missing id hard-errors; `updated` bumps, the rest survives" },
+]
+specs        = []
+requirements = ["REQ-052", "REQ-057", "REQ-059"]
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Workflow integration — consult / capture / harvest loop-map"
+objective = """
+Close the intake-leak gap (PRD-009 §5 success measure): wire the backlog into the \
+spec-driver loop at the right points (slice §Q6, scope §Workflow integration). \
+Sequenced LAST, after the CLI verbs land, because it edits the SHARED skill/boot \
+surface under the behaviour-preservation gate. Revise the routing table \
+(`.doctrine/state/boot.md` — regenerated via `doctrine boot`, SL-011, never \
+hand-edited as truth) and the affected skills so the backlog is consulted / captured \
+/ harvested at the loop points: `/route`, `/preflight` CONSULT (`backlog list`/`show` \
+at the start of substantive work — is this intent already captured?); `/consult`, \
+`/notes` CAPTURE (`backlog new` when an obstacle / tradeoff / follow-up surfaces); \
+`/audit`, `/close` HARVEST (durable risks/issues/chores into backlog items alongside \
+the existing audit.md / memory harvest). Add the BOUNDARY guidance the skills cite so \
+they route correctly — backlog = latent WORK; `knowledge_record` (PRD-010) = \
+epistemic/governance records; ADR = high-impact architectural DECISIONS; memory = \
+durable KNOWLEDGE — arbitrated by the work-intake membership test \
+(`mem.concept.backlog.work-intake-membership`). The deeper `slice new --from-backlog` \
+bridge stays a follow-up (Non-Goals). Usage guidance must SHIP to the client surfaces, \
+not hide in the build-repo CLAUDE.md (`mem.system.governance.ship-usage-guidance-to-clients`).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 + PHASE-03 + PHASE-04 green — the `new`/`list`/`show` surface the skills will reference exists and works" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "the routing table (boot source) + the affected skills (`/route`, `/preflight`, `/consult`, `/notes`, `/audit`, `/close`) reference consult / capture / harvest of the backlog at the right loop points, with the verbs that exist" },
+  { id = "EX-2", text = "the work / knowledge_record (PRD-010) / ADR / memory boundary text is present and cites the membership test as the arbiter; the guidance ships to the client surfaces (not the build-repo CLAUDE.md)" },
+  { id = "EX-3", text = "`doctrine boot` regenerates a consistent snapshot; existing skill behaviour is otherwise preserved (behaviour gate on the shared surface); `just check` green" },
+]
+verification = [
+  { id = "VA-1", expects = "agent check: each of the six skills' edited text routes correctly — consult/capture/harvest at the stated loop point, citing the membership-test boundary; no skill's prior behaviour is broken or scope-crept" },
+  { id = "VT-1", expects = "behaviour gate: the skills/boot suite (and the full `cargo test`) stay green unchanged after the surface revision; `doctrine boot --check` reports a fresh, consistent snapshot" },
+]
+specs        = []
+requirements = ["REQ-050"]
