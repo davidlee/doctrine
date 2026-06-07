@@ -20,4 +20,9 @@ requirements = ["REQ-049", "REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-057"
 # Canon that also governs (prose links in slice-020.md § Context Bundles):
 #   doc/entity-model.md  — one backlog_item + item_kind facet (:74); status (:109)
 #   doc/glossary.md      — reserved ids ISS/IMP/CHR/RSK/IDE
-# Forward edges (slices/specs/drift <-> backlog items) materialise once items exist.
+#   ADR-004              — relations outbound-only; reciprocity derived (PRD-009 OQ-004)
+#   ADR-003              — canonical change loop; backlog = capture step
+#   PRD-011              — derived graph priority; sibling consumer of the relation
+#                          seam + authored-priority seam (resolves PRD-009 OQ-002)
+# Forward edges (slices/specs/drift <-> backlog items) are outbound-only (ADR-004),
+# materialise once items exist.
