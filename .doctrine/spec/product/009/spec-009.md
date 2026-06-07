@@ -283,6 +283,10 @@ kind stays first-class without a lifecycle-special field.)
 - OQ-003 — On promotion, is the backlog item consumed (moved to a terminal state) or
   kept live and linked to its slice? Blocks the bridge's exit semantics and whether a
   promoted item still appears in the default survey.
-- OQ-004 — Are backlog↔artefact relations reciprocal (an item shows inbound references
-  from slices/specs/drift), or outbound-only in the durable item with reverse lookups
-  deferred to a registry surface? Blocks the inspect view's completeness claims.
+(OQ-004 — backlog↔artefact reciprocity — is resolved by ADR-004: relations are stored
+**outbound-only** on the durable item; reciprocity is real but **derived** — inbound
+references (which slices/specs/drift point at an item) are computed by the registry
+scan, never authored on the item. Exactly one side authors each relation type. The
+inspect view's inbound-completeness claim is the registry-backed surface's to make, not
+the sync-free reader's; reverse lookup is correct-but-uncached until the feature DAG
+lands.)

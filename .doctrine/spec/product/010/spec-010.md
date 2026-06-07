@@ -371,10 +371,14 @@ changes kind; the successor is a separate record of its own kind. The allowed cr
 are bounded by the §6 matrix; reopening directions (`constraint → assumption`,
 `decision → question`) are reconsideration modelled as relations, not supersession. The
 §6 assumption→constraint case is the canonical cross-kind supersession, not a link.)
-- OQ-003 — Are record↔artefact relations reciprocal (a slice/spec/risk shows inbound
-  references from the records that shape it), or outbound-only in the durable record
-  with reverse lookups deferred to a registry surface? Mirrors PRD-009 OQ-004; blocks
-  the inspect view's completeness claims.
+(OQ-003 — record↔artefact reciprocity — is resolved by ADR-004 (the same rule PRD-009
+OQ-004 cites): relations are stored **outbound-only** on the durable record;
+reciprocity is **derived** — an artefact's inbound references from the records that
+shape it are computed by the registry scan, never authored on the artefact. Exactly one
+side authors each relation (the record, here). Inbound completeness belongs to the
+registry-backed inspect surface, not the one-way reader. Leans OQ-005 toward
+relation-not-field: if scope is a typed relation, "what is scoped to me" is derived like
+any other inbound reference.)
 - OQ-004 — Should `confidence` (low/medium/high) be a common field across all kinds, or
   an assumption-only facet? It reads naturally on an assumption and a question, less so
   on an accepted decision or an active constraint. Blocks the common-schema shape.
