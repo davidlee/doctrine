@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 53
+slug = "carry-kind-specific-facets-including-the-risk-facet"
+title = "Carry kind-specific facets including the risk facet"
+status = "pending"
+kind = "functional"
+
+description = "A backlog item carries the facet fields its kind defines, including the risk facet (likelihood, impact, controls, origin, acceptance), within the single shared entity."
+tags = []
+acceptance_criteria = [
+  "Each kind carries its defined facet set; a risk item carries likelihood, impact, controls, origin, and acceptance.",
+  "Risk acceptance (accepted / expired / none) is a facet field distinct from lifecycle status.",
+  "All kinds, including risk, are the one `backlog_item` entity discriminated by `item_kind` — no parallel schema.",
+]

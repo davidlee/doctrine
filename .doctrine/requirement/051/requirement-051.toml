@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 51
+slug = "inspect-a-backlog-item-with-kind-specific-facets-and-relations"
+title = "Inspect a backlog item with kind-specific facets and relations"
+status = "pending"
+kind = "functional"
+
+description = "An operator can inspect a backlog item — its kind resolved from the id prefix — rendering identity, kind-specific facets, timestamps, and outbound relations."
+tags = []
+acceptance_criteria = [
+  "The item's kind is detected from its id prefix without being supplied.",
+  "Identity, kind-specific facets, and timestamps render.",
+  "Outbound relations to other artefacts render.",
+]

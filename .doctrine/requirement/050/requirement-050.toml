@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 50
+slug = "survey-and-filter-the-backlog-as-a-set"
+title = "Survey and filter the backlog as a set"
+status = "pending"
+kind = "functional"
+
+description = "An operator can survey the backlog as a set, filtering by kind, status, and tag, with resolved and closed items hidden by default."
+tags = []
+acceptance_criteria = [
+  "The survey can be narrowed by kind, status, tag, and title substring.",
+  "Resolved and closed items are hidden by default and shown only on explicit request.",
+  "Items render in recorded priority order where a priority is set.",
+]

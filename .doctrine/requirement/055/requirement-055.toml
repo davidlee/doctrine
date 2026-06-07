@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 55
+slug = "promote-a-backlog-item-into-a-scoped-slice"
+title = "Promote a backlog item into a scoped slice"
+status = "pending"
+kind = "functional"
+
+description = "An operator can promote a backlog item into a scoped slice; the new slice records the originating item and the item reflects that it has been carried into scope."
+tags = []
+acceptance_criteria = [
+  "Promotion yields a slice that records the originating backlog item.",
+  "The promoted item reflects that it has been carried into scope.",
+  "Promoting an already-promoted item is recognised rather than silently duplicating scope.",
+]

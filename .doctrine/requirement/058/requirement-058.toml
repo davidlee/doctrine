@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 58
+slug = "store-every-facet-as-typed-enumerated-data"
+title = "Store every facet as typed, enumerated data"
+status = "pending"
+kind = "quality"
+
+description = "Every backlog facet is stored as typed, enumerated data; no untyped frontmatter catch-all ever holds product data."
+tags = []
+acceptance_criteria = [
+  "Every facet is a typed field with an enumerated or otherwise constrained domain.",
+  "No untyped catch-all bag holds product data.",
+  "An out-of-domain facet value is surfaced as invalid rather than silently stored.",
+]

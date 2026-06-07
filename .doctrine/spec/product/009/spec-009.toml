@@ -1,0 +1,18 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 9
+slug = "backlog"
+title = "Backlog"
+status = "draft"
+kind = "product"
+category = "work-intake"
+tags = ["backlog", "work-intake", "capture", "triage", "prioritisation"]
+responsibilities = [
+  "Capture work intent — issues, improvements, chores, risks, ideas — as durable first-class items the moment it surfaces, before it is scoped.",
+  "Model every work item as one entity discriminated by an item_kind facet, never a fork of parallel per-kind schemas.",
+  "Carry an item through its work-intake lifecycle from open to triaged, started, resolved, and closed.",
+  "Hold kind-specific facets — notably the risk facet — as typed, enumerated storage, never an untyped catch-all bag.",
+  "Order the backlog by priority and bridge a captured item into a scoped slice, feeding the spec-driver loop.",
+  "Provide a forward relation seam linking items to slices, specs, and drift without reshaping the item.",
+]

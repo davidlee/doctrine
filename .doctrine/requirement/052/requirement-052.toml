@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 52
+slug = "move-a-backlog-item-through-its-canon-status-lifecycle"
+title = "Move a backlog item through its canon status lifecycle"
+status = "pending"
+kind = "functional"
+
+description = "An operator can move a backlog item between states in the closed canon lifecycle (open, triaged, started, resolved, closed)."
+tags = []
+acceptance_criteria = [
+  "Only the canon lifecycle states are reachable.",
+  "A transition changes only the status, preserving the rest of the item.",
+  "A resolved or closed item can be returned to an earlier state.",
+]
