@@ -226,9 +226,18 @@ drift = []
 ```
 
 `id/slug/title/status` are top-level so the file round-trips into `meta::Meta`
-(the boot snapshot / shared substrate can read it). `kind` is stored *and* implied
-by the dir — stored so a single read yields the validated entity without path
-inspection; the dir remains the reservation namespace.
+(verified: `Meta` does not `deny_unknown_fields`, so the extra keys are ignored;
+`status` is a `String` there). `kind` is stored *and* implied by the dir — stored
+so a single read yields the validated entity without path inspection; the dir
+remains the reservation namespace.
+
+**Empty-string ↔ `Option` seam.** `resolution`, `likelihood`, `impact` are seeded
+`""` (not absent) so the `edit` verb can `toml_edit`-set them *in place* (a tail
+`insert` of a fresh key would land after the `[facet]`/`[relationships]` headers —
+adr F-1 corruption). `""` is not an enum variant, so the `RawBacklogToml →
+BacklogItem` validation layer maps `"" → None` and parses any non-empty value to
+its enum (erroring on an unknown token). `list`/`show` read the validated entity,
+never the raw string.
 
 **Templates** (rust-embed assets): two — `templates/backlog.toml` (the four plain
 kinds) and `templates/backlog-risk.toml` (adds `[facet]`) — plus
@@ -268,6 +277,11 @@ kind subdirs). Without both, a created item is uncommittable.
   regenerate). **Coupling validation** (`validate_transition`): a terminal status
   requires a `resolution`; a non-terminal status forbids one. Setting
   `--resolution promoted` by hand is legal (the bridge automation is deferred).
+  **Re-open (D9):** moving to a non-terminal status **auto-clears** `resolution`
+  (back to `""`), so re-opening is one command and the `resolution ⟺ terminal`
+  invariant always holds post-write. A `resolution=promoted` item is re-openable by
+  hand — v1 is ungated, exactly the OQ-003 escape hatch ("the operator clears the
+  resolution and abandons the slice by hand"); no special promoted guard.
 
 Deferred ops attach without reshaping: an authored `priority` field
 (`REQ-054`/PRD-011 OQ-001), the `--from-backlog` promote bridge (sets terminal +
@@ -281,10 +295,15 @@ permanent, slug non-authoritative; `resolution ⟺ terminal status`; relationshi
 outbound-only; every facet typed (no bag); a terminal item stays addressable
 ("hidden" is a view); the relation seam is always present even when empty.
 
-Edge cases: empty backlog → first id per kind; `show` on an unknown prefix → hard
-error; `edit` on a missing id → hard error (never implicit create); malformed TOML
-(missing seeded keys) → refuse, not corrupt; `edit --status started --resolution X`
-→ rejected by coupling; clearing a resolution requires moving off terminal.
+Edge cases: empty backlog → first id per kind; **id parse** splits on the last
+`-`, upper-cases the prefix, parses the numeric tail as `u32` (tolerates `ISS-7`
+and `ISS-007`, rejects an unknown prefix or non-numeric tail) — note the five
+counters are independent, so `ISS-001` and `RSK-001` coexist and the prefix is
+load-bearing for disambiguation; `show` on an unknown prefix → hard error; `edit`
+on a missing id → hard error (never implicit create); malformed TOML (missing
+seeded keys) → refuse, not corrupt; `edit --status started --resolution X` →
+rejected by coupling (a non-terminal status takes no resolution); re-opening a
+terminal item auto-clears its resolution (D9).
 
 Assumptions (carried from scope, verified here): `entity.rs` admits this caller
 with a per-kind fileset descriptor and **no engine change**; the `mkdir` reservation
@@ -330,6 +349,10 @@ All slice §Q1–Q6 are resolved (§7). Residual, all out of v1 scope:
   conditional `[facet]` injection — more scaffold branching for no real gain.
 - **D8 — `edit` scope = `status`/`resolution` only in v1** (facets/tags/title
   hand-edited). Keeps the first mutating verb minimal and edit-preserving.
+- **D9 — re-open auto-clears `resolution`.** Moving to a non-terminal status sets
+  `resolution=""`; the verb never leaves a non-terminal item carrying a close-reason.
+  *Alt rejected:* reject-unless-explicit-clear — two commands for a re-open, no
+  safety gain (the post-state invariant is the same).
 
 Mutation note (carried into D6/D8): `resolution` is seeded as a top-level `""` key
 so `toml_edit` sets it **in place**; a tail-insert would land it after the
@@ -381,7 +404,37 @@ on the shared skill/boot surface — last, after the verbs land).
 
 ## 10. Review Notes
 
-(Adversarial pass pending.)
+Internal adversarial pass (findings + disposition):
+
+- **R1 — re-open mechanism was underspecified.** "Clearing a resolution requires
+  moving off terminal" named no mechanism. *Fixed:* D9 — non-terminal transition
+  auto-clears `resolution`; invariant holds post-write.
+- **R2 — empty-string ↔ `Option` parse seam was implicit.** `resolution`/levels are
+  seeded `""` for in-place `toml_edit`, but `""` is no enum variant. *Fixed:* §5.3
+  states the `"" → None` mapping in the validation layer.
+- **R3 — id parse tolerance unspecified.** *Fixed:* §5.5 — split last `-`, upper
+  prefix, `u32` tail (`ISS-7`/`ISS-007`); unknown prefix / bad tail error.
+- **R4 — `Status::is_terminal` is *not* `slice::is_terminal_status`.** Different
+  vocab (slice `…|audit|done` vs backlog `…|resolved|closed`). A backlog-local
+  predicate is correct, not duplication — flagged so a reviewer does not "DRY" them
+  into one wrong set.
+- **R5 — gitignore recursion is a wiring risk, not a design change.** Re-including
+  `.doctrine/backlog/` under an ignored `.doctrine/` needs the intermediate
+  un-ignore. *Disposition:* the wiring phase proves it with a real `git add`
+  assertion (§9), per `mem.pattern.install.authored-entity-wiring`.
+- **R6 — claim "engine unchanged" is load-bearing.** Re-checked: `new` needs only
+  `Fresh`; `list`/`show`/`edit` are backlog-local + `meta`/`toml_edit`. No
+  `entity.rs` change. The behaviour-preservation suite is the proof.
+- **R7 — `list` cross-kind order is arbitrary.** Declaration order (Issue…Idea) is
+  a deterministic placeholder, *explicitly not* a priority claim; real ordering is
+  PRD-011. Accepted as-is for v1.
+
+Doctrinal alignment: re-confirmed against ADR-003 (capture step), ADR-004
+(outbound-only; promote origin edge is slice-side), PRD-009 invariants
+(status/resolution/facet three-never-overlap; ungated lifecycle), PRD-011 (priority
+deferred; terminal/promoted hidden), the storage rule, and the reference-form
+convention. No governance conflict surfaced; the one new corpus-wide question
+(inline vs derived edges) is deferred to a follow-up ADR, not normalized around.
 
 ## Follow-Ups
 
