@@ -56,6 +56,15 @@ from.
 - **One entity, one schema.** Every kind of work item is the *same* `backlog_item`
   entity discriminated by an `item_kind` facet — never parallel per-kind schemas or
   directories. Kind variation is facet fields on one entity, not a fork.
+- **Backlog holds latent work, not epistemic state.** A kind belongs only if it
+  passes the membership test: it can be triaged and promoted into a slice, and its
+  standing fits the work-status lifecycle. Beliefs (assumptions) and choices
+  (decisions) fail this test — an assumption's standing is held→validated, a
+  decision's is proposed→accepted→superseded; neither is work to be done. They live
+  in their own families (a risk facet, the separate decision/governance family, or a
+  future epistemic group), never as an `item_kind`.
+- **Each kind has a discriminating boundary.** Adjacent kinds are separated by an
+  explicit test, not left to judgement, so an item resolves to exactly one kind.
 - **Capture is cheap; losing intent is not.** The bar to record an item is low, so
   intent lands the moment it surfaces rather than being deferred into oblivion.
 - **Canon fixes the vocabulary.** The kind set and id schemes (glossary) and the
@@ -84,8 +93,14 @@ Constraints:
 - The kind set and its id schemes are canon-fixed by the glossary — issue (`ISS`),
   improvement (`IMP`), chore (`CHR`), risk (`RSK`), idea (`IDE`), three-character
   prefixes — and may not be extended without a reserved id.
+- Every `item_kind` must pass the work-intake membership test (promotable to a slice,
+  standing fits the work-status lifecycle) and carry a discriminating boundary test
+  that resolves an item to exactly one kind; a candidate that fails either is not an
+  `item_kind`.
 - The status lifecycle is the closed canon set `open | triaged | started | resolved |
-  closed`; no kind may add or rename a status state.
+  closed`; no kind may add or rename a status state. `risk` is the lifecycle outlier
+  — a risk is mitigated/accepted/expired rather than "resolved"; that standing is
+  absorbed by the risk acceptance facet, not by extending the status vocabulary.
 - Risk acceptance is a facet field (`accepted` / `expired` / none), never a lifecycle
   state.
 - The capability must reuse the shared entity/scaffold substrate; extending it must not
@@ -194,10 +209,25 @@ requirements is tracked against those entities, not duplicated here.
 
 ## 8. Open Questions
 
-- OQ-001 — Does the `problem` kind (named in `entity-model.md:74` prose, present in the
-  source corpus, but lacking a reserved glossary id) enter the kind set, or stay
-  deferred? Blocks the final `item_kind` enum and any capture surface that enumerates
-  kinds.
+- OQ-001 — The final `item_kind` set. The glossary reserves five
+  (issue/improvement/chore/risk/idea); `entity-model.md:74` also names `problem` but
+  reserves no id. Resolve: (a) does `problem` enter the set — recommended yes, with the
+  decompose boundary (a problem decomposes into issues/improvements; an issue is one
+  identified defect with a fix), else folded into `issue`? (b) confirm `assumption` and
+  `decision` stay **out**: an assumption is epistemic (held→validated, not work-status;
+  an unvalidated assumption is a `risk` with `origin = assumption`), and a `decision`
+  belongs to the separate decision/governance family (`entity-model` taxonomy) where
+  ADR already lives — admitting either breaks the uniform work-status lifecycle and
+  duplicates an existing family. Blocks the enum and any capture surface that
+  enumerates kinds.
+- OQ-005 — A future home for non-work / epistemic items. ADRs capture high-impact,
+  architecturally-significant decisions; lower-stakes decisions and assumptions have no
+  home today and might warrant a risk-analogous treatment (typed facets, their own
+  lifecycle). They are deliberately excluded from the backlog by the work-intake
+  membership test (above). Does a distinct epistemic entity group — decisions and
+  assumptions, on a held→validated / proposed→accepted→superseded lifecycle — earn its
+  own entity later? Out of scope for the backlog; recorded so the exclusion is a
+  decision, not an omission.
 - OQ-002 — What is the product shape of priority: a single global total order, a
   per-kind ordering, or a head-tail partition (an explicitly-ranked head over an
   unranked tail)? Blocks the prioritise behaviour and how survey renders order.
