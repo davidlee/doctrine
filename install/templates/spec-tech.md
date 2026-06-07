@@ -1,5 +1,8 @@
 # {{ref}}: {{title}}
 
+<!-- Reference forms: entity ids padded (SPEC-007, ADR-004); doc-local refs bare
+     (D1 decision, OQ-1 open question). See doc/glossary.md § reference forms. -->
+
 ## Overview
 
 <!-- What this component is and where it sits (the C4 frame). -->

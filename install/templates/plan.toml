@@ -17,14 +17,16 @@ targets      = []
 dependencies = []
 
 # One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
-# never reused once authored — edits append, they never renumber. Criterion and
-# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (doc/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
 [[phase]]
 id        = "PHASE-01"
 name      = ""
 objective = ""
 entrance_criteria = []           # [{ id = "EN-1", text = "…" }]
 exit_criteria     = []           # [{ id = "EX-1", text = "…" }]
-verification      = []           # [{ id = "VT-1", expects = "…" }]
+verification      = []           # [{ id = "VT-1", expects = "…" }] — VT/VA/VH by mode
 specs             = []           # per-phase narrowing of the plan's specs
 requirements      = []
