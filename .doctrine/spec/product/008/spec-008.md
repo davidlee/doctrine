@@ -173,10 +173,15 @@ quality requirements is tracked against those entities, not duplicated here.
   decisions (mirroring the slice convention) for greppability, or remain bare
   numeric? This blocks any convention that cites a decision from outside its
   directory.
-- The relationship seam (supersedes / superseded_by / related / tags) is authored
-  but inert. When supersession is wired, is the reverse `superseded_by` link derived
-  from the forward `supersedes`, or independently authored? This blocks the design of
-  the supersession verb and whether the two links can ever disagree.
+(Resolved by ADR-004 §5 — the supersession reverse link. The reverse `superseded_by`
+is **stored** on the predecessor, not derived: supersession moves the predecessor to a
+terminal `superseded` status and rewrites its file regardless, so co-writing the reverse
+edge is ADR-004's lifecycle-mutation carve-out — zero marginal coupling, and the only
+honest place a reader of the dead decision finds its successor. The supersede verb
+writes `supersedes` on the successor and `superseded_by` on the predecessor atomically,
+so the two links cannot disagree. This is the sole reverse-edge exception; every
+non-lifecycle backlink — `related`, tags, inbound references — stays derived per
+ADR-004 §2.)
 - Decisions are project-global by definition, yet some rationale is genuinely
   framework-global (travelling with the binary to every client, like an orientation
   memory). Is there a class of framework-level decision distinct from a
