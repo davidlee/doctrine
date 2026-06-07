@@ -261,7 +261,12 @@ kind subdirs). Without both, a created item is uncommittable.
   &Inputs{slug,title,date})`; print `Created ISS-007: <dir>`. Monotonic per-kind id,
   race-retry inherited. Counters are independent across kinds (separate `dir`s).
 - **`list`** — for each `ItemKind`, read its tree into `Vec<BacklogItem>`; merge;
-  filter; sort **kind then ascending id**; render via `meta::render_table`. Filters
+  filter; sort **kind then ascending id**; render via `meta::render_table`. **A
+  kind's reservation dir need not exist** — the engine creates `.doctrine/backlog/
+  <kind>` lazily on that kind's first `new`, and an empty dir is not git-committable
+  (so it never survives a clone). The reader therefore treats a **missing
+  `<kind>` dir as the empty set**, never an error; `list` on a virgin repo prints
+  an empty table (the manifest seeds only the `.doctrine/backlog` parent — D4). Filters
   AND together. **Visibility:** with no `--status`/`--all`, show only active
   (`open|triaged|started`); `--all` shows all; an explicit `--status resolved`/
   `closed` shows that terminal state. Promoted items are terminal, so the
@@ -282,6 +287,17 @@ kind subdirs). Without both, a created item is uncommittable.
   invariant always holds post-write. A `resolution=promoted` item is re-openable by
   hand — v1 is ungated, exactly the OQ-003 escape hatch ("the operator clears the
   resolution and abandons the slice by hand"); no special promoted guard.
+  **Origin-edge interaction (the OQ-003 boundary).** Backlog-side re-open touches
+  the *item* only; the slice→item promotion-origin edge is **slice-authored**
+  (ADR-004 §1) and is *not* torn down by `backlog edit`. A bare backlog-side
+  re-open of a `promoted` item is therefore the **improper** half of the escape
+  hatch: it leaves an active item still claimed as a slice's consumed origin. The
+  sanctioned correction is **slice-side** — abandoning the slice tears down the
+  origin edge (OQ-003), with re-opening the item the *second* step, not a
+  standalone undo. v1 stays ungated (it cannot reach across to the slice), so the
+  residual dangling edge is a **derived-surface** concern: the registry
+  reverse-scan (deferred, PRD-011) is the reconciler that surfaces an origin edge
+  pointing at a non-terminal item — never authored-tier truth to repair here.
 
 Deferred ops attach without reshaping: an authored `priority` field
 (`REQ-054`/PRD-011 OQ-001), the `--from-backlog` promote bridge (sets terminal +
@@ -293,9 +309,13 @@ verb, `sync`, and the registry reverse scan + derived priority (PRD-011).
 Invariants (PRD-009 §4): `item_kind` fixed at capture; identity = prefix+number,
 permanent, slug non-authoritative; `resolution ⟺ terminal status`; relationships
 outbound-only; every facet typed (no bag); a terminal item stays addressable
-("hidden" is a view); the relation seam is always present even when empty.
+("hidden" is a view); the relation seam is always present even when empty; a
+`promoted` item's slice-side origin edge is reconciled **slice-side** (OQ-003 /
+ADR-004 §1), never repaired by a backlog-side re-open (§5.4 origin-edge interaction).
 
-Edge cases: empty backlog → first id per kind; **id parse** splits on the last
+Edge cases: empty backlog → first id per kind; **a kind with no reservation dir
+yet** → that kind contributes the empty set to `list` (never an error), and
+yields the first id on its first `new`; **id parse** splits on the last
 `-`, upper-cases the prefix, parses the numeric tail as `u32` (tolerates `ISS-7`
 and `ISS-007`, rejects an unknown prefix or non-numeric tail) — note the five
 counters are independent, so `ISS-001` and `RSK-001` coexist and the prefix is
@@ -381,14 +401,18 @@ TDD red/green/refactor throughout. Test classes (→ PRD-009 acceptance gates /
 
 - **Render round-trip** — `backlog-NNN.toml` parses into `meta::Meta` (4 keys) *and*
   the full `BacklogItem`; no `{{token}}` survives; risk seeds `[facet]`, plain kinds
-  do not.
+  do not. **All five kinds** seed the mutable `status`/`resolution`/`updated` keys
+  (the `edit`-in-place seam, §5.3) — asserted per kind, not risk alone, or `edit`
+  would refuse a non-risk item as malformed.
 - **Scaffold shape** — per-kind fileset (toml + md + symlink); risk includes the
   facet block; paths tree-relative.
 - **`new`** — monotonic per-kind allocation and **counter isolation** across kinds
   (an `ISS` create does not advance `RSK`); race-retry inherited.
 - **`list`** — the visibility/filter/order matrix: default hides terminal; `--all`
   and explicit `--status` reveal; `--kind`/`--tag`/substring AND; promoted hidden by
-  the terminal rule; kind-then-id order.
+  the terminal rule; kind-then-id order. **Empty/missing-dir:** `list` on a virgin
+  repo (no kind dirs created) prints an empty table, not an error; a kind with no
+  reservation dir contributes the empty set (§5.4).
 - **`show`** — prefix auto-detect; identity + facet + outbound relations render;
   unknown prefix errors.
 - **`edit`** — coupling (terminal⟺resolution, both directions); no-op guard;
@@ -428,6 +452,27 @@ Internal adversarial pass (findings + disposition):
 - **R7 — `list` cross-kind order is arbitrary.** Declaration order (Issue…Idea) is
   a deterministic placeholder, *explicitly not* a priority claim; real ordering is
   PRD-011. Accepted as-is for v1.
+
+External inquisition pass (`inquisition.md`, 2026-06-08) — dispositions:
+
+- **C1 — false citation `glossary:109`.** The status vocab lives at
+  `entity-model.md:109`; `glossary.md` (40 lines) has none. *Fixed:* `slice-020.md`
+  divergence row corrected to `(entity-model:109)`.
+- **C2 — missing kind-dir on `list`.** Per-kind dirs are engine-created lazily and
+  empty dirs are not git-committable, so the reader must tolerate absence. *Fixed:*
+  §5.4 `list` + §5.5 edge case + §9 test now state missing-dir → empty set; manifest
+  seeds only the `.doctrine/backlog` parent (D4).
+- **C3 — promoted re-open vs slice-side origin edge.** *Fixed:* §5.4 origin-edge
+  interaction + §5.5 invariant — bare backlog-side re-open of a `promoted` item is
+  the improper half; correction is slice-side (OQ-003/ADR-004 §1); the residual
+  dangling edge is the deferred registry reverse-scan's to surface (PRD-011).
+- **C4 — REQ-049..059 bodies are empty stubs.** PRD-009's requirement entities carry
+  placeholder Statement/Rationale, so conformance rests on titles. **Blocking
+  dependency on the lock:** PRD-009 must fill REQ-049..059 bodies before SL-020's
+  §9 traceability is verifiable. Tracked as a follow-up (a `backlog new chore`
+  candidate once the CLI ships); not a SL-020 design defect.
+- **C5/C6 — minor.** *Fixed:* stripped redundant `FR-006 /` (kept durable `REQ-054`)
+  at `slice-020.md` ×3; §9 round-trip now asserts seeded keys for all five kinds.
 
 Doctrinal alignment: re-confirmed against ADR-003 (capture step), ADR-004
 (outbound-only; promote origin edge is slice-side), PRD-009 invariants

@@ -97,7 +97,7 @@ how the research corpus reconciles with canon, and the v1 implement subset.
 | Modelling | 4 kinds · 4 dirs · 4 schemas | one entity + `item_kind` facet (`entity-model:74`) | **canon** — single kind |
 | Kind set | issue, problem, improvement, risk | issue, improvement, chore, risk, idea (`glossary`) — `problem` in `entity-model:74` prose only, **no reserved id** | **resolved** — PRD-009 OQ-001: the five; `problem` excluded |
 | ID scheme | `ISSUE-010` (5-char, 3-digit) | `ISS-/IMP-/CHR-/RSK-/IDE-NNN` (3-char) | **canon** — 3-char prefixes |
-| Status | open→triaged→in-progress→resolved | `open\|triaged\|started\|resolved\|closed` (`glossary:109`) | **canon** — `started` not `in-progress`, adds `closed` |
+| Status | open→triaged→in-progress→resolved | `open\|triaged\|started\|resolved\|closed` (`entity-model:109`) | **canon** — `started` not `in-progress`, adds `closed` |
 | Risk states | +accepted, +expired | not in canon vocab | **resolved** — PRD-009 OQ-006: `resolution` owns accepted/expired; risk facet is descriptive only |
 | Layout | `backlog/{kind}s/<ID>/` | one entity → engine's per-kind reservation dir | **canon** — engine layout |
 
@@ -109,7 +109,7 @@ encode the resolved semantics so the deferred layers stay forward-compatible:
 
 - **OQ-002 — priority shape → [PRD-011](../../spec/product/011/spec-011.md).**
   Two-layer head-tail model: a minimal **authored** seam (rank/band/pin, PRD-009
-  FR-006 / `REQ-054`; exact field still open as PRD-011 OQ-001) over a
+  `REQ-054`; exact field still open as PRD-011 OQ-001) over a
   registry-backed **derived** layer (PRD-011 — actionability, blockers,
   consequence, explanations; never persisted as truth). v1 builds neither; the
   design reserves the authored seam and the outbound relation graph PRD-011 reads.
@@ -224,7 +224,7 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
 ## Non-Goals
 
 - **Priority** — both layers. The **authored** seam (rank/band/pin, PRD-009
-  FR-006 / `REQ-054`; exact field open as PRD-011 OQ-001) and the **derived**
+  `REQ-054`; exact field open as PRD-011 OQ-001) and the **derived**
   graph-priority layer ([PRD-011](../../spec/product/011/spec-011.md):
   actionability, blockers, consequence, explanations over the relation graph). v1
   has no ordering; the design reserves the authored seam and the outbound edges
@@ -308,7 +308,7 @@ add `.doctrine/backlog` to `install/manifest.toml` `[dirs].create` **and** the
   the generic `[[edge]] from/rel/to` is the registry's *derived* form; sister edge
   files are for payload-carrying edges only. Harmonise slice/ADR/backlog array
   naming. A `backlog new` candidate once the CLI ships.
-- **Priority** — the authored seam (PRD-009 FR-006 / `REQ-054`) and the derived
+- **Priority** — the authored seam (PRD-009 `REQ-054`) and the derived
   graph-priority layer ([PRD-011](../../spec/product/011/spec-011.md)). The prime
   backlog follow-up.
 - **`slice new --from-backlog <ID>`** — the capture→scope bridge into the
