@@ -287,9 +287,24 @@ rejects a mandatory global total order (capture must stay cheap) and per-kind or
 as the sole model (a single "what next?" must compare risks, issues, chores,
 improvements, and ideas in one view). The exact authored field — `rank` / `band` /
 `pin` / ordering file — stays open as PRD-011 OQ-001.)
-- OQ-003 — On promotion, is the backlog item consumed (moved to a terminal state) or
-  kept live and linked to its slice? Blocks the bridge's exit semantics and whether a
-  promoted item still appears in the default survey.
+(OQ-003 — promotion exit semantics — is resolved: promotion **consumes** the item. It
+moves to a terminal status carrying `resolution = promoted` (the close-reason already
+defined in §4/§6), so it leaves the active flow; the default survey hides it (PRD-011
+REQ-075 excludes promoted items from default active output) while it stays addressable
+under an explicit reveal. The link is the slice→item origin edge, authored on the slice
+(ADR-004 §1); the item's "what it became" is derived, never stored on the item.
+
+The item is **not independently reopened** as a backlog operation — promotion is a
+one-way bridge, and recurred, regressed, or follow-on work is captured as a *new* item,
+since the slice now owns that work's lifecycle. The single exception is a *mistaken*
+promotion (wrong item, premature, slice never started): it is corrected **slice-side**,
+by abandoning the slice. Because the slice is the authoring side of the origin edge
+(ADR-004 §1), tearing the slice down removes the edge and releases the item back to the
+active flow — so there is no dangling slice→item edge and the backlog defines no special
+un-promote verb. This leans on slice lifecycle transitions (still nascent — ADR-003
+close/reconcile is deferred); in v1's hand-settable, ungated posture an operator clears
+the resolution and abandons the slice by hand, and this OQ fixes only which side owns the
+correction.)
 (OQ-004 — backlog↔artefact reciprocity — is resolved by ADR-004: relations are stored
 **outbound-only** on the durable item; reciprocity is real but **derived** — inbound
 references (which slices/specs/drift point at an item) are computed by the registry
