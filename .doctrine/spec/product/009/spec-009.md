@@ -277,9 +277,16 @@ the single generic close-reason for every kind; the risk facet holds only descri
 shape (likelihood/impact/origin/controls) and owns no accepted/expired field. The
 invariant "no close-reason is ever stored in a kind facet" (§4) records this; the risk
 kind stays first-class without a lifecycle-special field.)
-- OQ-002 — What is the product shape of priority: a single global total order, a
-  per-kind ordering, or a head-tail partition (an explicitly-ranked head over an
-  unranked tail)? Blocks the prioritise behaviour and how survey renders order.
+(OQ-002 — the product shape of priority — is resolved by PRD-011 as a two-layer
+head-tail model. The **authored** layer is minimal and durable: a ranked head over an
+unranked tail, the operator-authored priority seam this spec's FR-006 (`REQ-054`)
+owns. The **derived** layer is registry-backed and disposable: PRD-011 computes
+actionability, blocking, consequence, and explanation from the typed relation graph to
+order survey and next-work views without persisting any of it as backlog truth. This
+rejects a mandatory global total order (capture must stay cheap) and per-kind ordering
+as the sole model (a single "what next?" must compare risks, issues, chores,
+improvements, and ideas in one view). The exact authored field — `rank` / `band` /
+`pin` / ordering file — stays open as PRD-011 OQ-001.)
 - OQ-003 — On promotion, is the backlog item consumed (moved to a terminal state) or
   kept live and linked to its slice? Blocks the bridge's exit semantics and whether a
   promoted item still appears in the default survey.

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 71
+slug = "advise-next-actionable-work-with-reasons"
+title = "Advise next actionable work with reasons"
+status = "pending"
+kind = "functional"
+
+description = "An operator can ask what to consider next and receive a short advisory candidate list, each entry carrying its derived reason; the command mutates nothing."
+tags = []
+acceptance_criteria = [
+  "Each candidate carries id and title, item kind, lifecycle state, authored priority if present, actionability state, a primary derived reason, and relevant blockers or blocking consequences.",
+  "The command defaults to actionable candidates first.",
+  "The command transitions no item, creates no slice, and mutates no priority.",
+]

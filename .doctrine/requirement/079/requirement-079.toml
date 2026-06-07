@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 79
+slug = "keep-the-graph-core-generic-and-independently-testable"
+title = "Keep the graph core generic and independently testable"
+status = "pending"
+kind = "quality"
+
+description = "The graph core operates over opaque node IDs and typed directed edges, free of doctrine entity, time, scheduling, commitment, urgency, or external-product vocabulary, and is testable independently of doctrine policy and file persistence."
+tags = []
+acceptance_criteria = [
+  "The graph-core test suite contains no doctrine entity vocabulary and no time/scheduling/commitment semantics.",
+  "Doctrine policy interpretation (statuses, resolutions, relation kinds, item kinds, terminal states) lives outside the graph core, behind an adapter.",
+  "The graph core can be exercised over abstract nodes and edges without doctrine structs, TOML layout, or file paths.",
+]
