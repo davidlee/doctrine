@@ -1,0 +1,139 @@
+# Implementation plan for SL-022 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-022"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (doc/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "At-rest fields & render"
+objective = """
+Add the two outbound scalar fields (`descends_from`, `parent`) to the `Spec`
+struct and render them outbound-only, kind-gated to tech — the at-rest half of
+the spine (design §5.1, §5.2). No registry, edges, or integrity yet. The
+mechanical `None, None` test-constructor edits (no `Default`) land here; existing
+parse/render output is unchanged because the new lines are `Some`-gated.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked — self-review + inquisition pass resolved, no open deviation (inquisition.md §3)." },
+  { id = "EN-2", text = "SL-015 spec/registry suites are green at HEAD (behaviour-preservation baseline)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Spec` gains `descends_from: Option<String>` and `parent: Option<String>`, both `#[serde(default)]`; absent → None, present → Some (product + unfilled tech specs parse unchanged)." },
+  { id = "EX-2", text = "`render()` emits, kind-gated to tech and only when Some, `descends from: <ref>` then `parent: <ref>` in order c4 → descends → parent → responsibilities → sources; no children line; a product spec omits both lines." },
+  { id = "EX-3", text = "`install/templates/spec-tech.toml` documents `descends_from` and `parent` in the scaffold comment block (mirrors c4_level / [[source]]); the re-embedded scaffold emits them." },
+  { id = "EX-4", text = "Every existing `spec.rs` test passes; the only edit to them is the mechanical `descends_from: None, parent: None` added to `Spec { … }` constructors. No assertion changes value." },
+]
+verification = [
+  { id = "VT-1", expects = "parse tests: `parent`/`descends_from` present → Some, absent → None (Layer B)." },
+  { id = "VT-2", expects = "render tests: tech emits both lines in order; product with `descends_from` omits the line; no children line; empty-field tech omits (existing render assertions still hold)." },
+  { id = "VT-3", expects = "the SL-015 `spec.rs` suite is green with only the mechanical `None, None` constructor additions." },
+  { id = "VA-1", expects = "`doctrine spec new --tech` (or scaffold read) shows the new comment lines — rust-embed re-embed confirmed after a clean build." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Registry edges, product set & FK-resolution checks"
+objective = """
+Extend the registry with a `product_specs` id set and `parents` / `descents`
+edge collections, harvested by a NEW per-spec `spec-NNN.toml` read+parse in
+`build_registry` (it parses no spec today — only the edge tables; design §5.3,
+Charge I). Add the FK-resolution HARD checks: `descent_findings` and
+`parent_findings` (clean / invalid-kind / dangling), and rewrite
+`dangling_interaction_targets` to split invalid-kind from dangling (REQ-084 — an
+intended contract move, PRD-012 §6). No graph walk, no warn tier yet. Own the
+widened `build_registry` error surface.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the two fields parse and render." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Registry` gains `product_specs: BTreeSet<String>`, `parents: Vec<ParentEdge>`, `descents: Vec<DescentEdge { on_product }>`; `build_registry` parses each `spec-NNN.toml`, inserts product ids, and pushes parent/descent edges with refs canonicalised via `resolve_spec_ref`." },
+  { id = "EX-2", text = "`descent_findings`: tech descent target ∈ product_specs → clean, ∈ tech_specs → invalid-kind, ∈ neither → dangling (REQ-082). `parent_findings`: parent ∈ tech_specs → clean, ∈ product_specs → invalid-kind, ∈ neither → dangling, excluding the self case (REQ-083)." },
+  { id = "EX-3", text = "`dangling_interaction_targets` rewritten: product target → invalid-kind, neither → dangling (REQ-084); the old dangling-only behaviour is replaced." },
+  { id = "EX-4", text = "The four existing SL-015 checks (dangling member, duplicate label, orphan requirement, interaction) keep their behaviour except the deliberate REQ-084 rewrite; the additive set/edges do not perturb them." },
+]
+verification = [
+  { id = "VT-1", expects = "Layer A: descent clean / dangling / invalid-kind; parent clean / dangling / invalid-kind (self excluded)." },
+  { id = "VT-2", expects = "Layer A: interaction invalid-kind (rewriting `non_tech_interaction_target_is_flagged_tech_only`) and interaction dangling, asserting the two are distinct messages." },
+  { id = "VT-3", expects = "Layer C(i): `build_registry` over a well-formed temp corpus collects product ids + parent/descent edges. Layer C(iii): a malformed `spec-NNN.toml` now surfaces a parse error through validate (error-surface widening) where before it was invisible." },
+  { id = "VT-4", expects = "the SL-015 `registry.rs` hand-built-registry suite is green unchanged except the REQ-084 test rewrite." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Decomposition integrity (REQ-087)"
+objective = """
+Enforce the single-parent acyclic tree. `self_parent` is the sole reporter of
+A→A. `parent_cycle` walks the child→parent map and reports each cycle ONCE —
+canonicalised by least node-id, skipping self-loops (design finding A/F; Charge
+II). A pre-parse `second_parent` guard in `build_registry` scans the raw text for
+a duplicate / array `parent` and emits a NAMED hard finding with non-zero exit —
+the literal REQ-087 AC1 mechanism, the scalar field defense-in-depth (§5.2, §6a;
+Charge III/D).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: parent edges and product set are collected; FK checks pass." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`self_parent` reports A→A exactly once; `parent_cycle` skips self-loops and reports each k-cycle exactly once (canonical least-id), terminating cleanly at a root or a dangling parent." },
+  { id = "EX-2", text = "a pre-parse guard in `build_registry` detects a duplicate `parent =` key or `parent = [...]` array in the raw text and records a named hard finding (\"second parent declared in spec X\"); on a hit it skips the structural parse so the failure is named, not an opaque `Failed to parse`." },
+  { id = "EX-3", text = "`doctrine spec validate` / `run_validate` exits non-zero on any decomposition violation (self-parent, cycle, second-parent) — REQ-087 AC3." },
+]
+verification = [
+  { id = "VT-1", expects = "Layer A: self-parent → one finding; cycle-2 and cycle-3 each asserting the finding COUNT is exactly one (guards the dedup, not mere existence); a clean chain-to-root yields no finding." },
+  { id = "VT-2", expects = "Layer C(ii): a duplicate-parent and an array-parent corpus each → the named second-parent finding and a non-zero `run_validate` exit, asserted end-to-end (not at `toml::from_str` level)." },
+  { id = "VT-3", expects = "A→A yields exactly one finding total across `self_parent` + `parent_cycle` (no double-report)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Severity tier, product-descent warn & closure"
+objective = """
+Add the minimal severity split: `validate(scope)` keeps its signature and returns
+HARD findings only (every SL-015 validate test stays valid); a sibling
+`warnings(scope)` returns the soft set. `run_validate` calls both, prints
+`warning:`-prefixed warnings, and bails non-zero only on a non-empty hard set.
+The sole v1 warn is `descent_on_product` (a product spec carrying
+`descends_from`; design D5, Q1). Land closure: `just check`, clippy zero (§9).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: all hard decomposition checks pass." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`validate(scope) -> Vec<String>` returns hard findings only (unchanged signature); `warnings(scope) -> Vec<String>` is a scope-aware sibling returning the soft set; `run_validate` prints warnings prefixed `warning:` and exits non-zero only when the hard set is non-empty." },
+  { id = "EX-2", text = "`descent_on_product` warns when a product spec carries `descends_from`; the case is absent from the hard set and not silently dropped (D5)." },
+  { id = "EX-3", text = "`just check` is green and `cargo clippy` reports zero warnings (string-build and collection bans honoured); the storage rule holds (no derived data — children, reverse view — persisted)." },
+]
+verification = [
+  { id = "VT-1", expects = "R2: a warnings-only corpus exits zero; any hard finding → non-zero (severity does not leak into clean-corpus exit)." },
+  { id = "VT-2", expects = "descent-on-product warns and is absent from the hard findings set." },
+  { id = "VT-3", expects = "full pass: `doctrine spec validate` is non-zero on each crafted hard violation (dangling/invalid-kind descent, dangling/invalid-kind parent, self-parent, cycle, second-parent, dangling/invalid-kind interaction) and zero on a clean-but-warned corpus." },
+  { id = "VA-1", expects = "`just check` green and clippy zero warnings, confirmed in the closing run." },
+]
+specs        = []
+requirements = []
