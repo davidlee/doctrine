@@ -215,7 +215,7 @@ impl Status {
     /// predicate — explicitly NOT `slice::is_terminal_status` (R4): backlog and
     /// slice lifecycles are independent vocabularies. Drives the `resolution ⟺
     /// terminal` coupling (`edit`) and the hide-terminal `list` rule — reused by
-    /// `is_hidden` as the SL-025 `spec list` hide-set (no new predicate, design §5.3).
+    /// `is_hidden` as the SL-025 `backlog list` hide-set (no new predicate, design §5.3).
     const fn is_terminal(self) -> bool {
         matches!(self, Status::Resolved | Status::Closed)
     }
@@ -632,22 +632,31 @@ struct BacklogRow {
     title: String,
 }
 
-/// Render retained rows as `id  kind  status  slug  title` over the shared
-/// `listing::render_table` (the SL-009 ragged-grid path). The id is the canonical
-/// `XXX-NNN`. Empty rows → `""` (the virgin empty-table path, §5.5). Pure.
+/// Render retained rows as a `id  kind  status  slug  title` header then one row
+/// per item over the shared `listing::render_table` (the SL-009 ragged-grid path).
+/// The id is the canonical `XXX-NNN`. Empty rows → `""` (header suppressed, the
+/// virgin empty-table path, §5.5). Pure.
 fn format_rows(items: &[BacklogItem]) -> String {
-    let grid: Vec<Vec<String>> = items
-        .iter()
-        .map(|i| {
-            vec![
-                i.kind.canonical_id(i.id),
-                i.kind.as_str().to_string(),
-                i.status.as_str().to_string(),
-                i.slug.clone(),
-                i.title.clone(),
-            ]
-        })
-        .collect();
+    if items.is_empty() {
+        return String::new();
+    }
+    let mut grid: Vec<Vec<String>> = Vec::with_capacity(items.len() + 1);
+    grid.push(vec![
+        "id".to_string(),
+        "kind".to_string(),
+        "status".to_string(),
+        "slug".to_string(),
+        "title".to_string(),
+    ]);
+    grid.extend(items.iter().map(|i| {
+        vec![
+            i.kind.canonical_id(i.id),
+            i.kind.as_str().to_string(),
+            i.status.as_str().to_string(),
+            i.slug.clone(),
+            i.title.clone(),
+        ]
+    }));
     listing::render_table(&grid)
 }
 
@@ -1434,8 +1443,10 @@ tags = []
     }
 
     /// The first column (canonical id) of each rendered row, in render order.
+    /// Skips the §5.5 header line; an empty `""` (suppressed header) → no ids.
     fn ids(out: &str) -> Vec<String> {
         out.lines()
+            .skip(1)
             .map(|l| l.split_whitespace().next().unwrap().to_string())
             .collect()
     }
@@ -1443,6 +1454,33 @@ tags = []
     /// A no-constraint `ListArgs` (the default `backlog list`).
     fn list_args() -> ListArgs {
         ListArgs::default()
+    }
+
+    // --- §5.5: the uniform table header (extends to backlog) ---
+
+    #[test]
+    fn backlog_list_emits_a_header_then_prefixed_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+
+        let out = list_rows(root, None, list_args()).unwrap();
+        let lines: Vec<&str> = out.lines().collect();
+        // §5.5: rows present → a header row naming the columns, then the data.
+        assert!(lines[0].starts_with("id"), "header row: {:?}", lines[0]);
+        assert!(
+            lines[0].contains("kind") && lines[0].contains("status"),
+            "header names columns: {:?}",
+            lines[0]
+        );
+        assert!(lines[1].starts_with("ISS-001"), "first data row prefixed");
+    }
+
+    #[test]
+    fn backlog_list_empty_suppresses_the_header() {
+        let dir = tempfile::tempdir().unwrap();
+        // no items written → "" (header suppressed, §5.5 virgin-repo contract).
+        assert_eq!(list_rows(dir.path(), None, list_args()).unwrap(), "");
     }
 
     // --- VT-1: the visibility matrix ---

@@ -141,8 +141,10 @@ engine gate.
 
 **Dead-code removal on migration:** `meta::format_list` (last caller: adr) and the
 filter half of `meta::sort_and_filter` (superseded by `retain`) are removed — repo
-clippy denies `dead_code`. The sort-by-id `sort_and_filter` also provided is kept as
-a small `meta`-side sort the numeric kinds call (§5.3 ordering).
+clippy denies `dead_code`. _(Audit reconciliation, D-1: the sort-by-id half was
+**also** fully removed once the last caller migrated — keeping it would itself trip
+`dead_code`. Each kind now sorts inline via `sort_by_key` at the tail of its
+`list_rows`; the §5.3 ordering intent — kinds own their order — is unchanged.)_
 
 ### 5.2 Interfaces & Contracts
 
@@ -286,9 +288,10 @@ toml-as-data + md-body reassembly, parameterised like the existing `spec`/
   `Status::is_terminal` already IS its hide-set (reused, no new code).
 - **Ordering is per-kind (variant axis), not in `retain`.** `retain` filters only;
   each kind orders its rows for render — slice/adr/spec by id, backlog by
-  `(kind.ordinal, id)`, memory by `created` desc then uid. The sort-by-id half of
-  `meta::sort_and_filter` survives as a thin `meta` sort the numeric kinds call; its
-  status-filter half is removed (superseded by `retain`).
+  `(kind.ordinal, id)`, memory by `created` desc then uid. _(D-1: `meta::sort_and_filter`
+  is fully removed — both halves; each kind sorts inline via `sort_by_key`. `retain`'s
+  filter role made the status half dead, and the sort half went dead with its last
+  caller — repo `dead_code` denial forced removal of both.)_
 - **Slice status vocabulary (amended authority — D10).** `slices-spec.md`'s set
   becomes `{proposed, ready, started, audit, done, abandoned}`, enforced as the
   `validate_statuses` known-set for `slice list --status` (filter input only).
