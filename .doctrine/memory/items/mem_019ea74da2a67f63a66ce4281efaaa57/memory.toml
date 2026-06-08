@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea74da2a67f63a66ce4281efaaa57"
+memory_key = "mem.thread.lazyspec.frontend-integration"
+schema_version = 1
+memory_type = "thread"
+status = "active"
+title = "lazyspec read-only front-end for doctrine"
+summary = "lazyspec as RO front-end for doctrine — CLI-JSON wire, fork-adapter, virtual_doc projection; research complete (brief in ../lazyspec); doctrine-side = pieces 2/3 (wire-lock + emit-lazyspec-brief)"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["lazyspec", "integration", "front-end"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6aad016be859c6bc04bb9ca32e1410f5a2d92924"
+ref_name = "refs/heads/main"
+checkout_state_id = "64e279f625845774d1ad9d8a2aaa6a086f6e763c808b54875f44c71f42a3247c"
+base_commit = "165e5768516b5d3ed2cafb8354e401abb3ddca23"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
