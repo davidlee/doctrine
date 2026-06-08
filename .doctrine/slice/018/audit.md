@@ -97,3 +97,28 @@ NOT shipped to downstream drivers:
 PHASE-04 and PHASE-05 EX/VT criteria are all **met / aligned**. No `fix now`, no
 `follow-up slice`, no genuinely-unmet criterion. The one tolerated drift (F-2) is
 cosmetic and pre-existing. Behaviour-preservation gate held. Ready for `/close`.
+
+## PHASE-06 addendum (master-corpus drift reconciliation) — overall PASS
+
+Appended after the original closure; the slice was reopened (`done → in_progress`)
+to add a maintenance phase. Evidence at HEAD `5c4adfc` over a green `just check`.
+
+- **EX-1 (re-align) — met.** cli-command-map names the `backlog` verb; file-map
+  names `.doctrine/spec/{product,tech}/` + `.doctrine/backlog/`; skill-map names
+  `/spec-product` + `/spec-tech`. Each master-lint-clean.
+- **EX-2 (dispositions) — met.** All four orientation-grade memories authored
+  since closure are dispositioned KEEP-repo-scoped, with rationale (phase sheet
+  `## Decisions`; notes PHASE-06). Corpus stays lean at 14 (target ~12-18).
+- **EX-3 (ship + behaviour-preservation) — met.** `memory sync` = 3 changed /
+  11 unchanged / 0 prune (other 11 masters byte-unchanged); `just check` green.
+- **VT-1 — met.** `every_embedded_master_lints_clean` + `sync_populates_the_shipped_corpus...`
+  green after a rebuild (rust-embed compile-time embed honoured).
+- **VA-1 — met.** Read-back confirms the three masters name the current surface
+  and enumerate no ADR/PRD/REQ/SL numbers (no-restate principle held).
+
+**Reconciliation note:** the pre-PHASE-06 `⚠ 3/5` was a false divergence — a
+state-tree re-materialization had reset PHASE-04/05 (committed & audited at the
+original closure) to `planned`. Re-flipped to `completed`; this is an inherent
+property of disposable runtime state, not a defect.
+
+No findings, no follow-up. Ready for re-`/close`.

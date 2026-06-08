@@ -130,6 +130,29 @@ runs master-lint over the full 14-master embed in `just check`. E2E
 `sync_populates_the_shipped_corpus...` proves populate→idempotent→`retrieve` surfaces a
 shipped master at `staleness: reference`→alias-dedup; boot snapshot lists all 14 live.
 
+## PHASE-06 — DONE (commit `5c4adfc`; plan `75d388d`)
+
+Post-closure maintenance: re-align the three *enumerating* signpost masters that
+fell behind the surface SL-019..023 grew. Additive only (10 insertions, 3 files).
+
+- **cli-command-map** (`mem_019e9a12139e7c52bb0ee2b82fb79868`) — added the
+  `backlog` verb (`new · list · show · edit`).
+- **file-map** (`mem_019e9a11cda27db19c0c75bafa453d5d`) — added the
+  `.doctrine/spec/{product,tech}/` and `.doctrine/backlog/` entity dirs.
+- **skill-map** (`mem_019e9a1200b6796094f9e31ff1666390`) — added `/spec-product`
+  + `/spec-tech`.
+- **Behaviour-preservation:** the other 11 masters byte-unchanged; `memory sync`
+  reports **3 changed / 11 unchanged / 0 prune**. `every_embedded_master_lints_clean`
+  + the SL-018 sync e2e stay green. No ADR/spec numbers enumerated (no-restate held).
+- **4 memories dispositioned, all KEEP repo-scoped** (drift was in the signposts,
+  not a concept gap; corpus stays lean at 14): `canonical-change-loop` already
+  covered by lifecycle-start + core-loop; `descent-descends-from` +
+  `shipped-not-reachable` are doctrine-dev (D7); `backlog.work-intake-membership`
+  deferred (existence now surfaces via the two signpost edits).
+- **Rollup correction (this session):** PHASE-04/05 were committed & audited at the
+  original closure but a state-tree re-materialization had reset them to `planned`,
+  giving a false `⚠ 3/5`. Re-flipped to `completed` before adding PHASE-06.
+
 ## Closure (SL-018)
 
 Audit `overall=pass` (audit.md, HEAD `4e3cb65`): all PHASE-04/05 EX/VT aligned; F-1
