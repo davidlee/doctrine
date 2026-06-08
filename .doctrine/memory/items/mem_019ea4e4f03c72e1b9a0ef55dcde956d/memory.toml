@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea4e4f03c72e1b9a0ef55dcde956d"
+memory_key = "mem.pattern.entity.edit-preserving-status-transition"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Edit-preserving authored-TOML status transition"
+summary = "toml_edit DocumentMut in place + no-op guard + F-1 missing-seeded-key refuse; adr/backlog precedent"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = ["src/adr.rs", "src/backlog.rs"]
+globs = ["src/**/*.rs"]
+commands = ["adr", "backlog"]
+tags = ["rust", "toml-edit", "pattern"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f4a97dedb936a90f67a7be172c2347929f9d7d2e"
+ref_name = "refs/heads/main"
+checkout_state_id = "9e79f34038d780728e5ca9d6782e26f8679fd8d6062aed07440b5f2f5a5a28dc"
+base_commit = "1627bee8670093546e611778393a931da96cf743"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
