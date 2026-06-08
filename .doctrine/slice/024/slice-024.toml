@@ -1,7 +1,7 @@
 id = 24
 slug = "toml-render-escape"
 title = "Harden TOML render: escape user free-text through a shared seam"
-status = "proposed"
+status = "done"
 created = "2026-06-08"
 updated = "2026-06-08"
 
