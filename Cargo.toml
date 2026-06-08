@@ -26,6 +26,7 @@ toml.workspace = true
 toml_edit.workspace = true
 glob.workspace = true
 bm25.workspace = true
+regex-lite.workspace = true
 
 [dev-dependencies]
 tower = { workspace = true }
@@ -75,6 +76,10 @@ rust-embed = { version = "8", features = ["debug-embed"] }
 toml = "0.8"
 toml_edit = "0.22"
 glob = "0.3"
+# Pure-Rust regex for the shared list `--regexp` filter (SL-025 D9). regex-lite
+# over full `regex` deliberately: no regex-automata/aho-corasick — id/slug/title
+# matching needs nothing fancy, and it keeps compile time + binary size down.
+regex-lite = "0.1"
 # Corpus-relative BM25 lexical scorer (SL-017). default-features = false drops the
 # DefaultTokenizer/Language stack (stemming/stopwords/deunicode + 5 deps); we drive
 # it with a custom Tokenizer delegating to doctrine's lexer (design D2).

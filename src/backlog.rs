@@ -616,10 +616,10 @@ fn select(items: Vec<BacklogItem>, f: &ListFilter) -> Vec<BacklogItem> {
         .collect()
 }
 
-/// Render rows as `id  kind  status  slug  title` over `meta::render_table` (the
-/// SL-009 ragged-grid path — additive, NOT the fixed 4-col `format_list`). The id
-/// is the canonical `XXX-NNN` (kind-disambiguated). Empty rows → `""` (the virgin
-/// empty-table path). Pure.
+/// Render rows as `id  kind  status  slug  title` over `listing::render_table`
+/// (the SL-009 ragged-grid path — additive, NOT the fixed 4-col `format_list`).
+/// The id is the canonical `XXX-NNN` (kind-disambiguated). Empty rows → `""` (the
+/// virgin empty-table path). Pure.
 fn format_rows(items: &[BacklogItem]) -> String {
     let grid: Vec<Vec<String>> = items
         .iter()
@@ -633,7 +633,7 @@ fn format_rows(items: &[BacklogItem]) -> String {
             ]
         })
         .collect();
-    crate::meta::render_table(&grid)
+    crate::listing::render_table(&grid)
 }
 
 /// The `backlog list` rows as a string — the compute half of `run_list`,

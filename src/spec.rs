@@ -16,8 +16,8 @@
 //! the render fns, the parse-layer structs, and `new`/`list`/`req add`/`show`. The
 //! kind-agnostic engine is `crate::entity` (unchanged — three new `Fresh` callers
 //! only, R6 gate); the shared metadata-list substrate is `crate::meta`, reused
-//! **additively** — `spec list` rides `read_metas`/`render_table` with zero
-//! `meta.rs` edits.
+//! **additively** — `spec list` rides `read_metas` and the relocated
+//! `listing::render_table` (SL-025) with zero `meta.rs` edits.
 //!
 //! `spec show` (PHASE-04) is the pure local reassembly that reads every parse
 //! struct (`Spec`, `Member`, `Source`, `SpecStatus`, `C4Level`, `Interaction`) —
@@ -896,9 +896,9 @@ pub(crate) fn run_validate(path: Option<PathBuf>, spec_ref: Option<&str>) -> any
 }
 
 /// `doctrine spec list [--status S]` — per-subtype blocks of `id status slug
-/// #members`, sorted by id. Each block rides the shared `meta::render_table` (the
-/// `#members` cell is derived in this module, exactly as `slice list` derives its
-/// `phases` cell — additive, no `meta.rs` change). `--status` filters within each.
+/// #members`, sorted by id. Each block rides the shared `listing::render_table`
+/// (the `#members` cell is derived in this module, exactly as `slice list` derives
+/// its `phases` cell — additive). `--status` filters within each.
 pub(crate) fn run_list(path: Option<PathBuf>, status: Option<&str>) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let mut out = io::stdout();
@@ -923,8 +923,8 @@ fn list_block(root: &Path, subtype: SpecSubtype, status: Option<&str>) -> anyhow
 }
 
 /// Render one subtype's spec rows: a label line, a header row, then `id status slug
-/// #members` per spec, aligned via the shared `meta::render_table`. Empty input →
-/// `""` (the block is omitted entirely). Pure.
+/// #members` per spec, aligned via the shared `listing::render_table`. Empty input
+/// → `""` (the block is omitted entirely). Pure.
 fn format_spec_rows(subtype: SpecSubtype, rows: &[(meta::Meta, usize)]) -> String {
     if rows.is_empty() {
         return String::new();
@@ -943,7 +943,11 @@ fn format_spec_rows(subtype: SpecSubtype, rows: &[(meta::Meta, usize)]) -> Strin
             count.to_string(),
         ]);
     }
-    format!("{}\n{}", subtype.label(), meta::render_table(&grid))
+    format!(
+        "{}\n{}",
+        subtype.label(),
+        crate::listing::render_table(&grid)
+    )
 }
 
 // ---------------------------------------------------------------------------

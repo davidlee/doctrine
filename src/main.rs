@@ -10,6 +10,7 @@ mod git;
 mod input;
 mod install;
 mod lexical;
+mod listing;
 mod memory;
 mod meta;
 mod plan;

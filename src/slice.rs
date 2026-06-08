@@ -382,7 +382,7 @@ fn phases_cell(rollup: Option<&crate::state::PhaseRollup>) -> String {
 
 /// Render slice rows with the derived phase rollup. Human-only output: a header
 /// row plus `id status[⚠] phases slug title`, aligned via the shared
-/// `meta::render_table`. Empty input → `""` (header suppressed). Pure.
+/// `listing::render_table`. Empty input → `""` (header suppressed). Pure.
 fn format_slice_rows(rows: &[(meta::Meta, Option<crate::state::PhaseRollup>)]) -> String {
     if rows.is_empty() {
         return String::new();
@@ -407,7 +407,7 @@ fn format_slice_rows(rows: &[(meta::Meta, Option<crate::state::PhaseRollup>)]) -
             m.title.clone(),
         ]);
     }
-    meta::render_table(&grid)
+    crate::listing::render_table(&grid)
 }
 
 /// `doctrine slice list`.

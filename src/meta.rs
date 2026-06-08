@@ -13,6 +13,11 @@
 //! This is CLI presentation plus an authored-toml reader — deliberately *not*
 //! `entity.rs`, which stays a kind-blind scaffold engine free of presentation.
 //! The clock seam lives in `crate::clock`; nothing here reads wall time.
+//!
+//! The generic table layout (`render_table`) used to live here too; SL-025
+//! relocated it to the kind-blind read spine (`crate::listing`), which serves the
+//! named (memory) and own-struct (backlog) kinds as well as these numeric ones.
+//! `format_list` here is the numeric-kind grid that renders over it.
 
 use std::fs;
 use std::path::Path;
@@ -39,55 +44,9 @@ pub(crate) fn sort_and_filter(mut rows: Vec<Meta>, status: Option<&str>) -> Vec<
     rows
 }
 
-/// The two-space inter-column gap — the single source of column spacing for
-/// every `*list` surface.
-const COL_GAP: &str = "  ";
-
-/// Render `rows` as a left-aligned, two-space-gapped text table: each column is
-/// padded to its widest cell, the final column of each row is never padded, and
-/// a trailing newline terminates non-empty output (no rows → `""`).
-///
-/// The single layout authority for every list surface (slice/adr) — it carries
-/// no per-kind knowledge and renders nothing but a grid of strings (not a column
-/// framework). Callers bake any markers into the cell strings, so it stays
-/// presentation-neutral.
-pub(crate) fn render_table(rows: &[Vec<String>]) -> String {
-    if rows.is_empty() {
-        return String::new();
-    }
-    let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
-    let widths: Vec<usize> = (0..cols)
-        .map(|c| {
-            rows.iter()
-                .filter_map(|r| r.get(c))
-                .map(|cell| cell.chars().count())
-                .max()
-                .unwrap_or(0)
-        })
-        .collect();
-    let mut out = String::new();
-    for row in rows {
-        let last = row.len().saturating_sub(1);
-        for (c, cell) in row.iter().enumerate() {
-            if c > 0 {
-                out.push_str(COL_GAP);
-            }
-            out.push_str(cell);
-            if c != last {
-                let pad = widths
-                    .get(c)
-                    .copied()
-                    .unwrap_or(0)
-                    .saturating_sub(cell.chars().count());
-                out.extend(std::iter::repeat_n(' ', pad));
-            }
-        }
-        out.push('\n');
-    }
-    out
-}
-
-/// Format rows as aligned `id  status  slug  title` lines, over `render_table`.
+/// Format rows as aligned `id  status  slug  title` lines, over the shared
+/// `listing::render_table` (the layout authority relocated to the read spine,
+/// SL-025).
 pub(crate) fn format_list(rows: &[Meta]) -> String {
     let grid: Vec<Vec<String>> = rows
         .iter()
@@ -100,7 +59,7 @@ pub(crate) fn format_list(rows: &[Meta]) -> String {
             ]
         })
         .collect();
-    render_table(&grid)
+    crate::listing::render_table(&grid)
 }
 
 /// Parse the `Meta` of a single entity by id, reading `<stem>-<id>.toml` under
@@ -189,48 +148,6 @@ mod tests {
     #[test]
     fn format_list_empty_is_empty_string() {
         assert_eq!(format_list(&[]), "");
-    }
-
-    fn row(cells: &[&str]) -> Vec<String> {
-        cells.iter().map(|s| s.to_string()).collect()
-    }
-
-    #[test]
-    fn render_table_empty_is_empty_string() {
-        assert_eq!(render_table(&[]), "");
-    }
-
-    #[test]
-    fn render_table_aligns_ragged_columns_and_leaves_last_unpadded() {
-        let out = render_table(&[row(&["a", "longvalue", "x"]), row(&["bb", "y", "trailing"])]);
-        // col 0 → width 2, col 1 → width 9, col 2 (last) → unpadded.
-        assert_eq!(out, "a   longvalue  x\nbb  y          trailing\n");
-    }
-
-    #[test]
-    fn render_table_aligns_a_middle_column_the_slice_case() {
-        // id, status, phases (middle), slug, title — the SL-009 column set.
-        let out = render_table(&[
-            row(&["001", "done", "4/6", "memory-entity-v1", "Memory entity v1"]),
-            row(&[
-                "009",
-                "proposed",
-                "—",
-                "slice-status-rollup",
-                "Slice status rollup",
-            ]),
-        ]);
-        let lines: Vec<&str> = out.lines().collect();
-        // status col → width of "proposed" (8); phases col → width of "4/6" (3);
-        // slug col → width of "slice-status-rollup".
-        assert_eq!(
-            lines[0],
-            "001  done      4/6  memory-entity-v1     Memory entity v1"
-        );
-        assert_eq!(
-            lines[1],
-            "009  proposed  —    slice-status-rollup  Slice status rollup"
-        );
     }
 
     #[test]
