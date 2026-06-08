@@ -1,9 +1,9 @@
 id = 25
 slug = "uniform-cli-surface"
 title = "Uniform DRY CLI surface: shared list/show/filter/render contract"
-status = "proposed"
+status = "done"
 created = "2026-06-08"
-updated = "2026-06-08"
+updated = "2026-06-09"
 
 [relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
