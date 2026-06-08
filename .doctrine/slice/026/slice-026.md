@@ -70,20 +70,33 @@ clock/rng/git/disk in the pure layer). Composition model per
   file, not a live round-trip.
 - RO proof: the command is pure read + serialize — no mutation path exists to test.
 
-### Assumptions
+### Assumptions / Dependencies
 
 - SL-025 is landed (done + closed); its read APIs + `canonical_id` are production.
+- **SL-028 lands first.** It replaces the slice lifecycle vocabulary with a 10-state
+  FSM; the slice status mapping (design §5.3) is built on that FSM. doctrine has no
+  typed slice-dependency edge (`[relationships]` carries only
+  specs/requirements/supersedes), so this dependency is prose, not a stored edge.
+- SL-027 (done) DRY'd the backlog test-fixture builders into
+  `write_fixture`/`Fixture`; the golden corpus reuses it (promoted to a `pub(crate)`
+  test-support seam), never re-rolling backlog TOML (re-opening ISS-001).
 
 ### Risks / Open Questions
 
 Both prior open questions are **resolved in design** (see design §7):
 - **Edge → RelationType mapping** — settled (D2): `descends_from` and spec `parent`
   → `implements` (graph-visible); interactions → `related-to`; supersedes →
-  `supersedes`; backlog by axis.
+  `supersedes`; backlog `slices`/`specs`/`drift` → `related-to` (OQ-5, no axis is
+  `blocks`/`implements`).
 - **Command shape** — settled (D1): aggregate `doctrine export lazyspec`, its own
   envelope, not a `Format` variant.
-- Residual risks tracked in design §8 (schema drift, surface-parity, dead_code leaf,
-  synthetic-id collision).
+
+A round-2 inquisition (`inquisition.md`) verified the wire strings against lazyspec
+source (OQ-3 resolved: status lowercase/`in-progress`, relations `related-to`, date
+`%Y-%m-%d`) and surfaced two neighbour-couplings — SL-028's lifecycle vocabulary and
+SL-027's fixture builder — both integrated above. Residual risks tracked in design
+§8 (schema drift, surface-parity, dead_code leaf, synthetic-id collision, R6 SL-028
+coupling, R7 fixture re-triplication).
 
 ## Non-Goals
 
@@ -104,7 +117,10 @@ synthetic plan children — via `doctrine export lazyspec`, reusing SL-025's rea
 ## Follow-Ups
 
 - **Piece 4 (`../lazyspec`):** the doctrine backend fork off this slice's wire
-  format + the shipped `.lazyspec.toml` preset.
+  format + the shipped `.lazyspec.toml` preset. Its `materialize_doctrine_cache`
+  must invoke `doctrine export lazyspec` — **renamed** from the brief's working
+  `emit-lazyspec-brief --json` (D1, no-masquerade); the brief §7/§8 recipe still
+  names the old form.
 - **Later:** selectively re-enable mutations as doctrine grows lifecycle/transition
   verbs, mapping onto lazyspec's `DocumentStore` writes.
 - **v1 limitation to revisit:** lazyspec's graph renders `Implements` only — so

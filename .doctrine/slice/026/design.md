@@ -62,6 +62,20 @@ Entity inventory (prefixes confirmed from `Kind` consts): slice `SL`; spec `PRD`
 - **lazyspec graph follows `Implements` only** (brief §6) — shapes the edge mapping.
 - **Repo clippy denials** — BTree not Hash; no indexing-slicing; `expect`+reason not
   bare `allow`; the string-assembly rules. (Memory cluster `mem.pattern.lint.*`.)
+- **Depends on SL-028 (lands first).** SL-028 replaces the slice lifecycle
+  vocabulary with a 10-state FSM
+  (`proposed→design→plan→ready→started→review→audit→reconcile→done` + `abandoned`);
+  the slice status mapping (§5.3) is built on **that** FSM, not the legacy 6-state
+  set. doctrine has **no typed slice-dependency edge** — the `[relationships]`
+  table carries only `specs`/`requirements`/`supersedes` (`slice.rs:572`) — so this
+  dependency is recorded in prose (here + the scope Assumptions), not as a stored
+  edge. Slice status is a free `String` with tolerated out-of-vocab drift
+  (`slice.rs:349`/`:368`), so the map must be **total** (a default arm), never a
+  partial allowlist.
+- **Reuse SL-027's fixture builder (no parallel impl).** SL-027 (done) DRY'd the
+  backlog test-fixture builders into `write_fixture`/`Fixture` — currently private
+  to `backlog.rs`'s `#[cfg(test)] mod tests`. The golden corpus (§9) must ride it,
+  not re-roll backlog TOML (which re-opens ISS-001, just closed).
 
 ## 4. Guiding Principles
 
@@ -114,9 +128,9 @@ struct Entity {
     id: String,                                    // canonical_id, or synthetic for plan
     kind: String,                                  // lazyspec type name
     title: String,
-    status: String,                                // mapped → lazyspec's 7
+    status: String,                                // wire string ∈ lazyspec's 7 (§5.3)
     author: String,                                // "" where doctrine has none
-    date: String,                                  // ISO-8601
+    date: String,                                  // YYYY-MM-DD only (lazyspec parses %Y-%m-%d — NOT a datetime)
     tags: Vec<String>,
     related: Vec<Relation>,                        // outbound only
     body: String,                                  // assembled inline
@@ -132,7 +146,8 @@ struct TypeDef { name: String, plural: String, dir: String, prefix: String, icon
 ```
 
 `rel_type` ∈ `{"implements","supersedes","blocks","related-to"}` only — the four
-lazyspec `RelationType` strings; nothing else may appear.
+lazyspec `RelationType` strings; nothing else may appear (verified against
+`RelationType::ALL_STRS`/`FromStr`, lazyspec `document.rs:128`).
 
 ### 5.3 Data, State & Ownership
 
@@ -164,19 +179,45 @@ Requirements (`REQ`) are **not** nodes — inlined in spec bodies via `render()`
 | spec `interactions` (tech ↔ tech) | related-to | panel |
 | adr `supersedes` | supersedes | panel |
 | slice `supersedes` (when populated) | supersedes | panel |
-| backlog outbound axes | by axis (implements / blocks / related-to) | per axis |
+| backlog `relationships.slices` (→ slice) | related-to | panel |
+| backlog `relationships.specs` (→ spec) | related-to | panel |
+| backlog `relationships.drift` (→ drift ref) | related-to | panel |
 
-**Status mapping** (doctrine → lazyspec's 7):
+Backlog `Relationships` (`backlog.rs:374`) has exactly these three outbound axes,
+all reference/association links — **none maps to `implements` or `blocks`** (no
+backlog axis carries a dependency/sequence edge).
 
-- slice `{proposed→Draft, ready→Accepted, started→InProgress, audit→InProgress, done→Complete, abandoned→Rejected}`
-- spec `{draft→Draft, active→Accepted, deprecated→Superseded, superseded→Superseded}`
-- adr `{proposed→Review, accepted→Accepted, rejected→Rejected, superseded→Superseded, deprecated→Superseded}`
-- backlog `{open→Draft, triaged→Review, started→InProgress, resolved→Complete, closed→Complete}`
-- plan ← `PhaseRollup`: `completed==total && total>0 → Complete`; `completed>0 → InProgress`; else `Draft`.
+**Status mapping** — doctrine status → the **wire string**, ∈ lazyspec's 7:
+`draft`/`review`/`accepted`/`in-progress`/`complete`/`rejected`/`superseded`
+(verified against `Status` serde, lazyspec `document.rs:89` —
+`#[serde(rename_all = "lowercase")]` + `InProgress → "in-progress"`). The mapping
+is **TOTAL**: slice status is a free `String` with tolerated out-of-vocab drift
+(`slice.rs:349`/`:368`), so an unknown/drifted status hits the default arm, never
+panics or invents a string.
 
-`meta`: `project` = root dir basename; `generated_at` = injected `now`;
-`doctrine_version` = `CARGO_PKG_VERSION`. `types[]` built from `Kind` consts (prefix,
-dir) + an assigned icon + plural.
+- slice — the **SL-028 FSM** (SL-028 lands first; replaces the legacy 6-state set):
+  `{proposed→draft, design→draft, plan→draft, ready→accepted, started→in-progress,
+  review→in-progress, audit→in-progress, reconcile→in-progress, done→complete,
+  abandoned→rejected}`. **Default (drift / unknown) → `draft`.**
+- spec `{draft→draft, active→accepted, deprecated→superseded, superseded→superseded}`
+- adr `{proposed→review, accepted→accepted, rejected→rejected, superseded→superseded, deprecated→superseded}`
+- backlog `{open→draft, triaged→review, started→in-progress, resolved→complete, closed→complete}`
+- plan ← `PhaseRollup`: `completed==total && total>0 → complete`; `completed>0 → in-progress`; else `draft`.
+
+`meta`: `project` = root dir basename; `generated_at` = injected `now` (RFC3339 —
+doctrine's own meta field, not NaiveDate-parsed); `doctrine_version` =
+`CARGO_PKG_VERSION`. `types[]` built from `Kind` consts (prefix, dir) + an assigned
+icon + plural — **except** the synthetic `plan` type, which has no `Kind` const and
+is therefore **hand-authored** (prefix `PLAN`, dir, icon, plural).
+
+**Plan node `date`** = the owning slice's `updated` (injected as data; never read in
+the pure layer). `DocMeta.date` is mandatory and must parse `%Y-%m-%d`
+(`document.rs:11`), so the synthetic node can never ship an empty date.
+
+**Entity & type ordering.** `project` sorts `entities[]` by canonical id and
+`types[]` by name before serialization — disk-walk order is not stable, so this is
+what makes §5.4's idempotence claim true and the golden file robust against
+fixture-order churn.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -198,6 +239,13 @@ no mutation, no side effects beyond stdout.
 - **Edge cases:** slice with no plan → no plan node; spec with no members → body is
   prose-only, still virtual; backlog item kinds map 1:1 to five types; empty corpus →
   `entities: []`, `types[]` still full (manifest is static).
+- **INV-6** every emitted `status` is one of the seven verified wire strings; an
+  out-of-vocab doctrine status takes the per-kind default (slice → `draft`).
+- **INV-7** every emitted `date` is `YYYY-MM-DD` (never a datetime) — incl. the
+  synthetic plan node (owning slice's `updated`).
+- **Dangling edges:** a `related[].target` outside the emitted corpus is dropped
+  silently (lazyspec's `BrokenLinkRule` is suppressed by `validate_ignore`, brief
+  §6); v1 accepts this. Option: filter to in-corpus targets at projection time.
 - **Assumption:** lazyspec degrades on a write-refusing backend except the editor
   key — that gating is piece-4 (`../lazyspec`), not this slice.
 
@@ -206,19 +254,22 @@ no mutation, no side effects beyond stdout.
 - **OQ-1** Icon assignment per type is cosmetic; pick stable glyphs, not load-bearing.
 - **OQ-2** `types[].dir` is nominal (lazyspec materializes bodies into its own cache);
   emit a sensible per-kind path string, not doctrine's real on-disk layout.
-- **OQ-3 (adversarial F1, blocking conformance)** The exact wire *strings* for `status`
-  and relation `type` are unverified against lazyspec's deserializer. Brief §3 examples
-  are lowercase (`"accepted"`, `"implements"`), but multi-word values (`InProgress`,
-  `RelatedTo`) have an unknown form (`in-progress`? `in_progress`? `related-to`?).
-  **Pin against lazyspec's `Status`/`RelationType` serde (document.rs) before locking
-  the golden file** — a guessed string passes here and breaks at the boundary.
+- **OQ-3 (RESOLVED — was adversarial F1).** Wire strings verified against lazyspec
+  source, no fork needed: `Status` serde (`document.rs:89`) =
+  `#[serde(rename_all = "lowercase")]` + `InProgress → "in-progress"` →
+  `draft/review/accepted/in-progress/complete/rejected/superseded`; `RelationType`
+  (`document.rs:128`) `ALL_STRS`/`FromStr` →
+  `implements/supersedes/blocks/related-to`; `DocMeta.date` parses strictly
+  `%Y-%m-%d` (`document.rs:11`) — date-only, not a datetime. The golden file encodes
+  these; no string is guessed.
 - **OQ-4 (adversarial F4)** Body for slice/adr/backlog: raw prose-tier `.md` (simplest;
   may be empty, drops structured TOML like acceptance_criteria/c4_level/risk facet) vs
   a both-tier synthesis (preserves unmapped data per the brief's "exotic data in body").
   Specs already get both tiers via `render()`. Decide per-kind in planning.
-- **OQ-5 (adversarial F7)** Backlog `Relationships` axes → edge-type mapping is
-  hand-wavy ("by axis"); enumerate the actual axes and their `implements/blocks/
-  related-to` targets in planning.
+- **OQ-5 (RESOLVED — was adversarial F7).** Backlog `Relationships` (`backlog.rs:374`)
+  has exactly three outbound axes — `slices`, `specs`, `drift` — all
+  reference/association links; **all three → `related-to`**. No axis maps to
+  `implements` or `blocks` (none is a dependency/sequence edge).
 - **OQ-6** `meta.project` = root dir basename is non-canonical (differs across clones);
   cosmetic for lazyspec, accept for v1.
 
@@ -261,19 +312,37 @@ no mutation, no side effects beyond stdout.
 - **R3 — dead_code** if phase-planning lands `lazyspec.rs` structs before the command
   wiring. *Mitigate:* module-level `#![expect(dead_code, reason="…wired in PHASE-NN")]`,
   self-clearing (`mem.pattern.lint.dead-code-self-clearing-leaf`); never bare `allow`.
-- **R5 — wire-string mismatch (adversarial F1)** status/relation `type` strings that
-  don't match lazyspec's deserializer fail silently at the boundary, not in our suite.
-  *Mitigate:* OQ-3 — pin against lazyspec's serde first; the golden file then encodes
-  the verified strings, and the conformance test asserts the exact set.
+- **R5 — wire-string mismatch (adversarial F1) — RESOLVED.** Strings verified
+  against lazyspec serde (OQ-3): status lowercase / `in-progress`, relations
+  `related-to` et al., date `%Y-%m-%d`. The golden encodes them; conformance
+  asserts the exact set incl. the date-only form and the unknown-status default.
 - **R4 — Synthetic plan id collision.** *Mitigate:* `PLAN-` is unused by any real
   reservation, so `PLAN-NNN` is unique by construction; INV-5 + a test.
+- **R6 — lifecycle-vocabulary coupling (SL-028).** The slice status map consumes
+  SL-028's FSM vocabulary; SL-028 lands first. *Mitigate:* total map with a `draft`
+  default (an out-of-vocab status never breaks the wire); dependency recorded (§3 +
+  scope Assumptions); a conformance case feeds an unknown status.
+- **R7 — fixture re-triplication (SL-027 / ISS-001).** Re-rolling backlog fixture
+  TOML for the golden corpus re-opens the debt ISS-001 just closed. *Mitigate:*
+  reuse `write_fixture` via a promoted `pub(crate)` test-support seam (§9); no
+  `created = "…"` head literal may reappear in `lazyspec.rs` tests.
 
 ## 9. Quality Engineering & Validation
 
 - TDD red/green/refactor.
-- **Conformance test** (every-surface, table-driven over the kinds): asserts INV-1..5,
-  the keyword renames serialize correctly, the four-string edge vocab, and that a
-  membered `REQ` is absent as a node yet present in its spec body.
+- **Conformance test** (every-surface, table-driven over the kinds): asserts INV-1..7,
+  the keyword renames serialize correctly, the four-string edge vocab, the seven
+  status wire strings **including the unknown-status `draft` default**, the
+  date-only `%Y-%m-%d` form, stable id-sorted ordering, and that a membered `REQ`
+  is absent as a node yet present in its spec body.
+- **Corpus construction (SL-027 reuse, CHARGE IX).** The golden corpus is built via
+  the real loaders over a temp tree; backlog fixtures **reuse SL-027's
+  `write_fixture`/`Fixture`**, promoted to a `pub(crate)` test-support seam (a
+  `/consult`-grade visibility promotion — do not improvise at execute). slice / spec
+  (+members+reqs) / adr fixtures have **no** unified builder yet; that gap is named
+  here and shaped in planning (small per-kind writers beside the promoted backlog
+  seam). **No** new `backlog-NNN.toml` head literal is hand-rolled (re-opening
+  ISS-001 is forbidden).
 - **Golden fixture:** a minimal corpus → expected Brief JSON, value-compared; the
   drift canary. **Deterministic by injection** — the test passes fixed `now`+`version`
   to `project`, so `meta.generated_at`/`doctrine_version` don't make it flaky (the
@@ -304,3 +373,35 @@ no mutation, no side effects beyond stdout.
 
 Residual unknowns are OQ-3 (blocking, external — needs lazyspec serde) and OQ-4/OQ-5
 (planning-time). No governance conflict surfaced; ADR-001/004 alignment confirmed.
+
+### Adversarial self-review (round 2 — inquisition) — integrated
+
+Inquisition `inquisition.md`, against lazyspec source + the adjacent in-flight
+slices. Ten charges; all folded in:
+
+- **C-I → §5.2/§5.3, OQ-3, R5.** Wire strings were declared "external/blocking" but
+  lie open in lazyspec `document.rs` (cited by line in the brief). Read + verified;
+  status table rewritten to **wire strings** (`in-progress`, not `InProgress`);
+  OQ-3/R5 resolved.
+- **C-II → §5.2, INV-7.** `date` is `%Y-%m-%d` only, not "ISO-8601" — lazyspec's
+  `deserialize_naive_date` rejects datetimes.
+- **C-III → §5.3, INV-7.** Synthetic plan node `date` sourced from the owning slice's
+  `updated` (mandatory, must parse).
+- **C-IV → §5.3 edge table, OQ-5.** Backlog axes enumerated (`slices`/`specs`/`drift`
+  → all `related-to`); the phantom `blocks` target struck (no axis bears it).
+- **C-V → §5.3, §5.4.** `entities[]`/`types[]` sorted before serialization; the
+  idempotence claim is now earned.
+- **C-VI → §5.3.** The synthetic `plan` TypeDef is hand-authored (no `Kind` const);
+  the "built from `Kind` consts" rule's lone exception.
+- **C-VII → scope Follow-Ups.** Command renamed `emit-lazyspec-brief` → `export
+  lazyspec`; piece-4's `materialize_doctrine_cache` recipe must follow.
+- **C-VIII → §5.5.** Dangling outbound targets drop silently (validation
+  suppressed) — edge case acknowledged.
+- **C-IX → §9, §3, R7.** Golden corpus reuses SL-027's `write_fixture` (promoted to
+  test-support); no re-triplication of backlog TOML; slice/spec/adr fixture gap named.
+- **C-X → §3, §5.3, R6.** Status map made total (default arm) and rebuilt on SL-028's
+  10-state FSM; **SL-028 lands first** — dependency recorded (no typed slice edge
+  exists, so prose).
+
+Residual: OQ-4 (body tier, per-kind, planning) and the slice/spec/adr fixture-builder
+shape (planning). Lock gate: C-I–V + C-X folded; C-IX resolved before the golden test.
