@@ -200,13 +200,24 @@ No blocking unknowns.
   (and explicit `slug`) carrying `"` + newline + `\` (the quoted-literal breakers
   — *not* `]` alone; see § 5.5) must render a `*.toml` that re-parses via that
   module's reader and round-trips the value verbatim. The reader is `meta::Meta`
-  in every module: each already round-trips render output through it (`adr.rs:232`,
-  `slice.rs:559`, `requirement.rs:275`, `spec.rs:1144`, `backlog.rs:1020`), and
-  `Meta` carries no `deny_unknown_fields`, so the entities with extra fields parse
-  through it unchanged. TDD red: the injection title currently yields an
-  unparseable file. One test fn per module, extending each module's existing
-  `render_*_toml_round_trips` test (private fns ⇒ per-module, not a cross-module
-  table).
+  in every module. **Four** modules already round-trip their `render_*_toml`
+  output directly (call the render fn, `toml::from_str` the body): `adr.rs:229`
+  (`render_adr_toml_round_trips_to_metadata`), `slice.rs:557`
+  (`render_toml_round_trips_to_metadata`), `requirement.rs:272`
+  (`render_requirement_toml_round_trips_to_metadata`), `backlog.rs:1015`
+  (`rendered_toml_round_trips_into_meta_and_backlog_item`) — these four are
+  **extended** with the hostile input. **Spec has no such direct test:** its only
+  round-trip (`spec_list_meta_parses_scaffolded_spec_toml`, `spec.rs:1145`) goes
+  through `fresh` → disk → `meta::read_meta`, never parsing a `render_spec_toml`
+  string — so spec needs a **new** test that calls the private `render_spec_toml`
+  **directly** and `toml::from_str`s it (`mod tests` is in-file, so the private fn
+  is reachable; the direct call is mandatory — routing a hostile `--slug` through
+  the disk path would strike `<id>-<slug>` symlink creation *before* the TOML
+  round-trip, a false-red from the wrong stratum). `Meta` carries no
+  `deny_unknown_fields`, so the entities with extra fields parse through it
+  unchanged. TDD red: the injection title currently yields an unparseable file.
+  Per-module (private fns ⇒ not a cross-module table): **four extended, one new
+  (spec).**
 - **Leaf unit tests:** `tomlfmt.rs` tests `toml_string` and `toml_array_inner`
   directly for `"`/`\`/newline/`]` escaping and array breakout.
 - **Gate:** `cargo clippy` zero (bins/lib); `just check` clean; TDD
@@ -222,11 +233,16 @@ Internal adversarial pass (pre-`/inquisition`):
   *array* case. A `]`-only red would be green already (false red). Corrected
   § 5.5 and § 9: quoted-literal breakers are `"`/`\`/newline; the hostile driver
   must contain `"`; `]`/`,` breakout is tested on `toml_array_inner` only.
-- **A2 — reader claim verified (no change).** Confirmed every module already
-  round-trips its `render_*_toml` output via `meta::Meta` (`adr.rs:232`,
-  `slice.rs:559`, `requirement.rs:275`, `spec.rs:1144`, `backlog.rs:1020`) and
-  that no `deny_unknown_fields` exists in the tree, so backlog/spec (extra fields)
-  parse through `Meta`. § 9's "re-parses via its reader" is grounded, not assumed.
+- **A2 — reader claim corrected (post-`/inquisition`, SL-024 inquisition.md
+  Charge 1).** The first draft swore every module already round-trips its
+  `render_*_toml` output via `meta::Meta` and cited `spec.rs:1144` as a witness.
+  False: `spec.rs:1144` is a section comment, and spec's only round-trip
+  (`spec_list_meta_parses_scaffolded_spec_toml`, `spec.rs:1145`) reads from **disk**
+  via `fresh`/`read_meta`, never parsing a render string. Corrected: **four**
+  modules (`adr.rs:229`, `slice.rs:557`, `requirement.rs:272`, `backlog.rs:1015`)
+  round-trip render output **directly** and are extended; **spec gets a new
+  direct-render test** (see § 9). No `deny_unknown_fields` exists in the tree, so
+  backlog/spec (extra fields) parse through `Meta`.
 - **A3 — verbatim move stays clippy-clean (no change).** `toml_array_inner`'s
   `.map(|s| toml_string(s))` is not a `redundant_closure` hit: the element is
   `&String` and `toml_string` takes `&str`, so the closure is load-bearing (deref

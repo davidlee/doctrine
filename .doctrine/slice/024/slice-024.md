@@ -30,7 +30,7 @@ into a **TOML literal** through it — eliminating the raw splice corpus-wide.
 **Affected surface — the `render_*_toml` functions only:**
 
 - `src/adr.rs` — `render_adr_toml` (`:74` slug, `:75` title)
-- `src/spec.rs` — `:249` slug, `:250` title
+- `src/spec.rs` — `render_spec_toml` (`:260` slug, `:261` title)
 - `src/slice.rs` — `:71` slug, `:72` title
 - `src/requirement.rs` — `:120` slug, `:121` title
 - `src/backlog.rs` — `render_backlog_toml` (`:452` slug, `:453` title)
