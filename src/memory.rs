@@ -29,6 +29,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::entity::{self, Artifact, Fileset, LocalFs};
 use crate::git::{AnchorKind, Confidence, RepoIdKind};
+use crate::tomlfmt::{toml_array_inner, toml_string};
 
 /// Workspace coordinate carried on every memory; hardcoded `"default"` in v1 (no
 /// flag — design § 5.3 / interop constraint 6). Read back by `list`/`show`.
@@ -644,25 +645,6 @@ fn render_memory_toml(d: &Draft<'_>) -> Result<String> {
         .replace("{{normalizer}}", normalizer)
         .replace("{{reviewed}}", "")
         .replace("{{review_by}}", ""))
-}
-
-/// Render `s` as a TOML basic-string literal — quoted and fully escaped by the
-/// serializer (the read-path's own `toml` stack). The interpolated value lines
-/// emit this in place of a raw `"{{v}}"` splice, so a `"`, newline, or `]` can
-/// neither break the document nor inject a key (A-1).
-fn toml_string(s: &str) -> String {
-    toml::Value::String(s.to_owned()).to_string()
-}
-
-/// Render the *inner* of a TOML array literal — each element escaped through
-/// `toml_string`, comma-joined (the template supplies the surrounding `[ ]`).
-/// The single escaping seam for every scope array (`tags`/`paths`/`globs`/
-/// `commands`), so a hostile element cannot break out of the array (A-1).
-fn toml_array_inner(xs: &[String]) -> String {
-    xs.iter()
-        .map(|s| toml_string(s))
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 /// Render `memory.md` — the tool-authored body: title + summary only (design § 5.2).

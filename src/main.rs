@@ -21,6 +21,7 @@ mod skills;
 mod slice;
 mod spec;
 mod state;
+mod tomlfmt;
 
 use std::path::PathBuf;
 
