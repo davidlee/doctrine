@@ -310,6 +310,26 @@ enum BacklogCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Transition one item's status (and resolution) in place — kind auto-detected
+    /// from the prefix. Coupling holds: a terminal status requires a resolution, a
+    /// non-terminal forbids one (re-opening auto-clears it).
+    Edit {
+        /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
+        id: String,
+
+        /// The target status (open | triaged | started | resolved | closed).
+        #[arg(long)]
+        status: backlog::Status,
+
+        /// The resolution (required by a terminal status, forbidden otherwise).
+        #[arg(long)]
+        resolution: Option<backlog::Resolution>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -867,6 +887,12 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => backlog::run_list(path, kind, status, tag, all, substr),
             BacklogCommand::Show { id, path } => backlog::run_show(path, &id),
+            BacklogCommand::Edit {
+                id,
+                status,
+                resolution,
+                path,
+            } => backlog::run_edit(path, &id, status, resolution),
         },
         Command::Boot {
             command,

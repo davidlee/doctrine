@@ -790,6 +790,127 @@ pub(crate) fn run_show(path: Option<PathBuf>, reference: &str) -> anyhow::Result
 }
 
 // ---------------------------------------------------------------------------
+// Pure: the status ⟺ resolution coupling + impure: the edit-in-place transition
+// ---------------------------------------------------------------------------
+
+/// The `status ⟺ resolution` coupling (PRD-009 REQ-059 / §5.5) plus the D9
+/// re-open clear — a PURE decision over the *target* state, returning the
+/// resolution string to write. A terminal status REQUIRES a `--resolution`; a
+/// non-terminal status FORBIDS one and AUTO-CLEARS any prior resolution to `""`
+/// (D9 — re-opening is one command, and the `resolution ⟺ terminal` invariant
+/// holds post-write). `--resolution promoted` by hand is accepted (the promote
+/// bridge is deferred; v1 is ungated). No clock/disk — the shell stamps `updated`.
+fn validate_transition(
+    status: Status,
+    resolution: Option<Resolution>,
+) -> anyhow::Result<&'static str> {
+    match (status.is_terminal(), resolution) {
+        (true, Some(r)) => Ok(r.as_str()),
+        (true, None) => anyhow::bail!(
+            "a terminal status (`{}`) requires `--resolution`",
+            status.as_str()
+        ),
+        (false, Some(r)) => anyhow::bail!(
+            "a non-terminal status (`{}`) takes no `--resolution` (got `{}`)",
+            status.as_str(),
+            r.as_str()
+        ),
+        (false, None) => Ok(""),
+    }
+}
+
+/// Edit-preserving status/resolution transition on one authored `backlog-NNN.toml`
+/// — the `adr::set_adr_status` precedent: `toml_edit` mutates the file in place, so
+/// the inert `[facet]`/`[relationships]` tables, hand-added comments, and unknown
+/// keys all survive (the file is never reserialised). Resolves the coupling via
+/// `validate_transition`, carries the I5 no-op guard (an unchanged status+resolution
+/// writes nothing), and the F-1 refuse (a malformed item missing a seeded key is
+/// rejected, never corrupted by a tail-`insert` into a trailing subtable). The date
+/// is injected by the shell; returns the resolution string written (for its confirm
+/// line). A missing item file errors (read fails) — never an implicit create.
+fn set_backlog_status(
+    root: &Path,
+    item_kind: ItemKind,
+    id: u32,
+    status: Status,
+    resolution: Option<Resolution>,
+    today: &str,
+) -> anyhow::Result<&'static str> {
+    let resolution = validate_transition(status, resolution)?;
+    let name = format!("{id:03}");
+    let path = root
+        .join(item_kind.kind().dir)
+        .join(&name)
+        .join(format!("{BACKLOG_STEM}-{name}.toml"));
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("backlog item not found at {}", path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+    // I5 no-op guard: unchanged status AND resolution → write nothing (mtime holds).
+    let unchanged = doc.get("status").and_then(toml_edit::Item::as_str) == Some(status.as_str())
+        && doc.get("resolution").and_then(toml_edit::Item::as_str) == Some(resolution);
+    if unchanged {
+        return Ok(resolution);
+    }
+
+    // F-1: `status`/`resolution`/`updated` are scaffold-seeded — this verb edits in
+    // place, never creates. Their absence means a malformed (hand-edited) item; a tail
+    // `insert` would append the key *after* the trailing `[facet]`/`[relationships]`
+    // header, landing it inside that subtable (silent corruption). Refuse instead.
+    let table = doc.as_table_mut();
+    if !table.contains_key("status")
+        || !table.contains_key("resolution")
+        || !table.contains_key("updated")
+    {
+        anyhow::bail!(
+            "malformed backlog item {name}: missing seeded `status`/`resolution`/`updated` (regenerate via `backlog new`)"
+        );
+    }
+    table.insert("status", toml_edit::value(status.as_str()));
+    table.insert("resolution", toml_edit::value(resolution));
+    table.insert("updated", toml_edit::value(today));
+    std::fs::write(&path, doc.to_string())
+        .with_context(|| format!("Failed to write {}", path.display()))?;
+    Ok(resolution)
+}
+
+/// `doctrine backlog edit <ID> --status <s> [--resolution <r>]` — the transition
+/// verb (PRD-009 REQ-057/REQ-059, §5.4). Thin shell: find the root, `parse_ref` the
+/// id to its kind (prefix auto-detect), apply the coupled edit in place (clock
+/// injected), print the new state. A missing id hard-errors (never implicit create).
+pub(crate) fn run_edit(
+    path: Option<PathBuf>,
+    reference: &str,
+    status: Status,
+    resolution: Option<Resolution>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (item_kind, id) = parse_ref(reference)?;
+    let written = set_backlog_status(
+        &root,
+        item_kind,
+        id,
+        status,
+        resolution,
+        &crate::clock::today(),
+    )?;
+    let suffix = if written.is_empty() {
+        String::new()
+    } else {
+        format!(" · {written}")
+    };
+    writeln!(
+        io::stdout(),
+        "Edited {}: {}{suffix}",
+        item_kind.canonical_id(id),
+        status.as_str()
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1554,5 +1675,242 @@ tags = []
             lit(specs),
         );
         fs::write(dir.join(format!("backlog-{name}.toml")), body).unwrap();
+    }
+
+    // --- PHASE-05: the `backlog edit` coupled transition ---
+
+    /// Validate one item's on-disk state via the real reader. Panics if absent.
+    fn read_back(root: &Path, kind: ItemKind, id: u32) -> BacklogItem {
+        read_item(root, kind, id).unwrap()
+    }
+
+    // --- VT-1 / VT-2: the coupling + D9, as a pure decision ---
+
+    #[test]
+    fn validate_transition_couples_both_directions_and_d9_clears() {
+        // a terminal status REQUIRES a resolution (both terminal states).
+        assert!(validate_transition(Status::Resolved, None).is_err());
+        assert!(validate_transition(Status::Closed, None).is_err());
+        // terminal + resolution → that resolution's kebab string.
+        assert_eq!(
+            validate_transition(Status::Resolved, Some(Resolution::Fixed)).unwrap(),
+            "fixed"
+        );
+        // a non-terminal status FORBIDS a resolution (rejected outright).
+        assert!(validate_transition(Status::Started, Some(Resolution::Fixed)).is_err());
+        assert!(validate_transition(Status::Open, Some(Resolution::Promoted)).is_err());
+        // a non-terminal status with no resolution → D9 auto-clear to "".
+        assert_eq!(validate_transition(Status::Open, None).unwrap(), "");
+        assert_eq!(validate_transition(Status::Triaged, None).unwrap(), "");
+    }
+
+    // --- VT-3: edit-preserving (comments/unknowns survive); updated bumps ---
+
+    #[test]
+    fn backlog_edit_is_edit_preserving() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth"); // real template: [relationships] subtable
+        let path = issue_dir(root, "001").join("backlog-001.toml");
+
+        // hand-add an inert top-level table + a comment (the F-1 corruption hazard the
+        // in-place edit must NOT disturb).
+        let mut body = fs::read_to_string(&path).unwrap();
+        body.push_str("\n# hand note — keep me\n[custom]\nkeep = \"yes\"\n");
+        fs::write(&path, &body).unwrap();
+
+        set_backlog_status(
+            root,
+            ItemKind::Issue,
+            1,
+            Status::Resolved,
+            Some(Resolution::Fixed),
+            "2026-07-01",
+        )
+        .unwrap();
+
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(after.contains("# hand note — keep me"), "comment survives");
+        assert!(after.contains("[custom]"), "inert table survives verbatim");
+        assert!(after.contains("keep = \"yes\""), "unknown key survives");
+        assert!(
+            after.contains("[relationships]"),
+            "seeded subtable survives"
+        );
+        assert!(after.contains("status = \"resolved\""));
+        assert!(after.contains("resolution = \"fixed\""));
+        assert!(after.contains("updated = \"2026-07-01\""), "updated bumps");
+
+        // and it still round-trips the reader.
+        let item = read_back(root, ItemKind::Issue, 1);
+        assert_eq!(item.status, Status::Resolved);
+        assert_eq!(item.resolution, Some(Resolution::Fixed));
+    }
+
+    // --- VT-3: the no-op guard writes nothing ---
+
+    #[test]
+    fn backlog_edit_noop_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth"); // status open, resolution ""
+        let path = issue_dir(root, "001").join("backlog-001.toml");
+        let before = fs::read_to_string(&path).unwrap();
+        let mtime_before = fs::metadata(&path).unwrap().modified().unwrap();
+
+        // re-open an already-open item (status open, no resolution) → no-op.
+        let written =
+            set_backlog_status(root, ItemKind::Issue, 1, Status::Open, None, "2026-07-01").unwrap();
+        assert_eq!(
+            written, "",
+            "the no-op still reports the resolved (empty) state"
+        );
+
+        assert_eq!(
+            before,
+            fs::read_to_string(&path).unwrap(),
+            "a no-op writes nothing — content byte-identical"
+        );
+        assert_eq!(
+            mtime_before,
+            fs::metadata(&path).unwrap().modified().unwrap(),
+            "a no-op leaves mtime untouched"
+        );
+    }
+
+    // --- VT-3: a malformed item (missing a seeded key) is refused, not corrupted ---
+
+    #[test]
+    fn backlog_edit_refuses_malformed_missing_seeded_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // hand-corrupted: the seeded `resolution` key is gone.
+        let d = root.join(ItemKind::Issue.kind().dir).join("001");
+        fs::create_dir_all(&d).unwrap();
+        let malformed = "id = 1\nslug = \"a\"\ntitle = \"A\"\nkind = \"issue\"\n\
+             status = \"open\"\ncreated = \"2026-06-08\"\nupdated = \"2026-06-08\"\ntags = []\n";
+        let path = d.join("backlog-001.toml");
+        fs::write(&path, malformed).unwrap();
+
+        let err = set_backlog_status(
+            root,
+            ItemKind::Issue,
+            1,
+            Status::Resolved,
+            Some(Resolution::Fixed),
+            "2026-07-01",
+        );
+        assert!(err.is_err(), "a missing seeded key is refused");
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            malformed,
+            "the file is untouched — never tail-inserted into corruption"
+        );
+    }
+
+    // --- VT-3: a missing id hard-errors, never an implicit create ---
+
+    #[test]
+    fn backlog_edit_missing_id_hard_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let err = set_backlog_status(
+            root,
+            ItemKind::Issue,
+            99,
+            Status::Started,
+            None,
+            "2026-07-01",
+        );
+        assert!(err.is_err(), "editing a nonexistent id errors");
+        assert!(
+            !issue_dir(root, "099").exists(),
+            "the failed edit creates nothing"
+        );
+    }
+
+    // --- VT-2: re-open auto-clears the resolution (D9); promoted is ungated ---
+
+    #[test]
+    fn backlog_edit_reopen_auto_clears_resolution() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth");
+
+        // resolve it.
+        set_backlog_status(
+            root,
+            ItemKind::Issue,
+            1,
+            Status::Resolved,
+            Some(Resolution::Fixed),
+            "2026-07-01",
+        )
+        .unwrap();
+        let resolved = read_back(root, ItemKind::Issue, 1);
+        assert_eq!(resolved.status, Status::Resolved);
+        assert_eq!(resolved.resolution, Some(Resolution::Fixed));
+
+        // re-open (no --resolution) → D9 clears the resolution; the invariant holds.
+        set_backlog_status(root, ItemKind::Issue, 1, Status::Open, None, "2026-07-02").unwrap();
+        let reopened = read_back(root, ItemKind::Issue, 1);
+        assert_eq!(reopened.status, Status::Open);
+        assert_eq!(reopened.resolution, None, "D9: re-open clears resolution");
+
+        // a `promoted` item is hand-re-openable (ungated — the OQ-003 escape hatch).
+        set_backlog_status(
+            root,
+            ItemKind::Issue,
+            1,
+            Status::Closed,
+            Some(Resolution::Promoted),
+            "2026-07-03",
+        )
+        .unwrap();
+        set_backlog_status(root, ItemKind::Issue, 1, Status::Open, None, "2026-07-04").unwrap();
+        let after = read_back(root, ItemKind::Issue, 1);
+        assert_eq!(after.status, Status::Open);
+        assert_eq!(after.resolution, None, "a promoted item re-opens ungated");
+    }
+
+    // --- VT-5: non-canon status/resolution rejected at the clap ValueEnum boundary ---
+
+    #[test]
+    fn backlog_edit_rejects_noncanon_status_and_resolution() {
+        use clap::ValueEnum;
+        assert!(Status::from_str("bogus", false).is_err());
+        assert!(Resolution::from_str("nope", false).is_err());
+        // the canon tokens (kebab) still parse — the lifecycle stays otherwise ungated.
+        assert_eq!(Status::from_str("started", false).unwrap(), Status::Started);
+        assert_eq!(
+            Resolution::from_str("wont-do", false).unwrap(),
+            Resolution::WontDo
+        );
+    }
+
+    // --- VT-1: coupling both directions + missing id, through the real shell ---
+
+    #[test]
+    fn run_edit_drives_the_coupled_transition() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Risk, "Token leak");
+
+        // a terminal status without a resolution is rejected through the shell.
+        assert!(run_edit(Some(root.to_path_buf()), "RSK-001", Status::Resolved, None).is_err());
+        // a valid terminal+resolution is accepted.
+        run_edit(
+            Some(root.to_path_buf()),
+            "RSK-001",
+            Status::Resolved,
+            Some(Resolution::Mitigated),
+        )
+        .unwrap();
+        let item = read_back(root, ItemKind::Risk, 1);
+        assert_eq!(item.status, Status::Resolved);
+        assert_eq!(item.resolution, Some(Resolution::Mitigated));
+
+        // a missing id hard-errors through the shell (never an implicit create).
+        assert!(run_edit(Some(root.to_path_buf()), "RSK-099", Status::Started, None).is_err());
     }
 }
