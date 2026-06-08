@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea4e7c18f78d192ddd738ff6052bf"
+memory_key = "mem.pattern.build.jail-target-redirect"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "In the jail, cargo build writes to ~/.cargo/doctrine-target-jail/debug — ./target/debug/doctrine is stale"
+summary = "Embed-dependent runs must use the jail target binary, not ./target/debug/doctrine (a separate stale file)"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = []
+globs = []
+commands = ["boot"]
+tags = ["build", "jail", "embed"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f9d038455f272f2aeb3cefe087a522976fbbe770"
+ref_name = "refs/heads/main"
+checkout_state_id = "36a4b3412d4bbf6c8b2c2b0f0b7a5aed45f16f0df8864e1463197bbd010719c8"
+base_commit = "703b5bc2a8a6fb8dee8c90a82d3a185309503979"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
