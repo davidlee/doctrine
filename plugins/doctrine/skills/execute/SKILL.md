@@ -23,8 +23,8 @@ Inputs:
 3. Identify the concrete files or components you expect to touch first and run
    `/retrieve-memory` against those paths before deep reading or editing, so any
    scope-bound gotchas or patterns surface early.
-4. Ensure the phase is `in_progress` before implementation proceeds:
-   `doctrine slice phase <ID> PHASE-NN --status in_progress`.
+4. Ensure the phase is `in_progress` before implementation proceeds — flip it
+   with `doctrine slice phase` (see `using-doctrine.md`).
 5. Implement phase tasks in small coherent units, **TDD red/green/refactor**:
    write a failing test, make it pass, then refactor. Test behaviour, not
    trivial implementation. Build and improve test helpers and fixtures as you go.
@@ -43,9 +43,9 @@ Inputs:
 12. Before declaring the phase ready, run the verification gate — `just check`
     (lint + test + format) — and review the touched subsystems and notes once
     more for missed memory-capture candidates.
-13. When exit criteria (`EX-`) and verification (`VT-`) are satisfied, mark the
-    phase `doctrine slice phase <ID> PHASE-NN --status completed` and hand off:
-    `/phase-plan` for the next phase, or `/audit` when the slice's phases are done.
+13. When exit criteria (`EX-`) and verification (`VT-`) are satisfied, flip the
+    phase to `completed` with `doctrine slice phase`, then hand off: `/phase-plan`
+    for the next phase, or `/audit` when the slice's phases are done.
 
 ## Outcomes
 

@@ -8,15 +8,13 @@ description: Use when authoring or revising the technical specification — the 
 You are authoring the technical spec — the *how*, downstream of the product spec
 (`/spec-product`) and upstream of per-slice design (`/design`).
 
-> **Structural (SL-015).** Doctrine manages specs as first-class entities.
-> Scaffold with `doctrine spec new tech "<title>"`; add requirements with
-> `doctrine spec req add <SPEC-ref> "<title>" --kind functional|quality`; read the
-> reassembled whole with `doctrine spec show <SPEC-ref>`; check FK integrity with
-> `doctrine spec validate`; list with `doctrine spec list`. Identity + flat fields
-> (incl. `c4_level`, `sources`) live in `spec-NNN.toml`, the narrative in
-> `spec-NNN.md`; requirements are **peer entities** (`REQ-NNN`) membered via
-> `members.toml`; tech-only spec→spec edges are hand-authored in
-> `interactions.toml`.
+> **Structural (SL-015).** Doctrine manages specs as first-class entities. Use
+> `doctrine spec` to scaffold a tech spec, `req add` its requirements, `show` the
+> reassembled whole, `validate` FK integrity, and `list` the specs (flags in
+> `--help`; verb model in `using-doctrine.md`). Identity + flat fields (incl.
+> `c4_level`, `sources`) live in `spec-NNN.toml`, the narrative in `spec-NNN.md`;
+> requirements are **peer entities** (`REQ-NNN`) membered via `members.toml`;
+> tech-only spec→spec edges are hand-authored in `interactions.toml`.
 
 Capture the durable architecture and mechanism:
 

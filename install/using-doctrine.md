@@ -21,6 +21,7 @@ reach-for-it map):
 | read an entity (all tiers, synthesized) | `doctrine <kind> show <ID>` |
 | survey what exists | `doctrine <kind> list` |
 | scope a change | `doctrine slice new` |
+| transition a phase (e.g. flip `in_progress` → `completed`) | `doctrine slice phase` |
 | record a durable fact | `doctrine memory record` |
 | find / retrieve a memory | `doctrine memory find` · `doctrine memory retrieve` |
 | regenerate the boot snapshot | `doctrine boot` |
