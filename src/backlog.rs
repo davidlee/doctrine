@@ -28,11 +28,15 @@
     reason = "model + scaffold consumed by PHASE-02..05 verbs; no CLI this phase"
 )]
 
+use std::io::{self, Write};
 use std::path::PathBuf;
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{
+    self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
+};
 
 /// The toml/md file stem — shared by all five kinds (`backlog-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`ISS`/`IMP`/…) and from the per-kind tree dirs.
@@ -133,6 +137,13 @@ impl ItemKind {
             ItemKind::Risk => "risk",
             ItemKind::Idea => "idea",
         }
+    }
+
+    /// The canonical ref for an id in this kind's namespace (`ISS-007`) — the
+    /// print of `backlog new` and the inverse of `from_prefix`. Prefix from the
+    /// `Kind` (single source).
+    fn canonical_id(self, id: u32) -> String {
+        format!("{}-{id:03}", self.prefix())
     }
 
     /// Resolve a canonical-id prefix back to its kind (`backlog show <ID>`
@@ -464,6 +475,51 @@ fn backlog_scaffold(item_kind: ItemKind, ctx: &ScaffoldCtx<'_>) -> anyhow::Resul
 }
 
 // ---------------------------------------------------------------------------
+// CLI entry points (thin)
+// ---------------------------------------------------------------------------
+
+/// `doctrine backlog new <kind> "<title>" [--slug S]` — the capture verb (PRD-009
+/// REQ-049). Thin shell (§5.4): resolve the title/slug, inject the clock, reserve
+/// the next id in the kind's INDEPENDENT namespace via the shared `Fresh` engine
+/// path (monotonic id + race-retry inherited; `ISS-001` and `RSK-001` coexist),
+/// then print the canonical `XXX-NNN` id. A pure mirror of `adr`/`spec` `run_new`,
+/// dispatching the `Kind` on `item_kind`. Touches disk via the engine only — the
+/// engine is unchanged (the R6 gate).
+pub(crate) fn run_new(
+    path: Option<PathBuf>,
+    item_kind: ItemKind,
+    title: Option<String>,
+    slug: Option<String>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let title = crate::input::resolve_title(title)?;
+    let slug = crate::input::resolve_slug(&title, slug)?;
+    let date = crate::clock::today();
+    let out = entity::materialise(
+        item_kind.kind(),
+        &LocalFs,
+        &root,
+        &MaterialiseRequest::Fresh,
+        &Inputs {
+            slug: &slug,
+            title: &title,
+            date: &date,
+        },
+    )?;
+    let id = out
+        .eid
+        .numeric_id()
+        .context("backlog kind must yield a numeric id")?;
+    writeln!(
+        io::stdout(),
+        "Created {}: {}",
+        item_kind.canonical_id(id),
+        out.dir.display()
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -752,5 +808,134 @@ tags = []
         let item = validate(toml::from_str::<RawBacklogToml>(&risk_toml).unwrap()).unwrap();
         assert_eq!(item.kind, ItemKind::Risk);
         assert_eq!(item.id, 1);
+    }
+
+    // --- PHASE-02: the `backlog new` verb (thin shell over the engine) ---
+
+    /// Drive the real `new` verb with an explicit root (short-circuits detection)
+    /// and an explicit title (avoids stdin).
+    fn new_item(root: &Path, kind: ItemKind, title: &str) {
+        run_new(
+            Some(root.to_path_buf()),
+            kind,
+            Some(title.to_string()),
+            None,
+        )
+        .unwrap();
+    }
+
+    fn issue_dir(root: &Path, id: &str) -> PathBuf {
+        root.join(format!(".doctrine/backlog/issue/{id}"))
+    }
+
+    // --- VT-1: monotonic per kind ---
+
+    #[test]
+    fn backlog_new_reserves_monotonic_per_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth");
+        new_item(root, ItemKind::Issue, "Login");
+
+        assert!(issue_dir(root, "001").join("backlog-001.toml").is_file());
+        assert!(issue_dir(root, "001").join("backlog-001.md").is_file());
+        assert_eq!(
+            fs::read_link(root.join(".doctrine/backlog/issue/001-auth")).unwrap(),
+            Path::new("001")
+        );
+        // a second `new` lands the next id (engine race-retry inherited).
+        assert!(issue_dir(root, "002").join("backlog-002.toml").is_file());
+    }
+
+    // --- VT-1: the five counters are independent (separate dirs) ---
+
+    #[test]
+    fn backlog_new_counters_isolated_across_kinds() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // an issue and a risk both open at 001 — independent namespaces.
+        new_item(root, ItemKind::Issue, "Auth");
+        new_item(root, ItemKind::Risk, "Expiry");
+        assert!(issue_dir(root, "001").join("backlog-001.toml").is_file());
+        assert!(
+            root.join(".doctrine/backlog/risk/001/backlog-001.toml")
+                .is_file()
+        );
+
+        // a second issue advances to 002; the risk counter is untouched.
+        new_item(root, ItemKind::Issue, "Login");
+        assert!(issue_dir(root, "002").join("backlog-002.toml").is_file());
+        assert!(
+            !root.join(".doctrine/backlog/risk/002").exists(),
+            "an issue create must not advance the risk counter"
+        );
+    }
+
+    // --- VT-2: the kind-correct template seeds onto disk ---
+
+    #[test]
+    fn backlog_new_seeds_kind_template() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Risk, "Token expiry");
+        new_item(root, ItemKind::Issue, "Token expiry");
+
+        // risk seeds `[facet]`; the plain issue does not. Both default `open`.
+        let risk =
+            fs::read_to_string(root.join(".doctrine/backlog/risk/001/backlog-001.toml")).unwrap();
+        assert!(risk.contains("[facet]"), "risk seeds a facet");
+        assert!(risk.contains("status = \"open\""), "status defaults open");
+
+        let issue = fs::read_to_string(issue_dir(root, "001").join("backlog-001.toml")).unwrap();
+        assert!(!issue.contains("[facet]"), "a plain kind has no facet");
+        assert!(issue.contains("status = \"open\""));
+
+        // the printed canonical id (`ISS-001`) matches the reserved dir: the item
+        // validates and carries id 1 under the issue tree.
+        let item = validate(toml::from_str::<RawBacklogToml>(&issue).unwrap()).unwrap();
+        assert_eq!(item.kind, ItemKind::Issue);
+        assert_eq!(item.id, 1);
+        assert_eq!(ItemKind::Issue.canonical_id(item.id), "ISS-001");
+    }
+
+    // --- VT-3: the gitignore negation makes a created item git-addable (R5) ---
+
+    #[test]
+    fn created_backlog_item_is_git_addable() {
+        fn git(root: &Path, args: &[&str]) -> std::process::Output {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(args)
+                .output()
+                .expect("spawn git")
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        assert!(git(root, &["init", "-b", "main"]).status.success());
+        // the dogfood blanket-ignore + the PHASE-02 backlog negation (no inline #).
+        fs::write(
+            root.join(".gitignore"),
+            ".doctrine/*\n!.doctrine/backlog/\n",
+        )
+        .unwrap();
+
+        new_item(root, ItemKind::Issue, "Auth");
+        let item = ".doctrine/backlog/issue/001/backlog-001.toml";
+
+        // `check-ignore -q` exits 1 when the path is NOT ignored — negation is live.
+        assert_eq!(
+            git(root, &["check-ignore", "-q", item]).status.code(),
+            Some(1),
+            "the negation must un-ignore the backlog item"
+        );
+        // and `git add` of the item succeeds (no "paths are ignored").
+        let add = git(root, &["add", item]);
+        assert!(
+            add.status.success(),
+            "git add failed: {}",
+            String::from_utf8_lossy(&add.stderr)
+        );
     }
 }

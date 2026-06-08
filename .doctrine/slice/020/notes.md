@@ -35,3 +35,35 @@ Decisions worth surviving the phase sheet (audit-harvest candidates):
 - **R6 gate held:** `git diff src/entity.rs` empty across PHASE-01 — the five
   backlog `Kind`s are pure `Fresh` callers, zero engine change. This is the load-
   bearing premise of the whole slice; keep it green every phase.
+
+## PHASE-02 — `backlog new <kind>` + install wiring
+
+Decisions worth surviving the phase sheet (audit-harvest candidates):
+
+- **`new` is a pure mirror of `adr`/`spec` `run_new`.** `backlog::run_new(path,
+  item_kind, title, slug)` — resolve title/slug, `clock::today()`, `materialise(
+  item_kind.kind(), &LocalFs, …, &Fresh, …)`, print `Created XXX-NNN: <dir>` via
+  `writeln!(io::stdout())` (NOT `println!` — the `print_stdout` clippy denial).
+  Added `ItemKind::canonical_id(id)` (mirror `SpecSubtype::canonical_id`) for the
+  print; it makes `prefix()` live in the lib build. CLI: a `Backlog` `Command`
+  variant + a one-arm `BacklogCommand::New`. **R6 gate held** — `git diff
+  src/entity.rs` still empty.
+- **Authored-entity wiring trap closed, both surfaces** (`mem.pattern.install.
+  authored-entity-wiring`): `.doctrine/backlog` → `install/manifest.toml`
+  `[dirs].create`; `!.doctrine/backlog/` → the **repo** `.gitignore` (the dogfood
+  blanket-`.doctrine/*` model). The memory's load-bearing nuance held exactly: the
+  installer's *denylist* model (client repos, `[gitignore].entries`) takes NO
+  negation — only this repo's blanket model does. Manifest seeds only the
+  `.doctrine/backlog` **parent**; the five per-kind dirs are engine-created lazily
+  on first `new` (PHASE-03 missing-dir tolerance). Negation takes **no inline `#`**
+  (`mem.gitignore.no-inline-comments`).
+- **The git-addable proof shells real `git`.** `created_backlog_item_is_git_addable`
+  inits a temp repo, writes the two canonical gitignore lines, runs the real `new`,
+  then asserts `git check-ignore -q <item>` exits **1** (not-ignored = negation
+  live) AND `git add <item>` succeeds. Faithful R5 wiring proof, not a string match.
+- **`#![expect(dead_code)]` STILL fulfilled, unchanged.** `new` makes `kind/prefix/
+  canonical_id/as_str/has_facet` + the renders live, but `Status::is_terminal`,
+  `Resolution`/`RiskLevel` + their `as_str`, `from_prefix`, the `Raw*`/`validate`
+  parse tier, `BacklogItem`, and `KIND_PRECEDENCE` stay dead in the lib build;
+  `KIND_PRECEDENCE` stays dead in BOTH builds and keeps the expectation green.
+  **Retire the module expect at PHASE-05** when `edit` consumes the last of it.

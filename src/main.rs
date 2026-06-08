@@ -82,6 +82,13 @@ enum Command {
         command: SpecCommand,
     },
 
+    /// Capture and survey backlog work-intake items (issue / improvement /
+    /// chore / risk / idea).
+    Backlog {
+        #[command(subcommand)]
+        command: BacklogCommand,
+    },
+
     /// Regenerate the cache-friendly governance snapshot, or `boot install` to wire it.
     Boot {
         /// Wire the `@`-import + per-harness session refresh (omit to regenerate).
@@ -241,6 +248,26 @@ enum SpecReqCommand {
         /// Explicit membership label (default: next free FR-/NF- for the kind).
         #[arg(long)]
         label: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum BacklogCommand {
+    /// Allocate the next id in the kind's namespace and scaffold a new item.
+    New {
+        /// Item kind: issue | improvement | chore | risk | idea.
+        kind: backlog::ItemKind,
+
+        /// Item title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -786,6 +813,14 @@ fn main() -> anyhow::Result<()> {
                     path,
                 } => spec::run_req_add(path, &spec_ref, title, kind, label),
             },
+        },
+        Command::Backlog { command } => match command {
+            BacklogCommand::New {
+                kind,
+                title,
+                slug,
+                path,
+            } => backlog::run_new(path, kind, title, slug),
         },
         Command::Boot {
             command,

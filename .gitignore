@@ -12,6 +12,7 @@
 .doctrine/*
 !.doctrine/slice/
 !.doctrine/adr/
+!.doctrine/backlog/
 !.doctrine/requirement/
 !.doctrine/spec/
 !.doctrine/memory/
