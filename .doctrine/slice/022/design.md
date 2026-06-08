@@ -126,18 +126,28 @@ soft product-spec warning without a second collection pass.
 
 - `descent_findings` — for a tech-spec descent: target ∈ `product_specs` → clean;
   ∈ `tech_specs` → *invalid kind*; ∈ neither → *dangling* (REQ-082).
-- `dangling_parent` — `parent` ∉ `tech_specs` → dangling (REQ-083).
-- `self_parent` — `parent == spec` → hard 1-cycle (REQ-087).
+- `parent_findings` — `parent` ∈ `tech_specs` → clean; ∈ `product_specs` →
+  *invalid kind* (a parent must be a tech spec — symmetry with descent /
+  interaction); ∈ neither → *dangling* (REQ-083). Excludes the self case (owned by
+  `self_parent`).
+- `self_parent` — `parent == spec` → hard. **Sole reporter** for the 1-cycle
+  A→A; `parent_cycle` skips a node whose parent is itself, so A→A yields exactly
+  one finding (REQ-087).
 - `parent_cycle` — walk the child→parent map from each node with a visited
-  `BTreeSet`; a revisit is a cycle (REQ-087).
+  `BTreeSet`; a revisit (chain length ≥ 2) is a cycle. Terminates at a root (node
+  with no parent edge) or a dangling parent (target absent as a key) — neither is
+  a cycle (REQ-087).
 - interaction split — rewrite `dangling_interaction_targets`: target ∈
   `product_specs` → *invalid kind*; ∈ neither → *dangling* (REQ-084).
 - `descent_on_product` — **WARN** — a product spec carrying `descends_from`
   (REQ-082 open edge; see §6).
 
-**Severity split.** `validate` returns hard findings (as today) and a new soft
-`warnings` set. `run_validate` prints both (warnings prefixed `warning:`) but
-bails non-zero only on hard findings; a corpus clean-but-for-warnings exits zero.
+**Severity split.** `validate(scope) -> Vec<String>` keeps its signature and
+returns **hard findings only** — so every SL-015 `validate` test stays valid. A
+**sibling** `warnings(scope) -> Vec<String>` returns the soft set (scope-aware
+like the rest). `run_validate` calls both, prints warnings prefixed `warning:`,
+and bails non-zero only when the hard set is non-empty; a corpus clean-but-for-
+warnings exits zero.
 
 ### 5.3 Data, State & Ownership
 
@@ -246,9 +256,46 @@ gate (warnings-only → empty hard set). Layer B — `spec.rs` parse (`parent` /
 errors) and render (tech emits the lines in order; product with `descends_from`
 omits the line; no children line).
 
-Behaviour-preservation: every SL-015 `registry.rs` / `spec.rs` test stays green
-**unchanged** except the one deliberate REQ-084 rewrite (flagged in commit +
-audit). Closure: `doctrine spec validate` non-zero on each crafted hard
-violation, zero on a clean-but-warned corpus; `just check` green, clippy zero.
+Behaviour-preservation, precisely: the SL-015 `registry.rs` checks and their
+tests are untouched (additive set + new sibling methods) **except** the one
+deliberate REQ-084 rewrite of `non_tech_interaction_target_is_flagged_tech_only`
+(flagged in commit + audit). Two mechanical, non-behavioural edits are
+unavoidable and are *not* gate breaches: (a) the `spec.rs` test `Spec { … }`
+constructors (`tech_spec` helper and peers) gain `descends_from: None, parent:
+None` because `Spec` derives no `Default`; (b) nothing else. No existing
+assertion changes value. Closure: `doctrine spec validate` non-zero on each
+crafted hard violation, zero on a clean-but-warned corpus; `just check` green,
+clippy zero.
 
 ## 10. Review Notes
+
+Internal adversarial pass (integrated above):
+
+- **A — self-parent / cycle double-report.** A→A is both a self-parent and a
+  1-cycle. Resolved: `self_parent` is the sole reporter; `parent_cycle` skips
+  self-loops (§5.2). One finding per defect.
+- **B — `validate()` signature creep.** Folding warnings into `validate`'s return
+  would break the SL-015 `validate` tests. Resolved: `warnings()` is a sibling
+  method; `validate()` returns hard findings only (§5.2).
+- **C — overstated behaviour-preservation.** Adding two non-`Default` fields
+  forces the `spec.rs` `Spec { … }` test constructors to add `None, None` — a
+  mechanical, non-behavioural edit, but not "unchanged." Claim corrected (§9).
+- **D — REQ-087 AC1 mechanism (flag for inquisition).** "A containment that would
+  give a spec a second parent is rejected as a hard finding." A scalar `parent`
+  field makes two parents *unrepresentable*: `parent = "A"` twice is a TOML
+  duplicate-key parse error, `parent = ["A","B"]` is a type error — both fail at
+  `read`, so `spec validate` exits non-zero (build_registry returns `Err`) but via
+  a parse error, **not** a findings-list entry. This is judged *stronger* than a
+  finding (the invalid state cannot exist), but it is a literal-reading deviation
+  from "hard finding". Surfaced deliberately for the adversarial pass rather than
+  buried; the alternative (model `parent` as a `Vec` to produce a list finding)
+  is rejected as it reintroduces the representable-but-invalid state D1 designs
+  out.
+- **E — parent target-kind symmetry.** A `parent` pointing at a product spec is
+  now reported *invalid kind*, not *dangling* — consistent with descent and
+  interaction (§5.2). `product_specs` was already in scope, so zero marginal cost.
+
+Doctrinal alignment: ADR-004 (outbound-only, derived reciprocity, show
+outbound-only, §5 carve-out deferral), ADR-001 (registry stays pure leaf; impure
+scan + verb in command), storage rule (no derived data persisted) — all checked,
+no conflict found.

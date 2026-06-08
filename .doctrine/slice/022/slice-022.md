@@ -153,7 +153,10 @@ edge-table file.
 - `doctrine spec validate` is green on a well-formed tech corpus and non-zero on
   each crafted violation; `spec show` reassembles a tech spec with `descends_from`,
   `parent`, peers, and anchors as one readable whole (outbound only — no children).
-- SL-015 spec/registry suites pass unchanged (behaviour-preservation gate).
+- SL-015 spec/registry suites pass unchanged (behaviour-preservation gate) —
+  except the deliberate REQ-084 test rewrite and the mechanical `None, None`
+  additions to `spec.rs` `Spec { … }` test constructors (no assertion changes
+  value; `Spec` derives no `Default`).
 - `just check` green; clippy zero warnings; storage rule honoured (structured
   relations in TOML, no derived data — children, reverse view — persisted).
 - SL-021 is unblocked: the tech surface is complete enough to backfill against.
