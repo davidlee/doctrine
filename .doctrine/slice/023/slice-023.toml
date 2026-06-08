@@ -1,7 +1,7 @@
 id = 23
 slug = "ship-knowledge-tiers"
 title = "Ship knowledge tiers (ADR-005)"
-status = "proposed"
+status = "done"
 created = "2026-06-08"
 updated = "2026-06-08"
 
