@@ -4,7 +4,7 @@ version = 1
 id = 5
 slug = "shipped-knowledge-tiering"
 title = "Shipped knowledge is tiered by access pattern; skills route, reference docs explain"
-status = "proposed"
+status = "accepted"
 created = "2026-06-08"
 updated = "2026-06-08"
 
