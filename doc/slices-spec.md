@@ -89,7 +89,7 @@ sections over time.
 id = 1
 slug = "add-skill-removal"
 title = "Add skill removal to doctrine skills"
-status = "proposed"          # proposed | ready | started | audit | done  (v1: unenforced)
+status = "proposed"          # proposed | ready | started | audit | done | abandoned  (read-filter enforced; writes manual)
 created = "2026-06-03"
 updated = "2026-06-03"
 
@@ -216,7 +216,7 @@ detection). Shared code.
 
 ## Lifecycle
 
-`status ∈ {proposed, ready, started, audit, done}` is recorded in
+`status ∈ {proposed, ready, started, audit, done, abandoned}` is recorded in
 `slice-<id>.toml` and advanced by hand in v1. The stages track a slice from
 intent to reconciled change:
 
@@ -228,13 +228,21 @@ intent to reconciled change:
   `AUD-` artefact, glossary) is in progress — the stage produces the artefact;
   the two are not the same thing and do not share an id.
 - **done** — reconciled and closed.
+- **abandoned** — dropped before completion: the work was superseded by a later
+  slice, descoped, or otherwise will not ship. A terminal state like `done` (it
+  drops from the default `list`), but it carries no claim that the scope was
+  delivered — only that the slice is no longer live. Distinct from `done`: an
+  `abandoned` slice with incomplete phases is *consistent*, not divergent.
 
 There is **no `complete` command and no closure gate** in v1 — there is nothing
 to gate against until specs and verification artefacts exist, so transitions are
 by hand and any value in the set is accepted. Note the seam is *entirely*
 manual: v1 ships `new` (which always writes `proposed`) and `list`, and **no
-transition verb** — the other four states are reached only by hand-editing
-`slice-<id>.toml`. The richer vocabulary is recorded now so the lifecycle stages
+transition verb** — the other five states are reached only by hand-editing
+`slice-<id>.toml`. The vocabulary *is* enforced on the `list --status` filter
+(an out-of-vocab `--status` is rejected; an out-of-vocab *stored* status is
+never hidden and renders with a trailing `?` drift marker), but write-time
+transitions remain ungated. The richer vocabulary is recorded now so the lifecycle stages
 are deliberate, not retrofitted; gating attaches to them later. This is the
 deliberate "one thing at a time" boundary.
 
