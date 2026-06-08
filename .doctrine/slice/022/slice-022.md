@@ -129,10 +129,13 @@ edge-table file.
   no product id set ("no check resolves against one"). Descent + interaction-kind
   now need one; adding it must not perturb the existing four checks
   (behaviour-preservation — the SL-015 registry suite stays green unedited).
-- **Descent is tech-only.** Product specs do not descend; `descends_from` on a
-  product spec is meaningless. Decide in design whether that is unenforced (parse
-  ignores it on products) or a validate finding — lean unenforced/ignored, matching
-  how `interactions` is simply absent on products.
+- **Descent is tech-only (resolved: warn, leave open).** Product specs do not
+  descend in v1; `descends_from` on a product spec is **a soft `validate`
+  warning** (printed, exit zero), not a hard finding and not silently ignored.
+  This requires `validate` to gain a minimal **severity split** (hard findings
+  bail non-zero; warnings are advisory) — the one structural addition beyond
+  additive checks. Whether product specs should gain their own hierarchy/descent
+  long-term is an **open question**, left undesigned — see Follow-Ups.
 - **Behaviour-preservation.** The SL-015 spec/registry suites are the proof the
   shared machinery is unchanged — they must stay green unedited.
 - **Assumption:** `c4_level` enum, `[[source]]` shape, and the membership/label
@@ -170,3 +173,8 @@ edge-table file.
 - **`descends_from` ↔ `realises` prose reconciliation in PRD-012/REQ-082** (if the
   user wants the requirement title's "realises" wording revisited — PRD-012
   territory, not SL-022).
+- **Product-spec hierarchy / descent (open question).** v1 warns on
+  `descends_from` placed on a product spec but does not forbid the *concept* of
+  product-spec hierarchy. There is a plausible future case for decomposition among
+  product specs; left undesigned deliberately. Revisit before hardening the
+  warning into an error or extending decomposition cross-family.
