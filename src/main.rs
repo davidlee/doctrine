@@ -25,8 +25,11 @@ mod state;
 mod tomlfmt;
 
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
+
+use crate::listing::{Format, ListArgs};
 
 /// doctrine — project tooling.
 #[derive(Parser)]
@@ -34,6 +37,65 @@ use clap::{Parser, Subcommand};
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+/// The shared, invariant list-surface flags (SL-025 §5.2) — one composable
+/// `#[derive(Args)]` bundle flattened into every kind's `list` variant. It is the
+/// mandatory spine of the read surface: a kind cannot quietly grow bespoke list
+/// flags. Lives command-side (not in the `listing` leaf) so `clap` stays out of
+/// the leaf (ADR-001 / A-3); `--format` wires `Format::from_str` via `value_parser`
+/// rather than `ValueEnum`, which would drag clap into the leaf.
+#[derive(Args, Debug)]
+pub(crate) struct CommonListArgs {
+    /// Substring filter on slug+title (case-insensitive).
+    #[arg(long, short = 'f')]
+    pub(crate) filter: Option<String>,
+
+    /// Regex over canonical-id + slug + title.
+    #[arg(long, short = 'r')]
+    pub(crate) regexp: Option<String>,
+
+    /// Make the regex case-insensitive.
+    #[arg(long, short = 'i')]
+    pub(crate) case_insensitive: bool,
+
+    /// Status filter, multi-value (`-s draft,active`); any value reveals the
+    /// hide-set.
+    #[arg(long, short = 's', value_delimiter = ',')]
+    pub(crate) status: Vec<String>,
+
+    /// Tag filter, repeatable (OR logic).
+    #[arg(long, short = 't')]
+    pub(crate) tag: Vec<String>,
+
+    /// Show every state, including the kind's terminal hide-set.
+    #[arg(long, short = 'a')]
+    pub(crate) all: bool,
+
+    /// Output format.
+    #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+    pub(crate) format: Format,
+
+    /// Shorthand for `--format json`.
+    #[arg(long)]
+    pub(crate) json: bool,
+}
+
+impl CommonListArgs {
+    /// Lower the parsed clap bundle onto the clap-free leaf input ([`ListArgs`]).
+    /// The seam where command-layer clap types stop and the pure spine begins.
+    pub(crate) fn into_list_args(self) -> ListArgs {
+        ListArgs {
+            substr: self.filter,
+            regexp: self.regexp,
+            case_insensitive: self.case_insensitive,
+            status: self.status,
+            tags: self.tag,
+            all: self.all,
+            format: self.format,
+            json: self.json,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -148,11 +210,28 @@ enum AdrCommand {
         path: Option<PathBuf>,
     },
 
-    /// List ADRs by id: id, status, slug, title.
+    /// List ADRs by id: ADR-id, status, slug, title.
     List {
-        /// Filter to a single status.
+        #[command(flatten)]
+        list: CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one ADR: its metadata, relationships, and prose body.
+    Show {
+        /// ADR reference — `ADR-007` or the bare id `7`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
         #[arg(long)]
-        status: Option<String>,
+        json: bool,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -848,7 +927,13 @@ fn main() -> anyhow::Result<()> {
         },
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
-            AdrCommand::List { status, path } => adr::run_list(path, status.as_deref()),
+            AdrCommand::List { list, path } => adr::run_list(path, list.into_list_args()),
+            AdrCommand::Show {
+                reference,
+                format,
+                json,
+                path,
+            } => adr::run_show(path, &reference, if json { Format::Json } else { format }),
             AdrCommand::Status { id, status, path } => adr::run_status(path, id, status),
         },
         Command::Spec { command } => match command {

@@ -120,8 +120,20 @@ fn marker(label: &str) -> String {
 fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Section {
     let body = match kind {
         SourceKind::ExecPath => exec.display().to_string(),
-        // accepted ADRs only — the cache-stable decisions worth the prefix.
-        SourceKind::Adrs => section_or_marker(heading, adr::list_rows(root, Some("accepted"))),
+        // accepted ADRs only — the cache-stable decisions worth the prefix. An
+        // explicit `--status` reveals them past the list hide-set, which is exactly
+        // the boot intent (SL-025 §5.1 — boot is a declared non-clap consumer that
+        // builds a `listing::ListArgs` directly).
+        SourceKind::Adrs => section_or_marker(
+            heading,
+            adr::list_rows(
+                root,
+                crate::listing::ListArgs {
+                    status: vec!["accepted".to_string()],
+                    ..Default::default()
+                },
+            ),
+        ),
         // every memory pointer (the `just list-memories` index, paid once).
         SourceKind::Memories => {
             section_or_marker(heading, memory::list_rows(root, None, None, None))
@@ -1022,9 +1034,16 @@ mod tests {
         assert!(regenerate(root, exec).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
 
+        // SL-025: the ADR section now renders via the migrated spine path —
+        // prefixed ADR- ids + a header row.
         assert!(
-            snap.contains("001  accepted"),
-            "accepted ADR row projected:\n{snap}"
+            snap.contains("ADR-001  accepted"),
+            "accepted ADR row projected with prefixed id:\n{snap}"
+        );
+        assert!(
+            snap.lines()
+                .any(|l| l.starts_with("id") && l.contains("status")),
+            "ADR section carries the header row:\n{snap}"
         );
         assert!(
             !snap.contains("adopt-ci"),

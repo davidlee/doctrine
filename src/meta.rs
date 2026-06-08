@@ -17,7 +17,8 @@
 //! The generic table layout (`render_table`) used to live here too; SL-025
 //! relocated it to the kind-blind read spine (`crate::listing`), which serves the
 //! named (memory) and own-struct (backlog) kinds as well as these numeric ones.
-//! `format_list` here is the numeric-kind grid that renders over it.
+//! The numeric-kind list grid (formerly `format_list`) now lives on the spine too,
+//! per-kind; `meta` keeps only the authored-toml reader and the sort-by-id helper.
 
 use std::fs;
 use std::path::Path;
@@ -42,24 +43,6 @@ pub(crate) fn sort_and_filter(mut rows: Vec<Meta>, status: Option<&str>) -> Vec<
     rows.retain(|m| status.is_none_or(|s| m.status == s));
     rows.sort_by_key(|m| m.id);
     rows
-}
-
-/// Format rows as aligned `id  status  slug  title` lines, over the shared
-/// `listing::render_table` (the layout authority relocated to the read spine,
-/// SL-025).
-pub(crate) fn format_list(rows: &[Meta]) -> String {
-    let grid: Vec<Vec<String>> = rows
-        .iter()
-        .map(|m| {
-            vec![
-                format!("{:03}", m.id),
-                m.status.clone(),
-                m.slug.clone(),
-                m.title.clone(),
-            ]
-        })
-        .collect();
-    crate::listing::render_table(&grid)
 }
 
 /// Parse the `Meta` of a single entity by id, reading `<stem>-<id>.toml` under
@@ -128,26 +111,6 @@ mod tests {
             proposed.iter().map(|m| m.id).collect::<Vec<_>>(),
             vec![2, 3]
         );
-    }
-
-    #[test]
-    fn format_list_renders_aligned_rows() {
-        let rows = vec![
-            meta(1, "started", "add-skill-removal", "Add skill removal"),
-            meta(2, "proposed", "vendor-skills", "Vendor skills"),
-        ];
-        let out = format_list(&rows);
-        let lines: Vec<&str> = out.lines().collect();
-        assert_eq!(lines.len(), 2);
-        // "started" (7) pads to the width of "proposed" (8) for column alignment.
-        assert!(lines[0].starts_with("001  started   add-skill-removal"));
-        assert!(lines[0].ends_with("Add skill removal"));
-        assert!(lines[1].starts_with("002  proposed  vendor-skills"));
-    }
-
-    #[test]
-    fn format_list_empty_is_empty_string() {
-        assert_eq!(format_list(&[]), "");
     }
 
     #[test]

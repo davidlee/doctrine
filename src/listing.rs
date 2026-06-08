@@ -17,20 +17,9 @@
 //! stays per-kind (the *variant* axis): the row type, the column projection, the
 //! ordering, and the kind-specific flags — none of which live here.
 //!
-//! PHASE-01 stands this leaf up *ahead of its consumers* (the kinds migrate onto
-//! it in PHASE-02+). Every spine symbol except `render_table` (already consumed
-//! via the relocated callers) therefore has no non-test caller yet, so this
-//! module carries a self-clearing `#![expect(dead_code)]` — the same pattern
-//! SL-008 PHASE-01 used for its pure predicate leaf (`retrieve.rs`). The
-//! suppression retires itself the moment PHASE-02 wires the first consumer
-//! (`adr` + `listing::build`): an `expect` that is no longer needed is itself a
-//! lint error, so the next phase is forced to drop it.
-#![expect(
-    dead_code,
-    reason = "SL-025 PHASE-01: pure read spine stood up ahead of its consumers; \
-              PHASE-02 (adr migration + listing::build wiring) is the first caller \
-              and retires this self-clearing suppression"
-)]
+//! The kinds migrate onto this leaf one per phase (SL-025 PHASE-02+). A symbol
+//! not yet consumed by a migrated kind carries a narrowed per-symbol
+//! `#[expect(dead_code)]` that retires itself as each phase wires its consumer.
 
 use std::fmt;
 use std::str::FromStr;
