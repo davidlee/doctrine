@@ -38,13 +38,6 @@ pub(crate) struct Meta {
     pub(crate) status: String,
 }
 
-/// Sort by id and, when a status is given, keep only matching rows.
-pub(crate) fn sort_and_filter(mut rows: Vec<Meta>, status: Option<&str>) -> Vec<Meta> {
-    rows.retain(|m| status.is_none_or(|s| m.status == s));
-    rows.sort_by_key(|m| m.id);
-    rows
-}
-
 /// Parse the `Meta` of a single entity by id, reading `<stem>-<id>.toml` under
 /// its numeric dir in `tree_root`.
 pub(crate) fn read_meta(tree_root: &Path, stem: &str, id: u32) -> anyhow::Result<Meta> {
@@ -96,24 +89,6 @@ mod tests {
     }
 
     #[test]
-    fn sort_and_filter_orders_by_id_and_filters_status() {
-        let rows = vec![
-            meta(2, "proposed", "b", "Two"),
-            meta(1, "done", "a", "One"),
-            meta(3, "proposed", "c", "Three"),
-        ];
-
-        let all = sort_and_filter(rows.clone(), None);
-        assert_eq!(all.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1, 2, 3]);
-
-        let proposed = sort_and_filter(rows, Some("proposed"));
-        assert_eq!(
-            proposed.iter().map(|m| m.id).collect::<Vec<_>>(),
-            vec![2, 3]
-        );
-    }
-
-    #[test]
     fn read_meta_reads_the_stem_toml() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
@@ -144,7 +119,7 @@ mod tests {
         write_meta_toml(root, "slice", 1, "done", "one");
         // a `<id>-<slug>` symlink alias and a stray non-numeric dir are ignored
         // by scan_ids (numeric dirs only). read_metas yields scan order, not
-        // sorted — sort_and_filter owns ordering — so compare as a set.
+        // sorted — each kind owns ordering on the spine — so compare as a set.
         std::os::unix::fs::symlink("001", root.join("001-one")).unwrap();
         fs::create_dir_all(root.join("notes")).unwrap();
 

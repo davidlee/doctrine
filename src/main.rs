@@ -274,9 +274,8 @@ enum SpecCommand {
 
     /// List specs per subtype: id, status, slug, #members.
     List {
-        /// Filter to a single status.
-        #[arg(long)]
-        status: Option<String>,
+        #[command(flatten)]
+        list: CommonListArgs,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -287,6 +286,14 @@ enum SpecCommand {
     Show {
         /// Canonical spec ref: `PRD-NNN` (product) or `SPEC-NNN` (tech).
         spec_ref: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -966,8 +973,13 @@ fn main() -> anyhow::Result<()> {
                 slug,
                 path,
             } => spec::run_new(path, subtype, title, slug),
-            SpecCommand::List { status, path } => spec::run_list(path, status.as_deref()),
-            SpecCommand::Show { spec_ref, path } => spec::run_show(path, &spec_ref),
+            SpecCommand::List { list, path } => spec::run_list(path, list.into_list_args()),
+            SpecCommand::Show {
+                spec_ref,
+                format,
+                json,
+                path,
+            } => spec::run_show(path, &spec_ref, if json { Format::Json } else { format }),
             SpecCommand::Validate { spec_ref, path } => {
                 spec::run_validate(path, spec_ref.as_deref())
             }
