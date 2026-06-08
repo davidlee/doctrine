@@ -87,10 +87,13 @@ shared contract onto the entity engine. Concretely:
    `{proposed, ready, started, audit, done, abandoned}` (`abandoned` replaces the
    out-of-spec `superseded`); enforce it as the `slice list --status` filter
    known-set via the shared `validate_statuses` (write-time/transition enforcement
-   stays deferred — the lifecycle verb's job). Migrate the 2 live `superseded`
-   slices to `abandoned`. `boot.rs` is a declared consumer of the refactored
-   `list_rows`: its snapshot ADR/Memory sections adopt the new surface (prefixed
-   `ADR-` ids + header; memory hide-default).
+   stays deferred — the lifecycle verb's job; the read surface guards coherence with
+   a vocabulary-drift `?` marker on out-of-vocab stored statuses). Migrate the **1**
+   canonical `superseded` slice (`002`) to `abandoned` — numeric dirs only, the
+   `002-entity-engine` symlink is an alias. `boot.rs` is a declared consumer of the
+   refactored `list_rows`: its ADR section adopts the new surface (prefixed `ADR-`
+   ids + header); its Memory section is rendered **active-only** (agent-context
+   hygiene — no `draft` leak), decoupled from the CLI `memory list` default.
 
 **Closure intent.** "Done" is judged by: `show` resolves for all five kinds;
 every `list`/`show` emits canonical prefixed ids; default `list` hides terminal
