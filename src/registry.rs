@@ -34,9 +34,31 @@ pub(crate) struct InteractionEdge {
     pub(crate) target: String,
 }
 
+/// One spec→parent decomposition edge: a tech spec's `parent` field (SL-022 §5.2).
+/// `on_product` carries the subject's kind so the check can flag a tech-only field
+/// authored on a product as an invalid-kind finding (codex F5b), not drop it.
+pub(crate) struct ParentEdge {
+    /// Canonical ref of the spec the `parent` field lives on.
+    pub(crate) spec: String,
+    /// Canonical parent ref — expected to be a tech spec.
+    pub(crate) parent: String,
+    /// True when the subject is a product spec (`parent` is tech-only).
+    pub(crate) on_product: bool,
+}
+
+/// One spec→capability descent edge: a tech spec's `descends_from` field
+/// (SL-022 §5.2). `on_product` carries the subject's kind (see `ParentEdge`).
+pub(crate) struct DescentEdge {
+    /// Canonical ref of the spec the `descends_from` field lives on.
+    pub(crate) spec: String,
+    /// Canonical descent target — expected to be a product spec.
+    pub(crate) target: String,
+    /// True when the subject is a product spec (`descends_from` is tech-only).
+    pub(crate) on_product: bool,
+}
+
 /// A cache-independent snapshot of the corpus's ids + edges. Built fresh per
-/// `spec validate` invocation. Only the sets a check consumes are materialised:
-/// there is no product id set (no check resolves against one — §5.4).
+/// `spec validate` invocation. Only the sets a check consumes are materialised.
 #[derive(Default)]
 pub(crate) struct Registry {
     /// Canonical ids of every requirement in the tree (`REQ-NNN`).
@@ -44,10 +66,19 @@ pub(crate) struct Registry {
     /// Canonical ids of every tech spec (`SPEC-NNN`) — interaction targets resolve
     /// against this set (tech-only).
     pub(crate) tech_specs: BTreeSet<String>,
+    /// Canonical ids of every product spec (`PRD-NNN`) — descent targets resolve
+    /// against this set, and a tech parent / interaction target landing here is an
+    /// invalid kind rather than dangling (SL-022 §5.2).
+    pub(crate) product_specs: BTreeSet<String>,
     /// Every membership edge across product **and** tech specs.
     pub(crate) members: Vec<MemberEdge>,
     /// Every outbound interaction edge (tech specs only).
     pub(crate) interactions: Vec<InteractionEdge>,
+    /// Every outbound decomposition (`parent`) edge, both subtypes (a product
+    /// carrying the tech-only field is harvested so the check can flag it).
+    pub(crate) parents: Vec<ParentEdge>,
+    /// Every outbound descent (`descends_from`) edge, both subtypes (as above).
+    pub(crate) descents: Vec<DescentEdge>,
 }
 
 impl Registry {
@@ -67,21 +98,107 @@ impl Registry {
             .collect()
     }
 
-    /// HARD — interaction target that resolves to no tech spec (dangling FK). A
-    /// non-tech target (`PRD-*`) is absent from `tech_specs`, so the tech-only rule
-    /// is enforced by the same membership test. Scoped when `scope` is `Some`.
+    /// HARD — interaction target that is not a valid tech spec. Split by kind
+    /// (REQ-084, an intended contract move — PRD-012 §6): a target that is a product
+    /// spec is *invalid kind* (interactions are tech→tech), any other unresolved
+    /// target is *dangling*. Scoped when `scope` is `Some`.
     pub(crate) fn dangling_interaction_targets(&self, scope: Option<&str>) -> Vec<String> {
         self.interactions
             .iter()
             .filter(|e| scope.is_none_or(|s| e.spec == s))
             .filter(|e| !self.tech_specs.contains(&e.target))
             .map(|e| {
-                format!(
-                    "dangling interaction target: {} in {} resolves to no tech spec",
-                    e.target, e.spec
-                )
+                if self.product_specs.contains(&e.target) {
+                    format!(
+                        "invalid interaction target: {} in {} is a product spec (must be tech)",
+                        e.target, e.spec
+                    )
+                } else {
+                    format!(
+                        "dangling interaction target: {} in {} resolves to no spec",
+                        e.target, e.spec
+                    )
+                }
             })
             .collect()
+    }
+
+    /// HARD — `descends_from` integrity (REQ-082, SL-022 §5.2). `descends_from` is
+    /// a tech-only field, so on a product subject it is *invalid kind* (codex F5).
+    /// On a tech subject the target must be a product spec: a tech target is
+    /// *invalid kind*, an absent target is *dangling*. Scoped when `scope` is `Some`.
+    pub(crate) fn descent_findings(&self, scope: Option<&str>) -> Vec<String> {
+        let mut out = Vec::new();
+        for e in self
+            .descents
+            .iter()
+            .filter(|e| scope.is_none_or(|s| e.spec == s))
+        {
+            if e.on_product {
+                out.push(format!(
+                    "invalid descent: descends_from on product {} (tech-only field)",
+                    e.spec
+                ));
+                continue;
+            }
+            if self.product_specs.contains(&e.target) {
+                continue; // clean: tech descends from product
+            }
+            let msg = if self.tech_specs.contains(&e.target) {
+                format!(
+                    "invalid descent: {} descends_from {} which is a tech spec (must be product)",
+                    e.spec, e.target
+                )
+            } else {
+                format!(
+                    "dangling descent: {} descends_from {} resolves to no product spec",
+                    e.spec, e.target
+                )
+            };
+            out.push(msg);
+        }
+        out
+    }
+
+    /// HARD — `parent` integrity (REQ-083, SL-022 §5.2). `parent` is a tech-only
+    /// field, so on a product subject it is *invalid kind* (codex F5b). On a tech
+    /// subject the parent must be a tech spec: a product parent is *invalid kind*,
+    /// an absent parent is *dangling*. The self case (`parent == spec`) is excluded
+    /// — it is `self_parent`'s to report (PHASE-03). Scoped when `scope` is `Some`.
+    pub(crate) fn parent_findings(&self, scope: Option<&str>) -> Vec<String> {
+        let mut out = Vec::new();
+        for e in self
+            .parents
+            .iter()
+            .filter(|e| scope.is_none_or(|s| e.spec == s))
+        {
+            if e.on_product {
+                out.push(format!(
+                    "invalid parent: parent on product {} (tech-only field)",
+                    e.spec
+                ));
+                continue;
+            }
+            if e.spec == e.parent {
+                continue; // self-loop — owned by self_parent (PHASE-03)
+            }
+            if self.tech_specs.contains(&e.parent) {
+                continue; // clean: tech parent
+            }
+            let msg = if self.product_specs.contains(&e.parent) {
+                format!(
+                    "invalid parent: {} parent {} is a product spec (must be tech)",
+                    e.spec, e.parent
+                )
+            } else {
+                format!(
+                    "dangling parent: {} in {} resolves to no tech spec",
+                    e.parent, e.spec
+                )
+            };
+            out.push(msg);
+        }
+        out
     }
 
     /// HARD — a membership label used more than once within a single spec. Grouped
@@ -122,6 +239,8 @@ impl Registry {
         let mut findings = Vec::new();
         findings.extend(self.dangling_member_fks(scope));
         findings.extend(self.dangling_interaction_targets(scope));
+        findings.extend(self.descent_findings(scope));
+        findings.extend(self.parent_findings(scope));
         findings.extend(self.duplicate_labels(scope));
         if scope.is_none() {
             findings.extend(self.orphan_requirements());
@@ -166,6 +285,22 @@ mod tests {
         }
     }
 
+    fn descent(spec: &str, target: &str, on_product: bool) -> DescentEdge {
+        DescentEdge {
+            spec: spec.to_string(),
+            target: target.to_string(),
+            on_product,
+        }
+    }
+
+    fn parent_edge(spec: &str, parent: &str, on_product: bool) -> ParentEdge {
+        ParentEdge {
+            spec: spec.to_string(),
+            parent: parent.to_string(),
+            on_product,
+        }
+    }
+
     fn ids(refs: &[&str]) -> BTreeSet<String> {
         refs.iter().map(|s| (*s).to_string()).collect()
     }
@@ -180,6 +315,7 @@ mod tests {
                 member("SPEC-001", "REQ-002", "FR-001"),
             ],
             interactions: vec![interaction("SPEC-001", "SPEC-001")],
+            ..Default::default()
         }
     }
 
@@ -211,14 +347,110 @@ mod tests {
     }
 
     #[test]
-    fn non_tech_interaction_target_is_flagged_tech_only() {
-        // A product ref as an interaction target is absent from `tech_specs`.
+    fn product_interaction_target_is_invalid_kind_not_dangling() {
+        // REQ-084 contract move (PRD-012 §6): an interaction pointing at a product
+        // spec is now *invalid kind*, not dangling. The product ref must be in
+        // `product_specs` for the kind to be known; a target in neither set is
+        // *dangling*. The two messages must be distinct.
         let mut r = clean();
-        r.requirements = ids(&["REQ-001", "REQ-002"]);
-        r.interactions.push(interaction("SPEC-001", "PRD-001"));
+        r.product_specs = ids(&["PRD-001"]);
+        r.interactions.push(interaction("SPEC-001", "PRD-001")); // product target
+        r.interactions.push(interaction("SPEC-001", "SPEC-404")); // neither set
         let found = r.dangling_interaction_targets(None);
+        assert_eq!(found.len(), 2);
+        let invalid = found.iter().find(|f| f.contains("PRD-001")).unwrap();
+        let dangling = found.iter().find(|f| f.contains("SPEC-404")).unwrap();
+        assert!(invalid.contains("invalid") && invalid.contains("product"));
+        assert!(dangling.contains("dangling"));
+        assert_ne!(invalid, dangling);
+    }
+
+    #[test]
+    fn descent_clean_tech_to_product_yields_no_finding() {
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001"]);
+        r.descents.push(descent("SPEC-001", "PRD-001", false));
+        assert!(r.descent_findings(None).is_empty());
+    }
+
+    #[test]
+    fn descent_dangling_target_is_flagged() {
+        let mut r = clean();
+        r.descents.push(descent("SPEC-001", "PRD-404", false));
+        let found = r.descent_findings(None);
         assert_eq!(found.len(), 1);
-        assert!(found[0].contains("PRD-001"));
+        assert!(found[0].contains("dangling") && found[0].contains("PRD-404"));
+    }
+
+    #[test]
+    fn descent_to_tech_target_is_invalid_kind() {
+        // descends_from must resolve to a PRODUCT spec; a tech target is wrong kind.
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002"]);
+        r.descents.push(descent("SPEC-001", "SPEC-002", false));
+        let found = r.descent_findings(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("invalid") && found[0].contains("SPEC-002"));
+    }
+
+    #[test]
+    fn descent_on_product_subject_is_invalid_kind() {
+        // codex F5: descends_from is tech-only; on a product subject it is invalid.
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001", "PRD-002"]);
+        r.descents.push(descent("PRD-001", "PRD-002", true));
+        let found = r.descent_findings(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("invalid") && found[0].contains("PRD-001"));
+    }
+
+    #[test]
+    fn parent_clean_tech_to_tech_yields_no_finding() {
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        assert!(r.parent_findings(None).is_empty());
+    }
+
+    #[test]
+    fn parent_dangling_target_is_flagged() {
+        let mut r = clean();
+        r.parents.push(parent_edge("SPEC-001", "SPEC-404", false));
+        let found = r.parent_findings(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("dangling") && found[0].contains("SPEC-404"));
+    }
+
+    #[test]
+    fn parent_to_product_target_is_invalid_kind() {
+        // A parent must be a tech spec; a product parent is wrong kind (symmetry).
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001"]);
+        r.parents.push(parent_edge("SPEC-001", "PRD-001", false));
+        let found = r.parent_findings(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("invalid") && found[0].contains("PRD-001"));
+    }
+
+    #[test]
+    fn parent_on_product_subject_is_invalid_kind() {
+        // codex F5b: parent is tech-only; on a product subject it is invalid.
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001", "PRD-002"]);
+        r.parents.push(parent_edge("PRD-001", "SPEC-001", true));
+        let found = r.parent_findings(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("invalid") && found[0].contains("PRD-001"));
+    }
+
+    #[test]
+    fn parent_self_case_is_excluded_owned_by_self_parent() {
+        // The self-loop A→A is self_parent's to report (PHASE-03); parent_findings
+        // emits nothing for it.
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-001", false));
+        assert!(r.parent_findings(None).is_empty());
     }
 
     #[test]

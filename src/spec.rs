@@ -34,7 +34,7 @@ use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
 use crate::meta;
-use crate::registry::{InteractionEdge, MemberEdge, Registry};
+use crate::registry::{DescentEdge, InteractionEdge, MemberEdge, ParentEdge, Registry};
 use crate::requirement::{self, ReqKind, Requirement};
 
 /// The toml/md file stem — shared by both subtypes (`spec-NNN.toml`). Distinct
@@ -512,6 +512,14 @@ fn resolve_spec_ref(spec_ref: &str) -> anyhow::Result<(SpecSubtype, u32)> {
     Ok((subtype, id))
 }
 
+/// Canonicalise a stored spec ref for the registry, leaving an unparseable ref
+/// as-is so the integrity check (`validate`) can flag it as dangling rather than
+/// the scan swallowing it. The single canonicalisation path for every outbound
+/// spec→spec ref harvested into the registry (interactions, parents, descents).
+fn canonicalize_spec_ref(raw: &str) -> String {
+    resolve_spec_ref(raw).map_or_else(|_| raw.to_string(), |(s, n)| s.canonical_id(n))
+}
+
 /// The membership-label prefix for a requirement kind: `FR` (functional) / `NF`
 /// (quality). The label is membership state, not requirement state (§5.3), so it
 /// lives spec-side.
@@ -732,9 +740,37 @@ fn build_registry(root: &Path) -> anyhow::Result<Registry> {
 
     for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
         let tree = root.join(subtype.kind().dir);
+        let on_product = subtype == SpecSubtype::Product;
         for id in entity::scan_ids(&tree)? {
             let spec_ref = subtype.canonical_id(id);
             let dir = tree.join(format!("{id:03}"));
+
+            // Parse the spec itself to harvest its outbound relational fields. This
+            // is a NEW per-spec read (Charge I) — `build_registry` parsed no spec
+            // before SL-022, so a malformed `spec-NNN.toml` now surfaces here where
+            // it was invisible to `validate`. BOTH arms harvest BOTH tech-only
+            // fields so a product carrying one is seen, not dropped (codex F5b); the
+            // `on_product` flag lets the check turn it into an invalid-kind finding.
+            let spec_toml = dir.join(format!("{SPEC_STEM}-{id:03}.toml"));
+            let spec_text = std::fs::read_to_string(&spec_toml)
+                .with_context(|| format!("Failed to read {}", spec_toml.display()))?;
+            let spec: Spec = toml::from_str(&spec_text)
+                .with_context(|| format!("Failed to parse {}", spec_toml.display()))?;
+            if let Some(target) = &spec.descends_from {
+                reg.descents.push(DescentEdge {
+                    spec: spec_ref.clone(),
+                    target: canonicalize_spec_ref(target),
+                    on_product,
+                });
+            }
+            if let Some(parent) = &spec.parent {
+                reg.parents.push(ParentEdge {
+                    spec: spec_ref.clone(),
+                    parent: canonicalize_spec_ref(parent),
+                    on_product,
+                });
+            }
+
             for m in read_members(&dir.join("members.toml"))? {
                 reg.members.push(MemberEdge {
                     spec: spec_ref.clone(),
@@ -745,14 +781,13 @@ fn build_registry(root: &Path) -> anyhow::Result<Registry> {
             if subtype == SpecSubtype::Tech {
                 reg.tech_specs.insert(spec_ref.clone());
                 for e in read_interactions(&dir.join("interactions.toml"))? {
-                    let target = resolve_spec_ref(&e.target)
-                        .map(|(s, n)| s.canonical_id(n))
-                        .unwrap_or(e.target);
                     reg.interactions.push(InteractionEdge {
                         spec: spec_ref.clone(),
-                        target,
+                        target: canonicalize_spec_ref(&e.target),
                     });
                 }
+            } else {
+                reg.product_specs.insert(spec_ref.clone());
             }
         }
     }
@@ -1665,6 +1700,77 @@ parent = \"SPEC-002\"
         assert!(
             findings.is_empty(),
             "non-canonical-but-valid FKs must not produce dangling findings: {findings:?}"
+        );
+    }
+
+    // --- PHASE-02 (SL-022) Layer C: build_registry harvests the relational spine ---
+
+    /// Append fields to a scaffolded `spec-NNN.toml` (flat keys at top level).
+    fn append_spec_fields(path: &Path, lines: &str) {
+        let seeded = fs::read_to_string(path).unwrap();
+        fs::write(path, format!("{seeded}\n{lines}\n")).unwrap();
+    }
+
+    #[test]
+    fn build_registry_harvests_product_set_and_relational_edges() {
+        // VT-4 Layer C(i): a well-formed corpus → product ids + parent/descent edges
+        // with the right `on_product` flag.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+        fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+        append_spec_fields(
+            &root.join(".doctrine/spec/tech/001/spec-001.toml"),
+            "descends_from = \"PRD-001\"\nparent = \"SPEC-002\"",
+        );
+
+        let reg = build_registry(root).unwrap();
+
+        assert!(
+            reg.product_specs.contains("PRD-001"),
+            "product id is collected into product_specs"
+        );
+        let descent = reg
+            .descents
+            .iter()
+            .find(|e| e.spec == "SPEC-001")
+            .expect("descent edge for SPEC-001");
+        assert_eq!(descent.target, "PRD-001");
+        assert!(!descent.on_product, "tech subject → on_product false");
+        let parent = reg
+            .parents
+            .iter()
+            .find(|e| e.spec == "SPEC-001")
+            .expect("parent edge for SPEC-001");
+        assert_eq!(parent.parent, "SPEC-002");
+        assert!(!parent.on_product);
+
+        // The corpus is internally consistent (tech→product descent, tech parent).
+        assert!(
+            reg.validate(None).is_empty(),
+            "well-formed spine produces no findings: {:?}",
+            reg.validate(None)
+        );
+    }
+
+    #[test]
+    fn build_registry_surfaces_a_malformed_spec_toml() {
+        // VT-4 Layer C(iv): the new per-spec parse (Charge I) widens the error
+        // surface — a malformed `spec-NNN.toml`, invisible to `validate` before
+        // SL-022, now fails the build.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        let spec_toml = root.join(".doctrine/spec/tech/001/spec-001.toml");
+        fs::write(&spec_toml, "this is not = = valid toml").unwrap();
+
+        let result = build_registry(root);
+        assert!(result.is_err(), "malformed spec toml must fail the build");
+        let err = result.err().unwrap();
+        assert!(
+            err.to_string().contains("Failed to parse"),
+            "malformed spec toml surfaces as a parse error: {err}"
         );
     }
 
