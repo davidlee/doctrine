@@ -70,8 +70,9 @@ shared contract onto the entity engine. Concretely:
    terminal), `--tag/-t` (repeatable, OR), `--all/-a`. Kind-specific axes
    (`memory --type`, `backlog --kind`) layer on the same base. Filter axes AND
    across each other. backlog's existing `[SUBSTR]` positional is retained as a
-   deprecated alias of `--filter` (no break). Adds the `regex` crate (decided
-   explicitly — the repo was deliberately regex-free).
+   deprecated alias of `--filter` (no break). Adds the `regex-lite` crate
+   (decided explicitly — the repo was deliberately regex-free; `regex-lite`
+   chosen over full `regex` for compile time + binary size).
 5. **Uniform output shape + shared renderer (F-5, F-6).** One render path
    produces the human table (consistent header/column policy) and a `--json`
    (or `--format json`) machine-readable form, for `list` and `show`, across all

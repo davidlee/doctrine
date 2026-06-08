@@ -94,15 +94,19 @@ enum draft/active/superseded; `memory` enum active/draft/superseded/archived;
 
 ### 5.1 System Model
 
-Two new/changed seams, split by concern (C4-ish component view):
+Two new/changed seams, split by concern (C4-ish component view). Per ADR-001
+(leaf ← engine ← command), the clap-facing arg bundle lives **command-side**; the
+spine leaf is **clap-free** (A-3):
 
 ```
 command layer (main.rs + per-kind run_list/run_show)
-        │  flattens CommonListArgs; supplies per-kind is_terminal + columns
+   CommonListArgs  (#[derive(clap::Args)] — flattened into every list variant)
+        │  maps parsed args → listing::Filter + listing::Format
+        │  supplies per-kind is_terminal + columns
         ▼
-listing.rs  (NEW, pure leaf)  ── the kind-blind read spine
-   Filter, retain<…>, Format, render dispatch, json envelope, canonical_id,
-   render_table (moved from meta.rs)
+listing.rs  (NEW, pure leaf — NO clap)  ── the kind-blind read spine
+   Filter, Format (plain enum + FromStr), retain<…>, render dispatch,
+   json_envelope, canonical_id, validate_statuses, render_table (moved from meta)
         │
 meta.rs  (kept, narrowed)  ── numeric authored-toml reader
    Meta, read_meta(s), sort_and_filter
@@ -110,14 +114,17 @@ meta.rs  (kept, narrowed)  ── numeric authored-toml reader
 entity.rs (unchanged)  ── Kind { dir, prefix, scaffold }; prefix feeds canonical_id
 ```
 
-`render_table` moves from `meta.rs` to `listing.rs`: it is generic layout, used
-by every kind, not numeric-toml-specific. `meta.rs` keeps exactly its numeric
-reader charter.
+`CommonListArgs` is one `#[derive(clap::Args)]` struct defined once in the command
+layer and flattened into each kind's `list` variant — DRY at the flag surface
+while keeping clap out of the leaf. `render_table` moves from `meta.rs` to
+`listing.rs` (generic layout, used by every kind). `meta.rs` keeps exactly its
+numeric-reader charter.
 
 ### 5.2 Interfaces & Contracts
 
-**Shared input contract** — one composable bundle, flattened into every `list`
-variant (illustrative; field-level clap attrs elided):
+**Shared input contract** — one composable bundle, defined command-side
+(`main.rs`), flattened into every `list` variant (illustrative; field-level clap
+attrs elided):
 
 ```rust
 #[derive(clap::Args)]
@@ -156,46 +163,64 @@ own small bundle, flattened only by those kinds (compose, don't pre-partition).
 `-p/--path` stays a per-variant field (it is a root locator, not a list filter) —
 unchanged.
 
-**Shared filter contract** — pure, generic over the filterable axes:
+**Shared filter contract** — pure, in `listing.rs` (clap-free). The command layer
+builds a `Filter` from `CommonListArgs`; the leaf never sees clap:
 
 ```rust
 pub(crate) struct Filter {
     pub substr: Option<String>,           // lowercased once
-    pub regex: Option<regex::Regex>,      // pre-compiled (case flag baked in)
+    pub regex: Option<regex_lite::Regex>, // pre-compiled (case flag baked in)
     pub status: Vec<String>,              // empty = no status constraint
     pub tags: Vec<String>,                // empty = no tag constraint
     pub all: bool,
 }
 
-impl Filter {
-    /// Build from args; compiles the regex (clean error on a bad pattern) and
-    /// applies the `--json` → `Format::Json` coercion at the call site.
-    pub(crate) fn from_args(a: &CommonListArgs) -> anyhow::Result<(Filter, Format)>;
+/// Build a Filter + resolved Format from plain values (command layer passes the
+/// parsed CommonListArgs fields in). Compiles the regex (clean error on a bad
+/// pattern). `--json` forces Json regardless of `--format` (A-9 precedence).
+pub(crate) fn build(/* substr, regexp, case_insensitive, status, tags, all,
+                       format, json */) -> anyhow::Result<(Filter, Format)>;
+
+/// Each kind projects a row to its filterable fields ONCE — one closure, not
+/// five (A-1). `canonical` is the regex domain's leading field (uid for memory);
+/// substr matches slug+title, regex matches canonical+slug+title — distinct
+/// domains, both derivable from this projection.
+pub(crate) struct FilterFields {
+    pub canonical: String,   // SL-025 / ADR-001 / mem_… (regex domain)
+    pub slug: String,
+    pub title: String,
+    pub status: String,
+    pub tags: Vec<String>,
 }
 
-/// Keep a row iff: not (terminal-hidden) AND substr-match AND regex-match AND
-/// status-match AND tag-match. Terminal-hide is suppressed when `all` OR any
-/// explicit `status` is given. Accessors expose the three filterable axes; the
-/// terminal predicate is per-kind.
+/// Keep a row iff: not (terminal-hidden) AND substr-match (slug+title) AND
+/// regex-match (canonical+slug+title) AND status-match AND tag-match.
+/// Terminal-hide is suppressed when `all` OR any explicit `status` is given.
+/// `key` projects each row; the terminal predicate is per-kind.
 pub(crate) fn retain<R>(
     rows: Vec<R>,
     f: &Filter,
     is_terminal: impl Fn(&str) -> bool,
-    status_of: impl Fn(&R) -> &str,
-    haystack: impl Fn(&R) -> String,   // slug + " " + title (+ canonical for regex)
-    tags_of: impl Fn(&R) -> &[String],
+    key: impl Fn(&R) -> FilterFields,
 ) -> Vec<R>;
+
+/// Validate a stringly `--status` set against a kind's known statuses, with one
+/// uniform error message (A-2 — recovers the correctness that the shared
+/// Vec<String> bundle loses vs a typed clap enum; tab-completion is the only
+/// residual cost, accepted).
+pub(crate) fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()>;
 ```
 
-(Accessor closures, not a trait, keep the variant types — `Meta`, `BacklogItem`,
-memory's row — free of a shared supertype; a thin `Filterable` trait is an
-acceptable equivalent at build time. Either way it is filter-only, never render.)
+One projection closure (not five) keeps the variant row types — `Meta`,
+`BacklogItem`, memory's row — free of a shared supertype while serving both
+match domains; it is filter-only, never render.
 
-**Shared render contract** — pure:
+**Shared render contract** — pure, clap-free (`Format` is a plain enum + `FromStr`
+so the command layer can wire `#[arg(value_parser)]` without clap in the leaf):
 
 ```rust
-#[derive(Clone, Copy, clap::ValueEnum)]
-pub(crate) enum Format { Table, Json }
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Format { Table, Json }   // + impl FromStr (table|json)
 
 /// `SL` + `025` → `"SL-025"`. The single id-form authority.
 pub(crate) fn canonical_id(prefix: &str, id: u32) -> String;
@@ -227,12 +252,20 @@ toml-as-data + md-body reassembly, parameterised like the existing `spec`/
 - The id prefix is owned by `entity::Kind.prefix` (already present) and consumed
   by `canonical_id`. Memory is the exception: its uid *is* its canonical id, so
   it does not route through `canonical_id`.
+- **`slice show` reassembly boundary (A-5)**: `slice show` reassembles the slice's
+  *metadata + scope* (`slice-NNN.toml` as data + `slice-NNN.md` body) only — NOT
+  `design.md`/`plan.*`/`notes.md`, which are distinct artifacts with their own
+  (future) surfaces. Mirrors how `adr show` reassembles `adr-NNN.{toml,md}`.
+- **spec JSON across subtypes (A-8)**: the table groups product/tech into labelled
+  blocks; JSON emits a single `{kind:"spec", rows:[…]}` envelope where each row
+  carries a `subtype` field (faithful), not two envelopes.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
 `list` flow, every kind:
 1. command layer parses `CommonListArgs` (flattened) + kind-specific flags.
-2. `Filter::from_args` → `(Filter, Format)` (regex compiled, `--json` folded).
+2. `listing::build(...)` → `(Filter, Format)` (regex compiled, `--json` folded);
+   `validate_statuses` against the kind's known set.
 3. kind reads its rows (existing readers: `meta::read_metas`, `backlog::read_all`,
    memory's lister).
 4. `retain(rows, &filter, kind::is_terminal, …)` — shared.
@@ -256,8 +289,9 @@ handler, two surface names.
   memory).
 - **Terminal-hide override.** `--all` OR any explicit `--status` disables the
   terminal-hide default (generalises backlog's existing rule to every kind).
-- **`--json` vs `--format`.** `--json` is exactly `--format json`; if both given
-  and consistent, fine; the coercion lives once in `Filter::from_args`.
+- **`--json` vs `--format` (A-9).** `--json` *forces* `Json` and wins over any
+  `--format` value (so `--json --format table` → Json, no error); the precedence
+  lives once in `listing::build`.
 - **Invalid regex** → a clean `anyhow` error, not a panic.
 - **Multi-status semantics** — a row matches if its status ∈ the given set (OR
   within `--status`); `--tag` is OR within tags; the axes AND across each other.
@@ -314,10 +348,12 @@ handler, two surface names.
   bag would bury it untyped.
 - **D8 — `memory new` alias, keep `record` (F-7).** Uniform canonical verb, zero
   break; skills migrate at leisure.
-- **D9 — pull the `regex` crate, include `--regexp/-r` + `-i` now.** The repo was
+- **D9 — pull `regex-lite`, include `--regexp/-r` + `-i` now.** The repo was
   deliberately regex-free (`memory.rs:125`); the dependency was decided
-  explicitly (not slipped in). Small code; the spine was designed so it slots in
-  as one more `CommonListArgs` field + one `retain` arm.
+  explicitly (not slipped in). `regex-lite` (no `regex-automata`/`aho-corasick`)
+  is chosen over full `regex` for compile time + binary size — id/slug/title
+  matching needs nothing fancy. Small code; the spine slots it in as one
+  `CommonListArgs` field + one `retain` arm.
 
 ## 8. Risks & Mitigations
 
@@ -328,15 +364,17 @@ handler, two surface names.
 - R2 — **slice divergence behaviour shift** (R4/§5.5). Mitigation: explicit
   test update asserting superseded no longer false-flags `⚠`; call it out in the
   audit.
-- R3 — **`regex` dependency weight / lean-deps culture.** Mitigation: scoped to
-  the filter arm; bounded blast radius; decided explicitly (D9).
+- R3 — **regex dependency weight / lean-deps culture.** Mitigation: `regex-lite`
+  (not full `regex`) — minimal compile/binary cost; scoped to the filter arm;
+  decided explicitly (D9).
 - R4 — **short-flag collisions** (`-s -t -f -r -i -a`) with kind-specific flags.
   Mitigation: OQ-3 build-time audit; shared flag wins, kind-specific demotes to
   long-only.
 - R5 — **C-indiscipline regression** — a future kind adds bespoke list flags
   instead of flattening the bundle. Mitigation: the bundle + format dispatch are
-  the mandatory spine (Principle 2); a conformance test asserts each `list`
-  variant flattens `CommonListArgs`.
+  the mandatory spine (Principle 2); a **behavioural** conformance test (A-4 —
+  clap exposes no structural "is-flattened" check) parses `<kind> list --filter x
+  --json` for every kind and asserts success.
 
 ## 9. Quality Engineering & Validation
 
@@ -358,4 +396,34 @@ handler, two surface names.
 
 ## 10. Review Notes
 
-(Adversarial pass findings recorded here.)
+Internal adversarial pass (pre-`/plan`). All integrated into the body above.
+
+- **A-1 (interface bug, fixed §5.2)** — a single `haystack` accessor cannot serve
+  both substr (slug+title) and regex (canonical+slug+title) match domains, and
+  five closures was a smell. Replaced with one `FilterFields` projection closure
+  serving both domains.
+- **A-2 (typed-status regression, fixed §5.2)** — the shared stringly
+  `--status: Vec<String>` removes the clap enum validation backlog/memory have
+  today. Added `validate_statuses(given, known)` for a uniform error; residual
+  cost is lost shell tab-completion on status values (accepted).
+- **A-3 (ADR-001 violation, fixed §5.1/§5.2)** — `clap::Args`/`ValueEnum` in the
+  "pure leaf" `listing.rs` pulls a command-layer concern into a leaf.
+  `CommonListArgs` now lives command-side; the leaf is clap-free (`Format` is a
+  plain enum + `FromStr`; command wires `value_parser`).
+- **A-4 (untestable claim, fixed §9/R5)** — "assert each variant flattens
+  CommonListArgs" isn't structurally checkable; reworded to a behavioural
+  parse-conformance test per kind.
+- **A-5 (under-spec, fixed §5.3)** — `slice show` reassembles metadata + scope
+  only, not design/plan/notes.
+- **A-8 (under-spec, fixed §5.3)** — spec JSON is one envelope with a `subtype`
+  field per row, not two envelopes.
+- **A-9 (under-spec, fixed §5.5)** — `--json` forces Json and wins over
+  `--format`; no conflict error.
+- **A-7 (accepted, §5.5)** — `backlog list foo --filter bar` silently prefers
+  `--filter`; documented precedence, not an error (low stakes).
+- **OQ-3 / short-flag collisions** — `-s -t -f -r -i -a` audited at build against
+  each kind's existing short flags; shared flag wins, kind-specific demotes to
+  long-only.
+
+Residual open items carried to `/plan`: OQ-1 (per-kind JSON field shapes),
+OQ-2 (`show --format json` relationships inclusion), OQ-3 (collision audit).
