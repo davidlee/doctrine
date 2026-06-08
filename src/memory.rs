@@ -2109,6 +2109,47 @@ ref = "src/main.rs"
 
     // --- SL-011: list_rows is the additive string sibling of run_list ---
 
+    /// Write a memory at a chosen uid with a chosen `created` date (the ordering
+    /// key) — `updated` is left at the fixture default; only `created` and the uid
+    /// matter to the sort. Lets the fixture be planted out of created-order so the
+    /// per-kind `sort_default` (created-desc, uid-asc), not read order, is proven.
+    fn mem_at(items: &Path, uid: &str, created: &str) {
+        let toml = full_toml().replace(UID, uid).replace(
+            "created = \"2026-06-04\"",
+            &format!("created = \"{created}\""),
+        );
+        write_memory_full(items, uid, &toml, "body");
+    }
+
+    // SL-025 PHASE-06 EX-2 / VT-2: ordering-preservation through list_rows (NOT
+    // select_rows) — created descending, then uid ascending.
+    #[test]
+    fn list_rows_orders_created_desc_then_uid_asc_regardless_of_read_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        fs::create_dir_all(&items).unwrap();
+
+        // Two share the newest date → uid breaks the tie ascending; one is older.
+        let older = "mem_000000000000000000000000000000d4"; // 2026-06-01
+        let new_b = "mem_000000000000000000000000000000b2"; // 2026-06-09
+        let new_a = "mem_000000000000000000000000000000a1"; // 2026-06-09
+        // plant in a non-sorted sequence.
+        mem_at(&items, older, "2026-06-01");
+        mem_at(&items, new_b, "2026-06-09");
+        mem_at(&items, new_a, "2026-06-09");
+
+        let out = list_rows(root, None, ListArgs::default()).unwrap();
+        let off = |uid: &str| {
+            out.find(uid)
+                .unwrap_or_else(|| panic!("{uid} present: {out}"))
+        };
+        assert!(
+            off(new_a) < off(new_b) && off(new_b) < off(older),
+            "created desc then uid asc, through list_rows (sort, not read order): {out}"
+        );
+    }
+
     #[test]
     fn list_rows_renders_seeded_pointers_and_is_empty_when_none() {
         let dir = tempfile::tempdir().unwrap();
