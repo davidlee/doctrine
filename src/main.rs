@@ -721,11 +721,28 @@ enum SliceCommand {
         path: Option<PathBuf>,
     },
 
-    /// List slices by id: id, status, slug, title.
+    /// List slices by id: id, status, phases, slug, title.
     List {
-        /// Filter to a single status.
+        #[command(flatten)]
+        list: CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one slice: its metadata and scope body (not design/plan/notes).
+    Show {
+        /// Slice reference — `SL-025` or the bare id `25`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
         #[arg(long)]
-        status: Option<String>,
+        json: bool,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -827,7 +844,13 @@ fn main() -> anyhow::Result<()> {
                 note,
                 path,
             } => slice::run_phase(path, id, &phase_id, status, note.as_deref()),
-            SliceCommand::List { status, path } => slice::run_list(path, status.as_deref()),
+            SliceCommand::List { list, path } => slice::run_list(path, list.into_list_args()),
+            SliceCommand::Show {
+                reference,
+                format,
+                json,
+                path,
+            } => slice::run_show(path, &reference, if json { Format::Json } else { format }),
         },
         Command::Memory { command } => match command {
             MemoryCommand::Record {
