@@ -67,11 +67,15 @@ Two things sharpened in design:
 
 ### Canon (the refinement half)
 
-5. **Revise ADR-003** to the **full holistic model**: the slice FSM; the conduct
-   axis (and its fold into ADR-006 D8 solo/team); the two-enum requirement/
-   coverage engine; and the **explicit-reconcile-vs-derive** principle named
-   against spec-driver as the rejected foil. Name what is deferred so the canon
-   is not blind to the machinery (the central risk this cut was checked against).
+5. **Canon revision — vehicle C (amend ADR-003 + new ADR-009).**
+   - *Light-amend ADR-003*: name the **explicit-reconcile-vs-derive** principle
+     against spec-driver (§4/§5); update the §11 deferred-machinery map; record
+     the §7 audit-over-reach as a written target for follow-on tuning.
+   - *Author ADR-009 — slice lifecycle state machine + conduct axis*: the FSM
+     (mermaid), the conduct axis (and its fold into ADR-006 D8 solo/team), the
+     two-enum requirement/coverage model. Cites ADR-003 (outbound, ADR-004).
+   Names what is deferred so the canon is not blind to the machinery (the central
+   risk this cut was checked against).
 
 6. **Revise `slices-spec.md` § Lifecycle** to the new FSM vocabulary and the
    (still-deferred-enforcement) transition/closure posture.
@@ -101,9 +105,13 @@ Two things sharpened in design:
   `src/boot.rs` and/or `slice show`.
 - `src/requirement.rs`, `src/spec.rs` — requirement-lifecycle + coverage enum
   types (advisory).
-- `.doctrine/adr/003/adr-003.{toml,md}` — the holistic revision (mechanics —
-  amend vs supersede — is a triage item).
+- `.doctrine/adr/003/adr-003.{toml,md}` — light amendment (§4/§5 explicit-vs-
+  derive, §11 map, §7 audit-over-reach target).
+- `.doctrine/adr/009/` — **new** ADR (FSM + conduct + two-enum model), via
+  `doctrine adr new`.
 - `doc/slices-spec.md` § Lifecycle — vocabulary + posture revision.
+- `doc/spec-entity-spec.md` § Lifecycle — expanded requirement-status vocab
+  (`in-progress`, `retired`) + documented meanings.
 - `install/` — `doctrine.toml` template/seed if shipped; any manifest/gitignore
   wiring for the new config (`mem.pattern.install.authored-entity-wiring` if it
   becomes authored).

@@ -1,0 +1,311 @@
+# Design SL-028: Enact ADR-003 reconcile seam and lifecycle states
+
+<!-- Reference forms (.doctrine/glossary.md § reference forms): entity ids padded
+     (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
+     R1 (§10), Q1. -->
+
+## 1. Design Problem
+
+ADR-003 set the canonical loop `slice → design → plan → phases → [review] →
+audit → reconcile → close` and the normative/observed doctrine behind it, but
+deferred the machinery (§11). The loop's **observe → reconcile → close** capstone
+(§3–§8) has no home, and two structural facts surfaced while shaping this slice:
+
+- **The slice lifecycle is inert.** `slice-NNN.toml` `status` is hand-edited;
+  there is **no transition verb**. The vocabulary `{proposed, ready, started,
+  audit, done, abandoned}` predates ADR-003's reconcile step — it has no
+  `reconcile` and no `review` state.
+- **Doctrine deliberately diverges from spec-driver, and ADR-003 only half-states
+  it.** spec-driver *derives* requirement truth from coverage by precedence
+  (`sync`: `requirement.status = f(coverage)`). ADR-003 §4/§5 **forbid exactly
+  that** — drift is a *prompt to reconcile*; authority is never rewritten by
+  precedence. So doctrine's differentiator is **reconcile-as-explicit-authorship
+  vs derive-by-precedence** — committed in §4/§5 but never named against the
+  mechanism it rejects.
+
+**The cut (D1).** This slice is a **lifecycle-FSM vertical + a holistic revision
+of the canon**, not the whole capstone. It *builds* the slice FSM + transition
+verb + conduct vocabulary (advisory) + the requirement/coverage enums; it
+*revises* ADR-003 and authors ADR-009 so the canon expresses the full holistic
+model. The reconcile machinery (skill, artefact, CLI), the coverage derivation
+engine, and conduct/closure **enforcement** are deferred to follow-on slices that
+attach to this locked canon.
+
+## 2. Current State
+
+- **`SLICE_STATUSES`** (`src/slice.rs:349`) `= [proposed, ready, started, audit,
+  done, abandoned]`; the sole vocabulary authority, guarding **read/filter input
+  only**. `is_terminal_status = {done}` (`:380`), `is_hidden = {done, abandoned}`
+  (`:358`), `is_drifted` renders out-of-vocab stored status with `?` (`:368`),
+  `is_divergent` keys on the terminal set (`:394`). **No write/transition verb** —
+  the five non-`proposed` states are reached only by hand-editing (CLAUDE.md
+  "no slice lifecycle transition" gap; `slices-spec.md` § Lifecycle).
+- **`adr status`** (`src/adr.rs`) is the closest verb precedent — a flat
+  any→any `ValueEnum` over `set_adr_status` (edit-preserving). The slice FSM is
+  *ordered*, so it needs a transition classifier `adr status` lacks.
+- **Edit-preserving status transition** seam exists
+  (`mem.pattern.entity.edit-preserving-status-transition`;
+  `adr::set_adr_status`, `backlog::set_backlog_status`,
+  `backlog::validate_transition`).
+- **`ReqStatus`** (`src/requirement.rs:72`) `= {pending, active, deprecated,
+  superseded}` (serde kebab) — the requirement-lifecycle enum *already exists*;
+  it lacks an active-work state and a hard-withdrawal terminal.
+- **No `coverage` concept** exists anywhere in `src/`.
+- **No `doctrine.toml`.** `.doctrine/governance.md` is a thin *pointer* layer,
+  explicitly not a knobs file.
+- **`/audit` over-reaches the §7 seam** — it currently *writes* spec/governance
+  fixes ("design was wrong → reconcile `design.md`"). Identification-only is the
+  ADR-003 §7 target; this slice *names* the violation, the fix is follow-on.
+
+## 3. Forces & Constraints
+
+- **ADR-003** §4 (specs own normative truth; audit = observed evidence), §5
+  (drift reconciled explicitly, never by precedence), §7 (audit identifies /
+  reconcile writes), §8 (closure gate), §9 (PROD/TECH lifecycle states), §10
+  (ceremony shapes strictness not truth), §11 (deferred machinery, stable target).
+- **ADR-004** — relations stored outbound-only; ADR-009 cites ADR-003 outbound.
+- **ADR-006** — D8 solo/team coordination branch (the `conduct.actor` fold);
+  D5 branch-point check (the FSM staleness phenomenon); storage tiers pre-adapt
+  (authored disjoint per slice, runtime per-worktree).
+- **House posture** — write-time gating is deferred *by design*; the read surface
+  **tolerates** out-of-vocab status and **surfaces** drift rather than rejecting.
+  The transition verb must match: surface, don't block.
+- **No parallel implementation** — extend `ReqStatus`, do not stub a second
+  lifecycle enum; reuse the `set_*_status` seam, the `validate_statuses` guard,
+  the `ValueEnum` pattern.
+- **Storage rule** — `doctrine.toml` is user-owned authored config (committed,
+  like `governance.md`), not a doctrine entity (no id); no derived/queried data.
+- **Clippy denies** — `HashSet`/`HashMap` banned → `BTreeMap`
+  (`mem.pattern.lint.disallowed-types-collections`); suppress with
+  `expect(reason=…)` never bare `allow` (`mem.pattern.lint.expect-not-allow`);
+  self-clearing `dead_code` for the leaf-ahead-of-consumer
+  (`mem.pattern.lint.dead-code-self-clearing-leaf`).
+- **Pure/imperative split** — `classify` and `resolve` are pure; the date is
+  shell-injected (`clock::today()`); disk/parse in the thin shell.
+
+## 4. Guiding Principles
+
+- **Name the whole; build the vertical.** The canon (ADR-003 + ADR-009)
+  expresses the full holistic model so it is not locked blind; the code is a thin
+  FSM vertical.
+- **Surface, don't block.** The FSM is *encoded as data* and the verb *classifies*
+  a move; only out-of-vocab and leaving-terminal hard-refuse. Humans drive any
+  skip; agents see the move flagged. (ADR-003 §5; house read-surface posture.)
+- **Explicit reconcile, never derive.** `ReqStatus` is authored/normative;
+  `CoverageStatus` is observed evidence; doctrine reconciles them by explicit
+  authorship, never `ReqStatus = f(coverage)`.
+- **Conduct is orthogonal to the FSM.** *What* the loop is (axis A, states) is
+  separate from *how it is conducted* (axis B, `actor × autonomy`). Peer review
+  is a conduct role assignment, not new states.
+- **DRY the vocabulary** — extend `ReqStatus`; reuse the status-transition seam.
+
+## 5. Proposed Design
+
+### 5.1 System Model
+
+Three **orthogonal** structures, only the first two of which gain machinery here:
+
+1. **Slice lifecycle FSM** (axis A) — how a *change* moves. Built: vocabulary +
+   transition verb + classifier.
+2. **Conduct axis** (axis B) — `actor × autonomy` per state, advisory. Built:
+   vocabulary + `doctrine.toml [conduct]` parse + surfacing.
+3. **Requirement/coverage** (the deferred engine) — two enums land as vocabulary
+   only; derivation/registry/blocks deferred.
+
+### 5.2 Interfaces & Contracts
+
+**Transition verb** (`src/slice.rs`, wired in `src/main.rs`):
+
+```
+doctrine slice status <id> <state> [--note <s>]
+```
+
+- `state: SliceStatus` — a `clap::ValueEnum` mirroring the expanded
+  `SLICE_STATUSES`, guarded by `validate_statuses` (reused).
+- Pure classifier:
+  ```rust
+  enum Transition { Advance, BackEdge, Skip, Abandon, Noop, FromTerminal }
+  fn classify(from: &str, to: &str) -> Transition;
+  ```
+- `set_slice_status(root, id, to, note, today) -> Result<…>` — edit-preserving
+  (`DocumentMut`), no-op guard before write, F-1 refuse on malformed (missing
+  scaffold key), shell-injected date.
+- **Hard-refuse** only: `to` out-of-vocab; `from ∈ {done, abandoned}`
+  (`FromTerminal` — reopening deferred). All other moves write and print their
+  classification (+ the conduct posture).
+
+**Conduct** (`src/conduct.rs`, new):
+
+```rust
+enum Actor    { Agent, Self_, Peer, Team }     // serde kebab
+enum Autonomy { Auto, Draft, Gate }            // serde kebab
+struct Conduct { actor: Actor, autonomy: Autonomy }
+fn resolve(cfg: &ConductConfig, state: &str) -> Conduct;   // pure, default fallback
+```
+
+`doctrine.toml [conduct]` schema:
+
+```toml
+[conduct]
+default-actor    = "self"
+default-autonomy = "auto"
+[conduct.plan]      # the "no code without an approved plan" gate
+autonomy = "gate"
+[conduct.reconcile] # the closure gate (ADR-003 §8)
+autonomy = "gate"
+```
+
+`slice status` calls `resolve(to)` and **prints** the posture (e.g.
+`→ done [conduct: peer/gate — human acceptance expected]`). **Never blocks in
+v1.** `slice show` displays the current state's conduct.
+
+**Enums** (`src/requirement.rs`):
+
+```rust
+enum ReqStatus { Pending, InProgress, Active, Deprecated, Retired, Superseded }   // +InProgress +Retired
+enum CoverageStatus { Planned, InProgress, Verified, Failed, Blocked }            // new, stub
+```
+
+Documented meanings (carried to `spec-entity-spec.md` + ADR-003):
+*pending* not started · *in-progress* under active work · *active* in force,
+verified · *deprecated* soft — still honoured, discouraged · *retired* hard —
+withdrawn, no successor · *superseded* replaced by a named successor
+(`supersedes` edge).
+
+### 5.3 Data, State & Ownership
+
+- **Vocabulary** `SLICE_STATUSES = [proposed, design, plan, ready, started,
+  review, audit, reconcile, done, abandoned]` — **purely additive**; every prior
+  token survives, so existing slices need **no migration**. `is_terminal_status`
+  and `is_hidden` unchanged.
+- **`doctrine.toml`** — project-root, **authored/committed** (user-owned config,
+  the structured sibling of `governance.md`); located via `root::find`. Absent →
+  baked defaults. Not a doctrine entity.
+- **Conduct defaults** (baked, when file/key absent): `actor = self`, `autonomy =
+  auto` everywhere, **except `plan` and `reconcile` default to `gate`** — the two
+  load-bearing human gates expressed in a zero-config repo.
+- **`ReqStatus` / `CoverageStatus`** — owned by the requirement entity
+  (`requirement-NNN.toml`); `CoverageStatus` has no producer yet (stub).
+
+### 5.4 Lifecycle, Operations & Dynamics
+
+The FSM (carried verbatim into ADR-009):
+
+```mermaid
+stateDiagram-v2
+    [*] --> proposed
+    proposed --> design
+    design --> plan
+    plan --> ready : ⊨ approved plan (gate)
+    ready --> started
+    started --> review
+    review --> audit
+    audit --> reconcile
+    reconcile --> done : ⊨ closure (gate)
+    reconcile --> design : model gap (escalate)
+    done --> [*]
+    abandoned --> [*]
+
+    note right of ready
+      back-edges (fix invalidates an accepted gate):
+        review → started | design
+        audit  → review | started | design
+        reconcile → audit
+      staleness: ready/design flagged when a sibling
+        lands past — surfaced, never auto-demoted
+      abandon: any non-terminal → abandoned
+    end note
+```
+
+- **Gates-as-transitions**, except `ready` — the lone gate-as-state, the "no code
+  without an approved plan" human handoff. `design-ready` dropped: reaching
+  `plan` *is* design-accepted.
+- **Back-edge predicate** (human/skill judgement, not verb-enforced): stay
+  in-state for a correction that doesn't invalidate an accepted gate; fall back to
+  `started` (re-exec) or `design` (redesign) when it does; `audit` remediation
+  lands **upstream** (audit never fixes in place, §7).
+- **`reconcile → design`** — escalation when reconcile finds the spec/governance
+  *model* itself inadequate (not mere instance drift).
+- **Staleness** — `ready`/`design` flagged when a sibling slice lands past
+  (= ADR-006 branch-point staleness); **surfaced, never auto-demoted** (§5;
+  mirrors memory staleness). Detection mechanism deferred.
+
+### 5.5 Invariants, Assumptions & Edge Cases
+
+- **Additive vocab ⇒ no migration**; behaviour-preservation gate: existing
+  `slice list` rollup/divergence suites stay green unchanged.
+- **Terminal exit refused** (`FromTerminal`); reopening is deferred, deliberate.
+- **No-op guard** before write (content + mtime hold); **F-1 refuse** on
+  malformed TOML (never tail-`insert` → silent corruption).
+- **`CoverageStatus` unused** → self-clearing `expect(dead_code, reason=…)`.
+- **`BTreeMap`** for `[conduct.<state>]` overrides (HashMap banned).
+- **Date shell-injected**; `classify`/`resolve` pure.
+
+## 6. Open Questions & Unknowns
+
+- **OQ-1 `--force` lever.** When conduct moves advisory→enforced, a `gate` move by
+  an agent is what would demand `--force`/escalation. v1: warn only, no `--force`.
+  Follow-up tied to conduct enforcement.
+- **OQ-2 `retired` transition-setter.** `retired` lands as vocabulary now, but
+  *what sets it* is the reconcile engine (deferred). Documented meaning, no
+  producer.
+- **OQ-3 Staleness detection.** The mechanism (anchor/diff vs moved siblings) is
+  deferred; v1 names the back-edge only.
+- **OQ-4 Per-slice / per-run conduct override.** Deferred to follow-on (named in
+  ADR-009); v1 is project-level `doctrine.toml` only.
+- **OQ-5 `slices-spec.md` / `spec-entity-spec.md` edit scope.** § Lifecycle in
+  both updates to the new vocab — confirm the edit stays definitional (not a
+  rewrite).
+
+## 7. Decisions, Rationale & Alternatives
+
+- **D1 — Cut: lifecycle-FSM vertical + holistic canon revision.** Alt: whole
+  capstone (sprawl, rejected); canon-only spike (ships nothing). Chosen: build the
+  inert-lifecycle fix, name the rest.
+- **D2 — FSM shape: gates-as-transitions, `ready` the lone gate-state,
+  `design-ready` dropped.** Alt: doing/gate-state pairs throughout (asymmetric,
+  verbose) or a `green`/`implemented` gate-state (no real idle wait — `review`
+  absorbs it).
+- **D3 — Verb `slice status <id> <state>`; classify, don't jail.** Alt: `slice
+  advance` (can't express back-edges/abandon); a hard transition gate (contradicts
+  house surface-don't-block posture).
+- **D4 — Explicit reconcile, never derive** — the named spec-driver divergence.
+- **D5 — Conduct advisory v1** (`actor × autonomy`, `doctrine.toml [conduct]`).
+  Alt: enforce now (premature — ADR-003 §8 defers enforcement).
+- **D6 — Vehicle C: light-amend ADR-003 + new ADR-009.** Alt: amend-all-in-ADR-003
+  (mutates an accepted record's substance); supersede (90% of ADR-003 still holds).
+  Matches the ADR-006/007/008 satellite pattern; ADR-003 anticipates the split.
+- **D7 — Extend `ReqStatus`, don't parallel.** DRY; the enum already exists.
+- **D8 — `retired` added** (cheap), splitting hard-withdrawal out of `deprecated`'s
+  overload. Meanings documented in-code + ADR + `spec-entity-spec.md`.
+
+## 8. Risks & Mitigations
+
+- **Canon locked blind to the deferred engine** → mitigated: ADR-003/009 name the
+  two-enum model + explicit-vs-derive + the deferred-machinery map.
+- **Scope sprawl** → mitigated by D1's cut; follow-ups enumerated in scope doc.
+- **Advisory→enforced churn** → conduct vocabulary + defaults chosen now so
+  enforcement is additive (gate the same `autonomy` values, add `--force`).
+- **Audit §7 over-reach left unfixed** → named in the ADR so the follow-on tuning
+  has a written target; not silently tolerated.
+- **`ReqStatus` variant added but unset** → `in-progress`/`retired` parse and
+  render; producers arrive with the change process / reconcile engine.
+
+## 9. Quality Engineering & Validation
+
+- **`classify`** — table test: advance, each back-edge, skip, abandon-from-each,
+  noop, from-terminal, out-of-vocab.
+- **`set_slice_status`** — round-trip preserves comments + `[relationships]`;
+  no-op guard (content+mtime hold); F-1 refuse on malformed.
+- **`conduct`** — parse round-trip; default fallback (absent file, absent key);
+  `plan`/`reconcile` gate defaults; `resolve` precedence; `slice status` prints
+  the posture.
+- **enums** — `InProgress`/`Retired` serde + `as_str`; `CoverageStatus` serde
+  round-trip.
+- **Behaviour preservation** — existing `slice list`, rollup, divergence,
+  `is_drifted` suites green **unchanged** (additive vocab).
+- `just check` zero warnings; `cargo clippy` clean (bins/lib).
+
+## 10. Review Notes
+
+<!-- adversarial pass pending -->
