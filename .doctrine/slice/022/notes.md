@@ -44,3 +44,54 @@ value, except the deliberate REQ-084 test rewrite above.
 
 **Lint.** `map(..).unwrap_or_else(..)` on a `Result` trips `clippy::map_unwrap_or`
 (pedantic) — use `map_or_else(default, f)`.
+
+## PHASE-03 — Decomposition integrity (REQ-087)
+
+**Shape.** Three new HARD checks + a scan-time carrier:
+- `self_parent(scope)` (registry.rs) — sole reporter of A→A (tech subject).
+- `parent_cycle(scope)` (registry.rs) — ephemeral child→parent `BTreeMap`
+  (skips `on_product` + self-loops), walked from each node with an **ordered
+  `Vec` path + first-seen index `BTreeMap`**. On revisit, the cycle SLICE =
+  `path.get(first..)`; emit ONE finding only when `start == slice.min()` (least
+  id). Dedups correctly for a tail feeding a ring (`T→A→B→A`: slice `{A,B}`, only
+  A's walk emits). Terminates at root / dangling parent.
+- `BuildFinding { spec, message }` + `Registry.build_findings` (codex F1 carrier).
+  `validate(scope)` aggregates it scope-filtered (by `spec`), alongside the two
+  new pure checks.
+
+**Second-parent = parse-error classifier, NOT a line-scan (codex F2).**
+`build_registry`'s `toml::from_str::<Spec>` Err arm is now a `match` with a guard
+`Err(e) if is_second_parent(&e, &spec_text)` → push a named `BuildFinding`,
+`continue`; any other Err still propagates `"Failed to parse"` via `?`. The
+classifier (`is_second_parent`, spec.rs) attributes the error to the `parent` key
+via the **error span's enclosing source line** (`enclosing_line`), then confirms
+the shape by message text. Span attribution is the F2 guarantee made structural:
+the parser already ignored comments, so a scaffold's `# parent = …` can NEVER be
+the span — proven by `scaffold_commented_parent_does_not_trip_second_parent`.
+
+**R2 — the toml-error match is version-fragile (toml 0.8.23).** No stable
+error-kind enum. The match is: span's enclosing line key == `"parent"` AND
+`message().contains("duplicate key")` (dup) OR `"invalid type: sequence"` (array).
+Observed shapes (pinned by `second_parent_classifier_*`): dup →
+``duplicate key `parent` in document root``; array → `invalid type: sequence,
+expected a string` (note: the array message does NOT name the key — span
+attribution is REQUIRED, message alone would false-hit `slug = []`). A plain
+wrong-type (`parent = 5`) intentionally falls through to `"Failed to parse"` —
+not a "second parent". On any match miss: degraded message, still non-zero exit,
+never a silent pass (R2 mitigation holds).
+
+**Scope handling for cycles (decision, runtime-sheet D-cycle-scope).**
+`parent_cycle` always builds the corpus map and dedups by least-id; when `scope`
+is `Some` it keeps only cycles whose slice contains the scope node. Keeps corpus
+dedup correct while a scoped run still reports a cycle the scoped spec is in.
+
+**Lint.** `clippy::indexing-slicing` is DENY here — `&path[first..]` and string
+slicing (`enclosing_line`) both tripped it. Use `.get(range).unwrap_or_default()`
+/ `.get(..).unwrap_or("")`.
+
+**Existing-test edits.** NONE needed beyond PHASE-02's `..Default::default()` in
+`clean()` (it already absorbed `build_findings`, codex F6b). No assertion changed.
+
+**Scope left for PHASE-04.** PHASE-03 proved second-parent end-to-end (VT-2). The
+self-parent / cycle / FK / subject-kind cases ride the existing `run_validate`
+non-zero bail; the full crafted-corpus CLI sweep over every violation is PHASE-04.

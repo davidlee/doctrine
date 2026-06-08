@@ -34,7 +34,9 @@ use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
 use crate::meta;
-use crate::registry::{DescentEdge, InteractionEdge, MemberEdge, ParentEdge, Registry};
+use crate::registry::{
+    BuildFinding, DescentEdge, InteractionEdge, MemberEdge, ParentEdge, Registry,
+};
 use crate::requirement::{self, ReqKind, Requirement};
 
 /// The toml/md file stem — shared by both subtypes (`spec-NNN.toml`). Distinct
@@ -520,6 +522,47 @@ fn canonicalize_spec_ref(raw: &str) -> String {
     resolve_spec_ref(raw).map_or_else(|_| raw.to_string(), |(s, n)| s.canonical_id(n))
 }
 
+/// The source line enclosing `byte`, without its trailing newline. Used to attribute
+/// a parse error to the offending key.
+fn enclosing_line(src: &str, byte: usize) -> &str {
+    let byte = byte.min(src.len());
+    let start = src
+        .get(..byte)
+        .and_then(|s| s.rfind('\n'))
+        .map_or(0, |i| i + 1);
+    let end = src
+        .get(byte..)
+        .and_then(|s| s.find('\n'))
+        .map_or(src.len(), |i| byte + i);
+    src.get(start..end).unwrap_or("")
+}
+
+/// Classify a `Spec` parse error as a `second_parent` violation (SL-022 §5.2/§5.3,
+/// codex F1/F2): a duplicate `parent` key or an array-valued `parent` — both ways of
+/// declaring more than one parent for the scalar field. Attribution rides the error
+/// **span**: the parser has already ignored comments, so a freshly-scaffolded spec's
+/// commented `# parent = …` example can never be the span (the F2 guarantee is
+/// structural, not a heuristic). The shape is then confirmed by message text
+/// (toml-version-fragile, R2 — pinned by `second_parent_classifier_*` tests). Any
+/// other parse error returns `false` and propagates as `Failed to parse` — a
+/// degraded message, never a silent pass.
+fn is_second_parent(err: &toml::de::Error, src: &str) -> bool {
+    let Some(span) = err.span() else {
+        return false;
+    };
+    let on_parent_key = enclosing_line(src, span.start)
+        .trim_start()
+        .split('=')
+        .next()
+        .map(str::trim)
+        == Some("parent");
+    if !on_parent_key {
+        return false;
+    }
+    let msg = err.message();
+    msg.contains("duplicate key") || msg.contains("invalid type: sequence")
+}
+
 /// The membership-label prefix for a requirement kind: `FR` (functional) / `NF`
 /// (quality). The label is membership state, not requirement state (§5.3), so it
 /// lives spec-side.
@@ -754,8 +797,23 @@ fn build_registry(root: &Path) -> anyhow::Result<Registry> {
             let spec_toml = dir.join(format!("{SPEC_STEM}-{id:03}.toml"));
             let spec_text = std::fs::read_to_string(&spec_toml)
                 .with_context(|| format!("Failed to read {}", spec_toml.display()))?;
-            let spec: Spec = toml::from_str(&spec_text)
-                .with_context(|| format!("Failed to parse {}", spec_toml.display()))?;
+            // Classify a `parent` duplicate-key / array parse error into a named
+            // `second_parent` hard finding (carried, not propagated) before the `?`;
+            // any other parse error still fails the build (Charge I error surface).
+            let spec: Spec = match toml::from_str::<Spec>(&spec_text) {
+                Ok(s) => s,
+                Err(e) if is_second_parent(&e, &spec_text) => {
+                    reg.build_findings.push(BuildFinding {
+                        spec: spec_ref.clone(),
+                        message: format!("second parent: {spec_ref} declares more than one parent"),
+                    });
+                    continue;
+                }
+                Err(e) => {
+                    return Err(anyhow::Error::new(e)
+                        .context(format!("Failed to parse {}", spec_toml.display())));
+                }
+            };
             if let Some(target) = &spec.descends_from {
                 reg.descents.push(DescentEdge {
                     spec: spec_ref.clone(),
@@ -1202,6 +1260,46 @@ module = \"doctrine::cli\"
         // C2: the same toml deserialises into the shared Meta (the `title` proof).
         let m: Meta = toml::from_str(body).unwrap();
         assert_eq!(m.title, "CLI");
+    }
+
+    // --- PHASE-03 (SL-022) T6: pin the second_parent error classifier (R2) ---
+    // The match rides `toml::de::Error::{span,message}` (toml 0.8) and is version-
+    // fragile by construction; these tests are the canary if a toml bump shifts it.
+
+    const SPEC_BASE: &str =
+        "id = 1\nslug = \"x\"\ntitle = \"X\"\nstatus = \"draft\"\nkind = \"tech\"\ntags = []\n";
+
+    fn classify(doc: &str) -> bool {
+        let err = toml::from_str::<Spec>(doc).unwrap_err();
+        is_second_parent(&err, doc)
+    }
+
+    #[test]
+    fn second_parent_classifier_matches_duplicate_parent() {
+        assert!(classify(&format!(
+            "{SPEC_BASE}parent = \"SPEC-001\"\nparent = \"SPEC-002\"\n"
+        )));
+    }
+
+    #[test]
+    fn second_parent_classifier_matches_array_parent() {
+        assert!(classify(&format!(
+            "{SPEC_BASE}parent = [\"SPEC-001\", \"SPEC-002\"]\n"
+        )));
+    }
+
+    #[test]
+    fn second_parent_classifier_ignores_unrelated_parse_errors() {
+        // A scalar wrong-type that is not a multi-parent attempt → falls through.
+        assert!(!classify(&format!("{SPEC_BASE}parent = 5\n")));
+        // A duplicate of a different key → not attributed to `parent`.
+        assert!(!classify(&format!(
+            "{SPEC_BASE}category = \"a\"\ncategory = \"b\"\n"
+        )));
+        // An array given to a different string field → span is not the parent line.
+        assert!(!classify(
+            "id = 1\nslug = []\ntitle = \"X\"\nstatus = \"draft\"\nkind = \"tech\"\ntags = []\n"
+        ));
     }
 
     #[test]
@@ -1771,6 +1869,67 @@ parent = \"SPEC-002\"
         assert!(
             err.to_string().contains("Failed to parse"),
             "malformed spec toml surfaces as a parse error: {err}"
+        );
+    }
+
+    // --- PHASE-03 (SL-022) Layer C: second_parent end-to-end (VT-2 / VT-3) ---
+
+    /// Assert a single-tech-spec corpus carrying `parent_lines` surfaces the named
+    /// second-parent finding through `validate` AND a non-zero `run_validate` exit
+    /// (REQ-087 AC1 + AC3, proven end-to-end — not at `toml::from_str` level).
+    fn assert_second_parent_end_to_end(parent_lines: &str) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        append_spec_fields(
+            &root.join(".doctrine/spec/tech/001/spec-001.toml"),
+            parent_lines,
+        );
+
+        let reg = build_registry(root).unwrap();
+        let findings = reg.validate(None);
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.contains("second parent") && f.contains("SPEC-001")),
+            "validate surfaces the named second-parent finding: {findings:?}"
+        );
+        assert!(
+            run_validate(Some(root.to_path_buf()), None).is_err(),
+            "run_validate exits non-zero on a second-parent corpus"
+        );
+    }
+
+    #[test]
+    fn second_parent_duplicate_key_surfaces_end_to_end() {
+        // VT-2: a duplicate `parent` key → carried finding + non-zero exit.
+        assert_second_parent_end_to_end("parent = \"SPEC-002\"\nparent = \"SPEC-003\"");
+    }
+
+    #[test]
+    fn second_parent_array_value_surfaces_end_to_end() {
+        // VT-2: an array-valued `parent` → carried finding + non-zero exit.
+        assert_second_parent_end_to_end("parent = [\"SPEC-002\", \"SPEC-003\"]");
+    }
+
+    #[test]
+    fn scaffold_commented_parent_does_not_trip_second_parent() {
+        // VT-3 (codex F2 regression): a freshly-scaffolded tech spec ships a commented
+        // `# parent = …` example. Classifying the PARSE error (not scanning raw text)
+        // means the comment can never trip the finding, and the corpus validates clean.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001, commented # parent
+
+        let reg = build_registry(root).unwrap();
+        assert!(
+            reg.build_findings.is_empty(),
+            "commented # parent is not a finding"
+        );
+        assert!(
+            reg.validate(None).is_empty(),
+            "a clean scaffolded corpus has no findings: {:?}",
+            reg.validate(None)
         );
     }
 
