@@ -177,6 +177,11 @@
 
           commands = [
             {
+              name = "dn";
+              help = "short for doctrine";
+              command = "doctrine $@";
+            }
+            {
               name = "jpi";
               help = "op -> jailed-pi";
               command = "op run -- jailed-pi $@";
