@@ -95,3 +95,43 @@ slicing (`enclosing_line`) both tripped it. Use `.get(range).unwrap_or_default()
 **Scope left for PHASE-04.** PHASE-03 proved second-parent end-to-end (VT-2). The
 self-parent / cycle / FK / subject-kind cases ride the existing `run_validate`
 non-zero bail; the full crafted-corpus CLI sweep over every violation is PHASE-04.
+
+## PHASE-04 — Cross-cutting validation sweep & closure
+
+**Stale stub corrected.** The runtime sheet stub described a dropped model
+("severity tier", `descent_on_product` warn, a `warnings()` sibling). Codex F5
+DROPPED the tier (design §5.2, D5, §10 F5): `validate` is hard-only, signature
+unchanged; a tech-only field on a product is a HARD invalid-kind finding. Sheet
+rewritten before execution. **No production code this phase** — every check landed
+PHASE-02/03; PHASE-04 is the end-to-end gate + closure.
+
+**Shape — `run_validate`-level sweep, NOT a spawned binary.** Design §9: no spec
+e2e harness exists. The sweep drives `run_validate(Some(root), None)` (the function
+backing `doctrine spec validate`) over crafted temp corpora — the exact level
+PHASE-03 proved second-parent at. A parametrized helper
+`assert_validate_flags(build, expect_substr)` asserts BOTH the non-zero exit AND
+the specific finding text (proves the RIGHT check fired, not merely that some error
+did). One corpus PER violation — VT-1 reads "each crafted hard violation →
+non-zero", so per-violation granularity attributes each exit to its check (a
+mega-corpus only proves the aggregate). 11 cases: descent ×3 (dangling / tech-target
+invalid-kind / product-subject), parent ×3 (dangling / product-target invalid-kind
+/ product-subject), self-parent, cycle, interaction ×2 (dangling / product-target),
+clean→zero. Second-parent referenced from PHASE-03, not re-proven.
+
+**Integration confirmed (A2 STOP never fired).** Every violation independently
+trips `run_validate`'s bail — PHASE-03's `validate` aggregation reaches every check.
+The sweep's overlap with the Layer A pure-check tests is INTENDED: Layer A proves
+the check; the sweep proves the same violation rides the CLI exit (the integration
+the hand-built-registry unit tests bypass).
+
+**VA-1 (rust-embed re-embed).** Fresh `doctrine spec new tech` scaffold emits the
+`# descends_from` / `# parent` comment lines after the normal recompile — footgun
+cleared, no `cargo clean` needed.
+
+**VA-2 (REQ-082 AC3, satisfied by construction).** `Spec.descends_from` /
+`Spec.parent` are `Option<String>` — id-only, no prose field to restate product
+intent. Review check, not a code gate.
+
+**EX-3 storage rule.** No derived data (children, reverse view) persisted; the
+cycle inversion is ephemeral inside `parent_cycle`. Tests-only phase, no disk
+writes added.
