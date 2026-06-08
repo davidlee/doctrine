@@ -35,3 +35,8 @@ Be concise, but record:
 If the note identifies a reusable fact, pattern, or gotcha that would save a
 future agent meaningful time, run `/record-memory` before you treat the task,
 phase, or slice as wrapped.
+
+If instead it identifies a unit of follow-up **work** — an issue, risk, chore, or
+idea worth doing later — **capture** it with `backlog new` so the intent is not
+stranded in this context. Work, knowledge, or a decision? The boundary that
+arbitrates is in `using-doctrine.md`.

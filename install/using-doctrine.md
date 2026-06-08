@@ -21,14 +21,40 @@ reach-for-it map):
 | read an entity (all tiers, synthesized) | `doctrine <kind> show <ID>` |
 | survey what exists | `doctrine <kind> list` |
 | scope a change | `doctrine slice new` |
+| capture a unit of work intent | `doctrine backlog new <kind>` |
+| survey / inspect the backlog | `doctrine backlog list` · `doctrine backlog show <ID>` |
+| transition a backlog item | `doctrine backlog edit <ID>` |
 | transition a phase (e.g. flip `in_progress` → `completed`) | `doctrine slice phase` |
 | record a durable fact | `doctrine memory record` |
 | find / retrieve a memory | `doctrine memory find` · `doctrine memory retrieve` |
 | regenerate the boot snapshot | `doctrine boot` |
 | check a slice's phase rollup | `doctrine slice list` |
 
-`<kind>` is `slice`, `spec`, `adr`, `memory`, … (see `glossary.md`). Ask
-`doctrine <kind> --help` for the subcommands and flags each verb takes.
+`<kind>` is `slice`, `spec`, `adr`, `memory`, `backlog`, … (see `glossary.md`).
+Ask `doctrine <kind> --help` for the subcommands and flags each verb takes.
+
+## Which home for which record
+
+Four homes, told apart by what the record *is* — do not conflate them:
+
+- **Backlog = latent work.** A unit of work intent that can be triaged,
+  prioritised, and promoted into a slice — `issue`, `improvement`, `chore`,
+  `risk`, `idea`; captured with `doctrine backlog new <kind>`. The gate is the
+  **work-intake membership test** (`mem.concept.backlog.work-intake-membership`):
+  if a candidate does not fit the work-status lifecycle
+  (`open|triaged|started|resolved|closed`), it is **not** a backlog item. A
+  `risk` is admitted only as *unresolved work-risk* — uncertain future harm that
+  may need mitigation, acceptance, or expiry — never as a general epistemic note.
+- **knowledge_record (PRD-010) = epistemic / governance records** — assumptions,
+  questions, constraints and kin, each with its own held→validated lifecycle.
+  Not work; not the backlog.
+- **ADR = high-impact architectural decisions** (`doctrine adr new`) — a chosen
+  direction with consequences (`proposed → accepted → superseded`).
+- **Memory = durable knowledge** (`doctrine memory record`) — a reusable fact,
+  pattern, or gotcha a future agent would otherwise rediscover.
+
+When several seem to fit, the membership test arbitrates: the backlog is the home
+for unresolved *work intent*, never for every unresolved thing.
 
 ## Reading entities — always via `show`
 

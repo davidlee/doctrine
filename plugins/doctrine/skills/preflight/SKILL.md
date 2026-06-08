@@ -89,6 +89,8 @@ Search order:
 - related governance (ADRs, standards, policies) — see `/canon`
 - related specs under `doc/*`
 - `/retrieve-memory`
+- the backlog (`backlog list` / `backlog show <ID>`) — is this work already
+  captured, and which open items bear on it?
 - related artifacts (provisional: may be out of date)
 - code
 
