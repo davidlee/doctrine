@@ -4,9 +4,9 @@ version = 1
 id = 4
 slug = "relations-stored-outbound-only-reciprocity-is-derived"
 title = "Relations stored outbound-only; reciprocity is derived"
-status = "proposed"
+status = "accepted"
 created = "2026-06-07"
-updated = "2026-06-07"
+updated = "2026-06-08"
 
 [relationships]
 # Reserved. Empty in v1 — supersession (F1) and tagging are not wired yet.
