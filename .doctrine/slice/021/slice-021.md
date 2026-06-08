@@ -1,5 +1,26 @@
 # Backfill Doctrine technical-spec corpus
 
+> **Restructured (design session, 2026-06-08).** This slice is the *backfill*
+> (content) concern only, and is now **downstream/deferred**. The tech-spec
+> capability is larger than one slice; designing it whole separated three other
+> concerns out, each its own artifact:
+> - **Intent** — a new dedicated product spec (`PRD`, *additional* — tech spec is
+>   a substantial superset of product-spec functionality), authored next via
+>   `/spec-product`. The design-the-whole lives there first.
+> - **System support** — entity-model + command changes: decomposition/hierarchy
+>   as a **first-class structured field** (a single-valued outbound `parent`/
+>   `decomposes` FK, ADR-004 outbound-only), *not* a free-text `interactions`
+>   edge (`interactions` stays for peer relations: `uses`/`calls`). Plus the
+>   hand/auto-import boundary. Its own slice.
+> - **Folder hoist** — `.doctrine/spec/{product,tech}/` → `.doctrine/*`
+>   top-level to reduce digging; a storage-layout migration touching the 11
+>   existing product specs and the reservation namespaces → likely an **ADR +
+>   migration slice**, not folded in here.
+>
+> Backfill (this slice) is blocked on PRD + system-support landing. A narrow
+> first pass (umbrella + exemplar) may precede full corpus. Do not /plan or
+> /execute SL-021 until those land.
+
 ## Context
 
 SL-015 shipped product/tech specs as first-class entities. SL-019 backfilled
