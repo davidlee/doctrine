@@ -397,6 +397,21 @@ mod tests {
     }
 
     #[test]
+    fn using_doctrine_is_shipped() {
+        // ADR-005 / SL-023 PHASE-02: the operator's guide (verbs, hand-editing,
+        // read-via-show) must ship so a client can reach the tier-2 reference.
+        let names = embedded_filenames();
+        assert!(
+            names.contains(&"using-doctrine.md".to_string()),
+            "using-doctrine.md must be embedded (shipped); got {names:?}"
+        );
+        assert!(
+            !asset_text("using-doctrine.md").unwrap().trim().is_empty(),
+            "using-doctrine.md asset must be non-empty"
+        );
+    }
+
+    #[test]
     fn plan_creates_dirs_from_manifest() {
         let dir = tempfile::tempdir().unwrap();
         let manifest = Manifest {
