@@ -176,33 +176,6 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [PRD-011 — Graph-Derived Backlog Priority](.doctrine/spec/product/011/spec-011.md) — `active`
 - [PRD-012 — Technical Specifications](.doctrine/spec/product/012/spec-012.md) — `draft`
 
-### Slices
-
-- Implement slices: doctrine slice new/list | [scope](.doctrine/slice/001/slice-001.md) (—)
-- Generalise slice machinery into a kind-parameterised entity engine | [scope](.doctrine/slice/002/slice-002.md) (—)
-- [Slice design-doc siblings and entity-scaffold engine](.doctrine/slice/003/design.md) | [scope](.doctrine/slice/003/slice-003.md) (—)
-- [Implementation-plan and phase siblings](.doctrine/slice/004/design.md) | [scope](.doctrine/slice/004/slice-004.md) (—)
-- [Memory entity v1](.doctrine/slice/005/design.md) | [scope](.doctrine/slice/005/slice-005.md) (6/6)
-- [ADR support](.doctrine/slice/006/design.md) | [scope](.doctrine/slice/006/slice-006.md) (5/5)
-- [Memory anchoring & capture: record scope+git frame, verify, git seam](.doctrine/slice/007/design.md) | [scope](.doctrine/slice/007/slice-007.md) (6/6)
-- [Memory retrieval: find/retrieve + scope ranking + staleness](.doctrine/slice/008/design.md) | [scope](.doctrine/slice/008/slice-008.md) (5/5)
-- [Slice status rollup](.doctrine/slice/009/design.md) | [scope](.doctrine/slice/009/slice-009.md) (3/3)
-- [Symlink skills from a canonical .doctrine/skills tree (Claude-first)](.doctrine/slice/010/design.md) | [scope](.doctrine/slice/010/slice-010.md) (5/5)
-- [Cache-friendly session boot context](.doctrine/slice/011/design.md) | [scope](.doctrine/slice/011/slice-011.md) (6/6)
-- [memory-record symlink tolerance](.doctrine/slice/012/design.md) | [scope](.doctrine/slice/012/slice-012.md) (—)
-- [memory skills install ergonomics + off-script skill-port record](.doctrine/slice/013/design.md) | [scope](.doctrine/slice/013/slice-013.md) (1/1)
-- codex SessionStart-emit boot wiring | [scope](.doctrine/slice/014/slice-014.md) (—)
-- [Spec entity v1: product + technical specs](.doctrine/slice/015/design.md) | [scope](.doctrine/slice/015/slice-015.md) (6/6)
-- [Break slice↔state cycle: extract plan types](.doctrine/slice/016/design.md) | [scope](.doctrine/slice/016/slice-016.md) (1/1)
-- [Pluggable lexical scorer: trait + BM25 backend for memory retrieval](.doctrine/slice/017/design.md) | [scope](.doctrine/slice/017/slice-017.md) (4/4)
-- [Shipped orientation memory corpus](.doctrine/slice/018/design.md) | [scope](.doctrine/slice/018/slice-018.md) (6/6)
-- [Backfill Doctrine product-spec corpus](.doctrine/slice/019/design.md) | [scope](.doctrine/slice/019/slice-019.md) (5/5)
-- [Backlog entity v1: work-intake items (one kind + item_kind facet)](.doctrine/slice/020/design.md) | [scope](.doctrine/slice/020/slice-020.md) (6/6)
-- Backfill Doctrine technical-spec corpus | [scope](.doctrine/slice/021/slice-021.md) (—)
-- [Technical-spec system support: descent, decomposition & integrity](.doctrine/slice/022/design.md) | [scope](.doctrine/slice/022/slice-022.md) (2/4)
-- [Ship knowledge tiers (ADR-005)](.doctrine/slice/023/design.md) | [scope](.doctrine/slice/023/slice-023.md) (4/4)
-- [Harden TOML render: escape user free-text through a shared seam](.doctrine/slice/024/design.md) | [scope](.doctrine/slice/024/slice-024.md) (—)
-
 ### Architecture Decision Records
 
 - [ADR-001 — Module layering: leaf ← engine ← command, no cycles](.doctrine/adr/001/adr-001.md) — `accepted`
@@ -212,4 +185,31 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-005 — Shipped knowledge is tiered by access pattern; skills route, reference docs explain](.doctrine/adr/005/adr-005.md) — `accepted`
 - [ADR-006 — Worktree posture: policy-agnostic framework, orchestrator-sole-writer dispatch](.doctrine/adr/006/adr-006.md) — `proposed`
 - [ADR-007 — Adversarial review as a first-class kind with turn-based ledger coordination](.doctrine/adr/007/adr-007.md) — `proposed`
+
+### Slices
+
+- 001 Implement slices: doctrine slice new/list | [scope](.doctrine/slice/001/slice-001.md) (—)
+- 002 Generalise slice machinery into a kind-parameterised entity engine | [scope](.doctrine/slice/002/slice-002.md) (—)
+- [003 Slice design-doc siblings and entity-scaffold engine](.doctrine/slice/003/design.md) | [scope](.doctrine/slice/003/slice-003.md) (—)
+- [004 Implementation-plan and phase siblings](.doctrine/slice/004/design.md) | [scope](.doctrine/slice/004/slice-004.md) (—)
+- [005 Memory entity v1](.doctrine/slice/005/design.md) | [scope](.doctrine/slice/005/slice-005.md) (6/6)
+- [006 ADR support](.doctrine/slice/006/design.md) | [scope](.doctrine/slice/006/slice-006.md) (5/5)
+- [007 Memory anchoring & capture: record scope+git frame, verify, git seam](.doctrine/slice/007/design.md) | [scope](.doctrine/slice/007/slice-007.md) (6/6)
+- [008 Memory retrieval: find/retrieve + scope ranking + staleness](.doctrine/slice/008/design.md) | [scope](.doctrine/slice/008/slice-008.md) (5/5)
+- [009 Slice status rollup](.doctrine/slice/009/design.md) | [scope](.doctrine/slice/009/slice-009.md) (3/3)
+- [010 Symlink skills from a canonical .doctrine/skills tree (Claude-first)](.doctrine/slice/010/design.md) | [scope](.doctrine/slice/010/slice-010.md) (5/5)
+- [011 Cache-friendly session boot context](.doctrine/slice/011/design.md) | [scope](.doctrine/slice/011/slice-011.md) (6/6)
+- [012 memory-record symlink tolerance](.doctrine/slice/012/design.md) | [scope](.doctrine/slice/012/slice-012.md) (—)
+- [013 memory skills install ergonomics + off-script skill-port record](.doctrine/slice/013/design.md) | [scope](.doctrine/slice/013/slice-013.md) (1/1)
+- 014 codex SessionStart-emit boot wiring | [scope](.doctrine/slice/014/slice-014.md) (—)
+- [015 Spec entity v1: product + technical specs](.doctrine/slice/015/design.md) | [scope](.doctrine/slice/015/slice-015.md) (6/6)
+- [016 Break slice↔state cycle: extract plan types](.doctrine/slice/016/design.md) | [scope](.doctrine/slice/016/slice-016.md) (1/1)
+- [017 Pluggable lexical scorer: trait + BM25 backend for memory retrieval](.doctrine/slice/017/design.md) | [scope](.doctrine/slice/017/slice-017.md) (4/4)
+- [018 Shipped orientation memory corpus](.doctrine/slice/018/design.md) | [scope](.doctrine/slice/018/slice-018.md) (6/6)
+- [019 Backfill Doctrine product-spec corpus](.doctrine/slice/019/design.md) | [scope](.doctrine/slice/019/slice-019.md) (5/5)
+- [020 Backlog entity v1: work-intake items (one kind + item_kind facet)](.doctrine/slice/020/design.md) | [scope](.doctrine/slice/020/slice-020.md) (6/6)
+- 021 Backfill Doctrine technical-spec corpus | [scope](.doctrine/slice/021/slice-021.md) (—)
+- [022 Technical-spec system support: descent, decomposition & integrity](.doctrine/slice/022/design.md) | [scope](.doctrine/slice/022/slice-022.md) (3/4)
+- [023 Ship knowledge tiers (ADR-005)](.doctrine/slice/023/design.md) | [scope](.doctrine/slice/023/slice-023.md) (4/4)
+- [024 Harden TOML render: escape user free-text through a shared seam](.doctrine/slice/024/design.md) | [scope](.doctrine/slice/024/slice-024.md) (—)
 <!-- END:readme-index -->

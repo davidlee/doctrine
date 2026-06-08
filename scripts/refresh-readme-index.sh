@@ -61,6 +61,7 @@ add_subtype() {
 
 add_subtype "$SPEC_ROOT/product" PRD "Product Specifications" spec
 add_subtype "$SPEC_ROOT/tech" SPEC "Technical Specifications" spec
+add_subtype ".doctrine/adr" ADR "Architecture Decision Records" adr
 
 # Compact slice index: title -> design, "scope" -> scope doc, (rollup) from CLI.
 add_slices() {
@@ -73,9 +74,9 @@ add_slices() {
     title="$(toml_str "$sym/slice-$id.toml" title)"
     rollup="${ROLLUP[$id]:-—}"
     if [[ -f "$sym/design.md" ]]; then
-      design="[$title]($sym/design.md)"
+      design="[$id $title]($sym/design.md)"
     else
-      design="$title"
+      design="$id $title"
     fi
     block+="- $design | [scope]($sym/slice-$id.md) ($rollup)\n"
   done
@@ -85,8 +86,6 @@ add_slices() {
 }
 
 add_slices
-
-add_subtype ".doctrine/adr" ADR "Architecture Decision Records" adr
 
 # Drop the leading literal "\n" so the first heading abuts the BEGIN marker.
 section="${section#\\n}"
@@ -98,7 +97,7 @@ awk -v section="$section" '
   /<!-- END:readme-index -->/   { skip=0 }
   skip { next }
   { print }
-' "$README" > "$tmpfile"
+' "$README" >"$tmpfile"
 
 mv "$tmpfile" "$README"
 echo "readme index refreshed"
