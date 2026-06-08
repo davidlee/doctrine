@@ -4,9 +4,9 @@ version = 1
 id = 1
 slug = "module-layering"
 title = "Module layering: leaf ← engine ← command, no cycles"
-status = "proposed"
+status = "accepted"
 created = "2026-06-05"
-updated = "2026-06-05"
+updated = "2026-06-08"
 
 [relationships]
 # Reserved. Empty in v1 — supersession (F1) and tagging are not wired yet.

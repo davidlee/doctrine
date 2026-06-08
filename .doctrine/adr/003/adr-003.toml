@@ -4,9 +4,9 @@ version = 1
 id = 3
 slug = "canonical-change-loop-slice-first-observe-reconcile-close"
 title = "Canonical change loop: slice-first, observe, reconcile, close"
-status = "proposed"
+status = "accepted"
 created = "2026-06-07"
-updated = "2026-06-07"
+updated = "2026-06-08"
 
 [relationships]
 # Reserved. Empty in v1 — supersession (F1) and tagging are not wired yet.
