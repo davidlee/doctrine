@@ -1933,6 +1933,226 @@ parent = \"SPEC-002\"
         );
     }
 
+    // --- SL-022 PHASE-04: cross-cutting validation sweep (VT-1) ---
+    //
+    // Each hard violation, proven NON-ZERO end-to-end through `run_validate` (the
+    // function backing `doctrine spec validate`) over a minimal crafted corpus —
+    // the integration the Layer A pure-check tests (registry.rs) bypass. One corpus
+    // per violation (not a mega-corpus): VT-1 reads "each crafted hard violation →
+    // non-zero", so per-violation granularity proves each INDEPENDENTLY trips the
+    // bail and attributes the exit to the right check. Second-parent is already
+    // proven end-to-end above (`second_parent_*_surfaces_end_to_end`) — referenced
+    // here so the matrix reads complete, not re-proven. A clean corpus → zero closes
+    // the sweep.
+
+    /// Absolute path to a spec's `spec-NNN.toml`, via the production tree convention.
+    fn spec_toml(root: &Path, subtype: SpecSubtype, id: u32) -> PathBuf {
+        root.join(subtype.kind().dir)
+            .join(format!("{id:03}"))
+            .join(format!("spec-{id:03}.toml"))
+    }
+
+    /// Append a hand-authored interaction `[[edge]]` to a tech spec (no producer
+    /// verb in v1 — mirrors the `build_registry_scans_all_three_trees` fixture).
+    fn append_interaction(root: &Path, tech_id: u32, target: &str) {
+        let p = root
+            .join(SpecSubtype::Tech.kind().dir)
+            .join(format!("{tech_id:03}"))
+            .join("interactions.toml");
+        let seeded = fs::read_to_string(&p).unwrap();
+        fs::write(
+            &p,
+            format!("{seeded}\n[[edge]]\ntarget = \"{target}\"\ntype = \"uses\"\n"),
+        )
+        .unwrap();
+    }
+
+    /// Build a corpus via `build`, then assert `run_validate` exits NON-ZERO and the
+    /// surfaced finding names `expect_substr` — proving the intended check fired, not
+    /// merely that some error did.
+    fn assert_validate_flags(build: impl Fn(&Path), expect_substr: &str) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        build(root);
+        let findings = build_registry(root).unwrap().validate(None);
+        assert!(
+            findings.iter().any(|f| f.contains(expect_substr)),
+            "expected a finding containing {expect_substr:?}, got {findings:?}"
+        );
+        assert!(
+            run_validate(Some(root.to_path_buf()), None).is_err(),
+            "run_validate exits non-zero on a {expect_substr:?} corpus"
+        );
+    }
+
+    #[test]
+    fn sweep_descent_dangling() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 1),
+                    "descends_from = \"PRD-099\"", // no such product
+                );
+            },
+            "dangling descent:",
+        );
+    }
+
+    #[test]
+    fn sweep_descent_invalid_kind_tech_target() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 1),
+                    "descends_from = \"SPEC-002\"", // a tech spec, must be product
+                );
+            },
+            "which is a tech spec (must be product)",
+        );
+    }
+
+    #[test]
+    fn sweep_descent_on_product_subject() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Product, 1),
+                    "descends_from = \"PRD-002\"", // tech-only field on a product
+                );
+            },
+            "invalid descent: descends_from on product",
+        );
+    }
+
+    #[test]
+    fn sweep_parent_dangling() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 1),
+                    "parent = \"SPEC-099\"", // no such tech spec
+                );
+            },
+            "dangling parent:",
+        );
+    }
+
+    #[test]
+    fn sweep_parent_invalid_kind_product_target() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 1),
+                    "parent = \"PRD-001\"", // a product spec, must be tech
+                );
+            },
+            "is a product spec (must be tech)",
+        );
+    }
+
+    #[test]
+    fn sweep_parent_on_product_subject() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Product, 1),
+                    "parent = \"SPEC-001\"", // tech-only field on a product
+                );
+            },
+            "invalid parent: parent on product",
+        );
+    }
+
+    #[test]
+    fn sweep_self_parent() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 1),
+                    "parent = \"SPEC-001\"", // A → A
+                );
+            },
+            "names itself as parent",
+        );
+    }
+
+    #[test]
+    fn sweep_parent_cycle() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 1),
+                    "parent = \"SPEC-002\"",
+                );
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 2),
+                    "parent = \"SPEC-001\"",
+                );
+            },
+            "parent cycle:",
+        );
+    }
+
+    #[test]
+    fn sweep_interaction_dangling() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                append_interaction(root, 1, "SPEC-099"); // no such tech spec
+            },
+            "dangling interaction target:",
+        );
+    }
+
+    #[test]
+    fn sweep_interaction_invalid_kind_product_target() {
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+                append_interaction(root, 1, "PRD-001"); // a product spec, must be tech
+            },
+            "is a product spec (must be tech)",
+        );
+    }
+
+    #[test]
+    fn sweep_clean_corpus_exits_zero() {
+        // VT-1 closing case: a well-formed spine — tech descends_from a product,
+        // tech parent a tech root, a valid tech→tech interaction — exits ZERO.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002 (root)
+        fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+        append_spec_fields(
+            &spec_toml(root, SpecSubtype::Tech, 1),
+            "descends_from = \"PRD-001\"\nparent = \"SPEC-002\"",
+        );
+        append_interaction(root, 1, "SPEC-002");
+
+        assert!(
+            build_registry(root).unwrap().validate(None).is_empty(),
+            "a well-formed spine produces no findings"
+        );
+        assert!(
+            run_validate(Some(root.to_path_buf()), None).is_ok(),
+            "run_validate exits zero on a clean corpus"
+        );
+    }
+
     // --- PHASE-04: read_interactions (the [[edge]] reader) ---
 
     #[test]
