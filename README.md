@@ -41,17 +41,18 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 <!-- BEGIN:readme-index -->
 ### Product Specifications
 
-- [PRD-001 — Slices](.doctrine/spec/product/001/spec-001.md) — `draft`
-- [PRD-002 — Specifications](.doctrine/spec/product/002/spec-002.md) — `draft`
-- [PRD-003 — Skills](.doctrine/spec/product/003/spec-003.md) — `draft`
-- [PRD-004 — Memory](.doctrine/spec/product/004/spec-004.md) — `draft`
-- [PRD-005 — Reservation & Leasing](.doctrine/spec/product/005/spec-005.md) — `draft`
-- [PRD-006 — Install](.doctrine/spec/product/006/spec-006.md) — `draft`
-- [PRD-007 — Boot & Governance](.doctrine/spec/product/007/spec-007.md) — `draft`
-- [PRD-008 — ADRs](.doctrine/spec/product/008/spec-008.md) — `draft`
-- [PRD-009 — Backlog](.doctrine/spec/product/009/spec-009.md) — `draft`
-- [PRD-010 — Epistemic and Governance Records](.doctrine/spec/product/010/spec-010.md) — `draft`
-- [PRD-011 — Graph-Derived Backlog Priority](.doctrine/spec/product/011/spec-011.md) — `draft`
+- [PRD-001 — Slices](.doctrine/spec/product/001/spec-001.md) — `active`
+- [PRD-002 — Specifications](.doctrine/spec/product/002/spec-002.md) — `active`
+- [PRD-003 — Skills](.doctrine/spec/product/003/spec-003.md) — `active`
+- [PRD-004 — Memory](.doctrine/spec/product/004/spec-004.md) — `active`
+- [PRD-005 — Reservation & Leasing](.doctrine/spec/product/005/spec-005.md) — `active`
+- [PRD-006 — Install](.doctrine/spec/product/006/spec-006.md) — `active`
+- [PRD-007 — Boot & Governance](.doctrine/spec/product/007/spec-007.md) — `active`
+- [PRD-008 — ADRs](.doctrine/spec/product/008/spec-008.md) — `active`
+- [PRD-009 — Backlog](.doctrine/spec/product/009/spec-009.md) — `active`
+- [PRD-010 — Epistemic and Governance Records](.doctrine/spec/product/010/spec-010.md) — `active`
+- [PRD-011 — Graph-Derived Backlog Priority](.doctrine/spec/product/011/spec-011.md) — `active`
+- [PRD-012 — Technical Specifications](.doctrine/spec/product/012/spec-012.md) — `draft`
 
 ### Slices
 
@@ -72,16 +73,23 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [Spec entity v1: product + technical specs](.doctrine/slice/015/design.md) | [scope](.doctrine/slice/015/slice-015.md) (6/6)
 - [Break slice↔state cycle: extract plan types](.doctrine/slice/016/design.md) | [scope](.doctrine/slice/016/slice-016.md) (1/1)
 - [Pluggable lexical scorer: trait + BM25 backend for memory retrieval](.doctrine/slice/017/design.md) | [scope](.doctrine/slice/017/slice-017.md) (4/4)
-- [Shipped orientation memory corpus](.doctrine/slice/018/design.md) | [scope](.doctrine/slice/018/slice-018.md) (3/5)
+- [Shipped orientation memory corpus](.doctrine/slice/018/design.md) | [scope](.doctrine/slice/018/slice-018.md) (6/6)
 - [Backfill Doctrine product-spec corpus](.doctrine/slice/019/design.md) | [scope](.doctrine/slice/019/slice-019.md) (5/5)
-- Backlog entity v1: work-intake items (one kind + item_kind facet) | [scope](.doctrine/slice/020/slice-020.md) (—)
+- [Backlog entity v1: work-intake items (one kind + item_kind facet)](.doctrine/slice/020/design.md) | [scope](.doctrine/slice/020/slice-020.md) (6/6)
+- Backfill Doctrine technical-spec corpus | [scope](.doctrine/slice/021/slice-021.md) (—)
+- [Technical-spec system support: descent, decomposition & integrity](.doctrine/slice/022/design.md) | [scope](.doctrine/slice/022/slice-022.md) (2/4)
+- [Ship knowledge tiers (ADR-005)](.doctrine/slice/023/design.md) | [scope](.doctrine/slice/023/slice-023.md) (4/4)
+- [Harden TOML render: escape user free-text through a shared seam](.doctrine/slice/024/design.md) | [scope](.doctrine/slice/024/slice-024.md) (—)
 
 ### Architecture Decision Records
 
-- [ADR-001 — Module layering: leaf ← engine ← command, no cycles](.doctrine/adr/001/adr-001.md) — `proposed`
+- [ADR-001 — Module layering: leaf ← engine ← command, no cycles](.doctrine/adr/001/adr-001.md) — `accepted`
 - [ADR-002 — Global orientation memory class: repo-empty, unanchored, evergreen](.doctrine/adr/002/adr-002.md) — `accepted`
-- [ADR-003 — Canonical change loop: slice-first, observe, reconcile, close](.doctrine/adr/003/adr-003.md) — `proposed`
-- [ADR-004 — Relations stored outbound-only; reciprocity is derived](.doctrine/adr/004/adr-004.md) — `proposed`
+- [ADR-003 — Canonical change loop: slice-first, observe, reconcile, close](.doctrine/adr/003/adr-003.md) — `accepted`
+- [ADR-004 — Relations stored outbound-only; reciprocity is derived](.doctrine/adr/004/adr-004.md) — `accepted`
+- [ADR-005 — Shipped knowledge is tiered by access pattern; skills route, reference docs explain](.doctrine/adr/005/adr-005.md) — `accepted`
+- [ADR-006 — Worktree posture: policy-agnostic framework, orchestrator-sole-writer dispatch](.doctrine/adr/006/adr-006.md) — `proposed`
+- [ADR-007 — Adversarial review as a first-class kind with turn-based ledger coordination](.doctrine/adr/007/adr-007.md) — `proposed`
 <!-- END:readme-index -->
 
 ## License
