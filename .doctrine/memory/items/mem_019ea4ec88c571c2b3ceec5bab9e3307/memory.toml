@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea4ec88c571c2b3ceec5bab9e3307"
+memory_key = "mem.concept.spec.descent-descends-from"
+schema_version = 1
+memory_type = "concept"
+status = "active"
+title = "Tech-spec descent relation is named descends_from, not realises"
+summary = "Tech-spec cross-family descent field is descends_from, not realises (overclaim)"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = ["src/spec.rs", "src/registry.rs"]
+globs = []
+commands = []
+tags = ["spec-entity", "sl-022", "descent", "adr-004"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8cb1c7e31105b12ae3bd4d5471fb0ff2d9ad5abc"
+ref_name = "refs/heads/main"
+checkout_state_id = "671dde9c9a861a5d2cdce04bdaba228da48cc7c3df3c290a01465ef64d954f99"
+base_commit = "04eda1720a7b81a49767ec0fa9e756827a883265"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
