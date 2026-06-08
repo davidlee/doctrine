@@ -422,6 +422,9 @@ enum BacklogCommand {
 #[derive(Subcommand)]
 enum MemoryCommand {
     /// Mint a uid and scaffold a new memory under `.doctrine/memory/items`.
+    /// `memory new` is the uniform canonical alias (SL-025 §5.4 / D8); both names
+    /// dispatch the identical handler — skills may migrate `record → new` at leisure.
+    #[command(visible_alias = "new")]
     Record {
         /// Memory title.
         title: String,
@@ -479,6 +482,14 @@ enum MemoryCommand {
         /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
         reference: String,
 
+        /// Output format. `--json` is shorthand; see `--format`.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -495,19 +506,16 @@ enum MemoryCommand {
         path: Option<PathBuf>,
     },
 
-    /// List recorded memories, newest first; AND-filter by type/status/tag.
+    /// List recorded memories, newest first; AND-filter on the shared spine.
     List {
-        /// Filter by type: concept|fact|pattern|signpost|system|thread.
+        /// Filter by type: concept|fact|pattern|signpost|system|thread. The one
+        /// kind-specific axis (beside the shared flags — backlog `--kind` precedent).
         #[arg(long = "type", value_parser = memory::MemoryType::parse)]
         memory_type: Option<memory::MemoryType>,
 
-        /// Filter by lifecycle status.
-        #[arg(long, value_parser = memory::Status::parse)]
-        status: Option<memory::Status>,
-
-        /// Filter to memories carrying this tag.
-        #[arg(long = "tag")]
-        tag: Option<String>,
+        /// Shared list flags: -f/-r/-i/-s/-t/-a/--format/--json (SL-025).
+        #[command(flatten)]
+        list: CommonListArgs,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -888,14 +896,18 @@ fn main() -> anyhow::Result<()> {
                     global,
                 },
             ),
-            MemoryCommand::Show { reference, path } => memory::run_show(path, &reference),
+            MemoryCommand::Show {
+                reference,
+                format,
+                json,
+                path,
+            } => memory::run_show(path, &reference, if json { Format::Json } else { format }),
             MemoryCommand::Verify { reference, path } => memory::run_verify(path, &reference),
             MemoryCommand::List {
                 memory_type,
-                status,
-                tag,
+                list,
                 path,
-            } => memory::run_list(path, memory_type, status, tag.as_deref()),
+            } => memory::run_list(path, memory_type, list.into_list_args()),
             MemoryCommand::Find {
                 path_scope,
                 glob,

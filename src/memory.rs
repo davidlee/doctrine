@@ -29,6 +29,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::entity::{self, Artifact, Fileset, LocalFs};
 use crate::git::{AnchorKind, Confidence, RepoIdKind};
+use crate::listing::{self, Format, ListArgs};
 use crate::tomlfmt::{toml_array_inner, toml_string};
 
 /// Workspace coordinate carried on every memory; hardcoded `"default"` in v1 (no
@@ -93,7 +94,31 @@ pub(crate) enum Status {
     Quarantined,
 }
 
+/// The memory `--status` filter known-set (SL-025 §5.2): every [`Status`] variant,
+/// kept in lockstep with the enum by `memory_statuses_matches_the_variants`. Guards
+/// READ/filter input only (`listing::validate_statuses`) — not stored-status writes.
+pub(crate) const MEMORY_STATUSES: &[&str] = &[
+    "active",
+    "draft",
+    "superseded",
+    "retracted",
+    "archived",
+    "quarantined",
+];
+
 impl Status {
+    /// The `memory list` hide-set (design §5.3): the four terminal lifecycle states
+    /// drop from the default list (active + draft stay visible). The stringly bridge
+    /// over the typed enum — out-of-vocab tokens are impossible on a serde-validated
+    /// memory but `retain` is stringly, so a bad token is treated as not-hidden.
+    /// `--all` or any explicit `--status` overrides (handled in `listing::retain`).
+    fn is_hidden(self) -> bool {
+        matches!(
+            self,
+            Self::Superseded | Self::Retracted | Self::Archived | Self::Quarantined
+        )
+    }
+
     /// Parse the kebab token (the `--status` value parser + the validation layer).
     pub(crate) fn parse(s: &str) -> Result<Self> {
         Ok(match s {
@@ -932,9 +957,18 @@ pub(crate) fn render_show(m: &Memory, body: &str, guard: &str, staleness: Option
     )
 }
 
-/// AND-filter (a `None` filter passes everything) then order **`created`
-/// descending, then `uid` ascending** — a deterministic default and a contract,
-/// not an incidental sort (design § 5.2, review #13).
+/// The memory list/retrieve ordering contract: **`created` descending, then `uid`
+/// ascending** — a deterministic default, not an incidental sort (design § 5.2,
+/// review #13). Shared by `select_rows` (the retrieve pipeline) and `list_rows`
+/// (the spine list path) so the one comparator is never duplicated (DRY).
+fn sort_default(rows: &mut [Memory]) {
+    rows.sort_by(|a, b| b.created.cmp(&a.created).then_with(|| a.uid.cmp(&b.uid)));
+}
+
+/// AND-filter (a `None` filter passes everything) then order per [`sort_default`].
+/// The typed type/status/tag filter the `retrieve` surface (SL-008) still relies on
+/// (`retrieve.rs`); `memory list` itself routes through the shared `listing::retain`
+/// (the uniform read spine, SL-025) instead.
 pub(crate) fn select_rows(
     mut rows: Vec<Memory>,
     type_f: Option<MemoryType>,
@@ -946,50 +980,94 @@ pub(crate) fn select_rows(
             && status_f.is_none_or(|s| m.status == s)
             && tag_f.is_none_or(|t| m.scope.tags.iter().any(|x| x == t))
     });
-    rows.sort_by(|a, b| b.created.cmp(&a.created).then_with(|| a.uid.cmp(&b.uid)));
+    sort_default(&mut rows);
     rows
 }
 
-/// Format `list` rows: aligned `uid  type  status  key  title`. The **full** uid
-/// is printed (F-A11) so a listed id can drive `show`/`verify` — a short id is
-/// both unusable there and ambiguous (uuid-v7 ids share a leading bucket, F-A12).
-/// A keyless memory shows `-` for its key column; the title is `scrub_line`d
-/// (F-A10) so a newline in it cannot break the row or forge a second one.
-fn format_list(rows: &[Memory]) -> String {
-    let uid_w = rows.iter().map(|m| m.uid.len()).max().unwrap_or(0);
-    let kind_w = rows
-        .iter()
-        .map(|m| m.kind.as_str().len())
-        .max()
-        .unwrap_or(0);
-    let status_w = rows
-        .iter()
-        .map(|m| m.status.as_str().len())
-        .max()
-        .unwrap_or(0);
-    let key_w = rows
-        .iter()
-        .map(|m| m.key.as_deref().unwrap_or("-").len())
-        .max()
-        .unwrap_or(0);
-    let lines: Vec<String> = rows
-        .iter()
-        .map(|m| {
-            format!(
-                "{:<uid_w$}  {:<kind_w$}  {:<status_w$}  {:<key_w$}  {}",
-                m.uid,
-                m.kind.as_str(),
-                m.status.as_str(),
-                m.key.as_deref().unwrap_or("-"),
-                scrub_line(&m.title)
-            )
-        })
-        .collect();
-    if lines.is_empty() {
-        String::new()
-    } else {
-        lines.join("\n") + "\n"
+/// Project a `Memory` to its filterable fields (design §5.2). **The uid exception
+/// (§5.3/§5.5): the uid IS the canonical id — it is NOT routed through
+/// `listing::canonical_id`.** `canonical` is the regex domain's leading field
+/// (the full `mem_<32hex>`); substr matches slug+title (memory has no slug, so the
+/// key plays that role), regex matches canonical+slug+title. `tags` are the
+/// memory's own scope tags.
+fn key(m: &Memory) -> listing::FilterFields {
+    listing::FilterFields {
+        canonical: m.uid.clone(),
+        slug: m.key.clone().unwrap_or_default(),
+        title: m.title.clone(),
+        status: m.status.as_str().to_string(),
+        tags: m.scope.tags.clone(),
     }
+}
+
+/// The `memory list` hide-set predicate fed to `listing::retain` — the stringly
+/// bridge over the typed [`Status::is_hidden`] (`{superseded, retracted, archived,
+/// quarantined}`). active + draft stay visible. An out-of-vocab token (impossible
+/// on a serde-validated memory) is treated as not-hidden.
+fn is_hidden(status: &str) -> bool {
+    Status::parse(status).is_ok_and(Status::is_hidden)
+}
+
+/// One memory projected to its faithful JSON list row (design §5.3/§5.5 — memory
+/// owns its serde shape). `uid` is the canonical id (NOT prefixed — the memory
+/// exception); `type`/`status`/`trust` are the kebab/free strings; `key` is `null`
+/// when absent. Body/scope/anchor ride `show`, so the list row stays flat.
+#[derive(Debug, Serialize)]
+struct MemoryRow {
+    uid: String,
+    #[serde(rename = "type")]
+    memory_type: &'static str,
+    status: &'static str,
+    trust: String,
+    key: Option<String>,
+    title: String,
+}
+
+/// Faithful JSON rows (D7) — the uid plus the flat list fields.
+fn json_rows(rows: &[Memory]) -> Vec<MemoryRow> {
+    rows.iter()
+        .map(|m| MemoryRow {
+            uid: m.uid.clone(),
+            memory_type: m.kind.as_str(),
+            status: m.status.as_str(),
+            trust: scrub_line(&m.trust_level),
+            key: m.key.clone(),
+            title: scrub_line(&m.title),
+        })
+        .collect()
+}
+
+/// Render retained rows as `uid  type  status  trust  key  title` over the shared
+/// `listing::render_table` (SL-025 — the one renderer backs every kind). The
+/// **full** uid leads each row (F-A11) so a listed id drives `show`/`verify`
+/// directly (a short id is unusable and ambiguous — uuid-v7 ids share a leading
+/// bucket, F-A12). A keyless memory shows `-`; free-text cells (`key`, `title`) are
+/// `scrub_line`d (F-A10) so a newline cannot break a row or forge a second one.
+/// Empty rows → `""` (header suppressed, §5.5). Pure.
+fn format_rows(rows: &[Memory]) -> String {
+    if rows.is_empty() {
+        return String::new();
+    }
+    let mut grid: Vec<Vec<String>> = Vec::with_capacity(rows.len() + 1);
+    grid.push(vec![
+        "uid".to_string(),
+        "type".to_string(),
+        "status".to_string(),
+        "trust".to_string(),
+        "key".to_string(),
+        "title".to_string(),
+    ]);
+    for m in rows {
+        grid.push(vec![
+            m.uid.clone(),
+            m.kind.as_str().to_string(),
+            m.status.as_str().to_string(),
+            scrub_line(&m.trust_level),
+            scrub_line(m.key.as_deref().unwrap_or("-")),
+            scrub_line(&m.title),
+        ]);
+    }
+    listing::render_table(&grid)
 }
 
 // ---------------------------------------------------------------------------
@@ -1048,20 +1126,72 @@ fn resolve_show(items_root: &Path, mref: &MemoryRef) -> Result<(Memory, String, 
     Ok((memory, body, dir))
 }
 
-/// `doctrine memory show <uid|key>`.
-pub(crate) fn run_show(path: Option<PathBuf>, reference: &str) -> Result<()> {
+/// Render the `Json` show: the memory's faithful state under the shared
+/// `{kind, …}` envelope (the `backlog::show_json` precedent). The validated
+/// `Memory`'s fields are private and its closed enums render via `as_str`, so the
+/// JSON is hand-projected here (not a derive): the uid + flat identity, the scope,
+/// the anchor (kind/commit/ref/verified presence + the repo-id trust pair), the
+/// review/trust axis, and the `.md` body verbatim — the same data the table block
+/// reassembles, structured. Pure over the memory's own state (no cross-corpus scan).
+fn show_json(m: &Memory, body: &str) -> Result<String> {
+    let a = &m.anchor;
+    let s = &m.scope;
+    let value = serde_json::json!({
+        "kind": "memory",
+        "memory": {
+            "uid": m.uid,
+            "key": m.key,
+            "type": m.kind.as_str(),
+            "status": m.status.as_str(),
+            "title": m.title,
+            "summary": m.summary,
+            "created": m.created,
+            "updated": m.updated,
+            "scope": {
+                "workspace": s.workspace,
+                "repo": s.repo,
+                "paths": s.paths,
+                "globs": s.globs,
+                "commands": s.commands,
+                "tags": s.tags,
+                "repo_id_kind": s.repo_id_kind.as_str(),
+                "repo_id_confidence": s.repo_id_confidence.as_str(),
+            },
+            "anchor": {
+                "kind": a.kind.as_str(),
+                "commit": a.commit,
+                "checkout_state_id": a.checkout_state_id,
+                "ref": a.ref_name,
+                "verified_sha": a.verified_sha,
+            },
+            "verification_state": m.verification_state,
+            "reviewed": m.reviewed,
+            "review_by": m.review_by,
+            "trust_level": m.trust_level,
+            "severity": m.severity,
+            "weight": m.weight,
+        },
+        "body": body,
+    });
+    serde_json::to_string_pretty(&value).context("failed to serialize memory show JSON")
+}
+
+/// `doctrine memory show <uid|key> [--format F | --json]`.
+pub(crate) fn run_show(path: Option<PathBuf>, reference: &str, format: Format) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let items_root = root.join(MEMORY_ITEMS_DIR);
     let mref = MemoryRef::parse(reference)?;
     let (memory, body, _dir) = resolve_show(&items_root, &mref)?;
-    // Per-render nonce: the close-fence secret a hostile body cannot predict (A-2).
-    // The sole new impurity on this seam — `render_show` stays pure (nonce in).
-    let nonce = uuid::Uuid::new_v4().simple().to_string();
-    write!(
-        io::stdout(),
-        "{}",
-        render_show(&memory, &body, &nonce, None)
-    )?;
+    let out = match format {
+        // Per-render nonce: the close-fence secret a hostile body cannot predict
+        // (A-2). The sole new impurity on this seam — `render_show` stays pure.
+        Format::Table => {
+            let nonce = uuid::Uuid::new_v4().simple().to_string();
+            render_show(&memory, &body, &nonce, None)
+        }
+        Format::Json => show_json(&memory, &body)?,
+    };
+    write!(io::stdout(), "{out}")?;
     Ok(())
 }
 
@@ -1122,32 +1252,39 @@ pub(crate) fn collect_all(root: &Path) -> Result<Vec<Memory>> {
     Ok(out)
 }
 
-/// `doctrine memory list [--type --status --tag]`.
+/// The `memory list` output as a string — the compute half of `run_list`, on the
+/// shared spine (SL-025). `validate_statuses` guards `--status` against the SIX
+/// [`MEMORY_STATUSES`] (A-2); `listing::build` resolves the filter + format;
+/// `retain` applies the shared substr/regex/status/tag axes + the terminal
+/// [`is_hidden`] set. `--type` is the one kind-specific axis (kept beside the shared
+/// flags, applied here after the shared retain — the backlog `--kind` precedent).
+/// Ordering is per-kind (`created`-desc + uid via [`sort_default`]), never in
+/// `retain` (§5.3). `boot` calls this directly with an explicit `status:["active"]`
+/// to render its memory section ACTIVE-ONLY (drafts excluded from agent context, C-4).
+pub(crate) fn list_rows(root: &Path, type_f: Option<MemoryType>, args: ListArgs) -> Result<String> {
+    listing::validate_statuses(&args.status, MEMORY_STATUSES)?;
+    let (filter, format) = listing::build(args)?;
+    let mut rows = listing::retain(collect_all(root)?, &filter, is_hidden, key);
+    rows.retain(|m| type_f.is_none_or(|t| m.kind == t));
+    sort_default(&mut rows);
+    match format {
+        Format::Table => Ok(format_rows(&rows)),
+        Format::Json => listing::json_envelope("memory", &json_rows(&rows)),
+    }
+}
+
+/// `doctrine memory list [--type T] [-f SUBSTR] [-r RE] [-i] [-s S,…] [-t T] [-a]
+/// [--format F | --json]` — newest first, on the shared spine. Thin shell (§5.4):
+/// find the root, lower the args, print verbatim (`list_rows` carries the
+/// renderer's own trailing newline). `--type` is the one kind-specific axis.
 pub(crate) fn run_list(
     path: Option<PathBuf>,
     type_f: Option<MemoryType>,
-    status_f: Option<Status>,
-    tag_f: Option<&str>,
+    args: ListArgs,
 ) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let rows = select_rows(collect_all(&root)?, type_f, status_f, tag_f);
-    write!(io::stdout(), "{}", format_list(&rows))?;
+    write!(io::stdout(), "{}", list_rows(&root, type_f, args)?)?;
     Ok(())
-}
-
-/// The `memory list` rows as a string — an **additive** sibling to `run_list`
-/// (no existing line touched: memory.rs is SL-012-contended) so the boot snapshot
-/// (SL-011) can project the memory pointers in-process. Composes the same
-/// `collect_memories → select_rows → format_list` chain; `format_list` is private
-/// to this module, so the wrapper lives here rather than in `boot`.
-pub(crate) fn list_rows(
-    root: &Path,
-    type_f: Option<MemoryType>,
-    status_f: Option<Status>,
-    tag_f: Option<&str>,
-) -> Result<String> {
-    let rows = select_rows(collect_all(root)?, type_f, status_f, tag_f);
-    Ok(format_list(&rows))
 }
 
 // ---------------------------------------------------------------------------
@@ -1980,17 +2117,17 @@ ref = "src/main.rs"
         fs::create_dir_all(&items).unwrap();
 
         // empty store → the empty string (the agreed empty marker upstream).
-        assert_eq!(list_rows(root, None, None, None).unwrap(), "");
+        assert_eq!(list_rows(root, None, ListArgs::default()).unwrap(), "");
 
         let uid_a = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7";
         let uid_b = "mem_018f3a1b2c3d4e5f60718293a4b5c6d8";
         write_memory_dir(&items, uid_a);
         write_memory_dir(&items, uid_b);
 
-        let out = list_rows(root, None, None, None).unwrap();
+        let out = list_rows(root, None, ListArgs::default()).unwrap();
         assert!(out.contains(uid_a), "lists the first pointer");
         assert!(out.contains(uid_b), "lists the second pointer");
-        // composes select_rows + format_list: full uid printed, trailing newline.
+        // on the spine: full uid printed, header + trailing newline.
         assert!(out.ends_with('\n'));
     }
 
@@ -2006,19 +2143,251 @@ ref = "src/main.rs"
         write_memory_dir(&items, uid_item);
 
         // shipped/ absent ⇒ only the items pointer (collect_all == items-only).
-        let before = list_rows(root, None, None, None).unwrap();
+        let before = list_rows(root, None, ListArgs::default()).unwrap();
         assert!(before.contains(uid_item));
         assert!(!before.contains(uid_ship));
 
         // a shipped memory present ⇒ the boot/list seam surfaces it, exactly once.
         write_memory_full(&shipped, uid_ship, &titled_toml(uid_ship, "Shipped"), "s");
-        let after = list_rows(root, None, None, None).unwrap();
+        let after = list_rows(root, None, ListArgs::default()).unwrap();
         assert!(after.contains(uid_item), "items pointer still present");
         assert_eq!(
             after.matches(uid_ship).count(),
             1,
             "shipped pointer surfaces exactly once (no double-count)"
         );
+    }
+
+    // --- SL-025: memory on the shared list spine ---
+
+    /// Write a real `<items>/<uid>/` memory dir with a chosen `status` token — the
+    /// hide-set / reveal tests plant one memory per lifecycle state. Built off
+    /// `full_toml` (status `active`) with the status field swapped.
+    fn write_status_dir(items: &Path, uid: &str, status: &str) {
+        let toml = full_toml()
+            .replace(UID, uid)
+            .replace("status = \"active\"", &format!("status = \"{status}\""));
+        write_memory_full(items, uid, &toml, "body");
+    }
+
+    /// Drift canary: the `MEMORY_STATUSES` known-set must stay in lockstep with the
+    /// `Status` variants — the adr/spec/backlog precedent. A new variant that is not
+    /// added here fails the round-trip, forcing the known-set update.
+    #[test]
+    fn memory_statuses_matches_the_variants() {
+        let from_variants: Vec<&str> = [
+            Status::Active,
+            Status::Draft,
+            Status::Superseded,
+            Status::Retracted,
+            Status::Archived,
+            Status::Quarantined,
+        ]
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
+        assert_eq!(from_variants, MEMORY_STATUSES.to_vec());
+    }
+
+    #[test]
+    fn is_hidden_covers_the_four_terminal_states_only() {
+        assert!(is_hidden("superseded"));
+        assert!(is_hidden("retracted"));
+        assert!(is_hidden("archived"));
+        assert!(is_hidden("quarantined"));
+        // active + draft stay VISIBLE.
+        assert!(!is_hidden("active"));
+        assert!(!is_hidden("draft"));
+        // an out-of-vocab token is treated as not-hidden (stringly `retain`).
+        assert!(!is_hidden("bogus"));
+    }
+
+    #[test]
+    fn key_uses_the_uid_as_canonical_not_a_prefixed_id() {
+        let m = mem(
+            UID,
+            Some("mem.pattern.cli.skinny"),
+            MemoryType::Pattern,
+            Status::Active,
+            "2026-06-04",
+        );
+        let fields = key(&m);
+        // THE memory exception: the uid IS the canonical id (no `MEM-001` prefix).
+        assert_eq!(fields.canonical, UID);
+        assert_eq!(fields.slug, "mem.pattern.cli.skinny");
+        assert_eq!(fields.status, "active");
+    }
+
+    // VT-1: the six-status hide-set default — active + draft show, the four
+    // terminal states hide; an explicit `--status` (or `--all`) reveals them.
+    #[test]
+    fn list_default_hides_the_four_terminal_states_keeps_active_and_draft() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        fs::create_dir_all(&items).unwrap();
+
+        // one memory per lifecycle state (hex-only uids — `is_uid` is strict).
+        let valid = [
+            ("mem_00000000000000000000000000000a01", "active"),
+            ("mem_00000000000000000000000000000d02", "draft"),
+            ("mem_00000000000000000000000000000503", "superseded"),
+            ("mem_00000000000000000000000000000404", "retracted"),
+            ("mem_00000000000000000000000000000c05", "archived"),
+            ("mem_00000000000000000000000000000406", "quarantined"),
+        ];
+        for (uid, status) in valid {
+            write_status_dir(&items, uid, status);
+        }
+
+        // default: active + draft visible, the four terminal hidden.
+        let def = list_rows(root, None, ListArgs::default()).unwrap();
+        assert!(
+            def.contains("mem_00000000000000000000000000000a01"),
+            "active visible: {def}"
+        );
+        assert!(
+            def.contains("mem_00000000000000000000000000000d02"),
+            "draft visible: {def}"
+        );
+        for hidden in [
+            "mem_00000000000000000000000000000503",
+            "mem_00000000000000000000000000000404",
+            "mem_00000000000000000000000000000c05",
+            "mem_00000000000000000000000000000406",
+        ] {
+            assert!(
+                !def.contains(hidden),
+                "terminal hidden by default ({hidden}): {def}"
+            );
+        }
+
+        // explicit `--status superseded` reveals that terminal state.
+        let revealed = list_rows(
+            root,
+            None,
+            ListArgs {
+                status: vec!["superseded".to_string()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            revealed.contains("mem_00000000000000000000000000000503"),
+            "revealed: {revealed}"
+        );
+
+        // `--all` reveals everything.
+        let all = list_rows(
+            root,
+            None,
+            ListArgs {
+                all: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        for (uid, _) in valid {
+            assert!(all.contains(uid), "--all shows {uid}: {all}");
+        }
+    }
+
+    // VT-1: an invalid `--status` token is rejected with the six-status known-set.
+    #[test]
+    fn list_rejects_an_unknown_status_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let items = items_dir(dir.path());
+        fs::create_dir_all(&items).unwrap();
+        let err = list_rows(
+            dir.path(),
+            None,
+            ListArgs {
+                status: vec!["bogus".to_string()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("bogus"), "names the bad value: {err}");
+        assert!(
+            err.contains("active") && err.contains("quarantined"),
+            "lists the known set: {err}"
+        );
+    }
+
+    // VT-1: the JSON envelope — uid (NOT prefixed) + type/status/trust/key/title.
+    #[test]
+    fn list_json_envelope_carries_uid_type_status_trust() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        fs::create_dir_all(&items).unwrap();
+        write_status_dir(&items, "mem_00000000000000000000000000000a01", "active");
+
+        let out = list_rows(
+            root,
+            None,
+            ListArgs {
+                json: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["kind"], "memory");
+        let row = &v["rows"][0];
+        // the uid is the canonical id — NOT a prefixed `MEM-001`.
+        assert_eq!(row["uid"], "mem_00000000000000000000000000000a01");
+        assert!(row.get("type").is_some(), "type column: {out}");
+        assert_eq!(row["status"], "active");
+        assert!(row.get("trust").is_some(), "trust column: {out}");
+    }
+
+    // VT-1: the `--type` kind-specific axis filters (beside the shared flags).
+    #[test]
+    fn list_filters_by_type() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = items_dir(root);
+        fs::create_dir_all(&items).unwrap();
+        // full_toml is type `pattern`; plant a pattern + a fact.
+        write_status_dir(&items, "mem_00000000000000000000000000000a01", "active");
+        let fact = full_toml()
+            .replace(UID, "mem_00000000000000000000000000000f02")
+            .replace("memory_type = \"pattern\"", "memory_type = \"fact\"");
+        write_memory_full(&items, "mem_00000000000000000000000000000f02", &fact, "b");
+
+        let out = list_rows(root, Some(MemoryType::Fact), ListArgs::default()).unwrap();
+        assert!(
+            out.contains("mem_00000000000000000000000000000f02"),
+            "fact kept: {out}"
+        );
+        assert!(
+            !out.contains("mem_00000000000000000000000000000a01"),
+            "pattern filtered: {out}"
+        );
+    }
+
+    // VT-4: memory show --json projects the faithful entity + body under {kind,…}.
+    #[test]
+    fn show_json_projects_the_memory_and_body() {
+        let m = mem(
+            UID,
+            Some("mem.pattern.cli.skinny"),
+            MemoryType::Pattern,
+            Status::Active,
+            "2026-06-04",
+        );
+        let out = show_json(&m, "the body").unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["kind"], "memory");
+        assert_eq!(v["memory"]["uid"], UID);
+        assert_eq!(v["memory"]["type"], "pattern");
+        assert_eq!(v["memory"]["status"], "active");
+        assert_eq!(v["memory"]["key"], "mem.pattern.cli.skinny");
+        assert_eq!(v["body"], "the body");
+        // a closed-enum axis renders as its kebab string, not a struct.
+        assert_eq!(v["memory"]["trust_level"], "medium");
     }
 
     /// Build `RecordArgs` with the pre-PHASE-04 positional shape (no scope flags,
@@ -2922,8 +3291,10 @@ ref = "src/main.rs"
         );
     }
 
+    // SL-025: re-gridded onto `listing::render_table` — header row + `uid type
+    // status trust key title` columns (EX-1 adds the trust column).
     #[test]
-    fn format_list_aligns_full_uid_type_status_key_title() {
+    fn format_rows_renders_full_uid_type_status_trust_key_title() {
         let m = mem(
             UID,
             Some("mem.pattern.cli.skinny"),
@@ -2931,16 +3302,23 @@ ref = "src/main.rs"
             Status::Active,
             "2026-06-04",
         );
-        let out = format_list(&[m]);
-        // F-A11: the FULL uid leads the row, not a 12-char short form — a listed
-        // id must be copy-pasteable straight into `show`.
-        assert!(out.starts_with(UID), "full uid column: {out}");
-        assert!(out.contains("pattern"));
-        assert!(out.contains("active"));
-        assert!(out.contains("mem.pattern.cli.skinny"));
-        assert!(out.contains("Title"));
+        let out = format_rows(&[m]);
+        // header carries the columns (the §5.5 header-on-non-empty contract).
+        let header = out.lines().next().unwrap();
+        for col in ["uid", "type", "status", "trust", "key", "title"] {
+            assert!(header.contains(col), "header has {col}: {out}");
+        }
+        // F-A11: the FULL uid leads the DATA row — copy-pasteable into `show`.
+        let data = out.lines().nth(1).unwrap();
+        assert!(data.starts_with(UID), "full uid column: {out}");
+        assert!(data.contains("pattern"));
+        assert!(data.contains("active"));
+        assert!(data.contains("medium"), "trust column: {out}");
+        assert!(data.contains("mem.pattern.cli.skinny"));
+        assert!(data.contains("Title"));
         assert!(out.ends_with('\n'));
-        assert!(format_list(&[]).is_empty());
+        // empty → "" (header suppressed, §5.5).
+        assert!(format_rows(&[]).is_empty());
     }
 
     // F-A11 round-trip: the id a `list` row prints parses back to a `Uid` (so it
@@ -2948,8 +3326,15 @@ ref = "src/main.rs"
     #[test]
     fn the_listed_uid_parses_as_a_uid_for_show() {
         let m = mem(UID, None, MemoryType::Fact, Status::Active, "2026-06-04");
-        let out = format_list(&[m]);
-        let listed = out.split_whitespace().next().unwrap();
+        let out = format_rows(&[m]);
+        // the DATA row (line 1) leads with the uid (line 0 is the header).
+        let listed = out
+            .lines()
+            .nth(1)
+            .unwrap()
+            .split_whitespace()
+            .next()
+            .unwrap();
         assert_eq!(listed, UID);
         assert_eq!(
             MemoryRef::parse(listed).unwrap(),
@@ -2959,14 +3344,15 @@ ref = "src/main.rs"
 
     // F-A10: a newline in a title is scrubbed (\n escaped) so it cannot break the
     // single row into two or forge a second row. Same class as F-A2 in render_show.
+    // The re-grid onto render_table MUST preserve this security scrub.
     #[test]
-    fn format_list_scrubs_a_newline_in_the_title() {
+    fn format_rows_scrubs_a_newline_in_the_title() {
         let mut m = mem(UID, None, MemoryType::Fact, Status::Active, "2026-06-04");
         m.title = "real\nmem_forged00000000000000000000000000 fake".to_owned();
-        let out = format_list(&[m]);
+        let out = format_rows(&[m]);
         assert!(out.contains("real\\nmem_forged"), "title scrubbed: {out:?}");
-        // exactly one row → one trailing newline, no embedded raw newline.
-        assert_eq!(out.matches('\n').count(), 1, "single row: {out:?}");
+        // header + one data row → exactly two trailing newlines, no embedded raw.
+        assert_eq!(out.matches('\n').count(), 2, "header + one row: {out:?}");
     }
 
     // VT-1: resolve a uid AND a key; a stale key with no symlink does NOT

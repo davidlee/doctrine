@@ -134,10 +134,22 @@ fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Sectio
                 },
             ),
         ),
-        // every memory pointer (the `just list-memories` index, paid once).
-        SourceKind::Memories => {
-            section_or_marker(heading, memory::list_rows(root, None, None, None))
-        }
+        // ACTIVE memories only — an explicit boot predicate, DECOUPLED from the
+        // CLI `memory list` default (which keeps `draft` visible). boot is an
+        // agent-context PRODUCER and `draft` is unreviewed, so it must not leak
+        // into the snapshot (SL-025 §5.1 / C-4). The explicit `status:["active"]`
+        // also reveals past the list hide-set, mirroring the ADR section above.
+        SourceKind::Memories => section_or_marker(
+            heading,
+            memory::list_rows(
+                root,
+                None,
+                crate::listing::ListArgs {
+                    status: vec!["active".to_string()],
+                    ..Default::default()
+                },
+            ),
+        ),
         // canonical embedded digest — read from the embed, never disk (§5.2).
         SourceKind::Static(name) => section_or_marker(heading, install::asset_text(name)),
         // user-owned governance pointer layer — read from disk (§5.3).
@@ -1055,6 +1067,83 @@ mod tests {
         );
         assert!(!snap.contains("<!-- Accepted ADRs:"), "ADR marker replaced");
         assert!(!snap.contains("<!-- Memory:"), "memory marker replaced");
+    }
+
+    /// VT-3 (SL-025 §5.1 / C-4): boot's memory section is rendered ACTIVE-ONLY via
+    /// an explicit predicate, DECOUPLED from the CLI `memory list` default. The
+    /// fixture spans active + draft + each hidden lifecycle state. Boot must show
+    /// ONLY the active memory (no `draft` leak into agent context), while the CLI
+    /// list (`memory::list_rows` default) hides the four terminal states but KEEPS
+    /// draft — two different visibility rules, both asserted here.
+    #[test]
+    fn boot_memory_section_is_active_only_decoupled_from_the_list_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // an active + a draft via the real record path (born-frame capture is fine
+        // in a non-git temp dir — anchor `none`, unscoped).
+        let rec = |title: &str, status: memory::Status| {
+            memory::run_record(
+                Some(root.to_path_buf()),
+                &memory::RecordArgs {
+                    title,
+                    memory_type: memory::MemoryType::Pattern,
+                    key: None,
+                    status,
+                    summary: None,
+                    tags: &[],
+                    paths: &[],
+                    globs: &[],
+                    commands: &[],
+                    repo: None,
+                    global: false,
+                },
+            )
+            .unwrap();
+        };
+        rec("Active note", memory::Status::Active);
+        rec("Draft note", memory::Status::Draft);
+        rec("Superseded note", memory::Status::Superseded);
+        rec("Retracted note", memory::Status::Retracted);
+        rec("Archived note", memory::Status::Archived);
+        rec("Quarantined note", memory::Status::Quarantined);
+
+        // boot section: ACTIVE ONLY — no draft, no terminal.
+        assert!(regenerate(root, exec).unwrap());
+        let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
+        assert!(snap.contains("Active note"), "boot shows active:\n{snap}");
+        for leaked in [
+            "Draft note",
+            "Superseded note",
+            "Retracted note",
+            "Archived note",
+            "Quarantined note",
+        ] {
+            assert!(
+                !snap.contains(leaked),
+                "boot must not leak {leaked}:\n{snap}"
+            );
+        }
+
+        // CLI list DEFAULT: hides the four terminal but KEEPS draft (decoupled rule).
+        let listed = memory::list_rows(root, None, crate::listing::ListArgs::default()).unwrap();
+        assert!(
+            listed.contains("Active note"),
+            "list shows active:\n{listed}"
+        );
+        assert!(listed.contains("Draft note"), "list KEEPS draft:\n{listed}");
+        for hidden in [
+            "Superseded note",
+            "Retracted note",
+            "Archived note",
+            "Quarantined note",
+        ] {
+            assert!(
+                !listed.contains(hidden),
+                "list hides terminal {hidden}:\n{listed}"
+            );
+        }
     }
 
     // --- VT-3: integration — routing digest (embed) + governance body (disk) ---
