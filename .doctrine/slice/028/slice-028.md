@@ -39,11 +39,14 @@ Two things sharpened in design:
 ### Built in this slice
 
 1. **Slice lifecycle FSM.** New authored vocabulary + transition machinery:
-   `proposed → design → plan → ready → started → review → audit → reconcile →
-   done` (+ `abandoned`). Gates modelled as transitions, except `ready` — the
+   `proposed → design → plan → ready → started → audit → reconcile → done`
+   (+ `abandoned`). Gates modelled as transitions, except `ready` — the
    lone gate-as-state, the "no code without an approved plan" human handoff.
-   `design-ready` is dropped (reaching `plan` *is* design-accepted).
-   Predicate-driven back-edges (see Risks). Terminal set stays `{done}`.
+   `design-ready` and `review` are both dropped (reaching `plan` *is*
+   design-accepted; review is per-phase during `started` / folded into `audit` —
+   design F11). Predicate-driven back-edges (see Risks). The closure seam
+   (`audit → reconcile → done`) is structurally enforced (design F12); the
+   divergence-terminal set stays `{done}`.
 
 2. **Transition verb.** A `slice` verb that advances the FSM (and `abandon`),
    gate-aware (consults conduct `autonomy`, advisory), reusing
