@@ -189,6 +189,15 @@ pub(crate) struct Spec {
     pub(crate) responsibilities: Vec<String>,
     #[serde(default, rename = "source")]
     pub(crate) sources: Vec<Source>,
+    /// Cross-family descent to the product capability this spec realises
+    /// (`PRD-NNN`). Tech-only, single-valued outbound (ADR-004 §1); absent on a
+    /// product or unfilled tech spec. Integrity is `validate`'s job (SL-022 §5.2).
+    #[serde(default)]
+    pub(crate) descends_from: Option<String>,
+    /// Single decomposition parent (`SPEC-NNN`). Tech-only, single-valued
+    /// outbound; the reciprocal children view is derived, never stored (§5.2).
+    #[serde(default)]
+    pub(crate) parent: Option<String>,
 }
 
 /// One membership row in a spec's `members.toml` — the spec→requirement edge with
@@ -351,6 +360,18 @@ fn render(
     }
     if let Some(level) = spec.c4_level {
         parts.push(format!("c4 level: {}\n", level.as_str()));
+    }
+    // Outbound spine (SL-022 §5.2): tech-only, Some-gated. The kind gate keeps a
+    // (now hard-invalid) field on a product spec from being legitimised by render;
+    // the Some gate keeps existing render output byte-identical. Children are
+    // derived, never rendered (ADR-004 §3 — outbound-only).
+    if spec.kind == SpecSubtype::Tech {
+        if let Some(d) = &spec.descends_from {
+            parts.push(format!("descends from: {d}\n"));
+        }
+        if let Some(p) = &spec.parent {
+            parts.push(format!("parent: {p}\n"));
+        }
     }
     if !spec.responsibilities.is_empty() {
         parts.push("responsibilities:\n".to_string());
@@ -1139,6 +1160,9 @@ module = \"doctrine::cli\"
         assert_eq!(spec.sources.len(), 1);
         assert_eq!(spec.sources[0].language, "rust");
         assert_eq!(spec.sources[0].module.as_deref(), Some("doctrine::cli"));
+        // the spine fields are absent here → None (the at-rest default, VT-1).
+        assert_eq!(spec.descends_from, None);
+        assert_eq!(spec.parent, None);
 
         // C2: the same toml deserialises into the shared Meta (the `title` proof).
         let m: Meta = toml::from_str(body).unwrap();
@@ -1162,6 +1186,25 @@ tags = []
         assert_eq!(spec.c4_level, None);
         assert!(spec.responsibilities.is_empty());
         assert!(spec.sources.is_empty());
+        assert_eq!(spec.descends_from, None);
+        assert_eq!(spec.parent, None);
+    }
+
+    #[test]
+    fn tech_spec_parses_descent_and_parent_when_present() {
+        // the two outbound spine fields (VT-1): present → Some, stored verbatim.
+        let body = "\
+id = 1
+slug = \"cli\"
+title = \"CLI\"
+status = \"active\"
+kind = \"tech\"
+descends_from = \"PRD-001\"
+parent = \"SPEC-002\"
+";
+        let spec: Spec = toml::from_str(body).unwrap();
+        assert_eq!(spec.descends_from.as_deref(), Some("PRD-001"));
+        assert_eq!(spec.parent.as_deref(), Some("SPEC-002"));
     }
 
     #[test]
@@ -1404,6 +1447,8 @@ tags = []
             c4_level: None,
             responsibilities: Vec::new(),
             sources: Vec::new(),
+            descends_from: None,
+            parent: None,
         }
     }
 
@@ -1520,6 +1565,49 @@ tags = []
         // empty (product spec or a tech spec with zero edges) → block omitted.
         let without = render(&spec, "p\n", &[], &[]);
         assert!(!without.contains("## Interactions"));
+    }
+
+    #[test]
+    fn render_emits_descent_and_parent_for_tech_in_order() {
+        // VT-2: tech emits both lines, ordered c4 → descends → parent → resp → sources.
+        let spec = Spec {
+            c4_level: Some(C4Level::Component),
+            descends_from: Some("PRD-001".to_string()),
+            parent: Some("SPEC-002".to_string()),
+            responsibilities: vec!["route".to_string()],
+            ..tech_spec(1)
+        };
+        let out = render(&spec, "p\n", &[], &[]);
+        assert!(out.contains("descends from: PRD-001\n"));
+        assert!(out.contains("parent: SPEC-002\n"));
+        // no derived children line ever (ADR-004 §3, outbound-only).
+        assert!(!out.contains("children"));
+        // strict order: c4 < descends < parent < responsibilities < sources(absent).
+        let c4 = out.find("c4 level:").unwrap();
+        let descends = out.find("descends from:").unwrap();
+        let parent = out.find("parent:").unwrap();
+        let resp = out.find("responsibilities:").unwrap();
+        assert!(c4 < descends && descends < parent && parent < resp);
+    }
+
+    #[test]
+    fn render_omits_descent_and_parent_when_none_and_for_product() {
+        // VT-2: tech with both None → neither line.
+        let tech = tech_spec(1);
+        let out = render(&tech, "p\n", &[], &[]);
+        assert!(!out.contains("descends from:"));
+        assert!(!out.contains("\nparent:"));
+
+        // product subject carrying the (invalid, but at-rest) fields → kind-gate omits.
+        let product = Spec {
+            kind: SpecSubtype::Product,
+            descends_from: Some("PRD-001".to_string()),
+            parent: Some("SPEC-002".to_string()),
+            ..tech_spec(1)
+        };
+        let pout = render(&product, "p\n", &[], &[]);
+        assert!(!pout.contains("descends from:"));
+        assert!(!pout.contains("parent:"));
     }
 
     // --- FIX 2: build_registry canonicalizes non-canonical author-supplied FKs ---
