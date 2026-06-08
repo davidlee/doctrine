@@ -2,7 +2,7 @@ id = 2
 slug = "entity-engine"
 title = "Generalise slice machinery into a kind-parameterised entity engine"
 # superseded by SL-003 — engine extracted there against a real 2nd caller (see handover.md)
-status = "superseded"
+status = "abandoned"
 created = "2026-06-03"
 updated = "2026-06-05"
 
