@@ -32,3 +32,8 @@ Present the situation with context. Summarise:
 - any obvious tradeoffs
 
 Then ask for guidance before proceeding.
+
+If the obstacle is really a piece of **latent work** to defer rather than a
+decision needing the user now — a follow-up, a newly-spotted risk, a chore — then
+**capture** it with `backlog new` so it is not lost to the conversation, and say
+so. Is it work, knowledge, or a decision? See the boundary in `using-doctrine.md`.

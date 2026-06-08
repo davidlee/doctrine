@@ -18,6 +18,9 @@ When unsure, route to the stricter skill. No code without an approved plan.
 
 Mid-flight, any stage: unanticipated obstacle / tradeoff / emergent complexity →
 `/consult` (don't improvise past it). Durable gotcha / pattern → `/record-memory`.
+Latent **work** intent (issue / improvement / chore / risk / idea) → `backlog
+new` instead of losing it; check `backlog list` at the start of substantive work
+(already captured?). Work vs knowledge vs decision boundary: `using-doctrine.md`.
 Finished a coherent unit → `/notes`. Handing off to fresh context → `/next`.
 
 **Core process:** `slice new` (scope) → `slice design` (author + adversarial

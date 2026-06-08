@@ -29,7 +29,10 @@ Inputs:
      findings already reconciled into `design.md`.
    - Durable facts, patterns, or gotchas from the slice are harvested into
      `notes.md` / `audit.md`, and reusable ones captured via `/record-memory`,
-     before closure — or consciously rejected.
+     before closure — or consciously rejected. Durable follow-up **work** the
+     slice leaves behind (risks / issues / chores) is captured as backlog items
+     with `backlog new` (the work / knowledge / decision boundary:
+     `using-doctrine.md`), or consciously rejected.
    - `just check` is green.
 2. **Commit cleanly:** land `.doctrine/**` workflow artefacts in small, clean
    conventional commits scoped with the slice id, rather than letting them

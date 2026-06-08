@@ -47,6 +47,9 @@ Inputs:
    `/consult`.
 7. Harvest durable risks, decisions, and gotchas from the disposable phase sheets
    into `audit.md` / `notes.md`, and promote reusable facts via `/record-memory`.
+   Capture durable follow-up **work** the audit surfaced — risks, issues, chores —
+   as backlog items with `backlog new`, alongside that harvest (the
+   work / knowledge / decision boundary: `using-doctrine.md`).
 8. Hand off to `/close` only after `audit.md`, `design.md`, and any follow-up
    refs tell a coherent closure story — not merely when the tests pass.
 

@@ -45,6 +45,10 @@ session's cached prefix. Two distinct checks — keep them apart:
 
 ## Choose the governing skill
 
+At the start of substantive work, also **consult the backlog** — `backlog list`
+(or `backlog show <ID>`): is this intent already captured as an open item, and
+do any open items bear on it?
+
 1. Correctness depends on project governance, an unfamiliar subsystem, or "what
    is the right way here?" → `/canon` and `/retrieve-memory` first.
 2. Substantive new work and the path is not yet clear → `/preflight`.
@@ -60,6 +64,9 @@ Mid-flight, regardless of stage:
 
 - Unanticipated obstacle, decision, or emergent complexity → `/consult`.
 - Durable fact / gotcha / pattern worth keeping → `/record-memory`.
+- Latent **work** intent surfaced but not for now (issue / improvement / chore /
+  risk / idea) → capture it with `backlog new`, don't lose it. Is it work or
+  knowledge or a decision? See the boundary in `using-doctrine.md`.
 - Finished a coherent unit → `/notes`; handing off to fresh context → `/next`.
 - Authoring evergreen specs under `doc/*` → `/spec-product`, `/spec-tech`.
 
