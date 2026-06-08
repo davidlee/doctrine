@@ -143,3 +143,76 @@ First kind on the spine; establishes the two seams every later phase reuses.
   `just check` clean (clippy zero warnings, fmt). e2e suites green. Behaviour-
   preservation suites (entity/registry/meta readers/is_divergent) green **unchanged**.
 - Manual CLI smoke confirmed: list (default/-f/--json), show (table), -s bogus error.
+
+## PHASE-03 — slice list/show on the spine + status vocab (commits 0817896, 547eb76)
+
+Second kind on the spine. Adds slice's variant axis (phase rollup + two markers)
+and the vocabulary-drift mechanism.
+
+### slice list (`src/slice.rs`)
+- Same `list_rows(root, ListArgs)` recipe as adr: validate_statuses(SLICE_STATUSES)
+  → listing::build → read_metas → retain(metas, &filter, is_hidden, key) → sort_by
+  id → join phase rollup → branch Table/Json. **Rollup join is AFTER retain** — the
+  filter projects `Meta` alone (the impure `state::phase_rollup` read runs only for
+  the survivors). adr has no such join; this is slice's variant axis.
+- Hide-set `is_hidden`: `{done, abandoned}` (terminal presentation). DISTINCT from
+  `is_terminal_status` `{done}` (divergence). DISTINCT from the vocab. Three sets,
+  never conflated — see the doc-comments tying them together.
+- JSON `SliceRow.phases` is STRUCTURED: `{completed, total, blocked}` or `null`
+  (untracked). NOT the rendered `4/6 !1 ?1` cell (OQ-1). The `?`/`⚠` markers are
+  table-display-only — absent from JSON. **PHASE-06 conformance contract.**
+- Table grid (`render_table`, renamed from `format_slice_rows`): header + per row
+  `canonical_id`, `decorated_status`, `phases_cell`, slug, title. Empty → "".
+
+### The two markers (independent predicates, same column)
+- `is_drifted(status)` = `!SLICE_STATUSES.contains(status)` → trailing `?`.
+  §5.5 vocabulary-drift invariant: an out-of-vocab STORED status is never hidden
+  (hide-set lists known terminals only) and is flagged `?`.
+- `is_divergent(status, rollup)` (UNCHANGED) → trailing ` ⚠`.
+- `decorated_status(status, rollup)` composes both: `{status}{?}{ ⚠}` (drift hugs
+  the token, divergence trails). Both can appear: `bogus? ⚠`. Computed in ONE place.
+
+### slice show (A-5 — metadata + scope ONLY)
+- The adr quartet, ported: `parse_ref` (SL-/sl-/bare), `SliceDoc` (Meta fields +
+  created/updated + `Relationships{specs,requirements,supersedes}` all
+  `#[serde(default)]`), `read_slice` (toml-as-data + slice-NNN.md body ONLY),
+  `format_show`/`show_json`. JSON envelope key is `slice` (cf adr's `adr`).
+- **NEVER folds design.md/plan.*/notes.md** — proved by
+  `show_does_not_fold_in_design_plan_or_notes` (writes sibling files with secret
+  markers, asserts neither table nor json leaks them). The reassembly opens only
+  `slice-NNN.{toml,md}`.
+
+### Vocabulary (D10) — `SLICE_STATUSES`
+- `&["proposed","ready","started","audit","done","abandoned"]`. Slice has NO status
+  enum → this `&[&str]` is the sole authority (no drift-canary against variants;
+  instead `slice_statuses_matches_the_spec_vocabulary` pins it to slices-spec).
+  Guards `--status` READ input only (writes deferred to the lifecycle verb).
+- slices-spec.md amended: added `abandoned` (with a definition: terminal-but-not-
+  delivered, distinct from done), updated the lifecycle set + the "unenforced" note
+  (read-filter is now enforced; writes stay manual). `superseded` was never in the
+  slice vocab — it was the ADR value mistakenly stored on SL-002.
+
+### Data migration (C-3)
+- SL-002 `superseded → abandoned` on `.doctrine/slice/002/slice-002.toml` ONLY
+  (hand edit, single field; the historical `# superseded by SL-003` comment kept as
+  prose history). The `002-entity-engine` symlink alias untouched (it is an alias,
+  not a 2nd entity).
+
+### main.rs wiring
+- `SliceCommand::List` flattens `CommonListArgs` (bespoke `--status: Option<String>`
+  dropped); dispatch `slice::run_list(path, list.into_list_args())`.
+- `SliceCommand::Show { reference, format, json, path }` added, mirroring adr.
+
+### meta narrowing
+- slice STOPPED calling `meta::sort_and_filter` (it sorts via `sort_by_key(id)`).
+  The fn STAYS — spec.rs:916 still calls it (PHASE-04 migrates spec). Its
+  status-filter half is dead-but-harmless until then.
+
+### Gate
+- 614 bin unit tests pass (was 593: +23 slice list/show/vocab/drift/decorated,
+  −2 old format_slice_rows tests renamed/expanded). `just check` clean (clippy zero
+  warnings, fmt). e2e suites green. Behaviour-preservation (entity/registry/meta
+  readers/is_divergent/is_terminal_status) green **UNCHANGED**.
+- Manual CLI smoke: default list hides SL-002, `--status abandoned` reveals it as
+  `abandoned`, `-s bogus` errors with the vocab list, `show SL-002` table +
+  `show 25 --json` envelope all correct; SL-025 shows `2/6` (rollup join works).
