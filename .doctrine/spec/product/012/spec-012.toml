@@ -12,6 +12,6 @@ responsibilities = [
   "Hold the durable how of a capability — its architecture and mechanism — descending from product intent and upstream of any single change's design.",
   "Place each technical spec at a level of architectural abstraction (the C4 ladder) and decompose a coarse spec into a single-parent hierarchy of finer ones.",
   "Capture peer architectural relations between specs distinct from containment, and anchor each spec to the concrete code it governs.",
-  "Track the living architecture: a spec can be retired, superseded, merged, or split as code refactors, with lineage recorded rather than silently mutated or orphaned.",
+  "Track the living architecture as code refactors: retire or supersede a spec with lineage recorded and children not orphaned; dedicated merge/split transform verbs are reserved.",
   "Admit both hand-authoring and import from code structure, converging on one code-anchored entity per governed unit rather than parallel surfaces.",
 ]

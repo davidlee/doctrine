@@ -22,14 +22,18 @@ architecture becomes a first-class artefact: a later agent can read the
 component boundaries, the decomposition, and the code anchors before touching
 the system, instead of reverse-engineering them every time.
 
-The technical spec is a **superset** of the product spec. It reuses the shared
-spec machinery — identity, requirements as peer entities, on-demand reassembly,
-corpus integrity (all PRD-002) — and adds what only the *how* needs: a place on
+A technical spec is a **second spec family** built on the shared specification
+machinery, not an extension of the product spec's content. It reuses the common
+substrate from PRD-002 — identity, requirements as peer entities, membership
+labels, on-demand reassembly, and corpus integrity — but it does not contain or
+restate the product spec. It adds only what the durable *how* needs: a place on
 the **C4 ladder** of abstraction, **decomposition** into a hierarchy of finer
 specs, typed **peer relations** to sibling specs, and **anchors** to the code it
-governs. Those anchors are also the convergence seam for a future capability:
-generating technical specs *from* code structure, so a hand-authored corpus and
-an imported one meet on one entity rather than two parallel surfaces.
+governs. The connection to product intent is an explicit **descent** relation,
+never duplicated prose. Those anchors are also the convergence seam for a future
+capability — generating technical specs *from* code structure — so a
+hand-authored corpus and an imported one meet on one entity, never two parallel
+surfaces.
 
 ## 2. Scope
 
@@ -46,8 +50,9 @@ In scope:
   that containment.
 - Anchoring a technical spec to the concrete code it governs, and admitting both
   hand-authoring and import from code structure onto that one anchor.
-- Tracking the living architecture as code refactors: a spec can be retired,
-  superseded, merged, or split, with lineage recorded.
+- Tracking the living architecture as code refactors: a spec can be retired or
+  superseded through the shared lifecycle, with lineage recorded and its
+  decomposition children not silently orphaned.
 
 Out of scope:
 
@@ -68,6 +73,13 @@ Out of scope:
 - The **importer's source and shape** — the concrete mechanism that reads an
   external code model and emits technical specs is unresolved (OQ-2) and not
   specified here; only the convergence requirement its output must satisfy is.
+- **Transform verbs and identity policy** — dedicated merge and split operations,
+  automatic child re-parenting, and the "ship of Theseus" identity threshold are
+  reserved (OQ-3, OQ-4). v1 supports retirement and supersession through the
+  shared lifecycle and represents merge or split as manual supersession with
+  recorded lineage; the dedicated verbs land later without reshaping the artefact.
+- **Code-level bulk corpus** — exhaustive per-unit specs at the `code` C4 level
+  are reserved for a future importer, not v1 hand-authoring (OQ-5).
 
 Boundary: a product spec owns the durable *what/why*; a technical spec owns the
 durable *how*; a slice owns one change; a drift ledger owns a recorded mismatch.
@@ -95,9 +107,11 @@ and the *how* and the *what* never share a home.
   extraction, dissolution — can legitimately transform or end it. Identity
   across those transitions is governed by recorded lineage, never a silent
   rewrite and never an orphaned child.
-- **Spec–code drift is surfaced, not silently carried.** When the code a spec
-  anchors moves or disappears, that divergence is a finding for the drift
-  capability to record, not a quiet inconsistency the corpus tolerates.
+- **A stale anchor is an integrity finding, not a silent inconsistency.** When
+  the code a spec anchors moves or disappears, that produces an anchor-integrity
+  finding. A drift pass may promote it into the drift ledger, but the corpus
+  never tolerates the mismatch quietly — and recording the drift is the drift
+  capability's job, not this one's.
 
 ## 4. Requirements
 
@@ -120,6 +134,20 @@ Constraints:
   design artefact.
 - Recording a spec–code mismatch is the drift capability's surface, not this
   one; this capability only exposes the anchor data a drift pass reads.
+- Cross-family descent is authored as an outbound typed relation on the technical
+  spec, targeting durable product-spec ids; the reverse view — which technical
+  specs realise a product spec — is derived by registry scan under ADR-004. The
+  concrete key/shape is the technical spec's and design's to fix.
+- A code anchor is a typed reference to governed implementation surface and may
+  name one or many locations. v1 anchors may be path-level; later symbol, module,
+  or importer anchors must converge through the same anchor seam, never a
+  parallel code-spec surface.
+- Hand-authored technical specs normally stop at container or component level.
+  Code-level specs are admitted when they carry durable architectural value, but
+  routine code-level coverage is reserved for a future importer.
+- Merge and split lineage are reserved transformation behaviours: v1 preserves
+  lineage for retirement and supersession only; dedicated merge/split verbs and
+  automatic child re-parenting are deferred (OQ-4).
 
 Invariants:
 
@@ -132,9 +160,15 @@ Invariants:
   one anchor.
 - The technical *how* and the product *what* never share a home; a technical
   spec descends from a product spec without restating it.
-- A transformed spec (retired, superseded, merged, split) never silently
-  disappears and never orphans its decomposition children; its lineage remains
-  recoverable.
+- A retired or superseded spec never silently disappears and never orphans its
+  decomposition children; its lineage remains recoverable.
+- A technical spec's descent relation never restates product intent; it only
+  points to the product capability it realises.
+- A code anchor is not proof that the spec is current; it is the surface a drift
+  or reconciliation pass reads to detect whether spec and implementation still
+  agree.
+- A missing or moved anchor is an anchor-integrity finding; recording it as drift
+  belongs to the drift capability, never to this one.
 
 ## 5. Success Measures
 
@@ -146,9 +180,9 @@ Invariants:
   rather than containment.
 - A spec's altitude is unambiguous: its C4 level tells a reader whether it
   describes a system, a deployable unit, a component, or code.
-- When the architecture refactors — two components merge, one splits — the
-  corpus reflects the new shape with lineage intact, and no child is left
-  pointing at a vanished parent.
+- When the architecture refactors, the corpus can reflect the new shape with
+  lineage intact and no child left pointing at a vanished parent — by
+  supersession in v1, by dedicated transform verbs when they land.
 - A future importer generating specs from code structure lands on the same code
   anchors a hand author would use, producing no duplicate or competing entity
   for an already-specified unit.
@@ -160,38 +194,44 @@ Invariants:
 
 Primary flow — place and anchor: an operator authors a technical spec for a
 capability's architecture, declares its C4 level, and anchors it to the code it
-governs. The spec records the product capability it descends from. It opens in
-the draft stage and reassembles (PRD-002) as one readable whole.
+governs. The spec records the product capability it descends from. It uses
+PRD-002's shared lifecycle — opening in draft — and adds no tech-specific
+standing dialect; it reassembles (PRD-002) as one readable whole.
 
 Primary flow — decompose: an operator marks a finer-grained spec as a child of a
 coarser one. The containment is stored once, outbound, on the child; the
 parent's set of children is derived. A coarse spec and its children together
-describe one subsystem at successive C4 levels.
+describe one subsystem, usually at successive C4 levels — though a child may
+refine a parent at the same level where the architecture warrants it.
 
 Primary flow — relate as peers: an operator records a typed interaction (a spec
 uses or calls another) between two technical specs. The edge is a peer relation,
 distinct from containment, and resolves to an existing technical spec.
 
-Transform flow — the living architecture: as code refactors, a spec is retired,
-superseded by another, merged with siblings into one, or split into several. The
-transition records lineage — what became what — rather than deleting or
-rewriting the entity in place; a parent that is removed reattaches or
-re-parents its children rather than orphaning them.
+Transform flow — the living architecture: as code refactors, a spec is retired
+or superseded through the shared lifecycle, recording lineage — what became
+what — rather than being deleted or rewritten in place. Merge and split are
+represented in v1 as manual supersession with recorded lineage; dedicated
+transform verbs are reserved (OQ-4). When a parent is removed, re-parenting its
+children is an explicit step, never automatic, and an unresolved orphan is an
+integrity finding.
 
 Import flow (forward-looking): a tool reads an external code model and emits
 technical specs anchored to code structure. Where an anchor already has a
 hand-authored spec, the import reconciles to that one entity; it does not create
 a parallel spec for the same governed code.
 
-Integrity and drift guards: a containment that would introduce a cycle or a
-second parent is rejected as a hard finding. A spec whose code anchor no longer
-resolves to live code is surfaced as drift for the drift capability to record;
-the corpus does not silently carry the mismatch.
+Integrity guards: a containment that would introduce a cycle or a second parent
+is rejected as a hard finding. A spec whose code anchor no longer resolves to
+live code produces an anchor-integrity finding; a drift pass may promote that
+finding into the drift ledger, but PRD-012 does not itself create the drift
+record.
 
 Edge cases and failure modes: a root spec has no parent and that is valid; a
-peer interaction targeting a product spec rather than a technical one is a
-dangling reference; a merge that leaves a child pointing at a superseded parent
-is an orphan the integrity guard flags.
+peer interaction targeting a product spec rather than a technical one is an
+invalid target kind, not a dangling reference — the target exists, but the edge
+type is wrong; a supersession that leaves a child pointing at a superseded
+parent is an orphan the integrity guard flags.
 
 ## 7. Verification
 
@@ -207,14 +247,16 @@ it governs, and reassembles as one readable whole. Decomposition is proven by
 confirming containment is stored outbound on the child, a parent's children are
 derived rather than stored, and a containment that would form a cycle or a
 second parent is rejected. Peer relations are proven by confirming a typed
-interaction resolves to an existing technical spec and is reported dangling
-otherwise, and that it is never mistaken for containment. The hand/import
-convergence is proven by confirming an import onto an already-anchored unit
-reconciles to the existing entity rather than creating a parallel one. The
-transform behaviour is proven by confirming a retired, superseded, merged, or
-split spec preserves recoverable lineage and never orphans its children. Drift
-detection is proven by confirming a spec whose anchor no longer resolves to live
-code is surfaced, deferring the recording itself to the drift capability.
+interaction resolves to an existing technical spec, is reported as an invalid
+target kind when it points at a non-technical spec, and is never mistaken for
+containment. The hand/import convergence is proven by confirming an import onto
+an already-anchored unit reconciles to the existing entity rather than creating
+a parallel one. The transform behaviour is proven by confirming a retired or
+superseded spec preserves recoverable lineage, is never deleted in place, and
+never silently orphans its children; merge and split verbs are reserved and not
+gated here. Anchor integrity is proven by confirming a spec whose anchor no
+longer resolves to live code yields an anchor-integrity finding, deferring the
+drift record itself to the drift capability.
 
 Where a check must reference a specific obligation, it cites the durable
 requirement entity (REQ-NNN), never a mobile membership label. Coverage of the
@@ -223,11 +265,11 @@ duplicated here.
 
 ## 8. Open Questions
 
-- OQ-1 — Cross-family descent has no edge mechanism yet: a technical spec must
-  record the product capability it realises, but the shipped spec→spec edge
-  (`interactions`) is technical-only. Does descent reuse a generalised typed
-  edge, a dedicated field, or a new relation kind? Blocks wiring descent and any
-  coverage gate that reads it.
+- OQ-1 (resolved) — Cross-family descent is an outbound typed relation authored
+  on the technical spec, targeting durable product-spec ids. It is not a peer
+  technical interaction and is not prose. The reverse view — which technical
+  specs realise a product spec — is derived by registry scan under ADR-004. The
+  concrete key and serialisation are left to the technical spec and design.
 - OQ-2 — The importer's source and shape are unresolved: what external code
   model does code-structure import read (likely an integration with another
   tool rather than much new code), and at what C4 granularity does it emit —
@@ -241,7 +283,8 @@ duplicated here.
   and "one spec becomes N" recorded over the decomposition tree and the status
   lifecycle — typed lineage edges, status plus interactions, or a dedicated
   lineage facet? Blocks the transform verbs.
-- OQ-5 — Hand-authoring depth versus import: should the hand-authored corpus
-  stop at component level and reserve code-level, per-unit specs for the
-  importer, or is hand-authoring at code level ever warranted? Blocks the
-  backfill's altitude boundary (SL-021).
+- OQ-5 (partially resolved) — Hand-authored technical specs normally stop at
+  container or component level; code-level specs are admitted only when they
+  carry durable architectural value, and routine code-level coverage is reserved
+  for a future importer, which must converge on the same code-anchor seam. Open
+  remainder: the exact threshold for an exceptional hand-authored code-level spec.

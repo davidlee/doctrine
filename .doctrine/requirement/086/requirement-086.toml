@@ -2,15 +2,15 @@ schema = "doctrine.requirement"
 version = 1
 
 id = 86
-slug = "transform-a-technical-specs-lineage-as-the-architecture-refactors"
-title = "Transform a technical spec's lineage as the architecture refactors"
+slug = "preserve-lineage-and-integrity-when-a-technical-spec-is-retired-or-superseded"
+title = "Preserve lineage and integrity when a technical spec is retired or superseded"
 status = "pending"
 kind = "functional"
 
-description = "As code refactors, a technical spec can be retired, superseded, merged, or split, recording lineage rather than being silently deleted or rewritten, and never orphaning its children."
+description = "A technical spec is retired or superseded through the shared lifecycle, recording recoverable lineage rather than being deleted or rewritten in place, and never silently orphaning its decomposition children. Dedicated merge and split verbs are reserved."
 tags = []
 acceptance_criteria = [
-  "A spec can reach a terminal or transformed standing — retired, superseded, merged, or split — with its lineage (what became what) recoverable.",
+  "A technical spec can be retired or superseded through the shared spec lifecycle, with its lineage (what became what) recoverable.",
   "A transformed spec is never silently deleted or rewritten in place.",
-  "Removing a parent re-parents or reattaches its children rather than leaving them orphaned.",
+  "Its decomposition children are never silently orphaned; re-parenting them is an explicit step, and an unresolved orphan is an integrity finding.",
 ]
