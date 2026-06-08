@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 6
+slug = "uniform-destructive-lifecycle-verbs"
+title = "Uniform destructive + lifecycle-transition verbs across kinds (delete/archive, status-transition)"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-08"
+updated = "2026-06-08"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []

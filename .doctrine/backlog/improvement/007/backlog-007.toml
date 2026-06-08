@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 7
+slug = "boot-memory-render-trim"
+title = "Trim boot snapshot memory section (signpost-only or capped) on the boot render seam"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-08"
+updated = "2026-06-08"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
