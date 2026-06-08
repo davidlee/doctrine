@@ -131,10 +131,13 @@ numeric-reader charter.
 **`boot.rs` is a declared non-clap consumer.** The governance snapshot renders its
 ADR and Memory sections via `adr::list_rows`/`memory::list_rows` (`boot.rs:124,127`).
 Boot builds a `listing::Filter` directly from plain values — no clap — which is
-itself the proof the leaf is genuinely clap-free (A-3). Boot adopts the new surface:
-prefixed `ADR-` ids + header in the ADR section, the hide-terminal default in the
-Memory section. Boot's snapshot tests change with the format (R6); it is listed in
-the §9 gate as a *changing* consumer, not part of the unchanged engine gate.
+itself the proof the leaf is genuinely clap-free (A-3). Boot adopts the new surface: prefixed `ADR-` ids + header in the ADR section. Its
+Memory section is rendered **active-only** — an explicit boot predicate, decoupled
+from the CLI `memory list` default (which keeps `draft` visible) — because boot is an
+agent-context producer and `draft` is unreviewed (matches `memory-spec` draft
+exclusion + `retrieve.rs`; C-4). Boot's snapshot tests change with the format (R6);
+it is listed in the §9 gate as a *changing* consumer, not part of the unchanged
+engine gate.
 
 **Dead-code removal on migration:** `meta::format_list` (last caller: adr) and the
 filter half of `meta::sort_and_filter` (superseded by `retain`) are removed — repo
@@ -247,7 +250,8 @@ so the command layer can wire `#[arg(value_parser)]` without clap in the leaf):
 
 ```rust
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Format { Table, Json }   // + impl FromStr (table|json)
+pub(crate) enum Format { Table, Json }   // + impl FromStr + Display (table|json);
+                                         // Display required by clap default_value_t (C-6)
 
 /// `SL` + `025` → `"SL-025"`. The single id-form authority.
 pub(crate) fn canonical_id(prefix: &str, id: u32) -> String;
@@ -287,9 +291,12 @@ toml-as-data + md-body reassembly, parameterised like the existing `spec`/
   status-filter half is removed (superseded by `retain`).
 - **Slice status vocabulary (amended authority — D10).** `slices-spec.md`'s set
   becomes `{proposed, ready, started, audit, done, abandoned}`, enforced as the
-  `validate_statuses` known-set for `slice list --status`. Write-time/transition
-  enforcement stays deferred (lifecycle verb). The 2 live `superseded` slices
-  migrate to `abandoned` as part of this slice.
+  `validate_statuses` known-set for `slice list --status` (filter input only).
+  Write-time/transition enforcement stays deferred (lifecycle verb), so the read
+  surface guards its own coherence (§5.5 vocabulary-drift invariant). **1** canonical
+  slice migrates `superseded → abandoned` (`002`; the `002-entity-engine` symlink is
+  an alias, NOT a second entity — migration operates on numeric dirs via
+  `entity::scan_ids`, C-3).
 - The id prefix is owned by `entity::Kind.prefix` (already present) and consumed
   by `canonical_id`. Memory is the exception: its uid *is* its canonical id, so
   it does not route through `canonical_id`.
@@ -309,12 +316,15 @@ toml-as-data + md-body reassembly, parameterised like the existing `spec`/
    `validate_statuses` against the kind's known set.
 3. kind reads its rows (existing readers: `meta::read_metas`, `backlog::read_all`,
    memory's lister).
-4. `retain(rows, &filter, kind::is_terminal, …)` — shared.
-5. branch on `Format`:
+4. `retain(rows, &filter, kind::is_hidden, …)` — shared, FILTER-ONLY.
+5. **kind sorts the retained rows** (slice/adr/spec by id; backlog by
+   `(kind.ordinal, id)`; memory `created`-desc+uid) — ordering is the variant axis,
+   never in `retain` (C-5; tested via intentionally-unsorted fixtures, §9).
+6. branch on `Format`:
    - `Table` → kind assembles its grid (prefixed ids via `canonical_id`, header
      row) → `render_table`.
    - `Json` → kind serialises its faithful rows → `json_envelope`.
-6. shell writes to stdout.
+7. shell writes to stdout.
 
 `show` flow: resolve ref → kind/dir/id; read toml + md; `Table` reassembles the
 readable whole (today's behaviour for spec/backlog/memory; new for slice/adr),
@@ -345,6 +355,18 @@ handler, two surface names.
   (`terminal && completed<total`), the opposite of what it claimed. The split
   avoids it: an `abandoned` slice is hidden by default (hide-set) yet does not
   false-flag `⚠` (divergence-terminal excludes it).
+- **abandoned + complete phases legitimately flags `⚠`** (C-2). `is_divergent`
+  clause 2 (`!terminal && total>0 && completed==total`, `slice.rs:361`) fires for a
+  non-`done` slice with all phases complete — including `abandoned`. This is
+  behaviour *preserved* (today's `superseded` does the same) and a genuine reconcile
+  signal (work finished but not marked `done`). Intended; both abandoned cases
+  (incomplete → quiet, complete → `⚠`) are tested (§9). `is_divergent` stays untouched.
+- **Vocabulary-drift invariant (C-1).** Half-enforcement (read-validated,
+  write-deferred) must not silently hide or mask a drifted status. Two guards:
+  (a) `--status` input is validated against the vocab (typo protection); (b) an
+  *out-of-vocab stored* slice status is never hidden (the hide-set lists only known
+  terminal values) and renders with a trailing `?` drift marker — distinct from the
+  divergence `⚠`. (Slice-local: the enum kinds cannot store an out-of-vocab value.)
 - **backlog positional** — `[SUBSTR]` is retained as a deprecated alias: when
   `--filter` is absent and the positional present, the positional feeds `substr`;
   `--filter` is canonical. No break.
@@ -455,15 +477,25 @@ handler, two surface names.
 - **Domain-distinction test (F-N9)**: a row whose `canonical` matches the regex but
   whose slug+title do NOT match the substr (and vice-versa) — proves the two match
   domains are wired independently (guards the A-1 regression).
-- **Ordering-preservation test (F-N9)**: slice/adr/spec by id, backlog by
-  `(kind.ordinal,id)`, memory `created`-desc+uid, asserted after `retain`.
+- **Ordering-preservation test (F-N9/C-5)**: through each kind's `list_rows` with
+  intentionally-unsorted fixtures — slice/adr/spec by id, backlog by
+  `(kind.ordinal,id)`, memory `created`-desc+uid (a pure `retain` test can't catch a
+  dropped sort).
+- **Per-kind filter-wiring test (C-7)**: for each kind, `--filter` (substr) vs
+  `--regexp` over its *real* projection — a canonical-only-matching fixture proves
+  the kind wires canonical/slug/title correctly (the unit domain-distinction test
+  proves only `retain` in isolation).
+- **Vocabulary-drift test (C-1)**: a slice with an out-of-vocab stored status lists
+  (not dropped) with the `?` marker; `--status bogus` is rejected.
 - **Per-kind tests**: prefixed-id rows; hide-set default + reveal; faithful
   JSON per kind; `slice show`/`adr show` (table + json); `memory new` ≡
   `memory record`; backlog `--filter` ≡ positional; `slice list --status abandoned`
   accepted + `--status bogus` rejected (D10); 2 migrated slices read as `abandoned`.
-- **Boot-consumer preservation test (F-N9/R6)**: boot renders via the new
-  `list_rows`; assert the ADR section gains `ADR-` ids + header and the memory
-  section applies the hide-default.
+- **Boot-consumer preservation test (F-N9/R6/C-4/C-7)**: boot renders via the new
+  `list_rows`; fixture carries active + draft + each hidden memory status
+  (superseded/retracted/archived/quarantined). Assert the ADR section gains `ADR-`
+  ids + header, and the memory section is **active-only** (drafts excluded — NOT the
+  CLI list default).
 - **Conformance test**: every `list` subcommand parses the shared flags (R5).
 - **Lint/format gate**: `just check` (plain `cargo clippy`, zero warnings),
   house string-assembly + no-`as` + BTree + `#[expect]` styles.
@@ -527,6 +559,28 @@ Found NEW issues beyond A-1…A-9; all integrated above:
   boot-consumer preservation tests (§9).
 - *Non-finding noted:* OQ-3 short-flag collision risk is near-nil — every current
   `list` flag is long-only except `-p` (kept per-variant).
+
+### Second external pass (codex/gpt-5.5, fresh) — integrated
+
+Ran after the first external pass was integrated; found issues the prior two missed:
+
+- **C-1 (coherence, 🟠HIGH)** — D10 half-enforcement (read-validated, write-deferred)
+  could let a stored status be unfilterable/silently hidden. Fixed: vocabulary-drift
+  invariant (§5.5) — input validated, out-of-vocab stored status never hidden, marked `?`.
+- **C-2 (under-spec, 🟠)** — `abandoned`+complete-phases flags `⚠` via `is_divergent`
+  clause 2; only the incomplete case was argued. Resolved: documented as intended +
+  behaviour-preserved, both cases tested (§5.5/§9).
+- **C-3 (fact, 🟠)** — migration is **1** slice, not 2 (`002-entity-engine` is a
+  symlink alias). Fixed (§5.3/D10/scope); migration over numeric dirs via `scan_ids`.
+- **C-4 (context leak, 🟠)** — boot's memory section would leak `draft` (unreviewed)
+  into agent context. Fixed: boot memory section is active-only, decoupled from the
+  CLI list default (§5.1; matches `memory-spec`/`retrieve.rs`).
+- **C-5 (under-spec, 🟠)** — §5.4 flow omitted the sort step; a literal refactor could
+  drop backlog/memory ordering. Fixed: explicit sort step (§5.4) + unsorted-fixture
+  pipeline tests (§9).
+- **C-6 (🟡)** — `default_value_t` needs `Format: Display`. Fixed (§5.2).
+- **C-7 (🟡)** — tests underpowered. Fixed: per-kind filter-wiring tests + boot
+  fixtures spanning every hidden status (§9).
 
 Residual open items carried to `/plan`: OQ-1 (per-kind JSON field shapes),
 OQ-2 (`show --format json` relationships inclusion), OQ-3 (collision audit).
