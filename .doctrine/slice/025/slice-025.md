@@ -63,18 +63,23 @@ shared contract onto the entity engine. Concretely:
    explicit `--status`, matching `backlog`. The per-kind terminal-status set is
    read from the engine (e.g. the existing `slice::is_terminal_status` seam),
    not re-encoded.
-4. **Uniform filter surface (F-4).** A shared filter vocabulary across `list`: a
-   `[SUBSTR]` title/slug substring positional and `--status`/`--tag` where the
-   kind carries the axis, plus kind-specific axes (`memory --type`, `backlog
-   --kind`) layered on the same base. Filters AND together, uniformly.
+4. **Uniform filter surface (F-4).** A shared filter vocabulary across `list`,
+   carried in a flattened `CommonListArgs` clap bundle: `--filter/-f` (substring
+   on slug+title), `--regexp/-r` + `--case-insensitive/-i` (regex over
+   canonical-id+slug+title), `--status/-s` (multi-value; any value reveals
+   terminal), `--tag/-t` (repeatable, OR), `--all/-a`. Kind-specific axes
+   (`memory --type`, `backlog --kind`) layer on the same base. Filter axes AND
+   across each other. backlog's existing `[SUBSTR]` positional is retained as a
+   deprecated alias of `--filter` (no break). Adds the `regex` crate (decided
+   explicitly — the repo was deliberately regex-free).
 5. **Uniform output shape + shared renderer (F-5, F-6).** One render path
    produces the human table (consistent header/column policy) and a `--json`
    (or `--format json`) machine-readable form, for `list` and `show`, across all
    kinds. The serializer lives once on the engine/render layer.
-6. **Create-verb alignment (F-7).** Reconcile `memory record` with the `new`
-   convention. The exact mechanism (rename, alias, or deprecation path) is a
-   design decision; the objective is one create verb across kinds without
-   silently breaking existing `memory record` call sites in skills/scripts.
+6. **Create-verb alignment (F-7).** `memory new` becomes the canonical create
+   verb (uniform with every other kind) via `#[command(alias = "record")]`;
+   `memory record` keeps working unchanged. One create verb across kinds, zero
+   break to existing call sites in skills/scripts.
 
 **Closure intent.** "Done" is judged by: `show` resolves for all five kinds;
 every `list`/`show` emits canonical prefixed ids; default `list` hides terminal
@@ -93,7 +98,6 @@ rows) and are updated as part of the work, not worked around.
 - **Boot snapshot memory rendering (F-8).** The heavy all-memories dump in the
   boot snapshot is a `boot`-render concern on a different seam, not the
   `memory list` command. Out of scope. (Follow-up.)
-- **Regex filtering.** Substring covers the need; regex is not in scope.
 - **`find`/`retrieve` ranking semantics.** Memory's scope-ranked retrieval is a
   distinct surface; this slice does not touch its ranking or holdback.
 - **New `--json` schema as a versioned external contract.** The machine-readable
