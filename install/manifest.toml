@@ -5,6 +5,7 @@ target = ".doctrine"
 create = [
   ".doctrine/adr",
   ".doctrine/agents",
+  ".doctrine/backlog",
   ".doctrine/memory/items",
   ".doctrine/requirement",
   ".doctrine/scripts",
