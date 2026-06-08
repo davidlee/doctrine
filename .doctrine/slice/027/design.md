@@ -147,6 +147,8 @@ three current bodies:
 - `[facet]` ends `controls = [..]\n`; `[relationships]` segment leads `\n[relationships]` ✓
 - `[relationships]` ends `drift = []\n` ✓
 - `write_item` (no trailers) = head only, no trailing blank line ✓
+- `:1813` fully-assessed risk — head (`tags = ["security"]`) + facet + rels;
+  reproduced exactly, same `risk/001` path ✓
 - `toml_list`: `&[] → ""`, `&["a"] → "\"a\""`, `&["a","b"] → "\"a\", \"b\""` —
   matches both old closures ✓
 
@@ -157,8 +159,14 @@ Same bytes in → identical parse/assert downstream → suite green.
 - **No new tests.** This is a refactor; the existing backlog suite staying green
   **unchanged** is the behaviour-preservation gate and the whole proof.
 - `just check` (fmt + clippy zero-warnings + test + build) green.
-- **Closure check:** `grep -c 'created = "2026-06-08"'` within the
-  `src/backlog.rs` test module returns **1** (one builder owns the literal).
+- **Closure check:** `grep -c 'created = \"2026-06-08\"'` over `src/backlog.rs`
+  drops from **7 → 4**. The four *fixture-builder* copies (`write_item` :1439,
+  `:1813` :1809, `write_assessed_risk` :1934, `write_related` :1955) collapse to
+  **one** (the unified builder). The three survivors are deliberately-explicit
+  **in-memory / error-path** inputs that must show their exact bytes, not fixture
+  builders: `:1157` (`:1161` parser round-trip), `:1190`
+  (`validate_errors_on_an_unknown_enum_token`), `:2075`
+  (`backlog_edit_refuses_malformed…`).
 - ISS-001 transitioned to its resolving state at `/close`.
 
 ## 6. Scope / Phasing

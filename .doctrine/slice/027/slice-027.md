@@ -37,11 +37,16 @@ builder** in the `src/backlog.rs` test module, such that:
 2. The optional `[facet]` and `[relationships]` trailers are expressed as
    parameters of the single builder (present → emitted, absent → omitted),
    covering every shape the three current helpers produce.
-3. All call sites move to the unified builder. Existing assertions are not
-   touched beyond the mechanical call-site swap; the suite stays green.
+3. The three named helpers survive as thin wrappers delegating to the core; their
+   ~30 call sites are unchanged. A **fourth** head-copy — an inline literal at
+   `src/backlog.rs:1813` (`backlog_show_json_is_faithful_item_state`), a
+   fully-assessed risk the old narrow helpers could not express — folds into the
+   unified builder (the one call-site change). Existing assertions are untouched;
+   the suite stays green.
 
 Affected surface (concrete): the `#[cfg(test)] mod tests` block of
-`src/backlog.rs` only — the three builders above and their call sites.
+`src/backlog.rs` only — the three builders, the `:1813` inline literal, and (for
+the wrappers) their unchanged call sites.
 
 ## Non-Goals
 
@@ -52,8 +57,12 @@ Affected surface (concrete): the `#[cfg(test)] mod tests` block of
   status/resolution/tags/facet/relations, so a test-local builder remains the
   right tool. (If a clean reuse seam surfaces during design, `/consult` — do not
   improvise it here.)
-- **No new fixture capabilities** beyond what the three current helpers express
-  — this is consolidation, not feature growth.
+- **No new fixture capabilities** beyond what the three current helpers plus the
+  `:1813` literal express — this is consolidation, not feature growth.
+- **Inline parser / error-path literals stay explicit.** `:1161` (in-memory
+  `toml::from_str` round-trip), `:1190` (unknown-enum error), and `:2075`
+  (malformed-edit) feed bytes directly to the parser and must show those exact
+  bytes — they are not fixture builders and do not move.
 - **No change to the e2e fixture** in `tests/e2e_backlog_filter_alias.rs` (a CLI
   driver, not a TOML builder).
 
@@ -77,7 +86,7 @@ Affected surface (concrete): the `#[cfg(test)] mod tests` block of
 
 - `cargo test` backlog suite green, assertions unchanged.
 - `cargo clippy` zero warnings (`just check`).
-- The core TOML head + list-literal quoting exist in exactly one place;
-  `grep` for the duplicated `created = \"2026-06-08\"` literal returns a single
-  builder.
+- The core TOML head + list-literal quoting exist in exactly one place; the
+  `created = \"2026-06-08\"` literal drops from 7 → 4 occurrences (one unified
+  builder + three deliberately-explicit parser/error fixtures).
 - ISS-001 transitioned to its resolving state at `/close`.
