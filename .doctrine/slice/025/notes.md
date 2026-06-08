@@ -306,3 +306,88 @@ the deprecated positional alias (A-7).
   list --json (ONE envelope, subtype per row), -s bogus (uniform error); backlog
   list (prefixed, ordinal+id sort), positional `auth` filters, `auth --filter
   token` → token wins (A-7), backlog show --json faithful.
+
+## PHASE-05 — memory + boot consumer (commit 7283121)
+
+The LAST kind on the spine — the exception kind — plus boot's last section.
+
+### memory list (`src/memory.rs`)
+- `list_rows(root, type_f: Option<MemoryType>, args: ListArgs)` on the spine:
+  validate_statuses(MEMORY_STATUSES) → listing::build → collect_all → retain(rows,
+  &filter, is_hidden, key) → `--type` retain → `sort_default` → Table/Json.
+- **THE uid exception (§5.3/§5.5)**: `key(m).canonical = m.uid` directly — NOT
+  `canonical_id`. The regex domain is the full `mem_<32hex>`. memory has no slug, so
+  `key` plays the slug role in the substr/regex domains. JSON `uid` is NOT prefixed.
+- **Hide-set** `{superseded, retracted, archived, quarantined}` via
+  `is_hidden(status:&str) = Status::parse(s).is_ok_and(Status::is_hidden)`. active +
+  draft VISIBLE (the SL-005 list showed ALL six — this is the BEHAVIOUR CHANGE).
+  `--all`/explicit `--status` reveals (the uniform rule, in `retain`).
+- **Re-gridded onto `render_table`** (handover-recommended, §5.2 shared-renderer
+  closure intent). The private `format_list` width-printer DELETED. Columns
+  `uid type status trust key title` (EX-1: trust is the new column vs SL-005's
+  uid/type/status/key/title). Header row 0; empty → "". **F-A10 scrub preserved**:
+  `key` + `title` cells `scrub_line`d (newline-injection guard) — the re-grid kept it.
+- `MEMORY_STATUSES` = the 6 Status variants + drift-canary
+  `memory_statuses_matches_the_variants` (adr/spec/backlog precedent). Closed enum →
+  NO `?` drift marker (slice-only).
+- **`--type` is the one kind-specific axis** (kept beside the flatten — backlog
+  `--kind` precedent), applied via `rows.retain` AFTER the shared retain.
+- **JSON** = `{kind:"memory", rows:[{uid, type, status, trust, key|null, title}]}`.
+  `MemoryRow` serde struct (`#[serde(rename="type")]`); `trust`/`title` scrubbed.
+  **PHASE-06 conformance contract.**
+
+### select_rows KEPT (retrieve dep) + sort extracted
+- `retrieve.rs:672` still calls `select_rows(collect_all, type_f, status_f, None)`
+  for its typed filter + sort — NOT changed. Extracted the created-desc+uid
+  comparator into `sort_default(&mut [Memory])`, shared by both `select_rows` and
+  `list_rows` (DRY — one comparator, the §5.2 ordering contract).
+
+### memory show --json (`src/memory.rs`)
+- `run_show` gained `format: Format`; dispatch folds `json → Format::Json`.
+  `show_json(m, body)` hand-projects (private fields, closed enums via `as_str`) the
+  full entity under `{kind:"memory", memory:{uid,key,type,status,title,summary,
+  created,updated,scope{...},anchor{kind,commit,checkout_state_id,ref,verified_sha},
+  verification_state,reviewed,review_by,trust_level,severity,weight}, body}`. Table
+  path UNCHANGED (the SL-005 nonce-framed `render_show`; nonce only minted for Table).
+  **PHASE-06 conformance contract.**
+
+### memory new alias (`src/main.rs`)
+- `#[command(visible_alias = "new")]` on `MemoryCommand::Record` — two surface
+  names, ONE handler (`run_record`), identical entity. `memory record` keeps working.
+  Proven by `tests/e2e_memory_new_alias.rs` (the alias is unreachable from a unit
+  test — backlog A-7 precedent): both verbs, identical args → same normalised toml.
+
+### boot active-only (`src/boot.rs`, C-4)
+- boot's memory section calls `list_rows(root, None, ListArgs{ status:
+  vec!["active"], ..default })` — an EXPLICIT active-only predicate, DECOUPLED from
+  the CLI list default (which keeps draft). boot is an agent-context PRODUCER; draft
+  is unreviewed → must not leak. Mirrors the ADR section's `status:["accepted"]`.
+- Boot snapshot test `regenerate_projects_accepted_adrs_and_memory_pointers`
+  unchanged (its memory is active). NEW test
+  `boot_memory_section_is_active_only_decoupled_from_the_list_default`: a fixture
+  spanning active + draft + each of the 4 hidden states → asserts boot shows
+  active-ONLY, while `list_rows` default hides the 4 terminal but KEEPS draft (VT-3 —
+  the two distinct visibility rules).
+
+### main.rs wiring
+- `MemoryCommand::List` flattens `CommonListArgs` (dropped bespoke single
+  `--status`/`--tag`; KEEPS `--type`); dispatch `run_list(path, memory_type,
+  list.into_list_args())`. `Show` gained `format`/`json`. `Record` gained the
+  visible_alias.
+- **OQ-3 short-flag check**: memory's `--type`/`--tag` were LONG-ONLY pre-SL-025, so
+  NO collision with the shared `-t` (tag) or any of `-f/-r/-i/-s/-a`. `-p` stays the
+  per-variant root locator. The shared `-t` is now tag (Vec, OR); the old memory
+  `--tag` was single `Option<String>`. No demotion needed for memory.
+
+### Gate
+- 634 bin unit tests pass (was 625: +9 — drift-canary, is_hidden, key-uid-exception,
+  hide default+reveal+all, bad-status reject, list json, --type filter, show_json;
+  the 3 format_list tests migrated to format_rows; the 4 list_rows tests retargeted
+  to the new signature). +1 e2e (`e2e_memory_new_alias`). `just check` clean (plain
+  clippy zero warnings, fmt). All e2e green. Behaviour-preservation
+  (entity 24 / registry 25 / slice::tests 44 incl is_divergent + is_terminal_status)
+  green **UNCHANGED** — memory list default change is a DECLARED consumer change, not
+  the engine gate.
+- Manual CLI smoke: memory new (alias), list (type/trust cols + header, draft
+  visible), list --json (uid not prefixed), -s bogus (six-status error), show --json
+  (faithful + body), --type fact, -f substr on title.
