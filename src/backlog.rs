@@ -16,17 +16,11 @@
 //! seam for the optional `resolution`/risk-level fields). The kind-agnostic engine
 //! is `crate::entity` (unchanged — five new `Fresh` callers only, the R6 gate).
 //!
-//! PHASE-01 is the model + scaffold half: NO CLI surface yet (PHASE-02 wires
-//! `new`/`list`/`show`/`edit`). The model is reachable only via its `Kind`s and
-//! the tests until those verbs land, so the whole module is production-dead this
-//! phase — the module-level `#![expect(dead_code)]` is the bridge, retired the
-//! moment a verb consumes each item (the `requirement.rs`/`retrieve.rs`
-//! precedent). The inert `KIND_PRECEDENCE` const keeps the expectation fulfilled
-//! in both the lib and test builds.
-#![expect(
-    dead_code,
-    reason = "model + scaffold consumed by PHASE-02..05 verbs; no CLI this phase"
-)]
+//! All four verbs (`new`/`list`/`show`/`edit`) are wired into the CLI as of
+//! PHASE-06; the only production-dead item left is `KIND_PRECEDENCE` — inert
+//! until the PRD-011 multi-kind resolver consumes it. Its dead-code expectation
+//! is scoped to that one const (below), NOT module-wide, so genuinely-dead code
+//! introduced later still surfaces.
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -98,8 +92,10 @@ const IDEA_KIND: Kind = Kind {
 /// capture could match several kinds, `risk` wins, then issue/improvement/chore/
 /// idea. INERT in v1 — `new` always takes an explicit kind, so this is never
 /// exercised; recorded so the order is canon when the resolver lands (PRD-011).
-/// (Deliberately referenced nowhere — it keeps the module `dead_code` expectation
-/// fulfilled in both the lib and test builds while the verbs are unwired.)
+#[expect(
+    dead_code,
+    reason = "inert until the PRD-011 multi-kind resolver consumes it"
+)]
 const KIND_PRECEDENCE: [ItemKind; 5] = [
     ItemKind::Risk,
     ItemKind::Issue,
@@ -147,17 +143,10 @@ impl ItemKind {
     }
 
     /// Resolve a canonical-id prefix back to its kind (`backlog show <ID>`
-    /// auto-detect, PHASE-04). Prefixes come from the `Kind`s — the single source.
+    /// auto-detect, PHASE-04). Prefixes come from the `Kind`s — the single source;
+    /// the kind set is `ItemKind::ALL` (one declaration, not a second copy).
     fn from_prefix(prefix: &str) -> Option<Self> {
-        [
-            ItemKind::Issue,
-            ItemKind::Improvement,
-            ItemKind::Chore,
-            ItemKind::Risk,
-            ItemKind::Idea,
-        ]
-        .into_iter()
-        .find(|k| k.prefix() == prefix)
+        ItemKind::ALL.into_iter().find(|k| k.prefix() == prefix)
     }
 
     /// Whether this kind carries a risk `[facet]` (risk only). Selects the
