@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
+use crate::listing::{self, Format, ListArgs};
 use crate::tomlfmt::toml_string;
 
 /// The toml/md file stem — shared by all five kinds (`backlog-NNN.toml`). Distinct
@@ -213,10 +214,26 @@ impl Status {
     /// Whether this status is terminal (`resolved`/`closed`). A **backlog-local**
     /// predicate — explicitly NOT `slice::is_terminal_status` (R4): backlog and
     /// slice lifecycles are independent vocabularies. Drives the `resolution ⟺
-    /// terminal` coupling (`edit`, PHASE-05) and the hide-terminal `list` rule.
+    /// terminal` coupling (`edit`) and the hide-terminal `list` rule — reused by
+    /// `is_hidden` as the SL-025 `spec list` hide-set (no new predicate, design §5.3).
     const fn is_terminal(self) -> bool {
         matches!(self, Status::Resolved | Status::Closed)
     }
+}
+
+/// The `backlog list` known-status set (A-2) — the five `Status` variants, the
+/// authority `--status` is validated against. Lockstep-guarded against the enum by
+/// `backlog_statuses_matches_the_variants`. backlog has a CLOSED status enum, so a
+/// *stored* status is always in-vocabulary — no drift marker is possible.
+const BACKLOG_STATUSES: &[&str] = &["open", "triaged", "started", "resolved", "closed"];
+
+/// The `backlog list` hide-set fed to `listing::retain` (design §5.3): the terminal
+/// statuses drop from the default list. This is the stringly bridge over the typed
+/// [`Status::is_terminal`] — the SAME predicate, no new terminal set. An out-of-vocab
+/// token (impossible on a serde-validated item, but `retain` is stringly) is treated
+/// as not-hidden. `--all` or any explicit `--status` overrides (handled in `retain`).
+fn is_hidden(status: &str) -> bool {
+    parse_enum::<Status>(status, "status").is_ok_and(Status::is_terminal)
 }
 
 /// Why a terminal item was closed. One generic, kind-agnostic set (PRD-009): a
@@ -582,44 +599,42 @@ fn read_all(root: &Path) -> anyhow::Result<Vec<BacklogItem>> {
 // Pure: filter (the visibility matrix) + render
 // ---------------------------------------------------------------------------
 
-/// The `list` filter axes — bundled so the verb stays under the CLI arg ceiling
-/// and the compute half is one testable argument. All axes AND together.
-#[derive(Debug, Default)]
-struct ListFilter {
-    kind: Option<ItemKind>,
-    status: Option<Status>,
-    tag: Option<String>,
-    substr: Option<String>,
-    all: bool,
+/// Project a `BacklogItem` to its filterable fields (design §5.2). `canonical` is
+/// the prefixed id (`ISS-007`) — the regex domain; `status` is the kebab string the
+/// hide-set / `--status` filter match on; `tags` are the item's own.
+fn key(i: &BacklogItem) -> listing::FilterFields {
+    listing::FilterFields {
+        canonical: i.kind.canonical_id(i.id),
+        slug: i.slug.clone(),
+        title: i.title.clone(),
+        status: i.status.as_str().to_string(),
+        tags: i.tags.clone(),
+    }
 }
 
-/// Filter merged items by the AND of every set axis, then apply visibility
-/// (design §5.4 / D5): an explicit `--status` keeps exactly that state (revealing
-/// a terminal one); otherwise `--all` keeps everything and the default hides
-/// terminal (`resolved`/`closed` — promoted falls out by the terminal rule, no
-/// special branch). Pure; consumes and returns the item vec.
-fn select(items: Vec<BacklogItem>, f: &ListFilter) -> Vec<BacklogItem> {
-    let substr = f.substr.as_ref().map(|s| s.to_lowercase());
-    items
-        .into_iter()
-        .filter(|i| f.kind.is_none_or(|k| i.kind == k))
-        .filter(|i| f.tag.as_ref().is_none_or(|t| i.tags.iter().any(|x| x == t)))
-        .filter(|i| {
-            substr
-                .as_ref()
-                .is_none_or(|s| i.title.to_lowercase().contains(s))
-        })
-        .filter(|i| match f.status {
-            Some(s) => i.status == s,
-            None => f.all || !i.status.is_terminal(),
-        })
-        .collect()
+/// Re-export of the spine's status validator, scoped to backlog so callers read
+/// intent locally. Guards `--status` against [`BACKLOG_STATUSES`] (READ input only).
+fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()> {
+    listing::validate_statuses(given, known)
 }
 
-/// Render rows as `id  kind  status  slug  title` over `listing::render_table`
-/// (the SL-009 ragged-grid path — additive, NOT the fixed 4-col `format_list`).
-/// The id is the canonical `XXX-NNN` (kind-disambiguated). Empty rows → `""` (the
-/// virgin empty-table path). Pure.
+/// One backlog item projected to its faithful JSON row (design §5.3 — backlog owns
+/// its serde shape). `id` is the prefixed canonical id; `kind`/`status`/`resolution`
+/// are the kebab strings (resolution `null` when absent). The risk facet and
+/// relationships are list-irrelevant (they ride `show`), so the list row stays flat.
+#[derive(Debug, Serialize)]
+struct BacklogRow {
+    id: String,
+    kind: &'static str,
+    status: &'static str,
+    resolution: Option<&'static str>,
+    slug: String,
+    title: String,
+}
+
+/// Render retained rows as `id  kind  status  slug  title` over the shared
+/// `listing::render_table` (the SL-009 ragged-grid path). The id is the canonical
+/// `XXX-NNN`. Empty rows → `""` (the virgin empty-table path, §5.5). Pure.
 fn format_rows(items: &[BacklogItem]) -> String {
     let grid: Vec<Vec<String>> = items
         .iter()
@@ -633,40 +648,55 @@ fn format_rows(items: &[BacklogItem]) -> String {
             ]
         })
         .collect();
-    crate::listing::render_table(&grid)
+    listing::render_table(&grid)
 }
 
-/// The `backlog list` rows as a string — the compute half of `run_list`,
-/// extracted (the `adr::list_rows` precedent) so tests assert the rendered output
-/// without capturing stdout. Read all kinds → filter → sort kind-then-id → render.
-fn list_rows(root: &Path, f: &ListFilter) -> anyhow::Result<String> {
-    let mut items = select(read_all(root)?, f);
+/// The `backlog list` output as a string — the compute half of `run_list`, on the
+/// shared spine. `validate_statuses` guards `--status` (A-2); `listing::build`
+/// resolves the filter + format; `retain` applies the shared substr/regex/status/
+/// tag axes + the terminal hide-set ([`is_hidden`], reusing `Status::is_terminal`).
+/// The kind-specific `--kind` filter (not a shared axis) is applied here. backlog
+/// sorts by `(kind.ordinal, id)` — its variant ordering, never in `retain` (§5.3).
+fn list_rows(root: &Path, kind: Option<ItemKind>, args: ListArgs) -> anyhow::Result<String> {
+    validate_statuses(&args.status, BACKLOG_STATUSES)?;
+    let (filter, format) = listing::build(args)?;
+    let mut items = listing::retain(read_all(root)?, &filter, is_hidden, key);
+    items.retain(|i| kind.is_none_or(|k| i.kind == k));
     items.sort_by_key(|i| (i.kind.ordinal(), i.id));
-    Ok(format_rows(&items))
+    match format {
+        Format::Table => Ok(format_rows(&items)),
+        Format::Json => listing::json_envelope("backlog", &json_rows(&items)),
+    }
 }
 
-/// `doctrine backlog list [--kind K] [--status S] [--tag T] [--all] [<substr>]`
-/// — the survey verb (PRD-009 REQ-050). Thin shell (§5.4): find the root, build
-/// the filter, print the rows verbatim (`list_rows` carries `render_table`'s own
-/// trailing newline — no extra). Reads disk via `read_all` only; the engine and
-/// the shared `meta` path are untouched (R6/EX-3).
+/// Faithful JSON rows (D7) — the prefixed id plus the flat list fields.
+fn json_rows(items: &[BacklogItem]) -> Vec<BacklogRow> {
+    items
+        .iter()
+        .map(|i| BacklogRow {
+            id: i.kind.canonical_id(i.id),
+            kind: i.kind.as_str(),
+            status: i.status.as_str(),
+            resolution: i.resolution.map(Resolution::as_str),
+            slug: i.slug.clone(),
+            title: i.title.clone(),
+        })
+        .collect()
+}
+
+/// `doctrine backlog list [--kind K] [-f SUBSTR] [-r RE] [-i] [-s S,…] [-t T] [-a]
+/// [--format F | --json] [<SUBSTR>]` — the survey verb (PRD-009 REQ-050), on the
+/// shared spine. Thin shell (§5.4): find the root, lower the args, print the rows
+/// verbatim (`list_rows` carries `render_table`'s own trailing newline). `--kind`
+/// is the one kind-specific axis; the positional `[SUBSTR]` is folded into the
+/// shared substr by the caller (deprecated alias — `--filter` wins, A-7).
 pub(crate) fn run_list(
     path: Option<PathBuf>,
     kind: Option<ItemKind>,
-    status: Option<Status>,
-    tag: Option<String>,
-    all: bool,
-    substr: Option<String>,
+    args: ListArgs,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let filter = ListFilter {
-        kind,
-        status,
-        tag,
-        substr,
-        all,
-    };
-    write!(io::stdout(), "{}", list_rows(&root, &filter)?)?;
+    write!(io::stdout(), "{}", list_rows(&root, kind, args)?)?;
     Ok(())
 }
 
@@ -771,12 +801,59 @@ fn format_show(item: &BacklogItem) -> String {
 /// THAT item's single toml, render it to stdout. READ-ONLY — no mutation, no
 /// cross-corpus scan (only the one item's file is opened); the render is pure over
 /// the item's own state.
-pub(crate) fn run_show(path: Option<PathBuf>, reference: &str) -> anyhow::Result<()> {
+pub(crate) fn run_show(
+    path: Option<PathBuf>,
+    reference: &str,
+    format: Format,
+) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (item_kind, id) = parse_ref(reference)?;
     let item = read_item(&root, item_kind, id)?;
-    write!(io::stdout(), "{}", format_show(&item))?;
+    let out = match format {
+        Format::Table => format_show(&item),
+        Format::Json => show_json(&item)?,
+    };
+    write!(io::stdout(), "{out}")?;
     Ok(())
+}
+
+/// Render the `Json` show: the item's faithful state under the shared `{kind, …}`
+/// envelope (the `adr::show_json` precedent). The validated `BacklogItem`'s fields
+/// are private and its closed enums render via `as_str`, so the JSON is projected by
+/// hand here (not a derive): the flat identity, the optional resolution, the risk
+/// `[facet]` (risk only), and the outbound relationships — the same data the table
+/// reassembles, structured. Pure over the item's own state (no cross-corpus scan).
+fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
+    let facet = item.facet.as_ref().map(|f| {
+        serde_json::json!({
+            "likelihood": f.likelihood.map(RiskLevel::as_str),
+            "impact": f.impact.map(RiskLevel::as_str),
+            "origin": f.origin,
+            "controls": f.controls,
+        })
+    });
+    let rel = &item.relationships;
+    let value = serde_json::json!({
+        "kind": "backlog",
+        "backlog": {
+            "id": item.kind.canonical_id(item.id),
+            "kind": item.kind.as_str(),
+            "slug": item.slug,
+            "title": item.title,
+            "status": item.status.as_str(),
+            "resolution": item.resolution.map(Resolution::as_str),
+            "created": item.created,
+            "updated": item.updated,
+            "tags": item.tags,
+            "facet": facet,
+            "relationships": {
+                "slices": rel.slices,
+                "specs": rel.specs,
+                "drift": rel.drift,
+            },
+        },
+    });
+    serde_json::to_string_pretty(&value).context("failed to serialize backlog show JSON")
 }
 
 // ---------------------------------------------------------------------------
@@ -1363,6 +1440,11 @@ tags = []
             .collect()
     }
 
+    /// A no-constraint `ListArgs` (the default `backlog list`).
+    fn list_args() -> ListArgs {
+        ListArgs::default()
+    }
+
     // --- VT-1: the visibility matrix ---
 
     #[test]
@@ -1384,7 +1466,7 @@ tags = []
         );
         write_item(root, ItemKind::Issue, 5, "closed", "done", "e", "Echo", &[]);
 
-        let out = list_rows(root, &ListFilter::default()).unwrap();
+        let out = list_rows(root, None, list_args()).unwrap();
         assert_eq!(
             ids(&out),
             vec!["ISS-001", "ISS-002", "ISS-003"],
@@ -1424,9 +1506,10 @@ tags = []
         // --all reveals every state.
         let all = list_rows(
             root,
-            &ListFilter {
+            None,
+            ListArgs {
                 all: true,
-                ..Default::default()
+                ..ListArgs::default()
             },
         )
         .unwrap();
@@ -1440,9 +1523,10 @@ tags = []
         // (open hidden, closed hidden; the promoted resolved item included).
         let resolved = list_rows(
             root,
-            &ListFilter {
-                status: Some(Status::Resolved),
-                ..Default::default()
+            None,
+            ListArgs {
+                status: vec!["resolved".into()],
+                ..ListArgs::default()
             },
         )
         .unwrap();
@@ -1493,11 +1577,11 @@ tags = []
         // --kind issue AND --tag security AND substring "auth" → only ISS-001.
         let out = list_rows(
             root,
-            &ListFilter {
-                kind: Some(ItemKind::Issue),
-                tag: Some("security".to_string()),
+            Some(ItemKind::Issue),
+            ListArgs {
+                tags: vec!["security".to_string()],
                 substr: Some("auth".to_string()),
-                ..Default::default()
+                ..ListArgs::default()
             },
         )
         .unwrap();
@@ -1519,7 +1603,7 @@ tags = []
         write_item(root, ItemKind::Idea, 1, "open", "", "d", "D", &[]);
         write_item(root, ItemKind::Chore, 1, "open", "", "c", "C", &[]);
 
-        let out = list_rows(root, &ListFilter::default()).unwrap();
+        let out = list_rows(root, None, list_args()).unwrap();
         assert_eq!(
             ids(&out),
             vec!["ISS-001", "ISS-002", "CHR-001", "RSK-001", "IDE-001"],
@@ -1536,7 +1620,7 @@ tags = []
         // only the issue tree exists; the other four kind dirs are absent.
         write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
 
-        let out = list_rows(root, &ListFilter::default()).unwrap();
+        let out = list_rows(root, None, list_args()).unwrap();
         assert_eq!(
             ids(&out),
             vec!["ISS-001"],
@@ -1549,11 +1633,172 @@ tags = []
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         // no `.doctrine/backlog` at all — every kind reads empty.
-        let out = list_rows(root, &ListFilter::default()).unwrap();
+        let out = list_rows(root, None, list_args()).unwrap();
         assert_eq!(
             out, "",
             "a virgin repo prints an empty table, never an error"
         );
+    }
+
+    // --- SL-025 EX-3: the shared spine — regexp / case / hide-set / json ---
+
+    #[test]
+    fn backlog_list_regexp_matches_canonical_id_case_insensitive() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+        write_item(root, ItemKind::Risk, 1, "open", "", "r", "Risky", &[]);
+
+        // --regexp over the canonical-id domain, made case-insensitive (-i): the
+        // lower-case `iss` matches `ISS-001` only.
+        let out = list_rows(
+            root,
+            None,
+            ListArgs {
+                regexp: Some("iss-".into()),
+                case_insensitive: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001"],
+            "regexp on the prefixed id: {out}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_json_is_one_envelope_with_prefixed_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &["x"]);
+        write_item(
+            root,
+            ItemKind::Issue,
+            2,
+            "resolved",
+            "fixed",
+            "b",
+            "Bravo",
+            &[],
+        );
+
+        let json = list_rows(
+            root,
+            None,
+            ListArgs {
+                json: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["kind"], "backlog");
+        let rows = v["rows"].as_array().expect("rows is an array");
+        // the resolved item is hidden by default → one row; the open one survives.
+        assert_eq!(rows.len(), 1, "hide-set applies under json too: {json}");
+        let row = rows.first().expect("the open row");
+        assert_eq!(row["id"], "ISS-001");
+        assert_eq!(row["kind"], "issue");
+        assert_eq!(row["status"], "open");
+        assert_eq!(row["resolution"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn backlog_list_rejects_an_unknown_status_with_the_uniform_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+        let err = list_rows(
+            root,
+            None,
+            ListArgs {
+                status: vec!["bogus".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("bogus"),
+            "names the bad value: {err}"
+        );
+    }
+
+    /// Drift canary: the `BACKLOG_STATUSES` known-set must stay in lockstep with
+    /// the `Status` enum's kebab serde (A-2).
+    #[test]
+    fn backlog_statuses_matches_the_variants() {
+        let from_variants: Vec<&str> = [
+            Status::Open,
+            Status::Triaged,
+            Status::Started,
+            Status::Resolved,
+            Status::Closed,
+        ]
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
+        assert_eq!(from_variants, BACKLOG_STATUSES.to_vec());
+    }
+
+    #[test]
+    fn is_hidden_reuses_status_is_terminal() {
+        // the hide-set IS Status::is_terminal over the stringly token (no new set).
+        assert!(is_hidden("resolved"));
+        assert!(is_hidden("closed"));
+        assert!(!is_hidden("open"));
+        assert!(!is_hidden("triaged"));
+        assert!(!is_hidden("started"));
+        // an out-of-vocab token is not hidden (retain is stringly; serde can't store it).
+        assert!(!is_hidden("bogus"));
+    }
+
+    // --- SL-025 EX-4 / VT-3: backlog show --json ---
+
+    #[test]
+    fn backlog_show_json_is_faithful_item_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // a fully-assessed risk: facet + relationships + a terminal resolution.
+        let body = "\
+id = 1
+slug = \"leak\"
+title = \"Token leak\"
+kind = \"risk\"
+status = \"resolved\"
+resolution = \"mitigated\"
+created = \"2026-06-08\"
+updated = \"2026-06-08\"
+tags = [\"security\"]
+
+[facet]
+likelihood = \"high\"
+impact = \"critical\"
+origin = \"audit\"
+controls = [\"rotate\"]
+
+[relationships]
+slices = [\"SL-020\"]
+specs = []
+drift = []
+";
+        let dir2 = root.join(".doctrine/backlog/risk/001");
+        fs::create_dir_all(&dir2).unwrap();
+        fs::write(dir2.join("backlog-001.toml"), body).unwrap();
+
+        let item = read_item(root, ItemKind::Risk, 1).unwrap();
+        let json = show_json(&item).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["kind"], "backlog");
+        let b = &v["backlog"];
+        assert_eq!(b["id"], "RSK-001");
+        assert_eq!(b["status"], "resolved");
+        assert_eq!(b["resolution"], "mitigated");
+        assert_eq!(b["tags"][0], "security");
+        assert_eq!(b["facet"]["likelihood"], "high");
+        assert_eq!(b["facet"]["impact"], "critical");
+        assert_eq!(b["relationships"]["slices"][0], "SL-020");
     }
 
     // --- PHASE-04: the `backlog show <ID>` inspect verb (id parse + render) ---

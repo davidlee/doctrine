@@ -369,19 +369,10 @@ enum BacklogCommand {
         #[arg(long)]
         kind: Option<backlog::ItemKind>,
 
-        /// Only this status (reveals a terminal state).
-        #[arg(long)]
-        status: Option<backlog::Status>,
+        #[command(flatten)]
+        list: CommonListArgs,
 
-        /// Only items carrying this tag.
-        #[arg(long)]
-        tag: Option<String>,
-
-        /// Show every state, including terminal.
-        #[arg(long)]
-        all: bool,
-
-        /// Title substring filter (case-insensitive).
+        /// Title substring filter (DEPRECATED alias of `--filter`; `--filter` wins).
         substr: Option<String>,
 
         /// Explicit project root (default: auto-detect).
@@ -393,6 +384,14 @@ enum BacklogCommand {
     Show {
         /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
         id: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -1002,13 +1001,24 @@ fn main() -> anyhow::Result<()> {
             } => backlog::run_new(path, kind, title, slug),
             BacklogCommand::List {
                 kind,
-                status,
-                tag,
-                all,
+                mut list,
                 substr,
                 path,
-            } => backlog::run_list(path, kind, status, tag, all, substr),
-            BacklogCommand::Show { id, path } => backlog::run_show(path, &id),
+            } => {
+                // A-7: the positional `[SUBSTR]` is a DEPRECATED alias of `--filter`;
+                // `--filter` WINS when both are given (the positional folds in only
+                // when `--filter` is absent). Documented precedence, not an error.
+                if list.filter.is_none() {
+                    list.filter = substr;
+                }
+                backlog::run_list(path, kind, list.into_list_args())
+            }
+            BacklogCommand::Show {
+                id,
+                format,
+                json,
+                path,
+            } => backlog::run_show(path, &id, if json { Format::Json } else { format }),
             BacklogCommand::Edit {
                 id,
                 status,
