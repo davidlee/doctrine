@@ -733,7 +733,11 @@ pub(crate) fn run_req_add(
 /// `render`. READ-ONLY: no write, no mutation, and **no cross-corpus scan** — only
 /// this spec's dir and the requirement dirs reached by FK are opened (EX-2).
 /// Ephemeral stdout, no `*.rendered.md` (D9).
-pub(crate) fn run_show(path: Option<PathBuf>, spec_ref: &str, format: Format) -> anyhow::Result<()> {
+pub(crate) fn run_show(
+    path: Option<PathBuf>,
+    spec_ref: &str,
+    format: Format,
+) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (subtype, spec_id) = resolve_spec_ref(spec_ref)?;
     let name = format!("{spec_id:03}");
@@ -1039,7 +1043,10 @@ pub(crate) fn list_rows(root: &Path, args: ListArgs) -> anyhow::Result<String> {
         Format::Table => {
             let mut blocks = Vec::new();
             for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
-                blocks.push(format_spec_rows(subtype, &subtype_rows(root, subtype, &filter)?));
+                blocks.push(format_spec_rows(
+                    subtype,
+                    &subtype_rows(root, subtype, &filter)?,
+                ));
             }
             Ok(blocks.concat())
         }
@@ -1342,7 +1349,10 @@ mod tests {
         }
 
         // no tech specs → the tech block is suppressed entirely (no "tech" label).
-        assert!(!out.contains("tech\n"), "empty tech block suppressed: {out}");
+        assert!(
+            !out.contains("tech\n"),
+            "empty tech block suppressed: {out}"
+        );
     }
 
     #[test]
@@ -1411,7 +1421,10 @@ mod tests {
         // default: the superseded spec drops from the list.
         let def = list_rows(root, list_args()).unwrap();
         assert!(def.contains("PRD-001"), "{def}");
-        assert!(!def.contains("PRD-002"), "superseded hidden by default: {def}");
+        assert!(
+            !def.contains("PRD-002"),
+            "superseded hidden by default: {def}"
+        );
 
         // --all reveals it.
         let all = list_rows(
@@ -1521,7 +1534,10 @@ mod tests {
             },
         )
         .unwrap_err();
-        assert!(err.to_string().contains("bogus"), "names the bad value: {err}");
+        assert!(
+            err.to_string().contains("bogus"),
+            "names the bad value: {err}"
+        );
     }
 
     /// Drift canary: the `SPEC_STATUSES` known-set must stay in lockstep with the
