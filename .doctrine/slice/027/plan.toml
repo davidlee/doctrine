@@ -1,0 +1,53 @@
+# Implementation plan for SL-027 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-027"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Unify the backlog fixture builders"
+objective = """
+Lift the duplicated backlog-NNN.toml fixture literal out of the three test \
+helpers (write_item, write_assessed_risk, write_related) and the inline 4th \
+copy at src/backlog.rs:1813 into one core builder — a lifetime-parameterised \
+Fixture spec rendered by render_fixture_toml, written by write_fixture, with \
+list-literal quoting in a single toml_list. The three helpers become thin named \
+wrappers; the :1813 literal becomes one write_fixture call. Output stays \
+byte-identical so the backlog suite passes unchanged (behaviour-preservation \
+gate).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md D1 locked; the byte-equivalence map (§4) and the in/out scope boundary (§1.1) are settled." },
+  { id = "EN-2", text = "Backlog suite green at HEAD before any edit (the baseline the refactor must preserve)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "One core builder owns the TOML literal: render_fixture_toml + write_fixture + toml_list exist; the head literal, the 2026-06-08 dates, the backlog-{name}.toml path, and list quoting appear once each." },
+  { id = "EX-2", text = "write_item / write_assessed_risk / write_related survive as thin wrappers delegating to write_fixture; their ~30 call sites are unchanged." },
+  { id = "EX-3", text = "The :1813 inline literal (backlog_show_json_is_faithful_item_state) is a single write_fixture call; its create_dir_all + fs::write are removed; its assertions are untouched." },
+  { id = "EX-4", text = "The deliberately-explicit parser/error fixtures :1161, :1190, :2075 are NOT touched." },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test backlog suite green with ZERO assertion edits (only helper bodies + the :1813 call site change)." },
+  { id = "VT-2", expects = "just check passes: fmt + cargo clippy zero warnings + test + build." },
+  { id = "VA-1", expects = "grep -c 'created = \\\"2026-06-08\\\"' src/backlog.rs == 4 (one unified builder + the three explicit parser/error fixtures); the four old builder copies are gone." },
+]
+specs             = []
+requirements      = []
