@@ -85,7 +85,7 @@ add_slices() {
   fi
 }
 
-add_slices
+# add_slices
 
 # Drop the leading literal "\n" so the first heading abuts the BEGIN marker.
 section="${section#\\n}"
