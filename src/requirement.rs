@@ -29,6 +29,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::entity::{self, Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::tomlfmt::toml_string;
 
 /// Relative dir of the requirement tree inside the project root — one global tree,
 /// one reservation namespace (§5.1). Distinct top-level tree, like ADR.
@@ -117,8 +118,8 @@ pub(crate) struct Requirement {
 fn render_requirement_toml(id: u32, slug: &str, title: &str) -> anyhow::Result<String> {
     Ok(crate::install::asset_text("templates/requirement.toml")?
         .replace("{{id}}", &id.to_string())
-        .replace("{{slug}}", slug)
-        .replace("{{title}}", title))
+        .replace("{{slug}}", &toml_string(slug))
+        .replace("{{title}}", &toml_string(title)))
 }
 
 /// Render `requirement-<id>.md` from the embedded template: `{{ref}}` (the
@@ -289,6 +290,17 @@ mod tests {
         // no date token, no leftover placeholder.
         assert!(!body.contains("{{"));
         assert!(!body.contains("created"));
+    }
+
+    #[test]
+    fn render_requirement_toml_escapes_hostile_title_and_slug() {
+        // SL-024: quoted-literal breakers (`"`, `\`, newline) round-trip.
+        let title = "a\"b\\c\nd";
+        let slug = "p\"q";
+        let body = render_requirement_toml(7, slug, title).unwrap();
+        let parsed: Meta = toml::from_str(&body).unwrap();
+        assert_eq!(parsed.slug, slug);
+        assert_eq!(parsed.title, title);
     }
 
     #[test]

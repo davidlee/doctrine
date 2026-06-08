@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
+use crate::tomlfmt::toml_string;
 
 /// The toml/md file stem — shared by all five kinds (`backlog-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`ISS`/`IMP`/…) and from the per-kind tree dirs.
@@ -449,8 +450,8 @@ fn render_backlog_toml(
     };
     Ok(crate::install::asset_text(template)?
         .replace("{{id}}", &id.to_string())
-        .replace("{{slug}}", slug)
-        .replace("{{title}}", title)
+        .replace("{{slug}}", &toml_string(slug))
+        .replace("{{title}}", &toml_string(title))
         .replace("{{kind}}", item_kind.as_str())
         .replace("{{date}}", date))
 }
@@ -1035,6 +1036,17 @@ mod tests {
         assert_eq!(item.resolution, None);
         assert!(item.facet.is_none(), "a plain kind has no facet");
         assert_eq!(item.relationships, Relationships::default());
+    }
+
+    #[test]
+    fn render_backlog_toml_escapes_hostile_title_and_slug() {
+        // SL-024: quoted-literal breakers (`"`, `\`, newline) round-trip.
+        let title = "a\"b\\c\nd";
+        let slug = "p\"q";
+        let body = render_backlog_toml(ItemKind::Issue, 7, slug, title, "2026-06-08").unwrap();
+        let parsed: Meta = toml::from_str(&body).unwrap();
+        assert_eq!(parsed.slug, slug);
+        assert_eq!(parsed.title, title);
     }
 
     #[test]

@@ -2,8 +2,8 @@ schema = "doctrine.spec.tech"
 version = 1
 
 id = {{id}}
-slug = "{{slug}}"
-title = "{{title}}"
+slug = {{slug}}
+title = {{title}}
 status = "draft"
 kind = "tech"
 tags = []

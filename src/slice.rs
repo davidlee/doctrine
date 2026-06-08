@@ -25,6 +25,7 @@ use crate::entity::{
 };
 use crate::meta;
 use crate::plan::Plan;
+use crate::tomlfmt::toml_string;
 
 /// Relative dir of the slice tree inside the project root.
 const SLICE_DIR: &str = ".doctrine/slice";
@@ -68,8 +69,8 @@ const NOTES_KIND: Kind = Kind {
 fn render_toml(id: u32, slug: &str, title: &str, date: &str) -> anyhow::Result<String> {
     Ok(crate::install::asset_text("templates/slice.toml")?
         .replace("{{id}}", &id.to_string())
-        .replace("{{slug}}", slug)
-        .replace("{{title}}", title)
+        .replace("{{slug}}", &toml_string(slug))
+        .replace("{{title}}", &toml_string(title))
         .replace("{{date}}", date))
 }
 
@@ -560,6 +561,17 @@ mod tests {
         assert_eq!(parsed, meta(7, "proposed", "my-slug", "My Title"));
         // injected date survives
         assert!(body.contains("created = \"2026-06-03\""));
+    }
+
+    #[test]
+    fn render_toml_escapes_hostile_title_and_slug() {
+        // SL-024: quoted-literal breakers (`"`, `\`, newline) round-trip.
+        let title = "a\"b\\c\nd";
+        let slug = "p\"q";
+        let body = render_toml(7, slug, title, "2026-06-03").unwrap();
+        let parsed: Meta = toml::from_str(&body).unwrap();
+        assert_eq!(parsed.slug, slug);
+        assert_eq!(parsed.title, title);
     }
 
     #[test]
