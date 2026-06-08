@@ -216,3 +216,93 @@ and the vocabulary-drift mechanism.
 - Manual CLI smoke: default list hides SL-002, `--status abandoned` reveals it as
   `abandoned`, `-s bogus` errors with the vocab list, `show SL-002` table +
   `show 25 --json` envelope all correct; SL-025 shows `2/6` (rollup join works).
+
+## PHASE-04 — spec + backlog on the spine (commits 95e8bba, a37cf36, 1b99b5b)
+
+The last two show-having kinds. spec adds the per-subtype block axis + the
+single-envelope-with-subtype JSON shape (A-8); backlog is the reference shape +
+the deprecated positional alias (A-7).
+
+### spec list (`src/spec.rs`)
+- `list_rows(root, ListArgs)` on the spine, BUT the per-subtype grouping makes it
+  unlike adr/slice: it calls `subtype_rows(root, subtype, &filter)` ONCE PER
+  SUBTYPE (product, then tech) with the SAME `Filter` (one `build`). Each
+  `subtype_rows` = read_metas → `retain(metas,&filter,is_hidden,key)` → sort_by id
+  → join `member_count` (the variant-axis join, AFTER retain — the slice rollup
+  precedent). `key(subtype, m)` prefixes the id with the subtype's `Kind.prefix`
+  (PRD/SPEC) — load-bearing so PRD-001 and SPEC-001 never collide in the shared
+  envelope.
+- **Table** = two labelled blocks (`format_spec_rows`: `subtype.label()\n` + grid),
+  prefixed ids, empty block suppressed, whole-empty → "".
+- **Json = ONE `{kind:"spec", rows:[...]}` envelope** spanning BOTH subtypes
+  (A-8 — NOT two envelopes). `SpecRow{id (prefixed), subtype (&'static str
+  "product"/"tech"), status, slug, members (usize COUNT, structured not rendered)}`.
+  **PHASE-06 conformance contract.**
+- Hide-set `is_hidden` = `{superseded}`. `SPEC_STATUSES` =
+  `{draft,active,deprecated,superseded}` (the SpecStatus variants) + drift-canary
+  `spec_statuses_matches_the_variants`. spec has a CLOSED enum → a stored status is
+  always in-vocab → NO `?` drift marker (slice-only).
+
+### spec show --json (`src/spec.rs`)
+- `run_show` gained `format: Format`; `show_json` added. Faithful: serializes the
+  `Spec` (added `Serialize` to `Spec`/`Source`/`Member`/`Interaction`; SpecStatus/
+  SpecSubtype/C4Level already had it) + `id` (prefixed) + `body` verbatim +
+  `members` (each `{label, order, requirement:{id,slug,title,kind,status}}` — the
+  requirement projected by hand via `serde_json::json!` because `Requirement` stays
+  Deserialize-only) + `interactions`. EX-2 boundary preserved (no cross-corpus scan).
+
+### backlog list (`src/backlog.rs`)
+- `list_rows(root, kind: Option<ItemKind>, args: ListArgs)` — `--kind` is the ONE
+  kind-specific axis (kept beside the flatten, applied via `items.retain(...)`
+  AFTER the shared `retain`). read_all → `retain(items,&filter,is_hidden,key)` →
+  kind-filter → sort `(kind.ordinal, id)` → Table/Json.
+- `key(i)` = prefixed `i.kind.canonical_id(i.id)` (already prefixed pre-SL-025) +
+  slug/title + `status.as_str()` + `i.tags` (backlog has real tags, unlike spec).
+- **Hide-set REUSES `Status::is_terminal`** via a stringly bridge
+  `is_hidden(status:&str) = parse_enum::<Status>(status).is_ok_and(Status::is_terminal)`
+  — `{resolved,closed}`, NO new predicate (design §5.3). `BACKLOG_STATUSES` =
+  the 5 Status variants + drift-canary.
+- **Json** = `{kind:"backlog", rows:[...]}`, `BacklogRow{id (prefixed), kind, status,
+  resolution (Option, null when absent), slug, title}` — flat (facet/relationships
+  ride show, not list). **PHASE-06 conformance contract.**
+- `select`/`ListFilter` DELETED (replaced by the spine + the inline kind-filter).
+
+### backlog show --json (`src/backlog.rs`)
+- `run_show` gained `format`; `show_json` projects the full item by hand
+  (`serde_json::json!`) — flat identity + resolution + the risk `[facet]` (risk
+  only, null otherwise) + outbound relationships. BacklogItem fields are private &
+  its substructs aren't Serialize, so hand-projection (not a derive).
+
+### A-7 — the deprecated positional (`src/main.rs` dispatch)
+- `BacklogCommand::List` flattens `CommonListArgs`, KEEPS the positional
+  `substr: Option<String>`, keeps `--kind` + `-p`. The **precedence lives in the
+  dispatch** (not list_rows): `if list.filter.is_none() { list.filter = substr; }`
+  — `--filter` WINS, the positional folds in only when --filter is absent. Proven
+  by `tests/e2e_backlog_filter_alias.rs` (binary-level — the fold is unreachable
+  from a unit test).
+
+### main.rs wiring
+- `SpecCommand::List` flattens CommonListArgs (dropped bespoke `--status:
+  Option<String>`); `SpecCommand::Show` gained `format`/`json`. backlog ditto +
+  the positional fold. Dispatch folds `json → Format::Json` for both shows.
+
+### Dead-code removal (the planned §5.1 narrowing, completed)
+- **`meta::sort_and_filter` REMOVED.** spec.rs:916 was its last NON-TEST caller; once
+  spec migrated, `cargo build` (bins/lib) flagged it dead (repo denies dead_code).
+  The adr.rs callers at 594/602/925/938 were all `#[cfg(test)]` — they used it as a
+  sort/filter helper. Repointed: those two adr tests now assert via the real
+  `list_rows` path (the production surface) + a local `sort_by_key` for the
+  read_metas round-trip. The meta.rs `sort_and_filter_orders_by_id_and_filters_status`
+  test was deleted with the fn. NO numeric kind calls it now → the "surviving sort
+  half" rationale in design §5.3 is moot (all kinds sort via `sort_by_key`).
+
+### Gate
+- 625 bin unit tests pass (was 614: +6 spec list/json/hide/regex/canary/show-json,
+  +6 backlog regex/json/canary/is_hidden/show-json, −1 meta sort_and_filter test).
+  +1 e2e (`e2e_backlog_filter_alias`, A-7). `just check` clean (clippy zero
+  warnings, fmt). All e2e suites green. Behaviour-preservation
+  (entity/registry/meta readers/is_divergent/is_terminal_status) green **UNCHANGED**.
+- Manual CLI smoke: spec list (two labelled blocks, prefixed ids, #members), spec
+  list --json (ONE envelope, subtype per row), -s bogus (uniform error); backlog
+  list (prefixed, ordinal+id sort), positional `auth` filters, `auth --filter
+  token` → token wins (A-7), backlog show --json faithful.
