@@ -257,3 +257,43 @@ verification = [
 ]
 specs        = []
 requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-06"
+name      = "Reconcile master-corpus drift: re-align the shipped masters with the grown surface"
+objective = """
+The 14 masters (PHASE-05) were authored against the doctrine surface as it stood \
+at SL-018 closure. SL-019..023 grew that surface and three *enumerating* masters \
+now under-describe live doctrine: `signpost.cli-command-map` omits the top-level \
+**`backlog`** verb (SL-020); `signpost.file-map` omits the `.doctrine/spec/{product,\
+tech}/` (SL-015/019) and `.doctrine/backlog/` (SL-020) authored-entity dirs; \
+`signpost.skill-map` omits the **/spec-product** + **/spec-tech** authoring skills. \
+Re-align those three master bodies to the current surface, applying the SAME \
+invariants the design fixed — master-lint (INV signature, `memory_type` ≠ the \
+`reference` literal, ≥1 path/glob/command scope floor) and the **no-restate** \
+principle (point TOWARD boot/skills/`doc/*`; never enumerate ADRs or specs by \
+number — that rots). Re-sync so the corrected embed ships. Separately, dispose the \
+orientation-grade memories authored since closure (`concept.workflow.canonical-\
+change-loop`, `concept.spec.descent-descends-from`, `pattern.distribution.shipped-\
+not-reachable`, `concept.backlog.work-intake-membership`): for each, decide \
+promote-to-master vs keep-repo-scoped, with rationale. The corpus stays lean \
+(design target ~12-18), so promotion is the exception, not the default. This is a \
+maintenance phase — no new mechanism; the authoring path and gates are PHASE-04's, \
+re-applied.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete: 14 masters shipped, master-lint load-bearing over the real corpus, HEAD green" },
+  { id = "EN-2", text = "the grown surface is real: `backlog` is a live top-level verb; `.doctrine/spec/{product,tech}/` + `.doctrine/backlog/` exist (manifest `create`); `/spec-product` + `/spec-tech` skills ship" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "the three drifted masters re-aligned — `cli-command-map` names the `backlog` verb; `file-map` names the `.doctrine/spec/{product,tech}/` and `.doctrine/backlog/` dirs; `skill-map` names `/spec-product` + `/spec-tech` — each still master-lint-clean and still orienting (no ADR/spec enumeration that would rot)" },
+  { id = "EX-2", text = "every orientation-grade memory authored since closure carries a recorded disposition (promote / keep repo-scoped) with rationale; any promoted master carries `repo=\"\"`/anchor=none/scope-floor/type ≠ reference/`reviewed`-seeded and master-lint passes over the whole corpus" },
+  { id = "EX-3", text = "the corrected embed ships: `memory sync` lands the updated masters in shipped/; `just check` green; the behaviour-preservation gate holds — no unrelated master churn, the other masters byte-unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "`every_embedded_master_lints_clean` green over the full corpus after the edits; the SL-018 e2e (`sync_populates_the_shipped_corpus...`) still green — no regression in the sync/reach path" },
+  { id = "VA-1", expects = "an agent confirms the three re-aligned masters name the current surface (the `backlog` verb; the `spec/` + `backlog/` dirs; the two spec skills) and none restate boot/skills/`doc/*` or enumerate ADRs/specs by number" },
+]
+specs        = []
+requirements = []
