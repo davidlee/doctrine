@@ -235,6 +235,10 @@ fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()> {
 /// The table grid: a header row then one `ADR-id status slug title` row per ADR
 /// (prefixed ids + header, design §5.5). Rendered over the shared layout.
 fn render_table(metas: &[Meta]) -> String {
+    // No rows → "" (header suppressed, §5.5) — guard before building the grid.
+    if metas.is_empty() {
+        return String::new();
+    }
     let mut grid: Vec<Vec<String>> = vec![vec![
         "id".to_string(),
         "status".to_string(),
@@ -249,10 +253,6 @@ fn render_table(metas: &[Meta]) -> String {
             m.title.clone(),
         ]
     }));
-    // Header-only (no rows) collapses to "" — keep the empty-list contract (§5.5).
-    if metas.is_empty() {
-        return String::new();
-    }
     listing::render_table(&grid)
 }
 
