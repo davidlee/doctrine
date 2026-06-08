@@ -590,17 +590,33 @@ mod tests {
         run_new(Some(root.clone()), Some("Adopt CI".into()), None).unwrap();
         let adr = adr_root(&root);
 
-        // list (the run_list pipeline): both ADRs, sorted by id.
-        let all = meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), None);
-        assert_eq!(all.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1, 2]);
+        // list (the run_list pipeline): both ADRs, sorted by id. `--all` reveals
+        // every status; the spine owns the filter, adr owns the id sort.
+        let all = list_rows(
+            &root,
+            ListArgs {
+                all: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(all.contains("ADR-001"));
+        assert!(all.contains("ADR-002"));
 
         // authored mutation via the real verb core (not a rewrite).
         set_adr_status(&adr, 1, AdrStatus::Accepted, &crate::clock::today()).unwrap();
 
         // list --status accepted: only 001 survives the filter.
-        let accepted =
-            meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), Some("accepted"));
-        assert_eq!(accepted.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1]);
+        let accepted = list_rows(
+            &root,
+            ListArgs {
+                status: vec!["accepted".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(accepted.contains("ADR-001"));
+        assert!(!accepted.contains("ADR-002"));
     }
 
     // --- SL-025: list_rows on the spine — prefixed ids, header, hide-set, filters ---
@@ -921,23 +937,32 @@ mod tests {
             .replace("status = \"proposed\"", "status = \"accepted\"");
         fs::write(&p, flipped).unwrap();
 
-        // read_metas is unsorted; sort_and_filter owns the ordering (VT-3).
-        let all = meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), None);
+        // read_metas reads the stem faithfully (the reader round-trip, VT-3); the
+        // spine owns the sort/filter, so sort the read set here to pin id 1's fields.
+        let mut all = meta::read_metas(&adr, "adr").unwrap();
+        all.sort_by_key(|m| m.id);
         assert_eq!(all.iter().map(|m| m.id).collect::<Vec<_>>(), vec![1, 2]);
         assert_eq!(
-            all[0],
-            Meta {
+            all.first(),
+            Some(&Meta {
                 id: 1,
                 slug: "use-rust".into(),
                 title: "Use Rust".into(),
                 status: "proposed".into(),
-            }
+            })
         );
 
-        let accepted =
-            meta::sort_and_filter(meta::read_metas(&adr, "adr").unwrap(), Some("accepted"));
-        assert_eq!(accepted.len(), 1);
-        assert_eq!(accepted[0].id, 2);
+        // list --status accepted selects on the authored field (the spine filter).
+        let accepted = list_rows(
+            root,
+            ListArgs {
+                status: vec!["accepted".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(accepted.contains("ADR-002"));
+        assert!(!accepted.contains("ADR-001"));
     }
 
     // --- VT-1: status flips, `updated` bumps, the rest of the file survives ---

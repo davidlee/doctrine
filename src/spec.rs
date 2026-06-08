@@ -33,7 +33,8 @@ use serde::{Deserialize, Serialize};
 use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
-use crate::meta;
+use crate::listing::{self, Format, ListArgs};
+use crate::meta::{self, Meta};
 use crate::registry::{
     BuildFinding, DescentEdge, InteractionEdge, MemberEdge, ParentEdge, Registry,
 };
@@ -118,7 +119,7 @@ impl SpecSubtype {
 /// A code anchor a tech spec governs (tech-only; `[[source]]`). Shape mirrors the
 /// legacy canon `doc/spec-entity-spec.md` (D-3): the language + a code identifier,
 /// with an optional finer module path. Read by `spec show` render (PHASE-04).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct Source {
     pub(crate) language: String,
     pub(crate) identifier: String,
@@ -175,7 +176,7 @@ impl C4Level {
 /// The spec identity parse layer. `title` keys the shared-`Meta` convention (C2).
 /// `category` is deliberately OPEN vocabulary (`Option<String>`, C6); the tech flat
 /// fields default to absent/empty for a product spec. Read by `spec show` render.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct Spec {
     pub(crate) id: u32,
     pub(crate) slug: String,
@@ -206,7 +207,7 @@ pub(crate) struct Spec {
 /// One membership row in a spec's `members.toml` — the spec→requirement edge with
 /// its sticky label and advisory order. The FK is a plain canonical string
 /// (`REQ-NNN`); integrity is `validate`'s job, not the type's.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct Member {
     pub(crate) requirement: String,
     pub(crate) label: String,
@@ -225,7 +226,7 @@ struct MembersDoc {
 /// free-text per the relation schema (not an enum); the `target` FK is canonical
 /// (`SPEC-NNN`). Hand-authored in v1 (no verb — D-Q4). First prod caller is `spec
 /// show` render (PHASE-04 — render shows outbound interactions), not validate.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct Interaction {
     pub(crate) target: String,
     #[serde(rename = "type")]
@@ -732,7 +733,7 @@ pub(crate) fn run_req_add(
 /// `render`. READ-ONLY: no write, no mutation, and **no cross-corpus scan** — only
 /// this spec's dir and the requirement dirs reached by FK are opened (EX-2).
 /// Ephemeral stdout, no `*.rendered.md` (D9).
-pub(crate) fn run_show(path: Option<PathBuf>, spec_ref: &str) -> anyhow::Result<()> {
+pub(crate) fn run_show(path: Option<PathBuf>, spec_ref: &str, format: Format) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (subtype, spec_id) = resolve_spec_ref(spec_ref)?;
     let name = format!("{spec_id:03}");
@@ -765,9 +766,52 @@ pub(crate) fn run_show(path: Option<PathBuf>, spec_ref: &str) -> anyhow::Result<
 
     let interactions = read_interactions(&spec_dir.join("interactions.toml"))?;
 
-    let document = render(&spec, &prose_body, &resolved, &interactions);
-    write!(io::stdout(), "{document}")?;
+    let out = match format {
+        Format::Table => render(&spec, &prose_body, &resolved, &interactions),
+        Format::Json => show_json(&spec, &prose_body, &resolved, &interactions)?,
+    };
+    write!(io::stdout(), "{out}")?;
     Ok(())
+}
+
+/// Render the `Json` show: the spec's faithful toml-as-data (`Spec`) plus the prose
+/// body, its members (each edge with its resolved requirement's structured fields),
+/// and its outbound interactions, under the shared `{kind, …}` envelope (the
+/// `adr::show_json` precedent — toml-as-data is faithful, D7). Members keep advisory
+/// `order`; the requirement is projected by hand (its struct stays Deserialize-only,
+/// so render-faithful fields are spliced here, not via a derive). EX-2: still no
+/// cross-corpus scan — only the data already read by `run_show` is serialised.
+fn show_json(
+    spec: &Spec,
+    body: &str,
+    members: &[(Member, Requirement)],
+    interactions: &[Interaction],
+) -> anyhow::Result<String> {
+    let member_rows: Vec<serde_json::Value> = members
+        .iter()
+        .map(|(m, req)| {
+            serde_json::json!({
+                "label": m.label,
+                "order": m.order,
+                "requirement": {
+                    "id": requirement::canonical_id(req.id),
+                    "slug": req.slug,
+                    "title": req.title,
+                    "kind": req.kind.as_str(),
+                    "status": req.status.as_str(),
+                },
+            })
+        })
+        .collect();
+    let value = serde_json::json!({
+        "kind": "spec",
+        "spec": spec,
+        "id": canonical_id(spec.kind, spec.id),
+        "body": body,
+        "members": member_rows,
+        "interactions": interactions,
+    });
+    serde_json::to_string_pretty(&value).context("failed to serialize spec show JSON")
 }
 
 /// Scan the three trees into a `Registry` (design §5.6) — the impure half of
@@ -895,37 +939,132 @@ pub(crate) fn run_validate(path: Option<PathBuf>, spec_ref: Option<&str>) -> any
     anyhow::bail!("validate: {} hard finding(s) in {target}", findings.len())
 }
 
-/// `doctrine spec list [--status S]` — per-subtype blocks of `id status slug
-/// #members`, sorted by id. Each block rides the shared `listing::render_table`
-/// (the `#members` cell is derived in this module, exactly as `slice list` derives
-/// its `phases` cell — additive). `--status` filters within each.
-pub(crate) fn run_list(path: Option<PathBuf>, status: Option<&str>) -> anyhow::Result<()> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    let mut out = io::stdout();
-    for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
-        write!(out, "{}", list_block(&root, subtype, status)?)?;
-    }
-    Ok(())
+/// The `spec list` known-status set (A-2) — the four `SpecStatus` variants, the
+/// authority `--status` is validated against. Lockstep-guarded against the enum by
+/// a drift-canary test (`spec_statuses_matches_the_variants`). spec has a CLOSED
+/// status enum, so a *stored* status is always in-vocabulary — no drift marker is
+/// possible (unlike slice's stringly status; design §5.5 vocabulary-drift).
+const SPEC_STATUSES: &[&str] = &["draft", "active", "deprecated", "superseded"];
+
+/// The `spec list` hide-set (design §5.3): a `superseded` spec no longer governs,
+/// so it drops from the default list. `--all` or any explicit `--status` reveals it
+/// (handled in `listing::retain`). A presentation predicate fed only to `retain` —
+/// distinct from any lifecycle semantics.
+fn is_hidden(status: &str) -> bool {
+    status == "superseded"
 }
 
-/// One subtype's `list` block as a string — the compute half of `run_list`,
-/// extracted so it is unit-testable without stdout. Empty (no specs) → `""` (the
-/// whole block, header included, is suppressed).
-fn list_block(root: &Path, subtype: SpecSubtype, status: Option<&str>) -> anyhow::Result<String> {
+/// The `PRD-007` / `SPEC-012` canonical id for a spec id in `subtype`'s namespace,
+/// via the single id-form authority. The prefix comes from the subtype's `Kind`.
+fn canonical_id(subtype: SpecSubtype, id: u32) -> String {
+    listing::canonical_id(subtype.kind().prefix, id)
+}
+
+/// Re-export of the spine's status validator, scoped to spec so callers read intent
+/// locally. Guards `--status` against [`SPEC_STATUSES`] (READ/filter input only).
+fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()> {
+    listing::validate_statuses(given, known)
+}
+
+/// Project a spec `Meta` to its filterable fields (design §5.2). `canonical` is the
+/// prefixed id (`PRD-007` / `SPEC-012`) — the regex domain; spec's identity toml
+/// carries no `[tags]` on the `Meta` read path, so the tag axis is empty here.
+fn key(subtype: SpecSubtype, m: &Meta) -> listing::FilterFields {
+    listing::FilterFields {
+        canonical: canonical_id(subtype, m.id),
+        slug: m.slug.clone(),
+        title: m.title.clone(),
+        status: m.status.clone(),
+        tags: Vec::new(),
+    }
+}
+
+/// One subtype's retained, sorted spec rows joined with their `#members` count —
+/// the variant-axis join (the `slice list` phase-rollup precedent). The shared
+/// `retain` filters the `Meta`s; the member-count read runs only for survivors,
+/// after the filter. Sorted by id (ordering is spec's, not `retain`'s — §5.3).
+fn subtype_rows(
+    root: &Path,
+    subtype: SpecSubtype,
+    filter: &listing::Filter,
+) -> anyhow::Result<Vec<(Meta, usize)>> {
     let tree = root.join(subtype.kind().dir);
-    let metas = meta::sort_and_filter(meta::read_metas(&tree, SPEC_STEM)?, status);
+    let mut metas = listing::retain(
+        meta::read_metas(&tree, SPEC_STEM)?,
+        filter,
+        is_hidden,
+        |m| key(subtype, m),
+    );
+    metas.sort_by_key(|m| m.id);
     let mut rows = Vec::with_capacity(metas.len());
     for m in metas {
         let count = member_count(&tree.join(format!("{:03}", m.id)))?;
         rows.push((m, count));
     }
-    Ok(format_spec_rows(subtype, &rows))
+    Ok(rows)
+}
+
+/// One spec projected to its faithful JSON row (design §5.3 — spec owns its serde
+/// shape). `id` is the prefixed canonical id (so product/tech ids never collide in
+/// the single cross-subtype envelope, A-8); `subtype` labels each row in lieu of
+/// two envelopes; `members` is the structured COUNT, not a rendered cell.
+#[derive(Debug, Serialize)]
+struct SpecRow {
+    id: String,
+    subtype: &'static str,
+    status: String,
+    slug: String,
+    members: usize,
+}
+
+/// `doctrine spec list` — the survey verb, on the shared spine (design §5.4). The
+/// compute half is [`list_rows`]; this is the thin shell that writes it.
+pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    write!(io::stdout(), "{}", list_rows(&root, args)?)?;
+    Ok(())
+}
+
+/// The `spec list` output as a string — the compute half of `run_list`. Rides the
+/// shared spine: `validate_statuses` guards `--status` (A-2), `listing::build`
+/// resolves the filter + format. `Table` emits per-subtype labelled blocks
+/// (product then tech), each `id status slug #members`, the `#members` derived per
+/// row (spec's variant axis). `Json` emits a SINGLE `{kind:"spec", rows:[…]}`
+/// envelope spanning BOTH subtypes, each row carrying a `subtype` field (A-8) — not
+/// two envelopes. Empty → `""` (§5.5).
+pub(crate) fn list_rows(root: &Path, args: ListArgs) -> anyhow::Result<String> {
+    validate_statuses(&args.status, SPEC_STATUSES)?;
+    let (filter, format) = listing::build(args)?;
+    match format {
+        Format::Table => {
+            let mut blocks = Vec::new();
+            for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
+                blocks.push(format_spec_rows(subtype, &subtype_rows(root, subtype, &filter)?));
+            }
+            Ok(blocks.concat())
+        }
+        Format::Json => {
+            let mut rows = Vec::new();
+            for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
+                for (m, count) in subtype_rows(root, subtype, &filter)? {
+                    rows.push(SpecRow {
+                        id: canonical_id(subtype, m.id),
+                        subtype: subtype.label(),
+                        status: m.status,
+                        slug: m.slug,
+                        members: count,
+                    });
+                }
+            }
+            listing::json_envelope("spec", &rows)
+        }
+    }
 }
 
 /// Render one subtype's spec rows: a label line, a header row, then `id status slug
-/// #members` per spec, aligned via the shared `listing::render_table`. Empty input
-/// → `""` (the block is omitted entirely). Pure.
-fn format_spec_rows(subtype: SpecSubtype, rows: &[(meta::Meta, usize)]) -> String {
+/// #members` per spec (prefixed ids), aligned via the shared `listing::render_table`.
+/// Empty input → `""` (the block is omitted entirely — §5.5). Pure.
+fn format_spec_rows(subtype: SpecSubtype, rows: &[(Meta, usize)]) -> String {
     if rows.is_empty() {
         return String::new();
     }
@@ -937,17 +1076,13 @@ fn format_spec_rows(subtype: SpecSubtype, rows: &[(meta::Meta, usize)]) -> Strin
     ];
     for (m, count) in rows {
         grid.push(vec![
-            format!("{:03}", m.id),
+            canonical_id(subtype, m.id),
             m.status.clone(),
             m.slug.clone(),
             count.to_string(),
         ]);
     }
-    format!(
-        "{}\n{}",
-        subtype.label(),
-        crate::listing::render_table(&grid)
-    )
+    format!("{}\n{}", subtype.label(), listing::render_table(&grid))
 }
 
 // ---------------------------------------------------------------------------
@@ -957,10 +1092,14 @@ fn format_spec_rows(subtype: SpecSubtype, rows: &[(meta::Meta, usize)]) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::meta::Meta;
     use crate::requirement::ReqStatus;
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
+
+    /// A no-constraint `ListArgs` (the default `spec list`).
+    fn list_args() -> ListArgs {
+        ListArgs::default()
+    }
 
     fn fresh(root: &Path, subtype: SpecSubtype, slug: &str, title: &str) -> entity::Materialised {
         entity::materialise(
@@ -1187,23 +1326,23 @@ mod tests {
         fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
         fresh(root, SpecSubtype::Product, "billing", "Billing");
 
-        // seeded specs → member count 0 on every row.
-        let block = list_block(root, SpecSubtype::Product, None).unwrap();
-        assert!(block.starts_with("product\n"));
-        assert!(block.contains("id   status  slug"));
-        assert!(block.contains("#members"));
-        assert!(block.contains("001  draft   onboarding"));
-        assert!(block.contains("002  draft   billing"));
-        // both rows end in the 0 member count.
-        for line in block.lines().filter(|l| l.starts_with("00")) {
+        // seeded specs → member count 0 on every row. Prefixed ids, per-subtype
+        // labelled block (the product block; the tech block is suppressed empty).
+        let out = list_rows(root, list_args()).unwrap();
+        assert!(out.starts_with("product\n"), "product block leads: {out}");
+        assert!(out.contains("#members"));
+        assert!(out.contains("PRD-001  draft   onboarding"), "{out}");
+        assert!(out.contains("PRD-002  draft   billing"), "{out}");
+        // both data rows end in the 0 member count.
+        for line in out.lines().filter(|l| l.starts_with("PRD-")) {
             assert!(
                 line.trim_end().ends_with('0'),
                 "row ends in #members=0: {line}"
             );
         }
 
-        // the tech block is empty (no tech specs) → suppressed.
-        assert_eq!(list_block(root, SpecSubtype::Tech, None).unwrap(), "");
+        // no tech specs → the tech block is suppressed entirely (no "tech" label).
+        assert!(!out.contains("tech\n"), "empty tech block suppressed: {out}");
     }
 
     #[test]
@@ -1235,9 +1374,213 @@ mod tests {
             .replace("status = \"draft\"", "status = \"active\"");
         fs::write(&p, flipped).unwrap();
 
-        let active = list_block(root, SpecSubtype::Product, Some("active")).unwrap();
-        assert!(active.contains("002  active  billing"));
+        let active = list_rows(
+            root,
+            ListArgs {
+                status: vec!["active".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(active.contains("PRD-002  active  billing"), "{active}");
         assert!(!active.contains("onboarding"));
+    }
+
+    /// Flip a spec's authored `status` on disk (no status verb in v1).
+    fn flip_status(root: &Path, subtype: SpecSubtype, id: u32, to: &str) {
+        let p = root
+            .join(subtype.kind().dir)
+            .join(format!("{id:03}"))
+            .join(format!("spec-{id:03}.toml"));
+        let flipped = fs::read_to_string(&p)
+            .unwrap()
+            .replace("status = \"draft\"", &format!("status = \"{to}\""));
+        fs::write(&p, flipped).unwrap();
+    }
+
+    // --- SL-025 EX-1: hide-set {superseded}, prefixed ids, shared flags ---
+
+    #[test]
+    fn spec_list_hides_superseded_by_default_and_all_reveals() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
+        fresh(root, SpecSubtype::Product, "billing", "Billing");
+        flip_status(root, SpecSubtype::Product, 2, "superseded");
+
+        // default: the superseded spec drops from the list.
+        let def = list_rows(root, list_args()).unwrap();
+        assert!(def.contains("PRD-001"), "{def}");
+        assert!(!def.contains("PRD-002"), "superseded hidden by default: {def}");
+
+        // --all reveals it.
+        let all = list_rows(
+            root,
+            ListArgs {
+                all: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(all.contains("PRD-002"), "--all reveals superseded: {all}");
+
+        // an explicit --status superseded also reveals it.
+        let explicit = list_rows(
+            root,
+            ListArgs {
+                status: vec!["superseded".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(explicit.contains("PRD-002"), "{explicit}");
+        assert!(!explicit.contains("PRD-001"), "{explicit}");
+    }
+
+    #[test]
+    fn spec_list_filter_matches_slug_and_title_regexp_matches_canonical() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
+        fresh(root, SpecSubtype::Tech, "cli", "CLI");
+
+        // --filter (substr on slug+title) selects the onboarding product spec.
+        let by_substr = list_rows(
+            root,
+            ListArgs {
+                substr: Some("onboard".into()),
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(by_substr.contains("PRD-001"), "{by_substr}");
+        assert!(!by_substr.contains("SPEC-001"), "{by_substr}");
+
+        // --regexp on the canonical id domain selects the tech spec by its prefix.
+        let by_regex = list_rows(
+            root,
+            ListArgs {
+                regexp: Some("^SPEC-".into()),
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(by_regex.contains("SPEC-001"), "{by_regex}");
+        assert!(!by_regex.contains("PRD-001"), "{by_regex}");
+    }
+
+    // --- SL-025 EX-1 / A-8: a SINGLE json envelope, subtype per row ---
+
+    #[test]
+    fn spec_list_json_is_one_envelope_with_subtype_per_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
+        fresh(root, SpecSubtype::Tech, "cli", "CLI");
+
+        let json = list_rows(
+            root,
+            ListArgs {
+                json: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["kind"], "spec", "single envelope keyed `spec`");
+        let rows = v["rows"].as_array().expect("rows is an array");
+        assert_eq!(rows.len(), 2, "both subtypes in ONE envelope: {json}");
+
+        // each row carries its subtype + the prefixed id + a NUMERIC member count.
+        let prd = rows
+            .iter()
+            .find(|r| r["id"] == "PRD-001")
+            .expect("the product row");
+        assert_eq!(prd["subtype"], "product");
+        assert_eq!(prd["status"], "draft");
+        assert_eq!(prd["members"], 0);
+        let spec = rows
+            .iter()
+            .find(|r| r["id"] == "SPEC-001")
+            .expect("the tech row");
+        assert_eq!(spec["subtype"], "tech");
+    }
+
+    // --- SL-025 A-2: --status is validated against the spec known-set ---
+
+    #[test]
+    fn spec_list_rejects_an_unknown_status_with_the_uniform_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
+        let err = list_rows(
+            root,
+            ListArgs {
+                status: vec!["bogus".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("bogus"), "names the bad value: {err}");
+    }
+
+    /// Drift canary: the `SPEC_STATUSES` known-set must stay in lockstep with the
+    /// `SpecStatus` enum's kebab serde — adding a variant without the const (or vice
+    /// versa) breaks the read-filter coherence (A-2).
+    #[test]
+    fn spec_statuses_matches_the_variants() {
+        let from_variants: Vec<&str> = [
+            SpecStatus::Draft,
+            SpecStatus::Active,
+            SpecStatus::Deprecated,
+            SpecStatus::Superseded,
+        ]
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
+        assert_eq!(from_variants, SPEC_STATUSES.to_vec());
+    }
+
+    // --- SL-025 EX-2 / VT-3: spec show --json ---
+
+    #[test]
+    fn spec_show_json_is_faithful_toml_as_data_plus_body_and_members() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI");
+        run_req_add(
+            Some(root.to_path_buf()),
+            "SPEC-001",
+            Some("Route subcommands".into()),
+            ReqKind::Functional,
+            None,
+        )
+        .unwrap();
+
+        let spec_dir = root.join(".doctrine/spec/tech/001");
+        let spec_toml = spec_dir.join("spec-001.toml");
+        let spec: Spec = toml::from_str(&fs::read_to_string(&spec_toml).unwrap()).unwrap();
+        let body = fs::read_to_string(spec_dir.join("spec-001.md")).unwrap();
+        let members = read_members(&spec_dir.join("members.toml")).unwrap();
+        let mut resolved = Vec::new();
+        for m in members {
+            let req = requirement::load(root, &m.requirement).unwrap();
+            resolved.push((m, req));
+        }
+        let interactions = read_interactions(&spec_dir.join("interactions.toml")).unwrap();
+
+        let json = show_json(&spec, &body, &resolved, &interactions).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["kind"], "spec");
+        assert_eq!(v["id"], "SPEC-001");
+        assert_eq!(v["spec"]["title"], "CLI");
+        assert_eq!(v["spec"]["status"], "draft");
+        assert_eq!(v["body"], body, "the prose body is verbatim");
+        let mrows = v["members"].as_array().expect("members array");
+        assert_eq!(mrows.len(), 1, "the one membered requirement");
+        assert_eq!(mrows[0]["label"], "FR-001");
+        assert_eq!(mrows[0]["requirement"]["id"], "REQ-001");
+        assert_eq!(mrows[0]["requirement"]["title"], "Route subcommands");
     }
 
     // --- VT-2: the parse structs + tag/source round-trips ---
@@ -2244,7 +2587,7 @@ parent = \"SPEC-002\"
         .unwrap();
 
         let before = snapshot_tree(&root.join(".doctrine"));
-        run_show(Some(root.to_path_buf()), "SPEC-001").unwrap();
+        run_show(Some(root.to_path_buf()), "SPEC-001", Format::Table).unwrap();
         let after = snapshot_tree(&root.join(".doctrine"));
 
         assert_eq!(before, after, "spec show mutates nothing on disk");
