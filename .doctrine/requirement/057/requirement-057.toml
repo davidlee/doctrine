@@ -11,6 +11,6 @@ description = "Every mutation of a backlog item is atomic and edit-preserving, r
 tags = []
 acceptance_criteria = [
   "A status or facet change preserves comments and unknown keys verbatim.",
-  "A mutation is atomic — an interrupted write never leaves a partially-written item.",
+  "A mutation rewrites the item as a whole — never a partial field-level merge of old and new values.",
   "The item round-trips through read-modify-write unchanged except for the intended field.",
 ]
