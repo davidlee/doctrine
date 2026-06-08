@@ -379,11 +379,13 @@ stateDiagram-v2
   **Core-process prose** to name the stages (`… audit → reconcile → close`,
   factual — the state exists); leave the routing-table *skill* row for the
   reconcile-skill slice. Scope/affected-surface corrected.
-- **F3 (low, scope limit — stated).** `slice status` is **invoker-blind in v1**:
-  it surfaces the move classification + the *target state's* conduct, but does not
-  know whether an agent or a human invoked it. So "agent can't skip without
-  approval" (§4 #4) is **neither enforced nor actor-surfaced** in v1 — it arrives
-  with conduct enforcement (OQ-1, `--force`). Explicit, accepted limitation.
+- **F3 (low, scope limit — stated; conduct surfacing later corrected by F19).**
+  `slice status` is **invoker-blind in v1**: it surfaces the move classification +
+  the conduct posture (the **source** state's exit posture, `resolve(from)` — see
+  F19; this entry originally said "target state's conduct", since corrected), but
+  does not know whether an agent or a human invoked it. So "agent can't skip
+  without approval" (§4 #4) is **neither enforced nor actor-surfaced** in v1 — it
+  arrives with conduct enforcement (OQ-1, `--force`). Explicit, accepted limitation.
 - **F4 (low, edge case — fixed).** Transition *from* a drifted status →
   classified `Skip`, allowed. Added to §5.5.
 - **F5 (low, naming — fixed).** `Actor::Self_` (keyword workaround) → `Actor::Author`,
@@ -469,7 +471,8 @@ the slice handover. Seven findings beyond F1–F10; the three canon-shape decisi
 - **F15 (high, conduct sufficiency — RESOLVED: keep + tighten).** `slice status` is
   invoker-blind (F3): it cannot tell agent from author/peer/team, so `actor` is
   **neither enforced nor truthfully attributable** in v1 — the command can only
-  print the target state's *configured* posture. ADR-009 §2 sold `actor × autonomy`
+  print the *configured* posture (the source state's exit posture, `resolve(from)`
+  — F19). ADR-009 §2 sold `actor × autonomy`
   as a governance surface; that overclaimed. **Resolved: keep `actor` as advisory
   *config* declaring intended conduct** (what `slice show` displays, what a future
   enforcer reads once invocation identity is plumbed — OQ-1) and **tightened
