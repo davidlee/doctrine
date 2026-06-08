@@ -1,0 +1,97 @@
+# Implementation plan for SL-023 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-023"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Ship the glossary"
+objective = "Relocate doc/glossary.md to install/ so it embeds + installs into clients; drop its unshipped entity-model link; correct the dead doc/glossary.md path in shipped templates + governance; breadcrumb frozen citations."
+entrance_criteria = [
+  { id = "EN-1", text = "ADR-005 accepted and design D3 locked." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "doc/glossary.md relocated to install/glossary.md (git mv); no copy left in doc/." },
+  { id = "EX-2", text = "The entity-model.md link is removed; the opening sentence is self-contained (no dangling link in the shipped copy)." },
+  { id = "EX-3", text = "doc/glossary.md path corrected to .doctrine/glossary.md in install/templates/{spec-product,spec-tech,design,plan}.md, install/templates/plan.toml, install/governance.md." },
+  { id = "EX-4", text = "Non-destructive breadcrumb added under the frozen doc/glossary.md citation in .doctrine/slice/020/slice-020.md and .doctrine/spec/product/012/spec-012.md; originals intact." },
+]
+verification = [
+  { id = "VT-1", expects = "A test asserts install::asset_text(\"glossary.md\") is non-empty and the install plan lists glossary.md as an Install step (no doc/ wholesale embed)." },
+  { id = "VA-1", expects = "Rebuilt binary (clean + build) ships glossary.md; grep confirms no surviving doc/glossary.md path in install/templates or install/governance.md." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Author using-doctrine.md"
+objective = "Add install/using-doctrine.md — the client-facing operator's guide (task->verb map for ad-hoc ops, read-via-show discipline, storage read/write by tier, edit-preserving rules) that points to --help for shapes and never reproduces a flag table."
+entrance_criteria = [
+  { id = "EN-1", text = "Design D4 locked; glossary present as a pointer target (PHASE-01 complete)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/using-doctrine.md authored per D4: task->verb map (ad-hoc ops only, not the phase sequence), read-via-show, storage-by-tier + hand-edit boundary, edit-preserving rules, pointers to glossary + --help." },
+  { id = "EX-2", text = "The doc reproduces no doctrine --help flag/option table (names verbs, defers shapes to --help)." },
+]
+verification = [
+  { id = "VT-1", expects = "A test asserts install::asset_text(\"using-doctrine.md\") is non-empty and the install plan lists it as an Install step." },
+  { id = "VA-1", expects = "Review confirms unique payload vs --help/glossary/templates and no flag-table reproduction." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Push the reference-forms delta"
+objective = "Append a compact reference-forms block (rules only) plus a reference-docs pointer line to install/routing-process.md, so they ride the boot snapshot resident; storage-rule + use-CLI already present are not re-added."
+entrance_criteria = [
+  { id = "EN-1", text = "Pointer targets exist (PHASE-01, PHASE-02 complete); design D5 locked." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/routing-process.md gains a reference-forms block (entity-id pad rule, bare doc-local enums, VT/VA/VH criteria modes) — rules only, no tables/examples." },
+  { id = "EX-2", text = "A reference-docs pointer line names glossary.md + using-doctrine.md as read-on-demand references." },
+  { id = "EX-3", text = "No duplication of the already-resident storage-rule / use-CLI guardrail; snapshot stays compact." },
+]
+verification = [
+  { id = "VT-1", expects = "The boot integration test asserts a regenerated snapshot contains the reference-forms rules and the reference-docs pointer." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "De-dup the named skill sites"
+objective = "Reduce the 6 evidence-bound skill sites to pointers per the ratified restate line: remove flag syntax / option tables / storage-tier mechanics prose; add pointers to using-doctrine.md / glossary.md / --help. No 20-skill sweep."
+entrance_criteria = [
+  { id = "EN-1", text = "Pointer targets exist (PHASE-02, PHASE-03 complete); design D6 locked." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The 6 named sites (record-memory, retrieve-memory, spec-product, spec-tech, execute+phase-plan, canon+inquisition) are reduced per the D6 table; each gains a pointer." },
+  { id = "EX-2", text = "No named site reproduces flag syntax, an option/enum table, or storage-tier mechanics prose; MAY-permitted one-line pointers (slice:37, plan:40) untouched." },
+]
+verification = [
+  { id = "VT-1", expects = "A grep guard over the 6 named skill files finds no flag-syntax pattern (e.g. `--<flag> <`) or command-with-flags template." },
+  { id = "VA-1", expects = "Review confirms each site carries a pointer, no shipped doc reproduces --help, and every pull-reference is pointed-at (reachability)." },
+]
+specs        = []
+requirements = []
