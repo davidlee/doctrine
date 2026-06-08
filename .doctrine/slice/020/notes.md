@@ -67,3 +67,40 @@ Decisions worth surviving the phase sheet (audit-harvest candidates):
   parse tier, `BacklogItem`, and `KIND_PRECEDENCE` stay dead in the lib build;
   `KIND_PRECEDENCE` stays dead in BOTH builds and keeps the expectation green.
   **Retire the module expect at PHASE-05** when `edit` consumes the last of it.
+
+## PHASE-03 — `backlog list` (survey + visibility matrix)
+
+Decisions worth surviving the phase sheet (audit-harvest candidates):
+
+- **A NEW full-entity reader, NOT `meta::read_metas`.** `read_kind(root, kind)`
+  rides `entity::scan_ids` (numeric dirs only; **missing dir → empty Vec**, the C2
+  total-function tolerance) and parses+`validate`s each `backlog-NNN.toml` into a
+  full `BacklogItem` — `read_metas` yields only the 4 `meta::Meta` keys (no
+  `kind`/`status`-as-enum/`tags`). `read_all` iterates `ItemKind::ALL` and extends.
+  `meta.rs`/`entity.rs` UNCHANGED (R6/EX-3 held — `git diff` empty across the pair).
+- **Compute/print split mirrors `adr::{list_rows,run_list}`.** `list_rows(root,
+  &ListFilter) -> Result<String>` is the testable half (read→`select`→sort→
+  `format_rows`); `run_list` prints it via `write!` (no extra newline —
+  `render_table` carries its own). Tests assert the rendered String, never capture
+  stdout.
+- **Filters bundled in a private `ListFilter`** (`kind/status/tag/substr/all`) so
+  the verb stays at 6 args / 1 bool — under the clippy arg+bool ceilings
+  (`mem.pattern.lint.cli-handler-args-struct`) — and the compute half is one
+  testable argument. All axes AND together.
+- **Visibility folded into `select` (one predicate, no special branches).** `Some(
+  status) ⇒ status == s` (an explicit `--status` reveals a terminal state);
+  else `all || !is_terminal`. Promoted is a *resolution* on a terminal *status*,
+  so it falls out by the terminal rule with NO promoted-specific code (design D5).
+  `is_terminal` goes live here.
+- **Sort key `(kind.ordinal(), id)` — declaration order, NOT `KIND_PRECEDENCE`.**
+  Added `ItemKind::ALL` (decl order, the single source for both the cross-kind read
+  and `ordinal`) + `const fn ordinal`. A deterministic GROUPING, explicitly not a
+  priority claim (R7). `KIND_PRECEDENCE` (risk-first, the future resolver's) stays
+  referenced-nowhere. DRY: test `ALL_KINDS` retired in favour of `ItemKind::ALL`.
+- **`#![expect(dead_code)]` STILL fulfilled.** `list` makes `is_terminal`,
+  `ItemKind::ALL`/`ordinal`, and the `BacklogItem` list fields live; `from_prefix`,
+  `Resolution`/`RiskLevel::as_str`, and `resolution`/`facet`/`created`/`updated`
+  stay dead → expectation still met. **Retire at PHASE-05.**
+- **Test fixture: a direct-toml `write_item`** (the `meta::tests::write_meta_toml`
+  precedent) seeds an arbitrary `status`/`resolution` without the unbuilt PHASE-05
+  `edit` verb, exercising the real `scan_ids`+`validate` reader path.

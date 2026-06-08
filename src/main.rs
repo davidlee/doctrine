@@ -273,6 +273,33 @@ enum BacklogCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Survey items across all kinds; filters AND together. Hides terminal
+    /// (resolved/closed) by default — `--all` or an explicit `--status` reveals.
+    List {
+        /// Only this kind.
+        #[arg(long)]
+        kind: Option<backlog::ItemKind>,
+
+        /// Only this status (reveals a terminal state).
+        #[arg(long)]
+        status: Option<backlog::Status>,
+
+        /// Only items carrying this tag.
+        #[arg(long)]
+        tag: Option<String>,
+
+        /// Show every state, including terminal.
+        #[arg(long)]
+        all: bool,
+
+        /// Title substring filter (case-insensitive).
+        substr: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -821,6 +848,14 @@ fn main() -> anyhow::Result<()> {
                 slug,
                 path,
             } => backlog::run_new(path, kind, title, slug),
+            BacklogCommand::List {
+                kind,
+                status,
+                tag,
+                all,
+                substr,
+                path,
+            } => backlog::run_list(path, kind, status, tag, all, substr),
         },
         Command::Boot {
             command,

@@ -29,7 +29,7 @@
 )]
 
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -164,6 +164,30 @@ impl ItemKind {
     /// scaffold template and gates facet render.
     const fn has_facet(self) -> bool {
         matches!(self, ItemKind::Risk)
+    }
+
+    /// Every kind in DECLARATION order — the single source for the cross-kind
+    /// `list` read (each tree in turn) and the `ordinal` grouping key.
+    const ALL: [ItemKind; 5] = [
+        ItemKind::Issue,
+        ItemKind::Improvement,
+        ItemKind::Chore,
+        ItemKind::Risk,
+        ItemKind::Idea,
+    ];
+
+    /// The kind's position in declaration order — the primary `list` sort key.
+    /// A deterministic GROUPING (Issue…Idea), explicitly NOT a priority claim
+    /// (R7; priority is PRD-011, deferred) and NOT `KIND_PRECEDENCE` (risk-first,
+    /// the inert future-resolver order).
+    const fn ordinal(self) -> usize {
+        match self {
+            ItemKind::Issue => 0,
+            ItemKind::Improvement => 1,
+            ItemKind::Chore => 2,
+            ItemKind::Risk => 3,
+            ItemKind::Idea => 4,
+        }
     }
 }
 
@@ -520,6 +544,132 @@ pub(crate) fn run_new(
 }
 
 // ---------------------------------------------------------------------------
+// Read: per-kind tree → validated items (total over a missing dir)
+// ---------------------------------------------------------------------------
+
+/// Read every item under one kind's tree into validated `BacklogItem`s. Rides
+/// `entity::scan_ids` (numeric dirs only; **a missing tree → empty set**, the C2
+/// total-function tolerance), then parses + `validate`s each `backlog-NNN.toml`.
+/// The full-entity sibling of `meta::read_metas` (which yields only the 4 list
+/// keys, no `kind`/`resolution`); `meta.rs` stays untouched (R6/EX-3).
+fn read_kind(root: &Path, item_kind: ItemKind) -> anyhow::Result<Vec<BacklogItem>> {
+    let tree = root.join(item_kind.kind().dir);
+    let mut items = Vec::new();
+    for id in entity::scan_ids(&tree)? {
+        let name = format!("{id:03}");
+        let path = tree.join(&name).join(format!("{BACKLOG_STEM}-{name}.toml"));
+        let text = std::fs::read_to_string(&path)
+            .with_context(|| format!("backlog item not found at {}", path.display()))?;
+        let raw: RawBacklogToml =
+            toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+        items.push(validate(raw)?);
+    }
+    Ok(items)
+}
+
+/// Read all five kinds' trees, merged (declaration order, pre-sort). Each absent
+/// kind dir contributes the empty set, so a virgin repo reads to `[]`.
+fn read_all(root: &Path) -> anyhow::Result<Vec<BacklogItem>> {
+    let mut items = Vec::new();
+    for item_kind in ItemKind::ALL {
+        items.extend(read_kind(root, item_kind)?);
+    }
+    Ok(items)
+}
+
+// ---------------------------------------------------------------------------
+// Pure: filter (the visibility matrix) + render
+// ---------------------------------------------------------------------------
+
+/// The `list` filter axes — bundled so the verb stays under the CLI arg ceiling
+/// and the compute half is one testable argument. All axes AND together.
+#[derive(Debug, Default)]
+struct ListFilter {
+    kind: Option<ItemKind>,
+    status: Option<Status>,
+    tag: Option<String>,
+    substr: Option<String>,
+    all: bool,
+}
+
+/// Filter merged items by the AND of every set axis, then apply visibility
+/// (design §5.4 / D5): an explicit `--status` keeps exactly that state (revealing
+/// a terminal one); otherwise `--all` keeps everything and the default hides
+/// terminal (`resolved`/`closed` — promoted falls out by the terminal rule, no
+/// special branch). Pure; consumes and returns the item vec.
+fn select(items: Vec<BacklogItem>, f: &ListFilter) -> Vec<BacklogItem> {
+    let substr = f.substr.as_ref().map(|s| s.to_lowercase());
+    items
+        .into_iter()
+        .filter(|i| f.kind.is_none_or(|k| i.kind == k))
+        .filter(|i| f.tag.as_ref().is_none_or(|t| i.tags.iter().any(|x| x == t)))
+        .filter(|i| {
+            substr
+                .as_ref()
+                .is_none_or(|s| i.title.to_lowercase().contains(s))
+        })
+        .filter(|i| match f.status {
+            Some(s) => i.status == s,
+            None => f.all || !i.status.is_terminal(),
+        })
+        .collect()
+}
+
+/// Render rows as `id  kind  status  slug  title` over `meta::render_table` (the
+/// SL-009 ragged-grid path — additive, NOT the fixed 4-col `format_list`). The id
+/// is the canonical `XXX-NNN` (kind-disambiguated). Empty rows → `""` (the virgin
+/// empty-table path). Pure.
+fn format_rows(items: &[BacklogItem]) -> String {
+    let grid: Vec<Vec<String>> = items
+        .iter()
+        .map(|i| {
+            vec![
+                i.kind.canonical_id(i.id),
+                i.kind.as_str().to_string(),
+                i.status.as_str().to_string(),
+                i.slug.clone(),
+                i.title.clone(),
+            ]
+        })
+        .collect();
+    crate::meta::render_table(&grid)
+}
+
+/// The `backlog list` rows as a string — the compute half of `run_list`,
+/// extracted (the `adr::list_rows` precedent) so tests assert the rendered output
+/// without capturing stdout. Read all kinds → filter → sort kind-then-id → render.
+fn list_rows(root: &Path, f: &ListFilter) -> anyhow::Result<String> {
+    let mut items = select(read_all(root)?, f);
+    items.sort_by_key(|i| (i.kind.ordinal(), i.id));
+    Ok(format_rows(&items))
+}
+
+/// `doctrine backlog list [--kind K] [--status S] [--tag T] [--all] [<substr>]`
+/// — the survey verb (PRD-009 REQ-050). Thin shell (§5.4): find the root, build
+/// the filter, print the rows verbatim (`list_rows` carries `render_table`'s own
+/// trailing newline — no extra). Reads disk via `read_all` only; the engine and
+/// the shared `meta` path are untouched (R6/EX-3).
+pub(crate) fn run_list(
+    path: Option<PathBuf>,
+    kind: Option<ItemKind>,
+    status: Option<Status>,
+    tag: Option<String>,
+    all: bool,
+    substr: Option<String>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let filter = ListFilter {
+        kind,
+        status,
+        tag,
+        substr,
+        all,
+    };
+    write!(io::stdout(), "{}", list_rows(&root, &filter)?)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -530,15 +680,6 @@ mod tests {
     use crate::meta::Meta;
     use std::fs;
     use std::path::Path;
-
-    /// Every `ItemKind` — the table the per-kind assertions iterate.
-    const ALL_KINDS: [ItemKind; 5] = [
-        ItemKind::Issue,
-        ItemKind::Improvement,
-        ItemKind::Chore,
-        ItemKind::Risk,
-        ItemKind::Idea,
-    ];
 
     fn ctx_for(item_kind: ItemKind) -> ScaffoldCtx<'static> {
         let canonical: &'static str = match item_kind {
@@ -576,7 +717,7 @@ mod tests {
 
     #[test]
     fn backlog_scaffold_lays_out_toml_md_symlink() {
-        for kind in ALL_KINDS {
+        for kind in ItemKind::ALL {
             let ctx = ctx_for(kind);
             let fileset = backlog_scaffold(kind, &ctx).unwrap();
             assert_eq!(fileset.len(), 3, "{kind:?}: toml + md + symlink");
@@ -619,7 +760,7 @@ mod tests {
 
     #[test]
     fn all_five_kinds_seed_status_resolution_updated_tags() {
-        for kind in ALL_KINDS {
+        for kind in ItemKind::ALL {
             let body = render_backlog_toml(kind, 1, "s", "T", "2026-06-08").unwrap();
             assert!(
                 body.contains("status = \"open\""),
@@ -742,13 +883,13 @@ tags = []
 
     #[test]
     fn item_kind_from_prefix_round_trips_each_kind() {
-        for kind in ALL_KINDS {
+        for kind in ItemKind::ALL {
             assert_eq!(ItemKind::from_prefix(kind.prefix()), Some(kind));
         }
         assert_eq!(ItemKind::from_prefix("REQ"), None);
         // the five prefixes are distinct.
         let prefixes: std::collections::BTreeSet<&str> =
-            ALL_KINDS.iter().map(|k| k.prefix()).collect();
+            ItemKind::ALL.iter().map(|k| k.prefix()).collect();
         assert_eq!(prefixes.len(), 5);
     }
 
@@ -936,6 +1077,240 @@ tags = []
             add.status.success(),
             "git add failed: {}",
             String::from_utf8_lossy(&add.stderr)
+        );
+    }
+
+    // --- PHASE-03: the `backlog list` survey (visibility / filter / order) ---
+
+    /// Write a complete `backlog-NNN.toml` directly under a kind's tree — a true
+    /// unit fixture (the `meta::tests::write_meta_toml` precedent) that lets a
+    /// non-`open`/terminal status + a resolution be seeded without the (unbuilt,
+    /// PHASE-05) `edit` verb. Exercises the real reader: `scan_ids` + `validate`.
+    fn write_item(
+        root: &Path,
+        kind: ItemKind,
+        id: u32,
+        status: &str,
+        resolution: &str,
+        slug: &str,
+        title: &str,
+        tags: &[&str],
+    ) {
+        let tree = root.join(kind.kind().dir);
+        let name = format!("{id:03}");
+        let dir = tree.join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        let tags_lit = tags
+            .iter()
+            .map(|t| format!("\"{t}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let body = format!(
+            "id = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\nkind = \"{}\"\n\
+             status = \"{status}\"\nresolution = \"{resolution}\"\n\
+             created = \"2026-06-08\"\nupdated = \"2026-06-08\"\ntags = [{tags_lit}]\n",
+            kind.as_str()
+        );
+        fs::write(dir.join(format!("backlog-{name}.toml")), body).unwrap();
+    }
+
+    /// The first column (canonical id) of each rendered row, in render order.
+    fn ids(out: &str) -> Vec<String> {
+        out.lines()
+            .map(|l| l.split_whitespace().next().unwrap().to_string())
+            .collect()
+    }
+
+    // --- VT-1: the visibility matrix ---
+
+    #[test]
+    fn backlog_list_default_hides_terminal() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+        write_item(root, ItemKind::Issue, 2, "triaged", "", "b", "Bravo", &[]);
+        write_item(root, ItemKind::Issue, 3, "started", "", "c", "Charlie", &[]);
+        write_item(
+            root,
+            ItemKind::Issue,
+            4,
+            "resolved",
+            "fixed",
+            "d",
+            "Delta",
+            &[],
+        );
+        write_item(root, ItemKind::Issue, 5, "closed", "done", "e", "Echo", &[]);
+
+        let out = list_rows(root, &ListFilter::default()).unwrap();
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001", "ISS-002", "ISS-003"],
+            "default shows only the active states; resolved/closed hidden"
+        );
+    }
+
+    #[test]
+    fn backlog_list_all_and_explicit_status_reveal() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+        write_item(
+            root,
+            ItemKind::Issue,
+            4,
+            "resolved",
+            "fixed",
+            "d",
+            "Delta",
+            &[],
+        );
+        write_item(root, ItemKind::Issue, 5, "closed", "done", "e", "Echo", &[]);
+        // a promoted item is terminal (status resolved, resolution=promoted) — it
+        // must hide by default and reveal by the terminal rule, no special branch.
+        write_item(
+            root,
+            ItemKind::Issue,
+            6,
+            "resolved",
+            "promoted",
+            "f",
+            "Foxtrot",
+            &[],
+        );
+
+        // --all reveals every state.
+        let all = list_rows(
+            root,
+            &ListFilter {
+                all: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            ids(&all),
+            vec!["ISS-001", "ISS-004", "ISS-005", "ISS-006"],
+            "--all shows active + terminal + promoted"
+        );
+
+        // an explicit --status resolved reveals exactly that terminal state
+        // (open hidden, closed hidden; the promoted resolved item included).
+        let resolved = list_rows(
+            root,
+            &ListFilter {
+                status: Some(Status::Resolved),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            ids(&resolved),
+            vec!["ISS-004", "ISS-006"],
+            "--status resolved reveals the resolved (incl. promoted) items only"
+        );
+    }
+
+    // --- VT-2: filters AND together; kind-then-id order ---
+
+    #[test]
+    fn backlog_list_filters_and_together() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            "",
+            "auth-bug",
+            "Auth bug",
+            &["security"],
+        );
+        write_item(
+            root,
+            ItemKind::Issue,
+            2,
+            "open",
+            "",
+            "login",
+            "Login flow",
+            &["ui"],
+        );
+        write_item(
+            root,
+            ItemKind::Risk,
+            1,
+            "open",
+            "",
+            "auth-risk",
+            "Auth risk",
+            &["security"],
+        );
+
+        // --kind issue AND --tag security AND substring "auth" → only ISS-001.
+        let out = list_rows(
+            root,
+            &ListFilter {
+                kind: Some(ItemKind::Issue),
+                tag: Some("security".to_string()),
+                substr: Some("auth".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001"],
+            "the axes intersect: ISS-002 lacks the tag/substr, RSK-001 is the wrong kind"
+        );
+    }
+
+    #[test]
+    fn backlog_list_kind_then_id_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // write out of order, across kinds, to prove the sort (not insertion order).
+        write_item(root, ItemKind::Risk, 1, "open", "", "r", "R", &[]);
+        write_item(root, ItemKind::Issue, 2, "open", "", "i2", "I2", &[]);
+        write_item(root, ItemKind::Issue, 1, "open", "", "i1", "I1", &[]);
+        write_item(root, ItemKind::Idea, 1, "open", "", "d", "D", &[]);
+        write_item(root, ItemKind::Chore, 1, "open", "", "c", "C", &[]);
+
+        let out = list_rows(root, &ListFilter::default()).unwrap();
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001", "ISS-002", "CHR-001", "RSK-001", "IDE-001"],
+            "kind declaration order (issue/improvement/chore/risk/idea) then ascending id"
+        );
+    }
+
+    // --- VT-3: total-function reads (missing dir / virgin repo) ---
+
+    #[test]
+    fn backlog_list_missing_dir_is_empty_set() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // only the issue tree exists; the other four kind dirs are absent.
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+
+        let out = list_rows(root, &ListFilter::default()).unwrap();
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001"],
+            "an absent kind dir contributes the empty set, never an error"
+        );
+    }
+
+    #[test]
+    fn backlog_list_virgin_repo_empty_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // no `.doctrine/backlog` at all — every kind reads empty.
+        let out = list_rows(root, &ListFilter::default()).unwrap();
+        assert_eq!(
+            out, "",
+            "a virgin repo prints an empty table, never an error"
         );
     }
 }
