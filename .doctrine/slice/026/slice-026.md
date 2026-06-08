@@ -43,7 +43,7 @@ clock/rng/git/disk in the pure layer). Composition model per
 - **Node set:** `slice` (SL); `spec` → two virtual types **product-spec** (PRD) +
   **tech-spec** (SPEC), requirements inline; `adr` (ADR); `backlog` → **five** types
   by item_kind (ISS/IMP/CHR/RSK/IDE); `plan` → a **synthetic** child node
-  (`SL-NNN~plan`, plan not being a reserved entity). **Requirements are NOT
+  (`PLAN-NNN`, plan not being a reserved entity). **Requirements are NOT
   standalone nodes** — inline in spec bodies as `FR-`/`NF-` labelled entries.
 - **Every entity carries `validate_ignore: true`** (doctrine owns validation;
   `rules = []` does not empty lazyspec's rule set). **Emitted types are
