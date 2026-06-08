@@ -50,8 +50,14 @@ authored tier.
   derived, never stored, and are *not* the plain reader's to render (§3). This
   removes "show derived children" from scope.
 - **Behaviour-preservation gate.** The shared machinery's SL-015 suites are the
-  proof it is unchanged; they must stay green. The one sanctioned divergence is
-  REQ-084's deliberate reframing of the interaction target-kind check.
+  proof *unrelated* machinery is unchanged; they must stay green. REQ-084's
+  rewrite of the interaction target-kind check is **not** a divergence from this
+  gate — it is an **intended behaviour change** mandated by PRD-012 §6 (the
+  contract moved from dangling to invalid-kind), outside the gate's reach. The
+  one real caveat the gate must absorb is the new `build_registry` parse
+  (Charge I): its error surface widens, and the hand-built `Registry` unit suites
+  do not exercise it — §9 adds a `build_registry`-level test so that change is
+  proven, not assumed.
 - **Storage rule + cardinality.** The three relations are single-valued with no
   edge-local data, so they are flat scalar fields (the `c4_level` precedent), not
   edge-table files (which exist for many-cardinality + mobile edge data).
@@ -94,8 +100,14 @@ code realises intent, a spec describes the *how* — `realises` overclaims).
 
 `#[serde(default)]` → absent yields `None` (product specs and unfilled tech
 specs parse unchanged, exactly as `c4_level`). No shape validation at parse; an
-unresolvable ref is a `validate` finding. A duplicate `parent =` key is a TOML
-parse error — this is how a *second parent* is precluded (REQ-087).
+unresolvable ref is a `validate` finding. A *second parent* is **doubly
+precluded** (REQ-087, finding D): the scalar field makes the in-model state
+unrepresentable (a duplicate `parent =` key or a `parent = [...]` array fails
+`toml::from_str`), and a **pre-parse guard** in `build_registry` (§5.3) detects
+that same malformation first and emits a **named hard finding** ("spec X declares
+a second parent") rather than an opaque `"Failed to parse"`. The guard is what
+satisfies AC1 *literally* (a hard finding, non-zero exit); the scalar shape is
+defense-in-depth, not the sole mechanism.
 
 **`render()`** adds, after the `c4_level` line, kind-gated to tech:
 
@@ -136,9 +148,23 @@ soft product-spec warning without a second collection pass.
 - `parent_cycle` — walk the child→parent map from each node with a visited
   `BTreeSet`; a revisit (chain length ≥ 2) is a cycle. Terminates at a root (node
   with no parent edge) or a dangling parent (target absent as a key) — neither is
-  a cycle (REQ-087).
+  a cycle (REQ-087). **One finding per cycle, not per node** (finding A's "one
+  finding per defect" law): a k-cycle is reported once, canonicalised by emitting
+  only when the walk's starting node is the cycle's least id. (A naive
+  walk-from-every-node yields k findings for one ring — the relapse the cycle-2 /
+  cycle-3 tests must pin by asserting the *count*, not mere existence.)
+- `second_parent` — **HARD**, pre-parse (§5.3). A `spec-NNN.toml` whose raw text
+  carries a duplicate `parent =` key or an array `parent = [...]` → one named
+  finding ("second parent declared in spec X"), non-zero exit. This is REQ-087
+  AC1's literal mechanism (see finding D); the scalar field is the defense-in-depth
+  backstop, not the diagnostic.
 - interaction split — rewrite `dangling_interaction_targets`: target ∈
-  `product_specs` → *invalid kind*; ∈ neither → *dangling* (REQ-084).
+  `product_specs` → *invalid kind*; ∈ neither → *dangling* (REQ-084). **An intended
+  behaviour change** — PRD-012 §6 moved the contract (a product target is now
+  invalid-kind, not dangling), so the current behaviour is incorrect and the
+  existing test asserts the old, now-wrong contract. Not a "divergence" from the
+  behaviour-preservation gate — that gate guards *unrelated* machinery from
+  *accidental* change and does not reach a deliberate, spec-mandated contract move.
 - `descent_on_product` — **WARN** — a product spec carrying `descends_from`
   (REQ-082 open edge; see §6).
 
@@ -149,18 +175,48 @@ like the rest). `run_validate` calls both, prints warnings prefixed `warning:`,
 and bails non-zero only when the hard set is non-empty; a corpus clean-but-for-
 warnings exits zero.
 
+The severity tier is retained deliberately (finding D5; Charge IV answered). Its
+sole *current* consumer is `descent_on_product`, which traces to no acceptance
+criterion — but the tier is kept as **durable corpus machinery**, not built for
+that one case: a hard/soft split is the correct shape for advisory integrity the
+moment any check needs to *flag without blocking* (the anchor-integrity findings
+PRD-012 §6 foreshadows, evergreen-altitude drift, importer reconciliation), and
+warning over hard-error here preserves open question Q1 (a hard error pre-empts a
+future product-spec hierarchy; the warn does not). Cost is one sibling method and
+a `warning:` prefix — accepted as a one-time investment, not per-case scope creep.
+
 ### 5.3 Data, State & Ownership
 
-`build_registry` already loops `[Product, Tech]`:
+**Correction (Charge I).** `build_registry` today reads **only** `members.toml`
+and `interactions.toml` per spec (`src/spec.rs:705-743`); it does **not** parse
+`spec-NNN.toml` — the lone `Spec` parse in the subsystem lives in `run_show`
+(`src/spec.rs:675-677`). So `parent` / `descends_from` are **not** "already
+parsed" on the validate path. Harvesting them is a **new, fallible per-spec read**:
+
+`build_registry` already loops `[Product, Tech]`; each arm gains a
+`read_to_string(spec-NNN.toml)` + `toml::from_str::<Spec>` (mirroring `run_show`):
 - Product arm: `product_specs.insert(ref)`; if the parsed spec carries
   `descends_from`, push a `DescentEdge { on_product: true }` (warn only).
 - Tech arm (existing `tech_specs.insert` + interactions): read the parsed
   `Spec.parent` / `Spec.descends_from`; push `ParentEdge` / `DescentEdge { on_product:
   false }`, canonicalising the ref via the existing `resolve_spec_ref` path.
+- Both arms: before the parse, run the **pre-parse `second_parent` guard** over the
+  raw text (duplicate `parent =` key or `parent = [...]` array → named hard
+  finding); on a hit, record the finding and skip the structural parse for that
+  spec so a malformed file yields a *named* finding, not an opaque parse `Err`.
 
-No new file reads — both fields ride `spec-NNN.toml`, already parsed. The
-child→parent inversion needed for cycle detection is built inside `parent_cycle`,
-ephemeral, never persisted (storage rule).
+**Error-surface change (behaviour-preservation, Charge I).** This new parse means
+a malformed `spec-NNN.toml` that today does **not** break `doctrine spec validate`
+(validate never opened it) **will** now surface — caught and named where it is a
+second-parent violation, propagated as a `"Failed to parse"` context error
+otherwise. This is a genuine, intended widening of `build_registry`'s failure
+behaviour; the SL-015 unit suites stay green only because they build `Registry`
+by hand and bypass this seam, so their greenness is **not** proof this path is
+unchanged — §9 carries a `build_registry`-level test for the new behaviour.
+
+The child→parent inversion needed for cycle detection is built inside
+`parent_cycle`, ephemeral, never persisted (storage rule). The raw second-parent
+scan reads no extra file — it inspects the text already read for the parse.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -172,9 +228,10 @@ PRD's realising specs) are a future registry/`inspect` surface concern (§6).
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- A tech spec has **at most one** parent (scalar field; dup key rejected at
-  parse) and the parent chain is **acyclic** (`parent_cycle`). Together: the
-  decomposition is a forest of single-parent trees.
+- A tech spec has **at most one** parent (scalar field + pre-parse `second_parent`
+  guard → named hard finding; the dup key is also rejected at parse as a backstop)
+  and the parent chain is **acyclic** (`parent_cycle`, one finding per cycle).
+  Together: the decomposition is a forest of single-parent trees.
 - A root tech spec has no `parent` — valid.
 - `descends_from` resolves to a **product** spec; a tech-spec target is an
   invalid kind, an absent target is dangling.
@@ -204,6 +261,19 @@ PRD's realising specs) are a future registry/`inspect` surface concern (§6).
 - **Q4 — REQ-082 prose.** REQ-082's title still reads "...the product capability
   it realises". Reconciling that wording to `descends_from` is PRD-012 territory,
   not SL-022.
+
+## 6a. REQ-087 reconciliation (Charge III, User-sanctioned)
+
+REQ-087 AC1 — *"a second parent is rejected as a hard finding"* — and AC3 —
+*"the integrity pass returns a non-zero result"* — are satisfied **literally** by
+the pre-parse `second_parent` guard (§5.2/§5.3): a duplicate / array `parent`
+yields a **named hard finding** in `validate`'s list and a non-zero `run_validate`
+exit. The scalar field makes the state additionally **unrepresentable** in the
+parsed model — defense-in-depth, not the diagnostic. The earlier draft satisfied
+AC1 only by an opaque parse error (a literal-reading deviation); the User ruled
+(a) accept structural impossibility *and* (b) add the named diagnostic — which
+together promote the case from deviation to literal satisfaction. No open
+reconciliation remains.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -248,24 +318,37 @@ hard-error on product descent (D5); rendering children in `show` (D3).
 
 Unit-test driven (no spec e2e harness exists; SL-015 set the precedent). Layer A
 — `registry.rs` pure checks over hand-built registries: descent clean / dangling
-/ invalid-kind; parent clean / dangling; self-parent; cycle-2 / cycle-3 / clean
-chain-root; interaction invalid-kind (rewriting `non_tech_interaction_target…`) /
-dangling; descent-on-product warns and is absent from hard findings; severity
-gate (warnings-only → empty hard set). Layer B — `spec.rs` parse (`parent` /
-`descends_from` present→`Some`, absent→`None`; duplicate `parent` key → read
-errors) and render (tech emits the lines in order; product with `descends_from`
-omits the line; no children line).
+/ invalid-kind; parent clean / dangling; self-parent; **cycle-2 / cycle-3 each
+asserting the finding *count* is exactly one** (Charge II — guards the
+one-finding-per-cycle dedup, not mere existence); clean chain-root; interaction
+invalid-kind (rewriting `non_tech_interaction_target…`) / dangling;
+descent-on-product warns and is absent from hard findings; severity gate
+(warnings-only → empty hard set). Layer B — `spec.rs` parse (`parent` /
+`descends_from` present→`Some`, absent→`None`) and render (tech emits the lines in
+order; product with `descends_from` omits the line; no children line). Layer C —
+`build_registry` over a temp corpus (the seam Charge I exposed, untouched by the
+hand-built-registry layers): (i) a well-formed corpus parses and collects
+parent/descent edges; (ii) a **second-parent** spec (duplicate / array `parent`)
+yields the named hard finding and `run_validate` exits **non-zero** (REQ-087 AC1
++ AC3, end-to-end, not at `toml::from_str` level); (iii) an otherwise-malformed
+`spec-NNN.toml` now surfaces as a parse error where before it was invisible to
+`validate` (the deliberate error-surface widening).
 
-Behaviour-preservation, precisely: the SL-015 `registry.rs` checks and their
-tests are untouched (additive set + new sibling methods) **except** the one
-deliberate REQ-084 rewrite of `non_tech_interaction_target_is_flagged_tech_only`
-(flagged in commit + audit). Two mechanical, non-behavioural edits are
-unavoidable and are *not* gate breaches: (a) the `spec.rs` test `Spec { … }`
-constructors (`tech_spec` helper and peers) gain `descends_from: None, parent:
-None` because `Spec` derives no `Default`; (b) nothing else. No existing
-assertion changes value. Closure: `doctrine spec validate` non-zero on each
-crafted hard violation, zero on a clean-but-warned corpus; `just check` green,
-clippy zero.
+Behaviour-preservation, precisely: the SL-015 `registry.rs` *pure-check* methods
+and their hand-built-registry tests are untouched (additive set + new sibling
+methods) **except** the REQ-084 rewrite of
+`non_tech_interaction_target_is_flagged_tech_only` — an **intended behaviour
+change** (PRD-012 §6 moved the contract), not a gate divergence (flagged in commit
++ audit). The one **real** machinery change the unit suites do not cover is
+`build_registry`'s new per-spec `Spec` parse (Charge I): it widens the impure
+scan's error surface, so it is proven by Layer C, not assumed from green unit
+tests. Two mechanical, non-behavioural edits are unavoidable and are *not* gate
+breaches: (a) the `spec.rs` test `Spec { … }` constructors (`tech_spec` helper and
+peers) gain `descends_from: None, parent: None` because `Spec` derives no
+`Default`; (b) nothing else. No existing assertion changes value. Closure:
+`doctrine spec validate` non-zero on each crafted hard violation (including the
+second-parent case, Layer C), zero on a clean-but-warned corpus; `just check`
+green, clippy zero.
 
 ## 10. Review Notes
 
@@ -273,27 +356,46 @@ Internal adversarial pass (integrated above):
 
 - **A — self-parent / cycle double-report.** A→A is both a self-parent and a
   1-cycle. Resolved: `self_parent` is the sole reporter; `parent_cycle` skips
-  self-loops (§5.2). One finding per defect.
+  self-loops (§5.2). One finding per defect. *(Extended by inquisition finding F:
+  the same "one finding per defect" law applies to k-cycles too — see F.)*
 - **B — `validate()` signature creep.** Folding warnings into `validate`'s return
   would break the SL-015 `validate` tests. Resolved: `warnings()` is a sibling
   method; `validate()` returns hard findings only (§5.2).
 - **C — overstated behaviour-preservation.** Adding two non-`Default` fields
   forces the `spec.rs` `Spec { … }` test constructors to add `None, None` — a
   mechanical, non-behavioural edit, but not "unchanged." Claim corrected (§9).
-- **D — REQ-087 AC1 mechanism (flag for inquisition).** "A containment that would
-  give a spec a second parent is rejected as a hard finding." A scalar `parent`
-  field makes two parents *unrepresentable*: `parent = "A"` twice is a TOML
-  duplicate-key parse error, `parent = ["A","B"]` is a type error — both fail at
-  `read`, so `spec validate` exits non-zero (build_registry returns `Err`) but via
-  a parse error, **not** a findings-list entry. This is judged *stronger* than a
-  finding (the invalid state cannot exist), but it is a literal-reading deviation
-  from "hard finding". Surfaced deliberately for the adversarial pass rather than
-  buried; the alternative (model `parent` as a `Vec` to produce a list finding)
-  is rejected as it reintroduces the representable-but-invalid state D1 designs
-  out.
+- **D — REQ-087 AC1 mechanism (RESOLVED by inquisition + User ruling).** The
+  draft satisfied "second parent rejected as a hard finding" only by an opaque
+  TOML parse error (`build_registry` → `Err`) — a literal-reading deviation. The
+  inquisition tried this in full (Charge III) and surfaced two unconfessed sins:
+  the failure was *undiagnosable* (generic `"Failed to parse"`) and the AC3
+  non-zero exit was tested only at `toml::from_str` level. User ruled: accept
+  structural impossibility **and** add a named diagnostic. Synthesis: a pre-parse
+  `second_parent` guard emits a **named hard finding** with non-zero exit (literal
+  AC1 + AC3), the scalar field is defense-in-depth. The `Vec`-parent alternative
+  stays rejected (reintroduces the representable-but-invalid state). See §6a, §5.2,
+  §5.3, Layer C. **No deviation remains.**
 - **E — parent target-kind symmetry.** A `parent` pointing at a product spec is
   now reported *invalid kind*, not *dangling* — consistent with descent and
   interaction (§5.2). `product_specs` was already in scope, so zero marginal cost.
+
+Inquisition pass (`inquisition.md`, integrated above):
+
+- **F — k-cycle multiplicity (MAJOR, was unconfessed).** A walk-from-every-node
+  `parent_cycle` reports a k-node cycle k times, breaking finding A's
+  "one-finding-per-defect" law for every ring larger than the self-loop. Resolved:
+  dedup to one finding per cycle (canonicalise by least node-id); cycle-2 / cycle-3
+  tests assert the *count* (§5.2, §9 Layer A). User ruling: dedup.
+- **G — `build_registry` false "already parsed" (CRITICAL, was unconfessed).** The
+  draft claimed `parent` / `descends_from` ride a spec already parsed on the
+  validate path; in truth `build_registry` never parses `spec-NNN.toml` (only
+  `run_show` does). Resolved: §5.3 corrected, the new per-spec parse and its
+  widened error surface owned, Layer C added. User: corrected as a fix.
+- **H — severity-tier warrant (MINOR).** The `warnings()` tier traces to no AC.
+  User ruled: keep it as durable corpus machinery (justified §5.2, D5), not built
+  for the single product-descent warn case.
+- **(wording) REQ-084 framing.** Recast from "sanctioned divergence" to an
+  intended, spec-mandated behaviour change (§3, §9).
 
 Doctrinal alignment: ADR-004 (outbound-only, derived reciprocity, show
 outbound-only, §5 carve-out deferral), ADR-001 (registry stays pure leaf; impure

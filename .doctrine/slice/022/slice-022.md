@@ -106,8 +106,11 @@ edge-table file.
 
 - `src/spec.rs` — `Spec` struct gains `descends_from: Option<String>` and
   `parent: Option<String>` (parse + `render()` outbound lines). Touches the parse
-  / render seams only; existing fields unchanged. `build_registry` also collects
-  product-spec ids and the two new edge kinds.
+  / render seams only; existing fields unchanged. `build_registry` gains a
+  per-spec `spec-NNN.toml` read+parse (it parses no spec today — only the edge
+  tables) to harvest the two fields, plus a pre-parse second-parent guard; it then
+  collects product-spec ids and the two new edge kinds. The new parse widens the
+  scan's error surface (see design §5.3, Charge I).
 - `src/registry.rs` — gains a `product_specs: BTreeSet<String>` id set, parent
   edges, and descent edges; new pure checks: dangling/invalid-kind descent,
   dangling parent, self-parent, parent-chain cycle, and the interaction
