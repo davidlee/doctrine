@@ -104,3 +104,42 @@ Decisions worth surviving the phase sheet (audit-harvest candidates):
 - **Test fixture: a direct-toml `write_item`** (the `meta::tests::write_meta_toml`
   precedent) seeds an arbitrary `status`/`resolution` without the unbuilt PHASE-05
   `edit` verb, exercising the real `scan_ids`+`validate` reader path.
+
+## PHASE-04 — `backlog show <ID>` (commit `<pending>`)
+
+Decisions worth surviving the phase sheet (audit-harvest candidates):
+
+- **`show` is TOML-only — NO prose body (`format_show(&BacklogItem)`).** Unlike
+  `spec::run_show` (reads `.md` + members + interactions), backlog show is a pure fn
+  of the validated item, which carries no prose field. Design §5.4 enumerates
+  identity+facet+timestamps+relations and never lists the `.md`; "cannot go stale" =
+  derived from the item's own structured state. So show opens exactly ONE file (the
+  toml). The `.md` body stays scaffold-only, surfaced by neither verb in v1.
+- **`read_item(root, kind, id)` factored OUT of `read_kind`'s loop** (DRY) — the
+  single-id read shared by the `list` cross-kind loop and `show`. One parse path; a
+  missing file is a hard error (never implicit create, §5.5). No parse re-fork.
+- **`parse_ref` upper-cases the prefix; deliberately NOT shared with
+  `spec::resolve_spec_ref`.** Both do `rsplit_once('-')` + prefix-lookup + `u32` tail,
+  but backlog tolerates case (`iss-7` → Issue) per §5.5 whereas spec refs are always
+  canonical. A shared helper would impose one case-policy on both — kept separate,
+  the divergence is commented at both sites (R3 / the "load-bearing prefix" note).
+- **Relations render per-axis, non-empty only (D-PHASE04-2).** Mirror `spec::render`'s
+  `if !is_empty` gating. "Seam always present even when empty" (§5.5 invariant) is a
+  STORAGE rule, not a render rule — an item with no outbound relations shows no
+  `relationships:` block. OUTBOUND only; the inbound/reverse view is the deferred
+  registry surface's (ADR-004 / PRD-011), never computed by `show` — the VT-3 negative.
+- **Unassessed-risk render = a bare `[facet]` header.** A seeded risk has
+  `facet=Some` with all-`None` axes + empty `controls`, so the block is gated on
+  `item.facet` (kind-bearing) and prints `[facet]` with no axes — a truthful
+  "assessable, unassessed" signal, consistent with `new`/`list` treating risk as
+  facet-bearing. Per-axis lines appear once assessed (`likelihood`/`impact`/`origin`/
+  `controls`). Accepted as-is (within §5.4 latitude); flag for audit if a reviewer
+  wants the header suppressed until assessed.
+- **`#![expect(dead_code)]` STILL fulfilled.** `show` makes the LAST broad surface
+  live — `from_prefix`, `Resolution::as_str`, `RiskLevel::as_str`, and the
+  `resolution`/`facet`/`created`/`updated` fields all consumed by `format_show`. Only
+  `KIND_PRECEDENCE` (referenced nowhere) stays dead → the module expect remains
+  fulfilled in both builds. **Retire the module expect at PHASE-05** (`edit`); nothing
+  else is left to consume except the `validate_transition`/`edit` surface PHASE-05 adds.
+- **R6 gate held:** `git diff src/entity.rs src/meta.rs` empty across PHASE-04 —
+  backlog-local + a `Show` CLI arm only; the engine and shared `meta` path untouched.

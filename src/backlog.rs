@@ -556,15 +556,26 @@ fn read_kind(root: &Path, item_kind: ItemKind) -> anyhow::Result<Vec<BacklogItem
     let tree = root.join(item_kind.kind().dir);
     let mut items = Vec::new();
     for id in entity::scan_ids(&tree)? {
-        let name = format!("{id:03}");
-        let path = tree.join(&name).join(format!("{BACKLOG_STEM}-{name}.toml"));
-        let text = std::fs::read_to_string(&path)
-            .with_context(|| format!("backlog item not found at {}", path.display()))?;
-        let raw: RawBacklogToml =
-            toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
-        items.push(validate(raw)?);
+        items.push(read_item(root, item_kind, id)?);
     }
     Ok(items)
+}
+
+/// Read ONE item's `backlog-<NNN>.toml` into a validated `BacklogItem` — the
+/// single-id read shared by `read_kind`'s loop and `show` (DRY: one parse path).
+/// A missing file is a hard error (the id must already be reserved — `show` never
+/// implicitly creates, §5.5); the caller owns kind disambiguation (`parse_ref`).
+fn read_item(root: &Path, item_kind: ItemKind, id: u32) -> anyhow::Result<BacklogItem> {
+    let name = format!("{id:03}");
+    let path = root
+        .join(item_kind.kind().dir)
+        .join(&name)
+        .join(format!("{BACKLOG_STEM}-{name}.toml"));
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("backlog item not found at {}", path.display()))?;
+    let raw: RawBacklogToml =
+        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+    validate(raw)
 }
 
 /// Read all five kinds' trees, merged (declaration order, pre-sort). Each absent
@@ -666,6 +677,115 @@ pub(crate) fn run_list(
         all,
     };
     write!(io::stdout(), "{}", list_rows(&root, &filter)?)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Pure: id parse + show render
+// ---------------------------------------------------------------------------
+
+/// Parse a canonical ref (`ISS-007`) into its `(kind, id)` — the `show` auto-detect
+/// (§5.5 / R3). Split on the LAST `-`, upper-case the prefix (`iss-7` is tolerated),
+/// resolve it via `ItemKind::from_prefix`, and parse the numeric tail as `u32`
+/// (`ISS-7` and `ISS-007` both yield 7). An unknown prefix or a non-numeric tail is
+/// a hard error — never an implicit create. The five counters are independent, so
+/// the prefix is load-bearing for disambiguation (`ISS-1` ≠ `RSK-1`).
+///
+/// Deliberately NOT shared with `spec::resolve_spec_ref`: that sibling does NOT
+/// upper-case (spec refs are always canonical), whereas backlog tolerates case here.
+fn parse_ref(reference: &str) -> anyhow::Result<(ItemKind, u32)> {
+    let (prefix, tail) = reference.rsplit_once('-').with_context(|| {
+        format!("`{reference}` is not a canonical backlog ref (expected e.g. ISS-007)")
+    })?;
+    let kind = ItemKind::from_prefix(&prefix.to_uppercase()).with_context(|| {
+        format!("unknown backlog prefix `{prefix}` in `{reference}` (expected ISS/IMP/CHR/RSK/IDE)")
+    })?;
+    let id: u32 = tail
+        .parse()
+        .with_context(|| format!("`{tail}` is not a numeric id in `{reference}`"))?;
+    Ok((kind, id))
+}
+
+/// Render a `BacklogItem` for `show` — a pure fn of the item's OWN local state
+/// ("cannot go stale"), so it reads no other file and surfaces no inbound refs
+/// (the reverse view is the deferred registry surface's, ADR-004). House style:
+/// `Vec<String>` parts each carrying their own newline, joined by `concat()` (the
+/// `spec::render`/`format_rows` precedent — avoids the `push_str(&format!)` lint).
+/// The facet block is gated on `item.facet` (risk only); relationship axes and the
+/// optional fields render only when populated.
+fn format_show(item: &BacklogItem) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    // identity + the flat fields (resolution shown only on a terminal item).
+    parts.push(format!(
+        "{} — {}\n",
+        item.kind.canonical_id(item.id),
+        item.title
+    ));
+    let resolution = match item.resolution {
+        Some(r) => format!(" · {}", r.as_str()),
+        None => String::new(),
+    };
+    parts.push(format!(
+        "{} · {} · {}{resolution}\n",
+        item.slug,
+        item.kind.as_str(),
+        item.status.as_str(),
+    ));
+    parts.push(format!(
+        "created {} · updated {}\n",
+        item.created, item.updated
+    ));
+    if !item.tags.is_empty() {
+        parts.push(format!("tags: {}\n", item.tags.join(", ")));
+    }
+
+    // risk facet (gated on the kind carrying one); each axis only when assessed.
+    if let Some(facet) = &item.facet {
+        parts.push("\n[facet]\n".to_string());
+        if let Some(likelihood) = facet.likelihood {
+            parts.push(format!("  likelihood: {}\n", likelihood.as_str()));
+        }
+        if let Some(impact) = facet.impact {
+            parts.push(format!("  impact: {}\n", impact.as_str()));
+        }
+        if let Some(origin) = &facet.origin {
+            parts.push(format!("  origin: {origin}\n"));
+        }
+        if !facet.controls.is_empty() {
+            parts.push(format!("  controls: {}\n", facet.controls.join(", ")));
+        }
+    }
+
+    // outbound relations (§5.5) — each axis only when non-empty; inbound is the
+    // deferred registry surface's, NOT computed here (D-PHASE04-2 / ADR-004).
+    let rel = &item.relationships;
+    if !rel.slices.is_empty() || !rel.specs.is_empty() || !rel.drift.is_empty() {
+        parts.push("\nrelationships:\n".to_string());
+        for (label, refs) in [
+            ("slices", &rel.slices),
+            ("specs", &rel.specs),
+            ("drift", &rel.drift),
+        ] {
+            if !refs.is_empty() {
+                parts.push(format!("  {label}: {}\n", refs.join(", ")));
+            }
+        }
+    }
+
+    parts.concat()
+}
+
+/// `doctrine backlog show <ID>` — the inspect verb (PRD-009 REQ-051, §5.4). Thin
+/// shell: find the root, `parse_ref` the id to its kind (prefix auto-detect), read
+/// THAT item's single toml, render it to stdout. READ-ONLY — no mutation, no
+/// cross-corpus scan (only the one item's file is opened); the render is pure over
+/// the item's own state.
+pub(crate) fn run_show(path: Option<PathBuf>, reference: &str) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (item_kind, id) = parse_ref(reference)?;
+    let item = read_item(&root, item_kind, id)?;
+    write!(io::stdout(), "{}", format_show(&item))?;
     Ok(())
 }
 
@@ -1312,5 +1432,127 @@ tags = []
             out, "",
             "a virgin repo prints an empty table, never an error"
         );
+    }
+
+    // --- PHASE-04: the `backlog show <ID>` inspect verb (id parse + render) ---
+
+    // --- VT-2: id-parse tolerance + both hard-error modes ---
+
+    #[test]
+    fn backlog_show_id_parse_tolerance() {
+        // `ISS-7` and `ISS-007` both parse to (Issue, 7); case is tolerated.
+        assert_eq!(parse_ref("ISS-7").unwrap(), (ItemKind::Issue, 7));
+        assert_eq!(parse_ref("ISS-007").unwrap(), (ItemKind::Issue, 7));
+        assert_eq!(parse_ref("iss-7").unwrap(), (ItemKind::Issue, 7));
+        // each prefix routes to its own kind — the counters are independent.
+        assert_eq!(parse_ref("RSK-001").unwrap(), (ItemKind::Risk, 1));
+        assert_eq!(parse_ref("IDE-12").unwrap(), (ItemKind::Idea, 12));
+    }
+
+    #[test]
+    fn backlog_show_unknown_prefix_errors() {
+        // an unknown prefix and a non-numeric tail each hard-error (never a create).
+        assert!(parse_ref("REQ-001").is_err(), "unknown prefix rejected");
+        assert!(parse_ref("ISS-abc").is_err(), "non-numeric tail rejected");
+        assert!(
+            parse_ref("nodash").is_err(),
+            "a ref with no `-` is rejected"
+        );
+    }
+
+    // --- VT-1: auto-detect kind from prefix; identity + facet + relations render ---
+
+    #[test]
+    fn backlog_show_auto_detects_kind_from_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // a plain issue and an assessed risk, both reserved id 1 (independent trees).
+        new_item(root, ItemKind::Issue, "Auth bug");
+        let issue = read_item(root, ItemKind::Issue, 1).unwrap();
+        let issue_out = format_show(&issue);
+        assert!(
+            issue_out.starts_with("ISS-001 — Auth bug\n"),
+            "identity line: {issue_out}"
+        );
+        assert!(
+            issue_out.contains("· issue · open"),
+            "flat field line carries kind + status: {issue_out}"
+        );
+        assert!(
+            !issue_out.contains("[facet]"),
+            "a plain kind shows no facet block: {issue_out}"
+        );
+
+        // an assessed risk (seeded directly) shows its facet axes.
+        write_assessed_risk(root, 1);
+        let risk = read_item(root, ItemKind::Risk, 1).unwrap();
+        let risk_out = format_show(&risk);
+        assert!(risk_out.starts_with("RSK-001 — Token expiry\n"));
+        assert!(risk_out.contains("[facet]"), "risk shows the facet block");
+        assert!(risk_out.contains("likelihood: high"));
+        assert!(risk_out.contains("impact: critical"));
+        assert!(risk_out.contains("controls: rate-limit"));
+    }
+
+    // --- VT-3: outbound relations render; inbound is NOT surfaced (ADR-004) ---
+
+    #[test]
+    fn backlog_show_renders_outbound_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // ISS-001 points OUT at SL-020; a *separate* item (ISS-002) points AT it.
+        write_related(root, ItemKind::Issue, 1, &["SL-020"], &["PRD-009"]);
+        write_related(root, ItemKind::Issue, 2, &[], &[]);
+
+        let out = format_show(&read_item(root, ItemKind::Issue, 1).unwrap());
+        assert!(out.contains("relationships:"), "the outbound seam renders");
+        assert!(out.contains("slices: SL-020"), "outbound slice ref shown");
+        assert!(out.contains("specs: PRD-009"), "outbound spec ref shown");
+
+        // an item with no outbound relations renders no relationships block —
+        // and the reverse view (who points AT it) is never computed here.
+        let bare = format_show(&read_item(root, ItemKind::Issue, 2).unwrap());
+        assert!(
+            !bare.contains("relationships:"),
+            "no outbound relations → no block (inbound never surfaced): {bare}"
+        );
+    }
+
+    /// Overwrite a reserved risk item with an assessed `[facet]` — exercises the
+    /// real read+validate path for a populated facet without the (PHASE-05) `edit`.
+    fn write_assessed_risk(root: &Path, id: u32) {
+        let name = format!("{id:03}");
+        let dir = root.join(RISK_KIND.dir).join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        let body = format!(
+            "id = {id}\nslug = \"token-expiry\"\ntitle = \"Token expiry\"\nkind = \"risk\"\n\
+             status = \"open\"\nresolution = \"\"\ncreated = \"2026-06-08\"\n\
+             updated = \"2026-06-08\"\ntags = []\n\n[facet]\nlikelihood = \"high\"\n\
+             impact = \"critical\"\norigin = \"audit\"\ncontrols = [\"rate-limit\"]\n\n\
+             [relationships]\nslices = []\nspecs = []\ndrift = []\n"
+        );
+        fs::write(dir.join(format!("backlog-{name}.toml")), body).unwrap();
+    }
+
+    /// Write an item carrying seeded OUTBOUND `slices`/`specs` relations directly.
+    fn write_related(root: &Path, kind: ItemKind, id: u32, slices: &[&str], specs: &[&str]) {
+        let name = format!("{id:03}");
+        let dir = root.join(kind.kind().dir).join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        let lit = |xs: &[&str]| {
+            xs.iter()
+                .map(|x| format!("\"{x}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let body = format!(
+            "id = {id}\nslug = \"s\"\ntitle = \"T\"\nkind = \"{}\"\nstatus = \"open\"\n\
+             resolution = \"\"\ncreated = \"2026-06-08\"\nupdated = \"2026-06-08\"\ntags = []\n\n\
+             [relationships]\nslices = [{}]\nspecs = [{}]\ndrift = []\n",
+            kind.as_str(),
+            lit(slices),
+            lit(specs),
+        );
+        fs::write(dir.join(format!("backlog-{name}.toml")), body).unwrap();
     }
 }

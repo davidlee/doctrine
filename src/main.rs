@@ -300,6 +300,16 @@ enum BacklogCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Reassemble one item by id (`ISS-007`) — kind auto-detected from the prefix.
+    Show {
+        /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
+        id: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -856,6 +866,7 @@ fn main() -> anyhow::Result<()> {
                 substr,
                 path,
             } => backlog::run_list(path, kind, status, tag, all, substr),
+            BacklogCommand::Show { id, path } => backlog::run_show(path, &id),
         },
         Command::Boot {
             command,
