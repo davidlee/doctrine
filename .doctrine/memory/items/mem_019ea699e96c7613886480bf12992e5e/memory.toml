@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea699e96c7613886480bf12992e5e"
+memory_key = "mem.pattern.parse.toml-error-classification-fragile"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "toml error classification is version-fragile — pin shapes with canary tests"
+summary = "toml crate has no stable error-kind enum — error classification matches span+message text, is version-fragile, must be canary-pinned"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = ["src/spec.rs"]
+globs = []
+commands = []
+tags = ["toml", "parsing", "error-classification"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "ee9c1d567779d98c5c045db8b83ead8e634141bf"
+tree = "f3ba472a11e0a9f7245868f8ea1a39330e10d288"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "ee9c1d567779d98c5c045db8b83ead8e634141bf"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
