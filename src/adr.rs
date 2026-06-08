@@ -249,8 +249,8 @@ mod tests {
     fn render_adr_toml_escapes_hostile_title_and_slug() {
         // SL-024: a title / explicit slug carrying the quoted-literal breakers
         // (`"`, `\`, newline) must still render a parseable toml that round-trips.
-        let title = "a\"b\\c\nd";
-        let slug = "p\"q";
+        let title = crate::tomlfmt::HOSTILE_TITLE;
+        let slug = crate::tomlfmt::HOSTILE_SLUG;
         let body = render_adr_toml(7, slug, title, "2026-06-04").unwrap();
         let parsed: Meta = toml::from_str(&body).unwrap();
         assert_eq!(parsed.slug, slug);
