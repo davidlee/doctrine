@@ -1168,8 +1168,8 @@ mod tests {
         // call `render_spec_toml` DIRECTLY (the disk path via `fresh` would
         // false-red at `<id>-<slug>` symlink creation, the wrong stratum). A title
         // / explicit slug carrying the quoted-literal breakers must round-trip.
-        let title = "a\"b\\c\nd";
-        let slug = "p\"q";
+        let title = crate::tomlfmt::HOSTILE_TITLE;
+        let slug = crate::tomlfmt::HOSTILE_SLUG;
         let body = render_spec_toml(SpecSubtype::Product, 7, slug, title).unwrap();
         let parsed: Meta = toml::from_str(&body).unwrap();
         assert_eq!(parsed.slug, slug);

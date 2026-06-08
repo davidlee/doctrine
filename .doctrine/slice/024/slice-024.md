@@ -42,9 +42,12 @@ into a **TOML literal** through it — eliminating the raw splice corpus-wide.
 - One shared escaping helper (single definition); `memory.rs`'s private copies
   removed and re-imported, its existing suite green **unchanged** (behaviour
   gate — `memory.rs` output is byte-identical).
-- A title / explicit-slug containing `"`, `\`, newline, or `]` round-trips: each
+- A title / explicit-slug containing `"`, `\`, or a newline round-trips: each
   affected entity's `new` writes a `*-NNN.toml` that **re-parses** via its own
-  reader. One adversarial-input test per renderer (or a shared table test).
+  reader. (`]` is a breaker only in array context — `tags`/`paths` etc., covered
+  by `toml_array_inner`'s test — not in a quoted basic string, so the
+  scalar-field tests need not carry it.) One adversarial-input test per renderer
+  (or a shared table test).
 - `cargo clippy` zero warnings (bins/lib); `just check` clean. TDD red/green:
   the red test is an injection title that currently produces an unparseable file.
 

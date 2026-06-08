@@ -566,8 +566,8 @@ mod tests {
     #[test]
     fn render_toml_escapes_hostile_title_and_slug() {
         // SL-024: quoted-literal breakers (`"`, `\`, newline) round-trip.
-        let title = "a\"b\\c\nd";
-        let slug = "p\"q";
+        let title = crate::tomlfmt::HOSTILE_TITLE;
+        let slug = crate::tomlfmt::HOSTILE_SLUG;
         let body = render_toml(7, slug, title, "2026-06-03").unwrap();
         let parsed: Meta = toml::from_str(&body).unwrap();
         assert_eq!(parsed.slug, slug);

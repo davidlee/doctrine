@@ -29,6 +29,16 @@ pub(crate) fn toml_array_inner(xs: &[String]) -> String {
         .join(", ")
 }
 
+/// Shared adversarial fixtures for the per-renderer round-trip tests (SL-024):
+/// the quoted-literal breakers a hostile `title`/`--slug` can carry. A basic
+/// string only needs `"`, `\`, and control chars escaped — `]` is a breaker in
+/// array context, not in a quoted literal, so it lives in the array test, not
+/// here. One corpus, so the next breaker-class is added in one place.
+#[cfg(test)]
+pub(crate) const HOSTILE_TITLE: &str = "a\"b\\c\nd";
+#[cfg(test)]
+pub(crate) const HOSTILE_SLUG: &str = "p\"q";
+
 #[cfg(test)]
 mod tests {
     use super::*;
