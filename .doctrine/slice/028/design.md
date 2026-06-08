@@ -173,9 +173,13 @@ autonomy = "gate"
 autonomy = "gate"
 ```
 
-`slice status` calls `resolve(to)` and **prints** the posture (e.g.
-`→ done [conduct: peer/gate — human acceptance expected]`). **Never blocks in
-v1.** `slice show` displays the current state's conduct.
+`slice status` resolves the **source** state's exit posture — `resolve(from)`,
+since `autonomy` governs advancing *out* of a state, so `reconcile = gate` gates
+`reconcile → done` (the closure gate) and `plan = gate` gates `plan → ready` (the
+approved-plan gate) — and **prints** it (e.g. `reconcile → done [conduct:
+self/gate — human acceptance expected]`). Resolving the *target* would gate the
+wrong edge (entering `plan` rather than leaving it). **Never blocks in v1.**
+`slice show` displays the current state's exit posture (`resolve(current)`).
 
 **Enums** (`src/requirement.rs`):
 
@@ -489,3 +493,23 @@ the slice handover. Seven findings beyond F1–F10; the three canon-shape decisi
   is; a minimal reconcile-contract sketch (evidence inputs → authored surface
   mutated → invariants preserved) is a candidate ADR-009 addition but not lock-
   blocking. Noted for the reconcile-engine follow-on slice.
+
+### External adversarial pass 2 (codex, verification) — 2026-06-09
+
+Re-review of the F11–F17 revisions. Confirmed F11/F12/F15 **sound**, F13/F14/
+F16/F17 clean, mermaid topology byte-identical across both files, conduct story
+coherent after dropping `review`. Two narrow new findings, both fixed:
+
+- **F18 (medium — FIXED).** ADR-009 Verification asserted (present tense) that boot
+  Core-process prose *names* `audit → reconcile → close`, but the boot edit is
+  execution-phase work (F14) — false as written. Reworded to target tense ("on
+  acceptance + the execution-phase boot edit, will name …"); reconcile-entry stated
+  as manual discipline until the `/reconcile` skill lands.
+- **F19 (medium — FIXED).** §5.2 conduct surfacing said `slice status` calls
+  `resolve(to)` with example `→ done [peer/gate]` — but `autonomy` is **exit**
+  semantics ("advance *out* of a state"). Resolving the *target* gates the wrong
+  edge (entering `plan` rather than leaving it); the gate lives on the **source**
+  state's exit. Fixed: `resolve(from)`, example `reconcile → done [self/gate]`,
+  `slice show` shows `resolve(current)`. The `reconcile = gate` default now
+  correctly gates `reconcile → done` (closure) and `plan = gate` gates
+  `plan → ready` (approved-plan), matching the seam (F12).
