@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea740f91779218a6d728a3cc146cb"
+memory_key = "mem.pattern.lint.dead-code-self-clearing-leaf"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Self-clearing dead_code suppression for a leaf built ahead of consumers"
+summary = "A pure leaf built ahead of its consumers trips dead_code=deny; use a self-clearing module #![expect(dead_code, reason)] that the consumer phase retires"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = ["src/listing.rs", "src/retrieve.rs"]
+globs = []
+commands = []
+tags = ["lint", "dead_code", "phasing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "4314ce83bcd1e2a6d3b4c83cc6b173bfde67d238"
+tree = "6ce908c848a615cbc7b6863e3893848363c160fa"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "4314ce83bcd1e2a6d3b4c83cc6b173bfde67d238"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
