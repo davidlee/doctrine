@@ -55,9 +55,11 @@ edge-table file.
 
 3. **Decomposition integrity (REQ-087 / NF-001).** `spec validate` enforces the
    tree: a self-parent and any cycle in the parent chain are hard findings
-   returning non-zero. A second parent is structurally precluded — a scalar
-   `parent` key cannot appear twice in one TOML doc (duplicate-key parse error).
-   This adds the parent-chain cycle detection the registry deferred, kept local to
+   returning non-zero. A second parent — a duplicate or array `parent` key, which
+   the TOML parser rejects — is not left as an opaque parse error: `build_registry`
+   classifies it into a named second-parent entry in the `build_findings` carrier,
+   surfaced by `validate` and returned non-zero end-to-end (codex F1/F2). This adds
+   the parent-chain cycle detection the registry deferred, kept local to
    decomposition (no premature feature-DAG).
 
 4. **Peer-interaction target-kind correctness (REQ-084 / FR-004).** Distinguish
@@ -134,7 +136,8 @@ edge-table file.
 - **`product_specs` set additive only.** The registry deliberately materialised
   no product id set ("no check resolves against one"). Descent + interaction-kind
   now need one; adding it must not perturb the existing four checks
-  (behaviour-preservation — the SL-015 registry suite stays green unedited).
+  (behaviour-preservation — the SL-015 registry checks stay green with assertions
+  unchanged; only the `clean()` fixture literal gains the new fields, codex F6b).
 - **Tech-only fields on a product (resolved: hard invalid-kind; codex F5).** Both
   `descends_from` and `parent` are tech-only. On a product spec each is a **hard
   invalid-kind** finding (non-zero exit), never silently ignored. The earlier
@@ -145,7 +148,9 @@ edge-table file.
   their own hierarchy long-term is an **open question**, left undesigned (the hard
   finding forecloses it not at all) — see Follow-Ups.
 - **Behaviour-preservation.** The SL-015 spec/registry suites are the proof the
-  shared machinery is unchanged — they must stay green unedited.
+  shared machinery is unchanged — they stay green with no assertion-value changes,
+  save the deliberate REQ-084 test rewrite and two disclosed mechanical
+  constructor edits (`None, None` / `clean()` literal; see Verification, codex F6b).
 - **Assumption:** `c4_level` enum, `[[source]]` shape, and the membership/label
   seam are final for the duration (PRD-012 settled).
 - **Assumption:** PRD-012 v1 narrowing (importer + transform verbs reserved)
@@ -190,8 +195,8 @@ edge-table file.
 - **`descends_from` ↔ `realises` prose reconciliation in PRD-012/REQ-082** (if the
   user wants the requirement title's "realises" wording revisited — PRD-012
   territory, not SL-022).
-- **Product-spec hierarchy / descent (open question).** v1 warns on
-  `descends_from` placed on a product spec but does not forbid the *concept* of
-  product-spec hierarchy. There is a plausible future case for decomposition among
-  product specs; left undesigned deliberately. Revisit before hardening the
-  warning into an error or extending decomposition cross-family.
+- **Product-spec hierarchy / descent (open question).** v1 hard-rejects a
+  tech-only field (`descends_from` / `parent`) on a product spec, but does not
+  foreclose the *concept* of product-spec hierarchy long-term. There is a
+  plausible future case for decomposition among product specs; left undesigned
+  deliberately. Revisit before extending decomposition cross-family.
