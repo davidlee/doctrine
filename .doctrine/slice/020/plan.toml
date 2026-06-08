@@ -56,7 +56,7 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "`src/backlog.rs` exists: `ItemKind` + five const `Kind`s (own dir/prefix/scaffold) + `backlog_scaffold`/`render_*` mirror adr/spec; `materialise(Fresh)` reserves `XXX-NNN` under `.doctrine/backlog/<kind>/NNN/`" },
   { id = "EX-2", text = "closed `Status`/`Resolution`/`RiskLevel` (kebab serde + `as_str()`); `Status::is_terminal` is backlog-local; `BacklogItem`/`RiskFacet`/`Relationships` parse structs with `#[serde(default)]` and the `\"\" -> None` validation seam; only Risk carries `[facet]`" },
-  { id = "EX-3", text = "three templates shipped under `templates/` (backlog.toml, backlog-risk.toml, backlog.md), each seeding `status`/`resolution`/`updated`/`tags`; `entity.rs` unchanged (gate); clippy zero, `just check` green" },
+  { id = "EX-3", text = "the two toml templates (`backlog.toml`, `backlog-risk.toml`) + `backlog.md` shipped under `templates/` (D7 wording), each seeding `status`/`resolution`/`updated`/`tags`; `entity.rs` unchanged (gate); clippy zero, `just check` green" },
 ]
 verification = [
   { id = "VT-1", expects = "`backlog_scaffold_lays_out_toml_md_symlink` per kind: materialise lays toml + md (+ `NNN-slug` symlink) under the reserved numeric dir; risk includes `[facet]`, the four plain kinds omit it; paths tree-relative; canonical id is `XXX-NNN`" },
@@ -160,6 +160,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "`backlog_show_auto_detects_kind_from_prefix`: `ISS-007` resolves to the issue tree, `RSK-001` to risk; identity + outbound relations render; risk shows the facet, plain kinds do not" },
   { id = "VT-2", expects = "`backlog_show_id_parse_tolerance` + `backlog_show_unknown_prefix_errors`: `ISS-7`/`ISS-007` both parse; an unknown prefix and a non-numeric tail each hard-error" },
+  { id = "VT-3", expects = "`backlog_show_renders_outbound_only` (negative, ADR-004 / EX-2): an item with seeded outbound relations renders them; an inbound reference that exists elsewhere in the corpus (another entity pointing AT this item) is NOT surfaced by `show` — the reverse view is the deferred registry surface's" },
 ]
 specs        = []
 requirements = ["REQ-051"]
@@ -192,11 +193,14 @@ exit_criteria = [
   { id = "EX-1", text = "`backlog edit <ID> --status <s> [--resolution <r>]` sets the field(s) in place via `toml_edit`, bumps `updated`, preserves comments/unknown keys; a no-op (unchanged values) writes nothing; a missing-seeded-key file is refused, not corrupted" },
   { id = "EX-2", text = "coupling holds both directions: a terminal status requires a `resolution`, a non-terminal forbids one; moving to a non-terminal status auto-clears `resolution` (D9 re-open); `--resolution promoted` by hand is accepted" },
   { id = "EX-3", text = "a missing id hard-errors (never implicit create); the bare backlog-side re-open touches only the item (slice-authored origin edge untouched, OQ-003 boundary); clippy zero, `just check` green" },
+  { id = "EX-4", text = "the write is CRASH-SAFE atomic (REQ-057 acceptance: 'an interrupted write never leaves a partially-written item') — serialise the `toml_edit` document to a sibling temp file, then atomic `rename` over the target, never an in-place truncate-then-write. This EXCEEDS the adr `set_adr_status` precedent (plain `fs::write`), which the design names for the toml_edit *mutation* shape only; adr/spec predate the REQ registry and carry no atomicity acceptance bar, so backlog raises it without forcing a retrofit (harmonising the older verbs is a follow-up, not this slice)" },
 ]
 verification = [
   { id = "VT-1", expects = "`backlog_edit_coupling_both_directions`: terminal-without-resolution rejected; `--status started --resolution X` rejected (non-terminal takes no resolution); a valid terminal+resolution accepted" },
   { id = "VT-2", expects = "`backlog_edit_reopen_auto_clears_resolution` (D9): moving a resolved item to `open` clears `resolution` to `\"\"`; the invariant holds post-write; a `promoted` item is hand-re-openable (ungated)" },
   { id = "VT-3", expects = "`backlog_edit_is_edit_preserving` + `backlog_edit_noop_and_malformed_and_missing`: a hand-added comment/unknown key survives; a no-op writes nothing; a missing-seeded-key file is refused; a missing id hard-errors; `updated` bumps, the rest survives" },
+  { id = "VT-4", expects = "`backlog_edit_write_is_atomic` (REQ-057): the mutation lands via temp-file + `rename` — assert no leftover temp sibling after success, and that the round-trip changes only the intended field(s) + `updated` (no truncate window); the read-modify-write is byte-stable except the intended field" },
+  { id = "VT-5", expects = "`backlog_edit_rejects_noncanon_status` (REQ-052): an unknown `--status`/`--resolution` value is rejected at the clap `ValueEnum` boundary, so only the five canon states / nine resolutions are reachable; the lifecycle stays otherwise UNGATED — any canon state is hand-settable, no transition-permission matrix (design §5.4 ungated)" },
 ]
 specs        = []
 requirements = ["REQ-052", "REQ-057", "REQ-059"]
@@ -207,10 +211,11 @@ name      = "Workflow integration — consult / capture / harvest loop-map"
 objective = """
 Close the intake-leak gap (PRD-009 §5 success measure): wire the backlog into the \
 spec-driver loop at the right points (slice §Q6, scope §Workflow integration). \
-Sequenced LAST, after the CLI verbs land, because it edits the SHARED skill/boot \
-surface under the behaviour-preservation gate. Revise the routing table \
-(`.doctrine/state/boot.md` — regenerated via `doctrine boot`, SL-011, never \
-hand-edited as truth) and the affected skills so the backlog is consulted / captured \
+Sequenced LAST, after the CLI verbs land, because it edits the SHARED skill/routing \
+surface under the behaviour-preservation gate. Edit the AUTHORED sources: the routing/\
+process digest source `install/routing-process.md` (the boot digest's input) and the \
+affected skill files — NOT `.doctrine/state/boot.md`, which is the regenerated, inert \
+copy (`doctrine boot` rebuilds it from the source; SL-011). So the backlog is consulted / captured \
 / harvested at the loop points: `/route`, `/preflight` CONSULT (`backlog list`/`show` \
 at the start of substantive work — is this intent already captured?); `/consult`, \
 `/notes` CAPTURE (`backlog new` when an obstacle / tradeoff / follow-up surfaces); \
@@ -227,7 +232,7 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 + PHASE-03 + PHASE-04 green — the `new`/`list`/`show` surface the skills will reference exists and works" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "the routing table (boot source) + the affected skills (`/route`, `/preflight`, `/consult`, `/notes`, `/audit`, `/close`) reference consult / capture / harvest of the backlog at the right loop points, with the verbs that exist" },
+  { id = "EX-1", text = "the authored routing source (`install/routing-process.md`) + the affected skill files (`/route`, `/preflight`, `/consult`, `/notes`, `/audit`, `/close`) reference consult / capture / harvest of the backlog at the right loop points, with the verbs that exist; `.doctrine/state/boot.md` is regenerated from the source, never hand-edited" },
   { id = "EX-2", text = "the work / knowledge_record (PRD-010) / ADR / memory boundary text is present and cites the membership test as the arbiter; the guidance ships to the client surfaces (not the build-repo CLAUDE.md)" },
   { id = "EX-3", text = "`doctrine boot` regenerates a consistent snapshot; existing skill behaviour is otherwise preserved (behaviour gate on the shared surface); `just check` green" },
 ]
@@ -236,4 +241,6 @@ verification = [
   { id = "VT-1", expects = "behaviour gate: the skills/boot suite (and the full `cargo test`) stay green unchanged after the surface revision; `doctrine boot --check` reports a fresh, consistent snapshot" },
 ]
 specs        = []
-requirements = ["REQ-050"]
+# No functional REQ — PHASE-06 serves the PRD-009 §5 "intake stops leaking" success
+# measure (not a numbered requirement); the v1 functional REQs all land in PHASE-01..05.
+requirements = []
