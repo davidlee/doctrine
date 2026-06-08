@@ -1,7 +1,7 @@
 id = 20
 slug = "backlog-entity-v1"
 title = "Backlog entity v1: work-intake items (one kind + item_kind facet)"
-status = "proposed"
+status = "done"
 created = "2026-06-07"
 updated = "2026-06-08"
 
