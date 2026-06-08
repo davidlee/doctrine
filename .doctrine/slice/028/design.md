@@ -133,6 +133,14 @@ doctrine slice status <id> <state> [--note <s>]
 - **Hard-refuse** only: `to` out-of-vocab; `from ∈ {done, abandoned}`
   (`FromTerminal` — reopening deferred). All other moves write and print their
   classification (+ the conduct posture).
+- **Transition-terminal is its own predicate (F13).** The FromTerminal set
+  `{done, abandoned}` is a **third** slice-status predicate, distinct from
+  `is_terminal_status` (divergence, `{done}`) and `is_hidden` (presentation,
+  `{done, abandoned}`). The verb must **not** reuse `is_terminal_status` (adding
+  `abandoned` there false-flags `⚠` on abandoned-incomplete slices — `slice.rs`
+  comments forbid it) nor `is_hidden` (a presentation predicate, semantically
+  unrelated). Add `is_transition_terminal(status) -> bool` beside the others,
+  documented as the reopening-refusal set; the three predicates diverge by design.
 
 **Conduct** (`src/conduct.rs`, new):
 
@@ -177,7 +185,10 @@ withdrawn, no successor · *superseded* replaced by a named successor
 - **Vocabulary** `SLICE_STATUSES = [proposed, design, plan, ready, started,
   review, audit, reconcile, done, abandoned]` — **purely additive**; every prior
   token survives, so existing slices need **no migration**. `is_terminal_status`
-  and `is_hidden` unchanged.
+  (`{done}`, divergence) and `is_hidden` (`{done, abandoned}`, presentation)
+  unchanged; the transition verb adds a **third** predicate
+  `is_transition_terminal` (`{done, abandoned}`, reopening-refusal) rather than
+  overloading either (F13).
 - **`doctrine.toml`** — project-root, **authored/committed** (user-owned config,
   the structured sibling of `governance.md`); located via `root::find`. Absent →
   baked defaults. Not a doctrine entity.
@@ -359,3 +370,83 @@ stateDiagram-v2
   surface-don't-block posture), optionally warns; never hard-errors.
 - **F10 (trivial).** The mermaid is duplicated in `design.md` + ADR-009; ADR-009
   is the canonical home, `design.md` the working copy. Accepted minor drift risk.
+
+### External adversarial pass (codex) — 2026-06-09
+
+Hostile review of `design.md` + `adr-009.md` via the codex MCP, attack axes per
+the slice handover. Seven findings beyond F1–F10; F11/F12/F15 are canon-shape
+decisions surfaced to the user (do not lock until resolved).
+
+- **F11 (critical, FSM coherence — DECISION).** `review` as a *linear slice-level
+  state* between `started` and `audit` misrepresents both ADR-003 §6 and ADR-007.
+  ADR-003 §6 makes review **per-phase, optional, possibly non-blocking** (running
+  *while the next phase begins*) — it lives **inside** the per-phase loop, not as a
+  whole-slice stage. ADR-007's review is a **generic ledger kind** (`RV-`) used
+  across design/plan/impl/audit/reconcile. A single slice state can represent
+  neither; worse, the whole-slice holistic read **already is `audit`** (§7), so a
+  slice-level `review` state is redundant. F8's "names the position, doesn't
+  redefine" is insufficient: there is *no single position* to name. **Resolution
+  (recommended): drop `review` from the slice FSM** — per-phase review stays in
+  runtime/phase state + the `RV-` ledger; `audit` is the holistic read.
+  Alt: rename to a distinct slice-level concept (`pre-audit`). User decision —
+  reshapes the FSM vocabulary in both `design.md` and ADR-009.
+
+- **F12 (critical, ADR-003 §7/§8 seam — DECISION).** "Classify, don't jail" makes
+  the verb a **blessed writer for skip-to-`done`**: `started → done`,
+  `design → reconcile`, `proposed → done` all write cleanly, classified `Skip`.
+  Read-tolerating drifted disk state (house posture) is not the same as *shipping a
+  writer* that frictionlessly authors a closed slice that never audited/reconciled.
+  The divergence detector (`is_divergent`) only catches phase-rollup mismatch, **not
+  spec drift** — so the one invariant ADR-003 §8 protects ("a closed slice's owning
+  specs are coherent") has **zero surfacing** on a skip-to-`done`. Tension: ADR-003
+  §11 explicitly defers the closure *gate* ("no closure gate in v1"), so advisory-
+  only is defensible. **Resolution (recommended): harden only the two closure-seam
+  entry edges** — refuse entry to `done` except from `reconcile`, and to `reconcile`
+  except from `audit`; everything else stays classify-don't-jail. Protects the spine
+  without claiming full enforcement. User decision — touches the §11 deferral.
+
+- **F13 (high, internal contradiction — FIXED).** §5.2 refuses `from ∈ {done,
+  abandoned}` (FromTerminal) but §5.3 says reuse `is_terminal_status`, which is
+  `{done}` only — and `slice.rs` comments **explicitly forbid** adding `abandoned`
+  to it (would false-flag `⚠` on abandoned-incomplete slices via `is_divergent`).
+  The verb's *refuse-from-terminal* set (`{done, abandoned}`) is a **third**
+  predicate, distinct from both `is_terminal_status` (divergence, `{done}`) and
+  `is_hidden` (presentation, `{done, abandoned}` — semantically unrelated, must not
+  be reused). Fixed in §5.2/§5.3: name a distinct transition-terminal predicate.
+
+- **F14 (high, F2 sharpened — ACCEPTED w/ statement).** Beyond F2's prose-vs-
+  routing-table point: naming `reconcile` only in boot **Core-process prose** while
+  the **routing table** still sends "implementation done" → `/audit → /close` means
+  the routed process **never directs an agent into the `reconcile` state**. The
+  state is reachable by the *verb* but not by the *governance an agent follows*.
+  Accepted for v1 **only as explicit discipline**: reconcile-entry is a manual step
+  until the `/reconcile` skill lands (the routing row moves then, per F2's shipped-
+  not-reachable guard). Stated here so it is a chosen limitation, not a gap. (The
+  boot edit itself is execution-phase work, not a design-now defect.)
+
+- **F15 (high, conduct sufficiency — DECISION).** `slice status` is invoker-blind
+  (F3): it cannot tell agent from author/peer/team, so `actor` is **neither enforced
+  nor truthfully attributable** in v1 — the command can only print the target
+  state's *configured* posture. ADR-009 §2 sells `actor × autonomy` as a governance
+  surface; that overclaims. **Resolution (recommended): keep `actor` as advisory
+  *config/documentation* of intent** (what `slice show` displays, what a future
+  enforcer reads) but **tighten ADR-009's claim** to "advisory config, not runtime
+  actor-aware governance." Alt: defer `actor` entirely from v1, ship `autonomy`
+  hints only. User decision — affects ADR-009 §2 scope.
+
+- **F16 (medium, ADR-004 — FIXED).** ADR-009's "cross-links are prose until the
+  relation surface is wired" overstates: there is **no `amends` relation kind** in
+  the ADR schema (only `supersedes`/`superseded_by`/`related`/`tags`, all inert v1)
+  and **no relation-set CLI** (`adr` has only new/list/show/status). The amendment
+  linkage genuinely **cannot** be modelled now — it is honest schema debt, not a
+  deferred wiring. ADR-004 (outbound-only) is not violated (nothing is stored), but
+  the framing is corrected in ADR-009 References to name the debt explicitly.
+
+- **F17 (low, differentiator operability — ACCEPTED, deferred).** The explicit-
+  reconcile-vs-derive stance is, in v1, a **prohibition** ("`ReqStatus = f(coverage)`
+  must not exist") with the reconcile writer / coverage producer / registry all
+  deferred — so the differentiator is named, not yet an operable contract. This is
+  consistent with ADR-003 §11 (machinery deferred, stable target set). Accepted as-
+  is; a minimal reconcile-contract sketch (evidence inputs → authored surface
+  mutated → invariants preserved) is a candidate ADR-009 addition but not lock-
+  blocking. Noted for the reconcile-engine follow-on slice.
