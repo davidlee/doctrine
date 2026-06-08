@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea78bbab8737280d32bed6cbfa58c"
+memory_key = "mem.pattern.testing.conformance-asserts-surface-not-just-envelope"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Conformance tests must assert every surface, not just the JSON envelope"
+summary = "Cross-kind conformance tests must assert each surface (table header AND json), not just the json envelope"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = ["src/listing.rs"]
+globs = []
+commands = []
+tags = ["testing", "conformance", "cli"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "47dc984445d6c15f940d4ec312475cc87114e7e8"
+ref_name = "refs/heads/main"
+checkout_state_id = "6c0070e2fc7eb8bba83d6736cf92e93802094dbe590d4ed414ed4dfef6eb64a6"
+base_commit = "c12252f45fecb29208124834e568d6eabbb21c77"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
