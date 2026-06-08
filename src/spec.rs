@@ -1355,6 +1355,55 @@ mod tests {
         );
     }
 
+    /// Write a spec's identity toml directly at an explicit id under the subtype's
+    /// tree (creating the dir), bypassing the monotonic `fresh` allocator so the
+    /// fixture's creation order can differ from id order. No members.toml — the
+    /// member count reads 0 (read_members tolerates absence). Only the spine-read
+    /// fields are written.
+    fn spec_at(root: &Path, subtype: SpecSubtype, id: u32, status: &str, slug: &str, title: &str) {
+        let name = format!("{id:03}");
+        let dir = root.join(subtype.kind().dir).join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        let toml = format!(
+            "id = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\nstatus = \"{status}\"\ncreated = \"2026-06-04\"\nupdated = \"2026-06-04\"\n"
+        );
+        fs::write(dir.join(format!("{SPEC_STEM}-{name}.toml")), toml).unwrap();
+    }
+
+    #[test]
+    fn list_rows_orders_by_id_within_each_subtype_block_regardless_of_creation_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // Product subtype, created OUT of id order: 003, 001, 002.
+        spec_at(root, SpecSubtype::Product, 3, "draft", "pg", "ProductGamma");
+        spec_at(root, SpecSubtype::Product, 1, "draft", "pa", "ProductAlpha");
+        spec_at(root, SpecSubtype::Product, 2, "draft", "pb", "ProductBeta");
+        // Tech subtype, also out of order: 002 then 001.
+        spec_at(root, SpecSubtype::Tech, 2, "draft", "tb", "TechBeta");
+        spec_at(root, SpecSubtype::Tech, 1, "draft", "ta", "TechAlpha");
+
+        let out = list_rows(root, list_args()).unwrap();
+        let off = |id: &str| {
+            out.find(id)
+                .unwrap_or_else(|| panic!("{id} present: {out}"))
+        };
+        // product block leads, ascending ids within it.
+        assert!(
+            off("PRD-001") < off("PRD-002") && off("PRD-002") < off("PRD-003"),
+            "product rows ascend by id: {out}"
+        );
+        // tech block ascends by id.
+        assert!(
+            off("SPEC-001") < off("SPEC-002"),
+            "tech rows ascend by id: {out}"
+        );
+        // the whole product block precedes the whole tech block.
+        assert!(
+            off("PRD-003") < off("SPEC-001"),
+            "the product block precedes the tech block: {out}"
+        );
+    }
+
     #[test]
     fn member_count_reads_appended_rows() {
         // prove the column is live, not hardcoded 0: a hand-appended member counts.

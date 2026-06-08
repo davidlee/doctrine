@@ -1454,6 +1454,41 @@ mod tests {
         );
     }
 
+    // --- SL-025 PHASE-06 EX-2 / VT-2: ordering-preservation through list_rows ---
+
+    /// Write a slice's authored toml directly at an explicit id (creating its dir),
+    /// bypassing the monotonic `Fresh` allocator so the fixture's creation order
+    /// can differ from id order. Only the spine-read fields are written.
+    fn slice_at(root: &Path, id: u32, status: &str, slug: &str, title: &str) {
+        let name = format!("{id:03}");
+        let dir = slice_root(root).join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        let toml = format!(
+            "id = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\nstatus = \"{status}\"\ncreated = \"2026-06-04\"\nupdated = \"2026-06-04\"\n"
+        );
+        fs::write(dir.join(format!("slice-{name}.toml")), toml).unwrap();
+    }
+
+    #[test]
+    fn list_rows_orders_by_id_ascending_regardless_of_creation_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // Create OUT of id order: 003, then 001, then 002.
+        slice_at(root, 3, "proposed", "gamma", "Gamma");
+        slice_at(root, 1, "proposed", "alpha", "Alpha");
+        slice_at(root, 2, "proposed", "beta", "Beta");
+
+        let out = list_rows(root, list_args()).unwrap();
+        let off = |id: &str| {
+            out.find(id)
+                .unwrap_or_else(|| panic!("{id} present: {out}"))
+        };
+        assert!(
+            off("SL-001") < off("SL-002") && off("SL-002") < off("SL-003"),
+            "slice rows must render in ascending id order (sort, not read order): {out}"
+        );
+    }
+
     // --- VT-4: slice show — table + json, metadata + scope only (A-5) ---
 
     #[test]

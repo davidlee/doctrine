@@ -826,6 +826,50 @@ mod tests {
         assert_eq!(from_variants, ADR_STATUSES.to_vec());
     }
 
+    // --- SL-025 PHASE-06 EX-2 / VT-2: ordering-preservation through list_rows ---
+
+    /// Write an ADR's authored toml directly at an explicit id (creating its dir).
+    /// Bypasses the monotonic `Fresh` allocator so the fixture's creation order can
+    /// be made deliberately out of id-order — the spine's per-kind sort, not read
+    /// order, must produce the result. Only the fields the spine reads are written.
+    fn adr_at(root: &Path, id: u32, status: &str, slug: &str, title: &str) {
+        let name = format!("{id:03}");
+        let dir = adr_root(root).join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        let toml = format!(
+            "schema = \"doctrine.adr\"\nversion = 1\n\nid = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\nstatus = \"{status}\"\ncreated = \"2026-06-04\"\nupdated = \"2026-06-04\"\n"
+        );
+        fs::write(dir.join(format!("adr-{name}.toml")), toml).unwrap();
+    }
+
+    /// The byte offsets of each prefixed id in render order — ascending offsets
+    /// iff the rows are emitted in that sequence.
+    fn id_order(out: &str, ids: &[&str]) -> Vec<usize> {
+        ids.iter()
+            .map(|id| {
+                out.find(id)
+                    .unwrap_or_else(|| panic!("{id} present: {out}"))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn list_rows_orders_by_id_ascending_regardless_of_creation_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // Create OUT of id order: 003, then 001, then 002.
+        adr_at(root, 3, "accepted", "gamma", "Gamma");
+        adr_at(root, 1, "accepted", "alpha", "Alpha");
+        adr_at(root, 2, "accepted", "beta", "Beta");
+
+        let out = list_rows(root, args()).unwrap();
+        let offsets = id_order(&out, &["ADR-001", "ADR-002", "ADR-003"]);
+        assert!(
+            offsets[0] < offsets[1] && offsets[1] < offsets[2],
+            "ADR rows must render in ascending id order (sort, not read order): {out}"
+        );
+    }
+
     // --- VT-2: adr show — table + json, reassembling toml + md ---
 
     #[test]
