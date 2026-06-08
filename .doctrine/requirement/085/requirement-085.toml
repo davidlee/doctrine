@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 85
+slug = "anchor-a-technical-spec-to-the-code-it-governs"
+title = "Anchor a technical spec to the code it governs"
+status = "pending"
+kind = "functional"
+
+description = "A technical spec anchors to the concrete code it governs by language, identifier, and optional module, locating the how in source."
+tags = []
+acceptance_criteria = [
+  "A technical spec records one or more code anchors, each carrying a language and an identifier and an optional module.",
+  "The anchor identifies the governed code unambiguously enough for a drift pass to resolve it against source.",
+  "A spec may carry no anchor (for example a context-level spec) without error.",
+]

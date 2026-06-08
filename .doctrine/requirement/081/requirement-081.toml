@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 81
+slug = "place-a-technical-spec-at-a-c4-level-of-abstraction"
+title = "Place a technical spec at a C4 level of abstraction"
+status = "pending"
+kind = "functional"
+
+description = "A technical spec declares its level on the closed C4 ladder — context, container, component, or code — so its architectural altitude is explicit."
+tags = []
+acceptance_criteria = [
+  "A technical spec records a C4 level drawn from the closed set context | container | component | code.",
+  "The level renders in the reassembled spec so a reader knows whether it describes a system, a deployable unit, a component, or code.",
+  "A value outside the closed set is rejected, not silently accepted.",
+]

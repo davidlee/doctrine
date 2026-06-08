@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 88
+slug = "converge-hand-authored-and-imported-specs-on-one-code-anchor"
+title = "Converge hand-authored and imported specs on one code anchor"
+status = "pending"
+kind = "quality"
+
+description = "A hand-authored spec and one imported from code structure for the same code anchor reconcile to a single entity, never a parallel or competing surface."
+tags = []
+acceptance_criteria = [
+  "An import onto a code anchor that already has a hand-authored spec reconciles to that existing entity.",
+  "Import never creates a second spec for an already-anchored governed unit.",
+  "Hand-authored and imported specs share one code-anchor mechanism, not two parallel ones.",
+]

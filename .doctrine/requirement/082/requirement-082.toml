@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 82
+slug = "descend-a-technical-spec-from-the-product-capability-it-realises"
+title = "Descend a technical spec from the product capability it realises"
+status = "pending"
+kind = "functional"
+
+description = "A technical spec records the product capability (PRD-002) it realises, descending from the what to the how without restating the what."
+tags = []
+acceptance_criteria = [
+  "A technical spec can name the product capability it descends from by that capability's durable id.",
+  "The descent stores the target's durable peer id only, never a compound or owner-qualified key.",
+  "The technical spec does not restate the product intent it descends from.",
+]

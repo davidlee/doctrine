@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 84
+slug = "relate-technical-specs-as-typed-architectural-peers"
+title = "Relate technical specs as typed architectural peers"
+status = "pending"
+kind = "functional"
+
+description = "Two technical specs can be related by a typed peer interaction (uses, calls) distinct from containment, resolving to an existing technical spec."
+tags = []
+acceptance_criteria = [
+  "A technical spec records typed peer interactions to other technical specs.",
+  "A peer interaction is distinct from containment and is never treated as a parent link.",
+  "An interaction target that is not an existing technical spec is reported as a dangling reference.",
+]
