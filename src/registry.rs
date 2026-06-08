@@ -57,6 +57,17 @@ pub(crate) struct DescentEdge {
     pub(crate) on_product: bool,
 }
 
+/// A hard finding born at scan time, before any pure check can run — the
+/// `second_parent` parse-error classification (SL-022 §5.2, codex F1). `validate`
+/// surfaces it (scope-filtered by `spec`) alongside the pure-check findings.
+pub(crate) struct BuildFinding {
+    /// Canonical ref of the spec the finding is about (known from the dir scan even
+    /// when its `spec-NNN.toml` failed to parse).
+    pub(crate) spec: String,
+    /// The rendered hard-finding message.
+    pub(crate) message: String,
+}
+
 /// A cache-independent snapshot of the corpus's ids + edges. Built fresh per
 /// `spec validate` invocation. Only the sets a check consumes are materialised.
 #[derive(Default)]
@@ -79,6 +90,10 @@ pub(crate) struct Registry {
     pub(crate) parents: Vec<ParentEdge>,
     /// Every outbound descent (`descends_from`) edge, both subtypes (as above).
     pub(crate) descents: Vec<DescentEdge>,
+    /// Scan-time hard findings from parse-error classification (the `second_parent`
+    /// carrier, SL-022 §5.2 codex F1) — populated only by the impure `build_registry`,
+    /// so `registry.rs` stays a pure leaf (ADR-001).
+    pub(crate) build_findings: Vec<BuildFinding>,
 }
 
 impl Registry {
@@ -201,6 +216,67 @@ impl Registry {
         out
     }
 
+    /// HARD — a tech spec naming itself as `parent` (the 1-cycle A→A). The **sole**
+    /// reporter of the self case (REQ-087, §5.2): `parent_cycle` skips self-loops, so
+    /// A→A yields exactly one finding total. Tech subject only (a product `parent` is
+    /// `parent_findings`' invalid-kind case). Scoped when `scope` is `Some`.
+    pub(crate) fn self_parent(&self, scope: Option<&str>) -> Vec<String> {
+        self.parents
+            .iter()
+            .filter(|e| scope.is_none_or(|s| e.spec == s))
+            .filter(|e| !e.on_product && e.spec == e.parent)
+            .map(|e| format!("self parent: {} names itself as parent", e.spec))
+            .collect()
+    }
+
+    /// HARD — a cycle in the `parent` decomposition chain (REQ-087, §5.2). Walks the
+    /// child→parent map from each tech node keeping an **ordered path** plus a
+    /// first-seen index, recovers the cycle SLICE on revisit (`path[first_idx..]` —
+    /// the ring only, not a tail that fed it), and emits **one** finding per cycle —
+    /// only when the start node is the slice's least id (codex F3, correct dedup even
+    /// for a tail feeding a ring). Self-loops are skipped (owned by `self_parent`);
+    /// the walk terminates at a root (no parent edge) or a dangling parent. When
+    /// `scope` is `Some`, only cycles whose slice contains that node are kept.
+    pub(crate) fn parent_cycle(&self, scope: Option<&str>) -> Vec<String> {
+        // Ephemeral child→parent inversion — built here, never persisted (storage
+        // rule). Skip self-loops (self_parent's) and product subjects (invalid-kind).
+        let mut parent_of: BTreeMap<&str, &str> = BTreeMap::new();
+        for e in &self.parents {
+            if e.on_product || e.spec == e.parent {
+                continue;
+            }
+            parent_of.insert(&e.spec, &e.parent);
+        }
+        let mut out = Vec::new();
+        for &start in parent_of.keys() {
+            let mut path: Vec<&str> = Vec::new();
+            let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
+            let mut node = start;
+            loop {
+                if let Some(&first) = seen.get(node) {
+                    // Revisited a node on the path: the cycle is the slice from its
+                    // first sighting. Emit once, owned by the slice's least id.
+                    let slice = path.get(first..).unwrap_or_default();
+                    let least = slice.iter().min().copied().unwrap_or(node);
+                    let in_scope = scope.is_none_or(|s| slice.contains(&s));
+                    if start == least && in_scope {
+                        out.push(format!("parent cycle: {}", slice.join(" -> ")));
+                    }
+                    break;
+                }
+                match parent_of.get(node) {
+                    Some(&next) => {
+                        seen.insert(node, path.len());
+                        path.push(node);
+                        node = next;
+                    }
+                    None => break, // root or dangling parent — not a cycle
+                }
+            }
+        }
+        out
+    }
+
     /// HARD — a membership label used more than once within a single spec. Grouped
     /// per spec (`BTreeMap` for deterministic ordering). Scoped when `scope` is
     /// `Some` — duplicate detection is intra-spec, so a scoped run is complete.
@@ -241,7 +317,15 @@ impl Registry {
         findings.extend(self.dangling_interaction_targets(scope));
         findings.extend(self.descent_findings(scope));
         findings.extend(self.parent_findings(scope));
+        findings.extend(self.self_parent(scope));
+        findings.extend(self.parent_cycle(scope));
         findings.extend(self.duplicate_labels(scope));
+        findings.extend(
+            self.build_findings
+                .iter()
+                .filter(|f| scope.is_none_or(|s| f.spec == s))
+                .map(|f| f.message.clone()),
+        );
         if scope.is_none() {
             findings.extend(self.orphan_requirements());
         }
@@ -451,6 +535,81 @@ mod tests {
         r.tech_specs = ids(&["SPEC-001"]);
         r.parents.push(parent_edge("SPEC-001", "SPEC-001", false));
         assert!(r.parent_findings(None).is_empty());
+    }
+
+    #[test]
+    fn self_parent_reports_a_to_a_once() {
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-001", false));
+        let found = r.self_parent(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("SPEC-001"));
+    }
+
+    #[test]
+    fn self_loop_yields_exactly_one_finding_across_both_checks() {
+        // VT-4: A→A is a self-parent AND a 1-cycle; only self_parent reports it.
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-001", false));
+        assert_eq!(r.self_parent(None).len(), 1);
+        assert!(r.parent_cycle(None).is_empty());
+    }
+
+    #[test]
+    fn parent_cycle_two_node_reports_once() {
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.parents.push(parent_edge("SPEC-002", "SPEC-001", false));
+        assert_eq!(r.parent_cycle(None).len(), 1);
+    }
+
+    #[test]
+    fn parent_cycle_three_node_reports_once() {
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002", "SPEC-003"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.parents.push(parent_edge("SPEC-002", "SPEC-003", false));
+        r.parents.push(parent_edge("SPEC-003", "SPEC-001", false));
+        assert_eq!(r.parent_cycle(None).len(), 1);
+    }
+
+    #[test]
+    fn parent_cycle_tail_feeding_a_ring_reports_the_ring_once() {
+        // codex F3: T → A → B → A. The cycle slice is {A,B}; T is not in it, so its
+        // walk never emits. Exactly one finding, naming the ring not the tail.
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002", "SPEC-009"]);
+        r.parents.push(parent_edge("SPEC-009", "SPEC-001", false)); // T → A
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false)); // A → B
+        r.parents.push(parent_edge("SPEC-002", "SPEC-001", false)); // B → A
+        let found = r.parent_cycle(None);
+        assert_eq!(found.len(), 1);
+        assert!(!found[0].contains("SPEC-009"), "tail T must not be named");
+    }
+
+    #[test]
+    fn parent_cycle_clean_chain_to_root_yields_no_finding() {
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002", "SPEC-003"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.parents.push(parent_edge("SPEC-002", "SPEC-003", false)); // SPEC-003 is root
+        assert!(r.parent_cycle(None).is_empty());
+    }
+
+    #[test]
+    fn parent_cycle_scoped_to_a_member_node_reports_it() {
+        // A scoped run of a spec IN the ring still sees the cycle; a spec outside
+        // (the tail T) does not.
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002", "SPEC-009"]);
+        r.parents.push(parent_edge("SPEC-009", "SPEC-001", false)); // tail T → A
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false)); // A → B
+        r.parents.push(parent_edge("SPEC-002", "SPEC-001", false)); // B → A
+        assert_eq!(r.parent_cycle(Some("SPEC-001")).len(), 1);
+        assert!(r.parent_cycle(Some("SPEC-009")).is_empty());
     }
 
     #[test]

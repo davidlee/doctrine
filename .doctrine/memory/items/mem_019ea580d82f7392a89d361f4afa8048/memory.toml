@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea580d82f7392a89d361f4afa8048"
+memory_key = "mem.pattern.lint.indexing-slicing-ban"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Repo clippy denies indexing-slicing: use .get(range) not range-indexing"
+summary = "Repo clippy denies indexing-slicing — slice/index with .get(..), never []"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = ["src"]
+globs = ["src/**/*.rs"]
+commands = ["cargo clippy", "just check"]
+tags = ["lint", "clippy", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2991493633f83762053d89bfec624473b1f5d27b"
+ref_name = "refs/heads/main"
+checkout_state_id = "5ae0d155d9df41fbc7e678663e4b910b74f3f74eb7082b4e8af88f29d2a3d602"
+base_commit = "bd77970f4fa3ca536bee4b7a84e54925c122c1a1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
