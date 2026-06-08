@@ -1,0 +1,159 @@
+# Implementation plan for SL-025 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-025"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Spine leaf"
+objective = "Stand up the pure, clap-free listing.rs read spine and relocate render_table, with zero CLI behaviour change — establish the seam every kind will ride."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked through its review passes; the regex-lite dependency (D9) is approved." },
+  { id = "EN-2", text = "engine suites (entity, registry, meta readers) and the slice is_divergent suite are green at HEAD." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "listing.rs exists exposing Filter, Format (with FromStr + Display), FilterFields, retain, canonical_id, validate_statuses, json_envelope — and imports no clap (no clap::Args / ValueEnum in the leaf)." },
+  { id = "EX-2", text = "render_table is moved from meta.rs to listing.rs; meta.rs keeps its numeric reader plus a sort-by-id helper; every existing render_table caller is repointed with no change to any list output." },
+  { id = "EX-3", text = "regex-lite (not full regex) is added to Cargo.toml." },
+  { id = "EX-4", text = "canonical_id takes the prefix as a parameter; the leaf does not import entity (ADR-001 leaf-clean)." },
+]
+verification = [
+  { id = "VT-1", expects = "listing unit tests pass: retain matrix (substr × multi-status × tag × hide-set × all × regex), canonical_id, json_envelope shape, Format/--json coercion, invalid-regex error, empty→header-suppressed." },
+  { id = "VT-2", expects = "domain-distinction test passes: a row matching the regex on canonical-only (slug+title miss) is kept, and a substr-only match is kept — proving the two match domains are wired independently (guards A-1)." },
+  { id = "VT-3", expects = "the pre-existing suite is green unchanged (entity, registry, meta readers, is_divergent) — behaviour-preservation." },
+  { id = "VA-1", expects = "review confirms listing.rs is clap-free and ADR-001 leaf-clean." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "adr — reference migration"
+objective = "Migrate adr list/show onto the spine and establish CommonListArgs + listing::build, proving the contract end-to-end on the simplest kind, including its boot consumer."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the spine leaf exists and render_table is relocated." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "CommonListArgs (clap::Args, command-side) + listing::build are wired; build folds --json over --format (A-9) and pre-compiles the regex with a clean error on a bad pattern." },
+  { id = "EX-2", text = "adr list emits prefixed ADR- ids + a header, applies the hide-set {rejected, superseded, deprecated}, accepts -f/-r/-i/-s/-t/-a and --format/--json, and sorts by id." },
+  { id = "EX-3", text = "adr show is added (table + json), reassembling adr-NNN.toml + adr-NNN.md." },
+  { id = "EX-4", text = "the dead meta::format_list is removed (adr was its last caller)." },
+  { id = "EX-5", text = "the boot ADR section renders via the migrated path (ADR- ids + header)." },
+]
+verification = [
+  { id = "VT-1", expects = "adr list tests: prefixed ids, header, hide-set default + reveal under --all/--status, --filter and --regexp, json envelope." },
+  { id = "VT-2", expects = "adr show tests pass (table + json)." },
+  { id = "VT-3", expects = "the boot snapshot test is updated and green: the ADR section shows ADR- ids + header." },
+  { id = "VT-4", expects = "adr --status validates against the adr known-set with the uniform error (A-2)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "slice + status vocabulary"
+objective = "Migrate slice list/show onto the spine, amend and enforce the slice status vocabulary as a read-filter known-set, add the drift marker, and migrate the one drifted slice — leaving is_divergent untouched."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: CommonListArgs, listing::build, and the show seam exist." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "slice list is on the spine: SL- ids, header, hide-set {done, abandoned}, shared flags, sort by id, json (phases emitted as a structured value, not the rendered cell)." },
+  { id = "EX-2", text = "slice show is added — reassembles slice-NNN.toml (metadata) + slice-NNN.md (scope) only, NOT design/plan/notes (A-5); table + json." },
+  { id = "EX-3", text = "slices-spec.md vocabulary is amended to {proposed, ready, started, audit, done, abandoned}; abandoned is defined; superseded is removed." },
+  { id = "EX-4", text = "validate_statuses enforces the slice vocab on --status input; an out-of-vocab stored status is never hidden and renders with a trailing ? drift marker (distinct from the divergence marker)." },
+  { id = "EX-5", text = "slice 002 is migrated superseded→abandoned (numeric dir only; the 002-entity-engine symlink alias is untouched)." },
+  { id = "EX-6", text = "is_divergent and is_terminal_status are unchanged (divergence-terminal stays the done-only set)." },
+]
+verification = [
+  { id = "VT-1", expects = "slice list tests: SL- ids, hide-set default + reveal, drift ? marker on an out-of-vocab stored status, json." },
+  { id = "VT-2", expects = "divergence both-cases: abandoned + incomplete phases is quiet, abandoned + complete phases flags the divergence marker; the is_divergent suite is green unchanged." },
+  { id = "VT-3", expects = "vocab tests: --status abandoned accepted, --status bogus rejected; slice 002 reads abandoned." },
+  { id = "VT-4", expects = "slice show tests pass (table + json; metadata + scope only)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "spec + backlog"
+objective = "Bring the two remaining show-having kinds onto the spine — spec (per-subtype blocks) and backlog (the reference shape with its deprecated positional)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: the spine and the show seam exist." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "spec list is on the spine: prefixed ids, hide-set {superseded}, per-subtype blocks + #members preserved, sort by id, shared flags; json is a single {kind: spec, rows: [...]} envelope where each row carries a subtype field (A-8)." },
+  { id = "EX-2", text = "spec show gains --json." },
+  { id = "EX-3", text = "backlog list is on the spine: the [SUBSTR] positional is retained as a deprecated alias of --filter (--filter wins, A-7), -r/-i and the shared flags are added, Status::is_terminal is reused as the hide-set, prefixed ids, sort by (kind.ordinal, id); json." },
+  { id = "EX-4", text = "backlog show gains --json." },
+]
+verification = [
+  { id = "VT-1", expects = "spec list tests: per-subtype blocks, #members, hide-set, single-envelope json carrying subtype per row." },
+  { id = "VT-2", expects = "backlog tests: --filter ≡ positional precedence (A-7), hide-set unchanged, -r/-i, json." },
+  { id = "VT-3", expects = "spec and backlog show --json tests pass." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "memory + boot consumer"
+objective = "Migrate memory list/show onto the spine honouring the uid exception and the six-status hide-set; add the memory new alias; render boot's memory section active-only."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: the spine and the show seam exist." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "memory list is on the spine: the uid is kept as the canonical id (NOT routed through canonical_id), hide-set {superseded, retracted, archived, quarantined} with active + draft visible, type/trust columns, sort created-desc then uid, shared flags, json; validate_statuses runs against the full six-status set." },
+  { id = "EX-2", text = "memory show gains --json." },
+  { id = "EX-3", text = "memory new is added as a command alias of record — identical handler; memory record keeps working unchanged." },
+  { id = "EX-4", text = "the boot memory section is rendered active-only via an explicit predicate, decoupled from the memory list default (no draft leak into agent context)." },
+]
+verification = [
+  { id = "VT-1", expects = "memory list tests: uid ids, six-status hide-set default + reveal, type/trust columns, json." },
+  { id = "VT-2", expects = "memory new ≡ memory record: both create an identical entity." },
+  { id = "VT-3", expects = "boot memory test: a fixture spanning active + draft + each hidden status shows active-only in boot, while CLI memory list hides the four terminal but keeps draft." },
+  { id = "VT-4", expects = "memory show --json test passes." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "conformance + closure-prep"
+objective = "Prove the uniform contract holds across every kind and ready the slice for audit."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 through PHASE-05 complete: all five kinds are migrated onto the spine." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "behavioural parse-conformance (R5/A-4): for every kind, <kind> list --filter x --json parses and succeeds — the spine flags are present on all five." },
+  { id = "EX-2", text = "ordering-preservation pipeline tests run through each kind's list_rows with intentionally-unsorted fixtures." },
+  { id = "EX-3", text = "the OQ-3 short-flag collision audit is completed; any colliding kind-specific short flag is demoted to long-only (the shared flag wins)." },
+  { id = "EX-4", text = "the full list/show snapshot set is reconciled; engine and is_divergent suites are still green unchanged." },
+  { id = "EX-5", text = "just check passes: plain cargo clippy with zero warnings, fmt clean, house lint styles honoured." },
+]
+verification = [
+  { id = "VT-1", expects = "the parse-conformance test is green for all five kinds." },
+  { id = "VT-2", expects = "ordering-preservation tests are green." },
+  { id = "VT-3", expects = "closure-intent checklist met: show resolves for all five kinds; all list/show emit canonical prefixed ids (memory uid exempt); default list hides terminal with --all/--status revealing; a shared filter base and a shared renderer (human + json) back every kind; the create-verb is reconciled." },
+  { id = "VA-1", expects = "design-conformance review: the implementation matches the design.md §5 contracts and no bespoke list flags were reintroduced." },
+]
+specs        = []
+requirements = []
