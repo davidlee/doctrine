@@ -109,11 +109,12 @@ specs parse unchanged, exactly as `c4_level`). No shape validation at parse; an
 unresolvable ref is a `validate` finding. A *second parent* is **doubly
 precluded** (REQ-087, finding D): the scalar field makes the in-model state
 unrepresentable (a duplicate `parent =` key or a `parent = [...]` array fails
-`toml::from_str`), and a **pre-parse guard** in `build_registry` (§5.3) detects
-that same malformation first and emits a **named hard finding** ("spec X declares
-a second parent") rather than an opaque `"Failed to parse"`. The guard is what
-satisfies AC1 *literally* (a hard finding, non-zero exit); the scalar shape is
-defense-in-depth, not the sole mechanism.
+`toml::from_str`), and `build_registry` (§5.3) **classifies that parse error** —
+a duplicate-key / wrong-type failure *at `parent`* — into a **named hard finding**
+("spec X declares a second parent") rather than letting it surface as an opaque
+`"Failed to parse"`. The classified finding is what satisfies AC1 *literally* (a
+hard finding, non-zero exit); the scalar shape is defense-in-depth, not the sole
+mechanism.
 
 **`render()`** adds, after the `c4_level` line, kind-gated to tech:
 
@@ -136,7 +137,7 @@ show` does not display it.
 product_specs:  BTreeSet<String>,       // descent + interaction-kind resolve here
 parents:        Vec<ParentEdge>,        // { spec, parent, on_product }
 descents:       Vec<DescentEdge>,       // { spec, target, on_product }
-build_findings: Vec<BuildFinding>,      // { spec, message } — pre-parse hard findings (carrier)
+build_findings: Vec<BuildFinding>,      // { spec, message } — scan-time hard findings from parse-error classification (carrier)
 ```
 
 `on_product` (on **both** edges) is set true when the subject is a product spec;
@@ -144,7 +145,7 @@ the check turns it into a hard *invalid-kind* finding — `descends_from` and
 `parent` are tech-only fields, so either on a product is a wrong-subject error
 (codex F5; symmetry with the target-kind checks). `build_findings` is the carrier
 for findings born at scan time before a pure check can run — the `second_parent`
-guard (codex F1) records into it; `validate(scope)` includes it (scope-filtered by
+parse-error classifier (codex F1) records into it; `validate(scope)` includes it (scope-filtered by
 `spec`). The field is inert data, so `registry.rs` stays a pure leaf (ADR-001) —
 only `build_registry` (in `spec.rs`, the impure shell) populates it.
 
@@ -440,9 +441,12 @@ Internal adversarial pass (integrated above):
   inquisition tried this in full (Charge III) and surfaced two unconfessed sins:
   the failure was *undiagnosable* (generic `"Failed to parse"`) and the AC3
   non-zero exit was tested only at `toml::from_str` level. User ruled: accept
-  structural impossibility **and** add a named diagnostic. Synthesis: a pre-parse
-  `second_parent` guard emits a **named hard finding** with non-zero exit (literal
-  AC1 + AC3), the scalar field is defense-in-depth. The `Vec`-parent alternative
+  structural impossibility **and** add a named diagnostic. Synthesis (at the time):
+  a build-time `second_parent` guard emits a **named hard finding** with non-zero
+  exit (literal AC1 + AC3), the scalar field is defense-in-depth. *(Later refined by
+  codex F1/F2 — the guard became a `toml::from_str` **parse-error classifier**
+  recording into the `build_findings` carrier; the pre-parse line-scan framing is
+  superseded. §5.2/§5.3 carry the final mechanism.)* The `Vec`-parent alternative
   stays rejected (reintroduces the representable-but-invalid state). See §6a, §5.2,
   §5.3, Layer C. **No deviation remains.**
 - **E — parent target-kind symmetry.** A `parent` pointing at a product spec is
