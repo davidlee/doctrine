@@ -1,0 +1,78 @@
+# Implementation plan for SL-024 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-024"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (doc/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Extract the tomlfmt leaf"
+objective = """
+Create the pure leaf `src/tomlfmt.rs` holding `toml_string` and \
+`toml_array_inner`, bodies moved byte-for-byte from `memory.rs` (visibility \
+raised to `pub(crate)`), and declare `mod tomlfmt;` in `main.rs`. Repoint \
+`memory.rs` onto the shared seam: delete its two private copies, `use \
+crate::tomlfmt::{toml_string, toml_array_inner}`. No other module is touched. \
+The seam exists and memory consumes it with byte-identical output."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked and inquisition-amended (SL-024 inquisition.md Charges 1–2 closed)." },
+  { id = "EN-2", text = "Source of the move confirmed: private `toml_string` (memory.rs:653) and `toml_array_inner` (memory.rs:661); no `src/tomlfmt.rs` or `src/render.rs` exists yet." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/tomlfmt.rs` exists: `toml_string(&str) -> String` and `toml_array_inner(&[String]) -> String`, both `pub(crate)`, bodies byte-identical to the memory.rs originals; imports only the `toml` crate (leaf, no engine/command dep — ADR-001)." },
+  { id = "EX-2", text = "`main.rs` declares `mod tomlfmt;`." },
+  { id = "EX-3", text = "`memory.rs`'s two private copies are deleted and replaced by `use crate::tomlfmt::{toml_string, toml_array_inner};`; every existing call site (memory.rs:596/626/627/629–640) resolves to the leaf." },
+  { id = "EX-4", text = "No renderer, template, or module other than `memory.rs` + `main.rs` is changed in this phase." },
+]
+verification = [
+  { id = "VT-1", expects = "Leaf unit tests in `tomlfmt.rs` exercise `toml_string` and `toml_array_inner` directly for `\"`/`\\`/newline escaping and `]`/`,` array breakout." },
+  { id = "VT-2", expects = "memory's existing suite passes UNCHANGED (behaviour gate): memory.toml output byte-identical, the move is inert." },
+  { id = "VT-3", expects = "`cargo clippy` zero warnings (bins/lib); `just check` clean. `toml_array_inner`'s `.map(|s| toml_string(s))` survives (load-bearing deref coercion, not redundant_closure — A3)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Route the corpus through the seam"
+objective = """
+Eliminate the raw splice of user free-text into a TOML literal corpus-wide. \
+Convert all seven entity templates to self-quoting bare tokens (`slug = \
+{{slug}}`, `title = {{title}}`) and route the five `render_*_toml` renderers' \
+`title`+`slug` through `tomlfmt::toml_string`, each template+renderer edit a \
+lockstep pair. Drive it red→green with a per-renderer adversarial round-trip \
+test. Only `title` and explicit `slug` are escaped (D5); other tokens are \
+typed/generated and untouched."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the `tomlfmt` seam exists and memory consumes it green/unchanged." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Seven templates carry bare self-quoting tokens for slug+title: `slice`, `adr`, `requirement`, `spec-product`, `spec-tech`, `backlog`, `backlog-risk` (memory.toml already bare). After edits, `touch src/install.rs && cargo build` so the re-embed lands (R2)." },
+  { id = "EX-2", text = "Five renderers route `title`+`slug` through `tomlfmt::toml_string`: `slice::render_toml`, `adr::render_adr_toml`, `requirement::render_requirement_toml`, `spec::render_spec_toml` (both subtypes), `backlog::render_backlog_toml` (both templates). Each template+renderer edit applied as a pair — no `\"{{title}}\"` quote left beside a routed token (R1)." },
+  { id = "EX-3", text = "No raw `.replace(\"{{slug}}\"/\"{{title}}\", …)` of user free-text into a TOML literal remains corpus-wide. The `render_*_md` body splices stay raw (markdown is unparsed — Non-Goal); `state.rs:336` stays deferred (OQ-2)." },
+]
+verification = [
+  { id = "VT-1", expects = "Adversarial round-trip per renderer (red→green): a `title` (and explicit `slug`) carrying `\"` + newline + `\\` renders a `*.toml` that re-parses via `meta::Meta` and round-trips the value verbatim. Hostile driver MUST contain `\"` — `]` alone is green already (A1)." },
+  { id = "VT-2", expects = "Four existing direct round-trip tests are EXTENDED: `render_adr_toml_round_trips_to_metadata` (adr.rs:229), `render_toml_round_trips_to_metadata` (slice.rs:557), `render_requirement_toml_round_trips_to_metadata` (requirement.rs:272), `rendered_toml_round_trips_into_meta_and_backlog_item` (backlog.rs:1015)." },
+  { id = "VT-3", expects = "ONE NEW spec test calls the private `render_spec_toml` DIRECTLY and `toml::from_str`s the body (spec has no existing direct test; the disk path via `fresh` would false-red at `<id>-<slug>` symlink creation — inquisition.md Charge 1)." },
+  { id = "VT-4", expects = "All five entity suites + memory's pass (behaviour gate: only previously-broken inputs change output). `cargo clippy` zero; `just check` clean; TDD red/green/refactor." },
+]
+specs             = []
+requirements      = []
