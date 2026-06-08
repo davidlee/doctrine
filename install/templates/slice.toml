@@ -1,6 +1,6 @@
 id = {{id}}
-slug = "{{slug}}"
-title = "{{title}}"
+slug = {{slug}}
+title = {{title}}
 status = "proposed"
 created = "{{date}}"
 updated = "{{date}}"

@@ -38,6 +38,7 @@ use crate::registry::{
     BuildFinding, DescentEdge, InteractionEdge, MemberEdge, ParentEdge, Registry,
 };
 use crate::requirement::{self, ReqKind, Requirement};
+use crate::tomlfmt::toml_string;
 
 /// The toml/md file stem — shared by both subtypes (`spec-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`PRD`/`SPEC`) and from the tree dirs below.
@@ -257,8 +258,8 @@ fn render_spec_toml(
 ) -> anyhow::Result<String> {
     Ok(crate::install::asset_text(subtype.toml_template())?
         .replace("{{id}}", &id.to_string())
-        .replace("{{slug}}", slug)
-        .replace("{{title}}", title))
+        .replace("{{slug}}", &toml_string(slug))
+        .replace("{{title}}", &toml_string(title)))
 }
 
 /// Render `spec-<id>.md` from the subtype's embedded prose template: `{{ref}}` (the
@@ -1159,6 +1160,20 @@ mod tests {
                 status: "draft".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn render_spec_toml_escapes_hostile_title_and_slug() {
+        // SL-024 (inquisition Charge 1): spec has no existing direct render test —
+        // call `render_spec_toml` DIRECTLY (the disk path via `fresh` would
+        // false-red at `<id>-<slug>` symlink creation, the wrong stratum). A title
+        // / explicit slug carrying the quoted-literal breakers must round-trip.
+        let title = "a\"b\\c\nd";
+        let slug = "p\"q";
+        let body = render_spec_toml(SpecSubtype::Product, 7, slug, title).unwrap();
+        let parsed: Meta = toml::from_str(&body).unwrap();
+        assert_eq!(parsed.slug, slug);
+        assert_eq!(parsed.title, title);
     }
 
     #[test]

@@ -24,6 +24,7 @@ use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
 use crate::meta;
+use crate::tomlfmt::toml_string;
 
 /// Relative dir of the ADR tree inside the project root. Distinct top-level tree,
 /// not nested under slice (D2 — ADRs are project-global governance).
@@ -71,8 +72,8 @@ impl AdrStatus {
 fn render_adr_toml(id: u32, slug: &str, title: &str, date: &str) -> anyhow::Result<String> {
     Ok(crate::install::asset_text("templates/adr.toml")?
         .replace("{{id}}", &id.to_string())
-        .replace("{{slug}}", slug)
-        .replace("{{title}}", title)
+        .replace("{{slug}}", &toml_string(slug))
+        .replace("{{title}}", &toml_string(title))
         .replace("{{date}}", date))
 }
 
@@ -242,6 +243,18 @@ mod tests {
         // VT-1: status seeds proposed, the date is injected, no token survives.
         assert!(body.contains("created = \"2026-06-04\""));
         assert!(!body.contains("{{"));
+    }
+
+    #[test]
+    fn render_adr_toml_escapes_hostile_title_and_slug() {
+        // SL-024: a title / explicit slug carrying the quoted-literal breakers
+        // (`"`, `\`, newline) must still render a parseable toml that round-trips.
+        let title = "a\"b\\c\nd";
+        let slug = "p\"q";
+        let body = render_adr_toml(7, slug, title, "2026-06-04").unwrap();
+        let parsed: Meta = toml::from_str(&body).unwrap();
+        assert_eq!(parsed.slug, slug);
+        assert_eq!(parsed.title, title);
     }
 
     #[test]
