@@ -137,7 +137,7 @@ doctrine slice status <id> <state> [--note <s>]
 **Conduct** (`src/conduct.rs`, new):
 
 ```rust
-enum Actor    { Agent, Self_, Peer, Team }     // serde kebab
+enum Actor    { Agent, Author, Peer, Team }     // serde: Author renames to "self"
 enum Autonomy { Auto, Draft, Gate }            // serde kebab
 struct Conduct { actor: Actor, autonomy: Autonomy }
 fn resolve(cfg: &ConductConfig, state: &str) -> Conduct;   // pure, default fallback
@@ -232,8 +232,15 @@ stateDiagram-v2
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **Additive vocab ⇒ no migration**; behaviour-preservation gate: existing
-  `slice list` rollup/divergence suites stay green unchanged.
+- **Additive vocab ⇒ no migration.** Behaviour-preservation gate: existing
+  `slice list` rollup/divergence/`is_drifted` *behaviour* suites stay green
+  unchanged. **Exception (by design):** the spec-lockstep canary
+  `slice_statuses_matches_the_spec_vocabulary` (`slice.rs:1450`) updates in
+  lockstep with the `slices-spec.md` edit — that is the canary functioning, not a
+  regression (cf. `adr_known_set_matches_variants`).
+- **Transition from a drifted status** — if the stored `from` is out-of-vocab,
+  `classify` falls through to `Skip` (allowed, surfaced); the verb never refuses
+  a move *out of* drift, only an out-of-vocab *target* or a terminal source.
 - **Terminal exit refused** (`FromTerminal`); reopening is deferred, deliberate.
 - **No-op guard** before write (content + mtime hold); **F-1 refuse** on
   malformed TOML (never tail-`insert` → silent corruption).
@@ -302,10 +309,53 @@ stateDiagram-v2
   the posture.
 - **enums** — `InProgress`/`Retired` serde + `as_str`; `CoverageStatus` serde
   round-trip.
-- **Behaviour preservation** — existing `slice list`, rollup, divergence,
-  `is_drifted` suites green **unchanged** (additive vocab).
+- **Behaviour preservation** — `slice list`, rollup, divergence, `is_drifted`
+  *behaviour* suites green **unchanged**; the vocab canary (`slice.rs:1450`)
+  updates with the spec edit (F1).
 - `just check` zero warnings; `cargo clippy` clean (bins/lib).
 
 ## 10. Review Notes
 
-<!-- adversarial pass pending -->
+### Adversarial pass — 2026-06-09
+
+- **F1 (medium, corrected).** "Suites green unchanged" was too broad — the
+  spec-lockstep canary `slice_statuses_matches_the_spec_vocabulary`
+  (`slice.rs:1450`) pins the exact vocabulary and **must** update with the
+  `slices-spec.md` edit. Narrowed in §5.5/§9; the canary updating *is* the gate
+  working (cf. `adr_known_set_matches_variants`). `:831`/`:1405` iterate the const
+  and adapt free.
+- **F2 (medium, doctrinal).** The `reconcile` lifecycle *state* ships here, but
+  the `/reconcile` *skill* is deferred. Updating the boot **routing-table skill
+  column** to point at `/reconcile` would be a shipped-not-reachable footgun
+  (`mem.pattern.distribution.shipped-not-reachable`). **Resolution:** edit boot
+  **Core-process prose** to name the stages (`… audit → reconcile → close`,
+  factual — the state exists); leave the routing-table *skill* row for the
+  reconcile-skill slice. Scope/affected-surface corrected.
+- **F3 (low, scope limit — stated).** `slice status` is **invoker-blind in v1**:
+  it surfaces the move classification + the *target state's* conduct, but does not
+  know whether an agent or a human invoked it. So "agent can't skip without
+  approval" (§4 #4) is **neither enforced nor actor-surfaced** in v1 — it arrives
+  with conduct enforcement (OQ-1, `--force`). Explicit, accepted limitation.
+- **F4 (low, edge case — fixed).** Transition *from* a drifted status →
+  classified `Skip`, allowed. Added to §5.5.
+- **F5 (low, naming — fixed).** `Actor::Self_` (keyword workaround) → `Actor::Author`,
+  serde-renamed to `"self"`. Cleaner, idiomatic.
+- **F6 (low, corrected).** `doctrine.toml` is **root-level user config, not a
+  `.doctrine/` entity** — it does **not** need the gitignore-negation/manifest-dir
+  wiring (`mem.pattern.install.authored-entity-wiring`, which is for gitignored
+  `.doctrine/` subtrees). At most an optional install **seed/template** (like
+  `governance.md`). Scope affected-surface corrected.
+- **F7 (medium, process).** ADR-009 lands `proposed`; the slice **builds the FSM
+  it describes**, so ADR-009 must be **accepted** (user) as the canon-acceptance
+  step before the implementation phases — else we build ahead of accepted canon.
+  A `/plan` sequencing constraint: ADR phases (author + accept) precede the code
+  phases. Mirrors design-acceptance gating the plan.
+- **F8 (medium, cross-ADR coherence).** The `review` state coexists with the
+  deferred `/review` skill + ADR-007 review-ledger (`RV-`). ADR-009 must frame
+  `review` as the lifecycle **position where ADR-007's review happens**, not
+  redefine review — to avoid contradicting ADR-007. Carried as an ADR-009
+  authoring constraint.
+- **F9 (low).** `[conduct.<unknown-state>]` keys — `resolve` **tolerates** (house
+  surface-don't-block posture), optionally warns; never hard-errors.
+- **F10 (trivial).** The mermaid is duplicated in `design.md` + ADR-009; ADR-009
+  is the canonical home, `design.md` the working copy. Accepted minor drift risk.

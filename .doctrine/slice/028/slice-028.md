@@ -112,11 +112,13 @@ Two things sharpened in design:
 - `doc/slices-spec.md` § Lifecycle — vocabulary + posture revision.
 - `doc/spec-entity-spec.md` § Lifecycle — expanded requirement-status vocab
   (`in-progress`, `retired`) + documented meanings.
-- `install/` — `doctrine.toml` template/seed if shipped; any manifest/gitignore
-  wiring for the new config (`mem.pattern.install.authored-entity-wiring` if it
-  becomes authored).
-- `.doctrine/state/boot.md` Core process + routing table — already name the loop;
-  verify reconcile is distinct (ADR-003 Verification bullet 1).
+- `install/` — optional `doctrine.toml` **seed/template** (commented defaults,
+  like `governance.md`). `doctrine.toml` is root-level user config, **not** a
+  `.doctrine/` entity, so it needs **no** gitignore-negation/manifest wiring (F6).
+- `.doctrine/state/boot.md` — edit **Core-process prose** to name the stages
+  (`… audit → reconcile → close`, factual: the state exists). **Leave the
+  routing-table skill row** for the reconcile-skill slice — pointing it at the
+  deferred `/reconcile` would be shipped-not-reachable (F2).
 
 ## Risks, assumptions, open questions
 
