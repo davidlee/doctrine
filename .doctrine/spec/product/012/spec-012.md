@@ -1,7 +1,8 @@
 # PRD-012: Technical Specifications
 
 <!-- Reference forms: entity ids padded (REQ-059, ADR-004); doc-local refs bare
-     (OQ-1 open question). See doc/glossary.md § reference forms. -->
+     (OQ-1 open question). See doc/glossary.md § reference forms.
+     SL-023: glossary relocated to install/glossary.md (ships to .doctrine/glossary.md). -->
 
 ## 1. Intent
 

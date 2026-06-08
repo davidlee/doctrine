@@ -19,7 +19,7 @@
 <!-- e.g. -->
 <!-- - Architecture spec: doc/architecture.md -->
 <!-- - Build / test entrypoints: justfile (`just check`) -->
-<!-- - Domain glossary: doc/glossary.md -->
+<!-- - Domain glossary: .doctrine/glossary.md -->
 
 ## Project-local rules of the road
 
