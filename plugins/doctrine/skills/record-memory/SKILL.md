@@ -22,20 +22,19 @@ mental model / terminology) · `signpost` ("start here" navigation) · `thread`
 
 ## 2. Record it
 
-```
-doctrine memory record --type <type> "Title" \
-  --summary "one line" --tag <tag> [--key mem.<type>.<domain>.<subject>]
-```
-
-Scaffolds a TOML + body under `.doctrine/memory/items/`. The **born git anchor
-is captured automatically** — do not hand-author it.
+Record with `doctrine memory record` (ask `--help` for the flags; see
+`using-doctrine.md` for the verb model). It scaffolds a TOML + body under
+`.doctrine/memory/items/`; the **born git anchor is captured automatically** —
+do not hand-author it.
 
 ## 3. Scope it so it will be found
 
-- `--path-scope <file>` — exact file(s); strongest match.
-- `--glob <pattern>` — subsystem relevance (e.g. `src/auth/**`).
-- `--command <tok>` — tied to a command flow (token-prefix).
-- `--tag <tag>` — stable categorization; do **not** overload tags as scope.
+Scope a memory along four axes (the flags are in `--help`):
+
+- **path** — exact file(s); strongest match.
+- **glob** — subsystem relevance (e.g. `src/auth/**`).
+- **command** — tied to a command flow (token-prefix).
+- **tag** — stable categorization; do **not** overload tags as scope.
 
 ## 4. Set the risk axes (no flag yet — edit the TOML)
 
@@ -72,8 +71,5 @@ or author under `doc/*` instead. Memory is a pointer/recipe layer, not canon.
 
 ## 7. Sanity-check surfaceability
 
-```
-doctrine memory find --path-scope <file> --type <type>
-```
-
-Confirm it appears under the context a future agent will actually query.
+Run `doctrine memory find` scoped to the context a future agent will actually
+query (see `--help`), and confirm the memory appears.

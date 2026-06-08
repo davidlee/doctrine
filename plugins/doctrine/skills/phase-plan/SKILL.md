@@ -39,8 +39,8 @@ Inputs:
 6. If detailing the phase surfaces new design problems, unresolved tradeoffs, or
    policy ambiguity, stop — `/consult`, or return to `/design` if the design
    itself is the gap. Do not invent your way past it.
-7. When the sheet tells a coherent story, flip the phase status and hand off:
-   `doctrine slice phase <ID> PHASE-NN --status in_progress`, then `/execute`.
+7. When the sheet tells a coherent story, flip the phase to `in_progress` with
+   `doctrine slice phase` (see `using-doctrine.md`), then `/execute`.
 
 ## Outcomes
 

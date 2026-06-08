@@ -20,16 +20,12 @@ consult memories first, then proceed.
 
 ## Procedure (fast → thorough)
 
-1. **Scoped query first.** Build it from the concrete files you expect to read
-   or edit, plus the command context you are about to run:
-
-   ```
-   doctrine memory retrieve --path-scope <file> --command "<tok>" --tag <tag>
-   ```
-
-   Glob-scoped memories still match `--path-scope` paths — no separate flag
-   needed. Scope probes are OR'd; `--type`/`--status` are AND hard filters, so
-   do not over-filter unless certain.
+1. **Scoped query first.** Run `doctrine memory retrieve` scoped to the concrete
+   files you expect to read or edit, plus the command context you are about to
+   run (ask `--help` for flags; `using-doctrine.md` for the verb model).
+   Glob-scoped memories still match path scopes — no separate flag needed. Scope
+   probes are OR'd; type/status are AND hard filters, so do not over-filter
+   unless certain.
 
 2. **Tune the surface.** `--limit N` (default 5, max 20). `--min-trust
    high|medium|low` raises the trust floor under high severity — it only *raises*

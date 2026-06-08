@@ -239,21 +239,14 @@ coordinated writes** — see PRD-001 (`spec show PRD-001`) for the canonical sha
    requirement is a peer `REQ-NNN` entity, surfaced by `spec show` under a
    synthesized `## Requirements` section with its `FR-`/`NF-` label.
 
-Real CLI surface (ask `doctrine spec --help`; do not guess flags):
+Real CLI surface: `doctrine spec --help` (scaffold a product spec, `req add` a
+requirement member, `show` the reassembled whole, `validate` corpus FK integrity,
+`list` the specs). See `using-doctrine.md` for the verb model — do not guess flags.
 
-```sh
-doctrine spec new product "<title>"                                   # scaffold spec-NNN.{toml,md}
-doctrine spec req add <PRD-ref> "<title>" --kind functional|quality   # reserve a REQ-NNN member
-doctrine spec show <PRD-ref>                                          # reassembled whole + synthesized Requirements
-doctrine spec validate                                               # FK integrity across the corpus
-doctrine spec list                                                   # survey specs (optional --status)
-```
-
-`spec req add` takes only `<PRD-ref>`, a title, and `--kind` (plus an optional
-explicit `--label`). It reserves a `REQ-NNN` with bare fields. **To make it render
+`spec req add` reserves a `REQ-NNN` member with bare fields. **To make it render
 richly under `spec show`, hand-enrich the requirement entity TOML**
 (`requirement-NNN.toml`): add a one-line `description` (the queryable statement)
-and an `acceptance_criteria` array. There is no CLI flag for these — they are
+and an `acceptance_criteria` array — there is no flag for these, they are
 authored TOML.
 
 Structural rules:

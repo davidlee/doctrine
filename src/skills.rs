@@ -802,6 +802,48 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
+    // ADR-005 / SL-023 PHASE-04 (VT-1): the de-dup'd skills route rather than
+    // restate. Guards the named sites against re-growing flag-syntax templates,
+    // option/enum tables, or `--status` transition commands. Each must also keep
+    // a pointer to the shared tier-1/2 docs. Evidence-bound to the named set.
+    #[test]
+    fn dedup_skills_route_not_restate() {
+        let named = [
+            "record-memory",
+            "retrieve-memory",
+            "spec-product",
+            "spec-tech",
+            "execute",
+            "phase-plan",
+            "canon",
+            "inquisition",
+        ];
+        // Offender fragments removed by the de-dup — must not reappear.
+        let banned = [
+            "--status in_progress",
+            "--status completed",
+            "--kind functional|quality",
+            "--type <type>",
+            "--path-scope <file>",
+            "--command \"<tok>\"",
+        ];
+        for skill in named {
+            let path = format!("doctrine/skills/{skill}/SKILL.md");
+            let asset = PluginAssets::get(&path).expect("named skill must be embedded");
+            let text = std::str::from_utf8(&asset.data).expect("utf8");
+            for frag in banned {
+                assert!(
+                    !text.contains(frag),
+                    "restate-line: {skill} reproduces flag syntax `{frag}`"
+                );
+            }
+            assert!(
+                text.contains("using-doctrine") || text.contains("--help"),
+                "reachability: {skill} must point at a tier-1/2 reference"
+            );
+        }
+    }
+
     fn entry(domain: &str, id: &str) -> Entry {
         Entry {
             domain: domain.to_string(),
