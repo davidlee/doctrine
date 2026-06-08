@@ -9,6 +9,11 @@ does not restate them.
   gitignored `handover.md` / `phases` symlink. Glob `.doctrine/slice/**`.
 - `.doctrine/adr/nnn/` — project-global ADRs (`adr-nnn.{toml,md}`); status lives
   in the TOML.
+- `.doctrine/spec/product/nnn/` and `.doctrine/spec/tech/nnn/` — product /
+  technical specifications: `spec-nnn.{toml,md}` + `members.toml` (the
+  requirements they compose).
+- `.doctrine/backlog/` — work-intake items (issue / improvement / chore / risk /
+  idea), the intake surface upstream of a slice.
 - `.doctrine/memory/items/nnn/` — the memory store (`memory.{toml,md}` + a
   `mem.<key>` symlink). `.doctrine/memory/shipped/` is the gitignored synced
   global corpus. See [[concept.doctrine.memory-model]].

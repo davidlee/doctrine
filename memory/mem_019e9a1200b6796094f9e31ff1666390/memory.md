@@ -21,6 +21,8 @@ Mid-flight, any stage:
 - Unanticipated obstacle / tradeoff / emergent complexity → **/consult** (don't
   improvise past it).
 - Durable gotcha or pattern discovered → **/record-memory**.
+- Authoring durable product / technical intent (the evergreen specs, upstream of
+  per-slice design) → **/spec-product**, **/spec-tech**.
 - Finished a coherent unit of work → **/notes**.
 - Handing off to a fresh context → **/next** (or **/handover**).
 
