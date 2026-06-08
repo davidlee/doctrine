@@ -61,3 +61,85 @@ spine yet — that begins PHASE-02).
   meta). Behaviour-preservation suites (entity, registry, meta readers,
   is_divergent) green **unchanged** (VT-3). `just check` clean (clippy zero
   warnings, fmt). e2e suites green.
+
+## PHASE-02 — adr migration + CommonListArgs + show seam (commit 165e576)
+
+First kind on the spine; establishes the two seams every later phase reuses.
+
+### The reusable command-side seam (`src/main.rs`)
+- `CommonListArgs` (`#[derive(clap::Args)]`, `pub(crate)`, main.rs ~46) — the
+  mandatory shared list-flag bundle. Fields: `filter: Option<String>` (-f),
+  `regexp: Option<String>` (-r), `case_insensitive: bool` (-i), `status:
+  Vec<String>` (-s, `value_delimiter=','`), `tag: Vec<String>` (-t), `all: bool`
+  (-a), `format: Format` (`value_parser = Format::from_str`, `default_value_t`),
+  `json: bool`. `--format` uses `value_parser`/`FromStr` (NOT `ValueEnum`) so clap
+  stays out of the leaf (A-3). Needs `use std::str::FromStr;` in main.rs.
+- `CommonListArgs::into_list_args(self) -> listing::ListArgs` — the lowering seam
+  (clap → clap-free leaf). PHASE-03+: `#[command(flatten)] list: CommonListArgs`
+  in the kind's `List` variant; dispatch calls `kind::run_list(path,
+  list.into_list_args())`.
+- Show wiring pattern (no shared struct — show args are small): a `Show { reference:
+  String, format: Format (value_parser), json: bool, path }` variant; dispatch
+  resolves `if json { Format::Json } else { format }` and calls
+  `kind::run_show(path, &reference, fmt)`.
+
+### The per-kind list_rows recipe (model: `src/adr.rs:list_rows`)
+`fn list_rows(root, args: ListArgs) -> Result<String>`:
+1. `validate_statuses(&args.status, KIND_STATUSES)?` (A-2) — every kind supplies a
+   `&[&str]` known-set. adr's lives in `ADR_STATUSES`, lockstep-guarded against the
+   `AdrStatus` variants by a drift-canary test.
+2. `let (filter, format) = listing::build(args)?;`
+3. read rows (existing reader: `meta::read_metas` for numeric kinds).
+4. `let mut rows = listing::retain(rows, &filter, is_hidden, key);` — `is_hidden` is
+   the kind's LIST hide-set fn; `key: &Row -> listing::FilterFields`.
+5. **kind sorts** (`rows.sort_by_key(|m| m.id)` for adr — ordering is per-kind).
+6. branch on `format`: Table → assemble grid (header row + `canonical_id` ids) →
+   `listing::render_table`; Json → faithful row structs → `listing::json_envelope`.
+- **Empty-list contract (§5.5)**: the table grid includes a header row, so guard
+  `if rows.is_empty() { return String::new(); }` BEFORE calling render_table — else
+  a no-row list prints a bare header. adr does this in its `render_table` helper.
+- adr's tag axis is sourced from `[relationships].tags` (faithful, read-only — adr
+  has no tag write verb); projected in `key`.
+
+### The show recipe (model: `src/adr.rs:run_show`/`read_adr`/`format_show`/`show_json`)
+- `parse_ref(&str) -> Result<u32>`: strips `ADR-`/`adr-` prefix (optional,
+  case-spec'd) then parses; bare/padded ids work.
+- `read_adr(adr_root, id) -> (AdrDoc, String)`: a fuller deserialize struct
+  (`AdrDoc`: the four list fields + created/updated + a `Relationships` substruct
+  with `#[serde(default)]` on every axis) read as data, plus the `.md` body verbatim.
+- Table = `format_show`: `Vec<String>` parts + `concat()` (house lint: no
+  `push_str(&format!)`), identity line, flat fields, non-empty relationship axes,
+  then the prose body. Json = `show_json`: `serde_json::json!({kind, adr: doc,
+  body})` pretty-printed (OQ-2: relationships included — toml-as-data is faithful).
+
+### Boot consumer (declared changing consumer, R6 — `src/boot.rs:124`)
+- Boot builds `listing::ListArgs { status: vec!["accepted".into()], ..default }`
+  directly (no clap) — itself the proof the leaf is clap-free. The explicit status
+  also reveals accepted past the hide-set, which is the boot intent.
+- Boot snapshot test (`regenerate_projects_accepted_adrs_and_memory_pointers`)
+  updated: asserts `ADR-001  accepted` (prefixed) + a header line (padding-agnostic:
+  `lines().any(|l| l.starts_with("id") && l.contains("status"))`).
+
+### meta.rs narrowing (EX-4)
+- `meta::format_list` DELETED (adr was its last caller) + its two tests. The
+  numeric-kind grid now lives per-kind on the spine. `meta::sort_and_filter` KEPT
+  (slice.rs:417, spec.rs:916 still call it) — the surviving sort-by-id helper; its
+  status-filter half is now dead-but-harmless until those kinds migrate (PHASE-03/04).
+
+### Decisions / gotchas (durable)
+- adr `--status` went single (`Option<String>`) → multi (`Vec<String>` via `-s`),
+  the uniform surface. One value still works; the known-set = `AdrStatus` variants.
+- listing.rs's self-clearing `#![expect(dead_code)]` RETIRED (build + canonical_id
+  consumed). No per-symbol expect was needed — every spine symbol now has a caller
+  via adr. PHASE-03+ should NOT need to reintroduce one.
+- `Format::from_str` as a `value_parser` needs `std::str::FromStr` in scope at the
+  call site (main.rs imports it).
+- doc-comment lint: a line wrapping onto `{a, b, c}` trips
+  `clippy::doc_lazy_continuation` (reads as a list item). Keep brace-sets on one line
+  or rephrase.
+
+### Gate
+- 593 bin unit tests pass (was 581: +14 adr list/show/validate, −2 meta format_list).
+  `just check` clean (clippy zero warnings, fmt). e2e suites green. Behaviour-
+  preservation suites (entity/registry/meta readers/is_divergent) green **unchanged**.
+- Manual CLI smoke confirmed: list (default/-f/--json), show (table), -s bogus error.
