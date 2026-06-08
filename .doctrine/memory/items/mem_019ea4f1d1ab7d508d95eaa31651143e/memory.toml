@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea4f1d1ab7d508d95eaa31651143e"
+memory_key = "mem.pattern.distribution.shipped-not-reachable"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A shipped .doctrine/*.md is invisible unless pointed-at by boot or a skill"
+summary = "Installing a doc into .doctrine/ does not make agents read it; it must be referenced from the push digest or a skill (the AGENTS.md lesson, ADR-005)"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = ["install/routing-process.md", "install/rules/AGENTS.md"]
+globs = []
+commands = []
+tags = ["governance", "distribution", "boot", "skills"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "154e89bc7dc697a4d7e48ea5e10c12b09f1e9ef6"
+ref_name = "refs/heads/main"
+checkout_state_id = "59920d67c5f56e3b87fb22f11ec7d393aa3a198c24d306b5c01423f60ff9690a"
+base_commit = "198511c601d85721f0b81b5295ebbc7e5b6d3ee7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
