@@ -4,7 +4,7 @@ version = 1
 id = 9
 slug = "slice-lifecycle-fsm-conduct-axis"
 title = "Slice lifecycle state machine and conduct axis"
-status = "proposed"
+status = "accepted"
 created = "2026-06-08"
 updated = "2026-06-08"
 
