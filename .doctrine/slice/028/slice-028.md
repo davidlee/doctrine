@@ -1,156 +1,160 @@
 # Enact ADR-003 reconcile seam and lifecycle states
 
+> **Cut locked (design session, 2026-06-09).** Scoped down from "build the whole
+> reconcile capstone" to a **lifecycle-FSM vertical** plus a **full holistic
+> revision of ADR-003**. The reconcile *machinery* (`/reconcile` skill, reconcile
+> artefact entity + `slice reconcile` CLI, audit/close deep tuning, closure-gate
+> enforcement, coverage derivation/registry/blocks) is **deferred to follow-on
+> slices** — they attach to the canon this slice locks. Treat SL-028 as *review
+> + refinement of ADR-003*, not straight implementation.
+
 ## Context
 
 ADR-003 is **accepted** but largely **unenacted**: it sets the canonical loop
 `slice → design → plan → phases → per phase [review] → audit → reconcile →
 close` and the normative/observed doctrine behind it, then defers the machinery
-honestly (§11, "the age, not the intent"). Most of that deferred set already has
-a home:
+honestly (§11). Most of that deferred set already has a home — tech specs
+(SL-021), `/review` + review-ledger (IMP-001/ADR-007), `/dispatch` + worktree/
+worker (IMP-003/004/ADR-006/008), contracts (deeper-deferred). The piece with
+**no home** is the loop's own capstone: the **observe → reconcile → close** seam
+(§3–§8) and the lifecycle states §9 leans on. `reconcile` appears across slice
+prose as a *manual discipline step*; nothing builds it.
 
-- **Tech specs** (§9, §11) → SL-021.
-- **`/review`** — per-phase review, review-ledger kind (§6, §11) → ADR-007 /
-  IMP-001.
-- **`/dispatch`** — parallel/worktree execution (§10, §11) → ADR-006/008,
-  IMP-002/003/004.
-- **Contracts** — the deterministic observed-truth corpus (§11) — explicitly the
-  *deeper*-deferred piece (efficiency, not concept; language-limited). Out.
+Two things sharpened in design:
 
-The one ADR-003 piece with **no slice and no backlog item** is the loop's own
-capstone: the **observe → reconcile → close** seam (§3–§8). `reconcile` appears
-across slice prose (design/audit/notes of SL-007, SL-009, SL-011, SL-019,
-SL-020…) as a *manual discipline step*, but nothing builds it: there is no
-`/reconcile` skill, no `slice reconcile` CLI, no reconcile artefact, and `/audit`
-/ `/close` are still tuned to the *slice* lifecycle, not the spec-reconciliation
-lifecycle. And the **per-requirement lifecycle/coverage states** that §9's
-PROD-vs-TECH strictness depends on (`planned`/`in-progress`/`verified` + a
-baseline) are unmodelled — the spec composition seam (SL-015,
-`mem.system.spec.composition-seam`) carries no coverage state today.
-
-This slice enacts that capstone: the reconcile seam plus the lifecycle/coverage
-states it leans on. It is the move from "ADR-003 by discipline" toward "ADR-003
-with machinery" for the reconcile half of the loop (the review/dispatch halves
-remain with their own slices).
+- **The slice lifecycle is inert.** `slice-NNN.toml` `status` is hand-edited;
+  there is **no transition verb** (`slices-spec.md` § Lifecycle, CLAUDE.md gap).
+  The vocabulary `{proposed, ready, started, audit, done, abandoned}` predates
+  ADR-003's reconcile step — it has no `reconcile` state, and no `review`.
+- **Doctrine deliberately diverges from spec-driver, and ADR-003 half-states
+  it.** spec-driver *derives* requirement truth from coverage by precedence
+  (`sync`: `requirement.status = f(coverage)`). ADR-003 §4/§5 **forbid exactly
+  that** — drift is a *prompt to reconcile*, authority is never rewritten by
+  precedence/timestamp/overlay. So doctrine's differentiator is
+  **reconcile-as-explicit-authorship vs derive-by-precedence**; ADR-003 commits
+  to it but never names the mechanism it rejects. The ADR revision must.
 
 ## Scope & Objectives
 
-1. **`/reconcile` skill — the sole spec-reconciliation writer (§7).** Authors a
-   new skill that consumes the reconciliation context `/audit` assembled and the
-   spec changes `/audit` *identified*, then **writes** those spec edits against
-   observed truth. It is the single point in the loop where specs regain
-   authority (§3, §7). Distinct from `/audit` (identifies, never writes) and from
-   `/close` (confirms coherence, never writes specs).
+### Built in this slice
 
-2. **The reconcile artefact — durable record of what reconcile changed and why.**
-   The `spec-driver` *revision* analog (name provisional per §11). Captures the
-   reconciled outcome so closure is auditable. **Its schema is deferred by
-   ADR-003** — settling it (lightweight prose log vs full authored entity kind;
-   where it attaches: slice↔spec) is the central design decision here, and may
-   warrant its own ADR (altitude check below).
+1. **Slice lifecycle FSM.** New authored vocabulary + transition machinery:
+   `proposed → design → plan → ready → started → review → audit → reconcile →
+   done` (+ `abandoned`). Gates modelled as transitions, except `ready` — the
+   lone gate-as-state, the "no code without an approved plan" human handoff.
+   `design-ready` is dropped (reaching `plan` *is* design-accepted).
+   Predicate-driven back-edges (see Risks). Terminal set stays `{done}`.
 
-3. **`slice reconcile` CLI — the artefact's producer verb.** Parallels the known
-   `slice audit` scaffold gap (CLAUDE.md "known CLI gaps"): today `audit.md` is
-   hand-made; reconcile should not repeat that. Shape follows from the artefact
-   decision (2).
+2. **Transition verb.** A `slice` verb that advances the FSM (and `abandon`),
+   gate-aware (consults conduct `autonomy`, advisory), reusing
+   `slice::is_terminal_status` and the edit-preserving authored-TOML status
+   transition (`mem.pattern.entity.edit-preserving-status-transition`). Closes
+   the CLAUDE.md "no slice lifecycle transition" gap.
 
-4. **Audit → close skill tuning (the §7 seam, §8 gate).**
-   - `/audit`: tighten so it **identifies** the spec changes and **assembles** the
-     reconciliation context — and explicitly does **not** write spec edits.
-   - `/close`: refuse a terminal status while owning specs remain drifted (§8).
-     Discipline-by-skill now; a command gate is enforcement and ADR-003 §11 marks
-     enforcement deferred — design decides build-now vs discipline-only.
+3. **Conduct axis (vocabulary + advisory config).** `actor`
+   (`agent|self|peer|team`) × `autonomy` (`auto|draft|gate`), assignable per
+   state/gate. Home: a **new `doctrine.toml [conduct]`** table (structured
+   sibling of `governance.md`). **Advisory v1** — parsed + surfaced, not enforced
+   (ADR-003 §8 discipline-now-gate-later). Peer review is expressed as conduct
+   *role assignment* (two canonical patterns), needing **no new states**.
 
-5. **Per-requirement lifecycle / coverage states (§9).** Model
-   `planned`/`in-progress`/`verified` plus a baseline (`spec-driver`'s
-   `asserted`/`legacy_verified`) on the spec composition seam. §9 hinges on
-   this: PROD specs may carry planned intent ahead of implementation *provided*
-   state distinguishes `planned` from `verified`; TECH specs reconcile from
-   observed. Where the state lives — the mobile per-spec membership edge row vs
-   the durable `REQ-NNN` peer entity — is a design decision (coverage is
-   plausibly per-membership; baseline plausibly per-requirement).
+4. **Requirement-lifecycle + coverage enums (stubbed).** The two-enum model lands
+   as advisory Rust types beside the spec seam (`src/requirement.rs` /
+   `src/spec.rs`): requirement-lifecycle (**authored, normative**) vs coverage
+   (**observed, evidence**). Self-clearing `dead_code` ahead of consumers
+   (`mem.pattern.lint.dead-code-self-clearing-leaf`). **No** derivation, registry,
+   or coverage blocks — those are follow-on.
+
+### Canon (the refinement half)
+
+5. **Revise ADR-003** to the **full holistic model**: the slice FSM; the conduct
+   axis (and its fold into ADR-006 D8 solo/team); the two-enum requirement/
+   coverage engine; and the **explicit-reconcile-vs-derive** principle named
+   against spec-driver as the rejected foil. Name what is deferred so the canon
+   is not blind to the machinery (the central risk this cut was checked against).
+
+6. **Revise `slices-spec.md` § Lifecycle** to the new FSM vocabulary and the
+   (still-deferred-enforcement) transition/closure posture.
 
 ## Non-Goals
 
-- **Already-homed ADR-003 machinery** — `/review` + review-ledger
-  (IMP-001/ADR-007), `/dispatch` + worktree/worker (IMP-003/004/ADR-006/008),
-  tech-spec backfill (SL-021). Linked as neighbours, not built here.
-- **Contracts** — the deferred observed-truth corpus (§11). Out; reconcile leans
-  on audit close-reading as ADR-003 intends.
-- **Re-deciding ADR-003 canon** — ADR-003 is the governing constraint, not
-  revised here. (A *new* ADR for the reconcile-artefact schema is in-scope to
-  *propose* if the altitude check demands it.)
-- **Reconciling specs that don't exist yet** — tech specs are pending (SL-021),
-  so the live reconcile targets today are the PRD corpus + (later) tech specs.
-  This slice builds the *mechanism*; it does not backfill targets. Ordering
-  tension flagged below.
+- **The reconcile machinery itself** — `/reconcile` skill, reconcile artefact
+  entity, `slice reconcile` CLI, audit/close deep tuning, closure-gate
+  *enforcement*. Named in canon, built in follow-on slices.
+- **Coverage derivation / registry / coverage blocks** — the live
+  requirement-state engine. Enums are stubbed; the engine is deferred (and is
+  doctrine-divergent: explicit, not derived).
+- **Conduct enforcement + full knob set** — v1 is advisory parse + surface only.
+- **Already-homed ADR-003 machinery** — `/review` (IMP-001/ADR-007), `/dispatch`
+  (IMP-003/004/ADR-006/008), tech-spec backfill (SL-021), contracts.
+- **ADR-006 branch/reservation work** — already homed; SL-028 only ensures the
+  FSM (esp. staleness back-edges) is *coherent with* it, deferring enforcement.
 
 ## Affected surface
 
-*(Tentative — design refines; some items drop depending on the artefact
-decision.)*
+*(Design refines.)*
 
-- `plugins/doctrine/skills/reconcile/SKILL.md` — **new** skill (currently unbuilt
-  per §11).
-- `plugins/doctrine/skills/audit/SKILL.md`, `.../close/SKILL.md` — tuning to the
-  §7 seam / §8 gate.
-- `.doctrine/state/boot.md` routing table + Core process — already name the loop;
-  verify they reflect reconcile **distinct** from audit/close (ADR-003
-  Verification bullet 1).
-- `src/` — reconcile artefact entity if it becomes an authored kind (new tree +
-  `entity.rs` materialiser reuse; install wiring per
-  `mem.pattern.install.authored-entity-wiring`), `slice reconcile` command,
-  lifecycle/coverage state fields on the spec seam (`src/spec.rs`,
-  `src/requirement.rs`, `src/registry.rs`).
-- `install/` manifest dir + `.gitignore` negation for any new authored kind
-  (`mem.pattern.install.authored-entity-wiring`).
-- Templates under `install/templates/` for the new skill / artefact.
+- `src/slice.rs` — FSM vocabulary, transition verb, gate/conduct awareness
+  (extends `SLICE_STATUSES`, `is_terminal_status`, divergence rollup).
+- `src/main.rs` — CLI wiring for the transition verb.
+- New conduct config module + `doctrine.toml [conduct]` parse/surface; tie-in to
+  `src/boot.rs` and/or `slice show`.
+- `src/requirement.rs`, `src/spec.rs` — requirement-lifecycle + coverage enum
+  types (advisory).
+- `.doctrine/adr/003/adr-003.{toml,md}` — the holistic revision (mechanics —
+  amend vs supersede — is a triage item).
+- `doc/slices-spec.md` § Lifecycle — vocabulary + posture revision.
+- `install/` — `doctrine.toml` template/seed if shipped; any manifest/gitignore
+  wiring for the new config (`mem.pattern.install.authored-entity-wiring` if it
+  becomes authored).
+- `.doctrine/state/boot.md` Core process + routing table — already name the loop;
+  verify reconcile is distinct (ADR-003 Verification bullet 1).
 
 ## Risks, assumptions, open questions
 
-- **Altitude — does the reconcile artefact need an ADR?** ADR-003 leaves the
-  artefact's schema and the closure-gate's enforcement open as project-global
-  shape decisions. If reconcile becomes a new authored entity kind, that is
-  plausibly ADR-level (cf. ADR-006/007 each precede their IMP slices). **Resolve
-  in `/design`; do not pre-commit to "just a skill".**
-- **Slice likely sprawls — split candidate.** Five objectives spanning skill
-  authoring, a new entity + CLI, two skill retunings, and a spec-seam state
-  change is large (cf. IMP-001 "largest of the four — likely multi-phase"). It
-  may want to split (artefact+CLI / skill seam tuning / lifecycle states) or
-  shed the lifecycle states back to their own slice. Design settles the cut.
-- **Coverage-state placement.** Edge row (mobile, per-spec membership — matches
-  `label`/`order` already on the edge) vs `REQ-NNN` peer (durable identity).
-  Coverage may be per-membership, baseline per-requirement — needs design.
-- **Closure-gate enforcement.** §11 marks enforcement deferred. Building a hard
-  command gate now may overreach ADR-003's stated posture; discipline-by-skill
-  may be the correct v1. Design decides.
-- **Ordering vs SL-021.** Reconcile's richest targets are tech specs, which don't
-  exist yet. The mechanism is still worth building (PRD corpus is a live target,
-  and the loop is incomplete without it), but live end-to-end exercise is thin
-  until SL-021 lands. Assumption: build mechanism now, accept limited live
-  targets.
+- **ADR-003 revision mechanics.** Amend-in-place vs supersede with a new ADR
+  (ADR-003 is `accepted`). Governance call — `/consult` if convention is unclear.
+- **Back-edge semantics.** Stay in-state for corrections that don't invalidate an
+  accepted gate; fall back to `started` (re-exec) or `design` (redesign)
+  otherwise; `reconcile → design` escalation when reconcile discovers the spec/
+  governance *model* itself is inadequate (not mere instance drift).
+- **Staleness is surfaced, not enforced.** `ready`/`design` rot when sibling
+  slices land past them = ADR-006 branch-point staleness; doctrine flags
+  (`⚠`-style), never auto-demotes (§5 surfacing-not-overriding, mirrors memory
+  staleness). Detection mechanism may be deferred — flag only.
+- **Conduct is advisory v1.** Enums + parse + surface; enforcement deferred. The
+  (a)-vs-(b) peer-pattern *default* is a config decision, not a state decision.
+- **Enums land unused.** Requirement/coverage types are advisory ahead of their
+  engine; self-clearing `dead_code` suppression per the leaf pattern.
+- **`audit` already over-reaches the §7 seam** (it currently *writes* `design.md`
+  / governance fixes). Tuning that out is **follow-on**, but the ADR revision
+  must state the seam so the follow-on has a target.
 - **Assumption:** the SL-015 composition seam (member edge + `REQ-NNN` peer,
-  edit-preserving `toml_edit` append) is the fixed substrate the coverage state
-  attaches to.
+  edit-preserving append) is the fixed substrate the enums attach to.
 
 ## Verification / closure intent
 
-- A `/reconcile` skill exists, is the **sole** spec-reconciliation writer, reads
-  the audit-assembled context, and writes spec edits against observed truth
-  (ADR-003 Verification bullets 3–4, 7).
-- `/audit` **identifies** spec changes + assembles reconciliation context and
-  does **not** write spec edits; the seam is hard (§7).
-- `/close` refuses a terminal status while owning specs remain drifted —
-  discipline or command gate per the design decision (§8).
-- The reconcile artefact records what changed and why; its producer verb emits it;
-  `validate`/`show` (if an entity) reassemble it cleanly.
-- Per-requirement lifecycle/coverage states are modelled such that §9's
-  PROD-carries-planned-intent vs TECH-reconciled-from-observed posture is
-  expressible.
+- The slice FSM vocabulary is authored and the transition verb advances it
+  (incl. `abandon`), gate-aware, edit-preserving, terminal set `{done}`.
+- The conduct axis parses from `doctrine.toml [conduct]` and is surfaced;
+  advisory only (no enforcement). Peer patterns expressible as role assignment.
+- Requirement-lifecycle + coverage enums exist as types beside the spec seam,
+  advisory, with self-clearing suppression.
+- ADR-003 revised to the full holistic model (FSM + conduct + two-enum engine +
+  explicit-reconcile-vs-derive + deferred-machinery map); `slices-spec.md`
+  § Lifecycle reconciled to the new FSM.
 - `.doctrine/state/boot.md` Core process + routing table name the loop with
   reconcile distinct from audit and close.
-- `just check` green; conventions honoured (storage rule — no derived data in
-  prose; pure/imperative split; outbound-only relations).
+- `just check` green; conventions honoured (storage rule, pure/imperative split,
+  outbound-only relations, lint-as-you-go).
 
 ## Summary
 
 ## Follow-Ups
+
+- `/reconcile` skill + reconcile artefact entity + `slice reconcile` CLI.
+- Audit/close deep tuning to the §7 seam + §8 closure gate **enforcement**.
+- Coverage derivation + requirement-state registry + coverage blocks (the live
+  explicit-reconcile engine).
+- Conduct **enforcement** + full knob set + per-run orchestration wiring.
+- Staleness detection mechanism for `ready`/`design` (ADR-006 branch-point).
