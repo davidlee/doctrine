@@ -1,9 +1,9 @@
 id = 27
 slug = "backlog-test-fixture-dry"
 title = "DRY backlog test-fixture TOML builders into one helper"
-status = "proposed"
+status = "done"
 created = "2026-06-08"
-updated = "2026-06-08"
+updated = "2026-06-09"
 
 [relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
