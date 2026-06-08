@@ -109,6 +109,7 @@ Every phase's exit + verification criteria are met and test-backed. Spot-proof:
 
 ## Closure readiness
 
-Amber → green after F-1/F-2/F-3 fixed and D-1 design prose reconciled. No
-BLOCKERs, no follow-up slice, no tolerated drift. Hand to `/close` once the
-fixes land green.
+**GREEN.** All findings resolved in `c12252f`: F-1/F-2/F-3 fixed (backlog
+header + nits), D-1 design prose reconciled, F-4 aligned (no action). No
+BLOCKERs, no follow-up slice, no tolerated drift. `just check` green — 658
+tests, clippy 0, fmt clean. Audit-ready for `/close`.
