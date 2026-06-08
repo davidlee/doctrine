@@ -49,10 +49,18 @@ Hand-rolled, per kind:
 hide-terminal default, the richest filter set. It is also the kind that does *not*
 share `meta.rs`. `-p/--path` is the one already-uniform flag.
 
-Status vocabularies (terminal predicate inputs): `slice` string (terminal today =
-`done` only); `adr` enum proposed/accepted/rejected/superseded/deprecated; `spec`
-enum draft/active/superseded; `memory` enum active/draft/superseded/archived;
-`backlog` enum open/triaged/started/resolved/closed (terminal = resolved/closed).
+Status vocabularies. Two distinct predicates ride these (§5.3): the slice
+*divergence-terminal* set (`is_terminal_status`, `{done}` — **unchanged**) feeding
+`is_divergent`, and the NEW per-kind *list hide-set* feeding `retain`. Inventories
+(hide-set in brackets):
+
+- `slice` — free string today; SL-025 amends `slices-spec.md` to the enforced set
+  `{proposed, ready, started, audit, done, abandoned}` (`abandoned` replaces the
+  out-of-spec `superseded` now on disk; 2 slices migrate). hide-set `{done, abandoned}`.
+- `adr` — proposed/accepted/rejected/superseded/deprecated. hide-set `{rejected, superseded, deprecated}`.
+- `spec` — draft/active/superseded. hide-set `{superseded}`.
+- `memory` — active/draft/superseded/retracted/archived/quarantined (**SIX**). hide-set `{superseded, retracted, archived, quarantined}`.
+- `backlog` — open/triaged/started/resolved/closed. hide-set `{resolved, closed}` (unchanged; `Status::is_terminal` already is this set).
 
 ## 3. Forces & Constraints
 
@@ -120,6 +128,19 @@ while keeping clap out of the leaf. `render_table` moves from `meta.rs` to
 `listing.rs` (generic layout, used by every kind). `meta.rs` keeps exactly its
 numeric-reader charter.
 
+**`boot.rs` is a declared non-clap consumer.** The governance snapshot renders its
+ADR and Memory sections via `adr::list_rows`/`memory::list_rows` (`boot.rs:124,127`).
+Boot builds a `listing::Filter` directly from plain values — no clap — which is
+itself the proof the leaf is genuinely clap-free (A-3). Boot adopts the new surface:
+prefixed `ADR-` ids + header in the ADR section, the hide-terminal default in the
+Memory section. Boot's snapshot tests change with the format (R6); it is listed in
+the §9 gate as a *changing* consumer, not part of the unchanged engine gate.
+
+**Dead-code removal on migration:** `meta::format_list` (last caller: adr) and the
+filter half of `meta::sort_and_filter` (superseded by `retain`) are removed — repo
+clippy denies `dead_code`. The sort-by-id `sort_and_filter` also provided is kept as
+a small `meta`-side sort the numeric kinds call (§5.3 ordering).
+
 ### 5.2 Interfaces & Contracts
 
 **Shared input contract** — one composable bundle, defined command-side
@@ -147,8 +168,9 @@ pub(crate) struct CommonListArgs {
     /// Show every state, including terminal.
     #[arg(long, short = 'a')]
     pub all: bool,
-    /// Output format.
-    #[arg(long, value_enum, default_value_t = Format::Table)]
+    /// Output format. `value_parser` over `Format::from_str` — NOT `value_enum`,
+    /// which would require `Format: clap::ValueEnum` and drag clap into the leaf (A-3).
+    #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
     pub format: Format,
     /// Shorthand for `--format json`.
     #[arg(long)]
@@ -193,21 +215,26 @@ pub(crate) struct FilterFields {
     pub tags: Vec<String>,
 }
 
-/// Keep a row iff: not (terminal-hidden) AND substr-match (slug+title) AND
-/// regex-match (canonical+slug+title) AND status-match AND tag-match.
-/// Terminal-hide is suppressed when `all` OR any explicit `status` is given.
-/// `key` projects each row; the terminal predicate is per-kind.
+/// Keep a row iff: not (hidden by the kind's hide-set) AND substr-match
+/// (slug+title) AND regex-match (canonical+slug+title) AND status-match AND
+/// tag-match. Hide is suppressed when `all` OR any explicit `status` is given.
+/// `key` projects each row; `is_hidden` is the kind's LIST hide-set predicate —
+/// distinct from any divergence/lifecycle-terminal predicate (§5.3).
+/// FILTER-ONLY: ordering is the caller's (per-kind) concern (§5.3).
 pub(crate) fn retain<R>(
     rows: Vec<R>,
     f: &Filter,
-    is_terminal: impl Fn(&str) -> bool,
+    is_hidden: impl Fn(&str) -> bool,   // the kind's LIST hide-set, not divergence-terminal
     key: impl Fn(&R) -> FilterFields,
 ) -> Vec<R>;
 
 /// Validate a stringly `--status` set against a kind's known statuses, with one
 /// uniform error message (A-2 — recovers the correctness that the shared
 /// Vec<String> bundle loses vs a typed clap enum; tab-completion is the only
-/// residual cost, accepted).
+/// residual cost, accepted). EVERY kind supplies a known-set: the enum kinds from
+/// their variants, slice from the newly-enforced `slices-spec.md` vocabulary
+/// `{proposed,ready,started,audit,done,abandoned}` (D10). This validates READ
+/// (filter) input only — not stored-status writes/transitions.
 pub(crate) fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()>;
 ```
 
@@ -245,10 +272,24 @@ toml-as-data + md-body reassembly, parameterised like the existing `spec`/
   axis): slice keeps `phases`/`⚠`, spec keeps per-subtype + `#members`, backlog
   keeps `kind`/`resolution`, memory keeps `type`/`trust`. Each kind owns its row
   **serde shape** for JSON (faithful mirror).
-- Each kind owns its `is_terminal(&str) -> bool` predicate. `slice` extends to
-  `done || superseded`; `adr` = rejected/superseded/deprecated; `spec` =
-  superseded; `memory` = superseded/archived; `backlog` unchanged
-  (resolved/closed). Draft is never terminal (memory-local visibility axis).
+- **Two terminal predicates, never conflated.** (a) *divergence-terminal* —
+  `slice::is_terminal_status` stays `{done}`, **untouched**; it feeds `is_divergent`
+  only (an `abandoned` slice with incomplete phases must NOT false-flag `⚠`).
+  (b) *list hide-set* — a NEW per-kind presentation predicate consumed only by
+  `retain`: slice `{done, abandoned}`, adr `{rejected, superseded, deprecated}`,
+  spec `{superseded}`, memory `{superseded, retracted, archived, quarantined}`,
+  backlog `{resolved, closed}`. Memory active/draft stay visible. backlog's existing
+  `Status::is_terminal` already IS its hide-set (reused, no new code).
+- **Ordering is per-kind (variant axis), not in `retain`.** `retain` filters only;
+  each kind orders its rows for render — slice/adr/spec by id, backlog by
+  `(kind.ordinal, id)`, memory by `created` desc then uid. The sort-by-id half of
+  `meta::sort_and_filter` survives as a thin `meta` sort the numeric kinds call; its
+  status-filter half is removed (superseded by `retain`).
+- **Slice status vocabulary (amended authority — D10).** `slices-spec.md`'s set
+  becomes `{proposed, ready, started, audit, done, abandoned}`, enforced as the
+  `validate_statuses` known-set for `slice list --status`. Write-time/transition
+  enforcement stays deferred (lifecycle verb). The 2 live `superseded` slices
+  migrate to `abandoned` as part of this slice.
 - The id prefix is owned by `entity::Kind.prefix` (already present) and consumed
   by `canonical_id`. Memory is the exception: its uid *is* its canonical id, so
   it does not route through `canonical_id`.
@@ -295,10 +336,15 @@ handler, two surface names.
 - **Invalid regex** → a clean `anyhow` error, not a panic.
 - **Multi-status semantics** — a row matches if its status ∈ the given set (OR
   within `--status`); `--tag` is OR within tags; the axes AND across each other.
-- **slice divergence coupling** — extending `is_terminal_status` to include
-  `superseded` also changes `is_divergent` (a superseded slice with incomplete
-  phases no longer false-flags `⚠`). This is intended; existing divergence tests
-  are reviewed and updated to assert the corrected behaviour.
+- **slice divergence is untouched** (corrects an inverted claim in the earlier
+  draft). `is_terminal_status` stays `{done}`; the list hide-set is a *separate*
+  predicate (§5.3). So `is_divergent` is unchanged and its tests stay green
+  (behaviour-preservation, not a behaviour shift). Tracing the earlier draft's
+  proposal — adding `superseded`/`abandoned` to `is_terminal_status` — would have
+  *introduced* a false `⚠` on an abandoned-with-incomplete-phases slice
+  (`terminal && completed<total`), the opposite of what it claimed. The split
+  avoids it: an `abandoned` slice is hidden by default (hide-set) yet does not
+  false-flag `⚠` (divergence-terminal excludes it).
 - **backlog positional** — `[SUBSTR]` is retained as a deprecated alias: when
   `--filter` is absent and the positional present, the positional feeds `substr`;
   `--filter` is canonical. No break.
@@ -327,7 +373,10 @@ handler, two surface names.
   fns) and keeps the variant axis local (zero shared-seam blast radius). C is
   also consistent with `entity.rs` D2. Alternative A (extend `meta.rs` only) was
   rejected: backlog/memory aren't `Meta`-shaped, so they'd stay bespoke — partial
-  uniformity.
+  uniformity. *Churn caveat:* "a new shared flag → one edit" holds for a *full*-share
+  flag in `CommonListArgs`; a flag shared by a *subset* costs one bundle-extraction
+  touching its prior inline holders. C is still ≤ B here — B carries the identical
+  subset cost *plus* a forced god-type.
 - **D2 — new `listing.rs` over widening `meta.rs`.** Cohesion: `meta.rs` is the
   numeric authored-toml reader; the kind-blind filter/format/render spine serves
   named (memory) and own-struct (backlog) kinds too — a distinct concern.
@@ -348,6 +397,16 @@ handler, two surface names.
   bag would bury it untyped.
 - **D8 — `memory new` alias, keep `record` (F-7).** Uniform canonical verb, zero
   break; skills migrate at leisure.
+- **D10 — amend `slices-spec.md` to `{proposed,ready,started,audit,done,abandoned}`,
+  enforce as the `--status` filter known-set.** The spec already owned the set and
+  marked it "v1: unenforced" (`slices-spec.md:92,219,235`); live disk had drifted to
+  an out-of-spec `superseded` (2 slices). Uniform filter-validation needs a per-kind
+  known-set, so slice must have one. `abandoned` (broader: superseded / dropped /
+  obsoleted) replaces `superseded`; the 2 slices migrate. Enforcement is scoped to
+  **read/filter input** (`validate_statuses`) — write-time/transition enforcement
+  remains the deferred lifecycle verb's job, so the "no status-transition machinery"
+  Non-Goal holds. Editing an evergreen spec + migrating live data are called out in
+  the audit (R7).
 - **D9 — pull `regex-lite`, include `--regexp/-r` + `-i` now.** The repo was
   deliberately regex-free (`memory.rs:125`); the dependency was decided
   explicitly (not slipped in). `regex-lite` (no `regex-automata`/`aho-corasick`)
@@ -361,9 +420,10 @@ handler, two surface names.
   change (prefixed ids, fewer rows, new headers). Mitigation: update them as part
   of the work with the *reason* in the commit; keep engine suites untouched as
   the behaviour-preservation proof.
-- R2 — **slice divergence behaviour shift** (R4/§5.5). Mitigation: explicit
-  test update asserting superseded no longer false-flags `⚠`; call it out in the
-  audit.
+- R2 — **slice divergence (now a non-change).** An earlier draft coupled the list
+  hide-set to `is_terminal_status` and mis-stated the effect. Resolved by splitting
+  the predicates (§5.3/§5.5): `is_divergent` is untouched, its tests stay green. The
+  split *is* the mitigation; no behaviour-shift risk remains.
 - R3 — **regex dependency weight / lean-deps culture.** Mitigation: `regex-lite`
   (not full `regex`) — minimal compile/binary cost; scoped to the filter arm;
   decided explicitly (D9).
@@ -375,17 +435,35 @@ handler, two surface names.
   the mandatory spine (Principle 2); a **behavioural** conformance test (A-4 —
   clap exposes no structural "is-flattened" check) parses `<kind> list --filter x
   --json` for every kind and asserts success.
+- R6 — **boot snapshot format churn.** The governance snapshot's ADR/Memory
+  sections change (ADR-prefixed ids + header; memory hide-default). Mitigation: boot
+  declared a consumer (§5.1, §9); its snapshot tests update with the reason in the
+  commit; the heavier F-8 memory-section *trim* stays a separate follow-up.
+- R7 — **spec amendment + live-data migration** (D10). Editing evergreen
+  `slices-spec.md` and migrating 2 slices `superseded→abandoned`. Mitigation: both
+  git-tracked + reviewed; the migration is a mechanical authored-toml edit; called
+  out in the audit.
 
 ## 9. Quality Engineering & Validation
 
 - **Behaviour-preservation gate**: `entity.rs`, `registry.rs`, `meta.rs` reader
-  suites green unchanged.
+  suites + `slice::is_divergent` tests green **unchanged**. `boot.rs` snapshot tests
+  change *legitimately* (declared consumer, R6) — NOT part of the unchanged gate.
 - **New unit tests** (pure, in `listing.rs`): `retain` matrix (substr ×
-  multi-status × tag × terminal × all × regex), `canonical_id`, `json_envelope`
+  multi-status × tag × hide-set × all × regex), `canonical_id`, `json_envelope`
   shape, `Format`/`--json` coercion, invalid-regex error, empty→header-suppressed.
-- **Per-kind tests**: prefixed-id rows; terminal-hide default + reveal; faithful
+- **Domain-distinction test (F-N9)**: a row whose `canonical` matches the regex but
+  whose slug+title do NOT match the substr (and vice-versa) — proves the two match
+  domains are wired independently (guards the A-1 regression).
+- **Ordering-preservation test (F-N9)**: slice/adr/spec by id, backlog by
+  `(kind.ordinal,id)`, memory `created`-desc+uid, asserted after `retain`.
+- **Per-kind tests**: prefixed-id rows; hide-set default + reveal; faithful
   JSON per kind; `slice show`/`adr show` (table + json); `memory new` ≡
-  `memory record`; backlog `--filter` ≡ positional.
+  `memory record`; backlog `--filter` ≡ positional; `slice list --status abandoned`
+  accepted + `--status bogus` rejected (D10); 2 migrated slices read as `abandoned`.
+- **Boot-consumer preservation test (F-N9/R6)**: boot renders via the new
+  `list_rows`; assert the ADR section gains `ADR-` ids + header and the memory
+  section applies the hide-default.
 - **Conformance test**: every `list` subcommand parses the shared flags (R5).
 - **Lint/format gate**: `just check` (plain `cargo clippy`, zero warnings),
   house string-assembly + no-`as` + BTree + `#[expect]` styles.
@@ -424,6 +502,31 @@ Internal adversarial pass (pre-`/plan`). All integrated into the body above.
 - **OQ-3 / short-flag collisions** — `-s -t -f -r -i -a` audited at build against
   each kind's existing short flags; shared flag wins, kind-specific demotes to
   long-only.
+
+### External adversarial pass (fresh session, pre-`/plan`) — integrated
+
+Found NEW issues beyond A-1…A-9; all integrated above:
+
+- **F-N1 (correctness, 🔴)** — `is_divergent` claim was *inverted* and the predicate
+  conflated list-hide with divergence-terminal. Fixed: split `is_terminal_status`
+  `{done}` (divergence, untouched) from the per-kind list hide-set (§5.3/§5.5; R2).
+- **F-N2 (missed consumer, 🔴)** — `boot.rs` consumes `adr`/`memory::list_rows`.
+  Fixed: boot declared a consumer, adopts the new surface (§5.1; §9; R6).
+- **F-N3 (stale inventory, 🟠)** — memory has 6 statuses, not 4. Fixed (§2/§5.3);
+  hide-set decided `{superseded, retracted, archived, quarantined}`.
+- **F-N4 (under-spec, 🟠)** — ordering dropped from the contract. Fixed: `retain` is
+  filter-only, ordering is a per-kind step (§5.2/§5.3).
+- **F-N5 (missing authority, 🟠)** — slice had no enforceable vocabulary. Fixed:
+  amend `slices-spec.md` (+`abandoned`, −`superseded`), enforce as the filter
+  known-set, migrate 2 slices (D10; §5.3; R7).
+- **F-N6 (🟡)** — `value_enum` would re-import clap to the leaf. Fixed:
+  `value_parser`/`FromStr` (§5.2).
+- **F-N7 (🟡)** — dead `meta::format_list` + `sort_and_filter` filter-half removed (§5.1).
+- **F-N8 (🟡)** — D1 "one edit" softened for subset-share (§7).
+- **F-N9 (🟡)** — added domain-distinction, ordering-preservation, and
+  boot-consumer preservation tests (§9).
+- *Non-finding noted:* OQ-3 short-flag collision risk is near-nil — every current
+  `list` flag is long-only except `-p` (kept per-variant).
 
 Residual open items carried to `/plan`: OQ-1 (per-kind JSON field shapes),
 OQ-2 (`show --format json` relationships inclusion), OQ-3 (collision audit).

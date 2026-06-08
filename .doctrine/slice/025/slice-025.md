@@ -60,9 +60,10 @@ shared contract onto the entity engine. Concretely:
    per kind.
 3. **Hide-terminal default + `--all` (F-3).** `slice`/`adr`/`spec`/`memory`
    `list` hide terminal states by default and reveal them under `--all` or an
-   explicit `--status`, matching `backlog`. The per-kind terminal-status set is
-   read from the engine (e.g. the existing `slice::is_terminal_status` seam),
-   not re-encoded.
+   explicit `--status`, matching `backlog`. Each kind supplies a **list hide-set**
+   predicate, kept *distinct* from any lifecycle/divergence-terminal predicate
+   (`slice::is_terminal_status` `{done}` stays divergence-only and unchanged); the
+   hide-set is the presentation axis consumed by the shared `retain`.
 4. **Uniform filter surface (F-4).** A shared filter vocabulary across `list`,
    carried in a flattened `CommonListArgs` clap bundle: `--filter/-f` (substring
    on slug+title), `--regexp/-r` + `--case-insensitive/-i` (regex over
@@ -81,6 +82,15 @@ shared contract onto the entity engine. Concretely:
    verb (uniform with every other kind) via `#[command(alias = "record")]`;
    `memory record` keeps working unchanged. One create verb across kinds, zero
    break to existing call sites in skills/scripts.
+7. **Slice status vocabulary + boot consumer (F-N5/F-N2, from external review).**
+   Amend `slices-spec.md` to the enforced set
+   `{proposed, ready, started, audit, done, abandoned}` (`abandoned` replaces the
+   out-of-spec `superseded`); enforce it as the `slice list --status` filter
+   known-set via the shared `validate_statuses` (write-time/transition enforcement
+   stays deferred — the lifecycle verb's job). Migrate the 2 live `superseded`
+   slices to `abandoned`. `boot.rs` is a declared consumer of the refactored
+   `list_rows`: its snapshot ADR/Memory sections adopt the new surface (prefixed
+   `ADR-` ids + header; memory hide-default).
 
 **Closure intent.** "Done" is judged by: `show` resolves for all five kinds;
 every `list`/`show` emits canonical prefixed ids; default `list` hides terminal
@@ -96,9 +106,12 @@ rows) and are updated as part of the work, not worked around.
   status-transition machinery. The status-transition verbs stay ragged
   (`slice phase`, `adr status`, `backlog edit`, `memory verify`) — reconciling
   them, and the known slice-lifecycle-transition gap, is out of scope. (Follow-up.)
-- **Boot snapshot memory rendering (F-8).** The heavy all-memories dump in the
-  boot snapshot is a `boot`-render concern on a different seam, not the
-  `memory list` command. Out of scope. (Follow-up.)
+  (`--status` *filter*-validation IS in scope — it validates read input against the
+  vocabulary, not stored-status writes/transitions.)
+- **Boot snapshot memory *trim* (F-8).** SL-025 *does* update boot — its ADR/Memory
+  sections render through the refactored `list_rows`, so they adopt the new surface.
+  What stays out of scope is the heavier F-8 *trim* of the memory section
+  (signpost-only / capped), a separate `boot`-render concern. (Follow-up.)
 - **`find`/`retrieve` ranking semantics.** Memory's scope-ranked retrieval is a
   distinct surface; this slice does not touch its ranking or holdback.
 - **New `--json` schema as a versioned external contract.** The machine-readable
