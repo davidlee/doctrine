@@ -108,14 +108,17 @@ edge-table file.
   `parent: Option<String>` (parse + `render()` outbound lines). Touches the parse
   / render seams only; existing fields unchanged. `build_registry` gains a
   per-spec `spec-NNN.toml` read+parse (it parses no spec today — only the edge
-  tables) to harvest the two fields, plus a pre-parse second-parent guard; it then
-  collects product-spec ids and the two new edge kinds. The new parse widens the
-  scan's error surface (see design §5.3, Charge I).
+  tables) to harvest the two fields from both arms; on a parse failure it
+  classifies a duplicate/array-`parent` error into a named second-parent finding
+  (codex F1/F2). It then collects product-spec ids and the two new edge kinds. The
+  new parse widens the scan's error surface (see design §5.3, Charge I).
 - `src/registry.rs` — gains a `product_specs: BTreeSet<String>` id set, parent
-  edges, and descent edges; new pure checks: dangling/invalid-kind descent,
-  dangling parent, self-parent, parent-chain cycle, and the interaction
-  invalid-kind-vs-dangling split. Checks stay direct set-membership +
-  one local chain-walk; no generic edge framework.
+  edges and descent edges (each with `on_product`), and a `build_findings` carrier
+  (codex F1); new pure checks: descent + parent each clean / invalid-kind (wrong
+  target *or* tech-only field on a product subject, codex F5) / dangling,
+  self-parent, parent-chain cycle (ordered-path dedup, one per cycle), and the
+  interaction invalid-kind-vs-dangling split. Checks stay direct set-membership +
+  one local chain-walk; no generic edge framework, no severity tier.
 - `install/templates/spec-tech.toml` — document `descends_from` and `parent` in
   the scaffold comment block (mirrors the `c4_level` / `[[source]]` comments).
   Embedded template — heed the rust-embed re-embed footgun.
@@ -132,13 +135,15 @@ edge-table file.
   no product id set ("no check resolves against one"). Descent + interaction-kind
   now need one; adding it must not perturb the existing four checks
   (behaviour-preservation — the SL-015 registry suite stays green unedited).
-- **Descent is tech-only (resolved: warn, leave open).** Product specs do not
-  descend in v1; `descends_from` on a product spec is **a soft `validate`
-  warning** (printed, exit zero), not a hard finding and not silently ignored.
-  This requires `validate` to gain a minimal **severity split** (hard findings
-  bail non-zero; warnings are advisory) — the one structural addition beyond
-  additive checks. Whether product specs should gain their own hierarchy/descent
-  long-term is an **open question**, left undesigned — see Follow-Ups.
+- **Tech-only fields on a product (resolved: hard invalid-kind; codex F5).** Both
+  `descends_from` and `parent` are tech-only. On a product spec each is a **hard
+  invalid-kind** finding (non-zero exit), never silently ignored. The earlier
+  "soft warn + severity split" plan was reversed by the codex adversarial pass: the
+  warn preserved nothing (a product hierarchy would use `parent`, not the
+  cross-family `descends_from`) and product `parent` was being dropped entirely. No
+  severity tier ships — `validate` stays hard-only. Whether product specs gain
+  their own hierarchy long-term is an **open question**, left undesigned (the hard
+  finding forecloses it not at all) — see Follow-Ups.
 - **Behaviour-preservation.** The SL-015 spec/registry suites are the proof the
   shared machinery is unchanged — they must stay green unedited.
 - **Assumption:** `c4_level` enum, `[[source]]` shape, and the membership/label
@@ -148,18 +153,24 @@ edge-table file.
 
 ## Verification / closure intent
 
-- Each in-scope requirement traces to a test: `descends_from` stored / rendered /
-  validated against the product set (dangling and invalid-kind both flagged);
-  `parent` stored-once and validated against the tech set; self-parent + cycle
-  rejected non-zero; a duplicate `parent` key fails to parse; a `PRD-*` peer
-  interaction reported as invalid-kind, not dangling.
+- Every **machine-checkable** AC traces to a test (authoring-discipline ACs —
+  REQ-082 AC3 "no restate" — are satisfied by construction, verified by review):
+  `descends_from` stored / rendered / validated against the product set (dangling,
+  invalid-kind target, and invalid-kind on a product subject all flagged);
+  `parent` validated against the tech set (dangling, invalid-kind target, invalid-
+  kind on a product subject); self-parent + cycle (incl. tail-fed) rejected
+  non-zero, each one finding; a duplicate / array `parent` → named second-parent
+  finding non-zero (carried via `build_findings`); a `PRD-*` peer interaction
+  reported as invalid-kind, not dangling.
 - `doctrine spec validate` is green on a well-formed tech corpus and non-zero on
   each crafted violation; `spec show` reassembles a tech spec with `descends_from`,
   `parent`, peers, and anchors as one readable whole (outbound only — no children).
 - SL-015 spec/registry suites pass unchanged (behaviour-preservation gate) —
-  except the deliberate REQ-084 test rewrite and the mechanical `None, None`
-  additions to `spec.rs` `Spec { … }` test constructors (no assertion changes
-  value; `Spec` derives no `Default`).
+  except the deliberate REQ-084 test rewrite and two disclosed mechanical edits:
+  `None, None` added to `spec.rs` `Spec { … }` constructors (`Spec` has no
+  `Default`) and the new fields (or `..Default::default()`) added to the
+  `registry.rs` `clean()` `Registry { … }` literal (codex F6b). No assertion
+  changes value.
 - `just check` green; clippy zero warnings; storage rule honoured (structured
   relations in TOML, no derived data — children, reverse view — persisted).
 - SL-021 is unblocked: the tech surface is complete enough to backfill against.

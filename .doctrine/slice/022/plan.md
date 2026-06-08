@@ -10,12 +10,16 @@ authored in the TOML. Use this for the plan's rationale and sequencing.
 
 Four phases build the tech-spec relational spine bottom-up, each ending green and
 each a clean TDD unit. The ordering follows the data: first the fields exist at
-rest (PHASE-01), then the registry can collect and resolve them (PHASE-02), then
-the graph integrity over those edges (PHASE-03), then the one structural addition
-— the severity tier — and closure (PHASE-04). Every phase is additive to the
-SL-015 machinery; the behaviour-preservation gate (the SL-015 suites stay green)
-is an exit condition throughout, with the single sanctioned change being REQ-084's
-intended contract move (PRD-012 §6), not a divergence.
+rest (PHASE-01), then the registry can collect and resolve them with the FK /
+subject-kind checks (PHASE-02), then the graph integrity over those edges
+(PHASE-03), then a cross-cutting end-to-end validation sweep and closure
+(PHASE-04). There is **no severity tier** — the codex review showed the warn it
+was built for was incoherent, so a tech-only field on a product spec is a plain
+hard finding and `validate`'s signature is untouched. Every phase is additive to
+the SL-015 machinery; the behaviour-preservation gate (the SL-015 suites stay
+green) is an exit condition throughout, with the only changes being REQ-084's
+intended contract move (PRD-012 §6) and two disclosed mechanical test edits (the
+`Spec { … }` and `Registry { … }` literals gaining new fields).
 
 ## Sequencing & Rationale
 
@@ -33,27 +37,34 @@ parent/descent edge collections, and — the correction the inquisition forced
 (Charge I) — the new per-spec `spec-NNN.toml` parse in `build_registry`, which
 parses no spec today. That parse widens the impure scan's error surface, so this
 phase owns the Layer-C test that proves the new behaviour rather than assuming it
-from green hand-built-registry units. The FK-resolution checks here are
-flat set-membership only (descent and parent: clean / invalid-kind / dangling),
-plus the REQ-084 interaction rewrite. No graph walk yet — kept separate so the
-riskier traversal lands in isolation.
+from green hand-built-registry units. The FK / subject-kind checks here are
+flat set-membership only — descent and parent each: clean / invalid-kind (wrong
+target *or* a tech-only field on a product subject) / dangling — plus the REQ-084
+interaction rewrite. No graph walk yet — kept separate so the riskier traversal
+lands in isolation.
 
 **PHASE-03 — integrity in isolation.** The decomposition tree is the one
-graph-shaped concern and the locus of two inquisition findings, so it gets its own
-phase. `parent_cycle` must report each cycle exactly once (the dedup that finding
-F demands — the cycle-2/cycle-3 tests assert the *count*, not mere existence), and
-the pre-parse `second_parent` guard must emit a *named* hard finding with a
-non-zero exit (the synthesis of the User's rulings on finding D: structural
-impossibility plus a named diagnostic, which promotes REQ-087 AC1 from deviation
-to literal satisfaction). Isolating this phase keeps the traversal and the
-raw-text guard from entangling the simpler FK work.
+graph-shaped concern and the locus of the integrity findings, so it gets its own
+phase. `parent_cycle` must report each cycle exactly once — the dedup the codex
+review sharpened: an ordered path plus a recovered cycle slice, correct even when
+a non-cycle tail feeds the ring (the cycle-2/cycle-3/tail-fed tests assert the
+*count*, not mere existence). The `second_parent` finding is born by classifying
+the parse error (not a raw line-scan, which would false-hit the scaffold's own
+commented example) and carried through a new `build_findings` field into
+`validate` — the carrier the earlier draft never specified. Together these give
+REQ-087 AC1 a literal named hard finding with a non-zero exit. Isolating this
+phase keeps the traversal and the error-classification guard from entangling the
+simpler FK work.
 
-**PHASE-04 — the one structural addition, then close.** The severity split is the
-sole departure from "additive checks," so it lands last, after every hard check is
-proven. Deferring it keeps `validate()`'s signature — and therefore every SL-015
-validate test — untouched through phases 01–03; the soft tier arrives only when
-its single consumer (`descent_on_product`) needs it. Closure (`just check`, clippy
-zero, the full crafted-violation sweep) rides this phase.
+**PHASE-04 — prove it end-to-end, then close.** With no severity tier to add, the
+last phase is the gate: one crafted corpus driving *every* hard violation through
+the `doctrine spec validate` CLI, proving non-zero exit on each and zero on a
+clean corpus. PHASE-03 proves the second-parent path end-to-end (it is the new
+carrier path); the findings-list cases — self-parent, cycle, FK / subject-kind —
+ride the existing non-zero bail and are swept here at the CLI level so no
+acceptance criterion's exit-code claim rests on a pure-function test alone.
+Closure (`just check`, clippy zero, the scaffold-comment and REQ-082-AC3 review
+checks) rides this phase.
 
 This ordering also matches the dependency chain in the entrance criteria: each
 phase's EN-1 is the prior phase's completion, so a fresh agent can pick up any
