@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod adr;
+mod backlog;
 mod boot;
 mod clock;
 mod corpus;
