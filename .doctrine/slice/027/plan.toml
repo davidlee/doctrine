@@ -47,7 +47,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "cargo test backlog suite green with ZERO assertion edits (only helper bodies + the :1813 call site change)." },
   { id = "VT-2", expects = "just check passes: fmt + cargo clippy zero warnings + test + build." },
-  { id = "VA-1", expects = "grep -c 'created = \\\"2026-06-08\\\"' src/backlog.rs == 4 (one unified builder + the three explicit parser/error fixtures); the four old builder copies are gone." },
+  { id = "VA-1", expects = "grep -c 'created = \\\\\"2026-06-08\\\\\"' src/backlog.rs == 4 (one unified builder + the three explicit parser/error fixtures); the four old builder copies are gone — the source escapes the quote, so the pattern needs a literal backslash (\\\\\") to match." },
 ]
 specs             = []
 requirements      = []
