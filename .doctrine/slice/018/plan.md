@@ -6,8 +6,9 @@ authored in the TOML. Use this for the plan's rationale and sequencing.
 
 ## Overview
 
-Five phases turn the locked design into shippable work. Two facts shape the
-whole sequence:
+Five phases turn the locked design into shippable work (PHASE-06 is a
+post-closure maintenance addition — see its entry below). Two facts shape the
+original sequence:
 
 1. **Scripture leads (the gate).** The corpus is spec-violating until sanctioned
    and the `repo=""` admission path is unblessed, so the ADR + memory-spec
@@ -74,6 +75,20 @@ reach end-to-end (retrieve `--path-scope`, body render, non-decaying `reference`
 staleness, boot listing). The audience is the downstream agent *driving*
 doctrine — doctrine-repo dev gotchas are explicitly dropped to `items/`, not
 shipped. The corpus orients toward boot/skills/`doc/*`, it does not restate them.
+
+**PHASE-06 — Reconcile master-corpus drift (maintenance).** Appended after
+closure. The masters are a *living* orientation surface, but they were authored
+against doctrine as it stood at PHASE-05; SL-019..023 then grew the surface
+(a `backlog` verb, the `spec/` + `backlog/` entity dirs, the spec authoring
+skills) and three *enumerating* signpost masters — `cli-command-map`,
+`file-map`, `skill-map` — fell behind. This phase re-aligns those three bodies
+and re-syncs, riding PHASE-04's authoring path and the design's invariants
+(master-lint, the no-restate principle) unchanged — no new mechanism. It also
+dispositions the orientation-grade memories authored since closure, promoting to
+master only by exception (the corpus stays lean). Placed last and kept narrow:
+the non-enumerating masters (`overview`, `conventions`, `storage-model`, …) are
+evergreen and stay byte-unchanged, so the behaviour-preservation gate is the
+proof — only the three drifted bodies move.
 
 ## Notes
 
