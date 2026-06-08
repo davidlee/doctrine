@@ -1410,6 +1410,88 @@ tags = []
 
     // --- PHASE-03: the `backlog list` survey (visibility / filter / order) ---
 
+    /// A backlog-NNN.toml fixture spec — the single source of the test fixture
+    /// literal. `'a` (not `'static`) because `write_related` passes borrowed
+    /// `slices`/`specs`. `facet`/`rels` absent → that block is omitted.
+    struct Fixture<'a> {
+        kind: ItemKind,
+        id: u32,
+        slug: &'a str,
+        title: &'a str,
+        status: &'a str,
+        resolution: &'a str,
+        tags: &'a [&'a str],
+        facet: Option<FacetLit<'a>>,
+        rels: Option<RelLit<'a>>,
+    }
+
+    struct FacetLit<'a> {
+        likelihood: &'a str,
+        impact: &'a str,
+        origin: &'a str,
+        controls: &'a [&'a str],
+    }
+
+    struct RelLit<'a> {
+        slices: &'a [&'a str],
+        specs: &'a [&'a str],
+    }
+
+    /// The sole list-literal quoting: `[] → ""`, `["a","b"] → "\"a\", \"b\""`.
+    fn toml_list(xs: &[&str]) -> String {
+        xs.iter()
+            .map(|x| format!("\"{x}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// The sole fixture TOML literal: core head + optional `[facet]` + optional
+    /// `[relationships]`. Segments concatenate (each `""` when absent) rather than
+    /// `push_str(&format!(..))`, honouring the repo string-build convention.
+    fn render_fixture_toml(f: &Fixture<'_>) -> String {
+        let head = format!(
+            "id = {}\nslug = \"{}\"\ntitle = \"{}\"\nkind = \"{}\"\n\
+             status = \"{}\"\nresolution = \"{}\"\n\
+             created = \"2026-06-08\"\nupdated = \"2026-06-08\"\ntags = [{}]\n",
+            f.id,
+            f.slug,
+            f.title,
+            f.kind.as_str(),
+            f.status,
+            f.resolution,
+            toml_list(f.tags),
+        );
+        let facet = f.facet.as_ref().map_or_else(String::new, |x| {
+            format!(
+                "\n[facet]\nlikelihood = \"{}\"\nimpact = \"{}\"\norigin = \"{}\"\ncontrols = [{}]\n",
+                x.likelihood,
+                x.impact,
+                x.origin,
+                toml_list(x.controls),
+            )
+        });
+        let rels = f.rels.as_ref().map_or_else(String::new, |x| {
+            format!(
+                "\n[relationships]\nslices = [{}]\nspecs = [{}]\ndrift = []\n",
+                toml_list(x.slices),
+                toml_list(x.specs),
+            )
+        });
+        format!("{head}{facet}{rels}")
+    }
+
+    /// The sole path/dir/write: render the fixture and lay it under its kind tree.
+    fn write_fixture(root: &Path, f: Fixture<'_>) {
+        let name = format!("{:03}", f.id);
+        let dir = root.join(f.kind.kind().dir).join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(format!("backlog-{name}.toml")),
+            render_fixture_toml(&f),
+        )
+        .unwrap();
+    }
+
     /// Write a complete `backlog-NNN.toml` directly under a kind's tree — a true
     /// unit fixture (the `meta::tests::write_meta_toml` precedent) that lets a
     /// non-`open`/terminal status + a resolution be seeded without the (unbuilt,
@@ -1424,22 +1506,20 @@ tags = []
         title: &str,
         tags: &[&str],
     ) {
-        let tree = root.join(kind.kind().dir);
-        let name = format!("{id:03}");
-        let dir = tree.join(&name);
-        fs::create_dir_all(&dir).unwrap();
-        let tags_lit = tags
-            .iter()
-            .map(|t| format!("\"{t}\""))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let body = format!(
-            "id = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\nkind = \"{}\"\n\
-             status = \"{status}\"\nresolution = \"{resolution}\"\n\
-             created = \"2026-06-08\"\nupdated = \"2026-06-08\"\ntags = [{tags_lit}]\n",
-            kind.as_str()
+        write_fixture(
+            root,
+            Fixture {
+                kind,
+                id,
+                slug,
+                title,
+                status,
+                resolution,
+                tags,
+                facet: None,
+                rels: None,
+            },
         );
-        fs::write(dir.join(format!("backlog-{name}.toml")), body).unwrap();
     }
 
     /// The first column (canonical id) of each rendered row, in render order.
@@ -1799,31 +1879,28 @@ tags = []
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         // a fully-assessed risk: facet + relationships + a terminal resolution.
-        let body = "\
-id = 1
-slug = \"leak\"
-title = \"Token leak\"
-kind = \"risk\"
-status = \"resolved\"
-resolution = \"mitigated\"
-created = \"2026-06-08\"
-updated = \"2026-06-08\"
-tags = [\"security\"]
-
-[facet]
-likelihood = \"high\"
-impact = \"critical\"
-origin = \"audit\"
-controls = [\"rotate\"]
-
-[relationships]
-slices = [\"SL-020\"]
-specs = []
-drift = []
-";
-        let dir2 = root.join(".doctrine/backlog/risk/001");
-        fs::create_dir_all(&dir2).unwrap();
-        fs::write(dir2.join("backlog-001.toml"), body).unwrap();
+        write_fixture(
+            root,
+            Fixture {
+                kind: ItemKind::Risk,
+                id: 1,
+                slug: "leak",
+                title: "Token leak",
+                status: "resolved",
+                resolution: "mitigated",
+                tags: &["security"],
+                facet: Some(FacetLit {
+                    likelihood: "high",
+                    impact: "critical",
+                    origin: "audit",
+                    controls: &["rotate"],
+                }),
+                rels: Some(RelLit {
+                    slices: &["SL-020"],
+                    specs: &[],
+                }),
+            },
+        );
 
         let item = read_item(root, ItemKind::Risk, 1).unwrap();
         let json = show_json(&item).unwrap();
@@ -1926,39 +2003,46 @@ drift = []
     /// Overwrite a reserved risk item with an assessed `[facet]` — exercises the
     /// real read+validate path for a populated facet without the (PHASE-05) `edit`.
     fn write_assessed_risk(root: &Path, id: u32) {
-        let name = format!("{id:03}");
-        let dir = root.join(RISK_KIND.dir).join(&name);
-        fs::create_dir_all(&dir).unwrap();
-        let body = format!(
-            "id = {id}\nslug = \"token-expiry\"\ntitle = \"Token expiry\"\nkind = \"risk\"\n\
-             status = \"open\"\nresolution = \"\"\ncreated = \"2026-06-08\"\n\
-             updated = \"2026-06-08\"\ntags = []\n\n[facet]\nlikelihood = \"high\"\n\
-             impact = \"critical\"\norigin = \"audit\"\ncontrols = [\"rate-limit\"]\n\n\
-             [relationships]\nslices = []\nspecs = []\ndrift = []\n"
+        write_fixture(
+            root,
+            Fixture {
+                kind: ItemKind::Risk,
+                id,
+                slug: "token-expiry",
+                title: "Token expiry",
+                status: "open",
+                resolution: "",
+                tags: &[],
+                facet: Some(FacetLit {
+                    likelihood: "high",
+                    impact: "critical",
+                    origin: "audit",
+                    controls: &["rate-limit"],
+                }),
+                rels: Some(RelLit {
+                    slices: &[],
+                    specs: &[],
+                }),
+            },
         );
-        fs::write(dir.join(format!("backlog-{name}.toml")), body).unwrap();
     }
 
     /// Write an item carrying seeded OUTBOUND `slices`/`specs` relations directly.
     fn write_related(root: &Path, kind: ItemKind, id: u32, slices: &[&str], specs: &[&str]) {
-        let name = format!("{id:03}");
-        let dir = root.join(kind.kind().dir).join(&name);
-        fs::create_dir_all(&dir).unwrap();
-        let lit = |xs: &[&str]| {
-            xs.iter()
-                .map(|x| format!("\"{x}\""))
-                .collect::<Vec<_>>()
-                .join(", ")
-        };
-        let body = format!(
-            "id = {id}\nslug = \"s\"\ntitle = \"T\"\nkind = \"{}\"\nstatus = \"open\"\n\
-             resolution = \"\"\ncreated = \"2026-06-08\"\nupdated = \"2026-06-08\"\ntags = []\n\n\
-             [relationships]\nslices = [{}]\nspecs = [{}]\ndrift = []\n",
-            kind.as_str(),
-            lit(slices),
-            lit(specs),
+        write_fixture(
+            root,
+            Fixture {
+                kind,
+                id,
+                slug: "s",
+                title: "T",
+                status: "open",
+                resolution: "",
+                tags: &[],
+                facet: None,
+                rels: Some(RelLit { slices, specs }),
+            },
         );
-        fs::write(dir.join(format!("backlog-{name}.toml")), body).unwrap();
     }
 
     // --- PHASE-05: the `backlog edit` coupled transition ---
