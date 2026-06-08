@@ -41,8 +41,12 @@ Entity inventory (prefixes confirmed from `Kind` consts): slice `SL`; spec `PRD`
 
 ## 3. Forces & Constraints
 
-- **ADR-001 (module layering, leaf ← engine ← command).** Projection is a pure leaf;
-  disk/clock/git live only in the command shell.
+- **ADR-001 (module layering, leaf ← engine ← command).** `project` is a pure
+  *function* (no I/O), but it reads entity structs (`Spec`, `Adr`, backlog `Item`,
+  slice meta) that live in **command-layer** modules — so it sits in the export
+  command module *above* them (forward edges, no cycle; nothing lower imports it).
+  Purity ≠ leaf-ness: the property here is side-effect-freedom, not bottom-of-stack.
+  disk/clock/git live only in the impure shell.
 - **Pure/imperative split.** No clock/rng/git/disk in the pure layer — `now` and
   loaded data are injected (the date/uid pattern).
 - **ADR-004 (relations outbound-only; reciprocity derived).** Emit only outbound
@@ -76,13 +80,20 @@ doctrine export lazyspec  (command, impure shell)
   │     per-slice plan.md + PhaseRollup)
   │  inject now (RFC3339), version (CARGO_PKG_VERSION), project (root basename)
   ▼
-lazyspec::project(corpus, now, version) -> Brief        (PURE leaf — src/lazyspec.rs)
+lazyspec::project(corpus, now, version) -> Brief   (pure fn, command layer — src/lazyspec.rs)
   ▼
 serde_json::to_string_pretty(&brief) -> stdout
 ```
 
 `Corpus` is a plain pre-loaded data struct (Vecs of loaded entities + each slice's
-optional `(plan_body, PhaseRollup)`). `project` is a total function over it.
+optional `(plan_body, PhaseRollup)`). `project` is a total, side-effect-free function
+over it — deterministic given `(corpus, now, version)`, which is what makes the
+golden test deterministic (§9).
+
+**Reuse needs visibility widening (code impact).** `spec::render`, `read_members`,
+`read_interactions` are private `fn` today; reuse from the export module makes them
+`pub(crate)`. That is an edit to `spec.rs` under the **behaviour-preservation gate** —
+existing spec suites must stay green unchanged.
 
 ### 5.2 Interfaces & Contracts
 
@@ -138,7 +149,7 @@ lazyspec `RelationType` strings; nothing else may appear.
 | chore | backlog CHR | CHR | no | item `.md` | flat / by axis |
 | risk | backlog RSK | RSK | no | item `.md` | flat / by axis |
 | idea | backlog IDE | IDE | no | item `.md` | flat / by axis |
-| plan | slice-child artifact | *(synthetic `SL-NNN~plan`)* | no | `plan.md` | child of slice |
+| plan | slice-child artifact | PLAN *(synthetic id `PLAN-NNN`)* | no | `plan.md` | child of slice |
 
 Requirements (`REQ`) are **not** nodes — inlined in spec bodies via `render()` as
 `FR-`/`NF-` labelled entries.
@@ -181,8 +192,9 @@ no mutation, no side effects beyond stdout.
   `TypeConstraintChecker` stays satisfied (brief §6).
 - **INV-4** no `REQ` appears as an entity; every membered `REQ` appears in its
   spec's body.
-- **INV-5** plan ids are the only synthetic ids; shape `SL-NNN~plan`; never collide
-  with a real `canonical_id`.
+- **INV-5** plan ids are the only synthetic ids; shape `PLAN-NNN` where `NNN` is the
+  owning slice number; grammar-conformant (`{PREFIX}-{NNN}`) yet collision-free (no
+  real `PLAN` reservation exists), so it cannot clash with a real `canonical_id`.
 - **Edge cases:** slice with no plan → no plan node; spec with no members → body is
   prose-only, still virtual; backlog item kinds map 1:1 to five types; empty corpus →
   `entities: []`, `types[]` still full (manifest is static).
@@ -194,6 +206,21 @@ no mutation, no side effects beyond stdout.
 - **OQ-1** Icon assignment per type is cosmetic; pick stable glyphs, not load-bearing.
 - **OQ-2** `types[].dir` is nominal (lazyspec materializes bodies into its own cache);
   emit a sensible per-kind path string, not doctrine's real on-disk layout.
+- **OQ-3 (adversarial F1, blocking conformance)** The exact wire *strings* for `status`
+  and relation `type` are unverified against lazyspec's deserializer. Brief §3 examples
+  are lowercase (`"accepted"`, `"implements"`), but multi-word values (`InProgress`,
+  `RelatedTo`) have an unknown form (`in-progress`? `in_progress`? `related-to`?).
+  **Pin against lazyspec's `Status`/`RelationType` serde (document.rs) before locking
+  the golden file** — a guessed string passes here and breaks at the boundary.
+- **OQ-4 (adversarial F4)** Body for slice/adr/backlog: raw prose-tier `.md` (simplest;
+  may be empty, drops structured TOML like acceptance_criteria/c4_level/risk facet) vs
+  a both-tier synthesis (preserves unmapped data per the brief's "exotic data in body").
+  Specs already get both tiers via `render()`. Decide per-kind in planning.
+- **OQ-5 (adversarial F7)** Backlog `Relationships` axes → edge-type mapping is
+  hand-wavy ("by axis"); enumerate the actual axes and their `implements/blocks/
+  related-to` targets in planning.
+- **OQ-6** `meta.project` = root dir basename is non-canonical (differs across clones);
+  cosmetic for lazyspec, accept for v1.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -209,10 +236,13 @@ no mutation, no side effects beyond stdout.
   **display-only** graph-vocabulary label; doctrine's stored `descends_from` is
   untouched. *Alt rejected:* → related-to — honest label, but lineage vanishes from
   the graph (panel-only), gutting the value.
-- **D3 — Plan as synthetic child node (`SL-NNN~plan`).** Delivers the pictured
-  slice→plan graph child though plan is not a reserved entity. Synthetic id is
+- **D3 — Plan as synthetic child node (`PLAN-NNN`).** Delivers the pictured
+  slice→plan graph child though plan is not a reserved entity. The synthetic id is
   projection-only, never persisted — a bounded departure from "doctrine owns ids".
-  *Alt rejected:* fold plan into slice body — simpler, but loses the child node.
+  Uses a grammar-conformant `PLAN-NNN` (own lazyspec type/prefix) rather than a
+  `~`-suffixed form, so lazyspec's `{PREFIX}-{NNN}` id/type inference is not tripped
+  (adversarial F3). *Alt rejected:* fold plan into slice body — simpler, loses the
+  child node.
 - **D4 — Backlog → five lazyspec types** (per item_kind prefix), since lazyspec keys
   a type by one prefix. *Alt rejected:* one "backlog" type — ambiguous prefix.
 - **D5 — Spec → two types** (product-spec/PRD, tech-spec/SPEC) — preserves doctrine's
@@ -228,12 +258,15 @@ no mutation, no side effects beyond stdout.
   the SL-025 audit miss). *Mitigate:* table-driven conformance over kinds **and**
   fields, asserting each surface (`virtual`, `validate_ignore`, edge vocab, renames,
   synthetic id, req-absence-but-body-presence).
-- **R3 — dead_code on the leaf** if phase-planning lands `lazyspec.rs` before the
-  command wiring. *Mitigate:* module-level `#![expect(dead_code, reason="…wired in
-  PHASE-NN")]`, self-clearing (`mem.pattern.lint.dead-code-self-clearing-leaf`);
-  never bare `allow`.
-- **R4 — Synthetic plan id collision.** *Mitigate:* `~plan` suffix is outside the
-  `canonical_id` grammar; INV-5 + a test.
+- **R3 — dead_code** if phase-planning lands `lazyspec.rs` structs before the command
+  wiring. *Mitigate:* module-level `#![expect(dead_code, reason="…wired in PHASE-NN")]`,
+  self-clearing (`mem.pattern.lint.dead-code-self-clearing-leaf`); never bare `allow`.
+- **R5 — wire-string mismatch (adversarial F1)** status/relation `type` strings that
+  don't match lazyspec's deserializer fail silently at the boundary, not in our suite.
+  *Mitigate:* OQ-3 — pin against lazyspec's serde first; the golden file then encodes
+  the verified strings, and the conformance test asserts the exact set.
+- **R4 — Synthetic plan id collision.** *Mitigate:* `PLAN-` is unused by any real
+  reservation, so `PLAN-NNN` is unique by construction; INV-5 + a test.
 
 ## 9. Quality Engineering & Validation
 
@@ -242,11 +275,32 @@ no mutation, no side effects beyond stdout.
   the keyword renames serialize correctly, the four-string edge vocab, and that a
   membered `REQ` is absent as a node yet present in its spec body.
 - **Golden fixture:** a minimal corpus → expected Brief JSON, value-compared; the
-  drift canary.
+  drift canary. **Deterministic by injection** — the test passes fixed `now`+`version`
+  to `project`, so `meta.generated_at`/`doctrine_version` don't make it flaky (the
+  purity of `project` is what buys this). The golden encodes the OQ-3-verified wire
+  strings.
 - **Field-map check vs brief:** every emitted field has a `DocMeta` home.
 - **RO proof:** the command is pure read + serialize — no mutation path exists.
 - Lint: zero clippy warnings under the repo denials; `just check` before commit.
 
 ## 10. Review Notes
 
-<!-- adversarial pass appended below -->
+### Adversarial self-review (round 1) — integrated
+
+- **F1 → OQ-3, R5.** Status/relation wire *strings* unverified vs lazyspec's serde
+  (esp. `InProgress`, `RelatedTo`); a guess passes our suite, breaks at the boundary.
+  Now a blocking conformance prerequisite.
+- **F2 → §3, §5.1.** "Pure leaf" mislabel corrected: `project` is a pure *function* at
+  the command layer (reads command-layer entity structs). ADR-001 holds (forward
+  edges, no cycle); purity ≠ leaf-ness.
+- **F3 → D3, INV-5, R4, §5.3 table.** Synthetic plan id `SL-NNN~plan` → `PLAN-NNN`,
+  grammar-conformant so lazyspec's `{PREFIX}-{NNN}` inference isn't tripped.
+- **F4 → OQ-4.** Body for slice/adr/backlog (raw prose vs both-tier synthesis) deferred
+  to planning; raw `.md` can be empty and drop structured data.
+- **F5 → §5.1.** Reuse forces `spec::render/read_members/read_interactions` to
+  `pub(crate)` — a `spec.rs` edit under the behaviour-preservation gate; now stated.
+- **F6 → §9.** Golden determinism via injected `now`/`version` made explicit.
+- **F7 → OQ-5.** Backlog axis→edge mapping to be enumerated in planning.
+
+Residual unknowns are OQ-3 (blocking, external — needs lazyspec serde) and OQ-4/OQ-5
+(planning-time). No governance conflict surfaced; ADR-001/004 alignment confirmed.
