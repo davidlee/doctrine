@@ -1,0 +1,41 @@
+memory_uid = "mem_019ea50fa14b71c19e3bcd7ffe27b55f"
+memory_key = "mem.pattern.render.toml-splice-escape-user-values"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Entity renderers splice user free-text into TOML literals unescaped (toml_string is the fix)"
+summary = "Entity scaffold renderers splice user title into TOML raw via .replace (no escape) — a quote/backslash/newline writes an unparseable *-NNN.toml; memory.rs::toml_string is the fix to extract corpus-wide"
+created = "2026-06-08"
+updated = "2026-06-08"
+
+[scope]
+paths = ["src/backlog.rs", "src/adr.rs", "src/spec.rs", "src/slice.rs", "src/requirement.rs", "src/memory.rs"]
+globs = ["src/*.rs"]
+commands = ["doctrine backlog new"]
+tags = ["toml", "injection", "scaffold"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7849fb24ddf8da39aec9b270788d9a3f5ae01f16"
+ref_name = "refs/heads/main"
+checkout_state_id = "343c3ee0ebdc87c2edc0239194733659537261a48fecbeb8687187da5d164299"
+base_commit = "a1a7291cfaa728f2476e9d214f46ea3b18bcb3c4"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 2
