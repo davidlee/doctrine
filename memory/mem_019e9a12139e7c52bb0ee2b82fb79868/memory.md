@@ -17,6 +17,9 @@ exact shapes, flags, ids, and subcommands, ask the CLI: `doctrine <verb>
 - **adr** — architecture decision records: `new · list · status`.
 - **spec** — product / technical specifications:
   `new · list · show · validate · req`.
+- **backlog** — capture and survey work-intake items (issue · improvement ·
+  chore · risk · idea): `new · list · show · edit`. The intake surface upstream
+  of a slice.
 - **boot** — regenerate the governance snapshot (`.doctrine/state/boot.md`);
   `boot install` wires the `@`-import + session hook; `boot --check` is the disk
   sentry.
