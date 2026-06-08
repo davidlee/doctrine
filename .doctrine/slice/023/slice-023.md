@@ -65,9 +65,13 @@ delta, PULL is two docs, skills shed only named offenders.
 
 ## Affected Surface
 
-- `doc/glossary.md` → `install/glossary.md` (relocation; embed root).
-- `install/<cli-editing-reference>.md` — new doc (name TBD in design).
-- `install/routing-process.md` — append reference-forms block.
+- `doc/glossary.md` → `install/glossary.md` (relocation; embed root). Drop its
+  `entity-model.md` link (unshipped). **Ripple:** correct the `doc/glossary.md` path
+  → `.doctrine/glossary.md` in 5 shipped templates (`spec-product/spec-tech/design/
+  plan.md`, `plan.toml`) + `install/governance.md` (pre-existing client-dead link).
+  Non-destructive breadcrumb in frozen SL-020 / spec-012 citations.
+- `install/using-doctrine.md` — new operator doc (verbs, hand-editing, read-via-show).
+- `install/routing-process.md` — append reference-forms block + reference-docs pointer.
 - `src/install.rs` (`#[folder = "install/"]`) re-embeds new/moved files — the
   rust-embed recompile footgun applies (`cargo clean -p doctrine && cargo build`,
   then `doctrine boot`). Check `install/manifest.toml` if dir-create / gitignore
