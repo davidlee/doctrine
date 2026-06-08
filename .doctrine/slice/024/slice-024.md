@@ -82,16 +82,16 @@ into a **TOML literal** through it — eliminating the raw splice corpus-wide.
   (rust-embed re-embed footgun: a lone template edit is invisible until the
   embedding crate recompiles — `mem.pattern.embed.rustembed-recompile-and-symlinks`).
 
-**Open Questions (for `/design`):**
-- **Q1 — home of the shared seam.** A leaf util (ADR-001 layering: leaf ← engine
-  ← command). Candidates: a new `src/render.rs` leaf, or fold into an existing
-  leaf. `entity.rs` (engine) is wrong altitude for a pure string helper. Decide
-  in design.
-- **Q2 — template-quote convention.** Either the helper emits quotes (template
-  drops them: `title = {{title}}`) or templates keep quotes and the helper emits
-  the inner-only escaped string. `memory.rs` uses the former. Pick one corpus-wide.
-- **Q3 — `--slug` normalisation.** Orthogonal to escaping; flag for a possible
-  follow-up (normalise explicit slug like a derived one), do not bundle.
+**Open Questions — resolved in `design.md`:**
+- **Q1 — home of the shared seam → RESOLVED (design D4).** New leaf
+  `src/tomlfmt.rs` (not `render.rs` — name collides with the `render_*` fns that
+  stay per-module; not `entity.rs`/`lexical.rs` — wrong altitude/cohesion).
+- **Q2 — template-quote convention → RESOLVED (design D3).** Self-quoting
+  corpus-wide (helper emits quotes, template drops them: `title = {{title}}`),
+  matching `memory.toml`. Keeps `toml_string`'s signature unchanged for the
+  byte-identical move.
+- **Q3 — `--slug` normalisation → deferred follow-up** (design OQ-1). Orthogonal
+  to escaping; not bundled.
 
 ## Verification / Closure Intent
 
