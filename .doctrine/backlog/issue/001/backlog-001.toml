@@ -12,6 +12,6 @@ updated = "2026-06-08"
 tags = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
-slices = ["SL-020"]
+slices = ["SL-020", "SL-027"]
 specs  = []
 drift  = []
