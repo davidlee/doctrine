@@ -391,3 +391,94 @@ The LAST kind on the spine — the exception kind — plus boot's last section.
 - Manual CLI smoke: memory new (alias), list (type/trust cols + header, draft
   visible), list --json (uid not prefixed), -s bogus (six-status error), show --json
   (faithful + body), --type fact, -f substr on title.
+
+## PHASE-06 — conformance + closure-prep (commit 7fffacc)
+
+The FINAL phase: conformance tests + the OQ-3 collision audit + closure prep.
+Insertion-only — NO production code changed (all four src edits are additions
+inside existing `#[cfg(test)]` modules; the conformance file is new).
+
+### EX-1 / VT-1 — behavioural parse-conformance (R5/A-4)
+- `tests/e2e_list_conformance.rs` (NEW), table-driven over the five spine kinds
+  (adr, slice, spec, backlog, memory). Because the crate is binary-only (no lib —
+  `Cli` is private), this is an e2e over the built binary, not a `try_parse_from`
+  unit test.
+- `every_spine_flag_parses_and_succeeds_on_every_kind`: each shared flag in both
+  forms (-f/--filter, -r/--regexp, -i/--case-insensitive, -s/--status, -t/--tag,
+  -a/--all, --format json, --json) parses + the command succeeds on an empty root.
+  A dropped flatten or a shadowed shared flag → clap parse error → non-zero exit →
+  this fails. (The `-s draft` rows are skipped for kinds whose vocab lacks `draft`;
+  see the next test.)
+- `status_flag_is_recognised_grammar_on_every_kind`: for adr/slice/backlog, `-s
+  draft` is rejected by the UNIFORM VOCAB validator (not clap "unexpected
+  argument") — proving the `-s/--status` flag is parsed even when its value is
+  out of vocab.
+- `the_filter_x_json_canonical_combination_parses_on_every_kind`: the exact
+  invocation the design names (`<kind> list --filter x --json`) parses, succeeds,
+  AND emits the shared `{kind, rows}` envelope on every kind.
+
+### EX-2 / VT-2 — ordering-preservation (C-5/F-N9)
+Per-kind `list_rows` ordering tests with intentionally-out-of-order fixtures —
+written directly to disk at chosen ids / created dates (bypassing the monotonic
+`Fresh`/`fresh` allocator and `record`) so creation order ≠ declared order, and
+the per-kind sort (never `retain`, which is filter-only) is what produces the
+result. A pure `retain` test cannot catch a dropped sort (§9).
+- adr `list_rows_orders_by_id_ascending_regardless_of_creation_order` — id asc.
+- slice `list_rows_orders_by_id_ascending_regardless_of_creation_order` — id asc.
+- spec `list_rows_orders_by_id_within_each_subtype_block_regardless_of_creation_order`
+  — id asc within each subtype, product block before tech block.
+- memory `list_rows_orders_created_desc_then_uid_asc_regardless_of_read_order` —
+  created desc then uid asc, through `list_rows` (NOT `select_rows`, which already
+  had `select_rows_orders_created_desc_then_uid_asc`).
+- backlog: ALREADY covered by `backlog_list_kind_then_id_order` (cross-kind
+  out-of-order fixture, asserts `(kind.ordinal, id)`) — no new test needed.
+
+### EX-3 — OQ-3 short-flag collision audit: VERDICT CLEAN (no demotion)
+Exhaustive, hand-verified across all five `List` variants in main.rs:
+- adr / slice / spec List: `#[command(flatten)] CommonListArgs` + `-p/--path`
+  only. No kind-specific flag.
+- backlog List: flatten + `--kind` (LONG-only) + deprecated positional `[SUBSTR]`
+  (no short) + `-p`.
+- memory List: flatten + `--type` (LONG-only) + `-p`.
+The shared spine owns `-f -r -i -s -t -a`; `-p` is the per-variant ROOT LOCATOR
+(not a list filter, kept on every variant by design). NO kind-specific list flag
+claims a short flag → ZERO collisions → no demotion needed. (Aside: `skills list`
+has `-a` for `--agent`, but skills is NOT a spine kind and does not flatten
+`CommonListArgs` — out of scope.) Confirms the design §10 non-finding + PHASE-05's
+preliminary read.
+
+### EX-4 / VT-3 — closure-intent checklist (all MET, verified in code)
+1. `show` resolves for all five kinds — `run_show` in adr/slice/spec/backlog/memory.
+2. all list/show emit canonical PREFIXED ids — `canonical_id` in adr/slice/spec/
+   backlog; memory EXEMPT (`key(m).canonical = m.uid`, §5.5 — uid IS canonical).
+3. default list hides terminal with `--all`/`--status` revealing — per-kind
+   `is_hidden` + `listing::retain`'s `reveal_hidden = f.all || !f.status.is_empty()`
+   (listing.rs:190).
+4. a shared filter base (`listing::build`/`retain`) AND a shared renderer
+   (`render_table` + `json_envelope`) back every kind — confirmed by grep across
+   all five (memory re-gridded onto `render_table` in PHASE-05).
+5. create-verb reconciled — `#[command(visible_alias = "new")]` on memory Record
+   (main.rs:427).
+
+### EX-5 / VT-3 / VA-1 — gate + design-conformance
+- `just check` clean: `cargo fmt` clean, plain `cargo clippy` ZERO warnings, full
+  test suite green.
+- 638 bin unit tests (was 634: +4 ordering) + 18 e2e (was 15: +3 conformance) =
+  656 total, 0 failed.
+- Behaviour-preservation gate green AND byte-unchanged: entity::tests (24),
+  registry::tests (25), slice::tests incl is_divergent + is_terminal_status. ALL
+  four src diffs are insertion-only (`git diff --numstat`: 0 deletions), so no
+  existing test body or production fn was touched.
+- VA-1 design-conformance: implementation matches design §5 contracts; NO bespoke
+  list FILTER flags reintroduced. The only per-kind list flags are the
+  design-sanctioned variant-axis KIND selectors (`--kind`, `--type`), both
+  long-only.
+
+### DEVIATION from design (audit finding, not a defect)
+- design §5.3 / §5.1 expected the SORT-BY-ID half of `meta::sort_and_filter` to
+  SURVIVE as "a thin `meta` sort the numeric kinds call." REALITY: PHASE-04
+  removed `meta::sort_and_filter` ENTIRELY (confirmed: zero references in src/).
+  Every numeric kind sorts inline via `sort_by_key(|m| m.id)`, so the helper had
+  no callers and the repo's `dead_code` deny forced its removal. Benign: the
+  design's intent (kinds own ordering, §5.3) is fully honoured; the shared helper
+  was simply unnecessary once all numeric kinds migrated. Recorded for the audit.
