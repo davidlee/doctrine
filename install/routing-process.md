@@ -31,3 +31,12 @@ lives in `*.toml`, prose in `*.md`, and `show` synthesizes both tiers (a `.md` b
 may be empty by design — never judge an entity from one tier). The plan is not
 higher authority than the design or `/canon`. Phase ids (`PHASE-NN`) and criteria
 ids (`EN-/EX-/VT-`) are immutable — edits append, never renumber.
+
+**Reference forms.** Entity ids — prefixed, 3-digit zero-padded (`SL-023`,
+`ADR-005`, `REQ-059`); cite the durable id, never a mobile membership label
+(`FR-`/`NF-`). Doc-local enumerations — bare (`OQ-1`, `D1`, `R1`, `Q1`, `C1`).
+Criteria modes — `VT` by test / `VA` by agent / `VH` by human.
+
+**Reference docs (read on demand).** `glossary.md` — kinds, ids, full reference
+forms, verification taxonomy. `using-doctrine.md` — which verb for which intent,
+reading via `show`, storage tiers, and hand-editing / edit-preserving rules.
