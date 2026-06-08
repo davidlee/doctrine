@@ -1058,6 +1058,16 @@ mod tests {
             snap.contains("Route before you act"),
             "routing digest (embed) projected:\n{snap}"
         );
+        // ADR-005 / SL-023 PHASE-03 (VT-2): the reference-forms rules + the
+        // reference-docs pointer ride the push digest.
+        assert!(
+            snap.contains("Reference forms"),
+            "reference-forms block projected onto the snapshot:\n{snap}"
+        );
+        assert!(
+            snap.contains("Reference docs") && snap.contains("using-doctrine.md"),
+            "reference-docs pointer projected onto the snapshot:\n{snap}"
+        );
         assert!(
             snap.contains("point at doc/spec.md"),
             "governance body (disk) projected:\n{snap}"
