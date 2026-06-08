@@ -1,0 +1,17 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 12
+slug = "technical-specifications"
+title = "Technical Specifications"
+status = "draft"
+kind = "product"
+category = "knowledge-architecture"
+tags = ["spec", "technical", "architecture", "c4", "decomposition", "code-anchor", "evergreen"]
+responsibilities = [
+  "Hold the durable how of a capability — its architecture and mechanism — descending from product intent and upstream of any single change's design.",
+  "Place each technical spec at a level of architectural abstraction (the C4 ladder) and decompose a coarse spec into a single-parent hierarchy of finer ones.",
+  "Capture peer architectural relations between specs distinct from containment, and anchor each spec to the concrete code it governs.",
+  "Track the living architecture: a spec can be retired, superseded, merged, or split as code refactors, with lineage recorded rather than silently mutated or orphaned.",
+  "Admit both hand-authoring and import from code structure, converging on one code-anchored entity per governed unit rather than parallel surfaces.",
+]

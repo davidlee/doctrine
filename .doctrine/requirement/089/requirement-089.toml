@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 89
+slug = "hold-technical-specs-at-evergreen-architectural-altitude"
+title = "Hold technical specs at evergreen architectural altitude"
+status = "pending"
+kind = "quality"
+
+description = "A technical spec holds durable architecture and mechanism, not a single change's design or transient implementation detail; the boundary against slice design is maintained."
+tags = []
+acceptance_criteria = [
+  "A technical spec records durable architecture, mechanism, and invariants, not the current-vs-target behaviour of one change.",
+  "Single-change design, code impact, and per-change verification stay in the slice's design artefact, not the technical spec.",
+  "The spec remains valid across changes to the code that realises it, until an architectural transform supersedes it.",
+]

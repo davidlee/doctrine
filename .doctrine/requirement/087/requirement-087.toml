@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 87
+slug = "enforce-single-parent-acyclic-decomposition-integrity"
+title = "Enforce single-parent acyclic decomposition integrity"
+status = "pending"
+kind = "quality"
+
+description = "The decomposition is enforced as a single-parent acyclic tree: a containment that would introduce a cycle or a second parent is surfaced as a hard finding."
+tags = []
+acceptance_criteria = [
+  "A containment that would give a spec a second parent is rejected as a hard finding.",
+  "A containment that would form a cycle in the parent chain is rejected as a hard finding.",
+  "An integrity pass returns a non-zero result on any decomposition violation.",
+]
