@@ -18,7 +18,7 @@ dependencies = []
 
 # One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
 # never reused once authored — edits append, they never renumber. Criterion ids
-# are local to their phase, bare, and equally immutable (doc/glossary.md §
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
 # reference forms): EN-1 entry, EX-1 exit, and verification by mode —
 # VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
 [[phase]]

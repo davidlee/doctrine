@@ -48,6 +48,7 @@ Where a `/design` agent should read in, grouped by authority:
 - [`doc/glossary.md`](../../../doc/glossary.md) — the reserved ids and folder
   flags: `issue ISS`, `improvement IMP`, `chore CHR`, `risk RSK`, `idea IDE`
   (all `folder = y`; `./research/*` + `./context/*` subdirs permitted).
+  <!-- SL-023: glossary relocated to `install/glossary.md` (ships to `.doctrine/glossary.md`). -->
 - [`ADR-004`](../../adr/004/adr-004.md) — relations are stored **outbound-only**
   on the durable entity; reciprocity (inbound refs) is *derived* by the registry
   scan, never authored on the target. Settles PRD-009 OQ-004. The backlog item

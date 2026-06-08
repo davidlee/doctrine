@@ -1,7 +1,7 @@
 # {{ref}}: {{title}}
 
 <!-- Reference forms: entity ids padded (REQ-059, ADR-004); doc-local refs bare
-     (OQ-1 open question). See doc/glossary.md § reference forms. -->
+     (OQ-1 open question). See .doctrine/glossary.md § reference forms. -->
 
 ## 1. Intent
 Problem, value, and desired outcome.

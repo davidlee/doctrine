@@ -381,6 +381,22 @@ mod tests {
     // ---------------------------------------------------------------
 
     #[test]
+    fn glossary_is_shipped() {
+        // ADR-005 / SL-023 PHASE-01: the glossary must be in the embed/ship set
+        // so a client install receives the foundational conventions. Guards the
+        // regression where it lived unembedded under doc/.
+        let names = embedded_filenames();
+        assert!(
+            names.contains(&"glossary.md".to_string()),
+            "glossary.md must be embedded (shipped); got {names:?}"
+        );
+        assert!(
+            !asset_text("glossary.md").unwrap().trim().is_empty(),
+            "glossary.md asset must be non-empty"
+        );
+    }
+
+    #[test]
     fn plan_creates_dirs_from_manifest() {
         let dir = tempfile::tempdir().unwrap();
         let manifest = Manifest {
