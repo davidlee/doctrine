@@ -75,8 +75,9 @@ authored tier.
 
 - Build the missing spine, reuse every shipped seam unchanged.
 - Direction and reciprocity are ADR-004's to dictate, not this design's.
-- Hard findings block; a genuinely-open policy question warns rather than
-  pre-empting a decision (`descends_from` on a product spec).
+- The integrity gate is hard-only — no severity tier. A tech-only field on a
+  product spec is a hard invalid-kind finding, not a warn (codex F5 reversed the
+  earlier soft-warn plan; the warn preserved nothing — see §5.2, D5).
 - Keep graph machinery local to decomposition — no premature feature-DAG.
 
 ## 5. Proposed Design
