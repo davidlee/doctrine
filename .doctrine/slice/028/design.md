@@ -88,9 +88,11 @@ attach to this locked canon.
 - **Name the whole; build the vertical.** The canon (ADR-003 + ADR-009)
   expresses the full holistic model so it is not locked blind; the code is a thin
   FSM vertical.
-- **Surface, don't block.** The FSM is *encoded as data* and the verb *classifies*
-  a move; only out-of-vocab and leaving-terminal hard-refuse. Humans drive any
-  skip; agents see the move flagged. (ADR-003 §5; house read-surface posture.)
+- **Surface, don't block — except the closure seam.** The FSM is *encoded as data*
+  and the verb *classifies* a move; out-of-vocab, leaving-terminal, and the two
+  closure-seam edges (`→ reconcile`, `→ done`) hard-refuse — everything else writes
+  and surfaces. Humans drive any non-seam skip; agents see the move flagged.
+  (ADR-003 §5 read-surface posture; §7/§8 closure spine — F12.)
 - **Explicit reconcile, never derive.** `ReqStatus` is authored/normative;
   `CoverageStatus` is observed evidence; doctrine reconciles them by explicit
   authorship, never `ReqStatus = f(coverage)`.
@@ -124,15 +126,23 @@ doctrine slice status <id> <state> [--note <s>]
   `SLICE_STATUSES`, guarded by `validate_statuses` (reused).
 - Pure classifier:
   ```rust
-  enum Transition { Advance, BackEdge, Skip, Abandon, Noop, FromTerminal }
+  enum Transition { Advance, BackEdge, Skip, Abandon, Noop, FromTerminal, SeamBreach }
   fn classify(from: &str, to: &str) -> Transition;
   ```
 - `set_slice_status(root, id, to, note, today) -> Result<…>` — edit-preserving
   (`DocumentMut`), no-op guard before write, F-1 refuse on malformed (missing
   scaffold key), shell-injected date.
-- **Hard-refuse** only: `to` out-of-vocab; `from ∈ {done, abandoned}`
-  (`FromTerminal` — reopening deferred). All other moves write and print their
-  classification (+ the conduct posture).
+- **Hard-refuse:** `to` out-of-vocab; `from ∈ {done, abandoned}` (`FromTerminal`
+  — reopening deferred); and the **closure seam** (`SeamBreach`, F12) — `to =
+  reconcile` from any `from ≠ audit`, or `to = done` from any `from ≠ reconcile`.
+  All other moves write and print their classification (+ the conduct posture).
+- **Closure seam is structural (F12).** `audit → reconcile → close` is ADR-003's
+  closure spine (§7/§8); a verb that wrote `started → done` (classified `Skip`)
+  would author a "closed" slice whose specs were never reconciled, and
+  `is_divergent` (phase-rollup only, not spec drift) would not flag it. So the two
+  seam-entry edges are refused structurally — distinct from *conduct* enforcement
+  of the soft gates (`plan`, etc.), which stays deferred/advisory (ADR-003
+  §8/§11). Everything off the seam remains classify-don't-jail.
 - **Transition-terminal is its own predicate (F13).** The FromTerminal set
   `{done, abandoned}` is a **third** slice-status predicate, distinct from
   `is_terminal_status` (divergence, `{done}`) and `is_hidden` (presentation,
@@ -183,8 +193,9 @@ withdrawn, no successor · *superseded* replaced by a named successor
 ### 5.3 Data, State & Ownership
 
 - **Vocabulary** `SLICE_STATUSES = [proposed, design, plan, ready, started,
-  review, audit, reconcile, done, abandoned]` — **purely additive**; every prior
-  token survives, so existing slices need **no migration**. `is_terminal_status`
+  audit, reconcile, done, abandoned]` (no `review` state — F11) — **purely
+  additive**; every prior token survives, so existing slices need **no
+  migration**. `is_terminal_status`
   (`{done}`, divergence) and `is_hidden` (`{done, abandoned}`, presentation)
   unchanged; the transition verb adds a **third** predicate
   `is_transition_terminal` (`{done, abandoned}`, reopening-refusal) rather than
@@ -209,19 +220,19 @@ stateDiagram-v2
     design --> plan
     plan --> ready : ⊨ approved plan (gate)
     ready --> started
-    started --> review
-    review --> audit
-    audit --> reconcile
-    reconcile --> done : ⊨ closure (gate)
+    started --> audit
+    audit --> reconcile : ⊨ seam (hard edge)
+    reconcile --> done : ⊨ closure (hard edge)
     reconcile --> design : model gap (escalate)
     done --> [*]
     abandoned --> [*]
 
     note right of ready
       back-edges (fix invalidates an accepted gate):
-        review → started | design
-        audit  → review | started | design
+        audit     → started | design
         reconcile → audit
+      closure seam is structural (F12): reconcile entered
+        only from audit; done only from reconcile
       staleness: ready/design flagged when a sibling
         lands past — surfaced, never auto-demoted
       abandon: any non-terminal → abandoned
@@ -230,7 +241,13 @@ stateDiagram-v2
 
 - **Gates-as-transitions**, except `ready` — the lone gate-as-state, the "no code
   without an approved plan" human handoff. `design-ready` dropped: reaching
-  `plan` *is* design-accepted.
+  `plan` *is* design-accepted. **No `review` state (F11):** per-phase review runs
+  *during* `started` (ADR-003 §6); the whole-slice read *is* `audit` (§7).
+- **Closure seam is structural (F12).** Entering `reconcile` (only from `audit`)
+  and `done` (only from `reconcile`) are **hard-refused** otherwise — `audit →
+  reconcile → close` is ADR-003's closure spine; a blessed `started → done`
+  writer would author an unreconciled "closed" slice that no read-side detector
+  surfaces. The softer gates stay classify-don't-jail.
 - **Back-edge predicate** (human/skill judgement, not verb-enforced): stay
   in-state for a correction that doesn't invalidate an accepted gate; fall back to
   `started` (re-exec) or `design` (redesign) when it does; `audit` remediation
@@ -251,8 +268,15 @@ stateDiagram-v2
   regression (cf. `adr_known_set_matches_variants`).
 - **Transition from a drifted status** — if the stored `from` is out-of-vocab,
   `classify` falls through to `Skip` (allowed, surfaced); the verb never refuses
-  a move *out of* drift, only an out-of-vocab *target* or a terminal source.
+  a move *out of* drift, only an out-of-vocab *target*, a terminal source, or a
+  closure-seam breach. Note the seam still binds from drift: `to = done` /
+  `reconcile` from an out-of-vocab `from` is a `SeamBreach` refusal (the seam is
+  about the *target* edge, not the source's validity).
 - **Terminal exit refused** (`FromTerminal`); reopening is deferred, deliberate.
+- **Closure seam refused** (`SeamBreach`, F12) — `to = reconcile` requires
+  `from = audit`; `to = done` requires `from = reconcile`. The one invariant
+  ADR-003 §8 protects is structural; everything off the seam classifies and
+  writes.
 - **No-op guard** before write (content + mtime hold); **F-1 refuse** on
   malformed TOML (never tail-`insert` → silent corruption).
 - **`CoverageStatus` unused** → self-clearing `expect(dead_code, reason=…)`.
@@ -281,12 +305,18 @@ stateDiagram-v2
   capstone (sprawl, rejected); canon-only spike (ships nothing). Chosen: build the
   inert-lifecycle fix, name the rest.
 - **D2 — FSM shape: gates-as-transitions, `ready` the lone gate-state,
-  `design-ready` dropped.** Alt: doing/gate-state pairs throughout (asymmetric,
-  verbose) or a `green`/`implemented` gate-state (no real idle wait — `review`
-  absorbs it).
-- **D3 — Verb `slice status <id> <state>`; classify, don't jail.** Alt: `slice
-  advance` (can't express back-edges/abandon); a hard transition gate (contradicts
-  house surface-don't-block posture).
+  `design-ready` and `review` both dropped.** Alt: doing/gate-state pairs
+  throughout (asymmetric, verbose) or a `green`/`implemented` gate-state (no real
+  idle wait). `review` was initially a post-`started` state but is dropped (F11):
+  per-phase review is an event *during* `started` (ADR-003 §6), and the
+  whole-slice read *is* `audit` (§7) — a `review` state re-splits what §7 fused.
+- **D3 — Verb `slice status <id> <state>`; classify, don't jail — except the
+  closure seam.** Alt: `slice advance` (can't express back-edges/abandon); a hard
+  transition gate everywhere (contradicts house surface-don't-block posture).
+  Chosen middle (F12): classify-and-write for all moves *except* the two
+  closure-seam entry edges (`→ reconcile`, `→ done`), which are structurally
+  refused — the spine ADR-003 §8 protects, the one place "surface, don't block"
+  would let an unreconciled slice claim closure unflagged.
 - **D4 — Explicit reconcile, never derive** — the named spec-driver divergence.
 - **D5 — Conduct advisory v1** (`actor × autonomy`, `doctrine.toml [conduct]`).
   Alt: enforce now (premature — ADR-003 §8 defers enforcement).
@@ -312,7 +342,10 @@ stateDiagram-v2
 ## 9. Quality Engineering & Validation
 
 - **`classify`** — table test: advance, each back-edge, skip, abandon-from-each,
-  noop, from-terminal, out-of-vocab.
+  noop, from-terminal, out-of-vocab, and **seam-breach** (`→ reconcile` from
+  non-`audit`, `→ done` from non-`reconcile`, incl. from a drifted source) —
+  F12. Plus the legitimate seam path `audit → reconcile → done` classifies
+  `Advance` and writes.
 - **`set_slice_status`** — round-trip preserves comments + `[relationships]`;
   no-op guard (content+mtime hold); F-1 refuse on malformed.
 - **`conduct`** — parse round-trip; default fallback (absent file, absent key);
@@ -361,11 +394,11 @@ stateDiagram-v2
   step before the implementation phases — else we build ahead of accepted canon.
   A `/plan` sequencing constraint: ADR phases (author + accept) precede the code
   phases. Mirrors design-acceptance gating the plan.
-- **F8 (medium, cross-ADR coherence).** The `review` state coexists with the
-  deferred `/review` skill + ADR-007 review-ledger (`RV-`). ADR-009 must frame
-  `review` as the lifecycle **position where ADR-007's review happens**, not
-  redefine review — to avoid contradicting ADR-007. Carried as an ADR-009
-  authoring constraint.
+- **F8 (medium, cross-ADR coherence — SUPERSEDED by F11).** Originally: frame the
+  `review` state as the position where ADR-007's review happens, don't redefine it.
+  The external pass (F11) showed the framing was insufficient — there is no single
+  slice-level position to name, so the `review` state was **dropped** entirely.
+  F8's concern dissolves with the state.
 - **F9 (low).** `[conduct.<unknown-state>]` keys — `resolve` **tolerates** (house
   surface-don't-block posture), optionally warns; never hard-errors.
 - **F10 (trivial).** The mermaid is duplicated in `design.md` + ADR-009; ADR-009
@@ -374,22 +407,25 @@ stateDiagram-v2
 ### External adversarial pass (codex) — 2026-06-09
 
 Hostile review of `design.md` + `adr-009.md` via the codex MCP, attack axes per
-the slice handover. Seven findings beyond F1–F10; F11/F12/F15 are canon-shape
-decisions surfaced to the user (do not lock until resolved).
+the slice handover. Seven findings beyond F1–F10; the three canon-shape decisions
+(F11/F12/F15) were resolved with the user (2026-06-09) and applied below.
 
-- **F11 (critical, FSM coherence — DECISION).** `review` as a *linear slice-level
-  state* between `started` and `audit` misrepresents both ADR-003 §6 and ADR-007.
-  ADR-003 §6 makes review **per-phase, optional, possibly non-blocking** (running
-  *while the next phase begins*) — it lives **inside** the per-phase loop, not as a
-  whole-slice stage. ADR-007's review is a **generic ledger kind** (`RV-`) used
-  across design/plan/impl/audit/reconcile. A single slice state can represent
-  neither; worse, the whole-slice holistic read **already is `audit`** (§7), so a
-  slice-level `review` state is redundant. F8's "names the position, doesn't
-  redefine" is insufficient: there is *no single position* to name. **Resolution
-  (recommended): drop `review` from the slice FSM** — per-phase review stays in
-  runtime/phase state + the `RV-` ledger; `audit` is the holistic read.
-  Alt: rename to a distinct slice-level concept (`pre-audit`). User decision —
-  reshapes the FSM vocabulary in both `design.md` and ADR-009.
+- **F11 (critical, FSM coherence — RESOLVED: dropped).** `review` as a *linear
+  slice-level state* between `started` and `audit` misrepresents both ADR-003 §6
+  and ADR-007. ADR-003 §6 makes review **per-phase, optional, possibly
+  non-blocking** (running *while the next phase begins*) — it lives **inside** the
+  per-phase loop, not as a whole-slice stage. ADR-007's review is a **generic
+  ledger kind** (`RV-`) used across design/plan/impl/audit/reconcile. A single
+  slice state represents neither; worse, the whole-slice holistic read **already
+  is `audit`** (§7), so a `review` state re-splits what §7 deliberately fused.
+  F8's "names the position" was insufficient — there is *no single position* to
+  name. **Resolved: dropped from the FSM** (user, 2026-06-09). Per-phase review
+  lives in `started` + the `RV-` ledger; `audit` is the holistic read; peer/team
+  review is a conduct role on `audit` (§2). Applied to §5.3/§5.4/§7 D2 + ADR-009
+  §1/§2/Verification/References. **Follow-on note:** a code review may still be
+  heavy enough to warrant its own agent session/context — that is an
+  *audit-refinement* concern (how audit is conducted), not a reason for an FSM
+  state. Carried to the audit/close tuning follow-on.
 
 - **F12 (critical, ADR-003 §7/§8 seam — DECISION).** "Classify, don't jail" makes
   the verb a **blessed writer for skip-to-`done`**: `started → done`,
@@ -400,10 +436,12 @@ decisions surfaced to the user (do not lock until resolved).
   spec drift** — so the one invariant ADR-003 §8 protects ("a closed slice's owning
   specs are coherent") has **zero surfacing** on a skip-to-`done`. Tension: ADR-003
   §11 explicitly defers the closure *gate* ("no closure gate in v1"), so advisory-
-  only is defensible. **Resolution (recommended): harden only the two closure-seam
-  entry edges** — refuse entry to `done` except from `reconcile`, and to `reconcile`
-  except from `audit`; everything else stays classify-don't-jail. Protects the spine
-  without claiming full enforcement. User decision — touches the §11 deferral.
+  only is defensible. **Resolved: harden the two closure-seam entry edges** (user,
+  2026-06-09) — refuse entry to `done` except from `reconcile`, and to `reconcile`
+  except from `audit` (`SeamBreach`); everything else stays classify-don't-jail.
+  This protects the FSM *topology* ADR-003 §8 depends on — distinct from the soft-
+  gate *conduct* enforcement §11 defers, which stays deferred. Applied to
+  §5.2/§5.4/§5.5/§7 D3/§9 + ADR-009 §1/Verification.
 
 - **F13 (high, internal contradiction — FIXED).** §5.2 refuses `from ∈ {done,
   abandoned}` (FromTerminal) but §5.3 says reuse `is_terminal_status`, which is
@@ -424,15 +462,16 @@ decisions surfaced to the user (do not lock until resolved).
   not-reachable guard). Stated here so it is a chosen limitation, not a gap. (The
   boot edit itself is execution-phase work, not a design-now defect.)
 
-- **F15 (high, conduct sufficiency — DECISION).** `slice status` is invoker-blind
-  (F3): it cannot tell agent from author/peer/team, so `actor` is **neither enforced
-  nor truthfully attributable** in v1 — the command can only print the target
-  state's *configured* posture. ADR-009 §2 sells `actor × autonomy` as a governance
-  surface; that overclaims. **Resolution (recommended): keep `actor` as advisory
-  *config/documentation* of intent** (what `slice show` displays, what a future
-  enforcer reads) but **tighten ADR-009's claim** to "advisory config, not runtime
-  actor-aware governance." Alt: defer `actor` entirely from v1, ship `autonomy`
-  hints only. User decision — affects ADR-009 §2 scope.
+- **F15 (high, conduct sufficiency — RESOLVED: keep + tighten).** `slice status` is
+  invoker-blind (F3): it cannot tell agent from author/peer/team, so `actor` is
+  **neither enforced nor truthfully attributable** in v1 — the command can only
+  print the target state's *configured* posture. ADR-009 §2 sold `actor × autonomy`
+  as a governance surface; that overclaimed. **Resolved: keep `actor` as advisory
+  *config* declaring intended conduct** (what `slice show` displays, what a future
+  enforcer reads once invocation identity is plumbed — OQ-1) and **tightened
+  ADR-009 §2** to "advisory config, not runtime actor-aware governance" (user,
+  2026-06-09). Vocabulary fixed now so enforcement is additive. Supersedes F3's
+  "accepted limitation" framing with an explicit honesty correction in the ADR.
 
 - **F16 (medium, ADR-004 — FIXED).** ADR-009's "cross-links are prose until the
   relation surface is wired" overstates: there is **no `amends` relation kind** in
