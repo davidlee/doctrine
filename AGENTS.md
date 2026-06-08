@@ -109,3 +109,6 @@ These are the project-specific additions.)
 ## environment
 
 nixos; bubblewrap jails (mounted into /workspace/*).
+
+Always READ before WRITE of any substantial edit (e.g. filling a
+template) to avoid expensive write failure.
