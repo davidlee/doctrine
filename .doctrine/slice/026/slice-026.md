@@ -14,9 +14,12 @@ locked schema with no producer is an untested spec, and the producer's output *i
 the schema. Piece 1 (research) is done; piece 4 (the lazyspec fork) is a separate
 `../lazyspec` change, out of scope here.
 
-The emitter **rides SL-025** (uniform list/show/filter/**render** contract,
-in-flight) — it is a new JSON *render target* on that shared spine, not a parallel
-renderer. SL-025 is therefore an execution dependency.
+The emitter **rides SL-025** (uniform list/show/filter/render contract, **done +
+closed**) by reusing its read APIs + `listing::canonical_id` — *not* its
+`{kind, rows}` envelope. The Brief is a cross-kind aggregate in lazyspec's
+vocabulary, so it is its own shape (a new `export lazyspec` command), not a
+`Format` variant. "No parallel renderer" is honoured at the read/compose layer,
+not at the serde layer. SL-025 is landed — no execution dependency remains.
 
 Governing canon: ADR-001 (leaf ← engine ← command, no cycles), ADR-004 (relations
 stored outbound-only; reciprocity derived), the pure/imperative split (no
@@ -31,16 +34,17 @@ clock/rng/git/disk in the pure layer). Composition model per
 
 1. A **locked JSON wire format** (brief §3): `meta` + `entities[]` + `types[]`.
    Conformance-tested so drift is caught before it reaches lazyspec.
-2. A **new read-only CLI command** (working name `emit-lazyspec-brief`; final shape
-   may be a render mode of SL-025's surface — see Open Questions) that projects
-   doctrine entities into conformant JSON.
+2. A **new read-only CLI command** `doctrine export lazyspec` — named for its target
+   so it never masquerades as native doctrine output — projecting the corpus into
+   conformant JSON.
 
-**Projection rules (the contract this slice owns)**
+**Projection rules (the contract this slice owns; full detail in design §5.3)**
 
-- **Node set:** `spec` entities → `composed-spec` nodes (`virtual: true`, body =
-  assembled members); `slice`, `adr`, `plan` → their own nodes. **Requirements are
-  NOT standalone nodes** — they render inline in the composed-spec body as
-  `FR-`/`NF-` labelled entries (per the composition seam).
+- **Node set:** `slice` (SL); `spec` → two virtual types **product-spec** (PRD) +
+  **tech-spec** (SPEC), requirements inline; `adr` (ADR); `backlog` → **five** types
+  by item_kind (ISS/IMP/CHR/RSK/IDE); `plan` → a **synthetic** child node
+  (`SL-NNN~plan`, plan not being a reserved entity). **Requirements are NOT
+  standalone nodes** — inline in spec bodies as `FR-`/`NF-` labelled entries.
 - **Every entity carries `validate_ignore: true`** (doctrine owns validation;
   `rules = []` does not empty lazyspec's rule set). **Emitted types are
   non-singleton** so `TypeConstraintChecker` stays satisfied — these two are
@@ -68,20 +72,18 @@ clock/rng/git/disk in the pure layer). Composition model per
 
 ### Assumptions
 
-- SL-025's render contract is settled (design locked even if code is 3/6) — this
-  slice's design can proceed against it now.
-- The in-flight JSON substrate is SL-025's render spine, not a separate seam.
+- SL-025 is landed (done + closed); its read APIs + `canonical_id` are production.
 
 ### Risks / Open Questions
 
-- **Edge → RelationType mapping** — how `descends_from` (spec→PRD, the what→how
-  descent), `interactions` (spec→spec), and slice relations land in the four
-  lazyspec types. `/design` decides; consequential because the lazyspec graph shows
-  **Implements only** (brief §6).
-- **Command shape** — standalone `emit-lazyspec-brief` vs a `--format lazyspec`
-  render mode of SL-025's `show`/`list`. Resolve in `/design` once SL-025's final
-  render contract is visible.
-- **Execution gated on SL-025** (3/6). Design unblocked; execution waits.
+Both prior open questions are **resolved in design** (see design §7):
+- **Edge → RelationType mapping** — settled (D2): `descends_from` and spec `parent`
+  → `implements` (graph-visible); interactions → `related-to`; supersedes →
+  `supersedes`; backlog by axis.
+- **Command shape** — settled (D1): aggregate `doctrine export lazyspec`, its own
+  envelope, not a `Format` variant.
+- Residual risks tracked in design §8 (schema drift, surface-parity, dead_code leaf,
+  synthetic-id collision).
 
 ## Non-Goals
 
@@ -89,15 +91,15 @@ clock/rng/git/disk in the pure layer). Composition model per
   editor-`e` gating, the `.lazyspec.toml` preset (piece 4, lives in `../lazyspec`).
 - doctrine mutation verbs — projection is read-only.
 - Requirements as standalone lazyspec nodes.
-- A parallel JSON renderer — must ride SL-025.
+- A parallel read/compose path — reuse SL-025's readers + `canonical_id`.
 - Graph fidelity beyond an implements-tree (a known lazyspec-v1 limitation, not
   doctrine's concern here).
 
 ## Summary
 
 One coherent change: doctrine emits a conformance-tested, read-only JSON projection
-of its entities — composed specs (requirements inline) plus slices/adrs/plans —
-consumable by a lazyspec doctrine backend, riding SL-025's render spine.
+of its entities — specs (requirements inline) plus slices, adrs, backlog items, and
+synthetic plan children — via `doctrine export lazyspec`, reusing SL-025's read APIs.
 
 ## Follow-Ups
 
@@ -105,6 +107,7 @@ consumable by a lazyspec doctrine backend, riding SL-025's render spine.
   format + the shipped `.lazyspec.toml` preset.
 - **Later:** selectively re-enable mutations as doctrine grows lifecycle/transition
   verbs, mapping onto lazyspec's `DocumentStore` writes.
-- **v1 limitation to revisit:** lazyspec's graph renders `Implements` only —
-  doctrine's `blocks`/`supersedes`/descent edges are invisible *as a graph* until
-  lazyspec's graph view widens (a v2 upstream ask to lazyspec).
+- **v1 limitation to revisit:** lazyspec's graph renders `Implements` only — so
+  `descends_from`/`parent`/plan lineage shows as a DAG (mapped to `implements`, D2),
+  but `blocks`/`supersedes`/`interactions` stay panel-only until lazyspec's graph
+  view widens (a v2 upstream ask to lazyspec).
