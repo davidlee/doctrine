@@ -1433,9 +1433,12 @@ mod tests {
         assert_eq!(out, vec![RefOutcome::Created(target.clone())]);
         assert_eq!(fs::read_to_string(&target).unwrap(), format!("{REF}\n"));
 
-        // a second run is a no-op (Present), content unchanged.
+        // a second run is a no-op (Present), content unchanged. The file now
+        // exists, so the outcome carries the canonicalized real path (on macOS
+        // tempdir's /var resolves to /private/var) — compare against the same
+        // resolution the code applies, not the raw tempdir path.
         let out = ensure_boot_import(&[target.clone()], REF, false).unwrap();
-        assert_eq!(out, vec![RefOutcome::Present(target.clone())]);
+        assert_eq!(out, vec![RefOutcome::Present(resolve_target(&target))]);
         assert_eq!(fs::read_to_string(&target).unwrap(), format!("{REF}\n"));
     }
 
@@ -1445,8 +1448,10 @@ mod tests {
         let target = dir.path().join("AGENTS.md");
         fs::write(&target, "# Existing\n\nkeep me\n").unwrap();
 
+        // file pre-exists, so the outcome carries the canonicalized real path
+        // (macOS /var → /private/var); resolve the expected path to match.
         let out = ensure_boot_import(&[target.clone()], REF, false).unwrap();
-        assert_eq!(out, vec![RefOutcome::Added(target.clone())]);
+        assert_eq!(out, vec![RefOutcome::Added(resolve_target(&target))]);
         let body = fs::read_to_string(&target).unwrap();
         assert_eq!(body, format!("{REF}\n\n# Existing\n\nkeep me\n"));
     }
