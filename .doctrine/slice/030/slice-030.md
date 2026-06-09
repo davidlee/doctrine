@@ -54,6 +54,13 @@ and diverging only where policy lifecycle genuinely differs. The own-kind vs
 
 ## Follow-Ups
 
-- `standard` (`STD`) entity kind — sibling, deferred.
-- Policy status/lifecycle vocabulary, if it diverges from ADR's, may motivate a
-  shared governance-status abstraction.
+- `standard` (`STD`) entity kind — sibling, deferred (a third thin kind on the
+  shared `governance.rs` spine this slice introduces).
+- **Governance tag reader** — `--tag` is inert for governance kinds (ADR's
+  `key()` returns no tags; `Meta` never reads them). Extend the metadata reader so
+  tag filtering works for ADR/POL/STD.
+- **`policy supersede` verb** — mechanically flip a superseded policy off
+  `required` (parity with ADR's unbuilt `adr supersede`/F1); enforces the
+  design's supersession invariant.
+- **boot error vs empty** — `section_or_marker` collapses producer errors and
+  emptiness into one marker, hiding corruption; boot-wide disambiguation.
