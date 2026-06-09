@@ -65,14 +65,35 @@ impl ReqKind {
     }
 }
 
-/// A requirement's lifecycle status. Closed set, kebab serde; hand-edited, git is
-/// the trail (no `created`/`updated` stamps — §5.1/§5.3).
+/// A requirement's lifecycle status — the **authored / normative** half of the
+/// two-enum truth model (ADR-009 §3, SL-028 design §5.2). Closed set, kebab serde;
+/// hand-edited, git is the trail (no `created`/`updated` stamps — §5.1/§5.3).
+///
+/// Vocabulary and meanings (in transition order):
+/// - `Pending` — declared, not started.
+/// - `InProgress` — under active work.
+/// - `Active` — in force, verified.
+/// - `Deprecated` — soft withdrawal: still honoured, discouraged.
+/// - `Retired` — hard withdrawal: withdrawn with no successor.
+/// - `Superseded` — replaced by a named successor (the `supersedes` edge).
+///
+/// `InProgress` and `Retired` are SL-028 additions; what *sets* them (the change
+/// process / reconcile engine) is deferred (design §8 unset-variant risk, OQ-2).
+///
+/// **No derivation by design (ADR-009 §3, ADR-003 §4–§5; SL-028 D4/F17).** There is
+/// deliberately no `ReqStatus = f(CoverageStatus)` mapping — no `reconcile`/`sync`/
+/// `from_coverage` function, and the two enums never reference each other. Authored
+/// status is reconciled against observed coverage by **explicit authorship**, never
+/// derived by precedence (the named spec-driver divergence). The reconcile writer
+/// is a deferred follow-on; the absence here is the contract, not an omission.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum ReqStatus {
     Pending,
+    InProgress,
     Active,
     Deprecated,
+    Retired,
     Superseded,
 }
 
@@ -81,11 +102,52 @@ impl ReqStatus {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             ReqStatus::Pending => "pending",
+            ReqStatus::InProgress => "in-progress",
             ReqStatus::Active => "active",
             ReqStatus::Deprecated => "deprecated",
+            ReqStatus::Retired => "retired",
             ReqStatus::Superseded => "superseded",
         }
     }
+}
+
+/// A requirement's **observed-evidence** status — the second half of the two-enum
+/// truth model (ADR-009 §3; SL-028 design §5.2/§5.3). Closed set, kebab serde,
+/// mirroring `ReqKind`'s derive shape.
+///
+/// Vocabulary: `Planned` (coverage intended) · `InProgress` (evidence being
+/// gathered) · `Verified` (evidence confirms the requirement) · `Failed` (evidence
+/// contradicts it) · `Blocked` (evidence cannot be gathered).
+///
+/// **Stub — vocabulary only (SL-028 PHASE-03).** There is no producer, no consumer,
+/// no `Requirement` field, and no coverage block; SL-028 lands the type so the truth
+/// model is *named in code*. Its producer/consumer (the reconcile engine, the
+/// coverage join) is a deferred follow-on — the `expect(dead_code)` retires itself
+/// once that consumer is wired (dead-code-self-clearing-leaf precedent).
+// The suppression is scoped to the non-test build: under `cfg(test)` the VT-2
+// serde round-trip (`coverage_status_serde_round_trips_all_five_variants`) names
+// every variant, so the type is *used* and `dead_code` would not fire — an
+// unconditional `expect` would itself be unfulfilled there. The gate runs plain
+// `cargo clippy` (bins/lib, no test cfg) where the type is genuinely dead, so the
+// `not(test)` expectation is fulfilled exactly where the lint applies.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "CoverageStatus is the observed-evidence half of the two-enum \
+                  truth model (ADR-009 §3); its producer/consumer (reconcile \
+                  engine, coverage join) is deferred — SL-028 lands it as \
+                  vocabulary only"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum CoverageStatus {
+    Planned,
+    InProgress,
+    Verified,
+    Failed,
+    Blocked,
 }
 
 /// The parse layer (entity-model tolerant-parse tier — §5.3). `title` keys the
@@ -520,5 +582,62 @@ future_key = \"survives\"
         assert!(rewritten.contains("future_key = \"survives\""));
         // and it still parses into Requirement (unknown keys ignored).
         assert!(toml::from_str::<Requirement>(&rewritten).is_ok());
+    }
+
+    // --- SL-028 PHASE-03: the two-enum lifecycle vocabulary (VT-1, VT-2) ---
+
+    /// A toml-round-trip harness for a closed status enum: wrap a value in a
+    /// single-field table, serialise, parse back, and compare. Exercises the
+    /// serde rename in both directions through real toml (not just `as_str`).
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct StatusProbe<T> {
+        status: T,
+    }
+
+    fn status_round_trips<T>(value: T, kebab: &str)
+    where
+        T: std::fmt::Debug + PartialEq + Copy + Serialize + serde::de::DeserializeOwned,
+    {
+        let body = toml::to_string(&StatusProbe { status: value }).unwrap();
+        // the kebab token appears on the wire …
+        assert!(
+            body.contains(&format!("status = \"{kebab}\"")),
+            "expected kebab `{kebab}` in: {body}"
+        );
+        // … and parses back to the same variant.
+        let back: StatusProbe<T> = toml::from_str(&body).unwrap();
+        assert_eq!(back, StatusProbe { status: value });
+    }
+
+    #[test]
+    fn req_status_new_variants_serde_round_trip_and_render() {
+        // VT-1: the two additive variants wire to their kebab tokens (serde
+        // both directions) and render the same string via `as_str`.
+        status_round_trips(ReqStatus::InProgress, "in-progress");
+        status_round_trips(ReqStatus::Retired, "retired");
+        assert_eq!(ReqStatus::InProgress.as_str(), "in-progress");
+        assert_eq!(ReqStatus::Retired.as_str(), "retired");
+        // and `as_str` matches the serde token across the whole six-token vocabulary.
+        for s in [
+            ReqStatus::Pending,
+            ReqStatus::InProgress,
+            ReqStatus::Active,
+            ReqStatus::Deprecated,
+            ReqStatus::Retired,
+            ReqStatus::Superseded,
+        ] {
+            status_round_trips(s, s.as_str());
+        }
+    }
+
+    #[test]
+    fn coverage_status_serde_round_trips_all_five_variants() {
+        // VT-2: the observed-evidence half round-trips through toml across every
+        // variant — the only behaviour the stub carries (no producer/consumer yet).
+        status_round_trips(CoverageStatus::Planned, "planned");
+        status_round_trips(CoverageStatus::InProgress, "in-progress");
+        status_round_trips(CoverageStatus::Verified, "verified");
+        status_round_trips(CoverageStatus::Failed, "failed");
+        status_round_trips(CoverageStatus::Blocked, "blocked");
     }
 }

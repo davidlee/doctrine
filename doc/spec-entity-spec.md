@@ -227,7 +227,7 @@ id = 7
 slug = "unified-entry-point"
 title = "CLI MUST provide a single unified entry point routing to all subcommands"
 kind = "functional"          # functional | quality  (ReqKind, kebab serde)
-status = "pending"           # pending | active | deprecated | superseded
+status = "pending"           # pending | in-progress | active | deprecated | retired | superseded
 description = "..."          # the structured statement (rendered by `spec show`)
 acceptance_criteria = [      # testable list — structured, queryable, not prose
   "Routes to every registered subcommand",
@@ -324,10 +324,18 @@ check (the `mkdir` reservation + git add handle it) and no cycle detection
 
 - **Spec status** `draft → active → deprecated → superseded` — recorded, by hand,
   ungated in v1 (as slices/drift).
-- **Requirement status** `pending → active → deprecated → superseded` — advanced by
-  the *change process*, not edited in place (a delta/slice implementing a
-  requirement flips it on completion). The requirement's source of truth is its own
-  `requirement-NNN.toml`.
+- **Requirement status** `pending → in-progress → active → deprecated → retired |
+  superseded` — advanced by the *change process*, not edited in place (a delta/slice
+  implementing a requirement flips it on completion). The requirement's source of
+  truth is its own `requirement-NNN.toml`. Meanings: *pending* declared, not started ·
+  *in-progress* under active work · *active* in force, verified · *deprecated* soft
+  withdrawal, still honoured but discouraged · *retired* hard withdrawal, no successor ·
+  *superseded* replaced by a named successor (the `supersedes` edge). This is the
+  **authored / normative** half of the two-enum truth model (ADR-009 §3); the observed
+  `CoverageStatus` half is reconciled against it by **explicit authorship, never
+  derived** by precedence. `in-progress` and `retired` land as vocabulary now; their
+  setters (the change process / the deferred reconcile engine) arrive with that
+  follow-on.
 - **Supersede / relocation.** Because requirement **identity is immutable and
   membership is mobile** (a label lives on the edge, not the id), relocating a
   requirement between specs is a membership move — re-point the `members.toml` row,
