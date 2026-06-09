@@ -43,8 +43,12 @@ Out: raw-tree confinement (D2b, ADR-008); the funnel itself (SL-031).
 - **Commits.** Doctrine creates **no** commits in production paths (the `commit`
   tokens in `src/git.rs` are the the external decision register event-store verb enum + test
   helpers). D2a's "doctrine-driven commits" is therefore moot today.
-- **Worktree detection.** SL-029 shipped `GIT_DIR != GIT_COMMON` detection in
-  `src/worktree.rs` — reused here, not reimplemented.
+- **Worktree detection.** `src/worktree.rs` does **not** expose a self-detection
+  seam (X8): `verify_sibling_worktree` (private, `:286`) checks whether *two* trees
+  share a `git-common-dir` — sibling verification, not "am I on a linked
+  worktree?". So the memory warning cannot "reuse" an existing detector; this slice
+  **adds** a shared `worktree::is_linked_worktree(root) -> Result<bool>`
+  (`git rev-parse --git-dir` ≠ `--git-common-dir`) that `memory record` calls.
 - **`validate`.** No top-level command. A per-kind `spec validate` exists
   (`SpecCommand::Validate`); dup-id detection is cross-kind, so it does not ride
   that surface.
@@ -61,6 +65,9 @@ Out: raw-tree confinement (D2b, ADR-008); the funnel itself (SL-031).
   trunk scan reads git (impure); both live in the shell, not the engine core.
 - **ADR-004** — relations are outbound-only and prose-only in v1; reseat cannot
   reliably auto-rewrite inbound citations.
+- **Per-namespace ids (X2)** — every kind numbers from `001` independently
+  (`SL-001` + `ADR-001` + `REQ-001` all valid). Duplicate detection and reseat are
+  **intra-kind** and key on the **canonical ref**, never a bare number.
 - **Repo clippy denies** (`mem.pattern.lint.*`): no indexing-slicing, no
   `as` casts, no `HashSet/HashMap` (use BTree*), `expect`+reason over bare
   `allow`, string-assembly rules. Apply throughout.
@@ -71,8 +78,9 @@ Out: raw-tree confinement (D2b, ADR-008); the funnel itself (SL-031).
   mechanism; do not add an allocation framework.
 - **Data in, not effects** — the shell resolves trunk ids and the worker flag and
   passes them in; the engine stays pure.
-- **Fail open for reads, closed for the named writes** — the guard default-allows
-  unknown verbs; the write set is explicit and tested.
+- **Closed-set classification, not fail-open** — `write_class` matches every
+  command variant exhaustively (no wildcard), so an unclassified new verb is a
+  compile error, not a silent read (X3/X4).
 - **Detect ≠ repair** — `validate` reports; `reseat` renumbers and *reports*
   danglers; neither silently mutates prose.
 
@@ -94,8 +102,10 @@ Out: raw-tree confinement (D2b, ADR-008); the funnel itself (SL-031).
 Three near-independent additions plus one reuse:
 1. **Guard** — pure classifier in the shell, gate in `main()`.
 2. **Trunk-ref allocation** — impure resolver in `git.rs`; pure union in the engine.
-3. **`validate` + `reseat`** — new shell verbs over an integrity scan.
-4. **Memory warning** — reuse `worktree.rs` detection in `memory record`.
+3. **`validate` + `reseat`** — new shell verbs over a **per-kind** integrity scan
+   (ids are per-namespace — X2).
+4. **Memory warning** — add `worktree::is_linked_worktree` (X8), call it from
+   `memory record`.
 
 ### 5.2 Interfaces & Contracts
 
@@ -103,7 +113,7 @@ Three near-independent additions plus one reuse:
 ```rust
 // pure, unit-tested — no env, no io. Write carries the verb label for the message.
 enum WriteClass { Read, Write(&'static str) }
-fn write_class(cmd: &Command) -> WriteClass;
+fn write_class(cmd: &Command) -> WriteClass;   // EXHAUSTIVE match, NO wildcard (X4)
 // shell
 fn worker_mode() -> bool;            // DOCTRINE_WORKER == "1"
 // main(), before the dispatch match:
@@ -112,35 +122,54 @@ if let (true, WriteClass::Write(verb)) = (worker_mode(), write_class(&cli.comman
            source delta; doctrine-mediated writes funnel through the orchestrator.");
 }
 ```
-Write set classified `Write`: `Slice/Adr/Spec/Backlog New`, `Memory Record`,
-`Adr/Slice Status`, `Spec Req Add`, `Backlog Edit`. All else `Read`.
+**`write_class` is exhaustive over every `Command` + subcommand variant — no
+`_ => Read` arm (X4).** The enums are closed, so a wildcard buys nothing but a way
+for a future write verb to ship unguarded; exhaustiveness makes adding a command a
+**compile error until its class is decided** (deletes risk R-4). `Write` covers
+**every authored / memory / runtime-state mutation** — not just the narrow
+mint/anchor list (X3): `Slice {New, Design, Plan, Notes, Phases, Phase, Status}`,
+`Adr {New, Status}`, `Spec {New, Req Add}` (Validate = read), `Backlog {New, Edit}`,
+`Memory {Record, Verify}`, and the `Sync/Boot/Skills/Install` writers. This is a
+deliberate **superset** of ADR-006 D2a's enumerated set, honouring the broader D2
+("workers write none of it") — refusing more is safe, since a worker's only channel
+is its source delta. `Show/List/Find/Retrieve/CheckAllowlist/Provision/validate` =
+`Read`.
 
 **Trunk-ref allocation (D3).**
 ```rust
 // src/git.rs (impure shell)
-fn trunk_ref(root: &Path) -> Option<String>;     // ladder, below
+fn trunk_tree_ish(root: &Path) -> anyhow::Result<Option<String>>;  // peeled, ladder below
 fn trunk_entity_ids(root: &Path, kind_dir: &str) -> anyhow::Result<Vec<u32>>;
-//   = ls-tree -d --name-only <ref> -- .doctrine/<kind_dir>/ ; parse numeric basenames;
-//     Ok(vec![]) when no trunk ref / dir absent / bare repo.
-// src/entity.rs (pure engine) — signature widens, behaviour preserved
-fn materialise(kind, claim, project_root, request, inputs, trunk_ids: &[u32]) -> ..;
-//   Fresh scan closure becomes: || Ok(scan_ids(&tree_root)?.into_iter()
-//                                      .chain(trunk_ids.iter().copied()).collect())
-//   trunk_ids is INERT for InExisting / named placement (no id alloc); only the
-//   Fresh arm consumes it. Existing `materialise` test call sites pass `&[]`
-//   (mechanical signature update — permitted by the seam contract).
+//   = ls-tree -d --name-only <tree-ish> -- <kind_dir>/   (kind_dir is ALREADY
+//     repo-relative incl. `.doctrine/` — X1: do NOT re-prepend `.doctrine/`);
+//     parse numeric basenames; Ok(vec![]) when no trunk / dir absent / bare repo.
+// src/entity.rs — extract a genuinely PURE helper; materialise stays the (already
+// diskful) writer, gaining only a data param (X5):
+fn next_id(local: &[u32], trunk: &[u32]) -> u32;   // pure: max(union) + 1, unit-tested
+fn materialise(.., trunk_ids: &[u32]) -> ..;       // Fresh arm: candidate = next_id(&scan_ids(..)?, trunk_ids)
+//   trunk_ids INERT for InExisting / named (no alloc). Existing call sites pass
+//   `&[]` (mechanical arg update — behaviour assertions unchanged, F5).
 ```
-Ladder (`trunk_ref`): `DOCTRINE_TRUNK_REF` → `origin/HEAD` → `main` → `master`;
-first to `git rev-parse --verify --quiet` wins; else `None`. **Asymmetry (F4):** an
-**explicitly set** `DOCTRINE_TRUNK_REF` that fails to resolve is a **hard error**
-(don't silently mask a misconfiguration); only its *absence* falls through the
-ladder. `ls-tree` reads the object DB — **the ref need not be checked out**.
+Ladder (`trunk_tree_ish`): `DOCTRINE_TRUNK_REF` → `origin/HEAD` → `main` →
+`master`; each candidate resolved by **`git rev-parse --verify --quiet
+<ref>^{commit}`** — the `^{commit}` peel means a ref naming a blob/tag fails *here*,
+not silently later at `ls-tree` (X6). First to peel wins; else `Ok(None)`.
+**Asymmetry (F4):** an **explicitly set** `DOCTRINE_TRUNK_REF` that fails to peel is
+a **hard error** (don't mask a misconfiguration); only its *absence* falls through.
+`ls-tree` reads the object DB — **the tree-ish need not be checked out**.
 
-**`validate` + `reseat` (D3 fallback).**
+**`validate` + `reseat` (D3 fallback).** Ids are **per-namespace** — `SL-001`,
+`ADR-001`, `REQ-001` coexist legitimately (X2). So "duplicate id" means **two
+entities *of the same kind* asserting the same canonical id**, and the verbs key on
+the **canonical ref**, never a bare number:
 ```
 doctrine validate                     # exit 1 + report if any integrity violation
-doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + dangler list
+doctrine reseat <CANONICAL_REF> [--to <NNN>]   # e.g. `reseat SL-031`; exit 1 + dangler list
 ```
+`validate` rules (per kind): (a) dir basename `NNN` == toml `id`; (b) no two
+entities of a kind share an `id`; (c) each alias symlink (`SL-031-slug`, `mem.*`)
+**targets the dir whose toml id matches the alias's encoded id** — target equality,
+not mere resolvability (X7).
 
 ### 5.3 Data, State & Ownership
 
@@ -167,15 +196,16 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
   minter's local branch (e.g. a coordination branch behind trunk). One `ls-tree`
   per `new` — cheap, and only ever in non-worker context (the guard short-circuits
   workers before dispatch, so no wasted git call under a worker).
-- **Offline collision → detect → reseat.** A sandbox-denied worker falls back to
-  local-only scan (no trunk reachable) and may mint a stale id; after merge,
-  `doctrine validate` flags the duplicate; the human runs `doctrine reseat <ID>`,
-  which allocates the next free id (trunk-aware §5.2) and prints inbound citations
-  to fix by hand.
-- **Worker write attempt.** `DOCTRINE_WORKER=1` + an authored-write verb → bail
+- **Offline collision → detect → reseat.** A solo agent on an offline branch (no
+  trunk reachable) falls back to local-only scan and may mint a stale id; after
+  merge, two entities of the kind assert the same id. `doctrine validate` flags it
+  (intra-kind); the human runs `doctrine reseat SL-NNN`, which allocates the next
+  free id (trunk-aware §5.2) and prints inbound citations to fix by hand.
+- **Worker write attempt.** `DOCTRINE_WORKER=1` + any `Write`-classed verb → bail
   before dispatch; nonzero exit; the worker’s source delta is the only channel.
-- **Memory record in a worktree.** Detect `GIT_DIR != GIT_COMMON` → stderr warning
-  (squash-orphan risk) → proceed (non-blocking; solo-in-worktree is blessed, D6a).
+- **Memory record in a worktree.** `worktree::is_linked_worktree(root)` true →
+  stderr warning (squash-orphan risk) → proceed (non-blocking; solo-in-worktree is
+  blessed, D6a).
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -186,8 +216,10 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
   local, the union deliberately skips past already-pushed ids — an **intended**
   collision-avoidance change, not a regression (and absent from the fixtures, so
   the gate holds).
-- **INV-2 (pure engine).** No env/git/disk added to `entity.rs` core — only a
-  `&[u32]` data param.
+- **INV-2 (no NEW impurity, X5).** `materialise` is *already* diskful (it is the
+  writer); this slice adds **no** new env/git/disk to `entity.rs` — only a `&[u32]`
+  data param — and extracts the genuinely pure `next_id(local, trunk)` for unit
+  testing. The claim is "no new impurity," not "materialise is pure."
 - **INV-3 (reads always open).** The guard never refuses a `Read`-classified verb.
 - **EDGE — no trunk ref** (no remote / detached / bare / fresh repo): empty trunk
   set → local-only allocation. Defined terminus, not an error.
@@ -202,13 +234,13 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 (PHASE-03 detail).** Exact `validate` rule set: v1 = (a) dir basename ==
-  toml `id`; (b) no duplicate canonical id within a kind; (c) entity symlinks
-  resolve. May tighten during PHASE-03; not load-bearing for SL-031.
-- **OQ-2 (resolved).** Override = `DOCTRINE_TRUNK_REF` env; read via `ls-tree`
-  (no checkout); no-trunk → local fallback.
-- **OQ-3 (resolved).** `validate` is a new top-level verb (cross-kind), not a
-  per-kind rider.
+- **OQ-1 (PHASE-03 detail).** Exact `validate` rule set: v1 = §5.2 (a)/(b)/(c) —
+  intra-kind dir==id, no duplicate id within a kind, alias target equality. May
+  tighten during PHASE-03; not load-bearing for SL-031.
+- **OQ-2 (resolved).** Override = `DOCTRINE_TRUNK_REF` env; read via `ls-tree` on a
+  peeled tree-ish (no checkout); no-trunk → local fallback.
+- **OQ-3 (resolved).** `validate` is a new top-level verb scanning **each kind's**
+  namespace (X2 — ids are per-namespace, so the scan is intra-kind, not cross-kind).
 - **OQ-4 (resolved).** Reseat = renumber the canonical-id triple + report
   danglers; no auto prose-rewrite (R-3).
 - **OQ-5 (resolved).** Allocation composition = injected union at the existing
@@ -230,8 +262,18 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
   (outbound-only prose relations); silent rewrite would risk corrupting citations.
 - **D5 — `DOCTRINE_TRUNK_REF` env override, no config file.** Consistent with
   `DOCTRINE_WORKER`; honours D1 (no configuration Rube Goldberg). An explicitly set
-  ref that fails to resolve errors hard rather than silently falling through (F4) —
-  silence would mask a misconfiguration as a phantom collision later.
+  ref that fails to peel (`^{commit}`) errors hard rather than silently falling
+  through (F4/X6) — silence would mask a misconfiguration as a phantom collision.
+- **D6 — exhaustive `write_class`, superset of D2a (X3/X4).** Match every command
+  variant with no wildcard; classify every authored/memory/runtime mutation as
+  `Write`, not just D2a's mint/anchor list. Honours the broader D2 ("workers write
+  none of it") and makes an unclassified new verb a compile error. *Alt rejected:*
+  the narrow D2a-only set + `_ => Read` (lets `slice design`/`memory verify`/runtime
+  writers slip through, and ships future verbs unguarded).
+- **D7 — per-namespace integrity; canonical-ref verbs (X2).** `validate` scans each
+  kind independently; `reseat` takes `SL-NNN`, not a bare id. *Alt rejected:*
+  cross-kind dup detection (incoherent — `SL-001`/`ADR-001` legitimately coexist)
+  and `reseat <id>` (ambiguous target).
 
 ## 8. Risks & Mitigations
 
@@ -241,9 +283,9 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
   path byte-identical.
 - **R-3 (reseat vs prose citations).** → renumber the triple, *report* inbound
   citations, exit nonzero so the human finishes (D4). No silent corruption.
-- **R-4 (classifier drift).** A new write verb omitted from `write_class` ships
-  unguarded → mitigate: the classifier is one central `match` a reviewer sees, and
-  each verb's write/read class is unit-asserted.
+- **R-4 (classifier drift) — DELETED by D6/X4.** Exhaustive matching makes an
+  unclassified new verb a *compile error*; there is no drift surface left to
+  mitigate.
 - **R-5 (D2b residual).** A worker can still raw-edit main — out of scope, ADR-008.
   This slice rests on the CLI guard + prompt contract, as ADR-006 states.
 
@@ -254,23 +296,30 @@ preservation**, not file-immutability: existing `materialise` call sites take a
 mechanical `&[]` arg update (permitted by the seam contract); no existing
 behaviour **assertion** changes (F5).
 
-- **Guard:** for each write-classed verb, `DOCTRINE_WORKER=1` ⟹ nonzero exit +
-  refusal message; a representative read verb ⟹ unaffected. `write_class` unit
-  table covers every `Command` variant.
+- **Guard:** `write_class` unit table asserts a class for **every** `Command` +
+  subcommand variant (exhaustive — the compiler enforces totality, X4); for each
+  `Write` verb, `DOCTRINE_WORKER=1` ⟹ nonzero exit + verb-named refusal; a
+  representative `Read` verb ⟹ unaffected.
+- **`next_id` (pure):** unit table over (local, trunk) — empty/empty, trunk-ahead,
+  local-ahead, overlap — asserts `max(union)+1`.
 - **Trunk allocation:** fixture repo with committed ids ahead of the working tree
-  ⟹ next id clears the trunk max; no-trunk fixture ⟹ local-only; **existing
-  numeric suites green unchanged** (INV-1, PHASE-02 exit gate).
-- **`validate`:** planted dir/`id` mismatch and planted duplicate ⟹ exit 1 +
-  named report; clean corpus ⟹ exit 0.
-- **`reseat`:** colliding entity ⟹ triple renumbered to the next free id, symlink
-  resolves, inbound-citation danglers listed, exit nonzero.
-- **Memory warning:** worktree-context fixture ⟹ stderr warning + record still
-  succeeds; non-worktree ⟹ silent.
+  ⟹ next id clears the trunk max; `kind_dir` passed un-prefixed (X1 regression
+  test: a planted `.doctrine/slice/NNN` is found); no-trunk fixture ⟹ local-only;
+  bad-`^{commit}` override ⟹ hard error (X6); **existing numeric suites green
+  unchanged** (INV-1, PHASE-02 exit gate).
+- **`validate`:** planted dir/`id` mismatch, planted intra-kind duplicate, and a
+  planted **mis-targeted alias** (X7) ⟹ exit 1 + named report; clean corpus ⟹
+  exit 0.
+- **`reseat`:** colliding `SL-NNN` ⟹ triple renumbered to the next free id, alias
+  target correct, inbound-citation danglers listed, exit nonzero; refuses an
+  occupied `--to`; refuses an id with live runtime phase state (F3).
+- **Memory warning:** `is_linked_worktree` fixture (linked worktree) ⟹ stderr
+  warning + record still succeeds; primary tree ⟹ silent.
 
 **Phasing:** PHASE-01 guard (pure leaf, SL-031's hardest dep) → PHASE-02
 trunk-ref allocation (engine-gate risk) → PHASE-03 validate+reseat (needs §5.2's
-trunk-aware free-id pick) → PHASE-04 memory warning (smallest; rides the worktree
-detection).
+trunk-aware free-id pick) → PHASE-04 memory warning (adds + shares
+`is_linked_worktree`, X8).
 
 ## 10. Review Notes
 
@@ -291,6 +340,34 @@ detection).
   `reseat --to` refuses an occupied target; `trunk_ids` inert outside `Fresh`;
   per-`new` `ls-tree` runs only in non-worker context.
 
-### External adversarial pass
+### External adversarial pass (codex MCP — gpt-5.x, read-only)
 
-(codex MCP — appended below.)
+All eight findings verified against source and **accepted**; none spurious. The
+two BLOCKERs invalidated load-bearing assumptions the self-pass missed.
+
+- **X1 (BLOCKER, accepted).** `trunk_entity_ids` double-prefixed `.doctrine/` —
+  every `Kind.dir` already includes it (`src/slice.rs:38`, `src/spec.rs:51`,
+  `src/backlog.rs:60`). Fix: pass `kind.dir` straight to `ls-tree`. §5.2; X1
+  regression test in §9.
+- **X2 (BLOCKER, accepted).** Ids are **per-namespace** (`SL-001`+`ADR-001`
+  coexist), so "cross-kind dup-id" was incoherent and `reseat <bare-id>` had no
+  unique target. Fix: intra-kind detection; verbs key on the canonical ref
+  (`reseat SL-NNN`). §3, §5.1, §5.2, §6-OQ3, §7-D7.
+- **X3 (MAJOR, accepted).** Write set omitted `slice design/plan/notes/phases/
+  phase`, `memory verify`, sync/install writers — D2 ("workers write none of it")
+  not enforced. Fix: classify every mutation as `Write` (superset of D2a). §5.2,
+  §7-D6.
+- **X4 (MAJOR, accepted).** `_ => Read` wildcard lets a future write verb ship
+  unguarded. Fix: exhaustive match, no wildcard → compile error. §4, §5.2, §7-D6;
+  deletes R-4.
+- **X5 (MAJOR, accepted).** `materialise` is already diskful — "pure engine" was
+  hand-waving. Fix: extract pure `next_id(local, trunk)`; reframe INV-2 as "no new
+  impurity." §5.2, §5.5.
+- **X6 (MAJOR, accepted).** `rev-parse --verify` accepts a blob/tag → explicit
+  override fails late at `ls-tree`, contradicting hard-error-at-resolution. Fix:
+  peel `^{commit}` at resolution. §5.2, §7-D5.
+- **X7 (MAJOR, accepted).** "symlinks resolve" misses a stale alias pointing at
+  *some* live dir. Fix: validate alias **target equality** vs the id. §5.2(c), §9.
+- **X8 (MAJOR, accepted).** `worktree.rs` has no self-detection seam
+  (`verify_sibling_worktree` @286 is sibling verification) — "reuse" was false.
+  Fix: add shared `worktree::is_linked_worktree(root)`. §2, §5.1, §5.4, §9.
