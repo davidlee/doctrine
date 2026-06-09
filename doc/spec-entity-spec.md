@@ -159,7 +159,7 @@ requirement *and* appends the membership row in one (two-tree) operation.
 The requirement parse struct (kebab-serde, title-keyed for the shared `Meta`):
 `Requirement { id, title, slug, status, kind, description, tags,
 acceptance_criteria }` with closed `ReqKind { Functional, Quality }` and
-`ReqStatus { Pending, Active, Deprecated, Superseded }`.
+`ReqStatus { Pending, InProgress, Active, Deprecated, Retired, Superseded }`.
 
 ## Spec identity (one family, two subtypes, separate folders)
 

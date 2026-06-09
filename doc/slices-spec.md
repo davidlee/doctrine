@@ -89,7 +89,7 @@ sections over time.
 id = 1
 slug = "add-skill-removal"
 title = "Add skill removal to doctrine skills"
-status = "proposed"          # proposed | ready | started | audit | done | abandoned  (read-filter enforced; writes manual)
+status = "proposed"          # proposed | design | plan | ready | started | audit | reconcile | done | abandoned  (read-filter enforced; writes via `slice status`)
 created = "2026-06-03"
 updated = "2026-06-03"
 
@@ -101,8 +101,9 @@ updated = "2026-06-03"
 #   supersedes   = [2]       # slice-to-slice links
 ```
 
-- `status` is recorded but **not gated** in v1 (§ Lifecycle). Any value in the
-  set is accepted; transitions are by hand.
+- `status` transitions are classified and written by the `slice status` verb
+  (§ Lifecycle); the closure seam (`reconcile`←`audit`, `done`←`reconcile`) is
+  structural, while soft-gate enforcement is advisory/deferred in v1.
 - `[relationships]` is present-but-empty in v1. It is the seam the future
   spec/audit/patch lifecycle attaches to.
 - Additional `[…]` sections (risks, context inputs) may be added later as
