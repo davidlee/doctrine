@@ -1,0 +1,41 @@
+memory_uid = "mem_019eae92b0407601ac701fb9cade8897"
+memory_key = "mem.pattern.testing.black-box-cli-golden"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Pinning a doctrine CLI surface byte-exact with black-box goldens"
+summary = "Black-box CLI goldens: hand-seed fixed dates, match anyhow Error/Caused-by shape, carve out abs paths"
+created = "2026-06-09"
+updated = "2026-06-09"
+
+[scope]
+paths = ["src/adr.rs"]
+globs = ["tests/*.rs"]
+commands = ["doctrine adr", "doctrine policy"]
+tags = ["testing", "golden", "governance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8ff0e0ad00beada4dc5f092ba284fcf00ffae09d"
+ref_name = "refs/heads/main"
+checkout_state_id = "921cfb9bc025e5a45b8fe119128c0985d69d0d07926978754b99d827a14599d7"
+base_commit = "8607e1242b9f96c05e61058f0b2aaa9a576b79f8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
