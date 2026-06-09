@@ -12,8 +12,15 @@ funnel (SL-031) has a CLI it can trust under parallel dispatch:
 
 - a **worker-mode guard** that hard-refuses authored writes when a worker is
   running, and
-- **trunk-side id minting** so concurrent worktrees allocate disjoint ids,
-- with a **detect (`validate`) + reseat** backstop for the offline-collision case
+- **trunk-side id minting** — ids allocate against the shared trunk baseline so a
+  minter (the **orchestrator** on a coordination branch, or a **solo** agent) does
+  not collide with ids already on trunk. (Note: under the funnel **workers do not
+  mint** — the guard refuses it; minting is serial on the coordination branch.
+  Trunk-ref allocation is therefore *best-effort* collision **reduction** against
+  the fetched baseline, **not** a distributed lock — two unpushed concurrent
+  branches can still collide.)
+- with a **detect (`validate`) + reseat** backstop for the residual
+  offline/unpushed-collision case
 - and a **worktree-context warning** on `memory record` (ADR-006 amendment).
 
 Out: raw-tree confinement (D2b, ADR-008); the funnel itself (SL-031).
@@ -94,13 +101,13 @@ Three near-independent additions plus one reuse:
 
 **Guard (D2a).**
 ```rust
-// pure, unit-tested — no env, no io
-enum WriteClass { Read, Write }
+// pure, unit-tested — no env, no io. Write carries the verb label for the message.
+enum WriteClass { Read, Write(&'static str) }
 fn write_class(cmd: &Command) -> WriteClass;
 // shell
 fn worker_mode() -> bool;            // DOCTRINE_WORKER == "1"
 // main(), before the dispatch match:
-if worker_mode() && matches!(write_class(&cli.command), WriteClass::Write) {
+if let (true, WriteClass::Write(verb)) = (worker_mode(), write_class(&cli.command)) {
     bail!("DOCTRINE_WORKER=1: refusing authored write `{verb}` — workers return a \
            source delta; doctrine-mediated writes funnel through the orchestrator.");
 }
@@ -119,10 +126,15 @@ fn trunk_entity_ids(root: &Path, kind_dir: &str) -> anyhow::Result<Vec<u32>>;
 fn materialise(kind, claim, project_root, request, inputs, trunk_ids: &[u32]) -> ..;
 //   Fresh scan closure becomes: || Ok(scan_ids(&tree_root)?.into_iter()
 //                                      .chain(trunk_ids.iter().copied()).collect())
+//   trunk_ids is INERT for InExisting / named placement (no id alloc); only the
+//   Fresh arm consumes it. Existing `materialise` test call sites pass `&[]`
+//   (mechanical signature update — permitted by the seam contract).
 ```
-Ladder (`trunk_ref`): `DOCTRINE_TRUNK_REF` (if set & resolves) → `origin/HEAD` →
-`main` → `master`; first to `git rev-parse --verify --quiet` wins; else `None`.
-`ls-tree` reads the object DB — **the ref need not be checked out**.
+Ladder (`trunk_ref`): `DOCTRINE_TRUNK_REF` → `origin/HEAD` → `main` → `master`;
+first to `git rev-parse --verify --quiet` wins; else `None`. **Asymmetry (F4):** an
+**explicitly set** `DOCTRINE_TRUNK_REF` that fails to resolve is a **hard error**
+(don't silently mask a misconfiguration); only its *absence* falls through the
+ladder. `ls-tree` reads the object DB — **the ref need not be checked out**.
 
 **`validate` + `reseat` (D3 fallback).**
 ```
@@ -139,13 +151,22 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
   no config file (D1, no Rube Goldberg).
 - **Reseat** mutates exactly: the entity dir name (`git mv`-free filesystem rename),
   its `id` toml field, and its id/alias symlink — the canonical-id triple. It owns
-  nothing else; prose citations are reported, not owned.
+  nothing else; prose citations are reported, not owned. **Target guard:** `--to
+  <NNN>` that names an occupied id is refused (no clobber); default `--to` = the
+  next free trunk-aware id (§5.2). **Runtime-tier guard (F3):** if gitignored
+  runtime phase state exists for the id (`.doctrine/state/slice/NNN/`, the `phases`
+  symlink), reseat **refuses** — that state is keyed by id and reseat does not own
+  the disposable tier; the human clears/rebuilds it first. (Reseat targets
+  freshly-minted, pre-execution collisions in practice.)
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-- **Allocation under dispatch.** Orchestrator mints trunk-side (trunk ref = the id
-  baseline) *before* a worktree forks (ADR-006 D3); union scan guarantees a fresh
-  id even if the local fork tree is behind.
+- **Allocation under dispatch.** The **orchestrator** (never a worker — guard
+  refuses) mints trunk-side (trunk ref = the id baseline) *before* a worktree forks
+  (ADR-006 D3); the union scan clears any id present on trunk but absent from the
+  minter's local branch (e.g. a coordination branch behind trunk). One `ls-tree`
+  per `new` — cheap, and only ever in non-worker context (the guard short-circuits
+  workers before dispatch, so no wasted git call under a worker).
 - **Offline collision → detect → reseat.** A sandbox-denied worker falls back to
   local-only scan (no trunk reachable) and may mint a stale id; after merge,
   `doctrine validate` flags the duplicate; the human runs `doctrine reseat <ID>`,
@@ -158,8 +179,13 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **INV-1 (behaviour preservation).** Solo mode ⟹ `trunk_ids ⊆ local_ids` ⟹
-  `local ∪ trunk == local` ⟹ numeric suites green **unchanged**.
+- **INV-1 (behaviour preservation, F2).** The gate is the **existing numeric test
+  fixtures** (no remote / `origin == HEAD`), where `trunk_ids ⊆ local_ids` ⟹
+  `local ∪ trunk == local` ⟹ their behaviour assertions stay green unchanged. This
+  is **not** a universal subset claim: when a real `origin/HEAD` is *ahead* of
+  local, the union deliberately skips past already-pushed ids — an **intended**
+  collision-avoidance change, not a regression (and absent from the fixtures, so
+  the gate holds).
 - **INV-2 (pure engine).** No env/git/disk added to `entity.rs` core — only a
   `&[u32]` data param.
 - **INV-3 (reads always open).** The guard never refuses a `Read`-classified verb.
@@ -169,6 +195,10 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
   backstopped by `validate`+`reseat` — **not** designed out.
 - **EDGE — submodule**: trunk read inherits `git.rs`'s existing submodule guard;
   no new exposure.
+- **EDGE — reseat vs runtime state (F3)**: an id with live gitignored phase state
+  is refused (§5.3) — reseat does not migrate the disposable tier.
+- **EDGE — explicit bad override (F4)**: a set-but-unresolvable
+  `DOCTRINE_TRUNK_REF` errors hard; only absence falls through the ladder.
 
 ## 6. Open Questions & Unknowns
 
@@ -199,7 +229,9 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
 - **D4 — reseat reports danglers, does not rewrite prose.** Bounded by ADR-004
   (outbound-only prose relations); silent rewrite would risk corrupting citations.
 - **D5 — `DOCTRINE_TRUNK_REF` env override, no config file.** Consistent with
-  `DOCTRINE_WORKER`; honours D1 (no configuration Rube Goldberg).
+  `DOCTRINE_WORKER`; honours D1 (no configuration Rube Goldberg). An explicitly set
+  ref that fails to resolve errors hard rather than silently falling through (F4) —
+  silence would mask a misconfiguration as a phantom collision later.
 
 ## 8. Risks & Mitigations
 
@@ -217,7 +249,10 @@ doctrine reseat <ID> [--to <NNN>]     # renumber a colliding entity; exit 1 + da
 
 ## 9. Quality Engineering & Validation
 
-Per ADR-006 Verification, all **new** tests (no existing-test edits — the gate):
+Per ADR-006 Verification, all **new** tests. The gate is **behaviour
+preservation**, not file-immutability: existing `materialise` call sites take a
+mechanical `&[]` arg update (permitted by the seam contract); no existing
+behaviour **assertion** changes (F5).
 
 - **Guard:** for each write-classed verb, `DOCTRINE_WORKER=1` ⟹ nonzero exit +
   refusal message; a representative read verb ⟹ unaffected. `write_class` unit
@@ -239,4 +274,23 @@ detection).
 
 ## 10. Review Notes
 
-(Adversarial pass appended after the draft is committed.)
+### Self-adversarial pass (integrated)
+
+- **F1 — overclaim corrected.** Trunk-ref allocation is best-effort collision
+  *reduction*, not a distributed lock; workers never mint (guard refuses), so the
+  "concurrent worktrees allocate disjoint ids" framing was wrong. §1, §5.4 fixed.
+- **F2 — INV-1 restated.** The gate is the test fixtures (origin==HEAD), not a
+  universal `trunk ⊆ local`; ahead-origin skip is an intended change. §5.5 fixed.
+- **F3 — reseat vs runtime tier.** Reseat refuses an id with live phase state
+  (it does not own the disposable tier). §5.3, §5.5 added.
+- **F4 — explicit bad override errors hard;** only absence falls through. §5.2,
+  §5.5, §7-D5.
+- **F5 — gate is behaviour preservation, not file immutability** — mechanical
+  call-site arg updates are allowed. §9 fixed.
+- **F6 — minor:** guard message carries the verb label (`Write(&'static str)`);
+  `reseat --to` refuses an occupied target; `trunk_ids` inert outside `Fresh`;
+  per-`new` `ls-tree` runs only in non-worker context.
+
+### External adversarial pass
+
+(codex MCP — appended below.)
