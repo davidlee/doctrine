@@ -338,15 +338,143 @@ pub(crate) fn run_phase(
     Ok(())
 }
 
+/// `doctrine slice status <id> <state> [--note …]` — classify and write a slice
+/// lifecycle transition (SL-028, design §5.2). Reads the current authored status,
+/// classifies the move via [`classify`], writes it edit-preservingly, and prints
+/// the classification (e.g. `started → audit [advance]`). The `--note` is
+/// *surfaced only*, never stored: `slice-NNN.toml` has no progress-log field
+/// (storage rule — runtime progress lives under `.doctrine/state/`); a stored
+/// rationale would be a new authored field, out of scope (plan Decisions).
+pub(crate) fn run_status(
+    path: Option<PathBuf>,
+    id: u32,
+    state: SliceStatus,
+    note: Option<&str>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(SLICE_DIR);
+    let from = read_status(&slice_root, id)?;
+    let to = state.as_str();
+    let kind = classify(&from, to);
+    set_slice_status(&slice_root, id, &from, state, &crate::clock::today())?;
+    let suffix = note.map(|n| format!(" — {n}")).unwrap_or_default();
+    writeln!(
+        io::stdout(),
+        "{from} → {to} [{}]{suffix}",
+        transition_label(kind)
+    )?;
+    Ok(())
+}
+
+/// The lower-case label for a [`Transition`] in the verb's output line.
+fn transition_label(kind: Transition) -> &'static str {
+    match kind {
+        Transition::Advance => "advance",
+        Transition::BackEdge => "back-edge",
+        Transition::Skip => "skip",
+        Transition::Abandon => "abandon",
+        Transition::Noop => "no-op",
+        Transition::FromTerminal => "from-terminal",
+        Transition::SeamBreach => "seam-breach",
+    }
+}
+
+/// Read the current authored `status` of `slice-NNN.toml` (the `from` of a
+/// transition). Distinct from the no-op/scaffold guards in [`set_slice_status`]:
+/// this surfaces the value for classification + the output line.
+fn read_status(slice_root: &Path, id: u32) -> anyhow::Result<String> {
+    let name = format!("{id:03}");
+    let path = slice_root.join(&name).join(format!("slice-{name}.toml"));
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("slice {name} not found at {}", path.display()))?;
+    let doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+    doc.get("status")
+        .and_then(toml_edit::Item::as_str)
+        .map(str::to_string)
+        .with_context(|| format!("malformed slice {name}: missing `status`"))
+}
+
+/// Edit-preserving lifecycle transition on one authored `slice-NNN.toml`: gate
+/// the move via [`classify`] (refuse `FromTerminal` and `SeamBreach`, F12/F13),
+/// then set `status` + stamp `updated`. Mirrors `adr::set_adr_status` — the
+/// `toml_edit` in-place mutation preserves the inert `[relationships]` table,
+/// comments, and unknown keys (the file is never reserialised); carries the
+/// no-op guard and the F-1 malformed refuse. The `from` is supplied by the caller
+/// (already read for classification), the date by the shell. Unlike adr's flat
+/// any→any setter, this is an *ordered* FSM, so the classification gates the write.
+fn set_slice_status(
+    slice_root: &Path,
+    id: u32,
+    from: &str,
+    state: SliceStatus,
+    today: &str,
+) -> anyhow::Result<()> {
+    let to = state.as_str();
+    let name = format!("{id:03}");
+
+    // Gate before any disk write (design §5.2): refuse leaving a terminal source
+    // and the two closure-seam breaches; everything else (advance/back/skip/
+    // abandon/no-op) is allowed to write. `to` is in-vocab (the `ValueEnum`).
+    match classify(from, to) {
+        Transition::FromTerminal => anyhow::bail!(
+            "slice {name}: refusing to leave terminal status `{from}` (reopening is deferred)"
+        ),
+        Transition::SeamBreach => anyhow::bail!(
+            "slice {name}: `{to}` is reachable only across the closure seam \
+             (→ reconcile from audit, → done from reconcile), not from `{from}`"
+        ),
+        _ => {}
+    }
+
+    let path = slice_root.join(&name).join(format!("slice-{name}.toml"));
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("slice {name} not found at {}", path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+    // No-op guard: an unchanged status writes nothing, so mtime/content hold.
+    if doc.get("status").and_then(toml_edit::Item::as_str) == Some(to) {
+        return Ok(());
+    }
+
+    let table = doc.as_table_mut();
+    // F-1: `status`/`updated` are scaffold-seeded — edit in place, never create. A
+    // tail `insert` on a malformed file would land the key inside the trailing
+    // `[relationships]` subtable (silent corruption). Refuse instead.
+    if !table.contains_key("status") || !table.contains_key("updated") {
+        anyhow::bail!(
+            "malformed slice {name}: missing `status`/`updated` (regenerate via `slice new`)"
+        );
+    }
+    table.insert("status", toml_edit::value(to));
+    table.insert("updated", toml_edit::value(today));
+    fs::write(&path, doc.to_string()).with_context(|| format!("Failed to write {}", path.display()))
+}
+
 /// The slice status vocabulary — the authority `validate_statuses` checks
-/// `--status` against (A-2, D10). Mirrors `slices-spec.md` § Lifecycle
-/// (`{proposed, ready, started, audit, done, abandoned}`). Slice has no status
-/// *enum* (unlike adr): the lifecycle is hand-advanced and write-time gating is
-/// deferred, so this `&[&str]` IS the sole vocabulary authority. It guards READ
-/// (filter) input only — never a stored-status write. An out-of-vocab *stored*
-/// status is tolerated on disk and surfaced with a drift marker, not rejected
-/// (§5.5 vocabulary-drift invariant); see [`is_drifted`].
-const SLICE_STATUSES: &[&str] = &["proposed", "ready", "started", "audit", "done", "abandoned"];
+/// `--status` against (A-2, D10) and the `SliceStatus` `ValueEnum` mirrors. The
+/// expanded SL-028 FSM vocabulary (`slices-spec.md` § Lifecycle): `{proposed,
+/// design, plan, ready, started, audit, reconcile, done, abandoned}` — purely
+/// additive over the original six (no `review` state, F11), so existing slices
+/// need no migration. It guards READ (filter) input only — the write verb
+/// (`set_slice_status`) classifies a move via [`classify`] and refuses the
+/// closure seam / a terminal source, but an out-of-vocab *stored* status is
+/// tolerated on disk and surfaced with a drift marker, not rejected (§5.5
+/// vocabulary-drift invariant); see [`is_drifted`].
+const SLICE_STATUSES: &[&str] = &[
+    "proposed",
+    "design",
+    "plan",
+    "ready",
+    "started",
+    "audit",
+    "reconcile",
+    "done",
+    "abandoned",
+];
 
 /// The `slice list` hide-set (design §5.3): terminal slices — `done` (reconciled)
 /// and `abandoned` (dropped before completion) — no longer govern, so they drop
@@ -379,6 +507,120 @@ fn is_drifted(status: &str) -> bool {
 /// adding `abandoned` here would false-flag `⚠` on abandoned-incomplete slices.
 fn is_terminal_status(authored: &str) -> bool {
     authored == "done"
+}
+
+/// Whether leaving this status is refused by the transition verb — the
+/// *reopening-refusal* set (`{done, abandoned}`), F13. A **third**, distinct
+/// slice-status predicate: it is NOT [`is_terminal_status`] (divergence,
+/// `{done}` — adding `abandoned` there false-flags `⚠`) nor [`is_hidden`]
+/// (presentation, semantically unrelated). Reopening a closed/abandoned slice is
+/// deliberately deferred, so `set_slice_status` refuses a move out of either
+/// (`FromTerminal`); the three predicates diverge by design (design §5.2/§5.3).
+fn is_transition_terminal(status: &str) -> bool {
+    matches!(status, "done" | "abandoned")
+}
+
+/// How a `from → to` slice-status move classifies under the lifecycle FSM
+/// (design §5.4). Pure data over the edge table — no clock/disk; the verb stamps
+/// the shell-injected date. `classify` is total over its `&str` inputs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Transition {
+    /// A forward step along the chain, or the legitimate seam edges.
+    Advance,
+    /// A correction edge that walks back to re-do an invalidated stage.
+    BackEdge,
+    /// A move neither forward nor a named back-edge — written and surfaced.
+    Skip,
+    /// `* → abandoned` from any non-terminal source.
+    Abandon,
+    /// `from == to`; the writer no-ops.
+    Noop,
+    /// Leaving a terminal source (`{done, abandoned}`) — refused (reopening
+    /// deferred).
+    FromTerminal,
+    /// A closure-seam breach (F12): `→ reconcile` from a non-`audit` source, or
+    /// `→ done` from a non-`reconcile` source — refused structurally.
+    SeamBreach,
+}
+
+/// Classify a `from → to` slice-status move against the FSM (design §5.4),
+/// edge-table driven (NOT index arithmetic — `abandoned` is last in the const but
+/// is not "after `done`" in the FSM). `to` is assumed in-vocab (the verb boundary
+/// guards an out-of-vocab target); `from` may be drifted (out-of-vocab), in which
+/// case a non-seam, non-terminal move falls through to `Skip` — but the seam still
+/// binds by *target* edge (`→ reconcile`/`→ done` from a drifted source is a
+/// `SeamBreach`, §5.5). Precedence: no-op → from-terminal → closure-seam (by
+/// target) → abandon → forward/back edges → skip.
+pub(crate) fn classify(from: &str, to: &str) -> Transition {
+    if from == to {
+        return Transition::Noop;
+    }
+    if is_transition_terminal(from) {
+        return Transition::FromTerminal;
+    }
+    // Closure seam (F12), gated by the *target* edge — binds even from a drifted
+    // `from`. The legitimate seam entries are the only way in.
+    if to == "reconcile" {
+        return if from == "audit" {
+            Transition::Advance
+        } else {
+            Transition::SeamBreach
+        };
+    }
+    if to == "done" {
+        return if from == "reconcile" {
+            Transition::Advance
+        } else {
+            Transition::SeamBreach
+        };
+    }
+    if to == "abandoned" {
+        return Transition::Abandon;
+    }
+    // Forward chain (the non-seam advances) and the named back-edges.
+    match (from, to) {
+        ("proposed", "design")
+        | ("design", "plan")
+        | ("plan", "ready")
+        | ("ready", "started")
+        | ("started", "audit") => Transition::Advance,
+        ("audit", "started" | "design") | ("reconcile", "audit" | "design") => Transition::BackEdge,
+        _ => Transition::Skip,
+    }
+}
+
+/// The slice lifecycle status as a clap `ValueEnum` — the `slice status <state>`
+/// argument. Mirrors [`SLICE_STATUSES`]; the two are pinned in lockstep by
+/// `slice_status_enum_matches_the_vocabulary` (a drift canary, cf. adr's
+/// `adr_known_set_matches_variants`). Unlike adr, slice keeps the `&[&str]` const
+/// as the read-filter authority too, so this enum is the *write*-path mirror.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum SliceStatus {
+    Proposed,
+    Design,
+    Plan,
+    Ready,
+    Started,
+    Audit,
+    Reconcile,
+    Done,
+    Abandoned,
+}
+
+impl SliceStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Proposed => "proposed",
+            Self::Design => "design",
+            Self::Plan => "plan",
+            Self::Ready => "ready",
+            Self::Started => "started",
+            Self::Audit => "audit",
+            Self::Reconcile => "reconcile",
+            Self::Done => "done",
+            Self::Abandoned => "abandoned",
+        }
+    }
 }
 
 /// Whether the authored status and the derived phase rollup disagree (design
@@ -1450,7 +1692,17 @@ mod tests {
     fn slice_statuses_matches_the_spec_vocabulary() {
         assert_eq!(
             SLICE_STATUSES,
-            &["proposed", "ready", "started", "audit", "done", "abandoned"]
+            &[
+                "proposed",
+                "design",
+                "plan",
+                "ready",
+                "started",
+                "audit",
+                "reconcile",
+                "done",
+                "abandoned"
+            ]
         );
     }
 
@@ -1585,5 +1837,345 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let err = run_show(Some(dir.path().to_path_buf()), "SL-009", Format::Table).unwrap_err();
         assert!(err.to_string().contains("not found"), "got: {err}");
+    }
+
+    // --- SL-028 PHASE-01: lifecycle FSM ---
+
+    // VT-1: classify table (design §5.4/§9). Edge-table driven; covers advance,
+    // each back-edge, skip, abandon, noop, from-terminal, seam-breach (incl. from
+    // a drifted source), and the legit seam path audit→reconcile→done = Advance.
+
+    #[test]
+    fn classify_forward_chain_is_advance() {
+        for (from, to) in [
+            ("proposed", "design"),
+            ("design", "plan"),
+            ("plan", "ready"),
+            ("ready", "started"),
+            ("started", "audit"),
+        ] {
+            assert_eq!(classify(from, to), Transition::Advance, "{from} → {to}");
+        }
+    }
+
+    #[test]
+    fn classify_legit_closure_seam_path_is_advance() {
+        // audit → reconcile → done — the ADR-003 §7/§8 spine.
+        assert_eq!(classify("audit", "reconcile"), Transition::Advance);
+        assert_eq!(classify("reconcile", "done"), Transition::Advance);
+    }
+
+    #[test]
+    fn classify_named_back_edges() {
+        for (from, to) in [
+            ("audit", "started"),
+            ("audit", "design"),
+            ("reconcile", "audit"),
+            ("reconcile", "design"),
+        ] {
+            assert_eq!(classify(from, to), Transition::BackEdge, "{from} → {to}");
+        }
+    }
+
+    #[test]
+    fn classify_abandon_from_each_non_terminal() {
+        for from in [
+            "proposed",
+            "design",
+            "plan",
+            "ready",
+            "started",
+            "audit",
+            "reconcile",
+        ] {
+            assert_eq!(
+                classify(from, "abandoned"),
+                Transition::Abandon,
+                "{from} → abandoned"
+            );
+        }
+    }
+
+    #[test]
+    fn classify_noop_when_unchanged() {
+        assert_eq!(classify("started", "started"), Transition::Noop);
+        // No-op precedes from-terminal: done → done is a no-op, not a refusal.
+        assert_eq!(classify("done", "done"), Transition::Noop);
+    }
+
+    #[test]
+    fn classify_from_terminal_refused() {
+        for from in ["done", "abandoned"] {
+            assert_eq!(
+                classify(from, "design"),
+                Transition::FromTerminal,
+                "{from} → design"
+            );
+        }
+    }
+
+    #[test]
+    fn classify_seam_breach_to_reconcile_from_non_audit() {
+        for from in ["proposed", "design", "plan", "ready", "started"] {
+            assert_eq!(
+                classify(from, "reconcile"),
+                Transition::SeamBreach,
+                "{from} → reconcile"
+            );
+        }
+    }
+
+    #[test]
+    fn classify_seam_breach_to_done_from_non_reconcile() {
+        for from in ["proposed", "design", "plan", "ready", "started", "audit"] {
+            assert_eq!(
+                classify(from, "done"),
+                Transition::SeamBreach,
+                "{from} → done"
+            );
+        }
+    }
+
+    #[test]
+    fn classify_seam_binds_even_from_a_drifted_source() {
+        // The seam is about the target edge, not the source's validity (§5.5).
+        assert_eq!(classify("bogus", "reconcile"), Transition::SeamBreach);
+        assert_eq!(classify("bogus", "done"), Transition::SeamBreach);
+    }
+
+    #[test]
+    fn classify_move_out_of_drift_is_skip_not_refused() {
+        // Out-of-vocab `from`, non-seam, non-terminal target → Skip (allowed).
+        assert_eq!(classify("bogus", "started"), Transition::Skip);
+    }
+
+    #[test]
+    fn classify_non_chain_move_is_skip() {
+        // A legal-vocab pair the FSM never names (and not a seam target) → Skip.
+        assert_eq!(classify("proposed", "started"), Transition::Skip);
+        assert_eq!(classify("design", "started"), Transition::Skip);
+    }
+
+    // VT-1: the third predicate, distinct from the other two (F13).
+
+    #[test]
+    fn is_transition_terminal_is_a_distinct_third_predicate() {
+        assert!(is_transition_terminal("done"));
+        assert!(is_transition_terminal("abandoned"));
+        assert!(!is_transition_terminal("started"));
+        // Diverges from is_terminal_status ({done}) on `abandoned`...
+        assert!(is_transition_terminal("abandoned") && !is_terminal_status("abandoned"));
+        // ...and from is_hidden (presentation) which agrees on the set but is a
+        // semantically unrelated predicate — they must not be conflated.
+        assert_eq!(is_transition_terminal("done"), is_hidden("done"));
+    }
+
+    // T5: the ValueEnum ↔ const lockstep canary (cf. adr_known_set_matches_variants).
+
+    #[test]
+    fn slice_status_enum_matches_the_vocabulary() {
+        let variants = [
+            SliceStatus::Proposed,
+            SliceStatus::Design,
+            SliceStatus::Plan,
+            SliceStatus::Ready,
+            SliceStatus::Started,
+            SliceStatus::Audit,
+            SliceStatus::Reconcile,
+            SliceStatus::Done,
+            SliceStatus::Abandoned,
+        ];
+        let from_variants: Vec<&str> = variants.iter().map(|v| v.as_str()).collect();
+        assert_eq!(from_variants, SLICE_STATUSES.to_vec());
+    }
+
+    // VT-2: set_slice_status — round-trip, no-op, malformed/refusal guards.
+
+    /// Read the raw on-disk slice toml text.
+    fn slice_text(root: &Path, id: u32) -> String {
+        let name = format!("{id:03}");
+        fs::read_to_string(
+            slice_root(root)
+                .join(&name)
+                .join(format!("slice-{name}.toml")),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn set_slice_status_advances_and_preserves_comments_and_relationships() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        let before = slice_text(root, 1);
+        assert!(
+            before.contains("[relationships]"),
+            "fixture has relationships"
+        );
+        let comment = before
+            .lines()
+            .find(|l| l.trim_start().starts_with('#'))
+            .is_some();
+
+        // proposed → design (advance).
+        set_slice_status(
+            &slice_root(root),
+            1,
+            "proposed",
+            SliceStatus::Design,
+            "2099-01-01",
+        )
+        .unwrap();
+        let after = slice_text(root, 1);
+        assert!(
+            after.contains("status = \"design\""),
+            "status written: {after}"
+        );
+        assert!(
+            after.contains("updated = \"2099-01-01\""),
+            "date stamped: {after}"
+        );
+        assert!(
+            after.contains("[relationships]"),
+            "relationships survive: {after}"
+        );
+        if comment {
+            assert!(after.contains('#'), "comments survive: {after}");
+        }
+    }
+
+    #[test]
+    fn set_slice_status_noop_holds_content_and_mtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        let p = slice_root(root).join("001").join("slice-001.toml");
+        let before = fs::read_to_string(&p).unwrap();
+        let mtime_before = fs::metadata(&p).unwrap().modified().unwrap();
+
+        // proposed → proposed: no-op, nothing written.
+        set_slice_status(
+            &slice_root(root),
+            1,
+            "proposed",
+            SliceStatus::Proposed,
+            "2099-01-01",
+        )
+        .unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), before, "content held");
+        assert_eq!(
+            fs::metadata(&p).unwrap().modified().unwrap(),
+            mtime_before,
+            "mtime held"
+        );
+    }
+
+    #[test]
+    fn set_slice_status_refuses_from_terminal() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        for from in [SliceStatus::Done, SliceStatus::Abandoned] {
+            let err = set_slice_status(
+                &slice_root(root),
+                1,
+                from.as_str(),
+                SliceStatus::Design,
+                "x",
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(err.contains("terminal"), "{}: {err}", from.as_str());
+        }
+        // Disk untouched (still proposed).
+        assert!(slice_text(root, 1).contains("status = \"proposed\""));
+    }
+
+    #[test]
+    fn set_slice_status_refuses_seam_breach() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        // started → done (skip-to-done) is a seam breach.
+        let err = set_slice_status(&slice_root(root), 1, "started", SliceStatus::Done, "x")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("closure seam"), "skip-to-done refused: {err}");
+        // design → reconcile (non-audit source) is a seam breach.
+        let err2 = set_slice_status(&slice_root(root), 1, "design", SliceStatus::Reconcile, "x")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err2.contains("closure seam"),
+            "non-audit → reconcile refused: {err2}"
+        );
+        assert!(
+            slice_text(root, 1).contains("status = \"proposed\""),
+            "disk untouched"
+        );
+    }
+
+    #[test]
+    fn set_slice_status_seam_breach_from_a_drifted_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        set_status_raw(root, 1, "bogus");
+        // → done from a drifted source still breaches the seam (target edge).
+        let err = set_slice_status(&slice_root(root), 1, "bogus", SliceStatus::Done, "x")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("closure seam"),
+            "drifted → done refused: {err}"
+        );
+    }
+
+    #[test]
+    fn set_slice_status_refuses_malformed_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // A slice toml missing the `updated` scaffold key (hand-edited corruption).
+        let d = slice_root(root).join("001");
+        fs::create_dir_all(&d).unwrap();
+        fs::write(
+            d.join("slice-001.toml"),
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"started\"\n",
+        )
+        .unwrap();
+        let err = set_slice_status(&slice_root(root), 1, "started", SliceStatus::Audit, "x")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("malformed"), "missing key refused: {err}");
+    }
+
+    #[test]
+    fn run_status_prints_classification_with_note() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        set_status_raw(root, 1, "started");
+        // started → audit (advance); run_status is the thin shell, asserts no error
+        // and the write landed (output goes to stdout — the writer is the unit).
+        run_status(
+            Some(root.to_path_buf()),
+            1,
+            SliceStatus::Audit,
+            Some("done impl"),
+        )
+        .unwrap();
+        assert!(
+            slice_text(root, 1).contains("status = \"audit\""),
+            "write landed"
+        );
+    }
+
+    #[test]
+    fn read_status_surfaces_the_current_authored_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        set_status_raw(root, 1, "reconcile");
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
     }
 }
