@@ -7,18 +7,6 @@
 //! workspace, a shape-checked uid/key). No disk, no clock: the uid and the date
 //! are inputs minted in the shell (PHASE-04); this layer only validates shapes.
 //!
-//! PHASE-02 ships the pure core with no binary consumer yet — `record` (PHASE-04)
-//! and `show`/`list` (PHASE-05) wire it in. So the non-test build sees the whole
-//! module as dead; the tests exercise it. The expectation comes off as each
-//! consumer lands.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "pure memory core; consumers wired by record (PHASE-04) and show/list (PHASE-05)"
-    )
-)]
-
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Write};
