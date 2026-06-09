@@ -1,0 +1,41 @@
+memory_uid = "mem_019eacb95c397f63b8a4e4272a96e633"
+memory_key = "mem.concept.dispatch.gitignored-tier-partition"
+schema_version = 1
+memory_type = "concept"
+status = "active"
+title = "Gitignored-tier partition for worktree dispatch (ADR-006 D9)"
+summary = "Worktree dispatch: partition the gitignored tier into withhold-coordination vs provision-execution"
+created = "2026-06-09"
+updated = "2026-06-09"
+
+[scope]
+paths = []
+globs = [".doctrine/**", ".worktreeinclude"]
+commands = ["doctrine slice"]
+tags = ["dispatch", "worktree", "adr-006"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0815eb695806fabf4b5259c213051b974a0cd40b"
+ref_name = "refs/heads/main"
+checkout_state_id = "b138a33bfa566337ac4c10da10c05adf3f1ec039d9027a1ec6d6e247eb37ec2b"
+base_commit = "e39cdbf0a03ab774c8b8f435a422e4a9429a9e53"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 3
