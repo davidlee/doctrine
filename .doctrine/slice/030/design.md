@@ -292,9 +292,17 @@ TDD red/green/refactor. Test surfaces:
 - **policy.rs:** render round-trip (toml → `Meta`), hostile-title escape
   (`toml_string`), scaffold lays out two files + symlink, `run_new` monotonic id,
   status known-set ↔ enum drift canary.
-- **adr.rs (migration):** existing suite stays green unchanged at the CLI surface
-  — the behaviour-preservation proof. Test-internal `AdrDoc`→`governance::Doc`
-  retypes are not behaviour changes.
+- **adr.rs (migration) — behaviour-preservation proof (Codex MAJOR-6).** The
+  existing adr unit tests poke the very symbols the extraction *moves*
+  (`parse_ref`, `read_adr`, `format_show`, `show_json`, `set_adr_status`,
+  `AdrDoc`) and write to `io::stdout()` *without capturing it* — so they do **not**
+  prove the CLI surface is unchanged; relocating them to `governance.rs` only
+  proves the new helper is self-consistent. The actual proof is **black-box CLI
+  golden tests** for `adr list/show/status` (stdout + JSON payloads + the
+  malformed/missing error text), authored/confirmed **before** the extraction and
+  held green through it. `tests/e2e_list_conformance.rs` already golden-tests
+  `adr list`; this slice **adds `show`/`status` golden coverage** as the gate.
+  The relocated unit tests are necessary but not sufficient.
 - **boot.rs:** extend `regenerate_projects_*` — a `required` policy appears under
   "Active Policies"; `draft`/`retired` are hidden; empty → marker.
 - **install:** fresh install scaffolds `.doctrine/policy`; `git add` of a
@@ -346,3 +354,28 @@ Internal adversarial pass (assumptions verified against `src/`):
   richer status vocab (`draft`/`revision-required`) — were considered and
   **declined**: ADR stays untouched beyond the spine extraction, keeping SL-030
   scoped to policy.
+
+### External adversarial pass — Codex (gpt-5.2), all 7 findings accepted
+
+All verified true against `src/`. Integrated above; none rejected.
+
+- **BLOCKER-1 (layering)** — `governance.rs` mislabelled engine-tier while using
+  `root`/`clock` + exporting `run_*`. Fixed → command-tier, two faces (io/compute
+  vs shell wrappers). §5.1.
+- **BLOCKER-2 → MAJOR (tags)** — `adr::key` returns `tags: Vec::new()`; `meta`
+  never reads tags. "Parameterizes cleanly, no new plumbing" was overstated. Fixed
+  → spine inherits ADR's inert `--tag`; real tag reader is a §6 follow-up. §5.2.
+- **MAJOR-3 (parse_ref)** — "case-insensitive" would newly accept `AdR-7`,
+  breaking byte-identical. Fixed → preserve ADR's exact two-case strip,
+  parameterized. §5.2.
+- **MAJOR-4 (boot error≡empty)** — `section_or_marker` hides a malformed corpus
+  as "not yet populated". Fixed → documented as pre-existing/shared, out of scope;
+  §6 follow-up. §5.5.
+- **MAJOR-5 (supersession⇏status)** — superseded-but-`required` policy double-shows
+  in boot. Fixed → authored-discipline invariant + `policy supersede` follow-up.
+  §5.5.
+- **MAJOR-6 (verification)** — existing adr unit tests don't capture stdout; moving
+  them proves nothing about the CLI surface. Fixed → black-box `show`/`status`
+  golden tests are the gate, authored before extraction. §9.
+- **MINOR-7 (json_label)** — redundant with `stem`, admits invalid states. Fixed →
+  dropped; `GovKind` is 4 fields. §5.2.
