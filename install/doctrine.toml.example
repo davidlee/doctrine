@@ -23,7 +23,8 @@
 # Baked defaults (in force when the file or a key is absent):
 #   actor = self, autonomy = auto for EVERY state,
 #   EXCEPT plan and reconcile, which default to autonomy = gate.
-# Unknown keys and unknown-state subtables are tolerated, never an error.
+# Unknown top-level keys and unknown-state subtables (e.g. [conduct.foo]) are
+# tolerated and ignored; only genuinely malformed TOML is an error.
 
 # [conduct]
 # default-actor    = "self"

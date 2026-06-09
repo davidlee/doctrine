@@ -940,8 +940,9 @@ fn read_slice(slice_root: &Path, id: u32) -> anyhow::Result<(SliceDoc, String)> 
 }
 
 /// Render the readable whole for `Table` mode: an identity header, the flat
-/// fields, the non-empty relationship axes, then the scope body verbatim. House
-/// style: `Vec<String>` parts joined by `concat` (avoids the `push_str(&format!)`
+/// fields, the advisory conduct posture line (`resolve(current)`, F15/F19), the
+/// non-empty relationship axes, then the scope body verbatim. House style:
+/// `Vec<String>` parts joined by `concat` (avoids the `push_str(&format!)`
 /// lint). Metadata + scope only (A-5).
 fn format_show(doc: &SliceDoc, body: &str, posture: crate::conduct::Conduct) -> String {
     let mut parts: Vec<String> = Vec::new();
