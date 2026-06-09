@@ -16,6 +16,7 @@ mod listing;
 mod memory;
 mod meta;
 mod plan;
+mod policy;
 mod registry;
 mod requirement;
 mod retrieve;
@@ -141,6 +142,12 @@ enum Command {
     Adr {
         #[command(subcommand)]
         command: AdrCommand,
+    },
+
+    /// Create and list governance policies (standing rules).
+    Policy {
+        #[command(subcommand)]
+        command: PolicyCommand,
     },
 
     /// Create and list product / technical specifications.
@@ -277,6 +284,65 @@ enum AdrCommand {
         /// New status (required): proposed|accepted|rejected|superseded|deprecated.
         #[arg(long)]
         status: adr::AdrStatus,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum PolicyCommand {
+    /// Allocate the next id and scaffold a new policy.
+    New {
+        /// Policy title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List policies by id: POL-id, status, slug, title.
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one policy: its metadata, relationships, and prose body.
+    Show {
+        /// Policy reference — `POL-007` or the bare id `7`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Set a policy's status (edit-preserving; a no-op if unchanged).
+    Status {
+        /// Policy id (numeric).
+        id: u32,
+
+        /// New status (required): draft|required|deprecated|retired.
+        #[arg(long)]
+        status: policy::PolicyStatus,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -1033,6 +1099,17 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => adr::run_show(path, &reference, if json { Format::Json } else { format }),
             AdrCommand::Status { id, status, path } => adr::run_status(path, id, status),
+        },
+        Command::Policy { command } => match command {
+            PolicyCommand::New { title, slug, path } => policy::run_new(path, title, slug),
+            PolicyCommand::List { list, path } => policy::run_list(path, list.into_list_args()),
+            PolicyCommand::Show {
+                reference,
+                format,
+                json,
+                path,
+            } => policy::run_show(path, &reference, if json { Format::Json } else { format }),
+            PolicyCommand::Status { id, status, path } => policy::run_status(path, id, status),
         },
         Command::Spec { command } => match command {
             SpecCommand::New {

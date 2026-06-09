@@ -563,6 +563,27 @@ mod tests {
         );
     }
 
+    /// SL-030 PHASE-03: the policy tree is an authored governance kind, so the
+    /// manifest must create it (parity with adr / memory-items) and must NOT
+    /// ignore it — install surface 1 of 3. The `.gitignore` negation (surface 2)
+    /// and the git-add round-trip (surface 3) are covered by the e2e commit test.
+    #[test]
+    fn embedded_manifest_creates_the_policy_tree() {
+        let manifest = load_manifest().unwrap();
+        assert!(
+            manifest.dirs.create.iter().any(|d| d == ".doctrine/policy"),
+            "manifest must create the authored policy tree"
+        );
+        assert!(
+            !manifest
+                .gitignore
+                .entries
+                .iter()
+                .any(|e| e.starts_with(".doctrine/policy")),
+            "the authored policy tree must not be gitignored by the manifest"
+        );
+    }
+
     #[test]
     fn embedded_manifest_creates_and_ignores_the_skills_derived_tree() {
         let manifest = load_manifest().unwrap();
