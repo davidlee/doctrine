@@ -1,0 +1,13 @@
+id = 29
+slug = "dispatch-worktree-creation"
+title = "Dispatch worktree creation: detection and creation paths with guards"
+status = "proposed"
+created = "2026-06-09"
+updated = "2026-06-09"
+
+[relationships]
+# Reserved. Empty in v1 — no spec/requirement registry to point at yet.
+# When specs land, this section gains (illustrative, not v1):
+#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
+#   requirements = ["..."]   # implements / updates / verifies
+#   supersedes   = [2]       # slice-to-slice links
