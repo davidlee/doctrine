@@ -40,7 +40,9 @@ entries = [
 [root_markers]
 markers = [
   ".git",
-  ".jj",
+  # ".jj",
   ".project",
   "Cargo.toml",
+  "pyproject.toml",
+  "justfile"
 ]

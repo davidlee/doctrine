@@ -1,0 +1,41 @@
+memory_uid = "mem_019eae29eeef7783a5fbe02a852b082b"
+memory_key = "mem.pattern.skill.description-is-the-trigger"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Skill description is the auto-trigger surface"
+summary = "A skill's description field is its sole auto-invocation trigger — write it for that purpose, not as a blurb"
+created = "2026-06-09"
+updated = "2026-06-09"
+
+[scope]
+paths = []
+globs = ["plugins/doctrine/skills/**"]
+commands = []
+tags = ["skills", "authoring", "trigger"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f5f0af466628744744fa555751618e2598fe812f"
+ref_name = "refs/heads/main"
+checkout_state_id = "47a0e5cab64c14e909b3f6a71c165a1e52d95153514c20f157fbb6974595f361"
+base_commit = "cbf7ba586d334dfb727396aeb23eb3516fdc7a5e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

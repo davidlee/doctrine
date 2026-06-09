@@ -1,0 +1,41 @@
+memory_uid = "mem_019eae29f5bd75a0868da4d95bb272d5"
+memory_key = "mem.pattern.authoring.reuse-tuned-prior-art-verbatim"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Reuse tuned prior art verbatim, attribute it"
+summary = "Reuse well-tuned prior art word-for-word where it fits; no novelty for novelty's sake; attribute MIT-licensed prose"
+created = "2026-06-09"
+updated = "2026-06-09"
+
+[scope]
+paths = []
+globs = ["plugins/doctrine/skills/**"]
+commands = []
+tags = ["skills", "authoring", "attribution"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f5f0af466628744744fa555751618e2598fe812f"
+ref_name = "refs/heads/main"
+checkout_state_id = "0f68eac261f483087c0fbe5f64f158615e525c65af1622bd6f614a7357275875"
+base_commit = "cbf7ba586d334dfb727396aeb23eb3516fdc7a5e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
