@@ -47,6 +47,32 @@ Inputs:
     phase to `completed` with `doctrine slice phase`, then hand off: `/phase-plan`
     for the next phase, or `/audit` when the slice's phases are done.
 
+## Optional: solo isolation (opt-in)
+
+Default execution runs **in-tree** — the path above is unchanged unless isolation
+is requested.
+
+**Opt-in only — never automatic.** Run the phase on its own worktree fork *only*
+when the user or the plan explicitly asks for isolation. Absent that annotation,
+implement in-tree.
+
+When isolation is requested, before implementing (i.e. before step 5) invoke
+`/worktree` with:
+
+- `mode = solo`, `allow_work_in_place = true` (solo MAY degrade to in-tree on
+  sandbox denial);
+- `branch = slice/SL-NNN-slug` (the slice id is in scope — e.g.
+  `slice/SL-029-dispatch-worktree-creation`), worktree dir keyed by the durable id
+  (`.worktrees/SL-029`).
+
+`/worktree` handles detection, the creation ladder, provisioning, the spawn guards,
+and the green baseline; the **fork branch it returns is the deliverable**. Carry
+out the TDD loop (steps 5–12) inside that fork, then hand off the branch.
+
+`/execute` is its own orchestrator — it writes doctrine state directly, so
+**worker mode is never used here** (that is the future `/dispatch` funnel's path,
+left untouched).
+
 ## Outcomes
 
 - Phase objectives are implemented with traceable evidence, ending green.
