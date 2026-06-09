@@ -1,0 +1,141 @@
+# Implementation plan for SL-030 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-030"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Pin the ADR CLI surface with black-box golden tests"
+objective = """
+Before any extraction, establish the behaviour-preservation gate as executable \
+tests. The existing adr unit tests write to io::stdout() without capturing it \
+(design §9 / Codex MAJOR-6), so they cannot prove the CLI surface is unchanged. \
+Add black-box golden coverage for `adr show` and `adr status` (stdout + JSON + \
+malformed/missing error text); `adr list` is already covered by \
+tests/e2e_list_conformance.rs. These are the red/green net the migration holds \
+green UNCHANGED.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (Codex pass integrated); the ADR module compiles and its suite is green on the current tree." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Black-box golden tests exist for `adr show <ADR-NNN>` (Table + Json) and `adr status` (transition + no-op + malformed-refuse), asserting exact stdout/stderr and JSON payloads." },
+  { id = "EX-2", text = "The golden tests are green on the pre-extraction tree; their captured fixtures are committed as the migration baseline." },
+  { id = "EX-3", text = "No production code changed — this phase adds tests only." },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo test` runs the new adr show/status golden tests green; they assert byte-exact CLI output, not just filesystem side effects." },
+  { id = "VT-2", expects = "A deliberate one-character edit to an adr render/format fn turns a golden test red (the net actually catches surface drift)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Extract command-tier governance.rs spine; migrate ADR onto it"
+objective = """
+Create src/governance.rs as a command-tier shared module (design §5.1): the \
+GovKind descriptor {kind, stem, statuses, hidden} plus the shared compute/io \
+helpers (list_rows, key, render_table, json_rows→GovRow, read_doc, Doc, \
+Relationships, format_show, show_json, parse_ref, set_status) and the run_* \
+shell wrappers, all parameterized by &GovKind. Reduce adr.rs to a thin kind \
+(ADR_KIND, AdrStatus, ADR_STATUSES, is_hidden, scaffold, thin run_* binding the \
+enum→&str). parse_ref preserves ADR's exact two-case strip (NOT case-insensitive, \
+Codex MAJOR-3); show_json builds a serde_json::Map for the dynamic stem key \
+(Codex R2). Relocate the moved unit tests into governance.rs, driven by the ADR \
+descriptor.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the ADR CLI golden net is green and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/governance.rs exists at command tier (uses root/clock; depends downward on entity/meta/listing, sideways on root/clock/install). No engine/leaf module depends on it — ADR-001 layering preserved, no cycle." },
+  { id = "EX-2", text = "adr.rs holds only the per-kind descriptor + clap enum + known-set + is_hidden + scaffold + thin run_* wrappers; all shared logic lives in governance.rs." },
+  { id = "EX-3", text = "GovKind is the 4-field struct {kind, stem, statuses, hidden}; stem serves both file naming and the JSON envelope/object key." },
+  { id = "EX-4", text = "boot.rs's adr section still calls the migrated list_rows compute half unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "The PHASE-01 golden tests pass UNCHANGED — adr show/status/list stdout + JSON are byte-identical pre and post extraction (the behaviour-preservation proof)." },
+  { id = "VT-2", expects = "The relocated governance.rs unit tests pass when driven by the ADR descriptor (parse_ref two-case strip, set_status edit-preserving + no-op + malformed-refuse, format_show/show_json shape)." },
+  { id = "VT-3", expects = "`just check` (plain cargo clippy) is zero-warning; the full suite is green." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "policy.rs thin kind, templates, and the three install surfaces"
+objective = """
+Add the policy kind as a thin module over the PHASE-02 spine: POLICY_KIND \
+(dir=.doctrine/policy, prefix=POL, policy_scaffold), PolicyStatus clap enum \
+{Draft, Required, Deprecated, Retired}, POLICY_STATUSES + a drift canary, \
+is_hidden = deprecated|retired, run_new/list/show/status wrappers, and main.rs \
+wiring (mod policy, Command::Policy{PolicyCommand}). Scaffold seeds status=draft. \
+Templates: install/templates/policy.toml (mirror adr.toml, relationships axes, \
+seed draft) and policy.md (supekku body Statement/Rationale/Scope/Verification/\
+References, NO frontmatter). Wire all three install surfaces: \
+manifest.toml [dirs].create += .doctrine/policy, .gitignore += !.doctrine/policy/, \
+and parity.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: governance.rs spine is green and ADR rides it." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine policy new|list|show|status` work via the shared spine; ids are POL-NNN; status vocab is draft/required/deprecated/retired with deprecated|retired hidden by default." },
+  { id = "EX-2", text = "install/templates/policy.{toml,md} exist and are rust-embedded; policy.toml seeds status=draft; policy.md carries the supekku body sections with no YAML frontmatter." },
+  { id = "EX-3", text = "All three install surfaces wired: a fresh install scaffolds .doctrine/policy, and `git add` of a policy-NNN.toml succeeds (not gitignored)." },
+  { id = "EX-4", text = "POLICY_STATUSES ↔ PolicyStatus lockstep is pinned by a drift canary test." },
+]
+verification = [
+  { id = "VT-1", expects = "policy.rs unit tests pass: render round-trip to Meta, hostile-title toml_string escape, scaffold lays out two files + symlink, run_new allocates monotonic ids, status known-set ↔ enum drift canary." },
+  { id = "VT-2", expects = "An install/commit test proves a fresh install creates .doctrine/policy and a scaffolded policy is not gitignored (the silent-uncommittable trap is closed)." },
+  { id = "VT-3", expects = "`just check` zero-warning; full suite green." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Project required policies into the boot governance snapshot"
+objective = """
+Extend src/boot.rs with a SourceKind::Policies and an `Active Policies` section \
+ordered after `Accepted ADRs`, projecting policy::list_rows filtered to \
+status=required (mirrors the accepted-ADR filter). The error≡empty marker \
+collapse and the supersession-vs-status gap are pre-existing/shared and out of \
+scope (design §5.5) — documented, not fixed here. Extend the regenerate_projects_* \
+tests for the policy section.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: policy::list_rows exists and the policy CLI is green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine boot` renders an `Active Policies` section after `Accepted ADRs`, listing only status=required policies, cache-stable." },
+  { id = "EX-2", text = "An empty/absent policy corpus renders the `not yet populated` marker (the inherited error≡empty collapse is documented, not changed)." },
+  { id = "EX-3", text = "`boot --check` covers the new section via the same recompute (no separate sentry)." },
+]
+verification = [
+  { id = "VT-1", expects = "boot regenerate test: a `required` policy appears under `Active Policies`; `draft`/`deprecated`/`retired` policies are absent." },
+  { id = "VT-2", expects = "boot regenerate test: zero `required` policies → the section shows the marker, never a partial/stale row." },
+  { id = "VT-3", expects = "`just check` zero-warning; full suite green; `doctrine boot --check` reports clean after regenerate." },
+]
+specs        = []
+requirements = []
