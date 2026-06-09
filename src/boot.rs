@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use serde_json::{Map, Value};
 
-use crate::{adr, fsutil, install, memory, root};
+use crate::{adr, fsutil, governance, install, memory, root};
 
 /// The snapshot lives in the runtime-state tree — derived, gitignored
 /// (inherits the `.doctrine/*` ignore), `rm -rf`-able. Never authoritative.
@@ -126,7 +126,8 @@ fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Sectio
         // builds a `listing::ListArgs` directly).
         SourceKind::Adrs => section_or_marker(
             heading,
-            adr::list_rows(
+            governance::list_rows(
+                &adr::ADR_KIND,
                 root,
                 crate::listing::ListArgs {
                     status: vec!["accepted".to_string()],

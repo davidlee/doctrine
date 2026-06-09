@@ -4,6 +4,49 @@ Durable per-slice scratchpad — tracked in git. The place to lift anything from
 disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 `rm -rf` before the slice close-out audit harvests it.
 
+## PHASE-02 — governance.rs spine extraction; ADR migrated onto it
+
+Done: `src/governance.rs` (NEW) is the command-tier shared spine — `GovKind
+{kind, stem, statuses, hidden}` + compute/io (`list_rows`, `key`, `render_table`,
+`json_rows`/`GovRow`, `read_doc`/`Doc`/`Relationships`, `parse_ref`, `format_show`,
+`show_json`, `set_status`) + the `run_new`/`run_list`/`run_show` shell wrappers,
+all `&GovKind`-parameterized. `src/adr.rs` reduced to a thin kind (descriptor +
+`AdrStatus` enum/known-set + `is_hidden` + render/scaffold + 7 forwarders).
+`boot.rs` rebinds `adr::list_rows` → `governance::list_rows(&adr::ADR_KIND, …)`.
+
+**Behaviour-preservation proof (the point of the phase):**
+- The 10 black-box goldens pass UNCHANGED — `tests/e2e_adr_cli_golden.rs` is
+  byte-untouched (empty `git diff`). Lib test count held 698→698 (no test lost in
+  the relocation). boot `regenerate_projects_accepted_adrs` green (EX-4).
+- Mutate-to-red RE-proven against the *relocated* code: em-dash→hyphen in
+  `governance::format_show` reddens `adr_show_table_is_byte_exact`. The net wires
+  to the new location.
+
+**Contract details that mattered (carry into PHASE-03 policy.rs):**
+- The spine derives every user-facing literal from `g.stem` / `g.kind.prefix`:
+  filenames `{stem}-NNN.{toml,md}`, "{stem} NNN not found at …", "malformed
+  {stem} NNN … (regenerate via `{stem} new`)", JSON `{kind}`/object-key = `stem`,
+  "Created {PREFIX} NNN", canonical ids `{PREFIX}-NNN`. POL gets all of these free
+  by setting `stem="policy"`, `prefix="POL"`.
+- `parse_ref` strips TWO literal cases (`{PREFIX}-` | lowercased), NOT
+  case-insensitive — pinned executably now (`parse_ref("AdR-7").is_err()`).
+- `show_json` hand-builds a `serde_json::Map` (dynamic stem key; `json!` can't take
+  a runtime key). Output is pretty + BTreeMap-sorted + NO trailing newline. Repo
+  serde_json has no `preserve_order` (confirmed: struct fields serialize sorted).
+- a/an: message is "not an {prefix} reference" — byte-correct for ADR, renders
+  "not an POL" for POL (cosmetic; deferred per design D1, not pinned in P2).
+- The `run_status` enum→`&str` binding stays per-kind (binds `AdrStatus`); the
+  spine `set_status` takes `&str` + an injected `today`. Policy mirrors this:
+  `run_status(path,id,PolicyStatus)` → `governance::set_status(&POLICY_KIND, …)`.
+- Layering held: `governance` (command tier) → `entity`/`meta`/`listing`/`root`/
+  `clock`/`input`; `adr`→`governance`; `boot`→`governance`+`adr`. No engine/leaf
+  depends on `governance`. The relocated tests import `crate::adr::ADR_KIND` —
+  a cfg(test)-ONLY edge; production stays `adr`→`governance` one-way.
+
+Gotcha: `git checkout <untracked-file>` is a silent no-op — a mutate-to-red probe
+on the new (untracked) `governance.rs` did NOT revert; caught by re-grep. Revert
+probes on new files by hand.
+
 ## PHASE-01 — adr CLI golden net (commit `8607e12`)
 
 Done: `tests/e2e_adr_cli_golden.rs`, 10 black-box goldens over the built binary
