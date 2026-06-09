@@ -1,5 +1,5 @@
 {
-  description = "satan-attrd — SATAN attribute layer daemon";
+  description = "doctrine: dev shell";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -167,6 +167,18 @@
 
         devshells.default = {
           packages = projectPkgs ++ lib.optionals isLinux (lib.attrValues jailPkgs);
+
+          # darwin + nix: rustc's link line emits `-liconv` with `-nodefaultlibs`,
+          # which strips the Nix clang wrapper's auto-injected NIX_LDFLAGS — so
+          # libiconv is never on the search path and the link dies with
+          # `library not found for -liconv`. Hand rustc an explicit `-L`, the one
+          # flag it passes through `-nodefaultlibs`. Append so a caller's own
+          # RUSTFLAGS survive. No-op off darwin (glibc provides iconv) and off
+          # nix (Apple's /usr/bin/cc finds the SDK's libiconv.tbd natively).
+          devshell.startup.iconv-rustflags.text =
+            lib.optionalString stdenv.isDarwin ''
+              export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-L ${pkgs.libiconv}/lib"
+            '';
 
           env = [
             {
