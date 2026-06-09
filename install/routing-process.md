@@ -26,7 +26,7 @@ Finished a coherent unit → `/notes`. Handing off to fresh context → `/next`.
 **Core process:** `slice new` (scope) → `slice design` (author + adversarial
 review until locked) → `slice plan` → `slice phases` → per phase: `phase-plan`
 the runtime sheet, flip `in_progress`, implement TDD red/green/**refactor**, end
-green, flip `completed` → `/audit` → `/close`.
+green, flip `completed` → `/audit` → reconcile → `/close`.
 
 **Guardrails:** use the CLI, don't guess ids / command shapes / paths — and **read
 entities via `doctrine <kind> show <ID>`, not raw files**: structured/queried data
