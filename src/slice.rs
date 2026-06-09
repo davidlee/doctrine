@@ -357,13 +357,55 @@ pub(crate) fn run_status(
     let to = state.as_str();
     let kind = classify(&from, to);
     set_slice_status(&slice_root, id, &from, state, &crate::clock::today())?;
-    let suffix = note.map(|n| format!(" — {n}")).unwrap_or_default();
+    // Advisory conduct posture (F15/F19): the SOURCE state's exit posture —
+    // `autonomy` governs advancing *out* of `from`. Never blocks; surfaced only.
+    let cfg = load_conduct(&root)?;
+    let posture = crate::conduct::resolve(&cfg, &from);
     writeln!(
         io::stdout(),
-        "{from} → {to} [{}]{suffix}",
-        transition_label(kind)
+        "{}",
+        status_line(&from, to, kind, posture, note)
     )?;
     Ok(())
+}
+
+/// The project conduct filename — root-level user config (the structured sibling
+/// of `governance.md`), NOT a `.doctrine/` entity (design §5.3, F6).
+const DOCTRINE_TOML: &str = "doctrine.toml";
+
+/// Read the project `doctrine.toml [conduct]` table into a [`conduct::ConductConfig`]
+/// — the impure shell seam that keeps `conduct` pure (ADR-001). An absent file
+/// falls back to the default config (= baked defaults on resolve); a present file
+/// is parsed tolerantly (F9), erroring only on genuinely malformed TOML.
+fn load_conduct(root: &Path) -> anyhow::Result<crate::conduct::ConductConfig> {
+    let path = root.join(DOCTRINE_TOML);
+    match fs::read_to_string(&path) {
+        Ok(text) => crate::conduct::parse(&text)
+            .with_context(|| format!("Failed to parse {}", path.display())),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            Ok(crate::conduct::ConductConfig::default())
+        }
+        Err(e) => Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    }
+}
+
+/// The `slice status` output line (pure — composed from already-resolved data):
+/// `{from} → {to} [{classification}] [{posture}]{ — note}`. The posture is the
+/// SOURCE state's exit conduct (F19), advisory only. Factored out so the format
+/// is unit-testable without capturing stdout (VT-3).
+fn status_line(
+    from: &str,
+    to: &str,
+    kind: Transition,
+    posture: crate::conduct::Conduct,
+    note: Option<&str>,
+) -> String {
+    let suffix = note.map(|n| format!(" — {n}")).unwrap_or_default();
+    format!(
+        "{from} → {to} [{}] [{}]{suffix}",
+        transition_label(kind),
+        posture.label()
+    )
 }
 
 /// The lower-case label for a [`Transition`] in the verb's output line.
@@ -868,7 +910,13 @@ pub(crate) fn run_show(
     let id = parse_ref(reference)?;
     let (doc, body) = read_slice(&root.join(SLICE_DIR), id)?;
     let out = match format {
-        Format::Table => format_show(&doc, &body),
+        Format::Table => {
+            // Advisory posture (F19): the displayed (current) state's exit posture.
+            let cfg = load_conduct(&root)?;
+            let posture = crate::conduct::resolve(&cfg, &doc.status);
+            format_show(&doc, &body, posture)
+        }
+        // JSON stays byte-stable — posture is a Table-line addition only (design §5.2).
         Format::Json => show_json(&doc, &body)?,
     };
     write!(io::stdout(), "{out}")?;
@@ -895,10 +943,12 @@ fn read_slice(slice_root: &Path, id: u32) -> anyhow::Result<(SliceDoc, String)> 
 /// fields, the non-empty relationship axes, then the scope body verbatim. House
 /// style: `Vec<String>` parts joined by `concat` (avoids the `push_str(&format!)`
 /// lint). Metadata + scope only (A-5).
-fn format_show(doc: &SliceDoc, body: &str) -> String {
+fn format_show(doc: &SliceDoc, body: &str, posture: crate::conduct::Conduct) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("{} — {}\n", canonical_id(doc.id), doc.title));
     parts.push(format!("{} · {}\n", doc.slug, doc.status));
+    // Advisory conduct posture for the current state (F15/F19) — Table only.
+    parts.push(format!("conduct: {}\n", posture.label()));
     parts.push(format!(
         "created {} · updated {}\n",
         doc.created, doc.updated
@@ -1783,9 +1833,13 @@ mod tests {
                 supersedes: vec![],
             },
         };
-        let out = format_show(&doc, "# Scope\n\nthe scope body.\n");
+        // `started` defaults to self/auto (no plan/reconcile gate) — VT-3 show side.
+        let posture =
+            crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
+        let out = format_show(&doc, "# Scope\n\nthe scope body.\n", posture);
         assert!(out.contains("SL-025 — Uniform CLI"), "identity: {out}");
         assert!(out.contains("uniform-cli · started"), "flat fields: {out}");
+        assert!(out.contains("conduct: self/auto"), "conduct posture: {out}");
         assert!(out.contains("created 2026-06-01 · updated 2026-06-08"));
         assert!(out.contains("specs: PRD-010"), "relationships axis: {out}");
         assert!(
@@ -1807,7 +1861,9 @@ mod tests {
         fs::write(sr.join("001/notes.md"), "NOTES_SECRET").unwrap();
 
         let (doc, body) = read_slice(&sr, 1).unwrap();
-        let table = format_show(&doc, &body);
+        let posture =
+            crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
+        let table = format_show(&doc, &body, posture);
         let json = show_json(&doc, &body).unwrap();
         for needle in ["DESIGN_SECRET", "PLAN_SECRET", "NOTES_SECRET"] {
             assert!(!table.contains(needle), "table leaked {needle}: {table}");
@@ -1830,6 +1886,48 @@ mod tests {
         assert_eq!(parsed["slice"]["status"], "proposed");
         assert!(parsed["slice"]["relationships"]["specs"].is_array());
         assert!(parsed["body"].as_str().unwrap().contains("My Title"));
+    }
+
+    // --- SL-028 PHASE-02: conduct shell seam (T5/T6) ---
+
+    #[test]
+    fn load_conduct_absent_file_is_baked_defaults() {
+        // No doctrine.toml at root → default config → resolve gives the baked
+        // posture (T5: absent file shows the default; VT-1 absent-file fallback).
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = load_conduct(dir.path()).unwrap();
+        assert_eq!(cfg, crate::conduct::ConductConfig::default());
+        // plan-source exit posture is the baked gate even with no file.
+        assert_eq!(crate::conduct::resolve(&cfg, "plan").label(), "self/gate");
+        // a non-gate source is self/auto.
+        assert_eq!(
+            crate::conduct::resolve(&cfg, "started").label(),
+            "self/auto"
+        );
+    }
+
+    #[test]
+    fn load_conduct_reflects_a_root_override() {
+        // A root doctrine.toml [conduct] override is read by the shell and folds
+        // into resolve (T5: an override is reflected in the posture).
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(DOCTRINE_TOML),
+            "[conduct]\ndefault-actor = \"agent\"\n[conduct.ready]\nautonomy = \"gate\"\n",
+        )
+        .unwrap();
+        let cfg = load_conduct(dir.path()).unwrap();
+        // ready now gates, actor inherits the project default-actor (agent).
+        assert_eq!(crate::conduct::resolve(&cfg, "ready").label(), "agent/gate");
+    }
+
+    #[test]
+    fn load_conduct_refuses_malformed_doctrine_toml() {
+        // A genuinely malformed file surfaces an error (not silent) — but the
+        // FSM gates are untouched (this is the conduct read, advisory only).
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(DOCTRINE_TOML), "[conduct\nbroken =").unwrap();
+        assert!(load_conduct(dir.path()).is_err());
     }
 
     #[test]
@@ -2168,6 +2266,34 @@ mod tests {
             slice_text(root, 1).contains("status = \"audit\""),
             "write landed"
         );
+    }
+
+    #[test]
+    fn status_line_carries_the_source_exit_posture() {
+        // VT-3 (status side): the design's example line — reconcile gates by
+        // default, so its exit posture is self/gate (F19, resolve(from)).
+        let cfg = crate::conduct::ConductConfig::default();
+        let line = status_line(
+            "reconcile",
+            "done",
+            classify("reconcile", "done"),
+            crate::conduct::resolve(&cfg, "reconcile"),
+            None,
+        );
+        assert_eq!(line, "reconcile → done [advance] [self/gate]");
+    }
+
+    #[test]
+    fn status_line_appends_the_note_after_the_posture() {
+        let cfg = crate::conduct::ConductConfig::default();
+        let line = status_line(
+            "started",
+            "audit",
+            classify("started", "audit"),
+            crate::conduct::resolve(&cfg, "started"),
+            Some("done impl"),
+        );
+        assert_eq!(line, "started → audit [advance] [self/auto] — done impl");
     }
 
     #[test]

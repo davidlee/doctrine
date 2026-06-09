@@ -3,6 +3,7 @@ mod adr;
 mod backlog;
 mod boot;
 mod clock;
+mod conduct;
 mod corpus;
 mod entity;
 mod fsutil;
