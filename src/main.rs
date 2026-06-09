@@ -8,6 +8,7 @@ mod corpus;
 mod entity;
 mod fsutil;
 mod git;
+mod governance;
 mod input;
 mod install;
 mod lexical;
