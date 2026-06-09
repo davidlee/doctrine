@@ -1,0 +1,41 @@
+memory_uid = "mem_019eac98f96974c1a6a4c9e641f50c63"
+memory_key = "mem.pattern.lint.dead-code-expect-vs-cfg-test"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Self-clearing dead_code expect breaks when the leaf has a cfg(test) round-trip test"
+summary = "A cfg(test) round-trip over a dead leaf makes an unconditional expect(dead_code) unfulfilled — scope it cfg_attr(not(test))"
+created = "2026-06-09"
+updated = "2026-06-09"
+
+[scope]
+paths = ["src/requirement.rs"]
+globs = []
+commands = []
+tags = ["lint", "dead_code", "phasing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c0f04195f7595d3a29c2f41ace60f167f3b2bfdc"
+ref_name = "refs/heads/main"
+checkout_state_id = "006be7a58313820d28a94f6158223e167947754ece37a13c788264a447c0a8eb"
+base_commit = "1bc06ab4467066326978afeabfcccffafcc38168"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
