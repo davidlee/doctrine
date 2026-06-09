@@ -1,3 +1,5 @@
+mod doctrine '.doctrine/doctrine.just'
+
 default: lint test install
 
 check: fmt lint test build
