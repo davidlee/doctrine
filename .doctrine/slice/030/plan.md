@@ -19,11 +19,14 @@ before a line of production code moves.
 
 ## Sequencing & Rationale
 
-- **PHASE-01 — tests before extraction.** Pin `adr show`/`adr status` at the CLI
-  surface (stdout + JSON + error text); `adr list` is already golden via
-  `tests/e2e_list_conformance.rs`. Tests-only, no production change. This is the
-  safety net every later phase holds green. VT-2 deliberately mutates a render fn
-  to prove the net bites — a net that never goes red proves nothing.
+- **PHASE-01 — tests before extraction.** Pin `adr show`/`adr status`/`adr list`
+  at the CLI surface (stdout + JSON + error text). `tests/e2e_list_conformance.rs`
+  is *parse*-conformance only (flags parse, exit 0, generic `{kind,rows}`
+  substring) — it does not pin `adr list`'s byte-exact rows, so list gets its own
+  golden over a populated tree (hide-set, ordering, prefix). Tests-only, no
+  production change. This is the safety net every later phase holds green. VT-2/VT-3
+  deliberately mutate render fns (show/status AND list) to prove the net bites — a
+  net that never goes red proves nothing.
 
 - **PHASE-02 — extract and migrate, behaviour-identical.** Pull the shared
   compute/io + shell wrappers into a command-tier `governance.rs` parameterized by

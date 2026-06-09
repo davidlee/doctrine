@@ -29,22 +29,26 @@ objective = """
 Before any extraction, establish the behaviour-preservation gate as executable \
 tests. The existing adr unit tests write to io::stdout() without capturing it \
 (design §9 / Codex MAJOR-6), so they cannot prove the CLI surface is unchanged. \
-Add black-box golden coverage for `adr show` and `adr status` (stdout + JSON + \
-malformed/missing error text); `adr list` is already covered by \
-tests/e2e_list_conformance.rs. These are the red/green net the migration holds \
-green UNCHANGED.
+Add black-box golden coverage for `adr show`, `adr status`, AND `adr list` \
+(stdout + JSON + malformed/missing error text). NOTE: e2e_list_conformance.rs is \
+a PARSE-conformance matrix (flags parse, exit 0, generic {kind,rows} substring) — \
+it does NOT pin adr list's byte-exact stdout/rows, so list needs its own golden \
+over a populated tree (hide-set + ordering + prefix). These are the red/green net \
+the migration holds green UNCHANGED.
 """
 entrance_criteria = [
   { id = "EN-1", text = "design.md is locked (Codex pass integrated); the ADR module compiles and its suite is green on the current tree." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Black-box golden tests exist for `adr show <ADR-NNN>` (Table + Json) and `adr status` (transition + no-op + malformed-refuse), asserting exact stdout/stderr and JSON payloads." },
-  { id = "EX-2", text = "The golden tests are green on the pre-extraction tree; their captured fixtures are committed as the migration baseline." },
+  { id = "EX-2", text = "The golden tests are green on the pre-extraction tree; their captured expected output is committed (inline or fixture file) as the migration baseline." },
   { id = "EX-3", text = "No production code changed — this phase adds tests only." },
+  { id = "EX-4", text = "A black-box golden for `adr list` over a populated tree (>=2 ADRs spanning visible + hidden statuses) pins byte-exact stdout AND JSON rows — hide-set, id ordering, prefix, header. (e2e_list_conformance.rs is parse-conformance only; it does not cover this.)" },
 ]
 verification = [
-  { id = "VT-1", expects = "`cargo test` runs the new adr show/status golden tests green; they assert byte-exact CLI output, not just filesystem side effects." },
+  { id = "VT-1", expects = "`cargo test` runs the new adr show/status/list golden tests green; they assert byte-exact CLI output, not just filesystem side effects or generic envelope substrings." },
   { id = "VT-2", expects = "A deliberate one-character edit to an adr render/format fn turns a golden test red (the net actually catches surface drift)." },
+  { id = "VT-3", expects = "The mutate-to-red probe also bites the list path: a one-character edit to the list row/header render turns the adr list golden red." },
 ]
 specs        = []
 requirements = []
@@ -71,7 +75,7 @@ exit_criteria = [
   { id = "EX-1", text = "src/governance.rs exists at command tier (uses root/clock; depends downward on entity/meta/listing, sideways on root/clock/install). No engine/leaf module depends on it — ADR-001 layering preserved, no cycle." },
   { id = "EX-2", text = "adr.rs holds only the per-kind descriptor + clap enum + known-set + is_hidden + scaffold + thin run_* wrappers; all shared logic lives in governance.rs." },
   { id = "EX-3", text = "GovKind is the 4-field struct {kind, stem, statuses, hidden}; stem serves both file naming and the JSON envelope/object key." },
-  { id = "EX-4", text = "boot.rs's adr section still calls the migrated list_rows compute half unchanged." },
+  { id = "EX-4", text = "boot.rs's adr section produces byte-identical output; its call site rebinds adr::list_rows -> governance::list_rows(&ADR_KIND, ...) (list_rows leaves adr.rs for the spine). The existing boot regenerate_projects_accepted_adrs test stays green as a second preservation signal." },
 ]
 verification = [
   { id = "VT-1", expects = "The PHASE-01 golden tests pass UNCHANGED — adr show/status/list stdout + JSON are byte-identical pre and post extraction (the behaviour-preservation proof)." },
