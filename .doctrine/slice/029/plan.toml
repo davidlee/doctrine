@@ -1,0 +1,108 @@
+# Implementation plan for SL-029 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-029"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "CLI heart — `src/worktree.rs` pure core + `provision`/`check-allowlist`"
+objective = """
+Build the testable copy seam: the sole copier and the coordination-tier exclusion \
+guarantee (design §3). Pure core in new `src/worktree.rs` (ADR-001 leaf; no \
+disk/git — inputs passed in): the structured `WITHHELD` const (categorised by \
+`Tier`, derived from `.gitignore` runtime lines), `parse_allowlist` (the documented \
+`glob`-subset — blank/`#`/literal/`*`/`**`/`?`; REJECTS `!`/anchoring with a clear \
+error), `is_withheld`, `select_copies` (drops any WITHHELD-matching file even under \
+a broad `**` — skip+warn), and `allowlist_violations` (patterns that *name* a \
+withheld glob). Impure shell: `provision` runs from the SOURCE root and writes \
+`<fork>` — read `.worktreeinclude` (absent ⇒ empty ⇒ copy nothing) → \
+`allowlist_violations` fail-closed → enumerate gitignored candidates via `git \
+ls-files -z --others --ignored --exclude-standard` → `select_copies` → safe copy. \
+Copy safety in `src/fsutil.rs` (beyond `safe_join`): canonicalize source/`<fork>`/ \
+dest components, VERIFY `<fork>` shares the source git-common-dir and is not the \
+source, symlink policy (copy only if target stays in-tree and not withheld; else \
+skip+warn). Wire `Worktree { Provision, CheckAllowlist }` in `src/main.rs`. \
+`check-allowlist` exits nonzero on a tier-naming or unsupported-syntax pattern.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked: two adversarial passes (F1-F8 internal; B1/B2/B3/B5/M4/M6/M7/M8/m9/m10 codex) dispositioned; codex recheck green (ready-to-plan)" },
+  { id = "EN-2", text = "full cargo test + plain cargo clippy green at HEAD — the behaviour-preservation baseline (entity/slice/state/adr/memory/skills suites)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/worktree.rs exists: pure `WITHHELD`/`Tier`, `parse_allowlist` (rejects `!`/anchoring), `is_withheld`, `select_copies`, `allowlist_violations` — no disk/git in the pure layer (ADR-001 leaf, pure/imperative split)" },
+  { id = "EX-2", text = "`select_copies` withholds any WITHHELD-matching file even under a broad `**` allowlist (skip+warn, name the file); the copy physically cannot leak the coordination/runtime tier" },
+  { id = "EX-3", text = "`doctrine worktree provision <fork>` runs from source root, reads `.worktreeinclude` (absent ⇒ copies nothing), fail-closed on violations, enumerates gitignored candidates `-z`-safe, copies via the canonicalize/sibling-worktree/symlink-guarded helper; reports copied/withheld" },
+  { id = "EX-4", text = "`doctrine worktree check-allowlist` exits nonzero on a pattern naming a withheld glob OR an unsupported (`!`/anchoring) pattern; zero otherwise — documented as smell-test, NOT completeness" },
+  { id = "EX-5", text = "plain cargo clippy zero warnings; `just check` green; pre-existing suites unchanged (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "pure: `parse_allowlist` accepts each supported class and REJECTS `!`/unsupported-anchoring with a clear error" },
+  { id = "VT-2", expects = "pure: `allowlist_violations` canary — a pattern naming `.doctrine/state/` is flagged; a benign pattern is not" },
+  { id = "VT-3", expects = "pure (load-bearing): `select_copies` withholds a `.doctrine/state/...` file under a `**` allowlist; copies an allowlisted non-tier file" },
+  { id = "VT-4", expects = "pure: `WITHHELD`↔`.gitignore` parity — every `.doctrine/**` runtime glob is WITHHELD-covered or explicitly classified derived-regenerable; an unclassified glob fails" },
+  { id = "VT-5", expects = "impure/e2e: `provision` copies an allowlisted gitignored file into a fork; withholds a tier file with a warning at exit 0" },
+  { id = "VT-6", expects = "impure/e2e: `provision` refuses an out-of-tree / into-state symlink (F5) and refuses a `<fork>` that is not a sibling worktree (F5)" },
+  { id = "VT-7", expects = "impure/e2e: candidate enumeration is `-z`-safe for a newline/quoted path (m9); `check-allowlist` nonzero on a statically-bad allowlist" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "`/worktree` lifecycle skill + `/execute` solo-isolation thread"
+objective = """
+Author the lifecycle skill that drives the PHASE-01 CLI (design §2/§4/§5). New \
+`plugins/doctrine/skills/worktree/SKILL.md` (authored in `plugins/`, NEVER the \
+gitignored `.doctrine/skills/` install copy — B1): the `mode = solo | worker` \
+contract + `allow_work_in_place` (true only for solo) + `{fork_path, branch, \
+head_sha, provision_report, baseline_result}` outputs (the OQ-1 split seam — \
+worker DECLARED, solo IMPLEMENTED). Detection: `git-dir` ≠ `git-common-dir` with \
+the submodule disambiguation guard. Creation backend ladder: detect existing \
+isolation → harness native creation-only (opportunistic; design AROUND it, never \
+depend — F1) → `git worktree add` + provision (the blessed tested default) → \
+work-in-place (solo only) on sandbox denial. ALWAYS-provision rule for any forked \
+path: invoke `doctrine worktree provision`. Guards: commit-before-spawn (exact \
+`git status --porcelain -z`, abort on tracked-dirty OR untracked-non-ignored); \
+branch-point check (capture source HEAD pre-create, assert fork HEAD == captured \
+SHA post-create); baseline-verify via the project-configured command (this repo: \
+`just check`), green-gate before handoff. Squash-orphan caveat: nudge \
+record-on-trunk for durable memory. Then a THIN optional solo-isolation thread in \
+`plugins/doctrine/skills/execute/SKILL.md`: isolation is explicit opt-in (never \
+automatic — F8); invoke `/worktree` mode=solo; the fork branch is the deliverable; \
+default in-tree path UNCHANGED; worker-mode OFF (D6a). `/dispatch` SKILL untouched. \
+Document the commented `.worktreeinclude` template in the skill (not installed — F2).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `doctrine worktree provision`/`check-allowlist` shipped and green; the copy-seam exclusion guarantee tested" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`plugins/doctrine/skills/worktree/SKILL.md` exists (authored in `plugins/`, not `.doctrine/skills/`) carrying the §5 `mode=solo|worker` + `allow_work_in_place` contract and the declared outputs; solo implemented, worker declared-only" },
+  { id = "EX-2", text = "skill documents detection (git-dir≠common-dir + submodule guard), the creation ladder (native→`git worktree add`+provision→work-in-place), and the always-provision rule invoking the CLI" },
+  { id = "EX-3", text = "skill documents the guards: commit-before-spawn `git status --porcelain -z` gate, branch-point HEAD pre/post compare, baseline-verify via project command (`just check` here) before handoff" },
+  { id = "EX-4", text = "`plugins/doctrine/skills/execute/SKILL.md` gains a thin opt-in solo-isolation branch delegating to `/worktree` mode=solo; default in-tree path unchanged; worker-mode OFF; `/dispatch` untouched" },
+  { id = "EX-5", text = "the `.worktreeinclude` commented template is documented in the skill (project-owned, not installer-shipped, F2); the squash-orphan record-on-trunk nudge is present" },
+]
+verification = [
+  { id = "VA-1", expects = "agent read-through: the `/worktree` skill's mode contract, ladder, always-provision rule, and three guards are present, internally consistent, and match design §2/§4/§5" },
+  { id = "VA-2", expects = "agent read-through: `/execute` isolation is explicit opt-in (never automatic), delegates to `/worktree` mode=solo, leaves the default in-tree path and `/dispatch` untouched" },
+  { id = "VH-1", expects = "human acceptance: skill prose drives the PHASE-01 verbs correctly and the split seam (mode contract) is reusable by the future funnel slice without re-deciding" },
+]
+specs        = []
+requirements = []
