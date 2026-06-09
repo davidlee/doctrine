@@ -735,6 +735,26 @@ enum SliceCommand {
         path: Option<PathBuf>,
     },
 
+    /// Classify and write a slice lifecycle transition; prints the move's
+    /// classification (advance / back-edge / skip / abandon). Refuses the closure
+    /// seam (→ reconcile only from audit, → done only from reconcile) and leaving
+    /// a terminal status (done / abandoned).
+    Status {
+        /// Slice id to transition.
+        id: u32,
+
+        /// Target lifecycle state.
+        state: slice::SliceStatus,
+
+        /// Optional note — surfaced in the transition output, not stored.
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// List slices by id: id, status, phases, slug, title.
     List {
         #[command(flatten)]
@@ -858,6 +878,12 @@ fn main() -> anyhow::Result<()> {
                 note,
                 path,
             } => slice::run_phase(path, id, &phase_id, status, note.as_deref()),
+            SliceCommand::Status {
+                id,
+                state,
+                note,
+                path,
+            } => slice::run_status(path, id, state, note.as_deref()),
             SliceCommand::List { list, path } => slice::run_list(path, list.into_list_args()),
             SliceCommand::Show {
                 reference,

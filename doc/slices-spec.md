@@ -216,35 +216,48 @@ detection). Shared code.
 
 ## Lifecycle
 
-`status ∈ {proposed, ready, started, audit, done, abandoned}` is recorded in
-`slice-<id>.toml` and advanced by hand in v1. The stages track a slice from
-intent to reconciled change:
+`status ∈ {proposed, design, plan, ready, started, audit, reconcile, done,
+abandoned}` is recorded in `slice-<id>.toml` and advanced by the `slice status`
+transition verb (SL-028, ADR-009). The stages track a slice from intent to
+reconciled change:
 
 - **proposed** — drafted; scope and motivation captured, not yet agreed.
-- **ready** — accepted and scoped; cleared to start, work not begun.
-- **started** — implementation under way.
-- **audit** — code shipped; reconciling what shipped against the slice's
-  declared scope. This is the *status* a slice carries while its audit (the
-  `AUD-` artefact, glossary) is in progress — the stage produces the artefact;
-  the two are not the same thing and do not share an id.
-- **done** — reconciled and closed.
+- **design** — under architectural shaping; the design doc is being authored and
+  adversarially reviewed, not yet locked.
+- **plan** — design accepted; the executable phase plan is being authored. The
+  soft "no code without an approved plan" gate sits on leaving this state.
+- **ready** — plan accepted; cleared to start, work not begun. The lone
+  gate-as-state (the human handoff before implementation).
+- **started** — implementation under way; per-phase review (ADR-003 §6) runs
+  *during* this state, not as a separate state (F11).
+- **audit** — code shipped; the holistic whole-slice read against the declared
+  scope. This is the *status* a slice carries while its audit (the `AUD-`
+  artefact, glossary) is in progress — the stage produces the artefact; the two
+  are not the same thing and do not share an id.
+- **reconcile** — the ADR-003 §7/§8 closure capstone: drift between what shipped
+  and the owning specs is reconciled by *explicit authorship*, never by
+  precedence. Entered only from `audit` (the closure seam).
+- **done** — reconciled and closed. Entered only from `reconcile` (the closure
+  seam).
 - **abandoned** — dropped before completion: the work was superseded by a later
   slice, descoped, or otherwise will not ship. A terminal state like `done` (it
   drops from the default `list`), but it carries no claim that the scope was
   delivered — only that the slice is no longer live. Distinct from `done`: an
   `abandoned` slice with incomplete phases is *consistent*, not divergent.
 
-There is **no `complete` command and no closure gate** in v1 — there is nothing
-to gate against until specs and verification artefacts exist, so transitions are
-by hand and any value in the set is accepted. Note the seam is *entirely*
-manual: v1 ships `new` (which always writes `proposed`) and `list`, and **no
-transition verb** — the other five states are reached only by hand-editing
-`slice-<id>.toml`. The vocabulary *is* enforced on the `list --status` filter
-(an out-of-vocab `--status` is rejected; an out-of-vocab *stored* status is
-never hidden and renders with a trailing `?` drift marker), but write-time
-transitions remain ungated. The richer vocabulary is recorded now so the lifecycle stages
-are deliberate, not retrofitted; gating attaches to them later. This is the
-deliberate "one thing at a time" boundary.
+`slice status <id> <state>` *classifies and writes* a move — advance, back-edge,
+abandon, no-op — and **surfaces** the classification rather than blocking it. Two
+classes of move are hard-refused: leaving a terminal source (`done`/`abandoned`;
+reopening is deferred), and breaching the **closure seam** — `reconcile` is
+reachable only from `audit`, and `done` only from `reconcile` (the ADR-003 §7/§8
+spine a blessed skip-to-`done` would otherwise author unflagged). Everything off
+the seam classifies and writes (surface, don't block). **Conduct/closure
+enforcement of the soft gates (`plan`, `reconcile`) is deferred** (advisory only
+in v1, per the conduct axis); the vocabulary and the structural seam land now so
+gating attaches additively. The vocabulary is enforced on the `list --status`
+filter and the verb's target (an out-of-vocab `--status`/target is rejected; an
+out-of-vocab *stored* status is never hidden and renders with a trailing `?`
+drift marker). This is the deliberate "one thing at a time" boundary.
 
 ## Forward compatibility
 
