@@ -60,6 +60,8 @@ verification = [
   { id = "VT-5", expects = "impure/e2e: `provision` copies an allowlisted gitignored file into a fork; withholds a tier file with a warning at exit 0" },
   { id = "VT-6", expects = "impure/e2e: `provision` refuses an out-of-tree / into-state symlink (F5) and refuses a `<fork>` that is not a sibling worktree (F5)" },
   { id = "VT-7", expects = "impure/e2e: candidate enumeration is `-z`-safe for a newline/quoted path (m9); `check-allowlist` nonzero on a statically-bad allowlist" },
+  { id = "VT-8", expects = "impure/e2e: `provision` itself fails closed (nonzero, copies nothing) when `.worktreeinclude` contains a pattern naming a withheld tier (§3 fail-closed)" },
+  { id = "VT-9", expects = "impure/e2e: `provision` with an absent `.worktreeinclude` copies nothing and exits 0 (F2 empty-allowlist tolerance)" },
 ]
 specs        = []
 requirements = []
