@@ -155,6 +155,12 @@ This repository is multi-licensed:
 
 Where a file contains an SPDX license identifier or a directory contains its own LICENSE file, that more specific notice controls.
 
+## Acknowledgements
+
+The `/worktree` skill's directory-selection and safety-verification patterns are
+adapted from [`superpowers:using-git-worktrees`](https://github.com/obra/superpowers)
+by Jesse Vincent (MIT).
+
 ## Specifications
 
 Product and technical specifications — the durable, agent-readable intent behind

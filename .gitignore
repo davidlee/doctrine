@@ -8,6 +8,8 @@
 .agents
 .codex
 .direnv
+# for oops
+.spec-driver
 
 .doctrine/*
 !.doctrine/slice/
