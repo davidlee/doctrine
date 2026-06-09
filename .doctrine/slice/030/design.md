@@ -133,14 +133,21 @@ of the literal `"ADR-"`, and its error text interpolates the prefix.
 - **`.doctrine/policy/NNN/`** — authored tree: `policy-NNN.toml` (queried:
   `id/slug/title/status/created/updated` + inert `[relationships]`), `policy-NNN.md`
   (prose body), `NNN-slug` symlink. Mirrors the ADR layout exactly.
-- **`install/templates/policy.{toml,md}`** — rust-embedded scaffold templates,
-  mirror `adr.{toml,md}`; `policy.toml` seeds `status = "draft"`.
-- **Status vocab (data, owned by policy.rs):** `draft → active → deprecated /
-  retired`. `active` is the load-bearing in-force state (the boot section shows
-  only these). Supersession is a **relationship** (`relationships.supersedes`),
-  not a status — cleaner than ADR, which carries both. Hide-set: `deprecated`,
-  `retired`. Relationship axes: same four as ADR (`supersedes`, `superseded_by`,
-  `related`, `tags`).
+- **`install/templates/policy.{toml,md}`** — rust-embedded scaffold templates;
+  `policy.toml` mirrors `adr.toml` (metadata + `[relationships]`), seeds
+  `status = "draft"`. `policy.md` body reuses the tuned prior art from
+  `../spec-driver/supekku/templates/policy-template.md` (attributed) — sections
+  **Statement / Rationale / Scope / Verification / References** — but **drops its
+  YAML frontmatter**: per the storage rule and ADR-D1, metadata lives in the
+  sister TOML, never in the prose body.
+- **Status vocab (data, owned by policy.rs):** `draft → required → deprecated /
+  retired`. `required` is the load-bearing in-force state (a policy is *required*
+  to follow — term from the supekku prior art; the boot section shows only
+  these). `deprecated` = sunsetting but extant; `retired` = terminal off.
+  Supersession is a **relationship** (`relationships.supersedes`), not a status —
+  cleaner than ADR, which carries both. Hide-set: `deprecated`, `retired`.
+  Relationship axes: same four as ADR (`supersedes`, `superseded_by`, `related`,
+  `tags`).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -164,7 +171,7 @@ of the literal `"ADR-"`, and its error text interpolates the prefix.
 - **Known-set ↔ enum lockstep:** `POLICY_STATUSES` mirrors `PolicyStatus`
   variants, pinned by a drift canary test (mirrors `adr_known_set_matches_variants`).
 - **Hide-set ⊆ known-set:** `is_hidden` only names statuses in the vocab.
-- **boot active-filter:** only `active` policies project; empty → the section
+- **boot in-force filter:** only `required` policies project; empty → the section
   renders its `not yet populated` marker, never a partial/stale row.
 - **Edit-preserving round-trip:** `[relationships]`, comments, unknown keys
   survive `status` (toml_edit in place; never reserialised).
@@ -176,6 +183,9 @@ of the literal `"ADR-"`, and its error text interpolates the prefix.
   scoping.
 - `OQ-2`: `parse_ref` error text parameterized on `g.kind.prefix` (e.g.
   `expected POL-007 or 7`) — resolved, folded into §5.2.
+- `OQ-3` **(RESOLVED):** status vocab = `draft/required/deprecated/retired`
+  (hybrid — `required` from supekku prior art, terminal `retired` added). See
+  D2 / §10 R5.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -191,11 +201,13 @@ of the literal `"ADR-"`, and its error text interpolates the prefix.
   - *Migrate ADR now, not later:* a half-extracted spine (POL on shared fns, ADR
     still fat) is the worst state; the behaviour-preservation gate makes the
     extraction safe (suites prove it), and with STD imminent it pays off now.
-- **D2 — Status vocab `draft/active/deprecated/retired`; supersession is a
+- **D2 — Status vocab `draft/required/deprecated/retired`; supersession is a
   relationship, not a status.** Policy is a standing rule, not a decision —
-  ADR's `proposed/accepted/rejected` reads wrong for a policy. Keeping
-  supersession out of the status enum (unlike ADR) avoids the dual-source
-  ambiguity ADR carries.
+  ADR's `proposed/accepted/rejected` reads wrong for a policy. `required`
+  (in-force) is the supekku prior-art term, sharper than `active` for a rule;
+  `retired` is the terminal off-state the prior art lacks (hybrid resolution,
+  OQ-3). Keeping supersession out of the status enum (unlike ADR) avoids the
+  dual-source ambiguity ADR carries.
 - **D3 — Spine at the engine tier (`governance.rs`), beside `meta`/`listing`.**
   Preserves ADR-001 layering; per-kind modules depend on it, it depends only
   downward.
@@ -232,7 +244,7 @@ TDD red/green/refactor. Test surfaces:
 - **adr.rs (migration):** existing suite stays green unchanged at the CLI surface
   — the behaviour-preservation proof. Test-internal `AdrDoc`→`governance::Doc`
   retypes are not behaviour changes.
-- **boot.rs:** extend `regenerate_projects_*` — an `active` policy appears under
+- **boot.rs:** extend `regenerate_projects_*` — a `required` policy appears under
   "Active Policies"; `draft`/`retired` are hidden; empty → marker.
 - **install:** fresh install scaffolds `.doctrine/policy`; `git add` of a
   `policy-NNN.toml` succeeds (not gitignored).
@@ -241,4 +253,45 @@ Gate before commit: `just check` (plain `cargo clippy`, zero warnings), fmt.
 
 ## 10. Review Notes
 
-(Adversarial pass pending — to be recorded here.)
+Internal adversarial pass (assumptions verified against `src/`):
+
+- **R1 (sharpened) — "ADR suite stays green unchanged" overclaimed.** True at the
+  *CLI-observable* surface (new/list/show/status output). But adr.rs unit tests
+  poke internals that this design *moves* (`read_adr`, `set_adr_status`,
+  `format_show`, `show_json`, `parse_ref`, `AdrDoc`). Those tests **relocate** to
+  `governance.rs` and are driven by both descriptors. The behaviour-preservation
+  gate is satisfied by the integration/CLI-level assertions, not the relocated
+  unit tests. §9 amended accordingly.
+- **R2 — `show_json` dynamic key.** ADR builds `json!({"kind":"adr","adr":doc,…})`
+  — the *second* key is also dynamic under a `json_label`. The `json!` macro
+  cannot take a runtime key; the spine builds a `serde_json::Map` manually
+  (`insert("kind", label)`, `insert(label, doc)`, `insert("body", body)`). Impl
+  note, not a design change.
+- **R3 — `stem` must be explicit, not derived.** ADR coincidentally has
+  `stem == prefix.to_lowercase()` (`"adr"`/`"ADR"`); **policy breaks the
+  coincidence** (`stem = "policy"`, `prefix = "POL"`). Validates the explicit
+  `GovKind.stem` field — never derive stem from prefix. (`meta::read_metas` takes
+  the stem; `listing::canonical_id` takes the prefix — confirmed distinct args.)
+- **R4 — `GovKind` as a `const` holding fn pointers** (`hidden: fn(&str)->bool`,
+  embedded `kind.scaffold`). Verified const-compatible — `ADR_KIND` already holds
+  a `scaffold` fn pointer in a `const`. ✓
+- **R5 — Status vocab vs prior art (→ OQ-3, RESOLVED).** supekku
+  `policy-template.md` used `draft/required/deprecated`; D2 originally chose
+  `draft/active/deprecated/retired`. Reconciled to the hybrid
+  `draft/required/deprecated/retired` (`required` from prior art + terminal
+  `retired`). The spine treats the vocab as data, so the resolution is a one-line
+  known-set + enum change.
+- **Verified shared seams:** `entity::Kind` fields are `pub` (embeddable in
+  `GovKind`); `listing::{canonical_id,build,retain,validate_statuses,render_table,
+  json_envelope}` and `meta::read_metas(root, stem)` all parameterize cleanly —
+  no new shared plumbing needed beyond `governance.rs`.
+- **Prior-art reuse:** `policy.md` body = supekku
+  `Statement/Rationale/Scope/Verification/References`, frontmatter dropped
+  (storage rule). Attributed in §5.3.
+- **ADR template checked vs supekku `ADR.md` (no change).** doctrine's `adr.md`
+  body already matches supekku structurally (Context/Decision/Consequences{+/−/0}/
+  Verification/References) and correctly keeps metadata in `adr.toml` (not YAML
+  frontmatter). The only divergences — hint style (HTML-comment vs prose) and a
+  richer status vocab (`draft`/`revision-required`) — were considered and
+  **declined**: ADR stays untouched beyond the spine extraction, keeping SL-030
+  scoped to policy.
