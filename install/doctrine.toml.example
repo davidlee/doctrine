@@ -1,0 +1,36 @@
+# doctrine.toml — OPTIONAL project conduct config (reference template).
+#
+# This is a reference example, not a live config. To use it: copy it to your
+# PROJECT ROOT as `doctrine.toml` (NOT under `.doctrine/` — it is root-level
+# user config, the structured sibling of governance.md, not a doctrine entity)
+# and uncomment the table below. With NO file present, the baked defaults shown
+# here are in force, so adopting this is purely opt-in.
+#
+# The [conduct] table declares the *conduct axis* (SL-028, ADR-009 §2): per
+# lifecycle state, who conducts it (`actor`) and how much latitude exiting it
+# carries (`autonomy`). It is ADVISORY in v1 — `slice status` and `slice show`
+# PRINT the posture; nothing is enforced or gated. `actor` is declared intent,
+# never a runtime identity claim (invoker-blind).
+#
+#   actor    = self | agent | peer | team        (`self` = the human author)
+#   autonomy = auto | draft | gate
+#
+# `autonomy` is EXIT semantics: it governs advancing *out* of a state, so
+# `slice status` resolves the SOURCE state's posture and `reconcile = gate`
+# gates `reconcile -> done` (the closure gate), `plan = gate` gates
+# `plan -> ready` (the approved-plan gate).
+#
+# Baked defaults (in force when the file or a key is absent):
+#   actor = self, autonomy = auto for EVERY state,
+#   EXCEPT plan and reconcile, which default to autonomy = gate.
+# Unknown keys and unknown-state subtables are tolerated, never an error.
+
+# [conduct]
+# default-actor    = "self"
+# default-autonomy = "auto"
+#
+# [conduct.plan]      # "no code without an approved plan" gate
+# autonomy = "gate"
+#
+# [conduct.reconcile] # the closure gate (ADR-003 §8)
+# autonomy = "gate"
