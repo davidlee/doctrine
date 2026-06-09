@@ -1,0 +1,112 @@
+# Implementation plan for SL-028 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-028"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+#
+# The canon phase (author + accept ADR-009, apply the staged ADR-003 amendment)
+# was completed during /design (F7: canon-accept-before-code), commits
+# 3b50786..ee00d94. This plan is code-only.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Slice lifecycle FSM + transition verb"
+objective = """
+Make the inert slice lifecycle advanceable. Expand SLICE_STATUSES additively to \
+the 8+1 FSM vocabulary, add the pure `classify` transition classifier and the \
+distinct `is_transition_terminal` predicate, the edit-preserving \
+`set_slice_status` writer with the structural closure-seam (F12) and \
+from-terminal (F13) refusals, and wire the `slice status <id> <state>` CLI verb. \
+Propagate the vocabulary to slices-spec.md § Lifecycle in lockstep with the spec \
+canary, and name the reconcile stage in boot Core-process prose (F2/F14)."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and ADR-009 accepted (canon-accept-before-code, F7) — the FSM vocabulary, seam, and predicate set are canonical." },
+  { id = "EN-2", text = "slices-spec.md § Lifecycle is the vocabulary authority the spec-lockstep canary (slice.rs:1450) pins; the canary and the spec edit move together (F1)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SLICE_STATUSES = [proposed, design, plan, ready, started, audit, reconcile, done, abandoned] — purely additive; every prior token survives, no existing slice needs migration." },
+  { id = "EX-2", text = "Pure total `classify(from, to) -> Transition` over {Advance, BackEdge, Skip, Abandon, Noop, FromTerminal, SeamBreach}; no clock/disk in the classifier (date shell-injected)." },
+  { id = "EX-3", text = "`is_transition_terminal` ({done, abandoned}) added as a distinct third predicate; `is_terminal_status` ({done}, divergence) and `is_hidden` ({done, abandoned}, presentation) left unchanged (F13)." },
+  { id = "EX-4", text = "`set_slice_status` is edit-preserving (comments + [relationships] survive), no-op guarded, refuses malformed TOML (F-1), refuses the closure seam (SeamBreach, F12: → reconcile only from audit, → done only from reconcile), and refuses leaving a terminal source (FromTerminal)." },
+  { id = "EX-5", text = "`doctrine slice status <id> <state> [--note <s>]` wired in main.rs; writes the move and prints its classification." },
+  { id = "EX-6", text = "slices-spec.md § Lifecycle updated to the new vocabulary with the spec canary updated in lockstep; boot Core-process prose names `… audit → reconcile → close` (the routing-table skill row is NOT touched — F2)." },
+  { id = "EX-7", text = "Behaviour preservation: existing slice list / rollup / divergence / is_drifted / is_hidden suites stay green unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "classify table test: advance, each back-edge, skip, abandon-from-each-non-terminal, noop, from-terminal, out-of-vocab target, seam-breach (→reconcile from non-audit, →done from non-reconcile, incl. from a drifted source), and the legit seam path audit→reconcile→done classifying Advance." },
+  { id = "VT-2", expects = "set_slice_status round-trip preserves comments + [relationships]; no-op guard holds content+mtime; malformed-TOML refuse; FromTerminal refuse; SeamBreach refuse." },
+  { id = "VT-3", expects = "spec-lockstep canary slice_statuses_matches_the_spec_vocabulary green against the edited slices-spec § Lifecycle vocabulary." },
+  { id = "VT-4", expects = "existing rollup / divergence / is_drifted / is_hidden behaviour suites green unchanged; `just check` zero warnings." },
+  { id = "VA-1", expects = "boot Core-process prose names the reconcile stage; the routing-table skill column is unchanged (shipped-not-reachable guard, F2/F14)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Conduct axis (advisory)"
+objective = """
+Add the orthogonal conduct axis: `actor × autonomy` parsed from a new \
+`doctrine.toml [conduct]` table, resolved (pure) with baked defaults, and \
+surfaced (advisory, never blocking) on `slice status` and `slice show`. \
+Invoker-blind — declared config only, never enforced or attributed (F15)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed: the `slice status` verb exists, so the conduct posture folds into its existing output rather than introducing a new surface." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/conduct.rs: enum Actor {Agent, Author (serde \"self\"), Peer, Team}, enum Autonomy {Auto, Draft, Gate}, struct Conduct, ConductConfig; pure `resolve(cfg, state) -> Conduct` with default fallback; BTreeMap state overrides (HashMap banned)." },
+  { id = "EX-2", text = "`doctrine.toml [conduct]` parsed via root::find; absent file or key falls back to baked defaults (self/auto everywhere, plan & reconcile → gate); unknown-state keys tolerated, never hard-error (F9)." },
+  { id = "EX-3", text = "`slice status` prints the SOURCE state's exit posture resolve(from) (F19, autonomy is exit semantics); `slice show` prints resolve(current). Advisory — never blocks in v1." },
+  { id = "EX-4", text = "Optional doctrine.toml install seed/template (commented defaults, like governance.md); NO gitignore-negation or manifest-dir wiring — doctrine.toml is root-level user config, not a .doctrine entity (F6)." },
+]
+verification = [
+  { id = "VT-1", expects = "conduct parse round-trip; default fallback for absent file and absent key; plan/reconcile gate defaults; unknown-state key tolerated." },
+  { id = "VT-2", expects = "resolve precedence — a [conduct.<state>] override beats the default; resolve(from) returns the source state's exit posture." },
+  { id = "VT-3", expects = "`slice status` output contains the conduct posture string (e.g. `reconcile → done [self/gate]`); `slice show` contains resolve(current)." },
+  { id = "VT-4", expects = "`just check` zero warnings; existing suites green unchanged." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Requirement/coverage enums (vocabulary stubs)"
+objective = """
+Land the two-enum truth model as vocabulary only: extend ReqStatus (+InProgress \
++Retired) and add the CoverageStatus stub (self-clearing dead_code), documenting \
+meanings in spec-entity-spec.md § Lifecycle. No derivation, registry, or \
+coverage blocks — ReqStatus = f(coverage) stays absent by design (ADR-009 §3)."""
+entrance_criteria = [
+  { id = "EN-1", text = "ADR-009 §3 (authored-not-derived two-enum model + status meanings) is accepted canon." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ReqStatus = {Pending, InProgress, Active, Deprecated, Retired, Superseded} (serde kebab), additive over the existing enum; meanings documented in-code." },
+  { id = "EX-2", text = "CoverageStatus = {Planned, InProgress, Verified, Failed, Blocked} added (serde kebab), with a self-clearing expect(dead_code, reason=…) — no consumer yet (dead-code-self-clearing-leaf)." },
+  { id = "EX-3", text = "No derivation function exists: ReqStatus = f(coverage) is absent (the explicit-reconcile-vs-derive divergence, ADR-009 §3 / ADR-003 §4-§5)." },
+  { id = "EX-4", text = "spec-entity-spec.md § Lifecycle expanded to the requirement-status vocabulary with documented meanings (in-progress, retired added)." },
+]
+verification = [
+  { id = "VT-1", expects = "ReqStatus InProgress/Retired serde round-trip + as_str render." },
+  { id = "VT-2", expects = "CoverageStatus serde round-trip across all five variants." },
+  { id = "VT-3", expects = "`just check` zero warnings; existing requirement suites green unchanged." },
+]
+specs        = []
+requirements = []
