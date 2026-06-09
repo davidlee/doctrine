@@ -81,10 +81,19 @@ not a second discrimination axis.
    run_* wrappers  run_* wrappers   ← bind concrete enum, delegate to governance::*
 ```
 
-Module layering (ADR-001, leaf ← engine ← command): `governance.rs` sits at the
-engine tier beside `meta`/`listing`, depending only downward on
-`entity`/`meta`/`listing`/`install`/`clock`/`root`. The per-kind modules
-(`adr`/`policy`) depend on `governance`. No cycle.
+Module layering (ADR-001, leaf ← engine ← command). `governance.rs` is a
+**command-tier** shared module — it legitimately uses `root::find` and
+`clock::today` (shell concerns), so it does **not** sit at the engine tier beside
+the pure leaf `listing.rs`. It depends downward on `entity`/`meta`/`listing`
+(engine/leaf) and sideways on the `root`/`clock`/`install` shell utilities. The
+per-kind command modules (`adr`/`policy`) depend on `governance` (command →
+command, acyclic); `boot.rs` already depends on `adr` and will likewise call
+`policy::list_rows`. No engine/leaf module depends on `governance.rs`, so no
+cycle is introduced. Within `governance.rs`, two faces: **io/compute** helpers
+that take a resolved `root`/`path` as input (`list_rows`, `set_status`,
+`read_doc`, `parse_ref`, `format_show`, `show_json` — boot calls `list_rows`
+directly) and the thin **shell** wrappers (`run_*`) that do `root::find` +
+`clock::today` + stdout. (Codex BLOCKER-1.)
 
 ### 5.2 Interfaces & Contracts
 
@@ -94,12 +103,17 @@ The descriptor the spine binds:
 // governance.rs
 pub(crate) struct GovKind {
     pub kind: entity::Kind,                  // dir, prefix, scaffold (existing struct)
-    pub stem: &'static str,                  // file stem: "adr" / "policy"
+    pub stem: &'static str,                  // file stem AND JSON envelope/object key: "adr" / "policy"
     pub statuses: &'static [&'static str],   // known-set (validate_statuses authority)
     pub hidden: fn(&str) -> bool,            // default-list hide-set
-    pub json_label: &'static str,            // list/show JSON envelope key
 }
 ```
+
+`json_label` is **dropped** (Codex MINOR-7): in `adr.rs` the JSON `"kind"` value
+and the dynamic object key are both `"adr"` — identical to the file stem. A
+separate field only admits incoherent states (`stem="policy", json_label="adr"`)
+no kind wants. `stem` serves both file naming and JSON labelling — 4 fields, all
+exercised by ADR **and** POL from day one (tightens R3).
 
 Spine entry points (each takes `&GovKind`; the clock/`today` is injected):
 
@@ -124,9 +138,21 @@ pub(crate) fn run_status(path: Option<PathBuf>, id: u32, status: PolicyStatus) -
 
 `GovRow` replaces the per-kind `AdrRow` (identical fields: `id/status/slug/title`,
 all `String`). `Doc`/`Relationships` replace `AdrDoc`/ADR's `Relationships`
-(identical shape). `show_json`/`json_envelope` use `g.json_label` instead of the
-literal `"adr"`. `parse_ref` strips `g.kind.prefix` (case-insensitively) instead
-of the literal `"ADR-"`, and its error text interpolates the prefix.
+(identical shape). `show_json`/`json_envelope` use `g.stem` instead of the
+literal `"adr"` (the dynamic object key forces a hand-built `serde_json::Map`, not
+the `json!` macro — see §10 R2). `parse_ref` must **preserve ADR's exact
+semantics** (Codex MAJOR-3): strip `"{PREFIX}-"` or its lowercase `"{prefix}-"`
+(the two literal cases ADR accepts today, parameterized on `g.kind.prefix`) or a
+bare id — **not** case-insensitive (a case-insensitive strip would newly accept
+`AdR-7`, an observable ADR behaviour change). Error text interpolates the prefix.
+
+**Tag-filter parity (Codex BLOCKER-2, downgraded — pre-existing).** `adr::key`
+returns `tags: Vec::new()` ([src/adr.rs:219]) and `meta::read_metas` reads only
+`id/slug/title/status` — so ADR's `--tag` axis already matches nothing. The
+shared spine **inherits this limitation**; POL's `--tag` is likewise inert. This
+is parity, not a regression — but the design does **not** claim governance kinds
+support tag filtering. A real tag reader (extend `Meta` or a sibling read) is a
+**follow-up** (§6), not in scope here.
 
 ### 5.3 Data, State & Ownership
 
@@ -171,8 +197,24 @@ of the literal `"ADR-"`, and its error text interpolates the prefix.
 - **Known-set ↔ enum lockstep:** `POLICY_STATUSES` mirrors `PolicyStatus`
   variants, pinned by a drift canary test (mirrors `adr_known_set_matches_variants`).
 - **Hide-set ⊆ known-set:** `is_hidden` only names statuses in the vocab.
-- **boot in-force filter:** only `required` policies project; empty → the section
-  renders its `not yet populated` marker, never a partial/stale row.
+- **boot in-force filter:** only `required` policies project. **Caveat (Codex
+  MAJOR-4):** `boot::section_or_marker` collapses *both* a producer `Err` *and* a
+  genuinely-empty listing into the same `not yet populated` marker
+  ([src/boot.rs:171]) — so a malformed policy corpus renders as "no policies",
+  hiding corruption. This is **pre-existing, shared behaviour** (ADR's section
+  behaves identically); changing it is a boot-wide concern, **out of scope** for
+  SL-030. Documented as inherited; `boot --check`'s disk-sentry remains the
+  backstop. Tests assert the empty→marker case; the error→marker case is
+  acknowledged as inherited, not introduced.
+- **Supersession ⇏ status (Codex MAJOR-5 — invariant + gap).** Because
+  supersession is a *relationship* and boot filters on *status* only, a policy
+  listed in another's `supersedes` can still read `required` and so appear in
+  "Active Policies" alongside its replacement — exactly as ADR's status-only
+  accepted-filter behaves today ([src/boot.rs:123]). **Invariant (authored
+  discipline):** a policy named in any `supersedes` MUST be moved off `required`
+  (to `retired`). No `policy supersede` verb exists to enforce this mechanically
+  in v1 (parity with ADR's unbuilt `adr supersede`/F1) — it is a **follow-up**
+  (§6). boot is, by design, a status projection, not a supersession-resolver.
 - **Edit-preserving round-trip:** `[relationships]`, comments, unknown keys
   survive `status` (toml_edit in place; never reserialised).
 
@@ -186,6 +228,15 @@ of the literal `"ADR-"`, and its error text interpolates the prefix.
 - `OQ-3` **(RESOLVED):** status vocab = `draft/required/deprecated/retired`
   (hybrid — `required` from supekku prior art, terminal `retired` added). See
   D2 / §10 R5.
+
+**Deferred follow-ups (surfaced by the Codex pass, out of SL-030 scope):**
+- **Governance tag reader** — extend `Meta`/a sibling read so `--tag` actually
+  filters governance kinds (today inert for ADR too). Benefits ADR + POL + STD.
+- **`policy supersede` verb** — mechanically flip a superseded policy off
+  `required` (enforces the §5.5 invariant); parity with ADR's unbuilt F1
+  `adr supersede`.
+- **boot error vs empty disambiguation** — distinct failure marker / fail
+  `boot --check` on producer errors; boot-wide, benefits every section.
 
 ## 7. Decisions, Rationale & Alternatives
 
