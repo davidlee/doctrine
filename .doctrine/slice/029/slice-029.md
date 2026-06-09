@@ -40,8 +40,9 @@ IMP-002 dependency.
   the irreducible *gitignored* files matching a project-owned `.worktreeinclude`
   allowlist, **enforcing the exclusion invariant at the copy seam** — coordination/
   runtime tier (`.doctrine/state/`, `phases`, `handover.md`, memory caches) is
-  withheld even under a broad `**` pattern (skip+warn). Regenerate (`cargo build`)
-  + baseline-verify green is the skill-run project command, before handoff.
+  withheld even under a broad `**` pattern (skip+warn). Regenerate-from-source +
+  baseline-verify green via the project-configured command (this repo: `just
+  check`) is the skill step before handoff.
 - **Guards (D5).** Commit-before-spawn — an exact `git status --porcelain -z` gate
   (abort on tracked-dirty or untracked-non-ignored; the fork sees only committed
   HEAD). Branch-point check (HEAD pre/post-create compare) is **in scope** — cheap,
@@ -85,8 +86,9 @@ IMP-002 dependency.
 - **OQ-1 (altitude / sprawl) — RESOLVED → slice-split.** Lifecycle (this slice)
   vs orchestrator funnel (follow-up slice). See `design.md`.
 - **OQ-2 (harness specificity) — RESOLVED.** `doctrine worktree provision` is the
-  framework-neutral copy rung, reading the same `.worktreeinclude` the native hook
-  reads; rung 3 (`git worktree add` + provision) is the tested default.
+  framework-neutral copy rung, reading the project-owned `.worktreeinclude`
+  allowlist; rung 3 (`git worktree add` + provision) is the tested default. (No
+  native-hook allowlist parity assumed — native rung is opportunistic, design F1.)
 - **OQ-3 (CLI vs skill boundary) — RESOLVED.** CLI owns `provision` +
   `check-allowlist` (exclusion enforced at the copy seam); detection / ladder /
   commit-before-spawn / baseline stay skill-prose.
