@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use serde_json::{Map, Value};
 
-use crate::{adr, fsutil, governance, install, memory, root};
+use crate::{adr, fsutil, governance, install, memory, policy, root};
 
 /// The snapshot lives in the runtime-state tree — derived, gitignored
 /// (inherits the `.doctrine/*` ignore), `rm -rf`-able. Never authoritative.
@@ -65,6 +65,8 @@ enum SourceKind {
     Governance,
     /// Accepted-ADR rows (fed in PHASE-02).
     Adrs,
+    /// In-force (`required`) policy rows (fed in PHASE-04).
+    Policies,
     /// Memory pointers (fed in PHASE-02).
     Memories,
 }
@@ -81,6 +83,7 @@ fn boot_sequence() -> Vec<(&'static str, SourceKind)> {
         ),
         ("Governance (project)", SourceKind::Governance),
         ("Accepted ADRs", SourceKind::Adrs),
+        ("Active Policies", SourceKind::Policies),
         ("Memory", SourceKind::Memories),
         // build-volatile — keep LAST so a path change hits only the cache tail.
         ("Invoking doctrine", SourceKind::ExecPath),
@@ -131,6 +134,22 @@ fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Sectio
                 root,
                 crate::listing::ListArgs {
                     status: vec!["accepted".to_string()],
+                    ..Default::default()
+                },
+            ),
+        ),
+        // IN-FORCE policies only — `required` is the standing-rule status (D2/§5.5).
+        // An explicit `--status required` reveals them past the list hide-set
+        // (deprecated|retired), mirroring the accepted-ADR section above. The
+        // error≡empty marker collapse and supersession⇏status gap are inherited,
+        // shared, and out of scope here (§5.5) — documented, not fixed.
+        SourceKind::Policies => section_or_marker(
+            heading,
+            governance::list_rows(
+                &policy::POLICY_KIND,
+                root,
+                crate::listing::ListArgs {
+                    status: vec!["required".to_string()],
                     ..Default::default()
                 },
             ),
@@ -1070,6 +1089,81 @@ mod tests {
         assert!(!snap.contains("<!-- Memory:"), "memory marker replaced");
     }
 
+    // --- VT-1/VT-2: real producer — required policies (filtered) + empty marker ---
+
+    #[test]
+    fn regenerate_projects_required_policies_filtered() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // four policies, one per status — only the `required` one is in force.
+        policy::run_new(
+            Some(root.to_path_buf()),
+            Some("Commit cadence".into()),
+            None,
+        )
+        .unwrap();
+        policy::run_new(
+            Some(root.to_path_buf()),
+            Some("Branch hygiene".into()),
+            None,
+        )
+        .unwrap();
+        policy::run_new(Some(root.to_path_buf()), Some("Old rule".into()), None).unwrap();
+        policy::run_new(Some(root.to_path_buf()), Some("Dead rule".into()), None).unwrap();
+        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required).unwrap();
+        policy::run_status(
+            Some(root.to_path_buf()),
+            3,
+            policy::PolicyStatus::Deprecated,
+        )
+        .unwrap();
+        policy::run_status(Some(root.to_path_buf()), 4, policy::PolicyStatus::Retired).unwrap();
+        // policy 2 stays `draft`.
+
+        assert!(regenerate(root, exec).unwrap());
+        let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
+
+        // the required policy projects with a prefixed POL- id + header row.
+        assert!(
+            snap.contains("POL-001  required"),
+            "required policy row projected with prefixed id:\n{snap}"
+        );
+        // draft / deprecated / retired are all absent — boot is the in-force view.
+        for hidden in ["branch-hygiene", "old-rule", "dead-rule"] {
+            assert!(
+                !snap.contains(hidden),
+                "non-required policy {hidden} must not project:\n{snap}"
+            );
+        }
+        assert!(
+            !snap.contains("<!-- Active Policies:"),
+            "policy marker replaced when a required policy exists"
+        );
+    }
+
+    #[test]
+    fn regenerate_empty_policy_corpus_renders_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // a single draft policy — zero `required`, so the section is empty-in-force.
+        policy::run_new(Some(root.to_path_buf()), Some("Just a draft".into()), None).unwrap();
+
+        assert!(regenerate(root, exec).unwrap());
+        let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
+        assert!(
+            snap.contains("<!-- Active Policies: not yet populated -->"),
+            "zero required policies → marker, never a partial/stale row:\n{snap}"
+        );
+        assert!(
+            !snap.contains("just-a-draft"),
+            "draft policy must not leak into the in-force section:\n{snap}"
+        );
+    }
+
     /// VT-3 (SL-025 §5.1 / C-4): boot's memory section is rendered ACTIVE-ONLY via
     /// an explicit predicate, DECOUPLED from the CLI `memory list` default. The
     /// fixture spans active + draft + each hidden lifecycle state. Boot must show
@@ -1209,6 +1303,13 @@ mod tests {
         fs::write(&gov, "# Governance\n\npoint at doc/spec.md\n").unwrap();
         adr::run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
         adr::run_status(Some(root.to_path_buf()), 1, adr::AdrStatus::Accepted).unwrap();
+        policy::run_new(
+            Some(root.to_path_buf()),
+            Some("Commit cadence".into()),
+            None,
+        )
+        .unwrap();
+        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required).unwrap();
         memory::run_record(
             Some(root.to_path_buf()),
             &memory::RecordArgs {
