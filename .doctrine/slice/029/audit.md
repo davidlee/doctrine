@@ -63,6 +63,18 @@ via `doctrine skills install -y` + relinked `.claude/skills/`.
   the funnel slice. → **follow-up slice** (design §5 / §6 "Deferred"). The scope
   reconciliation already moved `/dispatch` out of SL-029.
 
+- **A-6 F1 was factually wrong — `WorktreeCreate` ships (design was wrong).**
+  Design §2/R-2 framed the Claude Code `WorktreeCreate` hook as an
+  "unconfirmed-shipped discussion proposal." It is a **shipped, documented** hook
+  (code.claude.com/docs/en/hooks): it *replaces* git worktree creation (the hook
+  creates the worktree and returns its path) and does **not** auto-copy by default.
+  The correct reason to not depend on rung 2 is **portability** — the hook is
+  Claude-Code-specific, so a non-Claude agent (codex, pi, …) has none; rung 3
+  (`git worktree add`) stays the portable default. The force-copy hazard survives
+  only as a conditional (a project MAY configure the hook to copy). → **design was
+  wrong**: reconciled `design.md` §2 rung 2 + R-2 and `worktree/SKILL.md` rung 2
+  to state the fact and the portability gate. User-surfaced.
+
 ## Closure readiness
 
 Design and code agree across both phases; every finding is dispositioned. The
