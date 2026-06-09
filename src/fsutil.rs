@@ -104,6 +104,85 @@ fn symlink(target: &Path, link: &Path) -> anyhow::Result<()> {
         .with_context(|| format!("Failed to create symlink {}", link.display()))
 }
 
+/// The disposition of one [`copy_selected`] candidate.
+#[derive(Debug)]
+pub(crate) enum CopyOutcome {
+    /// Copied into the fork.
+    Copied,
+    /// Deliberately not copied (symlink escapes the tree / targets the withheld
+    /// tier / is not a regular file); the reason is for a skip+warn line.
+    Skipped(String),
+}
+
+/// Copy one repo-relative file from a **canonical** `source_root` into a
+/// **canonical** `fork_root`, refusing anything whose real location escapes the
+/// source tree (SL-029 §3 copy safety, B5 — `safe_join` is insufficient because
+/// a symlink *component* can escape even with no `..`).
+///
+/// Both roots MUST already be canonical (the caller canonicalizes once). The
+/// source path is resolved with [`fs::canonicalize`], so a symlink component or a
+/// symlink pointing out-of-tree is caught; for a symlink whose target stays
+/// in-tree, `target_withheld` decides whether that target lands in the
+/// coordination tier (passed in to keep `fsutil` free of any git/worktree
+/// dependency — no module cycle). The destination parent is canonicalized after
+/// creation so a symlink component cannot redirect the write out of the fork;
+/// the final path is then built by join (the dest leaf does not exist yet, R-c).
+pub(crate) fn copy_selected(
+    source_root: &Path,
+    fork_root: &Path,
+    rel: &Path,
+    target_withheld: &dyn Fn(&Path) -> bool,
+) -> anyhow::Result<CopyOutcome> {
+    let src = source_root.join(rel);
+    let meta = fs::symlink_metadata(&src).with_context(|| format!("stat {}", src.display()))?;
+
+    let real = fs::canonicalize(&src).with_context(|| format!("canonicalize {}", src.display()))?;
+    if !real.starts_with(source_root) {
+        return Ok(CopyOutcome::Skipped(format!(
+            "{} resolves outside the source tree",
+            rel.display()
+        )));
+    }
+    if meta.file_type().is_symlink() {
+        let real_rel = real
+            .strip_prefix(source_root)
+            .map_err(|e| anyhow::anyhow!("strip source prefix: {e}"))?;
+        if target_withheld(real_rel) {
+            return Ok(CopyOutcome::Skipped(format!(
+                "{} targets the withheld tier",
+                rel.display()
+            )));
+        }
+    }
+    if !real.is_file() {
+        return Ok(CopyOutcome::Skipped(format!(
+            "{} is not a regular file",
+            rel.display()
+        )));
+    }
+
+    let dest = fork_root.join(rel);
+    let parent = dest
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("dest {} has no parent", dest.display()))?;
+    fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    let parent_canon =
+        fs::canonicalize(parent).with_context(|| format!("canonicalize {}", parent.display()))?;
+    if !parent_canon.starts_with(fork_root) {
+        return Ok(CopyOutcome::Skipped(format!(
+            "{} destination escapes the fork",
+            rel.display()
+        )));
+    }
+    let name = dest
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("dest {} has no file name", dest.display()))?;
+    let final_dest = parent_canon.join(name);
+    fs::copy(&real, &final_dest)
+        .with_context(|| format!("copy {} -> {}", real.display(), final_dest.display()))?;
+    Ok(CopyOutcome::Copied)
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -213,5 +292,65 @@ mod tests {
         assert!(err.to_string().contains("Refusing to replace non-symlink"));
         // untouched
         assert_eq!(fs::read_to_string(&squat).unwrap(), "not a symlink");
+    }
+
+    // --- copy_selected (SL-029 B5 copy safety) ---
+
+    fn canon_roots() -> (tempfile::TempDir, tempfile::TempDir, PathBuf, PathBuf) {
+        let src = tempfile::tempdir().unwrap();
+        let fork = tempfile::tempdir().unwrap();
+        let src_canon = fs::canonicalize(src.path()).unwrap();
+        let fork_canon = fs::canonicalize(fork.path()).unwrap();
+        (src, fork, src_canon, fork_canon)
+    }
+
+    #[test]
+    fn copy_selected_copies_a_plain_nested_file() {
+        let (src, _fork, src_canon, fork_canon) = canon_roots();
+        let f = src.path().join("nested/data.txt");
+        fs::create_dir_all(f.parent().unwrap()).unwrap();
+        fs::write(&f, "hello").unwrap();
+
+        let never = |_p: &Path| false;
+        let out = copy_selected(
+            &src_canon,
+            &fork_canon,
+            Path::new("nested/data.txt"),
+            &never,
+        )
+        .unwrap();
+        assert!(matches!(out, CopyOutcome::Copied));
+        assert_eq!(
+            fs::read_to_string(fork_canon.join("nested/data.txt")).unwrap(),
+            "hello"
+        );
+    }
+
+    #[test]
+    fn copy_selected_refuses_an_out_of_tree_symlink() {
+        let (src, _fork, src_canon, fork_canon) = canon_roots();
+        let outside = tempfile::tempdir().unwrap();
+        let secret = outside.path().join("secret");
+        fs::write(&secret, "s").unwrap();
+        std::os::unix::fs::symlink(&secret, src.path().join("link")).unwrap();
+
+        let never = |_p: &Path| false;
+        let out = copy_selected(&src_canon, &fork_canon, Path::new("link"), &never).unwrap();
+        assert!(matches!(out, CopyOutcome::Skipped(_)));
+        assert!(!fork_canon.join("link").exists());
+    }
+
+    #[test]
+    fn copy_selected_refuses_a_symlink_into_the_withheld_tier() {
+        let (src, _fork, src_canon, fork_canon) = canon_roots();
+        let statefile = src.path().join(".doctrine/state/boot.md");
+        fs::create_dir_all(statefile.parent().unwrap()).unwrap();
+        fs::write(&statefile, "boot").unwrap();
+        std::os::unix::fs::symlink(&statefile, src.path().join("link")).unwrap();
+
+        let withheld = |p: &Path| p.starts_with(".doctrine/state");
+        let out = copy_selected(&src_canon, &fork_canon, Path::new("link"), &withheld).unwrap();
+        assert!(matches!(out, CopyOutcome::Skipped(_)));
+        assert!(!fork_canon.join("link").exists());
     }
 }

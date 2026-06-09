@@ -502,7 +502,10 @@ fn run_git(root: &Path, args: &[&str]) -> Result<std::process::Output, CaptureEr
 }
 
 /// Run a git command, erroring on non-zero exit; return raw stdout bytes.
-fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CaptureError> {
+/// `pub(crate)` so the worktree provisioner can drive `git ls-files -z` through
+/// the one normative-flag chokepoint rather than forking a second runner
+/// (SL-029 T6 / R-a — generic plumbing, not born-frame internals).
+pub(crate) fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CaptureError> {
     let output = run_git(root, args)?;
     if output.status.success() {
         Ok(output.stdout)
@@ -516,7 +519,9 @@ fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CaptureError> {
 }
 
 /// Run a git command expecting trimmed UTF-8 stdout (errors on non-zero exit).
-fn git_text(root: &Path, args: &[&str]) -> Result<String, CaptureError> {
+/// `pub(crate)` for the worktree provisioner's `rev-parse --git-common-dir`
+/// sibling-worktree check (SL-029 T6).
+pub(crate) fn git_text(root: &Path, args: &[&str]) -> Result<String, CaptureError> {
     let bytes = git_bytes(root, args)?;
     let text = String::from_utf8(bytes)
         .map_err(|_ignored| CaptureError::Git(format!("non-utf8 output: {}", args.join(" "))))?;
