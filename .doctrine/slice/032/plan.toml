@@ -1,0 +1,143 @@
+# Implementation plan for SL-032 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-032"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Worker-mode guard"
+objective = """
+Mechanise ADR-006 D2a. Add a pure, EXHAUSTIVE `write_class(&Command) -> WriteClass`
+classifier (no wildcard arm — design §5.2/D6) that maps every Command + subcommand
+to Read or Write(verb-label), plus a `worker_mode()` shell read of DOCTRINE_WORKER
+and a single gate in main() that bails before the dispatch match when a worker
+attempts a Write-classed verb. Pure leaf — no engine touch. SL-031's hardest
+dependency: it is the guard the funnel relies on to keep workers source-only.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; D6 (exhaustive write_class, superset of D2a) and §5.2 guard signatures are the build target." },
+  { id = "EN-2", text = "The central `match cli.command` gate site in main() (design §2, src/main.rs) is the single insertion point." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`write_class` matches every Command + subcommand variant exhaustively with NO wildcard arm — adding a future verb is a compile error until classified (X4/D6)." },
+  { id = "EX-2", text = "Every authored / memory / runtime-state mutation classifies as Write — the design §5.2 superset (slice design/plan/notes/phases/phase/status, adr/spec new, spec req add, backlog new/edit, memory record/verify, sync/boot/skills/install writers); Show/List/Find/Retrieve/CheckAllowlist/Provision/validate classify as Read." },
+  { id = "EX-3", text = "main() bails before dispatch when `worker_mode()` and `write_class` is Write: verb-named refusal message to stderr + nonzero exit; Read-classed verbs are never refused (INV-3)." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit table asserts the class of every Command + subcommand variant; the exhaustive match means the compiler enforces totality (X4) — a new unclassified verb fails to build." },
+  { id = "VT-2", expects = "For each Write verb, DOCTRINE_WORKER=1 ⟹ nonzero exit + a refusal message naming that verb (the D2a conformance surface SL-031 trusts)." },
+  { id = "VT-3", expects = "A representative Read verb under DOCTRINE_WORKER=1 ⟹ runs unaffected (INV-3, reads always open)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Trunk-ref id allocation"
+objective = """
+Mechanise ADR-006 D3. Add `git::trunk_tree_ish(root)` (the peeled ladder
+DOCTRINE_TRUNK_REF → origin/HEAD → main → master, each resolved via
+`rev-parse --verify --quiet <ref>^{commit}`) and `git::trunk_entity_ids(root,
+kind_dir)` (ls-tree on the ALREADY-prefixed kind.dir — X1). Extract a genuinely
+pure `entity::next_id(local, trunk) -> u32` (= max(union)+1) and widen
+`materialise` with a `trunk_ids: &[u32]` data param consumed only in the Fresh
+arm. No NEW impurity in entity.rs (INV-2); existing numeric suites are the
+behaviour-preservation gate (INV-1/R-1).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "The injectable `scan` closure seam in `allocate_fresh`/`materialise` (design §2, src/entity.rs) is the union insertion point; no allocation framework is added." },
+  { id = "EN-2", text = "`src/git.rs` git_text/git_opt/run_git helpers + the existing submodule guard are reused for the trunk read." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`trunk_tree_ish` peels each ladder candidate via `^{commit}`; an EXPLICITLY set DOCTRINE_TRUNK_REF that fails to peel is a hard error; absence of any trunk (no remote / bare / detached / fresh) yields Ok(None) → empty trunk set (F4/X6/EDGE)." },
+  { id = "EX-2", text = "`trunk_entity_ids` passes kind.dir to ls-tree WITHOUT re-prepending `.doctrine/` (X1) and returns Ok(vec![]) when the dir is absent on trunk." },
+  { id = "EX-3", text = "`next_id(local, trunk)` is pure (no env/git/disk) and returns max(local ∪ trunk)+1; `materialise` gains the `trunk_ids` param, inert outside the Fresh arm; existing call sites take the mechanical `&[]` update (F5)." },
+  { id = "EX-4", text = "Existing numeric allocation suites pass green UNCHANGED (INV-1) — the PHASE-02 exit gate for shared-machinery behaviour preservation." },
+]
+verification = [
+  { id = "VT-1", expects = "`next_id` unit table over (local, trunk) — empty/empty, trunk-ahead, local-ahead, overlap — asserts max(union)+1." },
+  { id = "VT-2", expects = "Fixture repo with committed ids ahead of the working tree ⟹ the minted id clears the trunk max (the D3 union surface SL-031's orchestrator mints against)." },
+  { id = "VT-3", expects = "X1 regression: a planted `.doctrine/slice/NNN` is found via the un-prefixed kind.dir (no double `.doctrine/`)." },
+  { id = "VT-4", expects = "No-trunk fixture ⟹ local-only allocation, solo path byte-identical (R-2/EDGE)." },
+  { id = "VT-5", expects = "An explicitly set but un-peelable DOCTRINE_TRUNK_REF ⟹ hard error, not a silent local fallback (X6/F4)." },
+  { id = "VT-6", expects = "The existing numeric allocation suites run green unchanged (INV-1/R-1)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "validate + reseat"
+objective = """
+Mechanise the D3 detect + repair backstop. Add a new top-level `validate` verb
+that runs a PER-KIND (X2 — ids are per-namespace) integrity scan, and a
+`reseat <CANONICAL_REF> [--to <NNN>]` verb that renumbers an entity's canonical-id
+triple (dir name, toml `id`, id/alias symlink) to the next free trunk-aware id
+(PHASE-02's pick), reporting inbound prose citations as danglers without
+auto-rewriting them (ADR-004 outbound-only, R-3/D4).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: the trunk-aware free-id pick (`next_id` + trunk read) is available for reseat's default `--to` (design §5.3)." },
+  { id = "EN-2", text = "Per-namespace id model (X2) is the scan unit — detection and reseat key on the canonical ref (SL-NNN), never a bare number." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`validate` scans each kind for: (a) dir basename NNN == toml `id`; (b) no two entities of a kind share an `id`; (c) each alias symlink TARGETS the dir whose toml id matches the alias's encoded id (target equality, not mere resolvability — X7). Any violation ⟹ exit 1 + a report naming the offenders; a clean corpus ⟹ exit 0." },
+  { id = "EX-2", text = "`reseat <CANONICAL_REF>` renumbers the triple to the next free trunk-aware id (or `--to <NNN>`), keeps the alias target correct, and surfaces inbound prose citations as danglers + nonzero exit (no silent prose rewrite, D4/R-3)." },
+  { id = "EX-3", text = "`reseat` refuses an occupied `--to` (no clobber) and refuses an id with live gitignored runtime phase state (`.doctrine/state/slice/NNN/`, the `phases` symlink) — it does not own the disposable tier (F3)." },
+]
+verification = [
+  { id = "VT-1", expects = "`validate` on a planted dir/`id` mismatch ⟹ exit 1 + the offender named (the D3 detect-half conformance surface)." },
+  { id = "VT-2", expects = "`validate` on a planted intra-kind duplicate id ⟹ exit 1 + both named (X2)." },
+  { id = "VT-3", expects = "`validate` on a planted MIS-TARGETED alias (resolvable but pointing at the wrong dir) ⟹ exit 1 (X7 target equality)." },
+  { id = "VT-4", expects = "`validate` on a clean corpus ⟹ exit 0." },
+  { id = "VT-5", expects = "`reseat SL-NNN` on a collision ⟹ triple renumbered to the next free id, alias target correct, inbound-citation danglers listed, nonzero exit." },
+  { id = "VT-6", expects = "`reseat --to` naming an occupied id ⟹ refused (no clobber)." },
+  { id = "VT-7", expects = "`reseat` on an id with live runtime phase state ⟹ refused (F3)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Memory-record worktree warning"
+objective = """
+Mechanise the ADR-006 amendment. Add a shared `worktree::is_linked_worktree(root)
+-> Result<bool>` (git-dir ≠ git-common-dir — worktree.rs ships only sibling
+verification today, X8) and call it from `memory record` to emit a non-blocking
+stderr squash-orphan warning under linked-worktree context (solo-in-worktree stays
+blessed, D6a — warn, then proceed).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "worktree.rs has no self-detection seam today (verify_sibling_worktree is sibling, not self — X8); this phase ADDS and shares one." },
+  { id = "EN-2", text = "`memory record` is the single call site for the amendment (design §5.4)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`worktree::is_linked_worktree(root)` returns true iff `git rev-parse --git-dir` ≠ `--git-common-dir`, reusing the existing git/submodule helpers; it is shared (callable by the provision path), not memory-private." },
+  { id = "EX-2", text = "`memory record` under linked-worktree context emits a squash-orphan-risk warning to stderr and STILL succeeds (non-blocking, D6a); a primary working tree records silently." },
+]
+verification = [
+  { id = "VT-1", expects = "`is_linked_worktree` fixture: a linked worktree ⟹ true; the primary tree ⟹ false." },
+  { id = "VT-2", expects = "`memory record` in a linked worktree ⟹ stderr warning emitted AND the record succeeds (the amendment conformance surface)." },
+  { id = "VT-3", expects = "`memory record` in the primary tree ⟹ silent, no warning." },
+]
+specs             = []
+requirements      = []
