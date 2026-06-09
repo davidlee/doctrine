@@ -1,0 +1,41 @@
+memory_uid = "mem_019eacd4b2af7a7099792cc3e1671cc5"
+memory_key = "mem.pattern.distribution.skills-source-vs-installed"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Skill source-of-truth is plugins/, not the gitignored .doctrine/skills installed copy"
+summary = "Skills are authored in plugins/doctrine/skills/; .doctrine/skills/* is the gitignored installed copy — edit the source, not the copy"
+created = "2026-06-09"
+updated = "2026-06-09"
+
+[scope]
+paths = []
+globs = ["plugins/doctrine/skills/**", ".doctrine/skills/**"]
+commands = ["doctrine install"]
+tags = ["skills", "install", "distribution", "gitignore"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f35c6b8eec37e9561208c5c6c87ff84798811825"
+ref_name = "refs/heads/main"
+checkout_state_id = "29ae4224230fd572f4d986a39bf39bf4172ce57d3cc81530f289a2e38e59d507"
+base_commit = "689742b1ae6f357c704d29b4970bc745fb493d17"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
