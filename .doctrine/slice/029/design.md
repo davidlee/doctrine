@@ -76,8 +76,13 @@ sole copier.** Creation has a backend choice; provisioning is invariant.
 
 1. **Detect existing isolation** (D1) — already forked → skip creation.
 2. **Harness native worktree-*creation*** if present and invocable **creation-only**
-   (no auto-copy). Opportunistic; the Claude Code `WorktreeCreate` hook is a GitHub
-   *discussion* proposal (mattbrailsford #54), unconfirmed-shipped (F1).
+   (no auto-copy). Opportunistic; Claude Code's `WorktreeCreate` hook
+   (code.claude.com/docs/en/hooks) is the concrete instance — it *replaces* git
+   creation (the hook creates the worktree and returns its path). It is
+   **Claude-Code-specific**: a non-Claude agent (codex, pi, …) has no such hook,
+   and a project MAY configure the hook body to provision/copy. So treat the rung
+   as opportunistic + portability-gated, never depended on (F1, corrected — the
+   hook ships; the reason not to depend is portability, not existence-doubt).
 3. **`git worktree add <path> <branch>`** — the guaranteed-present, tested default.
 4. **Work-in-place** (solo, no funnel) on sandbox denial — the blessed D1/D6a trunk
    path. No fork.
@@ -281,10 +286,13 @@ the funnel slice.
 
 ## Open items / carried risks
 
-- **R-2 (native rung unconfirmed, F1).** The Claude Code `WorktreeCreate` hook is a
-  discussion proposal; rung 3 is the tested default. If the hook is absent, rung 2
-  is never taken — no design change. If a harness force-copies, the invariant
-  degrades to `check-allowlist` only (§2 caveat) — documented, not papered over.
+- **R-2 (native rung is portability-gated, F1 corrected).** Claude Code's
+  `WorktreeCreate` hook ships (code.claude.com/docs/en/hooks) but is
+  Claude-Code-specific — a non-Claude agent has none, so rung 3 (`git worktree
+  add`) stays the portable tested default. When the hook is absent, rung 2 is
+  never taken — no design change. If a project configures the hook to force-copy,
+  the invariant degrades to `check-allowlist` only (§2 caveat) — documented, not
+  papered over.
 - **Memory-cache glob precision.** `WITHHELD` memory-cache entries are pinned to
   `.gitignore` lines 35–38; the parity test is the guard against drift.
 - **A-1 (downgraded).** IMP-002 is a prereq for the funnel slice, not SL-029.

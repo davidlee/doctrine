@@ -64,9 +64,12 @@ A submodule is **not** the isolation we want — treat it as "not yet forked".
 
 1. **Existing isolation** (detection above) → skip creation, adopt the fork.
 2. **Harness native worktree-*creation*** if present and invocable
-   **creation-only** (no auto-copy). Opportunistic only — the Claude Code
-   `WorktreeCreate` hook is an unconfirmed-shipped discussion proposal (F1).
-   **Design around it; never depend on it.**
+   **creation-only** (no auto-copy). Opportunistic only — Claude Code's
+   `WorktreeCreate` hook (code.claude.com/docs/en/hooks) is the concrete instance:
+   it *replaces* git creation (the hook makes the worktree, returns its path). But
+   it is **Claude-Code-specific** — a non-Claude agent (codex, pi, …) has none, and
+   a project MAY configure the hook to copy. **Design around it; never depend on
+   it** — fall through to rung 3, which works under any agent.
 3. **`git worktree add <path> <branch>`** — guaranteed-present, the **blessed
    tested default**. Prefer this rung; it is fully controlled.
 4. **Work-in-place** (`solo` only, `allow_work_in_place=true`) on sandbox denial —
