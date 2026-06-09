@@ -863,6 +863,31 @@ mod tests {
         );
     }
 
+    // --- VT-1: section order (Active Policies immediately after Accepted ADRs — EX-1) ---
+
+    #[test]
+    fn boot_sequence_orders_active_policies_after_accepted_adrs() {
+        let h = headings();
+        let adrs = h
+            .iter()
+            .position(|h| *h == "Accepted ADRs")
+            .expect("Accepted ADRs present");
+        let policies = h
+            .iter()
+            .position(|h| *h == "Active Policies")
+            .expect("Active Policies present");
+        let memory = h
+            .iter()
+            .position(|h| *h == "Memory")
+            .expect("Memory present");
+        assert_eq!(
+            policies,
+            adrs + 1,
+            "Active Policies must sit immediately after Accepted ADRs"
+        );
+        assert!(policies < memory, "Active Policies must precede Memory");
+    }
+
     // --- VT-1: render determinism + structure ---
 
     #[test]
@@ -1131,10 +1156,15 @@ mod tests {
             "required policy row projected with prefixed id:\n{snap}"
         );
         // draft / deprecated / retired are all absent — boot is the in-force view.
+        // scope the negative checks to the Active Policies section body only.
+        let section = snap
+            .split_once("## Active Policies\n")
+            .map(|(_, tail)| tail.split_once("\n## ").map_or(tail, |(body, _)| body))
+            .expect("Active Policies section present");
         for hidden in ["branch-hygiene", "old-rule", "dead-rule"] {
             assert!(
-                !snap.contains(hidden),
-                "non-required policy {hidden} must not project:\n{snap}"
+                !section.contains(hidden),
+                "non-required policy {hidden} must not project:\n{section}"
             );
         }
         assert!(
