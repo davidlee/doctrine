@@ -63,3 +63,28 @@ check` green, plain clippy zero.
   branch-point check, baseline-verify (`just check`) are all skill-prose per design
   §4; the Rust does the copy axis only. `.worktreeinclude` is project-owned, NOT
   installed (design F2) — `/worktree` documents a commented template.
+
+## PHASE-02 — `/worktree` lifecycle skill + `/execute` solo-isolation thread
+
+Shipped: T1 `feat(SL-029): /worktree lifecycle skill …` (511e4f4); T2 + T3 this
+pass. `just check` green; both VA read-throughs PASS (skill prose matches design
+§2/§4/§5 in substance; `/execute` thread matches §5 clause-for-clause).
+
+### Decisions / findings (durable subset; full set in the phase sheet)
+
+- **`/worktree` is slice-agnostic.** It takes `mode`/`allow_work_in_place`/branch
+  as inputs; the slice→branch mapping (`slice/SL-NNN-slug`, dir `.worktrees/SL-NNN`)
+  lives in the `/execute` thread (PD-3), NOT in `/worktree` — so the funnel reuses
+  it for non-slice worker branches.
+- **`/execute` isolation is opt-in only, worker-mode OFF (D6a).** The default
+  in-tree path is unchanged; `/dispatch` SKILL untouched. The opt-in branch sits
+  before step 5 (the TDD loop runs inside the fork).
+- **Skill refresh ≠ `doctrine install`.** `doctrine install` only ensures the
+  `.doctrine/skills/` dir exists (content `skip`ped as exists). New SKILL.md /
+  NOTICE.md content + `.claude/skills/<id>` relink land via `doctrine skills
+  install -y`. And a lone `plugins/` edit does NOT re-embed on `cargo build` (no-op
+  in <1s) — `touch src/skills.rs` first to force the embedding crate to recompile
+  ([[mem.pattern.build.rust-embed-no-rerun]]). Working sequence: touch → build →
+  `skills install`. (Phase-sheet F-5.)
+- **NOTICE.md ships automatically** via the skills dir-copy (F-4) — no install
+  change needed.
