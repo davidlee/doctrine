@@ -24,6 +24,7 @@ mod slice;
 mod spec;
 mod state;
 mod tomlfmt;
+mod worktree;
 
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -167,6 +168,34 @@ enum Command {
 
         /// Explicit project root (default: auto-detect). Used by the bare
         /// regenerate; `boot install` carries its own `-p`.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Provision a worktree fork (allowlisted copy, coordination tier excluded).
+    Worktree {
+        #[command(subcommand)]
+        command: WorktreeCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorktreeCommand {
+    /// Copy allowlisted gitignored files from the source tree into `<fork>` —
+    /// the sole copy path; the coordination/runtime tier is always excluded.
+    Provision {
+        /// The target sibling worktree to populate.
+        fork: PathBuf,
+
+        /// Explicit source project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Static smell test: nonzero exit if any `.worktreeinclude` pattern names a
+    /// withheld tier or uses unsupported syntax (`!`/anchoring).
+    CheckAllowlist {
+        /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
@@ -1078,6 +1107,10 @@ fn main() -> anyhow::Result<()> {
                 dry_run,
                 yes,
             }) => boot::run_install(path, &agent, dry_run, yes),
+        },
+        Command::Worktree { command } => match command {
+            WorktreeCommand::Provision { fork, path } => worktree::run_provision(path, &fork),
+            WorktreeCommand::CheckAllowlist { path } => worktree::run_check_allowlist(path),
         },
     }
 }
