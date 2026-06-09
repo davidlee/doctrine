@@ -42,9 +42,11 @@ IMP-002 dependency.
   runtime tier (`.doctrine/state/`, `phases`, `handover.md`, memory caches) is
   withheld even under a broad `**` pattern (skip+warn). Regenerate (`cargo build`)
   + baseline-verify green is the skill-run project command, before handoff.
-- **Guards (D5).** Commit-before-spawn (a fork sees only committed HEAD).
-  Branch-point check is **deferred to the funnel slice** (vacuous for solo — no
-  concurrent HEAD mover).
+- **Guards (D5).** Commit-before-spawn — an exact `git status --porcelain -z` gate
+  (abort on tracked-dirty or untracked-non-ignored; the fork sees only committed
+  HEAD). Branch-point check (HEAD pre/post-create compare) is **in scope** — cheap,
+  ADR-D5-mandated, no IMP-002 needed; the funnel slice only extends it to the
+  concurrent case.
 - **Worker vs solo (D6a).** This slice lands the **solo** side only: `/execute`
   isolation, worker-mode OFF, writing doctrine state directly. Worker-mode-ON funnel
   workers + `/dispatch` are the follow-up slice.
@@ -54,7 +56,6 @@ IMP-002 dependency.
 - **Orchestrator funnel + `/dispatch` (OQ-1 split half)** — the
   import→verify→commit→record discipline (D2/D6/D7), worker-mode-ON workers, and
   filling the `/dispatch` placeholder. Separate follow-up slice; depends on IMP-002.
-- **Branch-point check (D5)** — deferred to the funnel slice; near-vacuous for solo.
 - **IMP-002 machinery** — the worker-mode guard (D2a) and trunk-ref minting /
   reseat (D3). Prerequisite for the funnel slice, not this one.
 - **Raw-tree confinement (D2b)** — OS-enforced worker confinement; deferred to
@@ -66,16 +67,18 @@ IMP-002 dependency.
 
 ## Affected surface
 
-- `.doctrine/skills/worktree/` — **new** lifecycle skill (detection, ladder,
-  guards, baseline prose; invokes the CLI verbs).
-- `src/worktree.rs` — **new**: pure core (`Allowlist`, `COORDINATION_GLOBS`,
-  `exclusion_violations`, `select_copies`) + impure `provision`.
+- `plugins/doctrine/skills/worktree/SKILL.md` — **new** lifecycle skill (mode
+  contract; detection, creation, guards, baseline; invokes the CLI verbs).
+  **Authored in `plugins/`, not the gitignored `.doctrine/skills/` install copy.**
+- `src/worktree.rs` — **new**: pure core (`Allowlist`, structured `WITHHELD`,
+  `is_withheld`, `select_copies`, `allowlist_violations`) + impure `provision` +
+  canonicalize-guarded copy.
 - `src/main.rs` — new `Worktree { Provision, CheckAllowlist }` subcommand.
-- `src/fsutil.rs` — recursive `safe_join`-guarded copy helper.
-- `.doctrine/skills/execute/` — thin optional-isolation thread (D6a, solo).
+- `src/fsutil.rs` — recursive, canonicalize/symlink-safe copy helper.
+- `plugins/doctrine/skills/execute/SKILL.md` — thin optional solo-isolation thread.
 - `.worktreeinclude` — **not installed**: project-owned; `provision` tolerates
   absence; the `/worktree` skill documents the template (design F2).
-- `.doctrine/skills/dispatch/` — **untouched** (placeholder; funnel slice).
+- `plugins/doctrine/skills/dispatch/SKILL.md` — **untouched** (placeholder; funnel).
 
 ## Risks, assumptions, open questions
 
@@ -101,10 +104,11 @@ creation ladder degrades cleanly through its rungs (`git worktree add` + provisi
 as the tested default); `provision` copies per allowlist and the **coordination-
 tier exclusion invariant is enforced *at the copy seam* and tested** (incl. the
 broad-`**` withhold case); `check-allowlist` rejects a tier-naming pattern;
-baseline-verify gates handoff; commit-before-spawn holds; the `/worktree` skill
-ships and `/execute` gains the solo optional-isolation thread (D6a). The relevant
-subset of ADR-006's Verification bullets is the conformance basis (funnel / D7 /
-branch-point / D2a deferred to the follow-up slice).
+baseline-verify (`just check`) gates handoff; commit-before-spawn + branch-point
+guards (D5) hold; the `/worktree` skill ships (with its `mode=solo|worker` contract,
+solo implemented) and `/execute` gains the solo optional-isolation thread (D6a). The
+relevant subset of ADR-006's Verification bullets is the conformance basis (funnel /
+D7 / D2a / branch-point-under-concurrency deferred to the follow-up slice).
 
 ## Follow-Ups
 

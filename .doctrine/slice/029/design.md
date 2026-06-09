@@ -11,270 +11,309 @@ is assumed, not built (and is **not** depended on by this slice — see §1).
   *lifecycle* + the `/execute` optional-isolation path: **solo, no funnel, no
   IMP-002 dependency.** The orchestrator funnel (import→verify→commit→record,
   worker-vs-solo D6a-ON, `/dispatch` ships) is a separate follow-up slice that
-  *does* depend on IMP-002. Rationale: the two units have different dependency
-  profiles; the lifecycle ships standalone value (solo `/execute` isolation works
-  today) and carries the testable Rust, so splitting unblocks SL-029 from the
-  IMP-002 sequencing gate and keeps each slice small.
+  *does* depend on IMP-002. The two units have different dependency profiles; the
+  lifecycle ships standalone value (solo `/execute` isolation works today) and
+  carries the testable Rust. **The split seam is the `/worktree` skill's mode
+  contract (§5), defined now so the funnel slice reuses it without re-deciding.**
 - **OQ-3 (CLI vs skill boundary) → invariant + provision copy in Rust.** The CLI
-  owns the exclusion-invariant assertion *and* the allowlist-driven copy (one
-  seam, so the copy physically cannot leak the coordination tier). Detection,
-  ladder rung-selection, branch-point check, baseline-verify stay skill-prose.
+  owns the exclusion-invariant assertion *and* the allowlist-driven copy — **the
+  sole copy path**, so the copy physically cannot leak the coordination tier.
+  Detection, ladder rung-selection, branch-point check, commit-before-spawn,
+  baseline-verify stay skill-prose.
 - **OQ-2 (framework-neutral fallback) → resolved by OQ-3.** `doctrine worktree
-  provision` is the framework-neutral copy rung: it reads the *same*
-  `.worktreeinclude` that Claude Code's native `WorktreeCreate` hook reads, so a
-  non-Claude harness gets byte-identical provisioning. Creation fallback (`git
-  worktree add`) and regenerate (`cargo build`) are explicit skill-prose / project
-  commands.
-- **Skill home → standalone `/worktree` skill.** Both `/execute` (optional) and
-  the future `/dispatch` funnel (mandatory) invoke it. DRY / single
-  responsibility; mirrors the `superpowers:using-git-worktrees` prior-art shape;
-  `/route` is unchanged (isolation is a sub-mechanism of execution, not a
-  top-level intent).
-- **`provision` scope → copy axis only.** Regenerate (`cargo build`) +
-  baseline-verify are the same project command the skill runs; no reason to
-  duplicate them in Rust.
+  provision` is **the only provisioner** — same behaviour under any harness. The
+  creation backend (native tool vs `git worktree add`) varies; provisioning does
+  not. Regenerate (project command) + baseline are skill-run.
+- **Skill home → standalone `/worktree` skill.** Both `/execute` (optional) and the
+  future `/dispatch` funnel (mandatory) invoke it. DRY; mirrors the
+  `superpowers:using-git-worktrees` prior-art shape; `/route` is unchanged.
+- **`provision` scope → copy axis only.** Regenerate + baseline-verify are the
+  project command the skill runs; not duplicated in Rust.
 
 ## §1 Current vs target behaviour
 
-**Current.** `/dispatch` is a placeholder. `/execute` runs serial, in-tree, with
-no isolation. No worktree machinery exists anywhere; there is no `.worktreeinclude`.
+**Current.** `/dispatch` is a placeholder. `/execute` runs serial, in-tree, no
+isolation. No worktree machinery exists; there is no `.worktreeinclude`.
+
+**Skill source-of-truth (corrected, B1).** Skills are authored under
+**`plugins/doctrine/skills/<name>/SKILL.md`** and *installed* into
+`.doctrine/skills/` — which is **gitignored** (`.gitignore:34`, the derived tier).
+This slice authors skills in `plugins/`, never in `.doctrine/skills/`.
 
 **Target** (solo, no funnel, no IMP-002 dependency):
 
-- New **`/worktree`** skill owns the lifecycle: detect → create-ladder →
-  provision → baseline → guards.
-- **`/execute`** gains a thin *optional* isolation branch delegating to
-  `/worktree`; the default in-tree path is untouched.
-- CLI: **`doctrine worktree provision <fork>`** (allowlist copy, exclusion
-  enforced at the copy seam) and **`doctrine worktree check-allowlist`** (static
-  exclusion assertion).
-- A default **`.worktreeinclude`** *template* is documented by the skill; the
-  installer ships no root-level file (§3, F2).
+- New **`plugins/doctrine/skills/worktree/SKILL.md`** owns the lifecycle: detect →
+  create → **provision (always, via CLI)** → baseline → guards.
+- **`plugins/doctrine/skills/execute/SKILL.md`** gains a thin *optional* isolation
+  branch delegating to `/worktree`; the default in-tree path is untouched.
+- CLI: **`doctrine worktree provision <fork>`** (allowlist copy, exclusion enforced
+  at the copy seam) and **`doctrine worktree check-allowlist`** (static assertion).
+- `.worktreeinclude` is **project-owned, not installed** (§3); absent ⇒ empty.
 - `/dispatch` stays a placeholder (the funnel slice fills it).
 
-This slice does **not** depend on IMP-002: the only execution mode here is solo
-(`/execute` isolation, worker-mode OFF, D6a), and the work-in-place fallback rung
-is the already-blessed D1/D6a trunk path. Worker-mode enforcement (D2a) only
-matters once the funnel dispatches *workers* — the follow-up slice. **Solo
-`/execute` isolation never mints ids** (the slice already exists; it writes
-status/notes/phase/memory, not new entities) — the one act that would pull in
-trunk-ref minting (D3 / IMP-002). The no-dependency claim holds at the one place
-it could break.
+This slice does **not** depend on IMP-002. The only execution mode here is solo
+(`/execute` isolation, worker-mode OFF, D6a); the work-in-place fallback rung is
+the blessed D1/D6a trunk path. **Solo `/execute` isolation never mints ids** (the
+slice already exists; it writes status/notes/phase/memory, not new entities) — the
+one act that would pull in trunk-ref minting (D3 / IMP-002). The no-dependency
+claim holds at the one place it could break.
 
-## §2 Detection + creation ladder (skill-prose, framework-neutral)
+## §2 Detection + creation + the always-provision rule (skill-prose)
 
 **Detection.** `git rev-parse --git-dir` ≠ `git rev-parse --git-common-dir` ⇒ the
-CWD is already inside a linked worktree (isolation already present — adapt, don't
-re-create; D1). **Submodule guard:** a submodule *also* trips that inequality;
-disambiguate by the `.git` gitdir pointing under `worktrees/` (a worktree) vs
-`modules/` (a submodule), or treat a non-empty `git rev-parse
---show-superproject-working-tree` as "submodule, not worktree". (superpowers
-prior art.)
+CWD is already inside a linked worktree (adapt, don't re-create; D1). **Submodule
+guard:** a submodule *also* trips that; disambiguate by the `.git` gitdir under
+`worktrees/` (worktree) vs `modules/` (submodule), or a non-empty `git rev-parse
+--show-superproject-working-tree` ⇒ submodule. (superpowers prior art.)
 
-**The creation ladder — four rungs, degrade in order:**
+**The lifecycle is creation + a mandatory provision step — not a copy ladder.**
+The earlier "native hook copies via `.worktreeinclude`" framing is dropped: a
+native copy bypasses `select_copies`, so a broad `**` allowlist could leak
+`.doctrine/state/` before doctrine votes (B2). **Resolution: `provision` is the
+sole copier.** Creation has a backend choice; provisioning is invariant.
 
-1. **Detect existing isolation** (D1) — already forked → skip creation, go straight
-   to provision + baseline.
-2. **Native harness tool** — Claude Code `WorktreeCreate` hook, fed by
-   `.worktreeinclude`; the hook performs the copy itself. **Opportunistic, not
-   assumed (F1):** this hook is sourced to a GitHub *discussion* (mattbrailsford
-   #54), not a confirmed-shipped feature. Treat rung 2 as a fast-path taken only
-   when the hook is actually present; **never** design around its existence.
-3. **`git worktree add <path> <branch>`** (framework-neutral fallback) → then
-   `doctrine worktree provision <fork>` performs the allowlist copy. **This is the
-   blessed default and the tested path** — the one rung guaranteed present in any
-   git harness. Rung 2 is merely an optimisation over it.
-4. **Work-in-place** (solo, no funnel) on sandbox denial — the already-blessed
-   D1/D6a trunk path. No fork, nothing to provision.
+**Creation backend, degrade in order:**
 
-Rung 2 provisions natively; rung 3 provisions via the CLI (the neutral, tested
-path, OQ-2); rung 4 has nothing to provision. **The same `.worktreeinclude` feeds
-rungs 2 and 3** — byte-identical provisioning across harnesses, so falling from
-rung 2 to rung 3 changes *who* copies, never *what* is copied.
+1. **Detect existing isolation** (D1) — already forked → skip creation.
+2. **Harness native worktree-*creation*** if present and invocable **creation-only**
+   (no auto-copy). Opportunistic; the Claude Code `WorktreeCreate` hook is a GitHub
+   *discussion* proposal (mattbrailsford #54), unconfirmed-shipped (F1).
+3. **`git worktree add <path> <branch>`** — the guaranteed-present, tested default.
+4. **Work-in-place** (solo, no funnel) on sandbox denial — the blessed D1/D6a trunk
+   path. No fork.
+
+**Then, for any forked path (1–3), always:** `doctrine worktree provision <fork>`
+→ run guards → baseline-verify. **Invariant-strength caveat (honest framing):** the
+copy-seam guarantee holds because provision is the only copier. *If* a harness
+force-copies on creation and cannot be run creation-only, doctrine cannot prevent
+that copy — the guarantee there degrades to the static `check-allowlist` only, and
+the project must keep `.worktreeinclude` precise. Prefer rung 3 (fully controlled)
+as the default; never depend on rung 2.
 
 ## §3 The CLI heart — `provision` + `check-allowlist`
 
 New module **`src/worktree.rs`**, ADR-001 leaf layering, pure/imperative split
 (no disk/git in the pure core — passed in as inputs).
 
+### Withhold authority — one structured list (F4)
+
+The coordination/runtime tier that must never enter a fork is a **single
+structured const** in `src/worktree.rs`, categorised, derived from the actual
+runtime tier in `.gitignore` (verified lines 24/31–38):
+
+```rust
+enum Tier { State, PhaseLink, Handover, MemoryCache }
+struct Withhold { tier: Tier, glob: &'static str }
+const WITHHELD: &[Withhold] = &[
+    W(State,       ".doctrine/state/**"),            // phase sheets, boot.md
+    W(PhaseLink,   ".doctrine/slice/*/phases"),       // per-slice symlink into state
+    W(Handover,    "**/handover.md"),                 // disposable agent context
+    W(MemoryCache, ".doctrine/memory/index/**"),
+    W(MemoryCache, ".doctrine/memory/embeddings/**"),
+    W(MemoryCache, ".doctrine/memory/state/**"),
+    W(MemoryCache, ".doctrine/memory/shipped/**"),    // synced global corpus
+];
+```
+
+`.doctrine/skills/*` (also gitignored) is **derived**, not coordination — it is
+regenerated by `doctrine install` in the fork, not copied and not a hazard; it is
+documented but out of `WITHHELD`. **Parity test (real, not prose cross-check):** a
+test asserts every `.doctrine/**` runtime glob in `.gitignore` is either covered by
+`WITHHELD` or explicitly classified derived-regenerable — so adding a runtime glob
+to `.gitignore` without classifying it fails CI.
+
+### Allowlist syntax — a documented subset (M6)
+
+The repo has only the `glob` crate (no gitignore-semantics crate). v1
+`.worktreeinclude` is therefore a **documented subset**: blank lines, `#` comments,
+literal repo-relative paths, and simple `glob` patterns (`*`, `**`, `?`). **No `!`
+negation, no anchoring rules** in v1 (rejected by the parser with a clear error, so
+a project can't silently rely on unsupported semantics). Fixtures cover each
+supported class. This is independent of any harness hook (provision is the sole
+copier), so native-parity is a non-goal.
+
 ### Pure core
 
 ```rust
-// The load-bearing constant: the coordination/runtime tier that must never enter
-// a fork (partition memory mem.concept.dispatch.gitignored-tier-partition).
-// Hardcoded; a test cross-checks it against the runtime-tier globs in .gitignore /
-// memory-spec so drift is caught (not derived at runtime — avoids a parse surface
-// and a runtime failure mode).
-const COORDINATION_GLOBS: &[&str] = &[
-    ".doctrine/state/",      // phase sheets, boot.md
-    "phases",                // the per-slice symlink into the state tree
-    "handover.md",           // disposable agent context
-    // memory caches (index / embeddings / state) — exact globs pinned vs memory-spec
-];
-
-struct Allowlist { patterns: Vec<Pattern> }            // gitignore syntax
-fn parse_allowlist(text: &str) -> Allowlist;
-fn exclusion_violations(a: &Allowlist) -> Vec<Violation>;   // patterns *naming* the tier → static reject
-fn select_copies(a: &Allowlist, candidates: &[RelPath]) -> Selection; // { copy, skipped_excluded }
+struct Allowlist { patterns: Vec<glob::Pattern> }       // documented subset
+fn parse_allowlist(text: &str) -> Result<Allowlist, ParseError>; // rejects '!' etc.
+fn is_withheld(rel: &RelPath) -> Option<Tier>;          // matches WITHHELD
+fn select_copies(a: &Allowlist, candidates: &[RelPath]) -> Selection; // {copy, withheld}
+fn allowlist_violations(a: &Allowlist) -> Vec<Violation>; // patterns that *name* a withheld glob
 ```
 
 ### Impure shell
 
-**Candidate set = gitignored files only (F5).** Committed files are already in the
-fork (it forks HEAD); provision's domain is the *irreducible gitignored* tier.
-Enumerate via `git ls-files --others --ignored --exclude-standard` (mirroring the
-`src/git.rs` subprocess seam); `select_copies` filters them; copy each into the
-fork preserving its relative path (extend `src/fsutil.rs` with a recursive,
-`safe_join`-guarded copy that **does not follow out-of-tree symlinks**).
+**Candidate set = gitignored files only**, enumerated with **`-z` (NUL-delimited,
+matching the `src/git.rs` seam, m9)**: `git ls-files -z --others --ignored
+--exclude-standard`. Committed files are already in the fork. `select_copies`
+filters; copy each into the fork preserving its relative path.
 
-**Invocation context (F4).** `provision` runs from the **source (main-tree)
-root** — auto-detected via `root::find` from CWD — and writes into the `<fork>`
-destination argument. It must *not* be run from inside the fresh fork (root
-detection would resolve to the fork, not the source). The skill's rung-3 prose
-runs it from the main tree immediately after `git worktree add`.
+**Invocation context (F4/F7).** `provision` runs from the **source (main-tree)
+root** (`root::find` from CWD) and writes into `<fork>`. It must not run from inside
+the fork.
 
-### Two-layer exclusion (the OQ-3-B payoff — defense in depth)
+**Copy safety (F5) — `safe_join` is insufficient.** The copy helper must:
+- **canonicalize** source root, `<fork>`, and every destination component
+  (`symlink_metadata` on parents) so no symlink component escapes the fork;
+- **verify `<fork>` is a real sibling worktree**: it shares the source's
+  `git-common-dir` and is not the source itself;
+- **symlink policy:** for an allowlisted source symlink, resolve its target; copy
+  **only if** the target stays inside the source tree *and* is not withheld;
+  otherwise **skip + warn** (never follow out-of-tree or into `.doctrine/state/`).
 
-- **`check-allowlist` (static smell test):** refuses any *pattern* that names the
-  coordination tier. Catches the obvious mistake early; CI / `validate`-usable.
-  This is the ADR-006 Verification "allowlist asserted to exclude the
-  coordination/runtime globs" bullet, made testable.
-- **`select_copies` (copy-time, the real guard):** drops any *file* under the tier
-  **even when matched by a broad `*` / `**` pattern that `check-allowlist` cannot
-  statically reject.** The copy therefore *physically cannot* leak
-  `.doctrine/state/` — the invariant is enforced at the copy, not merely asserted
-  alongside it. **Behaviour on a broad-pattern tier hit: skip + warn** (name the
-  withheld file, exit 0) — a wildcard allowlist stays usable and the operator is
-  told what was withheld.
+### Two-layer exclusion (the OQ-3-B payoff)
+
+- **`select_copies` (copy-time, the guarantee):** drops any *file* matching
+  `WITHHELD` **even under a broad `*`/`**`** — skip + warn (name the file, exit 0).
+  A wildcard allowlist stays usable; the copy physically cannot leak the tier.
+- **`check-allowlist` (static smell test):** `allowlist_violations` rejects a
+  *pattern that names* a withheld glob; nonzero exit. **Green is NOT completeness
+  (F7):** it only proves no pattern names the tier — `select_copies` remains the
+  guarantee. CI / `validate`-usable.
 
 ### Verbs
 
-- **`doctrine worktree provision <fork>`:** read `.worktreeinclude` from the source
-  root → run the exclusion check (**fail closed** on a statically-bad allowlist) →
-  resolve matching files → copy, dropping (skip+warn) any tier file → report
-  copied / withheld.
-- **`doctrine worktree check-allowlist`:** parse + assert; nonzero exit on a
-  pattern that names the tier. **Green here is *not* a completeness guarantee
-  (F7):** it only proves no pattern *names* the tier — a broad `**` can still
-  sweep tier files, which `select_copies` withholds at copy time. `check-allowlist`
-  is the early smell test; `select_copies` is the guarantee.
+- **`doctrine worktree provision <fork>`:** read `.worktreeinclude` from source root
+  (**absent ⇒ empty ⇒ copy nothing**, F2) → `allowlist_violations` (**fail closed**)
+  → enumerate candidates (`-z`) → `select_copies` → safe copy, skip+warn withheld →
+  report copied / withheld.
+- **`doctrine worktree check-allowlist`:** parse + `allowlist_violations`; nonzero on
+  a tier-naming pattern or an unsupported-syntax (`!`) pattern.
 
-### The `.worktreeinclude` (no installed root file — F2)
+### The `.worktreeinclude` (not installed — F2)
 
-Doctrine itself has no secrets / irreducible local files, so the default is
-**nothing to copy**. Rather than ship a root-level file via the installer (a new,
-clobber-prone manifest pattern — it could overwrite a consuming project's
-existing `.worktreeinclude`), **`provision` tolerates an absent `.worktreeinclude`
-as an empty allowlist** (copy nothing; safe out of the box, D1 policy-agnostic).
-The `/worktree` skill *documents* a commented template the project can adopt;
-the file is project-owned, never installer-managed.
+Doctrine has no secrets/irreducible local files → default is **nothing to copy**.
+Not shipped by the installer (a root-file install is clobber-prone — could overwrite
+a consuming project's file). `provision` tolerates absence; `/worktree` documents a
+commented template the project may adopt. Project-owned, never installer-managed.
 
 ## §4 Guards (skill-prose, `/worktree`)
 
-- **Commit-before-spawn (D5).** `/worktree` refuses to fork with doctrine-relevant
-  uncommitted changes; the fork sees only committed HEAD. Prose: require a clean
-  (or at least HEAD-current) tree before rungs 2/3. **In scope** — fork-cleanliness
-  applies even to solo isolation.
-- **Branch-point check (D5) — deferred to the funnel slice (F3).** The check (HEAD
-  pre-spawn == worktree HEAD post-spawn) guards a *spawn where a concurrent actor
-  could move HEAD*. Solo `/execute` isolation forks and works in-place with no
-  concurrent mover, so the check is near-vacuous here. It becomes load-bearing only
-  under the funnel's concurrent dispatch — it lands there, with the worker contract
-  it actually protects.
-- **Baseline-verify (D9).** After provision, run the project's regenerate + test
-  command (`cargo build && cargo test`) in the fork; a green gate before handoff.
-  Project command (VA/VH), not Rust. An unbuildable fork is fixed in provisioning,
-  never handed off.
+- **Commit-before-spawn (D5) — exact gate (F7).** Before creation, run `git status
+  --porcelain -z`; **abort** if any tracked file is dirty **or** any untracked,
+  non-ignored file exists (it would be silently absent from the fork). Only a clean
+  tree (modulo ignored files, which provision handles) may fork. The fork sees only
+  committed HEAD.
+- **Branch-point check (D5) — IN SCOPE (reversed from defer, B3).** Capture HEAD on
+  the source pre-create (`git rev-parse HEAD`); after creating the worktree, assert
+  the worktree HEAD equals the captured SHA; mismatch ⇒ abort/recreate. Cheap,
+  ADR-D5-mandated, needs no IMP-002 — so it lands here even though solo rarely
+  exercises it; the funnel slice only *extends* it to the concurrent case.
+- **Baseline-verify (D9) — project-configured command (m10).** After provision, run
+  the project's regenerate + verify command in the fork; green gate before handoff.
+  **For this repo that is `just check`** (fmt+lint+test+build), not a hardcoded
+  `cargo …`. The command is project/skill-provided (doctrine is a framework), not
+  baked into Rust. An unbuildable fork is fixed in provisioning, never handed off.
 
-## §5 `/execute` isolation thread + scope reconciliation
+## §5 `/worktree` mode contract + `/execute` thread + scope reconciliation
 
-- **`/execute` thread.** Add an optional branch: *isolation requested? → invoke
-  `/worktree` (fork + provision + baseline) → execute inside the fork → the fork
-  branch is the deliverable.* **Solo: worker-mode OFF (D6a)** — `/execute` is a
-  full agent and its own orchestrator; it writes its own doctrine state directly
-  (slice status, notes, phase, memory). The default no-isolation path is unchanged.
-- **Isolation trigger is explicit (F8).** Isolation is *opt-in*, never automatic:
-  the agent requests it (user instruction, or a plan/phase annotation). The
-  default `/execute` stays in-tree, so the common path is untouched and the new
-  branch is dead code until deliberately invoked.
-- **Squash-orphan caveat (ADR-006 Open / Negative).** Memory recorded inside a
-  worktree branch is orphaned by a squash-merge (content survives; SL-008
-  staleness fires). `/worktree` / `/execute` prose nudges record-on-trunk for
-  durable memory.
-- **Scope reconciliation.** `slice-029.md` is narrowed to the lifecycle + the
-  `/execute` path; the funnel / `/dispatch` deliverables move out; affected
-  surface becomes `.doctrine/skills/worktree/` + `src/worktree.rs` + CLI + the
-  `/execute` thread (no installed `.worktreeinclude`, F2); a follow-up records the
-  new funnel slice (the OQ-1 split half, IMP-002-dependent).
+**`/worktree` skill contract (defined now — F8, the OQ-1 split seam).** The skill
+is parameterised so the funnel slice reuses it without inheriting solo semantics:
+
+- **Inputs:** `mode = solo | worker`; `allow_work_in_place: bool` (true only for
+  `solo`); requested branch/path.
+- **Behaviour:** `solo` may degrade to the work-in-place rung on sandbox denial;
+  **`worker` must NOT** — a worker with no real fork is a hard failure (the funnel's
+  isolation is mandatory). SL-029 implements `solo`; `worker` is declared in the
+  contract, implemented by the funnel slice.
+- **Outputs:** `{ fork_path, branch, head_sha, provision_report{copied, withheld},
+  baseline_result }`.
+
+**`/execute` thread (solo).** Optional branch: *isolation requested? → invoke
+`/worktree` mode=solo → execute inside the fork → the fork branch is the
+deliverable.* **Worker-mode OFF (D6a)** — `/execute` is its own orchestrator and
+writes doctrine state directly. Default no-isolation path unchanged. **Isolation is
+explicit opt-in** (user/plan annotation), never automatic (F8).
+
+**Squash-orphan caveat (ADR-006 Open / Negative).** Memory recorded inside a
+worktree branch is orphaned by a squash-merge (content survives; SL-008 staleness
+fires). Skill prose nudges record-on-trunk for durable memory.
+
+**Scope reconciliation.** `slice-029.md` narrowed to the lifecycle + `/execute`
+path; funnel/`/dispatch` moved out; affected surface = `plugins/doctrine/skills/
+{worktree,execute}/` + `src/worktree.rs` + CLI + `src/fsutil.rs`; follow-up records
+the funnel slice.
 
 ## §6 Verification alignment
 
 **ADR-006 Verification bullets SL-029 discharges:**
-
-- *allowlist excludes the coordination/runtime globs* → `check-allowlist` +
-  `select_copies` tests (VT).
-- *baseline build+test passes in the fork before dispatch* → `/worktree` baseline
-  step (VA).
-- *tier merge-safety (D4): the `phases` symlink is relative* → existing invariant;
-  this slice introduces no shared-mutable authored file (VT, no regression).
+- *allowlist excludes the coordination/runtime globs* → `select_copies` +
+  `check-allowlist` tests (VT).
+- *baseline build+test passes in the fork before handoff* → `/worktree` baseline
+  step running `just check` (VA).
+- *branch-point check (D5)* → skill-prose HEAD pre/post compare (VA; cheap solo).
+- *tier merge-safety (D4): `phases` symlink relative* → existing invariant (VT, no
+  regression).
 
 **Test cases (SL-029):**
+- *pure:* `parse_allowlist` per supported class + **rejects `!`/unsupported** (M6);
+  `allowlist_violations` canary (pattern naming `.doctrine/state/` rejected);
+  **`select_copies` withholds a `.doctrine/state/...` file under a `**` allowlist**
+  (load-bearing); **`WITHHELD`↔`.gitignore` parity** (F4: an unclassified runtime
+  glob fails).
+- *impure / e2e:* `provision` copies an allowlisted gitignored file into a fork;
+  withholds a tier file with warning (exit 0); **refuses an out-of-tree / into-state
+  symlink** (F5); **refuses a `<fork>` that isn't a sibling worktree** (F5);
+  candidate enumeration is `-z`-safe for newline/quoted paths (m9); `check-allowlist`
+  nonzero on a statically-bad allowlist.
 
-- *pure:* `parse_allowlist` round-trip; `exclusion_violations` canary (a pattern
-  naming `.doctrine/state/` is rejected); **`select_copies` drops a
-  `.doctrine/state/...` file under a `**` allowlist** (the load-bearing case);
-  `COORDINATION_GLOBS` cross-check vs `.gitignore` / memory-spec.
-- *impure / e2e:* `provision` copies an allowlisted file into a fork; withholds a
-  tier file with a warning (exit 0); `check-allowlist` exits nonzero on a
-  statically-bad allowlist.
-
-**Deferred to the funnel slice (not verified here):** worker-mode guard
-(D2a / IMP-002); funnel order (D7); `memory record` worktree-warn; the
-branch-point check as an orchestrator assertion under dispatch.
+**Deferred to the funnel slice:** worker-mode guard (D2a/IMP-002); funnel order
+(D7); `memory record` worktree-warn; branch-point under *concurrent* dispatch;
+`/worktree` `mode=worker` implementation.
 
 ## §7 Affected surface
 
-- `.doctrine/skills/worktree/SKILL.md` — **new**: the lifecycle skill (detection,
-  ladder, guards, baseline prose; invokes the CLI verbs).
-- `src/worktree.rs` — **new**: pure core (`Allowlist`, `COORDINATION_GLOBS`,
-  `exclusion_violations`, `select_copies`) + impure shell (`provision`).
+- `plugins/doctrine/skills/worktree/SKILL.md` — **new**: the lifecycle skill (the
+  §5 mode contract; detection, creation, guards, baseline prose; invokes the CLI).
+- `plugins/doctrine/skills/execute/SKILL.md` — thin optional solo-isolation thread.
+- `src/worktree.rs` — **new**: pure core (`Allowlist`, `WITHHELD`, `is_withheld`,
+  `select_copies`, `allowlist_violations`) + impure `provision` + safe copy.
 - `src/main.rs` — new `Worktree { Provision, CheckAllowlist }` subcommand.
-- `src/fsutil.rs` — recursive `safe_join`-guarded copy helper.
-- `.doctrine/skills/execute/SKILL.md` — thin optional-isolation thread.
-- `.worktreeinclude` — **not installed** (F2): project-owned; `provision` tolerates
+- `src/fsutil.rs` — recursive, canonicalize-guarded copy helper (beyond `safe_join`).
+- `.worktreeinclude` — **not installed** (F2); project-owned; `provision` tolerates
   absence; the `/worktree` skill documents the template.
-- `install/manifest.toml` — **untouched** for this file (skills already globbed; no
-  root-file row needed).
-- `.doctrine/skills/dispatch/` — **untouched** (stays placeholder; funnel slice).
+- `install/manifest.toml` — **untouched** (no root-file row; skills shipped via the
+  existing `plugins/` mechanism).
+- `.doctrine/skills/*` — **derived/gitignored** (B1); regenerated by install, never
+  authored or copied.
+- `plugins/doctrine/skills/dispatch/SKILL.md` — **untouched** (placeholder; funnel).
 
 ## Open items / carried risks
 
-- **A-1 (carried, downgraded).** IMP-002 is a prereq for the *funnel slice*, not
-  for SL-029. SL-029 has no IMP-002 dependency.
+- **R-2 (native rung unconfirmed, F1).** The Claude Code `WorktreeCreate` hook is a
+  discussion proposal; rung 3 is the tested default. If the hook is absent, rung 2
+  is never taken — no design change. If a harness force-copies, the invariant
+  degrades to `check-allowlist` only (§2 caveat) — documented, not papered over.
+- **Memory-cache glob precision.** `WITHHELD` memory-cache entries are pinned to
+  `.gitignore` lines 35–38; the parity test is the guard against drift.
+- **A-1 (downgraded).** IMP-002 is a prereq for the funnel slice, not SL-029.
 - **R-1.** Worker self-verify degradation (D6) is a funnel-slice concern; N/A here.
-- **Memory-cache glob precision.** `COORDINATION_GLOBS`' memory-cache entries must
-  be pinned against the actual memory runtime layout (memory-spec / `.gitignore`)
-  — the cross-check test is the guard.
-- **Native rung is unconfirmed (F1).** The Claude Code `WorktreeCreate` hook is a
-  GitHub-discussion proposal, not a verified feature. Rung 3 is the tested default;
-  if the hook proves absent everywhere, rung 2 is simply never taken — no design
-  change, only a dead optimisation. Confirm at `/plan` or first execution.
 
 ## Adversarial review log
 
-Internal hostile pass integrated (F1–F8):
-- **F1** native rung may be unshipped → rung 3 reframed as the blessed/tested
-  default; rung 2 demoted to opportunistic (§2, Open items).
-- **F2** root-level `.worktreeinclude` install is clobber-prone → not installed;
-  `provision` tolerates absence; skill documents the template (§3, §5, §7).
-- **F3** branch-point check is vacuous for solo → deferred to the funnel slice;
-  commit-before-spawn retained (§4).
-- **F4** `provision` CWD ambiguity → run from source root, `<fork>` is destination
-  (§3 Impure shell).
-- **F5** candidate set unstated → gitignored files only; no out-of-tree symlink
-  following (§3 Impure shell).
-- **F6** id-minting could pull in D3 → made explicit that solo `/execute`
-  isolation never mints (§1).
-- **F7** `check-allowlist` green ≠ completeness → stated; `select_copies` is the
-  guarantee (§3 Verbs).
-- **F8** isolation trigger unspecified → explicit opt-in, never automatic (§5).
+**Pass 1 — internal (F1–F8):** integrated (native rung opportunistic; no installed
+`.worktreeinclude`; candidate set = gitignored; provision from source root;
+check-allowlist ≠ completeness; explicit isolation trigger; solo never mints ids).
+Note: pass-1 F3 (defer branch-point) was **reversed** by pass 2 / B3.
+
+**Pass 2 — external, gpt-5.5 via codex MCP.** Findings integrated:
+- **B1** skill source is `plugins/doctrine/skills/`, not gitignored
+  `.doctrine/skills/` → affected surface corrected (§1, §7).
+- **B2** native copy bypasses `select_copies` → `provision` is the *sole* copier;
+  native rung is creation-only/opportunistic; honest invariant-degradation caveat
+  (§2).
+- **B3** branch-point deferral violates D5 and isn't IMP-002-bound → **re-included**
+  in SL-029 (§4).
+- **B5** `safe_join` insufficient → canonicalize + sibling-worktree check + explicit
+  symlink policy (§3 Copy safety).
+- **M4** glob authority weak → single structured `WITHHELD` + real parity test;
+  `.doctrine/skills/*` classified derived (§3).
+- **M6** allowlist syntax underspecified + only `glob` crate → documented subset,
+  `!`/anchoring rejected; native-parity dropped (§3).
+- **M7** candidate/commit-gate holes → exact `git status --porcelain -z` gate;
+  untracked-non-ignored aborts (§4); `-z` enumeration (§3).
+- **M8** `/worktree` had no mode contract → `mode=solo|worker` +
+  `allow_work_in_place` defined now (§5).
+- **m9** `git ls-files` needs `-z` → required (§3).
+- **m10** baseline hardcoded `cargo …` → project-configured; `just check` here (§4).
