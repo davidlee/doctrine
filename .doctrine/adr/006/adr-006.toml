@@ -4,9 +4,9 @@ version = 1
 id = 6
 slug = "worktree-posture-orchestrator-sole-writer"
 title = "Worktree posture: policy-agnostic framework, orchestrator-sole-writer dispatch"
-status = "proposed"
+status = "accepted"
 created = "2026-06-08"
-updated = "2026-06-08"
+updated = "2026-06-10"
 
 [relationships]
 # Reserved. Empty in v1 — supersession (F1) and tagging are not wired yet.
