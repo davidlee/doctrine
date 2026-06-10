@@ -56,9 +56,10 @@ Applies uniformly to all four list verbs (backlog, slice, spec, governance).
   (`FilterFields` unchanged).
 - No change to single-entity `show` — slug still shown there.
 - Memory `find`/`list` (keyed, no slug column) is out of scope — it stays
-  bespoke and `--columns` is an accepted-but-ignored no-op there. Adoption of the
-  column model is deferred to **IMP-017** (design D9: memory's security-scrubbed
-  cells + the absent slug trigger outweigh bare flag-uniformity).
+  bespoke and `--columns` is **rejected with a clean error** there (not silently
+  ignored). Adoption of the column model is deferred to **IMP-017** (design D9:
+  memory's security-scrubbed cells + the absent slug trigger outweigh bare
+  flag-uniformity).
 - Not lifting JSON's *typed* per-kind row structs into stringly columns — that
   would regress type fidelity (#members numeric, resolution nullable). The lift
   targets the table column model + the `list_rows` control flow. [decision]
@@ -95,7 +96,9 @@ Each verb's default `list` table omits slug (spec shows title); `--columns`
 selects/orders columns and restores slug; an unknown column errors cleanly; JSON
 output unchanged across all verbs; filter still matches on slug. Cross-verb
 golden harness green. `cargo clippy` clean, `just check` green. Backlog **IMP-009,
-IMP-013, IMP-014** all reconciled to terminal at `/close`.
+IMP-013, IMP-014** all reconciled to terminal at `/close` — IMP-013's `/close`
+resolution **records the JSON-row-assembly descope** (design D2: typed rows
+irreducible under D7; table half delivered, JSON half deliberately not).
 
 ## Summary
 
