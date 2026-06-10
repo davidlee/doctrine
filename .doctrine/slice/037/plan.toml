@@ -1,0 +1,152 @@
+# Implementation plan for SL-037 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-037"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Column model + --columns API + governance proof + memory guard"
+objective = """
+Establish the shared table column model in the listing leaf and prove it end to
+end on the simplest kind. Add Column<R>, select_columns, and render_columns
+(design §3); extend ListArgs with an additive columns: Option<Vec<String>> field
+taken via args.columns.take() before build (D6, build's signature unchanged).
+Wire the --columns flag through the command layer (CommonListArgs gains the flag,
+into_list_args lowers it — §5). Migrate governance (R = GovRow: all-String,
+id pre-prefixed, D5-clean; the shared adr/policy/standard render path) to a
+slug-free default set. Because --columns now rides the shared CommonListArgs it
+reaches memory list, so guard memory list --columns with a clean rejection
+(D9/R4: a loud guard, never a silent no-op) in the same phase the flag is born.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked and re-approved post-inquisition (CHARGES I–V integrated)." },
+  { id = "EN-2", text = "SL-025 listing spine present: build/retain/render_table/validate_statuses/canonical_id intact." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "listing leaf exposes Column<R>, select_columns (default/subset/reorder, dups permitted, unknown → one uniform error), render_columns (empty rows → \"\")." },
+  { id = "EX-2", text = "ListArgs carries columns: Option<Vec<String>>; the migrating verb pulls it via take() before build; build still returns (Filter, Format) and its ~10 in-leaf tests pass unchanged." },
+  { id = "EX-3", text = "CommonListArgs exposes --columns (value_delimiter ','); into_list_args lowers it to ListArgs.columns; validation stays in the leaf (no clap ValueEnum, A-3)." },
+  { id = "EX-4", text = "governance default table omits slug ([id, status, title]); --columns id,status,slug,title selects/orders/reveals slug; unknown column errors with the available set; governance JSON byte-identical to pre-change." },
+  { id = "EX-5", text = "memory list --columns <any> is rejected with a clean unsupported message; memory list without --columns is byte-unchanged." },
+  { id = "EX-6", text = "cargo clippy (bins/lib) zero warnings; just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "select_columns leaf unit tests: default path; requested subset; reorder; duplicate names pass; unknown name → uniform error listing available tokens; empty-available guard." },
+  { id = "VT-2", expects = "governance unit tests: default omits slug; --columns reveals + orders slug; unknown column errors; JSON output unchanged across adr/policy/standard." },
+  { id = "VT-3", expects = "black-box test asserts memory list --columns errors with the unsupported-for-memory message." },
+  { id = "VT-4", expects = "pre-existing listing leaf + governance filter/JSON suites stay green unchanged (behaviour-preservation gate)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Migrate backlog + slice"
+objective = """
+Replace backlog's and slice's bespoke table assemblers with the column model.
+backlog: R = BacklogItem (or a small display row), columns
+id kind status slug title, default [id, kind, status, title]. slice:
+R = (Meta, Option<PhaseRollup>) (the existing row tuple), reusing canonical_id,
+decorated_status, and phases_cell as non-capturing fn(&R)->String extractors;
+columns id status phases slug title, default [id, status, phases, title]. The
+status column keeps its ?/⚠ drift markers as a cell value, not a separate
+column. JSON paths (BacklogRow/SliceRow) untouched (D2).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: column model, --columns API, and select_columns/render_columns live and tested." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "backlog default table is [id, kind, status, title] (slug hidden); --columns …,slug,… reveals slug; backlog JSON byte-unchanged; bespoke format_rows deleted." },
+  { id = "EX-2", text = "slice default table is [id, status, phases, title] (slug hidden); status cell still carries the ?/⚠ markers; phases cell intact; --columns reveals slug; slice JSON byte-unchanged; bespoke render_table assembler deleted." },
+  { id = "EX-3", text = "cargo clippy (bins/lib) zero warnings; just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "backlog unit tests: default omits slug; --columns reveals + orders; JSON unchanged." },
+  { id = "VT-2", expects = "slice unit tests: default omits slug; status markers (?/⚠) preserved in the status cell; phases cell intact; --columns reveals slug; JSON unchanged." },
+  { id = "VT-3", expects = "pre-existing backlog + slice filter/JSON suites stay green unchanged." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Migrate spec (pre-materialised subtype display row)"
+objective = """
+Migrate spec — the CHARGE I kind. Introduce a pre-materialised display row
+SpecListRow { id: String, status: String, slug: String, title: String,
+members: usize } built per labelled subtype block where SpecSubtype is in scope,
+so the subtype-dependent prefixed id (Product → PRD, Tech → SPEC via
+canonical_id) is resolved BEFORE extraction and every extractor stays a trivial
+non-capturing fn(&SpecListRow)->String (D5; the governance/GovRow pattern, never
+a captured subtype or Box<dyn Fn>). Columns id status slug title members, with
+members carrying header "#members"; default [id, status, title, members] — the
+D4 slug→title swap so spec keeps a human label. Resolve the selection once and
+call render_columns per block; preserve the per-subtype labelled-block layout
+and the omitted-empty-block behaviour (R3). JSON (SpecRow, members int)
+untouched (D2).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: column model + --columns API live (PHASE-02 independent — spec needs only the model)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "every spec column extractor is non-capturing over SpecListRow; subtype is resolved into the row per block, not captured (D5)." },
+  { id = "EX-2", text = "spec default table is [id, status, title, members] (slug→title swap); members header is #members; --columns …,slug,… reveals slug; prefixed ids correct per subtype (PRD vs SPEC)." },
+  { id = "EX-3", text = "the per-subtype labelled-block layout survives; an empty subtype block is omitted (R3); spec JSON byte-unchanged." },
+  { id = "EX-4", text = "cargo clippy (bins/lib) zero warnings; just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "spec unit tests: default shows title not slug; prefixed ids correct per subtype; --columns reveals slug; members cell correct." },
+  { id = "VT-2", expects = "spec multi-block test: per-subtype labelled blocks pinned; omitted-empty-block case (R3) covered." },
+  { id = "VT-3", expects = "spec JSON output unchanged (members stays int); pre-existing spec filter/JSON suites stay green unchanged." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "IMP-014 cross-verb golden harness"
+objective = """
+Land the cross-verb black-box golden harness (IMP-014, D8) as the regression net
+for the column churn, asserting every surface, not just the JSON envelope. Over a
+fixed corpus, pin byte-exact per migrated verb: the default table, a --columns
+table, and --json. Add the CHARGE IV explicit coverage the design demands:
+memory's rejection message, the empty-list header-suppressed "" path per verb
+(and an empty spec subtype block → block omitted), the spec multi-block layout +
+omitted-empty-block, and governance breadth (pin adr/policy/standard, or pin one
+and assert the shared render path so the representative is justified). This net
+lands last; the per-phase unit tests carried the TDD load during migration.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01..03 complete: all four slug-bearing verbs (governance, backlog, slice, spec) migrated to the column model." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "golden harness pins byte-exact, per migrated verb: default table, a --columns table, and --json output." },
+  { id = "EX-2", text = "explicit coverage present: memory --columns rejection; empty-list \"\" path per verb; spec multi-block + omitted-empty-block; governance adr/policy/standard breadth." },
+  { id = "EX-3", text = "behaviour-preservation gate: pre-existing filter/JSON suites green unchanged; cargo clippy (bins/lib) zero warnings; just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "the cross-verb golden test module passes against the fixed corpus, pinning table-default / --columns / --json per verb." },
+  { id = "VT-2", expects = "golden coverage asserts memory rejection, empty-list per verb, spec multi-block + omitted-empty-block, and governance breadth." },
+  { id = "VT-3", expects = "full test suite green; just check clean (full closure-readiness check)." },
+]
+specs        = []
+requirements = []
