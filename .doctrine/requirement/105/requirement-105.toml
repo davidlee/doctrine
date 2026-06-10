@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 105
+slug = "author-requirement-truth-only-explicitly-with-no-derivation-path"
+title = "Author requirement truth only explicitly, with no derivation path"
+status = "pending"
+kind = "quality"
+
+description = "Requirement truth is authored only by explicit reconciliation; no function maps coverage to authored status, and every authored-status change is attributable to a reconciliation act."
+tags = []
+acceptance_criteria = [
+  "No code path resolves a requirement's authored status as a function of its coverage.",
+  "Every change to an authored requirement status is attributable to an explicit reconciliation act.",
+  "Authored truth is never overwritten by precedence, timestamp, or artefact-kind.",
+]

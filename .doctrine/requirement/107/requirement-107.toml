@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 107
+slug = "keep-every-reconciled-change-auditable-and-reconstructable-after-the-fact"
+title = "Keep every reconciled change auditable and reconstructable after the fact"
+status = "pending"
+kind = "quality"
+
+description = "Every reconciled change is diffable, citable, and reconstructable after the fact, so a reconciliation can always be reviewed."
+tags = []
+acceptance_criteria = [
+  "Each reconciled change is committed and diffable.",
+  "The evidence and rationale behind a reconciliation are recoverable after the fact.",
+  "A reviewer can reconstruct why a requirement holds its current authored status.",
+]
