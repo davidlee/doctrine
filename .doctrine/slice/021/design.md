@@ -22,9 +22,11 @@ validate shape).
 
 Locked decisions (design Q&A):
 
-- **D1 Taxonomy topology** — umbrella context spec + mechanism containers +
-  thin capability components (§2). **⚠ Re-opened by F1 (§11): the umbrella's
-  scope/altitude is incoherent — does not re-lock until resolved.**
+- **D1 Taxonomy topology** — whole-system **context** root ("Doctrine", the
+  tool) + mechanism containers + thin capability components (§2). **Re-locked
+  per F1-A (§11): the root is a whole-system synthesis, not the entity engine;
+  every container parents to it, entity-engine content descends to its own
+  container.**
 - **D2 Descent rule: capability-complete** — every **shipped-mechanism** PRD
   reachable via ≥1 `descends_from` (F2: not "every active PRD" — unbuilt
   mechanism is exempt, named in §7); shared substrate carries thin
@@ -47,8 +49,8 @@ sheet / handover), never a committed artifact. PHASE-01 owns the final
 boundary calls.
 
 ```
-context   Doctrine entity system            ← doc/entity-model.md seed; no parent, no descent
-├─ container  Entity engine                 descent: — (shared substrate)
+context   Doctrine (the tool)              synthesis of the whole system; no parent, no descent
+├─ container  Entity engine                 ← doc/entity-model.md seed; descent: — (shared substrate)
 │  ├─ component  Slice entity surface       ← PRD-001 (lifecycle FSM, phases, plans)
 │  ├─ component  ADR entity surface         ← PRD-008
 │  ├─ component  Backlog entity surface     ← PRD-009
@@ -60,9 +62,19 @@ context   Doctrine entity system            ← doc/entity-model.md seed; no par
 ├─ container  Install & distribution        ← PRD-006 (rust-embed, manifest, templates)
 ├─ container  Skills distribution           ← PRD-003 (plugins/ source-of-truth, symlink tree)
 ├─ container  Boot snapshot                 ← PRD-007 (src/boot.rs, governance projection)
-└─ container  Dispatch & worktree           descent: — (ADR-006 governs; no PRD)
+├─ container  Dispatch & worktree           descent: — (ADR-006 governs; no PRD)
+├─ container  Priority engine               ← SPEC-001 (pre-exists; parent ← root, PHASE-05 retrofit)
+└─ container  Reconciliation                ← SPEC-002 (pre-exists; parent ← root, PHASE-05 retrofit)
    (CLI surface — SL-025 uniform contract: candidate container, descent —)
 ```
+
+The **root is a whole-system context spec** ("Doctrine", the tool) — a synthesis
+with no parent and no descent (REQ-085 admits anchor-free context specs). It is
+**not** the entity engine: `doc/entity-model.md`'s durable content seeds the
+**entity-engine container** (one container among peers), not the root. Every
+container parents to the root, so the corpus is one legible tree without
+asserting false containment — the root *contains* its containers by C4
+decomposition, it does not *peer* with them (PRD-012 §3).
 
 - **Unit = architectural capability** (the *how*) — not 1:1 with `doc/*` files
   nor with PRDs, and explicitly not a `src/` directory map (repo structure is
@@ -81,32 +93,40 @@ context   Doctrine entity system            ← doc/entity-model.md seed; no par
   shipped via SL-030/SL-033 under ADR-009) — their component's descent stays
   empty, like dispatch.
 - **PRD-011 / PRD-013 already covered** by SPEC-001 / SPEC-002 (forward
-  intent satisfies reachability). Retrofit `parent` onto both under the
-  umbrella in PHASE-05 (single-field edits) so the corpus forms one tree, not
-  a forest.
+  intent satisfies reachability). They become **containers under the root**;
+  retrofit `parent` onto both in PHASE-05 (single-field edits, F5) so the
+  corpus forms one tree, not a forest.
 - **Excluded:** drift ledger (unbuilt, no PRD — backfill covers shipped
   mechanism only).
-- ~12–14 new specs (~14–16 corpus incl. SPEC-001/002).
+- ~13–15 new specs (~15–17 corpus incl. SPEC-001/002) — the whole-system root
+  is net-new on top of the entity-engine container (F1-A).
 
 ## 3. Exemplar trio (D3)
 
 Three specs authored end-to-end, one per shape, before any fan-out:
 
-1. **Umbrella context spec** — "Doctrine entity system". `c4_level =
-   "context"`, no parent, no descent. Lifts `doc/entity-model.md`'s durable
-   content: the storage rule, entity-vs-facet taxonomy, identity/reference
-   model, family-specific status vocab, runtime-state boundary, three-layer
-   Rust model (Raw → Entity → Registry). **Altitude filter:** lift shipped
-   reality only — entity-model.md's direction/migration/adjudication content
-   (roadmap, importer stance, spec-driver critique) is *not* shipped how and
-   stays in `doc/*`. Anchors none/minimal (REQ-085 admits anchor-free context
-   specs). Requirements: NF-flavoured invariants (storage rule, outbound-only
-   relations).
-2. **Entity-engine container** — parent = umbrella, descent empty,
-   `c4_level = "container"`. Sources: `src/entity.rs` + registry/integrity
-   seams (`integrity::KINDS`), `doc/relation-index.md`,
+1. **Whole-system context spec** — "Doctrine" (the tool). `c4_level =
+   "context"`, no parent, no descent. A **synthesis** of the whole system —
+   what Doctrine *is* and how its containers compose — authored anchor-free
+   (REQ-085 admits anchor-free context specs), **not** a lift of any one
+   subsystem doc. It does **not** carry entity-engine mechanism; that descends
+   to the container (#2). Requirements: system-wide NF-flavoured invariants
+   (storage rule as a cross-cutting principle, outbound-only relations,
+   pure/imperative split). The hardest shape to keep at altitude — the bar is
+   "names the parts and their composition," never restating any container's how.
+2. **Entity-engine container** — parent = root, descent empty,
+   `c4_level = "container"`. Carries `doc/entity-model.md`'s durable content
+   (the storage rule's entity-engine realisation, entity-vs-facet taxonomy,
+   identity/reference model, family-specific status vocab, runtime-state
+   boundary, three-layer Rust model Raw → Entity → Registry) under the F4
+   interim-authority rule (§9), plus `src/entity.rs` + registry/integrity seams
+   (`integrity::KINDS`), `doc/relation-index.md`,
    mem.system.engine.identity-claim-seam,
-   mem.pattern.entity.kind-is-data-not-trait. The commonest fan-out shape.
+   mem.pattern.entity.kind-is-data-not-trait. **Altitude filter (lower-stakes
+   now it guards a container, not the root):** lift shipped reality only —
+   entity-model.md's direction/migration/adjudication content (roadmap,
+   importer stance, spec-driver critique) is *not* shipped how and stays in
+   `doc/*`. The commonest fan-out shape.
 3. **Thin capability component** — "ADR entity surface", parent = engine
    container, `descends_from = "PRD-008"`, `c4_level = "component"`. Anchors:
    the ADR kind module (path verified at authoring). Locks the thin shape:
@@ -167,10 +187,11 @@ fan-out vs serial `/execute`) decided at `/phase-plan`, not design-locked.
 
 ## 6. Edges
 
-- `descends_from` per the §2 tree; umbrella + shared-substrate containers
+- `descends_from` per the §2 tree; the root + shared-substrate containers
   stay empty.
-- `parent` wiring per tree; **retrofit SPEC-001/SPEC-002** under the umbrella
-  so the corpus is one tree.
+- `parent` wiring per tree; **retrofit SPEC-001/SPEC-002 `parent` = the
+  whole-system root** so the corpus is one tree (mechanical single-field add,
+  F5).
 - `interactions.toml` only where weighty — peer `uses`/`calls` distinct from
   containment (e.g. memory engine *uses* reservation for id allocation;
   install *uses* skills distribution). No edge for what containment already
@@ -200,7 +221,7 @@ fan-out vs serial `/execute`) decided at `/phase-plan`, not design-locked.
 1. **PHASE-01 Taxonomy** — confirm tree + per-spec source map (gitignored
    scaffolding); settle boundary calls (slices: component vs container;
    PRD-010 shipped subset; CLI-surface container in/out).
-2. **PHASE-02 Exemplar trio** — umbrella + engine container + ADR component;
+2. **PHASE-02 Exemplar trio** — whole-system root + engine container + ADR component;
    `validate`/`show` green; user accepts bar.
 3. **PHASE-03 Skill rework** — exemplar-driven SKILL.md; `skills install` +
    `touch src/skills.rs` refresh.
@@ -282,6 +303,12 @@ tree, not a forest." Three problems:
 
 Under both, the umbrella's *content* (entity-engine durable material) belongs
 on an entity-engine container, not the root.
+
+**RESOLVED — User chose (A).** Applied to the body: §2 root is now a
+whole-system context spec ("Doctrine", the tool) with every container parented
+to it; §3 exemplar #1 is that synthesis (anchor-free, REQ-085), with
+`entity-model.md` content moved down to the entity-engine container (#2) under
+the F4 rule; §6 retrofits SPEC-001/002 `parent` = root. D1 re-locked (§1).
 
 ### F2 — D2 completeness claim stated two incompatible ways (PARTIALLY UPHELD; minor)
 
