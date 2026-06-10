@@ -25,15 +25,19 @@ use serde::Deserialize;
 #[folder = "plugins/"]
 struct PluginAssets;
 
-/// The subset domain whose enumerated skills `--only-memory` resolves to. It is
-/// also the (sole) marketplace-only domain — its skills are symlinks into the
-/// canonical `doctrine` domain, so it is excluded from the install catalog.
+/// The subset domain whose enumerated skills `--only-memory` resolves to — a
+/// marketplace-only domain whose skills are symlinks into the canonical
+/// `doctrine` domain, so it is excluded from the install catalog.
 const MEMORY_SUBSET_DOMAIN: &str = "doctrine-memory";
+
+/// The partner subset domain (`pair` + `walkthrough`), symlinked into the
+/// canonical `doctrine` domain. Marketplace-only; no `--only-partner` analog.
+const PARTNER_SUBSET_DOMAIN: &str = "doctrine-partner";
 
 /// Marketplace-only domains the CLI does not install: their skills are symlinks
 /// to a canonical domain (e.g. `doctrine-memory` → `doctrine`), so the embed
 /// carries duplicates that would collide on skill id. Excluded at discovery.
-const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN];
+const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET_DOMAIN];
 
 /// Source from which the delegated `npx skills` pulls non-Claude installs.
 const DELEGATE_SOURCE: &str = "davidlee/doctrine";
@@ -882,13 +886,20 @@ mod tests {
     #[test]
     fn discover_excludes_marketplace_only_domains() {
         let cat = discover().unwrap();
-        // doctrine-memory is a marketplace-only subset (symlinks to doctrine);
-        // it must not enter the CLI catalog, or it collides on duplicate ids.
+        // doctrine-memory + doctrine-partner are marketplace-only subsets
+        // (symlinks to doctrine); they must not enter the CLI catalog, or they
+        // collide with the canonical skills on duplicate ids.
         assert!(cat.iter().all(|e| e.domain != "doctrine-memory"));
-        // …while the canonical memory skills remain in the doctrine domain.
+        assert!(cat.iter().all(|e| e.domain != "doctrine-partner"));
+        // …while the canonical skills remain in the doctrine domain.
         assert!(
             cat.iter()
                 .any(|e| e.id == "record-memory" && e.domain == "doctrine")
+        );
+        assert!(cat.iter().any(|e| e.id == "pair" && e.domain == "doctrine"));
+        assert!(
+            cat.iter()
+                .any(|e| e.id == "walkthrough" && e.domain == "doctrine")
         );
     }
 

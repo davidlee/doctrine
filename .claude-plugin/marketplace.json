@@ -23,9 +23,9 @@
       "description": "Author the disposable handover.md for the next agent / phase."
     },
     {
-      "name": "partner",
-      "source": "./plugins/partner",
-      "description": "Collaborative engineering partner — pair programming and guided code walkthroughs with a human in the loop, always a challenging partner."
+      "name": "doctrine-partner",
+      "source": "./plugins/doctrine-partner",
+      "description": "Doctrine's collaboration skills alone (pair/walkthrough) — a standalone subset of the doctrine plugin. Install one or the other, not both."
     }
   ]
 }
