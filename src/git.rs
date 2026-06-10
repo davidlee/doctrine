@@ -586,7 +586,7 @@ fn trunk_ladder(root: &Path, explicit: Option<&std::ffi::OsStr>) -> anyhow::Resu
 /// basename of each path is an id, non-numeric basenames ignored. No trunk
 /// (`trunk_tree_ish` → None), an absent dir, or empty output all yield
 /// `Ok(vec![])` — the local-only degradation (R-2).
-fn trunk_entity_ids(root: &Path, kind_dir: &str) -> anyhow::Result<Vec<u32>> {
+pub(crate) fn trunk_entity_ids(root: &Path, kind_dir: &str) -> anyhow::Result<Vec<u32>> {
     let Some(tree_ish) = trunk_tree_ish(root)? else {
         return Ok(Vec::new());
     };

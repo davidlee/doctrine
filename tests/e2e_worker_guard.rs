@@ -71,6 +71,7 @@ const WRITE_VERBS: &[(&[&str], &str)] = &[
     ),
     (&["boot"], "boot"),
     (&["boot", "install"], "boot install"),
+    (&["reseat", "SL-001"], "reseat"),
 ];
 
 #[test]
@@ -112,5 +113,22 @@ fn read_verb_unaffected_under_worker() {
     assert!(
         !err.contains("DOCTRINE_WORKER"),
         "`slice list` must not hit the worker guard; stderr: {err}"
+    );
+}
+
+// VT-3 (INV-3): the corpus integrity scan is a Read verb — it must run, not
+// refuse, under the worker env (an empty tree validates clean).
+#[test]
+fn validate_unaffected_under_worker() {
+    let dir = tmp();
+    let out = run_worker(dir.path(), &["validate", "-p", "."]);
+    let err = stderr(&out);
+    assert!(
+        out.status.success(),
+        "`validate` should run under DOCTRINE_WORKER=1; stderr: {err}"
+    );
+    assert!(
+        !err.contains("DOCTRINE_WORKER"),
+        "`validate` must not hit the worker guard; stderr: {err}"
     );
 }
