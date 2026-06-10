@@ -931,8 +931,97 @@ enum SkillsCommand {
     },
 }
 
+/// Mutation classification for the worker-mode guard (ADR-006 D2a). `Write`
+/// carries the verb label named in the refusal. EXHAUSTIVE by design (§7-D6):
+/// no wildcard arm, so a future `Command` variant is a compile error — never a
+/// silently-permitted write (the X4 self-defence).
+enum WriteClass {
+    Read,
+    Write(&'static str),
+}
+
+fn write_class(cmd: &Command) -> WriteClass {
+    use WriteClass::{Read, Write};
+    match cmd {
+        Command::Install { .. } => Write("install"),
+        Command::Skills { command } => match command {
+            SkillsCommand::List { .. } => Read,
+            SkillsCommand::Install { .. } => Write("skills install"),
+        },
+        Command::Slice { command } => match command {
+            SliceCommand::New { .. } => Write("slice new"),
+            SliceCommand::Design { .. } => Write("slice design"),
+            SliceCommand::Plan { .. } => Write("slice plan"),
+            SliceCommand::Phases { .. } => Write("slice phases"),
+            SliceCommand::Notes { .. } => Write("slice notes"),
+            SliceCommand::Phase { .. } => Write("slice phase"),
+            SliceCommand::Status { .. } => Write("slice status"),
+            SliceCommand::List { .. } | SliceCommand::Show { .. } => Read,
+        },
+        Command::Memory { command } => match command {
+            MemoryCommand::Record { .. } => Write("memory record"),
+            MemoryCommand::Verify { .. } => Write("memory verify"),
+            MemoryCommand::Sync { command, .. } => match command {
+                None => Write("memory sync"),
+                Some(SyncCommand::Install { .. }) => Write("memory sync install"),
+            },
+            MemoryCommand::Show { .. }
+            | MemoryCommand::List { .. }
+            | MemoryCommand::Find { .. }
+            | MemoryCommand::Retrieve { .. } => Read,
+        },
+        Command::Adr { command } => match command {
+            AdrCommand::New { .. } => Write("adr new"),
+            AdrCommand::Status { .. } => Write("adr status"),
+            AdrCommand::List { .. } | AdrCommand::Show { .. } => Read,
+        },
+        Command::Policy { command } => match command {
+            PolicyCommand::New { .. } => Write("policy new"),
+            PolicyCommand::Status { .. } => Write("policy status"),
+            PolicyCommand::List { .. } | PolicyCommand::Show { .. } => Read,
+        },
+        Command::Spec { command } => match command {
+            SpecCommand::New { .. } => Write("spec new"),
+            SpecCommand::Req { command } => match command {
+                SpecReqCommand::Add { .. } => Write("spec req add"),
+            },
+            SpecCommand::List { .. } | SpecCommand::Show { .. } | SpecCommand::Validate { .. } => {
+                Read
+            }
+        },
+        Command::Backlog { command } => match command {
+            BacklogCommand::New { .. } => Write("backlog new"),
+            BacklogCommand::Edit { .. } => Write("backlog edit"),
+            BacklogCommand::List { .. } | BacklogCommand::Show { .. } => Read,
+        },
+        Command::Boot { command, .. } => match command {
+            None => Write("boot"),
+            Some(BootCommand::Install { .. }) => Write("boot install"),
+        },
+        Command::Worktree { command } => match command {
+            // Both write *fork* files, not the doctrine state the guard protects,
+            // and never run in worker context (§5.2) — Read on purpose.
+            WorktreeCommand::Provision { .. } | WorktreeCommand::CheckAllowlist { .. } => Read,
+        },
+    }
+}
+
+/// Worker context (ADR-006 D2a): a dispatched worker sets `DOCTRINE_WORKER=1`
+/// and may read freely but must mint/anchor nothing — it returns a source delta.
+fn worker_mode() -> bool {
+    std::env::var_os("DOCTRINE_WORKER").as_deref() == Some(std::ffi::OsStr::new("1"))
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    // ADR-006 D2a worker-mode guard: a dispatched worker mints/anchors nothing.
+    // Bail before dispatch on any Write-classed verb; Read paths stay open (INV-3).
+    if let (true, WriteClass::Write(verb)) = (worker_mode(), write_class(&cli.command)) {
+        anyhow::bail!(
+            "DOCTRINE_WORKER=1: refusing authored write `{verb}` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator."
+        );
+    }
 
     match cli.command {
         Command::Install { path, dry_run, yes } => install::run(path, dry_run, yes),
@@ -1230,5 +1319,464 @@ mod tests {
     fn only_memory_alone_parses() {
         let r = Cli::try_parse_from(["doctrine", "skills", "install", "--only-memory"]);
         assert!(r.is_ok());
+    }
+}
+
+#[cfg(test)]
+mod write_class_tests {
+    use super::*;
+
+    // Read => None, Write(label) => Some(label). The compiler's totality (no
+    // wildcard in `write_class`) proves every variant is *handled*; this table
+    // pins the Read/Write split + verb labels (VT-1).
+    fn cls(cmd: Command) -> Option<&'static str> {
+        match write_class(&cmd) {
+            WriteClass::Read => None,
+            WriteClass::Write(v) => Some(v),
+        }
+    }
+
+    // The 8-field shared list flags — every `list` verb is a Read; a helper
+    // tames the construction noise across the kinds.
+    fn clist() -> CommonListArgs {
+        CommonListArgs {
+            filter: None,
+            regexp: None,
+            case_insensitive: false,
+            status: Vec::new(),
+            tag: Vec::new(),
+            all: false,
+            format: Format::Table,
+            json: false,
+        }
+    }
+
+    #[test]
+    fn install_is_write() {
+        assert_eq!(
+            cls(Command::Install {
+                path: None,
+                dry_run: false,
+                yes: false
+            }),
+            Some("install")
+        );
+    }
+
+    #[test]
+    fn skills_split() {
+        assert_eq!(
+            cls(Command::Skills {
+                command: SkillsCommand::List {
+                    agent: None,
+                    installed: false
+                }
+            }),
+            None
+        );
+        assert_eq!(
+            cls(Command::Skills {
+                command: SkillsCommand::Install {
+                    path: None,
+                    agent: Vec::new(),
+                    skill: Vec::new(),
+                    domain: Vec::new(),
+                    only_memory: false,
+                    global: false,
+                    dry_run: false,
+                    yes: false,
+                }
+            }),
+            Some("skills install")
+        );
+    }
+
+    #[test]
+    fn slice_split() {
+        let w = |c| cls(Command::Slice { command: c });
+        assert_eq!(
+            w(SliceCommand::New {
+                title: None,
+                slug: None,
+                path: None
+            }),
+            Some("slice new")
+        );
+        assert_eq!(
+            w(SliceCommand::Design { id: 0, path: None }),
+            Some("slice design")
+        );
+        assert_eq!(
+            w(SliceCommand::Plan { id: 0, path: None }),
+            Some("slice plan")
+        );
+        assert_eq!(
+            w(SliceCommand::Phases {
+                id: 0,
+                prune: false,
+                path: None
+            }),
+            Some("slice phases")
+        );
+        assert_eq!(
+            w(SliceCommand::Notes { id: 0, path: None }),
+            Some("slice notes")
+        );
+        assert_eq!(
+            w(SliceCommand::Phase {
+                id: 0,
+                phase_id: String::new(),
+                status: state::PhaseStatus::Planned,
+                note: None,
+                path: None,
+            }),
+            Some("slice phase")
+        );
+        assert_eq!(
+            w(SliceCommand::Status {
+                id: 0,
+                state: slice::SliceStatus::Proposed,
+                note: None,
+                path: None,
+            }),
+            Some("slice status")
+        );
+        assert_eq!(
+            w(SliceCommand::List {
+                list: clist(),
+                path: None
+            }),
+            None
+        );
+        assert_eq!(
+            w(SliceCommand::Show {
+                reference: String::new(),
+                format: Format::Table,
+                json: false,
+                path: None,
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn memory_split() {
+        let w = |c| cls(Command::Memory { command: c });
+        assert_eq!(
+            w(MemoryCommand::Record {
+                title: String::new(),
+                memory_type: memory::MemoryType::Concept,
+                key: None,
+                status: memory::Status::Active,
+                summary: None,
+                tag: Vec::new(),
+                path_scope: Vec::new(),
+                glob: Vec::new(),
+                command: Vec::new(),
+                repo: None,
+                global: false,
+                path: None,
+            }),
+            Some("memory record")
+        );
+        assert_eq!(
+            w(MemoryCommand::Verify {
+                reference: String::new(),
+                path: None
+            }),
+            Some("memory verify")
+        );
+        assert_eq!(
+            w(MemoryCommand::Show {
+                reference: String::new(),
+                format: Format::Table,
+                json: false,
+                path: None,
+            }),
+            None
+        );
+        assert_eq!(
+            w(MemoryCommand::List {
+                memory_type: None,
+                list: clist(),
+                path: None,
+            }),
+            None
+        );
+        assert_eq!(
+            w(MemoryCommand::Find {
+                path_scope: Vec::new(),
+                glob: Vec::new(),
+                command: Vec::new(),
+                tag: Vec::new(),
+                query: None,
+                memory_type: None,
+                status: None,
+                include_draft: false,
+                path: None,
+            }),
+            None
+        );
+        assert_eq!(
+            w(MemoryCommand::Retrieve {
+                path_scope: Vec::new(),
+                glob: Vec::new(),
+                command: Vec::new(),
+                tag: Vec::new(),
+                query: None,
+                memory_type: None,
+                status: None,
+                include_draft: false,
+                limit: None,
+                min_trust: None,
+                path: None,
+            }),
+            None
+        );
+        // Nested Option — bare `memory sync` AND `memory sync install` are both Write.
+        assert_eq!(
+            w(MemoryCommand::Sync {
+                command: None,
+                dry_run: false,
+                yes: false,
+                path: None,
+            }),
+            Some("memory sync")
+        );
+        assert_eq!(
+            w(MemoryCommand::Sync {
+                command: Some(SyncCommand::Install {
+                    path: None,
+                    dry_run: false,
+                    yes: false,
+                }),
+                dry_run: false,
+                yes: false,
+                path: None,
+            }),
+            Some("memory sync install")
+        );
+    }
+
+    #[test]
+    fn adr_split() {
+        let w = |c| cls(Command::Adr { command: c });
+        assert_eq!(
+            w(AdrCommand::New {
+                title: None,
+                slug: None,
+                path: None
+            }),
+            Some("adr new")
+        );
+        assert_eq!(
+            w(AdrCommand::Status {
+                id: 0,
+                status: adr::AdrStatus::Proposed,
+                path: None,
+            }),
+            Some("adr status")
+        );
+        assert_eq!(
+            w(AdrCommand::List {
+                list: clist(),
+                path: None
+            }),
+            None
+        );
+        assert_eq!(
+            w(AdrCommand::Show {
+                reference: String::new(),
+                format: Format::Table,
+                json: false,
+                path: None,
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn policy_split() {
+        let w = |c| cls(Command::Policy { command: c });
+        assert_eq!(
+            w(PolicyCommand::New {
+                title: None,
+                slug: None,
+                path: None
+            }),
+            Some("policy new")
+        );
+        assert_eq!(
+            w(PolicyCommand::Status {
+                id: 0,
+                status: policy::PolicyStatus::Draft,
+                path: None,
+            }),
+            Some("policy status")
+        );
+        assert_eq!(
+            w(PolicyCommand::List {
+                list: clist(),
+                path: None
+            }),
+            None
+        );
+        assert_eq!(
+            w(PolicyCommand::Show {
+                reference: String::new(),
+                format: Format::Table,
+                json: false,
+                path: None,
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn spec_split() {
+        let w = |c| cls(Command::Spec { command: c });
+        assert_eq!(
+            w(SpecCommand::New {
+                subtype: spec::SpecSubtype::Product,
+                title: None,
+                slug: None,
+                path: None,
+            }),
+            Some("spec new")
+        );
+        // Three levels deep: Spec -> Req -> Add.
+        assert_eq!(
+            w(SpecCommand::Req {
+                command: SpecReqCommand::Add {
+                    spec_ref: String::new(),
+                    title: None,
+                    kind: requirement::ReqKind::Functional,
+                    label: None,
+                    path: None,
+                }
+            }),
+            Some("spec req add")
+        );
+        assert_eq!(
+            w(SpecCommand::List {
+                list: clist(),
+                path: None
+            }),
+            None
+        );
+        assert_eq!(
+            w(SpecCommand::Show {
+                spec_ref: String::new(),
+                format: Format::Table,
+                json: false,
+                path: None,
+            }),
+            None
+        );
+        assert_eq!(
+            w(SpecCommand::Validate {
+                spec_ref: None,
+                path: None
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn backlog_split() {
+        let w = |c| cls(Command::Backlog { command: c });
+        assert_eq!(
+            w(BacklogCommand::New {
+                kind: backlog::ItemKind::Issue,
+                title: None,
+                slug: None,
+                path: None,
+            }),
+            Some("backlog new")
+        );
+        assert_eq!(
+            w(BacklogCommand::Edit {
+                id: String::new(),
+                status: backlog::Status::Open,
+                resolution: None,
+                path: None,
+            }),
+            Some("backlog edit")
+        );
+        assert_eq!(
+            w(BacklogCommand::List {
+                kind: None,
+                list: clist(),
+                substr: None,
+                path: None,
+            }),
+            None
+        );
+        assert_eq!(
+            w(BacklogCommand::Show {
+                id: String::new(),
+                format: Format::Table,
+                json: false,
+                path: None,
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn boot_split() {
+        // Bare regenerate (None) AND `boot install` are both Write. `--check` is
+        // a read-only sentry but the superset (§5.2) sweeps the whole verb to
+        // Write — workers never run it, and over-refusing a read is the safe side.
+        assert_eq!(
+            cls(Command::Boot {
+                command: None,
+                check: false,
+                path: None
+            }),
+            Some("boot")
+        );
+        assert_eq!(
+            cls(Command::Boot {
+                command: None,
+                check: true,
+                path: None
+            }),
+            Some("boot")
+        );
+        assert_eq!(
+            cls(Command::Boot {
+                command: Some(BootCommand::Install {
+                    path: None,
+                    agent: Vec::new(),
+                    dry_run: false,
+                    yes: false,
+                }),
+                check: false,
+                path: None,
+            }),
+            Some("boot install")
+        );
+    }
+
+    #[test]
+    fn worktree_is_read() {
+        // Deliberate (§5.2): these write *fork* files, not the doctrine state the
+        // guard protects, and never run in worker context.
+        assert_eq!(
+            cls(Command::Worktree {
+                command: WorktreeCommand::Provision {
+                    fork: PathBuf::from("x"),
+                    path: None,
+                }
+            }),
+            None
+        );
+        assert_eq!(
+            cls(Command::Worktree {
+                command: WorktreeCommand::CheckAllowlist { path: None }
+            }),
+            None
+        );
     }
 }
