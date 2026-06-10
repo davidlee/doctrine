@@ -123,7 +123,7 @@ that closes it.
                  `git apply` EVERY surviving net-diff onto B, NON-committing
         verify   run the project verify cmd on the combined working tree; on RED →
                  re-verify each delta alone to NAME the offender (X-3) → report+halt
-        guard    head-unmoved-check --base B   (HEAD still == B? else re-dispatch)
+        guard    branch-point-check --base B   (HEAD still == B? else re-dispatch; C-V naming note §5.2)
         commit   ONE batch commit on the coordination branch  → HEAD = B+1
         record   memory / AC evidence / notes — trails the confirmed commit
    next batch forks from B+1.  conflict during import = batching error → report+halt.
@@ -139,30 +139,32 @@ keeps every delta applied against the *same* base and makes "incremental per bat
 
 ### 5.2 Interfaces & Contracts
 
-**A — `entity::KindIdentity` (new, engine leaf).** The single per-kind identity
-the engine, integrity, and minting all read:
+**A — `integrity::KindRef` registry (command tier, X-4 resolved).** The single
+per-kind registry lives at the **command tier** (`integrity`), not the engine leaf.
+Its only consumers are command-tier (`integrity`'s id scan, `reseat`); the engine
+`Kind` needs nothing new, so no command/render concern descends into the leaf
+(ADR-001 rationale held — the X-4 finding):
 
 ```rust
-pub(crate) struct KindIdentity {
-    pub prefix: &'static str,             // "SL"            → canonical id
-    pub dir: &'static str,                // ".doctrine/slice" → entity-tree root
-    pub stem: &'static str,               // "slice"         → slice-007.toml
-    pub state_dir: Option<&'static str>,  // ".doctrine/state/slice" | None (F-5)
+pub(crate) struct KindRef {
+    pub kind: &'static entity::Kind,      // REFERENCES the engine const: prefix + dir (closes F-2)
+    pub stem: &'static str,               // "slice" → slice-007.toml AND the JSON envelope key (command)
+    pub state_dir: Option<&'static str>,  // ".doctrine/state/slice" | None (closes F-5)
 }
 ```
 
-- `entity::Kind` embeds `&'static KindIdentity` (replacing its bare `prefix`/`dir`,
-  carrying `scaffold` as today). `governance::GovKind`'s `stem` folds into the
-  identity. The fn-pointer `scaffold` stays on `Kind` (kind-specific behaviour, not
-  data) — the engine `Kind` is still data, not a trait (mem
-  `entity.kind-is-data-not-trait`).
-- `integrity::KINDS: &[&'static KindIdentity]` **references** the kind consts
-  (`&SLICE_KIND.identity`, …) — no re-typed literals (closes F-2). `reseat` reads
-  `identity.state_dir` instead of `has_runtime_state` + hardcoded path (closes F-5).
+- **`entity::Kind` is unchanged** — `{ dir, prefix, scaffold }`. No `KindIdentity`,
+  no fold; `GovKind.stem` stays a command-tier field (it is the JSON envelope key —
+  a render concern that must not live in the leaf).
+- `integrity::KINDS: &[KindRef]` **references** each kind's engine const
+  (`KindRef { kind: &SLICE_KIND, … }`) for `prefix`/`dir` — no re-typed literals
+  (closes F-2) — and carries `stem`/`state_dir` as command-tier data not duplicated
+  elsewhere. `reseat` reads `state_dir` instead of `has_runtime_state` + hardcoded
+  path (closes F-5).
 
 **A — minting wiring.** Each `run_new` replaces `&[]` with
-`git::trunk_entity_ids(&root, KIND.identity.dir)?`. No new signature — `materialise`
-already takes `trunk_ids: &[u32]`.
+`git::trunk_entity_ids(&root, KIND.dir)?` (`dir` stays on the engine `Kind`). No new
+signature — `materialise` already takes `trunk_ids: &[u32]`.
 
 **B — `doctrine worktree branch-point-check` (new verb, `src/worktree.rs`).**
 The one mechanical seam of the funnel:
@@ -215,9 +217,10 @@ at import; conflict → report; crash recovery. Skill-prose (VA). Authored in
   Orchestrator: every doctrine-mediated write (import-commit, memory, AC evidence,
   notes, status), on the coordination branch. The fork withholds the
   coordination/runtime tier by construction (D9 provision exclusion).
-- **Kind identity (A).** Owned distributively by each kind module's const (where it
-  already lives); `integrity::KINDS` is a *view* over those consts, not a second
-  owner.
+- **Kind identity (A).** `prefix`/`dir` owned distributively by each kind module's
+  engine `Kind` const (where they already live); `integrity::KINDS` is a command-tier
+  *view* that references those consts and *adds* the command-only `stem`/`state_dir`,
+  not a second owner of prefix/dir (X-4: render concerns stay above the leaf).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -305,8 +308,8 @@ rationale (substance shipped SL-032; wiring tail landed SL-031). Record the IMP-
   trunk ids; `next_id(local, &[])` stays byte-identical to the old behaviour
   (SL-032 INV-1) so the gate holds for repos with no trunk.
 - **INV — KINDS is a hand-maintained pin (R-b, not closed) (C-IV).** No central
-  `Kind` const-spine exists — the consts are scattered across modules in two types
-  (`Kind` / `GovKind`), and the `KindIdentity` refactor adds none — so no test can
+  `Kind` const-spine exists — the consts are scattered across modules, and the
+  command-tier `KindRef` registry references them but adds no spine — so no test can
   reflectively enumerate "the live consts." The guard test pins `KINDS` against a
   **hand-written prefix literal**: it fires on a `KINDS`/literal divergence, **not**
   on a forgotten kind, which escapes both. R-b therefore stays a hand-maintained
@@ -347,13 +350,16 @@ All resolved in `/design` (2026-06-10):
   + prose; the backlog→slice graph edge is deferred — relations are v1-empty, C-VII);
   phasing keeps them ordered without the overhead of a second slice. A ships testable value first and de-risks the
   reframing.
-- **D-registry — referenced view (b1), not centralized table (b2).** `integrity::
-  KINDS` references the distributed kind consts. Alternative (b2: one central
-  literal table the Kind consts look up via const-fn) rejected: it inverts the
-  existing "each module owns its Kind" ownership for marginal gain, and the scope
-  doc already specifies a *set-equality guard test* — which presumes KINDS and the
-  consts are distinct (b1). Residual R-b (type system can't *force* registration
-  without an exhaustive-match seam) is guarded by the test, same posture as today.
+- **D-registry — command-tier referenced view (b1), not centralized table (b2),
+  not engine-leaf fold (X-4).** `integrity::KINDS` is a **command-tier** registry
+  referencing the distributed engine `Kind` consts for prefix/dir and adding the
+  command-only stem/state_dir. Alternative b2 (one central literal table the Kind
+  consts look up) rejected: it inverts "each module owns its Kind." The engine-leaf
+  fold (a `KindIdentity` on `entity::Kind` carrying stem) rejected per **X-4**:
+  `stem` is the JSON envelope key — a render concern — and must not descend into the
+  leaf (ADR-001 rationale). Residual R-b (type system can't *force* registration
+  without an exhaustive-match seam — no `Kind` const-spine exists, C-IV) stays a
+  hand-maintained pin, same posture as today.
 - **D-delta — commit-to-fork-branch.** Alternatives: uncommitted working-tree diff
   (fragile re untracked files; defeats the committed-HEAD branch-point compare) and
   always-patch (redundant transport over a shared store). A raw `git commit` is not
@@ -369,9 +375,11 @@ All resolved in `/design` (2026-06-10):
 - **R-2 — squash-orphan of coordination/fork-branch memory.** Mitigation:
   record-on-trunk convention + `memory record` worktree nudge. Deferred seam
   (ADR-006 Open).
-- **R-3 — registry refactor breaks the engine.** Mitigation: behaviour-preservation
-  gate — existing validate/reseat/run_new suites must stay green unchanged; the
-  refactor is a field-relocation, not a logic change.
+- **R-3 — registry refactor breaks the engine.** Largely defused by X-4: the engine
+  `Kind` is **untouched**; the change is confined to `integrity`'s `KindRef` shape
+  (add `state_dir`, reference the engine const for prefix/dir) — command tier only.
+  Mitigation: behaviour-preservation gate — existing validate/reseat/run_new suites
+  must stay green unchanged; the change is a command-tier field add, not a logic change.
 - **R-4 — batching error surfaces as a merge conflict.** Mitigation: report-and-halt
   (never auto-merge); the branch-point check + **file-disjoint** batch construction
   (changed-path-disjoint, serial fallback for shared files — §5.4) make the clean
@@ -526,12 +534,13 @@ An independent external reviewer attacked the pass-1/2 survivors. Six findings;
   not the reverse; `KINDS: &[&KindIdentity]` referencing kind consts is acyclic
   (re-confirms pass-2 F-c).
 
-- **X-4 (MAJOR, NEW, OPEN) — `stem` is a command concern pulled into the engine
-  leaf.** `GovKind.stem` is documented "File stem **AND JSON envelope/object key**"
-  (`governance.rs:38`; used as the JSON envelope key in `show_json`/`list_rows`) —
-  a command-render concern living correctly at the command tier today. The §5.2
-  design folds it into `entity::KindIdentity` on the **engine leaf**. No literal
-  cycle (X-6), but it inverts ADR-001's *rationale* (the leaf gains command-render
-  knowledge). Pass-2 F-c only checked for a cycle and missed this. **This is the
-  one finding that reshapes deliverable A — it needs a decision, not an
-  improvisation.** Lock is held until X-4 is resolved.
+- **X-4 (MAJOR, NEW) — RESOLVED: registry stays command-tier.** `GovKind.stem` is
+  documented "File stem **AND JSON envelope/object key**" (`governance.rs:38`) — a
+  command-render concern. The draft §5.2 folded it into `entity::KindIdentity` on the
+  **engine leaf**; no literal cycle (X-6), but it inverted ADR-001's *rationale*
+  (the leaf gaining command-render knowledge — a gap pass-2 F-c's cycle-only check
+  missed). **Resolution (User):** the unified registry lives at the **command tier**
+  — `integrity::KINDS: &[KindRef]` references each engine `Kind` const for prefix/dir
+  (closes F-2) and carries `stem`/`state_dir` as command-only data (closes F-5); the
+  engine `Kind` is **unchanged** (`{ dir, prefix, scaffold }`). Same Fs closed, no
+  ADR-001 deviation, no `KindIdentity` type. §5.2/§5.3/§7 updated. **Lock unblocked.**
