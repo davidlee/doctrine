@@ -1,6 +1,8 @@
 # SL-038 Design — cordage scale harness
 
-Status: draft (design stage). Canonical for design intent; scope in `slice-038.md`.
+Status: **locked** (2026-06-11, post-inquisition — RSK-004 folded in (D5); C1/C2
+mended, C3 carried to plan as a VT gate). Canonical for design intent; scope in
+`slice-038.md`; hostile pass in `inquisition.md`.
 
 ## 1. Purpose
 
@@ -160,24 +162,28 @@ Same shape as §6.3 — a measured-ratio red, not an exact-count or subprocess o
 `evaluate()` runs one `reachable()` BFS per node (`query.rs:256`, the `for ord in
 0..node_count` loop); over the deep-chain spine each BFS walks the suffix, so the
 whole call is O(V²). Builds the spine at two **sub-overflow** sizes, evaluates an
-idempotent channel (`Combinator::Any`, a forward `Direction`) seeded once at node 0,
-times each, prints the ratio, asserts only a loose upper bound:
+idempotent channel (`Combinator::Any` over `Direction::Along` — descendants along the
+spine) seeded once at node 0, times each, prints the ratio, asserts only a loose upper
+bound:
 ```rust
 #[test] #[ignore = "slow; records the evaluate() per-node-BFS quadratic for RSK-004"]
 fn evaluate_scales_quadratically_in_node_count() {
     let (g1, ov1) = deep_chain(5_000);    // sub-overflow: build MUST succeed
     let (g2, ov2) = deep_chain(10_000);   // so query-time cost is isolated
-    let seed = |n| BTreeMap::from([(NodeId(0), /* one in-domain ChannelValue */)]);
-    let t1 = time(|| g1.evaluate(ChannelSpec::new(ov1, Combinator::Any, FWD), &seed(0)));
-    let t2 = time(|| g2.evaluate(ChannelSpec::new(ov2, Combinator::Any, FWD), &seed(0)));
+    // Any's seed domain is ValueKind::Flag (query.rs:431) → Flag(true) is in-domain.
+    let seed = BTreeMap::from([(NodeId(0), ChannelValue::Flag(true))]);
+    let t1 = time(|| g1.evaluate(ChannelSpec::new(ov1, Combinator::Any, Direction::Along), &seed));
+    let t2 = time(|| g2.evaluate(ChannelSpec::new(ov2, Combinator::Any, Direction::Along), &seed));
     eprintln!("evaluate ratio {:.1}x for 2x nodes", t2.as_secs_f64()/t1.as_secs_f64());
     assert!(t2 < std::time::Duration::from_secs(120));   // sanity, not a tight gate
 }
 ```
 2× nodes → ~4× time is the quadratic signal (vs ~2× for the O(V+E) topo-fold fix).
-The exact `Direction`/`ChannelValue` variant names are pinned at implementation time
-against the public enums (`lib.rs:128/137`); the in-domain seed must match `Any`'s
-value kind. Build is excluded from the timed closure (graphs are built *before*
+`Direction::Along` traverses the spine toward descendants so `reachable(k)` returns the
+`n-1-k`-node suffix; `Direction::None` would yield `∅` and **destroy the signal** — it
+is forbidden here. The output `Channel` is near-empty (the lone seed reaches only node
+0's own fold set) — irrelevant: the cost is the **unconditional** per-node BFS, which
+runs before any fold regardless of seeds. Build is excluded from the timed closure (graphs are built *before*
 `time(||…)`), so the measurement is the query, not the O(V) acyclic build. Unlike §6.3
 this red builds **no dense graph** — the cost is purely the per-node re-BFS, which is
 what isolates RSK-004 from the RSK-003 eviction quadratic.
