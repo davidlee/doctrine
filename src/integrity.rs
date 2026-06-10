@@ -317,6 +317,14 @@ fn parse_canonical_ref(reference: &str) -> anyhow::Result<(&'static KindRef, u32
 /// refused (F3 — reseat does not own the disposable tier). Inbound prose
 /// citations are reported as danglers and force a non-zero exit; prose is never
 /// rewritten (ADR-004 outbound-only, D4/R-3).
+///
+/// CONTRACT (SL-032 review F-4, accepted): the dangler exit is **non-zero even on
+/// a fully-completed reseat** — the mutation succeeded, the citations are the
+/// human's to fix; `reseat && commit` is therefore wrong, drive it by hand. The
+/// six post-guard fs ops are **not transactional**: a mid-sequence failure leaves
+/// a half-reseated entity that `validate` will flag. Reseat targets freshly
+/// minted, pre-execution collisions where that blast radius is acceptable;
+/// hardening it to atomic is a tracked follow-up, not done here.
 pub(crate) fn run_reseat(
     path: Option<PathBuf>,
     reference: &str,
@@ -429,7 +437,9 @@ pub(crate) fn run_reseat(
 
 /// Scan authored `.doctrine/**/*.md` prose for inbound citations of `needle`
 /// (a canonical ref), returning `file:line` locations. A whole-token match
-/// (`SL-031` does not match inside `SL-0310`) keeps the report honest.
+/// (`SL-031` does not match inside `SL-0310`) keeps the report honest, and
+/// disposable prose ([`is_disposable_prose`]) is skipped — a `rm -rf`-able
+/// `handover.md` or runtime phase note is not a citation a human must rewrite.
 fn scan_danglers(root: &Path, needle: &str) -> anyhow::Result<Vec<String>> {
     let pattern = root.join(".doctrine/**/*.md");
     let pattern = pattern
@@ -439,6 +449,9 @@ fn scan_danglers(root: &Path, needle: &str) -> anyhow::Result<Vec<String>> {
     let mut hits = Vec::new();
     for entry in glob::glob(pattern).context("bad glob pattern")? {
         let path = entry.context("glob walk")?;
+        if is_disposable_prose(&path) {
+            continue;
+        }
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue; // non-utf8 / unreadable — not authored prose we cite
         };
@@ -451,9 +464,24 @@ fn scan_danglers(root: &Path, needle: &str) -> anyhow::Result<Vec<String>> {
     Ok(hits)
 }
 
-/// True when `line` cites `needle` as a whole canonical token — the char before
-/// is not alphanumeric and the char after is not a digit, so `SL-031` is not
-/// found inside `ASL-031` or `SL-0310`.
+/// True for prose in the disposable tiers a reseat must not nag about: any file
+/// under the gitignored runtime state tree (`.doctrine/state/…`) and any
+/// `handover.md` (per-agent scratch, GITIGNORED). Authored prose — slice/adr/spec
+/// bodies, committed `memory.md` — is never disposable and stays in scope.
+fn is_disposable_prose(path: &Path) -> bool {
+    if path.file_name().and_then(|n| n.to_str()) == Some("handover.md") {
+        return true;
+    }
+    let comps: Vec<_> = path
+        .components()
+        .filter_map(|c| c.as_os_str().to_str())
+        .collect();
+    comps.windows(2).any(|w| w == [".doctrine", "state"])
+}
+
+/// True when `line` cites `needle` as a whole canonical token — neither the char
+/// before nor the char after is alphanumeric, so `SL-031` is not found inside
+/// `ASL-031`, `SL-0310`, or `SL-031x` (a glued suffix is never a real ref).
 fn line_cites(line: &str, needle: &str) -> bool {
     let mut base = 0;
     while let Some(rest) = line.get(base..)
@@ -468,7 +496,7 @@ fn line_cites(line: &str, needle: &str) -> bool {
         let after_ok = line
             .get(after..)
             .and_then(|s| s.chars().next())
-            .is_none_or(|c| !c.is_ascii_digit());
+            .is_none_or(|c| !c.is_ascii_alphanumeric());
         if before_ok && after_ok {
             return true;
         }
@@ -579,10 +607,31 @@ mod tests {
         assert!(line_cites("see SL-031 for detail", "SL-031"));
         assert!(line_cites("SL-031, ADR-004", "SL-031"));
         assert!(line_cites("SL-031", "SL-031"));
-        // boundary guards: a longer id or a glued prefix must not match.
+        // boundary guards: a longer id or a glued prefix/suffix must not match.
         assert!(!line_cites("SL-0310 is different", "SL-031"));
         assert!(!line_cites("XSL-031", "SL-031"));
+        assert!(!line_cites("SL-031x is not a ref", "SL-031")); // glued alpha suffix
         assert!(!line_cites("nothing here", "SL-031"));
+    }
+
+    #[test]
+    fn scan_danglers_skips_disposable_prose() {
+        // F-7: a citation in authored prose is reported; the same citation in a
+        // gitignored handover or runtime phase note is not.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let plant = |rel: &str| {
+            let p = root.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, "cites SL-031 here\n").unwrap();
+        };
+        plant(".doctrine/notes/x.md"); // authored → reported
+        plant(".doctrine/slice/001/handover.md"); // disposable → skipped
+        plant(".doctrine/state/slice/001/phases/phase-01.md"); // runtime → skipped
+
+        let hits = scan_danglers(root, "SL-031").unwrap();
+        assert_eq!(hits.len(), 1, "only authored prose reported: {hits:?}");
+        assert!(hits[0].ends_with("notes/x.md:1"), "{}", hits[0]);
     }
 
     #[test]
