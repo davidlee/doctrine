@@ -74,7 +74,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "cargo test -p cordage --ignored runs the four reds: explain asserts == 2^layers; overflow asserts the child !success (rc 134); quadratic and evaluate print their ratios and pass the loose bound." },
   { id = "VT-2", expects = "cargo test -p cordage (default) green AND just check green — the reds are off the default gate." },
-  { id = "VT-3", expects = "cargo clippy -p cordage --examples --tests is clean (the manual gate covering both harness targets)." },
+  { id = "VT-3", expects = "cargo clippy -p cordage --examples is clean (the manual gate; --tests is NOT linted — the cordage test suite is not clippy-clean by repo convention, design §8). The reds use expect/unwrap like the existing tests." },
 ]
 specs        = []
 requirements = []
