@@ -52,13 +52,16 @@ do any open items bear on it?
 1. Correctness depends on project governance, an unfamiliar subsystem, or "what
    is the right way here?" → `/canon` and `/retrieve-memory` first.
 2. Substantive new work and the path is not yet clear → `/preflight`.
-3. Code-changing intent with no governing slice → `/slice`.
-4. Slice exists, design missing / stale / unapproved → `/design`
+3. Understand or audit an existing artifact with no change intended →
+   `/walkthrough` (no slice). A walkthrough that surfaces a concrete change
+   re-enters routing.
+4. Code-changing intent with no governing slice → `/slice`.
+5. Slice exists, design missing / stale / unapproved → `/design`
    (then `/inquisition` for an adversarial pass before locking).
-5. Design locked, no plan → `/plan`; expand the next phase just before
+6. Design locked, no plan → `/plan`; expand the next phase just before
    executing it → `/phase-plan`.
-6. Plan approved and a phase is active → `/execute`.
-7. Implementation done, now evidence / reconciliation → `/audit` → `/close`.
+7. Plan approved and a phase is active → `/execute`.
+8. Implementation done, now evidence / reconciliation → `/audit` → `/close`.
 
 Mid-flight, regardless of stage:
 
@@ -69,6 +72,8 @@ Mid-flight, regardless of stage:
   knowledge or a decision? See the boundary in `using-doctrine.md`.
 - Finished a coherent unit → `/notes`; handing off to fresh context → `/next`.
 - Authoring evergreen specs under `doc/*` → `/spec-product`, `/spec-tech`.
+- **Pairing / walkthrough are conduct postures**, orthogonal to the stage — layer
+  them on the routed stage, don't route to them *instead* of it.
 
 ## Priority order
 
