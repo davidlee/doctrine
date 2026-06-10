@@ -61,10 +61,14 @@ urgency, or product vocabulary in the crate).
   order in any ordering path; the tie-break is an explicit total `order_key`
   tuple, not incidental ordering. (Pure/imperative split — clock/disk/git stay
   in the thin shell.)
-- **Performance posture.** v1 recomputes from a full registry scan per query;
-  the corpus is small (tens–hundreds of entities). Incremental recomputation and
-  dirty-region evaluation are an adapter-level optimisation the boundary
-  preserves but v1 does not build. Any cache is disposable; correctness is
+- **Performance posture.** v1 recomputes from a full registry scan per query at a
+  target corpus of **~tens of thousands of entities**. Full recompute is acceptable
+  at that scale *only if* the core build is genuinely O(V+E) **and non-recursive**:
+  linear time is sub-second there, but any recursion whose depth tracks graph depth
+  overflows the stack, and any accidental quadratic degrades to seconds (tracked as
+  RSK-002 / RSK-003, SL-036; unverified until the perf spike). Incremental
+  recomputation and dirty-region evaluation are an adapter-level optimisation the
+  boundary preserves but v1 does not build. Any cache is disposable; correctness is
   recomputation from authored state (REQ-078).
 - **Failure mode — cycles.** Handled per overlay (D5): a `dep` cycle is invalid —
   diagnose (naming node ids + edge kinds), degrade the affected query, never emit
@@ -84,10 +88,16 @@ urgency, or product vocabulary in the crate).
 
 ## Hypotheses
 
-- **H1 — full recompute is enough for v1.** The governed corpus is small enough
-  that scan-and-recompute per query is acceptable; no incremental engine is
-  needed yet. *Challenge:* if the corpus grows past comfort, the adapter's
-  invalidation seam (not the core) absorbs it.
+- **H1 — full recompute is enough for v1, at ~tens of thousands of nodes.**
+  Scan-and-recompute per query is acceptable; no incremental engine is needed yet.
+  This rests on the core build being genuinely **O(V+E) and non-recursive**: at this
+  scale linear time is sub-second, but recursion whose depth tracks graph depth
+  overflows the stack (RSK-003 — `Tarjan::strongconnect`, `level_of` recurse today)
+  and the eviction-to-fixpoint pass must not hide a quadratic. The linear+iterative
+  guarantee is load-bearing and **unverified until the perf spike reds RSK-002 /
+  RSK-003** (SL-036). *Challenge:* if the corpus grows past tens of thousands, the
+  adapter's invalidation seam (not the core) absorbs incrementality; the per-build
+  cost stays the core's own to bound.
 - **H2 — tree + typed-DAG captures doctrine's relations.** Doctrine relations are
   authored outbound-only (ADR-004); reverse edges, blockers, and reachability are
   all derivable in-core from that alone, with no new durable inbound field.

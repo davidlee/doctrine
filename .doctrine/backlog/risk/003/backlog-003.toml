@@ -1,0 +1,28 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 3
+slug = "cordage-tarjan-and-level-of-recursion-depth-overflows-stack-at-multi-thousand-graph-depth"
+title = "cordage Tarjan and level_of recursion depth overflows stack at multi-thousand graph depth"
+kind = "risk"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-11"
+tags = ["cordage", "scale", "recursion"]
+
+[facet]                         # risk only — every field typed; seeded empty
+likelihood = "medium"           # low | medium | high | critical
+impact     = "high"             # low | medium | high | critical
+origin     = "SL-036 PHASE-02 deferred recursion note (state/slice/036/phases/phase-02.md:47); discovered SL-036 post-close perf review 2026-06-11 when real scale target raised from H1 hundreds to tens of thousands"
+controls   = [
+  "two recursive sites, depth = graph depth: Tarjan::strongconnect (crates/cordage/src/resolve.rs:321) and level_of (resolve.rs:545); a deep chain (multi-thousand) overflows the 8MB main-thread stack -> panic, not slowdown",
+  "PHASE-02 explicitly deferred iterative Tarjan as non-concern at H1/H2 (phase-02.md:47); that deferral is void once depth exceeds a few thousand",
+  "no current exposure: all VT fixtures are shallow (<=3 nodes); gated on the first consumer feeding deep real graphs",
+  "fix direction: explicit-stack iterative rewrite of both functions (mechanical); red test = deep-chain generator in the perf spike",
+]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-036"]
+specs  = ["SPEC-001"]
+drift  = []

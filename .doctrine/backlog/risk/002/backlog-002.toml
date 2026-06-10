@@ -8,17 +8,18 @@ kind = "risk"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-10"
-updated = "2026-06-10"
-tags = []
+updated = "2026-06-11"
+tags = ["cordage", "scale"]
 
 [facet]                         # risk only — every field typed; seeded empty
-likelihood = "low"              # low | medium | high | critical
+likelihood = "medium"           # low | medium | high | critical
 impact     = "medium"           # low | medium | high | critical
-origin     = "SL-036 design Lock known-open; audit N-2/R-B; notes.md design-stage"
+origin     = "SL-036 design Lock known-open; audit N-2/R-B; notes.md design-stage. Re-rated low->medium 2026-06-11: real scale target raised from H1 hundreds to tens of thousands, where deep diamond lattices are routine rather than fixture-only"
 controls   = [
   "F47 bounds termination (chains end at roots or degraded-SCC entry) — combinatorics, not finiteness, is the residual",
-  "no current exposure: all VT fixtures are <=3 nodes by design; first-consumer-owned",
+  "exposure was nil at H1/H2 (all VT fixtures <=3 nodes); at tens-of-thousands scale deep lattices are reachable in real input — likelihood re-rated medium",
   "fix direction: return the predecessor sub-DAG (or direct + one canonical chain); policy enumerates on demand",
+  "quantify in the perf spike (handover Task 2) with a diamond-lattice generator before fixing; sibling of [[RSK-003]] (recursion overflow)",
 ]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
