@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 19
+slug = "cordage-golden-net-proves-determinism-but-not-value-correctness-no-independent-value-oracle"
+title = "cordage golden_net proves determinism but not value-correctness: no independent value oracle"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-11"
+tags = ["cordage", "testing"]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-036"]
+specs  = ["SPEC-001"]
+drift  = []

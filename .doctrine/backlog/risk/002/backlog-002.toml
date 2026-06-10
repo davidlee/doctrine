@@ -20,6 +20,7 @@ controls   = [
   "exposure was nil at H1/H2 (all VT fixtures <=3 nodes); at tens-of-thousands scale deep lattices are reachable in real input — likelihood re-rated medium",
   "fix direction: return the predecessor sub-DAG (or direct + one canonical chain); policy enumerates on demand",
   "quantify in the perf spike (handover Task 2) with a diamond-lattice generator before fixing; sibling of [[RSK-003]] (recursion overflow)",
+  "EMPIRICALLY CONFIRMED in SL-036 post-close review 2026-06-11 (Opus probe, deleted): 16.7M chains at 24 diamond layers in 1.1s, 2^layers growth; OOM/hang beyond. Both reviewers (codex + Opus) agree. extend_chains also clones the suffix per emitted branch (query.rs:150/158) -> O(path_len) copy per path on top of the exponential count",
 ]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
