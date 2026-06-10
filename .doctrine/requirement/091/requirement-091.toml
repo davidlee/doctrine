@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 91
+slug = "adapter-maps-doctrine-ids-to-opaque-nodes-and-re-maps-diagnostics-back"
+title = "Adapter maps doctrine ids to opaque nodes and re-maps diagnostics back"
+status = "pending"
+kind = "functional"
+
+description = "The doctrine adapter is the sole translation layer between the registry and the core: it maps doctrine entity ids to opaque core node ids, emits the core's typed directed edges from authored outbound relations alone, supplies the node attributes doctrine policy needs, and maps core diagnostics back to doctrine ids and relation-kind names."
+tags = []
+acceptance_criteria = [
+  "Core node ids are produced by the adapter from doctrine entity ids and are opaque to the core.",
+  "Every typed edge the core sees is emitted by the adapter from an authored outbound relation (ADR-004); no inbound or derived field is authored to produce it.",
+  "A core diagnostic (e.g. a cycle) is reported to the operator in doctrine ids and relation-kind names, re-mapped by the adapter from opaque core identifiers.",
+]

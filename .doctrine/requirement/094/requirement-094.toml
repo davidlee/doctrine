@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 94
+slug = "derived-cache-is-policy-version-stamped-and-recompute-equivalent"
+title = "Derived cache is policy-version-stamped and recompute-equivalent"
+status = "pending"
+kind = "quality"
+
+description = "Any persisted derived output is disposable cache or projection only: it stamps the policy version and an input signature so stale results are recognisable, and deleting it and recomputing from unchanged authored state yields equivalent output. Derived computation never mutates authored entity state."
+tags = []
+acceptance_criteria = [
+  "Cache/projection output records the policy version and an input signature identifying the authored state it was computed from.",
+  "Deleting any derived cache and recomputing over unchanged authored state yields equivalent ordering and explanations.",
+  "No derived value is written into entity TOML as canonical truth, and derived computation mutates no status, resolution, item_kind, priority metadata, or relation.",
+]

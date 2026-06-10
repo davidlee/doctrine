@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 90
+slug = "graph-core-is-a-standalone-product-neutral-crate"
+title = "Graph core is a standalone product-neutral crate"
+status = "pending"
+kind = "functional"
+
+description = "The generic graph evaluation core is built as its own workspace member crate that doctrine depends on by path; its manifest declares no dependency on doctrine or any product crate, and it carries no doctrine or product vocabulary, so it can be published externally later without reshaping its API or the doctrine adapter."
+tags = []
+acceptance_criteria = [
+  "The graph core lives in a separate workspace crate; doctrine depends on it through a path dependency.",
+  "The core crate's manifest declares no doctrine dependency and no product (e.g. bough) dependency.",
+  "Making the dependency external later is a publish plus a path-to-version flip, requiring no change to the core's public API or the doctrine adapter.",
+]
