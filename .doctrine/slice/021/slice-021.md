@@ -20,6 +20,13 @@
 > Backfill (this slice) is blocked on PRD + system-support landing. A narrow
 > first pass (umbrella + exemplar) may precede full corpus. Do not /plan or
 > /execute SL-021 until those land.
+>
+> **Unblocked (design session, 2026-06-11).** PRD-012 (and PRD-013) are
+> authored — both draft, both explicitly accepted as lean-on-able for this
+> slice (user call) — and SL-022 (system support: `descends_from`, `parent`,
+> integrity) is done. The folder hoist remains open and is not a blocker.
+> Design authored: see `design.md` (taxonomy D1/D2, exemplar trio D3,
+> requirement-status posture D4, skill reconciliation D5).
 
 ## Context
 
