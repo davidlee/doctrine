@@ -38,7 +38,7 @@ const REQUIREMENT_DIR: &str = ".doctrine/requirement";
 /// The top-level reserved requirement kind: `requirement-NNN.toml` +
 /// `requirement-NNN.md` + slug symlink. `prefix` is the canonical-id stem
 /// (`REQ-007`); the file stem is `"requirement"`.
-const REQUIREMENT_KIND: Kind = Kind {
+pub(crate) const REQUIREMENT_KIND: Kind = Kind {
     dir: REQUIREMENT_DIR,
     prefix: "REQ",
     scaffold: requirement_scaffold,
@@ -229,13 +229,14 @@ pub(crate) fn reserve(
     title: &str,
     date: &str,
 ) -> anyhow::Result<entity::Materialised> {
+    let trunk_ids = crate::git::trunk_entity_ids(root, REQUIREMENT_KIND.dir)?;
     entity::materialise(
         &REQUIREMENT_KIND,
         &entity::LocalFs,
         root,
         &entity::MaterialiseRequest::Fresh,
         &entity::Inputs { slug, title, date },
-        &[], // trunk ids: production minting wires them in SL-031 (§5.4)
+        &trunk_ids,
     )
 }
 

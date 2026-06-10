@@ -325,6 +325,7 @@ pub(crate) fn run_new(
     let title = crate::input::resolve_title(title)?;
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
+    let trunk_ids = crate::git::trunk_entity_ids(&root, g.kind.dir)?;
     let out = entity::materialise(
         &g.kind,
         &LocalFs,
@@ -335,7 +336,7 @@ pub(crate) fn run_new(
             title: &title,
             date: &date,
         },
-        &[], // trunk ids: production minting wires them in SL-031 (§5.4)
+        &trunk_ids,
     )?;
 
     let id = out

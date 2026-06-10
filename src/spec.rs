@@ -47,7 +47,7 @@ const SPEC_STEM: &str = "spec";
 
 /// The product subtype: light identity, `members.toml`, no interactions. Own tree
 /// + reservation namespace.
-const PRODUCT_SPEC_KIND: Kind = Kind {
+pub(crate) const PRODUCT_SPEC_KIND: Kind = Kind {
     dir: ".doctrine/spec/product",
     prefix: "PRD",
     scaffold: product_spec_scaffold,
@@ -55,7 +55,7 @@ const PRODUCT_SPEC_KIND: Kind = Kind {
 
 /// The tech subtype: identity + flat fields, `members.toml` + `interactions.toml`.
 /// Own tree + reservation namespace (ids independent of product's).
-const TECH_SPEC_KIND: Kind = Kind {
+pub(crate) const TECH_SPEC_KIND: Kind = Kind {
     dir: ".doctrine/spec/tech",
     prefix: "SPEC",
     scaffold: tech_spec_scaffold,
@@ -648,6 +648,7 @@ pub(crate) fn run_new(
     let title = crate::input::resolve_title(title)?;
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
+    let trunk_ids = crate::git::trunk_entity_ids(&root, subtype.kind().dir)?;
     let out = entity::materialise(
         subtype.kind(),
         &LocalFs,
@@ -658,7 +659,7 @@ pub(crate) fn run_new(
             title: &title,
             date: &date,
         },
-        &[], // trunk ids: production minting wires them in SL-031 (§5.4)
+        &trunk_ids,
     )?;
     let id = out
         .eid

@@ -16,18 +16,25 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
 
+use crate::adr::ADR_KIND;
+use crate::backlog::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
+use crate::policy::POLICY_KIND;
+use crate::requirement::REQUIREMENT_KIND;
+use crate::slice::SLICE_KIND;
+use crate::spec::{PRODUCT_SPEC_KIND, TECH_SPEC_KIND};
+use crate::standard::STANDARD_KIND;
 use crate::{entity, fsutil, git, listing, meta, root};
 
-/// A numbered entity kind's identity for the id scan — gathered where the
-/// kind-owning modules otherwise scatter it. `stem` names the metadata file
-/// (`slice-007.toml`); `prefix` the canonical id (`SL-007`); `has_runtime_state`
-/// marks the kinds that own gitignored phase state under `.doctrine/state/`
-/// (only slice today), which `reseat` refuses to strand (F3).
+/// A numbered entity kind's identity for the id scan — a *referencing view* over
+/// the engine [`entity::Kind`] each kind-owning module already declares (its
+/// canonical `prefix` and tree `dir`), plus the two facts the engine leaf does
+/// not carry: `stem` names the metadata file (`slice-007.toml`), and `state_dir`
+/// is the gitignored runtime phase-state tree (`.doctrine/state/slice`) a kind
+/// owns — `Some` only for slice today — which `reseat` refuses to strand (F3).
 pub(crate) struct KindRef {
-    pub(crate) prefix: &'static str,
-    pub(crate) dir: &'static str,
+    pub(crate) kind: &'static entity::Kind,
     pub(crate) stem: &'static str,
-    pub(crate) has_runtime_state: bool,
+    pub(crate) state_dir: Option<&'static str>,
 }
 
 /// Every numbered kind, in canonical order. The one place this list lives; a new
@@ -36,76 +43,64 @@ pub(crate) struct KindRef {
 /// through every kind-owning module).
 pub(crate) const KINDS: &[KindRef] = &[
     KindRef {
-        prefix: "SL",
-        dir: ".doctrine/slice",
+        kind: &SLICE_KIND,
         stem: "slice",
-        has_runtime_state: true,
+        state_dir: Some(".doctrine/state/slice"),
     },
     KindRef {
-        prefix: "ADR",
-        dir: ".doctrine/adr",
+        kind: &ADR_KIND.kind,
         stem: "adr",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "POL",
-        dir: ".doctrine/policy",
+        kind: &POLICY_KIND.kind,
         stem: "policy",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "STD",
-        dir: ".doctrine/standard",
+        kind: &STANDARD_KIND.kind,
         stem: "standard",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "PRD",
-        dir: ".doctrine/spec/product",
+        kind: &PRODUCT_SPEC_KIND,
         stem: "spec",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "SPEC",
-        dir: ".doctrine/spec/tech",
+        kind: &TECH_SPEC_KIND,
         stem: "spec",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "REQ",
-        dir: ".doctrine/requirement",
+        kind: &REQUIREMENT_KIND,
         stem: "requirement",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "ISS",
-        dir: ".doctrine/backlog/issue",
+        kind: &ISSUE_KIND,
         stem: "backlog",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "IMP",
-        dir: ".doctrine/backlog/improvement",
+        kind: &IMPROVEMENT_KIND,
         stem: "backlog",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "CHR",
-        dir: ".doctrine/backlog/chore",
+        kind: &CHORE_KIND,
         stem: "backlog",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "RSK",
-        dir: ".doctrine/backlog/risk",
+        kind: &RISK_KIND,
         stem: "backlog",
-        has_runtime_state: false,
+        state_dir: None,
     },
     KindRef {
-        prefix: "IDE",
-        dir: ".doctrine/backlog/idea",
+        kind: &IDEA_KIND,
         stem: "backlog",
-        has_runtime_state: false,
+        state_dir: None,
     },
 ];
 
@@ -206,7 +201,7 @@ fn check_kind(snap: &KindSnapshot) -> Vec<Finding> {
 /// metadata toml is a hard error (propagated), distinct from an integrity
 /// finding — `validate` reports inconsistency, it does not paper over corruption.
 fn scan_kind(root: &Path, kind: &'static KindRef) -> anyhow::Result<KindSnapshot> {
-    let tree_root = root.join(kind.dir);
+    let tree_root = root.join(kind.kind.dir);
 
     let mut entities = Vec::new();
     for dir_id in entity::scan_ids(&tree_root)? {
@@ -216,7 +211,7 @@ fn scan_kind(root: &Path, kind: &'static KindRef) -> anyhow::Result<KindSnapshot
 
     let aliases = scan_aliases(&tree_root, kind.stem)?;
     Ok(KindSnapshot {
-        prefix: kind.prefix,
+        prefix: kind.kind.prefix,
         entities,
         aliases,
     })
@@ -276,7 +271,7 @@ pub(crate) fn run_validate(path: Option<PathBuf>) -> anyhow::Result<()> {
 
     let scanned = KINDS
         .iter()
-        .map(|k| k.prefix)
+        .map(|k| k.kind.prefix)
         .collect::<Vec<_>>()
         .join(", ");
     writeln!(io::stdout(), "validate: scanned {scanned}")?;
@@ -297,7 +292,7 @@ pub(crate) fn run_validate(path: Option<PathBuf>) -> anyhow::Result<()> {
 
 /// Resolve a numbered kind by its canonical prefix (`SL` → the slice [`KindRef`]).
 pub(crate) fn kind_by_prefix(prefix: &str) -> Option<&'static KindRef> {
-    KINDS.iter().find(|k| k.prefix == prefix)
+    KINDS.iter().find(|k| k.kind.prefix == prefix)
 }
 
 /// Parse a canonical ref (`SL-031`) into its kind and numeric id. Reseat keys on
@@ -338,14 +333,14 @@ pub(crate) fn run_reseat(
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let (kind, src_id) = parse_canonical_ref(reference)?;
-    let tree_root = root.join(kind.dir);
+    let tree_root = root.join(kind.kind.dir);
 
     let src_name = format!("{src_id:03}");
     let src_dir = tree_root.join(&src_name);
     anyhow::ensure!(
         fsutil::is_real_dir(&src_dir),
         "no {} at {}",
-        listing::canonical_id(kind.prefix, src_id),
+        listing::canonical_id(kind.kind.prefix, src_id),
         src_dir.display()
     );
     // Slug from the authored metadata — the alias name component.
@@ -356,13 +351,13 @@ pub(crate) fn run_reseat(
         Some(t) => t,
         None => entity::next_id(
             &entity::scan_ids(&tree_root)?,
-            &git::trunk_entity_ids(&root, kind.dir)?,
+            &git::trunk_entity_ids(&root, kind.kind.dir)?,
         ),
     };
     anyhow::ensure!(
         dst_id != src_id,
         "{} is already seated at {src_name}",
-        listing::canonical_id(kind.prefix, src_id)
+        listing::canonical_id(kind.kind.prefix, src_id)
     );
 
     let dst_name = format!("{dst_id:03}");
@@ -374,14 +369,14 @@ pub(crate) fn run_reseat(
         "id {dst_name} is occupied — refusing to clobber {}",
         dst_dir.display()
     );
-    // Guard 2 — live runtime phase state (F3). Only `has_runtime_state` kinds
+    // Guard 2 — live runtime phase state (F3). Only kinds with a `state_dir`
     // (slice) key disposable state by id; reseat does not migrate that tier.
-    if kind.has_runtime_state {
-        let state = root.join(".doctrine/state/slice").join(&src_name);
+    if let Some(state_dir) = kind.state_dir {
+        let state = root.join(state_dir).join(&src_name);
         anyhow::ensure!(
             !state.exists(),
             "{} has live runtime phase state at {} — clear it first (reseat does not own the disposable tier)",
-            listing::canonical_id(kind.prefix, src_id),
+            listing::canonical_id(kind.kind.prefix, src_id),
             state.display()
         );
     }
@@ -419,8 +414,8 @@ pub(crate) fn run_reseat(
         Path::new(&dst_name),
     )?;
 
-    let old_ref = listing::canonical_id(kind.prefix, src_id);
-    let new_ref = listing::canonical_id(kind.prefix, dst_id);
+    let old_ref = listing::canonical_id(kind.kind.prefix, src_id);
+    let new_ref = listing::canonical_id(kind.kind.prefix, dst_id);
     writeln!(io::stdout(), "reseated {old_ref} → {new_ref}")?;
 
     // Inbound prose citations — report, never rewrite (D4/R-3).
@@ -592,7 +587,7 @@ mod tests {
     #[test]
     fn parse_canonical_ref_resolves_kind_and_id() {
         let (kind, id) = parse_canonical_ref("SL-031").expect("valid ref");
-        assert_eq!(kind.prefix, "SL");
+        assert_eq!(kind.kind.prefix, "SL");
         assert_eq!(id, 31);
         assert!(
             parse_canonical_ref("031").is_err(),
@@ -642,7 +637,7 @@ mod tests {
 
     #[test]
     fn kinds_table_covers_the_twelve_numbered_kinds() {
-        let prefixes: Vec<_> = KINDS.iter().map(|k| k.prefix).collect();
+        let prefixes: Vec<_> = KINDS.iter().map(|k| k.kind.prefix).collect();
         assert_eq!(
             prefixes,
             [
@@ -652,8 +647,8 @@ mod tests {
         // Only slice owns runtime phase state (F3 guard surface).
         let stateful: Vec<_> = KINDS
             .iter()
-            .filter(|k| k.has_runtime_state)
-            .map(|k| k.prefix)
+            .filter(|k| k.state_dir.is_some())
+            .map(|k| k.kind.prefix)
             .collect();
         assert_eq!(stateful, ["SL"]);
     }
