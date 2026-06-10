@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 16
+slug = "structural-relation-surface-for-product-to-product-and-spec-to-adr-links-cross-corpus-relations-are-prose-only"
+title = "Structural relation surface for product-to-product and spec-to-ADR links — cross-corpus relations are prose-only"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-10"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004)
+slices = []
+specs  = ["PRD-013", "PRD-012"] # PRD-013 exhibits the gap; PRD-012 owns overlapping spec-relation machinery
+drift  = []
