@@ -52,13 +52,15 @@ exit_criteria = [
   { id = "EX-2", text = "`reseat` reads `state_dir` from the registry — the hardcoded `.doctrine/state/slice` and the `has_runtime_state` bool are gone (F-5 closed)" },
   { id = "EX-3", text = "all 5 `run_new` sites mint via `git::trunk_entity_ids(&root, KIND.dir)?` — no `&[]` placeholders remain; minting unions local + trunk ids" },
   { id = "EX-4", text = "the `KINDS` membership guard test exists, pinned against a hand-written prefix literal (R-b hand-maintained pin, C-IV); it fires on a `KINDS`/literal divergence" },
-  { id = "EX-5", text = "plain cargo clippy zero warnings; `just check` green; existing validate/reseat/run_new suites pass UNCHANGED (behaviour-preservation gate, R-3)" },
+  { id = "EX-5", text = "plain cargo clippy zero warnings; `just check` green. Behaviour-preservation gate (R-3): engine (`src/entity.rs`) suites stay green UNCHANGED (X-4 keeps the engine untouched); validate/reseat/run_new BEHAVIOUR is preserved — only mechanical field-access renames (`kind.prefix`→`kind.kind.prefix`, `has_runtime_state`→`state_dir`) where `KindRef`'s shape changed are permitted; no behavioural-assertion edit" },
 ]
 verification = [
-  { id = "VT-1", expects = "e2e: two divergent worktrees WITH a resolvable trunk mint non-colliding ids (X-5 caveat: no resolvable trunk degrades to local-only minting, accepted R-2 — the guarantee is scoped to trunk-resolved repos)" },
+  { id = "VT-1", expects = "e2e in a trunk-resolved repo: two divergent worktrees mint non-colliding ids (X-5 caveat: no resolvable trunk degrades to local-only minting, accepted R-2 — the guarantee is scoped to trunk-resolved repos)" },
   { id = "VT-2", expects = "`next_id(local, &[])` is byte-identical to the pre-change behaviour (SL-032 INV-1) — the no-trunk gate holds" },
   { id = "VT-3", expects = "the `KINDS` membership guard fires on a `KINDS`/hand-literal divergence (a kind in one but not the other); the in-sync set passes" },
-  { id = "VT-4", expects = "behaviour-preservation: the pre-existing validate / reseat / run_new suites are green UNCHANGED after the registry refactor and the minting wiring (R-3)" },
+  { id = "VT-4", expects = "behaviour-preservation: validate / reseat / run_new BEHAVIOUR unchanged after the reshape + wiring (assertions intact; only field-access renames in code/tests) — the engine `entity.rs` suite has zero diff (R-3)" },
+  { id = "VT-5", expects = "EX-3 coverage — each of the 5 production minting verbs (slice/governance/spec/backlog/requirement `run_new`) is exercised in a trunk-resolved repo and picks a trunk-aware id; proves all five `&[]` sites are wired, not just one (a no-trunk repo cannot distinguish wired from `&[]`)" },
+  { id = "VA-1", expects = "X-4 structural check: `src/entity.rs` `Kind` struct is unchanged `{ dir, prefix, scaffold }` — no field added, no `KindIdentity` (a `git diff` of `entity.rs` shows no `Kind`-struct change; suite-green alone would not catch an unused added field)" },
 ]
 specs        = []
 requirements = []
