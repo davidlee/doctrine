@@ -215,11 +215,24 @@ sole empirical source, not a reproducer of a prior run.
   cordage` stay green. The reds run explicitly via `cargo test -p cordage --ignored`.
 - Zero-dep invariant re-asserted: `crates/cordage/Cargo.toml` diff is empty.
 - **Clippy coverage gap (accepted):** the gate runs plain `cargo clippy` (lib + bins
-  only, never `--all-targets`), so it does **not** lint `examples/` or `tests/`. The
-  harness's lint cleanliness is therefore not enforced by `just check` — lint it
-  manually (`cargo clippy -p cordage --examples --tests`) before commit. This is also
-  why the harness is an `examples/` target, not a `[[bin]]` (a bin *would* be gated,
-  but reintroduces the `CARGO_BIN_EXE` coupling §6.2 avoids).
+  only, never `--all-targets`), so it does **not** lint `examples/` or `tests/`. This
+  is also why the harness is an `examples/` target, not a `[[bin]]` (a bin *would* be
+  gated, but reintroduces the `CARGO_BIN_EXE` coupling §6.2 avoids).
+- **Manual lint gate is `--examples` ONLY** (corrected 2026-06-11 at phase-plan, was
+  `--examples --tests`). Empirically established: `cargo clippy -p cordage --tests`
+  fails across the **entire existing suite** (`expect_used`, `many_single_char_names`,
+  `tests_outside_test_module`, doc lints) because `[lints] workspace = true` makes the
+  cordage test targets inherit the full deny set, and `clippy.toml` sets no
+  `allow-{unwrap,expect}-in-tests`. Integration tests are not clippy-clean by repo
+  convention — that is the documented reason `just check` avoids `--all-targets`
+  (CLAUDE.md; `mem.pattern.lint.clippy-denies`). So the **example** must be written
+  clippy-clean and is the manual gate (`cargo clippy -p cordage --examples`); the
+  **reds** (`tests/scale_cliffs.rs`) follow the existing-test convention — `expect`/
+  `unwrap` and short names are fine, and the file is not clippy-gated. Concretely the
+  example avoids the deny set: `main() -> Result<…>` returning `Err` for bad args
+  (`std::process::exit` is **disallowed** by `clippy.toml`), `writeln!(io::stdout()…)?`
+  not `println!` (`print_stdout`/`print_stderr` denied), `var_os` not `var`, `.get()`
+  not index (`indexing_slicing`), `try_from` not `as` (`as_conversions`/`cast_*`).
 
 ## 9. Open questions
 
