@@ -281,6 +281,21 @@ fn resolve_common_dir(root: &Path, common: &str) -> anyhow::Result<PathBuf> {
         .with_context(|| format!("canonicalize git-common-dir {}", joined.display()))
 }
 
+/// True iff `root` sits on a *linked* worktree rather than the primary tree:
+/// `git rev-parse --git-dir` (this tree's gitdir) differs from `--git-common-dir`
+/// (the repo's shared gitdir). On the primary tree both resolve to the same
+/// `.git`; on a linked worktree the gitdir is `.git/worktrees/<name>` (SL-032
+/// PHASE-04, ADR-006 amendment). Shared, not memory-private — the provision path
+/// may call it; `memory record` calls it to warn on squash-orphan risk.
+pub(crate) fn is_linked_worktree(root: &Path) -> anyhow::Result<bool> {
+    let git_dir = resolve_common_dir(root, &git::git_text(root, &["rev-parse", "--git-dir"])?)?;
+    let common = resolve_common_dir(
+        root,
+        &git::git_text(root, &["rev-parse", "--git-common-dir"])?,
+    )?;
+    Ok(git_dir != common)
+}
+
 /// Verify `fork` is a real sibling worktree of `source`: it shares the source's
 /// `git-common-dir` and is not the source itself (design §3 copy safety, B5).
 fn verify_sibling_worktree(source: &Path, fork: &Path) -> anyhow::Result<()> {
@@ -588,5 +603,55 @@ mod tests {
         // select_copies would still protect at copy time.
         let allow = parse_allowlist("**").unwrap();
         assert!(!allowlist_violations(&allow).is_empty());
+    }
+
+    // --- T1: is_linked_worktree self-detection (SL-032 PHASE-04, VT-1) ---
+
+    fn git(dir: &Path, args: &[&str]) {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .expect("spawn git");
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    /// A primary git repo with a base commit; returns the canonical root.
+    fn init_repo(dir: &Path) -> PathBuf {
+        fs::create_dir_all(dir).unwrap();
+        git(dir, &["init", "-q", "-b", "main"]);
+        git(dir, &["config", "user.email", "t@example.com"]);
+        git(dir, &["config", "user.name", "Test"]);
+        fs::write(dir.join("seed"), "x").unwrap();
+        git(dir, &["add", "."]);
+        git(dir, &["commit", "-q", "-m", "base"]);
+        fs::canonicalize(dir).unwrap()
+    }
+
+    #[test]
+    fn is_linked_worktree_true_for_a_fork_false_for_the_primary_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("src"));
+        let fork = tmp.path().join("fork");
+        git(
+            &primary,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                "feat",
+                fork.to_str().unwrap(),
+            ],
+        );
+        let fork = fs::canonicalize(&fork).unwrap();
+
+        assert!(is_linked_worktree(&fork).unwrap(), "a linked worktree");
+        assert!(!is_linked_worktree(&primary).unwrap(), "the primary tree");
     }
 }
