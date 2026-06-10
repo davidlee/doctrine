@@ -203,6 +203,37 @@ impl OrderSpec {
     }
 }
 
+/// A node's composed-order level: its longest-path depth in the order structure
+/// `U`, tagged clean (`Finite`) or cycle-degraded (`Degraded`). Every `Degraded`
+/// sorts after every `Finite` — taint propagates downstream, so no surviving `U`
+/// edge ever runs tainted→clean (F11/F33).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Level {
+    Finite(u32),
+    Degraded(u32),
+}
+
+/// A node's total-order key: its [`Level`] then its [`NodeId`]. `(level, node)`
+/// is total within each variant, so [`Graph::ordered`] is deterministic and
+/// respects every surviving `U` edge (I2/I3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OrderKey {
+    level: Level,
+    node: NodeId,
+}
+
+impl OrderKey {
+    /// The composed-order level.
+    pub fn level(self) -> Level {
+        self.level
+    }
+
+    /// The node this key orders.
+    pub fn node(self) -> NodeId {
+        self.node
+    }
+}
+
 // ── build-input errors ───────────────────────────────────────────────────────
 
 /// A malformed build input. `build()` errors **only** on malformed input; cycles,
@@ -525,12 +556,17 @@ impl GraphBuilder {
 
         let resolution = resolve::resolve(&self.edges, &self.overlays);
         let (out, incoming) = build_indices(&resolution.edges);
-        Ok(Graph {
+        let mut graph = Graph {
             out,
             incoming,
             provenance: resolution.provenance,
             degraded_sccs: resolution.degraded_sccs,
-        })
+            order_spec: self.order_spec,
+            node_count: self.node_count,
+            order_keys: BTreeMap::new(),
+        };
+        graph.compose_order();
+        Ok(graph)
     }
 }
 
@@ -571,13 +607,16 @@ pub struct Graph {
     out: OutIndex,
     incoming: InIndex,
     provenance: Provenance,
-    /// Cyclic post-arity SCCs of `Reject` overlays (F46) — degraded marks for
-    /// PHASE-03 pass-3/4. Recorded now (EX-2), first read there.
-    #[expect(
-        dead_code,
-        reason = "PHASE-03 pass-3/4 consumes degraded post-arity SCCs (F46)"
-    )]
+    /// Cyclic post-arity SCCs of `Reject` overlays (F46) — the taint seeds, read
+    /// by `compose_order` (pass 4) and retained for later explain (F47).
     degraded_sccs: BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
+    /// The validated order spec, re-stored from the builder; read by
+    /// `compose_order` and available to later phases.
+    order_spec: OrderSpec,
+    /// Total node count — the level recurrence is total over `0..node_count`.
+    node_count: u32,
+    /// Per-node composed-order key (pass 4), total over all nodes.
+    order_keys: BTreeMap<NodeId, OrderKey>,
 }
 
 impl Graph {
@@ -615,5 +654,37 @@ impl Graph {
     /// while assembling this graph. Empty when nothing was resolved.
     pub fn provenance(&self) -> &Provenance {
         &self.provenance
+    }
+
+    /// The composed-order key of `node`, or `None` for a foreign/unknown id
+    /// (defined, non-panicking — F14).
+    pub fn order_key(&self, node: NodeId) -> Option<OrderKey> {
+        self.order_keys.get(&node).copied()
+    }
+
+    /// Every node in composed total order (by `OrderKey`). An empty `OrderSpec`
+    /// yields pure-`NodeId` order (all `Finite(0)`).
+    pub fn ordered(&self) -> Vec<NodeId> {
+        let mut keys: Vec<OrderKey> = self.order_keys.values().copied().collect();
+        keys.sort();
+        keys.into_iter().map(|k| k.node).collect()
+    }
+
+    /// Passes 3–4 (design §5.4): compose the order structure `U` from the order
+    /// spec and resolved adjacency, then materialise per-node [`OrderKey`]s.
+    /// Cross-layer evictions are merged into provenance; they touch `U` alone
+    /// (I7/F18).
+    fn compose_order(&mut self) {
+        let outcome = resolve::compose_order(
+            &self.out,
+            &self.order_spec,
+            &self.degraded_sccs,
+            self.node_count,
+        );
+        self.order_keys = outcome.order_keys;
+        if !outcome.evictions.is_empty() {
+            self.provenance.evictions.extend(outcome.evictions);
+            resolve::sort_provenance(&mut self.provenance);
+        }
     }
 }

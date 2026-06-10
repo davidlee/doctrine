@@ -174,3 +174,44 @@ Carry-forward for PHASE-03 (passes 3–4, order composition):
 - Provenance sort is `(overlay, edge)` for evictions / `(overlay, nodes)` for
   cycles — a reporting sort distinct from the F17 selection key. Keep pass-3
   `UnionCycleVsLayer` evictions flowing through the same `sort_provenance`.
+
+## PHASE-03 implementation (2026-06-11) — build passes 3–4, order surface
+
+Shipped passes 3 (compose `U`) and 4 (`order_key` materialization) plus the
+public ordering surface (`Level`, `OrderKey`, `Graph::order_key`, `Graph::ordered`).
+9 black-box tests in `tests/ordering.rs` (VT-1..9); whole `just check` green.
+
+Seam: `build()` now re-stores `OrderSpec` + `node_count` on `Graph` and calls a
+private `Graph::compose_order()` that READS `self.degraded_sccs` → cleared the
+`#[expect(dead_code)]` cleanly (D1 satisfied). `degraded_sccs`/`order_spec` stay
+stored for PHASE-04/05.
+
+Load-bearing decisions:
+- **`U` is a `BTreeSet<Edge>` (resolve.rs `Edge`, F17 Ord)** — `cyclic_components`/
+  `participates`/`.min()` reused verbatim. No second Tarjan, no second key.
+- **`compose_order` takes `&self.out` (the resolved adjacency)**, not a re-derived
+  edge list. `overlay_edges()` lifts an overlay's resolved edges back into `Edge`.
+  Keeps `Edge` private to resolve.rs; resolve is a descendant module so it reads
+  `OutEdge`/`NodeId`/`OrderKey` private fields directly (no public widening).
+- **D2 resolved → oriented `U` edge** for the F17 eviction key AND the `EvictedEdge`
+  provenance. All VT fixtures use `Along` (oriented ≡ authored), so no VT forced the
+  authored-orientation re-map; `Against` orientation is implemented but untested by a
+  VT — first `Against` consumer should add coverage. STOP-condition did not trigger.
+- **Intra-SCC exclusion reuses `participates(&edge, degraded[ov])`** on the authored
+  node pair (orientation-independent); boundary edges enter `U` so taint crosses.
+- **Levels = memoised longest-path recursion** (`level_of`), total over
+  `0..node_count` (isolated → 0, no sentinel). u32 via `.saturating_add(1)` (no `as`).
+- **Taint = DFS over `U` forward adjacency from spec-referenced degraded SCC seeds**;
+  empty-seed short-circuit. `Degraded > Finite` from enum variant order; `(level,
+  node)` from `OrderKey` field order — both derive-`Ord`, no hand-written cmp.
+- **Pass-3 evictions merged then re-sorted** via the now-`pub(crate)` `sort_provenance`
+  (idempotent full re-sort), so `UnionCycleVsLayer` interleaves with passes 1–2 by
+  `(overlay, edge)`.
+
+Carry-forward for PHASE-04 (reachability & channel evaluation):
+- `spine_path` deferred here (design assigns P04); `configs` still NOT stored on
+  `Graph` (no consumer yet — PHASE-04 `spine_path`/`evaluate` are the first; thread
+  then). `node_count`/`order_spec`/`order_keys`/`degraded_sccs` now all on `Graph`.
+- `reachable`/`evaluate` read the per-overlay traversal view (`out`/`incoming`),
+  which is cycle-safe over Reject overlays by design (I1/F47) — do NOT route them
+  through `U`.
