@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb21e007f7d10838e2166c7a0fa2d"
+memory_key = "mem.pattern.listing.column-model-extension"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Extending the shared list column model (listing.rs): pre-materialise the row, non-capturing fn extractors"
+summary = "To add a kind to the column model: build a typed table row, resolve runtime context (e.g. subtype-prefixed id) INTO it, keep extractors a const of non-capturing fn(&R)->String; columns.take() before build, select_columns once, render_columns per block; JSON stays per-kind typed."
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[scope]
+paths = ["src/listing.rs", "src/governance.rs", "src/spec.rs"]
+globs = []
+commands = []
+tags = ["listing", "render", "dry", "column-model"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "97edbce7853ba556fe3029d7e9cb455abb301288"
+ref_name = "refs/heads/main"
+checkout_state_id = "3c4ae2bdec22d6818905bd068b81e0f17bb67f8102d121c2a5c673075fd97489"
+base_commit = "a52c71cde701bc637126f3ae8ee4a8321df76429"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
