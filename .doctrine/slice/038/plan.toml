@@ -1,0 +1,106 @@
+# Implementation plan for SL-038 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-038"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Measurement harness & empirical characterization"
+objective = """
+Build crates/cordage/examples/scale_harness.rs: three deterministic, public-API-only
+generators — deep_chain(n) -> (Graph, OverlayId) (the spine, shared by the overflow and
+evaluate cliffs), diamond(layers), dense_evict(nodes, edges_per_node) — plus a
+std::env::args CLI (--cliff overflow|explain|quadratic|evaluate --n N [--layers L], no
+clap) that prints one CSV line per run (cliff,param,metric,value) and times with
+std::time::Instant. Then RUN each cliff and record the four numbers, and empirically pin
+the evaluate red's sub-overflow N pair (inquisition C3). Measure-and-red only; no fixes;
+cordage src/ untouched; Cargo.toml gains no [dependencies]."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked; slice scope and design tell the same 4-cliff story." },
+  { id = "EN-2", text = "cordage builds and its 75 tests are green on the default gate before any harness work." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "examples/scale_harness.rs compiles (cargo build -p cordage --examples) using only the public surface (GraphBuilder, OverlayConfig, EdgeAttrs, OrderSpec/OrderLayer, ChannelSpec, evaluate/explain/reachable)." },
+  { id = "EX-2", text = "Each --cliff runs and emits its CSV: overflow SIGABRTs (rc 134) at ~80k; explain prints an exact 2^layers count; quadratic prints a build-time ratio; evaluate prints a query-time ratio." },
+  { id = "EX-3", text = "C3: an evaluate-red N pair is pinned such that BOTH n build WITHOUT SIGABRT (validated empirically, not extrapolated) AND the larger evaluate runs long enough (target >= a few hundred ms) for the recorded ratio to clear scheduler noise. The pinned pair and the four numbers are recorded in the runtime sheet." },
+  { id = "EX-4", text = "Zero-dep intact: crates/cordage/Cargo.toml diff is empty; std-only (Instant/process/env confined to the example)." },
+]
+verification = [
+  { id = "VT-1", expects = "cargo clippy -p cordage --examples is clean (the §8 manual gate — the default gate does not lint examples/)." },
+  { id = "VA-1", expects = "Agent runs all four cliffs and records the four measurements + the pinned sub-overflow N pair as the evidence PHASE-03 consolidates and PHASE-02 hardcodes." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Red / characterization tests"
+objective = """
+Write crates/cordage/tests/scale_cliffs.rs: four #[ignore]d reds that encode the cliffs
+so the eventual fixes flip them — explain (exact 2^layers count, deterministic,
+flake-free), overflow (self-re-exec subprocess via current_exe + env flag + --exact
+filter; parent asserts child rc 134), quadratic (dense_evict at two densities, print
+ratio, assert only a loose < 120s bound), evaluate (deep_chain spine at the PHASE-01
+sub-overflow N pair with Combinator::Any over Direction::Along seeded Flag(true); print
+ratio, loose bound). Generators are duplicated inline (D4 — examples/ and tests/ cannot
+import each other). No change to the 75 existing tests (behaviour-preservation)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the example exists, the four numbers and the sub-overflow N pair are recorded." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "tests/scale_cliffs.rs exists with all four reds, each #[ignore]d with a reason, std-only, public-API-only." },
+  { id = "EX-2", text = "The overflow red uses self-re-exec (var_os, not var) — never an in-process should_panic; the evaluate red uses Direction::Along (never None) and ChannelValue::Flag(true)." },
+  { id = "EX-3", text = "The default gate is unaffected: cargo test -p cordage (non-ignored) and just check stay green; Cargo.toml unchanged; the 75 existing tests are untouched." },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test -p cordage --ignored runs the four reds: explain asserts == 2^layers; overflow asserts the child !success (rc 134); quadratic and evaluate print their ratios and pass the loose bound." },
+  { id = "VT-2", expects = "cargo test -p cordage (default) green AND just check green — the reds are off the default gate." },
+  { id = "VT-3", expects = "cargo clippy -p cordage --examples --tests is clean (the manual gate covering both harness targets)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Findings note & reconcile"
+objective = """
+Author .doctrine/slice/038/notes.md: consolidate the four measurements with the exact
+harness command that reproduces each, the in-target verdict (overflow ~80k, eviction
+quadratic, explain 2^layers, evaluate O(V^2) per-node BFS), H1's honest position
+(recompute is fine only after Fix A/B/D; explain needs Fix C before any deep-lattice
+consumer), and the OQ-2 allocation gap. State RSK-004's distinct provenance precisely:
+first measured by this harness, not a reproduction of the deleted probe. Confirm the
+follow-up fixes A/B/C/D are filed. Leave the slice audit-ready."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: the four reds run green-as-characterizations under --ignored; the numbers are recorded." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "notes.md consolidates all four numbers, each with its reproduce-command, plus the in-target verdict, H1's honest position, and the OQ-2 gap." },
+  { id = "EX-2", text = "RSK-004's provenance is stated explicitly (analytical-only, first-measured-here — the probe never ran it); RSK-002/003 are flagged as the probe's numbers re-confirmed here." },
+  { id = "EX-3", text = "Follow-up fixes A (iterative Tarjan/level_of), B (one-pass eviction), C (explain sub-DAG), D (reverse-topo evaluate fold) are filed as backlog/slices, not patched here." },
+]
+verification = [
+  { id = "VA-1", expects = "Agent verifies every number in notes.md matches the harness output and that the RSK-004 first-measured-here distinction is unambiguous." },
+  { id = "VH-1", expects = "User accepts the findings note; slice is ready for /audit -> /close." },
+]
+specs        = []
+requirements = []
