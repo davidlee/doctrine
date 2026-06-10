@@ -155,6 +155,17 @@ pub(crate) fn candidate_id(existing: &[u32]) -> u32 {
     existing.iter().copied().max().map_or(1, |m| m + 1)
 }
 
+/// Next id across the union of `local` (working-tree) and `trunk` ids:
+/// `max(local ∪ trunk) + 1`, or `1` when both are empty. Pure — the trunk ids
+/// are read once at the shell edge (`git::trunk_entity_ids`) and passed in, so
+/// two divergent worktrees mint non-colliding ids (ADR-006 D3). Delegates to
+/// [`candidate_id`] for the single `max+1` rule; `next_id(local, &[])` is
+/// byte-identical to `candidate_id(local)` (INV-1 behaviour preservation).
+pub(crate) fn next_id(local: &[u32], trunk: &[u32]) -> u32 {
+    let union: Vec<u32> = local.iter().copied().chain(trunk.iter().copied()).collect();
+    candidate_id(&union)
+}
+
 /// Derive a slug from a title: lowercase, runs of whitespace/`-`/`_` collapse
 /// to a single `-`, every other non-alphanumeric is stripped, no edge dashes.
 pub(crate) fn derive_slug(title: &str) -> String {
@@ -240,6 +251,7 @@ pub(crate) fn materialise(
     project_root: &Path,
     request: &MaterialiseRequest,
     inputs: &Inputs<'_>,
+    trunk_ids: &[u32],
 ) -> anyhow::Result<Materialised> {
     let tree_root = project_root.join(kind.dir);
     // The entity-tree root; the non-recursive claim mkdir below needs it to
@@ -249,7 +261,9 @@ pub(crate) fn materialise(
 
     match *request {
         MaterialiseRequest::Fresh => {
-            allocate_fresh(kind, claim, &tree_root, inputs, || scan_ids(&tree_root))
+            allocate_fresh(kind, claim, &tree_root, inputs, trunk_ids, || {
+                scan_ids(&tree_root)
+            })
         }
         MaterialiseRequest::InExisting { id } => create_in_existing(kind, &tree_root, id, inputs),
     }
@@ -263,10 +277,13 @@ fn allocate_fresh(
     claim: &dyn Claim,
     tree_root: &Path,
     inputs: &Inputs<'_>,
+    trunk_ids: &[u32],
     mut scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
 ) -> anyhow::Result<Materialised> {
+    // trunk_ids is constant across retries (read once at the shell edge, D-b);
+    // only `scan` re-reads the local tree to recover from a lost claim race.
     for _ in 0..MAX_CLAIM_RETRIES {
-        let id = candidate_id(&scan()?);
+        let id = next_id(&scan()?, trunk_ids);
         let name = format!("{id:03}");
         let dir = tree_root.join(&name);
         match claim.claim(&dir)? {
@@ -531,6 +548,29 @@ mod tests {
         assert_eq!(candidate_id(&[5]), 6);
     }
 
+    // --- next_id (trunk union) ---
+
+    #[test]
+    fn next_id_empty_union_is_one() {
+        assert_eq!(next_id(&[], &[]), 1);
+    }
+
+    #[test]
+    fn next_id_local_only_equals_candidate_id() {
+        // INV-1: next_id(local, &[]) is byte-identical to candidate_id(local).
+        for local in [&[][..], &[1, 2, 3], &[5], &[1, 3]] {
+            assert_eq!(next_id(local, &[]), candidate_id(local));
+        }
+    }
+
+    #[test]
+    fn next_id_is_max_of_union_plus_one() {
+        assert_eq!(next_id(&[1, 2], &[5, 3]), 6); // trunk ahead
+        assert_eq!(next_id(&[7], &[2, 3]), 8); // local ahead
+        assert_eq!(next_id(&[], &[4]), 5); // trunk only
+        assert_eq!(next_id(&[4], &[4]), 5); // overlap, not double-counted
+    }
+
     // --- derive_slug ---
 
     #[test]
@@ -608,8 +648,10 @@ mod tests {
         let tree = dir.path().join("tree");
         fs::create_dir_all(&tree).unwrap();
 
-        let out =
-            allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), || scan_ids(&tree)).unwrap();
+        let out = allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), &[], || {
+            scan_ids(&tree)
+        })
+        .unwrap();
         assert_eq!(out.eid.numeric_id(), Some(1));
         let body = fs::read_to_string(tree.join("001/body.md")).unwrap();
         assert_eq!(body, "TK-001 :: T");
@@ -631,7 +673,7 @@ mod tests {
             Ok(if n == 0 { vec![] } else { vec![1] })
         };
 
-        let out = allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), scan).unwrap();
+        let out = allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), &[], scan).unwrap();
         assert_eq!(out.eid.numeric_id(), Some(2));
         assert!(tree.join("002/body.md").is_file());
         assert_eq!(calls.get(), 2, "expected one collision then success");
@@ -651,8 +693,10 @@ mod tests {
         let tree = dir.path().join("tree");
         fs::create_dir_all(&tree).unwrap();
 
-        let err =
-            allocate_fresh(&TEST_KIND, &AlwaysHeld, &tree, &inputs(), || Ok(vec![])).unwrap_err();
+        let err = allocate_fresh(&TEST_KIND, &AlwaysHeld, &tree, &inputs(), &[], || {
+            Ok(vec![])
+        })
+        .unwrap_err();
         assert!(err.to_string().contains("Could not reserve an id"));
     }
 
@@ -687,8 +731,10 @@ mod tests {
         let tree = dir.path().join("tree");
         fs::create_dir_all(&tree).unwrap();
 
-        let err = allocate_fresh(&DOOMED_KIND, &LocalFs, &tree, &inputs(), || scan_ids(&tree))
-            .unwrap_err();
+        let err = allocate_fresh(&DOOMED_KIND, &LocalFs, &tree, &inputs(), &[], || {
+            scan_ids(&tree)
+        })
+        .unwrap_err();
         assert!(err.to_string().contains("Failed to create"));
         assert!(!tree.join("001").exists(), "the won dir must be removed");
     }
@@ -714,7 +760,7 @@ mod tests {
         let tree = dir.path().join("tree");
         fs::create_dir_all(&tree).unwrap();
 
-        let err = allocate_fresh(&ESCAPING_KIND, &LocalFs, &tree, &inputs(), || {
+        let err = allocate_fresh(&ESCAPING_KIND, &LocalFs, &tree, &inputs(), &[], || {
             scan_ids(&tree)
         })
         .unwrap_err();

@@ -539,6 +539,73 @@ fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, CaptureError> {
     Ok(Some(text.trim().to_string()))
 }
 
+/// Resolve trunk's commit-ish via the peeled ladder (ADR-006 D3): an explicit
+/// `DOCTRINE_TRUNK_REF`, else `origin/HEAD`, `main`, `master` in turn. Each
+/// candidate is peeled with `rev-parse --verify --quiet <ref>^{commit}`; the
+/// first that resolves wins. The whole ladder failing yields `Ok(None)` — a
+/// repo with no trunk (fresh / no remote / detached) is a defined terminus, not
+/// an error (R-2). **Asymmetry (F4/X6):** an *explicitly set* `DOCTRINE_TRUNK_REF`
+/// that fails to peel is a hard error (the user pinned a bad ref — do not
+/// silently fall through); only its *absence* descends to `origin/HEAD`.
+fn trunk_tree_ish(root: &Path) -> anyhow::Result<Option<String>> {
+    // Thin shell: the env read is the only impurity here. The ladder itself is
+    // env-injected (`trunk_ladder`) so it is testable without mutating the
+    // process environment — `set_var` is forbidden crate-wide (pure/imperative
+    // split, CLAUDE.md: pass env in as an input).
+    trunk_ladder(root, std::env::var_os("DOCTRINE_TRUNK_REF").as_deref())
+}
+
+/// The peeled trunk ladder with the explicit override injected (`explicit` is
+/// `DOCTRINE_TRUNK_REF` when set). See [`trunk_tree_ish`] for the contract; the
+/// asymmetry (F4/X6) lives here: an explicit ref that fails to peel is a hard
+/// error, ladder candidates that fail simply fall through.
+fn trunk_ladder(root: &Path, explicit: Option<&std::ffi::OsStr>) -> anyhow::Result<Option<String>> {
+    let peel = |r: &str| -> anyhow::Result<Option<String>> {
+        let spec = format!("{r}^{{commit}}");
+        Ok(git_opt(root, &["rev-parse", "--verify", "--quiet", &spec])?)
+    };
+    if let Some(explicit) = explicit {
+        let explicit = explicit.to_string_lossy();
+        return match peel(&explicit)? {
+            Some(sha) => Ok(Some(sha)),
+            None => anyhow::bail!("DOCTRINE_TRUNK_REF={explicit} does not resolve to a commit"),
+        };
+    }
+    for candidate in ["origin/HEAD", "main", "master"] {
+        if let Some(sha) = peel(candidate)? {
+            return Ok(Some(sha));
+        }
+    }
+    Ok(None)
+}
+
+/// Numeric entity ids present under `kind_dir` on trunk's tree (ADR-006 D3).
+/// `kind_dir` is ALREADY repo-relative including the `.doctrine/` prefix (X1) —
+/// do NOT re-prepend. Lists trunk's tree with
+/// `ls-tree -d --name-only <tree-ish> -- <kind_dir>/`; the trailing numeric
+/// basename of each path is an id, non-numeric basenames ignored. No trunk
+/// (`trunk_tree_ish` → None), an absent dir, or empty output all yield
+/// `Ok(vec![])` — the local-only degradation (R-2).
+fn trunk_entity_ids(root: &Path, kind_dir: &str) -> anyhow::Result<Vec<u32>> {
+    let Some(tree_ish) = trunk_tree_ish(root)? else {
+        return Ok(Vec::new());
+    };
+    let pathspec = format!("{kind_dir}/");
+    let listing = git_opt(
+        root,
+        &["ls-tree", "-d", "--name-only", &tree_ish, "--", &pathspec],
+    )?;
+    let Some(listing) = listing else {
+        return Ok(Vec::new());
+    };
+    let ids = listing
+        .lines()
+        .filter_map(|line| line.rsplit('/').next())
+        .filter_map(|base| base.parse::<u32>().ok())
+        .collect();
+    Ok(ids)
+}
+
 /// Capture the born frame for the working tree at `repo_root` (design §5.2).
 ///
 /// Three Ok states: clean → [`AnchorKind::Commit`] (`commit`/`tree`/`base_commit`/
@@ -1737,5 +1804,82 @@ mod tests {
             commits_touching(repo.path(), &p("a.txt"), &base, &tip),
             Some(1)
         );
+    }
+
+    // --- SL-032 PHASE-02: trunk-ref id allocation (trunk read seam) --------
+    //
+    // The explicit-override ladder is exercised via `trunk_ladder` with the ref
+    // injected — `set_var` is forbidden crate-wide, and the test process carries
+    // no ambient `DOCTRINE_TRUNK_REF`, so the no-override path (`trunk_entity_ids`
+    // → `trunk_tree_ish`) reads `None` naturally.
+
+    use std::ffi::OsStr;
+
+    /// Seed `.doctrine/slice/<NNN>/slice.toml` for each id and commit on `main`
+    /// (git tracks a dir only via a contained file). A non-numeric sibling dir
+    /// is committed too — it must be ignored by the numeric basename parse.
+    fn commit_slice_dirs(repo: &ScratchRepo, ids: &[u32]) {
+        for id in ids {
+            repo.write(&format!(".doctrine/slice/{id:03}/slice.toml"), "x = 1\n");
+        }
+        repo.write(".doctrine/slice/scratch-notes/n.md", "ignore me\n");
+        repo.git(&["add", "-A"]);
+        repo.git(&["commit", "-m", "seed slices"]);
+    }
+
+    #[test]
+    fn trunk_entity_ids_reads_committed_numeric_dirs() {
+        // VT-2: trunk's tree carries slice dirs → their ids surface; the
+        // non-numeric sibling dir is dropped.
+        let repo = ScratchRepo::new();
+        commit_slice_dirs(&repo, &[1, 2, 4]);
+        let mut ids = super::trunk_entity_ids(repo.path(), ".doctrine/slice").unwrap();
+        ids.sort_unstable();
+        assert_eq!(ids, vec![1, 2, 4]);
+    }
+
+    #[test]
+    fn trunk_entity_ids_does_not_reprepend_doctrine() {
+        // VT-3 / X1: `kind_dir` is ALREADY repo-relative incl. `.doctrine/`. A
+        // buggy re-prepend would query `.doctrine/.doctrine/slice/` → nothing.
+        let repo = ScratchRepo::new();
+        commit_slice_dirs(&repo, &[7]);
+        let ids = super::trunk_entity_ids(repo.path(), ".doctrine/slice").unwrap();
+        assert_eq!(ids, vec![7], "prefixed kind_dir must not be re-prepended");
+    }
+
+    #[test]
+    fn trunk_entity_ids_empty_without_trunk() {
+        // VT-4: an unborn repo (no commit ⇒ no main/master/origin peels) is a
+        // defined terminus → None tree-ish → empty id set, not an error.
+        let repo = ScratchRepo::new(); // init -b main, no commit
+        assert_eq!(super::trunk_tree_ish(repo.path()).unwrap(), None);
+        assert_eq!(
+            super::trunk_entity_ids(repo.path(), ".doctrine/slice").unwrap(),
+            Vec::<u32>::new()
+        );
+    }
+
+    #[test]
+    fn trunk_ladder_explicit_unpeelable_ref_is_hard_error() {
+        // VT-5 / F4: an explicitly pinned ref that fails to peel must NOT fall
+        // through to `main` — the user asked for a specific trunk.
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "hello", "init"); // main DOES resolve…
+        let bad = OsStr::new("refs/heads/does-not-exist");
+        let err = super::trunk_ladder(repo.path(), Some(bad)).unwrap_err();
+        assert!(
+            err.to_string().contains("DOCTRINE_TRUNK_REF"),
+            "error names the offending override: {err}"
+        );
+    }
+
+    #[test]
+    fn trunk_ladder_explicit_valid_ref_wins() {
+        // The override resolves → it is used (peeled to a commit sha).
+        let repo = ScratchRepo::new();
+        let head = repo.commit("a.txt", "hello", "init");
+        let sha = super::trunk_ladder(repo.path(), Some(OsStr::new("main"))).unwrap();
+        assert_eq!(sha, Some(head));
     }
 }

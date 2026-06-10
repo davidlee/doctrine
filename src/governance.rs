@@ -335,6 +335,7 @@ pub(crate) fn run_new(
             title: &title,
             date: &date,
         },
+        &[], // trunk ids: production minting wires them in SL-031 (§5.4)
     )?;
 
     let id = out
