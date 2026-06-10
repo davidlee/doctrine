@@ -280,6 +280,26 @@ urgency, or product vocabulary in the crate).
   contract*; until OQ-001 lands, `survey` orders by `actionability → consequence →
   fallback` with the authored-priority slot empty — no behaviour rests on an unbuilt
   field.
+- **D11 — blocking display: direct by default, transitive on request; `explain`
+  always walks to root.** Closes PRD-011 OQ-004 (this spec's OQ-4). The blocking
+  **closure is always computed** (reachability, H2) for ordering and eligibility — an
+  item whose only direct blocker is itself blocked is already non-actionable, and
+  `next` excludes it regardless of display depth. The decision is purely **display
+  verbosity**:
+  - **List surfaces** (`survey` / `next` / `inspect`) show only the **direct**
+    blocker(s) — the immediate "do Y first" signal — and the direct dependents for the
+    reverse ("what it blocks") direction.
+  - **`blockers ITEM`** reports direct blockers; **`--transitive`** walks the full
+    chain (both directions).
+  - **`explain ITEM`** always walks to the root cause — it is the "why" surface, the
+    one place transitive is default-on.
+
+  Rationale: the direct blocker is the actionable next step; full transitive closure
+  in every list row is noise that dilutes it and duplicates `explain`. Depth is one
+  flag (or the `explain` surface) away. No unbuilt input — blocking derives entirely
+  from authored outbound edges (ADR-004). *Verification:* `survey`/`next` rows name
+  only the immediate blocker; `blockers X --transitive` and `explain X` surface the
+  whole chain; toggling display depth never changes ordering.
 
 ## Open Questions
 
@@ -306,6 +326,10 @@ Resolved:
   ranked-but-blocked item. The outranking priority is the **item-level scalar**
   (OQ-001), not `seq`/`after` edge rank — the earlier "seq rank" framing was the
   edge-vs-item conflation, now corrected.
+- ~~**OQ-4** (PRD-011 OQ-004) — transitive blocking default.~~ Closed by **D11**:
+  direct blockers by default on list surfaces, `--transitive` walks the chain,
+  `explain` always walks to root; the closure is always computed for ordering, only
+  display depth is toggled.
 - ~~**OQ-7** (→ PRD-009) — the authored capture schema D4/D6 depend on.~~ Resolved by
   PRD-009 OQ-007: the `dep`/`seq` edges land as the agent-facing `needs`/`after` edges
   (FR-010 / `REQ-096` consumes `REQ-097`); the architectural trigger lands as the
@@ -320,8 +344,6 @@ Remaining:
 - **OQ-2** (PRD-011 OQ-006) — whether v1 derived `consequence` accounts for
   PRD-010 knowledge-record state, or defers governance pressure until PRD-010
   ships.
-- **OQ-4** (PRD-011 OQ-004) — transitive blocking shown by default, or only on an
-  explicit `--transitive` / explain surface.
 - **OQ-6** — planning-gate enforcement strength for D6's trigger channel: soft
   (skill remembers to check) vs hard (workflow/preflight step), and how the
   plan↔audit divergence (D6 (a) vs (b)) is surfaced. Friction vs enforceability
