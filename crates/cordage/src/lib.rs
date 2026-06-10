@@ -105,6 +105,15 @@ impl EdgeAttrs {
 // ── channels ─────────────────────────────────────────────────────────────────
 
 /// Commutative-monoid channel combinators; each owns a value domain.
+///
+/// **The REQ-080 extension seam.** A *fresh channel* — a new propagated meaning
+/// (blocking, staleness, a priority rollup, …) — is composed by a caller pairing
+/// one of these combinators with an overlay and a [`Direction`] in a
+/// [`ChannelSpec`], then seeding [`Graph::evaluate`]. No core edit is needed to
+/// add a channel; the channel's *meaning* lives entirely in the caller. This enum
+/// is the one deliberately **curated** extension point: adding a combinator is the
+/// only channel change that touches the core, so the monoid set stays small and
+/// each variant's domain/laws stay auditable (it is not an open registry).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Combinator {
     Max,
@@ -186,7 +195,10 @@ pub enum ChannelDiagReason {
     /// The seed's [`ChannelValue`] variant is outside the combinator's domain
     /// (`Any`/`All`/`CountDistinct` consume `Flag`, `Max` consumes `Scalar`). The
     /// seed is treated as absent.
-    SeedVariantMismatch { expected: ValueKind, actual: ValueKind },
+    SeedVariantMismatch {
+        expected: ValueKind,
+        actual: ValueKind,
+    },
     /// The seed map keyed a [`NodeId`] this graph never allocated. Ignored.
     UnknownSeedNode,
 }
@@ -762,6 +774,19 @@ impl Graph {
             return None;
         }
         Some(query::spine_path(&self.incoming, overlay, node))
+    }
+
+    /// Propagate a channel: fold `seeds` over `spec`'s overlay/combinator/
+    /// direction and return the per-node [`Channel`] (design §5.2). Idempotent
+    /// combinators (`Any`/`All`/`Max`) fold present seeds over `{n} ∪ reachable`;
+    /// `CountDistinct` counts `Flag(true)` seeds over strict `reachable` (F34).
+    /// The seed contract holds (F16): a node whose fold set has no present seed is
+    /// absent from `values` — no combinator identity escapes; foreign-node and
+    /// variant-mismatched seeds surface as [`ChannelDiagnostic`]s, never silently
+    /// coerced (F41). Pure; reads the resolved adjacency, invariant under the
+    /// `OrderSpec` (I7/F18).
+    pub fn evaluate(&self, spec: ChannelSpec, seeds: &BTreeMap<NodeId, ChannelValue>) -> Channel {
+        query::evaluate(&self.out, &self.incoming, self.node_count, spec, seeds)
     }
 
     /// The composed-order key of `node`, or `None` for a foreign/unknown id
