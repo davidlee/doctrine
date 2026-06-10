@@ -101,19 +101,30 @@ convenience and the shared `/worktree` seam, not because B depends on A's mintin
 
 ```
  orchestrator (coordination branch, worker-mode OFF, sole writer)
-   │  batch = dependency-disjoint tasks
-   ├─ per worker:
-   │    /worktree mode=worker  → git worktree add @base → provision → baseline✓
-   │    Agent isolation:worktree, DOCTRINE_WORKER=1, pre-distilled prompt (D6)
+   │  capture base B = git rev-parse HEAD   (commit-before-spawn: tree clean)
+   │  batch = dependency-DISJOINT tasks (the batching guarantee)
+   ├─ per worker (concurrent):
+   │    /worktree mode=worker → git worktree add @B → provision → baseline✓
+   │    Agent isolation:worktree, env DOCTRINE_WORKER=1, pre-distilled prompt (D6)
    │        worker: mutate SOURCE only → run verify cmd → git commit to fork branch
    │                → return structured report (NOT a doctrine write)
-   └─ funnel per worker (D7, strict order, incremental):
-        import (cherry-pick/apply fork branch — shared object store)
-        → verify (project cmd on coordination branch)
-        → commit (orchestrator, from coordination branch)
-        → record (memory / AC evidence / notes — trails the commit)
-        guard at import: branch-point-check (fork base == coordination HEAD?)
+   └─ funnel per BATCH (D7, strict order — the cadence is the batch, not the worker):
+        import   apply EVERY worker's delta onto B, NON-committing
+                 (cherry-pick -n / git apply — shared object store)
+        verify   run the project verify cmd on the combined working tree
+        guard    branch-point-check --base B   (HEAD still == B? else re-dispatch)
+        commit   ONE batch commit on the coordination branch  → HEAD = B+1
+        record   memory / AC evidence / notes — trails the confirmed commit
+   next batch forks from B+1.  conflict during import = batching error → report+halt.
 ```
+
+Why per-batch, not per-worker: a per-worker commit advances HEAD, so the next
+worker's delta would land on a moved base — exactly the "silently merge against a
+moved base" D5 forbids — and a literal branch-point check would then spuriously
+re-dispatch every worker after the first, defeating parallelism. Importing the whole
+disjoint batch onto the single captured `B`, verifying once, and committing once
+keeps every delta applied against the *same* base and makes "incremental per batch"
+(D7) literally one commit per batch.
 
 ### 5.2 Interfaces & Contracts
 
@@ -147,13 +158,14 @@ The one mechanical seam of the funnel:
 
 ```
 doctrine worktree branch-point-check --base <SHA> [--head <SHA>]
-  exit 0  if base == current coordination HEAD (default: `git rev-parse HEAD`)
-  exit 1  otherwise  (→ orchestrator re-dispatches; never merges against moved base)
+  --base = the orchestrator's pre-spawn captured base B
+  exit 0  if base == coordination HEAD (default --head: `git rev-parse HEAD`)
+  exit 1  otherwise  (→ orchestrator re-dispatches the batch; never commits on a moved base)
 ```
 
 Pure compare in the leaf (`fn matches(base, head) -> bool`); the git read of HEAD
 is the impure shell. Read-classed (no authored write) so it is callable under
-worker-mode — though only the orchestrator uses it.
+worker-mode — though only the orchestrator uses it, at the batch-commit boundary.
 
 **B — `/worktree mode=worker` contract** (implement the SL-029 stub):
 - MUST NOT degrade to work-in-place (a worker with no real fork is a hard abort;
@@ -187,31 +199,43 @@ at import; conflict → report; crash recovery. Skill-prose (VA). Authored in
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Funnel order (D7), per worker, incremental:** import → verify → commit → record.
-Knowledge always trails the confirmed commit; the coordination branch is the
-durable store; orchestrator context is disposable.
+**Funnel order (D7), the cadence is the batch:** import-all (non-committing) →
+verify-combined → branch-point guard → one batch commit → record. Knowledge always
+trails the confirmed commit; the coordination branch is the durable store;
+orchestrator context is disposable.
 
-**Branch-point under concurrency (D5 extended).** SL-029's single-tree check
-guards *creation* (fork HEAD == source HEAD post-create). SL-031 adds the check at
-**import time**: a batch's workers all fork from base `B`; importing worker-1 moves
-the coordination HEAD to `B+1`, so worker-2's base is now stale relative to HEAD.
+**Worker environment (D2a engagement).** `DOCTRINE_WORKER=1` is set **nowhere
+today** — the guard in `main.rs` is inert until the worker's process carries the
+var. The orchestrator **sets `DOCTRINE_WORKER=1` in the worker's spawn environment**
+(the `Agent`-tool env, when available) **and** the pre-distilled prompt mandates the
+worker export it as its first act. This is the same *unenforced prompt-contract*
+tier as the D2b raw-tree gap: doctrine's CLI refuses authored writes once the var is
+present; nothing forces the var to be present. `/dispatch` owns making it present.
+
+**Branch-point under concurrency (D5 extended).** SL-029's single-tree check guards
+*creation* (fork HEAD == source HEAD post-create). SL-031 adds the check at the
+**batch-commit boundary**: the orchestrator captured base `B` pre-spawn; before
+committing the imported batch it asserts coordination HEAD is **still `B`** (no
+out-of-band move while the batch ran). Because the whole disjoint batch is imported
+onto `B` and committed once, HEAD only moves at the orchestrator's own batch commit
+— so a mismatch means an **external** mover (a stray commit / dirty tree) ⟹
+**re-dispatch the batch from the new HEAD**, never commit against a moved base.
 
 - Batches are **dependency-disjoint by construction** (the orchestrator's batching
-  job) ⟹ within-batch deltas touch non-overlapping files ⟹ sequential apply onto
-  the moving HEAD is clean. The branch-point check guards the case where HEAD moved
-  for a reason **outside** the batch (an unexpected external commit / dirty tree) —
-  mismatch ⟹ **re-dispatch** that worker from the new HEAD, never blind-merge.
-- A genuine apply/merge **conflict** within a disjoint batch means the batching was
-  wrong ⟹ **report and halt**, human re-plans (ADR-006: policy is report, never
+  job) ⟹ the workers' deltas touch non-overlapping files ⟹ they co-apply onto `B`
+  cleanly.
+- A genuine apply **conflict** when co-applying a disjoint batch means the batching
+  was wrong ⟹ **report and halt**, human re-plans (ADR-006: policy is report, never
   auto-resolve).
 
 **Crash / overflow recovery.** Rebuild from the coordination branch + `git
 worktree list`; in-flight forks are re-imported or re-dispatched. No orchestrator
 state is load-bearing.
 
-**IMP-002 reconcile.** On A's completion, transition IMP-002 to done with rationale
-(substance shipped SL-032; wiring tail landed SL-031); record the IMP-003 ↔
-SL-029/SL-031 follow-up for `/close`.
+**IMP-002 reconcile.** On A's completion, `doctrine backlog edit IMP-002 --status
+<terminal> --resolution <…>` (a terminal status requires a resolution) with the
+rationale (substance shipped SL-032; wiring tail landed SL-031). Record the IMP-003
+↔ SL-029/SL-031 follow-up for `/close`.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -289,7 +313,7 @@ All resolved in `/design` (2026-06-10):
 | Item | Class | Evidence |
 |---|---|---|
 | Trunk-aware minting wired | VT | e2e: two divergent worktrees mint non-colliding ids; `next_id(local,&[])` unchanged |
-| Kind registry dedup (F-2/F-5) | VT | set-equality guard (`KINDS` ⟺ kind consts); `reseat` uses `state_dir`; existing suites green unchanged |
+| Kind registry dedup (F-2/F-5) | VT | F-2 (the copy) *closed* — `KINDS` references the consts; `reseat` uses `state_dir`; existing suites green unchanged. The membership test **pins** the set; R-b (forcing a new kind in) stays *guarded, not forced* — no exhaustive-match seam exists |
 | `branch-point-check` verb | VT | pure `matches(base,head)` table; e2e exit-0/1 over the built binary |
 | Worker-mode refuses authored writes (D2a) | VT | already covered (`tests/e2e_worker_guard.rs`); not re-implemented |
 | `/worktree mode=worker` contract | VA | skill conformance: source-only, no-degrade, commit-to-branch, report shape |
@@ -302,4 +326,31 @@ provision exclusion).
 
 ## 10. Review Notes
 
-(adversarial pass appended after the draft is accepted)
+### Adversarial pass 1 (2026-06-10) — integrated
+
+- **F-b (major, reasoning flaw) — funnel cadence.** The draft ran the funnel
+  *per worker* (import→verify→commit each). That contradicts D7's "incremental
+  *per batch*" and breaks branch-point logic: a per-worker commit moves HEAD, so
+  the next worker's delta lands on a moved base (the exact thing D5 forbids), and a
+  literal branch-point check would spuriously re-dispatch every worker after the
+  first. **Fixed:** per-batch atomic — import all disjoint deltas onto the captured
+  base `B` (non-committing), verify once, one batch commit, then record (§5.1/§5.4).
+- **F-a (moderate) — verify must precede the durable commit.** Import is now
+  explicitly non-committing (`cherry-pick -n` / `git apply`), so the project verify
+  runs on the combined working tree *before* the single batch commit (§5.1/§5.4).
+- **F-e (moderate, real gap) — `DOCTRINE_WORKER=1` is set nowhere.** Confirmed: no
+  skill/install/wiring sets it; the `main.rs` guard is inert until the worker's
+  process carries the var. **Fixed:** §5.4 makes the orchestrator set it in the
+  worker's spawn env + mandate it in the pre-distilled prompt — the same
+  unenforced prompt-contract tier as the D2b gap. `/dispatch` owns it.
+- **F-d (minor, precision) — R-b is guarded, not closed.** The membership test
+  *pins* the kind set but cannot *force* a new kind in (no exhaustive-match seam).
+  §9 wording sharpened; F-2 (the copy) is what's closed, not R-b.
+- **F-c (verified OK) — no layering cycle.** No kind module imports `integrity`, so
+  `KINDS: &[&KindIdentity]` referencing the kind consts is acyclic.
+- **F-f (verified OK) — IMP-002 reconcile mechanism exists.** `doctrine backlog edit
+  IMP-002 --status … --resolution …` (terminal status requires a resolution).
+
+Open after pass 1: none blocking. The funnel remains VA — its correctness rests on
+skill-prose discipline + the prompt contract, not Rust enforcement (an accepted
+posture, R-1/D2b lineage).
