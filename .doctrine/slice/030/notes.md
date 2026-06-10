@@ -147,3 +147,42 @@ The error≡empty marker collapse + supersession⇏status gap stay out of scope
 (design §5.5) — documented, not fixed.
 
 Surprise/adaptation: none. Mechanical mirror; first `just check` green.
+
+## PHASE-04 — project required policies into the boot snapshot (commit `6ae2eff`)
+
+Done: `boot.rs` gained `SourceKind::Policies` + an `Active Policies` section
+(after `Accepted ADRs`, before `Memory`; `ExecPath` stays last) projecting
+`governance::list_rows(&policy::POLICY_KIND, …, status:["required"])` — the
+in-force view, mirroring the accepted-ADR arm. Empty/absent corpus → the
+`not yet populated` marker (EX-2). `boot --check` covers it via the same
+recompute; markers are INFORMATIONAL (`run_check` returns `Ok`, exit 0) — only
+`stale` is the hard signal (EX-3 satisfied, design §5.5).
+
+Tests: `regenerate_projects_required_policies_filtered` (required shows;
+draft/deprecated/retired absent), `regenerate_empty_policy_corpus_renders_marker`.
+Seeded a `required` policy into `boot_check_reports_clean…`'s populated fixture
+(is_clean requires marker_sections empty, so the new section would otherwise mark).
+
+Inherited/shared gaps, design-acknowledged, OUT OF SCOPE (§5.5, not fixed):
+error≡empty marker collapse (Codex MAJOR-4), supersession⇏status double-show
+(MAJOR-5), inert `--tag` axis. STD (SL-033) inherits POL parity on all three.
+
+## Code-review disposition (commit `6ae2eff`, reviewed post-PHASE-04)
+
+Reviewed the PHASE-04 diff. Findings dispositioned:
+- **Action 1 (🟡, FIXED `f4048ae`):** EX-1 ordering ("after Accepted ADRs") was
+  unverified — the only order test pinned ExecPath-last. Added
+  `boot_sequence_orders_active_policies_after_accepted_adrs`: Active Policies ==
+  ADRs+1 and < Memory. A reorder now reddens.
+- **Action 3 (🟡, FIXED `f4048ae`):** the draft/deprecated/retired absence loop
+  in `regenerate_projects_required_policies_filtered` scanned the whole snapshot;
+  scoped it to the Active Policies section body via `split_once`.
+- **Action 2 (🔵, DEFERRED → SL-033):** boot's per-kind `SourceKind` variant +
+  match arm is a near-verbatim clone per governance kind. NOT a SL-030 defect —
+  scope was "mirror the ADR arm." Collapse into `SourceKind::Governance(&GovKind,
+  status_filter)` is folded into SL-033 scope (the STD slice).
+- Both test fixes: test-only, no production change, `just check` green, 709 pass.
+
+Audit-worthy nit: boot tests carry a `// PHASE-05 — boot --check disk sentry`
+banner, but the plan has only PHASE-01..04 — `boot --check` landed under PHASE-04
+EX-3. Stale label, not a defect.
