@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 13
+slug = "lift-shared-listshow-rowtablejson-shape-across-slice-and-spec-verbs"
+title = "Lift shared list+show row/table/JSON shape across slice and spec verbs"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-10"
+tags = ["dry", "render", "slice", "spec", "trigger", "deferred"]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = ["PRD-011"]
+drift  = []

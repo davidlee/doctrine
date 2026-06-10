@@ -285,3 +285,13 @@ intent.)
   but blocked item.
 - OQ-008 — How should the policy version be recorded in cache/projection output so stale
   derived results are recognisable? Blocks cache-staleness detection.
+- OQ-009 — Should the derived actionability policy admit a **code-surface (path-glob)
+  trigger** as a non-entity actionability input — an item held non-actionable until a
+  phase's planned or touched file set matches its trigger globs — or is edit-conditioned
+  dormancy a separate capability outside this graph? The graph core must stay path-free
+  (§2 constraint: no dependency on file paths), so a path-trigger can only enter as a
+  policy-layer mask, resolved by the existing scope-admittance predicates
+  (`src/retrieve.rs`, SL-008), never as a graph edge. Distinct from the entity-relation
+  triggers this spec already admits and from temporal dormancy (out of scope, §2). Blocks
+  whether the architectural-trigger work (IMP-012, with IMP-013/IMP-014 as fixtures) lands
+  as a channel of this capability or as a sibling spec.

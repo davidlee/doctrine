@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 12
+slug = "architectural-triggers-structural-triggering-condition-on-backlog-kinds-sense-checked-at-a-planning-gate"
+title = "Architectural triggers: structural triggering-condition on backlog kinds, sense-checked at a planning gate"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-10"
+tags = ["governance", "backlog", "planning-gate", "boot", "meta"]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = ["PRD-011", "PRD-009"]
+drift  = []

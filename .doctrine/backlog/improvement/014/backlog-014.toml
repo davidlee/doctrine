@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 14
+slug = "cross-verb-golden-harness-over-listingrs-shared-render-surface"
+title = "Cross-verb golden harness over listing.rs shared render surface"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-10"
+tags = ["testing", "golden", "render", "listing", "risk", "trigger", "deferred"]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = ["PRD-011"]
+drift  = []

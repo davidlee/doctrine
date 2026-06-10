@@ -1,0 +1,41 @@
+memory_uid = "mem_019eafc260957fe28d0e4d0bcf496e60"
+memory_key = "mem.pattern.entity.kind-is-data-not-trait"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Entity-engine Kind is data, not a trait — verb seam is intentionally not abstracted"
+summary = "Entity-engine Kind is data (struct + fn pointer), not a trait — intentional; do not trait-ify the verb seam"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[scope]
+paths = ["src/entity.rs", "src/governance.rs"]
+globs = []
+commands = []
+tags = ["entity", "architecture", "boundary"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5e71f55e6c71e7204ff16f01e20323f0219c668a"
+ref_name = "refs/heads/main"
+checkout_state_id = "6820583cef46688afc59ea22de626997e286daad41632c996ca81a348bf5bd82"
+base_commit = "7e67c44ae01719d8405b398cececc505fa4ee986"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
