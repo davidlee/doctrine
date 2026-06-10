@@ -1,0 +1,27 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 2
+slug = "cordage-explain-path-enumeration-is-exponential-on-diamond-lattices-sl-036-r-bn-2"
+title = "cordage explain() path enumeration is exponential on diamond lattices (SL-036 R-B/N-2)"
+kind = "risk"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-10"
+tags = []
+
+[facet]                         # risk only — every field typed; seeded empty
+likelihood = "low"              # low | medium | high | critical
+impact     = "medium"           # low | medium | high | critical
+origin     = "SL-036 design Lock known-open; audit N-2/R-B; notes.md design-stage"
+controls   = [
+  "F47 bounds termination (chains end at roots or degraded-SCC entry) — combinatorics, not finiteness, is the residual",
+  "no current exposure: all VT fixtures are <=3 nodes by design; first-consumer-owned",
+  "fix direction: return the predecessor sub-DAG (or direct + one canonical chain); policy enumerates on demand",
+]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-036"]
+specs  = ["SPEC-001"]
+drift  = []

@@ -1,0 +1,26 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 1
+slug = "cordage-against-orientation-u-re-map-untested-by-any-vt-sl-036-r-d"
+title = "cordage: Against-orientation U re-map untested by any VT (SL-036 R-D)"
+kind = "risk"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-10"
+tags = []
+
+[facet]                         # risk only — every field typed; seeded empty
+likelihood = "low"              # low | medium | high | critical
+impact     = "low"              # low | medium | high | critical
+origin     = "SL-036 audit (R-D); notes.md PHASE-03"
+controls   = [
+  "the D2 resolved->oriented re-map code path exists and is exercised indirectly",
+  "first Against consumer (adapter/policy slice) should add a direct VT",
+]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-036"]
+specs  = ["SPEC-001"]
+drift  = []
