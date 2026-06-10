@@ -274,7 +274,8 @@ re-fracture the spine, A-3).
 - OQ-2 *(resolved, §3)* — `--columns` semantics: ordered subset, duplicates
   permitted.
 - OQ-3 *(resolved, D9)* — memory vs the shared `--columns` flag. Resolved:
-  memory is **deferred** (stays bespoke; `--columns` accepted-but-ignored,
-  documented; adoption tracked under IMP-017). Chosen after an explicit challenge
+  memory is **deferred** (stays bespoke; `--columns` is **rejected with a clean
+  error** on `memory list` — a loud guard, not a silent no-op (CHARGE III);
+  adoption tracked under IMP-017). Chosen after an explicit challenge
   weighed the security-scrubbing coupling + the absent trigger against bare
   flag-uniformity.
