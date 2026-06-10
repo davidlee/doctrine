@@ -126,3 +126,51 @@ Carry-forward for PHASE-02 (`/phase-plan` reading):
   before the indices) — neither is stored yet.
 - `BuildError` has no `Display`/`Error` impl yet (deferred — would need a `NodeId`
   Display or a `use_debug`-denied `{:?}`); add when a consumer propagates via `?`.
+
+## PHASE-02 implementation (2026-06-11) — build passes 1–2
+
+Shipped `build()` passes 1 (arity) and 2 (per-overlay cycle resolution) in a new
+private `src/resolve.rs`, plus the public provenance vocabulary (`EdgeRef`,
+`EvictReason`, `EvictedEdge`, `CycleDiagnostic`, `Provenance`, `Graph::provenance()`).
+`out_edges`/`in_edges` now read the **resolved** view. 14 black-box resolution
+tests; whole `just check` green. Authored→resolved transform lives entirely in
+`resolve()` — `build()` validates, calls `resolve`, then feeds the resolved flat
+list to the existing `build_indices`.
+
+Load-bearing decisions (also in the phase sheet):
+- **Single internal `Edge` ordered by the F17 eviction key `(rank,age,src,dst)`.**
+  Per-overlay working set is `BTreeSet<Edge>`, so `.min()`/`.max()` select by the
+  eviction key *directly* (F37 satisfied by construction — the adjacency `OutEdge`/
+  `InEdge` keys never drive selection) and set membership dedupes identical edges.
+- **The F30/F46 two-SCC split** (the round-3/4 trap): authored pre-arity SCC →
+  `CycleDiagnostic` (always surfaces the authoring error, even after arity breaks
+  the cycle); post-arity SCC → degraded marks. Computed as two distinct
+  `cyclic_components` calls — authored set vs the pass-1 output. Confirmed by the
+  `arity_breaks_authored_reject_cycle_diagnostic_still_emitted` test.
+- **Tarjan SCC over `BTreeMap<NodeId,_>` state**, adjacency walked in `BTreeSet`
+  order → deterministic discovery with no ordinal Vec-indexing (sidesteps the repo
+  `indexing-slicing` + `as`-cast bans). Self-loop = single-node SCC marked cyclic
+  only when an `n→n` edge exists (F20). Recursion borrow dodged by copying the
+  `&'a` adjacency ref out of `&mut self` before recursing.
+- **`degraded_sccs` stored on `Graph` (D-1, user-confirmed)** to satisfy EX-2
+  literally; write-only this phase → `#[expect(dead_code, reason=…)]`. **PHASE-03
+  removes the expect when pass-3/4 first reads it** — do not add a PHASE-02 test
+  that reads the field (would make the expect unfulfilled).
+- **`configs`/`node_count` NOT stored on `Graph`** — passes 1–2 need configs only
+  at build time (threaded as a `resolve()` arg) and never need `node_count` (arity/
+  cycle concern only edge-touched nodes). The PHASE-01 carry-forward anticipated
+  threading them into `Graph`; deferred to PHASE-03/04 which are their real
+  consumers (`node_count` for the longest-path level, `configs` for `spine_path`).
+
+Carry-forward for PHASE-03 (passes 3–4, order composition):
+- The resolved per-overlay edge sets are in `Graph.out`/`incoming` (Evict overlays
+  acyclic; Reject overlays may stay cyclic — the traversal view). `degraded_sccs`
+  holds the post-arity cyclic SCCs of Reject overlays, keyed by overlay — the taint
+  seeds, after filtering to OrderSpec-referenced overlays (F31).
+- `OrderSpec` is still validated-then-discarded (PHASE-01). PHASE-03 must re-store
+  it (the first consumer) plus `node_count` (level recurrence is total over ALL
+  nodes) and `configs` (if `spine_path` lands here vs PHASE-04).
+- `EvictReason::UnionCycleVsLayer` already declared; pass-3 is its first producer.
+- Provenance sort is `(overlay, edge)` for evictions / `(overlay, nodes)` for
+  cycles — a reporting sort distinct from the F17 selection key. Keep pass-3
+  `UnionCycleVsLayer` evictions flowing through the same `sort_provenance`.
