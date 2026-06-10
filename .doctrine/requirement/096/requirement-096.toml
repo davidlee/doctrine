@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 96
+slug = "doctrine-authors-typed-dep-and-seq-dependency-edges"
+title = "Doctrine authors typed dep and seq dependency edges"
+status = "pending"
+kind = "functional"
+
+description = "Doctrine authors two new typed edge kinds feeding the graph: a hard dep (dependency/blocked) edge and a soft seq (sequencing/priority preference) edge carrying an int rank. Actionability and blocking derive from these authored edges; reference and lineage edges (specs/slices/requirements/drift/supersedes/descends_from) remain consequence inputs only. The adapter supplies each edge a clock-free creation-sequence age for deterministic seq eviction."
+tags = []
+acceptance_criteria = [
+  "A hard dep edge and a soft seq edge (with an int rank) are authorable doctrine relations, admitted into the graph as dep and seq overlays respectively.",
+  "Reference and lineage edges contribute to derived consequence but not to dep/seq blocking.",
+  "The adapter supplies each seq edge a clock-free creation-sequence age; the core reads age as an opaque attribute, never a wall-clock value.",
+]

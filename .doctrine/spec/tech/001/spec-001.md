@@ -22,11 +22,14 @@ values flow; policy owns what they mean; the adapter owns where they come from*)
   │                     │  id mapping, diagnostics mapped back to doctrine ids
   └─────┬───────────────┘
         │ opaque node ids + typed directed edges  (no doctrine vocabulary)
-  ┌─────┴───────────────┐  NEW workspace member crate (neutral, external-ready)
-  │  graph core         │  reverse index · reachability · typed acyclicity +
-  │                     │  cycle diagnostics · deterministic order · provenance
+  ┌─────┴───────────────┐  cordage — NEW workspace member crate
+  │  graph core         │  reverse index · reachability · per-overlay cycle
+  │  (crates/cordage)   │  policy (reject / evict) · deterministic order · provenance
   └─────────────────────┘
 ```
+
+The crate is **`cordage`** (`crates/cordage/`) — rigging over a tree of typed
+overlays; doctrine stays the workspace root crate and depends on it by path (D1).
 
 The **graph core** is a generic multi-channel evaluation engine over a tree plus
 typed directed (DAG) overlays — *not* a backlog-priority library. Prioritisation
@@ -63,10 +66,11 @@ urgency, or product vocabulary in the crate).
   dirty-region evaluation are an adapter-level optimisation the boundary
   preserves but v1 does not build. Any cache is disposable; correctness is
   recomputation from authored state (REQ-078).
-- **Failure mode — cycles.** A relation kind declared acyclic that contains a
-  cycle must degrade, never lie: emit a diagnostic naming the node ids and edge
-  kinds, exclude the cyclic component or fall back to local authored priority +
-  stable order, and never emit a false topological result (REQ-076).
+- **Failure mode — cycles.** Handled per overlay (D5): a `dep` cycle is invalid —
+  diagnose (naming node ids + edge kinds), degrade the affected query, never emit
+  a false topological order (REQ-076); a `seq` cycle cannot persist — the view
+  evicts the minimal `(rank, age)` edge at build time (REQ-092). Neither path
+  mutates authored TOML.
 - **The path-free-core tension (OQ-009).** Architectural triggers condition
   actionability on a *code-surface* (path-glob) match, but the core must not
   depend on file paths (PRD-011 §4 constraint). Resolved by D6: the trigger is a
@@ -92,10 +96,11 @@ urgency, or product vocabulary in the crate).
 ## Decisions
 
 - **D1 — three-layer split; the core is a neutral, external-ready workspace
-  crate.** Closes PRD-011 OQ-003. The generic graph core becomes its own
-  workspace member crate, neutral-named (neither `doctrine-` nor `bough-`
-  prefixed — both, and other products, are intended consumers), depended on by
-  path. Published-grade boundary from day one (no doctrine vocabulary, no product
+  crate.** Closes PRD-011 OQ-003 and OQ-005-layout (OQ-5). The generic graph core
+  becomes its own workspace member crate **`cordage`** at `crates/cordage/`,
+  product-neutral (neither `doctrine-` nor `bough-` prefixed — both, and other
+  products, are intended consumers); doctrine stays the workspace root crate and
+  depends on `cordage` by path. Published-grade boundary from day one (no doctrine vocabulary, no product
   semantics); the actual crates.io publish is deferred. Ownership split per
   PRD-011 §8: **core** owns opaque node ids, typed edges, overlay selection,
   reverse index, reachability, topological order, cycle diagnostics,
@@ -124,21 +129,43 @@ urgency, or product vocabulary in the crate).
   is exhaustive — a richer engine may emit more (REQ-080 seam): node ids stay
   opaque and stable per run, relation kinds stay typed (never prose-encoded), and
   the policy version is explicit in derived output.
-- **D4 — relation-kind semantics live in policy, never the core.** The core
-  propagates typed channels over typed edges with chosen combinators; *which*
-  kind blocks, influences, or merely contextualises is policy. The v1 admitted
-  set is provisional (§7: `blocks`/`blocked_by` acyclic dependency;
-  `promotes_to`/`origin` lifecycle bridge, not a dependency; `relates_to`
-  contextual; `shapes`/`constrains` governance influence; `supersedes` acyclic
-  lineage; `members` non-priority; `drift_affects` remediation consequence) —
-  the exact admitted set is **OQ-1**.
-- **D5 — typed per-relation-kind acyclicity; degrade on cycle.** Closes PRD-011
-  OQ-005. Acyclicity is a per-relation-kind contract, not a global graph
-  invariant: a kind declared acyclic (e.g. `blocks`, `supersedes`) reporting a
-  cycle yields a diagnostic naming node ids + edge kinds, and the affected query
-  excludes the cyclic component or degrades to local authored priority + stable
-  fallback; kinds not declared acyclic tolerate cycles. Never a silent false
-  topological order.
+- **D4 — two edge species; policy classifies, the core mechanises.** Closes
+  OQ-1. Every typed edge maps to one of two overlay species, and *which* doctrine
+  relation kind is which is policy:
+  - **`dep`** — hard dependency / blocked. Strictly acyclic (see D5 reject).
+  - **`seq`** — soft sequencing / priority preference, carrying an int **`rank`**.
+    Acyclic by construction (see D5 evict). Higher rank = stronger preference.
+
+  Per OQ-1 (option: *introduce blocks now*), doctrine **authors** both kinds — a
+  hard `dep` edge and a soft `seq` edge with `rank` — rather than deriving
+  actionability from reference edges alone (the corpus has no dependency edge
+  today; only `specs`/`slices`/`requirements`/`drift` references, `supersedes`/
+  `descends_from` lineage, and the `origin` promote bridge). Reference and lineage
+  edges remain **consequence** inputs (inbound count raises derived importance);
+  `origin` drives promoted-exclusion. The core stays generic — it propagates typed
+  channels over typed edges with chosen combinators and knows nothing of `dep` vs
+  `seq` meaning; it sees only an overlay's configured cycle policy and opaque edge
+  attributes (`rank`, `age`).
+- **D5 — per-overlay cycle policy: `dep` rejects, `seq` evicts.** Closes PRD-011
+  OQ-005. Acyclicity is enforced per overlay, by one of two core-configurable
+  policies:
+  - **reject-on-cycle** (`dep`): a cycle is **invalid**. The graph build raises a
+    diagnostic naming the node ids + edge kinds; the affected query excludes the
+    cyclic component or degrades to local authored priority + stable fallback. A
+    `dep` cycle is an authoring error to fix, surfaced by `validate` — never a
+    silent false topological order.
+  - **evict-on-cycle** (`seq`): a would-be cycle is broken by **evicting the
+    participating edge minimal under `(rank asc, age asc)`** — lowest rank, ties
+    broken oldest-first. The overlay is therefore always acyclic; a new low-rank
+    edge that only closes a cycle against stronger edges evicts itself (no-op).
+
+  **Eviction is a build-time *derived* resolution, never an authored mutation**
+  (storage rule): authored TOML may hold a `seq` cycle; every recompute evicts
+  deterministically by `(rank, age)` to yield an acyclic view, leaving the
+  authored edges untouched. `age` is a **clock-free creation-sequence stamp** the
+  adapter supplies (not a wall-clock `created` date — day granularity would tie),
+  keeping the core deterministic and pure. A future `link` verb could additionally
+  enforce at write time, but the read-side resolution is the contract.
 - **D6 — architectural triggers as a policy-layer actionability mask.** Closes
   PRD-011 OQ-009 (in-scope as a channel). A path-glob trigger holds an item
   non-actionable until a phase's planned/touched file set matches its trigger
@@ -165,24 +192,29 @@ urgency, or product vocabulary in the crate).
 
 ## Open Questions
 
-Local to this spec (the durable architecture is settled; these are remaining
-policy/layout calls). PRD-011 OQ-003 / OQ-005 / OQ-008 / OQ-009 are closed above
-(D1 / D5 / D7 / D6). PRD-011 OQ-001 (authored-seam field shape) is PRD-009's, not
+Local to this spec. PRD-011 OQ-003 / OQ-005 / OQ-008 / OQ-009 are closed above
+(D1 / D5 / D7 / D6); PRD-011 OQ-002 (OQ-1) and crate name/layout (OQ-5) are now
+closed by D4 and D1. PRD-011 OQ-001 (authored-seam field shape) is PRD-009's, not
 this spec's.
 
-- **OQ-1** (PRD-011 OQ-002) — the exact relation-kind set admitted into v1
-  actionability/blocking, vs merely contextual. The §7 / D4 list is provisional;
-  this fixes the blocker set and the per-kind acyclicity contract.
+Resolved:
+
+- ~~**OQ-1** (PRD-011 OQ-002) — admitted relation set.~~ Closed by D4: two edge
+  species `dep`/`seq`; doctrine authors both now; reference/lineage edges are
+  consequence inputs.
+- ~~**OQ-5** — crate name + workspace layout.~~ Closed by D1: `cordage` at
+  `crates/cordage/`, doctrine the root crate depending by path.
+
+Remaining:
+
 - **OQ-2** (PRD-011 OQ-006) — whether v1 derived `consequence` accounts for
   PRD-010 knowledge-record state, or defers governance pressure until PRD-010
   ships.
-- **OQ-3** (PRD-011 OQ-007) — whether an authored rank overrides actionability in
-  `survey` while `next` still prefers actionable work (how the two surfaces
-  diverge on a ranked-but-blocked item).
+- **OQ-3** (PRD-011 OQ-007) — whether an authored `seq` rank overrides
+  actionability in `survey` while `next` still prefers actionable work (how the
+  two surfaces diverge on a ranked-but-blocked item).
 - **OQ-4** (PRD-011 OQ-004) — transitive blocking shown by default, or only on an
   explicit `--transitive` / explain surface.
-- **OQ-5** — the crate's neutral name and exact workspace layout (directory,
-  manifest, where it sits relative to `src/`).
 - **OQ-6** — planning-gate enforcement strength for D6's trigger channel: soft
   (skill remembers to check) vs hard (workflow/preflight step). Friction vs
   enforceability (IMP-012 tension).
