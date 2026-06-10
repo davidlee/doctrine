@@ -54,6 +54,12 @@ pub(crate) const KINDS: &[KindRef] = &[
         has_runtime_state: false,
     },
     KindRef {
+        prefix: "STD",
+        dir: ".doctrine/standard",
+        stem: "standard",
+        has_runtime_state: false,
+    },
+    KindRef {
         prefix: "PRD",
         dir: ".doctrine/spec/product",
         stem: "spec",
@@ -635,12 +641,12 @@ mod tests {
     }
 
     #[test]
-    fn kinds_table_covers_the_eleven_numbered_kinds() {
+    fn kinds_table_covers_the_twelve_numbered_kinds() {
         let prefixes: Vec<_> = KINDS.iter().map(|k| k.prefix).collect();
         assert_eq!(
             prefixes,
             [
-                "SL", "ADR", "POL", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE"
+                "SL", "ADR", "POL", "STD", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE"
             ]
         );
         // Only slice owns runtime phase state (F3 guard surface).

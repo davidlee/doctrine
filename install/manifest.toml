@@ -14,6 +14,7 @@ create = [
   ".doctrine/slice",
   ".doctrine/spec/product",
   ".doctrine/spec/tech",
+  ".doctrine/standard",
   ".doctrine/templates",
 ]
 

@@ -23,10 +23,14 @@ use std::process::{Command, Output};
 
 const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
 
-/// The five kinds that ride the shared list spine (SL-025). `skills list` is NOT
+/// The kinds that ride the shared list spine (SL-025), including the three
+/// governance kinds (adr/policy/standard, SL-030/SL-033) — closing the gap that
+/// the matrix previously omitted even policy (SL-033 VT-7). `skills list` is NOT
 /// on the spine — it does not flatten `CommonListArgs` — so it is deliberately
 /// excluded.
-const SPINE_KINDS: [&str; 5] = ["adr", "slice", "spec", "backlog", "memory"];
+const SPINE_KINDS: [&str; 7] = [
+    "adr", "policy", "standard", "slice", "spec", "backlog", "memory",
+];
 
 /// Every shared spine flag, in both its short and long forms where it has one,
 /// plus the two output-format flags. Each entry is the arg vector appended to
@@ -87,14 +91,14 @@ fn every_spine_flag_parses_and_succeeds_on_every_kind() {
     }
 }
 
-/// `--status draft` is only in-vocab for spec + memory; adr/slice/backlog reject
-/// `draft` (a vocab error, NOT a parse error). The parse-conformance contract is
+/// `--status draft` is in-vocab for spec + memory + policy + standard; adr/slice/
+/// backlog reject `draft` (a vocab error, NOT a parse error). The parse-conformance contract is
 /// "the FLAG parses", which the `--all`/`--filter`/`--regexp`/`--tag` rows already
 /// prove for `-s`/`--status` grammar via the in-vocab kinds; for the others we
 /// assert the flag is RECOGNISED (clap-level) by checking the error is the uniform
 /// vocab error, not an "unexpected argument" parse error.
 fn status_vocab_has_draft(kind: &str) -> bool {
-    matches!(kind, "spec" | "memory")
+    matches!(kind, "spec" | "memory" | "policy" | "standard")
 }
 
 #[test]

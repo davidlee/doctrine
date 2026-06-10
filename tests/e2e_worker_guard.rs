@@ -59,6 +59,11 @@ const WRITE_VERBS: &[(&[&str], &str)] = &[
         "adr status",
     ),
     (&["policy", "new", "t"], "policy new"),
+    (&["standard", "new", "t"], "standard new"),
+    (
+        &["standard", "status", "1", "--status", "required"],
+        "standard status",
+    ),
     (&["spec", "new", "product", "t"], "spec new"),
     (
         &["spec", "req", "add", "PRD-001", "--kind", "functional"],

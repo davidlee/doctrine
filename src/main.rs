@@ -25,6 +25,7 @@ mod root;
 mod skills;
 mod slice;
 mod spec;
+mod standard;
 mod state;
 mod tomlfmt;
 mod worktree;
@@ -149,6 +150,12 @@ enum Command {
     Policy {
         #[command(subcommand)]
         command: PolicyCommand,
+    },
+
+    /// Create and list governance standards (standing conventions of practice).
+    Standard {
+        #[command(subcommand)]
+        command: StandardCommand,
     },
 
     /// Create and list product / technical specifications.
@@ -369,6 +376,65 @@ enum PolicyCommand {
         /// New status (required): draft|required|deprecated|retired.
         #[arg(long)]
         status: policy::PolicyStatus,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum StandardCommand {
+    /// Allocate the next id and scaffold a new standard.
+    New {
+        /// Standard title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List standards by id: STD-id, status, slug, title.
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one standard: its metadata, relationships, and prose body.
+    Show {
+        /// Standard reference — `STD-007` or the bare id `7`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Set a standard's status (edit-preserving; a no-op if unchanged).
+    Status {
+        /// Standard id (numeric).
+        id: u32,
+
+        /// New status (required): draft|default|required|deprecated|retired.
+        #[arg(long)]
+        status: standard::StandardStatus,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -1006,6 +1072,11 @@ fn write_class(cmd: &Command) -> WriteClass {
             PolicyCommand::Status { .. } => Write("policy status"),
             PolicyCommand::List { .. } | PolicyCommand::Show { .. } => Read,
         },
+        Command::Standard { command } => match command {
+            StandardCommand::New { .. } => Write("standard new"),
+            StandardCommand::Status { .. } => Write("standard status"),
+            StandardCommand::List { .. } | StandardCommand::Show { .. } => Read,
+        },
         Command::Spec { command } => match command {
             SpecCommand::New { .. } => Write("spec new"),
             SpecCommand::Req { command } => match command {
@@ -1229,6 +1300,17 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => policy::run_show(path, &reference, if json { Format::Json } else { format }),
             PolicyCommand::Status { id, status, path } => policy::run_status(path, id, status),
+        },
+        Command::Standard { command } => match command {
+            StandardCommand::New { title, slug, path } => standard::run_new(path, title, slug),
+            StandardCommand::List { list, path } => standard::run_list(path, list.into_list_args()),
+            StandardCommand::Show {
+                reference,
+                format,
+                json,
+                path,
+            } => standard::run_show(path, &reference, if json { Format::Json } else { format }),
+            StandardCommand::Status { id, status, path } => standard::run_status(path, id, status),
         },
         Command::Spec { command } => match command {
             SpecCommand::New {
@@ -1659,6 +1741,43 @@ mod write_class_tests {
         );
         assert_eq!(
             w(PolicyCommand::Show {
+                reference: String::new(),
+                format: Format::Table,
+                json: false,
+                path: None,
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn standard_split() {
+        let w = |c| cls(Command::Standard { command: c });
+        assert_eq!(
+            w(StandardCommand::New {
+                title: None,
+                slug: None,
+                path: None
+            }),
+            Some("standard new")
+        );
+        assert_eq!(
+            w(StandardCommand::Status {
+                id: 0,
+                status: standard::StandardStatus::Draft,
+                path: None,
+            }),
+            Some("standard status")
+        );
+        assert_eq!(
+            w(StandardCommand::List {
+                list: clist(),
+                path: None
+            }),
+            None
+        );
+        assert_eq!(
+            w(StandardCommand::Show {
                 reference: String::new(),
                 format: Format::Table,
                 json: false,
