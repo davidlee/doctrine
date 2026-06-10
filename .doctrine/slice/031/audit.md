@@ -68,3 +68,39 @@ Every EX/VT/VA criterion across the 3 phases is **aligned** with test or skill-p
 evidence. The only open items are the two conscious deferrals routed to `/close`
 (F-1 slice-status flip, F-2 IMP-003 transition) and one ADR-tracked residual (F-4).
 No "fix now" code findings remain. **Audit-ready → `/close`.**
+
+## Re-audit (post-close, code-review pass — 2026-06-10)
+
+Slice is closed; `just check` re-run green (exit 0; `e2e_worktree_branch_point`
+1/1, `e2e_worker_guard` 3/3, `e2e_worktree_provision` 5/5). A code-review pass over
+the shipped diff surfaced two findings the original conformance audit did not carry.
+
+- **F-6 — `branch-point-check` trusts `--base` unresolved (latent defect, safety
+  verb).** `run_branch_point_check` resolves `--head` via `git rev-parse HEAD` when
+  absent, but passes `--base` to `matches` (raw `==`) verbatim. A symbolic base
+  (`--base HEAD --head HEAD`) compares equal-by-name → **false stationary**,
+  defeating the one guard whose job is to refuse a moved base. The shipped caller
+  (`/dispatch` SKILL) captures `B = git rev-parse HEAD` (resolved), so the funnel is
+  safe **in contract** — but a safety verb should not trust pre-resolution.
+  **Disposition: follow-up slice/issue** — captured as **ISS-002** (rev-parse the
+  base in the shell, keep `matches` pure, add the symbolic-base VT row). Not
+  fix-now: out of the shipped contract, low likelihood, and the unsafe direction
+  needs two symbolic args; reopening a closed slice for it is the wrong route.
+
+- **F-7 — R-b "silent-escape closed" is overstated in the scope prose.**
+  `slice-031.md` sells the registry as "closing the R-b silent-escape: a new
+  numbered kind absent from the table escapes `validate`," with a "set-equality
+  guard (`KINDS` ⟺ the `Kind` consts)." What shipped is a literal prefix pin
+  (`integrity.rs:639`): add a 13th `Kind` const + tree, forget `KINDS`, and the test
+  stays green — the escape is **not** closed (Rust has no const reflection). The
+  design already reframed this to a hand-written pin via **C-IV**, and row 4 of this
+  audit correctly recorded EX-4 as exactly that — so canon's *authority* (design
+  C-IV) tells the truth; only the scope intro prose oversells.
+  **Disposition: design-was-right, scope-prose-stale (tolerated).** The genuine win
+  is F-2/F-5 dedup (KINDS now *references* the engine `Kind` consts, no second copy
+  to drift) — that shipped and is real. The missing-membership escape is a known,
+  reflection-bounded limitation governed by C-IV, not new drift. No re-open; logged
+  here so the overstatement is not mistaken for a delivered guarantee.
+
+**Re-audit verdict:** no fix-now code findings; one hardening issue owned (ISS-002),
+one prose overstatement reconciled against design C-IV. Closure stands.

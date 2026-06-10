@@ -1,5 +1,12 @@
 # Kind-identity registry dedup is deferred to SL-031 — do not pre-build it
 
+> **SUPERSEDED 2026-06-10 — SL-031 closed; the dedup landed.** `KindRef` is now a
+> referencing view over the engine `Kind` consts (F-2 raw-copy gone; F-5
+> `has_runtime_state` → `state_dir: Option`). The R-b membership escape is **not**
+> closed — confirmed reflection-bounded (C-IV literal pin, not a set-equality
+> guard). Live state is in [[mem.pattern.entity.numbered-kind-identity-table]].
+> Retained for the deferral rationale; do not act on the "do not pre-build" below.
+
 `integrity::KINDS` hand-copies each numbered kind's `prefix` + `dir` from the
 kind-owning module's `entity::Kind` const (`slice::SLICE_KIND`, `adr::ADR_KIND`,
 `backlog::*_KIND`, `spec::*_SPEC_KIND`, `requirement::REQUIREMENT_KIND`,
