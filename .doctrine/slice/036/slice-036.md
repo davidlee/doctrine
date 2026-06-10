@@ -98,11 +98,31 @@ Out of scope — later slices, named so the boundary is explicit:
   tuple, never incidental map order. `age` is an **adapter-supplied stable
   ordinal**, not wall-clock — the core depends only on it being *total and stable
   across recomputes*; it does not derive it (D5).
-- **OQ (→ /design):** how broad the channel-propagation/combinator API should be
-  in v1 (only what the policy needs vs a fuller algebra) without leaking meaning
-  or foreclosing REQ-080; whether to take a graph dependency (e.g. `petgraph`) or
-  hand-roll a small reverse-index + traversal (H2/the small-corpus posture lean
-  hand-rolled); internal module decomposition.
+- **Node population is heterogeneous and cross-kind (adapter concern, core
+  implication).** The eventual node set spans **backlog items, slices, requirements,
+  and feature/quality aggregates** (a feature/quality = an aggregation *of*
+  requirements). This *reverse-confirms* the opaque-node design — the core never
+  learns a node's kind (D2); mapping each entity kind → opaque node is adapter
+  scope. But the **aggregation** case identifies two things the core must support:
+  - **The tree backbone is the decomposition/membership spine.** SPEC-001's "tree +
+    typed-DAG overlays" — the overlays are `dep`/`seq`; the *tree* is containment
+    (feature ⊇ its requirements; membership/decomposition), distinct from the
+    dependency overlays.
+  - **Propagation needs an upward rollup combinator, not only backward blocking.** A
+    feature's channels aggregate *up* the tree from its child requirements (e.g.
+    `all children actionable`, `any child blocked`, `sum consequence`), whereas
+    blocking propagates *backward over a DAG overlay with `max`*. The v1 channel API
+    must express **both directions** over a small combinator family (max / any / all
+    / sum) — generic, no product nouns — which raises the floor on the
+    combinator-breadth OQ below.
+- **OQ (→ /design):** the combinator-breadth call now has a concrete floor — cover
+  at least {backward-over-overlay, upward-over-tree} with a small aggregate family,
+  without leaking channel *meaning* or foreclosing REQ-080. Open beyond that: whether
+  to take a graph dependency (e.g. `petgraph`) or hand-roll a small reverse-index +
+  traversal (H2/the small-corpus posture lean hand-rolled); internal module
+  decomposition. *May push upward:* the tree-as-membership-spine reading and the
+  cross-kind node population are arguably SPEC-001 / PRD-011 node-model intent — flag
+  for capture there during design rather than burying it in adapter scope.
 
 ## Verification / Closure intent
 
