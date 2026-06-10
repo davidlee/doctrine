@@ -1,7 +1,7 @@
 //! `cordage` — a generic multi-channel evaluation engine over a tree plus typed
 //! directed (DAG) overlays.
 //!
-//! The crate is product-neutral: it carries no `dep`/`seq`/backlog vocabulary and
+//! The crate is product-neutral: it carries no `dep`/`seq`/domain vocabulary and
 //! orders edges by opaque attributes it never interprets. Consumers (doctrine's
 //! policy and adapter layers, and other products) build a [`Graph`] from a
 //! [`GraphBuilder`], then query ordering, reachability, and channel propagation.
