@@ -50,7 +50,7 @@ context   Doctrine entity system            ← doc/entity-model.md seed; no par
 │  ├─ component  Slice entity surface       ← PRD-001 (lifecycle FSM, phases, plans)
 │  ├─ component  ADR entity surface         ← PRD-008
 │  ├─ component  Backlog entity surface     ← PRD-009
-│  └─ component  Governance kinds (POL/STD) ← PRD-010 (shipped subset only)
+│  └─ component  Governance kinds (POL/STD) descent: — (no owning PRD; SL-030/SL-033, ADR-009)
 ├─ container  Spec composition machinery    ← PRD-002 (REQ peers, members, reassembly, validate)
 │  └─ component  Tech-spec spine            ← PRD-012 (descent/parent/c4/anchors — SL-022)
 ├─ container  Memory engine                 ← PRD-004 (doc/memory-spec.md, richest source)
@@ -66,18 +66,25 @@ context   Doctrine entity system            ← doc/entity-model.md seed; no par
   nor with PRDs, and explicitly not a `src/` directory map (repo structure is
   C4 *code* altitude; hand-authoring stops at container/component, PRD-012
   OQ-5).
-- **Capability-complete descent (D2):** every active PRD gets ≥1 descending
-  spec. Where one mechanism realises many PRDs (the entity engine), thin
-  per-capability **component** specs carry the descent, each a child of the
-  engine container, pointing at the parent for shared mechanism — never
-  restating it. `descends_from` is single-valued, so this is the only
-  non-arbitrary wiring.
-- **PRD-011 / PRD-013 already covered** by SPEC-001 / SPEC-002. Retrofit
-  `parent` onto both under the umbrella in PHASE-05 (single-field edits) so
-  the corpus forms one tree, not a forest.
+- **Capability-complete descent (D2, refined post-adversarial):** every PRD
+  **whose mechanism ships** gets ≥1 descending spec. Where one mechanism
+  realises many PRDs (the entity engine), thin per-capability **component**
+  specs carry the descent, each a child of the engine container, pointing at
+  the parent for shared mechanism — never restating it. `descends_from` is
+  single-valued, so this is the only non-arbitrary wiring. **Exemptions are
+  named, not silent:** PRD-010 is active but its `knowledge_record` family is
+  unbuilt — no retrospective spec exists to author; forward-intent authoring
+  is out of scope. The coverage audit (§7) lists exemptions explicitly.
+- **POL/STD have no owning PRD** (PRD-007 orients, does not police; the kinds
+  shipped via SL-030/SL-033 under ADR-009) — their component's descent stays
+  empty, like dispatch.
+- **PRD-011 / PRD-013 already covered** by SPEC-001 / SPEC-002 (forward
+  intent satisfies reachability). Retrofit `parent` onto both under the
+  umbrella in PHASE-05 (single-field edits) so the corpus forms one tree, not
+  a forest.
 - **Excluded:** drift ledger (unbuilt, no PRD — backfill covers shipped
-  mechanism only); same rule trims PRD-010 components to shipped kinds.
-- ~14–16 specs total.
+  mechanism only).
+- ~12–14 new specs (~14–16 corpus incl. SPEC-001/002).
 
 ## 3. Exemplar trio (D3)
 
@@ -87,9 +94,12 @@ Three specs authored end-to-end, one per shape, before any fan-out:
    "context"`, no parent, no descent. Lifts `doc/entity-model.md`'s durable
    content: the storage rule, entity-vs-facet taxonomy, identity/reference
    model, family-specific status vocab, runtime-state boundary, three-layer
-   Rust model (Raw → Entity → Registry). Anchors none/minimal (REQ-085
-   admits anchor-free context specs). Requirements: NF-flavoured invariants
-   (storage rule, outbound-only relations).
+   Rust model (Raw → Entity → Registry). **Altitude filter:** lift shipped
+   reality only — entity-model.md's direction/migration/adjudication content
+   (roadmap, importer stance, spec-driver critique) is *not* shipped how and
+   stays in `doc/*`. Anchors none/minimal (REQ-085 admits anchor-free context
+   specs). Requirements: NF-flavoured invariants (storage rule, outbound-only
+   relations).
 2. **Entity-engine container** — parent = umbrella, descent empty,
    `c4_level = "container"`. Sources: `src/entity.rs` + registry/integrity
    seams (`integrity::KINDS`), `doc/relation-index.md`,
@@ -147,7 +157,8 @@ mem.pattern.build.jail-target-redirect).
 Remaining ~11–13 specs authored from exemplar trio + reconciled skill +
 per-spec source map (map lives in the gitignored phase sheet). Authoring
 order **top-down**: a child's `parent` must resolve, so containers land
-before their components (or ids are reserved first). Collision safety carries
+before their components (or ids are reserved first) — fan-out runs in waves
+(containers, then components), encoded in the phase sheet. Collision safety carries
 from SL-019: each spec its own entity tree; `REQ-NNN` via the atomic mkdir
 claim with bounded retries → cap concurrent authors. Mechanism (Workflow
 fan-out vs serial `/execute`) decided at `/phase-plan`, not design-locked.
@@ -170,8 +181,13 @@ fan-out vs serial `/execute`) decided at `/phase-plan`, not design-locked.
   product specs, no dangling interaction FKs, no orphan REQs, no duplicate
   labels.
 - `spec show` reassembles every spec; spine fields render.
-- **Capability-coverage audit:** every active PRD reachable via ≥1
-  `descends_from` (D2) — checked by registry scan/grep at close.
+- **Capability-coverage audit:** every shipped-mechanism PRD reachable via ≥1
+  `descends_from` (D2) — checked by registry scan/grep at close; exemptions
+  (PRD-010, mechanism unbuilt) listed explicitly, never silently skipped.
+- Verified against code during design (adversarial pass): parent-cycle,
+  self-parent, and second-parent checks ship (src/registry.rs §integrity,
+  SL-022 sweep tests); `validate` tolerates draft descent targets (baseline
+  corpus clean with SPEC-002 → PRD-013 today).
 - Specs flip `draft` → `active` at close
   (mem.pattern.entity.edit-preserving-status-transition).
 - `just check` green; no taxonomy/source-map artifact committed (grep the
