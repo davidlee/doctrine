@@ -38,3 +38,4 @@ handover.md
 .doctrine/memory/embeddings/*
 .doctrine/memory/state/*
 .doctrine/memory/shipped/
+.doctrine/slice/*/inquisition.md
