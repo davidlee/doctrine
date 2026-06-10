@@ -32,6 +32,10 @@ In scope:
 - Ordering the backlog by priority.
 - Bridging a captured item into a scoped slice — the capture→scope hand-off.
 - A forward relation seam linking items to slices, specs, and drift records.
+- Optional priority-engine capture enrichment on an item: hard `needs` / soft `after`
+  item→item ordering edges, and a `triggers` list of architectural prefactor riders.
+  Optional, never required (§4); consumed by the derived priority engine (PRD-011,
+  SPEC-001), minted here.
 
 Out of scope:
 
@@ -133,6 +137,14 @@ Constraints:
   regress the existing entity callers (slice, ADR, spec, memory).
 - An item's status is hand-settable and ungated, consistent with how slices, ADRs, and
   specs ship today.
+- The priority-engine enrichment — `needs`/`after` edges and `triggers` — is optional:
+  no capture path may require it, and an item carrying none is fully captured, surveyed,
+  and (absent triggers) actionability-eligible. The authored field names are
+  capture-surface ergonomics decoupled from the engine's internal overlay vocabulary;
+  classifying `needs`/`after` into the engine's edge species, the glob matcher, the
+  file-set sources, and the actionability mask are all the engine's (SPEC-001), not this
+  spec's. `after`'s `rank` is a pairwise-edge attribute, never the item-level
+  authored-priority scalar (PRD-011 OQ-001).
 
 Invariants:
 
@@ -150,6 +162,10 @@ Invariants:
   default" is a view, never deletion.
 - An item's relation seam is always present, even when empty, so the bridge and linkage
   machinery have a stable attachment point.
+- The priority-engine enrichment is never authored truth the engine writes back: the
+  item authors `needs`/`after`/`triggers`; everything the engine derives from them
+  (actionability, blocking, ordering, the trigger mask) is computed and disposable,
+  never persisted onto the item.
 
 ## 5. Success Measures
 
@@ -313,13 +329,34 @@ inspect view's inbound-completeness claim is the registry-backed surface's to ma
 the sync-free reader's; reverse lookup is correct-but-uncached until the feature DAG
 lands.)
 
-OQ-007 — **open** (raised by PRD-011 / SPEC-001 D4·D6) — should the backlog relation
-seam admit new **authored** capture schema that PRD-011's derived priority engine
-depends on: (1) two typed dependency edge kinds — a hard `dep` (dependency/blocked) and
-a soft `seq` (sequencing/priority preference) carrying an int `rank` — extending §2's
-"forward relation seam"; and (2) an architectural-trigger field `{ globs, note }` holding
-an item non-actionable until a planned/touched file set matches (SPEC-001 D6). These are
-capture surface (this spec's §2/FR territory), not graph mechanism, so SPEC-001 consumes
-them but does not mint them. Blocks SPEC-001 FR-005 (REQ-096) and the D6 trigger mask
-(REQ-093). Must stay consistent with §4's "capture must never require dependency
-modelling" — the edges are optional enrichment, not mandatory fields.
+(OQ-007 — the **authored** priority-engine capture schema (raised by PRD-011 /
+SPEC-001 D4·D6) — is resolved: the backlog item seam admits it, as **optional**
+enrichment minted here and consumed by SPEC-001. Recorded in §2, §4, and the new
+FR-010 (`REQ-097`) / FR-011 (`REQ-098`). The shape was settled on agent-UX grounds —
+token cost, traversability, self-describing authored names:
+
+- **Edges (FR-010 / `REQ-097`).** Two optional item→item edges on the outbound seam:
+  a hard `needs` (payload-free id list — blocked until those land) and a soft `after`
+  (inline-table list `{ to, rank }` — prefer this item after those). Both live in the
+  item's one relation block (one read, greppable); `after` is an inline-table list, not
+  a sister file or block-tables, so it stays one line per edge and the array order is
+  the adapter's stable `age` source (SPEC-001 D5). **The authored names deliberately do
+  not leak the engine's `dep`/`seq` overlay vocabulary** — that classification is
+  policy/adapter's (SPEC-001 D4). Optional throughout (§4): an edgeless item still
+  surveys by derived consequence + fallback, so PRD-011 §4 "capture must never require
+  dependency modelling" holds.
+- **Triggers (FR-011 / `REQ-098`).** An optional `triggers` **list** of `{ globs, note }`
+  riders. A **list**, not one field, so an item can rider several independent code
+  surfaces each with its own note; the engine masks the item non-actionable until a
+  file set matches ≥1 entry's globs and surfaces that entry's note (SPEC-001 D6). The
+  matcher, file-set sources, and mask are SPEC-001's; this spec mints only the field.
+  Promotes IMP-013/014's coarse `trigger` tag to typed structure.
+- **rank scope.** `after`'s `rank` is a **pairwise-edge** attribute (preference
+  strength), categorically distinct from the still-open **item-level** authored-priority
+  scalar (PRD-011 OQ-001, FR-006/`REQ-054`). OQ-007 mints only the edge attribute;
+  OQ-001 stays open and, when it lands, must not reuse a bare `rank` for the item scalar
+  — the two are different scopes (edge vs node), not one field.
+
+Unblocks SPEC-001 FR-005 (`REQ-096`) and the D6 trigger mask (`REQ-093`), which consume
+this schema. SPEC-001's D4/D6/REQ-093 wording, written against a singular `trigger`
+field, should be reconciled to the `triggers` list when SPEC-001 next moves.)
