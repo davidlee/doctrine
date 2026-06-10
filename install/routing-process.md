@@ -9,6 +9,7 @@ When unsure, route to the stricter skill. No code without an approved plan.
 |---|---|
 | Correctness depends on project governance / unfamiliar subsystem / "right way?" | `/canon` + `/retrieve-memory` |
 | Substantive work, path not yet clear | `/preflight` |
+| Understand / audit an existing artifact, no change intended | `/walkthrough` (no slice) |
 | Code-changing intent, no governing slice | `/slice` |
 | Slice exists, design missing / stale / unapproved | `/design` → `/inquisition` |
 | Design locked, no plan | `/plan` |
@@ -22,6 +23,9 @@ Latent **work** intent (issue / improvement / chore / risk / idea) → `backlog
 new` instead of losing it; check `backlog list` at the start of substantive work
 (already captured?). Work vs knowledge vs decision boundary: `using-doctrine.md`.
 Finished a coherent unit → `/notes`. Handing off to fresh context → `/next`.
+**Pairing / walkthrough are conduct postures**, orthogonal to the stage — layer
+them on the routed stage, don't route to them *instead* of it. A walkthrough that
+surfaces a concrete change re-enters `/route`.
 
 **Core process:** `slice new` (scope) → `slice design` (author + adversarial
 review until locked) → `slice plan` → `slice phases` → per phase: `phase-plan`
