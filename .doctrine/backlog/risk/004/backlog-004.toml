@@ -1,0 +1,28 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 4
+slug = "cordage-evaluate-channel-eval-is-quadratic-ovve-per-node-reachable-bfs"
+title = "cordage evaluate() channel eval is quadratic O(V*(V+E)) per-node reachable BFS"
+kind = "risk"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-11"
+tags = ["cordage", "scale"]
+
+[facet]                         # risk only — every field typed; seeded empty
+likelihood = "medium"           # low | medium | high | critical
+impact     = "medium"           # low | medium | high | critical
+origin     = "SL-036 post-close perf review 2026-06-11 (codex GPT-5.5 + Opus, independent agreement). Not previously filed — distinct from [[RSK-002]] (explain enumeration) and [[RSK-003]] (build-pipeline recursion/eviction); this is a query-time channel-eval cost"
+controls   = [
+  "query.rs:256 evaluate() runs a fresh full reachable() BFS once per node -> O(V*(V+E)); a single channel eval over tens-of-thousands of nodes is ~10^9 ops (seconds-to-minutes)",
+  "exposure nil at H1/H2: all VT fixtures <=5 nodes; gated on the first consumer evaluating channels over a large real graph",
+  "fix direction: single reverse-topo fold per overlay (process nodes in topo order, combine each node's seed with already-folded successors) -> one O(V+E) pass for the idempotent combinators, no per-node re-search",
+  "quantify in the perf spike (handover Task 2) alongside [[RSK-002]]/[[RSK-003]]; not a recursion/overflow risk — pure complexity",
+]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-036"]
+specs  = ["SPEC-001"]
+drift  = []

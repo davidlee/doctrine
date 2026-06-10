@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 3
+slug = "cordage-explain-foreign-node-id-returns-singleton-chains-rustdoc-says-empty-paths"
+title = "cordage explain() foreign node id returns singleton chains, rustdoc says empty paths"
+kind = "issue"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-11"
+tags = ["cordage"]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-036"]
+specs  = []
+drift  = []

@@ -9,7 +9,7 @@ status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-10"
 updated = "2026-06-11"
-tags = ["cordage", "scale", "recursion"]
+tags = ["cordage", "scale", "recursion", "quadratic"]
 
 [facet]                         # risk only — every field typed; seeded empty
 likelihood = "medium"           # low | medium | high | critical
@@ -20,6 +20,8 @@ controls   = [
   "PHASE-02 explicitly deferred iterative Tarjan as non-concern at H1/H2 (phase-02.md:47); that deferral is void once depth exceeds a few thousand",
   "no current exposure: all VT fixtures are shallow (<=3 nodes); gated on the first consumer feeding deep real graphs",
   "fix direction: explicit-stack iterative rewrite of both functions (mechanical); red test = deep-chain generator in the perf spike",
+  "EMPIRICALLY CONFIRMED in SL-036 post-close review 2026-06-11 (Opus probe, deleted; codex agrees): both sites SIGABRT (rc 134) at chain depth ~80k — INSIDE the tens-of-thousands target scale, not beyond it; the two overflows are independent (level_of overflows on a clean acyclic chain without any cycle present)",
+  "SECONDARY QUADRATIC (distinct from the overflow, same risk): the eviction-to-fixpoint passes pass2_evict (resolve.rs:198) and evict_layer_cycles (resolve.rs:478) recompute a full SCC pass (cyclic_components/Tarjan) per evicted edge -> O(E*(V+E)). Measured ~quadratic: 3.5s at 100 nodes/9.9k edges, 59s at 200 nodes/39.8k edges (~17x for 4x edges). participates (resolve.rs:224) linearly rescans all cyclic components per candidate, compounding it. Fix: evict all safe minimal participants in one SCC pass, or incrementally re-test only the affected component instead of restarting Tarjan each round",
 ]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
