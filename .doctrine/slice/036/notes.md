@@ -91,3 +91,38 @@ enumeration blowup (F47 bounds termination, NOT combinatorics — predecessor
 sub-DAG still the fix direction), full-downstream taint extent, pre-consumer
 API churn. Assessment: diminishing reached; findable-by-review surface looks
 exhausted — remaining unknowns belong to the first consumer. Recommend lock.
+
+## PHASE-01 implementation (2026-06-10) — crate skeleton & model contract
+
+Shipped `crates/cordage` as the second workspace member: full §5.2 declarative
+vocabulary, `GraphBuilder → build() → Graph`, build-input validation
+(F14/F22/F38), BTree adjacency with a derived reverse index, and `out_edges`/
+`in_edges`. **No resolution passes** (arity/cycle/U/order_key) — those are
+PHASE-02+. 16 tests across construction / build_validation / adjacency; whole
+`just check` green.
+
+Load-bearing decisions (also in the phase sheet):
+- **D(A-2) flat crate-root public API.** All public types in `lib.rs` root
+  (`cordage::NodeId`, not `cordage::model::NodeId`). Forced by `pub_use` deny —
+  the only route to a flat re-export-free API — and it dodges
+  `module_name_repetitions` (`graph::Graph`). The payoff is **path stability**:
+  PHASE-02+ logic moves into *private* modules (child modules read the root's
+  private fields), public type paths never move.
+- **Opaque-token discipline.** `NodeId`/`OverlayId` have no public ctor and no
+  ordinal accessor; tests mint foreign ids from a *sibling* builder. Value types
+  (`EdgeAttrs`/`OverlayConfig`/`ChannelSpec`) expose `new` + accessors.
+- **Adjacency Ord is explicit (F21).** Private `OutEdge`/`InEdge` with hand-written
+  `Ord` over `(dst,rank,age)` / `(src,rank,age)`; `BTreeSet` membership gives the
+  A-4 identical-edge dedupe for free (key spans all fields). Kept as two structs
+  deliberately — collapsing them would re-hide the per-direction key.
+- **OrderSpec validated then discarded** this phase (storing an unread field trips
+  `dead_code`); PHASE-03 re-stores it as the first consumer of order composition.
+
+Carry-forward for PHASE-02 (`/phase-plan` reading):
+- `GraphBuilder` keeps `overlays: Vec<OverlayConfig>` (config contents currently
+  read only via accessors); the arity pass will read `.arity()`/`.cycle_policy()`.
+- `Graph` stores only `out`/`incoming` indices today. Pass-1/2 will need node
+  count + per-overlay configs threaded into `Graph` (or computed in `build()`
+  before the indices) — neither is stored yet.
+- `BuildError` has no `Display`/`Error` impl yet (deferred — would need a `NodeId`
+  Display or a `use_debug`-denied `{:?}`); add when a consumer propagates via `?`.

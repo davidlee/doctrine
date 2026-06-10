@@ -41,6 +41,7 @@ workspace = true
 resolver = "3"
 members = [
     ".",
+    "crates/cordage",
 ]
 
 [workspace.package]
