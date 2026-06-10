@@ -34,7 +34,15 @@ Emit a single non-blocking **stderr** line when `doctrine memory record
 
 ## Summary
 
-(to be completed at close)
+Shipped (commit `a39154d`). `run_record` (`src/memory.rs`) now emits one
+non-blocking stderr advisory when a `--type thread` record succeeds — the thread
+is hidden from `find`/`retrieve` until `verify`d on a clean tree (SL-008 D6). A
+pure `thread_hidden_notice(memory_type, reference)` helper decides and formats
+the line (key if present, else uid); the shell only writes it, mirroring the
+linked-worktree stderr warning. Stdout's machine-readable success line is
+unchanged; non-thread records are silent. No read-path edit — the SL-008
+retrieval suites stayed green unchanged. Audit (`audit.md`): 8 findings, all
+aligned. Resolves backlog IMP-011 (resolved · done).
 
 ## Follow-Ups
 

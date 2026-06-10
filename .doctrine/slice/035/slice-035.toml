@@ -1,7 +1,7 @@
 id = 35
 slug = "thread-record-hidden-nudge"
 title = "Record-time stderr nudge for hidden thread memories"
-status = "proposed"
+status = "done"
 created = "2026-06-10"
 updated = "2026-06-10"
 
