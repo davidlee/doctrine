@@ -27,6 +27,11 @@ order = 5
 requirement = "REQ-095"
 label = "NF-002"
 order = 6
+
+[[member]]
+requirement = "REQ-096"
+label = "FR-005"
+order = 7
 # Members — the requirements this spec is woven from.
 # Seeded empty; `spec req add` (PHASE-03) appends rows edit-preservingly:
 #   [[member]]
