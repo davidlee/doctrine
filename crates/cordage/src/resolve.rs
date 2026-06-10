@@ -7,8 +7,8 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    Arity, CycleDiagnostic, CyclePolicy, EdgeAttrs, EdgeRef, EvictReason, EvictedEdge, NodeId,
-    OverlayConfig, OverlayId, Provenance, RawEdge,
+    Arity, CycleDiagnostic, CyclePolicy, Direction, EdgeAttrs, EdgeRef, EvictReason, EvictedEdge,
+    Level, NodeId, OrderKey, OrderSpec, OutIndex, OverlayConfig, OverlayId, Provenance, RawEdge,
 };
 
 /// An edge inside a single overlay's working set. Ordered by the F17 **eviction
@@ -377,9 +377,230 @@ fn flatten(working: &BTreeMap<OverlayId, BTreeSet<Edge>>) -> Vec<RawEdge> {
 /// Sort provenance for deterministic reporting (F21): evictions by
 /// `(overlay, edge)`, cycles by `(overlay, nodes)`. Distinct from the F17
 /// selection key used during eviction (F37).
-fn sort_provenance(provenance: &mut Provenance) {
+pub(crate) fn sort_provenance(provenance: &mut Provenance) {
     provenance.evictions.sort_by_key(|e| (e.overlay, e.edge));
     provenance
         .cycles
         .sort_by(|a, b| (a.overlay, &a.nodes).cmp(&(b.overlay, &b.nodes)));
+}
+
+// ── passes 3–4: cross-layer order composition (design §5.4) ──────────────────
+// Pass 3 composes the order structure `U` — a DAG SEPARATE from the overlay edge
+// sets (I7/F18). Layers are walked in precedence order; each layer's resolved
+// edges are oriented and batch-inserted, then U cycles are broken by evicting the
+// F17-minimal LAYER-k edge to fixpoint (F10) — earlier layers are never evicted
+// against (I2). Pass 4 reads the acyclic U: a longest-path level total over all
+// nodes (no sentinel, F12), tainted by descent from the spec-referenced degraded
+// SCCs (F31). U eviction reuses `cyclic_components`/`participates`/`Edge` Ord —
+// no second Tarjan, no second selection key.
+
+/// The composed-order outcome: per-node keys (pass 4) and the cross-layer
+/// `UnionCycleVsLayer` evictions (pass 3).
+pub(crate) struct ComposeOutcome {
+    pub order_keys: BTreeMap<NodeId, OrderKey>,
+    pub evictions: Vec<EvictedEdge>,
+}
+
+/// Compose `U` and materialise order keys. `out` is the RESOLVED adjacency (post
+/// passes 1–2); `degraded` the post-arity degraded SCCs (F46). Evictions touch
+/// `U` only — the overlay edge sets are untouched (I7).
+pub(crate) fn compose_order(
+    out: &OutIndex,
+    spec: &OrderSpec,
+    degraded: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
+    node_count: u32,
+) -> ComposeOutcome {
+    let mut u: BTreeSet<Edge> = BTreeSet::new();
+    let mut evictions: Vec<EvictedEdge> = Vec::new();
+
+    for layer in &spec.layers {
+        let overlay = layer.overlay;
+        let scc = degraded.get(&overlay);
+        let mut layer_k: BTreeSet<Edge> = BTreeSet::new();
+        for edge in overlay_edges(out, overlay) {
+            // Withhold an intra-SCC edge of a degraded overlay (F32/F46); a
+            // boundary-crossing edge still enters U so taint can reach dependents.
+            if let Some(components) = scc {
+                if participates(&edge, components) {
+                    continue;
+                }
+            }
+            let oriented = orient(edge, layer.direction);
+            u.insert(oriented);
+            layer_k.insert(oriented);
+        }
+        evict_layer_cycles(&mut u, &mut layer_k, overlay, &mut evictions);
+    }
+
+    let order_keys = materialize_keys(&u, spec, degraded, node_count);
+    ComposeOutcome {
+        order_keys,
+        evictions,
+    }
+}
+
+/// The resolved edges of one overlay, lifted from the adjacency index into the
+/// F17-ordered working `Edge` (so U eviction reuses `.min()`/`participates`).
+fn overlay_edges(out: &OutIndex, overlay: OverlayId) -> BTreeSet<Edge> {
+    let mut set: BTreeSet<Edge> = BTreeSet::new();
+    if let Some(by_src) = out.get(&overlay) {
+        for (&src, outs) in by_src {
+            for oe in outs {
+                set.insert(Edge {
+                    src,
+                    dst: oe.dst,
+                    rank: oe.rank,
+                    age: oe.age,
+                });
+            }
+        }
+    }
+    set
+}
+
+/// Orient a resolved edge per the layer direction. `Against` reverses; `Along`
+/// keeps. `None` is validated out before build, so it cannot reach here.
+fn orient(edge: Edge, direction: Direction) -> Edge {
+    match direction {
+        Direction::Against => Edge {
+            src: edge.dst,
+            dst: edge.src,
+            rank: edge.rank,
+            age: edge.age,
+        },
+        Direction::Along | Direction::None => edge,
+    }
+}
+
+/// Evict the F17-minimal LAYER-k edge in any U cycle, to fixpoint (F10). Only
+/// `layer_k` is evictable, so earlier-layer authority holds (I2); each step
+/// removes an edge → terminates.
+fn evict_layer_cycles(
+    u: &mut BTreeSet<Edge>,
+    layer_k: &mut BTreeSet<Edge>,
+    overlay: OverlayId,
+    evictions: &mut Vec<EvictedEdge>,
+) {
+    loop {
+        let components = cyclic_components(u);
+        if components.is_empty() {
+            break;
+        }
+        let victim = u
+            .iter()
+            .filter(|e| layer_k.contains(*e) && participates(e, &components))
+            .min()
+            .copied();
+        let Some(victim) = victim else {
+            break;
+        };
+        u.remove(&victim);
+        layer_k.remove(&victim);
+        evictions.push(EvictedEdge {
+            overlay,
+            edge: victim.to_ref(),
+            reason: EvictReason::UnionCycleVsLayer,
+        });
+    }
+}
+
+/// Pass 4: per-node [`OrderKey`] from the longest-path level over the acyclic `U`
+/// (total over `0..node_count`, F12) and the taint set (F31/F32).
+fn materialize_keys(
+    u: &BTreeSet<Edge>,
+    spec: &OrderSpec,
+    degraded: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
+    node_count: u32,
+) -> BTreeMap<NodeId, OrderKey> {
+    let levels = longest_levels(u, node_count);
+    let tainted = taint(u, spec, degraded);
+    let mut keys: BTreeMap<NodeId, OrderKey> = BTreeMap::new();
+    for ordinal in 0..node_count {
+        let node = NodeId(ordinal);
+        let depth = levels.get(&node).copied().unwrap_or(0);
+        let level = if tainted.contains(&node) {
+            Level::Degraded(depth)
+        } else {
+            Level::Finite(depth)
+        };
+        keys.insert(node, OrderKey { level, node });
+    }
+    keys
+}
+
+/// Longest-path level over the acyclic `U`: `0` with no predecessor, else
+/// `1 + max(level(pred))`. Memoised; total over `0..node_count`.
+fn longest_levels(u: &BTreeSet<Edge>, node_count: u32) -> BTreeMap<NodeId, u32> {
+    let mut preds: BTreeMap<NodeId, BTreeSet<NodeId>> = BTreeMap::new();
+    for e in u {
+        preds.entry(e.dst).or_default().insert(e.src);
+    }
+    let mut cache: BTreeMap<NodeId, u32> = BTreeMap::new();
+    for ordinal in 0..node_count {
+        level_of(NodeId(ordinal), &preds, &mut cache);
+    }
+    cache
+}
+
+fn level_of(
+    node: NodeId,
+    preds: &BTreeMap<NodeId, BTreeSet<NodeId>>,
+    cache: &mut BTreeMap<NodeId, u32>,
+) -> u32 {
+    if let Some(&cached) = cache.get(&node) {
+        return cached;
+    }
+    let level = match preds.get(&node) {
+        None => 0,
+        Some(parents) => {
+            let mut best = 0;
+            for &parent in parents {
+                best = best.max(level_of(parent, preds, cache).saturating_add(1));
+            }
+            best
+        }
+    };
+    cache.insert(node, level);
+    level
+}
+
+/// The taint set: seeds = degraded SCC members of spec-referenced overlays only
+/// (F31), propagated forward over `U` to every descendant (F32). Empty when no
+/// spec overlay is degraded.
+fn taint(
+    u: &BTreeSet<Edge>,
+    spec: &OrderSpec,
+    degraded: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
+) -> BTreeSet<NodeId> {
+    let mut tainted: BTreeSet<NodeId> = BTreeSet::new();
+    let mut stack: Vec<NodeId> = Vec::new();
+    for layer in &spec.layers {
+        if let Some(components) = degraded.get(&layer.overlay) {
+            for component in components {
+                for &node in component {
+                    stack.push(node);
+                }
+            }
+        }
+    }
+    if stack.is_empty() {
+        return tainted;
+    }
+    let mut succ: BTreeMap<NodeId, BTreeSet<NodeId>> = BTreeMap::new();
+    for e in u {
+        succ.entry(e.src).or_default().insert(e.dst);
+    }
+    while let Some(node) = stack.pop() {
+        if !tainted.insert(node) {
+            continue;
+        }
+        if let Some(children) = succ.get(&node) {
+            for &child in children {
+                if !tainted.contains(&child) {
+                    stack.push(child);
+                }
+            }
+        }
+    }
+    tainted
 }
