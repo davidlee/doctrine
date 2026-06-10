@@ -112,3 +112,5 @@ nixos; bubblewrap jails (mounted into /workspace/*).
 
 Always READ before WRITE of any substantial edit (e.g. filling a
 template) to avoid expensive write failure.
+
+default reviewer: codex mcp - use default (GPT-5.5) for external adversarial reviews. Opus sub-agent is also useful for variety on subsequent passes.
