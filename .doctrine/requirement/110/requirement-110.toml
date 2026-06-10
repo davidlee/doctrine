@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 110
+slug = "compute-per-requirement-composite-coverage-as-a-derived-view"
+title = "Compute per-requirement composite coverage as a derived view"
+status = "pending"
+kind = "functional"
+
+description = "The per-requirement composite coverage is computed as a derived view over its entries, never persisted as a stored scalar."
+tags = []
+acceptance_criteria = [
+  "Composite coverage for a requirement is computed on read by folding its entries across contributing changes.",
+  "No composite coverage value is persisted as authored truth.",
+  "The fold is deterministic for the same entries at a given ref.",
+]

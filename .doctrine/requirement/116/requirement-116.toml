@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 116
+slug = "keep-reconciliation-outcomes-diffable-and-reconstructable-from-the-authored-tier"
+title = "Keep reconciliation outcomes diffable and reconstructable from the authored tier"
+status = "pending"
+kind = "quality"
+
+description = "Every reconciliation outcome is diffable and reconstructable from the authored tier alone."
+tags = []
+acceptance_criteria = [
+  "Each reconciled change is committed and diffable in the authored tier.",
+  "The REC plus commits are sufficient to reconstruct why a requirement holds its current authored status.",
+  "Reconstruction needs no recourse to chat history or disposable runtime state.",
+]

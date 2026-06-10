@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 113
+slug = "enforce-the-closure-gate-by-default-refusing-residual-drift-with-a-recorded-override"
+title = "Enforce the closure gate by default-refusing residual drift with a recorded override"
+status = "pending"
+kind = "functional"
+
+description = "The closure gate default-refuses a terminal transition while owning specs carry residual drift, overridable only by a recorded reconciliation act."
+tags = []
+acceptance_criteria = [
+  "A slice with outstanding unreconciled drift on its owning specs is refused a terminal status.",
+  "An override is admitted only as a reconciliation act (a REC recording accepted residual drift with rationale).",
+  "The reconcile->done topology edge stays hard-enforced (ADR-009 F12), independent of the drift check.",
+]
