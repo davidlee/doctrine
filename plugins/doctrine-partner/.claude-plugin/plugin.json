@@ -1,0 +1,5 @@
+{
+  "name": "doctrine-partner",
+  "version": "0.1.0",
+  "description": "Doctrine's collaboration skills alone — pair programming and guided walkthroughs with a human in the loop, always a challenging partner. A standalone subset of the doctrine plugin; install one or the other, not both."
+}
