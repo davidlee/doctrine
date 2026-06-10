@@ -1,0 +1,41 @@
+memory_uid = "mem_019eaf93b62276a3b36afafb11baa27b"
+memory_key = "mem.thread.sl-031.kind-registry-dedup"
+schema_version = 1
+memory_type = "thread"
+status = "active"
+title = "Kind-identity registry dedup is deferred to SL-031 — do not pre-build it"
+summary = "KINDS/entity::Kind dedup (review F-2/F-5) is deferred to SL-031 — don't pre-build the registry"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[scope]
+paths = ["src/integrity.rs"]
+globs = ["src/*.rs"]
+commands = ["validate", "reseat"]
+tags = ["entity-engine", "sl-031", "id-allocation", "review-debt"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "58ff9807fb73dbe55b9cc4287d68e54296ede668"
+ref_name = "refs/heads/main"
+checkout_state_id = "4e25c39cdcc3f0a1af3c9fa8de7fabba7cbc9a7eb4b14a9fc3e4d15e724fa3ed"
+base_commit = "7af399df8f403f13e72b5ebb91c3b9e340ac4554"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
