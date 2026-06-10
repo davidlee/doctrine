@@ -243,8 +243,45 @@ whole suite still green (behaviour preservation — T1 only adds a field).
   — chosen for natural reading order, asserted in the test. Cycle-safe (visited
   re-entry break). → spine half of VT-1.
 
-Carry-forward to T5 (`evaluate`, the F34 split) — still TODO: the per-combinator-
-class fold (Any/All/Max over `{n}∪reachable`, CountDistinct over STRICT reachable),
-the seed contract + diagnostics (UnknownSeedNode-wins, ≤1/node, sorted), per-
-combinator `Direction::None` (F35), contributors (F21/F43). Then T6 REQ-080 seam,
-T7 refactor. `query::reachable` is the shared traversal T5 folds over.
+### T5–T7 (2026-06-11) — evaluate, REQ-080 seam, refactor
+
+`evaluate` + the REQ-080 doc-seam landed; `tests/channels.rs` (9 tests, VT-1
+channel half + VT-2..8) green, whole `just check` green (exit 0). PHASE-04
+complete.
+
+- **T5 `evaluate(spec, &seeds) -> Channel`, the F34 split.** Per node over
+  `0..node_count`: `reach = query::reachable(...)`; `fold_node` dispatches on
+  combinator. Fold set: idempotent (`Any`/`All`/`Max`) fold `{n} ∪ reach` via
+  `idempotent_members` (`once(n).chain(reach)` — `n` never in strict reach, no
+  dedup); `CountDistinct` folds STRICT `reach` only. **`Direction::None` needs no
+  special branch** — `reachable(_,None)=∅` collapses the idempotent fold set to
+  `{n}` (own seed, F35) and the CountDistinct set to `∅` (absent, F35). One match
+  arm, no per-direction conditionals.
+- **Seed contract single-sourced in `vet_seeds`** (T7 target, done up front):
+  splits the seed map into effective seeds + diagnostics in ONE pass.
+  UnknownSeedNode checked BEFORE the variant check → wins (F41). Diagnostics come
+  out NodeId-sorted for free (seeds is a `BTreeMap`). Effective = known node AND
+  in-domain variant; everything else contributes nothing to any fold.
+- **Absence vs identity (F16/F45):** a fold returns `None` ⇒ node absent from
+  `values` (no fabricated identity escapes). `Count(0)`/`Flag(false)` only when a
+  present-but-false seed exists in the fold set — `true_witnesses` returns
+  `Some(∅)` (present, no trues) vs `None` (nothing present) to carry exactly that
+  distinction.
+- **Contributors (F21/F43):** Any→present-true witnesses; All→present-false set
+  if false / present-true set if true; Max→single argmax (`value>best || (==  &&
+  node<best_node)` — min-NodeId tie, iteration-order-independent); CountDistinct→
+  the counted set. Only non-empty contributor sets are stored (accessor masks
+  missing→empty).
+- **T6 REQ-080 seam:** `Combinator` doc-marked as the one curated extension point
+  — a fresh channel is `(combinator, overlay, direction)` in the caller's hand, no
+  core edit; adding a *variant* is the only core-touching channel change. VT-8
+  composes two distinct fresh channels (Any/Against "flagged ancestor", Max/Along
+  "max priority") over one graph, no new variant.
+- **T7 refactor:** extracted `true_witnesses(members, effective) -> Option<
+  BTreeSet>` — the present-true gather shared verbatim by `fold_any` (idempotent
+  members) and `fold_count` (strict reach), differing only in fold set and output
+  projection (`Flag(!empty)` vs `Count(len)`). `fold_all`/`fold_max` stay distinct
+  (two-set / scalar-argmax shapes don't share cleanly). Diagnostic precedence was
+  already single-point in `vet_seeds`.
+
+EX-1..7 all met; VT-1..9 all covered. Ready for `/audit`.
