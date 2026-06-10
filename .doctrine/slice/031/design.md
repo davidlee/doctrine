@@ -112,14 +112,18 @@ that closes it.
    ├─ per worker (concurrent):
    │    /worktree mode=worker → git worktree add @B → provision → baseline✓
    │    Agent isolation:worktree, env DOCTRINE_WORKER=1, pre-distilled prompt (D6)
-   │        worker: mutate SOURCE only → run verify cmd → git commit to fork branch
-   │                → return structured report (NOT a doctrine write)
+   │        worker: mutate SOURCE only → run verify cmd → ONE non-merge commit S
+   │                to fork branch (S descended from B) → return report (NOT a doctrine write)
    └─ funnel per BATCH (D7, strict order — the cadence is the batch, not the worker):
-        import   REJECT any delta touching .doctrine/ authored trees (R-5 belt) →
-                 apply EVERY surviving delta onto B, NON-committing
-                 (cherry-pick -n / git apply — shared object store)
-        verify   run the project verify cmd on the combined working tree
-        guard    branch-point-check --base B   (HEAD still == B? else re-dispatch)
+        precond  coordination worktree+index CLEAN and HEAD == B (X-1 guard) else abort
+        delta    each worker = the net diff B..S (S = one non-merge commit, ancestry
+                 of B validated) — a NET DIFF, never a commit replay, so the R-5
+                 belt-check and the import-effect are the SAME object (X-2)
+        import   REJECT any delta whose B..S changed-paths touch .doctrine/ (R-5 belt) →
+                 `git apply` EVERY surviving net-diff onto B, NON-committing
+        verify   run the project verify cmd on the combined working tree; on RED →
+                 re-verify each delta alone to NAME the offender (X-3) → report+halt
+        guard    head-unmoved-check --base B   (HEAD still == B? else re-dispatch)
         commit   ONE batch commit on the coordination branch  → HEAD = B+1
         record   memory / AC evidence / notes — trails the confirmed commit
    next batch forks from B+1.  conflict during import = batching error → report+halt.
@@ -183,8 +187,11 @@ more than the ref compare.
 - MUST NOT degrade to work-in-place (a worker with no real fork is a hard abort;
   the funnel's isolation is mandatory).
 - Worker mutates source only; runs the orchestrator-supplied verify command;
-  **commits the source change to its fork branch** (a raw `git commit` — *not* a
-  doctrine-mediated write, so D2a does not refuse it); returns a structured report.
+  **commits the source change to its fork branch as exactly ONE non-merge commit
+  `S` descended from `B`** (a raw `git commit` — *not* a doctrine-mediated write,
+  so D2a does not refuse it). `S` is the importable delta unit (X-2): multi-commit,
+  merge, or rebased forks are a contract violation the orchestrator rejects before
+  import. Returns a structured report.
 - Outputs add `{ fork_branch, head_sha_after }` to the SL-029 output shape.
 
 **B — `/dispatch` skill** (fill placeholder): orchestrator-sole-writer remit;
@@ -238,8 +245,28 @@ step therefore **rejects any worker delta whose changed-path set intersects
 `.doctrine/` authored trees** → report+halt. This belt is sound where the env is
 not, because the **orchestrator** runs it — worker-mode OFF, the trusted sole
 writer — not the guarded party; and it is mechanically checkable
-(`git diff --name-only B..<fork> | grep '^.doctrine/'`), VA conformance on the
+(`git diff --name-only B..S | grep '^.doctrine/'`), VA conformance on the
 trusted side.
+
+**Import unit & git semantics (X-1/X-2/X-3 — external pass 3).** The funnel pins
+three things the earlier passes left to "cherry-pick -n / git apply":
+- **X-1 clean precondition.** `head-unmoved-check` asserting `HEAD == B` is *not*
+  enough — an uncommitted dirty index/worktree on the coordination branch would be
+  swept into the batch commit while the sha guard still passes. Before import the
+  orchestrator asserts the coordination worktree **and index are clean** (and again
+  that `HEAD == B`); a dirty tree aborts, never commits.
+- **X-2 net-diff, not replay.** The delta imported is the **net diff `B..S`**
+  applied with `git apply` (non-committing), *not* a `cherry-pick` of fork history.
+  This makes the R-5 belt-check (`git diff --name-only B..S`) and the actual
+  import-effect the **same object** — closing the gap where a multi-commit fork
+  could replay a policy-unchecked intermediate commit, stop on a merge commit, or
+  diverge from the net-diff the belt inspected. `S` is one non-merge commit
+  (§5.2); ancestry of `B` is validated before apply.
+- **X-3 failure isolation.** File-disjoint removes *git* conflicts, not *semantic*
+  coupling (an API change in one file, a caller in another — both green alone, red
+  combined). When the combined `verify` goes RED the orchestrator **re-runs verify
+  against each delta alone** (the forks are already isolated) to name the offending
+  worker, then report+halts. "report+halt" is no longer blind.
 
 **Branch-point under concurrency (D5 extended).** SL-029's single-tree check guards
 *creation* (fork HEAD == source HEAD post-create). SL-031 adds the check at the
@@ -361,7 +388,7 @@ All resolved in `/design` (2026-06-10):
 
 | Item | Class | Evidence |
 |---|---|---|
-| Trunk-aware minting wired | VT | e2e: two divergent worktrees mint non-colliding ids; `next_id(local,&[])` unchanged |
+| Trunk-aware minting wired | VT | e2e: two divergent worktrees **with a resolvable trunk** mint non-colliding ids; `next_id(local,&[])` unchanged. **Scope caveat (pass 3):** with no resolvable trunk (`trunk_entity_ids`→`[]`, `git.rs:589`) minting degrades to local-only (accepted R-2) — the no-collision guarantee holds only where a trunk ref resolves |
 | Kind registry dedup (F-2/F-5) | VT | F-2 (the copy) *closed* — `KINDS` references the consts; `reseat` uses `state_dir`; existing suites green unchanged. The membership test pins `KINDS` against a hand-written prefix literal (no `Kind` const-spine exists to reflect over, C-IV); R-b (forcing a new kind in) stays a **hand-maintained pin**, same posture as today |
 | `branch-point-check` verb | VT | pure `matches(base,head)` table; e2e exit-0/1 over the built binary |
 | Worker-mode refuses authored writes (D2a) | VT mech + VA activation | guard mechanism covered (`tests/e2e_worker_guard.rs`); but activation **fails OPEN** — no `Agent` env seam, worker self-arms the var (C-I). Sound belt = R-5 import-reject below |
@@ -466,5 +493,45 @@ registry guard is honestly re-stated as a hand-maintained pin (not a reflective
 guard). **Q2** — import-time `.doctrine/`-path reject is **in SL-031** (§5.4 belt,
 R-5, §9 row; orchestrator-side, the trusted writer runs it). **Q3** — batching
 contract is **file-disjoint + serial fallback** (§5.1/§5.4). **Q4** — §9 D2a row
-re-classed VT-mechanism / VA-activation, fail-open disclosed. Pass-2 leaves the
-design internally consistent; no open blockers remain before lock.
+re-classed VT-mechanism / VA-activation, fail-open disclosed.
+
+### Adversarial pass 3 (2026-06-10) — external (codex MCP, gpt-5.2); read-only
+
+An independent external reviewer attacked the pass-1/2 survivors. Six findings;
+**five integrated**, one is an open design fork (X-4). The reviewer's verdict
+("not safe to lock") is accepted for the integrated items; lock waits on X-4.
+
+- **X-1 (was BLOCKER) — fake clean-tree guard.** `head-unmoved-check` asserts
+  `HEAD == B` only; an uncommitted dirty index/worktree on the coordination branch
+  is swept into the batch commit while the sha guard passes. **Integrated** §5.1/§5.4:
+  assert worktree+index **clean** (and `HEAD == B`) before import.
+- **X-2 (was BLOCKER, severity overstated) — import-unit underspecified.** Codex's
+  "forbidden commit lands on the coordination branch" is *overstated* (non-committing
+  import + one batch commit ⟹ only the net combined tree is committed; a reverted
+  `.doctrine/` change never persists). But the **root gap is real**: "cherry-pick -n
+  / git apply over the fork branch ref" conflated net-diff-apply with commit-replay,
+  so the R-5 belt (net `B..fork` diff) and the import could diverge on a
+  multi-commit/merge fork. **Integrated** §5.1/§5.2/§5.4: delta = the **net diff
+  `B..S`**, `S` = one non-merge commit ancestry-validated, imported via `git apply`
+  (not `cherry-pick`) so belt-check ≡ import-effect.
+- **X-3 (MAJOR, NEW depth past C-III) — no semantic-failure isolation.** File-disjoint
+  removes git conflicts, not semantic coupling (API in file A, caller in file B —
+  green alone, red combined); the only designed response was a blind report+halt.
+  **Integrated** §5.1/§5.4: on combined-verify RED, re-verify each delta alone to
+  **name the offender** before halting.
+- **X-5 (MINOR) — minting overclaim.** §9's "two divergent worktrees mint
+  non-colliding ids" is unconditional, but `git.rs:589` degrades to local-only on
+  no resolvable trunk. **Integrated** §9: scoped the guarantee to trunk-resolved repos.
+- **X-6 (cleared) — no layering cycle.** Confirmed `integrity` imports `crate::entity`,
+  not the reverse; `KINDS: &[&KindIdentity]` referencing kind consts is acyclic
+  (re-confirms pass-2 F-c).
+
+- **X-4 (MAJOR, NEW, OPEN) — `stem` is a command concern pulled into the engine
+  leaf.** `GovKind.stem` is documented "File stem **AND JSON envelope/object key**"
+  (`governance.rs:38`; used as the JSON envelope key in `show_json`/`list_rows`) —
+  a command-render concern living correctly at the command tier today. The §5.2
+  design folds it into `entity::KindIdentity` on the **engine leaf**. No literal
+  cycle (X-6), but it inverts ADR-001's *rationale* (the leaf gains command-render
+  knowledge). Pass-2 F-c only checked for a cycle and missed this. **This is the
+  one finding that reshapes deliverable A — it needs a decision, not an
+  improvisation.** Lock is held until X-4 is resolved.
