@@ -285,3 +285,53 @@ complete.
   already single-point in `vet_seeds`.
 
 EX-1..7 all met; VT-1..9 all covered. Ready for `/audit`.
+
+## PHASE-05 implementation (2026-06-11) — T1–T4: the explain verb
+
+Shipped `explain(n) -> Explanation` (the role-agnostic structured account, §5.4)
+plus its tests. `tests/explain.rs` (8 tests, VT-1 + VT-2) green; whole `just check`
+green. **Bounded subagent scope: T1–T4 only.** T5–T8 (golden net:
+permutation/determinism/naive-oracle/denylist) DEFERRED to a later subagent —
+NOT started.
+
+Load-bearing decisions:
+- **`Explanation` FLAT in lib.rs** (A-2, no `pub use`), declared right after the
+  `Channel` block. Accessors only, no `# Errors` (infallible). Fields
+  `{node, order_key, paths: BTreeMap<OverlayId, Vec<Vec<NodeId>>>, evicted:
+  Vec<EvictedEdge>}` exactly per §5.4 — no String prose, no role fields (F13).
+- **`predecessor_paths` free fn in query.rs** (the heavy multi-parent walk); thin
+  `Graph::explain` threads `&self.incoming`/`&self.degraded_sccs`/`&self.provenance`
+  and reads `order_keys`. Mirrors the PHASE-04 free-fn + thin-wrapper seam.
+- **Multi-parent DFS, NOT spine_path's single chain.** `chains_to_root` branches on
+  each predecessor (`predecessors()` returns the full in-edge src list, adjacency
+  order) → `Vec<Vec<NodeId>>`. `extend_chains` carries a node-last `suffix`,
+  `.reverse()`s each completed chain to root→…→node (same orientation trick as
+  spine_path).
+- **F47 termination via `degraded_sccs`, not via the visited set.** A predecessor
+  that is a degraded-post-arity-SCC member is appended as the chain ENDPOINT and
+  the walk stops (never recurses into the cycle). `node` itself ∈ an SCC → `[[node]]`
+  (early return in `chains_to_root`). The visited set is a *defensive* secondary
+  guard for any residual cycle not SCC-keyed — finiteness does not depend on it
+  (the SCC endpoints already bound a degraded Reject view). Confirmed by the
+  a↔b + a→x fixture: `explain(x).paths[ov] = [[a,x]]`, `explain(a) = [[a]]`.
+- **`paths` keys every overlay present in `incoming`** (A8 settled): a node that is
+  a root on an overlay still appears as `[[n]]` (present, not absent). An overlay
+  with zero edges anywhere is absent — no node touches it. Pinned by the
+  two-overlay root fixture.
+- **F26 endpoint filter in the assembler:** `evicted` = `provenance.evictions()`
+  filtered to `src == n || dst == n`, **preserving the existing `(overlay, edge)`
+  provenance sort** (filter is order-preserving). VT-2 fixture: n as dst (p_lo→n)
+  and n as src (n→child) both present, unrelated (u→w) absent.
+- **`order_key` fallback:** `order_keys.get(n)` is total over all real nodes; a
+  foreign id falls back to `Finite(0)` (infallible, F14) rather than panicking.
+
+Carry-forward for the T5–T8 subagent:
+- `tests/golden_net.rs` (or split) still to author. ZERO-DEP CONTRACT BINDING —
+  hand-rolled permutation loop + naive oracle, NO proptest/quickcheck. Denylist
+  scan must self-exclude (A4) and resolve root via `CARGO_MANIFEST_DIR` (A3/A4).
+- For byte-identical compare (T5): `Explanation` derives `PartialEq`/`Eq`/`Clone`/
+  `Debug`; `Channel`/`Provenance`/`OrderKey` already do. No derive gaps found for
+  the explain surface.
+- `extend_chains` has 7 params (one under clippy's default ceiling) — if T8's
+  refactor touches it, bundle the `(incoming, degraded_sccs, overlay)` context into
+  a struct rather than adding an 8th arg.

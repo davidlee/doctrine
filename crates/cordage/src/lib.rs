@@ -259,6 +259,50 @@ impl Channel {
     }
 }
 
+/// A role-agnostic structured account of one node (design §5.4, D11/F13): its
+/// composed-order key, its transitive predecessor chains per overlay, and the
+/// evictions it is an endpoint of. No `String` prose, no policy role — rendering
+/// belongs to the policy layer.
+///
+/// `paths` keys every overlay; each value is the predecessor chains of `node`,
+/// oriented **root → … → node**. A chain ends at a root OR at the first node of a
+/// degraded post-arity SCC (F47): SCC members are chain ENDPOINTS only, never
+/// walked through, so the account is finite and deterministic on a cyclic `Reject`
+/// view. A node inside a degraded SCC gets the singleton chain `[[node]]`; the
+/// cycle itself is explained by [`Provenance::cycles`], not a path. `evicted` is
+/// the evictions with `node` as src or dst (F26).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Explanation {
+    node: NodeId,
+    order_key: OrderKey,
+    paths: BTreeMap<OverlayId, Vec<Vec<NodeId>>>,
+    evicted: Vec<EvictedEdge>,
+}
+
+impl Explanation {
+    /// The explained node.
+    pub fn node(&self) -> NodeId {
+        self.node
+    }
+
+    /// The node's composed-order key.
+    pub fn order_key(&self) -> OrderKey {
+        self.order_key
+    }
+
+    /// The transitive predecessor chains of the node, keyed by overlay; each
+    /// chain is oriented root → … → node (F47 termination).
+    pub fn paths(&self) -> &BTreeMap<OverlayId, Vec<Vec<NodeId>>> {
+        &self.paths
+    }
+
+    /// The evictions with the node as an endpoint (src or dst), in provenance
+    /// order (F26).
+    pub fn evicted(&self) -> &[EvictedEdge] {
+        &self.evicted
+    }
+}
+
 // ── ordering composition ─────────────────────────────────────────────────────
 
 /// One precedence layer of an [`OrderSpec`]: an overlay viewed in a direction.
@@ -793,6 +837,33 @@ impl Graph {
     /// (defined, non-panicking — F14).
     pub fn order_key(&self, node: NodeId) -> Option<OrderKey> {
         self.order_keys.get(&node).copied()
+    }
+
+    /// A role-agnostic structured account of `node` (design §5.4): its
+    /// composed-order key, its transitive predecessor chains per overlay (each
+    /// oriented root → … → node, terminating at a root or a degraded post-arity
+    /// SCC entry — F47), and the evictions it is an endpoint of (F26). Finite and
+    /// deterministic on cyclic `Reject` views; infallible (a foreign id yields the
+    /// `Finite(0)` key and empty paths/evictions, non-panicking — F14).
+    pub fn explain(&self, node: NodeId) -> Explanation {
+        let order_key = self.order_keys.get(&node).copied().unwrap_or(OrderKey {
+            level: Level::Finite(0),
+            node,
+        });
+        let paths = query::predecessor_paths(&self.incoming, &self.degraded_sccs, node);
+        let evicted = self
+            .provenance
+            .evictions()
+            .iter()
+            .filter(|e| e.edge().src() == node || e.edge().dst() == node)
+            .copied()
+            .collect();
+        Explanation {
+            node,
+            order_key,
+            paths,
+            evicted,
+        }
     }
 
     /// Every node in composed total order (by `OrderKey`). An empty `OrderSpec`
