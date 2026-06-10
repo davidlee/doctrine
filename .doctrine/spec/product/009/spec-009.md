@@ -312,3 +312,14 @@ scan, never authored on the item. Exactly one side authors each relation type. T
 inspect view's inbound-completeness claim is the registry-backed surface's to make, not
 the sync-free reader's; reverse lookup is correct-but-uncached until the feature DAG
 lands.)
+
+OQ-007 — **open** (raised by PRD-011 / SPEC-001 D4·D6) — should the backlog relation
+seam admit new **authored** capture schema that PRD-011's derived priority engine
+depends on: (1) two typed dependency edge kinds — a hard `dep` (dependency/blocked) and
+a soft `seq` (sequencing/priority preference) carrying an int `rank` — extending §2's
+"forward relation seam"; and (2) an architectural-trigger field `{ globs, note }` holding
+an item non-actionable until a planned/touched file set matches (SPEC-001 D6). These are
+capture surface (this spec's §2/FR territory), not graph mechanism, so SPEC-001 consumes
+them but does not mint them. Blocks SPEC-001 FR-005 (REQ-096) and the D6 trigger mask
+(REQ-093). Must stay consistent with §4's "capture must never require dependency
+modelling" — the edges are optional enrichment, not mandatory fields.

@@ -7,10 +7,11 @@ title = "Doctrine authors typed dep and seq dependency edges"
 status = "pending"
 kind = "functional"
 
-description = "Doctrine authors two new typed edge kinds feeding the graph: a hard dep (dependency/blocked) edge and a soft seq (sequencing/priority preference) edge carrying an int rank. Actionability and blocking derive from these authored edges; reference and lineage edges (specs/slices/requirements/drift/supersedes/descends_from) remain consequence inputs only. The adapter supplies each edge a clock-free creation-sequence age for deterministic seq eviction."
+description = "Doctrine authors two optional typed edge kinds feeding the graph: a hard dep (dependency/blocked) edge and a soft seq (sequencing/priority preference) edge carrying an int rank. They are enrichment, never required capture — an item with no authored edge still surveys by derived consequence + fallback (PRD-011 §4). Actionability and blocking derive from these authored edges; reference and lineage edges (specs/slices/requirements/drift/supersedes/descends_from) remain consequence inputs only. The authored edge schema (the new relation kinds + rank) is PRD-009 capture surface (OQ-007), consumed here, not minted in this spec. The adapter supplies each seq edge a clock-free, stable authoring ordinal as age for deterministic eviction; the contract on age is only that it be total and stable across recomputes, the derivation being an adapter-slice concern."
 tags = []
 acceptance_criteria = [
-  "A hard dep edge and a soft seq edge (with an int rank) are authorable doctrine relations, admitted into the graph as dep and seq overlays respectively.",
+  "A hard dep edge and a soft seq edge (with an int rank) are authorable doctrine relations (schema owned by PRD-009), admitted into the graph as dep and seq overlays respectively.",
+  "The dep/seq edges are optional — an item with no authored edge is still surveyed; no capture requires dependency modelling.",
   "Reference and lineage edges contribute to derived consequence but not to dep/seq blocking.",
-  "The adapter supplies each seq edge a clock-free creation-sequence age; the core reads age as an opaque attribute, never a wall-clock value.",
+  "The adapter supplies each seq edge a clock-free age that is total and stable across recomputes; the core reads age as an opaque attribute, never a wall-clock value.",
 ]

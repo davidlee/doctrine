@@ -3,14 +3,14 @@ version = 1
 
 id = 94
 slug = "derived-cache-is-policy-version-stamped-and-recompute-equivalent"
-title = "Derived cache is policy-version-stamped and recompute-equivalent"
+title = "Derived cache is policy-version-stamped for staleness detection"
 status = "pending"
 kind = "quality"
 
-description = "Any persisted derived output is disposable cache or projection only: it stamps the policy version and an input signature so stale results are recognisable, and deleting it and recomputing from unchanged authored state yields equivalent output. Derived computation never mutates authored entity state."
+description = "Any persisted derived output stamps the policy version and an input signature identifying the authored state it was computed from, so a stale cache is recognisable. This is the staleness-detection mechanism only; the disposability and no-authored-mutation invariant (cache deletable, recompute-equivalent, never written as truth) is REQ-078's and is not restated here."
 tags = []
 acceptance_criteria = [
   "Cache/projection output records the policy version and an input signature identifying the authored state it was computed from.",
-  "Deleting any derived cache and recomputing over unchanged authored state yields equivalent ordering and explanations.",
-  "No derived value is written into entity TOML as canonical truth, and derived computation mutates no status, resolution, item_kind, priority metadata, or relation.",
+  "A cache whose stamped policy version or input signature no longer matches current authored state is recognisable as stale.",
+  "Disposability, recompute-equivalence, and the no-authored-mutation invariant are inherited from REQ-078, not duplicated here.",
 ]
