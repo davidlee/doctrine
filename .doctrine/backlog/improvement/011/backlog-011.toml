@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 11
+slug = "warn-on-record-of-an-unverified-thread-invisible-to-findretrieve-until-verified"
+title = "Warn on record of an unverified thread (invisible to find/retrieve until verified)"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-10"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
