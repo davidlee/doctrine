@@ -20,6 +20,12 @@ sequence) · `system` (subsystem map + pointers, not a spec) · `concept` (stabl
 mental model / terminology) · `signpost` ("start here" navigation) · `thread`
 (short-lived working set, expires fast).
 
+⚠ **A `thread` is hidden from `find`/`retrieve` until verified** (SL-008 D6, §5).
+If you want a working loop to resurface by scope, prefer a durable type
+(`pattern`/`system`/`concept`) — or record the `thread` and `verify` it on a
+clean tree. An unverified thread shows only in `list`/`show`, never in scope
+ranking.
+
 ## 2. Record it
 
 Record with `doctrine memory record` (ask `--help` for the flags; see
@@ -58,6 +64,12 @@ doctrine memory verify <UID|KEY>
 Stamps `verified_sha` against the working tree (refuses a dirty tree — no false
 attestation). Unattested memories read as lower trust.
 
+**Threads require this to surface at all.** `thread_expiry` drops any `thread`
+that is not `verified` AND `reviewed` within 14 days from `find`/`retrieve`
+(SL-008 D6). `record` always writes `unverified`, so a fresh thread is invisible
+to scope ranking until you `verify` it — and `verify` refuses a dirty tree, so
+attest from a clean tree. Other types are never gated this way.
+
 **Holdback caution:** `retrieve` suppresses low-trust ∧ high-severity memories
 (non-bypassable). A high-severity claim you have not verified will be held back
 until you raise its trust by attesting it — by design. Set trust to match reality.
@@ -73,3 +85,6 @@ or author under `doc/*` instead. Memory is a pointer/recipe layer, not canon.
 
 Run `doctrine memory find` scoped to the context a future agent will actually
 query (see `--help`), and confirm the memory appears.
+
+Exception: an unverified `thread` will **not** appear here even when recorded
+correctly (§1/§5) — `verify` it first, or check `memory show` instead.
