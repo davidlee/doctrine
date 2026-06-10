@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 15
+slug = "boot-check-flags-empty-governance-sections-active-policiesstandards-as-unpopulated"
+title = "boot --check flags empty governance sections (Active Policies/Standards) as unpopulated"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-10"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
