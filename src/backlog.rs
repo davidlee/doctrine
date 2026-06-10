@@ -56,35 +56,35 @@ pub(crate) enum ItemKind {
 }
 
 /// The issue kind: a defect / problem to fix. Own tree + reservation namespace.
-const ISSUE_KIND: Kind = Kind {
+pub(crate) const ISSUE_KIND: Kind = Kind {
     dir: ".doctrine/backlog/issue",
     prefix: "ISS",
     scaffold: |c| backlog_scaffold(ItemKind::Issue, c),
 };
 
 /// The improvement kind: an enhancement to existing behaviour.
-const IMPROVEMENT_KIND: Kind = Kind {
+pub(crate) const IMPROVEMENT_KIND: Kind = Kind {
     dir: ".doctrine/backlog/improvement",
     prefix: "IMP",
     scaffold: |c| backlog_scaffold(ItemKind::Improvement, c),
 };
 
 /// The chore kind: maintenance with no user-visible behaviour change.
-const CHORE_KIND: Kind = Kind {
+pub(crate) const CHORE_KIND: Kind = Kind {
     dir: ".doctrine/backlog/chore",
     prefix: "CHR",
     scaffold: |c| backlog_scaffold(ItemKind::Chore, c),
 };
 
 /// The risk kind: a tracked risk — the only kind carrying a `[facet]`.
-const RISK_KIND: Kind = Kind {
+pub(crate) const RISK_KIND: Kind = Kind {
     dir: ".doctrine/backlog/risk",
     prefix: "RSK",
     scaffold: |c| backlog_scaffold(ItemKind::Risk, c),
 };
 
 /// The idea kind: a speculative possibility, not yet committed work.
-const IDEA_KIND: Kind = Kind {
+pub(crate) const IDEA_KIND: Kind = Kind {
     dir: ".doctrine/backlog/idea",
     prefix: "IDE",
     scaffold: |c| backlog_scaffold(ItemKind::Idea, c),
@@ -526,6 +526,7 @@ pub(crate) fn run_new(
     let title = crate::input::resolve_title(title)?;
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
+    let trunk_ids = crate::git::trunk_entity_ids(&root, item_kind.kind().dir)?;
     let out = entity::materialise(
         item_kind.kind(),
         &LocalFs,
@@ -536,7 +537,7 @@ pub(crate) fn run_new(
             title: &title,
             date: &date,
         },
-        &[], // trunk ids: production minting wires them in SL-031 (§5.4)
+        &trunk_ids,
     )?;
     let id = out
         .eid

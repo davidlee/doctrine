@@ -34,7 +34,7 @@ use crate::tomlfmt::toml_string;
 const SLICE_DIR: &str = ".doctrine/slice";
 
 /// The top-level reserved slice kind: toml + md + slug symlink.
-const SLICE_KIND: Kind = Kind {
+pub(crate) const SLICE_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: "SL",
     scaffold: slice_scaffold,
@@ -194,6 +194,7 @@ pub(crate) fn run_new(
     let title = crate::input::resolve_title(title)?;
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
+    let trunk_ids = crate::git::trunk_entity_ids(&root, SLICE_KIND.dir)?;
     let out = entity::materialise(
         &SLICE_KIND,
         &LocalFs,
@@ -204,7 +205,7 @@ pub(crate) fn run_new(
             title: &title,
             date: &date,
         },
-        &[], // trunk ids: production minting wires them in SL-031 (§5.4)
+        &trunk_ids,
     )?;
 
     let id = out
