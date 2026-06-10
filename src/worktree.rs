@@ -254,6 +254,18 @@ pub(crate) fn allowlist_violations(allow: &Allowlist) -> Vec<Violation> {
     out
 }
 
+/// HEAD-stationarity compare for `branch-point-check` (SL-031 §5.2): true iff the
+/// orchestrator's pre-spawn base `B` still equals coordination HEAD.
+///
+/// **Naming note (C-V).** This is the D5 *concurrency extension* — a ref-equality
+/// assert at the batch-commit boundary — NOT a merge-base / branch-point
+/// computation, and NOT SL-029's creation-time single-tree check. The "branch
+/// point" name is kept for continuity; the operation is nothing more than the
+/// shas being equal. Pure (ADR-001 leaf): the caller's shell does the HEAD read.
+pub(crate) fn matches(base: &str, head: &str) -> bool {
+    base == head
+}
+
 // ---------------------------------------------------------------------------
 // Impure shell — provision / check-allowlist
 // ---------------------------------------------------------------------------
@@ -450,6 +462,35 @@ pub(crate) fn run_check_allowlist(path: Option<PathBuf>) -> anyhow::Result<()> {
     )
 }
 
+/// `doctrine worktree branch-point-check --base <SHA> [--head <SHA>]` — the
+/// funnel's one tested seam (SL-031 §5.2). Asserts coordination HEAD has not moved
+/// off the orchestrator's pre-spawn base before the batch commit.
+///
+/// `--head` absent ⇒ the impure HEAD read (`git rev-parse HEAD`) of the worktree at
+/// `path`. Exit **0** on stationarity (`base == head`), **1** otherwise (the
+/// orchestrator re-dispatches the batch onto the moved HEAD — never commits on a
+/// moved base). Read-classed (no authored write): callable under worker-mode,
+/// though only the orchestrator drives it. C-V: ref-equality, not a merge-base —
+/// see [`matches`].
+pub(crate) fn run_branch_point_check(
+    path: Option<PathBuf>,
+    base: &str,
+    head: Option<String>,
+) -> anyhow::Result<()> {
+    let head = if let Some(h) = head {
+        h
+    } else {
+        let root = root::find(path, &root::default_markers())?;
+        git::git_text(&root, &["rev-parse", "HEAD"])?
+    };
+    if matches(base, &head) {
+        writeln!(io::stdout(), "stationary: HEAD == base {base}")?;
+        Ok(())
+    } else {
+        bail!("HEAD moved: base {base} != HEAD {head}");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -457,6 +498,19 @@ pub(crate) fn run_check_allowlist(path: Option<PathBuf>) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- branch-point-check pure compare (SL-031 PHASE-02, VT-1) ---
+
+    #[test]
+    fn matches_is_ref_equality() {
+        assert!(matches("abc123", "abc123"), "equal shas ⇒ stationary");
+        assert!(!matches("abc123", "def456"), "differing shas ⇒ moved");
+        assert!(!matches("abc123", ""), "empty head ⇒ moved");
+        assert!(
+            matches("", ""),
+            "degenerate equal ⇒ stationary (caller guards emptiness)"
+        );
+    }
 
     // --- T1: WITHHELD authority + .gitignore parity (VT-4) ---
 
