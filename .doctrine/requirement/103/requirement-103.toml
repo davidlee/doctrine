@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 103
+slug = "gate-slice-closure-on-reconciled-coherence-of-owning-specs"
+title = "Gate slice closure on reconciled coherence of owning specs"
+status = "pending"
+kind = "functional"
+
+description = "Closing a change confirms its owning specs are reconciled and carry no outstanding drift; an unreconciled change does not reach a terminal status."
+tags = []
+acceptance_criteria = [
+  "A change whose owning specs carry outstanding unreconciled drift cannot reach a terminal status.",
+  "A change whose owning specs are reconciled may close.",
+  "The coherence check covers every spec the change touched, not the slice status alone.",
+]

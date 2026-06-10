@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 104
+slug = "escalate-a-model-level-inadequacy-discovered-during-reconciliation"
+title = "Escalate a model-level inadequacy discovered during reconciliation"
+status = "pending"
+kind = "functional"
+
+description = "When reconciliation finds the spec or governance model itself inadequate — not a single instance of drift — the divergence is escalated for redesign rather than absorbed by editing the instance."
+tags = []
+acceptance_criteria = [
+  "A reconciliation can distinguish instance drift from inadequacy of the model itself.",
+  "A model-level inadequacy is escalated for redesign rather than resolved by an instance edit.",
+  "The escalation is visible, not silently folded into the reconciled outcome.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 106
+slug = "make-reconciled-requirement-standing-readable-without-recourse-to-chat-or-audit-history"
+title = "Make reconciled requirement standing readable without recourse to chat or audit history"
+status = "pending"
+kind = "quality"
+
+description = "After reconciliation, a downstream agent can read a requirement's reconciled standing from the spec alone, without recourse to the slice's chat or audit history."
+tags = []
+acceptance_criteria = [
+  "Reconciled requirement standing is readable from the spec surface alone.",
+  "An agent need not consult chat history or audit notes to learn what shipped.",
+  "The reconciled standing reflects observed reality at the time of closure.",
+]

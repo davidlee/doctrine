@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 102
+slug = "record-a-durable-citable-reconciliation-outcome"
+title = "Record a durable, citable reconciliation outcome"
+status = "pending"
+kind = "functional"
+
+description = "Each reconciliation produces a durable, citable record of what changed, why, and against what evidence."
+tags = []
+acceptance_criteria = [
+  "A reconciliation records the requirement and spec changes it made.",
+  "The record captures the rationale and the observed evidence the outcome was reconciled against.",
+  "The record is durable and citable by a stable reference after the slice closes.",
+]

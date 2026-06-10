@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 99
+slug = "establish-observed-coverage-evidence-for-the-requirements-a-change-touches"
+title = "Establish observed coverage evidence for the requirements a change touches"
+status = "pending"
+kind = "functional"
+
+description = "At audit, the observed coverage of each requirement a change touches is established as evidence — planned, in-progress, verified, failed, or blocked — distinct from the requirement's authored status."
+tags = []
+acceptance_criteria = [
+  "Each requirement a change touches can carry an observed coverage value from the closed evidence set (planned / in-progress / verified / failed / blocked).",
+  "Observed coverage is recorded as evidence, stored independently of the requirement's authored lifecycle status.",
+  "Coverage that cannot be established is recorded as blocked, never defaulted to verified.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 101
+slug = "reconcile-authored-requirement-and-spec-truth-through-a-single-explicit-writer"
+title = "Reconcile authored requirement and spec truth through a single explicit writer"
+status = "pending"
+kind = "functional"
+
+description = "An explicit writer brings requirement lifecycle status and touched spec truth to the accepted reconciled outcome; it is the sole author of reconciled truth in the loop."
+tags = []
+acceptance_criteria = [
+  "Reconciliation updates a requirement's authored lifecycle status to the accepted outcome.",
+  "The reconciliation step is the only path by which reconciled requirement and spec truth is written.",
+  "No status change occurs as a function of coverage; the writer authors the outcome explicitly.",
+]

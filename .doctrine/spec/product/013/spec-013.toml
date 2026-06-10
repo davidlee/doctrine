@@ -1,0 +1,19 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 13
+slug = "requirement-reconciliation"
+title = "Requirement Reconciliation"
+status = "draft"
+kind = "product"
+category = "change-management"
+tags = ["reconciliation", "drift", "coverage", "requirement-truth", "observed-evidence", "closure", "explicit-authorship", "evergreen"]
+responsibilities = [
+  "Bring evergreen requirement and spec truth back into coherence with shipped reality after a change, by explicit authorship.",
+  "Establish observed coverage evidence at audit and carry it as the observed half of the truth model, distinct from authored normative status.",
+  "Surface drift between authored truth and observed evidence as a prompt to reconcile, never an automatic overwrite.",
+  "Author the reconciled outcome through a single explicit writer — the sole author of reconciled requirement and spec truth in the loop.",
+  "Record each reconciliation as a durable, citable outcome: what changed, why, and against what evidence.",
+  "Gate slice closure on the reconciled coherence of its owning specs.",
+  "Forbid derivation of requirement truth by precedence, timestamp, or overlay — the explicit-authorship-not-derivation differentiator.",
+]
