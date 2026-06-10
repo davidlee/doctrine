@@ -1,0 +1,157 @@
+# Implementation plan for SL-031 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-031"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion and
+# verification ids (EN-/EX-/VT-) are local to their phase and equally immutable.
+# Verification by mode: VT-n test (automated), VA-n agent check, VH-n human.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "A — production trunk-aware minting + command-tier kind registry"
+objective = """
+Deliverable A (design §1/§5.2): the concrete, testable, unblocked Rust that ships \
+first and de-risks the reframe. Two coupled changes on the command tier, engine \
+leaf untouched (X-4). (1) Build the command-tier `integrity::KindRef { kind: \
+&'static entity::Kind, stem: &'static str, state_dir: Option<&'static str> }` \
+registry: `KINDS` REFERENCES each engine `Kind` const for prefix/dir (no re-typed \
+literals — closes F-2) and carries command-only `stem`/`state_dir`; `reseat` reads \
+`state_dir` instead of `has_runtime_state` + the hardcoded `.doctrine/state/slice` \
+(closes F-5); the membership guard test pins `KINDS` against a hand-written prefix \
+literal (no `Kind` const-spine exists to reflect over — R-b stays a hand-maintained \
+pin, C-IV). `entity::Kind` stays `{ dir, prefix, scaffold }` — no `KindIdentity`, \
+no fold; `stem` is the JSON envelope key, a render concern that must not descend \
+into the leaf (ADR-001, X-4). (2) Wire the 5 `&[]` minting placeholders to \
+`git::trunk_entity_ids(&root, KIND.dir)?` — `slice.rs:207`, `governance.rs:338`, \
+`spec.rs:661`, `backlog.rs:539`, `requirement.rs:238` (no new signature — \
+`materialise` already takes `trunk_ids: &[u32]`). Behaviour-preservation gate \
+(R-3): existing validate/reseat/run_new suites stay green UNCHANGED — they are the \
+proof; the change is a command-tier field add, not a logic change.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked — three adversarial passes (F-a..F-f internal; C-I..C-VII /inquisition; X-1..X-6 external codex) integrated, X-4 resolved by the User, §10 ledger settled, no open blocker" },
+  { id = "EN-2", text = "full cargo test + plain cargo clippy green at HEAD — the behaviour-preservation baseline (entity/slice/integrity/state/adr/memory suites)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`integrity::KindRef` exists with `kind: &'static entity::Kind` + `stem` + `state_dir: Option<&'static str>`; `KINDS` references each engine `Kind` const for prefix/dir (F-2 closed — no re-typed literals); `entity::Kind` is unchanged `{ dir, prefix, scaffold }` (X-4, no `KindIdentity`)" },
+  { id = "EX-2", text = "`reseat` reads `state_dir` from the registry — the hardcoded `.doctrine/state/slice` and the `has_runtime_state` bool are gone (F-5 closed)" },
+  { id = "EX-3", text = "all 5 `run_new` sites mint via `git::trunk_entity_ids(&root, KIND.dir)?` — no `&[]` placeholders remain; minting unions local + trunk ids" },
+  { id = "EX-4", text = "the `KINDS` membership guard test exists, pinned against a hand-written prefix literal (R-b hand-maintained pin, C-IV); it fires on a `KINDS`/literal divergence" },
+  { id = "EX-5", text = "plain cargo clippy zero warnings; `just check` green; existing validate/reseat/run_new suites pass UNCHANGED (behaviour-preservation gate, R-3)" },
+]
+verification = [
+  { id = "VT-1", expects = "e2e: two divergent worktrees WITH a resolvable trunk mint non-colliding ids (X-5 caveat: no resolvable trunk degrades to local-only minting, accepted R-2 — the guarantee is scoped to trunk-resolved repos)" },
+  { id = "VT-2", expects = "`next_id(local, &[])` is byte-identical to the pre-change behaviour (SL-032 INV-1) — the no-trunk gate holds" },
+  { id = "VT-3", expects = "the `KINDS` membership guard fires on a `KINDS`/hand-literal divergence (a kind in one but not the other); the in-sync set passes" },
+  { id = "VT-4", expects = "behaviour-preservation: the pre-existing validate / reseat / run_new suites are green UNCHANGED after the registry refactor and the minting wiring (R-3)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "B.1 — `branch-point-check` verb + `/worktree mode=worker` contract"
+objective = """
+The funnel's mechanical building blocks (design §5.2): the one tested seam and the \
+worker side of `/worktree` the orchestrator will compose in PHASE-03. (1) New \
+`doctrine worktree branch-point-check --base <SHA> [--head <SHA>]` (`src/worktree.rs` \
++ `src/main.rs`): pure `fn matches(base, head) -> bool` in the leaf, impure HEAD \
+read (`git rev-parse HEAD` default `--head`) in the shell, Read-classed (no authored \
+write — callable under worker-mode, though only the orchestrator uses it); exit 0 if \
+`base == head` else exit 1 (→ re-dispatch). NAMING NOTE (C-V): this is a \
+HEAD-stationarity assertion at the batch-commit boundary — the D5 *concurrency \
+extension* — not a merge-base/branch-point compute and not the creation-time check \
+SL-029 ships single-tree; the D5 vocabulary is kept for continuity. (2) Implement \
+the `mode=worker` half of `plugins/doctrine/skills/worktree/SKILL.md` (SL-029 \
+declared it, shipped solo only): worker-mode ON, mutate SOURCE only, run the \
+orchestrator-supplied verify command, then commit the source change to the fork \
+branch as exactly ONE non-merge commit `S` descended from `B` (a raw `git commit` \
+— NOT a doctrine-mediated write, so D2a permits it; multi-commit/merge/rebased \
+forks are a contract violation the orchestrator rejects). MUST NOT degrade to \
+work-in-place — a worker with no real fork is a hard abort (isolation is mandatory). \
+Returns a structured report; outputs add `{ fork_branch, head_sha_after }` to the \
+SL-029 output shape. Authored in `plugins/`, never the gitignored install copy.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — registry deduped, 5 sites mint trunk-aware, suites green unchanged" },
+  { id = "EN-2", text = "SL-029 `/worktree` solo lifecycle present (detection, creation ladder, `provision`/`check-allowlist`, single-tree branch-point) — the seam this phase extends, not rebuilds" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine worktree branch-point-check --base <SHA> [--head <SHA>]` is wired in `src/main.rs`; pure `matches(base, head)` in `src/worktree.rs` (no git/disk in the pure layer); HEAD read is the impure shell; Read-classed (no authored write)" },
+  { id = "EX-2", text = "the verb exits 0 when `base == head` and 1 otherwise; a scope/naming note records it as the HEAD-stationarity (D5 concurrency-extension) assert, not a merge-base compute (C-V)" },
+  { id = "EX-3", text = "`/worktree mode=worker` is implemented: worker-mode ON, source-only mutation, runs the supplied verify cmd, commits ONE non-merge commit `S` descended from `B` to the fork branch, returns a structured report, outputs `{ fork_branch, head_sha_after }`" },
+  { id = "EX-4", text = "`mode=worker` MUST NOT degrade to work-in-place — no real fork is a hard abort; doctrine-mediated authored writes still refuse under worker-mode (D2a, shipped SL-032), a raw source `git commit` is permitted" },
+  { id = "EX-5", text = "plain cargo clippy zero warnings; `just check` green; existing suites unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "pure: `matches(base, head)` truth table — equal ⇒ true, differing ⇒ false" },
+  { id = "VT-2", expects = "e2e over the built binary: `branch-point-check --base <HEAD>` exits 0; after a stray commit moves HEAD it exits 1 (default `--head` reads `git rev-parse HEAD`)" },
+  { id = "VA-1", expects = "`/worktree mode=worker` skill conformance: source-only, no-degrade hard-abort, commit-to-fork-branch as one non-merge commit `S`, structured-report + `{fork_branch, head_sha_after}` output shape (design §5.2)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "B.2 — `/dispatch` orchestrator funnel + IMP-002/IMP-003 reconcile"
+objective = """
+Fill the `/dispatch` placeholder with the orchestrator-sole-writer funnel and close \
+the slice's reconciliation tail (design §5.1/§5.4, §9). Author \
+`plugins/doctrine/skills/dispatch/SKILL.md` (in `plugins/`, never the gitignored \
+install copy): mandatory worker isolation via the harness `Agent` isolation \
+mechanism; orchestrator-sole-writer remit; the pre-distilled worker prompt (D6 — \
+policy digest, design excerpts, pre-fetched memories, task spec, mandatory verify \
+cmd; workers never read boot/governance) including the `export DOCTRINE_WORKER=1` \
+self-arm mandate (prompt-contract only — the `Agent` tool exposes no env seam, so \
+D2a fails OPEN, C-I); FILE-DISJOINT batching with serial fallback for unavoidable \
+shared-file tasks (C-III — dependency-disjoint is unsound); and the D7 funnel loop \
+in STRICT order per batch: precond (coordination worktree+index CLEAN and `HEAD == \
+B`, X-1) → delta = net diff `B..S` (`S` one non-merge commit, ancestry of `B` \
+validated, X-2) → R-5 BELT: reject any delta whose `B..S` changed-paths touch \
+`.doctrine/` authored trees → `git apply` every surviving net-diff onto `B` \
+NON-committing → verify combined tree; on RED re-verify each delta alone to NAME the \
+offender (X-3) → `branch-point-check --base B` guard → ONE batch commit on the \
+coordination branch → record (knowledge TRAILS the confirmed commit). Conflict / \
+moved-HEAD / `.doctrine/` touch = report-and-halt, never auto-merge. Crash recovery: \
+rebuild from the coordination branch + `git worktree list` (no load-bearing \
+orchestrator state). The R-5 belt is the enforceable belt that protects PHASE-01's \
+trunk-minting guarantee INSIDE the funnel (C-II — A and B are not failure-independent; \
+do not drop it). Then reconcile: `doctrine backlog edit IMP-002 --status <terminal> \
+--resolution <…>` (substance shipped SL-032, wiring tail landed here); author the \
+IMP-003 prose closure for `/close` (status-flip-with-resolution + prose; the \
+backlog→slice graph edge is deferred — relations v1-empty, C-VII).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — `branch-point-check` verb tested and `/worktree mode=worker` contract implemented (the funnel's building blocks)" },
+  { id = "EN-2", text = "ADR-006 Verification bullets (funnel / D7 / D2a / branch-point / provision-exclusion) are the conformance basis for the VA checks" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`plugins/doctrine/skills/dispatch/SKILL.md` is filled (not a placeholder): orchestrator-sole-writer remit, worker spawn via `Agent` isolation, the pre-distilled prompt (D6) + `DOCTRINE_WORKER=1` self-arm mandate (fail-open disclosed, C-I)" },
+  { id = "EX-2", text = "the funnel loop is specified in STRICT order per batch — clean+`HEAD==B` precond (X-1) → net diff `B..S` (X-2) → R-5 `.doctrine/`-reject → non-committing `git apply` → verify (RED ⇒ isolate offender, X-3) → branch-point guard → ONE batch commit → record-trails-code (D7)" },
+  { id = "EX-3", text = "batching is FILE-DISJOINT by construction with serial fallback for shared-file tasks (C-III); conflict / moved-HEAD / `.doctrine/`-touch = report-and-halt, never auto-merge; crash recovery = rebuild from coordination branch + `git worktree list`" },
+  { id = "EX-4", text = "IMP-002 reconciled: `doctrine backlog edit IMP-002 --status <terminal> --resolution <…>` lands with the rationale (substance shipped SL-032; wiring tail SL-031)" },
+  { id = "EX-5", text = "the IMP-003 closure prose is authored for `/close` (status-flip-with-resolution; backlog→slice edge deferred, relations v1-empty, C-VII); OQ-1 recorded resolved-defer" },
+]
+verification = [
+  { id = "VA-1", expects = "`/dispatch` conformance / audit read: the funnel persists in strict order import → verify → commit → record per batch (D7); knowledge trails the confirmed commit" },
+  { id = "VA-2", expects = "R-5 conformance: the orchestrator-side (worker-mode OFF, trusted) changed-path check rejects any delta whose net `B..S` diff touches `.doctrine/` authored trees → report+halt (the C-II belt)" },
+  { id = "VA-3", expects = "conformance: file-disjoint batching + serial fallback (C-III); branch-point-guard re-dispatch on moved HEAD; combined-RED isolates the offending delta (X-3); crash recovery rebuilds from the coordination branch" },
+  { id = "VH-1", expects = "`/close` confirms the rollup and the IMP-002 / IMP-003 lifecycle transitions (terminal status + resolution + prose)" },
+]
+specs        = []
+requirements = []
