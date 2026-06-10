@@ -145,8 +145,19 @@ with:
 ```
 
 **(e) `plugins/doctrine-partner/README.md`** — mirror doctrine-memory's README
-shape (title, what-it-is, CLI/dependency note, "install one, not both"). See
-OQ-1 on the duplicated-vs-symlink wording.
+*shape* (title, what-it-is, dependency note, "install one, not both") but with
+**accurate** source-vs-distribution wording (OQ-1 resolved (b)+): in-repo the
+skills are **symlinks** into `../../doctrine/skills/<id>` (single source of truth,
+no drift); on distribution Claude Code plugins are self-contained, so each symlink
+resolves to a real copy in the published artifact. Drop the false "duplicated /
+byte-identical copies" framing and the "update both copies" instruction (there is
+one source).
+
+**(f) `plugins/doctrine-memory/README.md`** — correct the same inaccuracy in the
+precedent (OQ-1 (b)+, folded in, no longer a follow-up): `:12-14` "duplicated …
+byte-identical copies" and `:19` "update both copies" describe a copy model the
+source does not use (symlinks). Rewrite to the same accurate source-vs-distribution
+framing so the siblings agree on the truth, not on a shared falsehood.
 
 ### 5.3 Data, State & Ownership
 
@@ -180,14 +191,15 @@ Build/refresh sequence (mandatory order — the re-embed footgun):
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 (README wording).** doctrine-memory's README says skills are
-  "duplicated, byte-identical copies", but the repo uses **symlinks**. The
-  precedent is internally inconsistent (README describes the *distributed*
-  reality; source uses symlinks to prevent drift). Options: (a) mirror
-  doctrine-memory's wording verbatim for sibling consistency, flag a follow-up to
-  reconcile both READMEs; (b) write doctrine-partner's README *accurately*
-  (symlinked source). **Recommendation: (a)** — consistency across siblings now,
-  reconcile both in a follow-up; a lone "accurate" sibling is its own drift.
+- **OQ-1 (README wording) — RESOLVED (b)+.** doctrine-memory's README says skills
+  are "duplicated, byte-identical copies" and to "update both copies", but the repo
+  uses **symlinks** (one source). The README conflates the source model (symlinks,
+  drift-proof) with the distributed artifact (self-contained copies). Resolution:
+  write doctrine-partner's README *accurately* (source = symlink, distribution =
+  resolved copy) **and** correct doctrine-memory's README the same way in this
+  slice (§5.2e/f) — siblings agree on the truth, not a shared falsehood. The "lone
+  accurate sibling is drift" argument was rejected: an accurate doc is not drift;
+  misleading content is. Kills the former reconcile-the-READMEs follow-up.
 - **OQ-2 (route wording/placement).** Exact row text and where the posture line
   sits. Proposed text in §5.2(b); reviewer to finalise.
 - **OQ-3 (two surfaces).** Confirmed both `install/routing-process.md` *and*
@@ -246,3 +258,16 @@ A fresh reviewer should attack: OQ-1's recommendation, the exact route wording
 (OQ-2), whether OQ-3's two-surface edit is complete (is there a third surface
 reciting the route table? — confirm `CLAUDE.md`'s inlined copy is generated, not
 hand-maintained), and whether the symlink relative paths resolve.
+
+Focused review pass (SL-034 resume, pre-plan) — all four attacked:
+- **OQ-1:** resolved **(b)+** — accurate wording in *both* READMEs, no propagated
+  falsehood; follow-up folded into scope (§5.2e/f, §6).
+- **OQ-2:** row grammar fits the boot table; `walkthrough` = no-change exit row,
+  `pair` = posture-only (no standalone row). Locked.
+- **OQ-3:** verified **exhaustive** — exactly two table-reciting surfaces. The
+  suspected third surfaces are all derived/pointers: `CLAUDE.md` **and** `AGENTS.md`
+  both `@import` `boot.md` and state the table "is not recited here"; `boot.md` is
+  projected from `routing-process.md` (`boot.rs:84`); `preflight/SKILL.md` only
+  defers to `/route`. No third hand-maintained surface. ✔
+- **Symlink form:** `../../doctrine/skills/<id>` is byte-identical to the working
+  doctrine-memory links (`ls -la plugins/doctrine-memory/skills/`). ✔
