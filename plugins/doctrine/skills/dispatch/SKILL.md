@@ -1,23 +1,188 @@
 ---
 name: dispatch
-description: Placeholder — parallel sub-agent execution of a slice's phases is not yet implemented in Doctrine. Do not route here; use /execute for serial phase execution.
+description: Use when /execute fan-out is real and a slice's independent tasks should run as concurrent isolated workers — the orchestrator-sole-writer funnel that spawns workers in their own worktree forks, then imports each source delta through one strict per-batch cadence (import-all → verify → branch-point guard → one commit → record), reporting and halting on any conflict rather than auto-merging.
 ---
 
 # Dispatch
 
-> **Placeholder.** Not yet implemented.
+Drive parallel, sub-agent execution of a slice's tasks as the **sole writer**.
+You are the orchestrator: you spawn workers into isolated worktree forks, collect
+each worker's **source delta** (its fork branch), and funnel those deltas into the
+coordination branch through one strict, crash-recoverable cadence. Workers mutate
+source; **only you** make doctrine-mediated writes.
 
-Intended future home for parallel, sub-agent-driven execution of a slice's
-phases — batching tasks by dependency and budget, dispatching workers in
-isolated worktrees, and merging at phase boundaries. Until it exists, execute
-phases serially with `/execute`.
+**Announce at start:** "Using the dispatch skill to run workers under the
+orchestrator funnel."
 
-When built, it would draw on `superpowers:dispatching-parallel-agents` and
-`superpowers:using-git-worktrees` as authoring references.
+**This is a sub-skill, not yet a `/route` destination.** It is the parallel analog
+of `/execute` (serial). Reach it only when execution fan-out is explicitly wanted;
+until a routing slot is wired, the caller invokes it directly. For one phase at a
+time, `/execute` remains the path.
 
-## TODO
+**Composes `/worktree mode=worker` — do not restate it.** The fork, provision,
+spawn guards, baseline, and the worker's `self-arm → mutate-source → verify →
+commit-one-S` loop all live in the [worktree skill](../worktree/SKILL.md). This
+skill is the orchestrator half only: batching, the import funnel, and reconciliation.
 
-- [ ] Define when this skill triggers and its STOP condition.
-- [ ] Spell out the batching / isolation / merge model against the doctrine
-      slice + state surface.
-- [ ] Wire a routing slot into `/route` once execution fan-out is real.
+## Remit — orchestrator is the sole writer (D6a)
+
+| Party | Branch | Worker-mode | Writes |
+|---|---|---|---|
+| **Orchestrator (you)** | coordination | **OFF** | every doctrine-mediated write: the import commit, memory, AC evidence, notes, status |
+| **Worker** | its fork | **ON** (self-armed) | **source only**, committed as one non-merge `S` to the fork branch — never doctrine state |
+
+The fork withholds the coordination/runtime tier by construction (`/worktree`
+provision exclusion, D9). A worker returns a **source delta + a structured report**;
+it is never a doctrine artifact writer. You alone advance the coordination branch.
+
+## Worker spawn (the harness `Agent` isolation mechanism)
+
+Spawn each worker with the harness `Agent` tool at `isolation: worktree` — isolation
+is **mandatory**, never optional. The worker runs `/worktree mode=worker`, which
+forks, provisions, guards, verifies a green baseline, then runs its constrained
+edit→verify→commit-`S` loop and returns `{ fork_branch, head_sha_after }`.
+
+A worker that cannot get a real fork is a **hard abort** (worktree skill, `worker`
+contract) — it MUST NOT degrade to an in-tree edit. Isolation is the funnel's whole
+premise.
+
+### Pre-distilled worker prompt (D6 — self-contained, no governance read)
+
+Workers **do not** read boot/governance or run `/route`/`/boot`. You pre-distill
+everything a worker needs into its spawn prompt:
+
+- **policy digest** — the rules of the road that bear on the task (lifted from your
+  own loaded governance, not re-derived by the worker);
+- **design excerpts** — the relevant design/contract slices;
+- **pre-fetched memories** — the scope-bound gotchas you already retrieved;
+- **task spec + declared file set** — what to change and exactly which files (the
+  file set is load-bearing for disjoint batching, below);
+- **mandatory verify command** — the project's green-gate (doctrine is a framework;
+  never assume `just check` — pass the project's command explicitly);
+- **the self-arm mandate** — the worker's first act is `export DOCTRINE_WORKER=1`.
+
+**`DOCTRINE_WORKER=1` is a self-armed prompt contract that fails OPEN (C-I).** The
+`Agent` tool exposes **no env seam**, so you cannot set the var in the worker's spawn
+environment — only the prompt can mandate it, and nothing enforces it. A worker that
+omits the line runs with the doctrine CLI fully open (the D2a guard inert). Mandate
+the line regardless, but **do not rely on it** — the enforceable protection is the
+import-time R-5 belt below, which you run on the trusted side.
+
+## Batching — file-disjoint by construction (C-III)
+
+Admit workers to a concurrent batch **only if their declared changed-path sets are
+pairwise disjoint.** A task that must share a file with another drops to **serial
+dispatch** — the honest cost of report-never-merge.
+
+**Dependency-disjoint is not enough.** Two independent tasks routinely edit the same
+file (e.g. two unrelated subcommands both touching `main.rs` — exactly this slice's
+own verb-wiring + minting-wiring). File-disjoint is the stronger contract that makes
+the deltas co-apply onto the captured base `B` cleanly. Shared file ⇒ serialise.
+
+## The funnel — strict per-batch order (D7)
+
+The cadence is **the batch, not the worker** (§5.1: a per-worker commit moves HEAD,
+landing the next delta on a moved base). Capture `B = git rev-parse HEAD` pre-spawn
+(tree clean). After the batch's workers return, run **in this exact order**:
+
+1. **precond (X-1).** Assert the coordination **worktree AND index are clean** and
+   `HEAD == B`. A dirty tree would be swept into the batch commit while a bare sha
+   guard still passes — so check both. Not clean ⇒ **abort**.
+2. **delta (X-2).** Each worker's delta is the **net diff `B..S`**, where `S` is the
+   one non-merge commit on the fork branch (validate: single non-merge commit,
+   ancestry of `B`; multi-commit / merge / rebased fork ⇒ contract violation, reject
+   before import). A net diff, **not** a `cherry-pick`/replay — so the belt-check and
+   the import-effect are the same object.
+3. **R-5 belt — reject authored-tree touches (C-II).** For each delta,
+   `git diff --name-only B..S`; if any path is under `.doctrine/` authored trees ⇒
+   **report + halt**. This belt protects PHASE-01's trunk-minting guarantee from an
+   unarmed worker that minted authored ids in its fork (A and B are **not**
+   failure-independent — do not drop it). It is sound where the env contract is not,
+   because **you** run it: worker-mode OFF, the trusted sole writer, mechanically
+   checkable.
+4. **import — non-committing.** `git apply` **every surviving net-diff onto `B`**,
+   NON-committing. A genuine apply **conflict** on a file-disjoint batch means the
+   changed-path analysis was wrong (or a worker strayed outside its declared paths)
+   ⇒ **report + halt**, human re-plans. Never auto-resolve.
+5. **verify — combined tree.** Run the project verify command on the combined working
+   tree. On **RED**, re-run verify against **each delta alone** (the forks are already
+   isolated) to **name the offending worker** (X-3 — file-disjoint removes git
+   conflicts, not semantic coupling) ⇒ report + halt. "report+halt" is never blind.
+6. **branch-point guard (D5 under concurrency).** `doctrine worktree
+   branch-point-check --base B` — coordination HEAD still `B`? Because the whole
+   disjoint batch imports onto the single `B` and commits once, HEAD only moves at
+   **your** batch commit; a mismatch means an **external** mover ⇒ **re-dispatch the
+   batch from the new HEAD**, never commit against a moved base. (Naming note C-V: a
+   HEAD-stationarity compare, not a merge-base computation.)
+7. **commit — one batch commit.** ONE commit on the coordination branch ⇒ `HEAD = B+1`.
+8. **record — knowledge trails the commit.** Memory / AC evidence / notes, *after*
+   the confirmed commit. Knowledge always trails confirmed code; the coordination
+   branch is the durable store, your context is disposable.
+
+The next batch forks from `B+1`.
+
+**Report-and-halt, never auto-merge.** Conflict, moved HEAD, or a `.doctrine/`-touch
+all stop the funnel and surface to a human (ADR-006: policy is report, never
+auto-resolve).
+
+## Crash / overflow recovery
+
+No orchestrator state is load-bearing. Rebuild from the **coordination branch** +
+`git worktree list`: committed batches are durable on the branch; in-flight forks are
+re-imported (their `B..S` still applies) or re-dispatched. Context overflow is just a
+crash — recover the same way.
+
+## Out of scope (v1)
+
+- **Remote / non-shared-store workers (C-VI).** The no-transport import assumes
+  harness isolation uses `git worktree` (shared `.git`, as Claude Code does), so you
+  read the fork branch directly. A remote agent would hand back a `git format-patch`
+  series applied `git am`-style through the **same** import→reject→verify→guard→commit
+  cadence — noted, not specified here. v1 assumes the shared object store.
+- **A routing slot.** `/dispatch` is not yet a `/route` destination; wiring fan-out
+  into `/route` is deferred until this path is exercised.
+
+## Quick Reference
+
+| Situation | Action |
+|---|---|
+| Spawn a worker | `Agent` at `isolation: worktree` running `/worktree mode=worker`; isolation mandatory |
+| Worker prompt | Pre-distilled: policy digest, design excerpts, memories, task spec + file set, verify cmd, `export DOCTRINE_WORKER=1` mandate |
+| Two tasks share a file | **Serialise** — file-disjoint batching only (dependency-disjoint is unsound) |
+| Batch returned | precond clean+`HEAD==B` → net diff `B..S` → R-5 reject → apply non-committing → verify → branch-point → one commit → record |
+| Delta touches `.doctrine/` | **Report + halt** (R-5 belt — the real protection; `DOCTRINE_WORKER=1` fails open) |
+| Worker fork `>1` / merge / rebased commit | **Reject** before import (the unit is net diff `B..S`, `S` one non-merge commit) |
+| Combined verify RED | Re-verify each delta alone to NAME the offender → report + halt (X-3) |
+| Apply conflict on disjoint batch | Changed-path analysis was wrong → **report + halt**, human re-plans |
+| `branch-point-check` exits 1 | External HEAD move → **re-dispatch** the batch, never commit on a moved base |
+| Crash / context overflow | Rebuild from coordination branch + `git worktree list`; no load-bearing state |
+
+## Red Flags
+
+**Never:**
+- Let a worker write `.doctrine/` authored trees, or import a delta that touches them
+  (the R-5 belt is non-droppable — it, not `DOCTRINE_WORKER=1`, is the real protection).
+- Imply `DOCTRINE_WORKER=1` *enforces* anything — it is self-armed and fails open (C-I).
+- Commit per worker (HEAD moves; the next delta lands on a moved base) — commit **per
+  batch**, once.
+- Replay fork history (`cherry-pick`) instead of applying the **net diff `B..S`**.
+- Auto-merge or auto-resolve a conflict / moved HEAD / authored-tree touch — **report
+  and halt**.
+- Record knowledge before the confirmed commit (it must trail the code).
+- Let a worker degrade to an in-tree edit, or batch two tasks that share a file.
+- Restate the worker loop or the worktree guards here — link to the worktree skill.
+- Author or edit this skill in `.doctrine/skills/` (the gitignored install copy); the
+  source of truth is here under `plugins/`.
+
+**Always:**
+- Run as worker-mode OFF, the sole doctrine-mediated writer, on the coordination branch.
+- Pre-distill a self-contained prompt; workers never read boot/governance.
+- Keep batches file-disjoint; serialise shared-file tasks.
+- Hold the strict funnel order; the R-5 belt and the branch-point guard are mandatory.
+- Make knowledge trail the confirmed commit; keep all durable state on the branch.
+
+## Outcome
+
+Each batch lands as exactly one commit on the coordination branch, every imported
+delta policy-checked and verified before it lands, with conflicts surfaced to a human
+rather than merged. The coordination branch is the deliverable.
