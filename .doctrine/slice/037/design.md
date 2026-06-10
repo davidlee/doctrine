@@ -38,6 +38,18 @@ golden net — IMP-014.
   the build→retain→sort skeleton) is *already* lifted in SL-025; the typed `*Row`
   struct is irreducibly per-kind. `--columns` does not touch JSON. Preserves
   SL-025 D7 (faithful rows). *(User-confirmed.)*
+  **IMP-013 scope note (closure honesty):** IMP-013 named its lift as "row
+  assembly + table + **JSON**, parameterized by a per-kind column/decoration
+  spec." This slice lifts the *table* half. The JSON-row-assembly half — the
+  per-kind `*Row` structs (`BacklogRow`/`SliceRow`/`SpecRow`/`GovRow`) and their
+  `json_rows` mappers — is **assessed and deliberately descoped**: the typed
+  rows carry structured values a `String` column cannot represent (slice
+  `phases` object, spec `members` int, backlog `resolution` nullable), so
+  stringly-typing them would regress D7. No clean shared struct exists; the
+  mappers are ~5–10 lines each. IMP-013's `/close` resolution must **record this
+  descope** rather than claim full delivery; no new backlog item is opened unless
+  the `json_rows` duplication later bites. *(User-confirmed: descope note, no new
+  item.)*
 - **D3 — `--columns a,b,c` is the opt-in API** (supersedes a one-off `--slug`
   boolean — the long-term presentation surface). Selects and orders visible table
   columns by name; validated against the kind's available set with one uniform
@@ -49,13 +61,22 @@ golden net — IMP-014.
   (e.g. the governance id prefix) is pushed into the row type `R`, not captured.
   Keeps `Column<R>` simple/`Copy`, no `Box<dyn Fn>` in the leaf.
 - **D6 — `build()`'s signature is unchanged; columns ride `ListArgs`.** The
-  verb pulls `let columns = args.columns.take();` *before* `build(args)`, so
-  `build` keeps returning `(Filter, Format)` and its ~10 in-leaf tests + 6 call
-  sites stay green unchanged (behaviour-preservation on shared machinery). The
-  `columns` field is additive; every existing `ListArgs` literal uses
-  `..Default::default()`, so none break. *(Revised from a `Presentation` return
-  after the adversarial pass found the destructure churn; user deferred the
-  internal seam.)*
+  migrating verb takes `mut args`, pulls `let columns = args.columns.take();`
+  *before* `build(args)`, so `build` keeps returning `(Filter, Format)` and **its
+  ~10 in-leaf tests stay green unchanged** (the load-bearing behaviour-
+  preservation guarantee — all leaf literals use `..Default::default()`,
+  `listing.rs:359+`). The `build(args)` *expression* is unchanged at every call
+  site; each migrating verb's `list_rows` fn gains only `mut args` + the `take`
+  line (memory's is untouched — it never reads `columns`). Blast radius, stated
+  precisely: there are **5** source-level `listing::build(args)` call sites
+  (backlog, slice, spec, governance, memory) across **7** list verbs (governance
+  serves adr/policy/standard). The `columns` field is additive and `Default`-
+  friendly; the only *exhaustive* `ListArgs`/`CommonListArgs` literals that must
+  gain the field are `into_list_args` (`main.rs:94`, the §5 wiring site —
+  intended) and the test helper `clist()` (`main.rs:1485`); `boot.rs`'s two
+  literals already use `..Default::default()` and are untouched. *(Revised from a
+  `Presentation` return after the adversarial pass found the destructure churn;
+  user deferred the internal seam.)*
 - **D7 — `--columns` under `--json` is ignored** (JSON is faithful/full),
   documented on the flag. Minor; revisit if a JSON projection is ever wanted.
 - **D8 — IMP-014 golden harness rides this slice** as the regression net for the
@@ -65,10 +86,17 @@ golden net — IMP-014.
   is absent), its cells are security-scrubbed (`scrub_line`, memory-spec §
   Security — a generic column layer risks a future unscrubbed column), and it is
   the strongest case of the over-abstraction IMP-013 warned of. Migrating it has
-  no triggering edit. `--columns` rides the shared `CommonListArgs`, so it is
-  **accepted-but-ignored on `memory list`** (documented no-op). Memory's adoption
-  is deferred-until-condition under **IMP-017** (trigger: next edit to memory list
-  rendering). *(User-confirmed after an explicit challenge.)*
+  no triggering edit. `--columns` rides the shared `CommonListArgs`, so it
+  reaches `memory list` — where it is **rejected with a clean error** ("`--columns`
+  is not supported for `memory list`") until IMP-017, **not** silently ignored. A
+  silently-accepted no-op flag is a least-surprise footgun and would *silently
+  change behaviour* the day IMP-017 wires memory; a loud rejection fails honestly
+  now and IMP-017 simply removes the guard. The guard fits the existing per-kind
+  read-validation seam — memory's `list_rows` already calls `validate_statuses`
+  per kind; a `columns.is_some()` rejection is the same shape, no spine fracture.
+  Memory's adoption is deferred-until-condition under **IMP-017** (trigger: next
+  edit to memory list rendering). *(User-confirmed: defer migration, but reject
+  `--columns` rather than silently ignore.)*
 
 ## 3. The column model (`listing.rs`, new)
 
@@ -140,11 +168,21 @@ JSON paths unchanged.
   non-capturing closures. Columns `id status phases slug title`; default
   `[id, status, phases, title]`. (`status` column keeps the `?`/`⚠` markers — a
   column *value*, not a separate column.)
-- **spec** — `R = (Meta, usize)` (existing). Columns `id status slug title
-  members` with `members` carrying `header = "#members"` (the `#` is
-  shell-hostile as a token). Default `[id, status, title, members]` — the
-  slug→title swap (D4). spec still emits one labelled block per subtype: it
-  resolves the selection once and calls `render_columns` per block.
+- **spec** — `R` is a small **pre-materialised display row**
+  `SpecListRow { id: String, status: String, slug: String, title: String,
+  members: usize }` (`title` is pulled from `Meta`; spec's table gains it via the
+  D4 slug→title swap),
+  **not** the bare `(Meta, usize)` tuple. spec's prefixed id is
+  *subtype-dependent* (`SpecSubtype::Product → PRD`, `Tech → SPEC`;
+  `canonical_id(subtype, m.id)`), so the subtype is external context that D5
+  forbids capturing in an extractor. It is resolved into the row **per block**,
+  where `subtype` is in scope (the governance/`GovRow` pattern) — then every
+  extractor is a trivial non-capturing `fn(&SpecListRow)->String`. Columns
+  `id status slug title members` with `members` carrying `header = "#members"`
+  (the `#` is shell-hostile as a token). Default `[id, status, title, members]`
+  — the slug→title swap (D4). spec still emits one labelled block per subtype:
+  it resolves the selection once and calls `render_columns` per block over that
+  block's pre-materialised rows.
 
 Net deletion: each kind's bespoke header/grid assembler collapses into a column
 table + one `render_columns` call.
@@ -155,8 +193,9 @@ table + one `render_columns` call.
 
 ```rust
 /// Select/order visible table columns, e.g. `--columns id,status,slug`. Unknown
-/// names error with the available set. No effect with `--json` (D7); ignored on
-/// `memory list`, which is not on the column model this slice (D9 / IMP-017).
+/// names error with the available set. No effect with `--json` (D7); rejected on
+/// `memory list` (not yet on the column model — D9 / IMP-017), never silently
+/// ignored.
 #[arg(long, value_delimiter = ',')]
 pub(crate) columns: Option<Vec<String>>,
 ```
@@ -179,6 +218,17 @@ re-fracture the spine, A-3).
   `black-box-cli-golden`, `stale-cargo-bin-exe`) over a fixed corpus pinning,
   per verb, the bytes of: default table, `--columns` table, and `--json`. Asserts
   every surface, not just the JSON envelope (mem `conformance-asserts-surface`).
+  Coverage must also pin, explicitly:
+  - **memory's rejection** — `memory list --columns …` errors with the
+    unsupported message (verifies the D9/R4 guard; without this the claim is
+    untested).
+  - **empty-list output per verb** — the header-suppressed `""` path (§5.5) for
+    each migrated verb (and an empty spec subtype block → block omitted).
+  - **spec multi-block layout** — the per-subtype labelled blocks *and* the
+    omitted-empty-block case (R3) pinned byte-exact.
+  - **governance breadth** — `adr`/`policy`/`standard` share one `render_table`
+    path; pin all three, or pin one and assert the shared path explicitly so the
+    representative is justified.
 - `cargo clippy` zero warnings (bins/lib only — not `--all-targets`); `just
   check` green; behaviour-preservation gate: pre-existing filter/JSON suites stay
   green unchanged (D2 guarantees JSON is untouched).
@@ -204,13 +254,14 @@ re-fracture the spine, A-3).
 - **R3 — spec subtype labelling.** The per-subtype block structure must survive
   the column lift (selection resolved once, applied per block). Covered by §4 +
   a spec golden.
-- **R4 *(resolved, D9)* — memory is the 6th `build()` caller on the shared
-  spine** (`memory list` consumes `CommonListArgs`, `main.rs:1245`), so
-  `--columns` reaches it. Resolved by deferring memory (D9): it stays bespoke,
-  `--columns` is an accepted-but-ignored no-op there (documented), and adoption
-  is tracked under IMP-017. The "uniform spine" claim is about the *filter* axes
-  (the query surface SL-025 guards), not presentation — so the no-op is a bounded
-  documented gap, not a spine fracture.
+- **R4 *(resolved, D9)* — memory is one of the `build()` callers on the shared
+  spine** (`memory list` consumes `CommonListArgs`, `main.rs:1245`, and is one of
+  the 5 `listing::build` call sites / 7 list verbs), so `--columns` reaches it. Resolved by deferring memory (D9): it stays bespoke,
+  and `--columns` is **rejected with a clean error** on `memory list` until
+  IMP-017 (a loud guard, not a silent no-op — CHARGE III). Adoption is tracked
+  under IMP-017. The "uniform spine" claim is about the *filter* axes (the query
+  surface SL-025 guards), not presentation — so the per-kind presentation guard
+  is a bounded, *honest* gap, not a spine fracture.
 - **R5 — memory's `scrub_line` security invariant** (hostile-input defense on
   trust/key/title cells). Out of scope here (memory deferred), but IMP-017
   records it as the invariant any future memory column model must carry into its
