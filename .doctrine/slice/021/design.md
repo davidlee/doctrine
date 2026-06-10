@@ -23,10 +23,12 @@ validate shape).
 Locked decisions (design Q&A):
 
 - **D1 Taxonomy topology** — umbrella context spec + mechanism containers +
-  thin capability components (§2).
-- **D2 Descent rule: capability-complete** — every active PRD reachable via
-  ≥1 `descends_from`; shared substrate carries thin per-capability component
-  specs rather than restating mechanism (§2).
+  thin capability components (§2). **⚠ Re-opened by F1 (§11): the umbrella's
+  scope/altitude is incoherent — does not re-lock until resolved.**
+- **D2 Descent rule: capability-complete** — every **shipped-mechanism** PRD
+  reachable via ≥1 `descends_from` (F2: not "every active PRD" — unbuilt
+  mechanism is exempt, named in §7); shared substrate carries thin
+  per-capability component specs rather than restating mechanism (§2).
 - **D3 Exemplar: vertical path** — root → container → component trio locks all
   three shapes before fan-out (§3).
 - **D4 Requirement status: `pending`** — SL-019 posture; no audit has
@@ -213,6 +215,11 @@ fan-out vs serial `/execute`) decided at `/phase-plan`, not design-locked.
   exemplar trio + present-tense shipped-obligation rule gate it.
 - **`doc/*` duplication tension** — lift durable content, do not retire the
   source; supersession is flagged as a follow-up only (slice non-goal).
+  **Interim authority rule (F4):** once a tech spec captures an architecture,
+  that spec is authoritative for it and the lifted `doc/*` content is demoted
+  to seed/historical (a pointer), even though physical retirement is deferred.
+  Without this, two co-authoritative homes recreate the "untrusted prose"
+  problem PRD-012 §1 exists to kill.
 - **Thin-component anaemia** — capability components degenerating to stubs.
   Bar: a component carries its kind-specific config, statuses, and render
   contracts, not just a pointer at the parent.
@@ -228,3 +235,107 @@ fan-out vs serial `/execute`) decided at `/phase-plan`, not design-locked.
   is scaffolding).
 - Fan-out mechanism → `/phase-plan`.
 - `doc/*` retirement → out of scope; flag as follow-up at `/close`.
+
+## 11. Inquisition dispositions (external — codex/GPT-5.5)
+
+Adversarial review of this design (commits `f15f2ce` + `9eb1d7b`) against
+PRD-012 §4 constraints/invariants, PRD-013, ADR-004, and the SL-019 charge
+class. Six charges returned; triaged below with evidence. F1 re-opens locked
+D1 and **must be resolved by the User before the design re-locks** — the rest
+are integrated.
+
+### F1 — Umbrella scope/altitude is incoherent (UPHELD; fatal-for-lock)
+
+*Charges I + IV + reviewer Q1 collapse to one defect.* The root is labelled
+"Doctrine entity system" and its body (§3) lifts only entity-engine content —
+storage rule, entity-vs-facet taxonomy, identity/reference model, Raw→Entity→
+Registry — yet §2 parents the **whole** architecture under it (install, boot,
+dispatch, skills distribution) and §6 retrofits SPEC-001 (priority engine /
+`cordage`) and SPEC-002 (reconciliation) beneath it "so the corpus forms one
+tree, not a forest." Three problems:
+
+1. **False containment.** PRD-012 §3: containment (`parent`) and peering are
+   different relations; conflating them "loses the architecture's shape." The
+   priority engine is not *contained by* the entity system — parenting it
+   there asserts a decomposition that is untrue.
+2. **No doctrine mandates one connected tree.** PRD-012: "a root spec has no
+   parent and that is valid." A forest is legal; the single-tree goal is
+   invented, then enforced with false edges.
+3. **Bad seed.** `doc/entity-model.md:3` declares itself **"Status: direction,
+   deferred. No action now"** — the *target* model and a spec-driver critique,
+   not shipped architecture, and scoped to entities only. Seeding a
+   whole-system root from a deferred-direction, entity-scoped doc is an
+   altitude error; the §3 "altitude filter" that salvages it is subjective and
+   unreproducible.
+
+**Remediation — User's call (two legitimate fixes):**
+
+- **(A) Proper context root** — author a thin whole-system context spec
+  ("Doctrine", the tool) whose children are *all* containers; demote "entity
+  system" to one container (the entity engine, seeded from `entity-model.md`).
+  Correct C4, preserves the legible single tree, and a context spec is a
+  synthesis (REQ-085 admits anchor-free context specs) — not a lift of one
+  subsystem doc. *Recommended.*
+- **(B) Forest** — drop the single-tree goal; allow multiple roots; author
+  `parent` only where containment is substantively true. Lighter; SPEC-001/002
+  stay rootless.
+
+Under both, the umbrella's *content* (entity-engine durable material) belongs
+on an entity-engine container, not the root.
+
+### F2 — D2 completeness claim stated two incompatible ways (PARTIALLY UPHELD; minor)
+
+*Charge II.* §1 said "every **active** PRD reachable" while §2/§7 say "every
+PRD **whose mechanism ships**". PRD-010 (active, `knowledge_record` unbuilt) is
+exempt under the second and a violation under the first. The **exemption is
+legitimate** — this slice backfills shipped *how*; forward-intent authoring for
+PRD-010 is out of scope, and SPEC-001/002 pre-exist so counting them costs
+nothing. Only the wording was inconsistent. **Fixed:** §1 D2 now reads
+"shipped-mechanism PRD"; the coverage audit (§7) asserts only that set with
+exemptions named. No new spec for PRD-010. *Reviewer's "ad-hoc escape hatch"
+framing refuted — the rule is coherent once worded once.*
+
+### F3 — "Locked" vs PHASE-01-deferred boundary (PARTIALLY UPHELD; minor)
+
+*Charge III.* §1 calls D1/D2 locked; §8 still settles "slices: component vs
+container," the PRD-010 subset, and CLI-surface inclusion in PHASE-01. No
+contradiction once the line is crisp: **the topology *shape* (D1) and the
+descent *rule* (D2) are locked; specific node *placement* (the roster) is
+PHASE-01's** — which is why the §2 tree is labelled "candidate" and the count
+is a range. The reviewer is right that this must not read as committed
+topology. No structural change; the candidate-tree caveat in §2 already carries
+it, reinforced here.
+
+### F4 — `doc/*` left co-authoritative (PARTIALLY UPHELD; serious)
+
+*Charge V.* Retiring `doc/*` is legitimately out of scope, but §9 ("do not
+retire the source") left two durable homes for one architecture — the very
+"untrusted prose" PRD-012 §1 exists to kill. *Reviewer's literal "never two
+parallel surfaces" cite actually governs hand-vs-import code-anchor
+convergence, not doc-vs-spec — but the §1 motivation makes the concern real.*
+**Fixed:** §9 now carries an interim authority rule — a tech spec, once
+authored, is authoritative for its architecture and the lifted `doc/*` content
+is demoted to seed/pointer, physical retirement still deferred.
+
+### F5 — Late `parent` retrofit on active SPEC-001 (REFUTED as framed; folds into F1)
+
+*Charge VI.* Adding a structural `parent` edge is **not** a PRD-013
+requirement-reconciliation event — PRD-013 governs requirement *authored-status
+vs coverage*, not structural relations. Retrofitting `parent` in PHASE-05 is a
+mechanical single-field add. The only live question is whether the edge's
+containment is *true* — which is **F1**. Once F1 settles the root scope, the
+SPEC-001/002 retrofit is valid. No separate remediation.
+
+### Verified, no change
+
+- **D4 `pending` is correct** (reviewer Q4 resolved). `pending` is the initial
+  value of the *authored/normative* requirement-status enum
+  (`pending → in-progress → active → deprecated → retired | superseded`,
+  spec-entity-spec § Lifecycle; "*pending*: declared, not started"), **not** a
+  coverage value. D4 asserts authored status, not derived coverage — coherent
+  with PRD-013's two-tier model.
+- **Anchors not treated as currency** — §9 already honours the PRD-012
+  invariant ("a code anchor is not proof the spec is current"; `validate` does
+  not check anchor liveness). No charge.
+- **Embed/refresh ritual** (§4: `skills install` + `touch src/skills.rs` +
+  rebuild) correct per `mem.pattern.distribution.skill-refresh-command`.
