@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 92
+slug = "acyclicity-is-declared-per-relation-kind"
+title = "Acyclicity is declared per relation kind"
+status = "pending"
+kind = "functional"
+
+description = "Acyclicity is a per-relation-kind contract, not a global graph invariant. Policy declares which relation kinds must be acyclic; the core surfaces cycles only on those kinds as diagnostics and tolerates cycles on kinds not so declared, and any affected query degrades rather than emit a false topological order."
+tags = []
+acceptance_criteria = [
+  "Each relation kind carries an explicit acyclic / cyclic-tolerant declaration owned by policy, not the core.",
+  "A cycle on a kind declared acyclic produces a diagnostic naming the involved node ids and edge kinds; a cycle on a tolerant kind produces no such diagnostic.",
+  "A query affected by a cycle in an acyclic overlay excludes the cyclic component or degrades to local authored priority plus the stable fallback order, never a false topological result.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 95
+slug = "core-and-policy-placement-obeys-the-boundary-test"
+title = "Core and policy placement obeys the boundary test"
+status = "pending"
+kind = "quality"
+
+description = "Every placement of a rule into the core versus policy satisfies the boundary test: a rule statable without product nouns may live in the core; a rule needing semantic interpretation must live in policy. The forbidden-core list bounds the crate — no task/project/habit terms, deadline/scheduled-for/best-before fields, lateness cost, remaining-work estimates, commitment pressure, urgency scoring, calendar/capacity concepts, sequential/parallel policy, resurfacing rules, or product defaults."
+tags = []
+acceptance_criteria = [
+  "No item on the forbidden-core list appears in the core crate.",
+  "A rule that cannot be stated without doctrine or product nouns lives in policy, not the core.",
+  "The core test suite carries no product vocabulary; policy tests carry the semantic interpretations explicitly.",
+]

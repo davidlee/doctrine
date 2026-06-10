@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 93
+slug = "architectural-triggers-resolve-as-a-policy-mask-never-a-graph-edge"
+title = "Architectural triggers resolve as a policy mask, never a graph edge"
+status = "pending"
+kind = "functional"
+
+description = "An architectural (path-glob) trigger holds an item non-actionable until a phase's planned or touched file set matches its trigger globs. It is resolved as a policy-layer actionability mask via the existing retrieve.rs scope-admittance predicates, and is never represented as an edge in the graph core, which stays free of file-path dependence."
+tags = []
+acceptance_criteria = [
+  "A path-glob trigger is matched by reusing the retrieve.rs scope predicates (SL-008) against a phase's declared file set, with no new matcher introduced.",
+  "The trigger affects only the policy actionability mask; the graph core receives no path-bearing node or edge.",
+  "An item whose trigger globs are unmatched is masked non-actionable, and surfaces as actionable once a declared file set matches.",
+]
