@@ -14,6 +14,8 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
+mod resolve;
+
 // ── identity ─────────────────────────────────────────────────────────────────
 // Opaque, builder-allocated, monotonic; no public constructor and no accessor for
 // the inner ordinal — callers treat ids as tokens. The adapter (a later slice)
@@ -221,6 +223,141 @@ pub enum BuildError {
     NodeCapExceeded,
 }
 
+// ── provenance ───────────────────────────────────────────────────────────────
+// Build-time resolution is surfaced, never silent: cycles, arity-keep losers, and
+// order-composition conflicts are reported as data here (D5/D8). No `String` prose,
+// no role, no doctrine noun (F13) — rendering is the policy layer's.
+
+/// A reference to a single edge: its endpoints and ordering attributes. Carries
+/// `attrs` to disambiguate parallel edges (same endpoints, differing rank/age).
+/// Ordered by `(src, dst, rank, age)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EdgeRef {
+    src: NodeId,
+    dst: NodeId,
+    attrs: EdgeAttrs,
+}
+
+impl EdgeRef {
+    /// The edge source.
+    pub fn src(&self) -> NodeId {
+        self.src
+    }
+
+    /// The edge destination.
+    pub fn dst(&self) -> NodeId {
+        self.dst
+    }
+
+    /// The edge ordering attributes.
+    pub fn attrs(&self) -> EdgeAttrs {
+        self.attrs
+    }
+}
+
+impl Ord for EdgeRef {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.src, self.dst, self.attrs.rank(), self.attrs.age()).cmp(&(
+            other.src,
+            other.dst,
+            other.attrs.rank(),
+            other.attrs.age(),
+        ))
+    }
+}
+
+impl PartialOrd for EdgeRef {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Why an edge was removed during build resolution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvictReason {
+    /// Lost the single-parent contest on an `AtMostOne` overlay (pass 1).
+    ArityViolation,
+    /// Removed to break a cycle on an `Evict` overlay (pass 2).
+    IntraOverlayCycle,
+    /// Removed from the composed order structure to break a cross-layer cycle
+    /// (pass 3 — PHASE-03).
+    UnionCycleVsLayer,
+}
+
+/// An edge removed by a resolution pass, with the overlay it belonged to and why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EvictedEdge {
+    overlay: OverlayId,
+    edge: EdgeRef,
+    reason: EvictReason,
+}
+
+impl EvictedEdge {
+    /// The overlay the evicted edge belonged to.
+    pub fn overlay(&self) -> OverlayId {
+        self.overlay
+    }
+
+    /// The evicted edge.
+    pub fn edge(&self) -> EdgeRef {
+        self.edge
+    }
+
+    /// Why it was evicted.
+    pub fn reason(&self) -> EvictReason {
+        self.reason
+    }
+}
+
+/// A diagnosed cyclic component on a `Reject` overlay (REQ-076): the nodes and
+/// participating edges of one strongly-connected component. A self-loop is a
+/// single-node cycle (F20). Reported, never linearized — `build()` still returns
+/// `Ok` (a cycle is data, an authoring error to surface).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CycleDiagnostic {
+    overlay: OverlayId,
+    nodes: BTreeSet<NodeId>,
+    edges: Vec<EdgeRef>,
+}
+
+impl CycleDiagnostic {
+    /// The overlay the cycle was found on.
+    pub fn overlay(&self) -> OverlayId {
+        self.overlay
+    }
+
+    /// The nodes of the cyclic component.
+    pub fn nodes(&self) -> &BTreeSet<NodeId> {
+        &self.nodes
+    }
+
+    /// The edges participating in the cyclic component, sorted.
+    pub fn edges(&self) -> &[EdgeRef] {
+        &self.edges
+    }
+}
+
+/// Build-time resolution provenance: the cycles diagnosed and the edges evicted.
+/// Both are sorted by `(overlay, edge)` for deterministic reporting (F21) — a
+/// reporting order distinct from the F17 eviction *selection* key (F37).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Provenance {
+    cycles: Vec<CycleDiagnostic>,
+    evictions: Vec<EvictedEdge>,
+}
+
+impl Provenance {
+    /// The diagnosed cyclic components, sorted by `(overlay, nodes)`.
+    pub fn cycles(&self) -> &[CycleDiagnostic] {
+        &self.cycles
+    }
+
+    /// The evicted edges, sorted by `(overlay, edge)`.
+    pub fn evictions(&self) -> &[EvictedEdge] {
+        &self.evictions
+    }
+}
+
 // ── internal adjacency edges ─────────────────────────────────────────────────
 // Two distinct structs with *explicit* `Ord` over the documented adjacency key
 // (F21 — never derive-incidental). `BTreeSet` membership then gives set-dedupe of
@@ -386,8 +523,14 @@ impl GraphBuilder {
             }
         }
 
-        let (out, incoming) = build_indices(&self.edges);
-        Ok(Graph { out, incoming })
+        let resolution = resolve::resolve(&self.edges, &self.overlays);
+        let (out, incoming) = build_indices(&resolution.edges);
+        Ok(Graph {
+            out,
+            incoming,
+            provenance: resolution.provenance,
+            degraded_sccs: resolution.degraded_sccs,
+        })
     }
 }
 
@@ -427,6 +570,14 @@ fn build_indices(edges: &[RawEdge]) -> (OutIndex, InIndex) {
 pub struct Graph {
     out: OutIndex,
     incoming: InIndex,
+    provenance: Provenance,
+    /// Cyclic post-arity SCCs of `Reject` overlays (F46) — degraded marks for
+    /// PHASE-03 pass-3/4. Recorded now (EX-2), first read there.
+    #[expect(
+        dead_code,
+        reason = "PHASE-03 pass-3/4 consumes degraded post-arity SCCs (F46)"
+    )]
+    degraded_sccs: BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
 }
 
 impl Graph {
@@ -458,5 +609,11 @@ impl Graph {
             .and_then(|m| m.get(&node))
             .into_iter()
             .flat_map(|set| set.iter().map(|e| (e.src, EdgeAttrs::new(e.rank, e.age))))
+    }
+
+    /// Build-time resolution provenance: the cycles diagnosed and edges evicted
+    /// while assembling this graph. Empty when nothing was resolved.
+    pub fn provenance(&self) -> &Provenance {
+        &self.provenance
     }
 }
