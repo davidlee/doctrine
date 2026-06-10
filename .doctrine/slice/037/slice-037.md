@@ -55,7 +55,10 @@ Applies uniformly to all four list verbs (backlog, slice, spec, governance).
 - No change to filter semantics — slug stays searchable via substr/regex
   (`FilterFields` unchanged).
 - No change to single-entity `show` — slug still shown there.
-- Memory `find`/`list` (keyed, no slug column) is out of scope.
+- Memory `find`/`list` (keyed, no slug column) is out of scope — it stays
+  bespoke and `--columns` is an accepted-but-ignored no-op there. Adoption of the
+  column model is deferred to **IMP-017** (design D9: memory's security-scrubbed
+  cells + the absent slug trigger outweigh bare flag-uniformity).
 - Not lifting JSON's *typed* per-kind row structs into stringly columns — that
   would regress type fidelity (#members numeric, resolution nullable). The lift
   targets the table column model + the `list_rows` control flow. [decision]
@@ -102,3 +105,7 @@ swaps slug→title) with a cross-verb golden net. One coherent change that
 resolves IMP-009 (UX), IMP-013 (the lift, now triggered), and IMP-014 (goldens).
 
 ## Follow-Ups
+
+- **IMP-017** — memory list adopts the shared column model (deferred-until-
+  condition; trigger = next edit to memory list rendering). Spun out of this
+  slice's design (D9).
