@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb380418c7092abdeb6fe1b332c28"
+memory_key = "mem.pattern.tooling.stale-lsp-diagnostics-after-build"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Stale rust-analyzer diagnostics after a build are false — verify with cargo"
+summary = "rust-analyzer floods stale method-not-found diagnostics after a build — trust cargo, not the LSP panel"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[scope]
+paths = []
+globs = ["crates/**"]
+commands = []
+tags = ["tooling", "testing", "lsp"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b1ecc4ae518ba6f49fd40ff27c870d1f2b444697"
+ref_name = "refs/heads/main"
+checkout_state_id = "e9ac3eddee883b61df15e6278c416ece7e3361528419944086b3efa99cd943cd"
+base_commit = "8e0f742a0c69f74f502722064e34e96f587bfba7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
