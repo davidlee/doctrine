@@ -493,15 +493,14 @@ fn policy_list_json_is_byte_exact() {
 fn columns_under_json_is_a_no_op_byte_identical_to_plain_json() {
     // D7 / A5: `--columns` is taken BEFORE the JSON build, so a `--columns X --json`
     // invocation must be byte-identical to plain `--json` (the projection is
-    // table-only; JSON stays faithful/full). Belt-and-braces over D2.
+    // table-only; JSON stays faithful/full). A *subset* request (`id` only) is the
+    // load-bearing case: were the JSON path to wrongly honour `--columns`, the
+    // projected envelope would drop status/slug/title and diverge — a full-set
+    // request would only catch reordering, not field-filtering (D2).
     let dir = tmp();
     seed_policy_corpus(dir.path());
     let plain = list(dir.path(), "policy", &["--json"]);
-    let projected = list(
-        dir.path(),
-        "policy",
-        &["--columns", "id,status,slug,title", "--json"],
-    );
+    let projected = list(dir.path(), "policy", &["--columns", "id", "--json"]);
     ok(&plain);
     ok(&projected);
     assert_eq!(stdout(&plain), stdout(&projected));
