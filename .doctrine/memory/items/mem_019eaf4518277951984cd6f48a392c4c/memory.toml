@@ -1,0 +1,41 @@
+memory_uid = "mem_019eaf4518277951984cd6f48a392c4c"
+memory_key = "mem.pattern.entity.numbered-kind-identity-table"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Numbered-kind identity is scattered; integrity::KINDS is the single corpus-wide id table"
+summary = "Any corpus-wide id operation must use integrity::KINDS; a new numbered kind must register there or it escapes validate"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[scope]
+paths = ["src/integrity.rs", "src/meta.rs"]
+globs = []
+commands = ["validate", "reseat"]
+tags = ["entity-engine", "sl-032", "id-allocation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "da08bda79dd9235391c16a501eaf28b52d3b2cb6"
+ref_name = "refs/heads/main"
+checkout_state_id = "2622995d45a0af0262347054506440e4316a47b0e9c6c13de0e2edcd7b6f6052"
+base_commit = "784af56d081256d38bf60ef87c8389c3492fc02a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

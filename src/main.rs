@@ -11,6 +11,7 @@ mod git;
 mod governance;
 mod input;
 mod install;
+mod integrity;
 mod lexical;
 mod listing;
 mod memory;
@@ -184,6 +185,31 @@ enum Command {
     Worktree {
         #[command(subcommand)]
         command: WorktreeCommand,
+    },
+
+    /// Scan every numbered entity kind for id-integrity violations (ADR-006 D3
+    /// detect-half): dir basename == toml id, no intra-kind duplicate id, and
+    /// alias target equality. Exits non-zero on any violation.
+    Validate {
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Renumber an entity's canonical id (ADR-006 D3 repair). Takes a canonical
+    /// ref (`SL-031`), moves it to the next free trunk-aware id or `--to <NNN>`,
+    /// and reports inbound prose citations as danglers (never rewrites them).
+    Reseat {
+        /// Canonical ref to renumber, e.g. `SL-031` (never a bare id).
+        reference: String,
+
+        /// Explicit target id (default: the next free trunk-aware id).
+        #[arg(long)]
+        to: Option<u32>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
     },
 }
 
@@ -1003,6 +1029,10 @@ fn write_class(cmd: &Command) -> WriteClass {
             // and never run in worker context (§5.2) — Read on purpose.
             WorktreeCommand::Provision { .. } | WorktreeCommand::CheckAllowlist { .. } => Read,
         },
+        // Read-only corpus integrity scan (INV-3).
+        Command::Validate { .. } => Read,
+        // Mutates the canonical-id triple — an authored write (D2/D6).
+        Command::Reseat { .. } => Write("reseat"),
     }
 }
 
@@ -1279,6 +1309,12 @@ fn main() -> anyhow::Result<()> {
             WorktreeCommand::Provision { fork, path } => worktree::run_provision(path, &fork),
             WorktreeCommand::CheckAllowlist { path } => worktree::run_check_allowlist(path),
         },
+        Command::Validate { path } => integrity::run_validate(path),
+        Command::Reseat {
+            reference,
+            to,
+            path,
+        } => integrity::run_reseat(path, &reference, to),
     }
 }
 
@@ -1777,6 +1813,21 @@ mod write_class_tests {
                 command: WorktreeCommand::CheckAllowlist { path: None }
             }),
             None
+        );
+    }
+
+    #[test]
+    fn validate_is_read_reseat_is_write() {
+        // Corpus integrity: the scan reads (INV-3); reseat mutates the canonical
+        // triple, so it is a worker-refused authored write (D2/D6).
+        assert_eq!(cls(Command::Validate { path: None }), None);
+        assert_eq!(
+            cls(Command::Reseat {
+                reference: "SL-001".to_string(),
+                to: None,
+                path: None,
+            }),
+            Some("reseat")
         );
     }
 }
