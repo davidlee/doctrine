@@ -5,10 +5,10 @@ id = 2
 slug = "worker-mode-guard-trunk-ref-reseat"
 title = "Worker-mode CLI guard and trunk-ref id allocation with reseat"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-08"
-updated = "2026-06-08"
+updated = "2026-06-10"
 tags = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
