@@ -100,10 +100,14 @@ landed; fills `plugins/doctrine/skills/dispatch/SKILL.md` (placeholder).
 - `src/{slice,governance,spec,backlog,requirement}.rs` — wire the 5 `&[]` minting
   placeholders to `git::trunk_entity_ids(&root, KIND.dir)?` (production trunk-aware
   minting; the SL-032 §5.4 tail).
-- `src/entity.rs` — `KindIdentity { prefix, dir, stem, state_dir }` embedded on
-  `Kind` (folds `GovKind.stem`, adds `state_dir`).
-- `src/integrity.rs` — `KINDS` references the kind consts (closes F-2); `reseat`
-  reads `state_dir` (closes F-5); set-equality guard test (`KINDS` ⟺ kind consts).
+- `src/entity.rs` — **unchanged** (X-4): `Kind` stays `{ dir, prefix, scaffold }`;
+  no `KindIdentity`, no fold. `stem` is a command-render concern (JSON envelope key)
+  and must not descend into the engine leaf.
+- `src/integrity.rs` — command-tier `KindRef { kind: &'static Kind, stem, state_dir }`
+  registry: `KINDS` **references** each engine `Kind` const for prefix/dir (closes
+  F-2) and adds command-only `stem`/`state_dir`; `reseat` reads `state_dir` (closes
+  F-5); the membership guard test pins `KINDS` against a hand-list (R-b stays a
+  hand-maintained pin — no `Kind` const-spine exists to reflect over, C-IV).
 - `src/worktree.rs` + `src/main.rs` — new `doctrine worktree branch-point-check`
   verb (OQ-2 mechanical seam; Read-classed).
 - **No install/boot wiring** — OQ-1 deferred (no WorktreeCreate hook this slice).
@@ -128,9 +132,10 @@ landed; fills `plugins/doctrine/skills/dispatch/SKILL.md` (placeholder).
   fork branch; the shared object store makes import a local git op (no transport).
   Report = returned message. Patch-handback is the non-shared-store fallback.
   (design §5.3 / §6)
-- **R-3 — registry refactor breaks the engine.** Folding `stem`/`state_dir` into one
-  identity surface and pointing `integrity::KINDS` at the kind consts must keep
-  validate/reseat/run_new suites green unchanged (behaviour-preservation gate).
+- **R-3 — registry refactor breaks the engine.** Defused by X-4: the engine `Kind`
+  is untouched; only `integrity`'s command-tier `KindRef` changes (reference the
+  engine const for prefix/dir, add `state_dir`). Must keep validate/reseat/run_new
+  suites green unchanged (behaviour-preservation gate).
 - **R-1 — D2b residual gap.** A worker can still raw-edit main (the harness does
   not confine it to its worktree, ADR-006 D2b); the funnel rests on the CLI guard
   (IMP-002) + prompt contract. Known, deferred to ADR-008.
