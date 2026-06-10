@@ -117,10 +117,21 @@ SourceKind::GovRows(g, in_force) => section_or_marker(
 ),
 ```
 
-**Byte-identity proof:** headings remain string literals in `boot_sequence`;
-ADR's `["accepted"]` and POL's `["required"]` build the same `ListArgs` the old
-arms built, so `list_rows` emits identical bytes. The behaviour-preservation gate
-is the existing boot suites, run unchanged.
+**Byte-identity — by construction, not by test.** Output identity holds
+*structurally*: headings remain string literals in `boot_sequence`, and ADR's
+`["accepted"]` / POL's `["required"]` build the exact `ListArgs` the old arms
+built (`status` Vec single-element, all other fields `..Default::default()` — the
+old arms set nothing else), so `list_rows` is called with identical inputs and
+emits identical bytes. The existing boot suites
+(`regenerate_projects_accepted_adrs_and_memory_pointers`,
+`regenerate_projects_required_policies_filtered`) are the *behaviour-preservation*
+gate — they assert row presence, the exact `PREFIX-NNN  status` row format,
+filtering (draft/deprecated/retired excluded), and section ordering, **run
+unchanged**. They prove semantic preservation, not full-section byte equality; the
+byte-identity itself rests on the construction argument above. If stronger
+assurance is wanted, a byte-exact section golden is a cheap add (the ADR golden
+pattern, `tests/e2e_adr_cli_golden.rs`) — not required, since the inputs are
+provably unchanged.
 
 ### 3.6 Glossary
 
@@ -135,7 +146,24 @@ known-set; symbol-only-title-needs-`--slug` bail.
 
 **main.rs:** `standard_split` classifier test.
 
-**install.rs:** standard tree created + not gitignored.
+**install.rs:** standard tree created + not gitignored (unit — surface 1 only).
+
+**Conformance parity (the load-bearing gates POL/ADR already hold — mirror, don't
+skip):**
+- **install→commit e2e** (mirror `tests/e2e_policy_install_commit.rs`): the
+  `!.doctrine/standard/` negation makes a scaffolded standard committable; without
+  it, ignored. Catches the "scaffolded but uncommittable under the blanket
+  `.doctrine/*` ignore" trap the install.rs unit test does NOT cover.
+- **worker-guard matrix** (`tests/e2e_worker_guard.rs`): add `standard new` +
+  `standard status` rows — both hard-refuse under `DOCTRINE_WORKER=1` with the
+  named-verb error (ADR-006 INV; read verbs unaffected).
+- **list parse-conformance** (`tests/e2e_list_conformance.rs`): extend to the
+  governance kinds so `standard list` proves `--filter/--regexp/--status/--json`
+  + the JSON envelope ride the shared spine (the matrix currently omits even POL).
+- **black-box CLI golden** (mirror `tests/e2e_adr_cli_golden.rs`): byte-exact
+  `standard list` (populated tree — hide-set + ordering + prefix + header),
+  `standard show` (Table + `--json`), `standard status` (transition + no-op +
+  malformed-refuse). A one-char render edit turns a golden red.
 
 **boot.rs — gate (stay GREEN UNCHANGED):** existing ADR/POL ordering + filtered-
 projection tests prove byte-identity. **New tests:**
@@ -193,6 +221,25 @@ not an ADR, not a `doc/*` spec.
   single `boot_sequence` tuple. No hidden third surface.
 - **"Does `default` collide with the supekku `default` semantics elsewhere?"** No —
   it is a per-kind status string, scoped to STD's known-set; ADR/POL never see it.
+
+### 8.1 External adversarial pass (Codex, design + plan)
+
+Six findings, all verified against source and integrated:
+- **(MAJOR) Boot "byte-identity proven by suites" overclaimed** — the existing
+  boot tests assert presence + row-format + filtering, not full section bytes.
+  Reworded §3.5: byte-identity holds *by construction* (provably-unchanged
+  inputs); the suites prove semantic preservation. Optional byte golden noted.
+- **(MAJOR) install→commit e2e missing** — POL has a dedicated
+  `e2e_policy_install_commit.rs` for the gitignore-negation/uncommittable trap;
+  the install.rs unit test covers only surface 1. Added VT-5 / §4 parity.
+- **(MAJOR) worker-guard gap** — `standard new/status` absent from the
+  `e2e_worker_guard.rs` refusal matrix (ADR-006). Added VT-6 / §4 parity.
+- **(MAJOR) list parse-conformance** — `e2e_list_conformance.rs` omits even POL;
+  "mirror policy" buys nothing. Added VT-7 / §4 (extend matrix to gov kinds).
+- **(MAJOR) golden VT-4 vague** — tightened to byte-exact `standard
+  list/show/show --json/status` against the ADR golden pattern.
+- **(MINOR) scope template fallback stale** — removed the "if exists…else
+  policy.md" conditional; supekku source is locked.
 
 ## 9. Open questions
 

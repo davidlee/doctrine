@@ -24,10 +24,9 @@ left in `src/boot.rs`: the per-kind boot projection is not yet parameterized.
   hide-set-⊆-known-set tests mirror POL's.
 - **Scaffold templates** — `install/templates/standard.{toml,md}` (rust-embedded).
   TOML mirrors `policy.toml` (metadata + inert `[relationships]`, `status =
-  "draft"`); MD body reuses tuned prior art if a standard template exists under
-  `../spec-driver/supekku/templates/` (attributed), else mirrors `policy.md`
-  sections — **no YAML frontmatter** (storage rule / ADR-D1: metadata in the
-  sister TOML).
+  "draft"`); MD body is taken from the tuned prior art at
+  `../spec-driver/supekku/templates/standard-template.md` (it exists; attributed)
+  — **no YAML frontmatter** (storage rule / ADR-D1: metadata in the sister TOML).
 - **CLI wiring** — `doctrine standard new|list|show|status` registered in the
   command tier, mirroring the `policy` subcommand registration.
 - **Install wiring** — manifest dir + `.gitignore` negation for the new authored
