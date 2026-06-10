@@ -19,21 +19,25 @@ discipline** (D7) — incremental per-batch persistence in strict order
 (D8); the **branch-point check extended to the concurrent case** (D5); and
 **worker-mode ON** for funnel workers (D6a, the half SL-029 left stubbed).
 
-**Execution depends on IMP-002** (worker-mode guard `DOCTRINE_WORKER=1` (D2a) +
-trunk-ref minting / reseat (D3)) — still `open`. IMP-002 is the funnel's
-prerequisite, named as such by both ADR-006 and SL-029. The dependency blocks
-*execution*, not scoping or design: this slice's design assumes IMP-002's D2a
-guard surface and D3 minting exist, and proceeds. Reuses the `/worktree` skill
-SL-029 landed; fills `plugins/doctrine/skills/dispatch/SKILL.md` (placeholder).
+**Prerequisite already satisfied (reframed in `/design`).** IMP-002 (worker-mode
+guard `DOCTRINE_WORKER=1` (D2a) + trunk-ref minting / reseat (D3)) was named as the
+*open* execution prerequisite — but its substance **shipped under SL-032** (D2a
+guard + `tests/e2e_worker_guard.rs` PHASE-01; D3 trunk minting PHASE-02; validate +
+reseat PHASE-03). The gate is open: SL-031 is **not** execution-blocked. The only
+residue is the 5 `&[]` minting placeholders (tagged `SL-031 §5.4`). IMP-002 the
+backlog item is stale-open and is **reconciled/closed by this slice**. The original
+A-1 ("blocked until IMP-002 lands") is retired. Reuses the `/worktree` skill SL-029
+landed; fills `plugins/doctrine/skills/dispatch/SKILL.md` (placeholder).
 
 ## Scope & Objectives
 
 - **Worker contract (D2/D6a).** Implement the `mode=worker` side of the
   `/worktree` skill (SL-029 landed solo only): worker-mode ON, worker mutates
-  **source only**, returns a **structured report + source delta** (a
-  branch/worktree diff or patch — not a prose description), never commits
-  doctrine state. Doctrine-mediated authored writes refuse under worker-mode
-  (honouring IMP-002's D2a guard).
+  **source only**, **commits the source change to its fork branch** (the branch ref
+  is the delta — OQ-3), returns a **structured report** (the returned message), and
+  never commits doctrine state. Doctrine-mediated authored writes refuse under
+  worker-mode (D2a guard, shipped SL-032; a raw source `git commit` is not a
+  doctrine-mediated write, so it is permitted).
 - **Orchestrator pre-distill (D6).** The worker receives a self-contained prompt
   — policy digest, design excerpts, pre-fetched memories, task spec, mandatory
   verification command. Workers do **not** read boot/governance or run `/boot`.
@@ -93,33 +97,40 @@ SL-029 landed; fills `plugins/doctrine/skills/dispatch/SKILL.md` (placeholder).
   contract (SL-029 stubbed it; solo shipped).
 - `plugins/doctrine/skills/execute/SKILL.md` — clarify the worker-vs-solo boundary
   only if the funnel contract requires it (D6a already drawn in SL-029).
-- **Possible CLI surface (design to settle, OQ-2)** — whether any of structured-
-  report / source-delta import / funnel ordering is a CLI verb (`src/worktree.rs`
-  / a new `doctrine worktree …` subcommand) or stays orchestrator skill-prose.
-  SL-029's precedent: mechanics in skill-prose, thin tested CLI verbs at the seam.
-- **Possible install/boot wiring** — for the Claude-only `WorktreeCreate` hook
-  (A-6), if OQ-1 resolves to ship it. Design-gated.
-- **Tests** — funnel-order conformance (import→verify→commit→record); branch-point
-  check under the concurrent-batch case.
+- `src/{slice,governance,spec,backlog,requirement}.rs` — wire the 5 `&[]` minting
+  placeholders to `git::trunk_entity_ids(&root, KIND.dir)?` (production trunk-aware
+  minting; the SL-032 §5.4 tail).
+- `src/entity.rs` — `KindIdentity { prefix, dir, stem, state_dir }` embedded on
+  `Kind` (folds `GovKind.stem`, adds `state_dir`).
+- `src/integrity.rs` — `KINDS` references the kind consts (closes F-2); `reseat`
+  reads `state_dir` (closes F-5); set-equality guard test (`KINDS` ⟺ kind consts).
+- `src/worktree.rs` + `src/main.rs` — new `doctrine worktree branch-point-check`
+  verb (OQ-2 mechanical seam; Read-classed).
+- **No install/boot wiring** — OQ-1 deferred (no WorktreeCreate hook this slice).
+- **Tests** — two-worktree non-colliding mint (VT); registry set-equality (VT);
+  `branch-point-check` exit-0/1 (VT). Funnel ordering + worker contract are **VA**
+  (skill conformance), not VT.
 
 ## Risks, assumptions, open questions
 
-- **A-1 — IMP-002 is an execution prerequisite.** Design proceeds assuming its
-  D2a worker-mode guard and D3 trunk-ref minting surfaces exist; execution is
-  blocked until IMP-002 lands.
-- **OQ-1 — WorktreeCreate hook (A-6): ship here or defer?** Sharp edges to decide
-  in `/design`: **interception scope** (the hook replaces *all* Claude worktree
-  creation in the project, not just doctrine's → needs opt-in/scoping, not blanket
-  install); **portability** (Claude-only; a non-Claude funnel agent has no hook →
-  must fall back to rung-3 `git worktree add` + provision; the hook is an
-  optimisation, never a dependency); **force-copy reconciliation** (a
-  doctrine-authored hook body must be **provision-only** — if it copies, the
-  SL-029 sole-copier invariant degrades to `check-allowlist` only).
-- **OQ-2 — CLI vs skill-prose boundary for the funnel.** How much of import /
-  verify / commit / record is a tested CLI verb vs pure orchestrator skill-prose
-  (mirrors SL-029 OQ-3).
-- **OQ-3 — source-delta representation.** Branch diff vs patch vs handed-back
-  worktree path; how the orchestrator imports it onto the coordination branch.
+- **A-1 — RETIRED.** IMP-002's substance shipped under SL-032 (see Context); the
+  slice is not execution-blocked. Replaced by **R-3** (registry refactor must keep
+  existing suites green — behaviour-preservation gate).
+- **OQ-1 — RESOLVED → DEFER.** The WorktreeCreate hook (A-6) is deferred: in the
+  funnel the orchestrator provisions before the worker exists (D9), so the gap the
+  hook closes is unreachable. Claude-only, project-wide-invasive, reopens force-copy
+  risk. Stays an open backlog item. (design §6)
+- **OQ-2 — RESOLVED → skill-prose funnel (VA) + one verb.** Ordering and the
+  dispatch/batch/recovery loop are orchestrator skill-prose (VA). The single
+  mechanical seam is a tested `doctrine worktree branch-point-check` verb (VT). No
+  funnel-driver verb. (design §5.2 / §6)
+- **OQ-3 — RESOLVED → fork branch ref is the delta.** Worker commits source to its
+  fork branch; the shared object store makes import a local git op (no transport).
+  Report = returned message. Patch-handback is the non-shared-store fallback.
+  (design §5.3 / §6)
+- **R-3 — registry refactor breaks the engine.** Folding `stem`/`state_dir` into one
+  identity surface and pointing `integrity::KINDS` at the kind consts must keep
+  validate/reseat/run_new suites green unchanged (behaviour-preservation gate).
 - **R-1 — D2b residual gap.** A worker can still raw-edit main (the harness does
   not confine it to its worktree, ADR-006 D2b); the funnel rests on the CLI guard
   (IMP-002) + prompt contract. Known, deferred to ADR-008.
@@ -128,16 +139,19 @@ SL-029 landed; fills `plugins/doctrine/skills/dispatch/SKILL.md` (placeholder).
 
 ## Verification / closure intent
 
-Done when: the `mode=worker` contract is implemented and a worker returns a
-structured report + source delta with doctrine-mediated writes refusing under
-worker-mode (D2a, via IMP-002); the orchestrator funnel executes
-**import → verify → commit → record** in strict order on the coordination branch
-with incremental per-batch persistence (D7), and the ordering is test-asserted;
-the branch-point check holds under the concurrent-batch case (D5); the `/dispatch`
-skill ships **filled** (no longer a placeholder) with the orchestrator-sole-writer
-remit and crash/recovery prose; and the WorktreeCreate-hook decision (OQ-1) is
-resolved — installed-and-scoped (provision-only) or explicitly deferred with
-rationale. ADR-006's funnel / D7 / D2a / branch-point-under-concurrency
+Done when: **(A)** trunk-aware minting is wired at all 5 `run_new` sites
+(two-worktree non-colliding mint, VT) and the kind-identity registry is deduped —
+`KINDS` references the consts, `reseat` uses `state_dir`, the set-equality guard
+passes, existing suites green unchanged (F-2/F-5, VT); IMP-002 is reconciled to
+done. **(B)** the `mode=worker` contract is implemented (source-only, commits to
+its fork branch, returns a structured report, no degrade-to-in-place) with
+doctrine-mediated writes refusing under worker-mode (D2a, already covered, VT); the
+orchestrator funnel runs **import → verify → commit → record** in strict order per
+batch (D7) — **VA** (skill conformance, not a unit test); the branch-point check
+under concurrency ships as the tested `branch-point-check` verb (D5, VT) driving the
+re-dispatch policy (VA); and `/dispatch` ships **filled** with the
+orchestrator-sole-writer remit + crash/recovery prose. OQ-1 is resolved (deferred,
+with rationale). ADR-006's funnel / D7 / D2a / branch-point-under-concurrency
 Verification bullets are the conformance basis.
 
 ## Follow-Ups
