@@ -812,5 +812,13 @@ integration *choice* (the simplicity-vs-precision call on F30, now reversed
 with evidence), F47/F48 are contract gaps in surfaces the earlier rounds never
 aimed at. Severity trend finally diminishing: blocker count 2→4→1 across
 external rounds, and round 4's blocker required no new mechanism — only
-re-keying two existing references from authored to post-arity SCCs. Design
-stands, pending user sign-off.
+re-keying two existing references from authored to post-arity SCCs.
+
+### Lock
+
+**Design locked by user sign-off, 2026-06-10** (post round 4, commit `96fe162`).
+48 findings (F1–F48) integrated across four adversarial rounds; 0 DDs
+overturned. Known-opens deliberately deferred to the first consumer
+(notes.md "Round-4 outcome"): explanation path-enumeration combinatorics,
+full-downstream taint extent, pre-consumer API churn. Subsequent changes to
+this design require re-opening review, not silent edits.

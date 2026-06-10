@@ -1,0 +1,154 @@
+# Implementation plan for SL-036 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+#
+# Design canon: design.md (locked 2026-06-10, F1–F48 integrated). Finding ids
+# (Fnn) and §9 fixture-row names below cite design.md; every §9 row is assigned
+# to exactly one phase's verification (cross-phase rows note the split).
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-036"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "crate skeleton & model contract"
+objective = "Stand up crates/cordage as a workspace member under the repo lint posture and deliver the full public model vocabulary (design §5.2): NodeId/OverlayId, OverlayConfig{CyclePolicy,Arity}, EdgeAttrs, Combinator/Direction/ChannelValue/ChannelSpec, OrderLayer/OrderSpec, GraphBuilder→build()→Graph with BTree adjacency + derived reverse index, and the complete build-input validation contract (F14/F22/F38). build() runs no resolution passes yet; queries are defined and non-panicking on every input."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (§10 Lock, user sign-off 2026-06-10); slice status = plan or later" },
+  { id = "EN-2", text = "Workspace is single-member (members = [\".\"]); no crates/ dir exists" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "crates/cordage builds as a workspace member with [lints] workspace = true and zero dependencies (no doctrine path dep)" },
+  { id = "EX-2", text = "Public model types match design §5.2 exactly: opaque NodeId(u32)/OverlayId(u16), CyclePolicy{Reject,Evict}, Arity{AtMostOne,Unbounded}, EdgeAttrs{rank,age}, Combinator{Max,Any,All,CountDistinct}, Direction{Along,Against,None}, ChannelValue{Flag,Scalar,Count}, ChannelSpec, OrderLayer/OrderSpec" },
+  { id = "EX-3", text = "build() Err = malformed input ONLY (F14): unknown node/overlay id, overlay repeated in OrderSpec in any direction (F38), Direction::None layer (F22), overlay cap (F29); BuildError names the offence structurally" },
+  { id = "EX-4", text = "Storage per §5.3: BTreeMap/BTreeSet throughout; out-sets ordered (dst,rank,age), in-sets (src,rank,age) (F21); reverse index derived at build(), never stored input (ADR-004); duplicate identical edges dedupe by set semantics" },
+  { id = "EX-5", text = "out_edges/in_edges adjacency views work; queries with a foreign/unknown id return empty/None, non-panicking (F14)" },
+  { id = "EX-6", text = "plain cargo clippy zero warnings; just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "Builder rejection suite: each F14/F22/F38 malformed-input class → Err naming the offence; empty OrderSpec is VALID (pure-NodeId order)" },
+  { id = "VT-2", expects = "Empty graph and single-node-no-edges build Ok; foreign-id out_edges/in_edges return empty (§9 'queries with a foreign id' edge case)" },
+  { id = "VT-3", expects = "Duplicate identical edge inserted twice → one edge (set dedupe); adjacency iteration order matches the §5.3 explicit keys" },
+  { id = "VT-4", expects = "cargo tree -p cordage shows zero deps; suite uses structural identifiers only (REQ-079 boundary row, established here, final proof PHASE-05)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "build passes 1–2: arity & per-overlay cycle resolution"
+objective = "Implement build() passes 1 and 2 (design §5.4): arity enforcement keeping the (rank,age,src,dst)-maximal incoming edge on AtMostOne overlays (F7/F19/F36); Reject cycle detection on the authored pre-arity edge set emitting CycleDiagnostic per cyclic component including self-loops (F20/F30), with degraded marks keyed to post-arity SCCs (F46); Evict resolution to fixpoint by the total eviction key (F17/F37). Cycles are Provenance data, never Err; Provenance output sorted (overlay, edge) (F21)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: builder, validation, storage, reverse index in place" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Pass 1: >1 incoming edge on AtMostOne keeps the F17-total-key MAX, rest evicted lowest-key-first as EvictedEdge{ArityViolation}; runs under both cycle policies (F27)" },
+  { id = "EX-2", text = "Pass 2 Reject: SCC detection on the AUTHORED pre-arity set (F30); every cyclic component (multi-node SCC or self-loop, F20) → CycleDiagnostic; degraded marks recorded against POST-ARITY SCCs (F46) for pass 3/4 consumption; no mutation; build() Ok" },
+  { id = "EX-3", text = "Pass 2 Evict: while a cyclic component exists, evict the globally-minimal participating edge by (rank asc, age asc, src, dst) (F17), recompute, repeat; terminates ≤ |E|; every eviction → EvictedEdge{IntraOverlayCycle}" },
+  { id = "EX-4", text = "Every eviction SELECTION compares by the F17 key, never adjacency-set order (F37); Provenance.cycles + .evictions sorted (overlay, edge) (F21)" },
+  { id = "EX-5", text = "plain cargo clippy zero warnings; just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "§9 REQ-076 reject row: Reject-overlay cycle → CycleDiagnostic names nodes+edges, no false order emitted, build Ok" },
+  { id = "VT-2", expects = "§9 REQ-092 evict row: Evict-overlay cycle → min-eviction-key edge evicted to fixpoint, in provenance; disjoint cycles each lose their own minimum" },
+  { id = "VT-3", expects = "§9 arity row (F7/F36/F39): total-key MAX kept, rest ArityViolation; equal-(rank,age) parents resolve by src" },
+  { id = "VT-4", expects = "§9 arity×reject pipeline row, diagnostic half (F30/F46): arity breaks the authored cycle → CycleDiagnostic still emitted alongside ArityViolation (ordering half verified PHASE-03)" },
+  { id = "VT-5", expects = "§9 self-loop row (F20): under both policies — reject diagnoses, evict drops" },
+  { id = "VT-6", expects = "§9 eviction key row (F37): fixture where adjacency-set min ≠ eviction-key min → eviction-key-minimal edge evicted" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "order composition: U, order_key, taint"
+objective = "Implement build() passes 3 and 4 plus the public ordering surface (design §5.4): compose the order structure U by precedence-ordered batch-insert + SCC eviction of layer-k minima (F10), excluding only intra-post-arity-SCC edges of degraded Reject overlays (F32/F46), evictions touching U alone (I7/F18); materialise OrderKey = Level{Finite,Degraded}(longest-path level) + NodeId with taint seeded from spec-referenced post-arity degraded SCCs and propagated to U-descendants (F11/F12/F31/F33/F46); deliver order_key(n) and ordered()."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: resolved per-overlay edge sets, post-arity degraded SCC marks, provenance machinery" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Pass 3: layers walked in precedence order; layer batch-inserted into U; while U cyclic, evict (rank,age,src,dst)-minimal layer-k edge in any cycle → EvictedEdge{UnionCycleVsLayer}; earlier layers never evicted against (I2); fixpoint per layer (F10)" },
+  { id = "EX-2", text = "Exclusion from U is intra-SCC only: edge withheld iff both endpoints in the same degraded post-arity SCC (F32/F46); boundary-crossing edges enter U" },
+  { id = "EX-3", text = "Pass-3 evictions remove edges from U ONLY; overlay edge sets untouched (I7/F18)" },
+  { id = "EX-4", text = "Pass 4: U acyclic; longest-path level total over all nodes, no sentinel (F12); taint seeds = degraded post-arity SCCs of OrderSpec-referenced overlays only (F31/F46), propagated to all U-descendants; tainted → Degraded(level), clean → Finite(level); Degraded > Finite; (level, NodeId) total within variant" },
+  { id = "EX-5", text = "ordered() respects every surviving U edge including inside the degraded suffix (F33/I2); empty OrderSpec → pure-NodeId order" },
+  { id = "EX-6", text = "plain cargo clippy zero warnings; just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "§9 union row (F2): 3-layer OrderSpec, layer-2 edge contradicts layer-0 → EvictedEdge{UnionCycleVsLayer}, layer-0 order preserved" },
+  { id = "VT-2", expects = "§9 union composite row (F10): prior a→b; layer-k {b→c, c→a} → exactly one layer-k edge evicted (total-key min), U acyclic, terminates" },
+  { id = "VT-3", expects = "§9 refinement row (F11): layer-0 a→b with c incomparable; layer-1 b→c → order a,b,c (surviving later-layer edge never violated)" },
+  { id = "VT-4", expects = "§9 degraded taint row (F12): reject-SCC + clean successor → successor Degraded, no overflow, ordered() total" },
+  { id = "VT-5", expects = "§9 degrade scope row (F31): cycle in a Reject overlay NOT in the OrderSpec → clean spec order preserved, diagnostic emitted, nothing Degraded" },
+  { id = "VT-6", expects = "§9 taint crossing row (F32): a↔b (Reject, in spec) + b→c → c Degraded; intra-SCC edges absent from U" },
+  { id = "VT-7", expects = "§9 suffix order row (F33): degraded a,b + surviving clean-layer b→a → suffix orders b before a (U level, not NodeId)" },
+  { id = "VT-8", expects = "§9 arity×reject pipeline row, ordering half (F30/F46): post-arity view acyclic → nothing Degraded, ordered() respects every surviving resolved edge (c,b,a for the F30 example)" },
+  { id = "VT-9", expects = "§9 REQ-077 determinism row, ordering half: build twice → identical order_key + Provenance; union fixture a—x→b (earlier layer), b—y→a (later layer) (contributor-trace half PHASE-04)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "reachability & channel evaluation"
+objective = "Deliver the traversal and propagation surface (design §5.2 contract, §5.5 I5/I6): strict cycle-safe reachable() (F8/F12), spine_path() on AtMostOne overlays (F23), and evaluate() implementing the per-combinator-class fold-set contract — idempotent combinators over {n} ∪ reachable, CountDistinct over strict reachable counting Flag(true) seeds only (F15/F34/F45) — with the full seed contract (F16/F41), per-combinator Direction::None (F35), contributors including All (F43), structural tie-breaks (F21), and channel values invariant under OrderSpec (I7/F18)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: resolved traversal views and ordering surface stable (I7 invariance is testable only once pass-3 eviction exists)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "reachable(ov,n,dir) strict (excludes n, I6), pure edge traversal, total + cycle-safe on degraded Reject views (F12); reachable(_,None) = ∅ (F25)" },
+  { id = "EX-2", text = "spine_path → Option: None unless AtMostOne (F23); follows the single kept parent (F6/F7)" },
+  { id = "EX-3", text = "evaluate per the F34 split: Any/All/Max fold present seeds over {n} ∪ reachable; CountDistinct = |strict-reachable Flag(true) seeds| via BTreeSet union accumulator, Count projected at read; all-present-false fold set → Count(0), real data ≠ absence (F45)" },
+  { id = "EX-4", text = "Seed contract (I5): missing seed contributes nothing; no-present-seed fold set → absent from values (no identity escapes, F16); variant mismatch → ChannelDiagnostic{SeedVariantMismatch{expected,actual}} treated absent (F40); foreign NodeId seed → ChannelDiagnostic{UnknownSeedNode} ignored, UnknownSeedNode wins, ≤1 diagnostic per node, sorted by NodeId (F41)" },
+  { id = "EX-5", text = "Direction::None per-combinator (F35): Any/All/Max emit own present variant-valid seed; CountDistinct always absent" },
+  { id = "EX-6", text = "contributors pinned (F21/F43): Any→witnesses, All→false:present-false / true:present-true, Max→argmax min-NodeId tie, Count→the set; Channel.values invariant under presence/shape of OrderSpec (I7/F18)" },
+  { id = "EX-7", text = "plain cargo clippy zero warnings; just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "§9 DD1 rollup row (F5): Unbounded membership overlay, node with 2 parents, Against-direction All/CountDistinct aggregate from both; spine_path returns the single kept path; CountDistinct over a diamond counts once (R3)" },
+  { id = "VT-2", expects = "§9 CountDistinct set row (F34/F45): seeded single node + None → absent; SCC a↔b seed on a only → per-member values per strict contract; all-Flag(false) fold set → Count(0) ≠ absent" },
+  { id = "VT-3", expects = "§9 None per combinator row (F35): Max+None → own seed; CountDistinct+None → absent" },
+  { id = "VT-4", expects = "§9 foreign seed row (F41): unknown NodeId in seed map → ChannelDiagnostic{UnknownSeedNode}, ignored, deterministic" },
+  { id = "VT-5", expects = "§9 seed contract row (F16): Scalar(i64::MIN) seed ≠ absence; mismatched variant → diagnostic; sparse seed map; no fabricated identity in values" },
+  { id = "VT-6", expects = "§9 eviction scope row (I7/F18): byte-identical channel values with and without an OrderSpec that evicts" },
+  { id = "VT-7", expects = "§9 ties row (F21): equal Max seeds → min-NodeId argmax; contributors + Provenance ordering pinned" },
+  { id = "VT-8", expects = "§9 REQ-080 seam row: a fresh channel via existing combinators works with no core change; Combinator doc-marked as the curated extension point" },
+  { id = "VT-9", expects = "reachable strictness (I6/F8) and reachable(_,None) = ∅ (F25) pinned directly" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "explain, provenance surface & the golden net"
+objective = "Deliver explain(n) — role-agnostic structured paths per overlay with F47 chain termination (root OR degraded-post-arity-SCC entry; SCC members are endpoints only; in-SCC node → [[n]]) and endpoint-filtered evictions (F26) — then close the slice-wide verification net: edge-insertion-permutation determinism, naive-oracle SCC/topo property tests, and the forbidden-vocabulary denylist scan (F24/REQ-077/REQ-079)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete: every public surface (order, channels, traversal, provenance) exists for explain to assemble and the net to pin" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Explanation per §5.4: {node, order_key, paths: BTreeMap<OverlayId, Vec<Vec<NodeId>>>, evicted} — no String prose, no role fields (F13); chains end at a root or the first node of a degraded post-arity SCC, never walk through SCC members; finite + deterministic on cyclic Reject views (F47)" },
+  { id = "EX-2", text = "Explanation.evicted = evictions with n as src or dst (F26)" },
+  { id = "EX-3", text = "Property tests: SCC + topo order against a naive independent oracle (F24/R1); edge-insertion-order permutation → byte-identical outputs" },
+  { id = "EX-4", text = "Denylist scan over crates/cordage/** (code, docs, tests) rejects the SPEC-001 Appendix B forbidden vocabulary; wired into the suite, not a manual step" },
+  { id = "EX-5", text = "plain cargo clippy zero warnings; just check green; full suite green — slice ready for /audit" },
+]
+verification = [
+  { id = "VT-1", expects = "§9 explain on cycles row (F47): Reject a↔b + a→x → explain(x) chain ends at a; explain(a) paths = [[a]]; terminates, deterministic, cycle via Provenance.cycles" },
+  { id = "VT-2", expects = "explain evictions endpoint filter (F26): eviction with n as src and as dst both appear; unrelated evictions absent" },
+  { id = "VT-3", expects = "§9 determinism+ row (F24): edge-insertion-order permutation → byte-identical order_key/Channel/Provenance/Explanation; SCC/topo property-tested vs naive oracle" },
+  { id = "VT-4", expects = "§9 REQ-077 determinism row, full: build twice → identical order_key + Provenance + contributor traces" },
+  { id = "VT-5", expects = "§9 REQ-079 boundary row, final proof: no doctrine dep in Cargo.toml; whole suite passes on structural identifiers only; denylist scan green over code, docs, tests" },
+]
+specs        = []
+requirements = []
