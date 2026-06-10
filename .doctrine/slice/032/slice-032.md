@@ -119,9 +119,13 @@ Done when: under `DOCTRINE_WORKER=1` the CLI hard-refuses **every** `Write`-clas
 verb (exhaustive `write_class` — entity new, slice design/plan/notes/phases, status
 transitions, memory record/verify, req add, backlog edit, sync/install) with a
 verb-named message + nonzero exit, and `Read` verbs stay open — test-asserted per
-class (D2a); ids union local ∪ trunk via pure `next_id`, with the peeled
-`^{commit}` ladder + `DOCTRINE_TRUNK_REF` override, degrading to local allocation
-when no trunk exists, without disturbing the existing allocation suites (R-1, R-2);
+class (D2a); the trunk-union **mechanism** ships and is unit-proven — pure
+`next_id(local, trunk)`, the peeled `^{commit}` ladder + `DOCTRINE_TRUNK_REF`
+override, `git::trunk_entity_ids` degrading to local allocation when no trunk
+exists, without disturbing the existing allocation suites (R-1, R-2). **Caveat
+(review F-1, audit.md):** no *mint* verb wires it yet — every `*::run_new` passes
+`&[]`, so trunk-aware minting is inert in production; the only live consumer is
+`reseat`'s default `--to`. Wiring the mint path is SL-031's job (D6/§5.4);
 `validate` flags an intra-kind duplicate / dir-id mismatch / mis-targeted alias
 (D3 detect-half) and `reseat SL-NNN` renumbers the triple, guards occupied-`--to`
 and live-phase-state, and surfaces inbound citations (R-3); `memory record` warns
