@@ -14,6 +14,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
+mod query;
 mod resolve;
 
 // ── identity ─────────────────────────────────────────────────────────────────
@@ -169,6 +170,80 @@ impl ChannelSpec {
     /// The traversal direction.
     pub fn direction(self) -> Direction {
         self.direction
+    }
+}
+
+// ── channel propagation result ───────────────────────────────────────────────
+// The structured output of `evaluate` (design §5.4). No `String` prose, no
+// channel name, no doctrine noun — the `Combinator` is NOT carried: a `Channel`
+// is per-`evaluate`, the spec stays in the caller's hand (F40 partial).
+
+/// Why a seed entry could not contribute, surfaced rather than silently dropped.
+/// `UnknownSeedNode` wins over `SeedVariantMismatch` when both could apply to one
+/// node (F41); at most one diagnostic per node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelDiagReason {
+    /// The seed's [`ChannelValue`] variant is outside the combinator's domain
+    /// (`Any`/`All`/`CountDistinct` consume `Flag`, `Max` consumes `Scalar`). The
+    /// seed is treated as absent.
+    SeedVariantMismatch { expected: ValueKind, actual: ValueKind },
+    /// The seed map keyed a [`NodeId`] this graph never allocated. Ignored.
+    UnknownSeedNode,
+}
+
+/// A single seed-rejection diagnostic from `evaluate`, naming the node and why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChannelDiagnostic {
+    node: NodeId,
+    reason: ChannelDiagReason,
+}
+
+impl ChannelDiagnostic {
+    /// The node whose seed was rejected.
+    pub fn node(self) -> NodeId {
+        self.node
+    }
+
+    /// Why the seed was rejected.
+    pub fn reason(self) -> ChannelDiagReason {
+        self.reason
+    }
+}
+
+/// The result of a single `evaluate`: per-node folded values, the contributing
+/// node sets, and any seed diagnostics. A node absent from `values` had no
+/// present seed in its fold set — no combinator identity ever escapes as output
+/// (F16). `contributors` and `diagnostics` follow §5.4: contributors are
+/// `Any`→present-true witnesses · `All`→present-false set if false / present-true
+/// set if true · `Max`→argmax (min-`NodeId` tie) · `CountDistinct`→the counted
+/// set; diagnostics are sorted by `NodeId`, at most one per node.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Channel {
+    values: BTreeMap<NodeId, ChannelValue>,
+    contributors: BTreeMap<NodeId, BTreeSet<NodeId>>,
+    diagnostics: Vec<ChannelDiagnostic>,
+}
+
+impl Channel {
+    /// The folded value of `node`, or `None` if no present seed reached it.
+    pub fn value(&self, node: NodeId) -> Option<ChannelValue> {
+        self.values.get(&node).copied()
+    }
+
+    /// Every node with a folded value, keyed by [`NodeId`].
+    pub fn values(&self) -> &BTreeMap<NodeId, ChannelValue> {
+        &self.values
+    }
+
+    /// The contributing node set behind `node`'s value (empty slice if none).
+    pub fn contributors(&self, node: NodeId) -> &BTreeSet<NodeId> {
+        static EMPTY: BTreeSet<NodeId> = BTreeSet::new();
+        self.contributors.get(&node).unwrap_or(&EMPTY)
+    }
+
+    /// The seed diagnostics, sorted by [`NodeId`], at most one per node.
+    pub fn diagnostics(&self) -> &[ChannelDiagnostic] {
+        &self.diagnostics
     }
 }
 
@@ -562,6 +637,7 @@ impl GraphBuilder {
             provenance: resolution.provenance,
             degraded_sccs: resolution.degraded_sccs,
             order_spec: self.order_spec,
+            overlays: self.overlays,
             node_count: self.node_count,
             order_keys: BTreeMap::new(),
         };
@@ -613,6 +689,10 @@ pub struct Graph {
     /// The validated order spec, re-stored from the builder; read by
     /// `compose_order` and available to later phases.
     order_spec: OrderSpec,
+    /// Per-overlay configs, re-stored from the builder and indexed by
+    /// `OverlayId` ordinal. Read by `spine_path` (the `AtMostOne` check) and
+    /// `evaluate`.
+    overlays: Vec<OverlayConfig>,
     /// Total node count — the level recurrence is total over `0..node_count`.
     node_count: u32,
     /// Per-node composed-order key (pass 4), total over all nodes.
@@ -654,6 +734,34 @@ impl Graph {
     /// while assembling this graph. Empty when nothing was resolved.
     pub fn provenance(&self) -> &Provenance {
         &self.provenance
+    }
+
+    /// The strict reachable set of `node` on `overlay` in `direction` — the
+    /// transitive successors, **excluding `node` itself** even when cyclically
+    /// reachable (I6/F8). `Along` walks out-edges, `Against` in-edges, `None`
+    /// yields the empty set (F25). A foreign overlay or node yields the empty set
+    /// (F14). Total and terminating over a degraded `Reject` view (F12) — it
+    /// reads the resolved per-overlay adjacency, never the composed order (I7).
+    pub fn reachable(
+        &self,
+        overlay: OverlayId,
+        node: NodeId,
+        direction: Direction,
+    ) -> BTreeSet<NodeId> {
+        query::reachable(&self.out, &self.incoming, overlay, node, direction)
+    }
+
+    /// The spine chain of `node` on `overlay`, **root → … → node** — or `None`
+    /// unless `overlay` is `AtMostOne` (F23): only spine-capable overlays have a
+    /// single kept parent per node (pass-1 arity). The DD1 ergonomic accessor —
+    /// the core privileges no overlay as "the" spine; a policy labels one
+    /// `AtMostOne` overlay's path itself. A foreign overlay yields `None`.
+    pub fn spine_path(&self, overlay: OverlayId, node: NodeId) -> Option<Vec<NodeId>> {
+        let config = self.overlays.get(usize::from(overlay.0))?;
+        if !matches!(config.arity(), Arity::AtMostOne) {
+            return None;
+        }
+        Some(query::spine_path(&self.incoming, overlay, node))
     }
 
     /// The composed-order key of `node`, or `None` for a foreign/unknown id

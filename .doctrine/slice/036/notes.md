@@ -215,3 +215,36 @@ Carry-forward for PHASE-04 (reachability & channel evaluation):
 - `reachable`/`evaluate` read the per-overlay traversal view (`out`/`incoming`),
   which is cycle-safe over Reject overlays by design (I1/F47) — do NOT route them
   through `U`.
+
+## PHASE-04 implementation (2026-06-11) — query surface T1–T4
+
+Storage seam + traversal half of the phase. New private `src/query.rs` (the
+query-time sibling of build-time `resolve.rs`), public channel-result types, and
+`reachable`/`spine_path` on `Graph`. `tests/reachability.rs` (8 tests) green;
+whole suite still green (behaviour preservation — T1 only adds a field).
+
+- **T1 storage seam:** `overlays: Vec<OverlayConfig>` re-stored on `Graph` in
+  `build()` (moved `self.overlays` into the struct after the `resolve` borrow
+  ends — no clone). First consumer is `spine_path`'s `AtMostOne` gate. The brief
+  dead-code window (field added before first read) carried a self-clearing
+  `#[expect(dead_code)]`, removed the moment `spine_path` read it (T4).
+- **T2 public types:** `Channel`/`ChannelDiagnostic`/`ChannelDiagReason` declared
+  FLAT in lib.rs (A-2, no `pub use`), doc-comments mirror §5.4. `Channel` carries
+  NO combinator (F40 partial — spec stays caller-side). `contributors(node)`
+  returns `&BTreeSet` via a `static EMPTY` fallback (no panic, no alloc).
+- **T3 `mod query` + `reachable(ov,n,dir) -> BTreeSet<NodeId>`:** BFS over the
+  resolved adjacency, `start` seeded into `visited` but never into `reached` →
+  STRICT (I6/F8) holds even when `start` is cyclically reachable. `Along`→`out`
+  dst, `Against`→`incoming` src, `None`→∅ (F25). Foreign ids→∅ (F14). Visited set
+  bounds a degraded Reject cycle (F12). → VT-9.
+- **T4 `spine_path(ov,n) -> Option<Vec<NodeId>>`:** `None` unless the stored
+  config is `AtMostOne` (F23); else follow `single_parent` (pass-1 left ≤1
+  in-edge) up `incoming`. **Orientation pinned: root → … → node** (ancestor-first)
+  — chosen for natural reading order, asserted in the test. Cycle-safe (visited
+  re-entry break). → spine half of VT-1.
+
+Carry-forward to T5 (`evaluate`, the F34 split) — still TODO: the per-combinator-
+class fold (Any/All/Max over `{n}∪reachable`, CountDistinct over STRICT reachable),
+the seed contract + diagnostics (UnknownSeedNode-wins, ≤1/node, sorted), per-
+combinator `Direction::None` (F35), contributors (F21/F43). Then T6 REQ-080 seam,
+T7 refactor. `query::reachable` is the shared traversal T5 folds over.
