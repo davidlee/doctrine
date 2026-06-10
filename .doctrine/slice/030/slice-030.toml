@@ -1,9 +1,9 @@
 id = 30
 slug = "policy-entity-kind"
 title = "Policy entity kind (POL)"
-status = "proposed"
+status = "done"
 created = "2026-06-09"
-updated = "2026-06-09"
+updated = "2026-06-10"
 
 [relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
