@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb1c0658f71d1a213a4f53856f410"
+memory_key = "mem.pattern.lint.new-workspace-member-cargo-metadata"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "New workspace member trips the cargo lint group + pedantic doc lints"
+summary = "A new workspace member crate trips clippy::cargo (cargo_common_metadata) + pedantic doc lints the root already satisfied"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[scope]
+paths = []
+globs = ["crates/**/Cargo.toml", "crates/**/*.rs"]
+commands = ["cargo clippy"]
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "7e4b70a42825fdfb4fcc90e4bdf2cd0f2aa6f78c"
+tree = "d5f7e83ac5ee6a49b6dde60926d8b19757044af1"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "7e4b70a42825fdfb4fcc90e4bdf2cd0f2aa6f78c"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
