@@ -240,6 +240,24 @@ enum WorktreeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// HEAD-stationarity assert at the batch-commit boundary (SL-031, D5
+    /// concurrency extension): exit 0 if coordination HEAD still equals the
+    /// orchestrator's pre-spawn base, 1 otherwise (→ re-dispatch). Not a
+    /// merge-base compute (C-V).
+    BranchPointCheck {
+        /// The orchestrator's pre-spawn captured base commit `B`.
+        #[arg(long)]
+        base: String,
+
+        /// HEAD to compare against (default: `git rev-parse HEAD`).
+        #[arg(long)]
+        head: Option<String>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1098,7 +1116,11 @@ fn write_class(cmd: &Command) -> WriteClass {
         Command::Worktree { command } => match command {
             // Both write *fork* files, not the doctrine state the guard protects,
             // and never run in worker context (§5.2) — Read on purpose.
-            WorktreeCommand::Provision { .. } | WorktreeCommand::CheckAllowlist { .. } => Read,
+            // branch-point-check is a HEAD read + ref compare — no authored write,
+            // callable under worker-mode by construction (§5.2, C-V).
+            WorktreeCommand::Provision { .. }
+            | WorktreeCommand::CheckAllowlist { .. }
+            | WorktreeCommand::BranchPointCheck { .. } => Read,
         },
         // Read-only corpus integrity scan (INV-3).
         Command::Validate { .. } => Read,
@@ -1390,6 +1412,9 @@ fn main() -> anyhow::Result<()> {
         Command::Worktree { command } => match command {
             WorktreeCommand::Provision { fork, path } => worktree::run_provision(path, &fork),
             WorktreeCommand::CheckAllowlist { path } => worktree::run_check_allowlist(path),
+            WorktreeCommand::BranchPointCheck { base, head, path } => {
+                worktree::run_branch_point_check(path, &base, head)
+            }
         },
         Command::Validate { path } => integrity::run_validate(path),
         Command::Reseat {

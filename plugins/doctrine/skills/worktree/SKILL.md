@@ -30,16 +30,21 @@ semantics (design §5, the OQ-1 split seam).
 - `solo` — MAY degrade to the work-in-place rung on sandbox denial (no fork; the
   blessed trunk path).
 - `worker` — **MUST NOT degrade.** A worker with no real fork is a hard failure;
-  the funnel's isolation is mandatory.
-
-**This slice (SL-029) implements `solo`. `worker` is DECLARED here, implemented by
-the funnel slice — do not add worker behaviour beyond this contract.**
+  the funnel's isolation is mandatory. Beyond creation/provision/guards, the worker
+  half runs a constrained edit→verify→**commit-one-`S`-to-fork** loop; see
+  [Worker mode](#worker-mode-the-funnel-half) (SL-031 §5.2).
 
 **Outputs:**
 ```
 { fork_path, branch, head_sha,
   provision_report { copied, withheld },
   baseline_result }
+```
+
+`worker` adds two fields once it has committed its delta:
+```
+{ fork_branch,        # the branch ref carrying the single commit S (the importable delta)
+  head_sha_after }    # the fork HEAD after S — what the orchestrator imports B..S from
 ```
 
 ## Detection (adapt, don't re-create — D1)
@@ -163,6 +168,13 @@ git -C <fork> rev-parse HEAD       # fork,   post-create → must equal SHA
 Mismatch ⇒ abort / recreate. Cheap; solo rarely exercises it, but it lands here so
 the funnel slice only *extends* it to the concurrent case.
 
+**Concurrency extension (SL-031, D5).** The funnel reuses the same ref-equality at
+a *different* boundary — the batch commit. `doctrine worktree branch-point-check
+--base <B> [--head <SHA>]` exits 0 iff coordination HEAD still equals the
+orchestrator's pre-spawn base `B`, 1 otherwise (→ re-dispatch). It is the
+**orchestrator's** guard, run worker-mode-OFF at import time — *not* something the
+worker runs. Naming note (C-V): a HEAD-stationarity compare, not a merge-base.
+
 ### Baseline-verify (D9 — project-configured, green-gate)
 
 After provisioning, run the project's regenerate-and-verify command **inside the
@@ -175,6 +187,61 @@ cd <fork> && just check            # this repo: fmt + lint + test + build
 The command is **project-provided** — doctrine is a framework, so it is never a
 hardcoded `cargo …`. An unbuildable fork is fixed in provisioning, **never handed
 off**.
+
+## Worker mode (the funnel half)
+
+`mode=worker` is the path `/dispatch` spawns inside an isolated fork. The fork,
+provision, and three guards above all run first — **unchanged**; this section is
+what happens *after* a green baseline, in place of solo handoff. The worker is a
+constrained writer: it produces exactly one importable delta and returns, never
+touching the coordination/runtime tier (the fork already withholds it, D9).
+
+**Self-arm first (D2a, fail-open — C-I).** The worker's first act is:
+
+```bash
+export DOCTRINE_WORKER=1
+```
+
+This arms the doctrine guard so any doctrine-mediated authored write (`slice …`,
+`memory record`, `backlog …`, minting) **refuses** — workers return a source
+delta; all doctrine-mediated writes funnel through the orchestrator. The harness
+`Agent` tool exposes **no env seam**, so nothing *enforces* the line — it is a
+self-armed prompt contract that fails **open** if omitted (the orchestrator's
+import-time `.doctrine/`-reject belt, not this var, is the real protection). Arm it
+regardless.
+
+**The constrained loop:**
+
+1. **Mutate source only.** Edit tracked/untracked source files in the fork. Do
+   **not** write `.doctrine/` authored trees, runtime state, or memory — those are
+   the orchestrator's, and an import touching them is rejected (report+halt).
+2. **Verify.** Run the **orchestrator-supplied** verify command (passed in the
+   worker prompt — not assumed to be `just check`; doctrine is a framework). A red
+   verify is reported back; the worker does not commit a red delta.
+3. **Commit exactly one `S`.** Commit the source change to the fork branch as
+   **one non-merge commit `S` descended from the base `B`**:
+
+   ```bash
+   git add -A && git commit -m "<task summary>"     # raw git — NOT a doctrine verb
+   ```
+
+   This is a plain `git commit`, **not** a doctrine-mediated authored write, so the
+   `DOCTRINE_WORKER=1` guard does not refuse it (D2a). `S` is the **importable delta
+   unit**: the orchestrator imports the net diff `B..S`. Therefore:
+   - **Exactly one** non-merge commit on top of `B`. **No** multi-commit history,
+     **no** merge commit, **no** rebase that re-parents off `B` — each is a contract
+     violation the orchestrator rejects before import.
+   - Stay within your declared file set; straying breaks the file-disjoint batch.
+
+**MUST NOT degrade to work-in-place.** A worker with no real fork is a **hard
+abort**, never a silent in-tree edit — isolation is the funnel's whole premise
+(contrast `solo` rung 4). If creation failed, report and stop.
+
+**Return** a structured report (held in orchestrator context, never a doctrine
+artifact): what changed, the verify result, and any memory-worthy notes — plus the
+two output fields `{ fork_branch, head_sha_after }` so the orchestrator can import
+`B..head_sha_after`. Knowledge trails the orchestrator's confirmed commit, not the
+fork (record-on-trunk, below).
 
 ## Squash-orphan caveat (record-on-trunk)
 
@@ -223,6 +290,10 @@ withheld regardless.
 | Tree dirty / untracked-non-ignored | **Abort** commit-before-spawn |
 | Fork HEAD ≠ captured source SHA | **Abort** / recreate |
 | `just check` red in fork | Fix in provisioning; **never hand off** |
+| `worker` start | `export DOCTRINE_WORKER=1` (self-arm, fail-open) |
+| `worker` verify green | Commit ONE non-merge `S` to fork; return `{fork_branch, head_sha_after}` |
+| `worker` >1 commit / merge / rebased fork | **Contract violation** — orchestrator rejects pre-import |
+| `worker` verify red | Report; **do not** commit a red delta |
 
 ## Red Flags
 
@@ -232,6 +303,9 @@ withheld regardless.
 - Imply `check-allowlist` green means the allowlist is complete (it is a smell test).
 - Run `provision` from inside the fork (run it from the source root).
 - Let a `worker` degrade to work-in-place.
+- In `worker` mode: write `.doctrine/` authored trees, skip `export
+  DOCTRINE_WORKER=1`, or land more than one non-merge commit `S` (multi-commit,
+  merge, or rebased forks are rejected — the import unit is the net diff `B..S`).
 - Fork from a dirty tree or hand off a red baseline.
 - Author or edit this skill in `.doctrine/skills/` (the gitignored install copy);
   the source of truth is here under `plugins/`.
