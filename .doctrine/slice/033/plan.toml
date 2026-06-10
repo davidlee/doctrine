@@ -1,0 +1,95 @@
+# Implementation plan for SL-033 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-033"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "STD rider: standard.rs data module, templates, CLI + install wiring"
+objective = """
+Ship the third governance kind end-to-end as a thin data module over the SL-030 \
+spine, exactly mirroring src/policy.rs (design §3.1–3.4). Create src/standard.rs: \
+STD_KIND (dir .doctrine/standard, prefix STD, stem "standard"), the clap \
+StandardStatus enum {Draft, Default, Required, Deprecated, Retired}, the \
+STANDARD_STATUSES known-set, is_hidden = {deprecated, retired}, the \
+render_standard_{toml,md} + standard_scaffold renderers, and the four thin \
+run_{new,list,show,status} forwarders binding STD_KIND into governance::*. Embed \
+templates install/templates/standard.{toml,md} — toml mirrors policy.toml \
+(schema "doctrine.standard"); md takes its sections from supekku's \
+standard-template.md (attributed, YAML frontmatter dropped per D1) including the \
+`default` = recommended-unless-justified note. Register `doctrine standard \
+new|list|show|status` in main.rs (mod, Command::Standard, classifier + dispatch \
+arms) and wire install (manifest dir .doctrine/standard + .gitignore negation). \
+After this phase `doctrine standard new/list/show/status` works on a real tree.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked and committed; the governance spine (governance.rs/policy.rs) compiles and its suites are green on the current tree." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/standard.rs exists as a thin data module: STD_KIND descriptor, StandardStatus clap enum, STANDARD_STATUSES known-set, is_hidden, render_standard_{toml,md}, standard_scaffold, and the four run_* forwarders binding STD_KIND into governance::*. No shared logic is copied — it rides governance.rs unchanged (no spine edit)." },
+  { id = "EX-2", text = "Status vocab is exactly draft/default/required/deprecated/retired; the template seeds status = \"draft\"; is_hidden returns true only for deprecated and retired." },
+  { id = "EX-3", text = "install/templates/standard.{toml,md} are embedded; the toml carries schema = \"doctrine.standard\" with the inert [relationships] table; the md has NO YAML frontmatter and attributes the supekku prior art." },
+  { id = "EX-4", text = "`doctrine standard new|list|show|status` is registered in main.rs (classifier: new/status=Write, list/show=Read) and dispatches to standard::run_*; install wiring adds the .doctrine/standard manifest dir + the !.doctrine/standard/ gitignore negation." },
+  { id = "EX-5", text = "`doctrine standard new` scaffolds NNN/standard-NNN.{toml,md} + the NNN-slug symlink on a real tree, and `standard list/show` read them back. No boot.rs change in this phase." },
+]
+verification = [
+  { id = "VT-1", expects = "standard.rs unit tests (mirror policy.rs) are green: toml round-trips to Meta (seeds draft), hostile title/slug escape, [relationships] inert, md substitutes ref/title with no frontmatter, scaffold lays out two files + a symlink." },
+  { id = "VT-2", expects = "standard_known_set_matches_variants (drift canary: the 5 StandardStatus variants equal STANDARD_STATUSES) and the hide-set ⊆ known-set guard (default/draft/required visible, deprecated/retired hidden) are green." },
+  { id = "VT-3", expects = "a standard_split classifier test (mirror policy_split) asserts new/status→Write and list/show→Read; an install.rs test asserts the .doctrine/standard tree is created and not gitignored." },
+  { id = "VT-4", expects = "an end-to-end check (golden or e2e) runs `doctrine standard new` then `standard list/show` over the scaffolded tree and observes STD-prefixed ids, the seeded draft status, and the symlink." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Boot parameterization: collapse per-kind arms; add Active Standards"
+objective = """
+Close the SL-030 boot debt (design §3.5 / Action 2). Replace the two per-kind \
+SourceKind variants (Adrs, Policies) and their two near-verbatim produce arms \
+with a single data-carrying variant GovRows(&'static GovKind, &'static \
+[&'static str]) — kind + the in-force status SET — and one produce arm that maps \
+the set into ListArgs.status. The variant is NOT named Governance (that already \
+binds the governance.md disk reader). Rewire boot_sequence: ("Accepted ADRs", \
+GovRows(&ADR_KIND, &["accepted"])), ("Active Policies", GovRows(&POLICY_KIND, \
+&["required"])), and the new ("Active Standards", GovRows(&STD_KIND, \
+&["default", "required"])) — placed after Active Policies, before Memory. STD is \
+the first kind with a two-element in-force set, which is what the &[&str] (vs a \
+single &str) buys. The ADR and POL section bytes MUST stay byte-identical — the \
+existing boot suites are the behaviour-preservation gate, run UNCHANGED.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `doctrine standard` works end-to-end and STD_KIND is exported for boot to bind. The existing boot suites are green on the current tree." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SourceKind no longer has the Adrs or Policies variants; it has one GovRows(&'static GovKind, &'static [&'static str]) variant with a single produce arm that builds ListArgs { status: set.iter().map(...).collect(), ..default }." },
+  { id = "EX-2", text = "boot_sequence binds ADR→&[\"accepted\"], POL→&[\"required\"], and STD→&[\"default\", \"required\"]; the Active Standards heading sits immediately after Active Policies and before Memory." },
+  { id = "EX-3", text = "The Accepted ADRs and Active Policies section bytes are unchanged — the pre-existing boot ordering + filtered-projection tests pass UNCHANGED (the behaviour-preservation gate)." },
+  { id = "EX-4", text = "No spine (governance.rs) change; no clap/CLI change. The refactor is confined to boot.rs (plus the standard module reference it binds)." },
+]
+verification = [
+  { id = "VT-1", expects = "the pre-existing boot tests (boot_sequence_orders_exec_path_last, orders_active_policies_after_accepted_adrs, regenerate_projects_accepted_adrs_and_memory_pointers, regenerate_projects_required_policies_filtered) pass unchanged after the collapse." },
+  { id = "VT-2", expects = "a new boot_sequence_orders_active_standards_after_active_policies test asserts the heading order ADRs < Policies < Standards < Memory." },
+  { id = "VT-3", expects = "a new regenerate_projects_in_force_standards_filtered test seeds standards across all five statuses and asserts the Active Standards section projects ONLY default + required rows (prefixed STD- ids), excluding draft/deprecated/retired — proving the two-element in-force set." },
+  { id = "VT-4", expects = "a one-character edit to the GovRows produce arm (e.g. dropping a status from a set) turns a boot projection test red — the gate actually bites." },
+]
+specs             = []
+requirements      = []
