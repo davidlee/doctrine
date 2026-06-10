@@ -453,6 +453,14 @@ accessor, not an `Explanation` field).
   union, monoid propagation — is custom regardless; a dep adds a determinism audit and
   a diagnostic-shape mismatch (REQ-076 wants node-ids+edge-kinds). Small corpus removes
   the scale argument.
+  - **Reconcile (2026-06-11, post-close).** The "small corpus removes the scale
+    argument" sentence is **void** — SPEC-001 H1 was revised from tens–hundreds to
+    ~tens of thousands of nodes. The *decision* (hand-roll) still holds, re-grounded:
+    the eviction-to-fixpoint / multi-overlay / D9 / propagation bulk is custom at any
+    scale, and a linear **iterative** SCC/topo is std-only and cheap at tens of
+    thousands. But the recursive implementations shipped here (`Tarjan::strongconnect`,
+    `level_of`) now violate the linear+iterative premise — see RSK-003 (stack overflow)
+    and RSK-002 (explain exponential), gated by the perf spike before any fix.
 - **DD4 — full engine, combinator vocab floored.** *Alt rejected:* defer propagation
   (B) — fractures one coherent leaf and the mechanism is fully fixture-testable now.
   The REQ-079 vocabulary-free suite is the validating consumer.
