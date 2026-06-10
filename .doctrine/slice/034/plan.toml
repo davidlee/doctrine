@@ -1,0 +1,75 @@
+# Implementation plan for SL-034 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-034"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Relocate skills + catalog integrity"
+objective = """
+Move pair + walkthrough to the canonical `doctrine` domain, ship the
+`doctrine-partner` standalone subset (mirroring `doctrine-memory`), and prove
+catalog integrity — exactly one entry per skill id — via the discovery
+exclusion. TDD on the discovery test; the re-embed footgun governs the build.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (commit a882f6f); interim `plugins/partner/` committed (78ca5ef) is the move source — both SKILL.md bodies settled." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`pair` + `walkthrough` SKILL source lives at `plugins/doctrine/skills/{pair,walkthrough}/` (moved from the interim `partner/` copies)." },
+  { id = "EX-2", text = "`plugins/doctrine-partner/` exists: `.claude-plugin/plugin.json`, `README.md` (accurate wording per design §5.2e), and `skills/{pair,walkthrough}` symlinks → `../../doctrine/skills/<id>` (byte-identical form to doctrine-memory)." },
+  { id = "EX-3", text = "`plugins/partner/` deleted; `.claude-plugin/marketplace.json` `partner` entry replaced by `doctrine-partner` (design §5.2d). Net diff shows no `plugins/partner/`." },
+  { id = "EX-4", text = "`src/skills.rs`: `PARTNER_SUBSET_DOMAIN` added to `MARKETPLACE_ONLY_DOMAINS`; the now-false \"(sole)\" doc-comment corrected. `--only-memory` unchanged (no `--only-partner`)." },
+]
+verification = [
+  { id = "VT-1", expects = "`discover_excludes_marketplace_only_domains` (skills.rs:~883), extended RED-first, asserts: no `doctrine-partner` domain in the catalog AND `pair`+`walkthrough` present under domain `doctrine` (INV-1, INV-2). Green after the const extension." },
+  { id = "VT-2", expects = "Behaviour-preservation gate: the pre-existing skills suite stays green unchanged (only the one discovery test is deliberately extended)." },
+  { id = "VT-3", expects = "Build gate: `touch src/skills.rs` → `cargo build` (re-embed footgun, design §5.4 step 2); `cargo clippy` zero warnings (plain, NOT --all-targets)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Route provision + README accuracy + boot"
+objective = """
+Teach `/route` the comprehension-intent exit and the conduct-posture distinction
+across both route surfaces; correct both subset READMEs to accurate
+symlink-vs-distribution wording (OQ-1 (b)+); regenerate the boot snapshot and
+confirm the new row projects through.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — `pair`/`walkthrough` live under domain `doctrine`, catalog green. The route additions reference skills core can now assume are installed (D1)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`install/routing-process.md`: comprehension-exit row added after the `/preflight` row (`Understand / audit an existing artifact, no change intended → /walkthrough (no slice)`) + the conduct-posture line in the mid-flight block (design §5.2b)." },
+  { id = "EX-2", text = "`plugins/doctrine/skills/route/SKILL.md` carries the same two additions — digest and full skill do not diverge (design §5.2c, D4)." },
+  { id = "EX-3", text = "`plugins/doctrine-partner/README.md` written accurately (source = symlink, distribution = resolved copy); `plugins/doctrine-memory/README.md` corrected the same way — neither says \"duplicated / byte-identical copies\" or \"update both copies\" (OQ-1 (b)+, §5.2e/f)." },
+  { id = "EX-4", text = "Boot snapshot regenerated via `doctrine boot` after the embed-recompile; the routing table in `boot.md` shows the comprehension-exit row." },
+]
+verification = [
+  { id = "VT-1", expects = "Boot suite stays green: presence checks `contains(\"Route before you act\")` (boot.rs:945,1291) hold; no verbatim routing sentinel exists, so row additions are golden-safe (design §2, §10)." },
+  { id = "VA-1", expects = "Agent check: `doctrine boot` output contains the comprehension-exit row, and a diff of the two route surfaces confirms they agree on the row + posture line." },
+  { id = "VH-1", expects = "Human/agent acceptance: both READMEs read truthfully against the on-disk symlinks." },
+  { id = "VT-2", expects = "Gate: `cargo clippy` zero warnings (plain); `just check` green." },
+]
+specs             = []
+requirements      = []
