@@ -1,0 +1,13 @@
+id = 37
+slug = "list-hide-slug-format-options"
+title = "CLI list defaults hide slug; opt-in reveal + format control"
+status = "proposed"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[relationships]
+# Reserved. Empty in v1 — no spec/requirement registry to point at yet.
+# When specs land, this section gains (illustrative, not v1):
+#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
+#   requirements = ["..."]   # implements / updates / verifies
+#   supersedes   = [2]       # slice-to-slice links
