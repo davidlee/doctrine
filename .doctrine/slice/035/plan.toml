@@ -1,0 +1,51 @@
+# Implementation plan for SL-035 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-035"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Record-time thread-hidden nudge"
+objective = """
+Emit a single non-blocking stderr advisory when `doctrine memory record \
+--type thread` succeeds, telling the user the thread is hidden from \
+find/retrieve until verified on a clean tree (SL-008 D6). Pure decision/text \
+helper `thread_hidden_notice` plus thin shell wiring in `run_record` \
+(src/memory.rs), mirroring the existing linked-worktree stderr warning. No \
+read-path change; behaviour-preservation gate intact."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked + committed (def4428); message wording fixed (D4)." },
+  { id = "EN-2", text = "Prior art identified: run_record linked-worktree stderr branch + success emit (src/memory.rs)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Pure `fn thread_hidden_notice(memory_type: MemoryType, reference: &str) -> Option<String>` exists in src/memory.rs — Some only for Thread, splices reference, carries the D4 wording." },
+  { id = "EX-2", text = "run_record wires the helper after the success writeln!, emitting to stderr via writeln!(io::stderr(), …); reference = key if present else uid." },
+  { id = "EX-3", text = "Stdout machine-readable success line unchanged for all types; nudge is stderr-only." },
+  { id = "EX-4", text = "just check passes — fmt + clippy zero warnings (plain, bins/lib) + tests + build." },
+]
+verification = [
+  { id = "VT-1", expects = "Thread → Some; message contains the reference and the word `verify`." },
+  { id = "VT-2", expects = "A non-thread type (Pattern) → None." },
+  { id = "VT-3", expects = "Reference splice: key-when-present and uid-when-absent both covered." },
+  { id = "VT-4", expects = "Existing memory.rs + e2e suites stay green unchanged (no read-path edit)." },
+]
+specs             = []           # per-phase narrowing of the plan's specs
+requirements      = []
