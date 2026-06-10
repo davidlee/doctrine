@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 10
+slug = "sl-032-review-cleanups"
+title = "SL-032 review cleanups: write_class test rewrite + reseat atomicity"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-10"
+updated = "2026-06-10"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []

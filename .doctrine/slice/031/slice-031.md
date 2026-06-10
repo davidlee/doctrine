@@ -47,6 +47,17 @@ SL-029 landed; fills `plugins/doctrine/skills/dispatch/SKILL.md` (placeholder).
 - **`/dispatch` skill (D5).** Fill the placeholder: mandatory isolation via the
   harness `Agent` isolation mechanism, orchestrator-sole-writer remit, the funnel
   loop above, and the recovery prose.
+- **Shared kind-identity registry (SL-032 review F-2/F-5).** Wiring trunk-aware
+  minting means each `*::run_new` must resolve its kind's `dir` to call
+  `git::trunk_entity_ids` — making SL-031 the **second consumer** of per-kind
+  identity (prefix/dir/stem) that `integrity::KINDS` already hand-copies from the
+  owning modules' `entity::Kind` consts. Build the single registry both consumers
+  derive from (closing the R-b silent-escape: a new numbered kind absent from the
+  table escapes `validate`), and let `KindRef` **carry the runtime-state dir**
+  instead of a `has_runtime_state` bool with a hardcoded `.doctrine/state/slice`
+  (F-5). Do this here — SL-031 is the consumer that fixes the registry's shape;
+  doing it in SL-032 would guess the shape blind, then reshape. Add the
+  set-equality guard test (`KINDS` ⟺ the `Kind` consts) as part of the registry.
 - **Deterministic worker provisioning at the harness seam (IMP-003 A-6, candidate
   — design-gated).** A **Claude-only, opt-in** `WorktreeCreate` hook that runs
   `doctrine worktree provision <fork>` when a worker spawns with
