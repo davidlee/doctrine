@@ -1,0 +1,27 @@
+id = 36
+slug = "cordage-core"
+title = "cordage graph core crate"
+status = "proposed"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[relationships]
+# Parent tech spec — SL-036 descends from SPEC-001 (Graph-Derived Priority Engine),
+# realising its D1 crate carve-out. (Hand-authored per SL-020's shape; no
+# `slice link` verb yet.)
+specs = ["SPEC-001"]
+# The generic-core requirement subset this slice satisfies — the mechanism owned by
+# the cordage crate (D1 ownership split). Doctrine-side requirements REQ-074 (inbound
+# display) and REQ-078 (disposable cache) rest on primitives delivered here but are
+# verified in the adapter / CLI follow-up slices (see Non-Goals).
+#   REQ-076  cycle diagnostics + safe degrade (reject-on-cycle)
+#   REQ-077  deterministic ordering + structured explanations
+#   REQ-079  generic, independently-testable core (the boundary proof)
+#   REQ-080  richer-engine consumption seam (open channel set)
+#   REQ-092  per-overlay cycle policy: dep rejects, seq evicts-to-fixpoint
+requirements = ["REQ-076", "REQ-077", "REQ-079", "REQ-080", "REQ-092"]
+# Canon that also governs (prose links in slice-036.md § Context):
+#   SPEC-001  D1 crate carve-out; D2 boundary test; D4/D5/D9 overlays + cycle policy;
+#             D7 determinism; Appendix B forbidden-core list
+#   ADR-001   module layering — cordage is a leaf the doctrine engine depends on
+#   ADR-004   relations outbound-only; reverse edges derived, never stored
