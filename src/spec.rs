@@ -1023,6 +1023,74 @@ struct SpecRow {
     members: usize,
 }
 
+/// One spec pre-materialised for the table (SL-037 §4) — spec is the one kind
+/// whose table and JSON rows do NOT coincide (A3): the table needs `title`
+/// (absent from `SpecRow`) and a rendered `#members` cell, and its prefixed id is
+/// *subtype-dependent* (`PRD`/`SPEC`). The id is resolved into the row PER BLOCK
+/// where `subtype` is in scope (D5), so every extractor stays a trivial
+/// non-capturing `fn(&SpecListRow)->String` — no captured subtype, no
+/// `Box<dyn Fn>`. Table-only — NOT `Serialize` (the JSON path is `SpecRow`, D2).
+struct SpecListRow {
+    id: String,
+    status: String,
+    slug: String,
+    title: String,
+    members: usize,
+}
+
+/// The table columns a spec block can show (`--columns` tokens over
+/// `R = SpecListRow`). Extractors are non-capturing (D5); the subtype-prefixed id
+/// is already materialised in the row. `members`' header is `#members` while its
+/// selector name is `members` — the one place header ≠ name in spec (the `#` is
+/// shell-hostile as a token, design §4). Declaration order is what the
+/// unknown-column error lists.
+const SPEC_COLUMNS: [listing::Column<SpecListRow>; 5] = [
+    listing::Column {
+        name: "id",
+        header: "id",
+        cell: |r| r.id.clone(),
+    },
+    listing::Column {
+        name: "status",
+        header: "status",
+        cell: |r| r.status.clone(),
+    },
+    listing::Column {
+        name: "slug",
+        header: "slug",
+        cell: |r| r.slug.clone(),
+    },
+    listing::Column {
+        name: "title",
+        header: "title",
+        cell: |r| r.title.clone(),
+    },
+    listing::Column {
+        name: "members",
+        header: "#members",
+        cell: |r| r.members.to_string(),
+    },
+];
+
+/// The default visible set — the D4 slug→title swap: the spec table GAINS `title`
+/// and DROPS `slug` from the default; `--columns …,slug` still reveals it.
+const SPEC_DEFAULT: &[&str] = &["id", "status", "title", "members"];
+
+/// Materialise one subtype's `(Meta, count)` rows into table rows, resolving the
+/// subtype-dependent prefixed id (`PRD`/`SPEC`) HERE where `subtype` is in scope —
+/// so the column extractors never capture it (D5). Mirrors governance's `gov_rows`.
+fn spec_list_rows(subtype: SpecSubtype, rows: &[(Meta, usize)]) -> Vec<SpecListRow> {
+    rows.iter()
+        .map(|(m, count)| SpecListRow {
+            id: canonical_id(subtype, m.id),
+            status: m.status.clone(),
+            slug: m.slug.clone(),
+            title: m.title.clone(),
+            members: *count,
+        })
+        .collect()
+}
+
 /// `doctrine spec list` — the survey verb, on the shared spine (design §5.4). The
 /// compute half is [`list_rows`]; this is the thin shell that writes it.
 pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<()> {
@@ -1038,16 +1106,27 @@ pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<
 /// row (spec's variant axis). `Json` emits a SINGLE `{kind:"spec", rows:[…]}`
 /// envelope spanning BOTH subtypes, each row carrying a `subtype` field (A-8) — not
 /// two envelopes. Empty → `""` (§5.5).
-pub(crate) fn list_rows(root: &Path, args: ListArgs) -> anyhow::Result<String> {
+pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     validate_statuses(&args.status, SPEC_STATUSES)?;
+    let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     match format {
         Format::Table => {
+            // Resolve the selection ONCE (R3), then render it per non-empty block
+            // so the per-subtype labelled-block layout survives the column lift.
+            let sel = listing::select_columns(&SPEC_COLUMNS, SPEC_DEFAULT, columns.as_deref())?;
             let mut blocks = Vec::new();
             for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
-                blocks.push(format_spec_rows(
-                    subtype,
-                    &subtype_rows(root, subtype, &filter)?,
+                let block_rows = spec_list_rows(subtype, &subtype_rows(root, subtype, &filter)?);
+                // Omit the empty subtype block entirely (R3) — the label line must be
+                // suppressed too, not just the (already-empty) grid.
+                if block_rows.is_empty() {
+                    continue;
+                }
+                blocks.push(format!(
+                    "{}\n{}",
+                    subtype.label(),
+                    listing::render_columns(&block_rows, &sel)
                 ));
             }
             Ok(blocks.concat())
@@ -1068,30 +1147,6 @@ pub(crate) fn list_rows(root: &Path, args: ListArgs) -> anyhow::Result<String> {
             listing::json_envelope("spec", &rows)
         }
     }
-}
-
-/// Render one subtype's spec rows: a label line, a header row, then `id status slug
-/// #members` per spec (prefixed ids), aligned via the shared `listing::render_table`.
-/// Empty input → `""` (the block is omitted entirely — §5.5). Pure.
-fn format_spec_rows(subtype: SpecSubtype, rows: &[(Meta, usize)]) -> String {
-    if rows.is_empty() {
-        return String::new();
-    }
-    let mut grid: Vec<Vec<String>> = vec![
-        ["id", "status", "slug", "#members"]
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect(),
-    ];
-    for (m, count) in rows {
-        grid.push(vec![
-            canonical_id(subtype, m.id),
-            m.status.clone(),
-            m.slug.clone(),
-            count.to_string(),
-        ]);
-    }
-    format!("{}\n{}", subtype.label(), listing::render_table(&grid))
 }
 
 // ---------------------------------------------------------------------------
@@ -1338,11 +1393,16 @@ mod tests {
 
         // seeded specs → member count 0 on every row. Prefixed ids, per-subtype
         // labelled block (the product block; the tech block is suppressed empty).
+        // The default table is [id, status, title, members] (D4 slug→title swap):
+        // it shows the human title, NOT the slug, plus the `#members` header.
         let out = list_rows(root, list_args()).unwrap();
         assert!(out.starts_with("product\n"), "product block leads: {out}");
         assert!(out.contains("#members"));
-        assert!(out.contains("PRD-001  draft   onboarding"), "{out}");
-        assert!(out.contains("PRD-002  draft   billing"), "{out}");
+        assert!(out.contains("PRD-001  draft   Onboarding"), "{out}");
+        assert!(out.contains("PRD-002  draft   Billing"), "{out}");
+        // slug is dropped from the default set (still reachable via --columns).
+        assert!(!out.contains("onboarding"), "slug hidden by default: {out}");
+        assert!(!out.contains("billing"), "slug hidden by default: {out}");
         // both data rows end in the 0 member count.
         for line in out.lines().filter(|l| l.starts_with("PRD-")) {
             assert!(
@@ -1356,6 +1416,64 @@ mod tests {
             !out.contains("tech\n"),
             "empty tech block suppressed: {out}"
         );
+    }
+
+    #[test]
+    fn list_rows_columns_selects_orders_and_reveals_slug() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
+
+        // --columns id,slug reveals slug (hidden by default) and drops the rest.
+        let out = list_rows(
+            root,
+            ListArgs {
+                columns: Some(vec!["id".into(), "slug".into()]),
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(out.starts_with("product\n"), "block label preserved: {out}");
+        assert!(out.contains("id"));
+        assert!(out.contains("slug"));
+        assert!(out.contains("PRD-001  onboarding"), "{out}");
+        // unselected columns are gone (title/status/#members).
+        assert!(!out.contains("#members"), "members dropped: {out}");
+        assert!(!out.contains("Onboarding"), "title dropped: {out}");
+    }
+
+    #[test]
+    fn list_rows_unknown_column_is_the_uniform_error_listing_available() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding");
+
+        let err = list_rows(
+            root,
+            ListArgs {
+                columns: Some(vec!["bogus".into()]),
+                ..ListArgs::default()
+            },
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("bogus"), "names the bad column: {msg}");
+        // the available set is listed, including the `#members` token name `members`.
+        assert!(msg.contains("members"), "lists the available set: {msg}");
+        assert!(msg.contains("title"), "lists the available set: {msg}");
+    }
+
+    #[test]
+    fn list_rows_prefixed_ids_are_correct_per_subtype() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "onboarding", "Onboarding"); // PRD-001
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+
+        let out = list_rows(root, list_args()).unwrap();
+        // product → PRD prefix, tech → SPEC prefix, resolved per block.
+        assert!(out.contains("PRD-001"), "product id prefixed PRD: {out}");
+        assert!(out.contains("SPEC-001"), "tech id prefixed SPEC: {out}");
     }
 
     /// Write a spec's identity toml directly at an explicit id under the subtype's
@@ -1444,8 +1562,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(active.contains("PRD-002  active  billing"), "{active}");
-        assert!(!active.contains("onboarding"));
+        // default table shows the title (D4 swap); the status filter still
+        // selects within the subtype.
+        assert!(active.contains("PRD-002  active  Billing"), "{active}");
+        assert!(!active.contains("Onboarding"));
     }
 
     /// Flip a spec's authored `status` on disk (no status verb in v1).
