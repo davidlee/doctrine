@@ -21,6 +21,11 @@
       "name": "handover",
       "source": "./plugins/handover",
       "description": "Author the disposable handover.md for the next agent / phase."
+    },
+    {
+      "name": "pair",
+      "source": "./plugins/pair",
+      "description": "Agentic pair programming — drive a change together with a human partner in the loop."
     }
   ]
 }
