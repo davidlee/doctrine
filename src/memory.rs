@@ -1286,6 +1286,14 @@ pub(crate) fn collect_all(root: &Path) -> Result<Vec<Memory>> {
 /// to render its memory section ACTIVE-ONLY (drafts excluded from agent context, C-4).
 pub(crate) fn list_rows(root: &Path, type_f: Option<MemoryType>, args: ListArgs) -> Result<String> {
     listing::validate_statuses(&args.status, MEMORY_STATUSES)?;
+    // SL-037 D9/R4: memory is NOT on the column model (deferred to IMP-017 —
+    // its cells are security-scrubbed and it has no slug to hide). The shared
+    // `--columns` flag still reaches here via `CommonListArgs`, so reject it
+    // loudly rather than silently no-op (the same read-validation seam as
+    // `validate_statuses`).
+    if args.columns.is_some() {
+        anyhow::bail!("--columns is not supported for `memory list`");
+    }
     let (filter, format) = listing::build(args)?;
     let mut rows = listing::retain(collect_all(root)?, &filter, is_hidden, key);
     rows.retain(|m| type_f.is_none_or(|t| m.kind == t));

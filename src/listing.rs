@@ -137,6 +137,10 @@ pub(crate) struct ListArgs {
     pub(crate) format: Format,
     /// `--json` sugar — forces [`Format::Json`] regardless of `format` (A-9).
     pub(crate) json: bool,
+    /// `--columns` table projection (SL-037 D3/D6): the verb pulls it via
+    /// `args.columns.take()` *before* [`build`], which never reads it — the
+    /// table is the only axis it touches (D2; no effect under `--json`, D7).
+    pub(crate) columns: Option<Vec<String>>,
 }
 
 /// Build a [`Filter`] + resolved [`Format`] from the parsed [`ListArgs`].
@@ -245,6 +249,61 @@ pub(crate) fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Res
         anyhow::bail!("unknown status `{bad}` (known: {known})");
     }
     Ok(())
+}
+
+/// One table column for a kind's row type `R`: a `name` (the `--columns`
+/// selector token — shell-safe, lowercase), a `header` (display text; usually
+/// == name), and a pure non-capturing cell extractor (SL-037 D5). Table-ONLY
+/// (D2) — JSON rows stay typed per-kind.
+/// NOT `#[derive(Copy)]` — derive would add a spurious `R: Copy` bound; columns
+/// are only ever borrowed (`&[Column<R>]` / `Vec<&Column<R>>`), never moved.
+pub(crate) struct Column<R> {
+    pub(crate) name: &'static str,
+    pub(crate) header: &'static str,
+    pub(crate) cell: fn(&R) -> String,
+}
+
+/// Resolve the visible, ordered selection. `requested` = parsed `--columns`
+/// (None → `default`, taken verbatim). Each requested name is validated against
+/// `available`; an unknown name is one uniform `anyhow` error listing the
+/// available tokens (A-2 parity with [`validate_statuses`]). Requested order is
+/// preserved; duplicates are permitted (the user asked for them) — SL-037 OQ-2:
+/// subset+order, dups pass.
+pub(crate) fn select_columns<'a, R>(
+    available: &'a [Column<R>],
+    default: &[&str],
+    requested: Option<&[String]>,
+) -> anyhow::Result<Vec<&'a Column<R>>> {
+    let pick = |name: &str| {
+        available.iter().find(|c| c.name == name).ok_or_else(|| {
+            let known = available
+                .iter()
+                .map(|c| c.name)
+                .collect::<Vec<_>>()
+                .join(", ");
+            anyhow::anyhow!("unknown column `{name}` (available: {known})")
+        })
+    };
+    match requested {
+        None => default.iter().map(|n| pick(n)).collect(), // default names are curated-valid
+        Some(names) => names.iter().map(|n| pick(n)).collect(),
+    }
+}
+
+/// Header row + one cell-row per `R`, over [`render_table`]. Empty rows → `""`
+/// (header suppressed, SL-025 §5.5). Replaces every kind's bespoke table
+/// assembler.
+pub(crate) fn render_columns<R>(rows: &[R], cols: &[&Column<R>]) -> String {
+    if rows.is_empty() {
+        return String::new();
+    }
+    let mut grid: Vec<Vec<String>> = Vec::with_capacity(rows.len() + 1);
+    grid.push(cols.iter().map(|c| c.header.to_string()).collect());
+    grid.extend(
+        rows.iter()
+            .map(|r| cols.iter().map(|c| (c.cell)(r)).collect()),
+    );
+    render_table(&grid)
 }
 
 /// The two-space inter-column gap — the single source of column spacing for every
@@ -728,6 +787,109 @@ mod tests {
         assert_eq!(
             lines[1],
             "009  proposed  —    slice-status-rollup  Slice status rollup"
+        );
+    }
+
+    // -- select_columns ----------------------------------------------------
+
+    /// A minimal row for column-model tests.
+    struct CRow {
+        id: &'static str,
+        slug: &'static str,
+    }
+
+    /// The available set for [`CRow`]: id, slug.
+    const CROW_COLUMNS: [Column<CRow>; 2] = [
+        Column {
+            name: "id",
+            header: "id",
+            cell: |r| r.id.to_string(),
+        },
+        Column {
+            name: "slug",
+            header: "slug",
+            cell: |r| r.slug.to_string(),
+        },
+    ];
+
+    fn names<R>(sel: &[&Column<R>]) -> Vec<&'static str> {
+        sel.iter().map(|c| c.name).collect()
+    }
+
+    fn req(names: &[&str]) -> Vec<String> {
+        names.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn select_columns_none_takes_the_default_verbatim() {
+        let sel = select_columns(&CROW_COLUMNS, &["id"], None).unwrap();
+        assert_eq!(names(&sel), ["id"]);
+    }
+
+    #[test]
+    fn select_columns_requested_subset_and_order_win() {
+        let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], Some(&req(&["slug"]))).unwrap();
+        assert_eq!(names(&sel), ["slug"]);
+        let sel =
+            select_columns(&CROW_COLUMNS, &["id", "slug"], Some(&req(&["slug", "id"]))).unwrap();
+        assert_eq!(names(&sel), ["slug", "id"]);
+    }
+
+    #[test]
+    fn select_columns_duplicates_are_permitted() {
+        let sel = select_columns(&CROW_COLUMNS, &["id"], Some(&req(&["id", "id"]))).unwrap();
+        assert_eq!(names(&sel), ["id", "id"]);
+    }
+
+    #[test]
+    fn select_columns_unknown_name_is_one_uniform_error_listing_available() {
+        // .err(): Result::unwrap_err would demand Debug on Vec<&Column<R>>,
+        // and deriving Debug on Column would add a spurious R: Debug bound.
+        let err = select_columns(&CROW_COLUMNS, &["id"], Some(&req(&["bogus"])))
+            .err()
+            .map(|e| e.to_string())
+            .unwrap();
+        assert!(err.contains("unknown column `bogus`"), "names it: {err}");
+        assert!(err.contains("id, slug"), "lists the available set: {err}");
+    }
+
+    #[test]
+    fn select_columns_empty_available_rejects_any_request() {
+        let none: [Column<CRow>; 0] = [];
+        let err = select_columns(&none, &[], Some(&req(&["id"])))
+            .err()
+            .map(|e| e.to_string())
+            .unwrap();
+        assert!(err.contains("unknown column `id`"), "got: {err}");
+        // The empty default over an empty available set is the benign case.
+        assert!(select_columns(&none, &[], None).unwrap().is_empty());
+    }
+
+    // -- render_columns ----------------------------------------------------
+
+    #[test]
+    fn render_columns_empty_rows_is_empty_string_header_suppressed() {
+        let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
+        assert_eq!(render_columns::<CRow>(&[], &sel), "");
+    }
+
+    #[test]
+    fn render_columns_emits_header_row_then_cells_via_render_table() {
+        let rows = [
+            CRow {
+                id: "ADR-001",
+                slug: "module-layering",
+            },
+            CRow {
+                id: "ADR-004",
+                slug: "relations",
+            },
+        ];
+        let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
+        let out = render_columns(&rows, &sel);
+        assert_eq!(
+            out,
+            "id       slug\nADR-001  module-layering\nADR-004  relations\n"
         );
     }
 

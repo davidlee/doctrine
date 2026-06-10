@@ -634,33 +634,40 @@ struct BacklogRow {
     title: String,
 }
 
-/// Render retained rows as a `id  kind  status  slug  title` header then one row
-/// per item over the shared `listing::render_table` (the SL-009 ragged-grid path).
-/// The id is the canonical `XXX-NNN`. Empty rows → `""` (header suppressed, the
-/// virgin empty-table path, §5.5). Pure.
-fn format_rows(items: &[BacklogItem]) -> String {
-    if items.is_empty() {
-        return String::new();
-    }
-    let mut grid: Vec<Vec<String>> = Vec::with_capacity(items.len() + 1);
-    grid.push(vec![
-        "id".to_string(),
-        "kind".to_string(),
-        "status".to_string(),
-        "slug".to_string(),
-        "title".to_string(),
-    ]);
-    grid.extend(items.iter().map(|i| {
-        vec![
-            i.kind.canonical_id(i.id),
-            i.kind.as_str().to_string(),
-            i.status.as_str().to_string(),
-            i.slug.clone(),
-            i.title.clone(),
-        ]
-    }));
-    listing::render_table(&grid)
-}
+/// The table columns `backlog list` can show (`--columns` tokens over
+/// `R = BacklogItem` — extractors are non-capturing, SL-037 D5; the prefixed id
+/// is materialised in the cell from the item's own kind+id). Declaration order is
+/// what the unknown-column error lists.
+const BL_COLUMNS: [listing::Column<BacklogItem>; 5] = [
+    listing::Column {
+        name: "id",
+        header: "id",
+        cell: |i| i.kind.canonical_id(i.id),
+    },
+    listing::Column {
+        name: "kind",
+        header: "kind",
+        cell: |i| i.kind.as_str().to_string(),
+    },
+    listing::Column {
+        name: "status",
+        header: "status",
+        cell: |i| i.status.as_str().to_string(),
+    },
+    listing::Column {
+        name: "slug",
+        header: "slug",
+        cell: |i| i.slug.clone(),
+    },
+    listing::Column {
+        name: "title",
+        header: "title",
+        cell: |i| i.title.clone(),
+    },
+];
+
+/// The default visible set — slug-free (SL-037 D4); `--columns …,slug` reveals it.
+const BL_DEFAULT: &[&str] = &["id", "kind", "status", "title"];
 
 /// The `backlog list` output as a string — the compute half of `run_list`, on the
 /// shared spine. `validate_statuses` guards `--status` (A-2); `listing::build`
@@ -668,14 +675,18 @@ fn format_rows(items: &[BacklogItem]) -> String {
 /// tag axes + the terminal hide-set ([`is_hidden`], reusing `Status::is_terminal`).
 /// The kind-specific `--kind` filter (not a shared axis) is applied here. backlog
 /// sorts by `(kind.ordinal, id)` — its variant ordering, never in `retain` (§5.3).
-fn list_rows(root: &Path, kind: Option<ItemKind>, args: ListArgs) -> anyhow::Result<String> {
+fn list_rows(root: &Path, kind: Option<ItemKind>, mut args: ListArgs) -> anyhow::Result<String> {
     validate_statuses(&args.status, BACKLOG_STATUSES)?;
+    let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let mut items = listing::retain(read_all(root)?, &filter, is_hidden, key);
     items.retain(|i| kind.is_none_or(|k| i.kind == k));
     items.sort_by_key(|i| (i.kind.ordinal(), i.id));
     match format {
-        Format::Table => Ok(format_rows(&items)),
+        Format::Table => {
+            let sel = listing::select_columns(&BL_COLUMNS, BL_DEFAULT, columns.as_deref())?;
+            Ok(listing::render_columns(&items, &sel))
+        }
         Format::Json => listing::json_envelope("backlog", &json_rows(&items)),
     }
 }
@@ -1564,6 +1575,96 @@ tags = []
         let dir = tempfile::tempdir().unwrap();
         // no items written → "" (header suppressed, §5.5 virgin-repo contract).
         assert_eq!(list_rows(dir.path(), None, list_args()).unwrap(), "");
+    }
+
+    // --- SL-037: the column model (default omits slug, --columns reveals) ---
+
+    /// A `ListArgs` requesting an explicit column set (SL-037 `--columns`).
+    fn columns_args(cols: &[&str]) -> ListArgs {
+        ListArgs {
+            columns: Some(cols.iter().map(|s| (*s).to_string()).collect()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn backlog_list_default_omits_slug() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            "",
+            "token-expiry",
+            "Alpha",
+            &[],
+        );
+
+        let out = list_rows(root, None, list_args()).unwrap();
+        let header = out.lines().next().unwrap();
+        // SL-037 D4: default visible set is [id, kind, status, title] — slug hidden.
+        assert!(
+            !header.contains("slug"),
+            "default header omits slug: {header:?}"
+        );
+        assert!(
+            !out.contains("token-expiry"),
+            "slug value hidden by default: {out}"
+        );
+        assert!(
+            header.contains("kind") && header.contains("status") && header.contains("title"),
+            "default keeps id/kind/status/title: {header:?}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_columns_reveals_and_orders_slug() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            "",
+            "token-expiry",
+            "Alpha",
+            &[],
+        );
+
+        // Reorder slug ahead of title and reveal it.
+        let out = list_rows(root, None, columns_args(&["id", "slug", "title"])).unwrap();
+        let header = out.lines().next().unwrap();
+        assert_eq!(
+            header.split_whitespace().collect::<Vec<_>>(),
+            vec!["id", "slug", "title"]
+        );
+        assert!(
+            out.contains("token-expiry"),
+            "slug revealed by --columns: {out}"
+        );
+    }
+
+    #[test]
+    fn backlog_list_columns_unknown_errors_with_available_set() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+
+        let err = list_rows(root, None, columns_args(&["bogus"]))
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(
+            err.contains("unknown column `bogus`"),
+            "uniform error: {err}"
+        );
+        assert!(
+            err.contains("id") && err.contains("slug"),
+            "lists available set: {err}"
+        );
     }
 
     // --- VT-1: the visibility matrix ---

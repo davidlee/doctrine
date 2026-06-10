@@ -247,3 +247,87 @@ barefoot before the `GovRow` that already showed the way, and the breaking-wheel
 for any implementer who reaches for `Box<dyn Fn>` to paper over it.*
 
 > **HERESIS URITOR; DOCTRINA MANET**
+
+---
+
+# SL-037 — Post-implementation conformance audit (pre-close)
+
+> Mode: **conformance**. The inquisition above shaped the *design* (CHARGES I–V,
+> all integrated and re-approved before `/plan`). This section reconciles the
+> *built code* on branch `sl-037-phase-01` (P1 4e56756 · P2 11efae1 · P3 2b1b46b ·
+> P4 317bbfa, + this audit's fix) against that design, the phase EX/VT, and a
+> code-review pass (self + codex/GPT-5.5).
+
+## Evidence
+
+- `just check` green (fmt + clippy bins/lib + full unit + every e2e suite). Build
+  finished clean.
+- Full suite **861 passed / 0 failed** (P4 report), re-confirmed for the touched
+  harness after this audit's fix (`e2e_list_columns_golden` 16/16).
+- `cargo clippy` (bins/lib) zero warnings.
+
+## Design-inquisition charges — integration verified in the built code
+
+| Charge | Remedy | Built? | Evidence |
+|---|---|---|---|
+| I (D5 spec non-capturing) | pre-materialised `SpecListRow`, id resolved per block | ✅ aligned | `spec.rs` `SpecListRow`/`spec_list_rows`; `SPEC_COLUMNS` is a `const` of `fn`; R1 canary cleared |
+| II (IMP-013 JSON-row descope) | record descope at close | ⏳ **close action** | typed `*Row`/`json_rows` remain per-kind by D2; see Harvest |
+| III (memory loud rejection) | guard + test | ✅ aligned | `memory.rs` `args.columns.is_some()` bail; `e2e_list_conformance.rs:126` |
+| IV (harness coverage) | pin memory-reject, empty-list, spec multi-block, gov breadth | ✅ aligned | `e2e_list_columns_golden.rs` + conformance test |
+| V (D6/R4 count precision) | design-doc text fix | ✅ aligned | design integrated pre-plan |
+
+## EX/VT reconciliation
+
+All phase EX/VT (plan.toml PHASE-01..04) **met** — verified against the passing
+suites named in each VT. No criterion miss. Notably P4 EX-1/VT-1 (`--columns`
+pinned byte-exact **per migrated verb**) is satisfied by the golden harness, which
+is also what makes the acceptance grammar regression-proof per kind (see F-1).
+
+## Code-review findings & dispositions
+
+- **F-1 — `--columns` absent from the uniform grammar matrix (`e2e_list_conformance.rs` `SPINE_FLAGS`).**
+  Expected (spirit of CHARGE IV / mem `conformance-asserts-surface`): every shared
+  flag self-documented in the one uniform net. Observed: `SPINE_FLAGS` omits
+  `--columns`. **Disposition: follow-up (IMP-018).** Rationale, not escape:
+  `--columns` is genuinely *non-uniform* — memory rejects it by design (D9), so it
+  cannot join the all-7-kinds matrix as-is. Acceptance for the 6 column kinds is
+  already pinned byte-exact in `e2e_list_columns_golden.rs` (dropping `columns`
+  from any kind's flatten fails *there*), and memory rejection in the conformance
+  suite — so behaviour is covered; this is a locality/self-documentation gap. Its
+  natural home is IMP-017: when memory joins the column model, `--columns` becomes
+  uniform and the matrix entry falls out for free. Filed as **IMP-018**, linked.
+- **F-2 — JSON `--columns` no-op golden was a full-set request (`e2e_list_columns_golden.rs`).**
+  Expected: prove the JSON path ignores `--columns` (D7/D2). Observed: requested
+  `id,status,slug,title` — would only catch reordering, not field-filtering; the
+  real subset proof lived only in the `governance.rs` unit test. **Disposition: fix
+  now** (this audit) — narrowed to a `--columns id` subset request; a JSON path
+  wrongly honouring columns now diverges and fails. Re-ran green.
+- **F-3 — spec table tests distinguish slug from title by case (`spec.rs` unit tests).**
+  `!out.contains("onboarding")` (slug) vs `out.contains("Onboarding")` (title).
+  **Disposition: tolerated drift.** Fixtures are controlled (slug lowercase, title
+  Titlecased); a title that contained its own slug as a substring would false-pass,
+  but no such fixture exists and the byte-exact golden harness (`e2e_list_columns_golden.rs`)
+  pins the true row shape independently. Hardening value is low; recorded so it is a
+  conscious accept, not an oversight.
+- **F-4 — double allocation on table render (`listing.rs` `Column::cell: fn(&R)->String`).**
+  `gov_rows`/`spec_list_rows` materialise owned `String`s, then `render_columns`
+  clones each cell again into the grid. **Disposition: tolerated drift (aligned with
+  D2).** Conscious tradeoff: the typed-row + non-capturing-`fn` extractor design is
+  what keeps the leaf pure (no clap/`entity`, no `Box<dyn Fn>`); the second
+  allocation is noise at CLI list scale. No action.
+
+## Harvest (for `/close`)
+
+- **IMP-013 closure note (CHARGE II):** this slice lifts the *table column
+  projection* (D2) but deliberately leaves per-kind typed JSON rows + `json_rows`
+  duplicated — irreducible under SL-025 D7 (faithful JSON: `phases` is an object,
+  `members` an int, `resolution` nullable). When `/close` reconciles IMP-013, record
+  the JSON-row half as **assessed and deliberately descoped**, not silently whole.
+- **IMP-018** filed (F-1) — `--columns` joins `SPINE_FLAGS` once memory migrates
+  (IMP-017 orbit).
+- Slice lifecycle: `slice-037.toml` still `proposed`; rollup 4/4. Reconcile at close
+  (no lifecycle-transition verb — known CLI gap).
+
+**Closure verdict: audit-ready.** Design and built code are reconciled; every
+finding is dispositioned; the only open items are the two intentional follow-ups
+above, both owned.
