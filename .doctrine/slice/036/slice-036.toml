@@ -1,9 +1,9 @@
 id = 36
 slug = "cordage-core"
 title = "cordage graph core crate"
-status = "plan"
+status = "done"
 created = "2026-06-10"
-updated = "2026-06-10"
+updated = "2026-06-11"
 
 [relationships]
 # Parent tech spec — SL-036 descends from SPEC-001 (Graph-Derived Priority Engine),

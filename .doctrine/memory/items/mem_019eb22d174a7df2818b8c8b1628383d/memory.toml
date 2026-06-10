@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb22d174a7df2818b8c8b1628383d"
+memory_key = "mem.pattern.review.interaction-bugs-hide-between-sound-parts"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Interaction bugs hide between individually-sound parts — review the seams, not just the components"
+summary = "Adversarial review must walk the seams between individually-sound components — interaction bugs hide there and per-section review misses them"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[scope]
+paths = []
+globs = ["crates/cordage/**"]
+commands = []
+tags = ["review", "design", "audit", "inquisition"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6e6927cab0358421823944e93d091eef6685f596"
+ref_name = "refs/heads/main"
+checkout_state_id = "1abcd643f86d4bfcc7d0d8fce8a2256989bb96e03e301ad0aec847bfd5397561"
+base_commit = "94d2c8b9d637068a9e36e4ba7b0b9f9ff50e2917"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
