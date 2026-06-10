@@ -45,3 +45,34 @@ trivially holds). Existing numeric allocation suites green unchanged (EX-4/VT-6)
 
 Gate: `cargo test` all suites green, `cargo clippy` zero warnings, `cargo fmt`
 clean.
+
+## PHASE-04 — memory-record worktree warning (done)
+
+Mechanised the ADR-006 amendment (D6a). Closed X8 — `worktree.rs` had no
+self-detection seam, only `verify_sibling_worktree` (a *sibling* question).
+
+**Shipped**
+- `worktree::is_linked_worktree(root) -> Result<bool>` (src/worktree.rs:285) —
+  `git rev-parse --git-dir` vs `--git-common-dir`, both normalised through the
+  existing `resolve_common_dir`. Differ ⟹ linked worktree. `pub(crate)`, shared
+  (the provision path may call it), not memory-private (EX-1).
+- `memory::run_record` call site (src/memory.rs:751) — `if
+  is_linked_worktree(&root).unwrap_or(false) { writeln!(io::stderr(), warning) }`.
+  Non-blocking (record still succeeds, EX-2); `unwrap_or(false)` swallows a
+  detection error so it can never break a record; fires regardless of `--global`
+  (a master in a worktree carries the same squash-orphan risk).
+
+**Verification** — VT-1 unit (`is_linked_worktree` fork⟹true / primary⟹false,
+src/worktree.rs test mod, with `init_repo` git fixture); VT-2/VT-3 black-box e2e
+(`tests/e2e_memory_record_worktree.rs`). Pre-existing provision (5) + worker-guard
+(3) suites green unchanged — INV-1 behaviour preservation holds.
+
+**Notes for the close-out audit**
+- No deviation from the sheet. The helper rides the locked §5.2 reuse plan
+  verbatim (`resolve_common_dir` + `git::git_text`).
+- VT-1 must be a **unit** test — the helper is `pub(crate)`, invisible to the
+  integration crate; VT-2/VT-3 are e2e (the CLI surface). Sheet D-3.
+- Live-repo smoke skipped deliberately — minting a real memory pollutes the
+  corpus; the e2e is the conformance surface.
+
+Gate: `just check` green (all suites), `cargo clippy` zero warnings.

@@ -747,6 +747,18 @@ pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>) -> Result
     if title.is_empty() {
         bail!("Title must not be empty");
     }
+
+    // ADR-006 amendment (SL-032 PHASE-04): recording on a linked worktree risks a
+    // squash-orphan — the minted item is lost if the branch merges squashed.
+    // Non-blocking (D6a): warn to stderr, then proceed. A detection failure is
+    // swallowed to `false` so it can never break a record.
+    if crate::worktree::is_linked_worktree(&root).unwrap_or(false) {
+        writeln!(
+            io::stderr(),
+            "warning: recording memory on a linked worktree — a squash merge will \
+             orphan this item. Prefer recording on the trunk."
+        )?;
+    }
     let key = args.key.map(normalize_key).transpose()?;
     let tags = validate_tags(args.tags)?;
     let summary = args.summary.unwrap_or_default();
