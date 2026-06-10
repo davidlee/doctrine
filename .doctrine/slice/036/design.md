@@ -84,25 +84,40 @@ pub struct OverlayConfig { cycle_policy: CyclePolicy, arity: Arity }
 pub struct EdgeAttrs { rank: i32, age: u64 }    // opaque; (rank asc, age asc) eviction order
 
 // ── channels (DD2) ───────────────────────────────────────────
-pub enum Combinator  { Max, Any, All, CountDistinct }   // commutative monoids
+pub enum Combinator  { Max, Any, All, CountDistinct }   // commutative monoids; each owns a value domain
 pub enum Direction   { Backward, Upward, None }
-pub enum ChannelValue { Flag(bool), Score(i64), Count(u32) }
+pub enum ChannelValue { Flag(bool), Scalar(i64), Count(u32) }   // Any/All→Flag · Max→Scalar · CountDistinct→Count
 pub struct ChannelSpec { overlay: OverlayId, combinator: Combinator, direction: Direction }
+
+// ── ordering composition (F1: generic, no dep/seq names) ─────
+// Policy supplies the precedence: "layer the reject overlay first, the evict
+// overlay within-level, then fallback." The core composes lexicographically and
+// knows none of the overlays' meaning.
+pub struct OrderLayer { overlay: OverlayId, direction: Direction }
+pub struct OrderSpec  { layers: Vec<OrderLayer> }   // NodeId fallback is always implicit + last
 
 // ── build → query ────────────────────────────────────────────
 GraphBuilder::new().overlay(cfg) -> OverlayId; .node() -> NodeId;
-                   .edge(ov, src, dst, attrs); .build() -> Result<Graph>  // cycles resolved
+                   .edge(ov, src, dst, attrs)
+                   .order_spec(OrderSpec)            // policy precedence; build resolves union vs it
+                   .build() -> Result<Graph>         // per-overlay + cross-layer cycles resolved
 
 impl Graph {
     fn out_edges(&self, ov, n) -> &BTreeSet<Edge>;
     fn in_edges (&self, ov, n) -> &BTreeSet<Edge>;          // reverse index (REQ-074 primitive)
-    fn reachable(&self, ov, n, dir) -> BTreeSet<NodeId>;
-    fn spine_path(&self, ov, n) -> Vec<NodeId>;             // ov must be AtMostOne
-    fn order_key(&self, n) -> OrderKey;  fn ordered(&self) -> Vec<NodeId>;
+    fn reachable(&self, ov, n, dir) -> BTreeSet<NodeId>;    // STRICT — excludes n (F8)
+    fn spine_path(&self, ov, n) -> Vec<NodeId>;             // follows the kept parent post arity-resolution (F6/F7)
+    fn order_key(&self, n) -> OrderKey;  fn ordered(&self) -> Vec<NodeId>;   // per the build's OrderSpec
     fn evaluate(&self, spec: &ChannelSpec, seed: &BTreeMap<NodeId, ChannelValue>) -> Channel;
     fn provenance(&self) -> &Provenance;  fn explain(&self, n) -> Explanation;
 }
 ```
+
+`order_key` is now generic (F1): `OrderKey` is the lexicographic tuple of each
+layer's longest-path level in its direction, with `NodeId` as the implicit total
+tail. The doctrine recipe "dep-topology → seq-rank → fallback" (D9/D10) is just
+policy passing `OrderSpec{ layers: [reject_overlay@Backward, evict_overlay@…] }` —
+the core never names dep or seq.
 
 **The propagation contract** — after `build()` every overlay is acyclic, so a
 channel is a single topo-order monoid fold (no iteration):
@@ -127,25 +142,37 @@ no-op). `CountDistinct` is the exception: `|{ m ∈ reachable(n, ov, dir) : seed
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-`build()` runs three deterministic passes:
+`build()` runs four deterministic passes; all overlay/layer references are by
+opaque `OverlayId` from the policy-supplied `OrderSpec` — no dep/seq names (F1):
 
-1. **Per-overlay cycle resolution.**
+1. **Arity enforcement (F7).** For each `AtMostOne` overlay, a node with >1 incoming
+   edge keeps the `(rank asc, age asc)`-minimal parent; the rest → `EvictedEdge
+   {ArityViolation}` in provenance (deterministic, surfaced not silent). This makes
+   `spine_path` single-valued by construction.
+2. **Per-overlay cycle resolution (D5/REQ-092).**
    - `Reject`: detect SCCs, no mutation; each non-trivial SCC → `CycleDiagnostic`,
-     marked **degraded** (excluded from clean topo, placed by `NodeId` fallback) —
-     never a false order (REQ-076). `build()` still returns `Ok` (cycle is data).
+     marked **degraded** — never a false order (REQ-076). `build()` still returns `Ok`
+     (cycle is data).
    - `Evict`: while a non-trivial SCC exists, evict the **globally-minimal
      participating edge** by `(rank asc, age asc)`, recompute, repeat. Unique min
      (total order) → deterministic; each eviction strictly reduces edges →
      terminates ≤ `|E|`. Every eviction → `EvictedEdge{IntraOverlayCycle}`.
-2. **D9 union — dep authoritative, seq yields.** Resolve dep → `dep_level(n)` by
-   longest-path layering (`0` if no prerequisites, else `1 + max` over dep-targets).
-   A `seq` edge is honoured only between dep-incomparable nodes; one that dep already
-   orders is redundant (dropped) or contradicts → **evicted by the same `(rank,age)`
-   rule** as `EvictedEdge{UnionCycleVsDep}`. Surviving intra-level seq edges topo-order
-   the level.
-3. **`order_key`** = `( dep_level(n), seq_pos_within_level(n), node_id(n) )`,
-   lexicographic ascending (do-earliest-first). The `NodeId` tail guarantees totality
-   — ordering never falls to map-iteration order.
+3. **Cross-layer union resolution (D9 — earlier layer authoritative) (F2).** Walking
+   the `OrderSpec` layers in precedence order, compose the partial order incrementally.
+   For each edge `u→v` in layer *k*: if the composed order of layers `< k` already
+   places `v` before `u` (the edge would reverse a higher-precedence decision), it is
+   a contradiction → **evict by `(rank asc, age asc)`** as `EvictedEdge{UnionCycleVsLayer}`.
+   An edge consistent-but-redundant with the earlier order is dropped silently (the
+   earlier layer already encodes it). Edges between earlier-incomparable nodes survive
+   and order within that eligible set. (D9's "dep authoritative, seq yields" is the
+   2-layer instance.)
+4. **`order_key` materialization (D7/REQ-077).** Per node, the lexicographic tuple
+   `( level_in_layer_0, level_in_layer_1, …, node_id )` — each entry the node's
+   longest-path level (`0` if no in-direction predecessor, else `1 + max`) in that
+   resolved layer. `NodeId` tail guarantees totality → ordering never falls to
+   map-iteration order. **Degraded SCC nodes (F9):** assigned `level = u32::MAX`
+   (saturating sentinel) in the affected layer → sorted after all clean nodes, among
+   themselves by `NodeId` — present and deterministic, but never falsely linearized.
 
 `explain(n)` (D11 — always walks to root) assembles **structured paths only**:
 
@@ -157,6 +184,8 @@ pub struct Explanation { node: NodeId, order_key: OrderKey,
 pub struct Channel { values: BTreeMap<NodeId, ChannelValue>,
     contributors: BTreeMap<NodeId, Vec<NodeId>> }   // Any→witness, Max→argmax, Count→set
 pub struct Provenance { cycles: Vec<CycleDiagnostic>, evictions: Vec<EvictedEdge> }
+pub struct EvictedEdge { overlay: OverlayId, edge: EdgeRef, reason: EvictReason }
+pub enum   EvictReason { ArityViolation, IntraOverlayCycle, UnionCycleVsLayer }
 ```
 
 No `String` prose, no channel name, no doctrine noun anywhere in these — rendering
@@ -166,17 +195,28 @@ is policy's (D1).
 
 - **I1.** Every overlay is acyclic post-`build()` (reject-degraded SCCs aside, which
   never linearize).
-- **I2.** `dep` blocking is never overridden by a `seq` preference — `dep_level`
-  dominates `order_key` (D9).
+- **I2 (generic, post-F1).** An earlier `OrderSpec` layer is never overridden by a
+  later one — the lexicographic tuple makes layer 0 dominate layer 1, etc. (D9's
+  "dep authoritative, seq yields" is the 2-layer case; the core states it without
+  naming dep/seq.)
 - **I3.** Recompute from identical inputs → identical `order_key`, `Channel`,
   `Provenance` (REQ-077).
 - **I4.** No authored mutation — eviction is a build-time derived resolution; inputs
   are consumed, never written back (storage rule, D8).
+- **I5 (F3 — combinator/value contract).** Each `Combinator` owns a `ChannelValue`
+  domain (`Any`/`All`→`Flag`, `Max`→`Scalar`, `CountDistinct`→`Count`). A seed entry
+  of a mismatched variant collapses to the combinator's **identity** (`All`→true,
+  `Any`/`Max`→false/`i64::MIN`, `Count`→0) — deterministic and non-panicking (no
+  `unwrap`), documented as a caller precondition rather than enforced by types in v1.
+- **I6 (F8 — reachable is strict).** `reachable(n)` excludes `n`; `CountDistinct`
+  therefore counts strict-reachable contributors, never `n`'s own seed.
 - **Assumption A1.** `age` is total + stable across recomputes (adapter contract;
   test-supplied here).
 - **Edge cases:** empty graph; single node no edges; self-loop (trivial SCC →
-  reject diagnoses / evict drops); disjoint cycles (each loses its own min edge);
-  a `seq` edge that only closes a cycle against stronger edges → evicts itself (no-op).
+  reject diagnoses / evict drops); disjoint cycles (each loses its own min edge); a
+  later-layer edge that only closes a cycle against a higher-precedence layer →
+  evicts itself (no-op); a node with >1 parent on an `AtMostOne` overlay → keeps the
+  min, others `ArityViolation`.
 
 ## 6. Open Questions & Unknowns
 
@@ -239,10 +279,48 @@ Black-box, vocabulary-free `tests/` (overlays `a`/`b`, channels `Flag`/`Count`):
 | **REQ-092** evict | seq cycle → min-`(rank,age)` edge evicted to fixpoint, in provenance. |
 | **REQ-077** determinism | build twice → identical `order_key` + `Provenance` + contributor traces; union fixture `A —dep→ B`, `B —seq→ A`. |
 | **REQ-080** seam | a fresh channel via existing combinators works with no core change; `Combinator` doc-marked as the curated extension point. |
+| **DD1 rollup (F5)** | `Unbounded` membership overlay, a node with **2 parents**, `Upward` `All`/`CountDistinct` → aggregates from both parents correctly; `spine_path` on an `AtMostOne` overlay returns the single kept path; `CountDistinct` over a diamond counts the distinct node once (R3). |
+| **arity (F7)** | >1 parent on `AtMostOne` → min kept, rest `EvictedEdge{ArityViolation}`. |
+| **union (F2)** | 3-layer `OrderSpec` where a layer-2 edge contradicts layer-0 → `EvictedEdge{UnionCycleVsLayer}`, layer-0 order preserved. |
 
 TDD red/green/**refactor** per phase (sequenced by `/plan`). `[lints] workspace = true`;
 `just check` zero-warnings after every file. Pure throughout; `age` test-supplied.
 
 ## 10. Review Notes
 
-(Adversarial pass pending — §Process step 6.)
+### Adversarial self-review (round 1) — 9 findings, all integrated
+
+- **F1 (significant, boundary leak) — FIXED.** `order_key`/`dep_level` hardcoded
+  "dep"/"seq" by name → the core deciding authoritative overlay + prerequisite
+  direction = doctrine meaning inside the neutral core (fails §9/REQ-079). Fix:
+  `order_key` is now generic over a policy-supplied `OrderSpec { layers }`; the core
+  composes lexicographically and union-resolves cross-layer contradictions without
+  naming any overlay. D9/D10's "dep-topology → seq-rank → fallback" becomes policy
+  passing a 2-layer spec. (§5.2, §5.4, I2.)
+- **F5 (significant, verification gap) — FIXED.** §9 omitted the `Upward` rollup over
+  a multi-parent `Unbounded` overlay — the DD1/T1 headline. Added the rollup fixture
+  row (multi-parent aggregation, `spine_path`, diamond `CountDistinct`). (§9.)
+- **F2 (moderate) — FIXED.** Union-eviction detection underspecified ("contradicts").
+  Now precise: per layer-*k* edge, contradiction = earlier-layer composed order already
+  reverses it → evict `(rank,age)`; `EvictReason::UnionCycleVsLayer`. (§5.4 pass 3.)
+- **F3 (moderate) — FIXED.** Combinator↔`ChannelValue` pairing had no contract. I5:
+  each combinator owns a domain; mismatched seed → identity, non-panicking, documented
+  precondition. (§5.5 I5.)
+- **F7 (moderate) — FIXED.** `Arity` was decorative. Now build-time pass 1 enforces
+  `AtMostOne` (keep min parent, rest `ArityViolation`), making `spine_path`
+  single-valued by construction. (§5.4 pass 1.)
+- **F9 (moderate) — FIXED.** Degraded-SCC `order_key` undefined. Now `level = u32::MAX`
+  sentinel → sorted after clean nodes, among themselves by `NodeId`. (§5.4 pass 4.)
+- **F4 (minor) — FIXED.** `Score(i64)` flirted with Appendix-B "urgency scoring" →
+  renamed `Scalar(i64)` (neutral; it is just the `Max` domain). (§5.2.)
+- **F6 (minor) — FIXED.** `spine_path` precondition resolved via F7 — it follows the
+  single kept parent post arity-resolution, no `Result` needed. (§5.2.)
+- **F8 (minor) — FIXED.** `reachable` inclusivity undefined → declared strict
+  (excludes `n`); `CountDistinct` counts strict-reachable only. (§5.2, I6.)
+
+Net: F1 changed the public ordering interface (`OrderSpec`); the rest tightened
+contracts and verification. No finding overturned a DD. Design stands.
+
+### External pass
+
+(Pending — `/inquisition` or external reviewer, user's call.)
