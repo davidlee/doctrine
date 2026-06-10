@@ -7,10 +7,11 @@ title = "Cycle policy is per overlay: dep rejects, seq evicts"
 status = "pending"
 kind = "functional"
 
-description = "Each typed edge overlay carries a core-configurable cycle policy. A dep (hard) overlay is reject-on-cycle: a cycle is invalid, surfaced as a diagnostic, and the affected query degrades to local authored priority plus stable fallback rather than a false topological order. A seq (soft) overlay is evict-on-cycle: a would-be cycle is broken by evicting the participating edge minimal under (rank asc, then age asc), so the overlay is always acyclic. Eviction is a build-time derived resolution and never mutates authored TOML."
+description = "Each typed edge overlay carries a core-configurable cycle policy — the mechanism realising REQ-076's degrade-not-false-order obligation. A dep (hard) overlay is reject-on-cycle: the cycle is invalid, surfaced as a diagnostic, and the affected query degrades to local authored priority plus stable fallback. A seq (soft) overlay is evict-on-cycle: while a cycle remains, the globally-minimal participating edge under (rank asc, then age asc) is evicted, iterated to a fixpoint, so the overlay is always acyclic and disjoint cycles each lose their own minimal edge. A cycle spanning both overlays — acyclic in each alone — is resolved by the union-cycle rule (SPEC-001 D9): dep is authoritative and the union-closing seq edge is evicted. Eviction is a build-time derived resolution that never mutates authored TOML and surfaces each evicted edge in provenance."
 tags = []
 acceptance_criteria = [
-  "A dep-overlay cycle is reported as a diagnostic naming the node ids and edge kinds and is treated as invalid (surfaced by validate), never silently ordered.",
-  "A seq-overlay would-be cycle is resolved by evicting the participating edge minimal under (rank asc, then age asc); a new minimal edge evicts itself as a no-op.",
+  "A dep-overlay cycle is reported as a diagnostic naming the node ids and edge kinds and treated as invalid (surfaced by validate), never silently ordered — the mechanism realising REQ-076.",
+  "A seq-overlay cycle is resolved by iteratively evicting the globally-minimal participating edge under (rank asc, then age asc) to a fixpoint; a new minimal edge evicts itself as a no-op; each evicted edge is surfaced in provenance.",
+  "A cycle spanning both the dep and seq overlays is resolved per D9 — dep authoritative, the union-closing seq edge evicted — never a false topological order.",
   "Eviction resolves at graph-build time as a derived view and mutates no authored edge; recomputing over unchanged authored state yields the same acyclic resolution.",
 ]

@@ -69,12 +69,17 @@ urgency, or product vocabulary in the crate).
 - **Failure mode — cycles.** Handled per overlay (D5): a `dep` cycle is invalid —
   diagnose (naming node ids + edge kinds), degrade the affected query, never emit
   a false topological order (REQ-076); a `seq` cycle cannot persist — the view
-  evicts the minimal `(rank, age)` edge at build time (REQ-092). Neither path
-  mutates authored TOML.
-- **The path-free-core tension (OQ-009).** Architectural triggers condition
-  actionability on a *code-surface* (path-glob) match, but the core must not
-  depend on file paths (PRD-011 §4 constraint). Resolved by D6: the trigger is a
-  **policy-layer actionability mask**, never a graph edge.
+  iteratively evicts the minimal `(rank, age)` edge to a fixpoint at build time and
+  surfaces each evicted edge in provenance (REQ-092). A cycle spanning *both*
+  overlays is invisible to either per-overlay policy; the union-cycle rule (D9) —
+  `dep` is authoritative, `seq` yields — closes that seam. No path mutates authored
+  TOML.
+- **The path-free-core tension (OQ-009, dependency-bearing).** Architectural triggers
+  condition actionability on a *code-surface* (path-glob) match, but the core must
+  not depend on file paths (PRD-011 §4 constraint). D6 fixes the *shape* — a
+  **policy-layer actionability mask**, never a graph edge — but stays open on two
+  unbuilt inputs (the authored trigger field and a phase file-set source), so OQ-009
+  is resolved-pending-prerequisites, not closed.
 
 ## Hypotheses
 
@@ -85,10 +90,13 @@ urgency, or product vocabulary in the crate).
 - **H2 — tree + typed-DAG captures doctrine's relations.** Doctrine relations are
   authored outbound-only (ADR-004); reverse edges, blockers, and reachability are
   all derivable in-core from that alone, with no new durable inbound field.
-- **H3 — `retrieve.rs` scope predicates are the trigger matcher.** The SL-008
-  scope-admittance engine (path / glob matching) already decides whether a memory
-  is in scope for a touched-path set; the same predicate matches an architectural
-  trigger against a phase's planned file set. No new matcher (D6).
+- **H3 — `retrieve.rs` glob predicates are the trigger matcher.** SL-008's leaf
+  predicates `glob_admits(pattern, query)` / `path_admits` (`src/retrieve.rs`) are
+  generic `&str` matchers reusable verbatim — trigger globs are the *pattern*, a
+  phase's file set the *subject*. (The higher `match_scope` is `Memory`-typed and is
+  *not* reused; a thin policy caller wraps the leaf predicates.) No new glob engine
+  (D6). *Caveat:* the matcher needs two inputs that do not yet exist — see D6's
+  prerequisites.
 - **H4 — the boundary is extractable later.** Carving the core as a neutral
   workspace crate *now* (path dependency) makes "ultimately external" a
   `cargo publish` + flip-path-to-version, not a refactor (D1).
@@ -146,6 +154,14 @@ urgency, or product vocabulary in the crate).
   channels over typed edges with chosen combinators and knows nothing of `dep` vs
   `seq` meaning; it sees only an overlay's configured cycle policy and opaque edge
   attributes (`rank`, `age`).
+
+  `dep`/`seq` edges are **optional enrichment**, never required capture — an item
+  with no authored edge still surveys by derived consequence + fallback, so PRD-011
+  §4 ("capture must never require dependency modelling") holds. The *authored* edge
+  schema itself (new relation kinds + `rank`) is **product-capture surface owned by
+  PRD-009** (its relation seam, §2), not minted in this tech spec; SPEC-001
+  *consumes* it. Pushed to PRD-009 OQ-007 — FR-005/REQ-096 is buildable only once
+  that schema is blessed.
 - **D5 — per-overlay cycle policy: `dep` rejects, `seq` evicts.** Closes PRD-011
   OQ-005. Acyclicity is enforced per overlay, by one of two core-configurable
   policies:
@@ -154,30 +170,55 @@ urgency, or product vocabulary in the crate).
     cyclic component or degrades to local authored priority + stable fallback. A
     `dep` cycle is an authoring error to fix, surfaced by `validate` — never a
     silent false topological order.
-  - **evict-on-cycle** (`seq`): a would-be cycle is broken by **evicting the
-    participating edge minimal under `(rank asc, age asc)`** — lowest rank, ties
-    broken oldest-first. The overlay is therefore always acyclic; a new low-rank
-    edge that only closes a cycle against stronger edges evicts itself (no-op).
+  - **evict-on-cycle** (`seq`): while the overlay contains a cycle, **evict the
+    globally-minimal participating edge under `(rank asc, age asc)`** — lowest rank,
+    ties broken oldest-first — and **repeat to a fixpoint** (each eviction strictly
+    reduces edge count, so it terminates; disjoint cycles each lose their own minimal
+    edge). The overlay is therefore always acyclic; a new low-rank edge that only
+    closes a cycle against stronger edges evicts itself (no-op). Every evicted edge
+    is **surfaced in provenance** for the affected nodes — an authored preference is
+    never dropped silently (REQ-077; PRD-011 "explanations are structured, not
+    magic").
 
   **Eviction is a build-time *derived* resolution, never an authored mutation**
   (storage rule): authored TOML may hold a `seq` cycle; every recompute evicts
   deterministically by `(rank, age)` to yield an acyclic view, leaving the
-  authored edges untouched. `age` is a **clock-free creation-sequence stamp** the
-  adapter supplies (not a wall-clock `created` date — day granularity would tie),
-  keeping the core deterministic and pure. A future `link` verb could additionally
-  enforce at write time, but the read-side resolution is the contract.
-- **D6 — architectural triggers as a policy-layer actionability mask.** Closes
-  PRD-011 OQ-009 (in-scope as a channel). A path-glob trigger holds an item
-  non-actionable until a phase's planned/touched file set matches its trigger
-  globs. It enters as a **policy mask**, resolved by reusing the `retrieve.rs`
-  scope predicates (SL-008) — *not* as a graph edge, keeping the core path-free
-  (PRD-011 §4 constraint). The authored trigger field is PRD-009's capture seam
-  (`{ globs = [...], note = "…" }`); the planning gate (`/plan` / `/phase-plan`)
-  is the v1 consumer that runs the scope match over the phase's declared paths.
-  IMP-013 (two-path) and IMP-014 (single-path) are the acceptance fixtures; if
-  the mask cannot express their triggers and surface them at the gate, D6 is not
-  done. Gate enforcement strength (soft skill-check vs hard workflow/preflight
-  step) is **OQ-6**.
+  authored edges untouched. `age` is a **clock-free, stable authoring ordinal** the
+  adapter supplies (not a wall-clock `created` date — day granularity would tie). The
+  *contract* the core depends on is only that `age` be **total and stable across
+  recomputes**; the derivation is an adapter-slice concern (a candidate: source
+  entity id, then append position within the outbound array — clock-free, stable
+  while arrays stay append-only). Because that ordinal is an authoring/structural
+  artifact rather than true wall-clock age, the equal-rank tie-break is deterministic
+  but not a semantic "oldest wins." A future `link` verb could additionally enforce
+  at write time, but the read-side resolution is the contract.
+- **D6 — architectural triggers as a policy-layer actionability mask
+  (dependency-bearing; OQ-009 resolved-pending).** A path-glob trigger holds an item
+  non-actionable until a file set matches its trigger globs. It enters as a **policy
+  mask** — `mask(item, files) = glob_admits(item.trigger.globs, files)` over the
+  leaf `retrieve.rs` predicates (SL-008; trigger globs = pattern, file paths =
+  subject) — *never* a graph edge, keeping the core path-free (PRD-011 §4). This
+  fixes the *shape*; it does not close OQ-009, because the matcher needs **three
+  inputs that do not yet exist**:
+  1. **the authored trigger field** `{ globs = [...], note = "…" }` — PRD-009's
+     capture seam (pushed to PRD-009 OQ-007). IMP-013/014 today carry only a
+     `trigger` *tag*, no structured field.
+  2. **(a) the planned file set** — a declared-paths field on the plan/phase, read at
+     the planning gate (`/plan` / `/phase-plan`). The mask fires here **prospectively**,
+     surfacing the prefactor opportunity *before* the code exists — an architectural
+     rider that only fired post-build would be useless.
+  3. **(b) the touched file set** — the audited reality at `/audit`, derived from the
+     worktree diff (no new authored field). The mask re-checks here against what
+     *actually* happened.
+
+  **Both (a) and (b) are necessary, for different reasons:** (a) is the plan, (b) is
+  the audited truth. When they **diverge** enough to flip a trigger the plan missed,
+  that is a **caught oops** — a drift signal surfaced at audit, not a silent miss.
+  IMP-013 (two-path) / IMP-014 (single-path) become real acceptance fixtures *once
+  the trigger field exists*; until then the "if the mask can't surface them, D6 is
+  not done" criterion is not yet evaluable. Gate enforcement strength (soft
+  skill-check vs hard workflow/preflight step) is **OQ-6**; the plan↔audit divergence
+  surface is folded into it.
 - **D7 — deterministic ordering and stamped cache.** `order_key` is a total
   deterministic tuple; ordering never depends on clock, RNG, or map-iteration
   order. Cache/projection output stamps the policy version + an input signature
@@ -189,13 +230,29 @@ urgency, or product vocabulary in the crate).
   metadata, or relations (REQ-078 invariant). Reverse references are always
   computed from authored outbound edges (ADR-004), never a separate inbound field
   (REQ-074).
+- **D9 — overlay composition and the union-cycle rule: `dep` is authoritative,
+  `seq` yields.** D5 enforces acyclicity *per overlay*, which is provably blind to a
+  cycle spanning both — e.g. `A —dep→ B` (acyclic in `dep`) with `B —seq→ A`
+  (acyclic in `seq`), whose **union** is cyclic. The composition is fixed: `order_key`
+  is built **dep-topology first, then `seq` rank within a dep-eligible set, then the
+  deterministic fallback** — `seq` is a preference *within* the dependency order, it
+  never reorders across a `dep` edge. A `seq` edge whose inclusion would close a cycle
+  **against the resolved `dep` order** is therefore evicted by the same
+  `(rank asc, age asc)` rule (and surfaced in provenance, per D5), exactly as for an
+  intra-`seq` cycle. Result: the union is always acyclic, `dep` blocking is never
+  overridden by a soft preference, and no false topological order is ever emitted
+  (REQ-076/REQ-092). *Verification:* seeding `A —dep→ B`, `B —seq→ A` yields a stable
+  order with the `seq` edge reported evicted — no panic, no false topo.
 
 ## Open Questions
 
-Local to this spec. PRD-011 OQ-003 / OQ-005 / OQ-008 / OQ-009 are closed above
-(D1 / D5 / D7 / D6); PRD-011 OQ-002 (OQ-1) and crate name/layout (OQ-5) are now
-closed by D4 and D1. PRD-011 OQ-001 (authored-seam field shape) is PRD-009's, not
-this spec's.
+Local to this spec. PRD-011 OQ-003 / OQ-005 / OQ-008 are closed above (D1 / D5 /
+D7); PRD-011 OQ-002 (OQ-1) and crate name/layout (OQ-5) are closed by D4 and D1.
+PRD-011 OQ-009 is **resolved-pending-prerequisites** (D6 fixes the shape; the
+authored trigger field + plan/audit file-set sources are unbuilt — see OQ-7).
+PRD-011 OQ-001 (authored-seam field shape) is PRD-009's, not this spec's. The
+`dep`/`seq` and trigger **authored schemas** D4/D6 rely on are PRD-009's capture
+surface, pushed to PRD-009 OQ-007 — this spec consumes them, it does not mint them.
 
 Resolved:
 
@@ -216,5 +273,11 @@ Remaining:
 - **OQ-4** (PRD-011 OQ-004) — transitive blocking shown by default, or only on an
   explicit `--transitive` / explain surface.
 - **OQ-6** — planning-gate enforcement strength for D6's trigger channel: soft
-  (skill remembers to check) vs hard (workflow/preflight step). Friction vs
-  enforceability (IMP-012 tension).
+  (skill remembers to check) vs hard (workflow/preflight step), and how the
+  plan↔audit divergence (D6 (a) vs (b)) is surfaced. Friction vs enforceability
+  (IMP-012 tension).
+- **OQ-7** (→ PRD-009) — the **authored capture schema** D4/D6 depend on: the new
+  `dep`/`seq` relation kinds (+ int `rank`) and the architectural-trigger field
+  `{ globs, note }`. Owned by PRD-009's relation/capture seam, not this tech spec;
+  FR-005/REQ-096 and D6 are buildable only once PRD-009 blesses it. Pushed to
+  PRD-009 OQ-007.

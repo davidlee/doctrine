@@ -7,10 +7,10 @@ title = "Core and policy placement obeys the boundary test"
 status = "pending"
 kind = "quality"
 
-description = "Every placement of a rule into the core versus policy satisfies the boundary test: a rule statable without product nouns may live in the core; a rule needing semantic interpretation must live in policy. The forbidden-core list bounds the crate — no task/project/habit terms, deadline/scheduled-for/best-before fields, lateness cost, remaining-work estimates, commitment pressure, urgency scoring, calendar/capacity concepts, sequential/parallel policy, resurfacing rules, or product defaults."
+description = "Every placement of a rule into the core versus policy satisfies the boundary test (SPEC-001 D2): a rule statable without product nouns may live in the core; a rule needing semantic interpretation must live in policy. This adds the placement discipline and the standing forbidden-core list — no task/project/habit terms, deadline/scheduled-for/best-before fields, lateness cost, remaining-work estimates, commitment pressure, urgency scoring, calendar/capacity concepts, sequential/parallel policy, resurfacing rules, or product defaults. The generic-core outcome and its test-vocabulary proof are REQ-079's and are not restated here."
 tags = []
 acceptance_criteria = [
   "No item on the forbidden-core list appears in the core crate.",
-  "A rule that cannot be stated without doctrine or product nouns lives in policy, not the core.",
-  "The core test suite carries no product vocabulary; policy tests carry the semantic interpretations explicitly.",
+  "A rule that cannot be stated without doctrine or product nouns lives in policy, not the core — adjudicated by the D2 boundary test.",
+  "The generic-core property and its no-product-vocabulary test proof are inherited from REQ-079, not duplicated here.",
 ]
