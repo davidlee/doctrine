@@ -1,0 +1,21 @@
+# crates/cordage — generic multi-channel evaluation engine over a tree plus typed
+# directed (DAG) overlays. Product-neutral leaf: no doctrine/bough vocabulary, no
+# dependencies (REQ-079 boundary). Doctrine depends on this by path; never the reverse
+# (ADR-001 leaf).
+[package]
+name = "cordage"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Generic graph core: typed overlays, deterministic ordering, channel propagation"
+license = "GPL-3.0-only"
+repository = "https://github.com/davidlee/doctrine"
+readme = "README.md"
+keywords = ["graph", "dag", "ordering"]
+categories = ["data-structures", "algorithms"]
+
+# Zero dependencies by construction (EX-1 / REQ-079). Do not add a [dependencies]
+# section without revisiting the boundary contract.
+
+[lints]
+workspace = true
