@@ -1,0 +1,41 @@
+memory_uid = "mem_019eaee720b6737182f5271bc6af1815"
+memory_key = "mem.pattern.lint.disallowed-methods-env-var"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Repo clippy bans std::env::var (disallowed_methods) — use var_os"
+summary = "clippy.toml disallowed-methods bans std::env::var + set_var; read env via var_os"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[scope]
+paths = ["src/main.rs"]
+globs = []
+commands = ["cargo clippy"]
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "13ee187c4494a982b6818157d3e133f85b0b9166"
+ref_name = "refs/heads/main"
+checkout_state_id = "11c6de1e59ba50c33e63e142bf348c8cce7e0b1afee4a2dc1526b678a8eedfb9"
+base_commit = "7aa61f2029d748f3a855fc5d19f421fb9fe8ce44"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
