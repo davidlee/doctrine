@@ -1,6 +1,6 @@
 id = 37
 slug = "list-hide-slug-format-options"
-title = "CLI list defaults hide slug; opt-in reveal + format control"
+title = "Shared list column model: --columns projection + slug-free defaults"
 status = "proposed"
 created = "2026-06-10"
 updated = "2026-06-10"
