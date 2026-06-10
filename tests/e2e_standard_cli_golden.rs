@@ -293,11 +293,12 @@ fn standard_list_table_default_hides_and_sorts_byte_exact() {
     let out = run(dir.path(), &["list"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     // Header + ONLY visible rows, ascending by id, STD- prefixed; retired ABSENT.
+    // Slug-free default (SL-037 D4) — `--columns …,slug` reveals it.
     assert_eq!(
         stdout(&out),
-        "id       status    slug              title\n\
-         STD-001  default   two-space-indent  Two-space indent\n\
-         STD-002  required  tabs-bad          Tabs bad\n"
+        "id       status    title\n\
+         STD-001  default   Two-space indent\n\
+         STD-002  required  Tabs bad\n"
     );
 }
 
@@ -323,9 +324,9 @@ fn standard_list_all_reveals_the_hidden_row() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id       status    slug              title\n\
-         STD-001  default   two-space-indent  Two-space indent\n\
-         STD-002  required  tabs-bad          Tabs bad\n\
-         STD-003  retired   old-rule          Old Rule\n"
+        "id       status    title\n\
+         STD-001  default   Two-space indent\n\
+         STD-002  required  Tabs bad\n\
+         STD-003  retired   Old Rule\n"
     );
 }

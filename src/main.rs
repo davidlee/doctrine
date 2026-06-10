@@ -85,6 +85,13 @@ pub(crate) struct CommonListArgs {
     /// Shorthand for `--format json`.
     #[arg(long)]
     pub(crate) json: bool,
+
+    /// Select/order visible table columns, e.g. `--columns id,status,slug`.
+    /// Unknown names error with the available set. No effect with `--json`
+    /// (JSON rows are faithful/full — SL-037 D7); rejected on `memory list`
+    /// (not yet on the column model — D9 / IMP-017), never silently ignored.
+    #[arg(long, value_delimiter = ',')]
+    pub(crate) columns: Option<Vec<String>>,
 }
 
 impl CommonListArgs {
@@ -100,6 +107,7 @@ impl CommonListArgs {
             all: self.all,
             format: self.format,
             json: self.json,
+            columns: self.columns,
         }
     }
 }
@@ -1491,6 +1499,7 @@ mod write_class_tests {
             all: false,
             format: Format::Table,
             json: false,
+            columns: None,
         }
     }
 

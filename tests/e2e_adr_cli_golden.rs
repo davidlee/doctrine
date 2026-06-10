@@ -291,11 +291,12 @@ fn adr_list_table_default_hides_and_sorts_byte_exact() {
     let out = run(dir.path(), &["list"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     // Header + ONLY visible rows, ascending by id, ADR- prefixed; rejected ABSENT.
+    // Slug-free default (SL-037 D4) — `--columns …,slug` reveals it.
     assert_eq!(
         stdout(&out),
-        "id       status    slug      title\n\
-         ADR-001  accepted  use-rust  Use Rust\n\
-         ADR-002  proposed  adopt-ci  Adopt CI\n"
+        "id       status    title\n\
+         ADR-001  accepted  Use Rust\n\
+         ADR-002  proposed  Adopt CI\n"
     );
 }
 
@@ -321,9 +322,9 @@ fn adr_list_all_reveals_the_hidden_row() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id       status    slug      title\n\
-         ADR-001  accepted  use-rust  Use Rust\n\
-         ADR-002  proposed  adopt-ci  Adopt CI\n\
-         ADR-003  rejected  old-idea  Old Idea\n"
+        "id       status    title\n\
+         ADR-001  accepted  Use Rust\n\
+         ADR-002  proposed  Adopt CI\n\
+         ADR-003  rejected  Old Idea\n"
     );
 }
