@@ -123,6 +123,30 @@ Out of scope — later slices, named so the boundary is explicit:
   decomposition. *May push upward:* the tree-as-membership-spine reading and the
   cross-kind node population are arguably SPEC-001 / PRD-011 node-model intent — flag
   for capture there during design rather than burying it in adapter scope.
+- **Design tensions surfaced pre-design (→ /design; T1 may touch SPEC-001's node
+  model):**
+  - **T1 — single-parent tree is too rigid a backbone.** A strict tree models only
+    shallow/coarse structure; real membership is multi-parent (a requirement serves
+    several features; a slice several specs). Resolution candidate: keep **one
+    single-parent spine** (cheap `explain`, unique root) *and* carry multi-parent
+    membership on a **`member-of`/`aggregates` overlay** — the core's existing
+    overlay primitive configured {acyclic, rollup combinator} — so no multi-parent
+    *tree* primitive is needed. Open: whether "tree" stays a distinct core primitive
+    at all or collapses to "the overlay designated as the single-parent spine" (more
+    uniform; forfeits guaranteed unique-root). True multi-parent membership is likely
+    a SPEC-001 node-model **revision**, not a slice-local call.
+  - **T2 — ordered vs unordered member groups (order-semantics, NOT concurrency).**
+    "Parallel" here = *any order within the set is acceptable* (a **bag**); "serial"
+    = *the set is a meant linear sequence* (a **list**). An order-meaning
+    distinction, not literal at-once execution — so no scheduling/Appendix-B concern.
+    Fully expressible with existing overlays: an **unordered group** = membership
+    with no intra-sibling order edge (display order falls to derived `order_key` and
+    carries no intent); an **ordered group** = membership threaded by an intra-sibling
+    order — **soft `seq`** (meant but non-gating) or **hard `dep`** (must precede).
+    Open for design: whether "ordered" is a **first-class membership property** (so
+    `explain` can say "step 2 of 3" and an unordered group's incidental display order
+    is never mistaken for intent) or purely derived from whether order edges thread
+    the siblings.
 
 ## Verification / Closure intent
 
