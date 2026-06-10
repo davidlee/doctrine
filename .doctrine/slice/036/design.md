@@ -243,13 +243,18 @@ opaque `OverlayId` from the policy-supplied `OrderSpec` — no dep/seq names (F1
      `c→b`, evicts `a→b`; the post-arity set is acyclic), and post-arity
      detection would silently relabel an authored hard cycle as a routine
      `ArityViolation`, losing D5's "authoring error to fix" diagnostic (REQ-076
-     surfacing). The **authored SCC is the one cycle concept** for Reject: it
-     drives the diagnostic, the degraded marking (pass 4), and the pass-3
-     intra-SCC exclusion (F32) — even when arity happens to break the cycle in
-     the traversal view. Conservative by construction: degrade-not-falsify
-     permits degrading a resolvable component, never the reverse; F27's
-     arity-resolves-under-Reject stands, and `reachable`/`evaluate` still read
-     the post-arity traversal view.
+     surfacing). Two cycle concepts, two jobs (F30 narrowed by F46): the
+     **authored SCC drives the `CycleDiagnostic`** — the authoring error is
+     always surfaced; **order degradation (pass-3 intra-SCC exclusion + pass-4
+     taint seeding) keys to the post-arity SCCs** — only what is *still* cyclic
+     in the traversal view degrades order. Round 3's authored-SCC-everywhere
+     rule excluded surviving valid resolved edges from `U` (the example above:
+     `b→a` survives arity, the post-arity view `c→b→a` is a clean DAG, yet
+     `b→a` was dropped and `ordered()` could invert it) — avoidable destruction
+     of real precedence, not useful conservatism. Post-arity SCCs are sub-SCCs
+     of authored ones (eviction only removes edges), so the diagnostic always
+     covers the degraded set. F27's arity-resolves-under-Reject stands;
+     `reachable`/`evaluate` still read the post-arity traversal view.
    - `Evict`: while a cyclic component exists (self-loops included, F20), evict the
      **globally-minimal participating edge** by the total key `(rank asc, age asc,
      src, dst)` (F17) — participating = belonging to any cyclic SCC; disjoint
@@ -272,7 +277,7 @@ opaque `OverlayId` from the policy-supplied `OrderSpec` — no dep/seq names (F1
    (global min over the participating set), and terminates (each eviction removes
    an edge). Exclusion of a Reject overlay's degraded edges from `U` is
    **intra-SCC only** (F32): an edge is withheld iff **both endpoints lie in the
-   same degraded (authored, F30) SCC**; boundary-crossing edges enter `U`
+   same degraded post-arity SCC (F46)**; boundary-crossing edges enter `U`
    normally so taint can reach dependents — for `a↔b` degraded plus `b→c`,
    dropping every SCC-incident edge would hand `c` a clean `Finite` level while
    its position depends on the cyclic component (falsification — the exact hole
@@ -286,7 +291,7 @@ opaque `OverlayId` from the policy-supplied `OrderSpec` — no dep/seq names (F1
    (`level(n) = 0` if no `U`-predecessor, else `1 + max over preds`) is **total
    over all nodes** — no sentinel, no overflow (F12). Taint is a separate mark
    deciding only the `Level` *variant*. **Taint seeds** = every node of a
-   degraded SCC of an overlay **the `OrderSpec` references** (F31 — a cycle in
+   degraded **post-arity** SCC (F46) of an overlay **the `OrderSpec` references** (F31 — a cycle in
    an overlay you are not ordering by must not destroy the order you are: pass 2
    still diagnoses it, but it contributes neither edges nor taint to the order);
    taint then propagates to every `U`-descendant of a seed (their positions
@@ -308,7 +313,14 @@ into the core's own public structs):
 
 ```rust
 pub struct Explanation { node: NodeId, order_key: OrderKey,
-    paths:   BTreeMap<OverlayId, Vec<Vec<NodeId>>>,  // transitive predecessor chains to root, per overlay
+    paths:   BTreeMap<OverlayId, Vec<Vec<NodeId>>>,  // transitive predecessor chains, per overlay.
+                                                     // A chain ends at a root OR at the first node
+                                                     // of a degraded post-arity SCC (F47) — degraded
+                                                     // SCC members are chain ENDPOINTS only, never
+                                                     // walked through (finite + deterministic on
+                                                     // cyclic Reject views; a node inside an SCC
+                                                     // gets [[n]]); the cycle itself is explained
+                                                     // by Provenance.cycles, not a path
     evicted: Vec<EvictedEdge> }      // evictions with n as an endpoint (src or dst) — F26
 pub struct Channel { values: BTreeMap<NodeId, ChannelValue>,
     contributors: BTreeMap<NodeId, BTreeSet<NodeId>>,   // Any→witnesses · All→false: the present-false
@@ -338,10 +350,12 @@ accessor, not an `Explanation` field).
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **I1 (restated, F12).** The composed order structure `U` and every `Evict`
-  overlay's resolved edge set are acyclic post-`build()`. A `Reject` overlay may
-  retain cyclic authored edges **as data** — diagnosed, degraded, never linearized;
-  "acyclic" is a property of resolved order/traversal views, not of authored input.
+- **I1 (restated F12, tightened F48).** The composed order structure `U` and
+  every `Evict` overlay's resolved edge set are acyclic post-`build()` — and
+  ONLY those. A `Reject` overlay's traversal view **may remain cyclic** — its
+  cycles are diagnosed and degraded, never linearized, and `reachable`/
+  `evaluate`/`explain` are cycle-safe over it by definition (F12/F47); round 3's
+  "acyclic is a property of resolved order/traversal views" over-claimed.
 - **I2 (generic, post-F1/F11; made literally true F33).** An earlier `OrderSpec`
   layer is never evicted against by a later one, and every edge surviving into
   `U` is respected by `ordered()` — **including edges between degraded nodes**:
@@ -381,7 +395,8 @@ accessor, not an `Explanation` field).
   >1 parent on `AtMostOne` → keeps the `(rank, age, src, dst)`-max — equal
   `(rank, age)` parents resolve by `src` (F36), others `ArityViolation`;
   authored cycle broken by arity on a `Reject` overlay → `CycleDiagnostic` still
-  emitted, SCC still degraded (F30); cycle in a `Reject` overlay **outside** the
+  emitted (F30) but order NOT degraded — degradation keys to post-arity SCCs, so
+  surviving resolved edges stay in `U` (F46); cycle in a `Reject` overlay **outside** the
   `OrderSpec` → diagnostic emitted, order untouched, nothing `Degraded` (F31);
   degraded SCC with an outbound edge (`a↔b`, `b→c`) → `c` `Degraded` (F32);
   degraded nodes joined by a surviving clean-layer `U` edge → suffix respects it
@@ -469,7 +484,8 @@ Black-box, vocabulary-free `tests/` (overlays `a`/`b`, channels `Flag`/`Count`):
 | **REQ-080** seam | a fresh channel via existing combinators works with no core change; `Combinator` doc-marked as the curated extension point. |
 | **DD1 rollup (F5)** | `Unbounded` membership overlay, a node with **2 parents**, `Against`-direction `All`/`CountDistinct` → aggregates from both parents correctly; `spine_path` on an `AtMostOne` overlay returns the single kept path; `CountDistinct` over a diamond counts the distinct node once (R3). |
 | **arity (F7/F36/F39)** | >1 parent on `AtMostOne` → total-key **max** kept (F39 fixed the stale "min"), rest `EvictedEdge{ArityViolation}`; equal-`(rank,age)` parents resolve by `src` (F36). |
-| **arity×reject pipeline (F30)** | `AtMostOne`+`Reject`, arity breaks the authored cycle → `CycleDiagnostic` still emitted alongside the `ArityViolation`. |
+| **arity×reject pipeline (F30/F46)** | `AtMostOne`+`Reject`, arity breaks the authored cycle → `CycleDiagnostic` still emitted alongside the `ArityViolation`; post-arity view acyclic → nothing `Degraded`, `ordered()` respects every surviving resolved edge (`c,b,a` for the F30 example). |
+| **explain on cycles (F47)** | `Reject` `a↔b` + `a→x`: `explain(x)`'s predecessor chain ends at `a` (degraded-SCC member = endpoint only, never walked through); `explain(a)` paths = `[[a]]`; terminates, deterministic, cycle reported via `Provenance.cycles`. |
 | **degrade scope (F31)** | cycle in a `Reject` overlay not in the `OrderSpec` → clean spec order preserved, diagnostic emitted, nothing `Degraded`. |
 | **taint crossing (F32)** | `a↔b` (`Reject`, in spec) + `b→c` → `c` `Degraded`; intra-SCC edges absent from `U`. |
 | **suffix order (F33)** | degraded `a`,`b` + surviving clean-layer `b→a` → suffix orders `b` before `a` (`U` level, not `NodeId`). |
@@ -756,3 +772,45 @@ individually-reviewed parts, invisible to per-section review. `OrderKey` changed
 shape again (`Degraded(u32)`); `OrderSpec` validation tightened (F38);
 diagnostics enriched (F40/F41). No DD overturned; DD2 refined again (F34/F45).
 Design stands, pending user sign-off.
+
+### Adversarial external review (round 4) — GPT-5.5 via codex MCP
+
+Run directly in-session against the round-3 integration (commit `2abb4e2`),
+targeting the round-3 rewrites. 3 findings, all accepted, 0 rejected.
+
+- **F46 (blocker, F30 over-correction) — FIXED.** [R4-01] Round 3's
+  "authored SCC is the one cycle concept" over-applied to pass 3/4: with the F30
+  example (`a→b` r1, `c→b` r2, `b→a`; arity evicts `a→b`), the surviving valid
+  edge `b→a` was excluded from `U` for being intra-authored-SCC although the
+  post-arity view `c→b→a` is a clean DAG — `ordered()` could invert a real
+  resolved precedence edge. Not falsification (nodes were Degraded, surfaced)
+  but avoidable destruction of valid order. Fix: split the jobs — the
+  **authored** SCC drives the `CycleDiagnostic` (F30's actual point, intact);
+  **order degradation** (pass-3 intra-SCC exclusion + pass-4 taint seeds) keys
+  to **post-arity** SCCs, so only what is still cyclic degrades order.
+  Post-arity SCCs ⊆ authored SCCs (eviction only removes edges) — the
+  diagnostic always covers the degraded set. This was the exact alternative
+  weighed and rejected for simplicity during F30 integration; the reviewer
+  supplied the concrete cost that flips the call. (§5.4 pass 2/3/4, edge cases,
+  §9.)
+- **F47 (significant, explain totality) — FIXED.** [R4-02]
+  `Explanation.paths` promised "predecessor chains to root" but a cyclic Reject
+  traversal view has no root — the contract was impossible (loop, silent
+  truncation, or omission). Fix: a chain ends at a root OR at the first node of
+  a degraded post-arity SCC — SCC members are chain *endpoints*, never walked
+  through; a node inside an SCC gets `[[n]]`; the cycle itself is explained by
+  `Provenance.cycles`. Finite + deterministic on every input. (§5.4
+  `Explanation`, §9.)
+- **F48 (moderate, I1 over-claim) — FIXED.** [R4-03] I1's tail ("'acyclic' is a
+  property of resolved order/traversal views") contradicted the design's own
+  Reject semantics — a Reject traversal view may stay cyclic post-build. I1
+  tightened to the actual guarantee: `U` + `Evict` resolved sets acyclic, and
+  ONLY those; Reject views handled by cycle-safe traversal (F12/F47). (I1.)
+
+Net: round 4 found no new machinery bugs — F46 is the cost of a round-3
+integration *choice* (the simplicity-vs-precision call on F30, now reversed
+with evidence), F47/F48 are contract gaps in surfaces the earlier rounds never
+aimed at. Severity trend finally diminishing: blocker count 2→4→1 across
+external rounds, and round 4's blocker required no new mechanism — only
+re-keying two existing references from authored to post-arity SCCs. Design
+stands, pending user sign-off.
