@@ -335,3 +335,62 @@ Carry-forward for the T5–T8 subagent:
 - `extend_chains` has 7 params (one under clippy's default ceiling) — if T8's
   refactor touches it, bundle the `(incoming, degraded_sccs, overlay)` context into
   a struct rather than adding an 8th arg.
+
+### T5–T8 (2026-06-11) — the golden net
+
+Closed the slice-wide verification net: `tests/golden_net.rs` (8 tests) +
+`tests/denylist.rs` (3 tests). Full cordage suite 75 tests, whole `just check`
+green; plain `cargo clippy -p cordage` zero warnings. ZERO new deps — the
+`[dependencies]`-free Cargo.toml contract held; everything hand-rolled.
+
+- **T5 permutation + build-twice determinism (VT-3/VT-4).** Fixtures are
+  *ordinal* edge specs (`EdgeSpec{src,dst,rank,age}` indexing into a fixed minted
+  node vector) so a permutation loop can shuffle insertion order while node
+  identity stays stable. `permutations(n)` is **Heap's algorithm** hand-rolled
+  (no `itertools`) — a self-guarding test asserts it yields exactly n! distinct
+  perms (n≤5 ⇒ ≤120). `assert_permutation_invariant` builds every perm and
+  byte-compares `order_key`(all)/`Provenance`/`Explanation`(all)/a fixed
+  `Channel` against the first perm as reference. Build-twice (REQ-077) compares
+  two distinct `Graph`s incl. Max-channel contributor traces. All public types
+  already derived `PartialEq`/`Eq`/`Clone` — **no derive additions needed** (the
+  T5 carry-forward worry was unfounded).
+- **No public `OverlayId` ctor** → `cordage_overlay()` mints a throwaway builder
+  to recover the ordinal-0 id (every single-overlay fixture's overlay). Mint
+  order is fixed so this is stable.
+- **T6 naive oracle (VT-3/R1/REQ-076).** Genuinely independent of the production
+  recursive Tarjan: SCCs by **mutual reachability closure** (BFS `closure()` per
+  node; u,v same SCC iff u→\*v ∧ v→\*u), topo by an edge-respect check on
+  `ordered()`. The engine's diagnosed `provenance().cycles()` node-sets are
+  mapped to ordinals and asserted equal to the oracle SCCs over a fixed family
+  (diamond / 2-cycle / 3-cycle+tail / two disjoint 2-cycles / self-loop). Topo
+  witness: on acyclic views every edge u→v has `pos(u)<pos(v)` in `ordered()`.
+- **REQ-076 cyclic-view witness — the subtle one (was a test bug first).** On a
+  Reject cycle {0,1} with surviving edge 0→2, ALL THREE nodes go `Degraded`
+  (full-downstream taint — documented conservatism), so there is NO `Finite` node
+  to compare against. The real no-false-topo proof: the surviving acyclic edge is
+  still order-respected (0 precedes 2 in `ordered()`) because **taint sets the
+  level *tag*, not the longest-path *depth*** (F33: `materialize_keys` reads
+  `longest_levels(U)` for the depth, then overlays the taint tag — so degraded
+  nodes keep their edge-respecting depth ordering). First test cut wrongly
+  expected node 2 to stay Finite; corrected.
+- **T7 denylist scan (VT-5/REQ-079/EX-4).** `tests/denylist.rs` walks the whole
+  crate from `CARGO_MANIFEST_DIR` (NOT cwd) — code, docs (README), manifest,
+  tests — hand-rolled recursive `collect_files` (no `walkdir`), whole-word
+  case-insensitive matcher (hand-rolled `find_from` windowed search + word-byte
+  boundary; no `regex`, no `as`, no indexing-slicing). A guard asserts the walk
+  actually finds `src/lib.rs` (green must mean clean, not "root resolution
+  broke"); a second test plants a token to prove the matcher is live; a third
+  pins self-exclusion.
+- **Denylist curation (A3 call, no /consult).** Listed the concrete Appendix B
+  domain nouns + time/scheduling/commitment/urgency terms; INCLUDED `backlog`
+  (doctrine entity noun) and reworded the one disclaiming use in lib.rs
+  (`no …/backlog vocabulary` → `…/domain vocabulary`); EXCLUDED bare `product` —
+  "product-neutral" is the crate's own boundary self-description, not domain
+  semantics, so matching it would be a false positive. Documented in the test
+  rustdoc; flagged for /audit.
+- **Self-match guard doubled (A4):** skip own basename AND assemble every literal
+  from string fragments at runtime, so the test file's bytes never spell a token
+  contiguously. Either guard suffices; both kept against a future rename/copy.
+
+EX-1..5 met; VT-1..5 all covered. Phase NOT flipped to completed — that's /audit's
+call. Slice rollup 4/5 → ready for /audit.
