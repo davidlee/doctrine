@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 98
+slug = "author-optional-architectural-triggers-gating-actionability"
+title = "Author optional architectural triggers gating actionability"
+status = "pending"
+kind = "functional"
+
+description = "A backlog item may optionally carry a `triggers` list — zero or more architectural-trigger entries, each `{ globs, note }` — on which the derived priority engine masks actionability. An item carrying triggers is non-actionable until a planned/touched file set matches the globs of at least one trigger (SPEC-001 D6 mask); the matching trigger's `note` is the surface-specific prefactor advice raised at the gate. The field is optional enrichment, never required capture — most items carry none. It is a list (not a single field) so one item can rider several independent code surfaces, each with its own note (e.g. parser-touch vs render-touch advice); a single item with two genuinely unrelated riders need not be split. Triggers are capture surface only: the matcher (leaf retrieve.rs glob predicates), the plan/audit file-set sources, and the mask itself are SPEC-001's (D6/REQ-093), which consumes this field. This promotes IMP-013/014's coarse `trigger` tag to typed structure."
+tags = []
+acceptance_criteria = [
+  "An item can author an optional `triggers` list of `{ globs, note }` entries; the field defaults empty and requires no capture.",
+  "Each trigger entry carries a glob set and a human/agent-readable note; the engine masks an item non-actionable until a file set matches at least one entry's globs, and surfaces the matching entry's note at the gate.",
+  "An item with no triggers is unmasked (always actionability-eligible by this axis); triggers are typed storage, not an untyped tag.",
+  "The field is capture surface only — the glob matcher, file-set sources, and mask live in SPEC-001 (D6/REQ-093), which consumes it.",
+]
