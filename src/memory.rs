@@ -823,7 +823,30 @@ pub(crate) fn run_record(path: Option<PathBuf>, args: &RecordArgs<'_>) -> Result
         Some(k) => writeln!(stdout, "Recorded memory {uid} ({k}): {}", out.dir.display())?,
         None => writeln!(stdout, "Recorded memory {uid}: {}", out.dir.display())?,
     }
+
+    // SL-035: a freshly-recorded `thread` scaffolds `unverified`, so thread_expiry
+    // (src/retrieve.rs, SL-008 D6) hides it from find/retrieve until verified. Nudge
+    // to stderr — same non-blocking posture as the linked-worktree warning above.
+    let reference = key.as_deref().unwrap_or(&uid);
+    if let Some(notice) = thread_hidden_notice(args.memory_type, reference) {
+        writeln!(io::stderr(), "{notice}")?;
+    }
     Ok(())
+}
+
+/// The record-time advisory for a freshly-minted memory. A `thread` is hidden
+/// from find/retrieve until verified (SL-008 D6 `thread_expiry`); every other
+/// type surfaces immediately, so returns `None`. `reference` is the verify
+/// handle (key if present, else uid). Pure — text in, text out (ADR-001).
+fn thread_hidden_notice(memory_type: MemoryType, reference: &str) -> Option<String> {
+    match memory_type {
+        MemoryType::Thread => Some(format!(
+            "warning: a `thread` memory is invisible to find/retrieve until verified \
+             (SL-008 D6). Verify it on a clean tree — `doctrine memory verify {reference}` \
+             — or it surfaces only in list/show."
+        )),
+        _ => None,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3548,5 +3571,44 @@ ref = "src/main.rs"
         );
         assert_eq!(pat.len(), 1);
         assert_eq!(pat[0].key.as_deref(), Some("mem.pattern.cli.skinny"));
+    }
+
+    // SL-035 PHASE-01: record-time advisory for hidden thread memories.
+
+    #[test]
+    fn thread_record_advises_the_hidden_until_verified_gate() {
+        // VT-1: a thread is hidden from find/retrieve until verified (SL-008 D6),
+        // so the advisory fires and names the verify handle + the verb.
+        let notice = thread_hidden_notice(MemoryType::Thread, "mem_abc123")
+            .expect("a thread must get the advisory");
+        assert!(notice.contains("mem_abc123"), "must name the reference");
+        assert!(notice.contains("verify"), "must point at `verify`");
+    }
+
+    #[test]
+    fn non_thread_record_gets_no_advisory() {
+        // VT-2: every other type surfaces immediately — no advisory.
+        for kind in [
+            MemoryType::Concept,
+            MemoryType::Fact,
+            MemoryType::Pattern,
+            MemoryType::Signpost,
+            MemoryType::System,
+        ] {
+            assert!(
+                thread_hidden_notice(kind, "mem_abc123").is_none(),
+                "{kind:?} must not be advised"
+            );
+        }
+    }
+
+    #[test]
+    fn thread_advisory_reference_is_the_verify_handle() {
+        // VT-3: the spliced reference is whatever drives `verify` — the key when
+        // present, the uid when absent. The caller picks; the fn splices it raw.
+        let by_key = thread_hidden_notice(MemoryType::Thread, "mem.thread.x.y").unwrap();
+        assert!(by_key.contains("mem.thread.x.y"));
+        let by_uid = thread_hidden_notice(MemoryType::Thread, "mem_deadbeef").unwrap();
+        assert!(by_uid.contains("mem_deadbeef"));
     }
 }
