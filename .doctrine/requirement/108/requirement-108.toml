@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 108
+slug = "persist-a-reconciliation-record-rec-of-each-reconciliation-act"
+title = "Persist a reconciliation record (REC) of each reconciliation act"
+status = "pending"
+kind = "functional"
+
+description = "Each reconciliation act persists a REC entity capturing its status-deltas, move, evidence refs, and owning-slice relation."
+tags = []
+acceptance_criteria = [
+  "A REC records the requirement status-deltas it authored as [(requirement, from, to)].",
+  "A REC records its move (accept | revise | redesign), evidence refs, and an optional owning-slice relation.",
+  "A REC is durable and citable by its stable id after the owning slice closes.",
+]

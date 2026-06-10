@@ -1,0 +1,37 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 2
+slug = "requirement-reconciliation-engine"
+title = "Requirement Reconciliation Engine"
+status = "draft"
+kind = "tech"
+category = "reconciliation"
+c4_level = "component"
+descends_from = "PRD-013"
+tags = ["reconciliation", "coverage", "drift", "rec-record", "two-tier-truth", "staleness-reuse", "closure-gate"]
+responsibilities = [
+  "Specify the reconciliation-record entity (REC-NNN) as its own first-class corpus — status-deltas, reconciliation move, evidence refs, and an owning-slice relation — durable, citable, and diffable after the owning slice closes.",
+  "Specify the observed-coverage substrate: mode-discriminated (VT/VA/VH) evidence entries keyed (requirement x contributing-change), stored slice-side and git-anchored; the per-requirement composite is a derived view, never a stored scalar.",
+  "Fix coverage freshness physics — VT evidence is continuously re-derivable; VH/VA evidence is point-in-time attestation that decays — and reuse the memory git-anchor + staleness seam as the attestation-staleness mechanism rather than building a parallel one.",
+  "Hold the two truth tiers physically apart: observed coverage is stored independently of authored requirement status, with no code path deriving authored status from coverage.",
+  "Specify the drift surfacer as a derived read (authored status vs composite observed coverage) that prompts reconciliation and never writes authored truth.",
+  "Specify the reconcile writer as the sole author of reconciled requirement and spec truth, emitting exactly one REC per act and mapping accept/revise/redesign onto requirement-status writes, spec-truth writes, and the ADR-009 reconcile->design escalation.",
+  "Specify the closure gate: default-refuse on residual drift with an explicit recorded override that is itself a reconciliation act, atop the ADR-009 F12 closure-seam topology.",
+]
+
+# category — OPEN domain vocabulary (a taxonomy that drifts by design). Add as:
+#   category = "cli"
+# c4_level — closed C4 set: context | container | component | code. Add as:
+#   c4_level = "container"
+# descends_from — the product capability (PRD-NNN) this spec realises; tech-only,
+#   single-valued, validated against the product specs. Add as:
+#   descends_from = "PRD-001"
+# parent — single decomposition parent (SPEC-NNN); tech-only, single-valued, the
+#   tree must stay acyclic. Add as:
+#   parent = "SPEC-002"
+# [[source]] — code anchors this spec governs (tech-only, repeatable). Add as:
+#   [[source]]
+#   language = "rust"
+#   identifier = "doctrine/cli"
+#   module = "doctrine::cli"   # optional

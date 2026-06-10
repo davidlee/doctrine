@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 111
+slug = "surface-drift-as-a-derived-read-that-never-writes-authored-truth"
+title = "Surface drift as a derived read that never writes authored truth"
+status = "pending"
+kind = "functional"
+
+description = "Drift is surfaced as a derived read comparing authored status to composite coverage — a prompt, with no write to authored truth."
+tags = []
+acceptance_criteria = [
+  "Divergence between a requirement's authored status and its composite coverage is reported as drift.",
+  "The drift surfacer has no code path that writes authored requirement or spec truth.",
+  "A requirement whose authored status matches its composite coverage is reported coherent, not drifted.",
+]

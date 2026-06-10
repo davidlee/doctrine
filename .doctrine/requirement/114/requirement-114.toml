@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 114
+slug = "admit-no-code-path-that-derives-authored-status-from-coverage"
+title = "Admit no code path that derives authored status from coverage"
+status = "pending"
+kind = "quality"
+
+description = "No code path resolves authored requirement status as a function of coverage; the two tiers stay structurally apart."
+tags = []
+acceptance_criteria = [
+  "No function maps coverage to authored requirement status anywhere in the engine.",
+  "Coverage entries and authored requirement status occupy distinct stores.",
+  "The reconcile writer authors status values explicitly; it never computes them from coverage.",
+]

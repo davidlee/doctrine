@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 109
+slug = "store-observed-coverage-as-mode-discriminated-entries-keyed-by-requirement-and-contributing-change"
+title = "Store observed coverage as mode-discriminated entries keyed by requirement and contributing change"
+status = "pending"
+kind = "functional"
+
+description = "Observed coverage is stored as mode-discriminated entries keyed by requirement and contributing change, slice-side and git-anchored."
+tags = []
+acceptance_criteria = [
+  "A coverage entry carries (requirement, contributing-change, mode in {VT, VA, VH}, status, git-anchor, optional attested-date).",
+  "Entries are stored slice-side, so several changes touching one requirement compose without clobbering each other.",
+  "Coverage entries are stored independently of the requirement's authored status.",
+]

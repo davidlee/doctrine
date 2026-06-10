@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 115
+slug = "decay-vhva-coverage-attestations-via-the-memory-git-anchor-staleness-seam"
+title = "Decay VH/VA coverage attestations via the memory git-anchor staleness seam"
+status = "pending"
+kind = "quality"
+
+description = "VH/VA coverage attestations decay via the existing memory git-anchor staleness seam — surfaced, never auto-demoted."
+tags = []
+acceptance_criteria = [
+  "A VH/VA coverage attestation carries a git-anchor and is flagged stale when its touched code moves past it.",
+  "Staleness reuses the memory git-anchor / verify machinery rather than a parallel implementation.",
+  "A stale attestation is surfaced, never silently changed to another status.",
+]
