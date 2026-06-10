@@ -44,3 +44,46 @@ Durable, committed. Harvested from disposable phase sheets at each phase end.
   (`e2e_backlog_filter_alias`) is filter/alias behaviour, slug-agnostic, passed
   unchanged. JSON envelopes byte-identical (D2). Direct-`render_table` slice unit
   tests migrated to the column path via `render_default`/`render_cols` helpers.
+
+## PHASE-04 — IMP-014 cross-verb golden harness (branch `sl-037-phase-01`)
+
+The regression net for the column churn (D8). TESTS ONLY — no production edit.
+New module `tests/e2e_list_columns_golden.rs`, 16 golden cases.
+
+- **T0 settled as a GAP-FILL net, not a re-render.** IMP-014's literal "one place"
+  reading would have DUPLICATED the adr/standard/memory assertions the slice grew
+  since (parallel implementation, CLAUDE.md). The module OWNS the genuine gaps and
+  CITES the rest by `path:line` in the header — duplicating nothing. T0 needed no
+  `/consult`; the cite-vs-own reading held in practice.
+  - **OWNED** (no prior test pinned these): backlog/slice/spec/policy DEFAULT
+    tables; the `--columns` projection (selection+order+slug-reveal) across all four
+    migrated verbs — `--columns` was invoked by NO test before this; the empty-list
+    `""` path per verb; spec multi-block + omitted-empty-block at the CLI surface;
+    governance `policy` breadth; the uniform unknown-column error; the D7
+    `--columns`-under-`--json` no-op.
+  - **CITED** (already green): memory `--columns` rejection
+    (`e2e_list_conformance.rs:126`); adr/standard slug-free default + `--json`
+    (`e2e_adr_cli_golden.rs:286-330` / `e2e_standard_cli_golden.rs:288-332`);
+    `{kind, rows}` envelope shape (`e2e_list_conformance.rs:149`).
+- **Memory rejection: CITED, not re-homed (A4).** Left physically in
+  `e2e_list_conformance.rs`; the new module references it in the T8 header comment.
+  Re-homing would have churned a green test for no coverage gain.
+- **A6 paid off — fixtures baked from OBSERVED bytes, not guessed.** Probed the live
+  binary against hand-seeded corpora before writing any `assert_eq!`; all 16 cases
+  passed first compile. Concrete shapes learned for the un-seeded kinds:
+  - **slice phases cell with NO state tree = `—`** (em-dash, untracked), JSON
+    `phases: null`. The slice golden is byte-stable WITHOUT seeding a runtime state
+    tree (A6's open question — resolved: no state needed).
+  - **spec multi-block = `<label>\n<table>` per subtype, concatenated with NO blank
+    separator** (`product\n…tech\n…`); an empty subtype block (label + grid) is
+    omitted ENTIRELY (R3).
+  - **spec `members.toml` member shape is `{requirement, label, order}`** — `list`
+    only COUNTS members, so no REQ tree is dereferenced (cheap fixtures).
+  - **backlog sorts by `(kind.ordinal, id)`**, not id — issue before improvement.
+  - **empty list = literally empty stdout** (`""`, header suppressed) on every verb.
+  - **list `--json` has NO trailing newline** (`write!`, not `writeln!`).
+- **D7 confirmed at the surface.** `--columns X --json` is byte-identical to plain
+  `--json` (projection taken before the JSON build) — pinned as an equality assert.
+- **Gate green.** Full suite 861 passed / 0 failed (16 new); `cargo clippy`
+  (bins/lib) zero warnings; `just check` exit 0; `cargo fmt --check` clean. The
+  behaviour-preservation gate held: every pre-existing suite green UNCHANGED.
