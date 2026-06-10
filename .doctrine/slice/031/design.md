@@ -59,7 +59,12 @@ doctrine-mediated authored write refuses in worker-mode; the **orchestrator**
 mints, serially, on the coordination branch. Therefore the trunk-aware-minting
 wiring (deliverable A) protects the **solo/team divergent-worktree** case
 (SL-029's world), *not* the funnel workers. A and B share a slice for delivery
-convenience and the shared `/worktree` seam, not because B depends on A's minting.
+convenience and the shared `/worktree` seam. They are **not** independent in
+failure, though (C-II): A's trunk-minting guarantee holds *inside the funnel* only
+because D2 keeps workers from minting at all — and D2a's activation fails open
+(§5.4). A worker that mints in-fork reintroduces the exact D3 collision A removes;
+the orchestrator's import-time `.doctrine/`-path reject (§5.4, R-5) is the belt
+that closes it.
 
 ## 3. Forces & Constraints
 
@@ -102,14 +107,16 @@ convenience and the shared `/worktree` seam, not because B depends on A's mintin
 ```
  orchestrator (coordination branch, worker-mode OFF, sole writer)
    │  capture base B = git rev-parse HEAD   (commit-before-spawn: tree clean)
-   │  batch = dependency-DISJOINT tasks (the batching guarantee)
+   │  batch = file-DISJOINT tasks — changed-path sets pairwise disjoint
+   │          (shared-file tasks fall back to serial dispatch; the batching guarantee)
    ├─ per worker (concurrent):
    │    /worktree mode=worker → git worktree add @B → provision → baseline✓
    │    Agent isolation:worktree, env DOCTRINE_WORKER=1, pre-distilled prompt (D6)
    │        worker: mutate SOURCE only → run verify cmd → git commit to fork branch
    │                → return structured report (NOT a doctrine write)
    └─ funnel per BATCH (D7, strict order — the cadence is the batch, not the worker):
-        import   apply EVERY worker's delta onto B, NON-committing
+        import   REJECT any delta touching .doctrine/ authored trees (R-5 belt) →
+                 apply EVERY surviving delta onto B, NON-committing
                  (cherry-pick -n / git apply — shared object store)
         verify   run the project verify cmd on the combined working tree
         guard    branch-point-check --base B   (HEAD still == B? else re-dispatch)
@@ -166,6 +173,11 @@ doctrine worktree branch-point-check --base <SHA> [--head <SHA>]
 Pure compare in the leaf (`fn matches(base, head) -> bool`); the git read of HEAD
 is the impure shell. Read-classed (no authored write) so it is callable under
 worker-mode — though only the orchestrator uses it, at the batch-commit boundary.
+*Naming note (C-V):* this is a **HEAD-stationarity** assertion (`base == head`) at
+the batch-commit boundary — the D5 *concurrency extension* — not a merge-base /
+branch-point computation, and not the creation-time branch-point SL-029 already
+ships single-tree. The D5 vocabulary is kept for continuity; the check is nothing
+more than the ref compare.
 
 **B — `/worktree mode=worker` contract** (implement the SL-029 stub):
 - MUST NOT degrade to work-in-place (a worker with no real fork is a hard abort;
@@ -187,8 +199,11 @@ at import; conflict → report; crash recovery. Skill-prose (VA). Authored in
   orchestrator reads the branch directly — no patch transport. The "structured
   report" is the worker's returned agent message (what changed + verify result +
   memory-worthy notes), held in orchestrator context, never a doctrine artifact.
-  **Fallback:** a non-shared-store worker (remote agent) hands back a
-  `git format-patch` series; documented as the exception, not the default.
+  **Fallback (out of v1 scope, C-VI):** a non-shared-store worker (remote agent)
+  would hand back a `git format-patch` series applied `git am`-style through the
+  *same* non-committing import→reject→verify→guard→commit cadence. Not specified
+  further here — remote-agent dispatch is **out of scope for v1**; the
+  shared-object-store path (Claude Code) is assumed.
 - **Who writes (D6a).** Worker: source only, in the fork, commits to fork branch.
   Orchestrator: every doctrine-mediated write (import-commit, memory, AC evidence,
   notes, status), on the coordination branch. The fork withholds the
@@ -204,13 +219,27 @@ verify-combined → branch-point guard → one batch commit → record. Knowledg
 trails the confirmed commit; the coordination branch is the durable store;
 orchestrator context is disposable.
 
-**Worker environment (D2a engagement).** `DOCTRINE_WORKER=1` is set **nowhere
-today** — the guard in `main.rs` is inert until the worker's process carries the
-var. The orchestrator **sets `DOCTRINE_WORKER=1` in the worker's spawn environment**
-(the `Agent`-tool env, when available) **and** the pre-distilled prompt mandates the
-worker export it as its first act. This is the same *unenforced prompt-contract*
-tier as the D2b raw-tree gap: doctrine's CLI refuses authored writes once the var is
-present; nothing forces the var to be present. `/dispatch` owns making it present.
+**Worker environment (D2a engagement) — prompt-contract only, fails OPEN (C-I).**
+The harness `Agent` tool exposes **no env parameter** (its surface is
+`description · isolation · model · prompt · run_in_background · subagent_type`;
+`isolation ∈ {worktree}`), so the orchestrator **cannot** set `DOCTRINE_WORKER=1`
+in the worker's spawn environment on the portable path. The var is set **only** by
+the pre-distilled prompt mandating the worker `export DOCTRINE_WORKER=1` as its
+first act — a *self-armed* contract. A worker that omits it runs with the doctrine
+CLI **fully open** (D2a inert): the guard fails **open**, not closed, and is
+**weaker** than D2b because activation depends on the *guarded party's* cooperation.
+`/dispatch` mandates the line; nothing enforces it. (Pass-1 F-e called this "Fixed";
+pass-2 C-I withdraws that — there is no env belt.)
+
+**Import-time authored-tree reject (R-5 belt, C-II).** Because D2a fails open, an
+unarmed worker can mint authored ids in its fork; on import those collide with the
+orchestrator's serial mints (the D3 hazard A removes). The orchestrator's `import`
+step therefore **rejects any worker delta whose changed-path set intersects
+`.doctrine/` authored trees** → report+halt. This belt is sound where the env is
+not, because the **orchestrator** runs it — worker-mode OFF, the trusted sole
+writer — not the guarded party; and it is mechanically checkable
+(`git diff --name-only B..<fork> | grep '^.doctrine/'`), VA conformance on the
+trusted side.
 
 **Branch-point under concurrency (D5 extended).** SL-029's single-tree check guards
 *creation* (fork HEAD == source HEAD post-create). SL-031 adds the check at the
@@ -221,11 +250,17 @@ onto `B` and committed once, HEAD only moves at the orchestrator's own batch com
 — so a mismatch means an **external** mover (a stray commit / dirty tree) ⟹
 **re-dispatch the batch from the new HEAD**, never commit against a moved base.
 
-- Batches are **dependency-disjoint by construction** (the orchestrator's batching
-  job) ⟹ the workers' deltas touch non-overlapping files ⟹ they co-apply onto `B`
-  cleanly.
-- A genuine apply **conflict** when co-applying a disjoint batch means the batching
-  was wrong ⟹ **report and halt**, human re-plans (ADR-006: policy is report, never
+- Batches are **file-disjoint by construction** — the orchestrator's batching job
+  computes the deltas' changed-path sets and admits a worker to a batch only if its
+  paths are **pairwise disjoint** from the rest; a task that must share a file drops
+  to **serial dispatch** (the honest cost of report-never-merge). *Dependency-disjoint
+  is not enough* (C-III): two independent tasks routinely edit the same file — two
+  unrelated subcommands both touching `main.rs`, e.g. this slice's own verb-wiring +
+  minting-wiring. File-disjoint is the stronger contract that actually makes the
+  deltas co-apply onto `B` cleanly.
+- A genuine apply **conflict** when co-applying a file-disjoint batch means the
+  changed-path analysis was wrong (or a worker strayed outside its declared paths)
+  ⟹ **report and halt**, human re-plans (ADR-006: policy is report, never
   auto-resolve).
 
 **Crash / overflow recovery.** Rebuild from the coordination branch + `git
@@ -242,12 +277,17 @@ rationale (substance shipped SL-032; wiring tail landed SL-031). Record the IMP-
 - **INV — minting is trunk-union.** After A, `next_id` everywhere unions local +
   trunk ids; `next_id(local, &[])` stays byte-identical to the old behaviour
   (SL-032 INV-1) so the gate holds for repos with no trunk.
-- **INV — KINDS ⟺ kind consts.** The set-equality guard test asserts `KINDS`
-  membership equals the set of live numbered-kind consts; a new kind missing from
-  the registry fails the test (the guarded form of R-b).
+- **INV — KINDS is a hand-maintained pin (R-b, not closed) (C-IV).** No central
+  `Kind` const-spine exists — the consts are scattered across modules in two types
+  (`Kind` / `GovKind`), and the `KindIdentity` refactor adds none — so no test can
+  reflectively enumerate "the live consts." The guard test pins `KINDS` against a
+  **hand-written prefix literal**: it fires on a `KINDS`/literal divergence, **not**
+  on a forgotten kind, which escapes both. R-b therefore stays a hand-maintained
+  pin, *the same posture as today*; the refactor's real win is closing F-2 (the
+  re-typed copy) and F-5 (`state_dir`), not forcing registration.
 - **ASM — shared object store.** The funnel's no-transport import assumes harness
-  worktree isolation uses `git worktree` (shared `.git`). Claude Code does; the
-  patch fallback covers the rest.
+  worktree isolation uses `git worktree` (shared `.git`). Claude Code does;
+  remote-agent (non-shared-store) dispatch is out of v1 scope (C-VI).
 - **EDGE — worker raw-edits main (D2b).** Unchanged residual gap; the harness does
   not confine the worker to its fork. Funnel rests on D2a (shipped) + the prompt
   contract. Deferred to ADR-008.
@@ -276,8 +316,9 @@ All resolved in `/design` (2026-06-10):
 ## 7. Decisions, Rationale & Alternatives
 
 - **D-scope — one slice, A→B.** Alternative (split A out) rejected: A and B share
-  the `/worktree` seam and the IMP-003 closure; phasing keeps them ordered without
-  the overhead of a second slice. A ships testable value first and de-risks the
+  the `/worktree` seam and the IMP-003 *reconciliation* (status-flip-with-resolution
+  + prose; the backlog→slice graph edge is deferred — relations are v1-empty, C-VII);
+  phasing keeps them ordered without the overhead of a second slice. A ships testable value first and de-risks the
   reframing.
 - **D-registry — referenced view (b1), not centralized table (b2).** `integrity::
   KINDS` references the distributed kind consts. Alternative (b2: one central
@@ -305,17 +346,26 @@ All resolved in `/design` (2026-06-10):
   gate — existing validate/reseat/run_new suites must stay green unchanged; the
   refactor is a field-relocation, not a logic change.
 - **R-4 — batching error surfaces as a merge conflict.** Mitigation: report-and-halt
-  (never auto-merge); the branch-point check + disjoint-batch construction make the
-  clean path the default.
+  (never auto-merge); the branch-point check + **file-disjoint** batch construction
+  (changed-path-disjoint, serial fallback for shared files — §5.4) make the clean
+  path the default.
+- **R-5 — fail-open D2a lets a funnel worker mint in-fork (C-I/C-II).** No `Agent`
+  env seam forces `DOCTRINE_WORKER=1`, so an unarmed worker can mint authored ids in
+  its fork; import would land the D3 collision A removes. Mitigation: the
+  orchestrator's **import-time `.doctrine/`-path reject** (§5.4) — sound because the
+  *trusted* sole writer runs it (not the guarded party), and mechanically checkable
+  — plus the prompt contract. Residual (a worker raw-edits `.doctrine/` undetected)
+  folds into the D2b / ADR-008 confinement gap. Accepted.
 
 ## 9. Quality Engineering & Validation
 
 | Item | Class | Evidence |
 |---|---|---|
 | Trunk-aware minting wired | VT | e2e: two divergent worktrees mint non-colliding ids; `next_id(local,&[])` unchanged |
-| Kind registry dedup (F-2/F-5) | VT | F-2 (the copy) *closed* — `KINDS` references the consts; `reseat` uses `state_dir`; existing suites green unchanged. The membership test **pins** the set; R-b (forcing a new kind in) stays *guarded, not forced* — no exhaustive-match seam exists |
+| Kind registry dedup (F-2/F-5) | VT | F-2 (the copy) *closed* — `KINDS` references the consts; `reseat` uses `state_dir`; existing suites green unchanged. The membership test pins `KINDS` against a hand-written prefix literal (no `Kind` const-spine exists to reflect over, C-IV); R-b (forcing a new kind in) stays a **hand-maintained pin**, same posture as today |
 | `branch-point-check` verb | VT | pure `matches(base,head)` table; e2e exit-0/1 over the built binary |
-| Worker-mode refuses authored writes (D2a) | VT | already covered (`tests/e2e_worker_guard.rs`); not re-implemented |
+| Worker-mode refuses authored writes (D2a) | VT mech + VA activation | guard mechanism covered (`tests/e2e_worker_guard.rs`); but activation **fails OPEN** — no `Agent` env seam, worker self-arms the var (C-I). Sound belt = R-5 import-reject below |
+| Import-time `.doctrine/`-tree reject (R-5) | VA | orchestrator-side (trusted, worker-mode OFF) changed-path check; delta touching `.doctrine/` → report+halt; `/dispatch` conformance |
 | `/worktree mode=worker` contract | VA | skill conformance: source-only, no-degrade, commit-to-branch, report shape |
 | Funnel order import→verify→commit→record (D7) | VA | `/dispatch` conformance / audit read; knowledge-trails-code |
 | Branch-point under concurrency (D5) | VA + VT | verb is VT; the re-dispatch policy is VA |
@@ -355,15 +405,15 @@ Open after pass 1: none blocking. The funnel remains VA — its correctness rest
 skill-prose discipline + the prompt contract, not Rust enforcement (an accepted
 posture, R-1/D2b lineage).
 
-### Adversarial pass 2 (2026-06-10) — /inquisition; findings NOT yet applied to the body
+### Adversarial pass 2 (2026-06-10) — /inquisition; findings APPLIED to the body
 
 Full charge sheet: `inquisition.md`. The reframe (§2) was re-verified and **holds**
 (D2a guard `main.rs:1118`, `next_id(local,trunk)`, `trunk_entity_ids`, the five
-`&[]`, `KINDS`/`reseat` all stand). Four charges are **load-bearing and block lock**;
-they require body edits + two open design decisions (Q2/Q3), so they are recorded
-here, not silently patched. **No governance conflict** — ADR-006 sanctions every
-underlying posture (D2b Negative); the heresy is the design *overstating
-prompt-contract as mechanism*.
+`&[]`, `KINDS`/`reseat` all stand). Four charges were **load-bearing**; all seven
+are now reconciled into the body (Q2/Q3 resolved by the User: import belt **in
+SL-031**; batching contract **file-disjoint + serial fallback**). **No governance
+conflict** — ADR-006 sanctions every underlying posture (D2b Negative); the heresy
+was the design *overstating prompt-contract as mechanism*, now corrected.
 
 - **C-I (MAJOR, supersedes F-e) — D2a fails OPEN; the env-belt does not exist.**
   The harness `Agent` tool exposes **no env parameter** (schema: `description ·
@@ -411,7 +461,10 @@ prompt-contract as mechanism*.
   (relations v1-empty). Align §1/§7 confidence to: status-flip-with-resolution +
   prose; edge deferred.
 
-Open decisions before lock: **Q2** (import-time `.doctrine/`-path rejection — in
-SL-031?), **Q3** (file-disjoint batching contract + serial-fallback), **Q4** (§9
-D2a re-class). These are `/design` calls needing the User; the inquisitor does not
-improvise past them.
+Decisions taken: **Q1** — no `Kind` const-spine exists, so C-IV stands; the
+registry guard is honestly re-stated as a hand-maintained pin (not a reflective
+guard). **Q2** — import-time `.doctrine/`-path reject is **in SL-031** (§5.4 belt,
+R-5, §9 row; orchestrator-side, the trusted writer runs it). **Q3** — batching
+contract is **file-disjoint + serial fallback** (§5.1/§5.4). **Q4** — §9 D2a row
+re-classed VT-mechanism / VA-activation, fail-open disclosed. Pass-2 leaves the
+design internally consistent; no open blockers remain before lock.
