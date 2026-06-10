@@ -63,8 +63,9 @@ struct GovRow {
 /// spine: `listing::build` resolves the filter + format, `validate_statuses`
 /// guards `--status` against the kind's known-set (A-2), `retain` applies the
 /// hide-set, the kind owns the sort (by id) and the column/JSON projection.
-pub(crate) fn list_rows(g: &GovKind, root: &Path, args: ListArgs) -> anyhow::Result<String> {
+pub(crate) fn list_rows(g: &GovKind, root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     listing::validate_statuses(&args.status, g.statuses)?;
+    let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let gov_root = root.join(g.kind.dir);
     let mut metas = listing::retain(
@@ -74,9 +75,15 @@ pub(crate) fn list_rows(g: &GovKind, root: &Path, args: ListArgs) -> anyhow::Res
         |m| key(g, m),
     );
     metas.sort_by_key(|m| m.id);
+    // One materialisation feeds both surfaces — governance's table and JSON
+    // rows coincide (SL-037 A4: GovRow is all-String, id pre-prefixed).
+    let rows = gov_rows(g, &metas);
     match format {
-        Format::Table => Ok(render_table(g, &metas)),
-        Format::Json => listing::json_envelope(g.stem, &json_rows(g, &metas)),
+        Format::Table => {
+            let sel = listing::select_columns(&GOV_COLUMNS, GOV_DEFAULT, columns.as_deref())?;
+            Ok(listing::render_columns(&rows, &sel))
+        }
+        Format::Json => listing::json_envelope(g.stem, &rows),
     }
 }
 
@@ -93,32 +100,40 @@ fn key(g: &GovKind, m: &Meta) -> listing::FilterFields {
     }
 }
 
-/// The table grid: a header row then one `<PREFIX>-id status slug title` row per
-/// entity (prefixed ids + header, design §5.5), over the shared layout.
-fn render_table(g: &GovKind, metas: &[Meta]) -> String {
-    // No rows → "" (header suppressed, §5.5) — guard before building the grid.
-    if metas.is_empty() {
-        return String::new();
-    }
-    let mut grid: Vec<Vec<String>> = vec![vec![
-        "id".to_string(),
-        "status".to_string(),
-        "slug".to_string(),
-        "title".to_string(),
-    ]];
-    grid.extend(metas.iter().map(|m| {
-        vec![
-            listing::canonical_id(g.kind.prefix, m.id),
-            m.status.clone(),
-            m.slug.clone(),
-            m.title.clone(),
-        ]
-    }));
-    listing::render_table(&grid)
-}
+/// The table columns every governance kind can show (`--columns` tokens over
+/// `R = GovRow` — extractors are non-capturing, SL-037 D5; the prefixed id is
+/// already materialised in the row). Selection-token order: declaration order
+/// is what the unknown-column error lists.
+const GOV_COLUMNS: [listing::Column<GovRow>; 4] = [
+    listing::Column {
+        name: "id",
+        header: "id",
+        cell: |r| r.id.clone(),
+    },
+    listing::Column {
+        name: "status",
+        header: "status",
+        cell: |r| r.status.clone(),
+    },
+    listing::Column {
+        name: "slug",
+        header: "slug",
+        cell: |r| r.slug.clone(),
+    },
+    listing::Column {
+        name: "title",
+        header: "title",
+        cell: |r| r.title.clone(),
+    },
+];
 
-/// Faithful JSON rows (D7) — the prefixed id plus the authored list fields.
-fn json_rows(g: &GovKind, metas: &[Meta]) -> Vec<GovRow> {
+/// The default visible set — slug-free (SL-037 D4); `--columns …,slug` reveals it.
+const GOV_DEFAULT: &[&str] = &["id", "status", "title"];
+
+/// Faithful rows (D7) — the prefixed id plus the authored list fields. Feeds
+/// both the column-projected table and the JSON envelope (table+JSON rows
+/// coincide for governance, SL-037 A4).
+fn gov_rows(g: &GovKind, metas: &[Meta]) -> Vec<GovRow> {
     metas
         .iter()
         .map(|m| GovRow {
@@ -691,6 +706,103 @@ mod tests {
         assert_eq!(rows[0]["id"], "ADR-001");
         assert_eq!(rows[0]["status"], "accepted");
         assert_eq!(rows[0]["slug"], "use-rust");
+    }
+
+    // --- SL-037 column model: slug-free default, --columns projection ---
+
+    #[test]
+    fn list_rows_default_table_omits_slug() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        two_adrs(root, AdrStatus::Accepted);
+
+        let out = list_rows(&ADR_KIND, root, args()).unwrap();
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(
+            lines[0].split_whitespace().collect::<Vec<_>>(),
+            ["id", "status", "title"],
+            "default header is slug-free: {out}"
+        );
+        assert!(!out.contains("use-rust"), "slug cell hidden: {out}");
+        assert!(out.contains("Use Rust"), "title cell present: {out}");
+    }
+
+    #[test]
+    fn list_rows_columns_selects_orders_and_reveals_slug() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        two_adrs(root, AdrStatus::Accepted);
+
+        let out = list_rows(
+            &ADR_KIND,
+            root,
+            ListArgs {
+                columns: Some(vec!["slug".into(), "id".into()]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(
+            lines[0].split_whitespace().collect::<Vec<_>>(),
+            ["slug", "id"],
+            "requested order wins: {out}"
+        );
+        assert!(out.contains("use-rust"), "slug revealed: {out}");
+        assert!(!out.contains("accepted"), "unselected status hidden: {out}");
+    }
+
+    #[test]
+    fn list_rows_unknown_column_is_the_uniform_error_listing_available() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = list_rows(
+            &ADR_KIND,
+            dir.path(),
+            ListArgs {
+                columns: Some(vec!["bogus".into()]),
+                ..Default::default()
+            },
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("unknown column `bogus`"), "names it: {err}");
+        assert!(
+            err.contains("id, status, slug, title"),
+            "lists the available set: {err}"
+        );
+    }
+
+    #[test]
+    fn list_rows_json_ignores_columns_and_keeps_slug() {
+        // D7: --columns has no effect under --json; JSON rows stay faithful (D2).
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        two_adrs(root, AdrStatus::Accepted);
+
+        let plain = list_rows(
+            &ADR_KIND,
+            root,
+            ListArgs {
+                json: true,
+                all: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let projected = list_rows(
+            &ADR_KIND,
+            root,
+            ListArgs {
+                json: true,
+                all: true,
+                columns: Some(vec!["id".into()]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(plain, projected, "--columns is a no-op under --json");
+        let parsed: serde_json::Value = serde_json::from_str(&projected).unwrap();
+        assert_eq!(parsed["rows"][0]["slug"], "use-rust");
     }
 
     #[test]
