@@ -69,3 +69,25 @@ round 3 (no reviewer sharpened them).
 Round 3 was billed FINAL, but it found 4 blockers — recommendation to user:
 one more cheap external pass over the round-3 rewrites (pass 2/3/4 + the
 propagation contract) before lock; the blocker trend has not yet hit zero.
+
+## Round-4 outcome (2026-06-10, GPT-5.5 via codex MCP, run in-session)
+
+User authorised running round 4 directly. 3 findings → F46–F48, all accepted:
+
+- **F46** — round 3's F30 "one cycle concept" call reversed with evidence:
+  authored-SCC keying of pass-3 exclusion/pass-4 taint destroyed surviving
+  valid resolved edges when arity had already broken the cycle. Now: authored
+  SCC → diagnostic only; post-arity SCC → order degradation. (This was the
+  alternative I weighed and rejected for simplicity at F30 integration — the
+  residual-conservatism note from round 3 is RESOLVED, not residual.)
+- **F47** — explain()'s "chains to root" was impossible on cyclic Reject views
+  (no root). Chains now end at roots or degraded-SCC entry; SCC members are
+  endpoints only; in-SCC nodes get [[n]].
+- **F48** — I1 wording over-claimed traversal-view acyclicity; tightened.
+
+Trend: blockers 2 (round 2+self) → 4 (round 3) → 1 (round 4), and round 4's
+blocker was a choice-cost, not a machinery bug. Remaining known-open: path
+enumeration blowup (F47 bounds termination, NOT combinatorics — predecessor
+sub-DAG still the fix direction), full-downstream taint extent, pre-consumer
+API churn. Assessment: diminishing reached; findable-by-review surface looks
+exhausted — remaining unknowns belong to the first consumer. Recommend lock.
