@@ -72,7 +72,10 @@ these sit — they are routing skills, correctly placed.
 - `plugins/partner/` (interim — removed)
 - `.claude-plugin/marketplace.json`
 - `src/skills.rs` — `MARKETPLACE_ONLY_DOMAINS` + comment + catalog-exclusion test
-- `install/routing-process.md` — routing digest
+- `install/routing-process.md` — routing digest (comprehension row + posture line)
+- `plugins/doctrine/skills/route/SKILL.md` — second route surface, same additions
+  (design §5.2c; kept in sync with the digest)
+- `plugins/doctrine-memory/README.md` — OQ-1 (b)+ accuracy fix (folded in)
 - boot snapshot + `src/boot.rs` goldens (regenerated)
 
 ## Risks / Assumptions / Open questions
@@ -87,12 +90,12 @@ these sit — they are routing skills, correctly placed.
   collision and the install catalog still excludes the subset.
 - **Risk (re-embed footgun).** A lone `plugins/` edit does not re-embed on
   `cargo build`; `src/skills.rs` must recompile. Sequence is mandatory.
-- **Open question.** Does the boot golden assert the routing digest verbatim? If
-  so the row/line additions update it; confirm the golden is the intended sentinel
-  and not an incidental snapshot. (Resolve in `/design`.)
-- **Open question.** README content for `doctrine-partner` — mirror
-  doctrine-memory's README shape; confirm during design whether it needs the
-  "install one or the other" warning prominently.
+- **Resolved.** Boot golden asserts the routing digest by *presence only*
+  (`contains("Route before you act")` at `boot.rs:945,1291`) — no verbatim
+  sentinel; row/line additions are golden-safe (design §2, §10).
+- **Resolved (OQ-1, b+).** doctrine-partner README written *accurately*
+  (symlink source / resolved-copy distribution); doctrine-memory README corrected
+  the same way in-slice — siblings agree on the truth, not a shared falsehood.
 
 ## Verification / closure intent
 
