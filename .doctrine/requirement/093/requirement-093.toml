@@ -7,11 +7,11 @@ title = "Architectural triggers resolve as a policy mask, never a graph edge"
 status = "pending"
 kind = "functional"
 
-description = "An architectural (path-glob) trigger holds an item non-actionable until a file set matches its trigger globs. It is resolved as a policy-layer actionability mask by reusing the leaf retrieve.rs glob predicates (glob_admits / path_admits; trigger globs = pattern, file paths = subject — not the Memory-typed match_scope), and is never represented as an edge in the graph core, which stays free of file-path dependence. The mask runs at two gates (SPEC-001 D6): prospectively at the planning gate against the plan's declared paths (a), and at audit against the touched file set (b); a divergence between (a) and (b) that flips a trigger is surfaced as a caught drift signal. Depends on the authored trigger field, owned by PRD-009 (OQ-007)."
+description = "An item's architectural (path-glob) triggers hold it non-actionable until a file set matches the globs of any of its triggers. Resolved as a policy-layer actionability mask by reusing the leaf retrieve.rs glob predicates (glob_admits / path_admits; trigger globs = pattern, file paths = subject — not the Memory-typed match_scope), and never represented as an edge in the graph core, which stays free of file-path dependence. The mask runs at two gates (SPEC-001 D6): prospectively at the planning gate against the plan's declared paths (a), and at audit against the touched file set (b); a divergence between (a) and (b) that flips a trigger is surfaced as a caught drift signal. Consumes the authored `triggers` list `{ globs, note }`, minted by PRD-009 FR-011/REQ-098 (OQ-007 resolved); the matching entry's note surfaces at the gate."
 tags = []
 acceptance_criteria = [
-  "A path-glob trigger is matched by reusing the leaf retrieve.rs glob predicates (SL-008) — trigger globs as pattern, file paths as subject — with no new glob engine introduced.",
-  "The trigger affects only the policy actionability mask; the graph core receives no path-bearing node or edge.",
+  "An item's path-glob triggers are matched by reusing the leaf retrieve.rs glob predicates (SL-008) — trigger globs as pattern, file paths as subject — with no new glob engine introduced.",
+  "Triggers affect only the policy actionability mask; the graph core receives no path-bearing node or edge.",
   "The mask runs at the planning gate against the plan's declared paths and at audit against the touched file set; a divergence that flips a trigger surfaces as a drift signal rather than a silent miss.",
-  "An item whose trigger globs are unmatched is masked non-actionable, and surfaces as actionable once a file set matches.",
+  "An item is masked non-actionable while no trigger's globs match, and surfaces as actionable once a file set matches any trigger; the matching entry's note surfaces at the gate.",
 ]

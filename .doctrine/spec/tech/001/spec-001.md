@@ -77,9 +77,10 @@ urgency, or product vocabulary in the crate).
 - **The path-free-core tension (OQ-009, dependency-bearing).** Architectural triggers
   condition actionability on a *code-surface* (path-glob) match, but the core must
   not depend on file paths (PRD-011 §4 constraint). D6 fixes the *shape* — a
-  **policy-layer actionability mask**, never a graph edge — but stays open on two
-  unbuilt inputs (the authored trigger field and a phase file-set source), so OQ-009
-  is resolved-pending-prerequisites, not closed.
+  **policy-layer actionability mask**, never a graph edge — but stays open on the
+  plan/audit file-set source (still unbuilt); the authored `triggers` field is now
+  blessed (PRD-009 FR-011 / `REQ-098`, OQ-007 resolved), so OQ-009 is
+  resolved-pending-prerequisites, not closed.
 
 ## Hypotheses
 
@@ -194,15 +195,18 @@ urgency, or product vocabulary in the crate).
   at write time, but the read-side resolution is the contract.
 - **D6 — architectural triggers as a policy-layer actionability mask
   (dependency-bearing; OQ-009 resolved-pending).** A path-glob trigger holds an item
-  non-actionable until a file set matches its trigger globs. It enters as a **policy
-  mask** — `mask(item, files) = glob_admits(item.trigger.globs, files)` over the
-  leaf `retrieve.rs` predicates (SL-008; trigger globs = pattern, file paths =
-  subject) — *never* a graph edge, keeping the core path-free (PRD-011 §4). This
-  fixes the *shape*; it does not close OQ-009, because the matcher needs **three
-  inputs that do not yet exist**:
-  1. **the authored trigger field** `{ globs = [...], note = "…" }` — PRD-009's
-     capture seam (pushed to PRD-009 OQ-007). IMP-013/014 today carry only a
-     `trigger` *tag*, no structured field.
+  non-actionable until a file set matches the globs of **any** of its triggers. It
+  enters as a **policy mask** — `mask(item, files) = ∃ t ∈ item.triggers ·
+  glob_admits(t.globs, files)` over the leaf `retrieve.rs` predicates (SL-008; trigger
+  globs = pattern, file paths = subject) — *never* a graph edge, keeping the core
+  path-free (PRD-011 §4). This fixes the *shape*; it does not yet close OQ-009, because
+  of the three inputs the matcher needs, the authored field is now **blessed** but two
+  file-set sources remain unbuilt:
+  1. **the authored `triggers` field** — a list of `{ globs = [...], note = "…" }`
+     riders; an item is masked until a file set matches **any** entry, and the matching
+     entry's `note` surfaces. **Minted by PRD-009 FR-011 (`REQ-098`); OQ-007 resolved**
+     — schema blessed, awaiting backlog implementation. Promotes IMP-013/014's coarse
+     `trigger` *tag* to typed structure.
   2. **(a) the planned file set** — a declared-paths field on the plan/phase, read at
      the planning gate (`/plan` / `/phase-plan`). The mask fires here **prospectively**,
      surfacing the prefactor opportunity *before* the code exists — an architectural
@@ -215,7 +219,8 @@ urgency, or product vocabulary in the crate).
   the audited truth. When they **diverge** enough to flip a trigger the plan missed,
   that is a **caught oops** — a drift signal surfaced at audit, not a silent miss.
   IMP-013 (two-path) / IMP-014 (single-path) become real acceptance fixtures *once
-  the trigger field exists*; until then the "if the mask can't surface them, D6 is
+  backlog implements the `triggers` field* (schema now blessed; the two file-set
+  sources still unbuilt); until then the "if the mask can't surface them, D6 is
   not done" criterion is not yet evaluable. Gate enforcement strength (soft
   skill-check vs hard workflow/preflight step) is **OQ-6**; the plan↔audit divergence
   surface is folded into it.
@@ -249,10 +254,11 @@ urgency, or product vocabulary in the crate).
 Local to this spec. PRD-011 OQ-003 / OQ-005 / OQ-008 are closed above (D1 / D5 /
 D7); PRD-011 OQ-002 (OQ-1) and crate name/layout (OQ-5) are closed by D4 and D1.
 PRD-011 OQ-009 is **resolved-pending-prerequisites** (D6 fixes the shape; the
-authored trigger field + plan/audit file-set sources are unbuilt — see OQ-7).
-PRD-011 OQ-001 (authored-seam field shape) is PRD-009's, not this spec's. The
-`dep`/`seq` and trigger **authored schemas** D4/D6 rely on are PRD-009's capture
-surface, pushed to PRD-009 OQ-007 — this spec consumes them, it does not mint them.
+authored `triggers` field is now blessed, the plan/audit file-set sources remain
+unbuilt). PRD-011 OQ-001 (item-level authored-priority seam) is PRD-009's, not this
+spec's. The `dep`/`seq` and trigger **authored schemas** D4/D6 rely on are PRD-009's
+capture surface — now minted there (PRD-009 OQ-007 resolved: FR-010 `needs`/`after`,
+FR-011 `triggers`); this spec consumes them, it does not mint them.
 
 Resolved:
 
@@ -261,6 +267,14 @@ Resolved:
   consequence inputs.
 - ~~**OQ-5** — crate name + workspace layout.~~ Closed by D1: `cordage` at
   `crates/cordage/`, doctrine the root crate depending by path.
+- ~~**OQ-7** (→ PRD-009) — the authored capture schema D4/D6 depend on.~~ Resolved by
+  PRD-009 OQ-007: the `dep`/`seq` edges land as the agent-facing `needs`/`after` edges
+  (FR-010 / `REQ-096` consumes `REQ-097`); the architectural trigger lands as the
+  optional `triggers` list `{ globs, note }` (FR-011 / `REQ-093` consumes `REQ-098`).
+  Authored names are decoupled from the `dep`/`seq` overlay vocabulary (policy/adapter
+  classifies); `after`'s `rank` is a pairwise-edge attribute, distinct from PRD-011
+  OQ-001's still-open item-level scalar. Schema blessed; FR-005/D6 buildable once
+  backlog implements it.
 
 Remaining:
 
@@ -276,8 +290,3 @@ Remaining:
   (skill remembers to check) vs hard (workflow/preflight step), and how the
   plan↔audit divergence (D6 (a) vs (b)) is surfaced. Friction vs enforceability
   (IMP-012 tension).
-- **OQ-7** (→ PRD-009) — the **authored capture schema** D4/D6 depend on: the new
-  `dep`/`seq` relation kinds (+ int `rank`) and the architectural-trigger field
-  `{ globs, note }`. Owned by PRD-009's relation/capture seam, not this tech spec;
-  FR-005/REQ-096 and D6 are buildable only once PRD-009 blesses it. Pushed to
-  PRD-009 OQ-007.
