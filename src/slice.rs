@@ -204,6 +204,7 @@ pub(crate) fn run_new(
             title: &title,
             date: &date,
         },
+        &[], // trunk ids: production minting wires them in SL-031 (§5.4)
     )?;
 
     let id = out
@@ -232,6 +233,7 @@ pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
             title: &meta.title,
             date: &date,
         },
+        &[], // inert for InExisting (trunk ids only affect Fresh allocation)
     )?;
 
     writeln!(
@@ -259,6 +261,7 @@ pub(crate) fn run_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
             title: &meta.title,
             date: &date,
         },
+        &[], // inert for InExisting (trunk ids only affect Fresh allocation)
     )?;
 
     writeln!(
@@ -312,6 +315,7 @@ pub(crate) fn run_notes(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
             title: &meta.title,
             date: &date,
         },
+        &[], // inert for InExisting (trunk ids only affect Fresh allocation)
     )?;
 
     writeln!(
@@ -1151,6 +1155,7 @@ mod tests {
             root,
             &MaterialiseRequest::Fresh,
             &Inputs { slug, title, date },
+            &[],
         )
         .unwrap()
     }
@@ -1337,6 +1342,7 @@ mod tests {
                 title: "My Title",
                 date: "2026-06-03",
             },
+            &[],
         )
         .unwrap();
 
@@ -1365,6 +1371,7 @@ mod tests {
                 title: "My Title",
                 date: "2026-06-03",
             },
+            &[],
         )
         .unwrap_err();
         assert!(err.to_string().contains("Refusing to overwrite"));
@@ -1393,6 +1400,7 @@ mod tests {
                 title: "My Title",
                 date: "2026-06-04",
             },
+            &[],
         )
         .unwrap();
 
@@ -1423,6 +1431,7 @@ mod tests {
                 title: "My Title",
                 date: "2026-06-04",
             },
+            &[],
         )
         .unwrap_err();
         assert!(err.to_string().contains("Refusing to overwrite"));
@@ -1453,6 +1462,7 @@ mod tests {
                 title: "My Title",
                 date: "2026-06-04",
             },
+            &[],
         )
         .unwrap();
 
@@ -1478,6 +1488,7 @@ mod tests {
                 title: "My Title",
                 date: "2026-06-04",
             },
+            &[],
         )
         .unwrap_err();
         assert!(err.to_string().contains("Refusing to overwrite"));

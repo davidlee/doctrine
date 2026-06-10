@@ -235,6 +235,7 @@ pub(crate) fn reserve(
         root,
         &entity::MaterialiseRequest::Fresh,
         &entity::Inputs { slug, title, date },
+        &[], // trunk ids: production minting wires them in SL-031 (§5.4)
     )
 }
 
@@ -413,6 +414,7 @@ mod tests {
                     title,
                     date: "2026-06-05",
                 },
+                &[],
             )
             .unwrap()
         };
