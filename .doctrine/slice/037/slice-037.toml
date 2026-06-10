@@ -1,9 +1,9 @@
 id = 37
 slug = "list-hide-slug-format-options"
 title = "Shared list column model: --columns projection + slug-free defaults"
-status = "proposed"
+status = "done"
 created = "2026-06-10"
-updated = "2026-06-10"
+updated = "2026-06-11"
 
 [relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
