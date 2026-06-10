@@ -354,3 +354,64 @@ provision exclusion).
 Open after pass 1: none blocking. The funnel remains VA — its correctness rests on
 skill-prose discipline + the prompt contract, not Rust enforcement (an accepted
 posture, R-1/D2b lineage).
+
+### Adversarial pass 2 (2026-06-10) — /inquisition; findings NOT yet applied to the body
+
+Full charge sheet: `inquisition.md`. The reframe (§2) was re-verified and **holds**
+(D2a guard `main.rs:1118`, `next_id(local,trunk)`, `trunk_entity_ids`, the five
+`&[]`, `KINDS`/`reseat` all stand). Four charges are **load-bearing and block lock**;
+they require body edits + two open design decisions (Q2/Q3), so they are recorded
+here, not silently patched. **No governance conflict** — ADR-006 sanctions every
+underlying posture (D2b Negative); the heresy is the design *overstating
+prompt-contract as mechanism*.
+
+- **C-I (MAJOR, supersedes F-e) — D2a fails OPEN; the env-belt does not exist.**
+  The harness `Agent` tool exposes **no env parameter** (schema: `description ·
+  isolation · model · prompt · run_in_background · subagent_type`; `isolation` ∈
+  `{worktree}`). So §5.4's "set `DOCTRINE_WORKER=1` in the worker's spawn env (the
+  `Agent`-tool env, when available)" is **never** available on the named harness —
+  the conjunction collapses to "worker self-exports the var as its first act." A
+  worker that omits it runs with the doctrine CLI **fully open**. F-e's "**Fixed**"
+  is withdrawn: this is **prompt-contract only**, the same tier as D2b, and fails
+  open. *Body edits owed:* strike "Fixed"/"shipped enforcement" framing in
+  §5.4/§3/§9; re-class the worker-write refusal as VA-activation over a VT-mechanism.
+- **C-II (MAJOR) — C-I undoes deliverable A inside the funnel.** A worker that did
+  not arm the var may `doctrine slice new` in-fork; its mint is blind to siblings'
+  concurrent mints on the coordination branch; `import` lands the authored mutation
+  → **colliding ids — the exact D3 hazard A removes**. §2's "A and B independent …
+  not because B depends on A" is false: D2 (worker-sole-writer) is what keeps A's
+  guarantee intact inside dispatch. *Decision owed (Q2):* make `import`
+  mechanically **reject any worker delta touching `.doctrine/` authored trees** —
+  the one belt that IS enforceable (greppable changed-path check), unlike the env.
+  Add as R-5 in §8.
+- **C-III (MAJOR) — "dependency-disjoint ⟹ file-disjoint" is unsound.** §5.4's
+  co-apply guarantee rests on a false syllogism: independent tasks routinely edit
+  the same file (this slice itself: the verb + minting wiring both touch
+  `main.rs`/`worktree.rs`). Nothing **constructs** file-disjointness. So
+  `cherry-pick -n` conflict — "report-and-halt" — is the **common case, not the
+  edge**; the per-batch atomic cadence (F-b's fix) is built on it. *Decision owed
+  (Q3):* batching contract = **file-disjoint** (compute pairwise changed-path
+  disjointness; serial-fallback for unavoidable shared-file tasks) — name it in §5.4.
+- **C-IV (MODERATE) — the set-equality guard is a tautological pin; R-b is
+  unguarded.** Confirmed via Q1: **no central `Kind` const spine exists** — consts
+  are scattered across modules in two types (`Kind`, `GovKind`), no enumerable
+  `&[&Kind]`, and the proposed `KindIdentity` refactor creates none. The only test
+  (`integrity.rs:644`) pins `KINDS` against a **hand-written 12-prefix literal**; a
+  13th kind added to neither escapes **both**. §5.2/§9/§5.5's claim "membership
+  equals the set of live consts; a new kind fails the test" is **false**. *Body
+  edit owed:* either build the const-spine the test can reflect over, or strike the
+  claim and confess R-b stays a **hand-maintained pin** (no better than today).
+- **C-V (MINOR) — `branch-point-check` is misnamed** (a HEAD-stationarity assert,
+  not a branch-point/merge-base compute; discharges the D5 *concurrency extension*,
+  not the creation-time check SL-029 shipped). Rename or scope-note §5.2/§9.
+- **C-VI (MINOR) — patch-handback fallback "covers the rest" while specifying
+  nothing** (§5.3/§5.5). Specify it to the same cadence, or descope remote-agent to
+  out-of-v1.
+- **C-VII (MINOR, disclosed) — IMP-003 "closure" is prose, no graph edge**
+  (relations v1-empty). Align §1/§7 confidence to: status-flip-with-resolution +
+  prose; edge deferred.
+
+Open decisions before lock: **Q2** (import-time `.doctrine/`-path rejection — in
+SL-031?), **Q3** (file-disjoint batching contract + serial-fallback), **Q4** (§9
+D2a re-class). These are `/design` calls needing the User; the inquisitor does not
+improvise past them.
