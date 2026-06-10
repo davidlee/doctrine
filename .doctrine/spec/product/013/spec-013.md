@@ -1,7 +1,23 @@
 # PRD-013: Requirement Reconciliation
 
-<!-- Reference forms: entity ids padded (REQ-059, ADR-004); doc-local refs bare
-     (OQ-1 open question). See .doctrine/glossary.md § reference forms. -->
+## Relations
+
+<!-- Prose stand-in: doctrine has no structural relation surface for product→product
+     or spec→ADR edges today, so these links live here, not as stored edges. The gap
+     is tracked by IMP-016; the one edge that WILL be structural is the descending
+     tech SPEC's `descends_from = "PRD-013"`. -->
+
+- **Governed by** — ADR-003 (canonical change loop; observe → reconcile → close;
+  explicit-authorship-not-derivation) and ADR-009 (slice lifecycle FSM with the
+  `reconcile` state; the two-enum requirement/coverage truth model, vocabulary-only).
+- **Peer of** — PRD-002 (owns the spec/requirement entities this capability writes
+  into; this spec resolves its §8 open question), PRD-010 (owns the drift/decision
+  record kinds reconciliation may emit), PRD-001 (owns the slice lifecycle whose
+  `reconcile` state this capability occupies).
+- **Realised by** (forthcoming) — a technical SPEC descending from this PRD
+  (`descends_from = "PRD-013"`), mirroring PRD-011 → SPEC-001.
+- **Constraint** — ADR-004 (relations stored outbound-only) is *why* the above are
+  prose: no outbound surface exists for product specs or spec→ADR. See IMP-016.
 
 ## 1. Intent
 
@@ -25,7 +41,7 @@ specs an agent can trust: requirement standing reflects what actually shipped, t
 act that changed it is durable and citable, and no truth was ever rewritten by
 precedence, timestamp, or artefact-kind. This is doctrine's deliberate divergence
 from coverage-derived requirement status — the differentiator stated as product
-intent rather than buried in an ADR.
+intent.
 
 ## 2. Scope
 
