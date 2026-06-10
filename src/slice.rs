@@ -721,31 +721,46 @@ fn decorated_status(status: &str, rollup: Option<&crate::state::PhaseRollup>) ->
     format!("{status}{drift}{divergence}")
 }
 
-/// The table grid: a header row then one `id status[?][ ⚠] phases slug title` row
-/// per slice, rendered over the shared layout. The `phases`/`⚠`/`?` columns are
-/// slice's variant axis (design §5.3) — they ride the grid, not `retain`. Empty
-/// input → `""` (header suppressed, §5.5). Pure.
-fn render_table(rows: &[(Meta, Option<crate::state::PhaseRollup>)]) -> String {
-    if rows.is_empty() {
-        return String::new();
-    }
-    let mut grid: Vec<Vec<String>> = vec![
-        ["id", "status", "phases", "slug", "title"]
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect(),
-    ];
-    for (m, rollup) in rows {
-        grid.push(vec![
-            canonical_id(m.id),
-            decorated_status(&m.status, rollup.as_ref()),
-            phases_cell(rollup.as_ref()),
-            m.slug.clone(),
-            m.title.clone(),
-        ]);
-    }
-    listing::render_table(&grid)
-}
+/// The table columns `slice list` can show (`--columns` tokens over the existing
+/// row tuple `R = (Meta, Option<PhaseRollup>)`, SL-037 §4). Extractors are
+/// non-capturing `fn(&R)->String` (D5): the `?`/`⚠` drift+divergence markers ride
+/// the `status` cell *value* via [`decorated_status`], and the `completed/total`
+/// rollup rides the `phases` cell via [`phases_cell`] — neither is a separate
+/// column or per-kind config (the SL-037 R1 canary: markers absorb as plain
+/// cell values). Declaration order is what the unknown-column error lists.
+type SliceRowTuple = (Meta, Option<crate::state::PhaseRollup>);
+
+const SLICE_COLUMNS: [listing::Column<SliceRowTuple>; 5] = [
+    listing::Column {
+        name: "id",
+        header: "id",
+        cell: |(m, _)| canonical_id(m.id),
+    },
+    listing::Column {
+        name: "status",
+        header: "status",
+        cell: |(m, r)| decorated_status(&m.status, r.as_ref()),
+    },
+    listing::Column {
+        name: "phases",
+        header: "phases",
+        cell: |(_, r)| phases_cell(r.as_ref()),
+    },
+    listing::Column {
+        name: "slug",
+        header: "slug",
+        cell: |(m, _)| m.slug.clone(),
+    },
+    listing::Column {
+        name: "title",
+        header: "title",
+        cell: |(m, _)| m.title.clone(),
+    },
+];
+
+/// The default visible set — slug-free (SL-037 D4); `--columns …,slug` reveals it.
+/// `phases` (the variant axis) stays in the default, between status and title.
+const SLICE_DEFAULT: &[&str] = &["id", "status", "phases", "title"];
 
 /// One slice projected to its faithful JSON row (design §5.3 — slice owns its
 /// serde shape). `phases` is a STRUCTURED value (`completed`/`total`/`blocked`),
@@ -801,8 +816,9 @@ fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()> {
 /// (its variant axis), and the column/JSON projection. The rollup is joined AFTER
 /// `retain` — `retain` filters `Meta` alone, so the (impure) state read only runs
 /// for the surviving rows.
-pub(crate) fn list_rows(root: &Path, args: ListArgs) -> anyhow::Result<String> {
+pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     validate_statuses(&args.status, SLICE_STATUSES)?;
+    let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let slice_root = root.join(SLICE_DIR);
     let mut metas = listing::retain(
@@ -820,7 +836,10 @@ pub(crate) fn list_rows(root: &Path, args: ListArgs) -> anyhow::Result<String> {
         })
         .collect::<anyhow::Result<_>>()?;
     match format {
-        Format::Table => Ok(render_table(&rows)),
+        Format::Table => {
+            let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, columns.as_deref())?;
+            Ok(listing::render_columns(&rows, &sel))
+        }
         Format::Json => listing::json_envelope("slice", &json_rows(&rows)),
     }
 }
@@ -1065,15 +1084,28 @@ mod tests {
         assert_eq!(phases_cell(Some(&anomalous)), "3/6 ?1");
     }
 
-    // --- render_table (the slice grid: prefixed ids + variant axis) ---
+    // --- SL-037 column model (the slice grid: prefixed ids + variant axis) ---
 
-    #[test]
-    fn render_table_empty_suppresses_the_header() {
-        assert_eq!(render_table(&[]), "");
+    /// Render rows over the default column set (the migrated `render_table` path).
+    fn render_default(rows: &[SliceRowTuple]) -> String {
+        let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, None).unwrap();
+        listing::render_columns(rows, &sel)
+    }
+
+    /// Render rows over an explicit `--columns` set.
+    fn render_cols(rows: &[SliceRowTuple], cols: &[&str]) -> String {
+        let owned: Vec<String> = cols.iter().map(|s| (*s).to_string()).collect();
+        let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, Some(&owned)).unwrap();
+        listing::render_columns(rows, &sel)
     }
 
     #[test]
-    fn render_table_renders_header_prefixed_ids_rollup_and_divergence() {
+    fn slice_list_empty_suppresses_the_header() {
+        assert_eq!(render_default(&[]), "");
+    }
+
+    #[test]
+    fn slice_list_default_renders_prefixed_ids_rollup_and_divergence() {
         let rows = vec![
             (
                 meta(1, "done", "entity-v1", "Entity v1"),
@@ -1085,7 +1117,7 @@ mod tests {
             ),
             (meta(9, "proposed", "rollup", "Rollup"), None),
         ];
-        let out = render_table(&rows);
+        let out = render_default(&rows);
         let lines: Vec<&str> = out.lines().collect();
         assert!(lines[0].starts_with("id"), "header: {:?}", lines[0]);
         assert!(lines[0].contains("phases"), "phases column: {:?}", lines[0]);
@@ -1093,7 +1125,7 @@ mod tests {
         // consistent terminal slice: no ⚠, full rollup
         assert!(lines[1].starts_with("SL-001  done"), "{:?}", lines[1]);
         assert!(lines[1].contains("6/6"));
-        // done but 2/6 → divergent ⚠
+        // done but 2/6 → divergent ⚠ (marker preserved in the status cell value)
         assert!(lines[2].starts_with("SL-007  done ⚠"), "{:?}", lines[2]);
         assert!(lines[2].contains("2/6"));
         // untracked → —
@@ -1101,6 +1133,52 @@ mod tests {
         assert!(lines[3].contains("—"));
         // no bare numeric id anywhere
         assert!(!out.contains("\n001  "), "no bare numeric id: {out}");
+    }
+
+    #[test]
+    fn slice_list_default_omits_slug() {
+        let rows = vec![(meta(1, "proposed", "entity-v1", "Entity v1"), None)];
+        let out = render_default(&rows);
+        let header = out.lines().next().unwrap();
+        // SL-037 D4: default visible set is [id, status, phases, title] — slug hidden.
+        assert!(
+            !header.contains("slug"),
+            "default header omits slug: {header:?}"
+        );
+        assert!(
+            !out.contains("entity-v1"),
+            "slug value hidden by default: {out}"
+        );
+        assert!(header.contains("title"), "default keeps title: {header:?}");
+    }
+
+    #[test]
+    fn slice_list_columns_reveals_slug_and_preserves_markers() {
+        let rows = vec![(
+            meta(7, "done", "anchoring", "Anchoring"),
+            Some(rollup(2, 4)),
+        )];
+        // Reveal slug; status cell still carries the ⚠ divergence marker, phases intact.
+        let out = render_cols(&rows, &["id", "status", "phases", "slug"]);
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(
+            lines[0].split_whitespace().collect::<Vec<_>>(),
+            vec!["id", "status", "phases", "slug"]
+        );
+        assert!(
+            out.contains("anchoring"),
+            "slug revealed by --columns: {out}"
+        );
+        assert!(
+            lines[1].contains("done ⚠"),
+            "⚠ marker preserved: {:?}",
+            lines[1]
+        );
+        assert!(
+            lines[1].contains("2/6"),
+            "phases cell intact: {:?}",
+            lines[1]
+        );
     }
 
     // --- decorated_status: drift `?` and divergence `⚠` are independent ---
