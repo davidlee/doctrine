@@ -20,6 +20,14 @@ silently escapes `validate` — there is no compile-time gate forcing registrati
 (unlike `write_class`'s exhaustive match, X4). The `kinds_table_*` unit test pins
 the current 11 but does not force a new kind in.
 
+**Correction (SL-032 review F-2/F-5):** "single corpus-wide table" overstates it —
+KINDS' `prefix`/`dir` are a **raw parallel copy** of each module's `entity::Kind`
+const, linked by nothing. The real single-source registry both `validate` and
+SL-031's trunk-mint wiring derive from is **deferred to SL-031** (the second
+consumer that shapes it); until then KINDS is the interim assembly point. Do NOT
+pre-build the registry to "fix" the duplication — see
+[[mem.thread.sl-031.kind-registry-dedup]].
+
 **Why:** future agents adding a numbered entity kind, or building any corpus-wide
 id tool (audit, renumber, cross-kind report), will look for a registry and find
 none scattered — KINDS is it.
