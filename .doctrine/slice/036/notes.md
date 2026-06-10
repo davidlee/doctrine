@@ -40,3 +40,32 @@ microseconds at hundreds of nodes); do not spend review budget there.
 - Upstream wording note parked in design.md §6: SPEC-001 D9/D10 "seq *rank*
   within a dep-eligible set" should read seq-*topology*; rank is eviction
   strength only. Post-lock SPEC revision, same channel as T1.
+
+## Round-3 outcome (2026-06-10)
+
+NOT a diminishing round: 15 combined external findings (web + GPT-5.5 + Opus,
+user-deduped) → F30–F44, all accepted (2 partial, 1 alternative fix), 0
+rejected, none rehash; plus self-found F45 (the F11 pattern again — found
+re-deriving F34's machinery). Four blockers in two interaction families:
+
+- **F30** — pass-1 arity eviction broke authored Reject cycles before pass-2
+  detection saw them (diagnostic silently lost). Fix: Reject detection on the
+  authored pre-arity set; authored SCC = the one cycle concept.
+- **F31/F32/F33** — Degraded/taint mis-scoped three ways: seeded from non-spec
+  overlays, exclusion-from-U ambiguous (taint-defeating under the natural
+  reading), suffix-by-NodeId violated surviving U edges (I2 literally false).
+  Fix: spec-scoped seeds, intra-SCC-only exclusion, `Degraded(u32)` carrying
+  U-level so the suffix respects surviving edges.
+
+Lesson: both families are *interaction* bugs between individually-sound parts
+(pass pipeline; degradation × ordering) — per-section review missed them three
+times. Known-open list updated: **taint conservatism partially addressed**
+(suffix now edge-respecting, non-spec overlays excluded); residual
+conservatism = F30's authored-SCC degradation when arity already broke the
+cycle, and full-downstream taint extent — both deliberate, revisit on consumer
+complaint. Path-enumeration blowup and API churn remain open, untouched by
+round 3 (no reviewer sharpened them).
+
+Round 3 was billed FINAL, but it found 4 blockers — recommendation to user:
+one more cheap external pass over the round-3 rewrites (pass 2/3/4 + the
+propagation contract) before lock; the blocker trend has not yet hit zero.
