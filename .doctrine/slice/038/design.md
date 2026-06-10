@@ -4,10 +4,17 @@ Status: draft (design stage). Canonical for design intent; scope in `slice-038.m
 
 ## 1. Purpose
 
-Land a committed, reproducible regression gate + findings note for three already-
-confirmed scale cliffs (RSK-002, RSK-003). Measure-and-red only. The probe that
-confirmed the numbers (2026-06-11) was deleted; this slice makes the evidence durable
-and turns it into reds the eventual fixes green.
+Land a committed, reproducible regression gate + findings note for the confirmed
+scale cliffs in cordage. Measure-and-red only. The probe that confirmed three of the
+numbers (2026-06-11) was deleted; this slice makes that evidence durable and turns it
+into reds the eventual fixes green.
+
+Four cliffs in scope — three **probe-confirmed** (RSK-002 explain, RSK-003 overflow,
+RSK-003 quadratic) and one **analytical-only, first-measured-here** (RSK-004
+evaluate). RSK-004 was folded in (D5): it is the same class and the same red shape as
+the eviction quadratic (§6.4 mirrors §6.3), so a 4th measured red here is far cheaper
+than a later separate harness slice. The findings note (§7) flags RSK-004's distinct
+provenance precisely — the deleted probe never measured it.
 
 ## 2. Constraints (canon)
 
@@ -31,21 +38,26 @@ crates/cordage/
 ```
 
 No shared generator module: each generator is a ~10-line public-API loop. The
-example owns the canonical copies; the tests that need a graph in-process
-(`explain`) build their own tiny inline graph (the diamond is ~8 lines). Minor,
-bounded duplication is preferred over an `#[path]`/module hack to share code between
-an `examples/` bin and a `tests/` bin (they cannot import each other). If the
-duplication exceeds ~3 generators, revisit — but at this size it does not.
+example owns the canonical copies; the tests build their own in-file copies of the
+generators they need (`explain` → `diamond`; `overflow` + `evaluate` → `deep_chain`,
+one generator shared across the two reds; `quadratic` → `dense_evict`). That is **3
+generators** duplicated across the `examples/`↔`tests/` boundary — at the revisit
+threshold, not over it. Minor, bounded duplication is preferred over an
+`#[path]`/module hack to share code between an `examples/` bin and a `tests/` bin
+(they cannot import each other). If a 4th generator appears, revisit.
 
 ## 4. Generators (public-API only)
 
 Signatures (in `examples/scale_harness.rs`; the diamond reappears inline in the test):
 
 ```rust
-// Linear spine 0→1→…→(n-1) on one Reject overlay referenced by the order spec.
-// Drives Tarjan + level_of recursion depth = n. Returns the built Graph (or the
-// build attempt — at large n this is where the SIGABRT happens, by intent).
-fn deep_chain(n: u32) -> cordage::Graph;
+// Linear spine 0→1→…→(n-1) on one overlay referenced by the order spec. Drives
+// Tarjan + level_of recursion depth = n (the overflow cliff) AND, re-used at a
+// sub-overflow n, the evaluate cliff: reachable(k) walks the n-k-node suffix, so
+// the per-node BFS sum is Σ(n-k) = O(n²). Returns the built Graph plus the spine
+// overlay id (the overflow path ignores the id; evaluate needs it for the
+// ChannelSpec). At large n the build attempt is where the SIGABRT happens, by intent.
+fn deep_chain(n: u32) -> (cordage::Graph, OverlayId);
 
 // `layers` diamond stages: each stage splits to 2 then rejoins. Predecessor-path
 // count from source to sink = 2^layers (exact, deterministic). Acyclic.
@@ -57,12 +69,21 @@ fn diamond(layers: u32) -> (cordage::Graph, /*source*/ NodeId, /*sink*/ NodeId, 
 fn dense_evict(nodes: u32, edges_per_node: u32) -> cordage::Graph;
 ```
 
+The evaluate cliff (RSK-004) reuses the **deep-chain spine** rather than a dedicated
+generator: it is the right demonstrator (sparse, E=O(V), reachable depth O(V) — so
+the current O(V·(V+E)) query stands apart from the O(V+E) topo-fold fix), and reusing
+it honours D4. The two cliffs that share the spine differ only in `n`: the overflow
+red builds at target depth (~80k → abort); the evaluate red builds at a **sub-overflow
+n** (the build must *succeed* so the query cost is isolated — tune empirically, ~5–12k,
+well under the ~80k overflow threshold).
+
 ## 5. Measurement example — CLI contract
 
 ```
 scale_harness --cliff overflow  --n N           # build deep_chain(N); may SIGABRT
 scale_harness --cliff explain   --layers L      # build diamond(L); print path count + time
 scale_harness --cliff quadratic --n N           # build dense_evict(N,..); print build time
+scale_harness --cliff evaluate  --n N           # build deep_chain(N) sub-overflow; time evaluate() over the spine
 ```
 
 - Parses args via `std::env::args` (no clap — zero-dep). Unknown args → nonzero exit
@@ -103,7 +124,7 @@ branch builds the chain and dies, the parent asserts the child's exit signal.
 #[test] #[ignore = "re-execs itself to crash a child; demonstrates RSK-003"]
 fn deep_chain_overflows_inside_target_scale() {
     if std::env::var_os("CORDAGE_OVERFLOW_CHILD").is_some() {
-        let _ = deep_chain(80_000);           // CHILD: overflow → process abort (rc 134)
+        let _ = deep_chain(80_000);           // CHILD: build aborts (rc 134); tuple unused
         return;
     }
     let exe = std::env::current_exe().expect("test bin path");
@@ -134,13 +155,51 @@ fn eviction_fixpoint_scales_superlinearly() {
 The printed ratio (probe saw ~17×) is the evidence; the assert only guards against a
 hang masquerading as a pass.
 
+### 6.4 evaluate — measured, recorded, coarse bound (RSK-004, first-measured-here)
+Same shape as §6.3 — a measured-ratio red, not an exact-count or subprocess one.
+`evaluate()` runs one `reachable()` BFS per node (`query.rs:256`, the `for ord in
+0..node_count` loop); over the deep-chain spine each BFS walks the suffix, so the
+whole call is O(V²). Builds the spine at two **sub-overflow** sizes, evaluates an
+idempotent channel (`Combinator::Any`, a forward `Direction`) seeded once at node 0,
+times each, prints the ratio, asserts only a loose upper bound:
+```rust
+#[test] #[ignore = "slow; records the evaluate() per-node-BFS quadratic for RSK-004"]
+fn evaluate_scales_quadratically_in_node_count() {
+    let (g1, ov1) = deep_chain(5_000);    // sub-overflow: build MUST succeed
+    let (g2, ov2) = deep_chain(10_000);   // so query-time cost is isolated
+    let seed = |n| BTreeMap::from([(NodeId(0), /* one in-domain ChannelValue */)]);
+    let t1 = time(|| g1.evaluate(ChannelSpec::new(ov1, Combinator::Any, FWD), &seed(0)));
+    let t2 = time(|| g2.evaluate(ChannelSpec::new(ov2, Combinator::Any, FWD), &seed(0)));
+    eprintln!("evaluate ratio {:.1}x for 2x nodes", t2.as_secs_f64()/t1.as_secs_f64());
+    assert!(t2 < std::time::Duration::from_secs(120));   // sanity, not a tight gate
+}
+```
+2× nodes → ~4× time is the quadratic signal (vs ~2× for the O(V+E) topo-fold fix).
+The exact `Direction`/`ChannelValue` variant names are pinned at implementation time
+against the public enums (`lib.rs:128/137`); the in-domain seed must match `Any`'s
+value kind. Build is excluded from the timed closure (graphs are built *before*
+`time(||…)`), so the measurement is the query, not the O(V) acyclic build. Unlike §6.3
+this red builds **no dense graph** — the cost is purely the per-node re-BFS, which is
+what isolates RSK-004 from the RSK-003 eviction quadratic.
+
+**N-pair tuning (impl):** both `n` must be (a) safely **sub-overflow** so the spine
+build succeeds — the recursion margin is large (overflow ~80k; the snippet's 5–10k is
+~⅛ of that), validate empirically rather than assume; and (b) large enough that the
+larger `evaluate` runs long enough (target ≳ a few hundred ms) for the recorded ratio
+to clear scheduler noise — if both calls are sub-ms the 4× signal blurs. The *recorded
+ratio* is the evidence; the `< 120s` assert only guards a hang.
+
 ## 7. Findings note (`notes.md`)
 
-Consolidates: the three confirmed measurements, the harness commands that reproduce
-each, the in-target verdict (overflow ~80k, eviction quadratic, explain 2^layers),
-H1's honest position (recompute is fine *only after* Fix A/B; explain needs Fix C
-before any deep-lattice consumer), and the OQ-2 allocation gap. Cites RSK-002/003 and
-the fix follow-ups.
+Consolidates: the four measurements, the harness commands that reproduce each, the
+in-target verdict (overflow ~80k, eviction quadratic, explain 2^layers, evaluate
+O(V²) per-node BFS), H1's honest position (recompute is fine *only after* Fix A/B/D;
+explain needs Fix C before any deep-lattice consumer), and the OQ-2 allocation gap.
+Cites RSK-002/003/004 and the fix follow-ups. **Provenance is stated precisely:** the
+RSK-002/003 numbers are the deleted probe's, *re-confirmed* by this harness; the
+RSK-004 number is **first measured here** — the probe never ran it (it was filed
+analytically, after the probe, from the `query.rs:256` read), so the harness is its
+sole empirical source, not a reproducer of a prior run.
 
 ## 8. Verification alignment
 
@@ -175,3 +234,14 @@ the fix follow-ups.
   test — the only flake-free way to red an exponential.
 - **D4 — no shared generator module**; bounded inline duplication beats an
   `examples`↔`tests` import hack at this size.
+- **D5 — RSK-004 folded in as the 4th cliff** (was the one open scope decision;
+  resolved with the user 2026-06-11). The evaluate per-node-BFS quadratic is the same
+  class and same red shape as the eviction quadratic (§6.4 mirrors §6.3), and the
+  public surface (`Graph::evaluate`, `ChannelSpec::new`, `ChannelValue` — verified)
+  supports a ~30-line black-box measured-ratio red reusing the deep-chain spine at a
+  sub-overflow `n`. A 4th red here is far cheaper than a later separate harness slice,
+  and the findings note is more complete (all build- and query-time cliffs in one
+  place). *Distinct provenance, stated in §7:* RSK-004 is analytical-only —
+  **first measured by this harness**, not a reproducer of the deleted probe. *Not
+  folded:* the evaluate fix itself (single reverse-topo fold) is Fix D below, a
+  follow-up, not this slice.

@@ -9,8 +9,9 @@ and non-recursive**.
 
 That guarantee has now been **empirically refuted** by a post-close probe (2026-06-11,
 codex + Opus agree; the probe harness was run then **deleted** — it left numbers in
-RSK-002 / RSK-003 but no committed, reproducible artifact). Three confirmed cliffs,
-all reachable **inside** the target scale:
+RSK-002 / RSK-003 but no committed, reproducible artifact). **Four cliffs** in scope —
+three **probe-confirmed** below, plus **RSK-004** (analytical-only, folded in D5,
+first measured by this harness) — all reachable **inside** the target scale:
 
 - **RSK-003 overflow (impact high — a crash).** `Tarjan::strongconnect`
   (`resolve.rs:321`) and `level_of` (`resolve.rs:545`) recurse with depth = graph
@@ -26,6 +27,12 @@ all reachable **inside** the target scale:
   16.7M chains at 24 diamond layers in 1.1s, **2^layers** growth, OOM/hang beyond.
   `extend_chains` (`query.rs:150/158`) clones the suffix per branch — O(path_len)
   copy on top of the exponential count.
+- **RSK-004 evaluate quadratic (analytical-only — first measured here).** `evaluate()`
+  (`query.rs:256`) runs a fresh `reachable()` BFS per node — O(V·(V+E)); over a sparse
+  deep spine that is O(V²). The deleted probe **never ran this** (filed analytically
+  after it, from the `query.rs:256` read), so the harness is its sole empirical source.
+  Folded in (D5) because it is the same class and same red shape as the RSK-003
+  eviction quadratic.
 
 The discovery question ("do these break in-target?") is **answered: yes.** What the
 deleted probe did not leave is a **durable, committed regression gate** and a
@@ -43,22 +50,26 @@ Land the **durable evidence the probe didn't leave** — a committed, reproducib
 harness and a findings note. Measure-and-red only; **no fixes**.
 
 - **Graph generators** (deterministic, public-API only): a deep-chain (linear spine
-  of N nodes), a diamond/lattice (parametrised by layers), and a dense-cycle Evict
-  overlay (drives the eviction fixpoint).
+  of N nodes — drives both the overflow cliff at target depth *and*, reused at a
+  sub-overflow N, the RSK-004 evaluate cliff), a diamond/lattice (parametrised by
+  layers), and a dense-cycle Evict overlay (drives the eviction fixpoint).
 - **Measurement example** — `crates/cordage/examples/scale_harness.rs`, arg-driven
-  (`--cliff overflow|quadratic|explain --n N [--layers L]`), std-only
+  (`--cliff overflow|quadratic|explain|evaluate --n N [--layers L]`), std-only
   (`std::time::Instant`). One run = one measurement; on the overflow path it
   deliberately SIGABRTs. Doubles as the **subprocess target** for the overflow test.
 - **Red tests** — `crates/cordage/tests/scale_cliffs.rs`, `#[ignore]`d (long /
   deliberately-crashing, off the default gate):
   - **explain** — deterministic, exact: `explain(sink).paths()[ov].len() == 2^layers`.
     A clean non-flaky red for RSK-002.
-  - **overflow** — spawns the example as a **subprocess** at a target-scale depth and
-    asserts the child terminates by signal (rc 134). Demonstrates the crash without
-    aborting the test process (a stack overflow is uncatchable in-process — see R1).
+  - **overflow** — re-execs its own test binary as a **subprocess** at a target-scale
+    depth and asserts the child terminates by signal (rc 134). Demonstrates the crash
+    without aborting the test process (a stack overflow is uncatchable in-process — R1).
   - **quadratic** — measures eviction build-time across two edge densities and
     **records** the ratio (printed); coarse sanity bound only, not a flake-prone hard
     timing assertion.
+  - **evaluate** (RSK-004) — measures `evaluate()` over the deep spine at two
+    sub-overflow node counts and **records** the ratio (~4× for 2× nodes); same coarse
+    bound as quadratic. The spine build must *succeed* so query-time cost is isolated.
 - **Findings note** (`notes.md`) — consolidates the confirmed numbers with the
   committed harness as their reproducer, and states plainly what H1 can honestly
   assert and which fixes the evidence justifies.
@@ -84,6 +95,13 @@ harness and a findings note. Measure-and-red only; **no fixes**.
   cliff (a crash) is uncatchable by criterion and needs a hand-rolled subprocess
   harness regardless. A bench member is the right home for *sustained, regression-
   tracked* benching later — a follow-up, not this throwaway harness.
+- **D5 — RSK-004 folded in as the 4th cliff** (resolved with the user 2026-06-11; the
+  one open scope decision). Same class and same red shape as the RSK-003 eviction
+  quadratic; the public surface (`Graph::evaluate`, `ChannelSpec::new`, `ChannelValue`
+  — verified) supports a ~30-line black-box measured-ratio red reusing the deep-chain
+  spine at sub-overflow N. Cheaper than a later separate harness slice; findings note
+  covers all build- and query-time cliffs in one place. *Not folded:* the evaluate fix
+  (Fix D) — a follow-up. Full rationale: design.md D5.
 
 ## Affected Surface
 
@@ -117,14 +135,15 @@ harness and a findings note. Measure-and-red only; **no fixes**.
 Done when:
 
 - `examples/scale_harness.rs` + `tests/scale_cliffs.rs` exist, std-only, committed.
-- `cargo test -p cordage --ignored` runs the reds: the explain test asserts exact
-  2^layers; the overflow test asserts a subprocess rc-134 at target depth; the
-  quadratic test prints its ratio.
-- `notes.md` consolidates the confirmed numbers, citing the harness as reproducer,
-  and states H1's honest position + the justified fixes.
+- `cargo test -p cordage --ignored` runs the four reds: explain asserts exact
+  2^layers; overflow asserts a subprocess rc-134 at target depth; quadratic and
+  evaluate each print their ratio.
+- `notes.md` consolidates the numbers, citing the harness as reproducer, states H1's
+  honest position + the justified fixes, and flags RSK-004's distinct provenance
+  (first-measured-here, not a probe reproduction).
 - cordage zero-dep intact (`Cargo.toml` unchanged); `just check` green (the harness
   is `#[ignore]`d / an example, off the default gate).
-- The three fixes are filed as follow-up slices (below), not patched here.
+- The four fixes are filed as follow-up slices (below), not patched here.
 
 ## Follow-Ups (fixes — now justified measured work, each TDD-greened against this slice's reds)
 
@@ -137,4 +156,7 @@ Done when:
   canonical chain), policy enumerates on demand — greens the exponential (RSK-002).
   Larger: changes the `Vec<Vec<NodeId>>` return shape, touches F47 semantics +
   downstream consumers.
+- **Fix D (algorithmic):** single reverse-topo fold for `evaluate()` — process nodes
+  in topo order, combine each node's seed with already-folded successors; one O(V+E)
+  pass for the idempotent combinators, no per-node re-search — greens RSK-004.
 - Trailing SPEC-001 H1 wording reconcile once the fixes land.
