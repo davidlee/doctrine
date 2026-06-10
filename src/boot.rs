@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use serde_json::{Map, Value};
 
-use crate::{adr, fsutil, governance, install, memory, policy, root};
+use crate::{adr, fsutil, governance, install, memory, policy, root, standard};
 
 /// The snapshot lives in the runtime-state tree — derived, gitignored
 /// (inherits the `.doctrine/*` ignore), `rm -rf`-able. Never authoritative.
@@ -50,8 +50,8 @@ struct Section {
     body: String,
 }
 
-/// Where a section's body comes from. New kinds (Policies, Standards) append to
-/// the sequence with no other change. `ExecPath` is build-volatile, not
+/// Where a section's body comes from. New governance kinds append a `GovRows`
+/// row to the sequence with no other change. `ExecPath` is build-volatile, not
 /// governance, so it is ordered **last** (see `boot_sequence`).
 enum SourceKind {
     /// The resolved `current_exe()` path — so the agent invokes the off-PATH CLI.
@@ -63,11 +63,13 @@ enum SourceKind {
     /// The project's `.doctrine/governance.md` body, read from disk (the
     /// user-owned layer), or a marker when absent.
     Governance,
-    /// Accepted-ADR rows (fed in PHASE-02).
-    Adrs,
-    /// In-force (`required`) policy rows (fed in PHASE-04).
-    Policies,
-    /// Memory pointers (fed in PHASE-02).
+    /// A governance-kind listing filtered to its in-force status SET — accepted
+    /// ADRs, required policies, default+required standards. One arm projects all
+    /// numbered governance kinds: the kind descriptor + the status set that
+    /// reveals past the list hide-set (SL-033 — the per-kind-arm collapse).
+    GovRows(&'static governance::GovKind, &'static [&'static str]),
+    /// Memory pointers — its own variant: `memory::list_rows` takes a distinct
+    /// signature (a `None` scope arg), not the `GovKind` spine.
     Memories,
 }
 
@@ -82,8 +84,18 @@ fn boot_sequence() -> Vec<(&'static str, SourceKind)> {
             SourceKind::Static("routing-process.md"),
         ),
         ("Governance (project)", SourceKind::Governance),
-        ("Accepted ADRs", SourceKind::Adrs),
-        ("Active Policies", SourceKind::Policies),
+        (
+            "Accepted ADRs",
+            SourceKind::GovRows(&adr::ADR_KIND, &["accepted"]),
+        ),
+        (
+            "Active Policies",
+            SourceKind::GovRows(&policy::POLICY_KIND, &["required"]),
+        ),
+        (
+            "Active Standards",
+            SourceKind::GovRows(&standard::STANDARD_KIND, &["default", "required"]),
+        ),
         ("Memory", SourceKind::Memories),
         // build-volatile — keep LAST so a path change hits only the cache tail.
         ("Invoking doctrine", SourceKind::ExecPath),
@@ -123,33 +135,22 @@ fn marker(label: &str) -> String {
 fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Section {
     let body = match kind {
         SourceKind::ExecPath => exec.display().to_string(),
-        // accepted ADRs only — the cache-stable decisions worth the prefix. An
-        // explicit `--status` reveals them past the list hide-set, which is exactly
-        // the boot intent (SL-025 §5.1 — boot is a declared non-clap consumer that
-        // builds a `listing::ListArgs` directly).
-        SourceKind::Adrs => section_or_marker(
+        // A numbered governance kind, filtered to its IN-FORCE status set: accepted
+        // ADRs, required policies, default+required standards. The explicit
+        // `status` set reveals these past the list hide-set (deprecated|retired|…) —
+        // exactly the boot intent (SL-025 §5.1 — boot is a declared non-clap
+        // consumer building a `listing::ListArgs` directly). One arm for every
+        // kind (SL-033): a single-element set reproduces the old per-kind arms
+        // byte-for-byte; a multi-element set (standards: default+required) is what
+        // the `&[&str]` buys. The error≡empty marker collapse and supersession⇏status
+        // gap are inherited, shared, and out of scope here (§5.5) — documented, not fixed.
+        SourceKind::GovRows(kind, set) => section_or_marker(
             heading,
             governance::list_rows(
-                &adr::ADR_KIND,
+                kind,
                 root,
                 crate::listing::ListArgs {
-                    status: vec!["accepted".to_string()],
-                    ..Default::default()
-                },
-            ),
-        ),
-        // IN-FORCE policies only — `required` is the standing-rule status (D2/§5.5).
-        // An explicit `--status required` reveals them past the list hide-set
-        // (deprecated|retired), mirroring the accepted-ADR section above. The
-        // error≡empty marker collapse and supersession⇏status gap are inherited,
-        // shared, and out of scope here (§5.5) — documented, not fixed.
-        SourceKind::Policies => section_or_marker(
-            heading,
-            governance::list_rows(
-                &policy::POLICY_KIND,
-                root,
-                crate::listing::ListArgs {
-                    status: vec!["required".to_string()],
+                    status: set.iter().map(|s| (*s).to_string()).collect(),
                     ..Default::default()
                 },
             ),
@@ -888,6 +889,29 @@ mod tests {
         assert!(policies < memory, "Active Policies must precede Memory");
     }
 
+    // --- VT-2: section order (Active Standards between Active Policies and Memory) ---
+
+    #[test]
+    fn boot_sequence_orders_active_standards_after_active_policies() {
+        let h = headings();
+        let pos = |needle: &str| {
+            h.iter()
+                .position(|x| *x == needle)
+                .unwrap_or_else(|| panic!("{needle} present"))
+        };
+        let adrs = pos("Accepted ADRs");
+        let policies = pos("Active Policies");
+        let standards = pos("Active Standards");
+        let memory = pos("Memory");
+        assert!(adrs < policies, "ADRs precede Policies");
+        assert_eq!(
+            standards,
+            policies + 1,
+            "Active Standards must sit immediately after Active Policies"
+        );
+        assert!(standards < memory, "Active Standards must precede Memory");
+    }
+
     // --- VT-1: render determinism + structure ---
 
     #[test]
@@ -1173,6 +1197,88 @@ mod tests {
         );
     }
 
+    // --- VT-3/VT-4: real producer — in-force standards (default + required), the
+    // first kind with a two-element in-force set. A one-char edit dropping a
+    // status from the GovRows set turns this red (VT-4 — the gate bites). ---
+
+    #[test]
+    fn regenerate_projects_in_force_standards_filtered() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // five standards, one per status — only `default` + `required` are in force.
+        standard::run_new(Some(root.to_path_buf()), Some("A draft rule".into()), None).unwrap();
+        standard::run_new(
+            Some(root.to_path_buf()),
+            Some("A default rule".into()),
+            None,
+        )
+        .unwrap();
+        standard::run_new(
+            Some(root.to_path_buf()),
+            Some("A required rule".into()),
+            None,
+        )
+        .unwrap();
+        standard::run_new(Some(root.to_path_buf()), Some("An old rule".into()), None).unwrap();
+        standard::run_new(Some(root.to_path_buf()), Some("A dead rule".into()), None).unwrap();
+        standard::run_status(
+            Some(root.to_path_buf()),
+            2,
+            standard::StandardStatus::Default,
+        )
+        .unwrap();
+        standard::run_status(
+            Some(root.to_path_buf()),
+            3,
+            standard::StandardStatus::Required,
+        )
+        .unwrap();
+        standard::run_status(
+            Some(root.to_path_buf()),
+            4,
+            standard::StandardStatus::Deprecated,
+        )
+        .unwrap();
+        standard::run_status(
+            Some(root.to_path_buf()),
+            5,
+            standard::StandardStatus::Retired,
+        )
+        .unwrap();
+        // standard 1 stays `draft`.
+
+        assert!(regenerate(root, exec).unwrap());
+        let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
+
+        // both in-force standards project with prefixed STD- ids.
+        assert!(
+            snap.contains("STD-002  default"),
+            "default standard row projected with prefixed id:\n{snap}"
+        );
+        assert!(
+            snap.contains("STD-003  required"),
+            "required standard row projected with prefixed id:\n{snap}"
+        );
+        // draft / deprecated / retired are absent — boot is the in-force view.
+        // scope the negative checks to the Active Standards section body only.
+        let section = snap
+            .split_once("## Active Standards\n")
+            .map(|(_, tail)| tail.split_once("\n## ").map_or(tail, |(body, _)| body))
+            .expect("Active Standards section present");
+        for hidden in ["a-draft-rule", "an-old-rule", "a-dead-rule"] {
+            assert!(
+                !section.contains(hidden),
+                "out-of-force standard {hidden} must not project:\n{section}"
+            );
+        }
+        assert!(
+            !snap.contains("<!-- Active Standards:"),
+            "standard marker replaced when an in-force standard exists"
+        );
+    }
+
     #[test]
     fn regenerate_empty_policy_corpus_renders_marker() {
         let dir = tempfile::tempdir().unwrap();
@@ -1340,6 +1446,18 @@ mod tests {
         )
         .unwrap();
         policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required).unwrap();
+        standard::run_new(
+            Some(root.to_path_buf()),
+            Some("Two-space indent".into()),
+            None,
+        )
+        .unwrap();
+        standard::run_status(
+            Some(root.to_path_buf()),
+            1,
+            standard::StandardStatus::Required,
+        )
+        .unwrap();
         memory::run_record(
             Some(root.to_path_buf()),
             &memory::RecordArgs {
