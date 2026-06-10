@@ -1,0 +1,41 @@
+memory_uid = "mem_019eaf5cd7a77430ad8144aeb9162174"
+memory_key = "mem.pattern.distribution.scaffold-new-skill"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Scaffold a new freestanding skill plugin"
+summary = "Scaffold a freestanding skill plugin: plugin.json + skills/<name>/SKILL.md + marketplace.json entry"
+created = "2026-06-10"
+updated = "2026-06-10"
+
+[scope]
+paths = []
+globs = ["plugins/**", ".claude-plugin/**"]
+commands = []
+tags = ["plugins", "skills", "distribution"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7a0bbcf6ccfc444fdd01bdabe090cecf8f96f0d4"
+ref_name = "refs/heads/main"
+checkout_state_id = "15a93bcef358a9480091297d62bd3bd74598845cd21add254a86a014f1443d8d"
+base_commit = "b0622dad2ee7d5c04d189c279df90e9f6d08dee3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
