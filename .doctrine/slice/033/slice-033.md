@@ -35,12 +35,16 @@ left in `src/boot.rs`: the per-kind boot projection is not yet parameterized.
 - **Action 2 (boot parameterization)** — collapse `boot.rs`'s per-kind governance
   projection. Today `SourceKind` carries one variant per kind (`Adrs`, `Policies`)
   and `produce` has one near-verbatim match arm each, differing only in the
-  `GovKind` and the status-filter literal. Replace both with a single
-  data-carrying `SourceKind::Governance(&'static GovKind, &'static str)` (kind +
-  in-force status filter) and one arm, so STD's boot surface — and any future
-  governance kind — is a **one-line `boot_sequence()` addition**, not a new
-  variant + new arm. The ADR and POL section bytes must stay byte-identical
-  (behaviour-preservation gate); the existing boot suites are the proof.
+  `GovKind` and the status-filter set. Replace both with a single data-carrying
+  variant (kind + in-force status **set**) and one arm, so STD's boot surface —
+  and any future governance kind — is a **one-line `boot_sequence()` addition**,
+  not a new variant + new arm. The filter is a `&'static [&'static str]` (not a
+  single literal): STD has two in-force statuses (`default`, `required`), and
+  `ListArgs.status` is already a `Vec`, so the set costs nothing. The new variant
+  is **not** named `Governance` (that name already binds the `governance.md` disk
+  reader) — e.g. `GovRows(&'static GovKind, &'static [&'static str])`. The ADR and
+  POL section bytes must stay byte-identical (behaviour-preservation gate); the
+  existing boot suites are the proof.
 - **Glossary** — STD row already present (`STD-123`); no change intended
   (parity with SL-030 OQ-1).
 
@@ -59,18 +63,17 @@ left in `src/boot.rs`: the per-kind boot projection is not yet parameterized.
 ## Summary
 
 Third governance kind by the established POL playbook (thin data module over the
-shared spine) plus the boot-projection parameterization SL-030 deferred. The
-design must settle STD's **status vocab** before planning (see Follow-Ups /
-open question) — POL's `draft → required → deprecated/retired` may not map
-cleanly onto a *standard*'s lifecycle.
+shared spine) plus the boot-projection parameterization SL-030 deferred.
 
 ## Follow-Ups
 
-- **Open question for `/design`:** STD status vocabulary. POL uses `draft /
-  required / deprecated / retired` with `required` load-bearing (the boot in-force
-  filter). A standard's in-force state may read differently (`adopted` / `stable`
-  / `active`?). The boot parameterization's status-filter literal per kind depends
-  on this — resolve in design, do not assume POL's verbatim.
+- **RESOLVED (design):** STD status vocabulary = `draft / default / required /
+  deprecated / retired`. STD is a *sibling* of POL (both standing rules) that
+  gains a `default` tier — "recommended unless justified to deviate" (supekku
+  prior art), distinct from `required` (mandatory). In-force (boot) = the **set**
+  `{default, required}`; hide-set = `{deprecated, retired}`; the template seeds
+  `draft`. This is why the boot parameterization carries a status set, not a
+  single literal (see Action 2).
 - After this slice, the spine carries three riders (ADR/POL/STD) and boot is fully
   data-driven — a fourth kind would be pure data, no code-shape change. Worth a
   durable memory at close.
