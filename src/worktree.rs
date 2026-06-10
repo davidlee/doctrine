@@ -34,6 +34,8 @@ pub(crate) enum Tier {
     PhaseLink,
     /// `**/handover.md` — disposable agent context.
     Handover,
+    /// `.doctrine/slice/*/inquisition.md` — disposable adversarial-review scratch.
+    Inquisition,
     /// `.doctrine/memory/{index,embeddings,state,shipped}` — regenerable caches.
     MemoryCache,
 }
@@ -44,6 +46,7 @@ impl std::fmt::Display for Tier {
             Tier::State => "state",
             Tier::PhaseLink => "phase-link",
             Tier::Handover => "handover",
+            Tier::Inquisition => "inquisition",
             Tier::MemoryCache => "memory-cache",
         };
         f.write_str(name)
@@ -69,6 +72,7 @@ pub(crate) const WITHHELD: &[Withhold] = &[
     w(Tier::State, ".doctrine/state/**"),
     w(Tier::PhaseLink, ".doctrine/slice/*/phases"),
     w(Tier::Handover, "**/handover.md"),
+    w(Tier::Inquisition, ".doctrine/slice/*/inquisition.md"),
     w(Tier::MemoryCache, ".doctrine/memory/index/**"),
     w(Tier::MemoryCache, ".doctrine/memory/embeddings/**"),
     w(Tier::MemoryCache, ".doctrine/memory/state/**"),
