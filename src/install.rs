@@ -584,6 +584,31 @@ mod tests {
         );
     }
 
+    /// SL-033 PHASE-01: the standard tree is the third authored governance kind, so
+    /// the manifest must create it (parity with adr / policy) and must NOT ignore it
+    /// — install surface 1 of 3. The `.gitignore` negation (surface 2) and the
+    /// git-add round-trip (surface 3) are covered by the e2e commit test.
+    #[test]
+    fn embedded_manifest_creates_the_standard_tree() {
+        let manifest = load_manifest().unwrap();
+        assert!(
+            manifest
+                .dirs
+                .create
+                .iter()
+                .any(|d| d == ".doctrine/standard"),
+            "manifest must create the authored standard tree"
+        );
+        assert!(
+            !manifest
+                .gitignore
+                .entries
+                .iter()
+                .any(|e| e.starts_with(".doctrine/standard")),
+            "the authored standard tree must not be gitignored by the manifest"
+        );
+    }
+
     #[test]
     fn embedded_manifest_creates_and_ignores_the_skills_derived_tree() {
         let manifest = load_manifest().unwrap();

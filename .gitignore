@@ -15,6 +15,7 @@
 !.doctrine/slice/
 !.doctrine/adr/
 !.doctrine/policy/
+!.doctrine/standard/
 !.doctrine/backlog/
 !.doctrine/requirement/
 !.doctrine/spec/
