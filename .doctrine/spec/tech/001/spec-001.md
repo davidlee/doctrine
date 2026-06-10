@@ -248,6 +248,38 @@ urgency, or product vocabulary in the crate).
   overridden by a soft preference, and no false topological order is ever emitted
   (REQ-076/REQ-092). *Verification:* seeding `A —dep→ B`, `B —seq→ A` yields a stable
   order with the `seq` edge reported evicted — no panic, no false topo.
+- **D10 — `survey` and `next` are distinct sort keys; item-level authored priority
+  outranks actionability in `survey`, `next` leads with actionable work.** Closes
+  PRD-011 OQ-007 (this spec's OQ-3), per PRD-011 §6's stated precedence.
+  - **`survey`** is the *importance* lens over all active items:
+    `authored-priority → actionability → consequence → deterministic fallback`. A
+    high-priority **blocked** item therefore floats high, carrying a **blocked badge**
+    (and its blocker in the explanation) — surfacing "your most important work is
+    blocked, go unblock it" rather than burying it. survey never *claims* a blocked
+    item is actionable; the badge keeps the actionability channel honest.
+  - **`next`** is the *do-now* lens: filter to `actionable`, order the remainder by
+    `order_key` (D9: dep-topology → `seq` rank within a dep-eligible set → fallback).
+    A blocked item is absent from `next` (or in a separate blocked section), however
+    high its authored priority.
+  - The two diverge precisely on a **ranked-but-blocked** item: top of `survey`,
+    absent from `next`. That divergence is the feature — it is why two surfaces exist.
+
+  **Scope guards.** The *"authored priority"* that outranks actionability in `survey`
+  is the **item-level head-tail scalar** (PRD-011 OQ-001, FR-006/`REQ-054`) — **not**
+  the `seq`/`after` edge `rank`, which is a pairwise-edge attribute that only orders
+  *within* a dep-eligible set (D9) and never feeds survey's top-level sort. survey's
+  importance projection is a *different lens* from `order_key`; D9's hard-dep invariant
+  (`seq` never reorders across a `dep` edge) binds `order_key` (next's ordering), not
+  survey's projection — but a `dep`-blocked item is still shown blocked, never
+  reordered to imply it is unblocked. *Verification:* a high-priority item with an
+  unresolved `dep` blocker appears at survey's head with a blocked badge and is absent
+  from `next`; an equal-priority unblocked item leads `next`.
+
+  **Downstream input (like D6).** survey's authored-priority slot is supplied by the
+  OQ-001 item scalar, still open and owned by PRD-009. D10 fixes the *precedence
+  contract*; until OQ-001 lands, `survey` orders by `actionability → consequence →
+  fallback` with the authored-priority slot empty — no behaviour rests on an unbuilt
+  field.
 
 ## Open Questions
 
@@ -267,6 +299,13 @@ Resolved:
   consequence inputs.
 - ~~**OQ-5** — crate name + workspace layout.~~ Closed by D1: `cordage` at
   `crates/cordage/`, doctrine the root crate depending by path.
+- ~~**OQ-3** (PRD-011 OQ-007) — does authored priority outrank actionability in
+  `survey` while `next` leads with actionable work.~~ Closed by **D10**: yes — `survey`
+  is the importance lens (authored-priority → actionability → consequence → fallback),
+  `next` the do-now lens (actionable, ordered by `order_key`); they diverge on a
+  ranked-but-blocked item. The outranking priority is the **item-level scalar**
+  (OQ-001), not `seq`/`after` edge rank — the earlier "seq rank" framing was the
+  edge-vs-item conflation, now corrected.
 - ~~**OQ-7** (→ PRD-009) — the authored capture schema D4/D6 depend on.~~ Resolved by
   PRD-009 OQ-007: the `dep`/`seq` edges land as the agent-facing `needs`/`after` edges
   (FR-010 / `REQ-096` consumes `REQ-097`); the architectural trigger lands as the
@@ -281,9 +320,6 @@ Remaining:
 - **OQ-2** (PRD-011 OQ-006) — whether v1 derived `consequence` accounts for
   PRD-010 knowledge-record state, or defers governance pressure until PRD-010
   ships.
-- **OQ-3** (PRD-011 OQ-007) — whether an authored `seq` rank overrides
-  actionability in `survey` while `next` still prefers actionable work (how the
-  two surfaces diverge on a ranked-but-blocked item).
 - **OQ-4** (PRD-011 OQ-004) — transitive blocking shown by default, or only on an
   explicit `--transitive` / explain surface.
 - **OQ-6** — planning-gate enforcement strength for D6's trigger channel: soft
