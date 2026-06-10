@@ -338,13 +338,20 @@ Resolved:
   classifies); `after`'s `rank` is a pairwise-edge attribute, distinct from PRD-011
   OQ-001's still-open item-level scalar. Schema blessed; FR-005/D6 buildable once
   backlog implements it.
-
-Remaining:
-
-- **OQ-2** (PRD-011 OQ-006) — whether v1 derived `consequence` accounts for
-  PRD-010 knowledge-record state, or defers governance pressure until PRD-010
-  ships.
-- **OQ-6** — planning-gate enforcement strength for D6's trigger channel: soft
-  (skill remembers to check) vs hard (workflow/preflight step), and how the
-  plan↔audit divergence (D6 (a) vs (b)) is surfaced. Friction vs enforceability
-  (IMP-012 tension).
+- ~~**OQ-2** (PRD-011 OQ-006) — whether v1 derived `consequence` accounts for
+  PRD-010 knowledge-record state.~~ **Deferred (scopes v1; no new mechanism).**
+  v1 `consequence` = existing reference/lineage edges only (slices/specs/
+  requirements/drift, `supersedes`/`descends_from`). PRD-010's `knowledge_record`
+  is unbuilt (no `knowledge`/`record` CLI command exists) — can't scan what
+  doesn't exist. `consequence` is an open seam (D3/`REQ-080`): governance pressure
+  (e.g. "blocked by an open question") is additive, non-breaking, added when
+  PRD-010 implements `knowledge_record`. Lock-safe.
+- ~~**OQ-6** — planning-gate enforcement strength for D6's trigger channel.~~
+  **Deferred (scopes v1; no new mechanism).** v1 = soft (skill-check)
+  enforcement. D6 is itself resolved-pending (file-set sources unbuilt) — fixing
+  gate strength before the mask runs is premature. Partly a workflow/skill
+  concern (`/plan`, `/phase-plan`, `/audit`), adjacent to the engine. Soft
+  matches doctrine's ungated posture (PRD-009 §4). Revisit hard enforcement + the
+  plan↔audit divergence surface (D6 (a) vs (b)) when D6's prerequisites land
+  (IMP-012 tension decided then). Lock-safe — D6 fixes the mask *shape*; strength
+  is downstream.
