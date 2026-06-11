@@ -462,12 +462,26 @@ pub(crate) fn run_check_allowlist(path: Option<PathBuf>) -> anyhow::Result<()> {
     )
 }
 
-/// `doctrine worktree branch-point-check --base <SHA> [--head <SHA>]` — the
+/// Peel a base/head ref to its canonical commit sha for the stationarity compare.
+/// `rev-parse --verify <ref>^{commit}` resolves a sha, `HEAD`, a branch, or a
+/// (lightweight/annotated) tag down to the commit it names; an unresolvable ref
+/// errors, so the guard *bails* rather than comparing an unresolved symbol
+/// (ISS-002 / SL-041). Impure (the git read); the comparison stays in [`matches`].
+fn resolve_commit(root: &Path, reference: &str) -> anyhow::Result<String> {
+    Ok(git::git_text(
+        root,
+        &["rev-parse", "--verify", &format!("{reference}^{{commit}}")],
+    )?)
+}
+
+/// `doctrine worktree branch-point-check --base <REF> [--head <REF>]` — the
 /// funnel's one tested seam (SL-031 §5.2). Asserts coordination HEAD has not moved
 /// off the orchestrator's pre-spawn base before the batch commit.
 ///
-/// `--head` absent ⇒ the impure HEAD read (`git rev-parse HEAD`) of the worktree at
-/// `path`. Exit **0** on stationarity (`base == head`), **1** otherwise (the
+/// **Both** ends are resolved to a commit sha in the shell via [`resolve_commit`]
+/// before the compare (`--head` absent ⇒ `HEAD`); a symbolic ref is never trusted
+/// verbatim, and an unresolvable ref makes the verb bail (ISS-002 / SL-041). Exit
+/// **0** on stationarity (resolved `base == head`), **1** otherwise (the
 /// orchestrator re-dispatches the batch onto the moved HEAD — never commits on a
 /// moved base). Read-classed (no authored write): callable under worker-mode,
 /// though only the orchestrator drives it. C-V: ref-equality, not a merge-base —
@@ -477,17 +491,15 @@ pub(crate) fn run_branch_point_check(
     base: &str,
     head: Option<String>,
 ) -> anyhow::Result<()> {
-    let head = if let Some(h) = head {
-        h
-    } else {
-        let root = root::find(path, &root::default_markers())?;
-        git::git_text(&root, &["rev-parse", "HEAD"])?
-    };
-    if matches(base, &head) {
-        writeln!(io::stdout(), "stationary: HEAD == base {base}")?;
+    let root = root::find(path, &root::default_markers())?;
+    let head = head.unwrap_or_else(|| "HEAD".to_owned());
+    let base_sha = resolve_commit(&root, base)?;
+    let head_sha = resolve_commit(&root, &head)?;
+    if matches(&base_sha, &head_sha) {
+        writeln!(io::stdout(), "stationary: HEAD == base {base_sha}")?;
         Ok(())
     } else {
-        bail!("HEAD moved: base {base} != HEAD {head}");
+        bail!("HEAD moved: base {base_sha} != HEAD {head_sha}");
     }
 }
 

@@ -98,3 +98,70 @@ fn stationary_head_exits_zero_moved_head_exits_one() {
         "explicit differing head must exit nonzero"
     );
 }
+
+// --- SL-041 VT-2/3/4 — both ends resolved in the shell (ISS-002) ---
+
+#[test]
+fn symbolic_base_resolves_against_head() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = init_repo(tmp.path());
+
+    // VT-2: --base HEAD (symbolic) vs stationary HEAD ⇒ exit 0. The pre-fix verb
+    // string-compared "HEAD" != <sha> and falsely reported "moved" (exit 1).
+    let out = branch_point_check(root, &["--base", "HEAD"]);
+    assert!(
+        out.status.success(),
+        "symbolic --base HEAD on a stationary tree must exit 0; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // A branch name is also a symbolic ref ⇒ resolves and is stationary.
+    let out = branch_point_check(root, &["--base", "main"]);
+    assert!(out.status.success(), "symbolic --base main must exit 0");
+}
+
+#[test]
+fn both_ends_are_resolved_not_string_compared() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = init_repo(tmp.path());
+    let base = git(root, &["rev-parse", "HEAD"]);
+
+    // VT-3a (decisive): resolved sha base vs symbolic --head HEAD on a stationary
+    // tree ⇒ exit 0. Pre-fix this string-compared <sha> != "HEAD" and falsely
+    // reported "moved" — so it proves the *passed* --head is resolved, not raw.
+    let out = branch_point_check(root, &["--base", &base, "--head", "HEAD"]);
+    assert!(
+        out.status.success(),
+        "resolved base vs symbolic --head HEAD (stationary) must exit 0; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // A stray commit moves HEAD.
+    std::fs::write(root.join("b.txt"), "stray").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-q", "-m", "stray"]);
+
+    // VT-3b: stale base sha vs resolved --head HEAD ⇒ exit 1 (the passed --head
+    // is itself resolved, not trusted verbatim).
+    let out = branch_point_check(root, &["--base", &base, "--head", "HEAD"]);
+    assert!(
+        !out.status.success(),
+        "stale base vs resolved symbolic head must exit nonzero; stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+#[test]
+fn unresolvable_base_bails() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = init_repo(tmp.path());
+
+    // VT-4: a ref that resolves to nothing ⇒ the guard bails (non-zero), it does
+    // not silently treat the unresolved symbol as stationary or moved.
+    let out = branch_point_check(root, &["--base", "no-such-ref"]);
+    assert!(
+        !out.status.success(),
+        "unresolvable --base must bail (nonzero); stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
