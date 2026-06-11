@@ -27,6 +27,7 @@ toml_edit.workspace = true
 glob.workspace = true
 bm25.workspace = true
 regex-lite.workspace = true
+cordage = { path = "crates/cordage" }
 
 [dev-dependencies]
 tower = { workspace = true }

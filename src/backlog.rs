@@ -367,9 +367,11 @@ pub(crate) struct RiskFacet {
 }
 
 /// Outbound-only relations (ADR-004): a backlog item points OUT at the slices,
-/// specs, and drift it touches; the reverse view is derived (deferred, PRD-011).
-/// Shared verbatim by the raw and validated layers (no `"" -> None` seam — these
-/// are plain lists), seeded empty so `#[serde(default)]` parses a virgin item.
+/// specs, and drift it touches, plus two item→item axes — `depends_on` (hard
+/// prerequisite) and `before` (soft manual sequence). The reverse view is derived
+/// (deferred, PRD-011). Shared verbatim by the raw and validated layers (no
+/// `"" -> None` seam — these are plain lists), seeded empty so `#[serde(default)]`
+/// parses a virgin item.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
 struct Relationships {
     #[serde(default)]
@@ -378,6 +380,10 @@ struct Relationships {
     specs: Vec<String>,
     #[serde(default)]
     drift: Vec<String>,
+    #[serde(default)]
+    depends_on: Vec<String>,
+    #[serde(default)]
+    before: Vec<String>,
 }
 
 /// Parse a kebab token into its closed enum via the serde derive — the single
@@ -802,12 +808,19 @@ fn format_show(item: &BacklogItem) -> String {
     // outbound relations (§5.5) — each axis only when non-empty; inbound is the
     // deferred registry surface's, NOT computed here (D-PHASE04-2 / ADR-004).
     let rel = &item.relationships;
-    if !rel.slices.is_empty() || !rel.specs.is_empty() || !rel.drift.is_empty() {
+    if !rel.slices.is_empty()
+        || !rel.specs.is_empty()
+        || !rel.drift.is_empty()
+        || !rel.depends_on.is_empty()
+        || !rel.before.is_empty()
+    {
         parts.push("\nrelationships:\n".to_string());
         for (label, refs) in [
             ("slices", &rel.slices),
             ("specs", &rel.specs),
             ("drift", &rel.drift),
+            ("depends_on", &rel.depends_on),
+            ("before", &rel.before),
         ] {
             if !refs.is_empty() {
                 parts.push(format!("  {label}: {}\n", refs.join(", ")));
@@ -872,6 +885,8 @@ fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
                 "slices": rel.slices,
                 "specs": rel.specs,
                 "drift": rel.drift,
+                "depends_on": rel.depends_on,
+                "before": rel.before,
             },
         },
     });
@@ -1136,6 +1151,9 @@ mod tests {
         assert_eq!(item.resolution, None);
         assert!(item.facet.is_none(), "a plain kind has no facet");
         assert_eq!(item.relationships, Relationships::default());
+        // the two PHASE-01 item→item axes default to `[]` on a virgin item (VT-1).
+        assert!(item.relationships.depends_on.is_empty());
+        assert!(item.relationships.before.is_empty());
     }
 
     #[test]
@@ -1449,6 +1467,8 @@ tags = []
     struct RelLit<'a> {
         slices: &'a [&'a str],
         specs: &'a [&'a str],
+        depends_on: &'a [&'a str],
+        before: &'a [&'a str],
     }
 
     /// The sole list-literal quoting: `[] → ""`, `["a","b"] → "\"a\", \"b\""`.
@@ -1486,9 +1506,12 @@ tags = []
         });
         let rels = f.rels.as_ref().map_or_else(String::new, |x| {
             format!(
-                "\n[relationships]\nslices = [{}]\nspecs = [{}]\ndrift = []\n",
+                "\n[relationships]\nslices = [{}]\nspecs = [{}]\ndrift = []\n\
+                 depends_on = [{}]\nbefore = [{}]\n",
                 toml_list(x.slices),
                 toml_list(x.specs),
+                toml_list(x.depends_on),
+                toml_list(x.before),
             )
         });
         format!("{head}{facet}{rels}")
@@ -2002,6 +2025,8 @@ tags = []
                 rels: Some(RelLit {
                     slices: &["SL-020"],
                     specs: &[],
+                    depends_on: &[],
+                    before: &[],
                 }),
             },
         );
@@ -2104,6 +2129,53 @@ tags = []
         );
     }
 
+    // --- VT-1: the two item→item axes (hard `depends_on` / soft `before`) render ---
+
+    #[test]
+    fn backlog_show_renders_depends_on_and_before() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // a populated item carrying both new outbound axes (hard prereq + soft seq).
+        write_fixture(
+            root,
+            Fixture {
+                kind: ItemKind::Issue,
+                id: 1,
+                slug: "s",
+                title: "T",
+                status: "open",
+                resolution: "",
+                tags: &[],
+                facet: None,
+                rels: Some(RelLit {
+                    slices: &[],
+                    specs: &[],
+                    depends_on: &["ISS-002"],
+                    before: &["ISS-003"],
+                }),
+            },
+        );
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+
+        // table seam: both axes render, in fixed hard-before-soft order.
+        let out = format_show(&item);
+        assert!(
+            out.contains("depends_on: ISS-002"),
+            "hard prereq axis renders: {out}"
+        );
+        assert!(
+            out.contains("before: ISS-003"),
+            "soft sequence axis renders: {out}"
+        );
+
+        // JSON seam: both keys carry the refs.
+        let json = show_json(&item).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let rel = &v["backlog"]["relationships"];
+        assert_eq!(rel["depends_on"][0], "ISS-002");
+        assert_eq!(rel["before"][0], "ISS-003");
+    }
+
     /// Overwrite a reserved risk item with an assessed `[facet]` — exercises the
     /// real read+validate path for a populated facet without the (PHASE-05) `edit`.
     fn write_assessed_risk(root: &Path, id: u32) {
@@ -2126,6 +2198,8 @@ tags = []
                 rels: Some(RelLit {
                     slices: &[],
                     specs: &[],
+                    depends_on: &[],
+                    before: &[],
                 }),
             },
         );
@@ -2144,7 +2218,12 @@ tags = []
                 resolution: "",
                 tags: &[],
                 facet: None,
-                rels: Some(RelLit { slices, specs }),
+                rels: Some(RelLit {
+                    slices,
+                    specs,
+                    depends_on: &[],
+                    before: &[],
+                }),
             },
         );
     }

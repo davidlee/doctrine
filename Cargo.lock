@@ -202,6 +202,7 @@ dependencies = [
  "anyhow",
  "bm25",
  "clap",
+ "cordage",
  "glob",
  "hex",
  "http-body-util",
