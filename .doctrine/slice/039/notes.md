@@ -32,20 +32,15 @@ Re-executed 2026-06-11 against the re-locked design (§10). The shipped old voca
 
 ## PHASE-02 — pure cordage adapter (`src/backlog_order.rs`)
 
-> **SUPERSEDED 2026-06-11 by the design RE-LOCK (D10 reconcile, design.md §10).**
-> This section documents the FIRST shipping of PHASE-02 against the OLD vocab —
-> `depends_on`/`before`, the forward-pointing `before` edge (`A.before=[B]` ⇒
-> `A→B`, *not* flipped), and `EdgeAttrs(0,0)` on every edge. The re-locked design
-> renames to `needs`/`after`, flips `after` to point backward (`A.after=[{to=B}]`
-> ⇒ `B→A`, uniform with `needs`), and carries genuine `EdgeAttrs(rank, age)`
-> eviction on the soft overlay. The corrective PHASE-02 re-execution replaces the
-> direction/EdgeAttrs claims below; supersede this section then (not yet — no code
-> until the plan is re-approved). **The R-C null result at the foot of this
-> section still holds and is NOT superseded** — it feeds PHASE-04 / OQ-B.
+> **CORRECTED & RE-EXECUTED 2026-06-11 to the re-locked PRD-009 vocab (D10).** The
+> first shipping (OLD vocab — `depends_on`/`before`, forward `before` edge `A→B`,
+> `EdgeAttrs(0,0)` on every edge) is preserved in git @ the pre-correction commit;
+> this section now documents the corrective re-exec. The R-C null result at the
+> foot still holds (feeds PHASE-04 / OQ-B).
 
 The vocabulary half of cordage: projects `OrderInput`, builds two overlays
-(`depends_on` Reject+Unbounded / `before` Evict+Unbounded) + one `OrderSpec`
-`[Along(dep), Along(before)]`, reads order + provenance back out as `ItemId` /
+(`needs` Reject+Unbounded / `after` Evict+Unbounded) + one `OrderSpec`
+`[Along(needs), Along(after)]`, reads order + provenance back out as `ItemId` /
 `Override`. No sort of its own (I1); pure, disk-free, `BacklogItem`-free.
 
 - **`build` returns `anyhow::Result`, not an infallible panic.** Design A2 framed a
@@ -53,10 +48,29 @@ The vocabulary half of cordage: projects `OrderInput`, builds two overlays
   posture denies `expect_used`/`unwrap_used`/`panic`/`unreachable` in lib code, so
   the lint-clean expression is a `map_err` propagate to the boundary — same intent
   (no recoverable path, never matched for recovery), surfaced as an `anyhow` error.
-- **Edge direction (D4).** `A.depends_on=[B]` ⇒ cordage edge **B→A** on the dep
-  overlay (the single flip at ingest); `A.before=[B]` ⇒ edge **A→B** on the before
-  overlay (already src-before-dst). Both layers `Along`; `EdgeAttrs::new(0,0)`
-  (durability unused this slice).
+- **Edge direction is now UNIFORM B→A (the load-bearing re-lock change).**
+  `A.needs=[B]` ⇒ cordage edge **B→A** (`EdgeAttrs::new(0,0)`, hard edges never
+  evict); `A.after=[{to=B, rank}]` ⇒ cordage edge **B→A** too (was the old forward
+  `before` A→B). One flip at ingest for both relations: ingest `src` = the resolved
+  predecessor (`to`/`dep`), `dst` = the authoring item. Both layers `Along`,
+  uniform src-before-dst — no per-overlay direction reasoning.
+- **Genuine `(rank, age)` eviction on `after`.** Each `after` edge carries
+  `EdgeAttrs::new(rank, age)`: `rank: i32` the authored per-edge rank, `age: u64` =
+  the edge's INDEX in that item's `after` array (`u64::try_from(idx)`, never `as`).
+  cordage's eviction key is `(rank, age, src, dst)` ascending (`resolve.rs:38`) —
+  lowest evicted first, so a higher-`rank` edge SURVIVES and, at equal rank, the
+  lower-`age` (earlier array position) edge is dropped. Retires the old A4
+  `(0,0)`-on-every-edge `(src,dst)` stand-in. Both halves of the key are unit-proven
+  (`lower_rank…` for rank, `lower_age_after_edge…` for age — the age test was
+  verified to FAIL if `age` were constant, so it genuinely discriminates the key).
+- **`Override` orientation is uniform across all reasons** (review fix). `from`
+  should have preceded `to`; it didn't, because `reason`. Evicted edges read
+  `src→from`, `dst→to` (already B→A); the `Dangling` drops were corrected to match
+  (`from` = the missing predecessor, `to` = the dependent) — the original corrective
+  draft left dangling in the un-flipped authored orientation, inconsistent with the
+  evicted paths and its own doc comment (caught by the codex adversarial pass; the
+  flip's seam is exactly where `mem.pattern.review.interaction-bugs-hide-between-
+  sound-parts` predicts a bug).
 - **Node allocation = the tier-2..4 fallback.** Nodes minted in `(exposure desc,
   created asc, canonical-id asc)` order; cordage's monotonic `NodeId` then carries
   the fallback wherever no overlay edge constrains a pair. `ItemId: Ord` is
@@ -64,14 +78,22 @@ The vocabulary half of cordage: projects `OrderInput`, builds two overlays
 - **`exposure` lives in `backlog.rs` as `exposure(Option<&RiskFacet>) -> u8`** — one
   fn, nested `weight` map (Low=1…Critical=4), `0` baseline for non-risk and
   part-assessed risk alike. This is the OQ-A split: derivation by the data,
-  vocabulary in `backlog_order.rs`. PHASE-03's `project` calls it.
+  vocabulary in `backlog_order.rs`. Shipped in PHASE-01 (`backlog.rs:499`); the
+  corrective re-exec did not re-touch it. PHASE-03's `project` calls it.
 - **Whole leaf is dead in the non-test build** (CLI consumer is PHASE-03). One
   module-level `#![cfg_attr(not(test), expect(dead_code, …))]` — the cfg-test-scoped
   self-clearing pattern (`mem.pattern.lint.dead-code-expect-vs-cfg-test`); an
   unconditional `expect` would fire unfulfilled under `cargo test`.
+- **Deferred (codex finding, pre-existing, NOT a corrective-delta regression):**
+  duplicate `ItemId`s in `&[OrderInput]` silently corrupt the bimap (`by_item`
+  overwrite while `by_node` retains both). Design §5.4 scopes the input to "one row
+  per non-terminal item" (PHASE-03's `project` guarantees it), so it cannot arise in
+  production — but the pure adapter doesn't fail loud on a precondition violation.
+  Captured as a backlog item rather than expanding this corrective phase.
 - **R-C bend (OQ-B, provisional null).** First real consumer needed **no** cordage
   API change — builder/overlay/edge/order_spec + provenance cycles/evictions
-  sufficed. PHASE-04 confirms and records the budget closure.
+  sufficed (now also the genuine `(rank, age)` eviction key, which existed as-is).
+  PHASE-04 confirms and records the budget closure.
 
 Surface widenings in `backlog.rs`: `ItemKind::canonical_id` and `ItemKind::prefix`
-→ `pub(crate)` (single-source reuse by `ItemId`, not a copy).
+→ `pub(crate)` (single-source reuse by `ItemId`, not a copy) — landed PHASE-01.
