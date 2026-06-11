@@ -1,0 +1,36 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 17
+slug = "tech-spec-spine"
+title = "Tech-spec spine"
+status = "draft"
+kind = "tech"
+category = "spec"
+c4_level = "component"
+parent = "SPEC-006"
+descends_from = "PRD-012"
+tags = ["spec", "spine", "c4-level", "descent", "parent", "source-anchor", "tech-only", "outbound-only"]
+responsibilities = [
+  "Define the tech-only flat spine fields on the parsed `Spec` — `descends_from`, `parent`, `c4_level`, and the repeatable `[[source]]` anchors — each `#[serde(default)]` so an unfilled or product spec parses with them absent/empty.",
+  "Fix `c4_level` to the closed C4 set (context, container, component, code) with kebab serde, an `Option<C4Level>` carried only when authored — the altitude axis hand-authoring stops at.",
+  "Carry `descends_from` (single-valued tech→`PRD-NNN`) and `parent` (single-valued `SPEC-NNN` decomposition) as outbound-only scalars (ADR-004) — the reciprocal children/realised-by views are derived, never stored.",
+  "Model a `[[source]]` code anchor as `{language, identifier, module?}` — the repeatable, tech-only list of code paths the spec governs, parsed via `#[serde(rename = \"source\")]` into `sources: Vec<Source>`.",
+  "Render the spine on `spec show` kind-gated and Some-gated — `c4 level`, `descends from`, `parent`, and the `sources:` block emit only when present, keeping product-spec and unfilled-tech output byte-stable.",
+  "Carry the `interactions.toml` peer-edge table (`[[edge]]` of `{target, type, notes?}`, parsed under the `edge` key) as the tech-only outbound `uses`/`calls` axis — the peering relation distinct from `parent` containment.",
+  "Harvest the spine refs (`descends_from`, `parent`) and interaction edges into the registry as `DescentEdge`/`ParentEdge`/`InteractionEdge` so the parent container's `validate` can FK-check them, including the `second_parent` parse-error classification.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/spec.rs"
+module = "doctrine::spec"
+
+[[source]]
+language = "rust"
+identifier = "src/registry.rs"
+module = "doctrine::registry"
+
+[[source]]
+language = "toml"
+identifier = "install/templates/interactions.toml"

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 208
+slug = "gate-the-closure-seam-by-target-edge-reconcile-only-from-audit-and-done-only-from-reconcile-every-other-source-to-those-targets-is-a-refused-seambreach"
+title = "Gate the closure seam by target edge: → reconcile only from audit and → done only from reconcile; every other source to those targets is a refused SeamBreach."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

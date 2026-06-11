@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 216
+slug = "carry-the-optional-resolution-close-reason-enum-and-the-risk-only-facet-risklevel-likelihoodimpact-origin-controls-as-typed-enums-through-the-empty-to-none-validation-seam"
+title = "Carry the optional Resolution close-reason enum and the risk-only [facet] (RiskLevel likelihood/impact, origin, controls) as typed enums through the empty-to-None validation seam."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

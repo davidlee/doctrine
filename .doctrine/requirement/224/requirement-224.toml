@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 224
+slug = "hide-deprecated-and-retired-rows-from-each-kinds-default-list-revealed-by-all-or-an-explicit-status-via-the-govkind-hidden-predicate"
+title = "Hide deprecated and retired rows from each kind's default list, revealed by --all or an explicit --status, via the GovKind hidden predicate."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

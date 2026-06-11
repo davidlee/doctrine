@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 221
+slug = "define-policy-pol-and-standard-std-governance-kinds-each-binding-a-govkind-descriptor-kind-stem-statuses-hidden-onto-the-shared-governance-spine"
+title = "Define policy (POL) and standard (STD) governance kinds, each binding a GovKind descriptor (kind, stem, statuses, hidden) onto the shared governance spine."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,31 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 15
+slug = "backlog-entity-surface"
+title = "Backlog entity surface"
+status = "draft"
+kind = "tech"
+category = "work-intake"
+c4_level = "component"
+parent = "SPEC-004"
+descends_from = "PRD-009"
+tags = ["backlog", "work-intake", "item-kinds", "status-lifecycle", "risk-facet", "relationships-seam", "priority-ordering", "kind-surface"]
+responsibilities = [
+  "Bind five `ItemKind`s (Issue, Improvement, Chore, Risk, Idea) onto five engine `Kind`s, each its own tree and reservation namespace under `.doctrine/backlog/<kind>/`, diverging only by prefix (ISS/IMP/CHR/RSK/IDE) and the risk-only `[facet]` seed.",
+  "Fix the closed work-item status vocabulary (open, triaged, started, resolved, closed) with a backlog-local `is_terminal` predicate (resolved/closed) driving the default `backlog list` hide-set, independent of the slice lifecycle.",
+  "Carry the kind-specific closed enums — `Resolution` (one generic kind-agnostic close-reason set) and the risk `[facet]` axes (`RiskLevel` likelihood/impact, origin, controls) — as typed enumerated storage through the `\"\" -> None` optional seam.",
+  "Hold the outbound `[relationships]` seam (slices, specs, drift forward links plus the priority-engine `needs`/`after`/`triggers` edges) appended edit-preservingly, refusing on a missing seeded array.",
+  "Mediate capture through `backlog new` and survey through `backlog list`, deriving canonical refs from the engine prefix and grouping the cross-kind list by declaration-order `ordinal` — a grouping, never a priority claim.",
+  "Project items into the `backlog_order` cordage adapter (`needs` hard / `after` soft overlays + exposure tiebreak) so priority order is composed by cordage, with the adapter owning only the domain vocabulary and performing no sort of its own.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/backlog.rs"
+module = "doctrine::backlog"
+
+[[source]]
+language = "rust"
+identifier = "src/backlog_order.rs"
+module = "doctrine::backlog_order"

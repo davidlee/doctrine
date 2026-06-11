@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 227
+slug = "project-active-policies-required-and-active-standards-default-required-into-the-boot-snapshot-via-governancelist-rows-with-an-explicit-in-force-set"
+title = "Project Active Policies (required) and Active Standards (default + required) into the boot snapshot via governance::list_rows with an explicit in-force set."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

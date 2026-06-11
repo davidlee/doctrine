@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 232
+slug = "model-a-source-anchor-as-language-identifier-optional-module-parsed-via-serde-rename-into-a-repeatable-sources-list"
+title = "Model a `[[source]]` anchor as language + identifier + optional module, parsed via serde rename into a repeatable `sources` list."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

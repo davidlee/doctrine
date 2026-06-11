@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 231
+slug = "carry-descends-from-techprd-and-parent-spec-as-single-valued-outbound-scalars-the-reciprocal-childrenrealised-by-views-are-derived-never-stored-adr-004"
+title = "Carry `descends_from` (tech→PRD) and `parent` (→SPEC) as single-valued outbound scalars; the reciprocal children/realised-by views are derived, never stored (ADR-004)."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

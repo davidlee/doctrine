@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 236
+slug = "treat-source-anchors-as-descriptive-not-currency-liveness-is-not-checked-so-a-stale-anchor-ships-silently-and-freshness-is-an-authoring-discipline"
+title = "Treat `[[source]]` anchors as descriptive, not currency: liveness is not checked, so a stale anchor ships silently and freshness is an authoring discipline."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

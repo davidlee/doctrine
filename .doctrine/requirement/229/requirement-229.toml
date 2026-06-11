@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 229
+slug = "define-descends-from-parent-c4-level-and-source-as-tech-only-flat-spine-fields-on-the-parsed-spec-each-serde-default-so-absent-on-a-product-or-unfilled-tech-spec"
+title = "Define `descends_from`, `parent`, `c4_level`, and `[[source]]` as tech-only flat spine fields on the parsed Spec, each serde-default so absent on a product or unfilled tech spec."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

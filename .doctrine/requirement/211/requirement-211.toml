@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 211
+slug = "keep-the-terminal-done-hide-done-abandoned-and-reopen-refusal-done-abandoned-predicates-distinct-so-an-abandoned-incomplete-slice-is-never-false-flagged-divergent"
+title = "Keep the terminal {done}, hide {done, abandoned}, and reopen-refusal {done, abandoned} predicates distinct so an abandoned-incomplete slice is never false-flagged divergent."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
