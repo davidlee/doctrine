@@ -830,7 +830,14 @@ impl Graph {
     /// coerced (F41). Pure; reads the resolved adjacency, invariant under the
     /// `OrderSpec` (I7/F18).
     pub fn evaluate(&self, spec: ChannelSpec, seeds: &BTreeMap<NodeId, ChannelValue>) -> Channel {
-        query::evaluate(&self.out, &self.incoming, self.node_count, spec, seeds)
+        query::evaluate(
+            &self.out,
+            &self.incoming,
+            &self.degraded_sccs,
+            self.node_count,
+            spec,
+            seeds,
+        )
     }
 
     /// The composed-order key of `node`, or `None` for a foreign/unknown id
