@@ -3,6 +3,33 @@
 Durable findings harvested from the disposable phase sheets. The runtime sheets
 under `.doctrine/state/` are `rm -rf`-able; what must survive lives here.
 
+## PHASE-01 (corrective) — PRD-009 vocab on the backlog model (`src/backlog.rs`)
+
+Re-executed 2026-06-11 against the re-locked design (§10). The shipped old vocab
+(`depends_on`/`before`, both `Vec<String>`) → PRD-009 `needs`/`after`/`triggers`.
+
+- **`Relationships` is one shared struct** (raw + validated) moved whole at
+  `validate` (A1 held) — the rename/retype threaded both layers in a single edit.
+- **`after`/`triggers` are net-new typed surface**, not a rename: `after:
+  Vec<AfterEdge>` (`AfterEdge { to, #[serde(default)] rank: i32 }`), `triggers:
+  Vec<Trigger>` (`Trigger { #[serde(default)] globs, #[serde(default)] note }`).
+  Both derive `Serialize` (Relationships does NOT) — `show_json` embeds
+  `rel.after`/`rel.triggers` directly through `json!`, no hand-built objects.
+- **Render split**: the four string axes (slices/specs/drift/needs) stay in the
+  one `[(label,&refs)]` loop; `after`/`triggers` carry payload → bespoke blocks.
+  Format (impl latitude): `after: B (rank 2), C` (rank suffix only when `!= 0`);
+  `triggers: [g1, g2] note` (globs bracketed, note trails when non-empty).
+- **A4 held — no data loss on rename.** No `deny_unknown_fields`, so the
+  renamed-away `depends_on`/`before` keys default `[]`; on-disk only `risk/002`
+  carried seeded-empty values. No populated old-vocab edge found (A4 STOP clear).
+- **PHASE-02's `backlog_order.rs` was untouched and stays green** — it owns its
+  own representation, doesn't read `Relationships`' private fields. Its corrective
+  re-execution (old `depends_on` semantics → `after`) is the NEXT phase.
+- VT-1 closed by: virgin round-trip (all three default `[]`),
+  `after_edge_round_trips_with_optional_rank` (bare `{to}`→rank 0),
+  `trigger_round_trips_with_optional_note` (`{globs}`→note ""), and
+  `backlog_show_renders_all_three_item_axes` (table + JSON).
+
 ## PHASE-02 — pure cordage adapter (`src/backlog_order.rs`)
 
 > **SUPERSEDED 2026-06-11 by the design RE-LOCK (D10 reconcile, design.md §10).**
