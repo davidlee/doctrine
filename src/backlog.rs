@@ -22,11 +22,14 @@
 //! is scoped to that one const (below), NOT module-wide, so genuinely-dead code
 //! introduced later still surfaces.
 
+use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
+
+use crate::backlog_order::{BacklogOrder, ItemId, OrderInput, Override, OverrideReason};
 
 use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
@@ -484,18 +487,8 @@ fn validate_facet(raw: RawRiskFacet) -> anyhow::Result<RiskFacet> {
 /// every non-risk item (a `None` facet) and every part-assessed risk alike —
 /// assessment is all-or-nothing for ordering. Weights are Low=1 … Critical=4 (A3);
 /// the product fits `u8`, no cast. The single derivation site — PHASE-03's
-/// `project` reads it here, not a second copy.
-///
-/// Self-clearing suppression scoped to the non-test build (the leaf lands ahead of
-/// its `project` consumer; the tests below are real uses under `cfg(test)`, so an
-/// unconditional `expect` would fire unfulfilled there).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by PHASE-03 project(); exercised by tests"
-    )
-)]
+/// `project` reads it here, not a second copy (the PHASE-01 self-clearing dead-code
+/// scope removed itself once `project` landed).
 pub(crate) fn exposure(facet: Option<&RiskFacet>) -> u8 {
     const fn weight(level: RiskLevel) -> u8 {
         match level {
@@ -509,6 +502,102 @@ pub(crate) fn exposure(facet: Option<&RiskFacet>) -> u8 {
         Some((l, i)) => weight(l) * weight(i),
         None => 0,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Pure: the ordering projection (BacklogItem -> the adapter's OrderInput)
+// ---------------------------------------------------------------------------
+
+/// A project-level drop (design §5.6 honest-record, the project half): an authored
+/// `needs`/`after` ref that does not even `parse_ref` to a `(kind, id)` — a stale or
+/// malformed token that can never become an `ItemId`, so it never reaches the adapter
+/// (whose `Dangling` covers the parses-but-not-a-node case). Carries the dependent's
+/// `ItemId` and the offending raw ref, so the shell names the drop loudly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AbsentDrop {
+    /// The item that authored the bad ref.
+    from: ItemId,
+    /// The unparseable ref string verbatim.
+    reference: String,
+}
+
+impl AbsentDrop {
+    /// The dependent item that authored the bad ref.
+    pub(crate) fn from(&self) -> ItemId {
+        self.from
+    }
+
+    /// The unparseable ref string.
+    pub(crate) fn reference(&self) -> &str {
+        &self.reference
+    }
+}
+
+/// Project the live (non-terminal) corpus into the adapter's inputs (design §5.4,
+/// OQ-A "projection in backlog.rs"). PURE — no clock/disk; `items` is the already-read
+/// corpus.
+///
+/// Node set = the **non-terminal** items (`!Status::is_terminal`) across all five
+/// kinds (§5.6 — a terminal item cannot participate in a live ordering). For each
+/// node, every authored `needs` ref and every `after` edge's `to` is resolved via
+/// `parse_ref` to an `ItemId`; a ref that fails to parse is recorded as an
+/// [`AbsentDrop`] (never silently dropped) and contributes no edge. Whether a *parsed*
+/// `ItemId` is itself a live node is the **adapter's** call (a non-node endpoint
+/// surfaces as a `Dangling` override) — `project` never pre-filters edges by node
+/// membership, keeping the honest record total.
+///
+/// **A-distinct (DD4).** The adapter's `by_item`/`by_node` bimap silently corrupts on
+/// a duplicate `ItemId` in the input slice. The corpus reads at most one item per
+/// `(kind, id)`, but `project` closes the precondition at the boundary: it builds the
+/// inputs keyed by `ItemId` (a `BTreeMap`), so the emitted `Vec<OrderInput>` carries
+/// strictly distinct `ItemId`s regardless of a malformed corpus.
+fn project(items: &[BacklogItem]) -> (Vec<OrderInput>, Vec<AbsentDrop>) {
+    let mut inputs: BTreeMap<ItemId, OrderInput> = BTreeMap::new();
+    let mut absent: Vec<AbsentDrop> = Vec::new();
+
+    for item in items.iter().filter(|i| !i.status.is_terminal()) {
+        let from = ItemId::new(item.kind, item.id);
+
+        let mut resolve = |reference: &str| -> Option<ItemId> {
+            if let Ok((kind, id)) = parse_ref(reference) {
+                Some(ItemId::new(kind, id))
+            } else {
+                absent.push(AbsentDrop {
+                    from,
+                    reference: reference.to_string(),
+                });
+                None
+            }
+        };
+
+        let needs: Vec<ItemId> = item
+            .relationships
+            .needs
+            .iter()
+            .filter_map(|r| resolve(r))
+            .collect();
+        let after: Vec<(ItemId, i32)> = item
+            .relationships
+            .after
+            .iter()
+            .filter_map(|e| resolve(&e.to).map(|to| (to, e.rank)))
+            .collect();
+
+        // A-distinct: the corpus is one row per `(kind, id)`, but key by `ItemId` so a
+        // duplicate can never reach the adapter's bimap (DD4).
+        inputs.insert(
+            from,
+            OrderInput::new(
+                from,
+                item.created.clone(),
+                exposure(item.facet.as_ref()),
+                needs,
+                after,
+            ),
+        );
+    }
+
+    (inputs.into_values().collect(), absent)
 }
 
 // ---------------------------------------------------------------------------
@@ -1074,6 +1163,102 @@ fn set_backlog_status(
     Ok(resolution)
 }
 
+/// One outbound item→item relationship-axis append (PHASE-03 set verbs). `Needs`
+/// carries the prereq refs (a string array); `After` carries one soft-sequence edge
+/// `{ to, rank }` (the array-of-inline-tables axis, one `to` per invocation — OQ-C).
+/// The refs are pre-validated by the shell before this is called.
+enum RelEdit<'a> {
+    /// Append these prereq refs to `[relationships].needs`.
+    Needs(&'a [String]),
+    /// Append one `{ to, rank }` edge to `[relationships].after`.
+    After { to: &'a str, rank: i32 },
+}
+
+/// Edit-preserving append into one `[relationships]` array — the `set_backlog_status`
+/// `toml_edit` precedent (mem.pattern.entity.edit-preserving-status-transition): mutate
+/// the file in place so comments, inert tables, and unknown keys survive verbatim (the
+/// file is never reserialised). Navigates `[relationships]` → the target array, pushes
+/// each new entry, and writes once.
+///
+/// **F-1 refuse** (the `set_backlog_status` corruption hazard): if `[relationships]`
+/// or the seeded target array is absent, this is a malformed (hand-edited) item — a
+/// tail `insert` would land the array inside a trailing subtable. Refuse instead,
+/// touching nothing. **Idempotent**: an entry already present (a `needs` ref already
+/// listed, or an identical `{ to, rank }` edge) is not duplicated; if every entry is
+/// already present the file is left byte-identical (no write, mtime holds).
+fn append_relationship(
+    root: &Path,
+    item_kind: ItemKind,
+    id: u32,
+    edit: &RelEdit<'_>,
+) -> anyhow::Result<()> {
+    let name = format!("{id:03}");
+    let path = root
+        .join(item_kind.kind().dir)
+        .join(&name)
+        .join(format!("{BACKLOG_STEM}-{name}.toml"));
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("backlog item not found at {}", path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+    // F-1: `[relationships]` and the target axis array are scaffold-seeded; their
+    // absence means a malformed item (a tail insert would corrupt a trailing subtable).
+    let axis = match edit {
+        RelEdit::Needs(_) => "needs",
+        RelEdit::After { .. } => "after",
+    };
+    let array = doc
+        .get_mut("relationships")
+        .and_then(toml_edit::Item::as_table_mut)
+        .and_then(|t| t.get_mut(axis))
+        .and_then(toml_edit::Item::as_array_mut)
+        .with_context(|| {
+            format!(
+                "malformed backlog item {name}: missing seeded `[relationships].{axis}` (regenerate via `backlog new`)"
+            )
+        })?;
+
+    let mut changed = false;
+    match edit {
+        RelEdit::Needs(refs) => {
+            for r in *refs {
+                // idempotent: skip a ref already in the array.
+                if array.iter().any(|v| v.as_str() == Some(r.as_str())) {
+                    continue;
+                }
+                array.push(r.as_str());
+                changed = true;
+            }
+        }
+        RelEdit::After { to, rank } => {
+            // idempotent: skip an identical `{ to, rank }` edge.
+            let present = array.iter().any(|v| {
+                v.as_inline_table().is_some_and(|t| {
+                    t.get("to").and_then(toml_edit::Value::as_str) == Some(to)
+                        && t.get("rank").and_then(toml_edit::Value::as_integer)
+                            == Some(i64::from(*rank))
+                })
+            });
+            if !present {
+                let mut edge = toml_edit::InlineTable::new();
+                edge.insert("to", (*to).into());
+                edge.insert("rank", i64::from(*rank).into());
+                array.push(edge);
+                changed = true;
+            }
+        }
+    }
+
+    if !changed {
+        return Ok(()); // every entry already present — write nothing (mtime holds).
+    }
+    std::fs::write(&path, doc.to_string())
+        .with_context(|| format!("Failed to write {}", path.display()))?;
+    Ok(())
+}
+
 /// `doctrine backlog edit <ID> --status <s> [--resolution <r>]` — the transition
 /// verb (PRD-009 REQ-057/REQ-059, §5.4). Thin shell: find the root, `parse_ref` the
 /// id to its kind (prefix auto-detect), apply the coupled edit in place (clock
@@ -1105,6 +1290,244 @@ pub(crate) fn run_edit(
         item_kind.canonical_id(id),
         status.as_str()
     )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// PHASE-03 set verbs: `backlog needs` / `backlog after` (the thin impure shells)
+// ---------------------------------------------------------------------------
+
+/// Validate that a backlog ref names an existing item — `parse_ref` then a read.
+/// A bad prefix / non-numeric tail (`parse_ref` Err) or a missing file is a HARD
+/// user error (`bail!` via the `?`), never a soft drop: a set verb must reject a
+/// stale ref at author time (design §5.6 — the absent case is rejected here, so
+/// `order` only ever defends against later staleness). Returns the resolved id.
+fn require_item(root: &Path, reference: &str) -> anyhow::Result<(ItemKind, u32)> {
+    let (kind, id) = parse_ref(reference)?;
+    read_item(root, kind, id)?;
+    Ok((kind, id))
+}
+
+/// Render a diagnosed `needs` cycle as a stable, sorted member list (`A, B, C`) for
+/// the refuse/error message — `ItemId` canonical refs only (no `NodeId` internals, R1).
+fn name_cycle(members: &std::collections::BTreeSet<ItemId>) -> String {
+    members
+        .iter()
+        .map(|id| id.render())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The `needs` set verb's pure refuse oracle (A-setcycle / DD2): would adding
+/// `new_needs` to `ITEM` close a `needs` cycle? Injects the proposed edges into a
+/// CLONE of the corpus, projects, builds, and asks the adapter's `dep_cycles` (the
+/// single cycle oracle — no parallel impl). Returns the offending cycles (empty ⇒
+/// safe to append). Pure over the read corpus + the proposed edges.
+fn needs_would_cycle(
+    items: &[BacklogItem],
+    target: (ItemKind, u32),
+    new_needs: &[String],
+) -> anyhow::Result<Vec<std::collections::BTreeSet<ItemId>>> {
+    let mut corpus: Vec<BacklogItem> = items.to_vec();
+    if let Some(item) = corpus
+        .iter_mut()
+        .find(|i| i.kind == target.0 && i.id == target.1)
+    {
+        item.relationships.needs.extend_from_slice(new_needs);
+    }
+    let (inputs, _) = project(&corpus);
+    Ok(BacklogOrder::build(&inputs)?.dep_cycles())
+}
+
+/// `doctrine backlog needs <ITEM> <PREREQ>…` — append hard prerequisites (PRD-009,
+/// design §5.5). Thin shell: find the root, validate ITEM + every PREREQ exists
+/// (a bad ref is a hard user error), then **build the dep graph including the
+/// proposed edges and refuse on a closing cycle** (naming members; nothing written
+/// — validate-then-build-then-write). Else append edit-in-place + confirm.
+pub(crate) fn run_needs(
+    path: Option<PathBuf>,
+    reference: &str,
+    prereqs: &[String],
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let target = require_item(&root, reference)?;
+    for prereq in prereqs {
+        require_item(&root, prereq)?;
+    }
+
+    // refuse a closing cycle BEFORE any write (the adapter is the single oracle).
+    let items = read_all(&root)?;
+    let cycles = needs_would_cycle(&items, target, prereqs)?;
+    if let Some(cycle) = cycles.first() {
+        anyhow::bail!(
+            "`backlog needs` would close a dependency cycle: {} (nothing written)",
+            name_cycle(cycle)
+        );
+    }
+
+    append_relationship(&root, target.0, target.1, &RelEdit::Needs(prereqs))?;
+    writeln!(
+        io::stdout(),
+        "{} needs {}",
+        target.0.canonical_id(target.1),
+        prereqs.join(", ")
+    )?;
+    Ok(())
+}
+
+/// `doctrine backlog after <ITEM> <TO> [--rank N]` — append ONE soft-sequence edge
+/// (PRD-009, design §5.5). Thin shell: validate ITEM + the single TO exists, then
+/// append `{ to, rank }` (rank optional, default 0). **Never** rejects a cycle — a
+/// soft `after` cycle is surfaced (and an edge evicted) at `order` time (VT-6).
+pub(crate) fn run_after(
+    path: Option<PathBuf>,
+    reference: &str,
+    to: &str,
+    rank: i32,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let target = require_item(&root, reference)?;
+    require_item(&root, to)?;
+
+    append_relationship(&root, target.0, target.1, &RelEdit::After { to, rank })?;
+    let suffix = if rank == 0 {
+        String::new()
+    } else {
+        format!(" (rank {rank})")
+    };
+    writeln!(
+        io::stdout(),
+        "{} after {to}{suffix}",
+        target.0.canonical_id(target.1),
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// PHASE-03 read verb: `backlog order` (composed order + the honest-record block)
+// ---------------------------------------------------------------------------
+
+/// Name a `Dangling` endpoint loudly (A-classify / DD1 / design §5.6 E1): the
+/// status/resolution vocabulary is supplied SHELL-side from the corpus, keeping the
+/// adapter id-only (the R-C kill). `endpoint` is the adapter's `Dangling.from()` — the
+/// missing endpoint. Looked up in `corpus`:
+/// - **present but terminal** (`resolved`/`closed`) ⇒ `"<status>/<resolution>"`
+///   (e.g. `closed/wont-do`) — the author judges staleness from the named resolution,
+///   never a silent satisfied-claim;
+/// - **not present** (a stale ref to a never-existed / since-deleted id) ⇒ `"absent"`.
+///
+/// (A present-but-NON-terminal endpoint cannot be `Dangling` — it would be a live
+/// node — so that arm is unreachable; rendered defensively as `"absent"`.)
+fn classify_dangling(corpus: &BTreeMap<ItemId, &BacklogItem>, endpoint: ItemId) -> String {
+    match corpus.get(&endpoint) {
+        Some(item) if item.status.is_terminal() => {
+            let resolution = item.resolution.map_or("?", Resolution::as_str);
+            format!("{}/{resolution}", item.status.as_str())
+        }
+        _ => "absent".to_string(),
+    }
+}
+
+/// Render the honest-record `overrides:` block (design §5.6, R1): one terse line per
+/// dropped edge — `<from> → <to> dropped (<why>)` — `ItemId` refs + reason words only
+/// (no NodeId/ordering internals leak). Covers BOTH the project-level [`AbsentDrop`]s
+/// (unparseable refs that never reached the adapter) and the adapter's `overrides()`
+/// (soft-cycle evictions, contradictions, and the parses-but-not-a-node `Dangling`s,
+/// each named with status+resolution). Empty when nothing was dropped (no block).
+fn render_overrides(
+    corpus: &BTreeMap<ItemId, &BacklogItem>,
+    absent: &[AbsentDrop],
+    overrides: &[Override],
+) -> String {
+    let mut lines: Vec<String> = Vec::new();
+
+    // project-level drops: an unparseable ref never became an ItemId.
+    for drop in absent {
+        lines.push(format!(
+            "  {} → {} dropped (dangling: {} absent)\n",
+            drop.from().render(),
+            drop.reference(),
+            drop.reference(),
+        ));
+    }
+
+    // adapter-level drops.
+    for ov in overrides {
+        let line = match ov.reason() {
+            OverrideReason::SoftCycleEvicted => format!(
+                "  {} → {} dropped (soft cycle)\n",
+                ov.from().render(),
+                ov.to().render()
+            ),
+            OverrideReason::Contradicted => format!(
+                "  {} → {} dropped (contradicts a need)\n",
+                ov.from().render(),
+                ov.to().render()
+            ),
+            OverrideReason::Dangling => format!(
+                "  {} → {} dropped (dangling: {} {})\n",
+                ov.from().render(),
+                ov.to().render(),
+                ov.from().render(),
+                classify_dangling(corpus, ov.from()),
+            ),
+        };
+        lines.push(line);
+    }
+
+    if lines.is_empty() {
+        return String::new();
+    }
+    let mut out = vec!["\noverrides:\n".to_string()];
+    out.extend(lines);
+    out.concat()
+}
+
+/// The `backlog order` output as a string — the compute half (PURE over the read
+/// corpus). Projects the non-terminal node set, builds the adapter, and — UNLESS a
+/// `needs` cycle is present — renders the composed order (the `list` column model,
+/// rows in cordage `ordered()` order) followed by the honest-record `overrides:`
+/// block. A `needs` **dep cycle is a hard error** (design §5.5 / EX-3): a returned
+/// `anyhow::Error` naming the members → `main`'s error path (stderr, non-zero exit),
+/// NO misleading order printed.
+fn order_rows(root: &Path) -> anyhow::Result<String> {
+    let items = read_all(root)?;
+    let (inputs, absent) = project(&items);
+    let order = BacklogOrder::build(&inputs)?;
+
+    if let Some(cycle) = order.dep_cycles().first() {
+        anyhow::bail!(
+            "`backlog order` cannot compose: a `needs` dependency cycle — {} (resolve it, then re-run)",
+            name_cycle(cycle)
+        );
+    }
+
+    // a fast ItemId → item index for the order render and the dangling classifier.
+    let corpus: BTreeMap<ItemId, &BacklogItem> = items
+        .iter()
+        .map(|i| (ItemId::new(i.kind, i.id), i))
+        .collect();
+
+    // the composed order — rows in cordage order (NOT (kind,id)); the `list` columns.
+    let ordered: Vec<BacklogItem> = order
+        .ordered()
+        .iter()
+        .filter_map(|id| corpus.get(id).map(|i| (*i).clone()))
+        .collect();
+    let sel = listing::select_columns(&BL_COLUMNS, BL_DEFAULT, None)?;
+    let table = listing::render_columns(&ordered, &sel);
+
+    let overrides = render_overrides(&corpus, &absent, &order.overrides());
+    Ok(format!("{table}{overrides}"))
+}
+
+/// `doctrine backlog order` — the composed-order view (PRD-009, design §5.5). Thin
+/// shell: find the root, compute, print. READ-only. A `needs` dep cycle returns an
+/// error (the shell never prints a misleading order) — `main` surfaces it on stderr
+/// with a non-zero exit.
+pub(crate) fn run_order(path: Option<PathBuf>) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    write!(io::stdout(), "{}", order_rows(&root)?)?;
     Ok(())
 }
 
@@ -2682,5 +3105,517 @@ tags = []
 
         // a missing id hard-errors through the shell (never an implicit create).
         assert!(run_edit(Some(root.to_path_buf()), "RSK-099", Status::Started, None).is_err());
+    }
+
+    // --- PHASE-03 T1: the ordering projection (project) ---
+
+    /// Seed one item carrying outbound `needs`/`after` axes (the `project` input).
+    fn write_rel_item(
+        root: &Path,
+        kind: ItemKind,
+        id: u32,
+        status: &str,
+        needs: &[&str],
+        after: &[AfterLit<'_>],
+    ) {
+        write_fixture(
+            root,
+            Fixture {
+                kind,
+                id,
+                slug: "s",
+                title: "T",
+                status,
+                resolution: if matches!(status, "resolved" | "closed") {
+                    "done"
+                } else {
+                    ""
+                },
+                tags: &[],
+                facet: None,
+                rels: Some(RelLit {
+                    slices: &[],
+                    specs: &[],
+                    needs,
+                    after,
+                    triggers: &[],
+                }),
+            },
+        );
+    }
+
+    /// The rendered canonical ids of a built order, in composed order.
+    fn ordered_ids(inputs: &[OrderInput]) -> Vec<String> {
+        BacklogOrder::build(inputs)
+            .unwrap()
+            .ordered()
+            .iter()
+            .map(|id| id.render())
+            .collect()
+    }
+
+    #[test]
+    fn project_keeps_non_terminal_nodes_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(root, ItemKind::Issue, 1, "open", &[], &[]);
+        write_rel_item(root, ItemKind::Issue, 2, "resolved", &[], &[]);
+        write_rel_item(root, ItemKind::Issue, 3, "closed", &[], &[]);
+        write_rel_item(root, ItemKind::Issue, 4, "started", &[], &[]);
+
+        let (inputs, absent) = project(&read_all(root).unwrap());
+        assert!(absent.is_empty());
+        // only the two non-terminal items (open, started) survive as nodes.
+        let mut ids = ordered_ids(&inputs);
+        ids.sort();
+        assert_eq!(ids, vec!["ISS-001", "ISS-004"]);
+    }
+
+    #[test]
+    fn project_wires_a_hard_needs_edge_into_the_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // ISS-001 needs ISS-002 ⇒ B(002) must precede A(001).
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-002"], &[]);
+        write_rel_item(root, ItemKind::Issue, 2, "open", &[], &[]);
+
+        let (inputs, _) = project(&read_all(root).unwrap());
+        assert_eq!(ordered_ids(&inputs), vec!["ISS-002", "ISS-001"]);
+    }
+
+    #[test]
+    fn project_honours_a_cross_kind_after_edge_with_rank() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // a cross-kind soft edge: CHR-001 after RSK-001 ⇒ RSK-001 precedes CHR-001.
+        write_rel_item(
+            root,
+            ItemKind::Chore,
+            1,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "RSK-001",
+                rank: 3,
+            }],
+        );
+        write_rel_item(root, ItemKind::Risk, 1, "open", &[], &[]);
+
+        let (inputs, absent) = project(&read_all(root).unwrap());
+        assert!(absent.is_empty(), "both endpoints are live nodes");
+        assert_eq!(ordered_ids(&inputs), vec!["RSK-001", "CHR-001"]);
+    }
+
+    #[test]
+    fn project_records_an_unparseable_ref_as_an_absent_drop() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // a stale/garbage ref that cannot even parse to (kind, id).
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["NOPE-1"], &[]);
+
+        let (inputs, absent) = project(&read_all(root).unwrap());
+        assert_eq!(
+            absent.len(),
+            1,
+            "the unparseable ref is recorded, not silent"
+        );
+        assert_eq!(absent[0].from().render(), "ISS-001");
+        assert_eq!(absent[0].reference(), "NOPE-1");
+        // the node itself still orders (the bad edge just contributes nothing).
+        assert_eq!(ordered_ids(&inputs), vec!["ISS-001"]);
+    }
+
+    #[test]
+    fn project_emits_distinct_item_ids_one_row_per_item() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_rel_item(root, ItemKind::Issue, 1, "open", &[], &[]);
+        write_rel_item(root, ItemKind::Risk, 1, "open", &[], &[]);
+
+        let (inputs, _) = project(&read_all(root).unwrap());
+        // A-distinct/DD4: the bimap precondition — strictly distinct ItemIds. ISS-001
+        // and RSK-001 share a numeric id but differ by kind, so both survive as rows
+        // and the build never overwrites a node (would panic/corrupt otherwise).
+        assert_eq!(ordered_ids(&inputs).len(), 2);
+        assert!(BacklogOrder::build(&inputs).is_ok());
+    }
+
+    // --- PHASE-03 T2: edit-preserving relationship-array append ---
+
+    #[test]
+    fn append_needs_preserves_comments_and_inert_tables() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth"); // real template: seeded [relationships]
+        let path = issue_dir(root, "001").join("backlog-001.toml");
+
+        // hand-add an inert table + a comment (the F-1 corruption hazard).
+        let mut body = fs::read_to_string(&path).unwrap();
+        body.push_str("\n# hand note — keep me\n[custom]\nkeep = \"yes\"\n");
+        fs::write(&path, &body).unwrap();
+
+        append_relationship(
+            root,
+            ItemKind::Issue,
+            1,
+            &RelEdit::Needs(&["ISS-002".to_string(), "RSK-001".to_string()]),
+        )
+        .unwrap();
+
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(after.contains("# hand note — keep me"), "comment survives");
+        assert!(after.contains("[custom]"), "inert table survives");
+        assert!(after.contains("keep = \"yes\""), "unknown key survives");
+
+        // the reader sees both new prereqs on the live axis.
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+        assert_eq!(item.relationships.needs, vec!["ISS-002", "RSK-001"]);
+    }
+
+    #[test]
+    fn append_after_round_trips_to_and_rank() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth");
+
+        append_relationship(
+            root,
+            ItemKind::Issue,
+            1,
+            &RelEdit::After {
+                to: "ISS-002",
+                rank: 5,
+            },
+        )
+        .unwrap();
+
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+        assert_eq!(
+            item.relationships.after,
+            vec![AfterEdge {
+                to: "ISS-002".to_string(),
+                rank: 5,
+            }]
+        );
+    }
+
+    #[test]
+    fn append_relationship_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth");
+        let path = issue_dir(root, "001").join("backlog-001.toml");
+
+        append_relationship(
+            root,
+            ItemKind::Issue,
+            1,
+            &RelEdit::Needs(&["ISS-002".to_string()]),
+        )
+        .unwrap();
+        let once = fs::read_to_string(&path).unwrap();
+
+        // a second identical append is a no-op — byte-identical, never duplicated.
+        append_relationship(
+            root,
+            ItemKind::Issue,
+            1,
+            &RelEdit::Needs(&["ISS-002".to_string()]),
+        )
+        .unwrap();
+        assert_eq!(
+            once,
+            fs::read_to_string(&path).unwrap(),
+            "idempotent append"
+        );
+
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+        assert_eq!(item.relationships.needs, vec!["ISS-002"], "not duplicated");
+    }
+
+    #[test]
+    fn append_relationship_refuses_a_malformed_missing_array() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // hand-corrupted: a `[relationships]` table that omits the seeded `needs` array.
+        let d = root.join(ItemKind::Issue.kind().dir).join("001");
+        fs::create_dir_all(&d).unwrap();
+        let malformed = "id = 1\nslug = \"a\"\ntitle = \"A\"\nkind = \"issue\"\n\
+             status = \"open\"\nresolution = \"\"\ncreated = \"2026-06-08\"\n\
+             updated = \"2026-06-08\"\ntags = []\n\n[relationships]\nslices = []\n";
+        let path = d.join("backlog-001.toml");
+        fs::write(&path, malformed).unwrap();
+
+        let err = append_relationship(
+            root,
+            ItemKind::Issue,
+            1,
+            &RelEdit::Needs(&["ISS-002".to_string()]),
+        );
+        assert!(err.is_err(), "a missing seeded array is refused");
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            malformed,
+            "the file is untouched on refuse"
+        );
+    }
+
+    // --- PHASE-03 T3: `run_needs` shell (VT-5 set-refuse) ---
+
+    #[test]
+    fn run_needs_appends_a_validated_prereq() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth"); // ISS-001
+        new_item(root, ItemKind::Issue, "Login"); // ISS-002
+
+        run_needs(
+            Some(root.to_path_buf()),
+            "ISS-001",
+            &["ISS-002".to_string()],
+        )
+        .unwrap();
+
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+        assert_eq!(item.relationships.needs, vec!["ISS-002"]);
+    }
+
+    #[test]
+    fn run_needs_rejects_a_missing_prereq_ref() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth"); // ISS-001 only
+        let path = issue_dir(root, "001").join("backlog-001.toml");
+        let before = fs::read_to_string(&path).unwrap();
+
+        // ISS-099 does not exist — a hard user error, nothing written.
+        let err = run_needs(
+            Some(root.to_path_buf()),
+            "ISS-001",
+            &["ISS-099".to_string()],
+        );
+        assert!(
+            err.is_err(),
+            "a missing prereq ref is rejected at author time"
+        );
+        assert_eq!(
+            before,
+            fs::read_to_string(&path).unwrap(),
+            "nothing written"
+        );
+    }
+
+    #[test]
+    fn run_needs_refuses_a_closing_cycle_naming_members_nothing_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-5: seed A.needs=[B]; `needs B A` would close the {A,B} cycle.
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-002"], &[]); // A=001 needs B=002
+        write_rel_item(root, ItemKind::Issue, 2, "open", &[], &[]); // B=002
+        let path_b = issue_dir(root, "002").join("backlog-002.toml");
+        let before_b = fs::read_to_string(&path_b).unwrap();
+
+        let err = run_needs(
+            Some(root.to_path_buf()),
+            "ISS-002",
+            &["ISS-001".to_string()],
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("cycle"), "the refuse names the failure: {msg}");
+        assert!(
+            msg.contains("ISS-001") && msg.contains("ISS-002"),
+            "names members: {msg}"
+        );
+
+        // nothing written — B's file is byte-identical.
+        assert_eq!(
+            before_b,
+            fs::read_to_string(&path_b).unwrap(),
+            "nothing written on refuse"
+        );
+    }
+
+    // --- PHASE-03 T4: `run_after` shell (soft — never rejects a cycle) ---
+
+    #[test]
+    fn run_after_appends_one_edge_with_default_rank_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth"); // ISS-001
+        new_item(root, ItemKind::Issue, "Login"); // ISS-002
+
+        run_after(Some(root.to_path_buf()), "ISS-001", "ISS-002", 0).unwrap();
+
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+        assert_eq!(
+            item.relationships.after,
+            vec![AfterEdge {
+                to: "ISS-002".to_string(),
+                rank: 0,
+            }]
+        );
+    }
+
+    #[test]
+    fn run_after_never_rejects_a_soft_cycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // X.after=[Y] already; `after X Y`-style reciprocal would cycle — but `after`
+        // is soft, so it is ACCEPTED (the eviction surfaces at order time, VT-6).
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "ISS-002",
+                rank: 1,
+            }],
+        );
+        write_rel_item(root, ItemKind::Issue, 2, "open", &[], &[]);
+
+        // close the reciprocal soft edge Y.after=[X] — must NOT be rejected.
+        run_after(Some(root.to_path_buf()), "ISS-002", "ISS-001", 5).unwrap();
+        let item = read_item(root, ItemKind::Issue, 2).unwrap();
+        assert_eq!(
+            item.relationships.after,
+            vec![AfterEdge {
+                to: "ISS-001".to_string(),
+                rank: 5,
+            }]
+        );
+    }
+
+    // --- PHASE-03 T5: `order_rows` compute (the render half) ---
+
+    /// The table portion of an `order` render (before the `overrides:` block) → its
+    /// composed-order ids. Reuses [`ids`] over just the table half.
+    fn order_ids(out: &str) -> Vec<String> {
+        let table = out.split("\noverrides:").next().unwrap_or(out);
+        ids(table)
+    }
+
+    #[test]
+    fn order_rows_composes_a_hard_needs_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // ISS-001 needs ISS-002 ⇒ ISS-002 must precede ISS-001 in the order.
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-002"], &[]);
+        write_rel_item(root, ItemKind::Issue, 2, "open", &[], &[]);
+
+        let out = order_rows(root).unwrap();
+        assert_eq!(
+            order_ids(&out),
+            vec!["ISS-002", "ISS-001"],
+            "B precedes A: {out}"
+        );
+        assert!(!out.contains("overrides:"), "no drops, no block: {out}");
+    }
+
+    #[test]
+    fn order_rows_hard_errors_on_a_needs_cycle_with_no_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-5: a hand-seeded mutual needs cycle {A,B}.
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-002"], &[]);
+        write_rel_item(root, ItemKind::Issue, 2, "open", &["ISS-001"], &[]);
+
+        let err = order_rows(root).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("cycle"), "names the failure: {msg}");
+        assert!(
+            msg.contains("ISS-001") && msg.contains("ISS-002"),
+            "names members: {msg}"
+        );
+    }
+
+    #[test]
+    fn order_rows_evicts_the_lower_rank_edge_of_a_soft_cycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-6: X.after=[{to=Y,rank=1}], Y.after=[{to=X,rank=5}] ⇒ the strictly
+        // lower-rank edge (X→Y, the edge X.after=[Y] flips to Y→X cordage… name by
+        // ItemId) is evicted. The order is still produced; the eviction is recorded.
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "ISS-002",
+                rank: 1,
+            }],
+        );
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            2,
+            "open",
+            &[],
+            &[AfterLit {
+                to: "ISS-001",
+                rank: 5,
+            }],
+        );
+
+        let out = order_rows(root).unwrap();
+        // both nodes still ordered (the cycle was linearized, not refused).
+        let mut shown = order_ids(&out);
+        shown.sort();
+        assert_eq!(shown, vec!["ISS-001", "ISS-002"]);
+        // exactly the soft-cycle eviction is recorded.
+        assert!(
+            out.contains("overrides:"),
+            "the eviction is recorded: {out}"
+        );
+        assert!(out.contains("soft cycle"), "named a soft-cycle drop: {out}");
+    }
+
+    #[test]
+    fn order_rows_records_terminal_and_absent_drops_with_status_and_resolution() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // VT-7: ISS-001 needs a terminal (CHR-001 closed/wont-do) AND an absent ref.
+        write_rel_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            &["CHR-001", "ISS-099"],
+            &[],
+        );
+        // CHR-001 is terminal — closed with a wont-do resolution (abandoned).
+        write_item(
+            root,
+            ItemKind::Chore,
+            1,
+            "closed",
+            "wont-do",
+            "drop-me",
+            "Dropped chore",
+            &[],
+        );
+
+        let out = order_rows(root).unwrap();
+        // the live node still orders.
+        assert_eq!(
+            order_ids(&out),
+            vec!["ISS-001"],
+            "the live node survives: {out}"
+        );
+        assert!(out.contains("overrides:"));
+        // the terminal dep is named with status+resolution (never silently satisfied).
+        assert!(
+            out.contains("CHR-001") && out.contains("closed/wont-do"),
+            "terminal dep named status/resolution: {out}"
+        );
+        // the absent ref is named absent.
+        assert!(
+            out.contains("ISS-099") && out.contains("absent"),
+            "absent ref named: {out}"
+        );
     }
 }

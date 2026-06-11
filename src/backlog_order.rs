@@ -10,19 +10,10 @@
 //! a `BacklogItem` or the filesystem (the projection lives in `backlog::project`,
 //! PHASE-03). Opaque cordage ids never escape a `pub(crate)` signature (§10 E4).
 //!
-//! Self-clearing dead-code scope: this is a leaf landed ahead of its consumer — the
-//! CLI wiring (`order`/`dep_cycles`/`overrides`) lands in PHASE-03. Every item here
-//! is exercised by the tests below under `cfg(test)`, so the suppression is scoped
-//! to the non-test build; when PHASE-03's real consumer lands it goes unfulfilled
-//! and forces its own removal (mem.pattern.lint.dead-code-expect-vs-cfg-test).
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-039 PHASE-02 pure adapter; the CLI consumer lands in PHASE-03. Tests exercise every item under cfg(test)."
-    )
-)]
-
+//! The CLI consumer (`backlog order`/`needs`) landed in PHASE-03 (`backlog::project`,
+//! `order_rows`, the set-verb cycle oracle), so the whole public surface is now
+//! production-live — the PHASE-02 self-clearing `dead_code` scope removed itself per
+//! plan (mem.pattern.lint.dead-code-expect-vs-cfg-test).
 use crate::backlog::ItemKind;
 use cordage::{
     Arity, CyclePolicy, Direction, EdgeAttrs, EvictReason, Graph, GraphBuilder, NodeId, OrderLayer,

@@ -633,6 +633,50 @@ enum BacklogCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Append hard prerequisites to an item's `needs` axis — kind auto-detected from
+    /// the prefix. Validates every ref exists, then refuses a closing dependency
+    /// cycle (naming the members; nothing written).
+    Needs {
+        /// The dependent item ref (e.g. ISS-007); the prefix selects the kind.
+        id: String,
+
+        /// One or more prerequisite refs the item must wait on.
+        #[arg(required = true)]
+        prereqs: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Append one soft-sequence edge to an item's `after` axis — kind auto-detected
+    /// from the prefix. Validates the target exists; never rejects a cycle (a soft
+    /// preference, surfaced and evicted at `order` time).
+    After {
+        /// The item ref that should run after the target (e.g. ISS-007).
+        id: String,
+
+        /// The predecessor ref this item should follow.
+        to: String,
+
+        /// Per-edge rank (a manual tie-break hint; default 0).
+        #[arg(long, default_value_t = 0)]
+        rank: i32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Print the composed work order across all non-terminal items, followed by an
+    /// honest-record block of any dropped edges. A `needs` dependency cycle is a hard
+    /// error (no misleading order is printed).
+    Order {
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1116,7 +1160,11 @@ fn write_class(cmd: &Command) -> WriteClass {
         Command::Backlog { command } => match command {
             BacklogCommand::New { .. } => Write("backlog new"),
             BacklogCommand::Edit { .. } => Write("backlog edit"),
-            BacklogCommand::List { .. } | BacklogCommand::Show { .. } => Read,
+            BacklogCommand::Needs { .. } => Write("backlog needs"),
+            BacklogCommand::After { .. } => Write("backlog after"),
+            BacklogCommand::List { .. }
+            | BacklogCommand::Show { .. }
+            | BacklogCommand::Order { .. } => Read,
         },
         Command::Boot { command, .. } => match command {
             None => Write("boot"),
@@ -1403,6 +1451,11 @@ fn main() -> anyhow::Result<()> {
                 resolution,
                 path,
             } => backlog::run_edit(path, &id, status, resolution),
+            BacklogCommand::Needs { id, prereqs, path } => backlog::run_needs(path, &id, &prereqs),
+            BacklogCommand::After { id, to, rank, path } => {
+                backlog::run_after(path, &id, &to, rank)
+            }
+            BacklogCommand::Order { path } => backlog::run_order(path),
         },
         Command::Boot {
             command,
