@@ -85,15 +85,25 @@ These are the project-specific additions.)
 
 ## known CLI gaps (todo as the tooling surface expands)
 
-- **no `slice audit` scaffold** — every other artifact has one; `audit.md` is hand-made.
+- **review/audit ledger — SHIPPED (SL-040).** The RV kind (`RV-NNN`, ADR-007) is the
+  structured audit substrate `audit.md` lacked: `doctrine review new --facet
+  reconciliation --target SL-NNN`, then append-only `raise`/`dispose`/`verify`/
+  `contest`/`withdraw` under a turn-based baton + per-review lock (D-C4a), with a
+  warm-cache `prime`. `/audit` is rewired onto it — `audit.md` retired for new audits
+  (existing files stay valid; no migration). Remaining review skills (`/inquisition`,
+  `/code-review`, reconciliation) not yet rewired — IMP-023.
 - **slice status rollup — SHIPPED (SL-009).** `slice list` now derives `X/Y complete`
   per slice from the phase state tree (`!N` blocked, `?N` anomalous, `—` untracked)
   and flags `⚠` when the hand-edited status and the rollup diverge. Read-only — it
-  *reveals* divergence; reconciling it is the lifecycle-transition gap below.
-- **no slice lifecycle transition** — `slice-nnn.toml` `status` is hand-edited; no
-  command moves a slice proposed→…→done or links it to phase state. (SL-009 surfaces
-  the divergence this would resolve; the terminal-status set lives in
-  `slice::is_terminal_status` for that verb to reuse.)
+  *reveals* divergence; the lifecycle-transition verb below reconciles it.
+- **slice lifecycle transition — SHIPPED (SL-040 / ADR-009).** `doctrine slice status
+  <id> <state>` classifies and writes the move (advance / back-edge / skip / abandon)
+  across `proposed→design→plan→ready→started→audit→reconcile→done`; refuses the closure
+  seam out of order (`→reconcile` only from `audit`, `→done` only from `reconcile`) and
+  refuses leaving a terminal status (`done`/`abandoned`). The closure seam enforces the
+  D-C9b close-gate — refuses `→reconcile`/`→done` while an RV targeting the slice carries
+  an unresolved `blocker`. Resolves the SL-009 rollup divergence. (`<id>` is the bare
+  number, e.g. `40`, not `SL-040`.)
 - **no standalone plan validation** — a malformed `plan.toml` only surfaces when
   `slice phases` parses it.
 - **memory retrieval — SHIPPED.** `record/show/list` (SL-005); SL-007 producer
