@@ -7,7 +7,9 @@ license = "GPL-3.0-only"
 repository = "https://github.com/davidlee/doctrine"
 keywords = ["cli", "project"]
 categories = ["command-line-utilities"]
-include = ["!.direnv", "!.envrc", "/src", "/install", "/plugins", "/memory", "/scripts", "/justfile", "/tests", "/examples", "/AGENTS.md", "/CLAUDE.md", "/CONTRIBUTING.md", "/LICENSE*.md"]
+# exclude (not include): keeps cargo on git-based file listing, so the gitignored
+# .direnv symlink-loop cache is never walked (no "File system loop" warnings).
+exclude = ["/.claude-plugin", "/.doctrine", "/.gitignore", "/clippy.toml", "/crates", "/doc", "/doctrine.png", "/flake.lock", "/flake.nix", "/skills-lock.json", "/todo.md"]
 
 [dependencies]
 anyhow.workspace = true
