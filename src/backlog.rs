@@ -120,8 +120,10 @@ impl ItemKind {
     }
 
     /// The canonical-id prefix (`ISS`/`IMP`/`CHR`/`RSK`/`IDE`), read off the
-    /// `Kind` so the prefix is never hardcoded twice.
-    const fn prefix(self) -> &'static str {
+    /// `Kind` so the prefix is never hardcoded twice. `pub(crate)` so the
+    /// `backlog_order` adapter's `ItemId` orders by `(prefix, id)` — the
+    /// canonical-id ascending tiebreak — without re-rendering a string per compare.
+    pub(crate) const fn prefix(self) -> &'static str {
         self.kind().prefix
     }
 
@@ -139,8 +141,9 @@ impl ItemKind {
 
     /// The canonical ref for an id in this kind's namespace (`ISS-007`) — the
     /// print of `backlog new` and the inverse of `from_prefix`. Prefix from the
-    /// `Kind` (single source).
-    fn canonical_id(self, id: u32) -> String {
+    /// `Kind` (single source). `pub(crate)` so the `backlog_order` adapter's
+    /// `ItemId` renders through the same single source.
+    pub(crate) fn canonical_id(self, id: u32) -> String {
         format!("{}-{id:03}", self.prefix())
     }
 
@@ -449,6 +452,39 @@ fn validate_facet(raw: RawRiskFacet) -> anyhow::Result<RiskFacet> {
         origin: optional_text(raw.origin),
         controls: raw.controls,
     })
+}
+
+/// The risk exposure score — `likelihood × impact` (1..=16) when BOTH axes are
+/// assessed, else `0`. The within-level ordering fallback the `backlog_order`
+/// adapter consumes (design §5.1 tier 3, VT-4): `0` is the baseline shared by
+/// every non-risk item (a `None` facet) and every part-assessed risk alike —
+/// assessment is all-or-nothing for ordering. Weights are Low=1 … Critical=4 (A3);
+/// the product fits `u8`, no cast. The single derivation site — PHASE-03's
+/// `project` reads it here, not a second copy.
+///
+/// Self-clearing suppression scoped to the non-test build (the leaf lands ahead of
+/// its `project` consumer; the tests below are real uses under `cfg(test)`, so an
+/// unconditional `expect` would fire unfulfilled there).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "consumed by PHASE-03 project(); exercised by tests"
+    )
+)]
+pub(crate) fn exposure(facet: Option<&RiskFacet>) -> u8 {
+    const fn weight(level: RiskLevel) -> u8 {
+        match level {
+            RiskLevel::Low => 1,
+            RiskLevel::Medium => 2,
+            RiskLevel::High => 3,
+            RiskLevel::Critical => 4,
+        }
+    }
+    match facet.and_then(|f| f.likelihood.zip(f.impact)) {
+        Some((l, i)) => weight(l) * weight(i),
+        None => 0,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2253,6 +2289,37 @@ tags = []
         // a non-terminal status with no resolution → D9 auto-clear to "".
         assert_eq!(validate_transition(Status::Open, None).unwrap(), "");
         assert_eq!(validate_transition(Status::Triaged, None).unwrap(), "");
+    }
+
+    // --- SL-039 VT-4: exposure = likelihood × impact, baseline otherwise ---
+
+    fn facet(likelihood: Option<RiskLevel>, impact: Option<RiskLevel>) -> RiskFacet {
+        RiskFacet {
+            likelihood,
+            impact,
+            origin: None,
+            controls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn exposure_scores_a_fully_assessed_risk() {
+        use RiskLevel::{Critical, High, Low};
+        assert_eq!(exposure(Some(&facet(Some(High), Some(Critical)))), 12);
+        assert_eq!(exposure(Some(&facet(Some(Low), Some(Low)))), 1);
+        assert_eq!(exposure(Some(&facet(Some(Critical), Some(Critical)))), 16);
+    }
+
+    #[test]
+    fn exposure_is_baseline_when_unassessed_or_non_risk() {
+        use RiskLevel::High;
+        // one axis only → baseline.
+        assert_eq!(exposure(Some(&facet(Some(High), None))), 0);
+        assert_eq!(exposure(Some(&facet(None, Some(High)))), 0);
+        // no axis → baseline.
+        assert_eq!(exposure(Some(&facet(None, None))), 0);
+        // non-risk item (no facet) → baseline.
+        assert_eq!(exposure(None), 0);
     }
 
     // --- VT-3: edit-preserving (comments/unknowns survive); updated bumps ---
