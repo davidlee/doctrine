@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 220
+slug = "the-backlog-status-vocabulary-and-terminal-predicate-are-backlog-local-distinct-from-the-slice-lifecycle-outbound-relations-are-stored-one-way-reverse-derived-adr-004"
+title = "The backlog status vocabulary and terminal predicate are backlog-local, distinct from the slice lifecycle; outbound relations are stored one-way, reverse derived (ADR-004)."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 235
+slug = "harvest-spine-refs-and-interaction-edges-into-the-registry-as-descentparentinteraction-edges-and-classify-a-multi-valued-parent-as-a-second-parent-finding"
+title = "Harvest spine refs and interaction edges into the registry as Descent/Parent/Interaction edges and classify a multi-valued parent as a `second_parent` finding."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

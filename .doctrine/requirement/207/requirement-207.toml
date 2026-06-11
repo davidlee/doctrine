@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 207
+slug = "classify-each-slice-status-fromto-move-against-the-lifecycle-fsm-via-a-pure-edge-table-refusing-terminal-source-reopen-and-any-closure-seam-breach-before-writing"
+title = "Classify each slice status from→to move against the lifecycle FSM via a pure edge table, refusing terminal-source reopen and any closure-seam breach before writing."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

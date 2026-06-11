@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 219
+slug = "model-every-kind-as-one-entity-discriminated-by-a-kind-facet-over-the-kind-blind-engine-never-parallel-per-kind-schemas-kind-variation-is-facet-fields-not-a-fork"
+title = "Model every kind as one entity discriminated by a kind facet over the kind-blind engine — never parallel per-kind schemas; kind variation is facet fields, not a fork."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

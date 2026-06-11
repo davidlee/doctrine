@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 230
+slug = "fix-c4-level-to-the-closed-kebab-set-contextcontainercomponentcode-as-an-optional-field-failing-to-parse-on-an-out-of-vocab-level"
+title = "Fix `c4_level` to the closed kebab set context/container/component/code as an optional field, failing to parse on an out-of-vocab level."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

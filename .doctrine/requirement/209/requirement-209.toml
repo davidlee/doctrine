@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 209
+slug = "resolve-an-orthogonal-advisory-conduct-posture-actor-autonomy-per-lifecycle-state-from-the-project-doctrinetoml-conduct-table-surfaced-on-slice-status-as-the-source-states-exit-posture"
+title = "Resolve an orthogonal advisory conduct posture (actor × autonomy) per lifecycle state from the project doctrine.toml [conduct] table, surfaced on slice status as the source state's exit posture."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

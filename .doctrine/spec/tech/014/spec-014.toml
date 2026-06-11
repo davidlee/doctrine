@@ -1,0 +1,40 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 14
+slug = "slice-surface"
+title = "Slice surface"
+status = "draft"
+kind = "tech"
+category = "slice"
+c4_level = "component"
+parent = "SPEC-004"
+descends_from = "PRD-001"
+tags = ["slice", "lifecycle", "fsm", "conduct", "phase-rollup", "status-vocab", "kind-surface"]
+responsibilities = [
+  "Define the slice `Kind` and its reserved scaffold — the `slice-<id>.{toml,md}` pair plus `<id>-<slug>` symlink — alongside the non-reserved design/plan/notes sibling kinds, all bound onto the shared engine materialiser.",
+  "Fix the nine-state slice status vocabulary (proposed, design, plan, ready, started, audit, reconcile, done, abandoned) used as both the `slice list --status` filter known-set and the `slice status` write-verb target check.",
+  "Own the slice lifecycle FSM (axis A): the `classify` edge-table mapping a from→to move to a Transition (Advance, BackEdge, Skip, Abandon, Noop, FromTerminal, SeamBreach), enforcing the audit→reconcile→done closure seam and refusing terminal-source reopen.",
+  "Carry the three deliberately-divergent slice-status predicates — `is_terminal_status` {done}, `is_hidden`/`is_transition_terminal` {done, abandoned} — each feeding a distinct surface (divergence flag, list hide-set, reopen refusal).",
+  "Own the conduct axis B (`actor × autonomy`) as an orthogonal advisory posture resolved per lifecycle state from the project `doctrine.toml [conduct]` table, surfaced on `slice status` as the source state's exit posture and never enforced.",
+  "Join the gitignored runtime phase rollup onto each list row — derive the `completed/total` cell with `!N` blocked and `?N` anomaly markers, the `?` drift marker for out-of-vocab status, and the `⚠` divergence flag when authored status and rollup disagree.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/slice.rs"
+module = "doctrine::slice"
+
+[[source]]
+language = "rust"
+identifier = "src/conduct.rs"
+module = "doctrine::conduct"
+
+[[source]]
+language = "rust"
+identifier = "src/state.rs"
+module = "doctrine::state"
+
+[[source]]
+language = "markdown"
+identifier = "doc/slices-spec.md"

@@ -1,0 +1,35 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 16
+slug = "governance-kinds-pol-std"
+title = "Governance kinds (POL/STD)"
+status = "draft"
+kind = "tech"
+category = "governance"
+c4_level = "component"
+parent = "SPEC-004"
+tags = ["governance", "policy", "standard", "governance-kind", "status-vocabulary", "boot-projection", "kind-surface"]
+responsibilities = [
+  "Define the two governance kinds — policy (POL) and standard (STD) — each as a thin per-kind module binding a `GovKind` descriptor (kind dir/prefix/scaffold, `stem`, `statuses`, `hidden`) onto the shared command-tier governance spine.",
+  "Fix each kind's status vocabulary: policy is draft/required/deprecated/retired; standard adds `default` (recommended-unless-justified). Each vocab doubles as the `--status` known-set, kept in lockstep with its clap enum by a drift-canary test.",
+  "Own the per-kind default-list hide-set (deprecated, retired) bound as `GovKind.hidden`, revealed again by `--all` or an explicit `--status`.",
+  "Carry the scaffold/render contract: a `<stem>-NNN.{toml,md}` fileset plus `NNN-slug` symlink, a frontmatter-free Statement/Rationale/Scope/Verification/References prose body, and a reserved inert `[relationships]` seam (supersedes, superseded_by, related, tags).",
+  "Project each kind's in-force rows into the governance boot snapshot via `governance::list_rows` — Active Policies (required) and Active Standards (default + required) — using the kind descriptor plus an in-force status set.",
+  "Model supersession as a `relationships.supersedes` link, never a status, so the status enum carries no Superseded variant.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/policy.rs"
+module = "doctrine::policy"
+
+[[source]]
+language = "rust"
+identifier = "src/standard.rs"
+module = "doctrine::standard"
+
+[[source]]
+language = "rust"
+identifier = "src/governance.rs"
+module = "doctrine::governance"

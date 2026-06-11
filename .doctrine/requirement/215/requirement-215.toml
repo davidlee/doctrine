@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 215
+slug = "hide-terminal-resolved-closed-items-from-the-default-list-via-the-typed-is-terminal-predicate-revealed-by-all-or-an-explicit-status"
+title = "Hide terminal (resolved, closed) items from the default list via the typed is_terminal predicate, revealed by --all or an explicit --status."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

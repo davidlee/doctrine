@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 210
+slug = "join-the-gitignored-phase-rollup-onto-each-list-row-deriving-the-completedtotal-cell-with-nn-markers-the-drift-marker-and-the-divergence-flag"
+title = "Join the gitignored phase rollup onto each list row, deriving the completed/total cell with !N/?N markers, the ? drift marker, and the ⚠ divergence flag."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

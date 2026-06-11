@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 206
+slug = "fix-the-nine-state-status-vocabulary-proposed-design-plan-ready-started-audit-reconcile-done-abandoned-as-both-the-list-status-filter-known-set-and-the-write-verb-target-check"
+title = "Fix the nine-state status vocabulary (proposed, design, plan, ready, started, audit, reconcile, done, abandoned) as both the list --status filter known-set and the write-verb target check."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

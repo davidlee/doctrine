@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 234
+slug = "carry-interactionstoml-edge-rows-targettypenotes-under-the-edge-key-as-the-tech-only-outbound-peer-axis-a-missing-file-yields-zero-edges"
+title = "Carry `interactions.toml` `[[edge]]` rows (target/type/notes) under the `edge` key as the tech-only outbound peer axis; a missing file yields zero edges."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

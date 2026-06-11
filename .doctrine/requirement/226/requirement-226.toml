@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 226
+slug = "carry-a-reserved-inert-relationships-seam-supersedes-superseded-by-related-tags-from-the-first-record-supersession-is-a-relationship-not-a-status"
+title = "Carry a reserved inert [relationships] seam (supersedes, superseded_by, related, tags) from the first record; supersession is a relationship, not a status."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
