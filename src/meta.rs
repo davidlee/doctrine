@@ -48,6 +48,31 @@ pub(crate) fn read_meta(tree_root: &Path, stem: &str, id: u32) -> anyhow::Result
     toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
+/// The id, and only the id, of a `<stem>-<id>.toml` — the scan-path reader
+/// (SL-040 D2). Serde ignores every other key, so a kind whose authored toml is
+/// intentionally **status-less** (review — its status is derived, D-C8) scans for
+/// `.id` cleanly, while the strict [`Meta`] above stays unchanged: a genuinely
+/// corrupt status-bearing toml with a missing `status` still hard-fails at every
+/// `read_meta` caller (`show`/`list`/render). Leniency is confined to this path —
+/// `validate`'s id scan, which only ever needs the `id` (design §5 / R-a).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct IdOnly {
+    pub(crate) id: u32,
+}
+
+/// Read just the `id` of a single entity's `<stem>-<id>.toml` — the [`IdOnly`]
+/// scan-path reader. Used by `integrity::scan_kind`, the one place a status-less
+/// kind (review) must be read without tripping the strict [`Meta`] (D2).
+pub(crate) fn read_id(tree_root: &Path, stem: &str, id: u32) -> anyhow::Result<u32> {
+    let name = format!("{id:03}");
+    let path = tree_root.join(&name).join(format!("{stem}-{name}.toml"));
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("{stem} {name} not found at {}", path.display()))?;
+    let parsed: IdOnly =
+        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+    Ok(parsed.id)
+}
+
 /// Read and parse every `<stem>-<id>.toml` under `tree_root`. `scan_ids` yields
 /// numeric dirs only, so `<id>-<slug>` symlinks and non-numeric entries are
 /// skipped.
@@ -109,6 +134,41 @@ mod tests {
         assert_eq!(m.status, "accepted");
         // the wrong stem does not find it
         assert!(read_meta(root, "slice", 7).is_err());
+    }
+
+    /// Write a status-LESS `<stem>-<id>.toml` carrying only `id`/`slug`/`title`
+    /// — review's intentionally derived-status authored shape (SL-040 D2).
+    fn write_statusless_toml(tree_root: &Path, stem: &str, id: u32) {
+        let name = format!("{id:03}");
+        let dir = tree_root.join(&name);
+        fs::create_dir_all(&dir).unwrap();
+        let body = format!("id = {id}\nslug = \"sl\"\ntitle = \"T {id}\"\n");
+        fs::write(dir.join(format!("{stem}-{name}.toml")), body).unwrap();
+    }
+
+    /// SL-040 D2 (VT-1, the scan-path half): the id-only reader scans a
+    /// status-less toml for `.id` cleanly — review need not seed a derived status.
+    #[test]
+    fn read_id_scans_a_statusless_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_statusless_toml(root, "review", 7);
+        assert_eq!(read_id(root, "review", 7).unwrap(), 7);
+    }
+
+    /// SL-040 D2 (VT-1, the preserved-invariant half): the strict `Meta` reader
+    /// still HARD-FAILS on a status-less status-BEARING toml — leniency is confined
+    /// to `read_id`; `read_meta` keeps the "missing status is corruption" contract.
+    #[test]
+    fn read_meta_still_hard_fails_on_a_missing_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_statusless_toml(root, "slice", 7);
+        let err = read_meta(root, "slice", 7).unwrap_err();
+        assert!(
+            err.to_string().contains("Failed to parse"),
+            "missing status must be a hard parse error: {err}"
+        );
     }
 
     #[test]

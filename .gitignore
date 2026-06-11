@@ -16,6 +16,7 @@
 !.doctrine/adr/
 !.doctrine/policy/
 !.doctrine/standard/
+!.doctrine/review/
 !.doctrine/backlog/
 !.doctrine/requirement/
 !.doctrine/spec/

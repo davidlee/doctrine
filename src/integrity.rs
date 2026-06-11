@@ -20,6 +20,7 @@ use crate::adr::ADR_KIND;
 use crate::backlog::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
 use crate::policy::POLICY_KIND;
 use crate::requirement::REQUIREMENT_KIND;
+use crate::review::REVIEW_KIND;
 use crate::slice::SLICE_KIND;
 use crate::spec::{PRODUCT_SPEC_KIND, TECH_SPEC_KIND};
 use crate::standard::STANDARD_KIND;
@@ -101,6 +102,15 @@ pub(crate) const KINDS: &[KindRef] = &[
         kind: &IDEA_KIND,
         stem: "backlog",
         state_dir: None,
+    },
+    // Review (SL-040) — the 2nd kind with a runtime state tree (baton/lock/cache,
+    // PHASE-03+), mirroring slice. Its authored toml is status-LESS (derived,
+    // D-C8); the scan reads `.id` via the id-only reader (D2), so a status-less
+    // ledger scans cleanly while the strict `Meta` stays untouched.
+    KindRef {
+        kind: &REVIEW_KIND,
+        stem: "review",
+        state_dir: Some(".doctrine/state/review"),
     },
 ];
 
@@ -205,7 +215,10 @@ fn scan_kind(root: &Path, kind: &'static KindRef) -> anyhow::Result<KindSnapshot
 
     let mut entities = Vec::new();
     for dir_id in entity::scan_ids(&tree_root)? {
-        let toml_id = meta::read_meta(&tree_root, kind.stem, dir_id)?.id;
+        // The scan path needs only the id (design §5 D2): read it via the id-only
+        // reader so review's intentionally status-less toml scans cleanly, while
+        // the strict `Meta` (status-bearing readers) is untouched.
+        let toml_id = meta::read_id(&tree_root, kind.stem, dir_id)?;
         entities.push(EntityFacts { dir_id, toml_id });
     }
 
@@ -246,8 +259,7 @@ fn scan_aliases(tree_root: &Path, stem: &str) -> anyhow::Result<Vec<AliasFacts>>
         let target_toml_id = std::fs::read_link(entry.path())
             .ok()
             .and_then(|t| t.file_name().and_then(|b| b.to_str()?.parse::<u32>().ok()))
-            .and_then(|target_dir_id| meta::read_meta(tree_root, stem, target_dir_id).ok())
-            .map(|m| m.id);
+            .and_then(|target_dir_id| meta::read_id(tree_root, stem, target_dir_id).ok());
 
         aliases.push(AliasFacts {
             encoded_id,
@@ -293,6 +305,25 @@ pub(crate) fn run_validate(path: Option<PathBuf>) -> anyhow::Result<()> {
 /// Resolve a numbered kind by its canonical prefix (`SL` → the slice [`KindRef`]).
 pub(crate) fn kind_by_prefix(prefix: &str) -> Option<&'static KindRef> {
     KINDS.iter().find(|k| k.kind.prefix == prefix)
+}
+
+/// Validate that a canonical ref (`SL-024`) resolves to a real entity on disk —
+/// the forward-edge guard a kind reuses at authoring time (SL-040 §7: `review
+/// new` refuses a dangling / unknown-prefix `[target].ref` before minting an RV).
+/// Two failure modes, both surfaced by [`parse_canonical_ref`] + a dir probe: an
+/// unknown prefix / non-canonical shape, and a well-formed ref to an id with no
+/// entity directory (dangling). Read-only.
+pub(crate) fn ensure_ref_resolves(root: &Path, reference: &str) -> anyhow::Result<()> {
+    let (kind, id) = parse_canonical_ref(reference)?;
+    let name = format!("{id:03}");
+    let dir = root.join(kind.kind.dir).join(&name);
+    anyhow::ensure!(
+        fsutil::is_real_dir(&dir),
+        "`{reference}` does not resolve to an entity (no {} at {})",
+        listing::canonical_id(kind.kind.prefix, id),
+        dir.display()
+    );
+    Ok(())
 }
 
 /// Parse a canonical ref (`SL-031`) into its kind and numeric id. Reseat keys on
@@ -584,6 +615,51 @@ mod tests {
         assert!(f[0].to_string().contains("no numbered target"), "{}", f[0]);
     }
 
+    /// SL-040 D2 (VT-1, validate-path): the review kind's intentionally
+    /// status-less toml scans cleanly through `scan_kind`'s id-only reader, so a
+    /// review entity is visible to `validate` without seeding a derived status.
+    #[test]
+    fn scan_kind_reads_a_review_statusless_toml() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let dir = root.join(REVIEW_KIND.dir).join("001");
+        std::fs::create_dir_all(&dir).unwrap();
+        // No `status` key — review derives it (D-C8).
+        std::fs::write(
+            dir.join("review-001.toml"),
+            "id = 1\nslug = \"s\"\ntitle = \"T\"\n\n[review]\nfacet = \"design\"\n",
+        )
+        .unwrap();
+        let review_kind = kind_by_prefix("RV").expect("RV in KINDS");
+        let snap = scan_kind(root, review_kind).expect("status-less review scans cleanly");
+        assert_eq!(snap.entities.len(), 1);
+        assert_eq!(snap.entities[0].toml_id, 1);
+    }
+
+    /// SL-040 §7: `ensure_ref_resolves` accepts a real target, refuses a dangling
+    /// (well-formed but absent) ref and an unknown-prefix ref — the `review new`
+    /// forward-edge guard.
+    #[test]
+    fn ensure_ref_resolves_guards_the_forward_edge() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let dir = root.join(".doctrine/slice/024");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("slice-024.toml"), "id = 24\n").unwrap();
+
+        assert!(ensure_ref_resolves(root, "SL-024").is_ok());
+        let dangling = ensure_ref_resolves(root, "SL-099").unwrap_err();
+        assert!(
+            dangling.to_string().contains("does not resolve"),
+            "{dangling}"
+        );
+        let unknown = ensure_ref_resolves(root, "ZZ-001").unwrap_err();
+        assert!(
+            unknown.to_string().contains("unknown kind prefix"),
+            "{unknown}"
+        );
+    }
+
     #[test]
     fn parse_canonical_ref_resolves_kind_and_id() {
         let (kind, id) = parse_canonical_ref("SL-031").expect("valid ref");
@@ -636,20 +712,21 @@ mod tests {
     }
 
     #[test]
-    fn kinds_table_covers_the_twelve_numbered_kinds() {
+    fn kinds_table_covers_the_numbered_kinds() {
         let prefixes: Vec<_> = KINDS.iter().map(|k| k.kind.prefix).collect();
         assert_eq!(
             prefixes,
             [
-                "SL", "ADR", "POL", "STD", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE"
+                "SL", "ADR", "POL", "STD", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE",
+                "RV"
             ]
         );
-        // Only slice owns runtime phase state (F3 guard surface).
+        // Slice and review (SL-040) own a runtime state tree (F3 guard surface).
         let stateful: Vec<_> = KINDS
             .iter()
             .filter(|k| k.state_dir.is_some())
             .map(|k| k.kind.prefix)
             .collect();
-        assert_eq!(stateful, ["SL"]);
+        assert_eq!(stateful, ["SL", "RV"]);
     }
 }
