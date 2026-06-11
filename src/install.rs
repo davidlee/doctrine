@@ -636,6 +636,29 @@ mod tests {
     }
 
     #[test]
+    fn embedded_manifest_creates_the_rec_tree_and_embeds_its_templates() {
+        let manifest = load_manifest().unwrap();
+        assert!(
+            manifest.dirs.create.iter().any(|d| d == ".doctrine/rec"),
+            "manifest must create the authored rec tree"
+        );
+        assert!(
+            !manifest
+                .gitignore
+                .entries
+                .iter()
+                .any(|e| e.starts_with(".doctrine/rec")),
+            "the authored rec tree must not be gitignored by the manifest"
+        );
+        for tpl in ["templates/rec.toml", "templates/rec.md"] {
+            assert!(
+                !asset_text(tpl).unwrap().trim().is_empty(),
+                "{tpl} must be embedded and non-empty"
+            );
+        }
+    }
+
+    #[test]
     fn embedded_manifest_creates_and_ignores_the_skills_derived_tree() {
         let manifest = load_manifest().unwrap();
         // The canonical skills tree is created-and-ignored: the installer

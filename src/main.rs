@@ -20,6 +20,7 @@ mod memory;
 mod meta;
 mod plan;
 mod policy;
+mod rec;
 mod registry;
 mod requirement;
 mod retrieve;
@@ -155,6 +156,12 @@ enum Command {
     Review {
         #[command(subcommand)]
         command: ReviewCommand,
+    },
+
+    /// Create, show, and list reconciliation records (the REC kind, SPEC-002).
+    Rec {
+        #[command(subcommand)]
+        command: RecCommand,
     },
 
     /// Create and list architecture decision records.
@@ -1278,6 +1285,62 @@ enum ReviewCommand {
 }
 
 #[derive(Subcommand)]
+enum RecCommand {
+    /// Open a new reconciliation record — the immutable ledger of one
+    /// reconciliation act (the REC kind, SPEC-002). A fresh REC is a skeleton
+    /// (empty deltas/evidence); the reconcile writer (Slice B) populates it.
+    New {
+        /// The reconciliation move: accept | revise | redesign.
+        #[arg(long = "move", value_parser = rec::RecMove::parse)]
+        r#move: rec::RecMove,
+
+        /// Optional owning slice, e.g. `SL-042` (a freestanding REC omits it).
+        #[arg(long)]
+        owning_slice: Option<String>,
+
+        /// Optional decision ref this act records against, e.g. `DEC-005`.
+        #[arg(long = "decision")]
+        decision_ref: Option<String>,
+
+        /// REC title (default: derived from the move).
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List reconciliation records by id: id, move, owning slice, title.
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one reconciliation record: move, edges, deltas/evidence, rationale.
+    Show {
+        /// REC reference — `REC-007` or the bare id `7`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
 enum SkillsCommand {
     /// List available skills and their install status.
     List {
@@ -1378,6 +1441,10 @@ fn write_class(cmd: &Command) -> WriteClass {
             | ReviewCommand::Show { .. }
             | ReviewCommand::Status { .. }
             | ReviewCommand::Prime { .. } => Read,
+        },
+        Command::Rec { command } => match command {
+            RecCommand::New { .. } => Write("rec new"),
+            RecCommand::List { .. } | RecCommand::Show { .. } => Read,
         },
         Command::Adr { command } => match command {
             AdrCommand::New { .. } => Write("adr new"),
@@ -1715,6 +1782,30 @@ fn main() -> anyhow::Result<()> {
                 },
             ),
             ReviewCommand::Unlock { reference, path } => review::run_unlock(path, &reference),
+        },
+        Command::Rec { command } => match command {
+            RecCommand::New {
+                r#move,
+                owning_slice,
+                decision_ref,
+                title,
+                path,
+            } => rec::run_new(
+                path,
+                &rec::NewArgs {
+                    r#move,
+                    owning_slice,
+                    decision_ref,
+                    title,
+                },
+            ),
+            RecCommand::List { list, path } => rec::run_list(path, list.into_list_args()),
+            RecCommand::Show {
+                reference,
+                format,
+                json,
+                path,
+            } => rec::run_show(path, &reference, if json { Format::Json } else { format }),
         },
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),

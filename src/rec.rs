@@ -1,0 +1,601 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! `doctrine rec` — the REC reconciliation-record kind (SPEC-002, SL-042 P1).
+//! A REC is the immutable ledger of ONE reconciliation act: the requirement-status
+//! deltas it applied, the `move` it represents, and the coverage evidence it rests
+//! on. It is **status-less** (design D-Q3): one REC per act, no lifecycle, no
+//! transition verb — the commit is the act boundary. The reconcile *writer* that
+//! populates deltas from observed coverage/drift is the dependent Slice B; P1
+//! stands up the kind itself (schema + scaffold/show/list + `validate` wiring).
+//!
+//! REC rides the SL-040 review-kind seam verbatim (no parallel impl): a numbered
+//! authored kind with an eager-materialised fileset (`rec-NNN.toml` + `rec-NNN.md`
+//! plus the `NNN-slug` symlink), a `KINDS` row, and the status-less scan-path
+//! reader (`meta::read_id`) it uses because it has no authored `status` field. Its
+//! fields exceed `ScaffoldCtx`, so like review it materialises eagerly rather than
+//! via `Kind.scaffold`.
+
+use std::fs;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+
+use anyhow::Context;
+use serde::{Deserialize, Serialize};
+
+use crate::entity::{self, Kind, LocalFs, Materialised};
+use crate::listing::{self, Column, Format, ListArgs};
+use crate::tomlfmt::toml_string;
+
+// ---------------------------------------------------------------------------
+// Pure core — the one closed vocabulary REC owns (`move`), with an `as_str`
+// render mirror + a `&[&str]` known-set kept in lockstep by a drift canary test
+// (the review.rs / adr.rs pattern).
+// ---------------------------------------------------------------------------
+
+/// The reconciliation move a REC represents (design §5.3, D-Q3). The closed 3-set:
+/// `accept` (evidence confirms authored status), `revise` (authored status moves to
+/// match evidence), `redesign` (the drift escalates to a design change — carries
+/// **empty** `status_deltas`, F7: it records the escalation, not an instance-truth
+/// write).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RecMove {
+    Accept,
+    Revise,
+    Redesign,
+}
+
+impl RecMove {
+    /// The on-disk render mirror — lockstep-guarded against [`MOVES`] by
+    /// `move_known_set_matches_variants`.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Accept => "accept",
+            Self::Revise => "revise",
+            Self::Redesign => "redesign",
+        }
+    }
+
+    /// Parse a `--move` token against the closed 3-set (the review.rs `Facet::parse`
+    /// pattern — keeps the pure-core enum clap-free). The error names every valid
+    /// move.
+    pub(crate) fn parse(s: &str) -> Result<Self, String> {
+        match s {
+            "accept" => Ok(Self::Accept),
+            "revise" => Ok(Self::Revise),
+            "redesign" => Ok(Self::Redesign),
+            other => Err(format!(
+                "unknown move `{other}` (known: {})",
+                MOVES.join(", ")
+            )),
+        }
+    }
+}
+
+/// The `RecMove` known-set. Lockstep-guarded against the enum by
+/// `move_known_set_matches_variants`.
+const MOVES: &[&str] = &["accept", "revise", "redesign"];
+
+// ---------------------------------------------------------------------------
+// Schema — the authored `rec-NNN.toml` shape, read/written as data (design §5.3).
+// status_deltas / evidence_refs are array-of-tables (`[[status_delta]]` /
+// `[[evidence_ref]]`), the review-finding idiom — extensible and readable.
+// ---------------------------------------------------------------------------
+
+/// One requirement-status fact this act applied (design §5.3): the requirement and
+/// the `from → to` transition. Stored as strings — a REC is a ledger of facts the
+/// writer (Slice B) already validated; the read path takes them verbatim.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub(crate) struct StatusDelta {
+    pub(crate) requirement: String,
+    pub(crate) from: String,
+    pub(crate) to: String,
+}
+
+/// One coverage entry this act rests on, cited by the stable 4-tuple key
+/// `(slice, requirement, contributing_change, mode)` (design §5.3 F3) — never a
+/// `file#line` anchor (those rot). REC owns this evidence sub-structure inline
+/// until PRD-010 `knowledge_record` lands (OQ-2/H4); the P2 coverage substrate
+/// keys entries by the same tuple.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub(crate) struct EvidenceRef {
+    pub(crate) slice: String,
+    pub(crate) requirement: String,
+    pub(crate) contributing_change: String,
+    pub(crate) mode: String,
+}
+
+/// The `[rec]` metadata table (design §5.3): the `move` and the two optional edges.
+/// `owning_slice` is **optional** — its optionality is *why* a freestanding REC
+/// survives its slice's close (the act outlives the change).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub(crate) struct RecMeta {
+    /// The reconciliation move (`accept` | `revise` | `redesign`). `move` is a Rust
+    /// keyword, so the field is `r#move`; serde maps it to the bare `move` on disk.
+    #[serde(rename = "move")]
+    pub(crate) r#move: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) owning_slice: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) decision_ref: Option<String>,
+}
+
+/// The full `rec-NNN.toml` read/written as data (design §5.3). No authored `status`
+/// field (D-Q3) — REC scans via the status-less `meta::read_id` path. The deltas
+/// and evidence default to empty (the redesign-REC shape, F7, and the skeleton a
+/// fresh `rec new` writes before the writer populates it).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub(crate) struct RecDoc {
+    pub(crate) id: u32,
+    pub(crate) slug: String,
+    pub(crate) title: String,
+    pub(crate) rec: RecMeta,
+    #[serde(default)]
+    pub(crate) status_delta: Vec<StatusDelta>,
+    #[serde(default)]
+    pub(crate) evidence_ref: Vec<EvidenceRef>,
+}
+
+// ---------------------------------------------------------------------------
+// Kind row + eager render (design §5.1; the review.rs eager-materialise shape).
+// ---------------------------------------------------------------------------
+
+/// Relative dir of the REC tree inside the project root — a distinct top-level
+/// authored tree (design §5.1), parallel to `.doctrine/review`.
+pub(crate) const REC_DIR: &str = ".doctrine/rec";
+
+/// The REC kind: `rec-NNN.toml` + `rec-NNN.md` + `NNN-slug` symlink, riding the
+/// kind-blind engine. The scaffold is inert — REC's `[rec]` fields exceed
+/// `ScaffoldCtx`, so it renders its fileset eagerly in [`run_new`] (the
+/// `review` rationale); this stub exists only to satisfy the `Kind` descriptor
+/// `integrity::KINDS` references.
+pub(crate) const REC_KIND: Kind = Kind {
+    dir: REC_DIR,
+    prefix: "REC",
+    scaffold: rec_scaffold_unused,
+};
+
+/// Inert scaffold — see [`REC_KIND`]. REC never rides `Kind.scaffold`; this is the
+/// descriptor stub.
+fn rec_scaffold_unused(_ctx: &entity::ScaffoldCtx<'_>) -> anyhow::Result<entity::Fileset> {
+    anyhow::bail!("rec materialises eagerly, not via Kind.scaffold")
+}
+
+/// Render `rec-NNN.toml` from the embedded template (design §5.1). Every
+/// user-supplied string (`slug`/`title`/`owning_slice`/`decision_ref`) and the
+/// closed-vocab `move` is spliced through `toml_string`, so a hostile value can
+/// neither break the document nor inject a key
+/// (mem.pattern.render.toml-splice-escape-user-values). A fresh REC writes an empty
+/// ledger — deltas/evidence are appended later by the reconcile writer (Slice B).
+fn render_rec_toml(id: u32, slug: &str, title: &str, meta: &RecMeta) -> anyhow::Result<String> {
+    Ok(crate::install::asset_text("templates/rec.toml")?
+        .replace("{{id}}", &id.to_string())
+        .replace("{{slug}}", &toml_string(slug))
+        .replace("{{title}}", &toml_string(title))
+        .replace("{{move}}", &toml_string(&meta.r#move))
+        .replace(
+            "{{owning_slice}}",
+            &optional_line("owning_slice", meta.owning_slice.as_deref()),
+        )
+        .replace(
+            "{{decision_ref}}",
+            &optional_line("decision_ref", meta.decision_ref.as_deref()),
+        ))
+}
+
+/// An optional `key = "value"\n` line for the template, or the empty string when
+/// the value is absent (the review `target_phase` pattern). The value rides
+/// `toml_string` so a hostile ref cannot break the table.
+fn optional_line(key: &str, value: Option<&str>) -> String {
+    match value {
+        Some(v) => {
+            let mut line = String::from(key);
+            line.push_str(" = ");
+            line.push_str(&toml_string(v));
+            line.push('\n');
+            line
+        }
+        None => String::new(),
+    }
+}
+
+/// Render `rec-NNN.md` — the rationale companion (design §5.1). Plain markdown
+/// token substitution (no toml-splice escaping: markdown body, not a structured
+/// value).
+fn render_rec_md(canonical: &str, r#move: &str) -> anyhow::Result<String> {
+    Ok(crate::install::asset_text("templates/rec.md")?
+        .replace("{{ref}}", canonical)
+        .replace("{{move}}", r#move))
+}
+
+// ---------------------------------------------------------------------------
+// CLI: `rec new`
+// ---------------------------------------------------------------------------
+
+/// The bundled `rec new` arguments — one struct to dodge the clippy arg-ceiling
+/// (mem.pattern.lint.cli-handler-args-struct).
+pub(crate) struct NewArgs {
+    pub(crate) r#move: RecMove,
+    pub(crate) owning_slice: Option<String>,
+    pub(crate) decision_ref: Option<String>,
+    pub(crate) title: Option<String>,
+}
+
+/// `doctrine rec new --move M [--owning-slice SL-NNN] [--decision DEC-NNN]` —
+/// allocate a fresh REC and write its skeleton ledger (empty deltas/evidence) plus
+/// the rationale md. The reconcile writer (Slice B) populates the deltas; P1 stands
+/// up the kind. Optional edges (`owning_slice`/`decision_ref`) are validated up
+/// front (design §7 forward-edge guard): a dangling ref is refused BEFORE any id is
+/// claimed, so a bad edge never mints an entity.
+pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    // Forward-edge validation: refuse a dangling `owning_slice` BEFORE claiming an
+    // id (reusing the corpus id table, integrity::KINDS) — a slice is a numbered
+    // doctrine entity, so the edge must resolve. `decision_ref` is NOT validated:
+    // a DEC is a doc-local decision reference (e.g. `DEC-005-C`), not a numbered
+    // entity kind in `KINDS`, so it carries as free-text (design §5.3).
+    if let Some(owning) = &args.owning_slice {
+        crate::integrity::ensure_ref_resolves(&root, owning)?;
+    }
+
+    let title = args
+        .title
+        .clone()
+        .unwrap_or_else(|| format!("{} reconciliation", args.r#move.as_str()));
+    let slug = crate::input::resolve_slug(&title, None)?;
+    let meta = RecMeta {
+        r#move: args.r#move.as_str().to_owned(),
+        owning_slice: args.owning_slice.clone(),
+        decision_ref: args.decision_ref.clone(),
+    };
+
+    let trunk_ids = crate::git::trunk_entity_ids(&root, REC_DIR)?;
+    let out: Materialised = entity::materialise_fresh_prebuilt(
+        &LocalFs,
+        &root,
+        REC_DIR,
+        REC_KIND.prefix,
+        &trunk_ids,
+        |id, canonical| {
+            let name = format!("{id:03}");
+            Ok(vec![
+                entity::Artifact::File {
+                    rel_path: PathBuf::from(format!("{name}/rec-{name}.toml")),
+                    body: render_rec_toml(id, &slug, &title, &meta)?,
+                },
+                entity::Artifact::File {
+                    rel_path: PathBuf::from(format!("{name}/rec-{name}.md")),
+                    body: render_rec_md(canonical, &meta.r#move)?,
+                },
+                entity::Artifact::Symlink {
+                    rel_path: PathBuf::from(format!("{name}-{slug}")),
+                    target: name,
+                },
+            ])
+        },
+    )?;
+
+    let id = out
+        .eid
+        .numeric_id()
+        .context("rec kind must yield a numeric id")?;
+    writeln!(io::stdout(), "Created rec {id:03}: {}", out.dir.display())?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// show / list — REC is status-less, so the readers surface the facts as-authored
+// (no derived status, unlike review).
+// ---------------------------------------------------------------------------
+
+/// The `REC-NNN` canonical id for a numeric rec id, via the single id-form authority.
+fn canonical_id(id: u32) -> String {
+    listing::canonical_id(REC_KIND.prefix, id)
+}
+
+/// Parse a rec reference — `REC-007`, `rec-7`, or the bare id `7` — to its id.
+fn parse_ref(reference: &str) -> anyhow::Result<u32> {
+    let digits = reference
+        .strip_prefix("REC-")
+        .or_else(|| reference.strip_prefix("rec-"))
+        .unwrap_or(reference);
+    digits
+        .parse::<u32>()
+        .with_context(|| format!("not a rec reference: `{reference}` (expected `REC-007` or `7`)"))
+}
+
+/// Read one REC's `rec-NNN.toml` as data.
+fn read_rec(rec_root: &Path, id: u32) -> anyhow::Result<RecDoc> {
+    let name = format!("{id:03}");
+    let path = rec_root.join(&name).join(format!("rec-{name}.toml"));
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("rec {name} not found at {}", path.display()))?;
+    toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
+}
+
+/// Read every `rec-NNN.toml` under the REC tree as data (for `list`).
+fn read_recs(rec_root: &Path) -> anyhow::Result<Vec<RecDoc>> {
+    let mut docs = Vec::new();
+    for id in entity::scan_ids(rec_root)? {
+        docs.push(read_rec(rec_root, id)?);
+    }
+    Ok(docs)
+}
+
+/// The `owning_slice` edge label for display, or `—` when the REC is freestanding.
+fn owning_label(doc: &RecDoc) -> String {
+    doc.rec
+        .owning_slice
+        .clone()
+        .unwrap_or_else(|| "—".to_owned())
+}
+
+/// `doctrine rec show <REC-NNN>` — read the REC as data and render the readable
+/// whole (`Table`) or the faithful toml-as-data + rationale (`Json`).
+pub(crate) fn run_show(
+    path: Option<PathBuf>,
+    reference: &str,
+    format: Format,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let rec_root = root.join(REC_DIR);
+    let id = parse_ref(reference)?;
+    let doc = read_rec(&rec_root, id)?;
+    let body = read_rationale(&rec_root, id)?;
+    let out = match format {
+        Format::Table => format_show(&doc, &body),
+        Format::Json => show_json(&doc, &body)?,
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
+/// Read the `rec-NNN.md` rationale body (the prose companion).
+fn read_rationale(rec_root: &Path, id: u32) -> anyhow::Result<String> {
+    let name = format!("{id:03}");
+    let path = rec_root.join(&name).join(format!("rec-{name}.md"));
+    fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))
+}
+
+/// Render the `Table` show: identity header, the `move` + edges, the delta/evidence
+/// counts, then the rationale body. House style — `Vec<String>` joined by `concat`
+/// (avoids the `push_str(&format!)` lint).
+fn format_show(doc: &RecDoc, body: &str) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(format!("{} — {}\n", canonical_id(doc.id), doc.title));
+    parts.push(format!(
+        "move={} · owning={}\n",
+        doc.rec.r#move,
+        owning_label(doc)
+    ));
+    if let Some(decision) = &doc.rec.decision_ref {
+        parts.push(format!("decision: {decision}\n"));
+    }
+    parts.push(format!(
+        "deltas: {} · evidence: {}\n",
+        doc.status_delta.len(),
+        doc.evidence_ref.len()
+    ));
+    parts.push(format!("\n{body}"));
+    parts.concat()
+}
+
+/// The faithful JSON `show` row — the toml-as-data plus the rationale body.
+#[derive(Debug, Serialize)]
+struct ShowJson<'a> {
+    #[serde(flatten)]
+    doc: &'a RecDoc,
+}
+
+/// Render the `Json` show under the shared `{kind, …}` envelope.
+fn show_json(doc: &RecDoc, body: &str) -> anyhow::Result<String> {
+    let row = ShowJson { doc };
+    let value = serde_json::json!({ "kind": "rec", "rec": row, "body": body });
+    serde_json::to_string_pretty(&value).context("failed to serialize rec show JSON")
+}
+
+const REC_COLUMNS: [Column<RecDoc>; 4] = [
+    Column {
+        name: "id",
+        header: "id",
+        cell: |d| canonical_id(d.id),
+    },
+    Column {
+        name: "move",
+        header: "move",
+        cell: |d| d.rec.r#move.clone(),
+    },
+    Column {
+        name: "owning",
+        header: "owning",
+        cell: owning_label,
+    },
+    Column {
+        name: "title",
+        header: "title",
+        cell: |d| d.title.clone(),
+    },
+];
+
+/// The default visible column set for `rec list`.
+const REC_DEFAULT: &[&str] = &["id", "move", "owning", "title"];
+
+/// A REC's filterable projection. REC is status-less, so the `status` axis is empty
+/// — a `--status` filter is rejected by [`list_rows`] against the empty known-set.
+fn key(d: &RecDoc) -> listing::FilterFields {
+    listing::FilterFields {
+        canonical: canonical_id(d.id),
+        slug: d.slug.clone(),
+        title: d.title.clone(),
+        status: String::new(),
+        tags: Vec::new(),
+    }
+}
+
+/// `rec list` rows as a string — the compute half of [`run_list`]. No hide-set
+/// (REC has no lifecycle), sorted by id. `--status` is rejected (no status axis).
+fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
+    listing::validate_statuses(&args.status, &[])?;
+    let columns = args.columns.take();
+    let (filter, format) = listing::build(args)?;
+    let rec_root = root.join(REC_DIR);
+    if !rec_root.is_dir() {
+        // No tree yet ⇒ no recs; render an empty result for the chosen format.
+        return match format {
+            Format::Table => Ok(listing::render_columns::<RecDoc>(
+                &[],
+                &listing::select_columns(&REC_COLUMNS, REC_DEFAULT, columns.as_deref())?,
+            )),
+            Format::Json => listing::json_envelope::<ListRow>("rec", &[]),
+        };
+    }
+    let mut docs = listing::retain(read_recs(&rec_root)?, &filter, |_| false, key);
+    docs.sort_by_key(|d| d.id);
+    match format {
+        Format::Table => {
+            let sel = listing::select_columns(&REC_COLUMNS, REC_DEFAULT, columns.as_deref())?;
+            Ok(listing::render_columns(&docs, &sel))
+        }
+        Format::Json => listing::json_envelope("rec", &json_rows(&docs)),
+    }
+}
+
+/// Faithful JSON rows for `list` — the prefixed id, move, owning edge, and title.
+#[derive(Debug, Serialize)]
+struct ListRow {
+    id: String,
+    r#move: String,
+    owning: String,
+    title: String,
+}
+
+fn json_rows(docs: &[RecDoc]) -> Vec<ListRow> {
+    docs.iter()
+        .map(|d| ListRow {
+            id: canonical_id(d.id),
+            r#move: d.rec.r#move.clone(),
+            owning: owning_label(d),
+            title: d.title.clone(),
+        })
+        .collect()
+}
+
+/// `doctrine rec list` — list reconciliation records by id with move, owning edge,
+/// and title.
+pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let mut out = io::stdout();
+    write!(out, "{}", list_rows(&root, args)?)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn move_as_str_round_trips_through_parse() {
+        for m in [RecMove::Accept, RecMove::Revise, RecMove::Redesign] {
+            assert_eq!(RecMove::parse(m.as_str()), Ok(m));
+        }
+    }
+
+    #[test]
+    fn move_parse_rejects_unknown_naming_the_known_set() {
+        let err = RecMove::parse("supersede").unwrap_err();
+        assert!(err.contains("supersede"), "names the bad token: {err}");
+        assert!(
+            err.contains("accept, revise, redesign"),
+            "names the set: {err}"
+        );
+    }
+
+    /// Drift canary (the review.rs `*_known_set_matches_variants` pattern): every
+    /// enum variant's `as_str` is in the known-set and vice versa, in order.
+    #[test]
+    fn move_known_set_matches_variants() {
+        let variants = [RecMove::Accept, RecMove::Revise, RecMove::Redesign];
+        let from_variants: Vec<&str> = variants.iter().map(|m| m.as_str()).collect();
+        assert_eq!(
+            from_variants, MOVES,
+            "MOVES drifted from the RecMove variants"
+        );
+    }
+
+    /// The schema round-trips a fully-populated REC through serde (design VT-1):
+    /// deltas, evidence (the 4-tuple), move, and both optional edges survive
+    /// toml → struct → toml.
+    #[test]
+    fn schema_round_trips_a_populated_rec() {
+        let doc = RecDoc {
+            id: 7,
+            slug: "accept-req-108".to_owned(),
+            title: "accept REQ-108".to_owned(),
+            rec: RecMeta {
+                r#move: "accept".to_owned(),
+                owning_slice: Some("SL-042".to_owned()),
+                decision_ref: Some("DEC-005".to_owned()),
+            },
+            status_delta: vec![StatusDelta {
+                requirement: "REQ-108".to_owned(),
+                from: "pending".to_owned(),
+                to: "active".to_owned(),
+            }],
+            evidence_ref: vec![EvidenceRef {
+                slice: "SL-042".to_owned(),
+                requirement: "REQ-108".to_owned(),
+                contributing_change: "SL-042".to_owned(),
+                mode: "VT".to_owned(),
+            }],
+        };
+        let text = toml::to_string(&doc).unwrap();
+        let back: RecDoc = toml::from_str(&text).unwrap();
+        assert_eq!(back, doc);
+    }
+
+    /// A `redesign` REC carries EMPTY `status_deltas` (design F7) — the schema must
+    /// admit an empty delta list and round-trip it.
+    #[test]
+    fn schema_admits_an_empty_delta_list() {
+        let doc = RecDoc {
+            id: 1,
+            slug: "redesign-escalation".to_owned(),
+            title: "redesign escalation".to_owned(),
+            rec: RecMeta {
+                r#move: "redesign".to_owned(),
+                owning_slice: None,
+                decision_ref: None,
+            },
+            status_delta: Vec::new(),
+            evidence_ref: Vec::new(),
+        };
+        let text = toml::to_string(&doc).unwrap();
+        let back: RecDoc = toml::from_str(&text).unwrap();
+        assert!(back.status_delta.is_empty(), "empty deltas admitted (F7)");
+        assert_eq!(back, doc);
+    }
+
+    /// The `move` field renders to the bare `move` key on disk (serde rename of the
+    /// `r#move` Rust keyword), not `r#move` — a hand-editor sees `move`.
+    #[test]
+    fn move_field_renders_as_bare_move_key() {
+        let doc = RecDoc {
+            id: 1,
+            slug: "s".to_owned(),
+            title: "t".to_owned(),
+            rec: RecMeta {
+                r#move: "accept".to_owned(),
+                owning_slice: None,
+                decision_ref: None,
+            },
+            status_delta: Vec::new(),
+            evidence_ref: Vec::new(),
+        };
+        let text = toml::to_string(&doc).unwrap();
+        assert!(text.contains("move = \"accept\""), "bare move key: {text}");
+        assert!(!text.contains("r#move"), "no raw-ident leak: {text}");
+    }
+}

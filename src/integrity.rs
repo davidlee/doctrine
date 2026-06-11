@@ -19,6 +19,7 @@ use anyhow::{Context, bail};
 use crate::adr::ADR_KIND;
 use crate::backlog::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
 use crate::policy::POLICY_KIND;
+use crate::rec::REC_KIND;
 use crate::requirement::REQUIREMENT_KIND;
 use crate::review::REVIEW_KIND;
 use crate::slice::SLICE_KIND;
@@ -111,6 +112,14 @@ pub(crate) const KINDS: &[KindRef] = &[
         kind: &REVIEW_KIND,
         stem: "review",
         state_dir: Some(".doctrine/state/review"),
+    },
+    // REC (SL-042) — the reconciliation-record kind. Status-LESS like review
+    // (D-Q3: one REC per act, no lifecycle), so the scan reads `.id` via the
+    // id-only reader (meta::read_id). Owns no runtime state tree (state_dir None).
+    KindRef {
+        kind: &REC_KIND,
+        stem: "rec",
+        state_dir: None,
     },
 ];
 
@@ -718,10 +727,11 @@ mod tests {
             prefixes,
             [
                 "SL", "ADR", "POL", "STD", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE",
-                "RV"
+                "RV", "REC"
             ]
         );
         // Slice and review (SL-040) own a runtime state tree (F3 guard surface).
+        // REC (SL-042) is status-less but stateless — no runtime tree.
         let stateful: Vec<_> = KINDS
             .iter()
             .filter(|k| k.state_dir.is_some())
