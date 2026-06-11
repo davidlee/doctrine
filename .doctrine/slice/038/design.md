@@ -148,14 +148,18 @@ loose upper bound (e.g. the larger build completes < 120s) to avoid timing flake
 ```rust
 #[test] #[ignore = "slow; records the eviction-fixpoint quadratic for RSK-003"]
 fn eviction_fixpoint_scales_superlinearly() {
-    let t1 = time(|| dense_evict(100, 100));
-    let t2 = time(|| dense_evict(200, 200));
+    let t1 = time(|| dense_evict(50, 50));     // PHASE-01 debug-pinned: 2.2s
+    let t2 = time(|| dense_evict(100, 100));   // 41s — ratio 18.5× (super-quadratic)
     eprintln!("eviction ratio {:.1}x for 4x edges", t2.as_secs_f64()/t1.as_secs_f64());
     assert!(t2 < std::time::Duration::from_secs(120));  // sanity, not a tight gate
 }
 ```
-The printed ratio (probe saw ~17×) is the evidence; the assert only guards against a
-hang masquerading as a pass.
+The printed ratio (probe saw ~17×; PHASE-01 debug measured 18.5×) is the evidence; the
+assert only guards against a hang masquerading as a pass. **N pair (50,100), not the
+release-probe-shaped (100,200):** `cargo test` runs DEBUG (~10× the probe's release
+numbers), where n=200 ≈ ~700s would blow the 120s bound and run ~12 min
+(`mem.pattern.testing.debug-vs-release-scale-timing`); 50/100 keeps the cliff (41s ≪
+120s) and the same super-quadratic ratio.
 
 ### 6.4 evaluate — measured, recorded, coarse bound (RSK-004, first-measured-here)
 Same shape as §6.3 — a measured-ratio red, not an exact-count or subprocess one.
@@ -163,17 +167,19 @@ Same shape as §6.3 — a measured-ratio red, not an exact-count or subprocess o
 0..node_count` loop); over the deep-chain spine each BFS walks the suffix, so the
 whole call is O(V²). Builds the spine at two **sub-overflow** sizes, evaluates an
 idempotent channel (`Combinator::Any` over `Direction::Along` — descendants along the
-spine) seeded once at node 0, times each, prints the ratio, asserts only a loose upper
-bound:
+spine) seeded once at the spine head (the `NodeId` the builder returns — opaque ids
+have no public ctor), times each, prints the ratio, asserts only a loose upper bound:
 ```rust
 #[test] #[ignore = "slow; records the evaluate() per-node-BFS quadratic for RSK-004"]
 fn evaluate_scales_quadratically_in_node_count() {
-    let (g1, ov1) = deep_chain(5_000);    // sub-overflow: build MUST succeed
-    let (g2, ov2) = deep_chain(10_000);   // so query-time cost is isolated
+    let (g1, ov1, h1) = deep_chain(2_000);   // sub-overflow: build MUST succeed
+    let (g2, ov2, h2) = deep_chain(4_000);   // so query-time cost is isolated
     // Any's seed domain is ValueKind::Flag (query.rs:431) → Flag(true) is in-domain.
-    let seed = BTreeMap::from([(NodeId(0), ChannelValue::Flag(true))]);
-    let t1 = time(|| g1.evaluate(ChannelSpec::new(ov1, Combinator::Any, Direction::Along), &seed));
-    let t2 = time(|| g2.evaluate(ChannelSpec::new(ov2, Combinator::Any, Direction::Along), &seed));
+    // Opaque ids: seed the head NodeId the builder returned, never `NodeId(0)`.
+    let s1 = BTreeMap::from([(h1, ChannelValue::Flag(true))]);
+    let s2 = BTreeMap::from([(h2, ChannelValue::Flag(true))]);
+    let t1 = time(|| g1.evaluate(ChannelSpec::new(ov1, Combinator::Any, Direction::Along), &s1));
+    let t2 = time(|| g2.evaluate(ChannelSpec::new(ov2, Combinator::Any, Direction::Along), &s2));
     eprintln!("evaluate ratio {:.1}x for 2x nodes", t2.as_secs_f64()/t1.as_secs_f64());
     assert!(t2 < std::time::Duration::from_secs(120));   // sanity, not a tight gate
 }
@@ -181,18 +187,19 @@ fn evaluate_scales_quadratically_in_node_count() {
 2× nodes → ~4× time is the quadratic signal (vs ~2× for the O(V+E) topo-fold fix).
 `Direction::Along` traverses the spine toward descendants so `reachable(k)` returns the
 `n-1-k`-node suffix; `Direction::None` would yield `∅` and **destroy the signal** — it
-is forbidden here. The output `Channel` is near-empty (the lone seed reaches only node
-0's own fold set) — irrelevant: the cost is the **unconditional** per-node BFS, which
+is forbidden here. The output `Channel` is near-empty (the lone seed reaches only the
+spine head's own fold set) — irrelevant: the cost is the **unconditional** per-node BFS, which
 runs before any fold regardless of seeds. Build is excluded from the timed closure (graphs are built *before*
 `time(||…)`), so the measurement is the query, not the O(V) acyclic build. Unlike §6.3
 this red builds **no dense graph** — the cost is purely the per-node re-BFS, which is
 what isolates RSK-004 from the RSK-003 eviction quadratic.
 
 **N-pair tuning (impl):** both `n` must be (a) safely **sub-overflow** so the spine
-build succeeds — the recursion margin is large (overflow ~80k; the snippet's 5–10k is
-~⅛ of that), validate empirically rather than assume; and (b) large enough that the
+build succeeds — the recursion margin is large (overflow ~80k; the PHASE-01-pinned
+2–4k is ~1/20 of that), validated empirically not assumed; and (b) large enough that the
 larger `evaluate` runs long enough (target ≳ a few hundred ms) for the recorded ratio
-to clear scheduler noise — if both calls are sub-ms the 4× signal blurs. The *recorded
+to clear scheduler noise — if both calls are sub-ms the 4× signal blurs. PHASE-01 debug
+measured (2000,4000) → 1.8s/7.7s, ratio 4.25×, ~9.5s total. The *recorded
 ratio* is the evidence; the `< 120s` assert only guards a hang.
 
 ## 7. Findings note (`notes.md`)
