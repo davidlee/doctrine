@@ -119,27 +119,9 @@ impl ReqStatus {
 /// gathered) · `Verified` (evidence confirms the requirement) · `Failed` (evidence
 /// contradicts it) · `Blocked` (evidence cannot be gathered).
 ///
-/// **Stub — vocabulary only (SL-028 PHASE-03).** There is no producer, no consumer,
-/// no `Requirement` field, and no coverage block; SL-028 lands the type so the truth
-/// model is *named in code*. Its producer/consumer (the reconcile engine, the
-/// coverage join) is a deferred follow-on — the `expect(dead_code)` retires itself
-/// once that consumer is wired (dead-code-self-clearing-leaf precedent).
-// The suppression is scoped to the non-test build: under `cfg(test)` the VT-2
-// serde round-trip (`coverage_status_serde_round_trips_all_five_variants`) names
-// every variant, so the type is *used* and `dead_code` would not fire — an
-// unconditional `expect` would itself be unfulfilled there. The gate runs plain
-// `cargo clippy` (bins/lib, no test cfg) where the type is genuinely dead, so the
-// `not(test)` expectation is fulfilled exactly where the lint applies.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "CoverageStatus is the observed-evidence half of the two-enum \
-                  truth model (ADR-009 §3); its producer/consumer (reconcile \
-                  engine, coverage join) is deferred — SL-028 lands it as \
-                  vocabulary only"
-    )
-)]
+/// The observed-evidence half is consumed by the slice-side coverage substrate
+/// (`crate::coverage`, SL-042 P2): a `CoverageEntry` carries its `CoverageStatus`.
+/// The status is **observed**, never derived into `ReqStatus` (NF-001 / ADR-009 §3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum CoverageStatus {

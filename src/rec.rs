@@ -92,16 +92,11 @@ pub(crate) struct StatusDelta {
 
 /// One coverage entry this act rests on, cited by the stable 4-tuple key
 /// `(slice, requirement, contributing_change, mode)` (design §5.3 F3) — never a
-/// `file#line` anchor (those rot). REC owns this evidence sub-structure inline
-/// until PRD-010 `knowledge_record` lands (OQ-2/H4); the P2 coverage substrate
-/// keys entries by the same tuple.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub(crate) struct EvidenceRef {
-    pub(crate) slice: String,
-    pub(crate) requirement: String,
-    pub(crate) contributing_change: String,
-    pub(crate) mode: String,
-}
+/// `file#line` anchor (those rot). The key is **owned by coverage** (the cited
+/// thing), not rec (the citer): P2 relocated the 4-tuple to `coverage::CoverageKey`
+/// as its owner; rec keeps the `EvidenceRef` name via this alias so its ledger
+/// schema and tests read byte-unchanged.
+use crate::coverage::CoverageKey as EvidenceRef;
 
 /// The `[rec]` metadata table (design §5.3): the `move` and the two optional edges.
 /// `owning_slice` is **optional** — its optionality is *why* a freestanding REC
