@@ -193,24 +193,51 @@ fn pass2_cycles(
     }
 }
 
-/// Evict the globally-minimal participating edge by the F17 key, to fixpoint.
-/// Each iteration removes one edge → terminates in ≤ |E| steps.
+/// Evict the F17-minimal participating edge per cyclic component, to fixpoint.
+/// The cyclic components are vertex-disjoint, so the global "drop the
+/// globally-minimal participant, re-Tarjan ALL edges" loop and this localized
+/// "process each component to its own fixpoint" loop evict the IDENTICAL set:
+/// eviction in component A never changes whether an edge in disjoint component B
+/// is cyclic. Computing the SCCs once up front (then re-Tarjan only the shrinking
+/// sub-component) drops the cost from O(E·(V+E)) to near-linear in N components.
 fn pass2_evict(edges: &mut BTreeSet<Edge>, overlay: OverlayId, evictions: &mut Vec<EvictedEdge>) {
+    for component in cyclic_components(edges) {
+        evict_component(edges, &component, overlay, evictions);
+    }
+}
+
+/// Drive ONE cyclic component to acyclicity. `component` seeds the vertex set;
+/// each step evicts the F17-min edge with both endpoints still inside the
+/// shrinking sub-component, then re-Tarjans only that induced sub-edge-set. Each
+/// step removes one edge → terminates in ≤ |induced edges| steps.
+fn evict_component(
+    edges: &mut BTreeSet<Edge>,
+    component: &BTreeSet<NodeId>,
+    overlay: OverlayId,
+    evictions: &mut Vec<EvictedEdge>,
+) {
+    // The induced sub-edge-set of this component (both endpoints inside it).
+    let mut sub: BTreeSet<Edge> = edges
+        .iter()
+        .filter(|e| component.contains(&e.src) && component.contains(&e.dst))
+        .copied()
+        .collect();
     loop {
-        let components = cyclic_components(edges);
-        if components.is_empty() {
+        let cyclic = cyclic_components(&sub);
+        if cyclic.is_empty() {
             break;
         }
         // `Edge` orders by the F17 key, so `.min()` selects the eviction-key
         // minimum directly — never adjacency-set order (F37).
-        let victim = edges
+        let victim = sub
             .iter()
-            .filter(|e| participates(e, &components))
+            .filter(|e| participates(e, &cyclic))
             .min()
             .copied();
         let Some(victim) = victim else {
             break;
         };
+        sub.remove(&victim);
         edges.remove(&victim);
         evictions.push(EvictedEdge {
             overlay,
@@ -318,42 +345,85 @@ impl<'a> Tarjan<'a> {
         t.out
     }
 
-    fn strongconnect(&mut self, v: NodeId) {
-        let idx = self.next_index;
-        self.next_index = self.next_index.saturating_add(1);
-        self.index.insert(v, idx);
-        self.lowlink.insert(v, idx);
-        self.stack.push(v);
-        self.on_stack.insert(v);
+    /// Iterative DFS (explicit `Vec` stack — depth tracks graph depth without
+    /// recursing, so a deep chain no longer overflows the native stack). Each
+    /// `Frame` carries a node and an index into its successor list; `successors`
+    /// is the `BTreeSet` walked deterministically. A frame is processed in two
+    /// interleaved roles: first visit assigns `index`/`lowlink` and pushes to the
+    /// Tarjan stack; each successor step either descends (push a child frame) or
+    /// folds the child/back-edge `lowlink` in; when successors are exhausted and
+    /// `lowlink[v]==index[v]`, the SCC is popped. The `lowlink` fold-on-return is
+    /// applied when control comes BACK to the parent frame (`returned`), mirroring
+    /// the recursive `lowlink[v] = min(lowlink[v], lowlink[w])`.
+    fn strongconnect(&mut self, root: NodeId) {
+        // (node, successor cursor). `returned` carries the child whose return is
+        // being folded back into the frame now on top of the stack.
+        let mut frames: Vec<(NodeId, usize)> = vec![(root, 0)];
+        let mut returned: Option<NodeId> = None;
 
-        // Copy the `&'a` reference out so the successor borrow is tied to `'a`,
-        // not to `&mut self` — lets us recurse without aliasing.
-        let adjacency = self.adjacency;
-        if let Some(successors) = adjacency.get(&v) {
-            for &w in successors {
-                if !self.index.contains_key(&w) {
-                    self.strongconnect(w);
-                    let low_w = self.lowlink.get(&w).copied().unwrap_or(idx);
-                    let low_v = self.lowlink.get(&v).copied().unwrap_or(idx);
-                    self.lowlink.insert(v, low_v.min(low_w));
-                } else if self.on_stack.contains(&w) {
-                    let index_w = self.index.get(&w).copied().unwrap_or(idx);
-                    let low_v = self.lowlink.get(&v).copied().unwrap_or(idx);
-                    self.lowlink.insert(v, low_v.min(index_w));
+        while let Some(&(v, cursor)) = frames.last() {
+            if cursor == 0 && returned.is_none() {
+                // First visit of `v`.
+                let idx = self.next_index;
+                self.next_index = self.next_index.saturating_add(1);
+                self.index.insert(v, idx);
+                self.lowlink.insert(v, idx);
+                self.stack.push(v);
+                self.on_stack.insert(v);
+            }
+
+            // Fold a just-returned child's lowlink into `v` (recursive
+            // `lowlink[v] = min(lowlink[v], lowlink[w])`).
+            if let Some(w) = returned.take() {
+                let low_w = self.lowlink.get(&w).copied().unwrap_or(0);
+                let low_v = self.lowlink.get(&v).copied().unwrap_or(0);
+                self.lowlink.insert(v, low_v.min(low_w));
+            }
+
+            // Advance through successors until we either descend or exhaust them.
+            let successors = self.adjacency.get(&v);
+            let mut descended = false;
+            let mut next_cursor = cursor;
+            if let Some(succ) = successors {
+                for &w in succ.iter().skip(cursor) {
+                    next_cursor = next_cursor.saturating_add(1);
+                    if !self.index.contains_key(&w) {
+                        // Descend: park the parent cursor, push the child frame.
+                        if let Some(last) = frames.last_mut() {
+                            last.1 = next_cursor;
+                        }
+                        frames.push((w, 0));
+                        descended = true;
+                        break;
+                    } else if self.on_stack.contains(&w) {
+                        // Back/cross edge to an on-stack node: fold in index[w].
+                        let index_w = self.index.get(&w).copied().unwrap_or(0);
+                        let low_v = self.lowlink.get(&v).copied().unwrap_or(0);
+                        self.lowlink.insert(v, low_v.min(index_w));
+                    }
                 }
             }
-        }
-
-        if self.lowlink.get(&v) == self.index.get(&v) {
-            let mut component = BTreeSet::new();
-            while let Some(w) = self.stack.pop() {
-                self.on_stack.remove(&w);
-                component.insert(w);
-                if w == v {
-                    break;
-                }
+            if descended {
+                continue;
             }
-            self.out.push(component);
+            if let Some(last) = frames.last_mut() {
+                last.1 = next_cursor;
+            }
+
+            // Successors exhausted: close `v`. Pop its SCC if it is a root.
+            if self.lowlink.get(&v) == self.index.get(&v) {
+                let mut component = BTreeSet::new();
+                while let Some(w) = self.stack.pop() {
+                    self.on_stack.remove(&w);
+                    component.insert(w);
+                    if w == v {
+                        break;
+                    }
+                }
+                self.out.push(component);
+            }
+            frames.pop();
+            returned = Some(v);
         }
     }
 }
@@ -473,27 +543,60 @@ fn orient(edge: Edge, direction: Direction) -> Edge {
 }
 
 /// Evict the F17-minimal LAYER-k edge in any U cycle, to fixpoint (F10). Only
-/// `layer_k` is evictable, so earlier-layer authority holds (I2); each step
-/// removes an edge → terminates.
+/// `layer_k` is evictable, so earlier-layer authority holds (I2). The U cyclic
+/// components are vertex-disjoint, so — as in `pass2_evict` — processing each
+/// component to its own fixpoint evicts the identical set the global re-Tarjan
+/// loop would, at near-linear cost.
 fn evict_layer_cycles(
     u: &mut BTreeSet<Edge>,
     layer_k: &mut BTreeSet<Edge>,
     overlay: OverlayId,
     evictions: &mut Vec<EvictedEdge>,
 ) {
+    for component in cyclic_components(u) {
+        evict_layer_component(u, layer_k, &component, overlay, evictions);
+    }
+}
+
+/// Drive ONE U cyclic component to acyclicity by evicting only its `layer_k`
+/// edges. Relies on the G2 layer-k invariant: every U-cycle present at layer k
+/// contains ≥1 `layer_k` edge (each prior layer is at fixpoint before layer k is
+/// inserted, so `U` minus the new `layer_k` edges is acyclic). Hence while a
+/// cyclic sub-component remains a `layer_k` victim always exists.
+fn evict_layer_component(
+    u: &mut BTreeSet<Edge>,
+    layer_k: &mut BTreeSet<Edge>,
+    component: &BTreeSet<NodeId>,
+    overlay: OverlayId,
+    evictions: &mut Vec<EvictedEdge>,
+) {
+    let mut sub: BTreeSet<Edge> = u
+        .iter()
+        .filter(|e| component.contains(&e.src) && component.contains(&e.dst))
+        .copied()
+        .collect();
     loop {
-        let components = cyclic_components(u);
-        if components.is_empty() {
+        let cyclic = cyclic_components(&sub);
+        if cyclic.is_empty() {
             break;
         }
-        let victim = u
+        let victim = sub
             .iter()
-            .filter(|e| layer_k.contains(*e) && participates(e, &components))
+            .filter(|e| layer_k.contains(*e) && participates(e, &cyclic))
             .min()
             .copied();
         let Some(victim) = victim else {
+            // G2 invariant violation: a cyclic sub-component with NO evictable
+            // layer_k edge. The localized loop must not silently leave U cyclic
+            // (the global loop would `break` here too, but on the WHOLE U — this
+            // is the documented STOP seam). Panic loudly rather than work around.
+            debug_assert!(
+                false,
+                "G2 violated: cyclic U sub-component with no layer_k victim (overlay {overlay:?})"
+            );
             break;
         };
+        sub.remove(&victim);
         u.remove(&victim);
         layer_k.remove(&victim);
         evictions.push(EvictedEdge {
@@ -542,6 +645,14 @@ fn longest_levels(u: &BTreeSet<Edge>, node_count: u32) -> BTreeMap<NodeId, u32> 
     cache
 }
 
+/// Memoised longest-path level of one node, computed with an explicit post-order
+/// `Vec` stack (no recursion → a clean acyclic chain no longer overflows the
+/// native stack). A node is finalised only after every predecessor is cached:
+/// the first time it is seen it is re-pushed under all its uncached parents
+/// (push-children-then-revisit); on the revisit all parents are cached, so
+/// `level = 0` with no preds else `1 + max(level(parent))` — identical to the
+/// recursive form. `U` is acyclic here (pass 3 broke every U cycle), so no
+/// parent can be on the active-path twice.
 fn level_of(
     node: NodeId,
     preds: &BTreeMap<NodeId, BTreeSet<NodeId>>,
@@ -550,18 +661,37 @@ fn level_of(
     if let Some(&cached) = cache.get(&node) {
         return cached;
     }
-    let level = match preds.get(&node) {
-        None => 0,
-        Some(parents) => {
-            let mut best = 0;
-            for &parent in parents {
-                best = best.max(level_of(parent, preds, cache).saturating_add(1));
-            }
-            best
+    // `expanded` marks a node whose children have already been pushed: its next
+    // pop is the finalise visit. Distinguishes first-sight from revisit.
+    let mut stack: Vec<(NodeId, bool)> = vec![(node, false)];
+    while let Some((cur, expanded)) = stack.pop() {
+        if cache.contains_key(&cur) {
+            continue;
         }
-    };
-    cache.insert(node, level);
-    level
+        match preds.get(&cur) {
+            None => {
+                cache.insert(cur, 0);
+            }
+            Some(parents) if expanded => {
+                let mut best = 0;
+                for &parent in parents {
+                    let parent_level = cache.get(&parent).copied().unwrap_or(0);
+                    best = best.max(parent_level.saturating_add(1));
+                }
+                cache.insert(cur, best);
+            }
+            Some(parents) => {
+                // First sight: revisit `cur` after its uncached parents resolve.
+                stack.push((cur, true));
+                for &parent in parents {
+                    if !cache.contains_key(&parent) {
+                        stack.push((parent, false));
+                    }
+                }
+            }
+        }
+    }
+    cache.get(&node).copied().unwrap_or(0)
 }
 
 /// The taint set: seeds = degraded SCC members of spec-referenced overlays only

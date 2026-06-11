@@ -1,27 +1,34 @@
-//! SL-038 — durable red / characterization tests for the four confirmed cordage
-//! scale cliffs, all reachable inside the ~tens-of-thousands target. Each red is
-//! `#[ignore]`d (off the default gate) and encodes a cliff so the eventual fix
-//! flips it:
+//! SL-038 / SL-043 — scale gates for the confirmed cordage scale cliffs, all
+//! reachable inside the ~tens-of-thousands target.
 //!
-//! - RSK-002 explain: exact `2^layers` predecessor-path count (deterministic).
-//! - RSK-003 overflow: `deep_chain` build SIGABRTs (rc 134) — asserted in a child
-//!   process via self-re-exec (a stack overflow is uncatchable in-process).
-//! - RSK-003 quadratic: `dense_evict` eviction-to-fixpoint pass O(E·(V+E)).
-//! - RSK-004 evaluate: `evaluate` runs one `reachable` BFS per node → O(V²) over
-//!   the sparse deep-chain spine (analytical-only — first measured here).
+//! SL-043 PHASE-01 fixed the build-time resolve.rs defects, so the overflow and
+//! eviction-locality gates here now assert the FIX (build succeeds / eviction is
+//! linear), not the cliff:
+//!
+//! - RSK-003 overflow: `deep_chain(80k)` now BUILDS Ok — the iterative
+//!   Tarjan/`level_of` no longer overflow the native stack (gate, not `#[ignore]`).
+//! - SL-043 eviction locality: N independent small cycles evict in ~linear time,
+//!   and the evicted SET is identical to the pre-fix global loop (set-identity).
+//!
+//! Still `#[ignore]`d as deferred / demonstration:
+//! - RSK-002 explain: exact `2^layers` predecessor-path count (demonstration).
+//! - EXC-2 dense_evict superlinearity: a single dense cycle's fixpoint stays
+//!   superlinear — deferred residual, NOT fixable in scope (linearizing it would
+//!   change the evicted set).
+//! - RSK-004 evaluate: per-node `reachable` BFS → O(V²) (query-time; PHASE-02+).
 //!
 //! std-only, public-API-only, zero-dep. Generators are duplicated inline (D4 —
 //! `examples/` and `tests/` cannot import each other); the canonical copy lives in
 //! `examples/scale_harness.rs`. Follows the existing-test convention
 //! (`expect`/`unwrap`, short names) — `tests/` is not clippy-gated (design §8).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::time::{Duration, Instant};
 
 use cordage::{
-    Arity, ChannelSpec, ChannelValue, Combinator, CyclePolicy, Direction, EdgeAttrs, Graph,
-    GraphBuilder, NodeId, OrderLayer, OrderSpec, OverlayConfig, OverlayId,
+    Arity, ChannelSpec, ChannelValue, Combinator, CyclePolicy, Direction, EdgeAttrs, EvictReason,
+    Graph, GraphBuilder, NodeId, OrderLayer, OrderSpec, OverlayConfig, OverlayId,
 };
 
 type Built<T> = Result<T, Box<dyn Error>>;
@@ -116,32 +123,89 @@ fn explain_path_count_is_exponential_in_diamond_depth() {
     assert_eq!(n, 1usize << layers); // exact: proves 2^layers growth
 }
 
-// ── 6.2 overflow — self-re-exec subprocess, signal-asserted (RSK-003 primary) ─
+// ── 6.2 overflow — FIXED: deep_chain(80k) now builds (SL-043 PHASE-01) ────────
+// Was a self-re-exec subprocess asserting the build SIGABRTs (rc 134). After the
+// iterative Tarjan + iterative `level_of` rewrite, the build succeeds at 80k in
+// the native stack. `deep_chain` is a clean acyclic chain on a Reject overlay
+// carried by one OrderLayer, so the build runs BOTH overflow sites: Tarjan over
+// the spine (cycle pass) AND `level_of`'s longest-path over the 80k-long preds
+// chain (pass 4) — this single fixture exercises both independent cliffs.
 
 #[test]
-#[ignore = "re-execs itself to crash a child; demonstrates RSK-003"]
-fn deep_chain_overflows_inside_target_scale() {
-    if std::env::var_os("CORDAGE_OVERFLOW_CHILD").is_some() {
-        let _ = deep_chain(80_000); // CHILD: build aborts (rc 134); tuple unused
-        return;
-    }
-    let exe = std::env::current_exe().expect("test bin path");
-    let status = std::process::Command::new(exe)
-        .args([
-            "--exact",
-            "deep_chain_overflows_inside_target_scale",
-            "--ignored",
-        ])
-        .env("CORDAGE_OVERFLOW_CHILD", "1")
-        .status()
-        .expect("spawn child");
-    assert!(!status.success()); // signal / rc-134 — the cliff, in-target
+fn deep_chain_builds_inside_target_scale() {
+    let (g, ov, head) = deep_chain(80_000).expect("deep_chain(80k) must build post-fix");
+    // Sanity: the spine head exists in the resolved graph and the order is total
+    // over all 80k nodes (level_of finalised every node — no overflow, no gap).
+    assert!(
+        g.out_edges(ov, head).next().is_some(),
+        "head has a successor"
+    );
+    assert_eq!(g.ordered().len(), 80_000, "every node ordered");
 }
 
-// ── 6.3 quadratic — measured, recorded, coarse bound (RSK-003 secondary) ──────
+// ── 6.3 eviction locality — FIXED: N small cycles evict linearly + set-identity ─
+// SL-043 PHASE-01 localized pass2_evict to vertex-disjoint components. This gate
+// asserts (a) the evicted SET is byte-identical to the pre-fix global loop on a
+// small deterministic fixture, and (b) eviction over many independent small
+// cycles is ~linear in N (loose debug bound).
+
+/// N independent 2-cycles on one Evict overlay: cycle i is `x_i → y_i` (rank 0)
+/// and `y_i → x_i` (rank 1). The F17-min participant of each cycle is the rank-0
+/// `x_i → y_i` edge, so BOTH the pre-fix global loop and the localized loop evict
+/// exactly `{ x_i → y_i }`. Returns the graph and the (src, dst) of each evicted
+/// edge as the global loop would have produced them (the set-identity oracle).
+fn many_small_cycles(n: u32) -> Built<(Graph, Vec<(NodeId, NodeId)>)> {
+    let mut b = GraphBuilder::new();
+    let ov = b.overlay(OverlayConfig::new(CyclePolicy::Evict, Arity::Unbounded));
+    let mut expected_evicted: Vec<(NodeId, NodeId)> = Vec::new();
+    for _ in 0..n {
+        let x = b.node();
+        let y = b.node();
+        b.edge(ov, x, y, EdgeAttrs::new(0, 0)); // F17-min → evicted
+        b.edge(ov, y, x, EdgeAttrs::new(1, 0)); // survives
+        expected_evicted.push((x, y));
+    }
+    Ok((built(b.build())?, expected_evicted))
+}
+
+/// The `(src, dst)` of each `IntraOverlayCycle` eviction, as a set.
+fn intra_cycle_evicted(g: &Graph) -> BTreeSet<(NodeId, NodeId)> {
+    g.provenance()
+        .evictions()
+        .iter()
+        .filter(|e| e.reason() == EvictReason::IntraOverlayCycle)
+        .map(|e| (e.edge().src(), e.edge().dst()))
+        .collect()
+}
 
 #[test]
-#[ignore = "slow; records the eviction-fixpoint quadratic for RSK-003"]
+fn many_small_cycles_evict_set_identical_to_global_loop() {
+    // Small deterministic fixture: 4 disjoint 2-cycles → exactly the 4 rank-0
+    // edges evicted, the same set the pre-fix global "drop global-min, re-Tarjan
+    // all" loop produces (disjointness ⇒ identical set, design T3).
+    let (g, expected) = many_small_cycles(4).expect("build 4 cycles");
+    let got = intra_cycle_evicted(&g);
+    let want: BTreeSet<(NodeId, NodeId)> = expected.into_iter().collect();
+    assert_eq!(got, want, "localized eviction set == global-loop set");
+}
+
+#[test]
+fn many_small_cycles_evict_in_linear_time() {
+    // Eviction over N disjoint cycles is ~linear in N: doubling N should NOT
+    // blow a coarse debug bound (the quadratic global loop would). Loose — a
+    // gate against a regression to O(N²), not a tight perf assertion.
+    let t = time(|| many_small_cycles(20_000).expect("build 20k cycles"));
+    assert!(
+        t < Duration::from_secs(60),
+        "20k disjoint cycles evicted in {t:?} (linear-eviction gate)"
+    );
+}
+
+// ── 6.4 dense_evict — EXC-2 deferred residual (NOT fixable in scope) ──────────
+
+#[test]
+#[ignore = "deferred residual (EXC-2): a single dense cycle's fixpoint stays \
+            superlinear; linearizing it would change the evicted set"]
 fn eviction_fixpoint_scales_superlinearly() {
     // PHASE-01 debug-pinned (50,100): 2.2s / 41s, ratio 18.5× — NOT (100,200),
     // which would blow the 120s bound in debug (mem.debug-vs-release-scale-timing).
