@@ -42,25 +42,29 @@ perf spike validates them before any fix lands — `/design` owns the final call
   green unchanged.
 - **RSK-003 secondary — eviction quadratic.** `pass2_evict` (`resolve.rs:198`) and
   `evict_layer_cycles` (`resolve.rs:478`) recompute a full Tarjan SCC pass per
-  evicted edge → O(E·(V+E)); `participates` (`resolve.rs:224`) rescans linearly,
-  compounding. Direction: evict all safe minimal participants per SCC pass, or
-  incrementally re-test only the affected component.
+  evicted edge → O(E·(V+E)). **Locked (design D4):** per-SCC localization — one
+  Tarjan, then re-test only the shrinking touched component; SCC disjointness makes
+  the evicted *set* provably identical (provenance sorted). A single dense SCC stays
+  contract-bound superlinear (design EXC-2) — not fixable without changing the
+  evicted set.
 - **RSK-004 — channel-eval quadratic (impact: medium).** `evaluate()`
   (`query.rs:256`) runs a fresh full `reachable()` BFS per node → O(V·(V+E)).
-  Direction: single reverse-topo fold per overlay (one O(V+E) pass for the
-  idempotent combinators, no per-node re-search). Pure complexity, no overflow.
+  **Locked (design D3):** build-SCC condensation + reverse-topo fold, reusing the
+  build-time `degraded_sccs` (no query Tarjan); cycle-safe (F47). Idempotent
+  combinators O(V+E); CountDistinct set-union fold superlinear (design EXC-1).
 - **RSK-002 — explain() enumeration exponential (impact: medium).** `explain()`
-  path enumeration is 2^layers on diamond lattices; `extend_chains`
-  (`query.rs:150/158`) also clones the suffix per branch. Direction: return the
-  predecessor sub-DAG (or direct + one canonical chain); policy enumerates on
-  demand. **This is an output-contract change, not pure perf** — flag for `/design`.
-- **RSK-001 — Against-orientation U re-map untested (impact: low).** The D2
-  resolved→oriented re-map is exercised only indirectly. Add a direct VT. Folds in
-  here because the slice already stands up cordage graph fixtures; cheap rider.
+  enumerates every chain → 2^layers; `extend_chains` also clones the suffix per
+  branch. **Locked (design D2):** return the **pure predecessor sub-DAG**
+  (`paths`→`predecessors`), no witness chain — D11/F13 role-agnostic structure;
+  policy enumerates on demand. No non-test consumer (output-contract change is free).
+- **RSK-001 — Against-orientation re-map untested (impact: low).** `orient`
+  (`resolve.rs:463`) is correct but exercised only indirectly. Add a direct VT
+  (coverage-add, passes on first write); lives near `orient` in resolve.rs.
 
-**Deliverable spine:** (1) a reusable scale/cliff test harness — graph generators
-(deep chain, diamond lattice, large fan-out) + cliff probes; (2) the four fixes
-above, each TDD red (generator-driven) → green → refactor; (3) the RSK-001 VT.
+**Deliverable spine (fixes only — the harness is SL-038, `done`):** the four fixes
+above, phased P1 `resolve.rs` (RSK-003 both + RSK-001) → P2 `query.rs` (RSK-004) →
+P3 `query.rs`+`lib.rs` (RSK-002), each TDD red→green→refactor against SL-038's
+`#[ignore]`'d reds.
 
 ## Non-Goals
 
@@ -78,20 +82,20 @@ above, each TDD red (generator-driven) → green → refactor; (3) the RSK-001 V
 
 ## Open Questions
 
-- **OQ-1** — Does RSK-002's `explain()` fix change a published output contract, and
-  does any current/planned consumer depend on full enumeration? If yes, this risk
-  may need its own design beat or a consumer-coordinated change.
-- **OQ-2** — Fold IMP-020 (traversal consolidation) in, or keep the slice to pure
-  risk-closure and let the rewrites diverge less rather than unify? `/design`.
-- **OQ-3** — Exact REQ subset under SPEC-001 to pin in `relationships.requirements`
-  once perf-spike numbers fix the scale targets.
-- **OQ-4** — Phase shape: one perf-spike-first phase (build harness + quantify all
-  four) then per-risk fix phases, vs. interleaved. Likely the former — the spike is
-  shared scaffolding and the measured numbers set the VT bounds.
+- **OQ-1 — RESOLVED (design D2).** RSK-002 *does* change the `explain` output
+  contract, but no non-test consumer reads it → free to reshape to the sub-DAG.
+- **OQ-2 — IMP-020 fold-in.** Still open; default **out** (design OQ-2). Revisit
+  only if the RSK-004/RSK-002 rewrites naturally converge a shared traversal helper.
+- **OQ-3 — REQ pin.** Exact REQ subset under SPEC-001 for
+  `relationships.requirements` — resolve at `/plan`.
+- **OQ-4 — RESOLVED.** Harness is SL-038 (`done`); phase shape is 3-by-file/concern
+  (design D6), not perf-spike-first.
 
 ## Verification / Closure Intent
 
-- A scale/cliff harness exists and is reused across all four fixes.
+- SL-038's `#[ignore]`'d cliff reds are flipped/inverted to green gates (overflow
+  → build-succeeds; evaluate → near-linear; explain → cone-shape; eviction → new
+  many-small-cycles linear gate, `dense_evict` stays `#[ignore]` per EXC-2).
 - Each risk has a **red test that fails on `main`** (overflow / measured blowup)
   and passes after the fix; cliff bounds budget for debug-build timings running
   ~10× release (recorded memory).
