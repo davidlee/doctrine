@@ -15,3 +15,6 @@ tags = []
 slices = []
 specs  = ["PRD-013", "PRD-012"] # PRD-013 exhibits the gap; PRD-012 owns overlapping spec-relation machinery
 drift  = []
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
