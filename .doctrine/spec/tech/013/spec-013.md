@@ -49,8 +49,8 @@ known-set check (`validate_statuses`), the canonical id form (`canonical_id`),
 the generic table layout (`render_table`/`render_columns`), and the JSON
 envelope (`json_envelope`). What stays *per-kind* is the variant axis: the row
 type, the column projection, the ordering, and any kind-specific flags — none
-of which live in the leaf. This is the substrate that was lifted out of five
-bespoke per-kind list implementations.
+of which live in the leaf. This is the shared substrate every per-kind `list`
+delegates into.
 
 ### The CommonListArgs spine flatten
 

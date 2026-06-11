@@ -46,11 +46,13 @@ exclusion is **two-layer** (design OQ-3-B): `select_copies` is the *guarantee* �
 drops any file matching the coordination/runtime tier even when a broad `**`
 allowlist would otherwise admit it, so the copy physically cannot leak the tier;
 `allowlist_violations` behind `check-allowlist` is a static *smell test* whose green
-result is explicitly **not** completeness. The withheld tier — `.doctrine/state/`,
-the relative `phases` symlink, `handover.md`, memory caches — is classified in
-`is_withheld` by `Tier`. Provision refuses outright if any `.worktreeinclude`
-pattern names a withheld tier, and `verify_sibling_worktree` refuses to provision
-the source tree onto itself.
+result is explicitly **not** completeness. The withheld tier — the five `Tier`
+variants: `.doctrine/state/`, the relative `phases` symlink, `handover.md`,
+inquisition scratch, and memory caches — is classified in `is_withheld` by
+`Tier`. As a fail-fast convenience, provision aborts before copying if any
+`.worktreeinclude` pattern names a withheld tier — the same smell test, not a
+substitute for the copy-time `select_copies` guarantee that runs regardless — and
+`verify_sibling_worktree` refuses to provision the source tree onto itself.
 
 ### The branch-point guard — HEAD-stationarity, not merge-base
 
