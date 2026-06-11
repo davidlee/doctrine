@@ -5,10 +5,10 @@ id = 1
 slug = "cordage-against-orientation-u-re-map-untested-by-any-vt-sl-036-r-d"
 title = "cordage: Against-orientation U re-map untested by any VT (SL-036 R-D)"
 kind = "risk"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "mitigated"
 created = "2026-06-10"
-updated = "2026-06-10"
+updated = "2026-06-11"
 tags = []
 
 [facet]                         # risk only — every field typed; seeded empty

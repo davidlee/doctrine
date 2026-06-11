@@ -127,3 +127,27 @@ enumerated paths to a predecessor adjacency sub-DAG. REQ-076 + REQ-078 hardened.
 PHASE-01/02/03 done; RSK-001/002/003/004 retired. Rollup shows `3/3 ⚠` — the `⚠`
 is the expected hand-status (`proposed`) vs rollup divergence (no lifecycle-
 transition verb yet). Next: `/audit` → reconcile → `/close` (lifecycle → done).
+
+## Audit (RV-002) — reconciliation complete, audit-ready for close
+
+Conformance audit on RV-002 (reconciliation facet, target SL-043). 9 findings,
+all terminal (verified), no blocker — close-gate (D-C9b) will pass. Full closure
+story in `.doctrine/review/002/review-002.md` `## Synthesis`.
+
+- **Guards G1/G2/G3 all held.** G1 (direction-resolved condensation) proven by the
+  `{Along,Against,None}×{Max,CountDistinct}` matrix vs per-node-BFS oracle. G2
+  (layer-k) = sanctioned OR-goldens (no positive fixture — candidate hardening).
+  G3 (cone membership parity) re-asserts the retired chains' coverage.
+- **EXC-1 / EXC-2** confirmed honestly bounded (tolerated). EXC-2 residual is the
+  lone remaining `#[ignore]` (`eviction_fixpoint_scales_superlinearly`); OQ-3
+  conditional trigger governs any future IMP. Behaviour-preservation (R1) green.
+- **In-audit reconciliations:** RSK-001/002/003/004 transitioned
+  `open → resolved/mitigated` (were code-retired but the ledger lagged — now matches
+  code-truth). ISS-003 left open, flagged for rescope (the reshape changed the
+  `paths`-field surface it cites). IMP-020 correctly stayed its own open item.
+- **Gotcha (process, IMP-024):** RV verbs refuse under a dispatch worker fork — the
+  baton lives in the parent tree's gitignored runtime state. Open the reconciliation
+  RV in the **parent tree**. An orphaned RV-002 in the `sl-042-coord` fork is
+  unreachable/unneeded; the parent-tree RV-002 is canonical. IMP-024 owns the fix.
+- **Next:** `/close` — drive `proposed ⚠ 3/3 → done` via `doctrine slice status 43`
+  (audit→reconcile→done), NOT a hand-edit of slice-043.toml.
