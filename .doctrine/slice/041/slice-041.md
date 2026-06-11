@@ -22,12 +22,15 @@ not trust its safety input to be pre-resolved.
 
 ## Scope & Objectives
 
-- Resolve `--base` to a sha in the impure shell of `run_branch_point_check`,
-  the same way `--head` is resolved, before the `matches` compare.
+- Resolve **both** ends — `--base` and a passed `--head` — to a canonical commit
+  sha in the impure shell, via `rev-parse --verify <ref>^{commit}` (one
+  `resolve_commit` helper), before the `matches` compare. The verbatim-trust
+  defect is symmetric; base-only would leave the twin bug.
 - Keep `matches` a pure leaf (ADR-001): ref-equality only; resolution stays in
   the shell.
-- Add a VT row: symbolic base vs resolved head ⇒ non-stationary / error, and
-  both-symbolic ⇒ no longer false-stationary.
+- An unresolvable base/head ⇒ the verb **bails** (the safe failure direction).
+- Add VT rows: symbolic base resolves to stationary; both-symbolic no longer
+  false-stationary; passed-head resolved; unresolvable base bails.
 
 ## Non-Goals
 
