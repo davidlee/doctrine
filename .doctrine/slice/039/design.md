@@ -400,17 +400,16 @@ code. `cargo clippy -p doctrine` / `-p cordage` — never `--all-targets`.
   durable note + `/record-memory`; **not** patched in this slice.
 - **OQ-C (cosmetic).** Verb naming (`depends-on`/`before`) — final clap shapes
   settled in `/plan`.
-- **OQ-D (semantics, USER — gates lock).** A hard `depends_on` whose prereq is a
-  terminal item with an **abandoned** resolution (`wont-do`/`obsolete`/`expired`/
-  `duplicate`/`accepted`). Two options: **(D-min)** the §5.6 honest-record form —
-  drop the edge, surface it loudly in `overrides()` with the resolution named, do not
-  adjudicate; the author judges staleness. Lightest, stays inside the settled
-  "dropped+recorded" rule. **(D-split)** add a satisfied-vs-abandoned `Resolution`
-  taxonomy and treat an abandoned-terminal hard dep distinctly (e.g. a stronger
-  "stale dependency" diagnostic, or a hard error). More correct for the hard
-  contract, but adds a resolution-kind classification this slice didn't plan. Lean:
-  **D-min** for a first-consumer small-corpus tool, taxonomy as a follow-up IMP if it
-  bites. Design currently authored to D-min; D-split is additive. (§10 E1.)
+- **OQ-D (semantics) — RESOLVED 2026-06-11 (user): D-min.** A hard `depends_on`
+  whose prereq is a terminal item with an **abandoned** resolution (`wont-do`/
+  `obsolete`/`expired`/`duplicate`/`accepted`). *Resolved:* the §5.6 honest-record
+  form — drop the edge, surface it loudly in `overrides()` with the endpoint status +
+  resolution named, do not adjudicate; the author judges staleness. Stays inside the
+  settled "dropped+recorded" rule; lightest for a first-consumer small-corpus tool.
+  *Rejected:* D-split (a satisfied-vs-abandoned `Resolution` taxonomy + distinct
+  abandoned-dep handling) — more correct for the hard contract but adds a
+  classification this slice didn't scope; captured as a **follow-up IMP if it bites**.
+  Design is authored to D-min; D-split is additive. (§5.6, §10 E1.)
 
 ## 10. Review Notes
 
@@ -484,5 +483,14 @@ user-settled call.
   semantics* of the lowest tier are best-effort. Assumption A1 rewritten to say so;
   typed-date parsing noted as out-of-scope. (§6 A1.)
 
-_Design is NOT locked. Round-2 fixes integrated; **OQ-D** awaits the user. On
-sign-off a Lock stanza is appended here (date + commit), then `/plan`._
+### Lock
+
+**LOCKED 2026-06-11** atop the round-2 integration (`e5e5852`). Two adversarial
+passes complete: internal round 1 (A1–A4) + external round 2 (codex MCP / GPT-5.5,
+E1–E5), all findings integrated. **OQ-D resolved D-min** (user, 2026-06-11) — the
+last open decision; design authored to it. Order model verified against the cordage
+surface (longest-path `ordered()`, `Reject`/`Evict` policies, provenance evictions,
+`(src,dst)` tie key, infallible well-formed `build()`). Residual open items are
+non-blocking: OQ-A (projection siting, impl), OQ-B (the budgeted R-C harvest,
+expected), OQ-C (verb naming, `/plan`). Next: `/plan`. No code until the plan is
+approved.
