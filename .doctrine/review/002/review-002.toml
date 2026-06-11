@@ -1,0 +1,97 @@
+id    = 2
+slug  = "reconciliation-review-of-sl-043"
+title = "reconciliation review of SL-043"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-043"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "G1: condensation fold partition + DAG are direction-resolved (verifier #1 guard)"
+detail = "Design §10 G1 (A-2+C1) mandated the fold partition AND its condensation-DAG edges/reverse-topo be direction-resolved {Along,Against,None}, never forward build adjacency — the None×cyclic (C1) and Against×cyclic cells being silent corruption the prior suite cannot see. Observed: tests/condensation_fold.rs (6 tests) implements the mandated matrix {Along,Against,None}×{Max,CountDistinct} over one degraded Reject SCC, asserting value AND contributor identity vs an independent per-node-BFS oracle; partition is built from the direction-resolved neighbour view (None⇒singletons). Green. PHASE-02 notes confirm."
+disposition = "aligned"
+response = "Verified present and correct. tests/condensation_fold.rs implements the mandated {Along,Against,None}×{Max,CountDistinct} matrix over one degraded Reject SCC, asserting value AND contributor identity vs an independent per-node-BFS oracle; the partition is direction-resolved (None⇒singletons), not the stored SCCs. The #1 carried risk (G1/A-2+C1) is covered. Green."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "G2: layer-k localization invariant has no positive fixture (sanctioned OR-goldens)"
+detail = "Design §10 G2 / plan VT-1: the layer-k invariant (every U-cycle at layer k holds >=1 layer_k edge) is a localization precondition, to be asserted directly OR pinned via the unchanged compose_order goldens. Observed: enforced as a loud debug_assert!(false,..) STOP seam on the no-victim arm of evict_layer_component (never fired across the suite) PLUS the unchanged compose_order goldens (golden_net.rs, ordering.rs). NO dedicated positive fixture constructs a layer-k cycle and asserts the invariant directly. Plan VT-1 explicitly sanctioned the OR-goldens form. Candidate hardening if revisited (PHASE-01 notes)."
+disposition = "tolerated"
+response = "Sanctioned by plan VT-1, which explicitly permits the 'assert directly OR pin via the unchanged compose_order goldens' form. The invariant is guarded by the debug_assert!(false) STOP seam (never fired) plus the unchanged compose_order goldens that structurally depend on it. A dedicated positive layer-k fixture is a candidate hardening, not a gate — accepting the OR-goldens form per the locked plan."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "G3: explain cone tests assert same predecessor membership as retired chains"
+detail = "Design §10 G3 / R3: the rewritten explain tests (the one sanctioned suite break) must assert the SAME reachable-predecessor membership the old enumerated chains covered, not a weaker shape. Observed: the five explain.rs cases re-expressed as cone adjacency asserting identical predecessor membership — scc-entry {x:{a},a:{}}, inside-scc {a:{}}, multi-parent {n:{r1,r2},r1:{},r2:{}}, root {n:{}}, determinism. golden_net.rs compares the whole Explanation via derived PartialEq across edge permutations and stayed GREEN UNCHANGED (permutation-invariance witness). PHASE-03 notes."
+disposition = "aligned"
+response = "Verified. The five explain cone cases assert identical predecessor membership to the retired chains (scc-entry, inside-scc, multi-parent, root, determinism); golden_net.rs compares the whole Explanation across edge permutations and stayed green unchanged. The sanctioned break re-asserts the same coverage, not a weaker shape (R3 satisfied)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "EXC-1: set-valued contributors (Any/All/CountDistinct) superlinear, only Max is O(V+E)"
+detail = "Design §4 EXC-1 (A-1 corrected): the value folds in O(V+E) for all combinators, but Any/All/CountDistinct contributors are SETS (F43) unioned up the condensation → superlinear in set size (output itself up to O(V) per node). Only Max is fully O(V+E) (singleton argmax, min-NodeId tiebreak). Accepted as inherent, named not papered over. EX-5 documented. No code defect — this is the named exception the design committed to."
+disposition = "tolerated"
+response = "Accepted inherent exception, named in design §4 EXC-1 and honoured in EX-5. The contributor SET for Any/All/CountDistinct is superlinear by the nature of the output (up to O(V) per node); only Max is fully O(V+E). Not a defect — a consciously documented complexity exception. No follow-up."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "EXC-2: dense single-SCC eviction stays superlinear; eviction_fixpoint #[ignore]"
+detail = "Design §4 EXC-2 / §7 D4 / OQ-3 (codex R2 corrected the earlier contract-bound over-claim): one dense SCC re-Tarjan'd per round is O(E·(V+E)) WITHIN that component only — scope-bound/deferred, NOT an inherent lower bound (decremental SCC maintenance could hold the same evicted set sub-quadratically; deferred on std-only/determinism/complexity grounds). Observed: exactly one #[ignore] remains in cordage — eviction_fixpoint_scales_superlinearly, tagged 'deferred residual (EXC-2)'. The new many-small-cycles linear gate proves the real win. OQ-3: file an IMP only IF a dense-SCC workload appears."
+disposition = "tolerated"
+response = "Scope-bound deferred residual per design §4 EXC-2 / §7 D4 / OQ-3 (codex R2 corrected the earlier 'contract-bound' over-claim — no lower bound exists). Captured durably by the single remaining #[ignore] (eviction_fixpoint_scales_superlinearly, EXC-2 message) as the deferred-residual marker; the new many-small-cycles linear gate proves the real win. OQ-3 sets the trigger to file an IMP only IF a dense-SCC workload appears — conditional, so no backlog item now; the ignore-marker is the chosen capture."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Behaviour-preservation (R1): pre-existing suite green UNCHANGED except 4 explain rewrites"
+detail = "Design §3 / R1: the existing suites are the iterative-rewrite equivalence proof and must stay green with zero edits, except the four explain tests (the one sanctioned break). Observed: just check green (full workspace); cargo test -p cordage green; PHASE notes attest the 75 pre-existing resolution/ordering/golden_net/channels/reachability tests stayed green unchanged across all three phases; only the sanctioned explain.rs cases and the scale_cliffs signal inversions changed. The equivalence proof holds."
+disposition = "aligned"
+response = "Verified. just check green (full workspace); cargo test -p cordage green; the 75 pre-existing resolution/ordering/golden_net/channels/reachability tests stayed green unchanged across all three phases (per PHASE notes), with only the four sanctioned explain rewrites and the scale_cliffs signal inversions changing. The behaviour-preservation gate — the iterative-rewrite equivalence proof (R1) — holds."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Public reshape Explanation.paths() → predecessors() (the only public change)"
+detail = "Design §5.2 D2: the sole public-type change — paths: BTreeMap<OverlayId,Vec<Vec<NodeId>>> → predecessors: BTreeMap<OverlayId,BTreeMap<NodeId,BTreeSet<NodeId>>>, accessor paths()→predecessors(). Role-agnostic sub-DAG, NO bundled witness chain (D11/F13). Observed landed: lib.rs:281 field, lib.rs:301 accessor, lib.rs:867 query::predecessor_cone wiring; old paths/paths() gone (repo denies dead_code). Design §2 confirmed NO non-test consumer reads explain/paths() (lib.rs wiring + cordage tests + examples/scale_harness.rs only) — sanctioned break, no external breakage."
+disposition = "aligned"
+response = "Verified landed and sanctioned. lib.rs:281 field + lib.rs:301 predecessors() accessor + lib.rs:867 predecessor_cone wiring; old paths/paths() removed (dead_code denied). Role-agnostic sub-DAG, no bundled witness chain (D11/F13). Design §2 confirmed no non-test consumer reads explain/paths(), so the one sanctioned suite break breaks no external surface."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "Slice's defining risks RSK-001/002/003/004 retired in code but still 'open' in backlog"
+detail = "Scope + notes: SL-043 retired RSK-001 (Against-orientation VT coverage), RSK-002 (explain exponential), RSK-003 (Tarjan/level_of overflow + secondary quadratic eviction), RSK-004 (evaluate quadratic). All four are CODE-RETIRED and green. Observed: backlog list still shows RSK-001/002/003/004 status=open (relationships.slices: SL-036). Ledger diverges from code-truth. Transition verb exists (doctrine backlog edit <id> — terminal status requires a resolution). Reconcile at close: edit each to a terminal status with a resolution citing SL-043."
+disposition = "fix-now"
+response = "Reconciled in-audit: RSK-001/002/003/004 transitioned to resolved/mitigated (doctrine backlog edit, resolution=mitigated — controls implemented by SL-043, EXC-1/EXC-2 residuals documented). Risk records now match code-truth; they drop out of the default backlog list (terminal). Done before close."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "ISS-003 references the retired explain() 'paths' contract reshaped by this slice"
+detail = "ISS-003 (open, slices: SL-036): 'explain() foreign node id returns singleton chains, rustdoc says empty paths.' SL-043 reshaped paths→predecessors entirely. Observed: cone_on_overlay (query.rs) returns {node:{}} for a foreign/unknown node (predecessors empty ⇒ lone endpoint) — structural analog of the old [[n]] singleton; the new rustdoc (lib.rs:267-268) describes the predecessor cone and no longer claims 'empty paths', so ISS-003's doc-vs-behaviour framing now references a field that no longer exists. Out of SL-043 scope (complexity, not foreign-node semantics), but the surface ISS-003 cites changed — rescope ISS-003 against the predecessors() contract."
+disposition = "follow-up"
+response = "Out of SL-043 scope (the reshape targeted complexity, not foreign-node semantics) but the surface ISS-003 cites was changed by it. ISS-003 already exists as the owned backlog item (no new item — avoid duplication); it needs rescoping against the predecessors() contract: the doc-vs-behaviour framing references a 'paths' field that no longer exists, while the underlying foreign-node-as-lone-endpoint behaviour persists as {node:{}}. Left open, flagged for rescope."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
