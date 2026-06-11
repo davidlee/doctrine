@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 122
+slug = "realise-the-storage-rule-for-entities-an-id-bearing-toml-plus-a-prose-markdown-body-with-typed-facet-tables-for-structured-rows"
+title = "Realise the storage rule for entities: an id-bearing TOML plus a prose Markdown body, with typed facet tables for structured rows"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 117
+slug = "authored-runtime-and-derived-artefacts-are-kept-in-three-physically-separate-tiers-queried-data-never-lives-in-prose"
+title = "Authored, runtime, and derived artefacts are kept in three physically separate tiers; queried data never lives in prose"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

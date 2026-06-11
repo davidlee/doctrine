@@ -1,0 +1,51 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 4
+slug = "entity-engine"
+title = "Entity engine"
+status = "draft"
+kind = "tech"
+category = "engine"
+c4_level = "container"
+parent = "SPEC-003"
+tags = ["entity-engine", "scaffolding", "identity", "kind", "storage-rule", "registry", "claim", "substrate"]
+responsibilities = [
+  "Materialise every authored directory entity (slice, adr, spec, requirement, memory, backlog, governance kinds) through one kind-agnostic engine, from a data-valued `Kind` descriptor rather than a per-kind trait.",
+  "Own the storage rule's entity-engine realisation — the `<entity>-<id>.{toml,md}` identity pair plus typed facet tables — so structured data lives in TOML and prose in Markdown for every kind alike.",
+  "Carry the identity and reference model: a canonical string id externally, a numeric id internally, durable peer-id references, and per-membership labels carried on edges rather than as identities.",
+  "Provide the atomic claim seam for collision-safe id allocation and named-entity placement, interpreted per caller (race-retry for numbered, duplicate-error for named).",
+  "Hold the corpus-wide kind table (`integrity::KINDS`) that enumerates every entity kind, its directory, prefix, and stateful status set.",
+  "Enforce the runtime-state boundary: mutable session/progress state lives outside the authored taxonomy, and mutating verbs write entity TOML edit-preservingly.",
+]
+
+# category — OPEN domain vocabulary (a taxonomy that drifts by design). Add as:
+#   category = "cli"
+# c4_level — closed C4 set: context | container | component | code. Add as:
+#   c4_level = "container"
+# descends_from — the product capability (PRD-NNN) this spec realises; tech-only,
+#   single-valued, validated against the product specs. Add as:
+#   descends_from = "PRD-001"
+# parent — single decomposition parent (SPEC-NNN); tech-only, single-valued, the
+#   tree must stay acyclic. Add as:
+#   parent = "SPEC-002"
+# [[source]] — code anchors this spec governs (tech-only, repeatable). Add as:
+#   [[source]]
+#   language = "rust"
+#   identifier = "doctrine/cli"
+#   module = "doctrine::cli"   # optional
+
+[[source]]
+language = "rust"
+identifier = "src/entity.rs"
+module = "doctrine::entity"
+
+[[source]]
+language = "rust"
+identifier = "src/registry.rs"
+module = "doctrine::registry"
+
+[[source]]
+language = "rust"
+identifier = "src/integrity.rs"
+module = "doctrine::integrity::KINDS"

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 118
+slug = "relationships-are-authored-outbound-only-every-reverse-direction-is-derived-never-stored-on-both-sides"
+title = "Relationships are authored outbound-only; every reverse direction is derived, never stored on both sides"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 120
+slug = "containment-edges-assert-true-c4-decomposition-only-peer-relations-are-never-encoded-as-parent-edges"
+title = "Containment edges assert true C4 decomposition only; peer relations are never encoded as parent edges"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
