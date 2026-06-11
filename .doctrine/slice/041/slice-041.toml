@@ -1,7 +1,7 @@
 id = 41
 slug = "resolve-branch-point-check-base-in-the-impure-shell"
 title = "Resolve branch-point-check --base in the impure shell"
-status = "proposed"
+status = "done"
 created = "2026-06-11"
 updated = "2026-06-11"
 
