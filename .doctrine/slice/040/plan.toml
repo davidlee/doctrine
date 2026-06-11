@@ -1,0 +1,227 @@
+# Implementation plan for SL-040 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-040"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Pure core — contentset leaf + review enums & predicates"
+objective = """
+Build the pure, dependency-free foundation before any engine/CLI wiring.
+`src/contentset.rs` (D3): ContentSet(BTreeMap path→hash), SetDrift, pure `diff` /
+`is_stale_against`, plus the thin impure `compute(root, paths)` shell owning sha2
+directly (absent path ⇒ omitted ⇒ reported `removed` ⇒ stale). `src/review.rs`
+pure core (the worktree.rs pure/shell shape): Facet / FindingStatus / Severity /
+Role / ReviewStatus enums (each `as_str` + const array + drift canary test);
+`derived_status` (§8, total over the enum); `can(verb, from, role)` transition
+predicate (§5); render fns splicing user text via `toml_string` (escaped). No
+engine row, no main.rs wiring, no I/O beyond `compute`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (round-1 inquisition survived) and ADR-007 D-C0..D-C11 govern; no design questions open against §4/§5/§8." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/contentset.rs and src/review.rs pure core compile and are unit-tested; review.rs has no main.rs/integrity wiring yet (leaf+core only)." },
+  { id = "EX-2", text = "ADR-001 layering holds: contentset is a leaf (owns sha2), review pure core depends only on leaf/std; clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "derived_status is total over the status enum (every Finding-status combination yields a (ReviewStatus, Await) without panic/wildcard gap)." },
+  { id = "VT-2", expects = "named derived_status cases: empty→(Active,Raiser); any open/contested→(Active,Responder); any answered & none open→(Active,Raiser); all∈{verified,withdrawn}→(Done,None); open+answered→(Active,Responder)." },
+  { id = "VT-3", expects = "can(verb,from,role): each single-owner edge passes for the right role/state; wrong-role and wrong-from-state refuse (D-C5)." },
+  { id = "VT-4", expects = "facet enum is the closed 7-set with NO `drift` (D-C11); every enum↔const-array canary (Facet/FindingStatus/Severity/Role/ReviewStatus) locks in lockstep." },
+  { id = "VT-5", expects = "contentset::diff classifies changed/added/removed; an absent path ⇒ removed ⇒ is_stale_against true (R1 absence⇒stale)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Authored kind end-to-end — engine + install wiring + review new/show/list"
+objective = """
+Make an RV creatable and showable with an empty ledger. Register
+`REVIEW_KIND: entity::Kind` (dir=.doctrine/review, prefix=RV, scaffold); add the
+`integrity::KINDS` row (KindRef with state_dir=.doctrine/state/review); D2 fix —
+a scan-path id-only reader so `scan_kind` deserialises `{ id }` for review's
+intentionally status-less toml while the shared strict `Meta` is untouched.
+Install wiring (`mem.pattern.install.authored-entity-wiring`): manifest
+`[dirs].create` += .doctrine/review, `.gitignore` `!.doctrine/review/`, embedded
+`install/templates/review.{toml,md}` (touch the embedding crate to re-embed).
+main.rs: `mod review; mod contentset;`, `Command::Review`, `ReviewCommand` enum,
+conduct_on_command (Read class) + execute arms for `new`/`show`/`list`.
+`review new --facet --target [--phase]` writes the authored ledger (empty
+findings) + seeds `## Brief`, validating `[target].ref` (reuse
+integrity::parse_canonical_ref / kind_by_prefix) — dangling ref refused early.
+render/show renders the reviews edge `RV-NNN ──reviews──▶ <target>`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green: contentset + review pure core (enums, derived_status, can, render fns) available and tested." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`review new --facet F --target SL-NNN` creates an authored RV (empty findings, seeded ## Brief); `review show`/`list` render it including the reviews edge and the empty-ledger derived status (Active/await=Raiser)." },
+  { id = "EX-2", text = "install tree is committable: manifest creates .doctrine/review, .gitignore negation lands the dir, templates embed; the KINDS row is seen by `doctrine validate`." },
+  { id = "EX-3", text = "clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "scan-path id-only reader scans review's status-less toml for `.id` cleanly; a corrupt NON-review toml missing `status` still HARD-FAILS at status-bearing readers (shared Meta stays strict) — both halves pinned (D2/R-a)." },
+  { id = "VT-2", expects = "`review new` with a dangling `[target].ref` (unknown id / bad prefix) is refused at creation (§7)." },
+  { id = "VT-3", expects = "install wiring: committable tree, manifest dir present, KINDS row visible to `validate` (authored-entity-wiring)." },
+  { id = "VT-4", expects = "`review show`/`list` render an empty-ledger RV with derived status Active and the reviews edge to the target (no stored status anywhere)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Verb family + runtime coordination — the turn guard"
+objective = """
+The full finding lifecycle under one coordination seam. `with_turn(root, id,
+verb, role, f)` wrapper (D6) — the single home of D-C3/D-C4/D-C4a: acquire
+`create_new` lock (RAII LockGuard, pid+timestamp), entry CAS (sha256(authored) ≠
+baton.authored_hash ⇒ recompute await, rewrite baton, bail), static verb→role
+assertion (`--as`), then closure `f` runs the per-finding `can()` and applies the
+edit-preserving toml_edit DocumentMut (governance.rs:290 pattern extended to
+finding-scoped edits, user text via toml_string), PRE-WRITE CAS (re-read bytes ≠
+step-2 snapshot ⇒ bail, no write), authored-first write_atomic, then baton-last
+write_atomic { await, authored_hash, rounds+1, contest counts, handoff log }.
+Verbs: raise / dispose / verify / contest / withdraw (Write class), `status`
+(Read; rebuilds the baton == recompute), `unlock` escape hatch. `--note` on
+contest/verify is ephemeral handoff chatter → baton log (D10, not "rationale").
+Fork-root guard (D4/D-C1): a review verb whose resolved root is a fork BAILS
+(IMP-024 not-yet-supported). Baton/lock live in .doctrine/state/review/NNN/
+(gitignored).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 green: a creatable/showable RV with an empty authored ledger exists; render + scan wiring in place." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "raise/dispose/verify/contest/withdraw drive a finding through its lifecycle under the turn guard; raiser fields are fixed at raise, responder fields mutable, status moves only on single-owner edges; `status` reports derived state and rebuilds the baton." },
+  { id = "EX-2", text = "concurrency proven: scripted interleavings show no clobber (one writer wins, the loser aborts and re-runs to a correct turn); entry+pre-write CAS catch out-of-band hand-edits in both windows; crash between authored-write and baton-write self-heals on the next call." },
+  { id = "EX-3", text = "a fork-resolved root is refused (IMP-024 guard); the baton/lock sit in gitignored .doctrine/state/review/NNN/; clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "field ownership disjoint: raiser fields (id/title/detail/severity) immutable after raise; responder fields (disposition/response) mutable; status never free-edited (D-C5)." },
+  { id = "VT-2", expects = "finding ids are append-only F-<max+1>; never deleted or renumbered (D-C5)." },
+  { id = "VT-3", expects = "transitions are edit-preserving — comments and unknown keys survive a dispose/verify/contest/withdraw (governance.rs:290 pattern)." },
+  { id = "VT-4", expects = "render escaping: a hostile title/detail (quotes, brackets, newlines) raised then shown round-trips intact via toml_string (render-splice)." },
+  { id = "VT-5", expects = "no-clobber under concurrency, asserting FINAL LEDGER state: (a) two invocations — one wins, loser aborts then re-runs from the refreshed baton to a correct turn; (b) crash between authored-write(5) and baton-write(7) → next call self-heals via entry CAS; (c) hand-edit landing AFTER the step-2 read → pre-write CAS aborts, no clobber; (d) same-finding contest racing verify (D-C4a)." },
+  { id = "VT-6", expects = "entry CAS catches a pre-invocation edit (stale await → recompute, baton refresh, re-run); pre-write CAS catches a mid-invocation edit (abort before write) — distinct windows (D-C4a/D-C2)." },
+  { id = "VT-7", expects = "authored-first/baton-last ordering holds; a crash between the two writes is resumable via CAS (D-C3)." },
+  { id = "VT-8", expects = "out-of-turn write refused (static role + can()); `raise` allowed while await=Responder (append-only, raiser-owned) (D-C4/§8)." },
+  { id = "VT-9", expects = "`status` rebuilds the baton — the cached await equals a fresh recompute (§Verification)." },
+  { id = "VT-10", expects = "a review verb invoked with a fork-resolved root bails (IMP-024 not-yet-supported guard); baton sits in gitignored parent state (D4/D-C1/D-C7)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "reviews edge close-gate + lifecycle teeth"
+objective = """
+Wire the reverse close-gate (D8/D-C9). `unresolved_blockers_for(root,
+subject_ref) -> Vec<BlockerRef>` — a standalone scoped scan in review.rs over
+.doctrine/review/*, matching `[target].ref`, filtering findings where
+severity==Blocker && status ∉ {verified,withdrawn} on an Active RV (pure check +
+thin scan shell, the integrity::scan_kind shape; NOT the spec Registry). Inject
+in the close COMMAND SHELL (not set_slice_status), firing only on the closure-seam
+moves (audit→reconcile, reconcile→done; seam at slice.rs:471): read `from`; if
+crossing the seam call unresolved_blockers_for; non-empty ⇒ bail listing
+`RV-NNN/F-n`. review-done = all findings terminal (D-C9a). The teeth live in the
+binary (the `slice status …` refusal), not skill prose. slice-close path only;
+other-target gates are future.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 green: findings carry severity + a derived status; a populated RV ledger can be produced for the gate to scan." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "crossing the closure seam (audit→reconcile / reconcile→done) is refused while an Active RV targeting the subject has an unresolved blocker finding, the refusal naming RV-NNN/F-n; it passes when no unresolved blocker remains." },
+  { id = "EX-2", text = "the gate fires ONLY on the closure-seam moves (non-seam transitions unaffected); clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "review-done = all findings terminal (∈{verified,withdrawn}); a non-terminal finding keeps the review Active (D-C9a)." },
+  { id = "VT-2", expects = "`slice status` across the closure seam refuses on an unresolved blocker and passes when none (D-C9b)." },
+  { id = "VT-3", expects = "unresolved_blockers_for scan correctness: matches by [target].ref, filters severity==Blocker & non-terminal & Active, ignores non-matching/terminal/non-blocker (§7)." },
+  { id = "VT-4", expects = "the gate fires only on the closure seam — a non-seam slice transition is not gated (§7)." },
+  { id = "VT-5", expects = "the close shell is the SOLE seam-crossing caller of set_slice_status — no other caller crosses audit→reconcile/reconcile→done (bypass guard, Charge VIII)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Warm-cache + prime (D-C10) — sequenced late"
+objective = """
+The reviewer-context cache (D9/D-C10), decoupled from any LLM token cache.
+`cache.toml` in .doctrine/state/review/NNN/ (runtime, regenerable): curated
+domain_map ([[area]] name/purpose/paths), [[invariant]], [[risk]], and `[hashes]`
+= a ContentSet over ⋃ area.paths (the staleness baseline). `review prime RV-NNN
+--seed` emits git-changed candidates (starting point, not authority); `review
+prime RV-NNN` (domain_map on stdin/--from) validates → contentset::compute(parent
+root) → writes cache.toml. prime is Read-class for authored conduct but ACQUIRES
+the per-review lock to serialize the cache.toml write against a concurrent
+prime/status. Staleness surfaced by `review status`:
+stored.diff(compute(parent_root, ⋃ paths)) — empty ⇒ `current`, else `stale`
+listing drifted paths (T-b naming; an optimization signal, NOT a gate). Single
+parent root; absence⇒stale (R1); subject-root additive → IMP-024.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 green: the per-review lock, contentset, and `review status` exist; the RV-without-cache increment is demonstrable (mid-slice checkpoint)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`review prime` persists a curated domain_map + [hashes]; immediately after, `review status` reports `current`." },
+  { id = "EX-2", text = "after a tracked path's content drifts, `review status` reports `stale` and lists the drifted path(s); an absent tracked path ⇒ stale; prime serializes via the per-review lock; clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "`prime` persists the curated domain_map and the `[hashes]` ContentSet; status reads `current` straight after (D-C10)." },
+  { id = "VT-2", expects = "staleness reports `current` vs `stale`; on drift it lists the changed path; an absent tracked path ⇒ stale (D-C10/T-b/R1)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "/audit pilot rewire + integration close"
+objective = """
+Rewire ONE skill — `/audit` (the known scaffold gap, D11) — onto the RV kind as
+proof-of-integration. Edit plugins/doctrine/skills/audit/SKILL.md so the audit
+loop drives the RV ledger: `review new --facet reconciliation --target SL-NNN` +
+`prime` (was: author audit.md); raise → severity/title/detail (was:
+expected/observed/evidence); dispose+verify (the aligned/fix-now/design-wrong/
+follow-up/tolerated taxonomy becomes the recommended disposition vocabulary);
+withdraw for raised-in-error; `## Synthesis` (was: audit.md prose). `blocker`
+severity is the only one that gates /close (D-C9b). audit.md retired for NEW
+audits (existing files remain, no migration). Re-embed: `doctrine skills install`
++ touch src/skills.rs (mem.pattern.distribution.skill-refresh-command). Final
+gate: full just check green, clippy zero.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 and PHASE-05 green: the full RV capability — verbs under the turn guard, the close-gate teeth, and the warm-cache — is in place to back the rewired skill." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "the /audit skill drives an RV end-to-end (new/prime/raise/dispose/verify/withdraw) and emits an RV with `## Synthesis` instead of a hand-made audit.md; the skill source is re-embedded." },
+  { id = "EX-2", text = "full just check green; clippy zero; the slice's verification matrix is satisfied." },
+]
+verification = [
+  { id = "VA-1", expects = "e2e: running the rewired /audit on a subject slice produces an RV (review-NNN.toml + ## Synthesis) and NOT an audit.md (§10)." },
+  { id = "VT-1", expects = "`just check` green and clippy zero across the whole workspace (conventions gate)." },
+]
+specs        = []
+requirements = []
