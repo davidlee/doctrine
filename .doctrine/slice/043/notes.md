@@ -84,3 +84,46 @@ golden_net, ordering incl. PHASE-01 RSK-001). REQ-078 + REQ-092 hardened.
   exists for the u16 `OverlayId` but not u32 `NodeId`).
 - Gate: `just check` green on the combined coordination tree (full workspace);
   worker fork verified green via `cargo test -p cordage` + `cargo clippy -p cordage`.
+
+## PHASE-03 — query.rs cone + lib.rs explain (commit 6e80199) — COMPLETE
+
+Retire RSK-002: the recursive chain enumeration (`predecessor_paths`/
+`chains_to_root`/`extend_chains`, `suffix.clone()` per branch ⇒ 2^layers on
+diamonds) replaced by ONE linear cone-builder; `Explanation` reshaped from
+enumerated paths to a predecessor adjacency sub-DAG. REQ-076 + REQ-078 hardened.
+
+- **Dispatched via the funnel** (second worker, `sl-043-p03`), rung-3 fork from
+  EXPLICIT base B, imported as net diff B..S. The coordination HEAD moved twice
+  mid-funnel (PHASE-02: the skill-hardening commits; PHASE-03: an external
+  `close(SL-040)` commit touching only `.doctrine/slice/040/`) — both path-disjoint
+  from cordage, so each batch RE-IMPORTED onto the moved HEAD (re-apply B..S, NOT
+  re-dispatch). The branch-point guard + disjointness check is what makes that safe.
+- **Cone-builder:** per overlay, BFS UP the in-edges from `n` with a GLOBAL visited
+  set (each cone node enqueued once), recording `node ↦ {immediate in-cone
+  predecessors}`. Degraded-SCC entries + roots are keys with EMPTY pred-sets
+  (endpoints, never expanded) — F47 termination is structural, not a guard. O(V+E),
+  no clone, no enumeration; diamonds collapse (shared parent recorded once).
+- **Public reshape:** `Explanation.paths: BTreeMap<OverlayId, Vec<Vec<NodeId>>>` →
+  `predecessors: BTreeMap<OverlayId, BTreeMap<NodeId, BTreeSet<NodeId>>>`; accessor
+  `paths()` → `predecessors()`. Role-agnostic sub-DAG only — NO bundled witness
+  chain (D2/D11/F13); policy reconstructs any chain by walking the cone. `reachable`
+  + `spine_path` retained (other callers).
+- **Tests:** the five `explain.rs` `paths()` cases re-expressed as cone adjacency
+  asserting the SAME predecessor membership (scc-entry `{x:{a}, a:{}}`, inside-scc
+  `{a:{}}`, multi-parent `{n:{r1,r2}, r1:{}, r2:{}}`, root `{n:{}}`, determinism) —
+  the one sanctioned suite break (G3/VT-1). `explain_path_count_is_exponential` →
+  `explain_cone_is_linear_in_diamond_depth` (cone node count `3*layers+1`, `#[ignore]`
+  REMOVED → fast linear gate, VT-2/VT-3). `examples/scale_harness.rs` consumer fixed.
+- **Behaviour-preservation witness:** `golden_net.rs` compares whole `Explanation`
+  via derived `PartialEq` across edge permutations (F24) and stayed GREEN UNCHANGED —
+  proof the reshaped cone is permutation-invariant (BTree-deterministic). Treated a
+  golden_net red as a bug signal, not a sanctioned edit.
+- Gate: `just check` green on the combined coordination tree; worker fork green via
+  `cargo test -p cordage` (8 explain, 8 golden_net, 5 scale_cliffs incl. the
+  RSK-002 cliff now passing) + `cargo clippy -p cordage` zero warnings.
+
+## Slice status — all phases COMPLETE (rollup 3/3)
+
+PHASE-01/02/03 done; RSK-001/002/003/004 retired. Rollup shows `3/3 ⚠` — the `⚠`
+is the expected hand-status (`proposed`) vs rollup divergence (no lifecycle-
+transition verb yet). Next: `/audit` → reconcile → `/close` (lifecycle → done).
