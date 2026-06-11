@@ -8,13 +8,17 @@ description: Use when authoring or revising the technical specification — the 
 You are authoring the technical spec — the *how*, downstream of the product spec
 (`/spec-product`) and upstream of per-slice design (`/design`).
 
-> **Structural (SL-015).** Doctrine manages specs as first-class entities. Use
-> `doctrine spec` to scaffold a tech spec, `req add` its requirements, `show` the
-> reassembled whole, `validate` FK integrity, and `list` the specs (flags in
-> `--help`; verb model in `using-doctrine.md`). Identity + flat fields (incl.
-> `c4_level`, `sources`) live in `spec-NNN.toml`, the narrative in `spec-NNN.md`;
-> requirements are **peer entities** (`REQ-NNN`) membered via `members.toml`;
-> tech-only spec→spec edges are hand-authored in `interactions.toml`.
+> **Structural.** Doctrine manages specs as first-class entities — a tech spec is
+> the same **three coordinated writes** as a product spec: scaffold with `spec new`
+> (subtype/title/slug only), hand-edit the spine and flat fields into
+> `spec-NNN.toml`, then `spec req add` its requirements. Use `show` to read the
+> reassembled whole, `validate` for FK integrity, `list` for the corpus (flags in
+> `--help`; verb model in `using-doctrine.md`). Identity, the relational spine, and
+> flat fields (incl. `c4_level`, `[[source]]` anchors) live in `spec-NNN.toml`, the
+> narrative in `spec-NNN.md`; requirements are **peer entities** (`REQ-NNN`) membered
+> via `members.toml`; tech-only spec→spec edges are hand-authored in
+> `interactions.toml`. **There is no CLI flag for the spine — it is authored TOML, and
+> `spec validate` is the integrity gate.**
 
 Capture the durable architecture and mechanism:
 
@@ -22,6 +26,38 @@ Capture the durable architecture and mechanism:
 - the key technical decisions and their rationale (link relevant ADRs)
 - interfaces and contracts that outlive any single change
 - constraints the implementation must honour
+
+**The relational spine** places every spec in the corpus tree (all hand-edited
+TOML, gated by `spec validate`):
+
+- `descends_from` — tech→PRD, single-valued, a validated FK to the product intent
+  this capability realises.
+- `parent` — a single parent, acyclic containment (the C4 decomposition).
+- **Containment is never a peer edge.** `parent` is never expressed as an
+  `interactions` edge, and an `interactions` edge is never containment (PRD-012
+  principle) — decomposition and peer `uses`/`calls` are distinct axes.
+
+**C4 altitude.** Hand-authored specs normally stop at the container/component
+level; code-level (C4 level 4) specs are exceptional, authored only when a unit of
+mechanism genuinely needs that resolution.
+
+**Posture is dual.** A tech spec may be **retrospective** (the shipped *how*) or
+**forward-intent** (SPEC-001/SPEC-002 style, describing an unbuilt engine) — both
+are legal, provided *planned* stays distinguishable from *verified*. Requirements
+are `REQ-NNN` entities at status `pending`; there are no coverage tables and no
+status derivation — observed coverage is reconciled, never inferred from the spec.
+
+**The exemplar trio** locks the three canonical shapes — read them with `spec show`
+before authoring:
+
+- **SPEC-003** (`context`) — the whole-system synthesis: anchor-free, no `parent`,
+  no `descends_from`; names the containers and their composition, never restating
+  any one container's mechanism.
+- **SPEC-004** (`container`) — `parent` only, no descent: a mechanism container
+  whose children carry the per-capability descent.
+- **SPEC-005** (`component`) — `parent` + `descends_from`: the thin (not anaemic)
+  capability shape — kind-specific contracts only, shared mechanism cited via the
+  parent, never restated.
 
 Keep it evergreen. A single change's concrete design — current vs target
 behaviour, code-impact, verification — belongs in that slice's `/design`, not
