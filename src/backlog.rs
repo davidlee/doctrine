@@ -369,12 +369,34 @@ pub(crate) struct RiskFacet {
     controls: Vec<String>,
 }
 
+/// A soft-sequence edge (PRD-009): this item runs `after` the predecessor `to`,
+/// with an optional per-edge `rank` (default `0` — a plain soft edge; a non-zero
+/// rank is a manual tie-break hint). A bare `{ to = "X" }` is rank 0.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct AfterEdge {
+    to: String,
+    #[serde(default)]
+    rank: i32,
+}
+
+/// A `triggers` rider (PRD-009 §5.7): the source `globs` this item watches, with
+/// an optional free-text `note` (default `""` — globs-only). FIELD ONLY this
+/// phase — the IMP-026 staleness mask is out of scope.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct Trigger {
+    #[serde(default)]
+    globs: Vec<String>,
+    #[serde(default)]
+    note: String,
+}
+
 /// Outbound-only relations (ADR-004): a backlog item points OUT at the slices,
-/// specs, and drift it touches, plus two item→item axes — `depends_on` (hard
-/// prerequisite) and `before` (soft manual sequence). The reverse view is derived
-/// (deferred, PRD-011). Shared verbatim by the raw and validated layers (no
-/// `"" -> None` seam — these are plain lists), seeded empty so `#[serde(default)]`
-/// parses a virgin item.
+/// specs, and drift it touches, plus three item→item axes (PRD-009) — `needs`
+/// (hard prerequisite, payload-free), `after` (soft manual sequence, per-edge
+/// optional `rank`), and the `triggers` rider (watched source globs). The reverse
+/// view is derived (deferred, PRD-011). Shared verbatim by the raw and validated
+/// layers (no `"" -> None` seam), seeded empty so `#[serde(default)]` parses a
+/// virgin item.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
 struct Relationships {
     #[serde(default)]
@@ -384,9 +406,11 @@ struct Relationships {
     #[serde(default)]
     drift: Vec<String>,
     #[serde(default)]
-    depends_on: Vec<String>,
+    needs: Vec<String>,
     #[serde(default)]
-    before: Vec<String>,
+    after: Vec<AfterEdge>,
+    #[serde(default)]
+    triggers: Vec<Trigger>,
 }
 
 /// Parse a kebab token into its closed enum via the serde derive — the single
@@ -847,20 +871,53 @@ fn format_show(item: &BacklogItem) -> String {
     if !rel.slices.is_empty()
         || !rel.specs.is_empty()
         || !rel.drift.is_empty()
-        || !rel.depends_on.is_empty()
-        || !rel.before.is_empty()
+        || !rel.needs.is_empty()
+        || !rel.after.is_empty()
+        || !rel.triggers.is_empty()
     {
         parts.push("\nrelationships:\n".to_string());
+        // the four string axes share the one loop; `after`/`triggers` carry payload
+        // (per-edge rank, glob+note) and render bespoke below, in §5.2 key order.
         for (label, refs) in [
             ("slices", &rel.slices),
             ("specs", &rel.specs),
             ("drift", &rel.drift),
-            ("depends_on", &rel.depends_on),
-            ("before", &rel.before),
+            ("needs", &rel.needs),
         ] {
             if !refs.is_empty() {
                 parts.push(format!("  {label}: {}\n", refs.join(", ")));
             }
+        }
+        if !rel.after.is_empty() {
+            let rendered = rel
+                .after
+                .iter()
+                .map(|e| {
+                    if e.rank == 0 {
+                        e.to.clone()
+                    } else {
+                        format!("{} (rank {})", e.to, e.rank)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            parts.push(format!("  after: {rendered}\n"));
+        }
+        if !rel.triggers.is_empty() {
+            let rendered = rel
+                .triggers
+                .iter()
+                .map(|t| {
+                    let globs = t.globs.join(", ");
+                    if t.note.is_empty() {
+                        format!("[{globs}]")
+                    } else {
+                        format!("[{globs}] {}", t.note)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            parts.push(format!("  triggers: {rendered}\n"));
         }
     }
 
@@ -921,8 +978,9 @@ fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
                 "slices": rel.slices,
                 "specs": rel.specs,
                 "drift": rel.drift,
-                "depends_on": rel.depends_on,
-                "before": rel.before,
+                "needs": rel.needs,
+                "after": rel.after,
+                "triggers": rel.triggers,
             },
         },
     });
@@ -1187,9 +1245,10 @@ mod tests {
         assert_eq!(item.resolution, None);
         assert!(item.facet.is_none(), "a plain kind has no facet");
         assert_eq!(item.relationships, Relationships::default());
-        // the two PHASE-01 item→item axes default to `[]` on a virgin item (VT-1).
-        assert!(item.relationships.depends_on.is_empty());
-        assert!(item.relationships.before.is_empty());
+        // the three PRD-009 item→item axes default to `[]` on a virgin item (VT-1).
+        assert!(item.relationships.needs.is_empty());
+        assert!(item.relationships.after.is_empty());
+        assert!(item.relationships.triggers.is_empty());
     }
 
     #[test]
@@ -1503,14 +1562,47 @@ tags = []
     struct RelLit<'a> {
         slices: &'a [&'a str],
         specs: &'a [&'a str],
-        depends_on: &'a [&'a str],
-        before: &'a [&'a str],
+        needs: &'a [&'a str],
+        after: &'a [AfterLit<'a>],
+        triggers: &'a [TriggerLit<'a>],
+    }
+
+    struct AfterLit<'a> {
+        to: &'a str,
+        rank: i32,
+    }
+
+    struct TriggerLit<'a> {
+        globs: &'a [&'a str],
+        note: &'a str,
     }
 
     /// The sole list-literal quoting: `[] → ""`, `["a","b"] → "\"a\", \"b\""`.
     fn toml_list(xs: &[&str]) -> String {
         xs.iter()
             .map(|x| format!("\"{x}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// `after` array-of-inline-tables literal: each edge `{ to = "X", rank = N }`.
+    fn toml_after(xs: &[AfterLit<'_>]) -> String {
+        xs.iter()
+            .map(|e| format!("{{ to = \"{}\", rank = {} }}", e.to, e.rank))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// `triggers` array-of-inline-tables literal: each `{ globs = [...], note = "" }`.
+    fn toml_triggers(xs: &[TriggerLit<'_>]) -> String {
+        xs.iter()
+            .map(|t| {
+                format!(
+                    "{{ globs = [{}], note = \"{}\" }}",
+                    toml_list(t.globs),
+                    t.note
+                )
+            })
             .collect::<Vec<_>>()
             .join(", ")
     }
@@ -1543,11 +1635,12 @@ tags = []
         let rels = f.rels.as_ref().map_or_else(String::new, |x| {
             format!(
                 "\n[relationships]\nslices = [{}]\nspecs = [{}]\ndrift = []\n\
-                 depends_on = [{}]\nbefore = [{}]\n",
+                 needs = [{}]\nafter = [{}]\ntriggers = [{}]\n",
                 toml_list(x.slices),
                 toml_list(x.specs),
-                toml_list(x.depends_on),
-                toml_list(x.before),
+                toml_list(x.needs),
+                toml_after(x.after),
+                toml_triggers(x.triggers),
             )
         });
         format!("{head}{facet}{rels}")
@@ -2061,8 +2154,9 @@ tags = []
                 rels: Some(RelLit {
                     slices: &["SL-020"],
                     specs: &[],
-                    depends_on: &[],
-                    before: &[],
+                    needs: &[],
+                    after: &[],
+                    triggers: &[],
                 }),
             },
         );
@@ -2165,13 +2259,57 @@ tags = []
         );
     }
 
-    // --- VT-1: the two item→item axes (hard `depends_on` / soft `before`) render ---
+    // --- VT-1: the three PRD-009 item→item axes (needs / after / triggers) ---
 
     #[test]
-    fn backlog_show_renders_depends_on_and_before() {
+    fn after_edge_round_trips_with_optional_rank() {
+        // a ranked edge keeps its `rank`; a bare `{ to }` defaults to rank 0.
+        let rel: Relationships =
+            toml::from_str("after = [{ to = \"ISS-002\", rank = 2 }, { to = \"ISS-003\" }]\n")
+                .unwrap();
+        assert_eq!(
+            rel.after,
+            vec![
+                AfterEdge {
+                    to: "ISS-002".to_string(),
+                    rank: 2,
+                },
+                AfterEdge {
+                    to: "ISS-003".to_string(),
+                    rank: 0,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn trigger_round_trips_with_optional_note() {
+        // a noted trigger keeps its `note`; a globs-only `{ globs }` defaults to "".
+        let rel: Relationships = toml::from_str(
+            "triggers = [{ globs = [\"src/x/**\"], note = \"watch x\" }, \
+             { globs = [\"src/y/**\"] }]\n",
+        )
+        .unwrap();
+        assert_eq!(
+            rel.triggers,
+            vec![
+                Trigger {
+                    globs: vec!["src/x/**".to_string()],
+                    note: "watch x".to_string(),
+                },
+                Trigger {
+                    globs: vec!["src/y/**".to_string()],
+                    note: String::new(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn backlog_show_renders_all_three_item_axes() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        // a populated item carrying both new outbound axes (hard prereq + soft seq).
+        // a populated item carrying all three PRD-009 outbound axes.
         write_fixture(
             root,
             Fixture {
@@ -2186,30 +2324,42 @@ tags = []
                 rels: Some(RelLit {
                     slices: &[],
                     specs: &[],
-                    depends_on: &["ISS-002"],
-                    before: &["ISS-003"],
+                    needs: &["ISS-002"],
+                    after: &[AfterLit {
+                        to: "ISS-003",
+                        rank: 2,
+                    }],
+                    triggers: &[TriggerLit {
+                        globs: &["src/x/**"],
+                        note: "watch x",
+                    }],
                 }),
             },
         );
         let item = read_item(root, ItemKind::Issue, 1).unwrap();
 
-        // table seam: both axes render, in fixed hard-before-soft order.
+        // table seam: each axis renders, in fixed §5.2 order (needs/after/triggers);
+        // a non-zero `after` rank annotates, the trigger note trails its globs.
         let out = format_show(&item);
+        assert!(out.contains("needs: ISS-002"), "hard prereq axis: {out}");
         assert!(
-            out.contains("depends_on: ISS-002"),
-            "hard prereq axis renders: {out}"
+            out.contains("after: ISS-003 (rank 2)"),
+            "soft seq axis with rank: {out}"
         );
         assert!(
-            out.contains("before: ISS-003"),
-            "soft sequence axis renders: {out}"
+            out.contains("triggers: [src/x/**] watch x"),
+            "triggers rider: {out}"
         );
 
-        // JSON seam: both keys carry the refs.
+        // JSON seam: needs is a string array; after/triggers are arrays of tables.
         let json = show_json(&item).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         let rel = &v["backlog"]["relationships"];
-        assert_eq!(rel["depends_on"][0], "ISS-002");
-        assert_eq!(rel["before"][0], "ISS-003");
+        assert_eq!(rel["needs"][0], "ISS-002");
+        assert_eq!(rel["after"][0]["to"], "ISS-003");
+        assert_eq!(rel["after"][0]["rank"], 2);
+        assert_eq!(rel["triggers"][0]["globs"][0], "src/x/**");
+        assert_eq!(rel["triggers"][0]["note"], "watch x");
     }
 
     /// Overwrite a reserved risk item with an assessed `[facet]` — exercises the
@@ -2234,8 +2384,9 @@ tags = []
                 rels: Some(RelLit {
                     slices: &[],
                     specs: &[],
-                    depends_on: &[],
-                    before: &[],
+                    needs: &[],
+                    after: &[],
+                    triggers: &[],
                 }),
             },
         );
@@ -2257,8 +2408,9 @@ tags = []
                 rels: Some(RelLit {
                     slices,
                     specs,
-                    depends_on: &[],
-                    before: &[],
+                    needs: &[],
+                    after: &[],
+                    triggers: &[],
                 }),
             },
         );
