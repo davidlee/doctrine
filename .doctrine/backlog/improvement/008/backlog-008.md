@@ -37,6 +37,33 @@ discipline, unenforced.
 - **Routing wire** — add the `/reconcile` row to `boot.md` routing table ONLY when
   the skill lands (F2/F14 shipped-not-reachable — never point routing at a deferred skill).
 
+## Concrete stale prose found at SL-043 close (2026-06-12)
+
+The "Retune `/close`" scope line above has a concrete, shippable backlog: the
+`close` skill (`.claude/skills/close/SKILL.md`) prose predates SL-040 (lifecycle
+verb + RV-ledger) and actively misdirects. Fix when this lands:
+
+- **Tooling-gaps callout (lines ~10–14) is false** — claims "no lifecycle
+  transition verb, status is hand-edited." SL-040 shipped `doctrine slice status
+  <id> <state>`: classifies the move (advance/back-edge/skip/abandon), enforces
+  the closure seam (→reconcile only from audit, →done only from reconcile) AND
+  the D-C9b close-gate (refuses →reconcile/→done while an RV targeting the slice
+  carries an unresolved `blocker`). Terminal set is `{done, abandoned}` (ADR-009),
+  and the verb refuses *leaving* a terminal status — not `is_terminal_status` v1
+  `{"done"}`.
+- **Step 3 "hand-edit `slice-nnn.toml` status" is wrong** — use the verb
+  (`doctrine slice status <id> done`, bare number); the verb writes the file, do
+  NOT hand-edit. If authored status lagged (the `⚠` case), the path must pass
+  `…→audit→reconcile→done`. Note done slices are hidden from default `slice list`
+  — confirm via `slice show <id>` / `slice list --all`.
+- **audit.md references (input line ~19; pre-check ~28–30) retired (SL-040)** —
+  input is the RV reconciliation ledger (`RV-NNN`); pre-check is every finding
+  *terminal* (`verified`/`withdrawn`), ledger `done · await=none` (`review status
+  RV-NNN`); harvest target is `notes.md` + the RV `## Synthesis`, not `audit.md`.
+- **Step 4 close-gate is now mechanical** — "do not close if a blocker remains"
+  is partly enforced by the binary (the transition refuses); frame the skill check
+  as believe-and-verify, not the sole guard.
+
 ## Sequencing
 
 - **After IMP-001** (RV review-ledger + `/review` family) — per the user; review
