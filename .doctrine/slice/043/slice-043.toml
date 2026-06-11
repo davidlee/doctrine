@@ -1,0 +1,18 @@
+id = 43
+slug = "cordage-scale-hardening"
+title = "cordage scale & robustness hardening"
+status = "proposed"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[relationships]
+# Parent tech spec — hardens the cordage core delivered by SL-036, still under
+# SPEC-001 (Graph-Derived Priority Engine). Hand-authored per SL-036's shape; no
+# `slice link` verb yet.
+specs = ["SPEC-001"]
+# Sibling SL-036 built the core and filed every risk this slice closes (RSK-001..004
+# all carry `slices: SL-036`); the backlog risks themselves have no axis in this
+# schema. Both linkages are tracked in prose and closed via `backlog edit` at /close:
+#   sibling: SL-036    risks: RSK-001 RSK-002 RSK-003 RSK-004
+# REQ subset is the cordage generic-core perf/robustness obligations under SPEC-001;
+# pin the exact REQ ids at /design once the perf-spike numbers fix the targets.
