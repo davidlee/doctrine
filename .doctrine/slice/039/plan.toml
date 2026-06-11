@@ -35,6 +35,11 @@ dependencies = []
 [[phase]]
 id        = "PHASE-01"
 name      = "Data model — two item→item edges + the triggers rider + the cordage path dep"
+# REVISED at the RE-LOCK (2026-06-11) — ids unchanged, obligation text reconciled to
+# PRD-009 (D10). Prior obligations preserved in git @ d65ed1a. Changed: EN-1 (lock ref),
+# EX-1/EX-2/EX-3 (depends_on/before two-field → needs/after/triggers three-field +
+# AfterEdge/Trigger payload), VT-1 (added after{to,rank} + triggers round-trip). Net-new
+# surface vs a rename: the `triggers` field, AfterEdge{to,rank}, Trigger{globs,note}.
 objective = """
 Lay the foundation: add the doctrine→cordage path dependency (the first ADR-001 \
 layering edge; cordage gains its first dependent) and extend the backlog model \
@@ -65,6 +70,13 @@ requirements = []
 [[phase]]
 id        = "PHASE-02"
 name      = "Pure cordage adapter — src/backlog_order.rs"
+# REVISED at the RE-LOCK (2026-06-11) — ids unchanged, obligation text reconciled.
+# Prior obligations preserved in git @ d65ed1a. Changed: EN-1 (vocab), EX-1 (overlay
+# handle names + OrderSpec layer vocab), EX-2 (the `after` edge now FLIPS B→A like
+# `needs` — was the old forward `before` A→B), EX-3 (vocab), EX-4 (EdgeAttrs(0,0)-on-
+# every-edge → genuine (rank,age) on `after`; retires the A4 (src,dst) stand-in),
+# VT-2/VT-3 (vocab + the eviction). Net-new surface vs a rename: real array-index `age`
+# + genuine (rank,age,src,dst) eviction. VT-10 obligation unchanged (bounded R-C claim).
 objective = """
 Build the vocabulary layer that lets cordage do the ordering. New module \
 `src/backlog_order.rs`: the `ItemId` newtype and `OrderInput` projection (incl. \
@@ -103,6 +115,12 @@ requirements = []
 [[phase]]
 id        = "PHASE-03"
 name      = "CLI surface — set verbs + ordered render"
+# REVISED at the RE-LOCK (2026-06-11) — ids unchanged, obligation text reconciled.
+# Prior obligations preserved in git @ d65ed1a. Changed: EX-1 (`backlog depends-on` →
+# `backlog needs`), EX-2 (`backlog before <ITEM> <SUCCESSOR>…` multi-target → `backlog
+# after <ITEM> <TO> [--rank N]` single-target per-edge — OQ-C settled), VT-5 (vocab),
+# VT-6 (genuine (rank,age,src,dst) eviction, retires the old min-(src,dst) stand-in).
+# Net-new surface vs a rename: the per-edge `--rank` flag. EX-4 honest-record unchanged.
 objective = """
 Wire the adapter to real items. Two set verbs — `backlog needs <ITEM> <PREREQ>…` \
 and `backlog after <ITEM> <TO> [--rank N]` (per-edge `rank`, optional default 0; \
