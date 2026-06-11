@@ -82,7 +82,9 @@ Nothing today stores coverage, emits a REC, or surfaces drift.
 requirement REQ-X authored status   distinct store ── NF-001 line: never f(coverage)
 
 src/rec.rs       (new)  REC kind: schema, scaffold/show/list; reuses meta::read_id
-src/coverage.rs  (new)  entry I/O (shell) + PURE folds: composite(), drift()
+src/coverage.rs  (new)  PURE leaf: CoverageEntry, composite(), drift() — no I/O
+                        impure shell (scan_coverage, staleness) sits at the
+                        engine/command layer above the leaf (ADR-001; F5)
 src/integrity.rs (+row) REC_KIND in KINDS (stem "rec", state_dir None)
 src/git.rs       (reuse) VH/VA staleness — no new fork
 install/manifest.toml (+ .doctrine/rec) · .gitignore (+ !.doctrine/rec/)
@@ -96,17 +98,26 @@ outbound-only grain. Scan cost is bounded by a perf spike (§9), not assumed.
 ### 5.2 Interfaces & Contracts
 
 Two pure folds in `coverage.rs` (signatures illustrative; CLI shapes settle at
-build per SPEC-002 D9):
+build per SPEC-002 D9). **Staleness is resolved in the shell, not the fold** (F1):
+freshness requires comparing `git_anchor` to HEAD — a git read — so the impure
+shell resolves a per-entry `is_stale` via the `src/git.rs` seam and passes it in;
+the folds stay pure over `(entry, is_stale)` pairs.
 
 ```text
-composite(entries: &[CoverageEntry]) -> Composite
+# pure leaf (no git/disk/clock):
+composite(entries: &[(CoverageEntry, IsStale)]) -> Composite
     fan-in of one requirement's entries across contributing changes:
-    modes present, per-mode statuses, staleness flags. Deterministic.
+    modes present, per-mode statuses, staleness already-resolved. Deterministic.
     NOT persisted (D4). v1 surfaces all; no precedence weighting (OQ-3).
 
 drift(authored: ReqStatus, composite: &Composite) -> Verdict
     read-only. Returns NO ReqStatus. Verdict ∈ {Coherent, Divergent(reason),
-    Indeterminate}.
+    Indeterminate}. "Fresh"/"stale" read off the already-resolved Composite.
+
+# impure shell (engine/command layer):
+scan_coverage(req) -> Vec<(CoverageEntry, IsStale)>
+    corpus-scan .doctrine/slice/*/coverage.toml, filter by req, resolve each
+    entry's staleness via git.rs. The ONLY git/disk in the data flow.
 ```
 
 **The v1 coherence predicate** (deliberately conservative — not a precedence
@@ -131,16 +142,32 @@ rides along. Collapsing `Indeterminate` via precedence is the OQ-3 follow-on.
 [[requirement, from, to]]` (facts already applied), `move ∈ {accept, revise,
 redesign}`, `evidence_refs`, `owning_slice?` (optional — its optionality is *why*
 a freestanding REC survives slice close), `decision_ref?`. `rec-NNN.md` holds
-rationale. No authored `status` field → scanned by `meta::read_id`.
+rationale. No authored `status` field → scanned by `meta::read_id`. A **redesign**
+REC carries **empty `status_deltas`** (F7) — it records the `reconcile→design`
+escalation and its rationale/evidence, writing no instance truth (D7); the schema
+must admit an empty delta list.
 
 **Coverage entry** (keyed, not id'd — Q4) in `.doctrine/slice/NNN/coverage.toml`:
-`requirement`, `contributing_change` (default = owning slice), `mode ∈ {VT, VA,
-VH}`, `status: CoverageStatus` (the SL-028 enum, reused), `git_anchor`,
-`attested_date?` (VH/VA only). Stored **slice-side** so several changes touching one
-requirement compose with **no clobber** (D3); stored in a file **distinct** from the
-requirement's authored status (NF-001).
+`requirement`, `contributing_change`, `mode ∈ {VT, VA, VH}`, `status:
+CoverageStatus` (the SL-028 enum, reused), `git_anchor`, `attested_date?` (VH/VA
+only). Stored **slice-side** so several changes touching one requirement compose
+with **no clobber** (D3); stored in a file **distinct** from the requirement's
+authored status (NF-001).
 
-Ownership: a slice owns the coverage it establishes; a REC is owned by its
+`contributing_change` (F2): the **default and overwhelmingly common** value is the
+owning slice itself — the change that ran the verification owns the evidence. It is
+kept **explicit** (not implicit-by-location) for two reasons: a slice may legitimately
+record evidence attributed to a *prior* change it is re-observing, and the
+composite's fan-in key is the tuple `(requirement, contributing_change, mode)`, not
+the file path. A slice never writes another slice's file (no-clobber holds at the
+*file* level); cross-attribution lives inside the owning slice's own file.
+
+**Stable key & citability** (F3): a coverage entry has no numbered id, so it is
+cited by its **stable tuple key** `(slice, requirement, contributing_change, mode)`
+— never a `file#line` anchor (those rot; cf. IDE-002). REC `evidence_refs` use this
+tuple form; reconstruction (NF-003) resolves entries by key, not by position.
+
+Ownership: a slice owns the coverage file it writes; a REC is owned by its
 reconciliation act (optionally a slice). The composite/drift views own *no* state.
 
 ### 5.4 Lifecycle, Operations & Dynamics
@@ -159,9 +186,15 @@ reconciliation act (optionally a slice). The composite/drift views own *no* stat
 ### 5.5 Invariants, Assumptions & Edge Cases
 
 - **INV-1 (NF-001).** No function maps coverage → authored requirement status.
-  Preserved structurally: `drift()` returns `Verdict` not `ReqStatus`; the two
-  enums keep their SL-028 "never reference each other" property; coverage and
-  status live in distinct files.
+  This is a **universal negative**, not a unit-testable assertion (F4); it is held
+  **architecturally**: (a) `coverage.rs` has **no dependency** on any
+  requirement-status *writer* — none exists in SL-042, which is *why* the
+  observe/reconcile split lands the writer in Slice B; (b) `drift()`'s return type
+  (`Verdict`) structurally cannot carry a status write; (c) the two SL-028 enums
+  keep their "never reference each other" property; (d) coverage and authored
+  status live in distinct files. The guard is a structural/review check (no import
+  edge coverage→status-writer), reinforced by the type signature — not a test of
+  absence.
 - **INV-2 (D4).** No composite/drift value is persisted; correctness is
   recomputation.
 - **INV-3.** Coverage is authored/committed (Q1) — reconstructable from the
@@ -220,6 +253,11 @@ reconciliation act (optionally a slice). The composite/drift views own *no* stat
   counts as drift at the gate. Accepted for v1.
 - **R-d — scan cost (R2).** Bounded by the perf spike (§9), not assumed; a cliff
   below realistic scale triggers the pre-registered reverse-index backlog item.
+- **R-e — git seam granularity (H1, F6).** "Reuse `src/git.rs` unchanged" is a
+  *hypothesis*, not verified: the staleness API must accept coverage's
+  `(git_anchor, touched_paths)` granularity. **P4 first task = confirm the seam
+  fits;** if a coverage anchor needs granularity the memory anchor lacks, **widen
+  at the leaf, not fork** (SPEC-002 H1 challenge). A fork would be a parallel impl.
 
 ## 9. Quality Engineering & Validation
 
@@ -240,11 +278,12 @@ Per-requirement evidence (VT unless noted):
 - **REQ-115 / NF-002** — wire `git_anchor` onto the `src/git.rs` seam; stale
   `Verified` flagged, **not demoted**; reuse asserted (no parallel staleness impl).
 
-**R2 perf spike (VT in P3):** seed N≈500 synthetic slices × coverage entries on
-shared requirements; time the composite corpus-scan; assert under budget, **debug
-~10× release** (`mem.pattern.testing.debug-vs-release-scale-timing`). Output = the
-scan-cost cliff; a cliff below realistic repo scale triggers a reverse-index
-`backlog new` (condition recorded now, per defer-needs-backlog).
+**R2 perf spike (VT in P3):** **sweep** N synthetic slices × coverage entries on
+shared requirements (e.g. 50 → 500 → 2000) and **locate the scan-cost cliff** —
+not assert a single fixed N passes (F8). Budget for **debug ~10× release**
+(`mem.pattern.testing.debug-vs-release-scale-timing`). Output = the cliff N; a cliff
+below realistic repo scale triggers a reverse-index `backlog new` (condition
+recorded now, per defer-needs-backlog).
 
 Lint/format gates per house rules (`cargo clippy` zero-warning bins/lib, `just
 check`). New module trips the cargo/pedantic doc lints
@@ -252,4 +291,37 @@ check`). New module trips the cargo/pedantic doc lints
 
 ## 10. Review Notes
 
-_(adversarial pass pending — §Adversarial review of the design skill)_
+### Internal adversarial pass (self-review, integrated)
+
+Eight findings; all integrated above.
+
+- **F1 (correctness, fixed §5.2)** — `composite()`/`drift()` were specified pure
+  yet consumed staleness, which needs a git read. Staleness now resolved in the
+  impure shell (`scan_coverage`) and passed into the folds as `IsStale`; the folds
+  stay pure.
+- **F2 (imprecision, fixed §5.3)** — `contributing_change` ownership clarified:
+  explicit (not implicit-by-location), default = owning slice, admits
+  re-observation of a prior change; no-clobber holds at the file level.
+- **F3 (rot, fixed §5.3)** — coverage entries cited by the stable tuple key
+  `(slice, requirement, contributing_change, mode)`, never `file#line` anchors
+  (cf. IDE-002). REC `evidence_refs` use the tuple.
+- **F4 (weak proof, fixed §5.5)** — NF-001 is a universal negative; reframed as an
+  architectural guard (no import edge coverage→status-writer) + type signature, not
+  a test-of-absence.
+- **F5 (ADR-001, fixed §5.1)** — named the leaf(pure)/shell(impure) boundary;
+  `coverage.rs` is the pure leaf, the scan/staleness shell sits above it.
+- **F6 (H1 unverified, fixed §8 R-e)** — git-seam-fits is a hypothesis; P4's first
+  task verifies it; widen-at-leaf, never fork.
+- **F7 (edge, fixed §5.3)** — a `redesign` REC carries empty `status_deltas`.
+- **F8 (verification, fixed §9)** — the perf spike sweeps N to locate the cliff,
+  not assert a fixed N.
+
+**Residual (consciously carried, not blockers):** OQ-2 (knowledge_record
+sequencing), OQ-3 (precedence), R-a (SL-040 concurrency — a *second* context is
+editing `meta.rs`/`integrity.rs` now; sequencing + fallback in §8, but live
+merge-conflict risk is real and a coordination concern, not only a build-order
+one).
+
+### External pass
+
+_Pending — `/inquisition` (handover prepared). No design lock until it clears._
