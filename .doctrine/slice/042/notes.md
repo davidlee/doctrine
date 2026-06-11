@@ -139,3 +139,45 @@ main.rs), combined-tree verify green (fmt/clippy/test/build).
   staleness resolution (single `rev-list` over the combined pathset, or memoize
   per anchor) rather than one subprocess per cell. Revisit when Slice B wires the
   reader; capture as `backlog new` then if still warranted.
+
+## PHASE-04 — VH/VA staleness decay, NF-002 lock (REQ-115) — landed `8fcc7fe`
+
+Built via the dispatch funnel with a single worktree worker `sl-042-p4-fork`
+(S=`eecbe1f`) off P3's `5193238`; net diff `B..S` imported, R-5 belt clean
+(src-only: `coverage_scan.rs` test module), combined-tree verify green.
+
+- **Verification-led — NO production change.** P3's `scan_coverage` already
+  resolves `IsStale` generically per entry, and NF-002 holds **structurally**
+  (`IsStale` is a value distinct from `CoverageStatus`; the shell never mutates
+  status). P4's job was to LOCK that contract with tests + confirm the seam-fit,
+  not add a mechanism. Four tests in `coverage_scan.rs`'s `#[cfg(test)]` module.
+- **R-e / H1 → FACT (EX-1).** `git::commits_touching(root, paths, since, target)`
+  consumes coverage's `(git_anchor: String, touched_paths: Vec<String>)`
+  granularity **verbatim** — driven against a temp git repo with a `CoverageEntry`'s
+  actual field shapes; both Stale and Fresh resolve. **No leaf widening, no fork.**
+  H1 ("reuse git.rs unchanged") is now test-backed, not hypothesis.
+- **NF-002 lock (VT-1, EX-2).** Temp git repo: a VH **and** a VA `Verified` entry
+  anchored at an old commit over `touched_paths` a later commit moved past →
+  `scan_coverage` flags **both** `IsStale::Stale` while each `status` stays
+  `Verified` — surfaced, **never auto-demoted**. Fresh contrast (untouched path)
+  → `Fresh`, status unchanged.
+- **No parallel impl (VT-2, EX-3).** Structural guard: coverage staleness flows
+  ONLY through `git::commits_touching`; `contentset.rs` (SL-040's content-hash
+  leaf — wrong model) is not on the coverage path. (Guard composes the rival
+  `contentset::` token at runtime so it doesn't self-match its own source.)
+- **dead_code expect persists** — P4 added no bins/lib consumer; `coverage_scan`'s
+  module-level `not(test) expect(dead_code)` still self-clears at the Slice-B reader.
+
+### Carry-forward for /audit + /close
+- **All 4 phases complete** on `sl-042-coord` (tip `8fcc7fe`). Coord branch is the
+  deliverable; **merge to `main` once `main` settles** (SL-043 was still live on
+  `main` during this run).
+- **EX-2 reconciliation (P2 plan finding):** "`CoverageStatus` genuinely used in
+  the non-test build" still does NOT hold — the whole coverage leaf + scan shell
+  remain dead in bins/lib (no CLI verb; the reader is **Slice B**). The
+  self-clearing `not(test) expect(dead_code)` on `coverage.rs` and
+  `coverage_scan.rs`, and the item-level one on `git::head_sha`, are all carried
+  intentionally and retire at the Slice-B consumer. Audit should record this as a
+  known, designed deferral (EX-2 lands at the consumer), not drift.
+- **Conditioned perf-spike backlog triggers** (P3 notes) remain unfired — revisit
+  at Slice B.
