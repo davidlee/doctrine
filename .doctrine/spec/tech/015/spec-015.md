@@ -71,9 +71,10 @@ container realises, specialised here for the seeded-empty optionals.
 ### The outbound relationships seam
 
 Each item carries a `[relationships]` table — forward links to `slices`, `specs`, and
-`drift`, plus the priority-engine edges `needs` (hard prereq), `after` (soft
-sequence, each a `{ to, rank }` edge), and `triggers` (architectural prefactor
-riders). The seam is outbound-only (ADR-004); the reverse direction is derived, never
+`drift`, plus the two priority-engine item→item edges — `needs` (hard prereq) and
+`after` (soft sequence, each a `{ to, rank }` edge) — and the `triggers` rider (the
+watched source `globs` an item observes, with an optional `note`; field-only this
+phase, the staleness mask deferred). The seam is outbound-only (ADR-004); the reverse direction is derived, never
 authored twice. `backlog needs`/`after` append into the seeded arrays
 edit-preservingly via `toml_edit` — never a full reserialize, so comments and inert
 tables survive — and **refuse** (rather than corrupt) when the seeded `[relationships]`
@@ -123,8 +124,9 @@ naming the members rather than emitting a wrong order.
   materialiser serving all five — diverging only by prefix and the risk facet seed — is
   preferred over five parallel implementations, and keeps kind variation a facet rather
   than a fork.
-- **The backlog mints ordering edges but does not own ordering.** `needs`/`after`/
-  `triggers` are captured here, but the composition is delegated to cordage so the
+- **The backlog mints ordering edges but does not own ordering.** `needs`/`after`
+  are captured here (the `triggers` rider is a separate watched-glob signal, not an
+  ordering axis), but the composition is delegated to cordage so the
   backlog stays a capture surface; the adapter owning only vocabulary keeps the
   priority mechanism swappable and disk-free.
 
