@@ -3,7 +3,7 @@
 //!
 //! cordage owns the mechanism (a tree + typed DAG overlays, opaque ordering); this
 //! module owns the **vocabulary**: it projects backlog items into [`OrderInput`],
-//! builds two overlays (`depends_on` hard / `before` soft) plus one `OrderSpec`,
+//! builds two overlays (`needs` hard / `after` soft) plus one `OrderSpec`,
 //! and reads the composed order and resolution provenance back out in domain terms
 //! ([`ItemId`], [`Override`]). It performs **no sort of its own** — cordage composes
 //! the order (design §5.4 I1). Pure and disk-free: it sees only `OrderInput`, never
@@ -71,13 +71,17 @@ impl PartialOrd for ItemId {
 /// adapter sees only this — `created` (the `YYYY-MM-DD` tier-2 tiebreak), the
 /// derived `exposure` (the tier-3 within-level fallback), and the two outbound edge
 /// lists in `ItemId` terms. No `BacklogItem`, no disk.
+///
+/// `after` is `(resolved `to`, rank)`: the per-edge authored `rank` rides into the
+/// `after` edge's `EdgeAttrs`; the entry's index in this `Vec` supplies the `age`
+/// ordinal (§5.4 — a distinct ordinal from `created`, §6 A2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OrderInput {
     item: ItemId,
     created: String,
     exposure: u8,
-    depends_on: Vec<ItemId>,
-    before: Vec<ItemId>,
+    needs: Vec<ItemId>,
+    after: Vec<(ItemId, i32)>,
 }
 
 impl OrderInput {
@@ -86,15 +90,15 @@ impl OrderInput {
         item: ItemId,
         created: String,
         exposure: u8,
-        depends_on: Vec<ItemId>,
-        before: Vec<ItemId>,
+        needs: Vec<ItemId>,
+        after: Vec<(ItemId, i32)>,
     ) -> Self {
         Self {
             item,
             created,
             exposure,
-            depends_on,
-            before,
+            needs,
+            after,
         }
     }
 }
@@ -111,7 +115,9 @@ pub(crate) struct Override {
 }
 
 impl Override {
-    /// The edge source (the authoring item, in `before`/`depends_on` orientation).
+    /// The edge source — the predecessor. Uniform across every reason (both
+    /// authored edges flip B→A, and dangling drops adopt the same orientation):
+    /// `from` should have preceded `to`; it didn't, because of [`Override::reason`].
     pub(crate) fn from(self) -> ItemId {
         self.from
     }
@@ -131,9 +137,9 @@ impl Override {
 /// still produced; the dropped edge is reported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OverrideReason {
-    /// A `before` edge in a soft cycle, evicted to linearize (`Evict` overlay).
+    /// An `after` edge in a soft cycle, evicted to linearize (`Evict` overlay).
     SoftCycleEvicted,
-    /// A `before` edge contradicting a hard `depends_on` ordering — the dependency
+    /// An `after` edge contradicting a hard `needs` ordering — the dependency
     /// wins, the soft preference is dropped.
     Contradicted,
     /// An edge whose endpoint is absent from the input set — skipped at ingest.
@@ -147,8 +153,8 @@ pub(crate) enum OverrideReason {
 pub(crate) struct BacklogOrder {
     graph: Graph,
     by_node: BTreeMap<NodeId, ItemId>,
-    depends_on_overlay: OverlayId,
-    before_overlay: OverlayId,
+    needs_overlay: OverlayId,
+    after_overlay: OverlayId,
     dangling: Vec<Override>,
 }
 
@@ -160,10 +166,14 @@ impl BacklogOrder {
     /// so the monotonic `NodeId` carries tiers 2–4 of the order key (design §5.1):
     /// the fallback that surfaces wherever no overlay edge constrains a pair.
     ///
-    /// `depends_on` is the hard prerequisite — `A.depends_on = [B]` means B must
-    /// precede A, so the cordage edge is **B→A** (the single D4 flip at ingest).
-    /// `before` is the soft preference — `A.before = [B]` is already src-before-dst,
-    /// edge **A→B**. An edge to an absent endpoint is dropped and recorded
+    /// Both authored edges point at predecessors and flip **B→A** (uniform
+    /// src-before-dst, every layer `Along`, §5.1). `needs` is the hard prerequisite
+    /// — `A.needs = [B]` means B must precede A, so the cordage edge is **B→A**,
+    /// `EdgeAttrs::new(0, 0)` (hard edges never evict). `after` is the soft
+    /// preference — `A.after = [{to=B, rank}]` means A comes after B, so the cordage
+    /// edge is also **B→A**, carrying `EdgeAttrs::new(rank, age)` where `age` is the
+    /// edge's index in the item's `after` array (the genuine `(rank, age, src, dst)`
+    /// eviction key, §5.4). An edge to an absent endpoint is dropped and recorded
     /// `Dangling`.
     ///
     /// # Errors
@@ -175,9 +185,9 @@ impl BacklogOrder {
     /// surface, never pattern-matched for recovery.
     pub(crate) fn build(inputs: &[OrderInput]) -> anyhow::Result<Self> {
         let mut builder = GraphBuilder::new();
-        let depends_on_overlay =
+        let needs_overlay =
             builder.overlay(OverlayConfig::new(CyclePolicy::Reject, Arity::Unbounded));
-        let before_overlay =
+        let after_overlay =
             builder.overlay(OverlayConfig::new(CyclePolicy::Evict, Arity::Unbounded));
 
         let mut ordered_inputs: Vec<&OrderInput> = inputs.iter().collect();
@@ -203,24 +213,38 @@ impl BacklogOrder {
             let Some(&src) = by_item.get(&input.item) else {
                 continue;
             };
-            for dep in &input.depends_on {
+            for dep in &input.needs {
                 match by_item.get(dep) {
+                    // `A.needs=[B]` ⇒ B before A: edge B→A, hard edges never evict.
                     Some(&prereq) => {
-                        builder.edge(depends_on_overlay, prereq, src, EdgeAttrs::new(0, 0));
+                        builder.edge(needs_overlay, prereq, src, EdgeAttrs::new(0, 0));
                     }
+                    // The missing predecessor is `from`, the dependent `to` —
+                    // the uniform B→A orientation `overrides()` reports (the
+                    // evicted paths read src→from, dst→to identically).
                     None => dangling.push(Override {
-                        from: input.item,
-                        to: *dep,
+                        from: *dep,
+                        to: input.item,
                         reason: OverrideReason::Dangling,
                     }),
                 }
             }
-            for successor in &input.before {
-                match by_item.get(successor) {
-                    Some(&dst) => builder.edge(before_overlay, src, dst, EdgeAttrs::new(0, 0)),
+            for (idx, (to, rank)) in input.after.iter().enumerate() {
+                match by_item.get(to) {
+                    // `A.after=[{to=B, rank}]` ⇒ B before A: edge B→A (the flip),
+                    // carrying the genuine `(rank, age)` eviction key; `age` is the
+                    // entry's index in this item's `after` array (§5.4, A7).
+                    Some(&prereq) => {
+                        let age = u64::try_from(idx).map_err(|e| {
+                            anyhow::anyhow!("backlog_order: after-edge index overflows u64: {e}")
+                        })?;
+                        builder.edge(after_overlay, prereq, src, EdgeAttrs::new(*rank, age));
+                    }
+                    // The missing predecessor is `from`, the dependent `to` —
+                    // matching the B→A orientation of the evicted paths.
                     None => dangling.push(Override {
-                        from: input.item,
-                        to: *successor,
+                        from: *to,
+                        to: input.item,
                         reason: OverrideReason::Dangling,
                     }),
                 }
@@ -228,8 +252,8 @@ impl BacklogOrder {
         }
 
         builder.order_spec(OrderSpec::new(vec![
-            OrderLayer::new(depends_on_overlay, Direction::Along),
-            OrderLayer::new(before_overlay, Direction::Along),
+            OrderLayer::new(needs_overlay, Direction::Along),
+            OrderLayer::new(after_overlay, Direction::Along),
         ]));
 
         let graph = builder.build().map_err(|e| {
@@ -241,8 +265,8 @@ impl BacklogOrder {
         Ok(Self {
             graph,
             by_node,
-            depends_on_overlay,
-            before_overlay,
+            needs_overlay,
+            after_overlay,
             dangling,
         })
     }
@@ -257,14 +281,14 @@ impl BacklogOrder {
             .collect()
     }
 
-    /// The diagnosed `depends_on` cycles — each an `ItemId` set (an authoring error
+    /// The diagnosed `needs` cycles — each an `ItemId` set (an authoring error
     /// to surface; the order is still produced, design §5.5).
     pub(crate) fn dep_cycles(&self) -> Vec<BTreeSet<ItemId>> {
         self.graph
             .provenance()
             .cycles()
             .iter()
-            .filter(|cycle| cycle.overlay() == self.depends_on_overlay)
+            .filter(|cycle| cycle.overlay() == self.needs_overlay)
             .map(|cycle| {
                 cycle
                     .nodes()
@@ -275,18 +299,18 @@ impl BacklogOrder {
             .collect()
     }
 
-    /// The dropped soft edges (design §5.6): `before` edges evicted on the soft
+    /// The dropped soft edges (design §5.6): `after` edges evicted on the soft
     /// overlay — by an intra-overlay cycle (`SoftCycleEvicted`) or a contradiction
-    /// with a hard dependency (`Contradicted`) — plus the ingest-time `Dangling`
-    /// drops. `ArityViolation` cannot arise on an `Unbounded` overlay (A5), so it
-    /// contributes nothing.
+    /// with a hard `needs` ordering (`Contradicted`) — plus the ingest-time
+    /// `Dangling` drops. `ArityViolation` cannot arise on an `Unbounded` overlay
+    /// (A5), so it contributes nothing.
     pub(crate) fn overrides(&self) -> Vec<Override> {
         let mut out: Vec<Override> = self
             .graph
             .provenance()
             .evictions()
             .iter()
-            .filter(|evicted| evicted.overlay() == self.before_overlay)
+            .filter(|evicted| evicted.overlay() == self.after_overlay)
             .filter_map(|evicted| {
                 let from = self.by_node.get(&evicted.edge().src()).copied()?;
                 let to = self.by_node.get(&evicted.edge().dst()).copied()?;
@@ -325,10 +349,10 @@ mod tests {
         item: ItemId,
         created: &str,
         exposure: u8,
-        depends_on: Vec<ItemId>,
-        before: Vec<ItemId>,
+        needs: Vec<ItemId>,
+        after: Vec<(ItemId, i32)>,
     ) -> OrderInput {
-        OrderInput::new(item, created.to_string(), exposure, depends_on, before)
+        OrderInput::new(item, created.to_string(), exposure, needs, after)
     }
 
     fn pos(order: &[ItemId], item: ItemId) -> usize {
@@ -344,20 +368,37 @@ mod tests {
         assert_eq!(ItemId::new(ItemKind::Chore, 11).render(), "CHR-011");
     }
 
-    // --- T3: VT-2 dependency ordering ---
+    // --- T4: VT-2 `needs` ordering (the B→A flip) ---
 
     #[test]
-    fn depends_on_orders_the_prerequisite_first() {
+    fn needs_orders_the_prerequisite_first() {
         let a = rsk(1);
         let b = rsk(2);
         let inputs = vec![
-            inp(a, "2026-06-01", 0, vec![b], vec![]), // A depends_on B
+            inp(a, "2026-06-01", 0, vec![b], vec![]), // A needs B
             inp(b, "2026-06-01", 0, vec![], vec![]),
         ];
         let order = BacklogOrder::build(&inputs).unwrap().ordered();
         assert!(
             pos(&order, b) < pos(&order, a),
             "B (prerequisite) precedes A; got {order:?}"
+        );
+    }
+
+    // --- T5(b): VT-2/VT-3 `after` orders two otherwise-unordered items (the flip) ---
+
+    #[test]
+    fn after_orders_the_predecessor_first() {
+        let a = rsk(1);
+        let b = rsk(2);
+        let inputs = vec![
+            inp(a, "2026-06-01", 0, vec![], vec![(b, 0)]), // A after B ⇒ B before A
+            inp(b, "2026-06-01", 0, vec![], vec![]),
+        ];
+        let order = BacklogOrder::build(&inputs).unwrap().ordered();
+        assert!(
+            pos(&order, b) < pos(&order, a),
+            "B (predecessor) precedes A under the after flip; got {order:?}"
         );
     }
 
@@ -370,10 +411,10 @@ mod tests {
         let c = iss(7);
         let d = iss(8);
         let forward = vec![
-            inp(a, "2026-06-02", 4, vec![b], vec![]), // a depends_on b
+            inp(a, "2026-06-02", 4, vec![b], vec![]), // a needs b
             inp(b, "2026-06-01", 0, vec![], vec![]),
-            inp(c, "2026-06-03", 8, vec![d], vec![d]), // c depends_on d AND c before d → evict
-            inp(d, "2026-06-04", 8, vec![], vec![]),
+            inp(c, "2026-06-03", 8, vec![d], vec![]), // c needs d (edge d→c)
+            inp(d, "2026-06-04", 8, vec![], vec![(c, 0)]), // d after c (edge c→d) → contradicts, evict
         ];
         let reverse: Vec<OrderInput> = forward.iter().rev().cloned().collect();
         let fwd = BacklogOrder::build(&forward).unwrap();
@@ -414,38 +455,39 @@ mod tests {
         assert_eq!(cycles, vec![BTreeSet::from([a, b])]);
     }
 
-    // --- T5: VT-3 a before contradicting a dependency is overridden ---
+    // --- T5(a): VT-3 an `after` contradicting a `needs` is overridden ---
 
     #[test]
-    fn before_contradicting_a_dependency_is_overridden() {
+    fn after_contradicting_a_need_is_overridden() {
         let a = rsk(1);
         let b = rsk(2);
         let inputs = vec![
-            inp(a, "2026-06-01", 0, vec![b], vec![b]), // A depends_on B AND A before B
-            inp(b, "2026-06-01", 0, vec![], vec![]),
+            inp(a, "2026-06-01", 0, vec![b], vec![]), // A needs B ⇒ edge B→A (B before A)
+            inp(b, "2026-06-01", 0, vec![], vec![(a, 0)]), // B after A ⇒ edge A→B — contradicts
         ];
         let built = BacklogOrder::build(&inputs).unwrap();
         let order = built.ordered();
-        // Dependency wins: B precedes A.
-        assert!(pos(&order, b) < pos(&order, a), "dep wins; got {order:?}");
+        // The hard `needs` wins: B precedes A.
+        assert!(pos(&order, b) < pos(&order, a), "need wins; got {order:?}");
         let overrides = built.overrides();
+        // The contradicting `after` edge A→B (the predecessor-flip src=A, dst=B) is dropped.
         assert!(
             overrides.iter().any(|o| o.from() == a
                 && o.to() == b
                 && o.reason() == OverrideReason::Contradicted),
-            "the before A→B edge is overridden as Contradicted; got {overrides:?}"
+            "the after edge A→B is overridden as Contradicted; got {overrides:?}"
         );
     }
 
-    // --- T5: VT-6 a soft before cycle is evicted, not fatal ---
+    // --- T5: VT-3 a soft `after` cycle is evicted, not fatal ---
 
     #[test]
-    fn soft_before_cycle_is_evicted_not_fatal() {
+    fn soft_after_cycle_is_evicted_not_fatal() {
         let x = rsk(1);
         let y = rsk(2);
         let inputs = vec![
-            inp(x, "2026-06-01", 0, vec![], vec![y]), // X before Y
-            inp(y, "2026-06-01", 0, vec![], vec![x]), // Y before X
+            inp(x, "2026-06-01", 0, vec![], vec![(y, 0)]), // X after Y ⇒ edge Y→X
+            inp(y, "2026-06-01", 0, vec![], vec![(x, 0)]), // Y after X ⇒ edge X→Y — cycle
         ];
         let built = BacklogOrder::build(&inputs).unwrap();
         assert_eq!(built.ordered().len(), 2, "order still produced");
@@ -456,6 +498,78 @@ mod tests {
         assert!(
             (from == x && to == y) || (from == y && to == x),
             "the evicted edge is between X and Y"
+        );
+    }
+
+    // --- VT-6 mechanism (adapter half): a higher-`rank` after edge survives a soft
+    // cycle; the strictly lower-`rank` edge is the one evicted (proves the genuine
+    // `(rank, age, src, dst)` key, not the retired (0,0) stand-in). Full CLI VT-6 in
+    // PHASE-03; the eviction mechanism is unit-proven here. ---
+
+    #[test]
+    fn lower_rank_after_edge_is_the_one_evicted_in_a_soft_cycle() {
+        let x = rsk(1);
+        let y = rsk(2);
+        let inputs = vec![
+            // X after Y, rank 5 ⇒ edge Y→X (rank 5) — the durable, high-rank preference.
+            inp(x, "2026-06-01", 0, vec![], vec![(y, 5)]),
+            // Y after X, rank 1 ⇒ edge X→Y (rank 1) — the weaker edge, evicted first.
+            inp(y, "2026-06-01", 0, vec![], vec![(x, 1)]),
+        ];
+        let built = BacklogOrder::build(&inputs).unwrap();
+        let overrides = built.overrides();
+        assert_eq!(overrides.len(), 1, "one edge evicted; got {overrides:?}");
+        assert_eq!(overrides[0].reason(), OverrideReason::SoftCycleEvicted);
+        // The evicted edge is the weaker X→Y (rank 1): src=X, dst=Y. The surviving
+        // Y→X (rank 5) keeps Y before X in the order.
+        assert_eq!(
+            (overrides[0].from(), overrides[0].to()),
+            (x, y),
+            "the lower-rank edge X→Y is evicted; got {overrides:?}"
+        );
+        let order = built.ordered();
+        assert!(
+            pos(&order, y) < pos(&order, x),
+            "the surviving high-rank Y→X edge keeps Y before X; got {order:?}"
+        );
+    }
+
+    // --- VT-6 mechanism (age half): equal-rank soft cycle, the LOWER-`age`
+    // (lower array-index) edge is evicted. Proves `age` is wired from the entry's
+    // index, not a constant — the missing half of the `(rank, age, src, dst)` key.
+    //
+    // Fixture: X=RSK-001, Y=RSK-002, Z=RSK-003, equal exposure/created ⇒ NodeIds
+    // allocate canonical-id ascending: node(X) < node(Y) < node(Z). The cycle:
+    //   X.after = [(Y, 0)]        ⇒ edge Y→X, age 0
+    //   Y.after = [(Z, 0), (X, 0)] ⇒ edge Z→Y age 0 (clean, Z precedes Y) and the
+    //                                cycle-closing edge X→Y at index 1 ⇒ age 1
+    // Both cycle edges share rank 0. The eviction key is (rank, age, src, dst): with
+    // equal rank, `age` decides BEFORE (src,dst). Y→X has age 0 < X→Y's age 1, so
+    // Y→X is evicted. DISCRIMINATION: were `age` a constant, the tiebreak would fall
+    // through to (src,dst) — X→Y has the smaller src (node(X) < node(Y)) and would
+    // be evicted instead. The asserted victim Y→X flips iff age is genuinely wired.
+
+    #[test]
+    fn lower_age_after_edge_is_the_one_evicted_in_an_equal_rank_soft_cycle() {
+        let x = rsk(1);
+        let y = rsk(2);
+        let z = rsk(3);
+        let inputs = vec![
+            inp(x, "2026-06-01", 0, vec![], vec![(y, 0)]), // X after Y ⇒ edge Y→X, age 0
+            // Z padding at index 0 (age 0, no cycle), cycle edge X at index 1 (age 1).
+            inp(y, "2026-06-01", 0, vec![], vec![(z, 0), (x, 0)]),
+            inp(z, "2026-06-01", 0, vec![], vec![]),
+        ];
+        let built = BacklogOrder::build(&inputs).unwrap();
+        let overrides = built.overrides();
+        assert_eq!(overrides.len(), 1, "one edge evicted; got {overrides:?}");
+        assert_eq!(overrides[0].reason(), OverrideReason::SoftCycleEvicted);
+        // The lower-age edge Y→X (src=Y, dst=X, age 0) is evicted; the higher-age
+        // X→Y (age 1) survives. A constant age would evict X→Y instead (smaller src).
+        assert_eq!(
+            (overrides[0].from(), overrides[0].to()),
+            (y, x),
+            "the lower-age edge Y→X is evicted; got {overrides:?}"
         );
     }
 
@@ -471,8 +585,11 @@ mod tests {
         let overrides = built.overrides();
         assert_eq!(overrides.len(), 1);
         assert_eq!(overrides[0].reason(), OverrideReason::Dangling);
-        assert_eq!(overrides[0].from(), a);
-        assert_eq!(overrides[0].to(), ghost);
+        // a.needs=[ghost] ⇒ ghost should have preceded a, but ghost is absent:
+        // the missing predecessor is `from`, the dependent `a` is `to` — the
+        // uniform B→A orientation shared with the evicted paths.
+        assert_eq!(overrides[0].from(), ghost);
+        assert_eq!(overrides[0].to(), a);
     }
 
     // --- T6: VT-4 exposure breaks ties within a level ---
@@ -517,20 +634,20 @@ mod tests {
         assert!(pos(&order, bottom) < pos(&order, mid) && pos(&order, mid) < pos(&order, top));
     }
 
-    // --- T6: a before edge (a level) beats exposure (a within-level fallback) ---
+    // --- T6: an after edge (a level) beats exposure (a within-level fallback) ---
 
     #[test]
-    fn a_before_edge_beats_exposure() {
+    fn an_after_edge_beats_exposure() {
         let hi = rsk(1);
         let lo = rsk(2);
         let inputs = vec![
-            inp(hi, "2026-06-01", 16, vec![], vec![]),
-            inp(lo, "2026-06-01", 0, vec![], vec![hi]), // lo before hi
+            inp(hi, "2026-06-01", 16, vec![], vec![(lo, 0)]), // hi after lo ⇒ edge lo→hi
+            inp(lo, "2026-06-01", 0, vec![], vec![]),
         ];
         let order = BacklogOrder::build(&inputs).unwrap().ordered();
         assert!(
             pos(&order, lo) < pos(&order, hi),
-            "the before edge beats hi's exposure; got {order:?}"
+            "the after edge (lo→hi) beats hi's exposure; got {order:?}"
         );
     }
 
@@ -541,7 +658,7 @@ mod tests {
         // Mechanical, textual scope: every source line whose first token is
         // `pub(crate)` (a fn/struct/field signature) must not name an opaque cordage
         // id. cordage's own `pub` tokens stay free; private fields (`by_node`,
-        // `depends_on_overlay`) are not `pub(crate)` and are intentionally exempt.
+        // `needs_overlay`/`after_overlay`) are not `pub(crate)` and are exempt.
         let src = include_str!("backlog_order.rs");
         for (idx, line) in src.lines().enumerate() {
             if line.trim_start().starts_with("pub(crate)") {
