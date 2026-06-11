@@ -438,10 +438,9 @@ mod tests {
     fn plan_skips_existing_files() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join(".doctrine");
-        let nested = target.join("x");
-        fs::create_dir_all(&nested).unwrap();
-        // Pre-create the target file.
-        let existing = nested.join("about.md");
+        fs::create_dir_all(&target).unwrap();
+        // Pre-create an embedded target file so the plan must Skip it.
+        let existing = target.join("glossary.md");
         fs::write(&existing, "old content").unwrap();
 
         let manifest = Manifest::default_for_tests();
@@ -511,7 +510,7 @@ mod tests {
         for entry in [
             ".doctrine/state/",
             ".doctrine/slice/*/phases",
-            ".doctrine/slice/*/handover.md",
+            ".doctrine/**/handover.md",
         ] {
             assert!(
                 manifest.gitignore.entries.iter().any(|e| e == entry),
@@ -711,11 +710,11 @@ mod tests {
         execute_plan(&plan).unwrap();
 
         assert!(dir.path().join(".doctrine/custom-dir").is_dir());
-        // The embedded file x/about.md should be installed.
-        let about = dir.path().join(".doctrine/x/about.md");
-        assert!(about.is_file());
-        let content = fs::read_to_string(&about).unwrap();
-        assert!(content.contains("About"));
+        // An embedded file (glossary.md) should be installed.
+        let glossary = dir.path().join(".doctrine/glossary.md");
+        assert!(glossary.is_file());
+        let content = fs::read_to_string(&glossary).unwrap();
+        assert!(content.contains("glossary"));
     }
 
     #[test]
@@ -771,7 +770,7 @@ mod tests {
             target: ".doctrine".to_string(),
             ..Manifest::default_for_tests()
         };
-        let dest = dir.path().join(".doctrine/x/about.md");
+        let dest = dir.path().join(".doctrine/glossary.md");
         fs::create_dir_all(dest.parent().unwrap()).unwrap();
         let original = "original content";
         fs::write(&dest, original).unwrap();

@@ -7,8 +7,7 @@ license = "GPL-3.0-only"
 repository = "https://github.com/davidlee/doctrine"
 keywords = ["cli", "project"]
 categories = ["command-line-utilities"]
-include = ["/src","/install", "/plugins", "/memory", "/scripts", "/justfile", "/tests", "/examples", "AGENTS.md","CLAUDE.md", "/CONTRIBUTING.md", "/LICENSE*.md"]
-exclude = [".envrc", ".direnv", "scratch", "doc", "temp"]
+include = ["!.direnv", "!.envrc", "/src", "/install", "/plugins", "/memory", "/scripts", "/justfile", "/tests", "/examples", "AGENTS.md","CLAUDE.md", "/CONTRIBUTING.md", "/LICENSE*.md"]
 
 [dependencies]
 anyhow.workspace = true
