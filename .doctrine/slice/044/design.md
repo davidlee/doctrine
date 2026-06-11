@@ -145,10 +145,16 @@ but no append verb exists yet.
 A second predicate in `run_status`, beside the RV-blocker scan, firing on the same
 `crosses_closure_seam` (specifically `reconcile→done`):
 
-1. Determine the requirements the closing slice **S** is responsible for — OPEN-1:
-   the reqs in **S's own `coverage.toml`** (structural, available, tight) vs the
-   broader reqs of every spec S realises (needs a prose→structural relation). Lean:
-   coverage.toml-derived.
+1. Determine the requirements the closing slice **S** is responsible for —
+   **D-B5 (LOCKED):** the gate's req set is `covered ∪ declared`, where `covered` =
+   the distinct reqs across S's `coverage.toml` entries (structural, always
+   available) and `declared` = an **authored, additive extra-req list** in S's
+   `coverage.toml` (a top-level `[gate] extra_reqs = [...]` table, `#[serde(default)]`
+   so old/empty files still parse). The scope is **risk-calibrated, not a fixed
+   policy** — the slice author casts it as wide as scope & risk warrant **at
+   `/plan`**, where it is peer-reviewed *before* any REC exists. Additive by
+   construction: you can never gate *less* than you covered. This sidesteps IMP-016
+   (no prose spec→req relation needed — the author names the reqs).
 2. For each such R: `drift(authored(R), composite(scan_coverage(R)))`. Any
    `{Divergent, Indeterminate}` = residual drift.
 3. **Discharge predicate (LOCKED):** residual drift on R is excused iff ∃ a REC with
@@ -186,8 +192,9 @@ type-level half).
 
 ## 6. Open Questions (a continuing agent MUST close before lock)
 
-- **OPEN-1** — closure-gate drift **scope**: the closing slice's `coverage.toml`
-  reqs (lean) vs all reqs of realised specs. Needs user confirmation.
+- ~~**OPEN-1**~~ — **RESOLVED → D-B5** (drift scope is a risk-calibrated authored
+  declaration in `coverage.toml`, set & peer-reviewed at `/plan`; gate set =
+  `covered ∪ declared`). See §5.5 step 1, §7 D-B5.
 - **OPEN-2** — reconcile **act granularity** (one REC/invocation vs one REC/req) +
   **REC population mechanism** (atomic `RecDoc` compose-and-write vs `rec new` +
   append verbs). No append verb exists today.
@@ -217,15 +224,35 @@ type-level half).
 - **D-B4 — B·P1 is one setter; both accept & revise reuse it.** revise = structural
   status only; material prose → IDE-003. *Alt rejected:* a separate spec-truth-revise
   verb (no distinct structural write exists; it would overlap IDE-003).
+- **D-B5 — closure-gate drift scope is a risk-calibrated authored declaration, not a
+  fixed policy.** The gate's req set = `covered ∪ declared`: `covered` derives
+  structurally from S's `coverage.toml` entries; `declared` is an **additive**
+  authored extra-req list (`[gate] extra_reqs`) in the same `coverage.toml`,
+  decided **at `/plan`** (ahead of any REC), peer-reviewed, calibrated to the
+  slice's scope & risk. The gate reads it at closure. *Rationale:* the right scope
+  is not knowable in the framework — it is a per-slice risk judgement, and risk
+  judgements belong in authored, reviewable artifacts (ADR-003 author-don't-derive
+  ethos), not baked into gate code. Additive so a slice can never silently gate
+  *less* than it covered. Home = `coverage.toml` (the gate already reads it for
+  `covered`; one place, one read). *Alt rejected:* (a) a hardcoded
+  `covered`-only-or-realised-specs policy — un-calibratable, and the realised-specs
+  pole needs the IMP-016 prose→req relation that doesn't exist; (b) home in
+  `plan.toml`/`slice-nnn.toml` — splits the gate's input across two files for no
+  gain (user-chosen: `coverage.toml`).
 
 ## 8. Risks & Mitigations *(to expand)*
 
 - **R-B1 — OPEN-2 ledger population.** If `rec new` writes empty and no append verb
   exists, B·P2 must either compose the full `RecDoc` atomically or add an append
   path; the choice affects the one-REC-per-act invariant. Resolve in OPEN-2.
-- **R-B2 — gate scope creep (OPEN-1).** A coverage.toml-derived scope under-checks if
-  a slice realises a req it recorded no coverage for; a spec-wide scope needs a
-  structural relation that doesn't exist (prose only, IMP-016).
+- **R-B2 — gate scope under-check (mitigated by D-B5).** A pure coverage.toml-derived
+  scope under-checks a req the slice realises but recorded no coverage for. **D-B5
+  mitigates:** the author widens the gate via the authored `extra_reqs` list at
+  `/plan`, peer-reviewed against scope & risk. *Residual risk:* the widening is a
+  human judgement — an author can still under-declare. The peer review at `/plan` is
+  the control; the additive default guarantees the floor (never < covered). The
+  spec-wide automation that would remove the judgement entirely still needs the
+  IMP-016 prose→req relation.
 
 ## 9. Quality Engineering & Validation *(sketch — to expand)*
 
@@ -234,7 +261,10 @@ type-level half).
   write.
 - **REQ-113** — gate refuses undischarged residual drift; an `owning_slice`-scoped
   `from==to` accept REC discharges it; F12 `reconcile→done` topology stays hard
-  independent of the drift check.
+  independent of the drift check. **D-B5 scope:** gate set = `covered ∪ declared`;
+  an `extra_reqs`-declared req with residual drift blocks closure same as a covered
+  one; an old/empty `coverage.toml` (no `[gate]` table) parses to `declared = ∅`
+  and gates on `covered` alone (additive default, back-compat round-trip test).
 - **REQ-114 / NF-001** — structural: no `coverage → status-writer` import edge
   (grep/compile, OPEN-3); the writer authors explicit values (the bridge passes a
   human value, not `f(coverage)`).
