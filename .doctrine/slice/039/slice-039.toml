@@ -1,0 +1,18 @@
+id = 39
+slug = "backlog-dep-ordering"
+title = "Backlog dependency ordering — item edges + cordage adapter"
+status = "proposed"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[relationships]
+# Engine consumed — SL-039 is the FIRST consumer of cordage (SPEC-001). It rides
+# the public builder/query surface and adds the doctrine→cordage path dep; it does
+# not modify cordage src/. Hand-authored per SL-038's shape; no `slice link` verb.
+specs = ["SPEC-001"]
+# No `requirements` — no REQ registry for the backlog capability yet (a backlog
+# spec is SL-021 territory; non-goal here).
+# Risk coordination is OUTBOUND-derived (ADR-004), not stored here: RSK-002's
+# explain-API change is the OQ-2 coupling point, cited in slice-039.md, not
+# duplicated as an edge. The backlog data-model extension governs no existing
+# entity — it introduces item→item edges that this slice's design will specify.
