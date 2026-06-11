@@ -1,0 +1,145 @@
+# Implementation plan for SL-039 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-039"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Data model — two item→item edges + the cordage path dep"
+objective = """
+Lay the foundation: add the doctrine→cordage path dependency (the first ADR-001 \
+layering edge; cordage gains its first dependent) and extend the backlog model \
+with two authored, outbound-only (ADR-004) item→item relations — `depends_on` \
+(hard prerequisite) and `before` (soft manual-sequence) — seeded `[]` in both \
+templates and rendered by `show`. No ordering, no cordage call yet — this phase \
+only widens the schema and wires the dep so PHASE-02 can consume cordage."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md LOCKED (a473f9f); slice scope §1 / Affected surface authoritative" },
+  { id = "EN-2", text = "no .doctrine/state/slice/039 phase state yet; plan approved" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Relationships` carries `depends_on: Vec<String>` and `before: Vec<String>`, both `#[serde(default)]`; reciprocity stays derived, never stored (ADR-004)" },
+  { id = "EX-2", text = "both backlog templates seed `depends_on = []` and `before = []` under `[relationships]`" },
+  { id = "EX-3", text = "`show` renders the two outbound axes alongside slices/specs/drift; `list` and its goldens untouched" },
+  { id = "EX-4", text = "root Cargo.toml gains `cordage = { path = \"crates/cordage\" }`; cordage builds as a dependent" },
+  { id = "EX-5", text = "`just check` green (zero clippy warnings); `cargo clippy -p doctrine`, never --all-targets" },
+]
+verification = [
+  { id = "VT-1", expects = "both templates seed depends_on=[]/before=[]; a virgin item round-trips through validate; show renders both axes when populated (design §8 VT-1)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Pure cordage adapter — src/backlog_order.rs"
+objective = """
+Build the vocabulary layer that lets cordage do the ordering. New module \
+`src/backlog_order.rs`: the `ItemId` newtype and `OrderInput` projection (incl. \
+the derived `exposure` = likelihood×impact, baseline otherwise); `BacklogOrder` \
+owning the Graph, the ItemId↔NodeId bimap, and the two NAMED overlay handles \
+(`depends_on_overlay`/`before_overlay`, not a positional pair — §5.4/E4). Build \
+two overlays (`depends_on` Reject+Unbounded, `before` Evict+Unbounded) + one \
+`OrderSpec = [Along(depends_on), Along(before)]`; allocate nodes in \
+`(exposure desc, created, canonical-id)` order so the NodeId fallback carries \
+tiers 2–3; each NodeId captured from `builder.node()`, never constructed. Expose \
+`ordered()`, `dep_cycles()`, `overrides()`. The adapter performs NO sort — \
+cordage composes (I1). Pure over OrderInput, disk-free, unit-tested."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: cordage path dep available, model carries depends_on/before" },
+  { id = "EN-2", text = "consume cordage as-is — no crates/cordage/** edit (leaf invariant, ADR-001)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "BacklogOrder::build ingests &[OrderInput], mints both overlays once + the 2-layer OrderSpec, allocates nodes in (exposure desc, created, id) order with NodeIds captured from builder.node()" },
+  { id = "EX-2", text = "ordered() maps each NodeId back through the bimap; the authored `A.depends_on=[B]` flip stored as cordage edge B→A; every layer Along (uniform src-before-dst)" },
+  { id = "EX-3", text = "dep_cycles() surfaces the depends_on overlay's CycleDiagnostics as ItemIds; overrides() surfaces evicted `before` edges + build-time dangling drops as (from,to,reason)" },
+  { id = "EX-4", text = "no NodeId/OverlayId appears in any adapter pub(crate) signature (the bounded R-C claim); EdgeAttrs::new(0,0) on every edge (durability unused)" },
+  { id = "EX-5", text = "`just check` green; cordage-side lint bans honoured (BTree not Hash, .get(range) not index, try_from not as, #[expect(reason=…)] not allow)" },
+]
+verification = [
+  { id = "VT-2",  expects = "A.depends_on=[B] ⇒ B before A in ordered() — the flip + Along (design §8 VT-2)" },
+  { id = "VT-3",  expects = "a depends_on overrides a contradicting before (the before edge in overrides()); before orders two otherwise-unordered items; equal-level pair falls to (exposure, creation) (VT-3)" },
+  { id = "VT-4",  expects = "high-exposure risk precedes a baseline item at the SAME composed level; an independent baseline item is NOT buried behind a deeply-blocked high-exposure item (the §10 A1 regression); unassessed risk + non-risk both = baseline (VT-4)" },
+  { id = "VT-8",  expects = "build twice incl. input permutation → byte-identical order + overrides; allocation order (exposure, created, id) (VT-8)" },
+  { id = "VT-10", expects = "a public-surface audit (test/doc) asserts no NodeId/OverlayId in any adapter pub(crate) signature — callers cannot pass a raw cordage id (the bounded claim, VT-10)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "CLI surface — set verbs + ordered render"
+objective = """
+Wire the adapter to real items. Two set verbs — `backlog depends-on <ITEM> \
+<PREREQ>…` and `backlog before <ITEM> <SUCCESSOR>…` — append to the authored \
+edges edit-in-place (the `set_backlog_status` toml_edit precedent), validating \
+each ref exists; `depends-on` additionally builds the dep graph incl. the new \
+edge and REFUSES on a cycle (naming members; nothing written), `before` never \
+rejects (soft). The new `backlog order [filters]` view reads non-terminal items, \
+projects them, builds the adapter, prints the composed order (reusing the `list` \
+column model) followed by an overrides block; a dependency cycle is a hard error \
+(stderr, non-zero exit) naming the members. Terminal/absent endpoints are \
+dropped + recorded with the endpoint's status AND resolution named (§5.6/E1 \
+honest-record, OQ-D D-min). `list` and its goldens stay untouched."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: BacklogOrder (ordered/dep_cycles/overrides) available" },
+  { id = "EN-2", text = "the order verb is the thin impure shell (read items → adapter → print); pure/imperative split held" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`backlog depends-on` appends prereqs, validates refs, refuses a closing cycle naming members (nothing written); reuses dep_cycles" },
+  { id = "EX-2", text = "`backlog before` appends, validates refs, never rejects a cycle (surfaced at order time)" },
+  { id = "EX-3", text = "`backlog order` prints the composed order + overrides block; a dep cycle exits non-zero on stderr naming members, no misleading order printed" },
+  { id = "EX-4", text = "terminal/absent endpoints dropped + recorded loudly with status + resolution named (never silently claimed satisfied); node set = non-terminal across all five kinds, cross-kind deps allowed" },
+  { id = "EX-5", text = "`backlog list` output + its black-box goldens unchanged; `just check` green" },
+]
+verification = [
+  { id = "VT-5", expects = "A→B→A ⇒ dep_cycles() names {A,B}; `order` exits non-zero; the set verb refuses the closing edge (design §8 VT-5)" },
+  { id = "VT-6", expects = "before X↔Y ⇒ min-(src,dst) edge evicted, order still printed, eviction in overrides() (VT-6)" },
+  { id = "VT-7", expects = "terminal/absent endpoint dropped + recorded with status+resolution; node set is non-terminal, cross-kind (VT-7)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Leaf invariant + R-C interface harvest"
+objective = """
+Close the loop on cordage's reserved budget. Assert the pure-leaf invariant held \
+end-to-end — cordage stays dependency-free of doctrine internals and unmodified — \
+and harvest the one budgeted R-C interface finding (OQ-B / objective 5): record \
+what cordage API bend (if any) real first-consumer use demanded, as a durable \
+note + `/record-memory`. The bend is NOT patched here (leaf invariant); if none \
+was needed, record that null result explicitly so the budget is closed, not left \
+dangling."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: real backlog use has exercised the full cordage public surface" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "no crates/cordage/** diff across the whole slice; cordage stays a pure leaf" },
+  { id = "EX-2", text = "the R-C interface finding (the one cordage API bend, or an explicit 'no bend needed' null result) recorded in notes.md + via /record-memory" },
+]
+verification = [
+  { id = "VT-9", expects = "`cargo tree -p cordage` shows cordage alone (no dependents pulling doctrine in); no crates/cordage/** diff (design §8 VT-9, I4)" },
+  { id = "VA-1", expects = "agent confirms the R-C harvest note + memory exist and name a concrete finding or an explicit null result (objective 5 / OQ-B)" },
+]
+specs        = []
+requirements = []
