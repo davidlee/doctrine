@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 204
+slug = "per-verb-black-box-goldens-plus-a-cross-verb-column-model-net-pin-the-rendered-table-and-json-envelope-byte-exact-turning-red-on-any-surface-drift"
+title = "Per-verb black-box goldens plus a cross-verb column-model net pin the rendered table and JSON envelope byte-exact, turning red on any surface drift."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

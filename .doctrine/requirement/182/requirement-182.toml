@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 182
+slug = "project-each-numbered-governance-kind-through-one-status-filtered-arm-accepted-adrs-required-policies-defaultrequired-standards-active-memories-revealing-rows-past-each-kinds-list-hide-set"
+title = "Project each numbered governance kind through one status-filtered arm — accepted ADRs, required policies, default+required standards, active memories — revealing rows past each kind's list hide-set."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

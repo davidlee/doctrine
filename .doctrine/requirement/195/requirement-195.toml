@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 195
+slug = "the-coordinationruntime-tier-doctrinestate-phases-symlink-handovermd-memory-caches-is-absent-from-a-fork-by-construction-no-shared-mutable-authored-file-crosses-the-isolation-unit"
+title = "The coordination/runtime tier (`.doctrine/state/`, `phases` symlink, `handover.md`, memory caches) is absent from a fork by construction — no shared-mutable authored file crosses the isolation unit."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

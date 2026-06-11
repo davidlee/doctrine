@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 192
+slug = "under-doctrine-worker1-bail-on-every-authoreddoctrine-mediated-write-via-an-exhaustive-write-class-match-leaving-reads-and-the-three-fork-side-worktree-verbs-open"
+title = "Under `DOCTRINE_WORKER=1`, bail on every authored/doctrine-mediated write via an exhaustive `write_class` match, leaving reads and the three fork-side worktree verbs open."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

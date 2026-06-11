@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 191
+slug = "worktree-branch-point-check-base-b-exits-0-when-coordination-head-equals-the-pre-spawn-base-and-1-otherwise-re-dispatch-it-is-ref-equality-not-a-merge-base-compute"
+title = "`worktree branch-point-check --base B` exits 0 when coordination HEAD equals the pre-spawn base and 1 otherwise (→ re-dispatch); it is ref-equality, not a merge-base compute."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

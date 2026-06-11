@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 181
+slug = "assemble-the-snapshot-as-a-pure-projection-boot-sequence-render-boot-with-no-clockrngdisk-yielding-a-deterministic-byte-identical-string-for-identical-governance-state"
+title = "Assemble the snapshot as a pure projection (boot_sequence + render_boot) with no clock/rng/disk, yielding a deterministic byte-identical string for identical governance state."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

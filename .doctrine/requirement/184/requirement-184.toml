@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 184
+slug = "write-doctrinestatebootmd-only-when-recomputed-content-differs-from-disk-report-wrote-on-change-and-unchanged-otherwise"
+title = "Write `.doctrine/state/boot.md` only when recomputed content differs from disk; report Wrote on change and Unchanged otherwise."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

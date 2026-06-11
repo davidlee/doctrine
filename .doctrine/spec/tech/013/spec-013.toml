@@ -1,0 +1,38 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 13
+slug = "cli-surface"
+title = "CLI surface"
+status = "draft"
+kind = "tech"
+category = "cli"
+c4_level = "container"
+parent = "SPEC-003"
+tags = ["cli", "grammar", "listing", "conformance", "json-envelope", "columns", "show"]
+responsibilities = [
+  "Impose the uniform `<kind> <verb>` command grammar: a top-level `Command` enum names each entity kind, each delegating to a per-kind subcommand enum whose verbs are the shared set (new, list, show, status), so the surface is one predictable shape across every kind.",
+  "Own the kind-blind read spine (src/listing.rs) — a pure leaf importing no clap and no entity — carrying the invariant `list` axes: filter semantics, the status known-set check, the canonical id form, the generic table layout, and the JSON envelope, lifted out of the five bespoke per-kind implementations.",
+  "Carry the shared `CommonListArgs` flatten as the mandatory spine of every kind's `list` subcommand (--filter/-f, --regexp/-r, -i, --status/-s, --tag/-t, --all/-a, --format, --json, --columns), lowered onto the clap-free `ListArgs` leaf at one seam.",
+  "Own the `--columns` projection model: a pre-materialised `Column<R>` (header + non-capturing fn cell extractor), `select_columns` validating requested names against the available set and honouring requested order, rendered by `render_columns` over `render_table`; rejected on `memory list`, never silently ignored.",
+  "Fix the canonical id form (`canonical_id`: prefix + zero-padded-to-three) as the single id-form authority for prefixed kinds, with memory conformant-by-exception (its uid is its canonical id).",
+  "Pin the surface byte-exact: the behavioural parse-conformance matrix proves all seven spine kinds parse every shared flag, and per-verb black-box goldens plus the cross-verb column-model net guard the rendered table/JSON output.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/listing.rs"
+module = "doctrine::listing"
+
+[[source]]
+language = "rust"
+identifier = "src/main.rs"
+module = "doctrine::main"
+
+[[source]]
+language = "rust"
+identifier = "tests/e2e_list_conformance.rs"
+
+[[source]]
+language = "rust"
+identifier = "tests/e2e_list_columns_golden.rs"
