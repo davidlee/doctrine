@@ -1,6 +1,6 @@
 [package]
 name = "doctrine"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Project tooling CLI"
 license = "GPL-3.0-only"
@@ -30,7 +30,7 @@ toml_edit.workspace = true
 glob.workspace = true
 bm25.workspace = true
 regex-lite.workspace = true
-cordage = { path = "crates/cordage", version = "0.1.0" }
+cordage = { path = "crates/cordage", version = "0.1.1" }
 
 [dev-dependencies]
 tower = { workspace = true }
