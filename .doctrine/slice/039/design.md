@@ -123,6 +123,18 @@ item would bury an independent, actionable one — see §10 finding A1). As a fa
 it acts only where deps/seq are silent, which is exactly "order otherwise-unordered
 items by exposure, then creation."
 
+**The `≻` is shorthand, not a lexicographic sort (don't read it as one).** deps and
+`before` *jointly* determine the longest-path levels; layer precedence governs only
+**eviction** (I1), never a per-tier level decomposition. Exposure and creation break
+ties **within** a level. So `before` constrains only the pairs it touches and the
+fallback orders everything else: with `A.before=[B]` and an unrelated higher-exposure
+`C`, the order is `C, A, B` (C and A share level 0; B is level 1) — *not* a global
+"manual-seq outranks exposure" ranking. And there is no `deps`-then-`before`
+lexicographic split at all: when `A.before=[B]` and `B.depends_on=[C]`, B's level is
+jointly caused by both layers. The honest contract is **two constraint layers + a
+within-level fallback; precedence decides evictions** — the four-tier table reads
+that, nothing stronger.
+
 **The uniform invariant + the one flip.** Every overlay edge `s→t` ⇒ s before t,
 all layers `Along`:
 
@@ -194,7 +206,13 @@ pub(crate) struct OrderInput {
 }
 
 /// Built once; owns the graph, the bimap, and the two minted overlay handles.
-pub(crate) struct BacklogOrder { /* Graph, BTreeMap<ItemId,NodeId>, Vec<(NodeId,ItemId)>, [OverlayId;2] */ }
+/// The handles are **named fields, not a positional `[OverlayId;2]`** — positional
+/// storage invites a transposition bug (the wrong handle filtered against
+/// provenance), which the token-hiding does NOT prevent (§10 E4).
+pub(crate) struct BacklogOrder {
+    /* graph: Graph, by_item: BTreeMap<ItemId,NodeId>, by_node: Vec<(NodeId,ItemId)>,
+       depends_on_overlay: OverlayId, before_overlay: OverlayId */
+}
 
 impl BacklogOrder {
     /// Build the two overlays + OrderSpec from the projected inputs. Nodes are
@@ -248,13 +266,27 @@ error.
 ### 5.6 Membership & dangling edges
 
 Node set = **non-terminal** items across **all five kinds** (cross-kind deps
-allowed). An authored edge whose endpoint is:
+allowed). A terminal item cannot participate in a live ordering (it is hidden from
+the view), so an authored edge whose endpoint is:
 
-- **terminal** (`resolved`/`closed`) — the prerequisite is *satisfied* / the
-  sequencing target is *gone*; the edge is dropped and recorded in `overrides()`
-  ("prereq RSK-002 already resolved").
+- **terminal** (`resolved`/`closed`) — dropped and recorded in `overrides()` **with
+  the endpoint's status AND `resolution` named** ("dep IMP-007 dropped — closed/
+  wont-do"). The render does **not** silently claim the prerequisite was *satisfied*:
+  a terminal `resolution` may be satisfied (`done`/`fixed`/`mitigated`) **or
+  abandoned** (`wont-do`/`obsolete`/`expired`/`duplicate`/`accepted` — backlog.rs
+  `Resolution`). Dropping a hard `depends_on` whose prereq was *abandoned* floats the
+  dependent unblocked, so the drop must be **loud**, never silent — the author judges
+  staleness from the named resolution (§10 E1; whether to go further and treat
+  abandoned-terminal deps distinctly is **OQ-D**).
 - **absent** (no such id) — a stale ref; the set verbs reject it at author time, so
   at `order` time it is dropped + recorded defensively.
+
+Terminal elision does **not** synthesise transitive edges: with `A.before=[B]` and
+`B.before=[C]` and `B` terminal, `A` and `C` are left unordered (both endpoints of
+the surviving-nothing chain) — recorded, and for the soft `before` edge acceptable;
+re-author the sequence if it must outlive the middle (§10 E3). For `depends_on`, a
+satisfied-terminal middle correctly releases the transitive constraint (the blocker
+is done); an abandoned-terminal middle is the OQ-D case.
 
 This keeps the graph total over the live node set; cordage never sees a foreign id.
 
@@ -283,8 +315,16 @@ This keeps the graph total over the live node set; cordage never sees a foreign 
   item → dropped + recorded (§5.6); a risk with only one facet axis assessed →
   baseline exposure; two items same `(exposure, created)` → tie broken by canonical
   id.
-- **Assumption A1.** `created` is a stable `YYYY-MM-DD` per item (the scaffold seeds
-  it); the `(exposure, created, id)` key is total even on a shared date.
+- **Assumption A1.** `created` is validated as an **opaque `String`**, not a typed
+  date (backlog.rs `RawBacklogToml.created`), so the allocation's middle key is
+  **lexicographic on that string**. This is total and deterministic ⇒ **I3 holds
+  unconditionally** (string order + the canonical-id final tiebreak never tie). It is
+  *chronological* only insofar as `created` is well-formed `YYYY-MM-DD` (the scaffold
+  seeds exactly that). A hand-edited malformed date (`2026-6-9` sorts after
+  `2026-06-10`) perturbs only **tier 3** (creation, the lowest tiebreak, reached only
+  among equal-exposure items) — never determinism, never deps/seq/exposure. Parsing
+  `created` to a typed date is a backlog-model change, out of this slice's scope
+  (§10 E5).
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -342,7 +382,7 @@ without disk. TDD red/green/**refactor** per phase.
 | **VT-7 membership** | terminal/absent endpoint dropped + recorded; node set is non-terminal, cross-kind. |
 | **VT-8 determinism** | build twice (incl. input permutation) → byte-identical order + overrides; allocation order `(exposure, created, id)`. |
 | **VT-9 leaf invariant** | `cargo tree -p cordage` shows cordage alone; no `crates/cordage/**` diff. |
-| **VT-10 R-C** | a public-surface audit (test/doc) asserts no `NodeId`/`OverlayId` appears in any adapter `pub(crate)` signature — wrong-graph/wrong-overlay wiring is inexpressible by absence of the tokens. |
+| **VT-10 R-C** | a public-surface audit (test/doc) asserts no `NodeId`/`OverlayId` appears in any adapter `pub(crate)` signature — so **adapter callers cannot pass a raw cordage id** (the bounded claim; cordage's own tokens stay `pub`, §10 E4). Internal handle-transposition is contained separately by the named overlay fields (§5.4), not by token absence. |
 
 `just check` zero-warnings after every file; the cordage-side lint bans (BTree not
 Hash, `.get` not index, `try_from` not `as`, `#[expect(reason=…)]`) apply to adapter
@@ -360,6 +400,17 @@ code. `cargo clippy -p doctrine` / `-p cordage` — never `--all-targets`.
   durable note + `/record-memory`; **not** patched in this slice.
 - **OQ-C (cosmetic).** Verb naming (`depends-on`/`before`) — final clap shapes
   settled in `/plan`.
+- **OQ-D (semantics, USER — gates lock).** A hard `depends_on` whose prereq is a
+  terminal item with an **abandoned** resolution (`wont-do`/`obsolete`/`expired`/
+  `duplicate`/`accepted`). Two options: **(D-min)** the §5.6 honest-record form —
+  drop the edge, surface it loudly in `overrides()` with the resolution named, do not
+  adjudicate; the author judges staleness. Lightest, stays inside the settled
+  "dropped+recorded" rule. **(D-split)** add a satisfied-vs-abandoned `Resolution`
+  taxonomy and treat an abandoned-terminal hard dep distinctly (e.g. a stronger
+  "stale dependency" diagnostic, or a hard error). More correct for the hard
+  contract, but adds a resolution-kind classification this slice didn't plan. Lean:
+  **D-min** for a first-consumer small-corpus tool, taxonomy as a follow-up IMP if it
+  bites. Design currently authored to D-min; D-split is additive. (§10 E1.)
 
 ## 10. Review Notes
 
@@ -386,5 +437,52 @@ code. `cargo clippy -p doctrine` / `-p cordage` — never `--all-targets`.
   to `(src, dst)` under `rank=age=0`; VT-10's "won't compile" softened to a
   public-surface token-absence audit (no `trybuild` overclaim). (§5.4, VT-10.)
 
-_(external adversarial pass appended below after the codex MCP review; design is
-not locked until user sign-off.)_
+### External adversarial pass (round 2) — codex MCP (GPT-5.5), 2026-06-11
+
+Hostile pass over the order-correctness proof, determinism, dangling/terminal
+handling, the R-C claim, and assumed-but-absent cordage API. Five findings; every
+source citation independently re-verified against `src/backlog.rs` /
+`crates/cordage/src/{lib,resolve}.rs` before disposition. No finding re-litigated a
+user-settled call.
+
+- **E1 (blocker, terminal semantics) — FIXED (framing) + OQ-D (taxonomy).** §5.6
+  claimed a terminal endpoint means the prerequisite is *satisfied*. False:
+  `Status::is_terminal` = `Resolved|Closed` (backlog.rs:219), and a terminal
+  `Resolution` may be **abandoned** — `wont-do`/`obsolete`/`expired`/`duplicate`/
+  `accepted` (backlog.rs:244). Dropping a hard `depends_on` on a `wont-do` prereq
+  floats the dependent unblocked, falsifying the hard contract. Fixed §5.6 to drop
+  the false "satisfied" claim and **record the dropped endpoint's status + resolution
+  loudly** (never silent). The deeper choice — honest-record (D-min) vs a
+  satisfied/abandoned taxonomy (D-split) — is **OQ-D**, a user decision that gates
+  lock. Design authored to D-min; D-split is additive. (§5.6, §9 OQ-D.)
+- **E2 (significant→clarification, contract overclaim) — FIXED.** The
+  `deps ≻ manual-seq ≻ exposure ≻ creation` headline reads as a global lexicographic
+  precedence the longest-path key cannot represent (`ordered()` = `(level in merged
+  U, NodeId)`, lib.rs:337/869, resolve.rs:507). Counterexample integrated: `A.before=
+  [B]` + unrelated higher-exposure `C` ⇒ `C, A, B`, i.e. `before` constrains only the
+  pairs it touches; and `A.before=[B]` + `B.depends_on=[C]` makes B's level *jointly*
+  caused — no deps-then-seq decomposition. The mechanism was already correct (A1/I1);
+  this hardens the *framing* to "two constraint layers + within-level fallback;
+  precedence decides evictions." (§5.1.)
+- **E3 (moderate, transitive elision) — FIXED.** Terminal middle severs authored
+  sequence: `A.before=[B]`, `B.before=[C]`, `B` terminal ⇒ A,C unordered. Documented
+  as deliberate (no synthetic transitive edge); acceptable for soft `before`,
+  re-author if it must survive; for `depends_on` a *satisfied* middle correctly
+  releases the constraint, an *abandoned* middle is the OQ-D case. (§5.6.)
+- **E4 (significant, R-C claim) — FIXED.** VT-10's "wrong-wiring inexpressible by
+  token-absence" overclaimed: `NodeId`/`OverlayId` + builder/`OrderLayer::new` stay
+  `pub` (lib.rs:25,33,316,594); hiding tokens from *callers* stops one misuse class
+  but not the adapter transposing its own two handles, nor a module bypassing the
+  adapter. Weakened VT-10 to the bounded "callers cannot pass a raw cordage id", and
+  replaced the sketch's positional `[OverlayId;2]` with **named fields**
+  (`depends_on_overlay`/`before_overlay`) to contain internal transposition. (§5.4,
+  VT-10.)
+- **E5 (moderate, determinism semantics) — FIXED.** `created` is an opaque `String`
+  (backlog.rs:315), so the allocation's middle key is **lexicographic, not
+  chronological** — a malformed hand-edited date reorders it. Determinism (I3) was
+  never at risk (string order is total + id final tiebreak); only the *creation-order
+  semantics* of the lowest tier are best-effort. Assumption A1 rewritten to say so;
+  typed-date parsing noted as out-of-scope. (§6 A1.)
+
+_Design is NOT locked. Round-2 fixes integrated; **OQ-D** awaits the user. On
+sign-off a Lock stanza is appended here (date + commit), then `/plan`._
