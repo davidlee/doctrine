@@ -1,21 +1,24 @@
 //! SL-038 / SL-043 — scale gates for the confirmed cordage scale cliffs, all
 //! reachable inside the ~tens-of-thousands target.
 //!
-//! SL-043 PHASE-01 fixed the build-time resolve.rs defects, so the overflow and
-//! eviction-locality gates here now assert the FIX (build succeeds / eviction is
-//! linear), not the cliff:
+//! SL-043 PHASE-01 fixed the build-time resolve.rs defects and PHASE-02 fixed the
+//! query-time `evaluate` cliff, so the overflow, eviction-locality, and evaluate
+//! gates here now assert the FIX (build succeeds / eviction linear / evaluate
+//! near-linear), not the cliff:
 //!
 //! - RSK-003 overflow: `deep_chain(80k)` now BUILDS Ok — the iterative
 //!   Tarjan/`level_of` no longer overflow the native stack (gate, not `#[ignore]`).
 //! - SL-043 eviction locality: N independent small cycles evict in ~linear time,
 //!   and the evicted SET is identical to the pre-fix global loop (set-identity).
+//! - RSK-004 evaluate: the per-node `reachable` BFS is replaced by ONE
+//!   condensation fold per call → near-linear over a deep_chain spine (gate, not
+//!   `#[ignore]`).
 //!
 //! Still `#[ignore]`d as deferred / demonstration:
 //! - RSK-002 explain: exact `2^layers` predecessor-path count (demonstration).
 //! - EXC-2 dense_evict superlinearity: a single dense cycle's fixpoint stays
 //!   superlinear — deferred residual, NOT fixable in scope (linearizing it would
 //!   change the evicted set).
-//! - RSK-004 evaluate: per-node `reachable` BFS → O(V²) (query-time; PHASE-02+).
 //!
 //! std-only, public-API-only, zero-dep. Generators are duplicated inline (D4 —
 //! `examples/` and `tests/` cannot import each other); the canonical copy lives in
@@ -218,33 +221,46 @@ fn eviction_fixpoint_scales_superlinearly() {
     assert!(t2 < Duration::from_secs(120)); // sanity, not a tight gate
 }
 
-// ── 6.4 evaluate — measured, recorded, coarse bound (RSK-004, first here) ─────
+// ── 6.4 evaluate — FIXED: condensation fold scales ~linearly (RSK-004) ────────
+// SL-043 PHASE-02 replaced the per-node `reachable` BFS in `evaluate` with ONE
+// direction-resolved condensation fold per call (O(V+E)). The cliff is inverted:
+// this is now a near-linear GATE, not an `#[ignore]`'d quadratic recording. The
+// pre-fix per-node BFS over a deep_chain spine was O(V²) — at 20k nodes that is
+// ~4·10^8 frontier steps, blowing any coarse debug bound; the fold finishes in
+// milliseconds. Doubling N must stay well under the quadratic 4× (debug ~10×
+// budget, mem.pattern.testing.debug-vs-release-scale-timing).
 
 #[test]
-#[ignore = "slow; records the evaluate() per-node-BFS quadratic for RSK-004"]
-fn evaluate_scales_quadratically_in_node_count() {
-    // Sub-overflow pair (2000,4000): build MUST succeed so query-time cost is
-    // isolated. Seed the head NodeId the builder returned (opaque ids — never
-    // NodeId(0)). Any's seed domain is ValueKind::Flag → Flag(true) is in-domain.
-    let (g1, ov1, h1) = deep_chain(2_000).expect("deep_chain 2000");
-    let (g2, ov2, h2) = deep_chain(4_000).expect("deep_chain 4000");
-    let s1 = BTreeMap::from([(h1, ChannelValue::Flag(true))]);
-    let s2 = BTreeMap::from([(h2, ChannelValue::Flag(true))]);
-    let t1 = time(|| {
-        g1.evaluate(
-            ChannelSpec::new(ov1, Combinator::Any, Direction::Along),
-            &s1,
-        )
-    });
-    let t2 = time(|| {
-        g2.evaluate(
-            ChannelSpec::new(ov2, Combinator::Any, Direction::Along),
-            &s2,
-        )
-    });
-    eprintln!(
-        "evaluate ratio {:.1}x for 2x nodes",
-        t2.as_secs_f64() / t1.as_secs_f64()
+fn evaluate_scales_near_linearly_in_node_count() {
+    // The deep_chain spine is the worst case for the old BFS (each node walked the
+    // whole remaining suffix). Seed the builder-returned head (opaque id — never
+    // NodeId(0)); Any's seed domain is Flag, so Flag(true) is in-domain.
+    fn eval_chain(n: u32) -> Duration {
+        let (g, ov, head) = deep_chain(n).expect("deep_chain builds (post-PHASE-01)");
+        let seeds = BTreeMap::from([(head, ChannelValue::Flag(true))]);
+        time(|| {
+            g.evaluate(
+                ChannelSpec::new(ov, Combinator::Any, Direction::Along),
+                &seeds,
+            )
+        })
+    }
+
+    // Absolute coarse gate: a 20k-spine evaluate that was O(V²) cannot finish here.
+    let t_big = eval_chain(20_000);
+    assert!(
+        t_big < Duration::from_secs(30),
+        "20k-spine evaluate took {t_big:?} — a quadratic per-node BFS would not finish (near-linear gate)"
     );
-    assert!(t2 < Duration::from_secs(120)); // sanity, not a tight gate
+
+    // Ratio sanity: doubling N stays well under the quadratic 4× (loose for debug
+    // noise on sub-second timings — a regression to O(V²) would clear 4×).
+    let t1 = eval_chain(8_000);
+    let t2 = eval_chain(16_000);
+    let ratio = t2.as_secs_f64() / t1.as_secs_f64().max(1e-6);
+    eprintln!("evaluate ratio {ratio:.1}x for 2x nodes (near-linear; quadratic ≈ 4x)");
+    assert!(
+        ratio < 3.0,
+        "evaluate doubled to {ratio:.1}x for 2x nodes — near-quadratic regression (expect ~2x)"
+    );
 }

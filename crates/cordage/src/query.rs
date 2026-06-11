@@ -243,6 +243,7 @@ fn neighbours(
 pub(crate) fn evaluate(
     out: &OutIndex,
     incoming: &InIndex,
+    degraded_sccs: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
     node_count: u32,
     spec: ChannelSpec,
     seeds: &BTreeMap<NodeId, ChannelValue>,
@@ -250,24 +251,404 @@ pub(crate) fn evaluate(
     let combinator = spec.combinator();
     let domain = seed_domain(combinator);
     let (effective, diagnostics) = vet_seeds(seeds, node_count, domain);
+    let view = Resolved {
+        out,
+        incoming,
+        overlay: spec.overlay(),
+        direction: spec.direction(),
+    };
 
-    let mut values: BTreeMap<NodeId, ChannelValue> = BTreeMap::new();
-    let mut contributors: BTreeMap<NodeId, BTreeSet<NodeId>> = BTreeMap::new();
-    for ord in 0..node_count {
-        let n = NodeId(ord);
-        let reach = reachable(out, incoming, spec.overlay(), n, spec.direction());
-        if let Some((value, contrib)) = fold_node(combinator, n, &reach, &effective) {
-            values.insert(n, value);
-            if !contrib.is_empty() {
-                contributors.insert(n, contrib);
-            }
-        }
-    }
+    // RSK-004: one condensation fold per call, not a per-node reachable BFS.
+    // (1) SCC partition of the DIRECTION-RESOLVED neighbour view (G1/C1): None ⇒
+    //     all singletons (neighbours = ∅, never group the stored {b,c}); Evict ⇒
+    //     no stored SCCs ⇒ singletons; Reject Along/Against ⇒ the stored
+    //     degraded_sccs grouped (SCCs survive transpose), the rest singletons.
+    let partition = scc_partition(degraded_sccs, view.overlay, view.direction, node_count);
+    // (2) Condensation DAG + reverse-topo (sinks first), built from the SAME
+    //     direction-resolved neighbour view — `out` for Along, `incoming` for
+    //     Against (A-2); inter-SCC edges only (self/intra-SCC dropped, C3).
+    let reverse_topo = condensation_reverse_topo(&view, &partition);
+    // (3) Per-combinator fold up the reverse-topo order; each node emits the same
+    //     (value, contributors) fold_node would, with no reachable-set materialised.
+    let (values, contributors) =
+        fold_condensation(&view, combinator, &effective, &partition, &reverse_topo);
+
     Channel {
         values,
         contributors,
         diagnostics,
     }
+}
+
+/// The direction-resolved neighbour view a single `evaluate` call walks: a
+/// `(overlay, direction)` lens over the two adjacency indices. Bundling the four
+/// fields keeps the condensation helpers' signatures small and guarantees the
+/// partition, the condensation edges, and the fold all read the SAME view (A-2).
+struct Resolved<'a> {
+    out: &'a OutIndex,
+    incoming: &'a InIndex,
+    overlay: OverlayId,
+    direction: Direction,
+}
+
+impl Resolved<'_> {
+    /// The direct neighbours of `node` under this view (`out.dst` for `Along`,
+    /// `incoming.src` for `Against`, ∅ for `None`).
+    fn neighbours(&self, node: NodeId) -> Vec<NodeId> {
+        neighbours(self.out, self.incoming, self.overlay, node, self.direction)
+    }
+}
+
+/// A total partition of `0..node_count` into SCCs of the **direction-resolved**
+/// neighbour view (G1/C1). `scc_of[ord]` is node `NodeId(ord)`'s SCC id;
+/// `members[scc_id]` lists that SCC's nodes in `NodeId` order.
+///
+/// `Direction::None` ⇒ neighbours are ∅, so every node is a singleton (the stored
+/// `{b,c}` is NEVER grouped). An `Evict` overlay has no entry in `degraded_sccs`,
+/// also yielding singletons. A `Reject` overlay under `Along`/`Against` reuses the
+/// stored cyclic SCCs (mutual reachability survives transpose), every other node a
+/// singleton — a total partition either way.
+struct Partition {
+    scc_of: Vec<usize>,
+    members: Vec<Vec<NodeId>>,
+}
+
+/// A `NodeId`'s ordinal as a `usize` index into the per-node partition vectors —
+/// `NodeId` wraps a `u32`, so `usize::from` is unavailable; `try_from` saturates
+/// (a `u32` always fits `usize` on supported targets).
+fn ord_index(node: NodeId) -> usize {
+    usize::try_from(node.0).unwrap_or(usize::MAX)
+}
+
+fn scc_partition(
+    degraded_sccs: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
+    overlay: OverlayId,
+    direction: Direction,
+    node_count: u32,
+) -> Partition {
+    let count = usize::try_from(node_count).unwrap_or(usize::MAX);
+    let mut scc_of: Vec<usize> = vec![usize::MAX; count];
+    let mut members: Vec<Vec<NodeId>> = Vec::new();
+
+    // Under None the partition dissolves to all singletons regardless of the
+    // stored SCCs (C1). Otherwise group the stored cyclic SCCs for this overlay
+    // (absent for Evict / acyclic overlays).
+    if !matches!(direction, Direction::None) {
+        if let Some(sccs) = degraded_sccs.get(&overlay) {
+            for scc in sccs {
+                if scc.len() < 2 {
+                    continue; // a singleton SCC is handled by the trivial pass
+                }
+                let id = members.len();
+                let mut group: Vec<NodeId> = Vec::with_capacity(scc.len());
+                for &node in scc {
+                    if let Some(slot) = scc_of.get_mut(ord_index(node)) {
+                        *slot = id;
+                    }
+                    group.push(node);
+                }
+                members.push(group);
+            }
+        }
+    }
+
+    // Every node not claimed by a grouped SCC is its own singleton.
+    for ord in 0..node_count {
+        let idx = usize::try_from(ord).unwrap_or(usize::MAX);
+        if scc_of.get(idx).copied() == Some(usize::MAX) {
+            let id = members.len();
+            if let Some(slot) = scc_of.get_mut(idx) {
+                *slot = id;
+            }
+            members.push(vec![NodeId(ord)]);
+        }
+    }
+
+    Partition { scc_of, members }
+}
+
+/// Reverse-topological order (sinks first) of the condensation DAG, built from the
+/// **same direction-resolved neighbour view** `evaluate` walks (`out` for `Along`,
+/// `incoming` for `Against`; A-2). Inter-SCC edges are the member neighbours
+/// quotiented by SCC id — a neighbour in the same SCC (self/intra, C3) is dropped,
+/// so the quotient is a genuine DAG and reverse-topo is well-defined. Explicit
+/// stack, no recursion; O(V+E).
+fn condensation_reverse_topo(view: &Resolved<'_>, partition: &Partition) -> Vec<usize> {
+    let scc_count = partition.members.len();
+    // Distinct successor SCC ids per SCC (BTreeSet ⇒ deterministic, deduped).
+    let mut succ: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); scc_count];
+    for (id, group) in partition.members.iter().enumerate() {
+        for &node in group {
+            for nb in view.neighbours(node) {
+                if let Some(&nb_id) = partition.scc_of.get(ord_index(nb)) {
+                    if nb_id != id {
+                        if let Some(set) = succ.get_mut(id) {
+                            set.insert(nb_id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Iterative post-order DFS: an SCC is emitted only after all its successors,
+    // yielding sinks-first (reverse-topo). `state`: 0 unseen, 1 on-stack, 2 done.
+    let mut order: Vec<usize> = Vec::with_capacity(scc_count);
+    let mut state: Vec<u8> = vec![0; scc_count];
+    for root in 0..scc_count {
+        if state.get(root).copied() != Some(0) {
+            continue;
+        }
+        let mut stack: Vec<usize> = vec![root];
+        while let Some(&id) = stack.last() {
+            match state.get(id).copied() {
+                Some(0) => {
+                    if let Some(slot) = state.get_mut(id) {
+                        *slot = 1;
+                    }
+                    if let Some(children) = succ.get(id) {
+                        for &child in children {
+                            if state.get(child).copied() == Some(0) {
+                                stack.push(child);
+                            }
+                        }
+                    }
+                }
+                Some(1) => {
+                    if let Some(slot) = state.get_mut(id) {
+                        *slot = 2;
+                    }
+                    order.push(id);
+                    stack.pop();
+                }
+                _ => {
+                    stack.pop();
+                }
+            }
+        }
+    }
+    order
+}
+
+/// A flag-combinator accumulator: the present-true and present-false seed nodes
+/// over an SCC's reachable cone, unioned up the condensation. `present` =
+/// `trues ∪ falses` (any present `Flag` seed, F45).
+#[derive(Clone, Default)]
+struct FlagWitnesses {
+    trues: BTreeSet<NodeId>,
+    falses: BTreeSet<NodeId>,
+}
+
+/// Fold the condensation per combinator, emitting for each node the SAME
+/// `(value, contributors)` `fold_node` produces — without materialising any
+/// reachable set. Idempotent combinators (`Any`/`All`/`Max`) fold `{n} ∪ reach`
+/// and the whole SCC shares one result; `CountDistinct` folds STRICT `reach` and
+/// each member restricts to `\ {n}` off the shared SCC witness set (C2/F34).
+fn fold_condensation(
+    view: &Resolved<'_>,
+    combinator: Combinator,
+    effective: &BTreeMap<NodeId, ChannelValue>,
+    partition: &Partition,
+    reverse_topo: &[usize],
+) -> (
+    BTreeMap<NodeId, ChannelValue>,
+    BTreeMap<NodeId, BTreeSet<NodeId>>,
+) {
+    match combinator {
+        Combinator::Max => fold_max_condensation(view, effective, partition, reverse_topo),
+        Combinator::Any | Combinator::All | Combinator::CountDistinct => {
+            fold_flags_condensation(view, combinator, effective, partition, reverse_topo)
+        }
+    }
+}
+
+/// The distinct successor-SCC ids of `scc_id` under the direction-resolved view —
+/// the same quotient `condensation_reverse_topo` builds, recomputed locally so the
+/// fold needs no second adjacency allocation.
+fn successor_sccs(view: &Resolved<'_>, partition: &Partition, scc_id: usize) -> BTreeSet<usize> {
+    let mut succ: BTreeSet<usize> = BTreeSet::new();
+    if let Some(group) = partition.members.get(scc_id) {
+        for &node in group {
+            for nb in view.neighbours(node) {
+                if let Some(&nb_id) = partition.scc_of.get(ord_index(nb)) {
+                    if nb_id != scc_id {
+                        succ.insert(nb_id);
+                    }
+                }
+            }
+        }
+    }
+    succ
+}
+
+/// `Max` fold up the condensation: each SCC's `(value, argmax)` is the max over its
+/// own member seeds (own seed included — `{n} ∪ reach`) and its successor SCCs'
+/// results, min-`NodeId` tiebreak. Mutual reachability ⇒ the whole SCC shares one
+/// `(value, argmax)`. Fully O(V+E) — a singleton argmax, no set materialised.
+fn fold_max_condensation(
+    view: &Resolved<'_>,
+    effective: &BTreeMap<NodeId, ChannelValue>,
+    partition: &Partition,
+    reverse_topo: &[usize],
+) -> (
+    BTreeMap<NodeId, ChannelValue>,
+    BTreeMap<NodeId, BTreeSet<NodeId>>,
+) {
+    let mut scc_best: Vec<Option<(i64, NodeId)>> = vec![None; partition.members.len()];
+    for &scc_id in reverse_topo {
+        let mut best: Option<(i64, NodeId)> = None;
+        // Own member seeds ({n} ∪ reach includes every SCC member's own seed).
+        if let Some(group) = partition.members.get(scc_id) {
+            for &node in group {
+                if let Some(ChannelValue::Scalar(value)) = effective.get(&node).copied() {
+                    best = supersede(best, value, node);
+                }
+            }
+        }
+        // Already-folded successor SCC results (sinks-first ⇒ ready).
+        for succ_id in successor_sccs(view, partition, scc_id) {
+            if let Some(Some((value, argmax))) = scc_best.get(succ_id).copied() {
+                best = supersede(best, value, argmax);
+            }
+        }
+        if let Some(slot) = scc_best.get_mut(scc_id) {
+            *slot = best;
+        }
+    }
+
+    let mut values: BTreeMap<NodeId, ChannelValue> = BTreeMap::new();
+    let mut contributors: BTreeMap<NodeId, BTreeSet<NodeId>> = BTreeMap::new();
+    for (scc_id, group) in partition.members.iter().enumerate() {
+        if let Some(Some((value, argmax))) = scc_best.get(scc_id).copied() {
+            for &node in group {
+                values.insert(node, ChannelValue::Scalar(value));
+                contributors.insert(node, BTreeSet::from([argmax]));
+            }
+        }
+    }
+    (values, contributors)
+}
+
+/// The `fold_max` supersede rule (F21): a strictly greater value wins; an equal
+/// value wins only on a strictly smaller `NodeId` (min-id argmax tiebreak).
+fn supersede(best: Option<(i64, NodeId)>, value: i64, node: NodeId) -> Option<(i64, NodeId)> {
+    let wins = match best {
+        None => true,
+        Some((best_value, best_node)) => {
+            value > best_value || (value == best_value && node < best_node)
+        }
+    };
+    if wins { Some((value, node)) } else { best }
+}
+
+/// `Any`/`All`/`CountDistinct` fold up the condensation. Each SCC accumulates the
+/// present-true / present-false seed nodes over its reachable cone (the union of
+/// member seeds and successor-SCC witnesses). The idempotent combinators include
+/// the own seed (`{n} ∪ reach`) and share the SCC result; `CountDistinct` is
+/// STRICT — the shared set is the pre-subtraction SCC witnesses and each member
+/// restricts to `\ {n}` (C2/F34).
+fn fold_flags_condensation(
+    view: &Resolved<'_>,
+    combinator: Combinator,
+    effective: &BTreeMap<NodeId, ChannelValue>,
+    partition: &Partition,
+    reverse_topo: &[usize],
+) -> (
+    BTreeMap<NodeId, ChannelValue>,
+    BTreeMap<NodeId, BTreeSet<NodeId>>,
+) {
+    let mut scc_wit: Vec<FlagWitnesses> = vec![FlagWitnesses::default(); partition.members.len()];
+    for &scc_id in reverse_topo {
+        let mut wit = FlagWitnesses::default();
+        if let Some(group) = partition.members.get(scc_id) {
+            for &node in group {
+                match effective.get(&node).copied() {
+                    Some(ChannelValue::Flag(true)) => {
+                        wit.trues.insert(node);
+                    }
+                    Some(ChannelValue::Flag(false)) => {
+                        wit.falses.insert(node);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for succ_id in successor_sccs(view, partition, scc_id) {
+            if let Some(succ_wit) = scc_wit.get(succ_id) {
+                wit.trues.extend(succ_wit.trues.iter().copied());
+                wit.falses.extend(succ_wit.falses.iter().copied());
+            }
+        }
+        if let Some(slot) = scc_wit.get_mut(scc_id) {
+            *slot = wit;
+        }
+    }
+
+    let mut values: BTreeMap<NodeId, ChannelValue> = BTreeMap::new();
+    let mut contributors: BTreeMap<NodeId, BTreeSet<NodeId>> = BTreeMap::new();
+    for (scc_id, group) in partition.members.iter().enumerate() {
+        let Some(wit) = scc_wit.get(scc_id) else {
+            continue;
+        };
+        for &node in group {
+            if let Some((value, contrib)) = member_value(combinator, node, wit) {
+                values.insert(node, value);
+                if !contrib.is_empty() {
+                    contributors.insert(node, contrib);
+                }
+            }
+        }
+    }
+    (values, contributors)
+}
+
+/// One node's `(value, contributors)` derived from its SCC's flag witnesses,
+/// matching `fold_any`/`fold_all`/`fold_count` exactly. The idempotent combinators
+/// fold `{n} ∪ reach` (the SCC set, own seed included); `CountDistinct` is STRICT,
+/// so it removes `n` from both the presence test and the witness set (F8/F34).
+fn member_value(
+    combinator: Combinator,
+    node: NodeId,
+    wit: &FlagWitnesses,
+) -> Option<(ChannelValue, BTreeSet<NodeId>)> {
+    match combinator {
+        Combinator::Any => {
+            if wit.trues.is_empty() && wit.falses.is_empty() {
+                return None; // no present Flag seed in {n} ∪ reach
+            }
+            Some((ChannelValue::Flag(!wit.trues.is_empty()), wit.trues.clone()))
+        }
+        Combinator::All => {
+            if wit.trues.is_empty() && wit.falses.is_empty() {
+                return None;
+            }
+            if wit.falses.is_empty() {
+                Some((ChannelValue::Flag(true), wit.trues.clone()))
+            } else {
+                Some((ChannelValue::Flag(false), wit.falses.clone()))
+            }
+        }
+        Combinator::CountDistinct => {
+            // STRICT: exclude `node` from its own fold set (reach excludes n, F8).
+            let present = wit
+                .trues
+                .iter()
+                .chain(wit.falses.iter())
+                .any(|m| *m != node);
+            if !present {
+                return None;
+            }
+            let counted: BTreeSet<NodeId> =
+                wit.trues.iter().copied().filter(|m| *m != node).collect();
+            Some((ChannelValue::Count(strict_count(&counted)), counted))
+        }
+        Combinator::Max => None, // Max never routes here (handled by fold_max_condensation)
+    }
+}
+
+/// `BTreeSet` cardinality as the `u32` count, saturating like `fold_count`.
+fn strict_count(counted: &BTreeSet<NodeId>) -> u32 {
+    u32::try_from(counted.len()).unwrap_or(u32::MAX)
 }
 
 /// Split the seed map into the **effective** seeds (known node, in-domain variant)
@@ -299,129 +680,6 @@ fn vet_seeds(
         }
     }
     (effective, diagnostics)
-}
-
-/// Fold one node over its combinator-class fold set, or `None` if the fold set
-/// holds no present effective seed (the node is then absent from `values` — no
-/// combinator identity escapes, F16).
-fn fold_node(
-    combinator: Combinator,
-    n: NodeId,
-    reach: &BTreeSet<NodeId>,
-    effective: &BTreeMap<NodeId, ChannelValue>,
-) -> Option<(ChannelValue, BTreeSet<NodeId>)> {
-    match combinator {
-        Combinator::Any => fold_any(n, reach, effective),
-        Combinator::All => fold_all(n, reach, effective),
-        Combinator::Max => fold_max(n, reach, effective),
-        Combinator::CountDistinct => fold_count(reach, effective),
-    }
-}
-
-/// The idempotent fold set `{n} ∪ reachable` — `n` is never in `reach` (strict),
-/// so no de-duplication is needed.
-fn idempotent_members(n: NodeId, reach: &BTreeSet<NodeId>) -> impl Iterator<Item = NodeId> + '_ {
-    std::iter::once(n).chain(reach.iter().copied())
-}
-
-/// Gather the present-true witnesses among `members`' effective `Flag` seeds, or
-/// `None` if `members` holds no present `Flag` seed at all (so the caller can
-/// distinguish absence from a present-all-false fold, F45). Shared by `Any` (over
-/// `{n} ∪ reachable`) and `CountDistinct` (over strict `reachable`): both reduce
-/// to "which reachable members carry a true flag", differing only in fold set and
-/// output projection.
-fn true_witnesses(
-    members: impl Iterator<Item = NodeId>,
-    effective: &BTreeMap<NodeId, ChannelValue>,
-) -> Option<BTreeSet<NodeId>> {
-    let mut present = false;
-    let mut witnesses: BTreeSet<NodeId> = BTreeSet::new();
-    for m in members {
-        if let Some(ChannelValue::Flag(flag)) = effective.get(&m).copied() {
-            present = true;
-            if flag {
-                witnesses.insert(m);
-            }
-        }
-    }
-    present.then_some(witnesses)
-}
-
-/// `Any`: OR of present `Flag` seeds; contributors = the present-true witnesses
-/// (F43). A present-all-false fold set is `Flag(false)`, real data (F45).
-fn fold_any(
-    n: NodeId,
-    reach: &BTreeSet<NodeId>,
-    effective: &BTreeMap<NodeId, ChannelValue>,
-) -> Option<(ChannelValue, BTreeSet<NodeId>)> {
-    true_witnesses(idempotent_members(n, reach), effective)
-        .map(|trues| (ChannelValue::Flag(!trues.is_empty()), trues))
-}
-
-/// `All`: AND of present `Flag` seeds; contributors = the present-false seeds if
-/// the result is false, else the present-true set (F43).
-fn fold_all(
-    n: NodeId,
-    reach: &BTreeSet<NodeId>,
-    effective: &BTreeMap<NodeId, ChannelValue>,
-) -> Option<(ChannelValue, BTreeSet<NodeId>)> {
-    let mut present = false;
-    let mut result = true;
-    let mut trues: BTreeSet<NodeId> = BTreeSet::new();
-    let mut falses: BTreeSet<NodeId> = BTreeSet::new();
-    for m in idempotent_members(n, reach) {
-        if let Some(ChannelValue::Flag(flag)) = effective.get(&m).copied() {
-            present = true;
-            if flag {
-                trues.insert(m);
-            } else {
-                result = false;
-                falses.insert(m);
-            }
-        }
-    }
-    if !present {
-        return None;
-    }
-    let contributors = if result { trues } else { falses };
-    Some((ChannelValue::Flag(result), contributors))
-}
-
-/// `Max`: maximum of present `Scalar` seeds; contributors = the single argmax,
-/// min-`NodeId` among the maximal (F21).
-fn fold_max(
-    n: NodeId,
-    reach: &BTreeSet<NodeId>,
-    effective: &BTreeMap<NodeId, ChannelValue>,
-) -> Option<(ChannelValue, BTreeSet<NodeId>)> {
-    let mut best: Option<(i64, NodeId)> = None;
-    for m in idempotent_members(n, reach) {
-        if let Some(ChannelValue::Scalar(value)) = effective.get(&m).copied() {
-            let supersedes = match best {
-                None => true,
-                Some((best_value, best_node)) => {
-                    value > best_value || (value == best_value && m < best_node)
-                }
-            };
-            if supersedes {
-                best = Some((value, m));
-            }
-        }
-    }
-    best.map(|(value, argmax)| (ChannelValue::Scalar(value), BTreeSet::from([argmax])))
-}
-
-/// `CountDistinct`: count of STRICT-reachable `Flag(true)` seeds via a set-union
-/// accumulator (diamonds are a no-op, R3); contributors = the counted set. A
-/// present-all-false strict fold set is `Count(0)`, real data ≠ absence (F45).
-fn fold_count(
-    reach: &BTreeSet<NodeId>,
-    effective: &BTreeMap<NodeId, ChannelValue>,
-) -> Option<(ChannelValue, BTreeSet<NodeId>)> {
-    true_witnesses(reach.iter().copied(), effective).map(|counted| {
-        let count = u32::try_from(counted.len()).unwrap_or(u32::MAX);
-        (ChannelValue::Count(count), counted)
-    })
 }
 
 /// The seed/output `ValueKind` a combinator consumes (`Any`/`All`/`CountDistinct`
