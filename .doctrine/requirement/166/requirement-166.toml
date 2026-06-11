@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 166
+slug = "detect-the-project-root-by-walking-up-for-a-manifest-marker-honouring-an-explicit-path-override"
+title = "Detect the project root by walking up for a manifest marker, honouring an explicit path override"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

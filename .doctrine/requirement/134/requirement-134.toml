@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 134
+slug = "materialise-both-spec-subtypes-product-prd-tech-spec-through-one-kind-blind-engine-each-in-its-own-directory-tree-and-reservation-namespace-diverging-only-in-scaffold-fileset-and-the-tech-only-flat-fields"
+title = "Materialise both spec subtypes (product PRD, tech SPEC) through one kind-blind engine, each in its own directory tree and reservation namespace, diverging only in scaffold fileset and the tech-only flat fields"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

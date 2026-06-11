@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 170
+slug = "install-is-idempotent-files-written-only-when-absent-and-never-overwritten-dirs-created-if-missing-gitignore-lines-deduplicated"
+title = "Install is idempotent: files written only when absent and never overwritten, dirs created-if-missing, gitignore lines deduplicated"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

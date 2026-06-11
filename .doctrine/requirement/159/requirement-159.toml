@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 159
+slug = "enumerate-every-numbered-kind-its-prefix-dir-toml-stem-and-runtime-state-dir-in-one-corpus-wide-kinds-table"
+title = "Enumerate every numbered kind, its prefix, dir, toml stem, and runtime state dir in one corpus-wide KINDS table"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

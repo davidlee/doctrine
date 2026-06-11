@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 158
+slug = "fold-trunk-side-ids-into-the-candidate-scan-for-fork-safe-allocation-read-once-at-the-shell-edge-and-degrading-to-local-only-without-a-trunk"
+title = "Fold trunk-side ids into the candidate scan for fork-safe allocation, read once at the shell edge and degrading to local-only without a trunk"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

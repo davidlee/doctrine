@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 180
+slug = "self-enforce-the-derived-doctrineskills-gitignore-anchored-at-the-trees-base-so-it-follows-the-tree-under-global"
+title = "Self-enforce the derived .doctrine/skills gitignore anchored at the tree's base so it follows the tree under global"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

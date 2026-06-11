@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 135
+slug = "weave-a-requirement-onto-a-spec-as-a-peer-req-nnn-entity-through-a-memberstoml-row-carrying-the-fk-a-sticky-frnf-membership-label-and-an-advisory-order"
+title = "Weave a requirement onto a spec as a peer REQ-NNN entity through a members.toml row carrying the FK, a sticky FR/NF membership label, and an advisory order"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

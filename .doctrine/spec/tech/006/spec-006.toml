@@ -1,0 +1,41 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 6
+slug = "spec-composition-machinery"
+title = "Spec composition machinery"
+status = "draft"
+kind = "tech"
+category = "spec"
+c4_level = "container"
+parent = "SPEC-003"
+descends_from = "PRD-002"
+tags = ["spec", "requirement", "members", "interactions", "descent", "parent", "validate", "reassembly"]
+responsibilities = [
+  "Assemble the spec as a composite entity: two subtypes (product `PRD`, tech `SPEC`) ride two `entity::Kind`s over the kind-blind engine, each its own directory tree and reservation namespace, diverging only in scaffold fileset and the tech-only flat fields.",
+  "Own the spec's relational spine — `descends_from` (tech→product, single-valued), `parent` (single acyclic decomposition), `c4_level`, and the repeatable `[[source]]` anchors — as hand-authored TOML the engine round-trips but does not generate.",
+  "Carry the requirement-as-peer composition: a `REQ-NNN` is its own entity, woven onto a spec through a `members.toml` `[[member]]` row holding a sticky `FR`/`NF` membership label and advisory order — the label is membership state on the edge, never the requirement's identity.",
+  "Provide `spec req add` as the spec-mediated requirement producer — reserve a requirement, set its kind, allocate the next-free membership label, and append the edge edit-preservingly (the non-transactional reserve→member sequence whose orphan window `validate` flags).",
+  "Carry the tech-only `interactions.toml` peer-edge table (`[[edge]]` outbound spec→spec `uses`/`calls`), the relation distinct from `parent` containment so a peering is never encoded as decomposition.",
+  "Reassemble the whole spec on read (`spec show`) — splice the identity TOML, prose body, members resolved to their requirements by FK in advisory order, and tech interaction edges — touching only this spec's directory and the requirement dirs reached by FK.",
+  "Run the corpus FK-integrity pass (`spec validate`) over the parsed registry: dangling/invalid member, descent, parent, and interaction targets, plus self-parent and the `second_parent` parse-error classification — the headline value that the first authored cross-entity edge demands.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/spec.rs"
+module = "doctrine::spec"
+
+[[source]]
+language = "rust"
+identifier = "src/requirement.rs"
+module = "doctrine::requirement"
+
+[[source]]
+language = "rust"
+identifier = "src/registry.rs"
+module = "doctrine::registry"
+
+[[source]]
+language = "markdown"
+identifier = "doc/spec-entity-spec.md"

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 156
+slug = "numerics-that-cross-to-the-backend-carry-no-floats-scores-weights-and-confidences-encode-as-integers-so-the-model-stays-swappable-onto-the-append-only-event-store-substrate"
+title = "Numerics that cross to the backend carry no floats; scores, weights, and confidences encode as integers so the model stays swappable onto the append-only event-store substrate"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

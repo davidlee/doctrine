@@ -1,0 +1,39 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 10
+slug = "skills-distribution"
+title = "Skills distribution"
+status = "draft"
+kind = "tech"
+category = "skills"
+c4_level = "container"
+parent = "SPEC-003"
+descends_from = "PRD-003"
+tags = ["skills", "plugins", "rust-embed", "marketplace", "symlink", "canonical-tree", "delegate", "idempotent"]
+responsibilities = [
+  "Carry the canonical skill source-of-truth under `plugins/<domain>/skills/<skill>/`, embedded into the binary at compile time via a second rust-embed `#[folder = \"plugins/\"]` parallel to `install/`, so one tree feeds both distribution channels with no skill duplicated.",
+  "Discover the embedded catalog by grouping asset paths into `<domain>/skills/<skill>/` entries, reading only `name`/`description` from each `SKILL.md` frontmatter, enforcing globally-unique skill ids, and excluding the marketplace-only subset domains (`doctrine-memory`, `doctrine-partner`) whose skills are symlinks back into the canonical domain.",
+  "Plan a per-agent install over a pure planner: Claude materialises a derived canonical `.doctrine/skills/<id>` tree and reconciles a relative agent symlink into it; every other agent delegates to `npx skills add davidlee/doctrine`, the universal external installer doctrine does not reimplement.",
+  "Reconcile each Claude agent link by proven ownership (target-value equality, not file type): create a missing link, heal a dangling-but-ours link, and keep-foreign an unrecognised symlink or real directory untouched — the never-clobber guarantee that doubles as the user's pinned-override hatch.",
+  "Materialise the derived canonical tree by always overwriting through a `.tmp-<id>` staging sibling swapped in by remove-then-rename, and write each agent link atomically by stage-then-rename, re-classifying ownership at mutation time to close the plan-to-execute TOCTOU window.",
+  "Self-enforce the derived-tree gitignore (`.doctrine/skills/*`) anchored at the same base the canonical tree is written to, so the ignore follows the tree to `$HOME` under `--global` rather than landing in a project where the tree is not.",
+  "Surface the catalog and routing through `skills list` (per-agent install status by symlink presence, including a dangling-but-managed link as installed) and `skills install` (subset by `--skill`/`--domain`/`--only-memory`, `--agent`, `--global`, `--dry-run`, `--yes`), reusing the shared project-root walk and the install confirm prompt.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/skills.rs"
+module = "doctrine::skills"
+
+[[source]]
+language = "directory"
+identifier = "plugins/"
+
+[[source]]
+language = "json"
+identifier = ".claude-plugin/marketplace.json"
+
+[[source]]
+language = "markdown"
+identifier = "doc/skills-spec.md"

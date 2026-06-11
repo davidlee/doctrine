@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 150
+slug = "freeze-the-git-context-frame-as-the external decision registers-gitcontextframev1-byte-for-byte-repo-id-by-explicitremotelocal-root-precedence-content-bearing-checkout-state-id-for-dirty-trees-bornunbornnon-repo-distinct"
+title = "Freeze the git context frame as the external decision register's GitContextFrameV1 byte-for-byte: repo-id by explicit/remote/local-root precedence, content-bearing checkout_state_id for dirty trees, born/unborn/non-repo distinct"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

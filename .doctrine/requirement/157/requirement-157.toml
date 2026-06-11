@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 157
+slug = "allocate-a-numbered-id-as-maxlocal-trunk-1-and-claim-it-atomically-in-a-bounded-retry-loop-recomputing-on-a-lost-race"
+title = "Allocate a numbered id as max(local ∪ trunk) + 1 and claim it atomically in a bounded retry loop, recomputing on a lost race"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 162
+slug = "id-allocation-and-every-integrity-check-are-per-namespace-and-intra-kind-differently-prefixed-ids-coexist-legitimately-and-are-never-compared"
+title = "Id allocation and every integrity check are per-namespace and intra-kind; differently-prefixed ids coexist legitimately and are never compared"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
