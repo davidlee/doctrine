@@ -9,6 +9,7 @@ create = [
   ".doctrine/memory/items",
   ".doctrine/policy",
   ".doctrine/requirement",
+  ".doctrine/review",
   ".doctrine/scripts",
   ".doctrine/skills",
   ".doctrine/slice",

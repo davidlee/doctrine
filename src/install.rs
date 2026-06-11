@@ -609,6 +609,33 @@ mod tests {
         );
     }
 
+    /// SL-040 PHASE-02 (VT-3): the review tree is an authored kind, so the manifest
+    /// must create it (parity with adr / policy / standard) and must NOT ignore it,
+    /// and both `review.{toml,md}` templates must be embedded (so `review new` can
+    /// render them — mem.pattern.build.rust-embed-no-rerun).
+    #[test]
+    fn embedded_manifest_creates_the_review_tree_and_embeds_its_templates() {
+        let manifest = load_manifest().unwrap();
+        assert!(
+            manifest.dirs.create.iter().any(|d| d == ".doctrine/review"),
+            "manifest must create the authored review tree"
+        );
+        assert!(
+            !manifest
+                .gitignore
+                .entries
+                .iter()
+                .any(|e| e.starts_with(".doctrine/review")),
+            "the authored review tree must not be gitignored by the manifest"
+        );
+        for tpl in ["templates/review.toml", "templates/review.md"] {
+            assert!(
+                !asset_text(tpl).unwrap().trim().is_empty(),
+                "{tpl} must be embedded and non-empty"
+            );
+        }
+    }
+
     #[test]
     fn embedded_manifest_creates_and_ignores_the_skills_derived_tree() {
         let manifest = load_manifest().unwrap();

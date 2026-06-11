@@ -151,6 +151,12 @@ enum Command {
         command: MemoryCommand,
     },
 
+    /// Create, show, and list adversarial-review ledgers (the RV kind, ADR-007).
+    Review {
+        #[command(subcommand)]
+        command: ReviewCommand,
+    },
+
     /// Create and list architecture decision records.
     Adr {
         #[command(subcommand)]
@@ -1047,6 +1053,71 @@ enum SliceCommand {
 }
 
 #[derive(Subcommand)]
+enum ReviewCommand {
+    /// Open a new review ledger targeting an entity via the `reviews` edge.
+    /// The `--target` ref is validated up front — a dangling ref is refused
+    /// before any id is allocated. Findings are added later with `review raise`.
+    New {
+        /// What this review reviews (the facet): scope | design | plan |
+        /// phase-plan | implementation | code-review | reconciliation.
+        #[arg(long, value_parser = review::Facet::parse)]
+        facet: review::Facet,
+
+        /// The subject canonical ref the review targets, e.g. `SL-024`.
+        #[arg(long)]
+        target: String,
+
+        /// Optional phase scope for a phase-scoped facet, e.g. `PHASE-03`.
+        #[arg(long)]
+        phase: Option<String>,
+
+        /// Review title (default: derived from facet + target).
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Raiser role label (cooperative; default `raiser`).
+        #[arg(long)]
+        raiser: Option<String>,
+
+        /// Responder role label (cooperative; default `responder`).
+        #[arg(long)]
+        responder: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List reviews by id: id, derived status (+ await), facet, target, title.
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one review: derived status, the `reviews` edge, and the brief.
+    Show {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
 enum SkillsCommand {
     /// List available skills and their install status.
     List {
@@ -1134,6 +1205,10 @@ fn write_class(cmd: &Command) -> WriteClass {
             | MemoryCommand::List { .. }
             | MemoryCommand::Find { .. }
             | MemoryCommand::Retrieve { .. } => Read,
+        },
+        Command::Review { command } => match command {
+            ReviewCommand::New { .. } => Write("review new"),
+            ReviewCommand::List { .. } | ReviewCommand::Show { .. } => Read,
         },
         Command::Adr { command } => match command {
             AdrCommand::New { .. } => Write("adr new"),
@@ -1359,6 +1434,34 @@ fn main() -> anyhow::Result<()> {
                     corpus::run_sync_install(path, dry_run, yes)
                 }
             },
+        },
+        Command::Review { command } => match command {
+            ReviewCommand::New {
+                facet,
+                target,
+                phase,
+                title,
+                raiser,
+                responder,
+                path,
+            } => review::run_new(
+                path,
+                &review::NewArgs {
+                    facet,
+                    target,
+                    phase,
+                    title,
+                    raiser,
+                    responder,
+                },
+            ),
+            ReviewCommand::List { list, path } => review::run_list(path, list.into_list_args()),
+            ReviewCommand::Show {
+                reference,
+                format,
+                json,
+                path,
+            } => review::run_show(path, &reference, if json { Format::Json } else { format }),
         },
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),

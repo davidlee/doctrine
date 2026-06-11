@@ -269,43 +269,91 @@ pub(crate) fn materialise(
     }
 }
 
-/// Reserved top-level placement (slice, later spec): claim the next id with a
-/// bounded retry loop, then scaffold. A `Won` claim means the dir is ours, so
-/// any scaffold/write failure removes it — no ghost entity survives (H2).
+/// Reserved top-level placement (slice, adr, …): claim the next id with a
+/// bounded retry loop, then scaffold from the `Kind`'s `ScaffoldCtx` template.
 fn allocate_fresh(
     kind: &Kind,
     claim: &dyn Claim,
     tree_root: &Path,
     inputs: &Inputs<'_>,
     trunk_ids: &[u32],
-    mut scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
+    scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
 ) -> anyhow::Result<Materialised> {
-    // trunk_ids is constant across retries (read once at the shell edge, D-b);
-    // only `scan` re-reads the local tree to recover from a lost claim race.
+    claim_fresh_id(
+        claim,
+        tree_root,
+        kind.prefix,
+        trunk_ids,
+        scan,
+        |id, canonical| {
+            let ctx = ScaffoldCtx {
+                id,
+                canonical,
+                slug: inputs.slug,
+                title: inputs.title,
+                date: inputs.date,
+            };
+            (kind.scaffold)(&ctx)
+        },
+    )
+}
+
+/// Materialise a fresh-numbered entity from a **pre-built** fileset — the numbered
+/// twin of [`materialise_named`] (seam A). For a kind whose fileset depends on more
+/// than `ScaffoldCtx` carries (review: facet / target / phase), render the fileset
+/// eagerly in the kind module and hand it here; the `build` closure receives the
+/// claimed `id` and `canonical` ref so id-bearing paths/bodies resolve. Shares the
+/// claim-retry + H2 cleanup core with [`allocate_fresh`].
+pub(crate) fn materialise_fresh_prebuilt(
+    claim: &dyn Claim,
+    project_root: &Path,
+    dir: &str,
+    prefix: &str,
+    trunk_ids: &[u32],
+    build: impl FnMut(u32, &str) -> anyhow::Result<Fileset>,
+) -> anyhow::Result<Materialised> {
+    let tree_root = project_root.join(dir);
+    fs::create_dir_all(&tree_root)
+        .with_context(|| format!("Failed to create {}", tree_root.display()))?;
+    claim_fresh_id(
+        claim,
+        &tree_root,
+        prefix,
+        trunk_ids,
+        || scan_ids(&tree_root),
+        build,
+    )
+}
+
+/// The shared claim-retry + write + H2-cleanup core for fresh-numbered placement.
+/// `scan` re-reads the local tree each retry (recovering a lost claim race);
+/// `trunk_ids` is constant (read once at the shell edge, D-b). `build` renders the
+/// fileset for the won `(id, canonical)`. A `Won` claim owns the dir, so any
+/// build/write failure removes it — no ghost entity survives (H2).
+fn claim_fresh_id(
+    claim: &dyn Claim,
+    tree_root: &Path,
+    prefix: &str,
+    trunk_ids: &[u32],
+    mut scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
+    mut build: impl FnMut(u32, &str) -> anyhow::Result<Fileset>,
+) -> anyhow::Result<Materialised> {
     for _ in 0..MAX_CLAIM_RETRIES {
         let id = next_id(&scan()?, trunk_ids);
         let name = format!("{id:03}");
         let dir = tree_root.join(&name);
         match claim.claim(&dir)? {
             Acquired::Won => {
-                let canonical = format!("{}-{name}", kind.prefix);
-                let ctx = ScaffoldCtx {
-                    id,
-                    canonical: &canonical,
-                    slug: inputs.slug,
-                    title: inputs.title,
-                    date: inputs.date,
-                };
-                return match scaffold_and_write(kind, tree_root, &ctx) {
+                let canonical = format!("{prefix}-{name}");
+                let written = build(id, &canonical).and_then(|fs| write_fileset(tree_root, &fs));
+                return match written {
                     Ok(()) => Ok(Materialised {
                         eid: OwnedEntityId::Numbered { id, canonical },
                         dir,
                     }),
                     Err(e) => {
-                        // Won ⟹ we created `dir` ⟹ a partial scaffold is our
-                        // mess to clean (H2). git-ref will not need this — there
-                        // an abandoned claim is a harmless gap (reservation-spec).
-                        // Best-effort: the scaffold error is the one to surface.
+                        // Won ⟹ we created `dir` ⟹ a partial scaffold is our mess
+                        // to clean (H2). Best-effort; the build error is surfaced.
                         drop(fs::remove_dir_all(&dir));
                         Err(e)
                     }
@@ -394,12 +442,6 @@ fn claim_and_write_named(
         },
         Acquired::AlreadyHeld => bail!("entity {name} already exists"),
     }
-}
-
-/// Render `kind`'s fileset for `ctx` and write it under `tree_root`.
-fn scaffold_and_write(kind: &Kind, tree_root: &Path, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<()> {
-    let fileset = (kind.scaffold)(ctx)?;
-    write_fileset(tree_root, &fileset)
 }
 
 /// Refuse if any artifact target already exists (file-creating sub-artefacts

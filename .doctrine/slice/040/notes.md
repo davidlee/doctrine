@@ -121,3 +121,49 @@ These three questions bear directly on D-C10 and are captured as open threads:
   durable sub-file anchor primitive. Lean: file-level content-hash as the staleness
   key (position-independent at file granularity); region anchors (symbol/heading)
   advisory-only. Possible backlog item: durable region-reference primitive.
+
+---
+
+## PHASE-02 implementation notes (authored kind end-to-end)
+
+Durable carry-forwards for PHASE-03+ (the verb family rides this surface):
+
+- **Eager-render seam (engine).** Review's fileset depends on facet/target/phase,
+  which `entity::ScaffoldCtx` does not carry — the same reason memory has the
+  `materialise_named` eager path. Added `entity::materialise_fresh_prebuilt` (the
+  numbered twin: a `build(id, canonical) -> Fileset` closure under the shared
+  claim-retry + H2 cleanup). `allocate_fresh` and it now share `claim_fresh_id`;
+  the old `scaffold_and_write` was folded in and removed. `REVIEW_KIND.scaffold`
+  is an inert stub (`review_scaffold_unused`) — review never rides `Kind.scaffold`.
+- **D2 — scan-path id-only reader.** `meta::IdOnly`/`meta::read_id` deserialise
+  `{ id }` ignoring the rest; `integrity::scan_kind` + `scan_aliases` use it. The
+  shared strict `Meta` is UNCHANGED, so a corrupt status-bearing toml still hard-
+  fails at `read_meta` (show/list/render). Leniency confined to the validate scan.
+- **Authored schema is status-LESS** (D-C8): `review-NNN.toml` carries
+  `id/slug/title` + `[review]` (facet/raiser/responder) + `[target]` (ref, optional
+  phase) + append-only `[[finding]]`. Review's own readers (`ReviewDoc`/`FindingRow`
+  in review.rs) parse it; derived status is computed at read time via PHASE-01's
+  `derived_status`. NEVER ask the shared reader for a stored status.
+- **Forward-edge validation** (`integrity::ensure_ref_resolves`, §7): `review new`
+  refuses a dangling / unknown-prefix `[target].ref` BEFORE claiming an id (reuses
+  `parse_canonical_ref` + a dir probe). `[target].phase` existence-check still
+  deferred (minor, per design).
+- **CLI surface** (main.rs hardcoded sites): `Command::Review` + `ReviewCommand`
+  {New, List, Show}; conduct `New=Write`, List/Show=Read; `--facet` uses
+  `review::Facet::parse` (the `MemoryType::parse` pattern, keeping the pure-core
+  enum clap-free). `new` args bundled in `review::NewArgs` (arg-ceiling).
+- **KINDS row**: `RV`, `stem="review"`, `state_dir=Some(".doctrine/state/review")`
+  — the 2nd stateful kind (the baton/lock/cache tree lands in PHASE-03/05; the
+  `.gitignore` `.doctrine/state/` already covers it, no new negation).
+- **Install wiring**: manifest `[dirs].create += .doctrine/review`; repo `.gitignore`
+  `!.doctrine/review/`; `install/templates/review.{toml,md}` embedded. The optional
+  `[target].phase` line is injected by `render_review_toml` via a `{{target_phase}}`
+  token (fixed-shape template, optional line rendered or empty).
+- **Jail gotcha**: after editing `main.rs`/templates, the live binary can lag —
+  `cargo build` may report `Finished 0.0s` while the on-disk bin is stale; `touch
+  src/main.rs` (or verify with `cargo run -- review --help`) before trusting an
+  e2e transcript. (mem.pattern.build.rust-embed-no-rerun-adjacent.)
+- **For PHASE-03**: the `Verb`/`can()`/`render_finding`/`Finding`/`Severity` pure
+  core is in place but still test-only (the module `expect(dead_code)` covers it);
+  the verb handlers + `with_turn` baton/lock retire that suppression. Finding ids
+  are `F-<max+1>` append-only over `ReviewDoc.finding`.
