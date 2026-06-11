@@ -25,3 +25,6 @@ test:
 
 install:
   cargo install --path .
+
+publish:
+  cargo publish
