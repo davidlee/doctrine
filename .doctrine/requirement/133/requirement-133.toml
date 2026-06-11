@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 133
+slug = "render-the-adr-body-as-frontmatter-free-prose-context-decision-consequences-verification-references-with-metadata-in-the-sister-toml"
+title = "Render the ADR body as frontmatter-free prose (Context, Decision, Consequences, Verification, References) with metadata in the sister TOML"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

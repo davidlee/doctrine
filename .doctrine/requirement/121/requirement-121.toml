@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 121
+slug = "materialise-every-authored-kind-through-one-kind-agnostic-engine-from-a-data-valued-kind-descriptor"
+title = "Materialise every authored kind through one kind-agnostic engine from a data-valued Kind descriptor"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

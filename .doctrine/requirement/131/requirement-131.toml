@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 131
+slug = "hide-rejected-superseded-and-deprecated-adrs-from-the-default-list-revealed-by-all-or-an-explicit-status"
+title = "Hide rejected, superseded, and deprecated ADRs from the default list, revealed by --all or an explicit --status"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
