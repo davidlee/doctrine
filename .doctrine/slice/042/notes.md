@@ -92,3 +92,50 @@ Surfaced while detailing P3; resolutions are design-faithful, additive, low-risk
   has NO bins/lib consumer (no CLI verb; the closure gate is Slice B), so the leaf
   remains dead in the gate build. EX-2's "genuinely used in the non-test build"
   therefore lands with the consumer (Slice B / a later read verb), not P3.
+
+## PHASE-03 — composite + drift + scan shell (REQ-110/111) — landed `0c6c802`
+
+Built via the dispatch funnel (orchestrator sole-writer) with a single worktree
+worker `sl-042-p3-fork` (S=`20d2848`) forked off P2's `6e71e24`; net diff `B..S`
+imported, R-5 belt clean (src-only: coverage.rs, coverage_scan.rs, git.rs,
+main.rs), combined-tree verify green (fmt/clippy/test/build).
+
+- **Folds (pure, `coverage.rs`).** `composite(&[(CoverageEntry, IsStale)]) ->
+  Composite` fans one requirement's cells in across contributing changes,
+  **deterministic** (sorted by the stable `CoverageKey`; no clock/rng/map-order),
+  surfaces all (no precedence — OQ-3). Exposes `is_empty / any_fresh_verified /
+  any_failed_or_blocked / only_forward`. `drift(ReqStatus, &Composite) -> Verdict`
+  encodes the §5.2 **total** tree; returns `Verdict { Coherent,
+  Divergent(DivergentReason{ObservedContradiction|EvidenceOutrunsAuthored}),
+  Indeterminate }` — **never a `ReqStatus`** (type-level NF-001). Staleness is
+  resolved in the shell and passed in (purity F1).
+- **`IsStale` leaf** (`Fresh|Stale|Unknown`) with `From<Option<u32>>`
+  (`Some(0)⇒Fresh, Some(≥1)⇒Stale, None⇒Unknown`) — maps the `commits_touching`
+  seam result. **`touched_paths: Vec<String>`** added to `CoverageEntry`
+  (`#[serde(default)]`, additive — P2 round-trips unchanged; closes the §5.3
+  field-list gap flagged in "PHASE-03 forward").
+- **Shell (`coverage_scan.rs`, NEW).** `scan_coverage(root, req)` corpus-walks
+  `.doctrine/slice/*/coverage.toml`, filters by requirement, resolves `HEAD→SHA`
+  ONCE via new `git::head_sha(root)` (T0 — minimal helper reusing the existing
+  `rev-parse --verify HEAD^{commit}` form; `commits_touching` contract
+  untouched), then per-entry staleness. Missing tree / unreadable / malformed /
+  unborn HEAD all degrade, never abort. The ONLY git/disk in the data flow.
+- **dead_code expects persist** (as predicted): no bins/lib consumer in P3, so
+  `coverage_scan.rs` carries its own module-level `not(test) expect(dead_code)`,
+  `coverage.rs`'s covers its new items, and `git::head_sha` got an item-level one.
+  EX-2 "genuinely used in non-test build" still lands at the Slice-B consumer.
+
+### R2 perf spike (VT-4) — debug timings, two axes measured separately
+- **(a) scan fan-in** (walk+parse+filter, IsStale precomputed, no subprocess):
+  N=50→3.33ms, 500→20.3ms, 2000→77.7ms (~0.039 ms/file, **linear, no cliff at
+  2000**). 2000 tier is `#[ignore]`d to keep the gate light.
+- **(b) staleness resolution** (per-call `git::commits_touching` subprocess vs
+  the real repo): **~4.09 ms/call**, linear (one `merge-base`+`rev-list` pair
+  per call) — the **dominant** cost.
+- **Conditioned backlog triggers (EX-5 — recorded, NOT yet fired; no consumer
+  exists until Slice B):** (a) a future scan-axis cliff ⇒ add a reverse-index
+  (requirement→entries) so the corpus walk isn't re-paid per query; (b) since
+  axis (b) dominates, when a reconcile read resolves *many* entries ⇒ batch the
+  staleness resolution (single `rev-list` over the combined pathset, or memoize
+  per anchor) rather than one subprocess per cell. Revisit when Slice B wires the
+  reader; capture as `backlog new` then if still warranted.
