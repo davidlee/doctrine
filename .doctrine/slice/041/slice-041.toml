@@ -1,0 +1,12 @@
+id = 41
+slug = "resolve-branch-point-check-base-in-the-impure-shell"
+title = "Resolve branch-point-check --base in the impure shell"
+status = "proposed"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[relationships]
+# Drives: ISS-002 (this slice resolves it). The edge is OUTBOUND-derived
+# (ADR-004) and lives on the backlog item, set at close via `backlog edit
+# ISS-002`; not duplicated here. Origin: SL-031 §5.2 (C-V) re-audit finding.
+# No spec/requirement registry to point at yet.
