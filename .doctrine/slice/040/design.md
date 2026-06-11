@@ -150,15 +150,21 @@ disposition = "fixed"    # responder-owned, mutable
 response    = "..."      # responder-owned, mutable
 ```
 
-### `Meta.status` accommodation — **D2** (touches shared machinery)
+### `Meta.status` accommodation — **D2** (scan-path id-only reader)
 
-`scan_kind` reads only `.id`, but strict `Meta` fails on a missing `status`.
-**Decision: `#[serde(default)]` on `Meta.status`** — one-line, behaviour-preserving
-(existing kinds always emit `status`; the default fires only for review's
-intentional omission), + a canary that a status-less toml parses → `""`. Rejected
-alternative: an id-only reader — branches `KINDS` or narrows the "malformed toml
-is a hard error" guarantee for all kinds. *Flagged for inquisition: contract
-widening vs purity.*
+`scan_kind` reads only `.id`, but strict `Meta` fails on review's intentionally
+status-less toml. **Decision: a scan-path id-only reader** — `scan_kind`
+deserialises a minimal `{ id }` (serde ignoring the rest) instead of the full
+`Meta`. The shared `Meta` stays **strict**: a genuinely corrupt `adr`/`slice`/`spec`
+toml with a missing `status` still hard-fails parse at every status-bearing reader
+(`show`/`list`/render), preserving the "malformed metadata toml is a hard error"
+contract. Review's own `show`/`list` live in `review.rs` and never ask the shared
+reader for a status they know is derived (§8). Leniency is confined to the one path
+that needs it. *Reverses the round-1 lean (`#[serde(default)]` on shared
+`Meta.status`) per `inquisition.md` Charge III: widening the shared struct salted
+the well for all kinds; the scoped reader does not.* Verify: a corrupt non-review
+toml with missing `status` still hard-fails (the preserved invariant); review's
+status-less toml scans for `.id` cleanly.
 
 ### Field ownership (D-C5) — keys disjoint
 
@@ -184,15 +190,18 @@ Append-only: findings never deleted/renumbered; `id = F-<n>`, next = `max+1`
 This per-finding predicate **is** D-C4's "refuse out-of-turn write"; `--as`
 asserts the role (cooperative, not security — ADR-007 Negative).
 
-### Contest/verify rationale — **D10** (ADR schema gap)
+### Contest/verify handoff note — **D10** (ephemeral chatter, not rationale)
 
-The schema has no raiser-owned *mutable* field, so `contest`'s rationale has no
-authored home (the raiser cannot edit `detail`/`response`). **Decision: `--note`
-on contest/verify lands in the baton handoff log (ephemeral)** — ADR-007 Neutral
-("handoff chatter → baton; durable → promoted to a finding/disposition"). Durable
-rationale the raiser promotes to a new finding. *Flagged: alternative is a new
-raiser-owned mutable field, a schema expansion beyond ADR-007 → would need
-`/consult`.*
+The schema has no raiser-owned *mutable* field. **Decision: `--note` on
+contest/verify is explicit *handoff chatter* — it lands in the baton handoff log
+(ephemeral, lost on baton loss, D-C2 bookkeeping tier)** — ADR-007 Neutral
+("handoff chatter → baton; durable → promoted to a finding/disposition"). It is
+**not** durable rationale and must not be named so (the misnomer invites users to
+entrust durable justification to a discarded file — `inquisition.md` Charge V):
+durable contest/verify justification the raiser **promotes to a new finding**, its
+authored home. CLI help carries the same framing. *A raiser-owned mutable schema
+field (durable rationale in the ledger) stays out of scope — a schema expansion
+beyond ADR-007 → `/consult` if ever wanted.*
 
 ### md companion (D-C6) + edit mechanics
 
@@ -209,12 +218,16 @@ finding-scoped edits; user free-text spliced via `toml_string`.
 
 Locus = **parent tree** (R1/D4): `.doctrine/state/review/NNN/`.
 
-**D-C1/D-C7 reconciliation.** D-C1 says the baton is *per-worktree*; D4 puts the
-locus in the parent. No contradiction: under the dispatched-fork model (§4) the
-review's single working tree **is** the parent (orchestrator-sole-writer, ADR-006)
-— forks are *read* for hashing, never co-write the ledger. So there is exactly one
-baton, per-(review-locus)-worktree, and D-C7 ("never a shared ledger across
-worktrees") holds by construction.
+**D-C1/D-C7 reconciliation** (ADR-007 D-C1 clarification, SL-040). D-C1 says the
+baton is *per-worktree*; D4 puts the locus in the parent. For the **pilot** these
+coincide: review verbs operate on the **main/parent tree**, where parent ≡ worktree,
+so D-C7 ("never a shared ledger across worktrees") holds directly — forks are *read*
+for hashing, never co-write the ledger. This is the pilot invariant, **enforced**
+(not asserted): a review verb whose resolved root is a fork **bails** —
+fork-invoked review (the locus would resolve to a fork that `WITHHELD` keeps from
+seeing the parent baton, `worktree.rs:71`) is **IMP-024**, not yet supported. The
+guard lives in the impure shell (root resolution); reconciling "per-worktree" with
+a parent-locus addressing rule is deferred to IMP-024.
 
 ```
 baton.toml   await (cached role) · authored_hash (CAS key) · rounds · contest counts · handoff log
@@ -247,13 +260,18 @@ verb knows its target finding id, so it runs `can(verb, finding.status, role)`
 1. acquire lock   create_new(lock) — AlreadyExists ⇒ bail "RV-NNN busy; re-run"
                   LockGuard::drop removes it (normal + panic; NOT hard-kill)
 2. read authored  parse review-NNN.toml → findings
-3. CAS guard      sha256(authored) ≠ baton.authored_hash ⇒ recompute await,
+3. ENTRY CAS      sha256(authored) ≠ baton.authored_hash ⇒ recompute await,
                     rewrite baton, bail "ledger changed underneath — re-run"
                     (missing baton ⇒ recompute, treat cold, proceed)
+                    [catches edits landing BEFORE this invocation]
 4. static role    asserted --as role == verb's required role; mismatch ⇒ bail (D-C4)
 ── mutate ──
-5. AUTHORED FIRST f(doc, findings) runs per-finding can() then applies the edit;
-                    write_atomic                                       (D-C3)
+5. AUTHORED FIRST f(doc, findings) runs per-finding can() then applies the edit.
+                    PRE-WRITE CAS: re-read authored bytes; sha256 ≠ the step-2
+                    snapshot ⇒ bail "ledger changed underneath — re-run" (do NOT
+                    write). [catches a hand-edit landing DURING this invocation —
+                    the lock excludes other invocations, not a human editor].
+                    Else write_atomic                                  (D-C3)
 6. recompute      (_, new_await) = derived_status(new); new_hash = sha256(new authored)
 7. BATON LAST     write_atomic baton{ await: new_await, authored_hash: new_hash, rounds+1, … }  (D-C3)
 8. release        LockGuard drop
@@ -263,12 +281,20 @@ verb knows its target finding id, so it runs `can(verb, finding.status, role)`
 
 - **Lock = serialize concurrent invocations.** `create_new`; held *within one
   invocation only* (turns persist via the baton, not the lock) → ms lifetime.
-- **CAS = detect *out-of-band* hand-edits, not concurrent ones.** The lock already
-  prevents concurrent clobber, so "ledger changed since the read" (D-C4a) can only
-  mean a human hand-edited the authored toml between invocations → the cached
-  `await` is stale → recompute from authored truth (D-C2), abort, re-run (re-gates
-  the verb if the edit changed whose turn it is). *Interpretation flagged — lock +
-  CAS both present and named in D-C4a; this assigns each its job.*
+- **CAS = detect *out-of-band* hand-edits, not concurrent ones.** The lock prevents
+  concurrent *invocation* clobber; it does **not** stop a human with a text editor
+  (no invocation, no lock). So "ledger changed since the read" (D-C4a) means a
+  hand-edit, and it must be caught in **both** windows: an edit *before* this
+  invocation (entry CAS, step 3 — stale cached `await`, recompute from authored
+  truth per D-C2, abort, re-run, re-gating the verb if the turn changed) **and** an
+  edit *during* this invocation, between the step-2 read and the step-5 write
+  (pre-write CAS, step 5 — abort before writing so the stale in-memory `DocumentMut`
+  cannot overwrite newer authored truth). A single entry-only check would let the
+  mid-turn edit through, and the next invocation's CAS would *not* catch it (baton
+  hash == our clobber). Residual: a hash→`write_atomic` rename-instant TOCTOU
+  survives, shrunk to the rename instant — **tolerated** (SL-040 ruling). *D-C4a
+  names lock + CAS; this assigns each its job — the inquisition round-1 remedy
+  (`inquisition.md` Charge I).*
 
 ### Crash & concurrency
 
@@ -312,6 +338,14 @@ writer focused and isolates the one-way `slice-shell → review-query` coupling 
 the impure layer. Teeth live in the **binary** (the `slice status …` refusal), not
 skill prose. Gate implemented for **slice close** only (pilot path); other-target
 close-gates are future.
+
+*Shell-injection bypass risk* (`inquisition.md` Charge VIII): placing the gate in
+the close shell, not `set_slice_status`, means any *future* caller crossing the
+closure seam without the shell would evade it. Mitigation: a VT asserts the close
+shell is the **sole** seam-crossing caller today (`set_slice_status` is invoked
+across the `audit→reconcile`/`reconcile→done` seam from nowhere else); any new
+seam-crossing caller MUST re-invoke `unresolved_blockers_for`. If a second caller
+ever exists, reconsider moving the gate to the FSM.
 
 ---
 
@@ -412,31 +446,46 @@ via `doctrine skills install` + touch `src/skills.rs`.
 
 - **D1** — review mirrors `slice` (raw `entity::Kind`), not `adr` (`GovKind`):
   derived status, bespoke commands, `state_dir`.
-- **D2** — `#[serde(default)]` on `Meta.status` (vs id-only reader). *Flagged.*
+- **D2** — scan-path id-only reader (`scan_kind` reads `{ id }`); shared `Meta`
+  stays strict. *Round-1 inquisition reversed the prior `#[serde(default)]` lean
+  (Charge III).*
 - **D3** — `contentset` standalone leaf, owns `sha2`; promotion deferred → IMP-025.
 - **D4** — review locus = parent tree (ADR-006 dispatched-fork model); domain_map
-  single parent root; subject-root additive → IMP-024 (resolves R1).
+  single parent root; subject-root additive → IMP-024 (resolves R1). Pilot invariant
+  **enforced**: review verbs refuse a fork-resolved root (ADR-007 D-C1 clarified —
+  parent-locus pilot rule; per-worktree reconciliation deferred to IMP-024).
 - **D5** — runtime layout: separate `baton.toml`/`cache.toml`/`lock` (OQ-1).
-- **D6** — concurrency: `create_new` lock (RAII) + `sha256` CAS as the
+- **D6** — concurrency: `create_new` lock (RAII) + `sha256` CAS, fired **twice**
+  (entry: pre-invocation edit; pre-write: mid-invocation edit) as the
   out-of-band-edit detector; `with_turn` wrapper, authored-first/baton-last
-  (OQ-2; interprets D-C4a). *Flagged.*
+  (OQ-2; interprets D-C4a). *Round-1 inquisition added the pre-write CAS (Charge I).*
 - **D7** — `await` is a derived summary; the gate is per-finding `can()`; `raise`
-  is not await-blocked (refines D-C8 turn semantics).
+  is not await-blocked. *Ratified at the seal: ADR-007 D-C4 clarified (SL-040) —
+  out-of-turn is enforced per-finding, `await` is not an independent gate.*
 - **D8** — close-gate = standalone scoped scan in `review.rs`, injected in the
   close command shell (not the registry, not `set_slice_status`).
 - **D9** — domain_map = curated set (T-a); file-level content-hash staleness,
   absence⇒stale; `current`/`stale` naming (T-b); region anchors advisory → IDE-002
   (T-c).
-- **D10** — contest/verify rationale → ephemeral baton handoff note (vs schema
-  field). *Flagged.*
+- **D10** — contest/verify `--note` is ephemeral *handoff chatter* (not "rationale",
+  Charge V) → baton handoff log; durable justification promotes to a finding. A
+  raiser-owned mutable schema field stays out of scope (→ `/consult` if ever wanted).
 - **D11** — `/audit` pilot; disposition taxonomy → RV disposition vocabulary; one
   skill only (IMP-023 defers the rest).
 
-## 12. Open questions / flagged for inquisition
+## 12. Open questions / flagged for inquisition — **resolved round 1**
 
-- **D2, D6, D10** carry locked leans but are explicitly flagged as the
-  interpretation/expansion points an adversarial pass should probe. No question
-  remains unresolved without a recommendation.
+- Round-1 external hostile pass (codex / GPT-5.5) recorded in `inquisition.md`.
+  Disposition: **D2 reversed** (Charge III — scan-path id-only reader, not
+  `serde(default)`); **D6 hardened** (Charge I — pre-write CAS added); **D10
+  reframed** (Charge V — handoff chatter, not "rationale"); §14 no-clobber VT
+  strengthened to scripted interleavings (Charge VI); close-gate sole-caller VT
+  added (Charge VIII). Charge VII (phantom §Verification ref) **dismissed** — the
+  section exists (ADR-007:232).
+- **Two ADR-007 tensions ratified at the seal** (not re-decided locally): D-C4
+  clarified — out-of-turn enforced per-finding, `await` is a summary (Charge II);
+  D-C1 clarified — parent-locus pilot rule + fork-root guard, per-worktree
+  reconciliation deferred to IMP-024 (Charge IV).
 - All deferrals have backlog homes: IMP-022 (Drift Ledger), IMP-023 (skill
   rewiring), IMP-024 (large-review funnel / subject-root), IMP-025 (promote
   `contentset`), IDE-002 (durable region anchor).
@@ -446,9 +495,9 @@ via `doctrine skills install` + touch `src/skills.rs`.
 - **R1 — warm-cache × worktree.** *Resolved* (D4): locus=parent collapses the
   multi-root concern; domain_map is single-rooted `(path, hash)`.
 - **R2 — close-gate scan cost** O(#RV)/close. Acceptable now; note indexing later.
-- **R-a — `Meta.status` widening** weakens the shared contract slightly (a
-  status-less non-review toml parses `""`). Mitigated: integrity reads only `.id`;
-  canary pins the behaviour (D2).
+- **R-a — shared `Meta` contract** kept strict (D2 reversed to a scan-path id-only
+  reader). A corrupt non-review toml missing `status` still hard-fails; leniency is
+  confined to `scan_kind`'s `{ id }` deserialise. VT pins both halves.
 - **R-b — stale lock on hard-kill.** `review unlock` escape hatch; RAII covers
   panic/normal paths.
 - **R-c — `with_turn`/CAS is greenfield concurrency** — the highest-risk code;
@@ -477,18 +526,19 @@ Mode: **VT** by test, **VA** by agent, **VH** by human. Phase assignment is
 | append-only finding ids | D-C5 | VT |
 | edit-preserving transitions (comments/unknown keys survive) | §4 | VT |
 | render escaping (hostile title/detail round-trips) | render-splice | VT |
-| `Meta.status` status-less toml parses → `""`; existing kinds unaffected | D2 | VT |
+| scan-path id-only reader scans review's status-less toml for `.id`; shared `Meta` stays strict — corrupt non-review toml missing `status` still HARD-FAILS | D2 | VT |
 | dangling `[target].ref` refused at `new` | §7 | VT |
 
 ### Runtime coordination
 | Obligation | Ref | Mode |
 |---|---|---|
-| **no-clobber under concurrency** (one wins, other aborts) | D-C4a | VT |
-| CAS catches out-of-band edit → baton refresh + re-run | D-C4a/D-C2 | VT |
+| **no-clobber under concurrency** — scripted interleavings, assert FINAL LEDGER state (not just exit code): (a) two invocations, one wins / loser aborts then re-runs from refreshed baton and lands a correct turn; (b) crash between steps 5–7 → next call self-heals via entry CAS; (c) hand-edit landing AFTER the step-2 read → pre-write CAS aborts, no clobber (Charge I); (d) same-finding `contest` racing `verify` | D-C4a | VT |
+| entry CAS catches pre-invocation edit → baton refresh + re-run; pre-write CAS catches mid-invocation edit → abort before write | D-C4a/D-C2 | VT |
 | authored-first/baton-last; crash-between resumable via CAS | D-C3 | VT |
 | out-of-turn refuse; `raise` allowed while `await=Responder` | D-C4/§8 | VT |
 | `status` rebuilds baton (cache == recompute) | §Verif | VT |
 | baton in per-worktree (parent) gitignored state | D-C7 | VT/VH |
+| review verb refuses a fork-resolved root (IMP-024 not-yet-supported guard) | D4/D-C1 | VT |
 
 ### Edge + close-gate
 | Obligation | Ref | Mode |
@@ -497,6 +547,7 @@ Mode: **VT** by test, **VA** by agent, **VH** by human. Phase assignment is
 | `/close` refuses on unresolved blocker; passes when none | D-C9b | VT |
 | `unresolved_blockers_for` scan correctness | §7 | VT |
 | gate fires only on closure seam | §7 | VT |
+| close shell is the SOLE seam-crossing caller of `set_slice_status` (no bypass) | §7 | VT |
 
 ### Cache + integration
 | Obligation | Ref | Mode |
