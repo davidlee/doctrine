@@ -7,6 +7,7 @@ mod clock;
 mod conduct;
 mod contentset;
 mod corpus;
+mod coverage;
 mod entity;
 mod fsutil;
 mod git;
