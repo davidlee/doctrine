@@ -49,14 +49,44 @@ Dispatch drives the *whole* slice, not one batch. The import funnel below is the
 3. **Funnel.** Run the strict per-batch cadence (below) to land the unit as exactly
    one commit on the coordination branch.
 4. **Repeat** from the new HEAD until the slice's phases are done.
-5. **Handover at the context threshold.** Your context is disposable and rebuildable
-   from the coordination branch (see Crash / overflow recovery). As you approach your
-   budget (≈200k tokens, or whenever a batch leaves you low), stop **at a committed
-   batch boundary** and `/handover`; a fresh orchestrator resumes from the branch.
-   Never carry a half-imported batch across a handover.
+5. **Hand over on cadence — a quality gate, not an overflow stop.** Your context is
+   disposable and rebuildable from the coordination branch (see Crash / overflow
+   recovery), so handover is cheap; the **dumb zone is not**. Reasoning quality decays
+   long before any capacity limit, so hand over *early*, while you are still sharp —
+   do **not** wait to "run low." You cannot read your own token count in-loop and no
+   human is watching the unattended drive, so trip on what you **can** count, at the
+   next **committed** batch boundary, whichever comes first:
+   - **`handover_after` batches** since your spawn (default `5`), **or**
+   - **`handover_delta` cumulative reviewed-delta lines** since your spawn (default
+     `2000`) — you already compute each `B..S`; sum them. Big phases (the real context
+     fillers) trip this sooner than a raw count would.
+
+   Then stop at the committed boundary and `/handover`; a fresh orchestrator resumes
+   from the branch. **Never carry a half-imported batch across a handover.** Defaults
+   are deliberately conservative starting points — tune via
+   `/dispatch handover_after=N handover_delta=L`.
 
 The slice reaches done unattended: you alternate plan → spawn → funnel without
-hand-holding each phase, and hand over cleanly when context runs low.
+hand-holding each phase, and hand over **early and cleanly** to stay out of the dumb
+zone — many lean orchestrator instances, never one bloated one.
+
+## Context hygiene — keep the orchestrator lean
+
+A bounded, roughly-uniform per-batch footprint is what makes the handover cadence
+above meaningful — without it, `handover_after` is noise (a 5-line delta and a
+4000-line failure log both count as "one"). Keep your own context small so N batches
+≈ a fixed budget:
+
+- **Worker reports enter your context structured and size-capped** — a verdict plus a
+  short summary, never raw build/test logs. Mandate the shape in the spawn prompt.
+- **Read deltas `--stat` / `--name-only` first.** Pull a full `B..S` diff into context
+  only when a check actually needs the body; the R-5 belt and disjointness checks run
+  on name-only.
+- **Verify output enters as pass/fail + a short tail**, never the full log. On RED you
+  keep the tail to name the offender (X-3); you do not need the whole run.
+
+These also shrink the unobservable tail (failure noise) that `handover_delta` can't
+see — so the two levers and the hygiene rules reinforce each other.
 
 ## Remit — orchestrator is the sole writer (D6a)
 
@@ -94,6 +124,10 @@ everything a worker needs into its spawn prompt:
 - **mandatory verify command** — the project's green-gate (doctrine is a framework;
   never assume `just check` — pass the project's command explicitly);
 - **the self-arm mandate** — the worker's first act is `export DOCTRINE_WORKER=1`.
+- **the escalation contract** — on an architectural fork, or a task it cannot complete
+  cleanly within its declared files, the worker **stops and reports** rather than
+  improvising design or straying outside its file set. It has no governance read, so
+  the decision comes **up to you** — you `/consult` it, never the worker.
 
 **`DOCTRINE_WORKER=1` is a self-armed prompt contract that fails OPEN (C-I).** The
 `Agent` tool exposes **no env seam**, so you cannot set the var in the worker's spawn
@@ -185,7 +219,8 @@ crash — recover the same way.
 |---|---|
 | No phase parallelizes | **Serial — one worker per phase, batch of one, same funnel.** The norm, not a fallback; never bail to inline |
 | Drive the slice | Loop: `/phase-plan` next unit → spawn worker(s) → funnel → repeat from new HEAD until done |
-| Approaching context budget (~200k) | Stop at a **committed** batch boundary → `/handover`; fresh orchestrator resumes from the branch |
+| Handover cadence (quality gate) | Hand over **early**, at a **committed** boundary, on `handover_after` batches (def 5) **or** `handover_delta` cumulative `B..S` lines (def 2000), whichever first — stay out of the dumb zone |
+| Worker reports a fork / can't finish clean | It halted by contract → **you `/consult`** the decision; never auto-adapt plan or design to push the drive forward |
 | Phase can't be delegated (spec / authoring) | Execute it inline yourself, then resume the loop; dispatch the delegable phases |
 | Spawn a worker | `Agent` at `isolation: worktree` running `/worktree mode=worker`; isolation mandatory |
 | Worker prompt | Pre-distilled: policy digest, design excerpts, memories, task spec + file set, verify cmd, `export DOCTRINE_WORKER=1` mandate |
@@ -209,6 +244,10 @@ crash — recover the same way.
 - Replay fork history (`cherry-pick`) instead of applying the **net diff `B..S`**.
 - Auto-merge or auto-resolve a conflict / moved HEAD / authored-tree touch — **report
   and halt**.
+- Auto-adapt the plan or design to keep the drive moving. An emergent
+  architecturally-significant decision is the **semantic** report-and-halt: `/consult`
+  it, never decide solo mid-drive. Unattended raises the stakes — nobody is watching,
+  and a wrong call lands as a commit and compounds across the next phases.
 - Record knowledge before the confirmed commit (it must trail the code).
 - Bail to serial **inline** execution because no phase parallelizes — serial still
   means spawn a worker in a worktree (batch of one). Inline is only for non-delegable
@@ -220,7 +259,10 @@ crash — recover the same way.
 
 **Always:**
 - Default to one worker per phase in its own worktree; parallelize only file-disjoint
-  phases. Drive the whole slice phase by phase, handing over at the context boundary.
+  phases. Drive the whole slice phase by phase, handing over **early on cadence** to
+  stay out of the dumb zone, and `/consult` emergent architectural forks.
+- Keep your own context lean (capped worker reports, stat-first diffs, verify tails)
+  so the handover cadence tracks a real budget.
 - Run as worker-mode OFF, the sole doctrine-mediated writer, on the coordination branch.
 - Pre-distill a self-contained prompt; workers never read boot/governance.
 - Keep concurrent batches file-disjoint; run shared-file tasks as separate serial batches.
