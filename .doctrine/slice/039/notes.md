@@ -5,6 +5,17 @@ under `.doctrine/state/` are `rm -rf`-able; what must survive lives here.
 
 ## PHASE-02 — pure cordage adapter (`src/backlog_order.rs`)
 
+> **SUPERSEDED 2026-06-11 by the design RE-LOCK (D10 reconcile, design.md §10).**
+> This section documents the FIRST shipping of PHASE-02 against the OLD vocab —
+> `depends_on`/`before`, the forward-pointing `before` edge (`A.before=[B]` ⇒
+> `A→B`, *not* flipped), and `EdgeAttrs(0,0)` on every edge. The re-locked design
+> renames to `needs`/`after`, flips `after` to point backward (`A.after=[{to=B}]`
+> ⇒ `B→A`, uniform with `needs`), and carries genuine `EdgeAttrs(rank, age)`
+> eviction on the soft overlay. The corrective PHASE-02 re-execution replaces the
+> direction/EdgeAttrs claims below; supersede this section then (not yet — no code
+> until the plan is re-approved). **The R-C null result at the foot of this
+> section still holds and is NOT superseded** — it feeds PHASE-04 / OQ-B.
+
 The vocabulary half of cordage: projects `OrderInput`, builds two overlays
 (`depends_on` Reject+Unbounded / `before` Evict+Unbounded) + one `OrderSpec`
 `[Along(dep), Along(before)]`, reads order + provenance back out as `ItemId` /

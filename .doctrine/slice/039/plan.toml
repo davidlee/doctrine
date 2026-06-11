@@ -21,30 +21,43 @@ dependencies = []
 # are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
 # reference forms): EN-1 entry, EX-1 exit, and verification by mode —
 # VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+#
+# NB (corrective re-execution, 2026-06-11). The design RE-LOCKED 2026-06-11
+# (design.md §10) reconciled the authored vocabulary to PRD-009 (D10):
+# `depends_on`→`needs`, `before`→`after`, plus the `triggers` rider field and the
+# genuine `(rank,age,src,dst)` eviction key (the retired A4 `(src,dst)`-under-zero
+# stand-in is gone). PHASE-01/02 shipped against the OLD vocab; their criteria
+# TEXT is corrected in-place under the SAME immutable ids (immutability binds the
+# id, not the prose), and they re-execute. This is MORE than a rename — it adds
+# real surface: `AfterEdge`/`Trigger` types, the `--rank` flag, real array-index
+# `age`, and genuine layer-precedence eviction. Do not read it as a mechanical sed.
 
 [[phase]]
 id        = "PHASE-01"
-name      = "Data model — two item→item edges + the cordage path dep"
+name      = "Data model — two item→item edges + the triggers rider + the cordage path dep"
 objective = """
 Lay the foundation: add the doctrine→cordage path dependency (the first ADR-001 \
 layering edge; cordage gains its first dependent) and extend the backlog model \
-with two authored, outbound-only (ADR-004) item→item relations — `depends_on` \
-(hard prerequisite) and `before` (soft manual-sequence) — seeded `[]` in both \
-templates and rendered by `show`. No ordering, no cordage call yet — this phase \
-only widens the schema and wires the dep so PHASE-02 can consume cordage."""
+with the PRD-009 authored vocabulary — two outbound-only (ADR-004) item→item \
+relations, `needs` (hard prerequisite, payload-free id list) and `after` (soft \
+manual-sequence, `[{to, rank}]` pointing backward at predecessors) — plus the \
+`triggers` rider field (`[{globs, note}]`, FIELD ONLY; the IMP-026 mask is out of \
+scope). All three seeded `[]` in both templates and rendered by `show`. No \
+ordering, no cordage call yet — this phase only widens the schema and wires the \
+dep so PHASE-02 can consume cordage."""
 entrance_criteria = [
-  { id = "EN-1", text = "design.md LOCKED (a473f9f); slice scope §1 / Affected surface authoritative" },
+  { id = "EN-1", text = "design.md RE-LOCKED 2026-06-11 (§10; round-3 inquisition survived, commit ad6c4f5); slice scope §1 / Affected surface authoritative" },
   { id = "EN-2", text = "no .doctrine/state/slice/039 phase state yet; plan approved" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "`Relationships` carries `depends_on: Vec<String>` and `before: Vec<String>`, both `#[serde(default)]`; reciprocity stays derived, never stored (ADR-004)" },
-  { id = "EX-2", text = "both backlog templates seed `depends_on = []` and `before = []` under `[relationships]`" },
-  { id = "EX-3", text = "`show` renders the two outbound axes alongside slices/specs/drift; `list` and its goldens untouched" },
+  { id = "EX-1", text = "`Relationships` carries `needs: Vec<String>`, `after: Vec<AfterEdge>` (AfterEdge { to: String, rank: i32 default 0 }), and `triggers: Vec<Trigger>` (Trigger { globs: Vec<String>, note: String default \"\" }), all `#[serde(default)]`; reciprocity stays derived, never stored (ADR-004)" },
+  { id = "EX-2", text = "both backlog templates seed `needs = []`, `after = []`, and `triggers = []` under `[relationships]`" },
+  { id = "EX-3", text = "`show` renders all three new outbound axes (needs/after/triggers) alongside slices/specs/drift; `list` and its goldens untouched" },
   { id = "EX-4", text = "root Cargo.toml gains `cordage = { path = \"crates/cordage\" }`; cordage builds as a dependent" },
   { id = "EX-5", text = "`just check` green (zero clippy warnings); `cargo clippy -p doctrine`, never --all-targets" },
 ]
 verification = [
-  { id = "VT-1", expects = "both templates seed depends_on=[]/before=[]; a virgin item round-trips through validate; show renders both axes when populated (design §8 VT-1)" },
+  { id = "VT-1", expects = "both templates seed needs=[]/after=[]/triggers=[]; a virgin item round-trips through validate; an `after` entry round-trips { to, rank } (rank optional→0) and a `triggers` entry round-trips { globs, note } (note optional→\"\"); show renders all three axes when populated (design §8 VT-1)" },
 ]
 specs        = []
 requirements = []
@@ -55,32 +68,34 @@ name      = "Pure cordage adapter — src/backlog_order.rs"
 objective = """
 Build the vocabulary layer that lets cordage do the ordering. New module \
 `src/backlog_order.rs`: the `ItemId` newtype and `OrderInput` projection (incl. \
-the derived `exposure` = likelihood×impact, baseline otherwise); `BacklogOrder` \
-owning the Graph, the ItemId↔NodeId bimap, and the two NAMED overlay handles \
-(`depends_on_overlay`/`before_overlay`, not a positional pair — §5.4/E4). Build \
-two overlays (`depends_on` Reject+Unbounded, `before` Evict+Unbounded) + one \
-`OrderSpec = [Along(depends_on), Along(before)]`; allocate nodes in \
-`(exposure desc, created, canonical-id)` order so the NodeId fallback carries \
-tiers 2–3; each NodeId captured from `builder.node()`, never constructed. Expose \
-`ordered()`, `dep_cycles()`, `overrides()`. The adapter performs NO sort — \
+the derived `exposure` = likelihood×impact, baseline otherwise; `after` projected \
+as `Vec<(ItemId, rank)>`); `BacklogOrder` owning the Graph, the ItemId↔NodeId \
+bimap, and the two NAMED overlay handles (`needs_overlay`/`after_overlay`, not a \
+positional pair — §5.4/E4). Build two overlays (`needs` Reject+Unbounded, `after` \
+Evict+Unbounded) + one `OrderSpec = [Along(needs), Along(after)]`; allocate nodes \
+in `(exposure desc, created, canonical-id)` order so the NodeId fallback carries \
+tiers 2–3; each NodeId captured from `builder.node()`, never constructed. `needs` \
+edges carry `EdgeAttrs::new(0,0)`; `after` edges carry `EdgeAttrs::new(rank, age)` \
+(age = the edge's index in the item's `after` array — the genuine eviction key). \
+Expose `ordered()`, `dep_cycles()`, `overrides()`. The adapter performs NO sort — \
 cordage composes (I1). Pure over OrderInput, disk-free, unit-tested."""
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-01 complete: cordage path dep available, model carries depends_on/before" },
+  { id = "EN-1", text = "PHASE-01 complete: cordage path dep available, model carries needs/after/triggers" },
   { id = "EN-2", text = "consume cordage as-is — no crates/cordage/** edit (leaf invariant, ADR-001)" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "BacklogOrder::build ingests &[OrderInput], mints both overlays once + the 2-layer OrderSpec, allocates nodes in (exposure desc, created, id) order with NodeIds captured from builder.node()" },
-  { id = "EX-2", text = "ordered() maps each NodeId back through the bimap; the authored `A.depends_on=[B]` flip stored as cordage edge B→A; every layer Along (uniform src-before-dst)" },
-  { id = "EX-3", text = "dep_cycles() surfaces the depends_on overlay's CycleDiagnostics as ItemIds; overrides() surfaces evicted `before` edges + build-time dangling drops as (from,to,reason)" },
-  { id = "EX-4", text = "no NodeId/OverlayId appears in any adapter pub(crate) signature (the bounded R-C claim); EdgeAttrs::new(0,0) on every edge (durability unused)" },
+  { id = "EX-1", text = "BacklogOrder::build ingests &[OrderInput], mints both overlays once + the 2-layer OrderSpec [Along(needs), Along(after)], allocates nodes in (exposure desc, created, id) order with NodeIds captured from builder.node()" },
+  { id = "EX-2", text = "ordered() maps each NodeId back through the bimap; the authored `A.needs=[B]` flip stored as cordage edge B→A, and `A.after=[{to=B}]` flip stored as B→A; every layer Along (uniform src-before-dst)" },
+  { id = "EX-3", text = "dep_cycles() surfaces the `needs` overlay's CycleDiagnostics as ItemIds; overrides() surfaces evicted `after` edges + build-time dangling drops as (from,to,reason)" },
+  { id = "EX-4", text = "no NodeId/OverlayId appears in any adapter pub(crate) signature (the bounded R-C claim); `needs` edges carry EdgeAttrs::new(0,0), `after` edges carry EdgeAttrs::new(rank, age) where age = the edge's index in the item's `after` array — the genuine (rank,age,src,dst) eviction key, not the retired A4 (0,0) stand-in" },
   { id = "EX-5", text = "`just check` green; cordage-side lint bans honoured (BTree not Hash, .get(range) not index, try_from not as, #[expect(reason=…)] not allow)" },
 ]
 verification = [
-  { id = "VT-2",  expects = "A.depends_on=[B] ⇒ B before A in ordered() — the flip + Along (design §8 VT-2)" },
-  { id = "VT-3",  expects = "a depends_on overrides a contradicting before (the before edge in overrides()); before orders two otherwise-unordered items; equal-level pair falls to (exposure, creation) (VT-3)" },
+  { id = "VT-2",  expects = "A.needs=[B] ⇒ B before A in ordered() — the flip + Along (design §8 VT-2)" },
+  { id = "VT-3",  expects = "a `needs` overrides a contradicting `after` (the `after` edge in overrides()); `after` orders two otherwise-unordered items; equal-level pair falls to (exposure, creation) (VT-3)" },
   { id = "VT-4",  expects = "high-exposure risk precedes a baseline item at the SAME composed level; an independent baseline item is NOT buried behind a deeply-blocked high-exposure item (the §10 A1 regression); unassessed risk + non-risk both = baseline (VT-4)" },
   { id = "VT-8",  expects = "build twice incl. input permutation → byte-identical order + overrides; allocation order (exposure, created, id) (VT-8)" },
-  { id = "VT-10", expects = "a public-surface audit (test/doc) asserts no NodeId/OverlayId in any adapter pub(crate) signature — callers cannot pass a raw cordage id (the bounded claim, VT-10)" },
+  { id = "VT-10", expects = "a public-surface audit (test/doc) asserts no NodeId/OverlayId in any adapter pub(crate) signature — adapter callers cannot pass a raw cordage id (the bounded claim; cordage's own tokens stay pub, §10 E4/In-I) (VT-10)" },
 ]
 specs        = []
 requirements = []
@@ -89,31 +104,32 @@ requirements = []
 id        = "PHASE-03"
 name      = "CLI surface — set verbs + ordered render"
 objective = """
-Wire the adapter to real items. Two set verbs — `backlog depends-on <ITEM> \
-<PREREQ>…` and `backlog before <ITEM> <SUCCESSOR>…` — append to the authored \
-edges edit-in-place (the `set_backlog_status` toml_edit precedent), validating \
-each ref exists; `depends-on` additionally builds the dep graph incl. the new \
-edge and REFUSES on a cycle (naming members; nothing written), `before` never \
-rejects (soft). The new `backlog order [filters]` view reads non-terminal items, \
-projects them, builds the adapter, prints the composed order (reusing the `list` \
-column model) followed by an overrides block; a dependency cycle is a hard error \
-(stderr, non-zero exit) naming the members. Terminal/absent endpoints are \
-dropped + recorded with the endpoint's status AND resolution named (§5.6/E1 \
-honest-record, OQ-D D-min). `list` and its goldens stay untouched."""
+Wire the adapter to real items. Two set verbs — `backlog needs <ITEM> <PREREQ>…` \
+and `backlog after <ITEM> <TO> [--rank N]` (per-edge `rank`, optional default 0; \
+single `to` per invocation — OQ-C settled) — append to the authored edges \
+edit-in-place (the `set_backlog_status` toml_edit precedent), validating each ref \
+exists; `needs` additionally builds the dep graph incl. the new edge and REFUSES \
+on a cycle (naming members; nothing written), `after` never rejects (soft). The \
+new `backlog order [filters]` view reads non-terminal items, projects them, builds \
+the adapter, prints the composed order (reusing the `list` column model) followed \
+by an overrides block; a dependency cycle is a hard error (stderr, non-zero exit) \
+naming the members. Terminal/absent endpoints are dropped + recorded with the \
+endpoint's status AND resolution named (§5.6/E1 honest-record, OQ-D D-min). `list` \
+and its goldens stay untouched."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-02 complete: BacklogOrder (ordered/dep_cycles/overrides) available" },
   { id = "EN-2", text = "the order verb is the thin impure shell (read items → adapter → print); pure/imperative split held" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "`backlog depends-on` appends prereqs, validates refs, refuses a closing cycle naming members (nothing written); reuses dep_cycles" },
-  { id = "EX-2", text = "`backlog before` appends, validates refs, never rejects a cycle (surfaced at order time)" },
+  { id = "EX-1", text = "`backlog needs` appends prereqs, validates refs, refuses a closing cycle naming members (nothing written); reuses dep_cycles" },
+  { id = "EX-2", text = "`backlog after` appends one { to, rank } edge (rank optional, default 0), validates `to` exists, never rejects a cycle (surfaced at order time)" },
   { id = "EX-3", text = "`backlog order` prints the composed order + overrides block; a dep cycle exits non-zero on stderr naming members, no misleading order printed" },
   { id = "EX-4", text = "terminal/absent endpoints dropped + recorded loudly with status + resolution named (never silently claimed satisfied); node set = non-terminal across all five kinds, cross-kind deps allowed" },
   { id = "EX-5", text = "`backlog list` output + its black-box goldens unchanged; `just check` green" },
 ]
 verification = [
-  { id = "VT-5", expects = "A→B→A ⇒ dep_cycles() names {A,B}; `order` exits non-zero; the set verb refuses the closing edge (design §8 VT-5)" },
-  { id = "VT-6", expects = "before X↔Y ⇒ min-(src,dst) edge evicted, order still printed, eviction in overrides() (VT-6)" },
+  { id = "VT-5", expects = "A.needs=[B], B.needs=[A] ⇒ dep_cycles() names {A,B}; `order` exits non-zero; the `needs` set verb refuses the closing edge (design §8 VT-5)" },
+  { id = "VT-6", expects = "`after` X↔Y ⇒ globally-minimal (rank,age,src,dst) edge evicted (a strictly lower-`rank` edge in the cycle is the one dropped — distinguishes the genuine key from the retired A4 (src,dst) stand-in), order still printed, eviction in overrides() (VT-6)" },
   { id = "VT-7", expects = "terminal/absent endpoint dropped + recorded with status+resolution; node set is non-terminal, cross-kind (VT-7)" },
 ]
 specs        = []
