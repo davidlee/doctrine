@@ -11,11 +11,13 @@ reconciled requirement/spec truth through one writer, and gate closure on cohere
 
 The hard line stays: observed evidence and authored truth never touch through a
 function (`REQ-105`/NF-001). Slice B is where authored truth is finally *written* —
-so it is the slice that must prove the no-derivation invariant structurally at the
-seam where coverage is read and status is written (the reconcile writer authors an
-explicit value; it never computes status from coverage). That structural proof —
-the coverage→status-writer import-edge enforcement — is the load-bearing test
-(IMP-030).
+so it is the slice that must prove the no-derivation invariant at the seam where
+coverage is read and status is written (the reconcile writer authors an explicit
+`--to` value; it never computes status from coverage). The proof is **behavioural,
+not an import ban** — the writer legitimately imports `coverage` to read `drift` for
+prompting; the load-bearing test (IMP-030) is that the written status equals the
+operator's `--to` across every `drift` `Verdict`, plus a no-launder guard (design
+§5.6, D-B7).
 
 Foundations already ship: SL-042's coverage store + drift surfacer (the reads this
 writer consumes), the ADR-009 slice FSM (`slice status`, the F12 closure seam, and
@@ -82,26 +84,33 @@ exactly one REC per reconciliation act and closure refusing unreconciled drift.
   **revise** (write corrected spec truth), or **redesign** (escalate
   `reconcile → design` via `slice status`, ADR-009 — **no** instance write). Emits
   **exactly one REC per requirement** (D-B8 — forced by the single `move` field;
-  composed atomically). The writer authors status values explicitly; NF-001 holds
-  **type-level** — the writer *does* import `coverage` (to read `drift` for
-  prompting), but `coverage` exposes no `ReqStatus`, so a derived status cannot
-  compile (D-B7; a compile-fail VT proves it, IMP-030). Every act is committed +
-  REC-cited so it is reconstructable from the authored tier alone (NF-003).
+  composed atomically). The writer authors status values explicitly; NF-001 holds by
+  **tested behaviour** — the writer *does* import `coverage` (to read `drift` for
+  prompting), so no type-level proof exists; instead a verdict-independence VT pins
+  the written status to the operator's `--to` across every `Verdict`, with a
+  no-launder guard (D-B7, IMP-030). Every act is committed + REC-cited so it is
+  reconstructable from the authored tier alone (NF-003).
 - **B·P3 — Closure gate predicate** (D8, FR-006/REQ-113, H5). A predicate on the
-  existing `slice status reconcile → done` edge: default-**refuse** while owning
-  specs carry residual unreconciled drift (corpus scan over SL-042's drift read,
-  SL-040 #3/#6 pattern — no reverse index). The only admitted override is a
-  **recorded reconciliation act** — a REC recording accepted residual drift with
-  rationale — so closed-with-*unreconciled*-drift is unrepresentable. The
+  existing `slice status reconcile → done` edge: default-**refuse** while any req in
+  the slice's **gate set** — `covered ∪ declared ∪ reconciled` (D-B5: coverage
+  entries ∪ an authored `[gate] extra_reqs` in `slice-044.toml` ∪ every req a REC
+  `owning_slice==S` names) — carries residual unreconciled drift (corpus scan over
+  SL-042's drift read, SL-040 #3/#6 pattern — no reverse index). The only admitted
+  override is a **recorded reconciliation act** — an `owning_slice`-scoped `accept`
+  REC affirming the req at its current status with evidence covering the residual
+  drift — so closed-with-*unreconciled*-drift is unrepresentable. The
   `done`-only-from-`reconcile` topology edge stays ADR-009 F12 hard, independent of
   the drift check, and composes with (does not replace) the existing D-C9b
   RV-blocker close-gate on the same seam.
 
 **Closure intent.** Reconciliation produces **exactly one REC per act**, diffable
 and reconstructable from the authored tier alone (NF-003 — no recourse to chat or
-runtime state). Closure **refuses** unreconciled drift unless an override REC is
-present. The NF-001 acceptance proof is **structural** at the write seam: no
-function maps coverage → authored status; the import edge is absent by test.
+runtime state). Closure **refuses** unreconciled drift unless an `owning_slice`-scoped
+`accept` REC affirms the req at its current value with evidence covering the residual
+drift. The NF-001 acceptance proof is **behavioural** at the write seam: the written
+status tracks the operator's `--to`, never the `drift` `Verdict` (verdict-independence
+VT + no-launder guard) — the import edge is *present and legitimate*, the derivation
+is what's forbidden.
 
 ## Non-Goals
 
@@ -138,8 +147,9 @@ writer (accept/revise/redesign → exactly one REC per requirement), and the clo
 gate
 (default-refuse residual drift, override only via a recorded REC). The NF-001
 no-derivation line — built into SL-042 by *absence* of a write path — is proven here
-by a structural import-edge test at the one seam that reads coverage and writes
-status. Depends on SL-042. Resolves IMP-030.
+**behaviourally**: the writer reads coverage yet its written status tracks the
+operator's `--to`, never the `drift` `Verdict` (verdict-independence VT + no-launder
+guard). Depends on SL-042. Resolves IMP-030.
 
 ## Follow-Ups
 
