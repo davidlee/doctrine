@@ -97,3 +97,31 @@ The vocabulary half of cordage: projects `OrderInput`, builds two overlays
 
 Surface widenings in `backlog.rs`: `ItemKind::canonical_id` and `ItemKind::prefix`
 → `pub(crate)` (single-source reuse by `ItemId`, not a copy) — landed PHASE-01.
+
+## PHASE-04 — leaf invariant pinned + R-C interface budget CLOSED (null)
+
+Verify + harvest phase, zero production code. The cordage reserved budget is
+closed, not dangling.
+
+- **VT-9 leaf invariant — HELD end-to-end.** Of the five SL-039 commits
+  (`41a0279`, `8305613`, `729529c`, `7af085e`, `12fb716`), **zero** touch
+  `crates/cordage/**` (`git show --stat <c> -- crates/cordage/` → 0 files each;
+  last cordage touch was SL-036/SL-038). `cargo tree -p cordage` → `cordage
+  v0.1.0` alone at root, no doctrine in its subtree — cordage stayed a
+  dependency-free pure leaf. The one `src/backlog_order.rs` delta this slice
+  (`12fb716`, 17 lines) was removal of the now-unfulfilled self-clearing
+  `#![cfg_attr(not(test), expect(dead_code))]` — that file is the **adapter** in
+  the doctrine crate, NOT the cordage leaf. EX-1 holds.
+- **VT-10 token-absence audit still green** (`no_pub_crate_signature_leaks_a_
+  cordage_id`, a PHASE-02 deliverable, not re-authored): no `pub(crate)` signature
+  leaks an opaque cordage id. Opaque ids never escape the adapter (§10 E4).
+- **R-C interface finding (OQ-B / objective 5) — NULL result, budget CLOSED.**
+  First real consumer (PHASE-03's CLI `backlog needs`/`after`/`order` + `project`)
+  drove the **entire** cordage public surface — `GraphBuilder`/`Graph`/`OrderSpec`/
+  `OverlayConfig`/`EdgeAttrs`/`EvictReason`/`CyclePolicy`/`Direction`/`Arity`/
+  `OrderLayer`/`NodeId`/`OverlayId` plus the provenance cycles/evictions and the
+  genuine `(rank, age, src, dst)` eviction key — with **zero cordage API change**
+  (EN-2 held all three phases). No bend was needed; no latent ergonomic friction
+  the shell silently absorbed. The budget reserved to discover a real-use API bend
+  is spent and returned empty. Recorded durably as
+  `mem.system.engine.cordage-rc-budget-closed-null`.

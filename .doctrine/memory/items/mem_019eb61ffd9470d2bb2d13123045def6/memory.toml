@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb61ffd9470d2bb2d13123045def6"
+memory_key = "mem.system.engine.cordage-rc-budget-closed-null"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "cordage R-C interface budget closed (null result, no bend needed)"
+summary = "SL-039 R-C budget closed NULL — cordage's full public surface drove a real consumer with zero API bend"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = ["src/backlog_order.rs"]
+globs = ["crates/cordage/**"]
+commands = []
+tags = ["cordage", "sl-039"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "670cb57463a6753e457dbec0a1d60f6f6564d704"
+ref_name = "refs/heads/main"
+checkout_state_id = "dd27e4756e95851d9a6d95d31b8aae0a29cb92a22a36060f58de5061348d7f20"
+base_commit = "12fb71689a3e133f320916b09180018550a1c1ae"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
