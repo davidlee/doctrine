@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb8c8483f7b538e7d30daaf9c1999"
+memory_key = "mem.signpost.spec-002.slice-roadmap"
+schema_version = 1
+memory_type = "signpost"
+status = "active"
+title = "SPEC-002 Reconciliation Engine slice roadmap (A→B)"
+summary = "SPEC-002 decomposes into SL-042 (observe substrate, done) + SL-044 (reconcile writer + closure gate); NF-001/NF-003 proven across both"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["reconciliation", "spec-002", "roadmap"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "12ba65627af06e4bc1687fb0d3cd04db087c7a1e"
+ref_name = "refs/heads/main"
+checkout_state_id = "fca0ad20a570137483555691247afd8fa7c7eecdb889ca3806dc2f3edaefb09e"
+base_commit = "815c1cacca313a90f875dba5876171678cd84c65"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
