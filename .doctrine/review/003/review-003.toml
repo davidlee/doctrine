@@ -1,0 +1,52 @@
+id    = 3
+slug  = "reconciliation-review-of-sl-042"
+title = "reconciliation review of SL-042"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-042"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "EX-2 (P2): CoverageStatus not 'genuinely used in non-test build' within SL-042"
+detail = "Plan PHASE-02 EX-2 / design §8 R-b assume P2 (the store) makes CoverageStatus genuinely used so the not(test) expect(dead_code) can be removed. Reality: P2 is the store; no bins/lib consumer exists until the Slice-B reader. requirement.rs's suppression WAS removed as planned, but the whole coverage leaf + scan shell remain dead in the clippy(bins/lib) build, so self-clearing module-level not(test) expect(dead_code) was ADDED to coverage.rs:32 and coverage_scan.rs:23, plus an item-level one on git::head_sha (git.rs:933). Gate is clean. EX-2's 'genuinely used in the non-test build' therefore lands at the Slice-B consumer, not P2. Designed deferral, not drift."
+disposition = "follow-up"
+response = "Confirmed designed deferral, not drift. The plan EX-2 / design §8 R-b premise (P2 is the consumer) was optimistic — P2 is the store. The suppression strategy is correct: requirement.rs's expect was removed; module-level self-clearing not(test) expect(dead_code) carries on coverage.rs/coverage_scan.rs + item-level on git::head_sha, and self-retires when a bins/lib consumer references the leaf. That consumer is the Slice-B reader, captured as IMP-030 (which explicitly notes these suppressions retire there). Gate is clean. EX-2's 'genuinely used' lands at IMP-030."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "REQ-114/NF-001 verified structurally, not by a test-of-absence (by design)"
+detail = "Design §5.5 INV-1 / §9 / F4 / codex X-3 establish NF-001 as a universal negative unprovable by a unit test. SL-042 holds it architecturally: drift() returns Verdict (coverage.rs:249, test drift_returns_verdict_not_reqstatus :688); the two SL-028 enums never reference each other (requirement.rs:84-88, grep-checkable); coverage and authored status occupy distinct stores. The coverage->status-writer import-edge guard (INV-1 clause a) is vacuously satisfied — no writer exists in SL-042 — so its load-bearing enforcement lands with the Slice-B writer. Verification matches the design's deliberate framing; no test-of-absence was promised post-X-3."
+disposition = "aligned"
+response = "Verification matches the design's deliberate framing. Post-codex-X-3 the design (§5.5 INV-1, §9, F4) explicitly reframes NF-001 from a test-of-absence to a structural guard: the checkable obligations are all green — drift() returns Verdict (type-level), the two SL-028 enums never reference each other (grep/compile), coverage and authored status in distinct stores. The import-edge clause is vacuous in SL-042 (no writer) and its load-bearing enforcement is owned by Slice B / IMP-030. No follow-up needed in SL-042."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "EX-5 (P3): perf-spike backlog triggers recorded but unfired"
+detail = "EX-5 requires the cliff located per axis and the matching backlog trigger conditions recorded. Done: (a) scan fan-in ~0.039 ms/file, linear, NO cliff at N=2000; (b) staleness resolution ~4.09 ms/call subprocess-dominated, linear. Two conditioned triggers recorded in notes.md: reverse-index (requirement->entries) on a future scan-axis cliff; batch staleness resolution (single rev-list / memoize per anchor) on a staleness-axis cliff. Neither fired — no cliff at measured scale and no consumer (reader is Slice B). Per defer-needs-backlog the conditioned triggers must be captured in backlog before close."
+disposition = "follow-up"
+response = "EX-5 is met: the cliff was located per axis (scan fan-in linear, no cliff at 2000; staleness ~4.09ms/call, dominant) and the two conditioned triggers are recorded. They are correctly unfired — no cliff at measured scale and no consumer yet. Captured as RSK-006 (holds the measurements + trigger conditions), to be revisited when IMP-030 wires the reader. defer-needs-backlog satisfied."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Slice-B dependent (reconcile writer + closure gate + NF-001 import-edge enforcement) not yet captured in backlog"
+detail = "Design §3/§4/§5.5 defer the reconcile writer, the requirement-status/spec-truth write seam, the closure gate, and the load-bearing NF-001 coverage->status-writer import-edge guard to a dependent 'Slice B'. This observe substrate establishes only the structural preconditions. backlog list shows no captured item for Slice B, nor for the EX-2 dead-code consumer / EX-5 perf triggers that resolve at it. defer-needs-backlog: deferred-but-needed-later work must be captured in a slice or backlog before close."
+disposition = "follow-up"
+response = "Captured. The Slice-B dependent (reconcile writer + closure gate + load-bearing NF-001 import-edge enforcement) is now IMP-030; the conditioned perf triggers are RSK-006. Both cite their SL-042 origin. The two SL-042 deferrals that resolve at the consumer (EX-2 dead-code F-1, perf F-3) are linked into IMP-030. defer-needs-backlog satisfied before close."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
