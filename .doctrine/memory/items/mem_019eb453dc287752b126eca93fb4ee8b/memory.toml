@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb453dc287752b126eca93fb4ee8b"
+memory_key = "mem.pattern.testing.debug-vs-release-scale-timing"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Debug-build scale timings run ~10x the release probe numbers; cliff-test bounds must budget for debug"
+summary = "cordage scale cliffs in debug are ~10x slower than release; the deleted probe's numbers were release — size red N pairs + loose bounds for the debug cargo test gate"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = ["crates/cordage"]
+globs = []
+commands = []
+tags = ["cordage", "scale", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "03aa60da9f424968a9cb9d604ad35673e6087916"
+ref_name = "refs/heads/main"
+checkout_state_id = "7790adfd4c6b734600f0ca6919906d2601fc759bbdce1861ec5acb34fc8ea595"
+base_commit = "fd430ace2bb69df7af240be0fb169179c9f16413"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
