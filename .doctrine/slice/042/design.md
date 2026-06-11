@@ -16,7 +16,9 @@ Scope = four phases: **P1** REC record kind · **P2** coverage substrate · **P3
 composite view + drift surfacer · **P4** VH/VA staleness decay. Realises
 REQ-108/109/110/111 (FR) and REQ-114/115 (NF-001/NF-002). The reconcile *writer*,
 the requirement-status/spec-truth write seam, and the closure gate are the
-dependent **Slice B**, deliberately excluded (§3).
+dependent **Slice B**, deliberately excluded (§3). `REQ-105` (author requirement
+truth only explicitly) is the writer's dual — realised by Slice B, not here; SL-042
+owns only the `REQ-114` no-derivation negative.
 
 ## 2. Current State
 
@@ -60,9 +62,12 @@ Nothing today stores coverage, emits a REC, or surfaces drift.
 ## 4. Guiding Principles
 
 - **Surface, never resolve.** This slice only *stores evidence* and *derives
-  reads*. It has **no write path** to authored requirement or spec truth — that is
-  the structural proof of NF-001 in SL-042, and the reason the reconcile writer is
-  Slice B.
+  reads*. It has **no write path** to authored requirement or spec truth — that
+  establishes the structural **preconditions** for NF-001 (a `Verdict` return type
+  that cannot carry a status write; coverage and authored status in distinct
+  stores) and is the reason the reconcile writer is Slice B. The active import-edge
+  guard (no edge coverage→status-writer) can only bite once a writer exists, so its
+  load-bearing enforcement lands with Slice B (§5.5 INV-1).
 - **Conservative derivation.** Derived reads refuse to silently call ambiguous
   cases coherent (§5.2 coherence predicate); ambiguity is surfaced for judgement.
 - **Correctness is recomputation.** No composite/drift value is stored; any cache
@@ -99,9 +104,14 @@ outbound-only grain. Scan cost is bounded by a perf spike (§9), not assumed.
 
 Two pure folds in `coverage.rs` (signatures illustrative; CLI shapes settle at
 build per SPEC-002 D9). **Staleness is resolved in the shell, not the fold** (F1):
-freshness requires comparing `git_anchor` to HEAD — a git read — so the impure
-shell resolves a per-entry `is_stale` via the `src/git.rs` seam and passes it in;
-the folds stay pure over `(entry, is_stale)` pairs.
+freshness compares each entry's `git_anchor` against the current HEAD — a git read
+— so the impure shell resolves a per-entry `IsStale` via the `src/git.rs` seam and
+passes it in; the folds stay pure over `(entry, is_stale)` pairs. The seam is
+`git::commits_touching(root, touched_paths, since=git_anchor, target=head_sha)`
+(`Some(0)⇒fresh, Some(≥1)⇒stale, None⇒undecidable`); it **refuses the literal
+`HEAD`** (`src/git.rs:901` — "this seam does not resolve HEAD"), so the shell
+resolves `HEAD → frozen SHA` **once per query** before the scan and feeds that SHA
+as `target`.
 
 ```text
 # pure leaf (no git/disk/clock):
@@ -116,25 +126,44 @@ drift(authored: ReqStatus, composite: &Composite) -> Verdict
 
 # impure shell (engine/command layer):
 scan_coverage(req) -> Vec<(CoverageEntry, IsStale)>
-    corpus-scan .doctrine/slice/*/coverage.toml, filter by req, resolve each
-    entry's staleness via git.rs. The ONLY git/disk in the data flow.
+    corpus-scan .doctrine/slice/*/coverage.toml, filter by req, resolve HEAD→SHA
+    once, then resolve each entry's staleness via git::commits_touching. The ONLY
+    git/disk in the data flow.
 ```
 
 **The v1 coherence predicate** (deliberately conservative — not a precedence
-engine; honours the OQ-3 deferral while giving FR-004 its verdict):
+engine; honours the OQ-3 deferral while giving REQ-111 (FR-004) its verdict).
+**Total over the full `ReqStatus` × composite domain** — every cell resolves to
+exactly one verdict (no contradiction, no fall-through). Two status classes:
 
-- **Coherent** — only unambiguous alignment: authored `Active` ↔ a fresh
-  `Verified` with no `Failed`; authored `Pending`/`InProgress` ↔ observed
-  `Planned`/`InProgress` (forward intent — PRD-013 "not drift when grounded").
-- **Divergent(reason)** — unambiguous contradiction: any `Failed`/`Blocked` under
-  an in-force authored status; an in-force authored status with zero confirming
-  evidence.
-- **Indeterminate** — everything else, incl. a **stale** `Verified` (NF-002 —
-  flagged, never auto-demoted): surfaced for the writer to judge.
+- **In-force** = `{Pending, InProgress, Active, Deprecated}` — asserts a live
+  obligation, so coverage can confirm or contradict it.
+- **Withdrawn** = `{Retired, Superseded}` — no live claim; coverage is historical.
+
+- **Coherent** —
+  - any **withdrawn** authored status (no live claim to contradict); or
+  - `Active`/`Deprecated` with a **fresh** `Verified` and no `Failed`/`Blocked`; or
+  - `Pending`/`InProgress` with an **empty** composite or only `Planned`/
+    `InProgress` (forward intent — PRD-013 "not drift when grounded").
+- **Divergent(reason)** — an **in-force** authored status with any `Failed` or
+  `Blocked` (observed contradiction, or evidence unobtainable under a live
+  obligation). Reserved for *contradicting evidence* — never raised by mere
+  absence.
+- **Indeterminate** — every remaining in-force case, surfaced for the writer to
+  judge: `Active`/`Deprecated` with an **empty** composite (in-force but
+  unsubstantiated — absence of evidence is not contradiction), or with only a
+  **stale** `Verified` and no fresh confirmation (NF-002 — flagged, never
+  auto-demoted), or any mode/status mix lacking both a clean fresh `Verified` and
+  a clear `Failed`/`Blocked`.
 
 At the Slice-B closure gate, `{Divergent, Indeterminate}` both read as
-*unreconciled* — consistent with FR-004's binary (coherent vs drifted); the reason
-rides along. Collapsing `Indeterminate` via precedence is the OQ-3 follow-on.
+*unreconciled* — consistent with REQ-111 (FR-004)'s binary (coherent vs drifted);
+the reason rides along. Collapsing `Indeterminate` via precedence is the OQ-3
+follow-on. The zero-evidence cell is now single-valued — the prior "in-force +
+zero confirming evidence → Divergent" clause is **retired** (absence ≠
+contradiction): `Active`/`Deprecated`+empty → `Indeterminate`, `Pending`/
+`InProgress`+empty → `Coherent` — and withdrawn statuses no longer fall through to
+drift at the gate.
 
 ### 5.3 Data, State & Ownership
 
@@ -152,7 +181,12 @@ must admit an empty delta list.
 CoverageStatus` (the SL-028 enum, reused), `git_anchor`, `attested_date?` (VH/VA
 only). Stored **slice-side** so several changes touching one requirement compose
 with **no clobber** (D3); stored in a file **distinct** from the requirement's
-authored status (NF-001).
+authored status (NF-001). `coverage.toml` lands in the **authored tier**:
+`.doctrine/slice/NNN/` is a committed tree whose `.gitignore` ignores only the
+disposable members (`handover.md`, the `phases` symlink), so a new top-level file
+is tracked by default — no manifest/negation row is needed (unlike `.doctrine/rec`,
+a new top-level kind). P2 confirms no ignore rule swallows it (Q1/D-Q1; the §9
+`check-ignore` VT proves it).
 
 `contributing_change` (F2): the **default and overwhelmingly common** value is the
 owning slice itself — the change that ran the verification owns the evidence. It is
@@ -194,15 +228,21 @@ reconciliation act (optionally a slice). The composite/drift views own *no* stat
   keep their "never reference each other" property; (d) coverage and authored
   status live in distinct files. The guard is a structural/review check (no import
   edge coverage→status-writer), reinforced by the type signature — not a test of
-  absence.
+  absence. In SL-042 the import-edge clause (a) is **vacuously satisfied** — no
+  status-writer exists yet — so its load-bearing enforcement lands with the Slice-B
+  writer it must wall off; what SL-042 genuinely holds *now* is (b) the `Verdict`
+  return type, (c) the two-enum non-reference, and (d) the distinct stores.
 - **INV-2 (D4).** No composite/drift value is persisted; correctness is
   recomputation.
 - **INV-3.** Coverage is authored/committed (Q1) — reconstructable from the
   authored tier alone, no recourse to disposable runtime state (NF-003 spirit).
-- **Edge cases.** Requirement with zero coverage entries → composite empty →
-  drift `Indeterminate` (not silently coherent). Conflicting entries across
-  changes (stale VH `Verified` vs fresh VT `Failed`) → `Indeterminate`/`Divergent`,
-  surfaced (OQ-3, not resolved). Evidence unobtainable → entry `Blocked`, surfaced.
+- **Edge cases** (all single-valued per §5.2). Empty composite: `Pending`/
+  `InProgress` → `Coherent` (forward intent); `Active`/`Deprecated` →
+  `Indeterminate` (in-force, unsubstantiated); withdrawn → `Coherent`. Conflicting
+  entries across changes (stale VH `Verified` vs fresh VT `Failed`) → `Divergent`
+  (the `Failed` dominates under an in-force status); a stale `Verified` with no
+  fresh confirmation and no `Failed` → `Indeterminate`. Evidence unobtainable →
+  entry `Blocked` → `Divergent` under an in-force status, surfaced.
 
 ## 6. Open Questions & Unknowns
 
@@ -235,8 +275,11 @@ reconciliation act (optionally a slice). The composite/drift views own *no* stat
 - **D-Q4 — coverage is a keyed table, not a numbered kind.** D3 keys by
   (requirement × contributing change); only REC gets numbered-kind wiring (one
   `KINDS` row, minimal SL-040 collision surface).
-- **D-Q5 — coherence predicate is conservative tri-state.** Gives FR-004 a verdict
-  without an OQ-3 precedence engine; refuses to silently call ambiguous coherent.
+- **D-Q5 — coherence predicate is a conservative, total tri-state.** Gives REQ-111
+  (FR-004) a verdict without an OQ-3 precedence engine; refuses to silently call
+  ambiguous coherent; resolves to exactly one verdict over the full `ReqStatus` ×
+  composite domain (in-force set defined; withdrawn → coherent; zero-evidence
+  single-valued).
 
 ## 8. Risks & Mitigations
 
@@ -258,6 +301,13 @@ reconciliation act (optionally a slice). The composite/drift views own *no* stat
   `(git_anchor, touched_paths)` granularity. **P4 first task = confirm the seam
   fits;** if a coverage anchor needs granularity the memory anchor lacks, **widen
   at the leaf, not fork** (SPEC-002 H1 challenge). A fork would be a parallel impl.
+  Inspection partly de-risks it: `git::commits_touching(root, paths, since, target)`
+  already takes exactly `(touched_paths, git_anchor, head_sha)` — the right
+  granularity. **Why `git.rs`, not `src/contentset.rs`** (SL-040's newer
+  content-hash staleness leaf, `is_stale_against`): coverage decay is *"code moved
+  past the anchor"* = commit reachability (D5/H1), not content-hash divergence — so
+  `git.rs` is the matching axis; the sibling leaf was weighed and is the wrong
+  model, not a missed reuse.
 
 ## 9. Quality Engineering & Validation
 
@@ -267,11 +317,18 @@ Per-requirement evidence (VT unless noted):
   owning_slice/decision_ref); `show`/`list` render; `NNN-slug` alias resolves;
   `validate` clean with the new `KINDS` row; id-stable after slice close.
 - **REQ-109** — write/read entries; **no-clobber** (two slices, same requirement,
-  neither overwrites); stored in a file distinct from requirement status.
+  neither overwrites); stored in a file distinct from requirement status; the
+  written `coverage.toml` is **git-tracked, not ignored** (`git check-ignore`
+  clean — D-Q1 authored-tier residency).
 - **REQ-110** — fold determinism (same entries → same view); **assert nothing
   persisted** (no stored composite scalar on disk).
-- **REQ-111** — the three verdict cases incl. FR-004 "matches → coherent";
-  **type-level**: `drift()` returns `Verdict`, no truth-write in its signature.
+- **REQ-111** — a **verdict-matrix VT** over the full `ReqStatus` (6) × composite
+  {empty, fresh-`Verified`, stale-`Verified`, `Failed`/`Blocked`, forward-only}
+  domain — every cell single-valued per §5.2 (in particular: withdrawn → coherent;
+  `Active`/`Deprecated`+empty → indeterminate; `Pending`+empty → coherent; the
+  retired zero-evidence Divergent clause has no surviving cell), incl. REQ-111
+  (FR-004) "matches → coherent". **Type-level**: `drift()` returns `Verdict`, no
+  truth-write in its signature.
 - **REQ-114 / NF-001** — **structural**: SL-028's "two enums never reference each
   other" preserved; `drift()` returns `Verdict` not `ReqStatus`; a guard test
   asserting no `f(coverage) → ReqStatus`.
@@ -322,6 +379,33 @@ editing `meta.rs`/`integrity.rs` now; sequencing + fallback in §8, but live
 merge-conflict risk is real and a coordination concern, not only a build-order
 one).
 
-### External pass
+### External pass — `/inquisition` (2026-06-11, `inquisition.md`)
 
-_Pending — `/inquisition` (handover prepared). No design lock until it clears._
+Seven charges; verdict **REMAND** (one mortal: the coherence predicate). All
+integrated above:
+
+- **C-I (ref form, fixed §5.2/§7/§9)** — `FR-004` rebound to its durable id
+  `REQ-111` (mobile membership-label heresy).
+- **C-II (mortal — predicate incoherence, fixed §5.2/§5.5)** — the predicate
+  contradicted itself on in-force × empty composite and leaned on an undefined
+  "in-force". Now **total + single-valued**: in-force set defined
+  `{Pending,InProgress,Active,Deprecated}`; the zero-evidence Divergent clause
+  retired; every `ReqStatus` × composite cell resolves once.
+- **C-III (predicate incompleteness, fixed §5.2/§5.5)** — withdrawn statuses
+  `{Retired,Superseded}` → `Coherent` (no live claim); empty `Pending`/
+  `InProgress` → `Coherent` (forward intent). Routine lifecycle states no longer
+  trapped as drift at the gate.
+- **C-IV (seam precision, fixed §5.2/§8 R-e)** — the seam refuses literal `HEAD`;
+  shell resolves `HEAD→SHA` once, then `commits_touching`. `git.rs` justified over
+  SL-040's `contentset.rs` content-hash leaf (commit-reachability is the right
+  axis; the sibling engine was weighed, not missed).
+- **C-V (overclaim, fixed §4/§5.5)** — NF-001 "structural proof" softened to
+  "preconditions"; the import-edge guard is vacuous here (no writer yet) and its
+  enforcement lands with Slice B.
+- **C-VI (fidelity, fixed §1)** — `REQ-105` (explicit authorship) located as Slice
+  B's; SL-042 owns only the `REQ-114` negative.
+- **C-VII (storage rule, fixed §5.3/§9)** — `coverage.toml` authored-tier residency
+  secured: gitignore posture stated, `check-ignore` VT added.
+
+Design clears the external pass with findings integrated. **Eligible for lock →
+`/plan`.**
