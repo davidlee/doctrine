@@ -22,10 +22,10 @@ cargo test -p cordage -- --ignored --nocapture --test-threads=1
 
 | Cliff | Risk | Class | Measured | Red test | Example probe |
 |---|---|---|---|---|---|
-| explain exponential | RSK-002 | exact `2^layers` | path count `== 1<<18` = **262_144** at L=18 (verified L=4→16, L=12→4096, no extrapolation) | `--exact explain_path_count_is_exponential` | `--cliff explain --layers 18` |
-| build overflow | RSK-003 (primary) | stack-depth crash | **`rc 134`** (SIGABRT, "stack overflow, aborting") at chain depth **80_000** | `--exact build_overflows_stack_on_deep_chain` | `--cliff overflow --n 80000` |
-| eviction quadratic | RSK-003 (secondary) | super-quadratic | ratio **18.7×** for 2× nodes, `dense_evict(50,50)` vs `(100,100)` (PHASE-01 pin 18.5×) | `--exact eviction_is_quadratic` | `--cliff quadratic --n {50,100}` |
-| evaluate quadratic | RSK-004 | clean quadratic O(V²) | ratio **4.3×** for 2× nodes, `deep_chain(2000)` vs `(4000)` (PHASE-01 pin 4.25×; ~4× = quadratic) | `--exact evaluate_is_quadratic` | `--cliff evaluate --n {2000,4000}` |
+| explain exponential | RSK-002 | exact `2^layers` | path count `== 1<<18` = **262_144** at L=18 (verified L=4→16, L=12→4096, no extrapolation) | `--exact explain_path_count_is_exponential_in_diamond_depth` | `--cliff explain --layers 18` |
+| build overflow | RSK-003 (primary) | stack-depth crash | **`rc 134`** (SIGABRT, "stack overflow, aborting") at chain depth **80_000** | `--exact deep_chain_overflows_inside_target_scale` | `--cliff overflow --n 80000` |
+| eviction quadratic | RSK-003 (secondary) | super-quadratic | ratio **~18.5–18.7×** (4× edges / 2× nodes), `dense_evict(50,50)` vs `(100,100)` (PHASE-01 pin 18.5×, PHASE-02 18.7×, audit re-run 18.5×) | `--exact eviction_fixpoint_scales_superlinearly` | `--cliff quadratic --n {50,100}` |
+| evaluate quadratic | RSK-004 | clean quadratic O(V²) | ratio **~4.2–4.3×** (2× nodes), `deep_chain(2000)` vs `(4000)` (PHASE-01 pin 4.25×, PHASE-02 4.3×, audit re-run 4.2×; ~4× = quadratic) | `--exact evaluate_scales_quadratically_in_node_count` | `--cliff evaluate --n {2000,4000}` |
 
 Per-cliff mechanism (source anchors carried from the slice scope):
 
