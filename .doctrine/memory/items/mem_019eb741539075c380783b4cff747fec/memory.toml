@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb741539075c380783b4cff747fec"
+memory_key = "mem.pattern.review.rv-verbs-refuse-on-worktree-fork"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "RV review verbs refuse on a worktree fork — drive the audit from the parent tree or merge-first"
+summary = "RV review turn-verbs refuse on a worktree fork (IMP-024); drive audit from the parent tree or merge-first"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = []
+globs = []
+commands = ["review", "audit", "close"]
+tags = ["dispatch", "worktree", "review"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6065b5e939c7ae5f493446da06441c2baa7cf90e"
+ref_name = "refs/heads/main"
+checkout_state_id = "9343e4e436fa28c00b34134f58c8c80bbe6ff04cb2e86cc112c9de09d76176a7"
+base_commit = "50015f5788cb5fef577339519b27961d909b6ea8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0

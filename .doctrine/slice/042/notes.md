@@ -181,3 +181,24 @@ Built via the dispatch funnel with a single worktree worker `sl-042-p4-fork`
   known, designed deferral (EX-2 lands at the consumer), not drift.
 - **Conditioned perf-spike backlog triggers** (P3 notes) remain unfired — revisit
   at Slice B.
+
+## /audit outcome (RV-003, 2026-06-12)
+
+- **Merged to main first.** RV review verbs **refuse on a worktree fork** (IMP-024
+  — the turn baton lives in the parent tree's gitignored state). The coord branch
+  was merged into main (`--no-ff`, clean, disjoint from the settled SL-043 3/3),
+  so the RV ledger + code + notes sit in one tree. Audit/close run on main; the
+  handover's "merge post-close" was inverted because its precondition (main
+  settled) was met and IMP-024 forced it.
+- **Gate green on merged main:** fmt/clippy(compiled)/test (917 lib + all e2e, 1
+  ignored = 2000-tier perf probe)/build all 0.
+- **RV-003 done · 4 findings, all verified terminal, no blockers.** F-1 EX-2
+  dead-code → follow-up (IMP-030); F-2 NF-001 structural → aligned (import-edge
+  enforcement is Slice B); F-3 perf triggers unfired → follow-up (RSK-006); F-4
+  Slice-B capture → follow-up (IMP-030). Synthesis in `review-003.md`.
+- **Deferrals captured before close (defer-needs-backlog):** **IMP-030** (Slice-B
+  reconcile writer + closure gate + NF-001 import-edge enforcement; carries the
+  F-1 dead-code + F-3 perf deferrals that retire at the consumer) and **RSK-006**
+  (conditioned reverse-index / staleness-batching perf triggers).
+- **Lifecycle:** slice status hand-edited `proposed` vs 4/4 rollup (⚠) — reconcile
+  to terminal at `/close`.
