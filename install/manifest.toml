@@ -32,7 +32,7 @@ create = [
 entries = [
   ".doctrine/state/",
   ".doctrine/slice/*/phases",
-  ".doctrine/slice/*/handover.md",
+  ".doctrine/**/handover.md",
   ".doctrine/slice/*/inquisition.md",
   ".doctrine/memory/index/*",
   ".doctrine/memory/embeddings/*",

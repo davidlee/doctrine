@@ -1,13 +1,15 @@
 # use flake:
 .envrc
+.direnv
+.claude
+.agents
+.pi
+.codex
+
 *.tmp
 *.temp
 *.local.*
-.claude
-.pi
-.agents
-.codex
-.direnv
+
 # for oops
 .spec-driver
 
@@ -21,8 +23,9 @@
 !.doctrine/requirement/
 !.doctrine/spec/
 !.doctrine/memory/
+!.doctrine/rules/
 # SL-011 dogfood: commit the seeded boot governance layer
-!.doctrine/governance.md
+# !.doctrine/governance.md
 
 handover.md
 /scratch
@@ -32,11 +35,11 @@ handover.md
 
 /target
 .doctrine/state/
-.doctrine/slice/*/phases
-.doctrine/slice/*/handover.md
 .doctrine/skills/*
 .doctrine/memory/index/*
 .doctrine/memory/embeddings/*
 .doctrine/memory/state/*
 .doctrine/memory/shipped/
+.doctrine/slice/*/phases
+.doctrine/slice/*/handover.md
 .doctrine/slice/*/inquisition.md
