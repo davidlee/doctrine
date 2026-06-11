@@ -1,0 +1,50 @@
+# Implementation plan for SL-041 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-041"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Resolve both ends in the shell"
+objective = """
+Close ISS-002: resolve --base and a passed --head to canonical commit shas in \
+the impure shell of run_branch_point_check before the matches compare, via one \
+resolve_commit helper (rev-parse --verify <ref>^{commit}). matches stays a pure \
+ref-equality leaf (ADR-001). An unresolvable ref bails (safe failure direction)."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md D1 (both ends, peeled ^{commit}) and D2 (root::find unconditional) are locked." },
+  { id = "EN-2", text = "Existing matches_is_ref_equality unit test and the e2e branch-point suite are green at HEAD." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "run_branch_point_check resolves both base and head (absent head => \"HEAD\") via resolve_commit before matches; matches body unchanged." },
+  { id = "EX-2", text = "An unresolvable base or head causes the verb to bail (non-zero exit), not a silent stationary/moved verdict." },
+  { id = "EX-3", text = "Verb doc-comment updated: both-ended peeled resolution + bail-on-unresolvable; src/main.rs wiring and CLI arg surface unchanged." },
+  { id = "EX-4", text = "cargo clippy clean (zero warnings, bins/lib); just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "Leaf gate: matches_is_ref_equality stays green unchanged." },
+  { id = "VT-2", expects = "e2e: --base HEAD (symbolic) with stationary HEAD => exit 0 (the ISS-002 fix; was exit 1)." },
+  { id = "VT-3", expects = "e2e: --base HEAD --head HEAD => exit 0 via both peeling to the same sha; after a stray commit, --base <old sha> --head HEAD => exit 1 (passed head is resolved)." },
+  { id = "VT-4", expects = "e2e: --base <unresolvable ref> => non-zero exit with a resolution error." },
+  { id = "VT-5", expects = "e2e: existing stationary_head_exits_zero_moved_head_exits_one stays green (deadbeef case now bails vs mismatches; same !success contract)." },
+]
+specs             = []
+requirements      = []
