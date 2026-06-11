@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 26
+slug = "backlog-triggers-actionability-mask-spec-001-d6"
+title = "Backlog triggers actionability mask (SPEC-001 D6)"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-11"
+updated = "2026-06-11"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
