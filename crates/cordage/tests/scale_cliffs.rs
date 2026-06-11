@@ -13,9 +13,11 @@
 //! - RSK-004 evaluate: the per-node `reachable` BFS is replaced by ONE
 //!   condensation fold per call → near-linear over a deep_chain spine (gate, not
 //!   `#[ignore]`).
+//! - RSK-002 explain: the recursive `2^layers` chain enumeration is replaced by
+//!   ONE cone builder → the predecessor sub-DAG is LINEAR in diamond depth (gate,
+//!   not `#[ignore]`).
 //!
-//! Still `#[ignore]`d as deferred / demonstration:
-//! - RSK-002 explain: exact `2^layers` predecessor-path count (demonstration).
+//! Still `#[ignore]`d as deferred:
 //! - EXC-2 dense_evict superlinearity: a single dense cycle's fixpoint stays
 //!   superlinear — deferred residual, NOT fixable in scope (linearizing it would
 //!   change the evicted set).
@@ -114,16 +116,31 @@ fn time<T>(f: impl FnOnce() -> T) -> Duration {
     start.elapsed()
 }
 
-// ── 6.1 explain — exact, deterministic (RSK-002) ─────────────────────────────
+// ── 6.1 explain — cone is LINEAR, deterministic (RSK-002 retired) ─────────────
 
 #[test]
-#[ignore = "exponential; demonstrates RSK-002, not a gate run by default"]
-fn explain_path_count_is_exponential_in_diamond_depth() {
-    let layers = 18; // 2^18 = 262_144 paths; test process stays ~100MB
+fn explain_cone_is_linear_in_diamond_depth() {
+    // The old recursive chain enumeration was 2^layers on a diamond. The cone
+    // builder records each node once (global visited set), so the cone is the
+    // predecessor sub-DAG: its node count is LINEAR in `layers`, far below the
+    // 2^layers paths the enumeration produced. A fast gate (no #[ignore]).
+    let layers = 18; // 2^18 = 262_144 — the old path explosion; the cone is ~55.
     let (g, _src, sink, ov) = diamond(layers).expect("diamond build");
     let ex = g.explain(sink);
-    let n = ex.paths().get(&ov).map_or(0, Vec::len);
-    assert_eq!(n, 1usize << layers); // exact: proves 2^layers growth
+    let cone_nodes = ex.predecessors().get(&ov).map_or(0, BTreeMap::len);
+
+    // Every diamond node is an ancestor of the sink: 1 source + 3 per stage
+    // (left, right, join). The cone keys exactly that set.
+    let expected = 3 * usize::try_from(layers).expect("layers fits usize") + 1;
+    assert_eq!(
+        cone_nodes, expected,
+        "cone keys every ancestor of the sink, once"
+    );
+    assert!(
+        cone_nodes < (1usize << layers),
+        "cone ({cone_nodes}) is far below 2^layers ({})",
+        1usize << layers
+    );
 }
 
 // ── 6.2 overflow — FIXED: deep_chain(80k) now builds (SL-043 PHASE-01) ────────
