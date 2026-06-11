@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb454312175609861af6ffe6e9050"
+memory_key = "mem.pattern.cordage.opaque-ids-capture-from-builder"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "cordage NodeId/OverlayId are opaque — capture seed ids from GraphBuilder, never write NodeId(0)"
+summary = "cordage NodeId/OverlayId have no public ctor; external tests/examples must capture ids from GraphBuilder::node/overlay, not mint NodeId(0)"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = ["crates/cordage"]
+globs = []
+commands = []
+tags = ["cordage"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "03aa60da9f424968a9cb9d604ad35673e6087916"
+ref_name = "refs/heads/main"
+checkout_state_id = "a326ad4d1ee59f3adecbbd83444da74cfd9a584bf50f299994be4eb16419fedf"
+base_commit = "fd430ace2bb69df7af240be0fb169179c9f16413"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
