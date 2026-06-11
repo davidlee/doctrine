@@ -12,5 +12,68 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-040"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "post-turn handoff --note appends to baton.toml outside the per-review lock + CAS (D-C4a/D-C2)"
+detail = "src/review.rs:1516-1522: run_raiser_transition appends the handoff --note to baton.toml AFTER with_turn drops the lock — an unlocked read-modify-write outside both the lock and the CAS that every other baton mutation in the file is guarded by. A concurrent verb's baton write or a status/prime rebuild can lost-update the handoff/counters. Blast radius is low: baton is regenerable observability (D-C2) and the next call's entry-CAS recomputes and self-heals, so no durable corruption — but it breaks the 'every baton mutation under the lock' invariant the rest of the file upholds."
+disposition = "follow-up"
+response = "Captured as CHR-001. Cosmetic-only: lost handoff note self-heals via the next entry-CAS recompute (baton is regenerable, D-C2); no durable corruption, so not fix-now-in-slice. Fix = move the note append inside the with_turn closure."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = 'domain_map path-traversal guard uses substring contains("..") — false-positives legit paths'
+detail = "src/review.rs:1769: validate_domain_map rejects any path whose string contains '..' as a substring, so a legitimate relative path like src/a..b.rs or notes..md is refused. The guard should test Path::components() for Component::ParentDir, not a raw substring. Not a security hole — cooperative tooling and compute() joins under root regardless (ADR-007 --as is not a security boundary)."
+disposition = "follow-up"
+response = "Captured as CHR-001. Latent edge: rejects legit paths containing '..'; low likelihood, no security impact (cooperative tooling). Fix = Path::components()/Component::ParentDir."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "no black-box e2e CLI golden for the review verb family; VA-1 pilot path has zero automated coverage"
+detail = "Every other numbered kind ships an e2e_*_cli_golden.rs (mem.pattern.testing.black-box-cli-golden); review has none. Every run_* is exercised only by in-module unit calls — clap dispatch, --as parsing arms, --json shorthand, and the actual binary surface are untested end-to-end. VA-1 (/audit produces an RV instead of audit.md) is agent-mode, so the pilot integration path has no automated regression guard."
+disposition = "follow-up"
+response = "Captured as IMP-029. Behaviour is unit-covered (every VT criterion green); the gap is an additive e2e golden + the VA-1 pilot path, owned future test work — legitimately follow-up, not a defect in shipped behaviour."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "close-gate parse of a hand-corrupted severity is non-conservative — an unknown severity drops a blocker from the gate (D-C9b)"
+detail = "src/review.rs:724-737 doc_unresolved_blockers filters Severity::parse(..) == Ok(Blocker), so an out-of-vocab severity on a genuine blocker silently drops it from the close-gate. Asymmetric with parse_finding_status (unknown status → Open → keeps gating, conservative). Severity is closed-enum on the write path, so only reachable via hand-edit; a close-gate should fail safe (unknown severity gates)."
+disposition = "follow-up"
+response = "Captured as CHR-001. Reachable only via hand-edit of a closed enum; fix = close-gate fails safe (unknown severity gates) to match the conservative read elsewhere."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "parse_finding_status maps unknown status → Open with no surfaced diagnostic"
+detail = "src/review.rs:649-657: a typo'd terminal status (e.g. 'verifed') is read as Open, keeping the finding gating forever with no warning. Conservative-by-design per D-C8 (keeps Active rather than silently closing), which is the correct fail-safe direction — flagging only the absence of any diagnostic on the corrupt read."
+disposition = "aligned"
+response = "Conservative-by-design (D-C8): unknown status → Open keeps the finding Active rather than silently closing — the correct fail-safe direction. No change; the absence of a diagnostic is acceptable for a hand-edit-only path."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "review status (Read-class) acquires the lock and bails 'busy' under a concurrent write verb"
+detail = "src/review.rs:1823-1838 run_status takes the per-review lock to serialize the baton rebuild, so a read command fails while any write verb holds it. Matches the design (cache == recompute, serialized), mildly surprising for a read."
+disposition = "aligned"
+response = "Matches design: status serializes the baton rebuild (cache == recompute) under the lock; bailing 'busy' under a concurrent writer is correct, not a defect."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "close-gate bypass guard is a brittle source-grep test, not a type-level seam"
+detail = "src/slice.rs:373-387 + the vt5_close_shell_is_the_sole_seam_crossing_caller test string-counts set_slice_status( in the production region; brittle to a re-exported wrapper, a macro, or a shift in the #[cfg(test)] split heuristic. It is exactly the mitigation design §7 Charge VIII committed to (VT-5), so acceptable as designed."
+disposition = "tolerated"
+response = "The exact mitigation design §7 Charge VIII committed to (VT-5 bypass guard). Brittleness of a source-grep guard is consciously accepted in lieu of a type-level seam; if it ever misfires on a refactor the test fails loudly, which is the intended tripwire."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -8,13 +8,22 @@ schema  = "doctrine.plan.overview"
 version = 1
 slice   = "SL-043"
 
-[specs]                          # empty in v1 — no spec/requirement registry yet
-primary       = []
+[specs]
+primary       = ["SPEC-001"]
 collaborators = []
 
+# OQ-1 resolved at /plan (design §6). The cordage generic-core perf/robustness
+# obligations the four fixes harden to hold at the ~tens-of-thousands target:
+#   targets      — REQ-078 (recompute-from-authored correctness; the H1
+#                  performance posture — build O(V+E), non-recursive),
+#                  REQ-092 (per-overlay cycle policy: seq evict-to-fixpoint
+#                  surfacing each evicted edge in provenance; dep reject-degrade).
+#   dependencies — REQ-076 (degrade, never a false topological order),
+#                  REQ-077 (determinism — same input → same order/explanation:
+#                  the behaviour-preservation gate is its proof).
 [requirements]
-targets      = []
-dependencies = []
+targets      = ["REQ-078", "REQ-092"]
+dependencies = ["REQ-076", "REQ-077"]
 
 # One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
 # never reused once authored — edits append, they never renumber. Criterion ids
@@ -23,10 +32,123 @@ dependencies = []
 # VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
 [[phase]]
 id        = "PHASE-01"
-name      = ""
-objective = ""
-entrance_criteria = []           # [{ id = "EN-1", text = "…" }]
-exit_criteria     = []           # [{ id = "EX-1", text = "…" }]
-verification      = []           # [{ id = "VT-1", expects = "…" }] — VT/VA/VH by mode
-specs             = []           # per-phase narrowing of the plan's specs
-requirements      = []
+name      = "resolve.rs — iterative Tarjan/level_of + eviction localization"
+objective = """
+Retire RSK-003 (both sites) and add the RSK-001 coverage VT, all in resolve.rs.
+(1) Iterative Tarjan: rewrite strongconnect (resolve.rs:321) as an explicit-Vec-stack
+DFS — each frame carries (node, successor-iterator-position), successors walked in
+BTreeSet order, lowlink updated on return mirroring the recursive min. (2) Iterative
+level_of (resolve.rs:545): explicit-stack post-order longest-path over preds, same
+memo cache, a node finalised only after all parents resolved (independent overflow
+site — blows on a clean acyclic chain). (3) Eviction localization (pass2_evict
+resolve.rs:198 + evict_layer_cycles resolve.rs:478): one Tarjan → SCCs, process each
+cyclic component independently — evict its F17-min participating edge, re-Tarjan only
+that shrinking sub-component to fixpoint, then the next; disjointness ⇒ the evicted
+SET is identical to the global loop, provenance sorted ⇒ identical output. (4) RSK-001:
+a direct VT that an Against OrderLayer yields the swapped (dst→src) oriented edge in U.
+Equivalence proof is consumer order-insensitivity (A-4 R2), NOT byte-identical
+component emission order — the unchanged suite is the backstop. Hardens REQ-078
+(non-recursive build) + REQ-092 (seq evict-to-fixpoint).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (§10 — three adversarial passes); plan.toml authored; slice status plan or later" },
+  { id = "EN-2", text = "SL-038 reds present #[ignore]'d in tests/scale_cliffs.rs: deep_chain_overflows_inside_target_scale, eviction_fixpoint_scales_superlinearly" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Tarjan::strongconnect (resolve.rs:321) is explicit-Vec-stack iterative — no recursion tracking graph depth; deep_chain(80_000) build returns Ok (no SIGABRT)" },
+  { id = "EX-2", text = "level_of (resolve.rs:545) is explicit-stack post-order longest-path, same memo cache; a clean acyclic 80k chain builds without overflow; computed levels identical to the recursive form" },
+  { id = "EX-3", text = "pass2_evict (resolve.rs:198) + evict_layer_cycles (resolve.rs:478) localized: one Tarjan, evict F17-min per cyclic component, re-Tarjan only the shrinking sub-component to fixpoint; the evicted SET equals the pre-fix global loop; provenance still sorted by (overlay, edge) (F17/F21/F37)" },
+  { id = "EX-4", text = "RSK-001 VT exists near orient (resolve.rs:463): an Against OrderLayer produces the swapped (dst→src) oriented edge in U / the resulting order; passes on first write" },
+  { id = "EX-5", text = "Signals: deep_chain_overflows inverted to assert build succeeds at 80k; a NEW many-small-cycles linear-eviction gate added; dense_evict stays #[ignore] per EXC-2 (deferred residual, re-doc'd)" },
+  { id = "EX-6", text = "Behaviour-preservation: every pre-existing resolution/ordering/golden_net test green UNCHANGED (zero edits). plain cargo clippy zero warnings; just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "G2 (A-3 localization precondition): assert the layer-k invariant — every U-cycle present at layer k contains ≥1 layer_k edge — OR pin it via the unchanged compose_order goldens that depend on it (global victim=None⇒break arm unreachable while components remain)" },
+  { id = "VT-2", expects = "Evicted-set identity + linearity: a fixture of N independent small cycles evicts the SAME edge set as the pre-fix global loop (R2/D4) and scales ~linearly in N; debug bound budgets ~10× release" },
+  { id = "VT-3", expects = "REQ-078: deep_chain(80_000) build Ok (Tarjan overflow inverted); a clean acyclic 80k chain builds Ok (level_of overflow inverted) — both independent sites" },
+  { id = "VT-4", expects = "RSK-001: Against-orientation VT — swapped (dst→src) oriented edge characterized" },
+  { id = "VT-5", expects = "REQ-077: full pre-existing cordage suite green, unchanged (consumer order-insensitivity, A-4 — the iterative-rewrite equivalence proof)" },
+]
+specs             = ["SPEC-001"]
+requirements      = ["REQ-078", "REQ-092"]
+
+[[phase]]
+id        = "PHASE-02"
+name      = "query.rs evaluate — direction-resolved condensation fold"
+objective = """
+Retire RSK-004: replace the per-node reachable BFS in evaluate (query.rs:243/256) with
+a single condensation fold per call, cycle-safe (F47) and output-identical. Three
+sub-steps, each a documented silent-corruption seam the existing suite cannot see:
+(1) SCC PARTITION of the direction-resolved neighbour view — Direction::None ⇒ every
+node a singleton (neighbours=∅, never group the stored {b,c}); Evict ⇒ singletons;
+Reject Along/Against ⇒ the stored degraded_sccs (SCCs survive transpose) [C1 R3].
+(2) Direction-resolved CONDENSATION DAG + reverse-topo built from the SAME neighbour
+view evaluate walks — out for Along, incoming for Against (query.rs:217-228), NEVER the
+forward build adjacency [A-2 R2]; inter-SCC edges quotiented by SCC-id, self/intra-SCC
+neighbours dropped so the condensation is a DAG [C3]. (3) Per-combinator FOLD: Max one
+(value, argmax) min-NodeId tiebreak, fully O(V+E); Any/All/CountDistinct union the
+witness/present set up the DAG (never the projected Count) [C4] — EXC-1; CountDistinct
+STRICT per-member \\{n} (F8/F34), NOT a shared SCC result [C2]. evaluate gains a
+degraded_sccs: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>> param (threaded from Graph,
+already held); Graph::evaluate signature unchanged. Hardens REQ-078 + REQ-092.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: iterative Tarjan is the shared SCC primitive; resolution/ordering suites green unchanged" },
+  { id = "EN-2", text = "evaluate_scales_quadratically_in_node_count red present #[ignore]'d (SL-038)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "evaluate runs ONE condensation fold per call (not a per-node reachable BFS); evaluate_scales_quadratically inverted to assert near-linear scaling" },
+  { id = "EX-2", text = "G1 partition (C1): the SCC partition is of the direction-resolved neighbour relation — Direction::None ⇒ all singletons; Evict ⇒ singletons; Reject Along/Against ⇒ stored degraded_sccs; the stored {b,c} is NEVER grouped under None" },
+  { id = "EX-3", text = "G1 condensation (A-2/C3): condensation edges + reverse-topo built from the neighbour view evaluate walks (out/Along, incoming/Against), never forward build adjacency; inter-SCC edges quotiented by SCC-id with self/intra-SCC dropped → a true DAG" },
+  { id = "EX-4", text = "Per-combinator successor object (C2/C4): Max=(value,argmax) min-NodeId tiebreak; Any/All/CountDistinct=unioned witness/present set (never projected Count); CountDistinct strict per-member \\{n} (F8/F34), not the shared SCC result" },
+  { id = "EX-5", text = "values/contributors/diagnostics byte-identical to the pre-fix per-node-BFS form (asserted against the pre-fix suite); EXC-1 documented for set-valued contributors (Any/All/CountDistinct superlinear in set size — only Max fully O(V+E))" },
+  { id = "EX-6", text = "Behaviour-preservation: pre-existing suite green unchanged. plain cargo clippy zero warnings; just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "G1 DOMINANT: fixture matrix {Along, Against, None} × {Max, CountDistinct} over ONE degraded Reject SCC, each cell asserting value AND contributor identity vs per-node BFS. None×cyclic (C1) and Against×cyclic are the two silent-corruption cells the existing suite cannot see (VT-3 has no SCC)" },
+  { id = "VT-2", expects = "R4 CountDistinct strict-exclusion: cyclic-SCC (a⇄b) + downstream/diamond fixtures assert n ∉ its own witnesses while n ∈ its predecessors' witnesses — no off-by-one" },
+  { id = "VT-3", expects = "REQ-078: evaluate_scales_quadratically inverted — deep_chain spine evaluate scales ~linearly (was quadratic); debug bound budgets ~10× release" },
+  { id = "VT-4", expects = "REQ-077: output-identity — values/contributors/diagnostics equal to the pre-fix form across the existing evaluate fixtures (behaviour-preservation)" },
+]
+specs             = ["SPEC-001"]
+requirements      = ["REQ-078", "REQ-092"]
+
+[[phase]]
+id        = "PHASE-03"
+name      = "query.rs cone + lib.rs explain — paths→predecessors reshape"
+objective = """
+Retire RSK-002: replace predecessor_paths/chains_to_root/extend_chains
+(query.rs:80-185) with a single cone-builder — BFS/DFS the in-edges from n up to roots
+/ degraded-SCC entries, recording node ↦ {immediate in-cone predecessors} with a GLOBAL
+visited set (each cone node visited once), no suffix.clone(), no enumeration: O(V+E)
+[A-5]. Reshape the only public change: Explanation.paths (BTreeMap<OverlayId,
+Vec<Vec<NodeId>>>) → predecessors (BTreeMap<OverlayId, BTreeMap<NodeId, BTreeSet<NodeId>>>);
+accessor paths() → predecessors(); field doc updated. Roots = cone keys with empty
+pred-set; F47 termination preserved structurally — a degraded-SCC-entry node is a key
+with empty preds, and if n is itself in a degraded SCC its cone is {n:{}} (the old
+[[n]]). No bundled witness chain (D2 — D11/F13 role-agnostic structure; policy
+reconstructs any chain/spine by walking the cone). Rewrite lib.rs explain() assembly
+(lib.rs:267-296/848) + the four tests/explain.rs cases to assert the cone; replace
+explain_path_count_is_exponential with a cone-shape/size assertion. Hardens REQ-076
+(cycle-safe explanation structure) + REQ-078.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (Tarjan before P2/P3 per D6); PHASE-02 landed (sequential pipeline order)" },
+  { id = "EN-2", text = "explain_path_count_is_exponential_in_diamond_depth red present #[ignore]'d; the four tests/explain.rs cases present; confirmed no non-test consumer reads explain/paths()" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "predecessor_paths/chains_to_root/extend_chains replaced by ONE cone-builder with a global visited set — each cone node visited once, no suffix.clone(), O(V+E)" },
+  { id = "EX-2", text = "Explanation.paths reshaped to predecessors: BTreeMap<OverlayId, BTreeMap<NodeId, BTreeSet<NodeId>>> (node ↦ immediate in-cone predecessors); accessor paths()→predecessors(); field doc updated" },
+  { id = "EX-3", text = "F47 termination preserved structurally: degraded-SCC-entry node is a key with empty preds; n inside a degraded SCC ⇒ cone {n:{}} (old [[n]]); roots = keys with empty pred-set" },
+  { id = "EX-4", text = "lib.rs explain() assembly updated; the four tests/explain.rs cases rewritten to the cone; explain_path_count_is_exponential replaced by a cone-shape/size assertion (the one sanctioned suite break)" },
+  { id = "EX-5", text = "Role-agnostic structure preserved (D2/D11/F13): no bundled canonical witness chain — the pure predecessor sub-DAG only" },
+  { id = "EX-6", text = "Behaviour-preservation: pre-existing suite green unchanged EXCEPT the four explain tests (sanctioned). plain cargo clippy zero warnings; just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "G3 (R3 sanctioned break): the four rewritten cone tests assert the SAME reachable-predecessor membership the old chains covered (roots, SCC-entry endpoints, the [[n]] case) re-expressed as adjacency — NOT a weaker shape" },
+  { id = "VT-2", expects = "REQ-078: explain_path_count_is_exponential replaced by a cone-shape/size assertion on the diamond fixture — the cone is the predecessor sub-DAG, size O(V+E) not 2^layers" },
+  { id = "VT-3", expects = "Cone-builder linearity: the diamond depth that was exponential now builds the cone once via the global visited set (each node recorded once, all in-edges captured)" },
+  { id = "VT-4", expects = "REQ-077: full suite green unchanged except the four explain tests (behaviour-preservation; F47/I1 cycle-safety of the cone preserved)" },
+]
+specs             = ["SPEC-001"]
+requirements      = ["REQ-076", "REQ-078"]
