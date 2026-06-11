@@ -8,6 +8,7 @@ mod conduct;
 mod contentset;
 mod corpus;
 mod coverage;
+mod coverage_scan;
 mod entity;
 mod fsutil;
 mod git;
