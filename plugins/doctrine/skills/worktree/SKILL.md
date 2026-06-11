@@ -25,13 +25,23 @@ semantics (design §5, the OQ-1 split seam).
 - `mode = solo | worker`
 - `allow_work_in_place: bool` — **true only for `solo`**
 - requested branch / path
+- `base` — the ref the fork is created from. **`solo` defaults to `HEAD`;
+  `worker` REQUIRES an explicit base** (the orchestrator's coordination HEAD `B`),
+  because the session HEAD is **not** `B` — the orchestrator drives from the
+  coordination branch while the session repo may sit on `main`. Forking from the
+  implicit session HEAD imports a divergent base and corrupts the `B..S` delta.
 
 **Behaviour:**
 - `solo` — MAY degrade to the work-in-place rung on sandbox denial (no fork; the
   blessed trunk path).
 - `worker` — **MUST NOT degrade.** A worker with no real fork is a hard failure;
-  the funnel's isolation is mandatory. Beyond creation/provision/guards, the worker
-  half runs a constrained edit→verify→**commit-one-`S`-to-fork** loop; see
+  the funnel's isolation is mandatory. It forks from the **supplied `base` (`B`)** via
+  rung 3, never the implicit session HEAD — for a worker the session HEAD is *not* `B`
+  (the orchestrator drives the coordination branch while the session repo may sit on
+  `main`), so an implicit-HEAD fork is a divergent base that breaks `S.parent == B`.
+  The harness-native creation rung (rung 2) cannot pin the base and is never depended
+  on. Beyond creation/provision/guards, the worker half runs a constrained
+  edit→verify→**commit-one-`S`-to-fork** loop; see
   [Worker mode](#worker-mode-the-funnel-half) (SL-031 §5.2).
 
 **Outputs:**
@@ -75,8 +85,10 @@ A submodule is **not** the isolation we want — treat it as "not yet forked".
    it is **Claude-Code-specific** — a non-Claude agent (codex, pi, …) has none, and
    a project MAY configure the hook to copy. **Design around it; never depend on
    it** — fall through to rung 3, which works under any agent.
-3. **`git worktree add <path> <branch>`** — guaranteed-present, the **blessed
-   tested default**. Prefer this rung; it is fully controlled.
+3. **`git worktree add <path> <branch> <base>`** — guaranteed-present, the **blessed
+   tested default**. Prefer this rung; it is fully controlled. Pass `<base>`
+   explicitly (`HEAD` for solo, `B` for a worker) — the explicit base is *why* this
+   rung is controlled where the harness backend is not.
 4. **Work-in-place** (`solo` only, `allow_work_in_place=true`) on sandbox denial —
    no fork, the trunk path. `worker` aborts instead.
 
@@ -157,16 +169,20 @@ exists (it would be silently absent from the fork). Ignored files are fine —
 
 ### Branch-point check (D5 — in scope)
 
-Capture the source HEAD *before* creating, assert the fork's HEAD matches it
-*after*:
+Assert the fork's HEAD equals the **intended base** — `HEAD` for solo, the supplied
+`base` (`B`) for a worker. **Resolve the intended base to a SHA first**, then compare
+the fork against *that*, not against a re-read of session HEAD (which, for a worker,
+is the wrong ref):
 
 ```bash
-git rev-parse HEAD                 # source, pre-create  → SHA
-git -C <fork> rev-parse HEAD       # fork,   post-create → must equal SHA
+git rev-parse <base>               # intended base (HEAD for solo, B for worker) → SHA
+git -C <fork> rev-parse HEAD       # fork, post-create → must equal that SHA
 ```
 
-Mismatch ⇒ abort / recreate. Cheap; solo rarely exercises it, but it lands here so
-the funnel slice only *extends* it to the concurrent case.
+Mismatch ⇒ abort / recreate — a worker fork that landed on session HEAD instead of
+`B` is exactly the divergent-base corruption this guard exists to catch. Cheap; solo
+rarely exercises it, but it lands here so the funnel slice only *extends* it to the
+concurrent case.
 
 **Concurrency extension (SL-031, D5).** The funnel reuses the same ref-equality at
 a *different* boundary — the batch commit. `doctrine worktree branch-point-check
@@ -282,13 +298,14 @@ withheld regardless.
 | `--git-dir` ≠ `--git-common-dir`, not a submodule | Already forked → adopt, skip creation |
 | Submodule (`modules/` gitdir / superproject) | Not isolation → treat as not-forked |
 | Native creation-only hook present | Opportunistic rung 2; else fall through |
-| Default fork | Rung 3: `git worktree add .worktrees/<branch> <branch>` |
+| Default fork | Rung 3: `git worktree add .worktrees/<branch> <branch> <base>` (base = `HEAD` solo, `B` worker) |
+| `worker` fork base | Rung-3 from the supplied `B`; pass base explicitly, never inherit current HEAD (the harness-native rung can't pin base) |
 | Worktree dir not ignored | Add to `.gitignore` + commit before creating |
 | Sandbox denies fork, `mode=solo` | Rung 4: work-in-place (no fork) |
 | Sandbox denies fork, `mode=worker` | **Abort** (isolation mandatory) |
 | Any fork created | Always `doctrine worktree provision <fork>` |
 | Tree dirty / untracked-non-ignored | **Abort** commit-before-spawn |
-| Fork HEAD ≠ captured source SHA | **Abort** / recreate |
+| Fork HEAD ≠ intended base (`HEAD` solo / `B` worker) | **Abort** / recreate — divergent-base corruption |
 | `just check` red in fork | Fix in provisioning; **never hand off** |
 | `worker` start | `export DOCTRINE_WORKER=1` (self-arm, fail-open) |
 | `worker` verify green | Commit ONE non-merge `S` to fork; return `{fork_branch, head_sha_after}` |
@@ -307,6 +324,10 @@ withheld regardless.
   DOCTRINE_WORKER=1`, or land more than one non-merge commit `S` (multi-commit,
   merge, or rebased forks are rejected — the import unit is the net diff `B..S`).
 - Fork from a dirty tree or hand off a red baseline.
+- Fork a `worker` from the implicit current/session HEAD instead of the supplied
+  `base` (`B`) — for a worker the session HEAD is not `B`, so it is a divergent base
+  that breaks `S.parent == B`. Rung-3 from the explicit `B`; the harness-native rung
+  can't pin the base.
 - Author or edit this skill in `.doctrine/skills/` (the gitignored install copy);
   the source of truth is here under `plugins/`.
 

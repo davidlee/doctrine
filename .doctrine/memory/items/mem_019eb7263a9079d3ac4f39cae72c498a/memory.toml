@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb7263a9079d3ac4f39cae72c498a"
+memory_key = "mem.pattern.dispatch.fork-rung3-base-not-session-head"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch worker must fork rung-3 from explicit base B, never inherit session HEAD"
+summary = "Dispatch worker forks rung-3 from explicit coordination base B, never the implicit session HEAD (session HEAD != B -> divergent-base B..S corruption)"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = []
+globs = ["plugins/doctrine/skills/dispatch/**", "plugins/doctrine/skills/worktree/**"]
+commands = ["doctrine worktree"]
+tags = ["dispatch", "worktree", "funnel"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "cf4fee2fdceb298482f63bef4a122095534f5669"
+ref_name = "refs/heads/main"
+checkout_state_id = "0227791d80ad121c5a1e32f48f3993cce4ad109eecef9b4e2580dc4be4023e82"
+base_commit = "287b3daeeea90d1cc3f783d50da801a06d5a7a7f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 80

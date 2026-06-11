@@ -30,10 +30,12 @@ executing them inline yourself — **whether or not any phase parallelizes**. Un
 routing slot is wired, the caller invokes it directly. To run a single phase inline
 in your own context, `/execute` remains the path.
 
-**Composes `/worktree mode=worker` — do not restate it.** The fork, provision,
-spawn guards, baseline, and the worker's `self-arm → mutate-source → verify →
-commit-one-S` loop all live in the [worktree skill](../worktree/SKILL.md). This
-skill is the orchestrator half only: batching, the import funnel, and reconciliation.
+**Composes `/worktree mode=worker base=<B>` — do not restate it.** The rung-3 fork
+from the explicit base `B`, provision, spawn guards, baseline (`fork == B`), and the
+worker's `self-arm → mutate-source → verify → commit-one-S` loop all live in the
+[worktree skill](../worktree/SKILL.md). This skill is the orchestrator half only:
+batching, the import funnel, and reconciliation. You pass `B`; the worktree skill
+pins the fork to it.
 
 ## The drive loop — phase by phase to slice-done
 
@@ -99,16 +101,32 @@ The fork withholds the coordination/runtime tier by construction (`/worktree`
 provision exclusion, D9). A worker returns a **source delta + a structured report**;
 it is never a doctrine artifact writer. You alone advance the coordination branch.
 
-## Worker spawn (the harness `Agent` isolation mechanism)
+## Worker spawn — fork rung-3 from `B`, never the implicit session HEAD
 
-Spawn each worker with the harness `Agent` tool at `isolation: worktree` — isolation
-is **mandatory**, never optional. The worker runs `/worktree mode=worker`, which
-forks, provisions, guards, verifies a green baseline, then runs its constrained
-edit→verify→commit-`S` loop and returns `{ fork_branch, head_sha_after }`.
+Spawn each worker (via your harness's sub-agent mechanism) so it runs
+`/worktree mode=worker base=<B>`, where `B` is the coordination HEAD you captured
+pre-spawn. The worktree skill rung-3 forks `git worktree add <dir> <branch> <B>`,
+provisions, guards (**baseline asserts `fork == B`**), verifies a green baseline, then
+runs its constrained edit→verify→commit-`S` loop and returns
+`{ fork_branch, head_sha_after }`.
 
-A worker that cannot get a real fork is a **hard abort** (worktree skill, `worker`
-contract) — it MUST NOT degrade to an in-tree edit. Isolation is the funnel's whole
-premise.
+The hazard is **harness-agnostic**: the orchestrator drives the coordination branch
+while the session repo may sit elsewhere (e.g. `main`), so the **current/session HEAD
+is not `B`**. A fork that inherits the implicit current HEAD instead of the explicit
+`B` drags the session↔coordination divergence into `B..S` — a wrong-base corruption
+(proven in PHASE-01: `main`'s slice work pulled into a sibling slice's delta). Always
+pass `B`; never let the fork default to current HEAD.
+
+> **Claude Code note.** Spawn with the `Agent` tool as a **plain agent** that self-forks
+> rung-3. Do **not** use `Agent` at `isolation: worktree`: that backend builds the fork
+> from the *session* HEAD (not `B`) and gives no reliable isolation here — it is the
+> concrete way the implicit-HEAD trap bites under Claude Code. Harnesses without such a
+> backend can ignore this note; the rung-3 rule above already protects them.
+
+Isolation remains **mandatory** — a real sibling-dir fork. A worker that cannot get
+one, or whose baseline `fork == B` fails, is a **hard abort** (worktree skill,
+`worker` contract) — never an in-tree edit. Isolation *and* the correct base are the
+funnel's whole premise.
 
 ### Pre-distilled worker prompt (D6 — self-contained, no governance read)
 
@@ -160,10 +178,14 @@ landing the next delta on a moved base). Capture `B = git rev-parse HEAD` pre-sp
    `HEAD == B`. A dirty tree would be swept into the batch commit while a bare sha
    guard still passes — so check both. Not clean ⇒ **abort**.
 2. **delta (X-2).** Each worker's delta is the **net diff `B..S`**, where `S` is the
-   one non-merge commit on the fork branch (validate: single non-merge commit,
-   ancestry of `B`; multi-commit / merge / rebased fork ⇒ contract violation, reject
-   before import). A net diff, **not** a `cherry-pick`/replay — so the belt-check and
-   the import-effect are the same object.
+   one non-merge commit on the fork branch. **Assert `git rev-parse S^ == B`** — the
+   immediate parent *is* `B`, not merely an ancestor. This is the trusted-side belt
+   against a divergent-base fork (a worker spawned at session HEAD instead of `B`):
+   if `S^ != B`, the net diff would smuggle the session↔coordination divergence into
+   the import ⇒ **reject before import**. Also validate single non-merge commit;
+   multi-commit / merge / rebased fork ⇒ contract violation, reject. A net diff,
+   **not** a `cherry-pick`/replay — so the belt-check and the import-effect are the
+   same object.
 3. **R-5 belt — reject authored-tree touches (C-II).** For each delta,
    `git diff --name-only B..S`; if any path is under `.doctrine/` authored trees ⇒
    **report + halt**. This belt protects PHASE-01's trunk-minting guarantee from an
@@ -205,8 +227,8 @@ crash — recover the same way.
 
 ## Out of scope (v1)
 
-- **Remote / non-shared-store workers (C-VI).** The no-transport import assumes
-  harness isolation uses `git worktree` (shared `.git`, as Claude Code does), so you
+- **Remote / non-shared-store workers (C-VI).** The no-transport import assumes the
+  rung-3 fork is a local `git worktree` (shared `.git`, as Claude Code does), so you
   read the fork branch directly. A remote agent would hand back a `git format-patch`
   series applied `git am`-style through the **same** import→reject→verify→guard→commit
   cadence — noted, not specified here. v1 assumes the shared object store.
@@ -222,7 +244,7 @@ crash — recover the same way.
 | Handover cadence (quality gate) | Hand over **early**, at a **committed** boundary, on `handover_after` batches (def 5) **or** `handover_delta` cumulative `B..S` lines (def 2000), whichever first — stay out of the dumb zone |
 | Worker reports a fork / can't finish clean | It halted by contract → **you `/consult`** the decision; never auto-adapt plan or design to push the drive forward |
 | Phase can't be delegated (spec / authoring) | Execute it inline yourself, then resume the loop; dispatch the delegable phases |
-| Spawn a worker | `Agent` at `isolation: worktree` running `/worktree mode=worker`; isolation mandatory |
+| Spawn a worker | Sub-agent runs `/worktree mode=worker base=<B>`; rung-3 fork from `B`, baseline `fork==B`; pass `B`, never inherit current HEAD. *(Claude Code: plain `Agent`, never `isolation: worktree`)* |
 | Worker prompt | Pre-distilled: policy digest, design excerpts, memories, task spec + file set, verify cmd, `export DOCTRINE_WORKER=1` mandate |
 | Two tasks share a file | **Separate serial batches** — file-disjoint is required to parallelize (dependency-disjoint is unsound) |
 | Batch returned | precond clean+`HEAD==B` → net diff `B..S` → R-5 reject → apply non-committing → verify → branch-point → one commit → record |
@@ -252,6 +274,10 @@ crash — recover the same way.
 - Bail to serial **inline** execution because no phase parallelizes — serial still
   means spawn a worker in a worktree (batch of one). Inline is only for non-delegable
   authoring / spec phases.
+- Let a worker fork from the implicit current/session HEAD instead of the explicit
+  `B` — session HEAD ≠ `B`, so it drags unrelated commits into `B..S`. Pass `B`;
+  rung-3 fork; baseline `fork == B` or abort. *(Claude Code: this is exactly why you
+  never spawn at `isolation: worktree`.)*
 - Let a worker degrade to an in-tree edit, or batch two tasks that share a file.
 - Restate the worker loop or the worktree guards here — link to the worktree skill.
 - Author or edit this skill in `.doctrine/skills/` (the gitignored install copy); the
