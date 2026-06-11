@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb5eb158f7a70a200aad52a873712"
+memory_key = "mem.pattern.dispatch.authoring-entities-not-dispatchable"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Authoring doctrine entities cannot be fanned out via /dispatch"
+summary = "/dispatch can't fan out doctrine-entity authoring — R-5 halts on .doctrine/ authored-tree touches; use plain Agent sub-agents or serial /execute"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = [".doctrine/spec", ".doctrine/adr"]
+globs = ["plugins/doctrine/skills/dispatch/**"]
+commands = []
+tags = ["dispatch", "fan-out", "spec-authoring", "orchestration"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e428b2acab41758d5c3e0614625f14df44ae35d9"
+ref_name = "refs/heads/main"
+checkout_state_id = "b2e4d8fc7722520d06e3321417fdac649b3c2c32657e16b86157ed2cea5ccd0f"
+base_commit = "83056136ddab03f574f5819c83807875a2bef30a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
