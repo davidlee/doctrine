@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 175
+slug = "route-claude-installs-directly-and-delegate-every-other-agent-to-npx-skills-add-davidleedoctrine"
+title = "Route Claude installs directly and delegate every other agent to npx skills add davidlee/doctrine"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

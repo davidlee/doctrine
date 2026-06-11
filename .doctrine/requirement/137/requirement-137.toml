@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 137
+slug = "carry-tech-only-outbound-spec-to-spec-peer-edges-in-interactionstoml-the-usescalls-relation-distinct-from-parent-containment"
+title = "Carry tech-only outbound spec-to-spec peer edges in interactions.toml, the uses/calls relation distinct from parent containment"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

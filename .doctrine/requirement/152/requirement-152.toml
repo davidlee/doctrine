@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 152
+slug = "the-trust-holdback-is-non-bypassable-on-retrieve-low-trust-high-severity-memory-is-withheld-from-agent-context-while-find-and-show-keep-it-inspectable"
+title = "The trust holdback is non-bypassable on retrieve — low-trust high-severity memory is withheld from agent context while find and show keep it inspectable"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

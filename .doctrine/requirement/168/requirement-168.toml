@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 168
+slug = "expose-asset-text-as-the-shared-read-seam-the-entity-scaffolding-verbs-draw-embedded-templates-through"
+title = "Expose asset_text as the shared read seam the entity-scaffolding verbs draw embedded templates through"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

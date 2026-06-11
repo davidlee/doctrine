@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 145
+slug = "retrieve-and-find-memories-scope-first-or-match-pathsglobscommandstags-by-specificity-weight-and-order-results-by-the-nine-key-deterministic-sort-tuple-so-the-same-query-yields-the-same-order"
+title = "Retrieve and find memories scope-first: OR-match paths/globs/commands/tags by specificity weight and order results by the nine-key deterministic sort tuple so the same query yields the same order"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

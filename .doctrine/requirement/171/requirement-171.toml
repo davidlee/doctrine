@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 171
+slug = "distribution-is-one-self-contained-binary-with-a-compile-time-embed-no-network-fetch-and-no-separate-asset-bundle"
+title = "Distribution is one self-contained binary with a compile-time embed, no network fetch and no separate asset bundle"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

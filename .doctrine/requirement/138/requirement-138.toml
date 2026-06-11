@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 138
+slug = "reassemble-the-whole-spec-on-show-by-splicing-identity-toml-prose-body-members-resolved-by-fk-in-advisory-order-and-tech-interaction-edges"
+title = "Reassemble the whole spec on show by splicing identity TOML, prose body, members resolved by FK in advisory order, and tech interaction edges"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

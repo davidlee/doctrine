@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 146
+slug = "compute-git-anchored-staleness-in-four-explicit-modes-scopedattested-by-commits-touching-scoped-paths-since-verified-sha-scoped-unattested-and-unscoped-by-days-since-reviewed-and-the-globalderived-class-evergreen-and-decay-exempt"
+title = "Compute git-anchored staleness in four explicit modes — scoped+attested by commits touching scoped paths since verified_sha, scoped-unattested and unscoped by days-since-reviewed, and the global/derived class evergreen and decay-exempt"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

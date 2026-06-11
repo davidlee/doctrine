@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 161
+slug = "repair-a-collided-id-with-reseat-renumber-the-canonical-id-quad-to-a-free-id-behind-pre-mutation-guards-reporting-inbound-prose-citations-as-danglers-it-never-rewrites"
+title = "Repair a collided id with reseat: renumber the canonical-id quad to a free id behind pre-mutation guards, reporting inbound prose citations as danglers it never rewrites"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

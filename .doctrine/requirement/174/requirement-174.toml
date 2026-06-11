@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 174
+slug = "discover-the-embedded-catalog-from-skillmd-frontmatter-with-globally-unique-skill-ids-excluding-the-marketplace-only-subset-domains"
+title = "Discover the embedded catalog from SKILL.md frontmatter with globally-unique skill ids, excluding the marketplace-only subset domains"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

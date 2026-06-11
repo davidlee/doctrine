@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 160
+slug = "detect-id-integrity-violations-with-validate-dir-basename-equals-toml-id-no-intra-kind-duplicate-id-and-every-alias-targets-the-dir-whose-toml-id-equals-its-encoded-id"
+title = "Detect id-integrity violations with validate: dir basename equals toml id, no intra-kind duplicate id, and every alias targets the dir whose toml id equals its encoded id"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

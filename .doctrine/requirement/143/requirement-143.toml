@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 143
+slug = "spec-composition-reads-only-the-spec-directory-and-the-requirement-directories-reached-by-fk-and-the-integrity-pass-parses-the-typed-edge-tables-never-the-prose-bodies"
+title = "Spec composition reads only the spec directory and the requirement directories reached by FK, and the integrity pass parses the typed edge tables, never the prose bodies"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

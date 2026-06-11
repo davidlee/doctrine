@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 147
+slug = "attest-a-memory-with-verify-by-stamping-its-verification-axis-against-a-clean-working-tree-refusing-a-dirty-tree-so-no-false-attestation-is-recorded"
+title = "Attest a memory with verify by stamping its verification axis against a clean working tree, refusing a dirty tree so no false attestation is recorded"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

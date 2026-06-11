@@ -1,0 +1,39 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 9
+slug = "install-distribution"
+title = "Install & distribution"
+status = "draft"
+kind = "tech"
+category = "install"
+c4_level = "container"
+parent = "SPEC-003"
+descends_from = "PRD-006"
+tags = ["install", "rust-embed", "manifest", "templates", "idempotent", "root-detection", "gitignore", "distribution"]
+responsibilities = [
+  "Embed the `install/` source tree into the binary at compile time (rust-embed `#[folder]`) and reproduce it into a target directory under a user's project, so a single self-contained binary carries everything a fresh project needs — no network, no separate asset bundle.",
+  "Own `install/manifest.toml` as the install configuration — target directory (default `.doctrine`), the directories to create even when empty, the `.gitignore` lines to append, and the project-root markers — parsed at runtime from the embedded copy and itself excluded from the installed fileset.",
+  "Detect the project root by walking up from CWD for any manifest root-marker, honouring an explicit `--path` override, so install lands relative to the repo root rather than the working directory.",
+  "Build an inspectable plan (create-dir / install / skip / gitignore steps) and run it idempotently: files are written only when absent and never overwritten, directories are created-if-missing, and `.gitignore` lines are appended only when not already present — so re-install is a safe no-op.",
+  "Ship the entity templates (`install/templates/*`) and expose `asset_text` as the shared read seam scaffolding verbs use to provision a new entity's files by token substitution — the single place embedded assets are fetched.",
+  "Carry the authored-entity wiring contract: a new authored kind reaches a fresh project only when its directory is added to the manifest `[dirs].create` and its derived/runtime subtrees are narrowly negated in `[gitignore].entries`.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/install.rs"
+module = "doctrine::install"
+
+[[source]]
+language = "toml"
+identifier = "install/manifest.toml"
+
+[[source]]
+language = "rust"
+identifier = "src/root.rs"
+module = "doctrine::root"
+
+[[source]]
+language = "markdown"
+identifier = "doc/install-spec.md"

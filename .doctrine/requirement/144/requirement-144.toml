@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 144
+slug = "record-a-memory-through-the-record-producer-memory-new-alias-mint-the-uid-build-the-git-context-frame-write-scope-pathsglobscommandstags-and-the-captured-anchor-and-scaffold-the-committed-item"
+title = "Record a memory through the record producer (memory new alias): mint the uid, build the git context frame, write scope (paths/globs/commands/tags) and the captured anchor, and scaffold the committed item"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

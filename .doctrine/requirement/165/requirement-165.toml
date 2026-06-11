@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 165
+slug = "parse-manifesttoml-from-the-embedded-copy-for-target-dirs-to-create-gitignore-entries-and-root-markers-excluding-it-from-the-installed-fileset"
+title = "Parse manifest.toml from the embedded copy for target, dirs-to-create, gitignore entries, and root markers, excluding it from the installed fileset"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

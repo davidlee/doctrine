@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 149
+slug = "address-a-memory-as-a-named-entity-by-a-client-minted-content-addressable-uuid-with-an-edit-preserving-memorytoml-plus-prose-memorymd-and-a-mem-key-slug-aliased-by-a-non-authoritative-symlink"
+title = "Address a memory as a named entity by a client-minted content-addressable UUID, with an edit-preserving memory.toml plus prose memory.md and a mem-key slug aliased by a non-authoritative symlink"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

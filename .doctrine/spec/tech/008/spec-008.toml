@@ -1,0 +1,35 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 8
+slug = "id-lifecycle"
+title = "Id lifecycle"
+status = "draft"
+kind = "tech"
+category = "integrity"
+c4_level = "container"
+parent = "SPEC-003"
+descends_from = "PRD-005"
+tags = ["reservation", "claim", "next-free", "integrity", "validate", "reseat", "KINDS", "fork-safe"]
+responsibilities = [
+  "Own next-free id allocation for every numbered kind: scan the namespace, pick `max(local ∪ trunk) + 1`, and claim that candidate through the engine's atomic claim seam inside a bounded retry loop, recomputing on a lost race — the algorithm the engine substrate's claim primitive is interpreted by, not the primitive itself.",
+  "Make allocation fork-safe by folding trunk-side ids into the candidate scan: the local working tree alone cannot see a sibling fork's just-authored id, so the trunk's `ls-tree` id listing is unioned into `max + 1` before claiming, read once at the shell edge and held constant across retries (ADR-006 D3).",
+  "Hold the corpus-wide id table (`integrity::KINDS`) — the single place that travels the `(prefix, dir, toml stem, runtime state dir)` quad a generic id scan needs — and accept the drift surface that a new numbered kind absent from this table silently escapes both `validate` and the per-namespace nature of every check (`SL-001`/`ADR-001`/`REQ-001` coexist legitimately; every rule is intra-kind).",
+  "Provide `validate` as the detect half of the ADR-006 D3 posture — a pure check layer (facts in, findings out, no disk) over an impure corpus scan that enforces three intra-kind rules per numbered kind: dir basename equals the toml `id`, no two dirs declare one id, and every `NNN-slug` alias targets the dir whose toml id equals its encoded id (target equality, not mere resolvability).",
+  "Provide `reseat` as the repair half — renumber an entity's canonical-id quad (dir name, the `<stem>-NNN.{toml,md}` filenames, the toml `id` field, the `NNN-slug` alias) to the next-free trunk-aware id or an explicit `--to`, behind pre-mutation guards (refuse an occupied target, refuse an id with live runtime phase state) and reporting inbound prose citations as danglers it never rewrites (ADR-004 outbound-only).",
+  "Treat memory's named UUID identity as out of scope for the numbered lifecycle: a `mem_<uid>` entity carries no reserved number, so it neither allocates through the next-free loop nor is scanned by `validate` — its alias integrity is a deferred key-based variant, deferred here.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/integrity.rs"
+module = "doctrine::integrity"
+
+[[source]]
+language = "rust"
+identifier = "src/entity.rs"
+module = "doctrine::entity"
+
+[[source]]
+language = "markdown"
+identifier = "doc/reservation-spec.md"
