@@ -248,6 +248,32 @@ fn arity_broken_cycle_orders_cleanly() {
     assert_eq!(g.ordered(), vec![d, c, a]);
 }
 
+// ── RSK-001: Against orientation (SL-043 coverage VT) — an `Against` OrderLayer ─
+// reverses each resolved edge into U, so a→c authored yields the c→a oriented
+// edge: c sorts before a in the order (the inverse of an `Along` layer on the
+// same authored edge). Characterizes the `orient` path directly (resolve.rs).
+
+#[test]
+fn against_layer_reverses_oriented_edge_in_order() {
+    let mut b = GraphBuilder::new();
+    let o0 = b.overlay(reject_unbounded());
+    let a = b.node(); // NodeId-lower
+    let c = b.node(); // NodeId-higher
+    b.edge(o0, a, c, attrs()); // authored a → c
+    b.order_spec(OrderSpec::new(vec![OrderLayer::new(
+        o0,
+        Direction::Against,
+    )]));
+    let g = b.build().expect("valid");
+
+    // Against swaps a→c into c→a in U: c is the source (level 0), a the sink
+    // (level 1) — the order is c before a, the opposite of an Along layer.
+    assert!(g.provenance().evictions().is_empty());
+    assert_eq!(g.order_key(c).expect("c").level(), Level::Finite(0));
+    assert_eq!(g.order_key(a).expect("a").level(), Level::Finite(1));
+    assert_eq!(g.ordered(), vec![c, a]);
+}
+
 // ── VT-9: determinism (REQ-077), ordering half — identical inputs give ───────
 // identical order keys and provenance across builds.
 
