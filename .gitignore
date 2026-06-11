@@ -1,6 +1,6 @@
 # use flake:
-.envrc
 .direnv
+.envrc
 .claude
 .agents
 .pi
@@ -16,6 +16,7 @@
 .doctrine/*
 !.doctrine/slice/
 !.doctrine/adr/
+!.doctrine/agents/
 !.doctrine/policy/
 !.doctrine/standard/
 !.doctrine/review/
