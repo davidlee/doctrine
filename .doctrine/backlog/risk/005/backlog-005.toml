@@ -1,0 +1,26 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 5
+slug = "backlog-order-adapter-duplicate-itemid-in-orderinput-silently-corrupts-the-nodeid-bimap"
+title = "backlog_order adapter: duplicate ItemId in &[OrderInput] silently corrupts the NodeId bimap"
+kind = "risk"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-11"
+updated = "2026-06-11"
+tags = ["cordage", "adapter"]
+
+[facet]                         # risk only — every field typed; seeded empty
+likelihood = "low"              # low | medium | high | critical
+impact     = "high"             # low | medium | high | critical
+origin     = "SL-039 PHASE-02 codex adversarial review"
+controls   = ["project enforces distinct ItemIds at the projection boundary (DD4, src/backlog.rs)"]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-039"]
+specs  = []
+drift  = []
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
