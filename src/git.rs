@@ -923,6 +923,26 @@ pub(crate) fn commits_touching(
     git_opt(root, &args).ok().flatten()?.parse::<u32>().ok()
 }
 
+/// Resolve `HEAD` to its frozen commit SHA once, so the staleness seam
+/// ([`commits_touching`], which REFUSES the literal `HEAD`) is fed a stable
+/// `target`. Reuses the `rev-parse --verify HEAD^{commit}` form (the born-frame
+/// capture seam, ~line 629). `None` on an unborn HEAD / non-repo / git failure —
+/// the caller degrades every cell to `IsStale::Unknown`.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-042 P3 reconcile-reader seam: head_sha feeds coverage_scan's \
+                  staleness resolution; no bins/lib consumer until the CLI reader \
+                  slice wires it"
+    )
+)]
+pub(crate) fn head_sha(root: &Path) -> Option<String> {
+    git_opt(root, &["rev-parse", "--verify", "HEAD^{commit}"])
+        .ok()
+        .flatten()
+}
+
 // ---------------------------------------------------------------------------
 // Unit tests — pure logic only (no git, no disk). The byte-identity proof for
 // the remote table is copied verbatim from the external decision register's reference (VT-1).
