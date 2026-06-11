@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb56e4c117ea1811284d62895f6b7"
+memory_key = "mem.system.lifecycle.defer-needs-backlog-before-close"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "Deferred-but-needed-later items must be captured in a slice or backlog before closeout"
+summary = "Any deferred-but-needed-later item (extra skill, future kind, funnel) must exist as a slice or backlog entry before slice closeout — never only in prose/conversation"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["lifecycle", "closeout", "backlog", "governance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "399ee72bd8ec245a9bd890a41589a572a3ed7c24"
+ref_name = "refs/heads/main"
+checkout_state_id = "1e07108a4844c8b365d63d5b087be8d95187cfcf944c7e8cfac9b4a3ddc3df34"
+base_commit = "589c6f04e092124b23d1ac5f3930f5eb59573e71"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
