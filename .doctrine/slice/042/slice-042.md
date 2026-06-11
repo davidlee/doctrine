@@ -89,14 +89,26 @@ truth machinery with the no-derivation line proven structurally. Dependent
 follow-on **Slice B** adds the reconcile writer, the requirement-status/spec-truth
 write seam, and the closure gate.
 
+## Design decisions (locked — see design.md §7)
+
+- **D-Q1** coverage = authored/committed slice-side `coverage.toml` (NF-003).
+- **D-Q2** cross-slice fan-in = corpus scan, no reverse index (R2) + a perf spike.
+- **D-Q3** REC is status-less/immutable; staged delta drafting/approval is a future
+  **Revision** vehicle (IDE-003), deferred.
+- **D-Q4** coverage is a keyed table, not a numbered kind (only REC is numbered).
+- **D-Q5** REC alias = `NNN-slug` (OQ-1 closed).
+- **Reuse:** `ReqStatus` + `CoverageStatus` already exist (SL-028, vocabulary-only);
+  SL-042 is the named coverage-join consumer. NF-001 "two enums never reference each
+  other" is a pre-existing invariant to preserve.
+
 ## Follow-Ups
 
-- **Slice B** (reconcile + close) — depends on this slice's substrate shape; scaffold
-  after this design locks so B's write-seam design sees the coverage/REC shapes.
-- **R2 — cross-slice composite fan-in.** Coverage is slice-side (D3) but a
-  requirement composes across N slices (REQ-110). How the derived reader enumerates
-  entries across slices is unspecified → resolve in P3 design.
-- **R3 / OQ-1 — REC alias/symlink convention** (mirror `mem.<key>` / `nnn-slug`) →
-  P1 design.
-- **OQ-2** — if knowledge_record lands first, REC consumes its evidence type instead
-  of owning it; neither forks (H4).
+- **Slice B** (reconcile + close) — depends on this slice's substrate shape.
+- **R-a (hard dep)** — P1 reuses SL-040's in-flight `meta::read_id` + status-less
+  scan path and shares the `integrity::KINDS` table → sequence P1 after SL-040
+  lands; fallback = land `read_id` here, SL-040 rebases. P2–P4 independent.
+- **R-b** — remove the `CoverageStatus` `not(test) expect(dead_code)` in P2 when the
+  consumer lands.
+- **OQ-2** — if knowledge_record lands first, REC consumes its evidence type; neither
+  forks (H4). **OQ-3** — composite precedence deferred; `Indeterminate` = drift.
+- **IDE-003** — Revision vehicle (staged delta approval), deferred.
