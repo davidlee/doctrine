@@ -68,21 +68,25 @@ Build the reconcile + close half as three phases (B·P1–B·P3), ending green w
 exactly one REC per reconciliation act and closure refusing unreconciled drift.
 
 - **B·P1 — Write seam** (FR-005 precondition; R1, pre-decided in SL-042). The
-  authored-truth write primitives the reconcile writer needs: a
-  `spec req status <REQ> --to <state>` edit-preserving transition (mirrors
-  `slice status` — `mem.pattern.entity.edit-preserving-status-transition`), and the
-  spec-truth **revise** write path. Pure transition classify + edit-preserving TOML
-  rewrite; clock/disk in the thin shell. No reconcile logic yet — just the seams P2
-  composes.
+  authored-truth write primitive the reconcile writer needs: **one**
+  `spec req status <REQ> --to <state>` edit-preserving transition — a **free any→any**
+  setter mirroring `governance::set_status` (the adr precedent), *not* the ordered
+  `slice status` FSM (D-B6: `revise` must move any direction to correct a mis-claim).
+  Both accept and revise reuse this single setter (D-B4 — the earlier "spec-truth
+  revise write path" collapses into it; revise differs only by REC move + direction +
+  the human's prose hand-edit, which routes to the IDE-003 Revision vehicle).
+  Edit-preserving TOML rewrite; clock/disk in the thin shell. No reconcile logic yet.
 - **B·P2 — Reconcile writer** (D7, FR-005/REQ-112, NF-001/REQ-114, NF-003/REQ-116).
   The **sole author** of reconciled truth in the loop. Per divergence it applies one
   move: **accept** (write requirement status via the B·P1 seam to match evidence),
   **revise** (write corrected spec truth), or **redesign** (escalate
   `reconcile → design` via `slice status`, ADR-009 — **no** instance write). Emits
-  **exactly one REC per act** (the SL-042 REC kind). The writer authors status
-  values explicitly; the **coverage→status import edge does not exist** — enforced by
-  a structural test (IMP-030). Every act is committed + REC-cited so it is
-  reconstructable from the authored tier alone (NF-003).
+  **exactly one REC per requirement** (D-B8 — forced by the single `move` field;
+  composed atomically). The writer authors status values explicitly; NF-001 holds
+  **type-level** — the writer *does* import `coverage` (to read `drift` for
+  prompting), but `coverage` exposes no `ReqStatus`, so a derived status cannot
+  compile (D-B7; a compile-fail VT proves it, IMP-030). Every act is committed +
+  REC-cited so it is reconstructable from the authored tier alone (NF-003).
 - **B·P3 — Closure gate predicate** (D8, FR-006/REQ-113, H5). A predicate on the
   existing `slice status reconcile → done` edge: default-**refuse** while owning
   specs carry residual unreconciled drift (corpus scan over SL-042's drift read,
@@ -128,9 +132,10 @@ function maps coverage → authored status; the import edge is absent by test.
 
 ## Summary
 
-Builds SPEC-002's reconcile + close half: the authored-truth write seam
-(`spec req status` + spec-truth revise), the **sole-author** reconcile writer
-(accept/revise/redesign → exactly one REC per act), and the closure gate
+Builds SPEC-002's reconcile + close half: the authored-truth write seam (one
+`spec req status` setter, reused by accept & revise), the **sole-author** reconcile
+writer (accept/revise/redesign → exactly one REC per requirement), and the closure
+gate
 (default-refuse residual drift, override only via a recorded REC). The NF-001
 no-derivation line — built into SL-042 by *absence* of a write path — is proven here
 by a structural import-edge test at the one seam that reads coverage and writes
