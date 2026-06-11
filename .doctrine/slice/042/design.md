@@ -145,15 +145,19 @@ exactly one verdict (no contradiction, no fall-through). Two status classes:
   - `Active`/`Deprecated` with a **fresh** `Verified` and no `Failed`/`Blocked`; or
   - `Pending`/`InProgress` with an **empty** composite or only `Planned`/
     `InProgress` (forward intent — PRD-013 "not drift when grounded").
-- **Divergent(reason)** — an **in-force** authored status with any `Failed` or
-  `Blocked` (observed contradiction, or evidence unobtainable under a live
-  obligation). Reserved for *contradicting evidence* — never raised by mere
-  absence.
-- **Indeterminate** — every remaining in-force case, surfaced for the writer to
-  judge: `Active`/`Deprecated` with an **empty** composite (in-force but
-  unsubstantiated — absence of evidence is not contradiction), or with only a
-  **stale** `Verified` and no fresh confirmation (NF-002 — flagged, never
-  auto-demoted), or any mode/status mix lacking both a clean fresh `Verified` and
+- **Divergent(reason)** — an **in-force** authored status that evidence
+  **contradicts or outruns**: any `Failed`/`Blocked` (observed contradiction, or
+  evidence unobtainable under a live obligation); **or** `Pending`/`InProgress`
+  with a **fresh** `Verified` — evidence has *outrun* the authored status (the
+  *accept* case), so the planned-vs-verified distinguishability PRD-013 requires
+  for forward intent (spec-013 "not drift… when **distinguishable**") no longer
+  holds. Never raised by mere absence.
+- **Indeterminate** — **every remaining in-force case** (total *by construction*:
+  any in-force status that is neither Coherent nor Divergent above), surfaced for
+  the writer to judge. Examples: `Active`/`Deprecated` with an **empty** composite
+  (in-force but unsubstantiated — absence ≠ contradiction); any in-force status
+  with only a **stale** `Verified` and no fresh confirmation (NF-002 — flagged,
+  never auto-demoted); a mode/status mix with neither a clean fresh `Verified` nor
   a clear `Failed`/`Blocked`.
 
 At the Slice-B closure gate, `{Divergent, Indeterminate}` both read as
@@ -163,7 +167,11 @@ follow-on. The zero-evidence cell is now single-valued — the prior "in-force +
 zero confirming evidence → Divergent" clause is **retired** (absence ≠
 contradiction): `Active`/`Deprecated`+empty → `Indeterminate`, `Pending`/
 `InProgress`+empty → `Coherent` — and withdrawn statuses no longer fall through to
-drift at the gate.
+drift at the gate. Conversely `Pending`/`InProgress` + a **fresh** `Verified` →
+`Divergent` (evidence outruns authored — the *accept* case); forward-intent
+Coherence holds only while coverage stays `Planned`/`InProgress` (spec-013
+distinguishability). Totality is *by construction*: `Indeterminate` is the explicit
+catch-all for in-force statuses, so no `ReqStatus` × composite cell is unclassified.
 
 ### 5.3 Data, State & Ownership
 
@@ -192,14 +200,23 @@ a new top-level kind). P2 confirms no ignore rule swallows it (Q1/D-Q1; the §9
 owning slice itself — the change that ran the verification owns the evidence. It is
 kept **explicit** (not implicit-by-location) for two reasons: a slice may legitimately
 record evidence attributed to a *prior* change it is re-observing, and the
-composite's fan-in key is the tuple `(requirement, contributing_change, mode)`, not
-the file path. A slice never writes another slice's file (no-clobber holds at the
-*file* level); cross-attribution lives inside the owning slice's own file.
+**entry identity** is the tuple `(slice, requirement, contributing_change, mode)`
+— the **same 4-tuple as the citation key** (F3), not the file path. Including the
+writing `slice` keeps identity single-valued under cross-attribution: if a
+re-observing slice *and* the owning change both record `(requirement,
+contributing_change, mode)`, they are **distinct entries** (different `slice`) — two
+evidence points, not a clobber. The composite **fans in by `requirement`** and
+**surfaces all** such entries; reconciling two that share `(requirement,
+contributing_change, mode)` across slices is OQ-3 precedence, deferred (it never
+yields a non-deterministic *fold*, only multiple surfaced rows). A slice never
+writes another slice's file (no-clobber holds at the *file* level);
+cross-attribution lives inside the owning slice's own file.
 
 **Stable key & citability** (F3): a coverage entry has no numbered id, so it is
-cited by its **stable tuple key** `(slice, requirement, contributing_change, mode)`
-— never a `file#line` anchor (those rot; cf. IDE-002). REC `evidence_refs` use this
-tuple form; reconstruction (NF-003) resolves entries by key, not by position.
+both **identified** (§5.3 F2 fan-in) and **cited** by one **stable tuple key**
+`(slice, requirement, contributing_change, mode)` — never a `file#line` anchor
+(those rot; cf. IDE-002). REC `evidence_refs` use this tuple form; reconstruction
+(NF-003) resolves entries by key, not by position.
 
 Ownership: a slice owns the coverage file it writes; a REC is owned by its
 reconciliation act (optionally a slice). The composite/drift views own *no* state.
@@ -329,18 +346,27 @@ Per-requirement evidence (VT unless noted):
   retired zero-evidence Divergent clause has no surviving cell), incl. REQ-111
   (FR-004) "matches → coherent". **Type-level**: `drift()` returns `Verdict`, no
   truth-write in its signature.
-- **REQ-114 / NF-001** — **structural**: SL-028's "two enums never reference each
-  other" preserved; `drift()` returns `Verdict` not `ReqStatus`; a guard test
-  asserting no `f(coverage) → ReqStatus`.
+- **REQ-114 / NF-001** — **structural, not a test of absence** (§5.5 INV-1/F4 — a
+  universal negative is unprovable by a unit test). The checkable obligations:
+  SL-028's "two enums never reference each other" preserved (a compile/grep
+  assertion); `drift()` returns `Verdict` not `ReqStatus` (type-level); coverage and
+  authored status in distinct stores (distinct-file test). The coverage→status-writer
+  **import-edge** guard is a Slice-B review gate (no writer exists here to wall off).
 - **REQ-115 / NF-002** — wire `git_anchor` onto the `src/git.rs` seam; stale
   `Verified` flagged, **not demoted**; reuse asserted (no parallel staleness impl).
 
 **R2 perf spike (VT in P3):** **sweep** N synthetic slices × coverage entries on
-shared requirements (e.g. 50 → 500 → 2000) and **locate the scan-cost cliff** —
-not assert a single fixed N passes (F8). Budget for **debug ~10× release**
-(`mem.pattern.testing.debug-vs-release-scale-timing`). Output = the cliff N; a cliff
-below realistic repo scale triggers a reverse-index `backlog new` (condition
-recorded now, per defer-needs-backlog).
+shared requirements (e.g. 50 → 500 → 2000) and **locate the cliff** — not assert a
+single fixed N passes (F8). **Two cost axes, measured separately** (codex C2 — else
+the staleness subprocesses mask the scan question R2 actually asks): **(a) scan
+fan-in** — corpus-walk + filter with `IsStale` **precomputed** (the
+no-reverse-index cost D-Q2 risks); **(b) staleness resolution** — the per-entry
+`git::commits_touching` subprocess cost (a *separate* concern, and itself a candidate
+for batching at P4 — N subprocesses per query). Budget for **debug ~10× release**
+(`mem.pattern.testing.debug-vs-release-scale-timing`). Output = the cliff N **per
+axis**; a scan-axis cliff below realistic repo scale triggers a reverse-index
+`backlog new`, a staleness-axis cliff triggers a batching one (conditions recorded
+now, per defer-needs-backlog).
 
 Lint/format gates per house rules (`cargo clippy` zero-warning bins/lib, `just
 check`). New module trips the cargo/pedantic doc lints
@@ -407,5 +433,31 @@ integrated above:
 - **C-VII (storage rule, fixed §5.3/§9)** — `coverage.toml` authored-tier residency
   secured: gitignore posture stated, `check-ignore` VT added.
 
-Design clears the external pass with findings integrated. **Eligible for lock →
-`/plan`.**
+### External pass 2 — codex variety pass (2026-06-11, GPT-5.x)
+
+Four findings, all integrated. Two were missed by *both* prior passes:
+
+- **X-1 (high — totality hole, fixed §5.2)** — the "total" predicate left
+  `Pending`/`InProgress` + **fresh** `Verified` matching **no** verdict (not
+  Coherent, not Divergent, and the Indeterminate catch-all required a *missing*
+  fresh `Verified`). Fixed two ways: that cell is now **`Divergent`** (evidence
+  *outruns* authored — the *accept* case; spec-013 forward-intent holds only while
+  coverage stays distinguishably `Planned`/`InProgress`), and `Indeterminate` is now
+  the explicit **catch-all by construction**, so no cell is unclassified.
+- **X-2 (high — composite key collision, fixed §5.3 F2/F3)** — the fan-in key was
+  the 3-tuple `(requirement, contributing_change, mode)` while cross-attribution
+  let two slices write it in different files → non-single-valued fold. Identity is
+  now the **4-tuple incl. `slice`** (== the citation key); collisions are distinct
+  evidence points the composite surfaces, precedence deferred (OQ-3). Fold stays
+  deterministic.
+- **X-3 (med — self-contradiction, fixed §9)** — §9 REQ-114 still promised "a
+  guard test asserting no `f(coverage)→ReqStatus`", the test-of-absence §5.5/F4
+  declares impossible. Replaced with the checkable obligations (type/enum/distinct-
+  store) + the Slice-B import-edge review gate.
+- **X-4 (med — mismeasured spike, fixed §9)** — the perf spike folded N
+  `git::commits_touching` subprocesses into the scan-cliff measurement. Split into
+  two axes (scan fan-in with precomputed `IsStale`; staleness resolution), each with
+  its own backlog trigger.
+
+Design clears two external passes with all findings integrated. **Eligible for
+lock → `/plan`.**
