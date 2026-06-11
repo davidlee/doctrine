@@ -1,28 +1,62 @@
 ---
 name: dispatch
-description: Use when /execute fan-out is real and a slice's independent tasks should run as concurrent isolated workers — the orchestrator-sole-writer funnel that spawns workers in their own worktree forks, then imports each source delta through one strict per-batch cadence (import-all → verify → branch-point guard → one commit → record), reporting and halting on any conflict rather than auto-merging.
+description: Use to drive a slice's phases to completion through sub-agent workers in isolated worktrees — you orchestrate and are the sole writer, the workers execute. Default is serial (one worker per phase) to keep your context clean and run the slice unattended without babysitting; parallelize file-disjoint phases into one concurrent batch when you can. Every worker's source delta funnels back through one strict cadence (import → verify → branch-point guard → one commit → record); conflicts report-and-halt, never auto-merge.
 ---
 
 # Dispatch
 
-Drive parallel, sub-agent execution of a slice's tasks as the **sole writer**.
-You are the orchestrator: you spawn workers into isolated worktree forks, collect
-each worker's **source delta** (its fork branch), and funnel those deltas into the
-coordination branch through one strict, crash-recoverable cadence. Workers mutate
-source; **only you** make doctrine-mediated writes.
+Drive a slice's phases to completion through sub-agent **workers** — you are the
+orchestrator and **sole writer**, they execute. You spawn each worker into an
+isolated worktree fork, collect its **source delta** (its fork branch), and funnel
+that delta into the coordination branch through one strict, crash-recoverable
+cadence. Workers mutate source; **only you** make doctrine-mediated writes.
+
+**Default serial, parallel by opportunity.** The point is to drive the whole slice
+unattended without burning your own context — *not* to hunt for parallelism. One
+worker per phase is the norm: a worker burns the phase's tokens so yours stay clean,
+and you run phase after phase without babysitting. When two or more phases are
+**file-disjoint** you *may* admit them to one concurrent batch — an optimization,
+never the entry condition. A slice with no parallelism is still a dispatch slice;
+**serial is a batch of one, same funnel**. Bailing to inline serial execution
+because "nothing parallelizes" is the failure this skill exists to prevent.
 
 **Announce at start:** "Using the dispatch skill to run workers under the
 orchestrator funnel."
 
-**This is a sub-skill, not yet a `/route` destination.** It is the parallel analog
-of `/execute` (serial). Reach it only when execution fan-out is explicitly wanted;
-until a routing slot is wired, the caller invokes it directly. For one phase at a
-time, `/execute` remains the path.
+**This is a sub-skill, not yet a `/route` destination.** It is the unattended,
+sub-agent analog of `/execute` (which is serial, inline, you-drive-one-phase). Reach
+it when you want to drive a slice's phases to completion *through workers* instead of
+executing them inline yourself — **whether or not any phase parallelizes**. Until a
+routing slot is wired, the caller invokes it directly. To run a single phase inline
+in your own context, `/execute` remains the path.
 
 **Composes `/worktree mode=worker` — do not restate it.** The fork, provision,
 spawn guards, baseline, and the worker's `self-arm → mutate-source → verify →
 commit-one-S` loop all live in the [worktree skill](../worktree/SKILL.md). This
 skill is the orchestrator half only: batching, the import funnel, and reconciliation.
+
+## The drive loop — phase by phase to slice-done
+
+Dispatch drives the *whole* slice, not one batch. The import funnel below is the
+**inner** loop (land one unit); this is the **outer** loop (drive to completion):
+
+1. **Plan the next unit.** `/phase-plan` the next phase — or, if several upcoming
+   phases are file-disjoint, plan them together as one concurrent batch. A phase that
+   cannot be delegated (spec / authoring work — see Red Flags) you execute inline
+   yourself, then continue the loop.
+2. **Spawn worker(s).** One worker per phase in the unit, each in its own worktree
+   fork (below). A serial unit is a single worker; that is the common case.
+3. **Funnel.** Run the strict per-batch cadence (below) to land the unit as exactly
+   one commit on the coordination branch.
+4. **Repeat** from the new HEAD until the slice's phases are done.
+5. **Handover at the context threshold.** Your context is disposable and rebuildable
+   from the coordination branch (see Crash / overflow recovery). As you approach your
+   budget (≈200k tokens, or whenever a batch leaves you low), stop **at a committed
+   batch boundary** and `/handover`; a fresh orchestrator resumes from the branch.
+   Never carry a half-imported batch across a handover.
+
+The slice reaches done unattended: you alternate plan → spawn → funnel without
+hand-holding each phase, and hand over cleanly when context runs low.
 
 ## Remit — orchestrator is the sole writer (D6a)
 
@@ -68,16 +102,19 @@ omits the line runs with the doctrine CLI fully open (the D2a guard inert). Mand
 the line regardless, but **do not rely on it** — the enforceable protection is the
 import-time R-5 belt below, which you run on the trusted side.
 
-## Batching — file-disjoint by construction (C-III)
+## Batching — serial by default, file-disjoint to parallelize (C-III)
 
-Admit workers to a concurrent batch **only if their declared changed-path sets are
-pairwise disjoint.** A task that must share a file with another drops to **serial
-dispatch** — the honest cost of report-never-merge.
+The default unit is **one phase, one worker** — a batch of one. You only *widen* a
+batch to run workers concurrently when their declared changed-path sets are
+**pairwise disjoint.** A task that would share a file with another in the same batch
+stays in its **own** serial batch — not a degraded outcome, just the normal one. The
+funnel is identical for a batch of one; you simply run the batches one after another.
 
-**Dependency-disjoint is not enough.** Two independent tasks routinely edit the same
-file (e.g. two unrelated subcommands both touching `main.rs` — exactly this slice's
-own verb-wiring + minting-wiring). File-disjoint is the stronger contract that makes
-the deltas co-apply onto the captured base `B` cleanly. Shared file ⇒ serialise.
+**Dependency-disjoint is not enough** to parallelize. Two independent tasks routinely
+edit the same file (e.g. two unrelated subcommands both touching `main.rs` — exactly
+this slice's own verb-wiring + minting-wiring). File-disjoint is the stronger contract
+that makes the deltas co-apply onto the captured base `B` cleanly. Shared file ⇒
+separate serial batches, never one concurrent batch.
 
 ## The funnel — strict per-batch order (D7)
 
@@ -146,9 +183,13 @@ crash — recover the same way.
 
 | Situation | Action |
 |---|---|
+| No phase parallelizes | **Serial — one worker per phase, batch of one, same funnel.** The norm, not a fallback; never bail to inline |
+| Drive the slice | Loop: `/phase-plan` next unit → spawn worker(s) → funnel → repeat from new HEAD until done |
+| Approaching context budget (~200k) | Stop at a **committed** batch boundary → `/handover`; fresh orchestrator resumes from the branch |
+| Phase can't be delegated (spec / authoring) | Execute it inline yourself, then resume the loop; dispatch the delegable phases |
 | Spawn a worker | `Agent` at `isolation: worktree` running `/worktree mode=worker`; isolation mandatory |
 | Worker prompt | Pre-distilled: policy digest, design excerpts, memories, task spec + file set, verify cmd, `export DOCTRINE_WORKER=1` mandate |
-| Two tasks share a file | **Serialise** — file-disjoint batching only (dependency-disjoint is unsound) |
+| Two tasks share a file | **Separate serial batches** — file-disjoint is required to parallelize (dependency-disjoint is unsound) |
 | Batch returned | precond clean+`HEAD==B` → net diff `B..S` → R-5 reject → apply non-committing → verify → branch-point → one commit → record |
 | Delta touches `.doctrine/` | **Report + halt** (R-5 belt — the real protection; `DOCTRINE_WORKER=1` fails open) |
 | Worker fork `>1` / merge / rebased commit | **Reject** before import (the unit is net diff `B..S`, `S` one non-merge commit) |
@@ -169,20 +210,27 @@ crash — recover the same way.
 - Auto-merge or auto-resolve a conflict / moved HEAD / authored-tree touch — **report
   and halt**.
 - Record knowledge before the confirmed commit (it must trail the code).
+- Bail to serial **inline** execution because no phase parallelizes — serial still
+  means spawn a worker in a worktree (batch of one). Inline is only for non-delegable
+  authoring / spec phases.
 - Let a worker degrade to an in-tree edit, or batch two tasks that share a file.
 - Restate the worker loop or the worktree guards here — link to the worktree skill.
 - Author or edit this skill in `.doctrine/skills/` (the gitignored install copy); the
   source of truth is here under `plugins/`.
 
 **Always:**
+- Default to one worker per phase in its own worktree; parallelize only file-disjoint
+  phases. Drive the whole slice phase by phase, handing over at the context boundary.
 - Run as worker-mode OFF, the sole doctrine-mediated writer, on the coordination branch.
 - Pre-distill a self-contained prompt; workers never read boot/governance.
-- Keep batches file-disjoint; serialise shared-file tasks.
+- Keep concurrent batches file-disjoint; run shared-file tasks as separate serial batches.
 - Hold the strict funnel order; the R-5 belt and the branch-point guard are mandatory.
 - Make knowledge trail the confirmed commit; keep all durable state on the branch.
 
 ## Outcome
 
-Each batch lands as exactly one commit on the coordination branch, every imported
-delta policy-checked and verified before it lands, with conflicts surfaced to a human
-rather than merged. The coordination branch is the deliverable.
+Driven phase by phase, the slice reaches completion unattended. Each batch — usually
+a single serial worker, occasionally a file-disjoint concurrent set — lands as exactly
+one commit on the coordination branch, every imported delta policy-checked and verified
+before it lands, with conflicts surfaced to a human rather than merged. The coordination
+branch is the deliverable.
