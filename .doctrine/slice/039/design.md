@@ -258,7 +258,10 @@ impl BacklogOrder {
 
 cordage build inputs: two `OverlayConfig`s — `needs` `(Reject, Unbounded)`, `after`
 `(Evict, Unbounded)`. A `needs` edge carries `EdgeAttrs::new(0, 0)` (hard edges are
-equal — they never evict, the `Reject` policy errors instead). An `after` edge
+equal — they never evict; a `needs` cycle is a `Reject` **diagnostic** in provenance,
+not a `build()` error — cordage returns cycles as data, never errors, `resolve.rs:4`;
+the adapter's `dep_cycles()` elevates it to the hard `order`-time error, §5.5).
+An `after` edge
 carries `EdgeAttrs::new(rank, age)`: the authored per-edge `rank` (default 0) and the
 edge's **index in the item's `after` array** as the `age` ordinal — clock-free and
 stable across recomputes (SPEC-001 D5; *not* the wall-clock `created`, which is the
@@ -324,7 +327,11 @@ architectural prefactor riders on the same outbound seam. SL-039 mints the **aut
 field only** — the symmetric counterpart to adding `needs`/`after`:
 
 - **Parse**: `triggers: Vec<Trigger>`, `#[serde(default)]`, `Trigger { globs:
-  Vec<String>, note: String }`. Seeded `triggers = []` in both templates.
+  Vec<String>, note: String }`. Seeded `triggers = []` in both templates. `note` is
+  `#[serde(default)]` (**optional, empty permitted**) — a deliberate ergonomic: the
+  globs self-document, and PRD-009 FR-011 specifies `{ globs, note }` without
+  requiring a non-empty note (Q2, inquisition round 3). When the IMP-026 mask lands,
+  a matched entry surfaces its note (empty = globs-only signal).
 - **Render**: `show` lists each trigger's globs + note alongside the other axes.
 - **No mask, no ordering.** PRD-009 is explicit that it "mints only the field"; the
   consuming behaviour — SPEC-001 D6's policy-layer actionability mask `mask(item,
@@ -381,6 +388,13 @@ its presence on an item has **zero** effect on `order` until IMP-026 lands.
   dst)` is made total by `(src, dst)`. The two ordinals act in disjoint places (node
   allocation vs edge eviction), so E5's `created` malformedness cannot perturb
   eviction, and array reordering cannot perturb node allocation.
+  **Contract note (D5 wording).** SPEC-001 D5 (`spec-001.md:200`) states the contract
+  as "`age` be total and stable" and offers the candidate "source entity id, then
+  append position." This design's bare array index satisfies the *full-key* totality
+  (`(rank,age,src,dst)` via `resolve.rs:38-41`), **not** D5's literal *age*-totality —
+  a deliberate, sound reliance on the richer key, not a drift. When SPEC-001 next
+  moves (already flagged for the `triggers`-list reconcile, PRD-009 `:362`), D5's
+  wording should be reconciled to "full eviction key total," not this `age` "fixed."
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -584,26 +598,60 @@ read `depends_on`/`before`.)
   mask is blocked on the open **OQ-009** file-set source → deferred to **IMP-026**.
   (User chose pull-in; the buildable half is the field, the mask is not.)
 - **No mechanism re-verification needed** beyond the eviction key: `rank`/`age` are
-  `EdgeAttrs`, which §3 already held out of `OrderKey`, so the composed order, I1/I2,
-  and the A1/E2 longest-path reasoning are unchanged — only eviction *selection*
-  becomes spec-correct. The `(rank,age,src,dst)` key re-verified against
-  `resolve.rs:38-40` (F17) + SPEC-001 D5.
+  `EdgeAttrs`, which §3 already held out of `OrderKey` (`OrderKey { level, node }`,
+  `lib.rs:351`), so the order-*derivation mechanism* (longest-path over the resolved
+  DAG) and I1/I2/A1/E2 are unchanged. The order *output* differs **only** where
+  eviction now selects a different edge than the retired A4 `(src,dst)`-under-zero
+  stand-in — which is the intended A4 retirement, pinned by VT-6 (an acyclic,
+  conflict-free input still produces the identical order). The `(rank,age,src,dst)`
+  key re-verified against `resolve.rs:38-40` (F17) + SPEC-001 D5.
+
+### Inquisition pass (round 3) — `/inquisition` on the reconcile, 2026-06-11
+
+Hostile pass over the reconcile, authorities read at source (PRD-009 §2/§4/OQ-007,
+SPEC-001 D5/D6/OQ-009, `crates/cordage/src/{lib,resolve}.rs`), full record in
+`inquisition.md`. The reconcile was **acquitted** on the summoned charge — direction-
+flip, §5.1/§5.6 worked examples, the `(rank,age,src,dst)` eviction, the
+`OrderKey`-excludes-`EdgeAttrs` mechanism claim, and the triggers field-only boundary
+all verified faithful against the source, not the paraphrase. Three collateral
+findings + two questions, all dispositioned:
+
+- **In-I (moderate, scope/design drift) — FIXED.** `slice-039.md` (`:65`, Closure
+  intent) still preached the round-2-**recanted** "wrong-wiring won't compile"
+  overclaim (E4 retracted it; VT-10 bounded it to token-absence) — and `:162` is a
+  closure gate. Reconciled both to the bounded R-C claim (callers cannot pass a raw
+  cordage id; internal transposition contained by named fields, not the type system).
+  The *same* cross-artifact miss-class that birthed the R1 reconcile.
+- **In-II (low, leaf-contract false witness) — FIXED.** §5.4 read "the `Reject`
+  policy errors instead"; cordage `Reject` *diagnoses as data*, never errors
+  (`resolve.rs:4`; `build()` Errs only on malformed input, `lib.rs:654`). Corrected
+  to attribute the hard error to the adapter's `dep_cycles()`/`order` verb.
+- **In-III (low, framing) — FIXED.** §10 round-3 read "the composed order … unchanged";
+  the order *output* changes wherever eviction now selects a different edge (the
+  intended A4 retirement). Split derivation-mechanism (unchanged) from output (changed,
+  pinned by VT-6).
+- **Q1 (age vs SPEC-001 D5 wording) — RECORDED (§6 A2).** Bare array-index `age`
+  satisfies the full-key totality, not D5's literal *age*-totality; flagged for the
+  next SPEC-001 reconcile.
+- **Q2 (`triggers` note optionality) — RULED (§5.7).** `note` optional (empty
+  permitted) — deliberate ergonomic, PRD-009 FR-011 does not require non-empty.
 
 ### Lock
 
-**LOCKED 2026-06-11** (round-2 lock `e5e5852`) → **RECONCILED 2026-06-11, re-lock
-pending the round-3 `/inquisition`.** Lock was broken by the R1 PRD-009 vocabulary
-divergence (caught post-lock); the reconcile is integrated and internally reviewed,
-but the re-lock waits on a fresh hostile pass over the changed surface — the original
-lock came only after its external pass, and round 1–2 *missed* this divergence, so the
-reconcile earns its own scrutiny. Passes: internal round 1 (A1–A4), external round 2
-(codex MCP / GPT-5.5, E1–E5), reconcile round 3 (R1–R2, integrated; hostile pass
-**pending**). **OQ-D resolved D-min**; vocabulary resolved to PRD-009 (**D10**);
-`rank` default 0.
+**LOCKED 2026-06-11** (round-2 lock `e5e5852`) → **RECONCILED 2026-06-11** → **RE-LOCKED
+2026-06-11** after the round-3 `/inquisition` (In-I…III FIXED, Q1/Q2 dispositioned).
+The round-2 lock was broken by the R1 PRD-009 vocabulary divergence (caught post-lock);
+the reconcile was integrated, internally reviewed, and has now survived a fresh hostile
+pass over the changed surface. Passes: internal round 1 (A1–A4), external round 2
+(codex MCP / GPT-5.5, E1–E5), reconcile round 3 (R1–R2), **inquisition round 3
+(In-I…III, Q1–Q2 — survived, `inquisition.md`)**. **OQ-D resolved D-min**; vocabulary
+resolved to PRD-009 (**D10**); `rank` default 0.
 Order model verified against the cordage surface (longest-path `ordered()`,
 `Reject`/`Evict` policies, provenance evictions, the genuine `(rank,age,src,dst)`
 eviction key, `anyhow`-wrapped well-formed `build()`). Residual open items are
 non-blocking: OQ-A (projection siting, impl), OQ-B (the budgeted R-C harvest,
 expected), OQ-C (`after` clap shape, `/plan`); deferred work: IMP-026 (triggers mask).
-Re-run `/inquisition` on the reconcile, then `/plan` to correct `plan.toml` + the
-corrective PHASE-01/02 execution. No code until the plan is re-approved.
+Inquisition round 3 survived (`inquisition.md`); design **re-locked**. Next: `/plan` to
+correct `plan.toml` vocab + sequence the corrective PHASE-01/02 passes (the shipped code
+still reads `depends_on`/`before` + `EdgeAttrs(0,0)` — the design leads it), then the held
+PHASE-03. No code until the plan is re-approved.
