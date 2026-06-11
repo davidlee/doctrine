@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 190
+slug = "refuse-provision-when-any-worktreeinclude-pattern-names-a-withheld-tier-and-back-check-allowlist-with-allowlist-violations-as-a-static-smell-test-not-a-completeness-guarantee"
+title = "Refuse provision when any `.worktreeinclude` pattern names a withheld tier, and back `check-allowlist` with `allowlist_violations` as a static smell test (not a completeness guarantee)."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

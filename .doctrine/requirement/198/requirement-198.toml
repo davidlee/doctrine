@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 198
+slug = "provide-a-kind-blind-list-spine-carrying-filter-semantics-the-status-known-set-check-the-canonical-id-form-the-table-layout-and-the-json-envelope-lifted-out-of-per-kind-list-code"
+title = "Provide a kind-blind list spine carrying filter semantics, the status known-set check, the canonical id form, the table layout, and the JSON envelope, lifted out of per-kind list code."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,27 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 11
+slug = "boot-snapshot"
+title = "Boot snapshot"
+status = "draft"
+kind = "tech"
+category = "boot"
+c4_level = "container"
+parent = "SPEC-003"
+descends_from = "PRD-007"
+tags = ["boot", "snapshot", "governance-projection", "cache-key", "session-start", "import-wiring", "hook-merge", "disk-sentry"]
+responsibilities = [
+  "Assemble the snapshot as a pure projection — `boot_sequence` declares an ordered heading+source list, `render_boot` folds the produced section bodies into one deterministic string with no clock/rng/disk, so the same governance state always yields a byte-identical snapshot.",
+  "Order the build-volatile `Invoking doctrine` exec-path section LAST so a binary-path change confines its diff to the snapshot tail and leaves the governance prefix cache-warm.",
+  "Project each numbered governance kind through one `GovRows` arm filtered to its in-force status SET (accepted ADRs, required policies, default+required standards, active memories) — the explicit status set reveals past each kind's list hide-set, building a `listing::ListArgs` directly as a non-clap consumer.",
+  "Fall back to a fixed `<!-- heading: not yet populated -->` marker on any producer miss (error OR empty listing), so a missing source is a benign marker, never a crash or a cache-busting variable body.",
+  "Write the snapshot to `.doctrine/state/boot.md` (runtime-state, gitignored) only when content differs from disk (`write_if_changed`) — the content diff IS the cache key, so an unchanged regenerate keeps the cached session-start prefix warm.",
+  "Wire `boot install`: idempotently prepend the `@.doctrine/state/boot.md` import once into each harness's committed file (Claude `CLAUDE.md`, codex `AGENTS.md`), deduping same-inode symlink targets, and merge a `<exec> boot` `SessionStart` hook into `.claude/settings.local.json` preserving foreign hooks.",
+  "Run `boot --check` as a DISK sentry: recompute the snapshot, report `stale` when on-disk bytes differ and which sections are unpopulated markers — disk-scoped wording only, never asserting the live in-session prefix is fresh.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/boot.rs"
+module = "doctrine::boot"

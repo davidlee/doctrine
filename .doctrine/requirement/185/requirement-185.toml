@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 185
+slug = "boot-install-idempotently-prepends-the-import-once-per-harness-file-claude-claudemd-codex-agentsmd-deduping-same-inode-symlink-targets-to-one-write"
+title = "`boot install` idempotently prepends the `@`-import once per harness file (Claude CLAUDE.md, codex AGENTS.md), deduping same-inode symlink targets to one write."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 202
+slug = "the-list-spine-is-a-pure-leaf-importing-neither-clap-nor-entity-and-touching-no-clock-rng-git-or-disk-adr-001-leaf-layering"
+title = "The list spine is a pure leaf importing neither clap nor entity and touching no clock, rng, git, or disk (ADR-001 leaf layering)."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

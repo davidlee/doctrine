@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 186
+slug = "boot-install-merges-a-exec-boot-sessionstart-hook-into-claude-settingslocaljson-refreshing-a-stale-owned-copy-and-preserving-every-foreign-hook-and-key"
+title = "`boot install` merges a `<exec> boot` SessionStart hook into Claude settings.local.json, refreshing a stale owned copy and preserving every foreign hook and key."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

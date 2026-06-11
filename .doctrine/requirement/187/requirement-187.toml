@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 187
+slug = "boot-check-recomputes-the-snapshot-reports-stale-when-on-disk-bytes-differ-unreadable-counts-as-stale-and-lists-sections-still-rendering-a-marker"
+title = "`boot --check` recomputes the snapshot, reports `stale` when on-disk bytes differ (unreadable counts as stale), and lists sections still rendering a marker."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

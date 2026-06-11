@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 194
+slug = "all-git-disk-and-process-impurity-is-confined-to-the-gitrsprovision-shell-the-provision-and-copy-selection-core-is-pure-pathsstrings-in-no-clockrngdisk"
+title = "All git, disk, and process impurity is confined to the `git.rs`/provision shell; the provision and copy-selection core is pure (paths/strings in, no clock/rng/disk)."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

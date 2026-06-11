@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 199
+slug = "make-the-shared-list-flags-mandatory-by-flattening-commonlistargs-into-every-kinds-list-lowered-onto-the-clap-free-listargs-leaf-at-one-seam"
+title = "Make the shared list flags mandatory by flattening CommonListArgs into every kind's list, lowered onto the clap-free ListArgs leaf at one seam."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

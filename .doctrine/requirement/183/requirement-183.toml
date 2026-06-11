@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 183
+slug = "fall-back-to-a-fixed-heading-not-yet-populated-marker-on-any-producer-miss-error-or-empty-listing-so-a-missing-source-never-crashes-assembly"
+title = "Fall back to a fixed `<!-- heading: not yet populated -->` marker on any producer miss (error or empty listing), so a missing source never crashes assembly."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 193
+slug = "capture-the-born-frame-in-gitrs-reproducing-forgetremotev1-remote-normalization-and-forgetcheckoutv1-checkout-state-hashing-byte-for-byte-against-the-event-store"
+title = "Capture the born frame in `git.rs`, reproducing `forget.remote.v1` remote normalization and `forget.checkout.v1` checkout-state hashing byte-for-byte against the event store."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
