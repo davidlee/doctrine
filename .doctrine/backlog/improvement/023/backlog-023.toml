@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 23
+slug = "rewire-remaining-review-skills-onto-rv-kind-inquisition-code-review-drift-reconciliation-beyond-the-one-piloted-in-imp-001"
+title = "Rewire remaining review skills onto RV kind (/inquisition, /code-review, drift, reconciliation) beyond the one piloted in IMP-001"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-11"
+updated = "2026-06-11"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []

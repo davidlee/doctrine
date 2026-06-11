@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 24
+slug = "large-review-funnel-fan-parallel-raisers-into-one-rv-ledger-adr-007-neutral-seam-composes-adr-006-spatial-adr-007-temporal"
+title = "Large-review funnel: fan parallel raisers into one RV ledger (ADR-007 Neutral seam, composes ADR-006 spatial + ADR-007 temporal)"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-11"
+updated = "2026-06-11"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []

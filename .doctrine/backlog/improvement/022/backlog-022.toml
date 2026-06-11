@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 22
+slug = "drift-ledger-kind-multi-artefact-normative-vs-observed-divergence-carved-from-adr-007-d-c11"
+title = "Drift Ledger kind: multi-artefact normative-vs-observed divergence (carved from ADR-007 D-C11)"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-11"
+updated = "2026-06-11"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
