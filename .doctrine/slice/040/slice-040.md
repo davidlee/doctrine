@@ -89,21 +89,25 @@ sequenced late so an RV-without-cache increment is demonstrable mid-slice.
 
 ### Risks / Assumptions / Open Questions
 
-- **R1 — warm-cache content-hash × worktree** (D-C10): the explored path set and
-  its hashability differ across worktrees; staleness model must be worktree-aware.
-  Largest design unknown. → `/design`.
-- **R2 — reverse close-gate scan cost**: corpus scan over all RV per `/close`;
-  acceptable at current scale, note if it needs indexing later.
-- **A1 — pilot skill = `/audit`** unless `/design` surfaces a better first
-  integration.
-- **A2 — single slice altitude**: large but one coherent capability; size is
-  absorbed by phasing, not by splitting the kind.
-- **OQ-1** — does `prime` warrant its own runtime sub-file or fold into the baton
-  file? (design)
-- **OQ-2** — lock mechanism: advisory file lock vs CAS-on-content; interaction
-  with D-C4a re-read. (design)
+All design-stage open questions are now **resolved in `design.md`** (`/design`
+complete; flagged points D2/D6/D10 carry locked leans pending `/inquisition`):
+
+- **R1 — warm-cache content-hash × worktree** (D-C10): **resolved** — design D4.
+  Locus = parent tree (ADR-006 dispatched-fork model) collapses the multi-root
+  concern; domain_map is single-rooted `(path, hash)`; subject-root is additive
+  future (IMP-024).
+- **R2 — reverse close-gate scan cost**: standing — O(#RV)/close, acceptable now,
+  note indexing later (design §7).
+- **A1 — pilot skill = `/audit`**: confirmed (design §10/D11).
+- **A2 — single slice altitude**: confirmed (one coherent capability, phased).
+- **OQ-1** — `prime` runtime file shape: **resolved** — separate
+  `baton.toml`/`cache.toml`/`lock` (design D5).
+- **OQ-2** — lock mechanism: **resolved** — `create_new` lock (RAII) + `sha256`
+  CAS as out-of-band-edit detector (design D6).
 
 ## Follow-Ups
 
 Tracked as backlog, per `mem.system.lifecycle.defer-needs-backlog-before-close`:
-IMP-022 (Drift Ledger), IMP-023 (skill rewiring), IMP-024 (large-review funnel).
+IMP-022 (Drift Ledger), IMP-023 (skill rewiring), IMP-024 (large-review funnel /
+subject-root), **IMP-025** (promote `contentset` to a shared primitive),
+**IDE-002** (durable region-anchor primitive).

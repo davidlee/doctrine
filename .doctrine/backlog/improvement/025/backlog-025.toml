@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 25
+slug = "promote-content-hashed-path-set-to-shared-primitive"
+title = "Promote content-hashed-path-set to shared primitive"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-11"
+updated = "2026-06-11"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-040"]
+specs  = []
+drift  = []
