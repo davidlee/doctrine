@@ -177,20 +177,37 @@ from `Graph`, already held).
 **P2 — `query.rs` (RSK-004).**
 
 - **Condensation fold**, once per `evaluate`:
-  1. SCC partition: `Evict` overlay ⇒ every node its own trivial SCC; `Reject` ⇒
-     stored `degraded_sccs[overlay]` are the cyclic SCCs, all others singleton. The
-     partition is **direction-invariant** (SCCs survive transpose), so reusing the
-     build-time forward-adjacency `degraded_sccs` is valid for both directions.
+  1. SCC partition — **of the direction-resolved view, not unconditionally the
+     stored one (C1 R3 — silent-corruption seam).** `Evict` overlay ⇒ every node a
+     trivial SCC. `Reject` ⇒ the stored `degraded_sccs[overlay]` are the cyclic
+     SCCs — but this reuse is valid **only for the traversing directions**
+     `Along`/`Against` (SCCs survive transpose). Under **`Direction::None`**
+     `neighbours` is ∅ (query.rs:228) so *no* node reaches another: the partition
+     **dissolves to all singletons** and the per-node truth is fold-set `{n}`
+     (idempotent) / ∅ (CountDistinct, F35). Grouping the stored `{b,c}` under `None`
+     would fold `Max(b)`/`Max(c)` into one value — silent corruption the
+     behaviour-preservation gate misses (VT-3 has no SCC). So: partition = SCCs of
+     the direction-resolved neighbour relation; `None` ⇒ singletons everywhere.
   2. **Direction-resolved condensation (A-2 R2 — load-bearing).** The condensation
      *partition* is reused, but the inter-SCC **edges** and the reverse-topo order
      are built from the **same neighbour view `evaluate` walks** — `out` for `Along`,
      `incoming` for `Against` (query.rs:217-228) — **never** the forward build
      adjacency. For `a→b, b⇄c`: `Along` condenses `a→{b,c}` (fold `{b,c}` then `a`);
      `Against` condenses `{b,c}→a` (fold `a` then `{b,c}`). Folding a forward DAG for
-     an `Against` channel silently corrupts every value. Reverse-topo (sinks first)
-     over *that* DAG, O(V+E).
-  3. Fold each SCC = combine(member seeds, already-folded successor-SCC results);
-     every node in an SCC shares the SCC result (mutual reachability).
+     an `Against` channel silently corrupts every value. **Inter-SCC edges (C3):**
+     for each member's direction-resolved neighbour, map to its SCC-id and add an
+     edge **only when the ids differ** — drop intra-SCC neighbours / self-edges, or
+     the "condensation" is not a DAG and reverse-topo is undefined. Reverse-topo
+     (sinks first) over *that* DAG, O(V+E).
+  3. Fold each SCC = combine(member seeds, already-folded successor-SCC results).
+     The successor object propagated up the DAG is **per-combinator (C4)**: a
+     `(value, argmax)` for `Max`, the unioned witness/present set for
+     `Any`/`All`/`CountDistinct` (never the projected `Count`, else diamonds
+     double-count, R3). For the **idempotent** combinators every node in an SCC
+     shares the SCC result (mutual reachability ⇒ identical fold set). **NOT
+     CountDistinct (C2 / F34, SL-036 §5.2):** members share the pre-subtraction SCC
+     witness set, but each projects `\ {n}` — `count(b)` and `count(c)` differ. The
+     line below is the authority.
   - **Max** — own-seed included; whole SCC one `(value, argmax)`, min-`NodeId`
     tiebreak folded up. Fully **O(V+E)** (singleton contributor).
   - **Any / All** — own-seed included (`{n}∪reachable`); value folds in O(V+E),
@@ -376,11 +393,38 @@ fully broke; two over-claims and two hidden invariants now documented.
   HOLD with concrete fixtures (SCC `a⇄b`, downstream `c`); no off-by-one, SCC-constant
   contributor switch.
 
+### Inquisition — Opus, direction-resolved condensation (2026-06-11, R3)
+
+Narrow adversarial hunt focused on the A-2/G1 fix. The claim **SURVIVED for
+`Along`/`Against`** (linchpin example hand-traced byte-identical for value AND
+contributors, Max + CountDistinct, incl. F8 self-loop), but found one seam the
+codex pass left tainted:
+
+- **C1 (🔴 → FIXED).** A-2's fix made the *edges* direction-resolved but left the
+  *partition* "direction-invariant". `Direction::None` is the third enum member and
+  a **valid channel direction** (`ChannelSpec::new` does not reject it — lib.rs:161;
+  validated out only for order layers, lib.rs:680). Under `None`, `neighbours`=∅ so
+  every node folds alone, but the stored `{b,c}` partition would group them →
+  `Max(b)`/`Max(c)` collapse to one value. **Silent corruption invisible to the
+  gate** (VT-3 = isolated node, no SCC). §5.4 P2 step 1 + G1 now make the *partition*
+  direction-resolved (`None` ⇒ singletons).
+- **C2 (🟠 → FIXED).** "every node in an SCC shares the SCC result" was a universal
+  over-claim — false for CountDistinct (per-member `\ {n}`, F34 / SL-036 §5.2).
+  Scoped to the idempotent combinators; line-200 formula affirmed as authority.
+- **C3 (🟠 → FIXED).** Inter-SCC edge derivation under-specified — must quotient
+  member-adjacency by SCC-id and drop self-edges or the condensation isn't a DAG.
+  Pinned in §5.4 P2 step 2.
+- **C4/C5 (🟡 → FIXED).** Named the per-combinator successor-contribution object
+  (no projected `Count` up the DAG, R3); widened G1 to `{Along,Against,None}` ×
+  combinators.
+
 ### Carried risks into /plan (verifier MUST guard explicitly)
-- **G1 (A-2, elevated).** Condensation fold builds its DAG + reverse-topo from the
-  **direction-resolved** neighbour view, not forward build adjacency. A targeted
-  `Against`-channel-over-a-cyclic-overlay fixture asserting value-identity vs the
-  per-node BFS is mandatory — the silent-corruption surface.
+- **G1 (A-2 + C1, elevated).** The fold partition AND its condensation DAG +
+  reverse-topo are **direction-resolved**, not the forward build adjacency. Fixture
+  matrix is mandatory: `{Along, Against, None}` × `{Max, CountDistinct}` (≥) over one
+  degraded `Reject` SCC, each asserting value+contributor identity vs the per-node
+  BFS. The **`None`×cyclic** cell (C1) and the **`Against`×cyclic** cell are the two
+  silent-corruption surfaces the existing suite cannot see (VT-3 has no SCC).
 - **G2 (A-3).** The layer-k invariant (every U-cycle at layer k has a `layer_k`
   edge) is a localization precondition; assert it or the unchanged `compose_order`
   goldens that depend on it.
