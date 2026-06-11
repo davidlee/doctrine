@@ -62,9 +62,12 @@ consume yet* — introducing them is half this slice's work.
      handles, compose them into one 2-layer `OrderSpec`; allocate nodes in
      `(exposure desc, created, id)` order so the fallback carries tiers 2–3 (no
      throwaway-builder);
-   - **domain newtypes** so a semantically-wrong edge won't compile — the R-C
-     kill (OQ-5): `NodeId`/`OverlayId` never escape the adapter, `ItemId` is the
-     only token callers touch;
+   - **domain newtypes** that make wrong-wiring inexpressible *to callers* — the
+     R-C kill (OQ-5): `NodeId`/`OverlayId` never escape the adapter, `ItemId` is
+     the only token callers touch, so no raw cordage id can cross the boundary.
+     (Internal handle-transposition is contained by named overlay fields, not by
+     the type system — design E4/VT-10; the round-2 "won't compile" claim was
+     retracted.)
    - a narrow surface: ingest the two authored edge maps + derived exposure,
      `ordered() -> Vec<ItemId>`, `overrides()` (the surfaced evictions), a
      dependency-cycle error.
@@ -159,5 +162,7 @@ of the cordage scale/perf streams.
 - A backlog tech/product spec (SL-021) would later govern this capability
   retroactively.
 - Closure intent: authored dep edges order correctly + deterministically;
-  wrong-wiring won't compile (newtype proof); cordage unmodified (leaf invariant
-  holds); the interface-rev finding recorded.
+  no raw cordage id crosses the adapter boundary (the bounded R-C kill — callers
+  cannot pass a `NodeId`/`OverlayId`; internal transposition contained by named
+  fields, design E4/VT-10, *not* a "won't compile" proof); cordage unmodified
+  (leaf invariant holds); the interface-rev finding recorded.
