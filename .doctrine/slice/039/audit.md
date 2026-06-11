@@ -69,6 +69,23 @@ reconcile step, no lifecycle verb yet).
   bites." **Disposition: tolerated drift — not owed this slice.** Did not bite in
   the audit; no backlog item filed (deliberate, per the design's own condition).
 
+## Code review (adversarial sub-agent pass, 2026-06-11)
+
+Net SL-039 code diff (`3add407..HEAD` over `src/backlog.rs`, `src/backlog_order.rs`,
+`src/main.rs`, `tests/e2e_backlog_order_golden.rs`; ~2335 insertions) reviewed
+against `design.md`, `plan.toml`, ADR-001/004, and the cordage source.
+
+**Verdict: shippable as-is — no must-fix findings.** Each load-bearing claim
+verified against the cordage source (not the design's paraphrase): B→A flip on
+both edges, genuine `(rank,age,src,dst)` eviction (age tests discriminate the real
+key from the retired `(0,0)` stand-in), `Contradicted` cross-layer filter correct
+(`overlay() == after_overlay`), exposure-as-within-level-fallback (never lifts
+across levels), honest-record drop tiers (AbsentDrop + Dangling) both surfaced,
+bounded R-C kill mechanically test-asserted. Purity held, ADR-001/004 + every
+clippy ban respected. Two LOW observations (`classify_dangling` unreachable arm,
+`by_item.get` dead-defensive `else`) — both already documented dead-defensive,
+**no fix required**. Disposition: **aligned.**
+
 ## Closure readiness
 
 `design.md`, `plan.toml`, the implementation, and `notes.md` tell a coherent
