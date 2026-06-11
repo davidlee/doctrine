@@ -15,3 +15,6 @@ tags = ["governance", "backlog", "planning-gate", "boot", "meta"]
 slices = []
 specs  = ["PRD-011", "PRD-009"]
 drift  = []
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
