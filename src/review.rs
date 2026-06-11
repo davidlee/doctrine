@@ -703,6 +703,62 @@ fn parse_ref(reference: &str) -> anyhow::Result<u32> {
     })
 }
 
+/// One unresolved blocker holding a target's closure open (design §7, D8/D-C9b):
+/// the canonical RV id (`RV-007`) and the offending finding id (`F-2`). Surfaced
+/// by the close-gate to name *why* a closure-seam transition is refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BlockerRef {
+    pub(crate) rv: String,
+    pub(crate) finding: String,
+}
+
+/// Pure check (design §7): the unresolved blocker findings *this* RV holds against
+/// its target. A finding gates iff `severity == Blocker && status ∉ {verified,
+/// withdrawn}` — but ONLY on an **Active** review (`derived_status == Active`,
+/// D-C8): a `Done` ledger (every finding terminal, D-C9a) holds nothing, even if a
+/// stray non-terminal status were hand-edited in (the derived gate already
+/// excludes that by keeping it Active). No I/O — operates on already-read data so
+/// the scan shell stays thin (the `integrity::scan_kind` shape).
+fn doc_unresolved_blockers(doc: &ReviewDoc) -> Vec<BlockerRef> {
+    if doc.derived().0 != ReviewStatus::Active {
+        return Vec::new();
+    }
+    doc.finding
+        .iter()
+        .filter(|f| Severity::parse(&f.severity) == Ok(Severity::Blocker))
+        .filter(|f| !parse_finding_status(&f.status).is_terminal())
+        .map(|f| BlockerRef {
+            rv: canonical_id(doc.id),
+            finding: f.id.clone(),
+        })
+        .collect()
+}
+
+/// The reverse close-gate scan (design §7, D8/D-C9b) — a **standalone scoped scan**
+/// over `.doctrine/review/*`, NOT the spec `Registry` (wrong cohesion) and NOT a
+/// general reverse index (scope non-goal). Returns every unresolved blocker
+/// (`severity == Blocker && status ∉ {verified, withdrawn}`) on an Active RV whose
+/// `[target].ref` matches `subject_ref`. The thin shell: read every ledger, then
+/// the pure [`doc_unresolved_blockers`] filters each. O(#RV)/close (R2 — fine at
+/// scale, index later). Used by the slice-close command shell one-way
+/// (`slice`-shell → `review`-query); `review` must not import `slice` (ADR-001).
+pub(crate) fn unresolved_blockers_for(
+    root: &Path,
+    subject_ref: &str,
+) -> anyhow::Result<Vec<BlockerRef>> {
+    let review_root = root.join(REVIEW_DIR);
+    if !review_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut blockers = Vec::new();
+    for doc in read_reviews(&review_root)? {
+        if doc.target.reference == subject_ref {
+            blockers.extend(doc_unresolved_blockers(&doc));
+        }
+    }
+    Ok(blockers)
+}
+
 /// `doctrine review show <RV-NNN>` — read the RV as data and render the readable
 /// whole (`Table`) or the faithful toml-as-data + brief (`Json`). The status is
 /// DERIVED here (review never asks the shared reader for a stored status, D-C8);
@@ -2705,6 +2761,146 @@ mod tests {
         assert!(
             !text.contains("please address the edge case"),
             "note not durable: {text}"
+        );
+    }
+
+    // ---- PHASE-04: reverse close-gate scan (design §7, D8/D-C9b) ----
+
+    /// VT-3 / VT-1: an Active RV with a raised (open) **blocker** finding is
+    /// reported by the scan, keyed `RV-NNN`/`F-n`, and matched by `[target].ref`.
+    #[test]
+    fn vt3_scan_reports_an_unresolved_blocker_on_an_active_rv() {
+        let tmp = fixture_rv(); // RV-001 → SL-001
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+        // Active (one open finding) + blocker ⇒ one BlockerRef RV-001/F-1.
+        assert_eq!(read_doc(root, 1).derived().0, ReviewStatus::Active);
+        let blockers = unresolved_blockers_for(root, "SL-001").unwrap();
+        assert_eq!(
+            blockers,
+            vec![BlockerRef {
+                rv: "RV-001".to_owned(),
+                finding: "F-1".to_owned(),
+            }]
+        );
+    }
+
+    /// VT-3: a non-matching `[target].ref` is ignored — the scan is subject-scoped.
+    #[test]
+    fn vt3_scan_ignores_a_non_matching_target() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+        // RV-001 targets SL-001; a query for an unrelated subject finds nothing.
+        assert!(unresolved_blockers_for(root, "SL-999").unwrap().is_empty());
+    }
+
+    /// VT-3: a non-blocker finding (major/minor/nit) never gates — only `blocker`.
+    #[test]
+    fn vt3_scan_ignores_a_non_blocker_finding() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "nice to have"),
+            Role::Raiser,
+        )
+        .unwrap();
+        assert!(unresolved_blockers_for(root, "SL-001").unwrap().is_empty());
+    }
+
+    /// VT-1 / VT-3: a **verified** blocker is terminal ⇒ the RV is Done ⇒ the scan
+    /// reports nothing (the finding is resolved AND the review is no longer Active).
+    #[test]
+    fn vt1_verified_blocker_is_terminal_and_not_reported() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        run_verify(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            None,
+            Role::Raiser,
+        )
+        .unwrap();
+        // All findings terminal ⇒ Done (D-C9a) ⇒ no unresolved blocker.
+        assert_eq!(read_doc(root, 1).derived().0, ReviewStatus::Done);
+        assert!(unresolved_blockers_for(root, "SL-001").unwrap().is_empty());
+    }
+
+    /// VT-1 / VT-3: a **withdrawn** blocker is terminal ⇒ Done ⇒ not reported.
+    #[test]
+    fn vt1_withdrawn_blocker_is_terminal_and_not_reported() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_withdraw(Some(root.to_path_buf()), "RV-001", "F-1", Role::Raiser).unwrap();
+        assert_eq!(read_doc(root, 1).derived().0, ReviewStatus::Done);
+        assert!(unresolved_blockers_for(root, "SL-001").unwrap().is_empty());
+    }
+
+    /// VT-1: a **non-terminal** blocker keeps the review Active and gating — a
+    /// blocker disposed-but-not-yet-verified (answered) still gates (D-C9a: review
+    /// is done only when EVERY finding is terminal ∈ {verified, withdrawn}).
+    #[test]
+    fn vt1_answered_blocker_keeps_the_review_active_and_gating() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        // answered ∉ {verified, withdrawn} ⇒ Active ⇒ still an unresolved blocker.
+        assert_eq!(read_doc(root, 1).derived().0, ReviewStatus::Active);
+        let blockers = unresolved_blockers_for(root, "SL-001").unwrap();
+        assert_eq!(blockers.len(), 1);
+        assert_eq!(blockers[0].finding, "F-1");
+    }
+
+    /// VT-3: with no `.doctrine/review/` tree at all, the scan is a clean empty —
+    /// the gate degrades gracefully on a slice with no reviews.
+    #[test]
+    fn vt3_scan_with_no_review_tree_is_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(
+            unresolved_blockers_for(tmp.path(), "SL-001")
+                .unwrap()
+                .is_empty()
         );
     }
 

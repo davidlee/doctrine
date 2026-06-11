@@ -361,6 +361,30 @@ pub(crate) fn run_status(
     let from = read_status(&slice_root, id)?;
     let to = state.as_str();
     let kind = classify(&from, to);
+    // Reverse close-gate (design §7, D8/D-C9b): the gate lives in this close
+    // COMMAND SHELL, not the FSM writer (`set_slice_status`) — keeping the writer
+    // focused and isolating the one-way `slice-shell → review-query` coupling
+    // (ADR-001: `review` never imports `slice`). It fires ONLY on a closure-seam
+    // crossing (`audit→reconcile`, `reconcile→done`); a non-seam transition is
+    // never gated. A SOLE seam-crossing caller of `set_slice_status` (this shell)
+    // means the gate cannot be bypassed (`set_slice_status_is_the_sole_seam_crosser`
+    // pins it). The teeth are HERE in the binary — the `slice status …` refusal —
+    // not in skill prose.
+    if crosses_closure_seam(&from, to) {
+        let blockers = crate::review::unresolved_blockers_for(&root, &canonical_id(id))?;
+        if !blockers.is_empty() {
+            let listed = blockers
+                .iter()
+                .map(|b| format!("{}/{}", b.rv, b.finding))
+                .collect::<Vec<_>>()
+                .join(", ");
+            anyhow::bail!(
+                "slice {} → {to}: refused — unresolved blocker review finding(s): {listed} \
+                 (resolve via `review verify`/`review withdraw`, then retry)",
+                canonical_id(id)
+            );
+        }
+    }
     set_slice_status(&slice_root, id, &from, state, &crate::clock::today())?;
     // Advisory conduct posture (F15/F19): the SOURCE state's exit posture —
     // `autonomy` governs advancing *out* of `from`. Never blocks; surfaced only.
@@ -565,6 +589,17 @@ fn is_terminal_status(authored: &str) -> bool {
 /// (`FromTerminal`); the three predicates diverge by design (design §5.2/§5.3).
 fn is_transition_terminal(status: &str) -> bool {
     matches!(status, "done" | "abandoned")
+}
+
+/// Whether a `from → to` move crosses the **closure seam** (design §7, D8): the
+/// two legitimate terminal advances `audit → reconcile` and `reconcile → done`.
+/// Pure — the reverse close-gate ([`run_status`]) fires the RV-blocker scan ONLY
+/// on these edges, never on any other transition (VT-4). These are exactly the
+/// `to`-targets the `SeamBreach` guard protects (§5.5), taken from their one legal
+/// source: structurally, `set_slice_status` is the sole writer of these moves, so
+/// this shell is the sole seam-crosser (VT-5).
+fn crosses_closure_seam(from: &str, to: &str) -> bool {
+    matches!((from, to), ("audit", "reconcile") | ("reconcile", "done"))
 }
 
 /// How a `from → to` slice-status move classifies under the lifecycle FSM
@@ -2394,5 +2429,183 @@ mod tests {
         make_slice(root, "s", "S", "2026-06-04");
         set_status_raw(root, 1, "reconcile");
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
+    }
+
+    // --- PHASE-04: reverse close-gate (design §7, D8/D-C9b) ---
+
+    /// VT-4: `crosses_closure_seam` is true for EXACTLY the two terminal advances
+    /// and false for every other edge — the gate's firing predicate.
+    #[test]
+    fn vt4_crosses_closure_seam_is_only_the_two_terminal_advances() {
+        assert!(crosses_closure_seam("audit", "reconcile"));
+        assert!(crosses_closure_seam("reconcile", "done"));
+        // Non-seam transitions — never gated.
+        for (from, to) in [
+            ("started", "audit"),
+            ("ready", "started"),
+            ("plan", "ready"),
+            ("audit", "started"),   // a back-edge
+            ("reconcile", "audit"), // a back-edge
+            ("started", "abandoned"),
+            ("audit", "audit"), // no-op
+        ] {
+            assert!(
+                !crosses_closure_seam(from, to),
+                "{from} → {to} must NOT be a closure-seam crossing"
+            );
+        }
+    }
+
+    /// Raise one `blocker` finding on a fresh RV targeting `SL-<target_id>`. Returns
+    /// the project root unchanged. Drives the real verb path (raise under the turn
+    /// guard) so the ledger is authentic.
+    fn raise_blocker_rv(root: &Path, target_id: u32) {
+        let target = canonical_id(target_id);
+        crate::review::run_new(
+            Some(root.to_path_buf()),
+            &crate::review::NewArgs {
+                facet: crate::review::Facet::Reconciliation,
+                target: target.clone(),
+                phase: None,
+                title: None,
+                raiser: None,
+                responder: None,
+            },
+        )
+        .unwrap();
+        crate::review::run_raise(
+            Some(root.to_path_buf()),
+            &crate::review::RaiseArgs {
+                reference: "RV-001".to_owned(),
+                severity: crate::review::Severity::Blocker,
+                title: "must fix".to_owned(),
+                detail: "d".to_owned(),
+            },
+            crate::review::Role::Raiser,
+        )
+        .unwrap();
+    }
+
+    /// VT-2 (refuse half): crossing the closure seam `audit → reconcile` is REFUSED
+    /// while an Active RV targeting the slice holds an unresolved blocker, the
+    /// refusal naming `RV-NNN/F-n`; the authored status is left untouched.
+    #[test]
+    fn vt2_close_seam_refused_on_an_unresolved_blocker() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        set_status_raw(root, 1, "audit");
+        raise_blocker_rv(root, 1);
+
+        let err = run_status(Some(root.to_path_buf()), 1, SliceStatus::Reconcile, None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("RV-001/F-1"), "names the blocker: {err}");
+        assert!(err.contains("refused"), "refusal wording: {err}");
+        // The transition was refused BEFORE the write — status unchanged.
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "audit");
+    }
+
+    /// VT-2 (pass half): the SAME seam crossing PASSES once the blocker is verified
+    /// (terminal ⇒ the RV is Done ⇒ no unresolved blocker remains).
+    #[test]
+    fn vt2_close_seam_passes_after_the_blocker_is_verified() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        set_status_raw(root, 1, "audit");
+        raise_blocker_rv(root, 1);
+
+        // Resolve the blocker: dispose (answered) then verify (terminal).
+        crate::review::run_dispose(
+            Some(root.to_path_buf()),
+            &crate::review::DisposeArgs {
+                reference: "RV-001".to_owned(),
+                finding: "F-1".to_owned(),
+                disposition: "fixed".to_owned(),
+                response: "done".to_owned(),
+            },
+            crate::review::Role::Responder,
+        )
+        .unwrap();
+        crate::review::run_verify(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            None,
+            crate::review::Role::Raiser,
+        )
+        .unwrap();
+
+        run_status(Some(root.to_path_buf()), 1, SliceStatus::Reconcile, None).unwrap();
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
+    }
+
+    /// VT-2 (withdraw variant): withdrawing the blocker also unblocks the seam.
+    #[test]
+    fn vt2_close_seam_passes_after_the_blocker_is_withdrawn() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        set_status_raw(root, 1, "audit");
+        raise_blocker_rv(root, 1);
+
+        crate::review::run_withdraw(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            crate::review::Role::Raiser,
+        )
+        .unwrap();
+        run_status(Some(root.to_path_buf()), 1, SliceStatus::Reconcile, None).unwrap();
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
+    }
+
+    /// VT-4: the gate fires ONLY on the closure seam — a NON-seam slice transition
+    /// (`started → audit`) is NOT gated even with an unresolved blocker present.
+    #[test]
+    fn vt4_non_seam_transition_is_not_gated() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "s", "S", "2026-06-04");
+        set_status_raw(root, 1, "started");
+        raise_blocker_rv(root, 1);
+
+        // started → audit is a forward Advance but NOT the closure seam — passes.
+        run_status(Some(root.to_path_buf()), 1, SliceStatus::Audit, None).unwrap();
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "audit");
+    }
+
+    /// VT-5 (bypass guard, Charge VIII): the close command shell (`run_status` via
+    /// `set_slice_status`) is the SOLE caller crossing the closure seam. This is a
+    /// SOURCE-level assertion: `set_slice_status` is private to this module, and a
+    /// grep of the whole module body finds exactly ONE call site (in `run_status`,
+    /// the close shell) — so no other path can cross `audit→reconcile` /
+    /// `reconcile→done` and thereby bypass the gate. If a SECOND call site ever
+    /// appears, this test fails, forcing that caller to re-invoke the gate (or the
+    /// design to move the gate into the FSM writer).
+    #[test]
+    fn vt5_close_shell_is_the_sole_seam_crossing_caller_of_set_slice_status() {
+        let src = include_str!("slice.rs");
+        // Scope to PRODUCTION code only — `set_slice_status` is module-private, so
+        // the FSM writer reaches disk via exactly the call sites in this module.
+        // Test-only callers (which exercise the writer directly) are excluded by
+        // cutting at the `#[cfg(test)]` boundary; my own comment mentions live past
+        // it too. The production region must hold exactly ONE call site.
+        let production = src.split_once("#[cfg(test)]").map_or(src, |(head, _)| head);
+        let call_sites = production
+            .match_indices("set_slice_status(")
+            .filter(|(i, _)| {
+                // Exclude the definition `fn set_slice_status(`.
+                !production.get(..*i).unwrap_or("").ends_with("fn ")
+            })
+            .count();
+        assert_eq!(
+            call_sites, 1,
+            "exactly ONE production caller may cross the closure seam (the close \
+             shell `run_status`); a second `set_slice_status(` call site bypasses \
+             the close-gate (design §7 Charge VIII — re-invoke the gate, or move \
+             it into the FSM writer)"
+        );
     }
 }

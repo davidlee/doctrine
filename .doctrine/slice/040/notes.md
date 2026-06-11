@@ -219,3 +219,47 @@ Durable carry-forwards (the close-gate PHASE-04 + warm-cache PHASE-05 ride this)
   finding survives, F-1 not clobbered; (d) verify-then-contest same finding → the
   terminal-state per-finding gate refuses the loser. All assert FINAL on-disk ledger
   + baton, not just exit codes.
+
+## PHASE-04 implementation notes (reverse close-gate + lifecycle teeth)
+
+Durable carry-forwards (PHASE-06 /audit rewire rides the teeth):
+
+- **`unresolved_blockers_for(root, subject_ref) -> Result<Vec<BlockerRef>>`**
+  (review.rs, after `parse_ref`) — the standalone scoped scan (D8/D-C9b). Thin
+  shell: `root.join(REVIEW_DIR)`, early-return empty if the tree is absent, then
+  `read_reviews` (the existing PHASE-02 reader) and, per doc whose
+  `target.reference == subject_ref`, the **pure** `doc_unresolved_blockers(doc)`.
+  Pure check: `doc.derived().0 != Active ⇒ empty` (a Done ledger holds nothing,
+  D-C9a), else findings with `Severity::parse == Blocker && !status.is_terminal()`
+  → `BlockerRef { rv: canonical_id(doc.id), finding: f.id }` ("RV-007"/"F-2").
+  NOT the spec `Registry`, NOT a reverse index. `review` does NOT import `slice`.
+- **Close-shell injection** = `slice::run_status` (slice.rs ~388), the close
+  COMMAND SHELL — NOT `set_slice_status`. Reads `from`, and iff
+  `crosses_closure_seam(from, to)` calls `review::unresolved_blockers_for(&root,
+  &canonical_id(id))`; non-empty ⇒ `bail!` listing `RV-NNN/F-n` BEFORE the FSM
+  write (status untouched on refusal). The FSM writer stays focused; the one-way
+  `slice-shell → review-query` coupling lives in the impure layer (ADR-001).
+- **`crosses_closure_seam(from, to)`** (slice.rs, near `classify`) — true for
+  EXACTLY `("audit","reconcile")` and `("reconcile","done")`. These are `Advance`
+  in `classify`, so the gate canNOT key on `Transition::Advance` (other advances
+  exist) — it keys on the explicit edge pair. Non-seam transitions (incl.
+  `started→audit`) are never gated.
+- **VT-5 sole-caller proof** (Charge VIII) = a SOURCE-grep test
+  (`vt5_close_shell_is_the_sole_seam_crossing_caller_of_set_slice_status`):
+  `include_str!("slice.rs")`, split at `#[cfg(test)]` to scope to PRODUCTION code,
+  count `set_slice_status(` call sites excluding the `fn ` definition → assert
+  exactly **1**. `set_slice_status` is module-private, so 1 production call site =
+  one seam-crosser = the gate cannot be bypassed. A 2nd call site fails the test,
+  forcing that caller to re-invoke the gate (or moving the gate to the FSM, per
+  §7). **NO second seam-crossing caller exists today** — gate placement in the
+  shell is sound.
+- **VT coverage**: VT-1 (terminal⇒Done⇒not-reported; answered blocker keeps Active
+  & gating) + VT-3 (scan correctness: match/ignore non-matching/non-blocker/
+  terminal/no-tree) live in review.rs; VT-2 (refuse-then-pass via verify AND
+  withdraw), VT-4 (seam-only firing + the predicate), VT-5 (sole-caller) live in
+  slice.rs. Existing slice/close suites unchanged (behaviour-preservation gate
+  held — no close test broke).
+- **For PHASE-06**: the teeth are LIVE — `blocker`-severity findings on an Active
+  RV targeting a slice refuse `slice status … reconcile|done`. The /audit rewire
+  should lean on `blocker` as the sole gating severity (D-C9b); other severities
+  record but never block close.
