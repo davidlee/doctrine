@@ -385,13 +385,15 @@ fn push_line(out: &mut String, key: &str, value: &str) {
 // `state_dir`), NOT `adr`'s `GovKind` spine (design D1).
 // ===========================================================================
 
+use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read as _, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
+use crate::contentset::{self, ContentSet};
 use crate::entity::{self, Kind, LocalFs, Materialised};
 use crate::listing::{self, Column, Format, ListArgs};
 
@@ -1546,6 +1548,269 @@ fn verb_past(verb: Verb) -> &'static str {
     }
 }
 
+// ===========================================================================
+// PHASE-05 — the reviewer-context warm-cache (`cache.toml`) + `prime` (design §9,
+// D9, D-C10). The cache is the reviewer's *learned* model — runtime, regenerable,
+// never authored, DECOUPLED from any LLM token cache (T-b: doctrine makes no
+// attempt to observe token-cache warmth). It lives beside the baton/lock in the
+// parent tree's gitignored state.
+//
+// Shape (§9): a curated, load-bearing `domain_map` (`[[area]]` name/purpose/paths,
+// T-a — NOT a mechanical read-log), `[[invariant]]`/`[[risk]]` annotations, and a
+// `[hashes]` table = the `ContentSet` over `⋃ area.paths` — the staleness baseline.
+// Staleness is the pure `stored.diff(compute(parent_root, ⋃ paths))` (T-b naming:
+// `current` vs `stale`); it is an optimization SIGNAL surfaced by `status`, never
+// a gate. Single parent root; absence⇒stale (R1, in `contentset`).
+// ===========================================================================
+
+/// One `[[area]]` of the curated `domain_map` (§9, T-a): a named region of the
+/// subject, its purpose, and the load-bearing paths the reviewer must hold in
+/// context. The `⋃` of every area's `paths` is what `[hashes]` covers.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+struct CacheArea {
+    name: String,
+    #[serde(default)]
+    purpose: String,
+    #[serde(default)]
+    paths: Vec<String>,
+}
+
+/// A free-text `[[invariant]]` or `[[risk]]` annotation (§9) — a single `text`
+/// field. Curated context for the reviewer; carried verbatim, never hashed.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+struct CacheNote {
+    text: String,
+}
+
+/// The warm-cache document — `cache.toml` (§9). `area`/`invariant`/`risk` are the
+/// curated reviewer context; `hashes` is the `ContentSet` baseline over `⋃ area.
+/// paths`, the comparison key. `serde` round-trips the lot; `hashes` is rebuilt
+/// from `area.paths` on every `prime` so it cannot drift from the `domain_map`.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+struct Cache {
+    #[serde(default, rename = "area")]
+    areas: Vec<CacheArea>,
+    #[serde(default, rename = "invariant")]
+    invariants: Vec<CacheNote>,
+    #[serde(default, rename = "risk")]
+    risks: Vec<CacheNote>,
+    #[serde(default)]
+    hashes: BTreeMap<String, String>,
+}
+
+impl Cache {
+    /// The de-duplicated, sorted union of every area's paths — the set the
+    /// `[hashes]` baseline covers and the set `status` recomputes against.
+    fn tracked_paths(&self) -> Vec<String> {
+        let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for area in &self.areas {
+            for path in &area.paths {
+                set.insert(path.clone());
+            }
+        }
+        set.into_iter().collect()
+    }
+
+    /// The stored `[hashes]` reconstituted as a `ContentSet` staleness baseline.
+    fn baseline(&self) -> ContentSet {
+        ContentSet::from_hashes(self.hashes.clone())
+    }
+}
+
+/// The `cache.toml` path for a review id — beside `baton.toml`/`lock` in the
+/// parent tree's gitignored state subtree (§6/§9).
+fn cache_path(root: &Path, id: u32) -> PathBuf {
+    state_dir(root, id).join("cache.toml")
+}
+
+/// Read the warm-cache if present (`None` = unprimed — no staleness signal to
+/// report yet, design §9). A parse failure is a hard error (the file is ours).
+fn read_cache(root: &Path, id: u32) -> anyhow::Result<Option<Cache>> {
+    let path = cache_path(root, id);
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(toml::from_str(&text).with_context(|| {
+            format!("Failed to parse warm-cache {}", path.display())
+        })?)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    }
+}
+
+/// Write the warm-cache atomically (temp+rename), creating the state subtree
+/// first. The caller holds the per-review lock (§9 — prime serialises its write
+/// against a concurrent prime/status).
+fn write_cache(root: &Path, id: u32, cache: &Cache) -> anyhow::Result<()> {
+    let dir = state_dir(root, id);
+    fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+    let body = toml::to_string(cache).context("serialize warm-cache")?;
+    crate::fsutil::write_atomic(&cache_path(root, id), body.as_bytes())
+}
+
+/// The staleness verdict for a primed cache (T-b naming): `current` when the
+/// stored `[hashes]` baseline still matches the live `⋃ paths`, else `stale` with
+/// the drifted paths listed (changed + removed[absence⇒stale, R1] + added). Pure
+/// `diff` over the impure `compute` — the staleness DIFF is pure, `compute` (disk
+/// + sha2) is the shell.
+fn cache_staleness(root: &Path, cache: &Cache) -> anyhow::Result<CacheVerdict> {
+    let live = contentset::compute(root, &cache.tracked_paths())
+        .context("hash the warm-cache's tracked paths")?;
+    let drift = cache.baseline().diff(&live);
+    let mut drifted: Vec<String> = Vec::new();
+    drifted.extend(drift.changed);
+    drifted.extend(drift.removed);
+    drifted.extend(drift.added);
+    if drifted.is_empty() {
+        Ok(CacheVerdict::Current)
+    } else {
+        drifted.sort();
+        drifted.dedup();
+        Ok(CacheVerdict::Stale(drifted))
+    }
+}
+
+/// The warm-cache staleness verdict (§9, T-b). `Stale` carries the drifted paths.
+enum CacheVerdict {
+    Current,
+    Stale(Vec<String>),
+}
+
+// ---------------------------------------------------------------------------
+// `review prime` (Read class for authored conduct — no authored mutation — but it
+// acquires the per-review lock to serialize the cache write, design §9).
+// ---------------------------------------------------------------------------
+
+/// Bundled `review prime` args (the clippy arg-ceiling — `cli-handler-args-struct`).
+pub(crate) struct PrimeArgs {
+    pub(crate) reference: String,
+    /// `--seed`: emit git-changed candidate paths (a starting point, NOT
+    /// authority — it writes nothing) and exit, instead of priming.
+    pub(crate) seed: bool,
+    /// `--from <file>`: read the curated `domain_map` from a file rather than stdin.
+    pub(crate) from: Option<PathBuf>,
+}
+
+/// `doctrine review prime <RV-NNN>` — populate the warm-cache from a curated
+/// `domain_map` (design §9, T-a). Two modes:
+///
+/// - `--seed`: emit git-changed candidate paths for the reviewer to curate FROM
+///   (a starting point, not authority — writes nothing, takes no lock).
+/// - otherwise: read the `domain_map` (TOML: `[[area]]`/`[[invariant]]`/`[[risk]]`)
+///   from `--from <file>` or stdin, validate it, hash `⋃ area.paths`
+///   (`contentset::compute`), and write `cache.toml`. Read-class for authored
+///   conduct (it mutates no authored ledger) but it ACQUIRES THE PER-REVIEW LOCK
+///   to serialize the cache write against a concurrent prime/status (§9). It runs
+///   neither the baton nor the CAS — only the lock around the cache write.
+pub(crate) fn run_prime(path: Option<PathBuf>, args: &PrimeArgs) -> anyhow::Result<()> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(&args.reference)?;
+    // The review must exist (the cache is a review's learned model) — fail early
+    // with the same "not found" message the verbs give before touching state.
+    let _ = read_authored(&root, id)?;
+
+    if args.seed {
+        return emit_seed_candidates(&root, id);
+    }
+
+    let supplied = if let Some(file) = &args.from {
+        fs::read_to_string(file).with_context(|| format!("read domain_map {}", file.display()))?
+    } else {
+        let mut buf = String::new();
+        io::stdin()
+            .read_to_string(&mut buf)
+            .context("read domain_map from stdin")?;
+        buf
+    };
+    let mut cache: Cache = toml::from_str(&supplied)
+        .context("parse the supplied domain_map (expected [[area]]/[[invariant]]/[[risk]] TOML)")?;
+    validate_domain_map(&cache)?;
+
+    // Serialize the cache write against a concurrent prime/status (§9). The lock —
+    // and ONLY the lock — is reused from PHASE-03; no baton, no CAS.
+    let _lock = LockGuard::acquire(&root, id)?;
+    // Rebuild `[hashes]` from the curated `⋃ paths` so the baseline cannot drift
+    // from the `domain_map` (any value the supplier put under `[hashes]` is ignored).
+    let baseline = contentset::compute(&root, &cache.tracked_paths())
+        .context("hash the curated domain_map paths")?;
+    cache.hashes = baseline.hashes().clone();
+    write_cache(&root, id, &cache)?;
+
+    writeln!(
+        io::stdout(),
+        "{} primed — {} area(s), {} tracked path(s), {} invariant(s), {} risk(s)",
+        canonical_id(id),
+        cache.areas.len(),
+        cache.tracked_paths().len(),
+        cache.invariants.len(),
+        cache.risks.len(),
+    )?;
+    Ok(())
+}
+
+/// Validate a supplied `domain_map` (§9): at least one area, every area named, every
+/// area carrying at least one path, and every path relative (the `ContentSet` is a
+/// root-relative `(relpath, hash)` map — an absolute path escapes the parent root).
+fn validate_domain_map(cache: &Cache) -> anyhow::Result<()> {
+    if cache.areas.is_empty() {
+        anyhow::bail!(
+            "domain_map has no [[area]] — a primed cache needs at least one curated area"
+        );
+    }
+    for area in &cache.areas {
+        if area.name.trim().is_empty() {
+            anyhow::bail!("an [[area]] is missing a `name`");
+        }
+        if area.paths.is_empty() {
+            anyhow::bail!(
+                "area `{}` has no `paths` — every area must track at least one path",
+                area.name
+            );
+        }
+        for path in &area.paths {
+            if Path::new(path).is_absolute() || path.contains("..") {
+                anyhow::bail!(
+                    "area `{}` path `{path}` is not root-relative (no absolute paths or `..`)",
+                    area.name
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `review prime --seed` — emit git-changed candidate paths under the parent root
+/// (working-tree + staged changes vs HEAD, plus untracked) as a STARTING POINT for
+/// the reviewer to curate from (§9, T-a). It is not authority and writes nothing.
+/// Reuses the `git.rs` impure seam (`git_text`); the reviewer pares this down to
+/// the load-bearing set.
+fn emit_seed_candidates(root: &Path, id: u32) -> anyhow::Result<()> {
+    let porcelain = crate::git::git_text(root, &["status", "--porcelain", "--untracked-files=all"])
+        .context("git status for prime --seed candidates")?;
+    let mut paths: Vec<String> = Vec::new();
+    for line in porcelain.lines() {
+        // Porcelain v1: 2 status columns then the path. Skip the 2 status bytes
+        // and trim the separating space(s) — robust to the ` D `/`D  ` spacing
+        // variants. A rename shows `old -> new`; the new path is the candidate.
+        let rest = line.get(2..).unwrap_or("").trim();
+        let candidate = rest.rsplit(" -> ").next().unwrap_or(rest);
+        if !candidate.is_empty() {
+            paths.push(candidate.to_owned());
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    let mut out = io::stdout();
+    writeln!(
+        out,
+        "# {} prime --seed: {} git-changed candidate(s) — curate into a domain_map (not authority)",
+        canonical_id(id),
+        paths.len()
+    )?;
+    for path in &paths {
+        writeln!(out, "{path}")?;
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // status (Read class) + unlock (escape hatch)
 // ---------------------------------------------------------------------------
@@ -1553,7 +1818,8 @@ fn verb_past(verb: Verb) -> &'static str {
 /// `doctrine review status <RV-NNN>` — report the derived state and REBUILD the
 /// baton (the cache == a fresh recompute, design §8/§Verification). Read-class for
 /// authored conduct (no authored mutation), but it acquires the lock to serialize
-/// the baton write against a concurrent verb.
+/// the baton write against a concurrent verb. When a warm-cache is primed, it also
+/// reports the cache staleness signal (`current`/`stale`, §9 — a signal, not a gate).
 pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Result<()> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(reference)?;
@@ -1570,8 +1836,9 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
         ..prior
     };
     write_baton(&root, id, &rebuilt)?;
+    let mut out = io::stdout();
     writeln!(
-        io::stdout(),
+        out,
         "{} — {} · await={} · findings {} · rounds {}",
         canonical_id(id),
         status.as_str(),
@@ -1579,6 +1846,16 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
         doc.finding.len(),
         rebuilt.rounds
     )?;
+    // Warm-cache staleness — an optimization SIGNAL, never a gate (§9, T-b). Only
+    // reported when a cache has been primed; unprimed reviews say nothing.
+    if let Some(cache) = read_cache(&root, id)? {
+        match cache_staleness(&root, &cache)? {
+            CacheVerdict::Current => writeln!(out, "cache: current")?,
+            CacheVerdict::Stale(paths) => {
+                writeln!(out, "cache: stale ({})", paths.join(", "))?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -2917,5 +3194,270 @@ mod tests {
         assert!(!lock.exists(), "stale lock removed");
         // Idempotent on an unlocked review.
         run_unlock(Some(root.to_path_buf()), "RV-001").unwrap();
+    }
+
+    // -- PHASE-05: warm-cache + prime (D-C10, §9) ----------------------------
+
+    /// Write `body` as a tracked source file under `root` (the warm-cache hashes
+    /// real bytes on disk).
+    fn plant_tracked(root: &Path, rel: &str, body: &str) {
+        let path = root.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, body).unwrap();
+    }
+
+    /// A two-area curated `domain_map` over two tracked paths — the `prime` input.
+    fn sample_domain_map() -> &'static str {
+        r#"
+[[area]]
+name = "turn protocol"
+purpose = "baton/lock/CAS serialize turns"
+paths = ["src/review.rs", "src/state.rs"]
+
+[[invariant]]
+text = "await derived, never stored (D-C8)"
+
+[[risk]]
+text = "stale baton after out-of-band edit"
+"#
+    }
+
+    /// VT-1: `prime --from` persists the curated `domain_map` AND the `[hashes]`
+    /// ContentSet over `⋃ area.paths`; `cache.toml` round-trips and the verdict is
+    /// `current` straight after (§9, D-C10).
+    #[test]
+    fn vt1_prime_persists_domain_map_and_hashes_then_current() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        plant_tracked(root, "src/review.rs", "fn review() {}\n");
+        plant_tracked(root, "src/state.rs", "fn state() {}\n");
+
+        let map = root.join("map.toml");
+        fs::write(&map, sample_domain_map()).unwrap();
+        run_prime(
+            Some(root.to_path_buf()),
+            &PrimeArgs {
+                reference: "RV-001".to_owned(),
+                seed: false,
+                from: Some(map),
+            },
+        )
+        .unwrap();
+
+        // cache.toml landed beside the baton/lock in gitignored state.
+        let cache = read_cache(root, 1).unwrap().expect("cache primed");
+        assert_eq!(cache.areas.len(), 1);
+        assert_eq!(cache.areas[0].name, "turn protocol");
+        assert_eq!(cache.invariants.len(), 1);
+        assert_eq!(cache.risks.len(), 1);
+        // [hashes] = the ContentSet over the union of area.paths.
+        assert_eq!(
+            cache.hashes.keys().cloned().collect::<Vec<_>>(),
+            vec!["src/review.rs".to_owned(), "src/state.rs".to_owned()]
+        );
+        let expected = contentset::compute(
+            root,
+            &["src/review.rs".to_owned(), "src/state.rs".to_owned()],
+        )
+        .unwrap();
+        assert_eq!(&cache.hashes, expected.hashes());
+
+        // Read `current` straight after (no drift).
+        assert!(matches!(
+            cache_staleness(root, &cache).unwrap(),
+            CacheVerdict::Current
+        ));
+    }
+
+    /// VT-2: staleness reports `current` vs `stale`; on a tracked path's content
+    /// drift it lists the changed path; an absent tracked path ⇒ stale naming it
+    /// (T-b / R1).
+    #[test]
+    fn vt2_status_reports_current_then_stale_on_drift_and_absence() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        plant_tracked(root, "src/review.rs", "original\n");
+        plant_tracked(root, "src/state.rs", "state\n");
+        let map = root.join("map.toml");
+        fs::write(&map, sample_domain_map()).unwrap();
+        run_prime(
+            Some(root.to_path_buf()),
+            &PrimeArgs {
+                reference: "RV-001".to_owned(),
+                seed: false,
+                from: Some(map),
+            },
+        )
+        .unwrap();
+        let cache = read_cache(root, 1).unwrap().unwrap();
+
+        // current — nothing changed.
+        assert!(matches!(
+            cache_staleness(root, &cache).unwrap(),
+            CacheVerdict::Current
+        ));
+
+        // Mutate a tracked file's bytes ⇒ stale, listing exactly that path.
+        fs::write(root.join("src/review.rs"), "MUTATED\n").unwrap();
+        match cache_staleness(root, &cache).unwrap() {
+            CacheVerdict::Stale(paths) => {
+                assert_eq!(paths, vec!["src/review.rs".to_owned()]);
+            }
+            CacheVerdict::Current => panic!("expected stale after a content drift"),
+        }
+
+        // Restore, then REMOVE a tracked file ⇒ absence⇒stale naming it (R1).
+        fs::write(root.join("src/review.rs"), "original\n").unwrap();
+        fs::remove_file(root.join("src/state.rs")).unwrap();
+        match cache_staleness(root, &cache).unwrap() {
+            CacheVerdict::Stale(paths) => {
+                assert_eq!(paths, vec!["src/state.rs".to_owned()]);
+            }
+            CacheVerdict::Current => panic!("absent tracked path must be stale (R1)"),
+        }
+    }
+
+    /// `prime` rebuilds `[hashes]` from the curated `⋃ paths` — any value the
+    /// supplier put under `[hashes]` is ignored (the baseline cannot drift from the
+    /// `domain_map`).
+    #[test]
+    fn prime_ignores_supplied_hashes_and_recomputes() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        plant_tracked(root, "a.txt", "real content\n");
+        let map = root.join("map.toml");
+        fs::write(
+            &map,
+            "[[area]]\nname = \"a\"\npaths = [\"a.txt\"]\n[hashes]\n\"a.txt\" = \"deadbeef\"\n",
+        )
+        .unwrap();
+        run_prime(
+            Some(root.to_path_buf()),
+            &PrimeArgs {
+                reference: "RV-001".to_owned(),
+                seed: false,
+                from: Some(map),
+            },
+        )
+        .unwrap();
+        let cache = read_cache(root, 1).unwrap().unwrap();
+        assert_ne!(
+            cache.hashes.get("a.txt").map(String::as_str),
+            Some("deadbeef")
+        );
+        assert!(matches!(
+            cache_staleness(root, &cache).unwrap(),
+            CacheVerdict::Current
+        ));
+    }
+
+    /// A `domain_map` with no areas (or an area with no paths / no name) is refused —
+    /// the cache needs a curated, load-bearing set (§9, T-a).
+    #[test]
+    fn prime_refuses_an_empty_or_malformed_domain_map() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        let map = root.join("map.toml");
+
+        // No areas at all.
+        fs::write(&map, "[[invariant]]\ntext = \"x\"\n").unwrap();
+        assert!(
+            run_prime(
+                Some(root.to_path_buf()),
+                &PrimeArgs {
+                    reference: "RV-001".to_owned(),
+                    seed: false,
+                    from: Some(map.clone()),
+                },
+            )
+            .is_err()
+        );
+
+        // An area with no paths.
+        fs::write(&map, "[[area]]\nname = \"a\"\npaths = []\n").unwrap();
+        assert!(
+            run_prime(
+                Some(root.to_path_buf()),
+                &PrimeArgs {
+                    reference: "RV-001".to_owned(),
+                    seed: false,
+                    from: Some(map.clone()),
+                },
+            )
+            .is_err()
+        );
+
+        // An absolute / escaping path.
+        fs::write(
+            &map,
+            "[[area]]\nname = \"a\"\npaths = [\"../etc/passwd\"]\n",
+        )
+        .unwrap();
+        assert!(
+            run_prime(
+                Some(root.to_path_buf()),
+                &PrimeArgs {
+                    reference: "RV-001".to_owned(),
+                    seed: false,
+                    from: Some(map),
+                },
+            )
+            .is_err()
+        );
+
+        // Nothing was written on any refusal.
+        assert!(read_cache(root, 1).unwrap().is_none());
+    }
+
+    /// `prime` acquires the per-review lock around the cache write — a held lock
+    /// makes it bail "busy" (the §9 serialization, reusing the PHASE-03 LockGuard).
+    #[test]
+    fn prime_serializes_via_the_per_review_lock() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        plant_tracked(root, "a.txt", "x\n");
+        let map = root.join("map.toml");
+        fs::write(&map, "[[area]]\nname = \"a\"\npaths = [\"a.txt\"]\n").unwrap();
+
+        // Hold the lock, then prime must bail busy (no clobber).
+        let held = LockGuard::acquire(root, 1).unwrap();
+        let err = run_prime(
+            Some(root.to_path_buf()),
+            &PrimeArgs {
+                reference: "RV-001".to_owned(),
+                seed: false,
+                from: Some(map.clone()),
+            },
+        )
+        .unwrap_err();
+        assert!(format!("{err}").contains("busy"), "lock contention: {err}");
+        assert!(
+            read_cache(root, 1).unwrap().is_none(),
+            "no cache written under contention"
+        );
+        drop(held);
+
+        // Lock free ⇒ prime succeeds.
+        run_prime(
+            Some(root.to_path_buf()),
+            &PrimeArgs {
+                reference: "RV-001".to_owned(),
+                seed: false,
+                from: Some(map),
+            },
+        )
+        .unwrap();
+        assert!(read_cache(root, 1).unwrap().is_some());
+    }
+
+    /// `status` on an unprimed review reports no cache line (the signal only fires
+    /// once a `domain_map` is curated, §9).
+    #[test]
+    fn status_is_silent_about_an_unprimed_cache() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        // No prime — read_cache is None, so status reports the ledger only.
+        assert!(read_cache(root, 1).unwrap().is_none());
+        run_status(Some(root.to_path_buf()), "RV-001").unwrap();
     }
 }
