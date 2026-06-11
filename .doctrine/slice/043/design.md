@@ -76,11 +76,18 @@ Public surface touched: only `Explanation` (RSK-002). **No non-test consumer rea
     fold, superlinear in set size (the output itself is up to O(V) per node;
     `contributors` is already O(V²) worst-case). **Only `Max` is fully O(V+E)** —
     its contributor is a single argmax (min-`NodeId` tiebreak), not a set.
-  - **EXC-2 — dense single SCC eviction.** Strictly-sequential F17-min eviction
-    (one edge per round, each round's victim depends on the prior) cannot be
-    parallelised without risking a *different* evicted set → contract-bound
-    superlinear on one pathological dense SCC. The common case (small sparse
-    cycles) is effectively linear after localization.
+  - **EXC-2 — dense single SCC eviction (scope-bound, not inherent).**
+    Strictly-sequential F17-min eviction (one edge per round, each round's victim
+    depends on the prior) resists *naive* parallelism — co-evicting independent
+    minimals risks a *different* evicted set. Localization bounds the residual cost
+    to the one dense component (re-Tarjan the shrinking SCC per round → O(E·(V+E))
+    *within* that component only); the common case (small sparse cycles) is
+    effectively linear. **Honesty (codex pass, R2):** this is **not** a proven
+    lower bound. An incremental decremental-SCC-maintenance algorithm could keep the
+    *same* evicted set sub-quadratically; it is **deferred** (std-only, determinism,
+    and complexity cost outweigh the payoff for a pathological input), not
+    contract-forced. `dense_evict` stays an `#[ignore]` characterization of the
+    *deferred* residual, not an inherent floor (see IMP candidate, §6 OQ-3).
 - **Ride existing seams; no parallel implementation.** Iterative Tarjan is the
   single SCC primitive shared by RSK-003-primary *and* -secondary. RSK-004 reuses
   **build-time** `degraded_sccs` (already on `Graph`) rather than a second
@@ -137,8 +144,15 @@ from `Graph`, already held).
 
 - **Iterative Tarjan** — `strongconnect` becomes an explicit-stack DFS. Each stack
   frame carries `(node, successor-iterator-position)`; successors walked in
-  `BTreeSet` order (discovery order **identical** to the recursive form → identical
-  SCC output). Lowlink update on return mirrors the recursive `min`.
+  `BTreeSet` order, lowlink update on return mirrors the recursive `min`.
+  **Equivalence proof (A-4 R2):** the load-bearing claim is *not* byte-identical
+  component-emission order (hard to pin through the frame lifecycle) — it is that
+  **every consumer of `cyclic_components` is order-insensitive**: provenance is
+  re-sorted (`sort_provenance`, F21), `participates`/`in_degraded_scc`/`taint` use
+  set membership / `.any()`, and the `.min()` victim selection is over edges not
+  components. So any faithful SCC *partition* (each component a canonical
+  `BTreeSet`) yields identical output regardless of Vec order. The unchanged suite
+  is the backstop.
 - **Iterative `level_of`** — explicit-stack post-order longest-path over `preds`,
   same memo `cache`; a node is finalised only after all parents resolved
   (push-children-then-revisit pattern). Identical levels.
@@ -147,8 +161,15 @@ from `Graph`, already held).
   only that shrinking sub-component** to fixpoint, then next component. Disjointness
   ⇒ the evicted **set** is identical to the global loop; provenance sorted ⇒
   identical output. Same treatment for `evict_layer_cycles` (only `layer_k` edges
-  evictable; the localized component is the U sub-component). EXC-2 governs the
-  dense-single-SCC residue.
+  evictable; the localized component is the U sub-component) — **but this rests on a
+  load-bearing invariant (A-3 R2): every U-cycle present at layer k contains ≥1
+  `layer_k` edge.** It holds by construction: `compose_order` (resolve.rs:416-432)
+  drives each prior layer to fixpoint *before* inserting layer k, so `U` minus the
+  newly-inserted `layer_k` edges is acyclic — any current cycle must include a
+  `layer_k` edge. This makes the global loop's `victim=None ⇒ break` arm
+  (resolve.rs:494) unreachable while components remain, so localized per-component
+  eviction cannot skip an unevictable cyclic component and diverge. EXC-2 governs
+  the dense-single-SCC residue.
 - **RSK-001 VT** — a direct test that an `Against` `OrderLayer` produces the swapped
   (dst→src) oriented edge in `U` / the resulting order, characterizing the existing
   `orient` path. Passes on first write.
@@ -157,8 +178,17 @@ from `Graph`, already held).
 
 - **Condensation fold**, once per `evaluate`:
   1. SCC partition: `Evict` overlay ⇒ every node its own trivial SCC; `Reject` ⇒
-     stored `degraded_sccs[overlay]` are the cyclic SCCs, all others singleton.
-  2. Reverse-topological order over the condensation DAG (sinks first), O(V+E).
+     stored `degraded_sccs[overlay]` are the cyclic SCCs, all others singleton. The
+     partition is **direction-invariant** (SCCs survive transpose), so reusing the
+     build-time forward-adjacency `degraded_sccs` is valid for both directions.
+  2. **Direction-resolved condensation (A-2 R2 — load-bearing).** The condensation
+     *partition* is reused, but the inter-SCC **edges** and the reverse-topo order
+     are built from the **same neighbour view `evaluate` walks** — `out` for `Along`,
+     `incoming` for `Against` (query.rs:217-228) — **never** the forward build
+     adjacency. For `a→b, b⇄c`: `Along` condenses `a→{b,c}` (fold `{b,c}` then `a`);
+     `Against` condenses `{b,c}→a` (fold `a` then `{b,c}`). Folding a forward DAG for
+     an `Against` channel silently corrupts every value. Reverse-topo (sinks first)
+     over *that* DAG, O(V+E).
   3. Fold each SCC = combine(member seeds, already-folded successor-SCC results);
      every node in an SCC shares the SCC result (mutual reachability).
   - **Max** — own-seed included; whole SCC one `(value, argmax)`, min-`NodeId`
@@ -202,6 +232,12 @@ from `Graph`, already held).
   `extend_chains` triplication). **Default: out** — folding the consolidation in
   widens scope from risk-closure to a traversal refactor. Revisit only if the
   rewrites naturally converge a shared helper; otherwise IMP-020 stays its own item.
+- **OQ-3 — incremental dense-SCC eviction (deferred, codex R2).** EXC-2's residual
+  (one dense SCC re-Tarjan'd per round) is *deferred*, not inherent: a decremental
+  SCC-maintenance algorithm could hold the same evicted set sub-quadratically.
+  **Default: out** — std-only/determinism/complexity cost outweighs the payoff for a
+  pathological input outside realistic authored scale. File as an IMP backlog item if
+  a dense-SCC workload ever appears; `dense_evict` stays the `#[ignore]` marker.
 - *(Resolved during design)* RSK-002 output shape → pure sub-DAG (D2). explain has
   no non-test consumer (the OQ-1 from scope is closed).
 
@@ -215,19 +251,26 @@ from `Graph`, already held).
   (re-privileges a materialization); direct-preds + one chain (lossy).
 - **D3 — RSK-004 = build-SCC condensation fold, combinator-split.** *Rationale*:
   cycle-safety is a standing contract (F47), condensation is the rigorous handling,
-  and `degraded_sccs` is already computed at build → no query-time Tarjan. EXC-1
-  (CountDistinct) accepted as inherent. *Alternative rejected*: assume acyclic
-  overlays (narrows the contract); cache-reachable-sets (no asymptotic win).
+  and `degraded_sccs` is already computed at build → no query-time Tarjan. The reused
+  cache is the SCC *partition* only (direction-invariant); condensation **edges +
+  reverse-topo order are rebuilt direction-resolved** (§5.4 P2 A-2 R2) — the linchpin
+  the verifier guards. EXC-1 (set-valued contributors) accepted as inherent.
+  *Alternative rejected*: assume acyclic overlays (narrows the contract);
+  cache-reachable-sets (no asymptotic win).
 - **D4 — RSK-003-secondary = per-SCC localization; retarget the signal.** *Rationale*:
-  SCC disjointness makes localization provably output-identical; a single dense SCC
-  is contract-bound superlinear (EXC-2). The `dense_evict` red can't become
-  linear-green, so it stays an `#[ignore]` characterization (re-doc'd as the EXC-2
-  exception) and a **new green gate proves the real win** — N independent small
-  cycles evict ~linearly in N — plus an assertion the evicted **set** is unchanged.
-  *Alternative rejected*: co-evict "disjoint minimals" for true linearity (risks a
-  different evicted set → violates behaviour-preservation).
+  SCC disjointness makes localization provably output-identical (the `evict_layer_cycles`
+  case via the §5.4 layer-k invariant); a single dense SCC's residual is
+  superlinear but **scope-bound, not inherent** (EXC-2 / OQ-3 — codex R2 corrected the
+  earlier "contract-bound" over-claim). The `dense_evict` red can't become
+  linear-green *in scope*, so it stays an `#[ignore]` characterization (re-doc'd as
+  the deferred-residual marker) and a **new green gate proves the real win** — N
+  independent small cycles evict ~linearly in N — plus an assertion the evicted
+  **set** is unchanged. *Alternative rejected*: co-evict "disjoint minimals" for true
+  linearity (risks a different evicted set → violates behaviour-preservation);
+  incremental decremental-SCC maintenance (deferred to OQ-3, not ruled out).
 - **D5 — RSK-003-primary = iterative both sites.** Shared iterative Tarjan also
-  serves D4's re-test. Mechanical; determinism preserved by BTreeSet walk order.
+  serves D4's re-test. Mechanical; determinism preserved not by emission order but by
+  consumer order-insensitivity (§5.4 A-4 R2) + BTreeSet walk order.
 - **D6 — Phasing = 3, by file/concern** (P1 resolve.rs, P2 query.rs evaluate, P3
   query+lib explain). Dependency-ordered (Tarjan before localization); each phase
   flips its own red(s).
@@ -300,6 +343,46 @@ from `Graph`, already held).
   exponential. Each node still records all its in-edges; degraded-SCC entries are
   recorded as empty-pred leaves.
 
-### Carried risks into /plan
-- R3 (explain test rewrite must not weaken assertions) and A-2 (degraded_sccs
-  equivalence) are the two the phase verifier must guard explicitly.
+### External adversarial pass — codex GPT-5.5 (2026-06-11, R2)
+
+Independent hostile review of the six load-bearing claims. Converged with the
+internal pass on the two HOLDS that mattered (CountDistinct R4, EXC-1 contributor
+identity) and **sharpened three claims the internal pass under-stated**. No claim
+fully broke; two over-claims and two hidden invariants now documented.
+
+- **A-2 LINCHPIN (was "holds" → UNDER-SPEC, FIXED).** The internal pass proved the
+  SCC *partition* is captured — true, and direction-invariant. But it missed that the
+  **condensation edges + reverse-topo order are direction-sensitive**: `evaluate`
+  walks `out` for `Along` / `incoming` for `Against` (query.rs:217-228), so folding a
+  forward-built condensation DAG silently corrupts every `Against` channel value.
+  Counterexample `a→b, b⇄c`: `Along` ⇒ `a→{b,c}`; `Against` ⇒ `{b,c}→a` — opposite
+  fold order. §5.4 P2 step 2 + D3 now mandate direction-resolved condensation. This is
+  the #1 verifier guard.
+- **EXC-2 (was "contract-bound" → UNDER-SPEC, REWORDED).** The design proved only
+  that the *current* impl re-Tarjans per round; it conflated "can't naively
+  parallelise" with "must be superlinear." No lower bound exists. Residual is
+  **scope-bound/deferred** (decremental SCC maintenance is possible, just not worth
+  it) — §4 EXC-2, §7 D4, and OQ-3 corrected.
+- **A-3 (holds, invariant surfaced).** `evict_layer_cycles` localization matches the
+  global loop **only because** every U-cycle at layer k contains a `layer_k` edge
+  (prior layers fixed before insert; global `victim=None ⇒ break` arm thus
+  unreachable). `pass2_evict` is unconditionally disjoint. Invariant now stated in
+  §5.4 — verifier must confirm it survives any compose_order change.
+- **A-4 iterative Tarjan (holds, proof reframed).** "Discovery order identical" is
+  the wrong (and hard) proof obligation; the real one is **consumer
+  order-insensitivity** (provenance re-sorted, set-membership reads, edge-keyed
+  `.min()`). §5.4 P1 + D5 reframed. `level_of`/cone builder confirmed HOLD.
+- **R4 CountDistinct, A-1/EXC-1 contributor identity** — independently re-verified
+  HOLD with concrete fixtures (SCC `a⇄b`, downstream `c`); no off-by-one, SCC-constant
+  contributor switch.
+
+### Carried risks into /plan (verifier MUST guard explicitly)
+- **G1 (A-2, elevated).** Condensation fold builds its DAG + reverse-topo from the
+  **direction-resolved** neighbour view, not forward build adjacency. A targeted
+  `Against`-channel-over-a-cyclic-overlay fixture asserting value-identity vs the
+  per-node BFS is mandatory — the silent-corruption surface.
+- **G2 (A-3).** The layer-k invariant (every U-cycle at layer k has a `layer_k`
+  edge) is a localization precondition; assert it or the unchanged `compose_order`
+  goldens that depend on it.
+- **G3 (R3).** The four rewritten `explain` cone tests must assert the *same*
+  reachable-predecessor membership the old chains covered, not a weaker shape.
