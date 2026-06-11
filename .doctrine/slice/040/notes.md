@@ -321,3 +321,62 @@ Durable carry-forwards (PHASE-06 `/audit` rewire rides this surface):
 - **NOT built (additive, deferred):** a `subject` root for pre-import fork review
   → IMP-024; region anchors (file-level hash is the key) → IDE-002; read-hook
   attestation seeding (T-a) → future tooling.
+
+---
+
+## PHASE-06 implementation notes (/audit pilot rewire + integration close)
+
+The slice's end-to-end acceptance — one skill rewired onto the RV kind, no new Rust.
+
+- **Mechanism rewired, doctrine preserved (D11/§10).**
+  `plugins/doctrine/skills/audit/SKILL.md` now drives the RV ledger instead of a
+  hand-made `audit.md`. The §10 mapping table is faithful: `review new --facet
+  reconciliation --target SL-NNN` + `prime` (was: author `audit.md`); `raise
+  --severity/--title/--detail` (was: expected/observed/evidence); `dispose
+  --disposition/--response` + `verify` (the aligned/fix-now/design-wrong/follow-up/
+  tolerated taxonomy is now the recommended `disposition` vocabulary); `withdraw`
+  for raised-in-error; the `## Synthesis` (hand-added to `review-NNN.md`) is the
+  old `audit.md` prose (D-C6). The reconciliation-loop philosophy, the "disposition
+  every finding" discipline, the "resist easy escapes" guidance, and the harvest /
+  `/record-memory` / `backlog new` step are all kept verbatim in spirit. Only the
+  *destination artefact* changed.
+- **`blocker` is the sole gating severity (D-C9b).** The skill says so explicitly:
+  an unresolved `blocker` on an active RV refuses `audit→reconcile` / `reconcile→done`
+  (PHASE-04 teeth, in the binary, not prose); `major/minor/nit` record but never
+  block. The "no undispositioned findings before close" prose became the teeth.
+- **Self-audit via `--as` (cooperative).** The skill instructs raiser/responder
+  role assertion for the one-party case; the lock + per-finding `can()` keep it
+  correct. Flagged as not-a-security-boundary (ADR-007 Negative).
+- **`audit.md` retired for NEW audits, existing files remain — no migration.**
+  Stated in the skill.
+- **`description` frontmatter updated** (the auto-trigger surface,
+  `mem.pattern.skill.description-is-the-trigger`): it previously named "audit.md";
+  it now names the RV ledger. Trigger *condition* unchanged.
+- **Re-embed ritual (the footgun, handled).** `src/skills.rs` is
+  `#[derive(RustEmbed)] #[folder = "plugins/"]` — a lone SKILL.md edit is invisible
+  until that crate recompiles (`mem.pattern.build.rust-embed-no-rerun`). Steps:
+  `touch src/skills.rs` → `cargo build` (saw real `Compiling doctrine`, NOT
+  `Finished 0.0s`) → `doctrine skills install --skill audit -y` (the sole installer,
+  `mem.pattern.distribution.skill-refresh-command`). Proof it took: the installed
+  `.doctrine/skills/audit/SKILL.md` is **byte-identical** to the rewritten source
+  (`diff` empty), the 6 RV markers present, the old `audit.md`-authoring line gone.
+  Source-of-truth is `plugins/`, NOT the gitignored `.doctrine/skills/` copy
+  (`mem.pattern.distribution.skills-source-vs-installed`) — only the source +
+  `src/skills.rs` are committed.
+- **VA-1 e2e (proof, on real subjects).** Drove the full flow on SL-021 (RV-001):
+  `review new --facet reconciliation` → `prime --seed` then `prime` (curated
+  domain_map, `cache: current`) → `raise` ×3 (blocker/minor/major) → `withdraw F-3
+  --as raiser` (raised-in-error) → `dispose F-1/F-2 --as responder` → `verify
+  F-1/F-2 --as raiser` → `status` = `done · await=none`. Artefacts produced:
+  `review-001.{toml,md}` (status-less, append-only field-owned findings; `## Brief`
+  seeded) and **NO** `audit.md`. Close-gate teeth proven on a scratch slice SL-043
+  driven to the audit seam: `slice status 043 reconcile` **refused** —
+  "unresolved blocker review finding(s): RV-003/F-1" — then **passed** after
+  `dispose`+`verify`. All scratch artefacts (RV-001/2/3, SL-043, runtime state)
+  removed after capture; nothing scratch committed.
+- **Final gate (VT-1).** `cargo clippy` zero warnings (plain, bins/lib);
+  `just check` green — fmt + lint + **980 tests** + build, zero failures. Existing
+  suites unchanged (behaviour-preservation held — no install/embed test broke).
+- **No `/consult` or human-review triggers fired.** The rewrite changed mechanism,
+  not the audit stage's philosophy; no §10↔ADR-007↔CLI tension; the RV verb family
+  had every capability the audit flow needs (no gap surfaced).
