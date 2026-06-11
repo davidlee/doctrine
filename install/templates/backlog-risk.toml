@@ -21,3 +21,5 @@ controls   = []
 slices = []
 specs  = []
 drift  = []
+depends_on = []                 # item→item hard prerequisite
+before     = []                 # item→item soft manual sequence
