@@ -1,0 +1,162 @@
+# Implementation plan for SL-042 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-042"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "REC record kind"
+objective = """
+Land the new first-class numbered kind REC-NNN (corpus .doctrine/rec/NNN/,
+rec-NNN.toml + rec-NNN.md) riding the SL-040 authored-entity-wiring seam verbatim
+(no parallel impl): one integrity::KINDS row (stem "rec", state_dir None), manifest
+dir + .gitignore negation, NNN-slug alias, scaffold/show/list/validate. REC is
+status-less (D-Q3) → read via meta::read_id status-less scan path. Schema:
+status_deltas = [[requirement, from, to]] (admits EMPTY for a redesign REC, F7),
+move ∈ {accept, revise, redesign}, evidence_refs, owning_slice? (optional —
+why a freestanding REC survives slice close), decision_ref?. Realises REQ-108.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (two external passes integrated, eligible-for-plan)" },
+  { id = "EN-2", text = "SL-040 kind-seam landed: meta::read_id status-less scan path, integrity::KINDS table, manifest + .gitignore-negation wiring available to ride (R-a primary path; fallback = land read_id here, SL-040 rebases)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "REC registered: integrity::KINDS row, src/rec.rs schema, manifest dir + .gitignore !.doctrine/rec/ negation; scaffold/show/list/validate operate on REC-NNN" },
+  { id = "EX-2", text = "REC is status-less and scanned via meta::read_id (no authored status field); NNN-slug alias resolves" },
+  { id = "EX-3", text = "Schema admits an empty status_deltas list (redesign REC, F7); move/evidence_refs/optional owning_slice/optional decision_ref round-trip" },
+]
+verification = [
+  { id = "VT-1", expects = "REQ-108: scaffold→toml round-trip preserves deltas/move/evidence_refs and optional owning_slice/decision_ref; empty status_deltas admitted" },
+  { id = "VT-2", expects = "REQ-108: show/list render REC; NNN-slug alias resolves to NNN; validate clean with the new KINDS row" },
+  { id = "VT-3", expects = "REQ-108: REC id stable after owning slice close (status-less kind survives the close seam)" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Coverage substrate"
+objective = """
+Add the slice-side coverage store: a keyed table (not a numbered kind, D-Q4) in
+.doctrine/slice/NNN/coverage.toml, entries (requirement, contributing_change,
+mode ∈ {VT,VA,VH}, status: CoverageStatus [SL-028 enum reused], git_anchor,
+attested_date? for VH/VA). Entry identity = the 4-tuple key (slice, requirement,
+contributing_change, mode) == the citation key (F2/F3) — never a file#line anchor.
+Stored slice-side so several changes touching one requirement compose with
+NO-CLOBBER (D3), in a file DISTINCT from the requirement's authored status (NF-001),
+in the AUTHORED tier (committed, git-tracked — D-Q1; no manifest/negation row, it
+rides the slice tree default-track). Remove the CoverageStatus not(test)
+expect(dead_code) now that the consumer is real (R-b). Pure leaf in src/coverage.rs
+(CoverageEntry); I/O stays in the shell above (ADR-001, F5). Realises REQ-109.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — REC evidence_refs cite the 4-tuple coverage key; REC kind exists" },
+  { id = "EN-2", text = "SL-028 ReqStatus + CoverageStatus enums present in src/requirement.rs (reuse, no new enum)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "coverage.toml entries write/read with the 4-tuple key; CoverageStatus is the entry status (SL-028 enum reused)" },
+  { id = "EX-2", text = "CoverageStatus not(test) expect(dead_code) removed — genuinely used in the non-test build (R-b), clippy clean" },
+  { id = "EX-3", text = "coverage.toml lands in the authored tier: git-tracked, not swallowed by any .gitignore rule (D-Q1)" },
+]
+verification = [
+  { id = "VT-1", expects = "REQ-109: write then read entries round-trips; mode + CoverageStatus + git_anchor + optional attested_date preserved" },
+  { id = "VT-2", expects = "REQ-109: no-clobber — two slices recording the same requirement each own their file; neither overwrites the other (distinct 4-tuple entries surface)" },
+  { id = "VT-3", expects = "REQ-109: coverage stored in a file distinct from the requirement's authored status (distinct-store)" },
+  { id = "VT-4", expects = "REQ-109: git check-ignore on the written coverage.toml is clean — authored-tier residency (D-Q1)" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Composite view + drift surfacer"
+objective = """
+Derive — never store (D4/INV-2) — the per-requirement composite and the drift read.
+Pure folds in src/coverage.rs: composite(entries: &[(CoverageEntry, IsStale)]) ->
+Composite (fan-in by requirement across contributing changes, deterministic, no
+clock/RNG/map-order; v1 surfaces all, no precedence — OQ-3) and drift(authored:
+ReqStatus, composite: &Composite) -> Verdict ∈ {Coherent, Divergent(reason),
+Indeterminate}, read-only, returns NO ReqStatus. Coherence predicate is the
+conservative TOTAL tri-state of design §5.2 — every ReqStatus(6) × composite cell
+single-valued by construction (in-force set {Pending,InProgress,Active,Deprecated};
+withdrawn {Retired,Superseded} → Coherent; Active/Deprecated+empty → Indeterminate;
+Pending/InProgress+empty → Coherent; Pending/InProgress+fresh-Verified → Divergent,
+the accept case; Indeterminate is the catch-all). Impure shell scan_coverage(req):
+corpus-walk .doctrine/slice/*/coverage.toml, filter by requirement, resolve HEAD→SHA
+ONCE (the seam refuses literal HEAD), resolve each entry's IsStale via
+git::commits_touching, pass (entry, is_stale) pairs to the pure folds — the only
+git/disk in the data flow. R2 perf spike (VT): sweep N synthetic slices×entries
+(e.g. 50→500→2000), measure TWO AXES SEPARATELY (codex C2/X-4) — (a) scan fan-in
+with IsStale precomputed, (b) staleness-resolution subprocess cost — locate the
+cliff PER AXIS (F8), budget debug ~10× release; record the conditioned backlog
+triggers now (reverse-index for a scan cliff, batching for a staleness cliff).
+Realises REQ-110, REQ-111, and the structural REQ-114/NF-001 obligations.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — coverage entries readable from the corpus" },
+  { id = "EN-2", text = "Coherence predicate fixed and total per design §5.2 (C-II/C-III/X-1 integrated)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "composite() is a pure deterministic fold; no composite/drift value persisted to disk (INV-2)" },
+  { id = "EX-2", text = "drift() returns Verdict and never a ReqStatus (type-level NF-001 precondition)" },
+  { id = "EX-3", text = "the verdict predicate is total: every ReqStatus × composite cell resolves to exactly one verdict (§5.2)" },
+  { id = "EX-4", text = "scan_coverage resolves HEAD→SHA once then per-entry staleness; folds stay pure over (entry, IsStale)" },
+  { id = "EX-5", text = "R2 perf spike locates the cliff per axis; the matching backlog trigger conditions are recorded (defer-needs-backlog)" },
+]
+verification = [
+  { id = "VT-1", expects = "REQ-110: fold determinism — same entries yield the same composite; assert nothing persisted (no stored composite scalar on disk)" },
+  { id = "VT-2", expects = "REQ-111: verdict-matrix over full ReqStatus(6) × composite {empty, fresh-Verified, stale-Verified, Failed/Blocked, forward-only} — every cell single-valued per §5.2 (withdrawn→Coherent; Active/Deprecated+empty→Indeterminate; Pending+empty→Coherent; Pending+fresh-Verified→Divergent)" },
+  { id = "VT-3", expects = "REQ-114/NF-001: drift() returns Verdict not ReqStatus (type-level); SL-028 two-enum non-reference preserved (compile/grep); coverage and authored status in distinct stores" },
+  { id = "VT-4", expects = "R2 spike: cliff located per axis (scan fan-in vs staleness resolution measured separately), debug ~10× release budgeted" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "VH/VA staleness decay"
+objective = """
+Wire VH/VA coverage attestations onto the existing src/git.rs git-anchor/staleness
+seam (SL-007/008) — reuse unchanged, no parallel impl. FIRST TASK (R-e/F6, H1 is a
+hypothesis not a fact): confirm the seam accepts coverage's (git_anchor,
+touched_paths) granularity; if a coverage anchor needs granularity the memory anchor
+lacks, WIDEN AT THE LEAF, never fork (a fork is a parallel impl). git.rs is the
+matching axis (commit-reachability — code moved past the anchor, D5/H1), NOT
+SL-040's contentset.rs content-hash leaf (weighed, wrong model). A VH/VA entry's
+git_anchor compared to HEAD; movement past it flags the entry stale — SURFACED,
+NEVER auto-demoted to another status (NF-002). Realises REQ-115/NF-002.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — composite consumes a resolved IsStale per entry" },
+  { id = "EN-2", text = "src/git.rs commits_touching(root, paths, since, target) seam available (SL-007/008)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "seam-fit confirmed (R-e): git.rs accepts coverage's (git_anchor, touched_paths) granularity, or the leaf is widened — not forked" },
+  { id = "EX-2", text = "a VH/VA entry whose touched code moved past its git_anchor is flagged stale and surfaced; its CoverageStatus is NOT auto-demoted (NF-002)" },
+  { id = "EX-3", text = "no parallel staleness implementation introduced (reuse of the src/git.rs seam asserted)" },
+]
+verification = [
+  { id = "VT-1", expects = "REQ-115/NF-002: a stale Verified VH/VA entry is flagged stale, not demoted to another status" },
+  { id = "VT-2", expects = "REQ-115: staleness resolved via the src/git.rs seam (no new staleness leaf); reuse asserted" },
+]
+specs             = []
+requirements      = []
