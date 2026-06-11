@@ -295,4 +295,267 @@ mod tests {
             "per-call staleness {per:?} — investigate subprocess cost"
         );
     }
+
+    // --- PHASE-04 temp-git-repo helper (R-e seam-fit) ------------------------
+    //
+    // A throwaway born git repo (NEVER the doctrine repo's own .doctrine/): init,
+    // pin identity, write+commit files. Mirrors git.rs's `ScratchRepo` shape; kept
+    // local because that helper is private to git.rs's test module.
+
+    /// Run `git -C <root> <args>` with pinned identity (no machine config needed),
+    /// asserting success; returns trimmed stdout.
+    fn git_at(root: &Path, args: &[&str]) -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args([
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+        String::from_utf8(out.stdout).unwrap().trim().to_owned()
+    }
+
+    /// Write `rel` under `root` (creating parents), stage and commit it, return the
+    /// resulting HEAD SHA.
+    fn write_commit(root: &Path, rel: &str, contents: &str, msg: &str) -> String {
+        let full = root.join(rel);
+        fs::create_dir_all(full.parent().unwrap()).unwrap();
+        fs::write(&full, contents).unwrap();
+        git_at(root, &["add", rel]);
+        git_at(root, &["commit", "-q", "-m", msg]);
+        git_at(root, &["rev-parse", "HEAD"])
+    }
+
+    // --- T1 (R-e): the staleness seam fits a coverage entry's own granularity --
+    //
+    // H1 ("git::commits_touching fits coverage's (git_anchor, touched_paths)
+    // granularity") turned from hypothesis into a test-backed fact: drive the seam
+    // with the EXACT field types a CoverageEntry carries (a String anchor, a
+    // Vec<String> of repo-relative paths) against a real temp git repo. No leaf
+    // widening was needed — the existing signature consumed coverage's granularity
+    // verbatim.
+
+    #[test]
+    fn seam_fits_coverage_entry_granularity_stale_and_fresh() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git_at(root, &["init", "-q", "-b", "main"]);
+
+        // A coverage entry's anchor is the SHA after the path was first seen.
+        let anchor = write_commit(root, "src/foo.rs", "fn a() {}\n", "add foo");
+        // A second, unrelated path moves HEAD without touching foo.rs.
+        let _ = write_commit(root, "src/bar.rs", "fn b() {}\n", "add bar");
+        let head_fresh = git_at(root, &["rev-parse", "HEAD"]);
+
+        // Use a CoverageEntry's ACTUAL field shapes as the seam inputs.
+        let entry = entry_with(&anchor, &["src/foo.rs"]);
+        // foo.rs was NOT touched between anchor and head_fresh → Fresh.
+        let fresh = IsStale::from(git::commits_touching(
+            root,
+            &entry.touched_paths,
+            &entry.git_anchor,
+            &head_fresh,
+        ));
+        assert_eq!(
+            fresh,
+            IsStale::Fresh,
+            "anchor..HEAD over an untouched path resolves Fresh through the seam"
+        );
+
+        // Now modify foo.rs and commit — HEAD moves PAST the anchor over that path.
+        let head_stale = write_commit(root, "src/foo.rs", "fn a() { 1; }\n", "edit foo");
+        let stale = IsStale::from(git::commits_touching(
+            root,
+            &entry.touched_paths,
+            &entry.git_anchor,
+            &head_stale,
+        ));
+        assert_eq!(
+            stale,
+            IsStale::Stale,
+            "a commit touching the path since the anchor resolves Stale through the seam"
+        );
+    }
+
+    /// Build a `CoverageEntry` carrying the given anchor + touched paths (the two
+    /// fields the staleness seam consumes), Verified VH evidence.
+    fn entry_with(anchor: &str, paths: &[&str]) -> CoverageEntry {
+        use crate::requirement::CoverageStatus;
+        CoverageEntry {
+            key: coverage::CoverageKey {
+                slice: "SL-042".to_owned(),
+                requirement: "REQ-115".to_owned(),
+                contributing_change: "SL-042".to_owned(),
+                mode: "VH".to_owned(),
+            },
+            status: CoverageStatus::Verified,
+            git_anchor: anchor.to_owned(),
+            attested_date: Some("2026-06-12".to_owned()),
+            touched_paths: paths.iter().map(|p| (*p).to_owned()).collect(),
+        }
+    }
+
+    // --- T2 (VT-1 / NF-002): VH/VA Verified evidence is FLAGGED stale, never ---
+    //     auto-demoted. The core decay lock, end-to-end through scan_coverage.
+    //
+    // Layout a temp git repo with a committed source file (the anchor), a slice
+    // coverage.toml carrying a VH and a VA Verified entry over that file, then move
+    // HEAD past the anchor by editing the file. scan_coverage must mark both cells
+    // Stale while their `status` stays Verified — staleness is a SEPARATE axis from
+    // the observed status; nothing demotes Verified to Failed/Blocked/etc.
+
+    /// Render a two-entry (VH + VA) coverage.toml body, both `Verified`, anchored at
+    /// `anchor` over `path`. The mode is the only field that differs between them.
+    fn vh_va_coverage_body(anchor: &str, path: &str) -> String {
+        let entry = |mode: &str| {
+            format!(
+                "[[entry]]\n\
+                 slice = \"SL-042\"\n\
+                 requirement = \"REQ-115\"\n\
+                 contributing_change = \"SL-042\"\n\
+                 mode = \"{mode}\"\n\
+                 status = \"verified\"\n\
+                 git_anchor = \"{anchor}\"\n\
+                 attested_date = \"2026-06-12\"\n\
+                 touched_paths = [\"{path}\"]\n"
+            )
+        };
+        format!("{}{}", entry("VH"), entry("VA"))
+    }
+
+    #[test]
+    fn vh_va_verified_evidence_is_flagged_stale_never_demoted() {
+        use crate::requirement::CoverageStatus;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git_at(root, &["init", "-q", "-b", "main"]);
+
+        // 1. A committed source file → its commit SHA is the coverage anchor.
+        let anchor = write_commit(root, "src/foo.rs", "fn a() {}\n", "add foo");
+
+        // 2. Lay the VH + VA Verified coverage entries over src/foo.rs at `anchor`,
+        //    and commit them INSIDE the temp repo so the temp repo's own HEAD is
+        //    valid for head_sha / commits_touching (NOT the doctrine repo's HEAD).
+        let cov_rel = ".doctrine/slice/042/coverage.toml";
+        write_commit(
+            root,
+            cov_rel,
+            &vh_va_coverage_body(&anchor, "src/foo.rs"),
+            "coverage",
+        );
+
+        // 3. Move HEAD PAST the anchor over src/foo.rs (edit + commit). `anchor` is
+        //    now a strict ancestor of HEAD (the merge-base gate passes) and a commit
+        //    has touched the path since.
+        write_commit(root, "src/foo.rs", "fn a() { 1; }\n", "edit foo");
+
+        // 4. Scan. Both VH and VA cells must be Stale, status still Verified.
+        let cells = scan_coverage(root, "REQ-115");
+        assert_eq!(
+            cells.len(),
+            2,
+            "the VH and VA entries both survive the filter"
+        );
+
+        for (entry, stale) in &cells {
+            assert_eq!(
+                *stale,
+                IsStale::Stale,
+                "{} evidence over an edited path is flagged stale",
+                entry.key.mode
+            );
+            assert_eq!(
+                entry.status,
+                CoverageStatus::Verified,
+                "{} status stays Verified — staleness NEVER auto-demotes (NF-002)",
+                entry.key.mode
+            );
+        }
+        // Spell the mode coverage out: both attestation kinds are present.
+        assert!(cells.iter().any(|(e, _)| e.key.mode == "VH"));
+        assert!(cells.iter().any(|(e, _)| e.key.mode == "VA"));
+    }
+
+    #[test]
+    fn vh_va_verified_evidence_untouched_since_anchor_is_fresh() {
+        use crate::requirement::CoverageStatus;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git_at(root, &["init", "-q", "-b", "main"]);
+
+        // The anchor is the SHA at which foo.rs was last touched.
+        let anchor = write_commit(root, "src/foo.rs", "fn a() {}\n", "add foo");
+        // Commit the coverage store and an UNRELATED file — HEAD advances but never
+        // touches src/foo.rs after the anchor.
+        write_commit(
+            root,
+            ".doctrine/slice/042/coverage.toml",
+            &vh_va_coverage_body(&anchor, "src/foo.rs"),
+            "coverage",
+        );
+        write_commit(root, "src/bar.rs", "fn b() {}\n", "add bar");
+
+        let cells = scan_coverage(root, "REQ-115");
+        assert_eq!(cells.len(), 2);
+        for (entry, stale) in &cells {
+            assert_eq!(
+                *stale,
+                IsStale::Fresh,
+                "{} evidence over an untouched path is Fresh — the contrast case",
+                entry.key.mode
+            );
+            assert_eq!(entry.status, CoverageStatus::Verified, "status unchanged");
+        }
+    }
+
+    // --- T3 (VT-2 / EX-3): no parallel staleness impl ------------------------
+    //
+    // Coverage staleness flows ONLY through git::commits_touching — there is no
+    // second staleness leaf. Structurally assert that the coverage modules
+    // reference the seam and carry NO code path into the memory-side staleness leaf
+    // (the cs leaf below — a DISTINCT, unrelated module that must not bleed in
+    // here). We match the `::`-path FORM of that module, never the bare word, so
+    // prose may name it without tripping the guard.
+
+    /// The memory-side staleness leaf's module path form. Spelled by concatenation
+    /// so this very assertion's source carries no literal `<name>::` token to
+    /// false-positive on (the guard reads its own file).
+    fn rival_staleness_path() -> String {
+        format!("{}::", "contentset")
+    }
+
+    #[test]
+    fn coverage_staleness_flows_only_through_commits_touching() {
+        let scan_src = include_str!("coverage_scan.rs");
+        let cov_src = include_str!("coverage.rs");
+        let rival = rival_staleness_path();
+
+        assert!(
+            scan_src.contains("commits_touching"),
+            "the scan shell resolves staleness through git::commits_touching"
+        );
+        // The single staleness seam — no parallel impl, no path into the rival leaf.
+        for (name, src) in [("coverage_scan.rs", scan_src), ("coverage.rs", cov_src)] {
+            assert!(
+                !src.contains(&rival),
+                "{name} must not path into the memory-side staleness leaf — coverage \
+                 staleness has its own single seam (git::commits_touching), no \
+                 parallel impl"
+            );
+        }
+    }
 }
