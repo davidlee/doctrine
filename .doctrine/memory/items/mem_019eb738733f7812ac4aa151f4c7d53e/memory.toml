@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb738733f7812ac4aa151f4c7d53e"
+memory_key = "mem.pattern.cordage.denylist-whole-word-vocab"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "cordage denylist whole-word matches forbidden product vocab"
+summary = "cordage forbidden-vocab denylist (tests/denylist.rs) whole-word matches product nouns — no project/task/schedule/capacity in any cordage identifier or doc-comment"
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = ["crates/cordage/tests/denylist.rs"]
+globs = ["crates/cordage/**"]
+commands = []
+tags = ["cordage", "denylist", "lint"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "6dfc589fb606bcc579d71de85d971bd047fc1498"
+tree = "4f91dffb3f3258baa96f979b7c17d9aebc705f8f"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "6dfc589fb606bcc579d71de85d971bd047fc1498"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
