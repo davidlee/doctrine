@@ -1,0 +1,13 @@
+id = 44
+slug = "reconcile-writer-closure-gate"
+title = "Reconcile writer + closure gate (SPEC-002 B)"
+status = "proposed"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[relationships]
+# Reserved. Empty in v1 — no spec/requirement registry to point at yet.
+# When specs land, this section gains (illustrative, not v1):
+#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
+#   requirements = ["..."]   # implements / updates / verifies
+#   supersedes   = [2]       # slice-to-slice links
