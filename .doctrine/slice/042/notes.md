@@ -55,3 +55,40 @@ into the audit at close.
   constituent steps directly (`cargo fmt --check`, `cargo clippy`, `cargo test`,
   `cargo build`). Verify worker-mode **off** (the `DOCTRINE_WORKER=1` guard makes
   the `adr status` e2e goldens refuse-and-fail; orchestrator verify must unset it).
+- **Worktree linkage is fragile under the concurrent session.** The SL-043 session
+  on `main` ran something (gc/prune/worktree-remove) that wiped
+  `.git/worktrees/`, ORPHANING the linked coord/p2 worktrees mid-run (their `.git`
+  pointer dangled; the env also carried empty `GIT_DIR`/`GIT_WORK_TREE`). NO data
+  lost — branch `sl-042-coord` and all commits survived in the object store; the
+  worktree was just `prune`d + re-`add`ed. **The branch is the durable artifact,
+  not the worktree dir.** Run git as `env -u GIT_DIR -u GIT_WORK_TREE git -C
+  /workspace/sl-042-coord …` to dodge the empty-GIT_DIR env.
+
+## PHASE-03 forward (pre-planning findings — not yet implemented)
+
+Surfaced while detailing P3; resolutions are design-faithful, additive, low-risk.
+
+- **Schema gap: `CoverageEntry` lacks `touched_paths`.** Design names
+  `touched_paths` 3× (§5.2 staleness call, §8 R-e) as the coverage attribute the
+  staleness seam consumes, but §5.3's field LIST omitted it, so P2's landed
+  `CoverageEntry` has no such field. **Fix in P3:** add `touched_paths:
+  Vec<String>` with `#[serde(default)]` (additive — P2 round-trip tests stay
+  green). The staleness check needs it: `commits_touching(root, &touched_paths,
+  since=git_anchor, target=head_sha)`.
+- **`scan_coverage` placement:** `src/coverage.rs` is a PURE LEAF (its module doc
+  asserts "no git/disk"). The impure `scan_coverage` (corpus walk + git seam) must
+  live ABOVE the leaf (ADR-001) — a NEW `src/coverage_scan.rs` shell, NOT inside
+  the leaf. P4's staleness wiring grows there too.
+- **`IsStale` is a leaf type** (`coverage.rs`): `Fresh | Stale | Unknown`, mapping
+  the seam's `Some(0) | Some(≥1) | None`. The shell PRODUCES it; the pure
+  `composite(&[(CoverageEntry, IsStale)])` CONSUMES it (purity F1: staleness
+  resolved in the shell, never in the fold).
+- **Git seam:** `crate::git::commits_touching(root, paths: &[String], since: &str,
+  target: &str) -> Option<u32>` at `src/git.rs:901`. **Refuses literal `HEAD`** —
+  resolve `HEAD → frozen SHA` ONCE per query upstream (`git rev-parse HEAD`), feed
+  as `target`. `Some(0)⇒fresh, Some(≥1)⇒stale, None⇒undecidable`.
+- **dead_code suppression persists through P3.** The module-level
+  `#![cfg_attr(not(test), expect(dead_code))]` on `coverage.rs` stays: P3 still
+  has NO bins/lib consumer (no CLI verb; the closure gate is Slice B), so the leaf
+  remains dead in the gate build. EX-2's "genuinely used in the non-test build"
+  therefore lands with the consumer (Slice B / a later read verb), not P3.
