@@ -63,32 +63,71 @@ pub(crate) fn spine_path(incoming: &InIndex, overlay: OverlayId, node: NodeId) -
     chain
 }
 
-/// The transitive predecessor chains of `node`, per overlay, oriented
-/// **root → … → node** (design §5.4, F47). For each overlay present in the
-/// `incoming` view, enumerate every chain of predecessors up the in-edges. Unlike
-/// [`spine_path`] (single kept parent on an `AtMostOne` overlay) this is the
-/// multi-parent `Unbounded` walk: a node with k predecessors branches into k
-/// chains.
+/// The predecessor cone of `node`, per overlay: the predecessor sub-DAG as a
+/// `node ↦ {immediate in-cone predecessors}` adjacency map (design §5.4, A-5,
+/// D2/F13). For each overlay present in the `incoming` view, BFS UP the in-edges
+/// from `node` with a **global** visited set — each cone node is enqueued at most
+/// once, so the walk is O(V+E): no path enumeration, no clone, no `2^layers`
+/// blow-up on diamonds. Policy reconstructs any chain/spine/witness by walking the
+/// returned adjacency.
 ///
-/// Termination (F47): a chain ends at a **root** (no predecessors) OR at the first
-/// node that is a member of a degraded post-arity SCC on that overlay
-/// (`degraded_sccs[overlay]`). That SCC node is included as the chain ENDPOINT but
-/// never walked through — so the walk is finite and deterministic even on a cyclic
-/// `Reject` view. If `node` itself is inside a degraded SCC, its only chain is the
-/// singleton `[[node]]`. A visited set guards against re-entry on any residual
-/// cycle that is not SCC-keyed (defensive — finiteness does not depend on it).
-pub(crate) fn predecessor_paths(
+/// Termination (F47): the in-edges are followed up to **roots** (no predecessors)
+/// and **degraded-SCC entries**. A root is recorded as a key with an empty
+/// pred-set. A node inside a degraded post-arity SCC on the overlay
+/// (`degraded_sccs[overlay]`) is recorded as an endpoint — a key with an empty
+/// pred-set, never expanded — even though it stays in its successor's pred-set. So
+/// the cone is finite and deterministic even on a cyclic `Reject` view. If `node`
+/// itself is inside a degraded SCC its cone is exactly `{node: {}}` (the old
+/// `[[node]]`).
+pub(crate) fn predecessor_cone(
     incoming: &InIndex,
     degraded_sccs: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
     node: NodeId,
-) -> BTreeMap<OverlayId, Vec<Vec<NodeId>>> {
+) -> BTreeMap<OverlayId, BTreeMap<NodeId, BTreeSet<NodeId>>> {
     incoming
         .keys()
         .map(|&overlay| {
-            let chains = chains_to_root(incoming, degraded_sccs, overlay, node);
-            (overlay, chains)
+            let cone = cone_on_overlay(incoming, degraded_sccs, overlay, node);
+            (overlay, cone)
         })
         .collect()
+}
+
+/// The predecessor cone of `node` on one overlay (node ↦ immediate in-cone
+/// predecessors). A node inside a degraded SCC yields `{node: {}}`; otherwise a
+/// single BFS up the in-edges with a global visited set records each reached node
+/// once, terminating at roots (empty pred-set) and degraded-SCC entries (recorded
+/// as empty-pred endpoints, never enqueued).
+fn cone_on_overlay(
+    incoming: &InIndex,
+    degraded_sccs: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
+    overlay: OverlayId,
+    node: NodeId,
+) -> BTreeMap<NodeId, BTreeSet<NodeId>> {
+    let mut cone: BTreeMap<NodeId, BTreeSet<NodeId>> = BTreeMap::new();
+    // A node that is itself a degraded-SCC member is the endpoint: {node: {}}.
+    if in_degraded_scc(degraded_sccs, overlay, node) {
+        cone.insert(node, BTreeSet::new());
+        return cone;
+    }
+    let mut visited: BTreeSet<NodeId> = BTreeSet::new();
+    visited.insert(node);
+    let mut frontier: VecDeque<NodeId> = VecDeque::new();
+    frontier.push_back(node);
+    while let Some(cur) = frontier.pop_front() {
+        let pset: BTreeSet<NodeId> = predecessors(incoming, overlay, cur).into_iter().collect();
+        for &p in &pset {
+            if in_degraded_scc(degraded_sccs, overlay, p) {
+                // SCC entry — record as an empty-pred endpoint, never expand it.
+                cone.entry(p).or_default();
+            } else if visited.insert(p) {
+                frontier.push_back(p);
+            }
+            // Either way, `p` stays in `cur`'s pred-set below.
+        }
+        cone.insert(cur, pset);
+    }
+    cone
 }
 
 /// Whether `node` is a member of any degraded post-arity SCC on `overlay`.
@@ -100,88 +139,6 @@ fn in_degraded_scc(
     degraded_sccs
         .get(&overlay)
         .is_some_and(|sccs| sccs.iter().any(|scc| scc.contains(&node)))
-}
-
-/// Enumerate the predecessor chains of `node` on one overlay (root → … → node).
-/// A node inside a degraded SCC yields just `[[node]]`; otherwise each chain
-/// branches on the node's predecessors, terminating at a root or a degraded-SCC
-/// entry (which is included as an endpoint, never expanded).
-fn chains_to_root(
-    incoming: &InIndex,
-    degraded_sccs: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
-    overlay: OverlayId,
-    node: NodeId,
-) -> Vec<Vec<NodeId>> {
-    // A node that is itself a degraded-SCC member is an endpoint: [[node]].
-    if in_degraded_scc(degraded_sccs, overlay, node) {
-        return vec![vec![node]];
-    }
-    let mut chains: Vec<Vec<NodeId>> = Vec::new();
-    let mut visited: BTreeSet<NodeId> = BTreeSet::new();
-    visited.insert(node);
-    extend_chains(
-        incoming,
-        degraded_sccs,
-        overlay,
-        node,
-        &mut vec![node],
-        &mut visited,
-        &mut chains,
-    );
-    chains
-}
-
-/// Walk predecessors of `cur` depth-first, accumulating completed chains. `suffix`
-/// holds the path from `cur` down to the explained node (node-last); a completed
-/// chain is reversed into root → … → node order before it is pushed. `visited`
-/// bounds residual cycles not captured by the SCC endpoints.
-fn extend_chains(
-    incoming: &InIndex,
-    degraded_sccs: &BTreeMap<OverlayId, Vec<BTreeSet<NodeId>>>,
-    overlay: OverlayId,
-    cur: NodeId,
-    suffix: &mut Vec<NodeId>,
-    visited: &mut BTreeSet<NodeId>,
-    chains: &mut Vec<Vec<NodeId>>,
-) {
-    let parents: Vec<NodeId> = predecessors(incoming, overlay, cur);
-    // A root (no predecessors) completes the chain at `cur`.
-    if parents.is_empty() {
-        let mut chain = suffix.clone();
-        chain.reverse();
-        chains.push(chain);
-        return;
-    }
-    for parent in parents {
-        if in_degraded_scc(degraded_sccs, overlay, parent) {
-            // The SCC entry is the chain endpoint — include it, do not walk in.
-            let mut chain = suffix.clone();
-            chain.push(parent);
-            chain.reverse();
-            chains.push(chain);
-            continue;
-        }
-        if !visited.insert(parent) {
-            // Re-entry on a residual cycle — end the chain here (defensive).
-            let mut chain = suffix.clone();
-            chain.push(parent);
-            chain.reverse();
-            chains.push(chain);
-            continue;
-        }
-        suffix.push(parent);
-        extend_chains(
-            incoming,
-            degraded_sccs,
-            overlay,
-            parent,
-            suffix,
-            visited,
-            chains,
-        );
-        suffix.pop();
-        visited.remove(&parent);
-    }
 }
 
 /// The predecessors of `node` on `overlay` (in-edge sources), in adjacency-key

@@ -260,22 +260,25 @@ impl Channel {
 }
 
 /// A role-agnostic structured account of one node (design §5.4, D11/F13): its
-/// composed-order key, its transitive predecessor chains per overlay, and the
-/// evictions it is an endpoint of. No `String` prose, no policy role — rendering
-/// belongs to the policy layer.
+/// composed-order key, its predecessor cone per overlay, and the evictions it is
+/// an endpoint of. No `String` prose, no policy role — rendering belongs to the
+/// policy layer.
 ///
-/// `paths` keys every overlay; each value is the predecessor chains of `node`,
-/// oriented **root → … → node**. A chain ends at a root OR at the first node of a
-/// degraded post-arity SCC (F47): SCC members are chain ENDPOINTS only, never
-/// walked through, so the account is finite and deterministic on a cyclic `Reject`
-/// view. A node inside a degraded SCC gets the singleton chain `[[node]]`; the
-/// cycle itself is explained by [`Provenance::cycles`], not a path. `evicted` is
-/// the evictions with `node` as src or dst (F26).
+/// `predecessors` keys every overlay; each value is the predecessor **cone** of
+/// `node` — the predecessor sub-DAG as a `node ↦ {immediate in-cone predecessors}`
+/// adjacency map (D2: pure structure, no bundled witness chain). **Roots** are
+/// keys with an empty pred-set. **F47 termination is preserved structurally**: a
+/// degraded post-arity SCC entry is recorded as a key with an empty pred-set (an
+/// endpoint, never walked through), so the account is finite and deterministic on
+/// a cyclic `Reject` view; if `node` is itself inside a degraded SCC its cone is
+/// `{node: {}}`. The cycle itself is explained by [`Provenance::cycles`], not the
+/// cone. Policy reconstructs any chain/spine/witness by walking the adjacency.
+/// `evicted` is the evictions with `node` as src or dst (F26).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Explanation {
     node: NodeId,
     order_key: OrderKey,
-    paths: BTreeMap<OverlayId, Vec<Vec<NodeId>>>,
+    predecessors: BTreeMap<OverlayId, BTreeMap<NodeId, BTreeSet<NodeId>>>,
     evicted: Vec<EvictedEdge>,
 }
 
@@ -290,10 +293,13 @@ impl Explanation {
         self.order_key
     }
 
-    /// The transitive predecessor chains of the node, keyed by overlay; each
-    /// chain is oriented root → … → node (F47 termination).
-    pub fn paths(&self) -> &BTreeMap<OverlayId, Vec<Vec<NodeId>>> {
-        &self.paths
+    /// The predecessor cone of the node, keyed by overlay: each value is the
+    /// predecessor sub-DAG as a `node ↦ {immediate in-cone predecessors}` adjacency
+    /// map. Roots and degraded-SCC entries are keys with an empty pred-set (F47
+    /// termination preserved structurally); policy walks the adjacency to
+    /// reconstruct any chain/spine.
+    pub fn predecessors(&self) -> &BTreeMap<OverlayId, BTreeMap<NodeId, BTreeSet<NodeId>>> {
+        &self.predecessors
     }
 
     /// The evictions with the node as an endpoint (src or dst), in provenance
@@ -847,17 +853,18 @@ impl Graph {
     }
 
     /// A role-agnostic structured account of `node` (design §5.4): its
-    /// composed-order key, its transitive predecessor chains per overlay (each
-    /// oriented root → … → node, terminating at a root or a degraded post-arity
-    /// SCC entry — F47), and the evictions it is an endpoint of (F26). Finite and
-    /// deterministic on cyclic `Reject` views; infallible (a foreign id yields the
-    /// `Finite(0)` key and empty paths/evictions, non-panicking — F14).
+    /// composed-order key, its predecessor cone per overlay (the predecessor
+    /// sub-DAG as node ↦ immediate in-cone predecessors, roots and degraded
+    /// post-arity SCC entries recorded as empty-pred keys — F47), and the evictions
+    /// it is an endpoint of (F26). Finite and deterministic on cyclic `Reject`
+    /// views; infallible (a foreign id yields the `Finite(0)` key and empty
+    /// cone/evictions, non-panicking — F14).
     pub fn explain(&self, node: NodeId) -> Explanation {
         let order_key = self.order_keys.get(&node).copied().unwrap_or(OrderKey {
             level: Level::Finite(0),
             node,
         });
-        let paths = query::predecessor_paths(&self.incoming, &self.degraded_sccs, node);
+        let predecessors = query::predecessor_cone(&self.incoming, &self.degraded_sccs, node);
         let evicted = self
             .provenance
             .evictions()
@@ -868,7 +875,7 @@ impl Graph {
         Explanation {
             node,
             order_key,
-            paths,
+            predecessors,
             evicted,
         }
     }

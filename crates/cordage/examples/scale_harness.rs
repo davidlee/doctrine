@@ -121,9 +121,11 @@ fn run(cliff: &str, n: Option<u32>, layers: Option<u32>, out: &mut impl Write) -
             let (g, _src, sink, ov) = diamond(layers)?;
             let start = Instant::now();
             let ex = g.explain(sink);
-            let paths = ex.paths().get(&ov).map_or(0, Vec::len);
+            // Cone node count (predecessor sub-DAG) — LINEAR in layers post-RSK-002,
+            // not the old 2^layers path count.
+            let cone_nodes = ex.predecessors().get(&ov).map_or(0, BTreeMap::len);
             let ms = millis(start);
-            writeln!(out, "explain,{layers},paths,{paths}")?;
+            writeln!(out, "explain,{layers},cone_nodes,{cone_nodes}")?;
             writeln!(out, "explain,{layers},explain_ms,{ms:.1}")?;
         }
         "quadratic" => {

@@ -1,16 +1,28 @@
 //! VT-1 (explain on cycles, F47) + VT-2 (eviction endpoint filter, F26).
 //!
-//! `explain(n)` assembles, per overlay, the transitive predecessor chains of `n`
-//! (root → … → n) and the evictions with `n` as an endpoint. On a cyclic `Reject`
-//! view a chain ends at a root OR at the first node of a degraded post-arity SCC —
-//! SCC members are endpoints only, never walked through; a node inside an SCC gets
-//! `[[n]]`. The cycle itself is explained by `Provenance.cycles`, never by a path.
-//! Black-box: opaque ids minted by the builder, structural vocabulary only.
+//! `explain(n)` assembles, per overlay, the predecessor **cone** of `n` — the
+//! predecessor sub-DAG as a `node ↦ {immediate in-cone predecessors}` adjacency
+//! map — and the evictions with `n` as an endpoint. On a cyclic `Reject` view the
+//! cone terminates at roots and degraded post-arity SCC entries: both are recorded
+//! as empty-pred keys (endpoints, never walked through); a node inside an SCC gets
+//! `{n: {}}`. The cycle itself is explained by `Provenance.cycles`, never by the
+//! cone. Black-box: opaque ids minted by the builder, structural vocabulary only.
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use cordage::{
     Arity, CyclePolicy, Direction, EdgeAttrs, EvictReason, GraphBuilder, NodeId, OrderLayer,
     OrderSpec, OverlayConfig,
 };
+
+/// A cone `node ↦ preds` built from `(node, [preds])` pairs — captured builder
+/// ids only, never minted literals.
+fn cone(entries: Vec<(NodeId, Vec<NodeId>)>) -> BTreeMap<NodeId, BTreeSet<NodeId>> {
+    entries
+        .into_iter()
+        .map(|(n, preds)| (n, preds.into_iter().collect()))
+        .collect()
+}
 
 fn reject() -> OverlayConfig {
     OverlayConfig::new(CyclePolicy::Reject, Arity::Unbounded)
@@ -43,14 +55,17 @@ fn explain_chain_ends_at_a_degraded_scc_entry_not_walking_through_it() {
     let g = b.build().expect("valid");
 
     let ex = g.explain(nx);
-    // x's only predecessor chain ends at a — a is a degraded-SCC endpoint, so the
-    // walk stops there and does NOT continue into b.
-    assert_eq!(ex.paths().get(&ov), Some(&vec![vec![na, nx]]));
+    // x's cone records a as its predecessor; a is a degraded-SCC endpoint, so it is
+    // an empty-pred key — the walk stops there and never continues into b.
+    assert_eq!(
+        ex.predecessors().get(&ov),
+        Some(&cone(vec![(nx, vec![na]), (na, vec![])]))
+    );
 }
 
 #[test]
 fn explain_of_a_node_inside_a_degraded_scc_is_the_singleton_chain() {
-    // explain(a) where a is itself a member of the degraded SCC a ↔ b → [[a]].
+    // explain(a) where a is itself a member of the degraded SCC a ↔ b → {a: {}}.
     let mut b = GraphBuilder::new();
     let ov = b.overlay(reject());
     let na = b.node();
@@ -63,12 +78,12 @@ fn explain_of_a_node_inside_a_degraded_scc_is_the_singleton_chain() {
     let g = b.build().expect("valid");
 
     let ex = g.explain(na);
-    assert_eq!(ex.paths().get(&ov), Some(&vec![vec![na]]));
+    assert_eq!(ex.predecessors().get(&ov), Some(&cone(vec![(na, vec![])])));
 }
 
 #[test]
 fn explain_terminates_and_is_deterministic_with_the_cycle_in_provenance() {
-    // The cycle is surfaced via Provenance.cycles, NOT via a path. explain must
+    // The cycle is surfaced via Provenance.cycles, NOT via the cone. explain must
     // terminate (proven by returning) and be deterministic (recompute identical).
     let mut b = GraphBuilder::new();
     let ov = b.overlay(reject());
@@ -81,18 +96,18 @@ fn explain_terminates_and_is_deterministic_with_the_cycle_in_provenance() {
     b.order_spec(OrderSpec::new(vec![OrderLayer::new(ov, Direction::Along)]));
     let g = b.build().expect("valid");
 
-    // The cycle lives in provenance, not in any path.
+    // The cycle lives in provenance, not in the cone.
     assert!(!g.provenance().cycles().is_empty());
 
     // Deterministic: a second explain of the same node is identical.
-    assert_eq!(g.explain(nx).paths(), g.explain(nx).paths());
+    assert_eq!(g.explain(nx).predecessors(), g.explain(nx).predecessors());
 }
 
 #[test]
 fn explain_walks_a_multi_parent_dag_to_distinct_roots() {
-    // root1 → n, root2 → n on a plain (acyclic) Reject overlay: explain enumerates
-    // BOTH predecessor chains, each oriented root → … → n. Distinct from spine_path
-    // (single chain) — this is the multi-parent Unbounded walk.
+    // root1 → n, root2 → n on a plain (acyclic) Reject overlay: n's cone records
+    // BOTH roots as its predecessors, each itself an empty-pred root key. Distinct
+    // from spine_path (single chain) — this is the multi-parent Unbounded cone.
     let mut b = GraphBuilder::new();
     let ov = b.overlay(reject());
     let r1 = b.node();
@@ -102,17 +117,17 @@ fn explain_walks_a_multi_parent_dag_to_distinct_roots() {
     b.edge(ov, r2, n, EdgeAttrs::new(0, 0));
     let g = b.build().expect("valid");
 
-    // Chains are ordered (r1 < r2 by mint order) — deterministic enumeration.
+    // n ↦ {r1, r2}; both roots are empty-pred keys — deterministic adjacency.
     assert_eq!(
-        g.explain(n).paths().get(&ov),
-        Some(&vec![vec![r1, n], vec![r2, n]])
+        g.explain(n).predecessors().get(&ov),
+        Some(&cone(vec![(n, vec![r1, r2]), (r1, vec![]), (r2, vec![])]))
     );
 }
 
 #[test]
 fn explain_keys_every_overlay_a_root_node_is_singleton_on_each() {
-    // A8: a node with no predecessors on an overlay is [[n]] (present, not absent).
-    // Two overlays, the node a root on both → both keyed, each [[n]].
+    // A8: a node with no predecessors on an overlay is {n: {}} (present, not
+    // absent). Two overlays, the node a root on both → both keyed, each {n: {}}.
     let mut b = GraphBuilder::new();
     let ov1 = b.overlay(reject());
     let ov2 = b.overlay(reject());
@@ -123,8 +138,8 @@ fn explain_keys_every_overlay_a_root_node_is_singleton_on_each() {
     let g = b.build().expect("valid");
 
     let ex = g.explain(n);
-    assert_eq!(ex.paths().get(&ov1), Some(&vec![vec![n]]));
-    assert_eq!(ex.paths().get(&ov2), Some(&vec![vec![n]]));
+    assert_eq!(ex.predecessors().get(&ov1), Some(&cone(vec![(n, vec![])])));
+    assert_eq!(ex.predecessors().get(&ov2), Some(&cone(vec![(n, vec![])])));
 }
 
 #[test]
