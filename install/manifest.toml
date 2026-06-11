@@ -8,6 +8,7 @@ create = [
   ".doctrine/backlog",
   ".doctrine/memory/items",
   ".doctrine/policy",
+  ".doctrine/rec",
   ".doctrine/requirement",
   ".doctrine/review",
   ".doctrine/scripts",

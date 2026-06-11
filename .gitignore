@@ -20,6 +20,7 @@
 !.doctrine/policy/
 !.doctrine/standard/
 !.doctrine/review/
+!.doctrine/rec/
 !.doctrine/backlog/
 !.doctrine/requirement/
 !.doctrine/spec/

@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb6eb7e5d7ea3a8e7564d7eeaac90"
+memory_key = "mem.pattern.entity.free-text-ref-not-forward-validated"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Forward-edge validation only fits refs to numbered kinds in integrity::KINDS — free-text refs (DEC) must carry unvalidated"
+summary = ""
+created = "2026-06-11"
+updated = "2026-06-11"
+
+[scope]
+paths = ["src/rec.rs", "src/integrity.rs"]
+globs = []
+commands = []
+tags = ["entity", "validation", "sl-042"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "44221d182b7fceb9e80b94a70b85c4a26ca0c149"
+ref_name = "refs/heads/main"
+checkout_state_id = "166aac77e95a03eccebd13c31b9c90e992847755f0229a6fd69b496222c55377"
+base_commit = "d7513ec7b56f4306a76a858e5bf4c4580c70ae32"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
