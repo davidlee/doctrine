@@ -13,9 +13,10 @@ Build the **reconcile + close** half of SPEC-002 (the observe half shipped as
 gate slice closure on coherence. Three phases — **B·P1** authored-truth write seam ·
 **B·P2** sole-author reconcile writer · **B·P3** closure gate. Realises **REQ-112**
 (FR-005) and **REQ-113** (FR-006); strengthens cross-cutting **REQ-114** (NF-001,
-proven *structurally at the write seam* here — its load-bearing import-edge guard
-lands in B, the slice that first has a status-writer to wall off) and **REQ-116**
-(NF-003). Descends **PRD-013**. Resolves backlog **IMP-030**.
+proven *behaviourally at the write seam* here — the load-bearing
+verdict-independence guard lands in B, the slice that first has a status-writer; see
+§5.6/D-B7) and **REQ-116** (NF-003). Descends **PRD-013**. Resolves backlog
+**IMP-030**.
 
 The hard line stays: observed evidence and authored truth never touch through a
 function (`REQ-105`/NF-001). B is where authored truth is finally *written* — the
@@ -84,9 +85,11 @@ closure on drift.
 ## 4. Guiding Principles
 
 - **Author, never derive.** The writer reads `drift` only to *prompt*; the human/
-  agent supplies the move and the explicit target status. NF-001 holds **type-level**
-  — `coverage` exposes no `ReqStatus`, so the necessary `use coverage` (to read
-  `drift`) still cannot derive a status (§5.6, D-B7).
+  agent supplies the move and the explicit `--to` status. NF-001 holds by **tested
+  behaviour** — the written status equals the operator's `--to` across every
+  `Verdict`; the verdict never reaches the code path that picks it (§5.6, D-B7). (A
+  pure type-level proof is *not* available — `coverage` imports `ReqStatus`, so a
+  match-launder would compile; the test is the guard.)
 - **One act, one REC, fully reconstructable.** Every reconciliation act commits + a
   REC; the REC plus commits reconstruct *why* a requirement holds its current status
   from the authored tier alone (NF-003) — no recourse to chat/runtime state.
@@ -126,7 +129,12 @@ actively needs free movement: `revise` corrects a mis-claim and must move **any*
 direction (e.g. `active→pending` when evidence refutes a claimed satisfaction) — a
 forward-only FSM would refuse exactly the corrections `revise` exists to make. No
 terminal guard in v1 (a mis-`retired` req must be un-retirable by `revise`); terminal
-discipline, if later wanted, is additive.
+discipline, if later wanted, is additive. **Caveat (codex finding 8):**
+`doc/spec-entity-spec.md:325` describes an *intended ordered* `ReqStatus` lifecycle —
+not enforced in code today. The free setter is scoped to the **reconcile** writer
+(its job is correction); a terminal exit (`→ retired/superseded`) should still carry
+a REC/note, and once a real successor edge exists, setting `superseded` without one
+becomes a validation target (deferred, additive — not v1).
 
 ### 5.3 B·P2 — the reconcile writer (sole author)
 
@@ -180,21 +188,37 @@ A second predicate in `run_status`, beside the RV-blocker scan, firing on the sa
 `crosses_closure_seam` (specifically `reconcile→done`):
 
 1. Determine the requirements the closing slice **S** is responsible for —
-   **D-B5 (LOCKED):** the gate's req set is `covered ∪ declared`, where `covered` =
-   the distinct reqs across S's `coverage.toml` entries (structural, always
-   available) and `declared` = an **authored, additive extra-req list** in S's
-   `coverage.toml` (a top-level `[gate] extra_reqs = [...]` table, `#[serde(default)]`
-   so old/empty files still parse). The scope is **risk-calibrated, not a fixed
-   policy** — the slice author casts it as wide as scope & risk warrant **at
-   `/plan`**, where it is peer-reviewed *before* any REC exists. Additive by
-   construction: you can never gate *less* than you covered. This sidesteps IMP-016
-   (no prose spec→req relation needed — the author names the reqs).
+   **D-B5 (LOCKED):** the gate's req set is `covered ∪ declared ∪ reconciled`:
+   - **`covered`** = the distinct reqs S itself recorded coverage for. **Defined
+     precisely** (codex finding 6): the entries *physically in S's own*
+     `.doctrine/slice/044/coverage.toml`, **and** the reader **validates**
+     `key.slice == S` for each, refusing a slice/key mismatch (a foreign `slice =`
+     in S's own file is an integrity error, not silently in-or-out). Needs a new
+     **slice-local coverage reader** returning distinct requirements — `scan_coverage`
+     is per-req-across-all-slices and does not enumerate one slice's reqs.
+   - **`declared`** = an **authored, additive extra-req list** in **`slice-044.toml`**
+     (`[gate] extra_reqs = [...]` — authored slice-metadata tier, *not* the
+     observed-evidence `coverage.toml`; codex finding 4). Risk-calibrated: the author
+     casts it as wide as scope & risk warrant **at `/plan`**, peer-reviewed *before*
+     any REC exists. Sidesteps IMP-016 (no prose spec→req relation — the author names
+     the reqs).
+   - **`reconciled`** = every req named in a `status_delta` of a REC with
+     `owning_slice == S` (codex finding 3 — **closes the opt-in dodge**: you cannot
+     reconcile a req via a REC and then escape its gate by not covering/declaring it).
+   Additive by construction — the gate can never check *less* than the union of what
+   S covered, declared, or reconciled.
 2. For each such R: `drift(authored(R), composite(scan_coverage(R)))`. Any
    `{Divergent, Indeterminate}` = residual drift.
-3. **Discharge predicate (LOCKED):** residual drift on R is excused iff ∃ a REC with
-   `owning_slice == S` whose `status_delta` names R with `to == R's current authored
-   status` (the act *affirmed R at the value it now holds*). `owning_slice == S` is
-   load-bearing — a gate honours only its own slice's RECs.
+3. **Discharge predicate (LOCKED, strengthened — codex finding 2):** residual drift
+   on R is excused iff the **latest** REC for `(owning_slice == S, R)` satisfies **all**:
+   (a) `move == accept` (an *affirm* — not redesign/revise);
+   (b) its `status_delta` names R with `to == R's current authored status` (affirmed
+   *at the value R now holds* — guards a status edited away-and-back);
+   (c) its `evidence_ref` set **covers the current residual drift's evidence keys**
+   (the `CoverageKey`s feeding today's `composite` for R) — so *fresh contradictory
+   evidence arriving after the REC re-opens drift* the stale REC can no longer excuse.
+   `owning_slice == S` stays load-bearing — a gate honours only its own slice's RECs.
+   *Without (a)+(c) a months-old affirm would discharge live drift it never saw.*
 4. Undischarged residual drift → **refuse** (bail, like the blocker gate). The
    `done`-only-from-`reconcile` F12 topology stays hard, independent of this check.
 
@@ -213,39 +237,52 @@ close-gate; SL-042 D-Q2 coverage fan-in). **Perf escalation is RSK-006** — if 
 scan cliffs below realistic scale, the reverse-index lands there, documented, rather
 than denormalizing now.
 
-### 5.6 NF-001 enforcement = type-level, not an import-edge ban (D-B7, LOCKED)
+### 5.6 NF-001 enforcement = behavioural no-derivation, not a type-level proof (D-B7, LOCKED)
 
-**Correction to the original framing.** A "no import edge `coverage → status-writer`"
-ban is *wrong*: the reconcile writer (§5.3) **must** import `coverage` — it reads
-`drift` to *prompt* the human. The import is legitimate and necessary; banning it
-would forbid the read the writer exists to do.
+**Two prior framings, both wrong.** (a) "No import edge `coverage → status-writer`" —
+wrong: the writer **must** import `coverage` to read `drift` for prompting. (b) "The
+type system makes `status = f(coverage)` non-compiling" — **also wrong** (codex
+finding 1). `coverage` itself imports `ReqStatus` (`coverage.rs:45`); a writer can
+trivially *launder* a status out of the verdict and still compile:
 
-The real, load-bearing wall is **type-level** and already shipped by SL-042: `drift`
-returns `Verdict` and `composite` returns `Composite` — **neither exposes a
-`ReqStatus`** (`coverage.rs:222`/`:226`). So even with `use coverage` in scope,
-`status = f(coverage)` **cannot compile** — there is no `ReqStatus` to derive. The
-B·P1 setter (§5.2) takes an **explicit caller-supplied `ReqStatus`**; the writer
-passes the *human's* value, and the verdict only steers the prompt, never the
-argument. NF-001 holds by construction.
+```rust
+let to = match verdict {            // <- this compiles; it IS a coverage→status derivation
+    Verdict::Divergent(EvidenceOutrunsAuthored) => ReqStatus::Active,
+    Verdict::Divergent(ObservedContradiction)   => ReqStatus::Pending,
+    _ => authored,
+};
+```
 
-**Enforcement mechanism (D-B7):** continue SL-042's type-level approach — a
-compile-fail-style VT at the writer mirroring `coverage.rs:685` (a documented
-"would-not-compile" assertion that no `coverage`-derived value reaches the status
-argument) plus a positive test that the written status is independent of the drift
-`Verdict`. **No grep arch-test** — doctrine has no arch-test framework, and a
-`use coverage` ban would be brittle *and* wrong (it forbids the legitimate read).
+The `Verdict`-carries-no-`ReqStatus` shape raises the bar but is **not** a proof.
+
+**The real guard is behavioural (D-B7):**
+1. `spec req status <REQ> --to <ReqStatus>` parses `--to` as an **independent CLI
+   input** — the operator's explicit value, structurally separate from any verdict.
+2. **VT — verdict-independence:** for a fixed reconcile input, the status the writer
+   passes to the B·P1 setter equals the `--to` argument **across every `Verdict`
+   variant** (hold `--to` fixed, vary the synthesized verdict — the written status
+   must not move). This is the test the laundering example above would fail.
+3. **Guard — no-launder:** no writer-path helper has signature
+   `… -> ReqStatus` derived from `Verdict`/`DivergentReason`. Enforced by a unit
+   test over the writer module's surface (doctrine has no arch-test framework; the
+   guard is a targeted test, not a grep over the tree).
+
+The verdict's *only* role is to populate the human-facing prompt; it never reaches
+the code path that selects `to`. NF-001 holds by **tested behaviour**, not by the
+type system alone.
 
 ## 6. Open Questions (a continuing agent MUST close before lock)
 
 - ~~**OPEN-1**~~ — **RESOLVED → D-B5** (drift scope is a risk-calibrated authored
-  declaration in `coverage.toml`, set & peer-reviewed at `/plan`; gate set =
-  `covered ∪ declared`). See §5.5 step 1, §7 D-B5.
+  declaration in `slice-044.toml`, set & peer-reviewed at `/plan`; gate set =
+  `covered ∪ declared ∪ reconciled`). See §5.5 step 1, §7 D-B5.
 - ~~**OPEN-2**~~ — **RESOLVED → D-B8** (one REC per req, forced by the single `move`
   field; atomic full-`RecDoc` compose, no append — append contradicts REC
   immutability). See §5.3.
-- ~~**OPEN-3**~~ — **RESOLVED → D-B7** (NF-001 is a type-level guard, not an
-  import-edge ban — the writer *must* import `coverage`; the wall is that `coverage`
-  exposes no `ReqStatus`). See §5.6.
+- ~~**OPEN-3**~~ — **RESOLVED → D-B7** (NF-001 is a *behavioural* no-derivation guard
+  — `--to` is an independent CLI input, tested verdict-independent across every
+  `Verdict`; neither an import-edge ban nor a type-level proof, both of which fail).
+  See §5.6.
 - ~~**OPEN-4**~~ — **RESOLVED → D-B6** (free any→any setter; `revise` must move any
   direction to correct a mis-claim; no enforced `ReqStatus` order). See §5.2.
 - **Carried (deferred, not blockers):** OQ-3 composite precedence (v1 surfaces all,
@@ -271,32 +308,43 @@ argument) plus a positive test that the written status is independent of the dri
   status only; material prose → IDE-003. *Alt rejected:* a separate spec-truth-revise
   verb (no distinct structural write exists; it would overlap IDE-003).
 - **D-B5 — closure-gate drift scope is a risk-calibrated authored declaration, not a
-  fixed policy.** The gate's req set = `covered ∪ declared`: `covered` derives
-  structurally from S's `coverage.toml` entries; `declared` is an **additive**
-  authored extra-req list (`[gate] extra_reqs`) in the same `coverage.toml`,
-  decided **at `/plan`** (ahead of any REC), peer-reviewed, calibrated to the
-  slice's scope & risk. The gate reads it at closure. *Rationale:* the right scope
-  is not knowable in the framework — it is a per-slice risk judgement, and risk
-  judgements belong in authored, reviewable artifacts (ADR-003 author-don't-derive
-  ethos), not baked into gate code. Additive so a slice can never silently gate
-  *less* than it covered. Home = `coverage.toml` (the gate already reads it for
-  `covered`; one place, one read). *Alt rejected:* (a) a hardcoded
-  `covered`-only-or-realised-specs policy — un-calibratable, and the realised-specs
-  pole needs the IMP-016 prose→req relation that doesn't exist; (b) home in
-  `plan.toml`/`slice-nnn.toml` — splits the gate's input across two files for no
-  gain (user-chosen: `coverage.toml`).
+  fixed policy.** The gate's req set = `covered ∪ declared ∪ reconciled`: `covered` =
+  the distinct reqs *physically in S's own* `coverage.toml`, each validated
+  `key.slice == S`; `declared` = an **additive** authored extra-req list
+  (`[gate] extra_reqs`) in **`slice-044.toml`** (authored slice-metadata tier);
+  `reconciled` = every req a REC `owning_slice == S` names. `declared` is decided **at
+  `/plan`** (ahead of any REC), peer-reviewed, calibrated to scope & risk.
+  *Rationale:* the right scope is not knowable in the framework — it is a per-slice
+  risk judgement, and risk judgements belong in authored, reviewable artifacts
+  (ADR-003 author-don't-derive ethos), not in gate code. Additive so a slice can
+  never silently gate *less* than it covered/declared/reconciled. *Home* = the
+  authored **slice TOML, not `coverage.toml`** (codex finding 4: coverage is the
+  *observed-evidence* tier — `coverage.rs:16` — and putting closure policy there
+  mixes tiers; the original "gate already reads coverage" convenience evaporated once
+  findings 5/6 showed a typed field + a new slice-local reader are needed regardless).
+  The `reconciled` term (codex finding 3) **closes the opt-in dodge** — a hardcoded
+  `covered`-only scope let a slice reconcile a req then escape its gate by not
+  covering it. *Alt rejected:* (a) a hardcoded `covered`-only-or-realised-specs policy
+  — un-calibratable, realised-specs needs the absent IMP-016 prose→req relation;
+  (b) home in `coverage.toml` — tier breach (user re-decided to slice TOML after the
+  adversarial pass); (c) `plan.toml` — per-phase-plan tier, but gate scope is a
+  slice-level closure property outliving any single plan.
 - **D-B6 — `spec req status` is a free any→any edit-preserving setter, not an FSM.**
   Mirrors `governance::set_status` (adr), not `set_slice_status`. `revise` must move
   any direction to correct a mis-claim; a forward-only FSM refuses exactly those
   corrections; `ReqStatus` enforces no order today. No v1 terminal guard. *Alt
   rejected:* ordered FSM (fights reconcile's correction use case; no lifecycle order
   to enforce anyway).
-- **D-B7 — NF-001 is enforced type-level, not by an import-edge ban.** The writer
-  *must* `use coverage` (to read `drift` for prompting); the wall is that `coverage`
-  exposes no `ReqStatus`, so `status = f(coverage)` cannot compile. Compile-fail VT
-  (mirrors `coverage.rs:685`) + positive independence test. *Alt rejected:* a grep
-  `use coverage` ban — brittle, no arch-test framework, and *wrong* (it forbids the
-  legitimate read). *Corrects* the original "no import edge" framing.
+- **D-B7 — NF-001 is enforced by *tested behaviour*, not a type-level proof.** The
+  writer *must* `use coverage` (to read `drift` for prompting), and a pure type-level
+  proof is unavailable — `coverage` imports `ReqStatus` (`coverage.rs:45`), so a
+  `match verdict { … => ReqStatus::X }` launder compiles (codex finding 1). Guard:
+  `--to` is an independent CLI input; a **verdict-independence VT** pins the written
+  status equal to `--to` across every `Verdict`; a **no-launder test** forbids a
+  writer helper returning `ReqStatus` from `Verdict`/`DivergentReason`. *Alt
+  rejected:* (a) a grep `use coverage` ban — brittle *and* wrong (forbids the
+  legitimate read); (b) "type system makes it non-compiling" — **false**, the launder
+  compiles. *Corrects two* prior framings (import-edge, then type-level).
 - **D-B8 — one REC per requirement, composed atomically.** Forced by the single
   `RecMeta.move` String (mixed-move sessions can't share a REC). Writer composes the
   full `RecDoc` and writes it once; no `rec new`+append. *Alt rejected:* one
@@ -310,31 +358,47 @@ argument) plus a positive test that the written status is independent of the dri
   would contradict REC immutability anyway). *Residual:* B·P2 needs a compose-and-
   write path the `rec` module doesn't expose yet — a new internal writer (not a new
   public append verb). Surfaces at `/plan` as a B·P2 task.
-- **R-B2 — gate scope under-check (mitigated by D-B5).** A pure coverage.toml-derived
-  scope under-checks a req the slice realises but recorded no coverage for. **D-B5
-  mitigates:** the author widens the gate via the authored `extra_reqs` list at
-  `/plan`, peer-reviewed against scope & risk. *Residual risk:* the widening is a
-  human judgement — an author can still under-declare. The peer review at `/plan` is
-  the control; the additive default guarantees the floor (never < covered). The
-  spec-wide automation that would remove the judgement entirely still needs the
-  IMP-016 prose→req relation.
+- **R-B2 — gate scope under-check (mitigated by D-B5's `reconciled` term).** A pure
+  `covered`-derived scope under-checks a req the slice touched but recorded no
+  coverage for. The **`reconciled`** term (any REC-named req, codex finding 3) closes
+  the worst case — a req the slice *reconciled* is auto-gated regardless of coverage/
+  declaration, so it cannot be dodged. *Residual:* a req the slice changed but neither
+  covered, declared, **nor** reconciled still escapes — that requires a structural
+  spec/slice→req relation (IMP-016) to fully automate; until then `declared` +
+  `/plan` peer review is the control. Floor guaranteed: never < `covered ∪ reconciled`.
+- **R-B3 — stale-REC discharge (mitigated, codex finding 2).** A `to==current` match
+  alone let an old affirm excuse drift it never saw (status edited away-and-back, or
+  fresh contradictory evidence). Discharge now requires `move==accept` + latest-REC +
+  `evidence_ref ⊇ current residual evidence keys` (§5.5 step 3). *Residual:* the
+  evidence-coverage check assumes residual drift's `CoverageKey`s are enumerable at
+  the gate — they are (the `composite` cells feeding the verdict); pin with a VT where
+  a post-REC evidence cell re-opens drift and is *not* discharged.
+- **R-B4 — `covered` enumeration is new machinery (codex finding 6).** No slice-local
+  coverage reader exists; `scan_coverage` is per-req-across-slices and `key.slice` is
+  unvalidated. B·P3 must add a slice-local reader returning distinct reqs and refusing
+  `key.slice != S` in S's own file. Small, but real new surface — a B·P3 task at `/plan`.
 
 ## 9. Quality Engineering & Validation *(sketch — to expand)*
 
 - **REQ-112** — writer applies each move; **exactly one REC per act**; accept writes
   status via the B·P1 setter; redesign escalates with empty-delta REC + no instance
   write.
-- **REQ-113** — gate refuses undischarged residual drift; an `owning_slice`-scoped
-  `from==to` accept REC discharges it; F12 `reconcile→done` topology stays hard
-  independent of the drift check. **D-B5 scope:** gate set = `covered ∪ declared`;
-  an `extra_reqs`-declared req with residual drift blocks closure same as a covered
-  one; an old/empty `coverage.toml` (no `[gate]` table) parses to `declared = ∅`
-  and gates on `covered` alone (additive default, back-compat round-trip test).
-- **REQ-114 / NF-001** — type-level (D-B7): a compile-fail VT mirroring
-  `coverage.rs:685` proves no `coverage`-derived value reaches the status argument
-  (the writer imports `coverage` for `drift` yet cannot derive a `ReqStatus` —
-  `Verdict`/`Composite` carry none); a positive test pins the written status
-  independent of the drift `Verdict`.
+- **REQ-113** — gate refuses undischarged residual drift; F12 `reconcile→done`
+  topology stays hard independent of the drift check. **D-B5 scope:** gate set =
+  `covered ∪ declared ∪ reconciled`; an `extra_reqs`-declared req *and* a
+  REC-`reconciled` req each block closure on residual drift same as a covered one; a
+  slice with no `[gate]` table in `slice-044.toml` → `declared = ∅`, gates on
+  `covered ∪ reconciled` (additive floor). **Discharge VTs (D-B5 step 3):** (i) an
+  `owning_slice==S`, `move==accept`, `to==current` REC whose `evidence_ref` covers the
+  residual evidence discharges; (ii) the *same* REC does **not** discharge once a
+  post-REC coverage cell introduces fresh drift (evidence-coverage clause); (iii) a
+  `revise`/`redesign` REC does **not** discharge (move==accept clause); (iv) a foreign
+  `owning_slice` REC does **not** discharge.
+- **REQ-114 / NF-001** — behavioural (D-B7): a **verdict-independence VT** — hold
+  `--to` fixed, vary the synthesized `Verdict` across all variants, assert the written
+  status never moves; a **no-launder test** that no writer helper derives `ReqStatus`
+  from `Verdict`/`DivergentReason`. (No type-level proof claimed — the launder
+  compiles; the tests are the guard.)
 - **REQ-116 / NF-003** — a REC + commits reconstruct a requirement's current status
   with no runtime-state recourse; the on-demand scan resolves "last act" from
   authored REC ids alone.
@@ -346,11 +410,31 @@ argument) plus a positive test that the written status is independent of the dri
 - **/consult (2026-06-12)** — override representation. Resolved: D-B1 (affirm
   reframe), D-B2 (per-slice gate ownership), D-B3 (on-demand scan over stored link,
   ADR-004 anti-desync). Recorded in §5.1/§5.5/§7.
-- **OPEN-1..4 closed (2026-06-12).** D-B5 (OPEN-1, user-decided: risk-calibrated
-  authored gate scope in `coverage.toml`, home user-chosen). D-B6 (OPEN-4: free
-  any→any setter). D-B7 (OPEN-3: type-level NF-001, corrects the import-edge
-  framing). D-B8 (OPEN-2: one REC/req, atomic — forced by the single `move` field).
-  D-B6/B7/B8 resolved by code-grounded reasoning, not preference; surfaced for the
-  user + the adversarial pass to contest.
-- External adversarial pass (`/inquisition` or codex) — **pending** (design now
-  complete; this is the lock gate).
+- **OPEN-1..4 closed (2026-06-12).** D-B5 (OPEN-1) D-B6 (OPEN-4) D-B7 (OPEN-3)
+  D-B8 (OPEN-2). D-B6/B7/B8 resolved by code-grounded reasoning, then stress-tested
+  below.
+- **Codex adversarial pass (gpt-5.5, 2026-06-12) — 3 blockers + 4 majors, all
+  actioned:**
+  - *Finding 1 (blocker)* — D-B7's type-level claim was **false** (the verdict→status
+    launder compiles). Reframed to a behavioural verdict-independence + no-launder
+    guard. §5.6, D-B7.
+  - *Finding 2 (blocker)* — discharge predicate let stale RECs excuse live drift.
+    Strengthened: latest-REC + `move==accept` + `evidence_ref ⊇ residual keys`. §5.5
+    step 3, R-B3.
+  - *Finding 3 (blocker)* — gate was opt-in for uncaptured reqs. Added the
+    **`reconciled`** term to the gate set. §5.5 step 1, R-B2.
+  - *Finding 4 (major)* — gate policy in the evidence tier. **User re-decided**
+    (after the pass): home moved `coverage.toml` → **`slice-044.toml`**. D-B5.
+  - *Finding 5 (major, moot)* — `CoverageFile` render would drop `[gate]`. Dissolved
+    by the finding-4 move (no `[gate]` in coverage.toml).
+  - *Finding 6 (major)* — `covered` needed a precise definition + a slice-local
+    reader + `key.slice==S` validation. §5.5 step 1, R-B4.
+  - *Finding 7 (major)* — scope still carried import-edge language. Reconciled in
+    `slice-044.md`.
+  - *Finding 8 (minor)* — `doc/spec-entity-spec.md:325` documents an ordered
+    lifecycle; D-B6 caveat added (free setter scoped to reconcile).
+  - *Not-a-finding:* redesign back-edge logic confirmed sound (slice leaves
+    `reconcile`, so the `reconcile→done` gate can't fire — no dead logic).
+- External adversarial pass — **DONE** (above). All findings actioned; design
+  complete. Remaining before lock: user sign-off on the post-pass deltas, then
+  `/plan`.
