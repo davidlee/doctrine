@@ -124,6 +124,22 @@ impl Severity {
             Self::Nit => "nit",
         }
     }
+
+    /// Parse a `--severity` token against the closed 4-set (the `Facet::parse`
+    /// pattern — keeps the pure-core enum clap-free). `blocker` is the only
+    /// severity that gates `/close` (D-C9b).
+    pub(crate) fn parse(s: &str) -> Result<Self, String> {
+        match s {
+            "blocker" => Ok(Self::Blocker),
+            "major" => Ok(Self::Major),
+            "minor" => Ok(Self::Minor),
+            "nit" => Ok(Self::Nit),
+            other => Err(format!(
+                "unknown severity `{other}` (known: {})",
+                SEVERITIES.join(", ")
+            )),
+        }
+    }
 }
 
 /// The `Severity` known-set. Lockstep-guarded by
@@ -879,6 +895,678 @@ pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<
     Ok(())
 }
 
+// ===========================================================================
+// PHASE-03 — the verb family + runtime coordination (the turn guard).
+//
+// The full finding lifecycle (raise/dispose/verify/contest/withdraw) rides ONE
+// higher-order seam, `with_turn` (design §6, D6) — the single home of
+// D-C3 (authored-first/baton-last ordering), D-C4 (the static verb→role gate),
+// and D-C4a (the create_new lock + the sha256 CAS, fired in TWO distinct windows:
+// entry — a hand-edit landing BEFORE this invocation; pre-write — a hand-edit
+// landing DURING it). The lock serializes concurrent invocations; the CAS catches
+// out-of-band human edits the lock cannot see (no invocation ⇒ no lock).
+//
+// Locus = the parent tree's gitignored runtime state, `.doctrine/state/review/NNN/`
+// (D4/D-C7). A review verb whose resolved root is a *fork* bails — fork-invoked
+// review is IMP-024, not yet supported (the pilot invariant, enforced at root
+// resolution).
+// ===========================================================================
+
+/// The runtime baton (design §6, D-C2) — gitignored, regenerable, never authored.
+/// `await`/`authored_hash` are cache-derivable from the authored ledger (the
+/// recompute floor); `rounds`/`contests`/`handoff` are non-derivable observability
+/// bookkeeping (lost on baton loss — acceptable, D-C2).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+struct Baton {
+    /// The summarized turn (D-C8) — a display/routing convenience, never a gate.
+    #[serde(default)]
+    awaiting: String,
+    /// The CAS key: sha256 of the authored ledger bytes this baton was last
+    /// reconciled against (D-C4a). A divergence ⇒ an out-of-band edit landed.
+    #[serde(default)]
+    authored_hash: String,
+    /// A coarse turn counter — bumped each turn (observability only).
+    #[serde(default)]
+    rounds: u32,
+    /// How many `contest` turns this review has seen (observability only).
+    #[serde(default)]
+    contests: u32,
+    /// Ephemeral handoff chatter (design D10) — the `--note` on contest/verify
+    /// lands here, NOT durable rationale. Lost on baton loss by design.
+    #[serde(default)]
+    handoff: Vec<String>,
+}
+
+/// The runtime subtree for one review's baton + lock (design §6). Parent-tree
+/// locus, gitignored (`.gitignore` already covers `.doctrine/state/`).
+fn state_dir(root: &Path, id: u32) -> PathBuf {
+    root.join(".doctrine/state/review").join(format!("{id:03}"))
+}
+
+fn baton_path(root: &Path, id: u32) -> PathBuf {
+    state_dir(root, id).join("baton.toml")
+}
+
+fn lock_path(root: &Path, id: u32) -> PathBuf {
+    state_dir(root, id).join("lock")
+}
+
+/// Read the baton if present (`None` = cold — treat as a fresh recompute, D-C4a).
+fn read_baton(root: &Path, id: u32) -> anyhow::Result<Option<Baton>> {
+    let path = baton_path(root, id);
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(toml::from_str(&text).with_context(|| {
+            format!("Failed to parse baton {}", path.display())
+        })?)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e).with_context(|| format!("Failed to read baton {}", path.display())),
+    }
+}
+
+/// Write the baton atomically (temp+rename), creating the state subtree first.
+fn write_baton(root: &Path, id: u32, baton: &Baton) -> anyhow::Result<()> {
+    let dir = state_dir(root, id);
+    fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+    let body = toml::to_string(baton).context("serialize baton")?;
+    crate::fsutil::write_atomic(&baton_path(root, id), body.as_bytes())
+}
+
+/// Compute the `(await, authored_hash)` the baton should carry for a ledger whose
+/// findings are `findings` and whose bytes hash to `hash` — the D-C2 recompute
+/// floor reused by entry-CAS heal, the per-turn refresh, and `status`.
+fn reconcile_baton_fields(findings: &[FindingState], hash: &str) -> (String, String) {
+    let (_, awaited) = derived_status(findings);
+    (awaited.as_str().to_owned(), hash.to_owned())
+}
+
+/// A RAII lock: `create_new` the lockfile on construction (an `AlreadyExists`
+/// race is the caller's "RV-NNN busy" bail), remove it on `drop` — covering the
+/// normal AND panic paths (NOT a hard-kill `-9`, which leaves a stale lock for
+/// `review unlock`). The lock serializes concurrent *invocations* only; it is
+/// held within one invocation and the turn persists via the baton (design §6).
+struct LockGuard {
+    path: PathBuf,
+}
+
+impl LockGuard {
+    /// Acquire the per-review lock, writing a `pid timestamp` diagnostic body
+    /// (`review unlock` surfaces it on a stale lock). `AlreadyExists` ⇒ a
+    /// concurrent invocation holds it ⇒ a clean "busy; re-run" bail, no clobber.
+    fn acquire(root: &Path, id: u32) -> anyhow::Result<Self> {
+        let dir = state_dir(root, id);
+        fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+        let path = lock_path(root, id);
+        match crate::fsutil::create_new_file(&path) {
+            Ok(mut file) => {
+                let stamp = crate::clock::now_timestamp().unwrap_or_default();
+                let body = format!("pid = {}\nacquired = \"{stamp}\"\n", std::process::id());
+                // Best-effort diagnostics body; a write failure does not invalidate
+                // the lock (the file's existence is the mutex, not its contents).
+                file.write_all(body.as_bytes())
+                    .with_context(|| format!("write lock body {}", path.display()))?;
+                Ok(Self { path })
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                anyhow::bail!(
+                    "{} busy (another `review` invocation holds the lock); re-run \
+                     (a stale lock from a hard kill clears with `review unlock`)",
+                    canonical_id(id)
+                )
+            }
+            Err(e) => Err(e).with_context(|| format!("acquire lock {}", path.display())),
+        }
+    }
+}
+
+impl Drop for LockGuard {
+    fn drop(&mut self) {
+        // Best-effort: a failed removal leaves a stale lock for `review unlock`.
+        // Drop cannot propagate an error; the must-use Result is deliberately
+        // discarded into a binding (the sanctioned form under the repo lint).
+        let _ignored = fs::remove_file(&self.path);
+    }
+}
+
+/// Map an authored `FindingRow`'s status string to the pure [`FindingState`] for
+/// `derived_status`/baton reconciliation (the conservative read of §8).
+fn finding_states_of(doc: &ReviewDoc) -> Vec<FindingState> {
+    doc.finding
+        .iter()
+        .map(|f| FindingState {
+            status: parse_finding_status(&f.status),
+        })
+        .collect()
+}
+
+/// Read the authored ledger bytes + the parsed doc for a review id — the step-2
+/// snapshot the two CAS windows compare against.
+fn read_authored(root: &Path, id: u32) -> anyhow::Result<(String, ReviewDoc)> {
+    let name = format!("{id:03}");
+    let path = root
+        .join(REVIEW_DIR)
+        .join(&name)
+        .join(format!("review-{name}.toml"));
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("review {name} not found at {}", path.display()))?;
+    let doc: ReviewDoc =
+        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+    Ok((text, doc))
+}
+
+/// The authored ledger path for a review id.
+fn authored_path(root: &Path, id: u32) -> PathBuf {
+    let name = format!("{id:03}");
+    root.join(REVIEW_DIR)
+        .join(&name)
+        .join(format!("review-{name}.toml"))
+}
+
+/// Resolve the project root for a review verb and ENFORCE the pilot invariant
+/// (design D4/D-C1): a verb whose resolved root is a *fork* (linked worktree)
+/// bails — fork-invoked review is IMP-024, not yet supported. The baton/lock live
+/// in the parent tree's gitignored state, which a fork's `WITHHELD` tier keeps it
+/// from seeing (`worktree.rs:71`). The guard lives here, in the shell, at root
+/// resolution — every verb routes through it.
+fn resolve_review_root(path: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    if crate::worktree::is_linked_worktree(&root).unwrap_or(false) {
+        anyhow::bail!(
+            "review verbs are not supported on a worktree fork (IMP-024): the turn \
+             baton lives in the parent tree's gitignored state, which a fork cannot \
+             co-write. Run `review` from the parent tree."
+        );
+    }
+    Ok(root)
+}
+
+/// A test seam for the pre-write CAS window (design §6 step 5). The default is a
+/// no-op; a concurrency test injects a hand-edit here to fire mid-invocation,
+/// between the step-2 read and the step-5 write — deterministically, without
+/// threads. `with_turn` is the production entry point (no hook).
+type MidTurnHook<'a> = &'a dyn Fn();
+
+/// The single turn-taking seam (design §6, D6). Runs the numbered protocol:
+///
+/// 1. acquire the `create_new` lock (RAII) — `AlreadyExists` ⇒ "busy; re-run".
+/// 2. read + snapshot the authored ledger bytes.
+/// 3. ENTRY CAS: `sha256(authored) ≠ baton.authored_hash` ⇒ heal the baton (the
+///    D-C2 recompute), bail "ledger changed underneath — re-run" (missing baton
+///    ⇒ cold, proceed). Catches an edit landing BEFORE this invocation.
+/// 4. STATIC role check: `role == verb.required_role()` — mismatch ⇒ bail (D-C4).
+/// 5. AUTHORED FIRST: run the closure `f` (per-finding `can()` + the edit), then
+///    PRE-WRITE CAS (re-read bytes ≠ the step-2 snapshot ⇒ bail, do NOT write —
+///    catches an edit landing DURING this invocation), else `write_atomic`.
+/// 6. recompute `await` + the new hash from the written ledger.
+/// 7. BATON LAST: `write_atomic` the baton.
+/// 8. release the lock (`LockGuard` drop).
+fn with_turn<F>(root: &Path, id: u32, verb: Verb, role: Role, f: F) -> anyhow::Result<()>
+where
+    F: FnOnce(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<()>,
+{
+    with_turn_hooked(root, id, verb, role, &|| {}, f)
+}
+
+/// `with_turn` with an injectable mid-turn hook (the pre-write CAS test seam).
+fn with_turn_hooked<F>(
+    root: &Path,
+    id: u32,
+    verb: Verb,
+    role: Role,
+    mid_turn: MidTurnHook<'_>,
+    f: F,
+) -> anyhow::Result<()>
+where
+    F: FnOnce(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<()>,
+{
+    // 1. acquire lock (RAII — released on every exit path below, incl. panic).
+    let _lock = LockGuard::acquire(root, id)?;
+
+    // 2. read + snapshot the authored bytes.
+    let (snapshot, doc) = read_authored(root, id)?;
+    let snapshot_hash = crate::git::sha256(snapshot.as_bytes());
+
+    // 3. ENTRY CAS — an edit landed BEFORE this invocation (baton stale).
+    //    (a missing baton ⇒ cold — proceed; the per-turn write seeds it.)
+    if let Some(baton) = read_baton(root, id)?.filter(|b| b.authored_hash != snapshot_hash) {
+        // Heal: recompute await from the authored truth (D-C2), refresh the
+        // baton's CAS key, preserve the observability counters, then bail.
+        let (awaiting, hash) = reconcile_baton_fields(&finding_states_of(&doc), &snapshot_hash);
+        let healed = Baton {
+            awaiting,
+            authored_hash: hash,
+            ..baton
+        };
+        write_baton(root, id, &healed)?;
+        anyhow::bail!(
+            "{} ledger changed underneath the baton — re-run (the baton has been \
+             refreshed from the authored ledger)",
+            canonical_id(id)
+        );
+    }
+
+    // 4. STATIC role check (D-C4) — the half the wrapper owns.
+    if role != verb.required_role() {
+        anyhow::bail!(
+            "`{}` is the {}'s verb; --as {} cannot assert it",
+            verb.as_str(),
+            verb.required_role().as_str(),
+            role.as_str()
+        );
+    }
+
+    // 5. AUTHORED FIRST — the closure runs the per-finding can() + applies the
+    //    edit-preserving edit, then the PRE-WRITE CAS re-reads the bytes.
+    let mut document = snapshot
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", authored_path(root, id).display()))?;
+    f(&mut document, &doc.finding)?;
+
+    // Test seam: a hand-edit injected here lands AFTER the step-2 read and BEFORE
+    // the step-5 write — the exact window the pre-write CAS must catch.
+    mid_turn();
+
+    // PRE-WRITE CAS — the authored bytes must still match the step-2 snapshot.
+    let current = fs::read_to_string(authored_path(root, id))
+        .with_context(|| format!("re-read {}", authored_path(root, id).display()))?;
+    if crate::git::sha256(current.as_bytes()) != snapshot_hash {
+        anyhow::bail!(
+            "{} ledger changed underneath this turn — re-run (a hand-edit landed \
+             mid-turn; nothing was written, no clobber)",
+            canonical_id(id)
+        );
+    }
+    let new_body = document.to_string();
+    crate::fsutil::write_atomic(&authored_path(root, id), new_body.as_bytes())?;
+
+    // 6. recompute await + the new hash from the just-written ledger.
+    let new_hash = crate::git::sha256(new_body.as_bytes());
+    let new_doc: ReviewDoc = toml::from_str(&new_body)
+        .with_context(|| format!("re-parse {}", authored_path(root, id).display()))?;
+    let (awaiting, hash) = reconcile_baton_fields(&finding_states_of(&new_doc), &new_hash);
+
+    // 7. BATON LAST — preserve the observability counters across the turn.
+    let prior = read_baton(root, id)?.unwrap_or_default();
+    let contests = prior.contests + u32::from(verb == Verb::Contest);
+    let baton = Baton {
+        awaiting,
+        authored_hash: hash,
+        rounds: prior.rounds + 1,
+        contests,
+        // Handoff chatter is appended by the verb shell AFTER this turn write
+        // (D10) — carry the prior log forward untouched here.
+        handoff: prior.handoff,
+    };
+    write_baton(root, id, &baton)?;
+
+    // 8. release lock — `_lock` drops at scope end.
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Finding-scoped edit-preserving toml_edit (the governance.rs:290 pattern,
+// extended to a `[[finding]]` array element). Comments / unknown keys survive.
+// ---------------------------------------------------------------------------
+
+/// Locate the `[[finding]]` table whose `id == finding_id`, returning a mutable
+/// handle. The lookup is by the authored `id` field, never by array position (an
+/// append-only ledger never renumbers, but order is not identity).
+fn finding_table_mut<'a>(
+    doc: &'a mut toml_edit::DocumentMut,
+    finding_id: &str,
+) -> anyhow::Result<&'a mut toml_edit::Table> {
+    let array = doc
+        .get_mut("finding")
+        .and_then(toml_edit::Item::as_array_of_tables_mut)
+        .ok_or_else(|| anyhow::anyhow!("ledger has no findings"))?;
+    array
+        .iter_mut()
+        .find(|t| t.get("id").and_then(toml_edit::Item::as_str) == Some(finding_id))
+        .ok_or_else(|| anyhow::anyhow!("no finding `{finding_id}` in the ledger"))
+}
+
+/// Apply a single-owner status transition (design §5): set the finding's
+/// `status`, plus any responder-owned `disposition`/`response`. Edit-preserving —
+/// the table is mutated in place, so comments / unknown keys / sibling findings
+/// survive (the `governance.rs:290` contract at finding scope). User free-text
+/// rides `toml_edit::value`, which quotes/escapes it (the structured-write twin of
+/// the render path's `toml_string`).
+fn apply_transition(
+    table: &mut toml_edit::Table,
+    new_status: FindingStatus,
+    disposition: Option<&str>,
+    response: Option<&str>,
+) {
+    table.insert("status", toml_edit::value(new_status.as_str()));
+    if let Some(d) = disposition {
+        table.insert("disposition", toml_edit::value(d));
+    }
+    if let Some(r) = response {
+        table.insert("response", toml_edit::value(r));
+    }
+}
+
+/// Append a fresh `[[finding]]` with id `F-<max+1>` (design §5, append-only —
+/// never renumber, never reuse). Raiser-owned fields are fixed here at raise; the
+/// status is seeded `open`; the responder pair is absent until a `dispose`.
+fn append_finding(
+    doc: &mut toml_edit::DocumentMut,
+    existing: &[FindingRow],
+    severity: Severity,
+    title: &str,
+    detail: &str,
+) -> String {
+    let next = next_finding_id(existing);
+    let mut row = toml_edit::Table::new();
+    row.insert("id", toml_edit::value(&next));
+    row.insert("status", toml_edit::value(FindingStatus::Open.as_str()));
+    row.insert("severity", toml_edit::value(severity.as_str()));
+    row.insert("title", toml_edit::value(title));
+    row.insert("detail", toml_edit::value(detail));
+    if let Some(array) = doc
+        .entry("finding")
+        .or_insert_with(|| toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
+        .as_array_of_tables_mut()
+    {
+        array.push(row);
+    }
+    next
+}
+
+/// The next append-only finding id: `F-<max+1>` over the existing `F-<n>` ids
+/// (design §5). Robust to a gap / a non-conforming id (skipped in the max scan).
+fn next_finding_id(existing: &[FindingRow]) -> String {
+    let max = existing
+        .iter()
+        .filter_map(|f| f.id.strip_prefix("F-"))
+        .filter_map(|n| n.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0);
+    format!("F-{}", max + 1)
+}
+
+/// The current authored status of a finding (for the per-finding `can()` gate).
+fn finding_status_of(existing: &[FindingRow], finding_id: &str) -> anyhow::Result<FindingStatus> {
+    let row = existing
+        .iter()
+        .find(|f| f.id == finding_id)
+        .ok_or_else(|| anyhow::anyhow!("no finding `{finding_id}` in the ledger"))?;
+    Ok(parse_finding_status(&row.status))
+}
+
+// ---------------------------------------------------------------------------
+// The write verbs — each rides `with_turn`; the closure owns the per-finding gate
+// ---------------------------------------------------------------------------
+
+/// Bundled `review raise` args (the clippy arg-ceiling — `cli-handler-args-struct`).
+pub(crate) struct RaiseArgs {
+    pub(crate) reference: String,
+    pub(crate) severity: Severity,
+    pub(crate) title: String,
+    pub(crate) detail: String,
+}
+
+/// `doctrine review raise <RV-NNN> --severity --title --detail [--as raiser]` —
+/// append a fresh `open` finding (design §5). Append-only; `raise` is the raiser's
+/// and is NOT await-blocked (it may fire even while `await=Responder`, D7/§8).
+pub(crate) fn run_raise(path: Option<PathBuf>, args: &RaiseArgs, role: Role) -> anyhow::Result<()> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(&args.reference)?;
+    with_turn(&root, id, Verb::Raise, role, |doc, existing| {
+        // Per-finding gate: `raise` targets a fresh (None) finding (design §5).
+        if !can(Verb::Raise, None, role) {
+            anyhow::bail!("raise is the raiser's verb (--as raiser)");
+        }
+        let new_id = append_finding(doc, existing, args.severity, &args.title, &args.detail);
+        writeln!(io::stdout(), "Raised {} on {}", new_id, canonical_id(id))?;
+        Ok(())
+    })
+}
+
+/// Bundled `review dispose` args.
+pub(crate) struct DisposeArgs {
+    pub(crate) reference: String,
+    pub(crate) finding: String,
+    pub(crate) disposition: String,
+    pub(crate) response: String,
+}
+
+/// `doctrine review dispose <RV-NNN> --finding F-n --disposition --response
+/// [--as responder]` — the responder answers a finding (open|contested →
+/// answered, design §5). Sets the responder-owned `disposition`/`response`.
+pub(crate) fn run_dispose(
+    path: Option<PathBuf>,
+    args: &DisposeArgs,
+    role: Role,
+) -> anyhow::Result<()> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(&args.reference)?;
+    with_turn(&root, id, Verb::Dispose, role, |doc, existing| {
+        let from = finding_status_of(existing, &args.finding)?;
+        gate(Verb::Dispose, from, role, &args.finding)?;
+        let table = finding_table_mut(doc, &args.finding)?;
+        apply_transition(
+            table,
+            FindingStatus::Answered,
+            Some(&args.disposition),
+            Some(&args.response),
+        );
+        writeln!(
+            io::stdout(),
+            "Disposed {} on {} (answered)",
+            args.finding,
+            canonical_id(id)
+        )?;
+        Ok(())
+    })
+}
+
+/// `doctrine review verify <RV-NNN> --finding F-n [--as raiser] [--note …]` — the
+/// raiser accepts an answered finding (answered → verified, terminal, design §5).
+/// `--note` is ephemeral handoff chatter → the baton log (D10), NOT rationale.
+pub(crate) fn run_verify(
+    path: Option<PathBuf>,
+    reference: &str,
+    finding: &str,
+    note: Option<&str>,
+    role: Role,
+) -> anyhow::Result<()> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(reference)?;
+    run_raiser_transition(
+        &root,
+        id,
+        Verb::Verify,
+        FindingStatus::Verified,
+        finding,
+        note,
+        role,
+    )
+}
+
+/// `doctrine review contest <RV-NNN> --finding F-n [--as raiser] [--note …]` — the
+/// raiser rejects an answered finding (answered → contested, design §5), handing
+/// it back to the responder. `--note` is ephemeral handoff chatter (D10).
+pub(crate) fn run_contest(
+    path: Option<PathBuf>,
+    reference: &str,
+    finding: &str,
+    note: Option<&str>,
+    role: Role,
+) -> anyhow::Result<()> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(reference)?;
+    run_raiser_transition(
+        &root,
+        id,
+        Verb::Contest,
+        FindingStatus::Contested,
+        finding,
+        note,
+        role,
+    )
+}
+
+/// `doctrine review withdraw <RV-NNN> --finding F-n [--as raiser]` — the raiser
+/// retracts a finding (open|answered → withdrawn, terminal, design §5).
+pub(crate) fn run_withdraw(
+    path: Option<PathBuf>,
+    reference: &str,
+    finding: &str,
+    role: Role,
+) -> anyhow::Result<()> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(reference)?;
+    run_raiser_transition(
+        &root,
+        id,
+        Verb::Withdraw,
+        FindingStatus::Withdrawn,
+        finding,
+        None,
+        role,
+    )
+}
+
+/// The shared shell for the three raiser status-only transitions
+/// (verify/contest/withdraw): gate per-finding, apply the status, and route an
+/// optional `--note` to the baton's ephemeral handoff log (D10). Disposition /
+/// response are responder-owned, so these never touch them.
+fn run_raiser_transition(
+    root: &Path,
+    id: u32,
+    verb: Verb,
+    to: FindingStatus,
+    finding: &str,
+    note: Option<&str>,
+    role: Role,
+) -> anyhow::Result<()> {
+    with_turn(root, id, verb, role, |doc, existing| {
+        let from = finding_status_of(existing, finding)?;
+        gate(verb, from, role, finding)?;
+        let table = finding_table_mut(doc, finding)?;
+        apply_transition(table, to, None, None);
+        writeln!(
+            io::stdout(),
+            "{} {} on {} ({})",
+            verb_past(verb),
+            finding,
+            canonical_id(id),
+            to.as_str()
+        )?;
+        Ok(())
+    })?;
+    // Handoff chatter (D10) — appended to the baton AFTER the turn's baton write,
+    // so it survives as the latest baton state (ephemeral, lost on baton loss).
+    if let (Some(n), Some(mut baton)) = (note, read_baton(root, id)?) {
+        baton.handoff.push(format!("{}: {n}", verb.as_str()));
+        write_baton(root, id, &baton)?;
+    }
+    Ok(())
+}
+
+/// The per-finding gate (design §6 — the closure's half): refuse an out-of-turn
+/// write with a message naming the verb, the finding, and its current state.
+fn gate(verb: Verb, from: FindingStatus, role: Role, finding: &str) -> anyhow::Result<()> {
+    if !can(verb, Some(from), role) {
+        anyhow::bail!(
+            "`{}` cannot fire on {} (status `{}`, --as {}): out of turn (design §5)",
+            verb.as_str(),
+            finding,
+            from.as_str(),
+            role.as_str()
+        );
+    }
+    Ok(())
+}
+
+/// The past-tense label for a verb's success line.
+fn verb_past(verb: Verb) -> &'static str {
+    match verb {
+        Verb::Raise => "Raised",
+        Verb::Dispose => "Disposed",
+        Verb::Verify => "Verified",
+        Verb::Contest => "Contested",
+        Verb::Withdraw => "Withdrew",
+    }
+}
+
+// ---------------------------------------------------------------------------
+// status (Read class) + unlock (escape hatch)
+// ---------------------------------------------------------------------------
+
+/// `doctrine review status <RV-NNN>` — report the derived state and REBUILD the
+/// baton (the cache == a fresh recompute, design §8/§Verification). Read-class for
+/// authored conduct (no authored mutation), but it acquires the lock to serialize
+/// the baton write against a concurrent verb.
+pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Result<()> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(reference)?;
+    let _lock = LockGuard::acquire(&root, id)?;
+    let (text, doc) = read_authored(&root, id)?;
+    let hash = crate::git::sha256(text.as_bytes());
+    let states = finding_states_of(&doc);
+    let (status, awaited) = derived_status(&states);
+    let (awaiting, authored_hash) = reconcile_baton_fields(&states, &hash);
+    let prior = read_baton(&root, id)?.unwrap_or_default();
+    let rebuilt = Baton {
+        awaiting,
+        authored_hash,
+        ..prior
+    };
+    write_baton(&root, id, &rebuilt)?;
+    writeln!(
+        io::stdout(),
+        "{} — {} · await={} · findings {} · rounds {}",
+        canonical_id(id),
+        status.as_str(),
+        awaited.as_str(),
+        doc.finding.len(),
+        rebuilt.rounds
+    )?;
+    Ok(())
+}
+
+/// `doctrine review unlock <RV-NNN>` — the escape hatch for a stale lock left by a
+/// hard kill (`-9`, which RAII cannot cover, design §6/R-b). Removes the lockfile;
+/// its `pid`/`acquired` body aids the operator's "is this really stale?" judgement
+/// (printed before removal).
+pub(crate) fn run_unlock(path: Option<PathBuf>, reference: &str) -> anyhow::Result<()> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(reference)?;
+    let lock = lock_path(&root, id);
+    match fs::read_to_string(&lock) {
+        Ok(body) => {
+            writeln!(
+                io::stdout(),
+                "Removing stale lock for {}:",
+                canonical_id(id)
+            )?;
+            for line in body.lines() {
+                writeln!(io::stdout(), "  {line}")?;
+            }
+            fs::remove_file(&lock).with_context(|| format!("remove lock {}", lock.display()))?;
+            Ok(())
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            writeln!(io::stdout(), "{} is not locked", canonical_id(id))?;
+            Ok(())
+        }
+        Err(e) => Err(e).with_context(|| format!("read lock {}", lock.display())),
+    }
+}
+
+/// Parse a `--as` role token (the cooperative role assertion, design §5 — NOT a
+/// security boundary, ADR-007 Negative). Defaults to the verb's required role when
+/// omitted, so a single-party drive need not toggle `--as` on every call.
+pub(crate) fn parse_role(token: Option<&str>, default: Role) -> anyhow::Result<Role> {
+    match token {
+        None => Ok(default),
+        Some("raiser") => Ok(Role::Raiser),
+        Some("responder") => Ok(Role::Responder),
+        Some(other) => anyhow::bail!("unknown --as role `{other}` (known: raiser, responder)"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1400,5 +2088,638 @@ mod tests {
         );
         let err = Facet::parse("bogus").unwrap_err();
         assert!(err.contains("unknown facet"), "{err}");
+    }
+
+    // =====================================================================
+    // PHASE-03 — verb family + the turn guard (VT-1..10)
+    // =====================================================================
+
+    /// Stand up a fresh RV (id 1) targeting a planted SL-001, in a tempdir whose
+    /// root is not a git tree (the fork guard's `is_linked_worktree` returns Err
+    /// ⇒ treated not-a-fork ⇒ proceeds). Returns the root.
+    fn fixture_rv() -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        plant_slice_target(root, 1);
+        run_new(Some(root.to_path_buf()), &new_args(Facet::Design, "SL-001")).unwrap();
+        tmp
+    }
+
+    fn raise_args(reference: &str, sev: Severity, title: &str) -> RaiseArgs {
+        RaiseArgs {
+            reference: reference.to_owned(),
+            severity: sev,
+            title: title.to_owned(),
+            detail: "d".to_owned(),
+        }
+    }
+
+    fn dispose_args(reference: &str, finding: &str) -> DisposeArgs {
+        DisposeArgs {
+            reference: reference.to_owned(),
+            finding: finding.to_owned(),
+            disposition: "fixed".to_owned(),
+            response: "done".to_owned(),
+        }
+    }
+
+    fn read_doc(root: &Path, id: u32) -> ReviewDoc {
+        read_review(&root.join(REVIEW_DIR), id).unwrap()
+    }
+
+    /// A full raise→dispose→verify lifecycle drives the finding through its
+    /// states; the ledger reflects each transition and the baton tracks `await`.
+    #[test]
+    fn lifecycle_raise_dispose_verify() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+        // After a raise: one open finding, await=Responder.
+        let doc = read_doc(root, 1);
+        assert_eq!(doc.finding.len(), 1);
+        assert_eq!(doc.finding[0].id, "F-1");
+        assert_eq!(doc.finding[0].status, "open");
+        assert_eq!(read_baton(root, 1).unwrap().unwrap().awaiting, "responder");
+
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        let doc = read_doc(root, 1);
+        assert_eq!(doc.finding[0].status, "answered");
+        assert_eq!(doc.finding[0].disposition.as_deref(), Some("fixed"));
+        assert_eq!(doc.finding[0].response.as_deref(), Some("done"));
+        assert_eq!(read_baton(root, 1).unwrap().unwrap().awaiting, "raiser");
+
+        run_verify(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            None,
+            Role::Raiser,
+        )
+        .unwrap();
+        let doc = read_doc(root, 1);
+        assert_eq!(doc.finding[0].status, "verified");
+        // All-terminal ⇒ Done / await=none.
+        assert_eq!(read_baton(root, 1).unwrap().unwrap().awaiting, "none");
+    }
+
+    /// VT-1: field ownership disjoint — raiser fields (id/title/detail/severity)
+    /// are fixed at raise; a dispose mutates ONLY the responder pair + status.
+    #[test]
+    fn vt1_raiser_fields_immutable_responder_fields_mutable() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &RaiseArgs {
+                reference: "RV-001".to_owned(),
+                severity: Severity::Blocker,
+                title: "orig-title".to_owned(),
+                detail: "orig-detail".to_owned(),
+            },
+            Role::Raiser,
+        )
+        .unwrap();
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        let f = &read_doc(root, 1).finding[0];
+        // Raiser-owned: unchanged by the responder's turn.
+        assert_eq!(f.id, "F-1");
+        assert_eq!(f.title, "orig-title");
+        assert_eq!(f.detail, "orig-detail");
+        assert_eq!(f.severity, "blocker");
+        // Responder-owned: set by dispose.
+        assert_eq!(f.disposition.as_deref(), Some("fixed"));
+        assert_eq!(f.response.as_deref(), Some("done"));
+        // Status moved on a single-owner edge.
+        assert_eq!(f.status, "answered");
+    }
+
+    /// VT-2: finding ids are append-only `F-<max+1>` — never reused, even with a
+    /// gap. Three raises land F-1, F-2, F-3.
+    #[test]
+    fn vt2_finding_ids_are_append_only() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        for n in ["a", "b", "c"] {
+            run_raise(
+                Some(root.to_path_buf()),
+                &raise_args("RV-001", Severity::Minor, n),
+                Role::Raiser,
+            )
+            .unwrap();
+        }
+        let ids: Vec<String> = read_doc(root, 1)
+            .finding
+            .iter()
+            .map(|f| f.id.clone())
+            .collect();
+        assert_eq!(ids, ["F-1", "F-2", "F-3"]);
+        // The pure id allocator: max+1 over existing, robust to a gap.
+        let rows = vec![FindingRow {
+            id: "F-7".to_owned(),
+            status: "open".to_owned(),
+            severity: "nit".to_owned(),
+            title: "t".to_owned(),
+            detail: "d".to_owned(),
+            disposition: None,
+            response: None,
+        }];
+        assert_eq!(next_finding_id(&rows), "F-8");
+        assert_eq!(next_finding_id(&[]), "F-1");
+    }
+
+    /// VT-3: transitions are edit-preserving — a hand-added comment and an
+    /// unknown key survive a dispose (the governance.rs:290 contract at finding
+    /// scope).
+    #[test]
+    fn vt3_transitions_are_edit_preserving() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+        // Hand-add a comment + an unknown top-level key.
+        let path = authored_path(root, 1);
+        let mut text = fs::read_to_string(&path).unwrap();
+        text.push_str("\n# a hand comment\nunknown_key = \"keepme\"\n");
+        fs::write(&path, &text).unwrap();
+        // The hand-edit changed the bytes — refresh the baton so the entry CAS
+        // does not (correctly) abort the next turn on the edit it now reflects.
+        run_status(Some(root.to_path_buf()), "RV-001").unwrap();
+
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(
+            after.contains("# a hand comment"),
+            "comment survived: {after}"
+        );
+        assert!(
+            after.contains("unknown_key = \"keepme\""),
+            "unknown key survived: {after}"
+        );
+        assert_eq!(read_doc(root, 1).finding[0].status, "answered");
+    }
+
+    /// VT-4: render escaping — a hostile title/detail raised then read back
+    /// round-trips intact (toml_edit::value quotes/escapes the structured write,
+    /// the splice twin of the render path).
+    #[test]
+    fn vt4_hostile_free_text_round_trips() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        let hostile = "a\"b\\c\nd]e";
+        run_raise(
+            Some(root.to_path_buf()),
+            &RaiseArgs {
+                reference: "RV-001".to_owned(),
+                severity: Severity::Major,
+                title: hostile.to_owned(),
+                detail: hostile.to_owned(),
+            },
+            Role::Raiser,
+        )
+        .unwrap();
+        // The ledger is still valid TOML and the value is intact.
+        let f = &read_doc(root, 1).finding[0];
+        assert_eq!(f.title, hostile);
+        assert_eq!(f.detail, hostile);
+    }
+
+    /// VT-5(a) + VT-8: two ordered invocations — a lock held by a concurrent
+    /// invocation makes the second BAIL (busy), no clobber; after the first
+    /// completes the loser re-runs from the refreshed baton and lands a correct
+    /// turn. Also asserts `raise` is allowed while await=Responder.
+    #[test]
+    fn vt5a_lock_serializes_loser_bails_then_re_runs() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        // Manually hold the lock (simulating a concurrent invocation in flight).
+        let held = LockGuard::acquire(root, 1).unwrap();
+        // A second invocation loses the create_new race → clean "busy" bail.
+        let err = run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("busy"), "loser bailed busy: {err}");
+        // Nothing was written — the ledger is untouched.
+        assert!(
+            read_doc(root, 1).finding.is_empty(),
+            "no clobber on a lost lock"
+        );
+        // The first invocation completes (lock released).
+        drop(held);
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "first"),
+            Role::Raiser,
+        )
+        .unwrap();
+        // The loser re-runs — and `raise` is allowed even while await=Responder
+        // (one open finding ⇒ Responder), landing F-2 (VT-8 raise-not-blocked).
+        assert_eq!(read_baton(root, 1).unwrap().unwrap().awaiting, "responder");
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "second"),
+            Role::Raiser,
+        )
+        .unwrap();
+        let ids: Vec<String> = read_doc(root, 1)
+            .finding
+            .iter()
+            .map(|f| f.id.clone())
+            .collect();
+        assert_eq!(ids, ["F-1", "F-2"]);
+    }
+
+    /// VT-5(b) + VT-6 + VT-7: a crash between the authored write (step 5) and the
+    /// baton write (step 7) leaves the authored ledger ahead of the baton hash;
+    /// the NEXT invocation's entry CAS detects it, heals the baton, and bails
+    /// "re-run". Simulated by mutating the authored ledger directly (a real
+    /// authored-write that the baton never caught up to) then driving a verb.
+    #[test]
+    fn vt5b_entry_cas_self_heals_a_crash_between_writes() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+        let baton_before = read_baton(root, 1).unwrap().unwrap();
+
+        // Simulate a crash AFTER the authored write but BEFORE the baton write:
+        // the authored ledger gains an edit the baton's hash does not reflect.
+        let path = authored_path(root, 1);
+        let mut text = fs::read_to_string(&path).unwrap();
+        text = text.replace("status = \"open\"", "status = \"answered\"");
+        fs::write(&path, &text).unwrap();
+
+        // The next invocation's ENTRY CAS catches the divergence, refreshes the
+        // baton from the authored truth, and bails.
+        let err = run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("changed underneath"),
+            "entry CAS bailed: {err}"
+        );
+        // The baton self-healed: its hash now matches the authored bytes, and the
+        // await recomputed from the answered finding (Raiser).
+        let healed = read_baton(root, 1).unwrap().unwrap();
+        assert_ne!(
+            healed.authored_hash, baton_before.authored_hash,
+            "hash refreshed"
+        );
+        assert_eq!(
+            healed.authored_hash,
+            crate::git::sha256(fs::read_to_string(&path).unwrap().as_bytes())
+        );
+        assert_eq!(
+            healed.awaiting, "raiser",
+            "await recomputed from authored truth"
+        );
+        // The ledger was NOT clobbered — the aborted dispose wrote nothing.
+        assert_eq!(read_doc(root, 1).finding[0].status, "answered");
+    }
+
+    /// VT-5(c) + VT-6: a hand-edit landing AFTER the step-2 read but BEFORE the
+    /// step-5 write (the pre-write CAS window) aborts the turn with NO write — the
+    /// stale in-memory DocumentMut cannot overwrite the newer authored truth. The
+    /// mid-turn hook fires the edit deterministically (no threads).
+    #[test]
+    fn vt5c_pre_write_cas_aborts_a_mid_turn_edit() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+        let path = authored_path(root, 1);
+
+        // Drive a dispose under the hooked seam: the hook lands a hand-edit
+        // (a second finding) between the in-memory mutation and the write.
+        let hook = || {
+            let mut text = fs::read_to_string(&path).unwrap();
+            text.push_str(
+                "\n[[finding]]\nid = \"F-2\"\nstatus = \"open\"\nseverity = \"nit\"\n\
+                 title = \"injected\"\ndetail = \"by hand\"\n",
+            );
+            fs::write(&path, &text).unwrap();
+        };
+        let err = with_turn_hooked(
+            root,
+            1,
+            Verb::Dispose,
+            Role::Responder,
+            &hook,
+            |doc, existing| {
+                let from = finding_status_of(existing, "F-1")?;
+                gate(Verb::Dispose, from, Role::Responder, "F-1")?;
+                let table = finding_table_mut(doc, "F-1")?;
+                apply_transition(table, FindingStatus::Answered, Some("fixed"), Some("done"));
+                Ok(())
+            },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("changed underneath this turn"),
+            "pre-write CAS aborted: {err}"
+        );
+        // NO clobber: F-1 is still `open` (the dispose never wrote), and the
+        // injected F-2 survives (the abort wrote nothing over it).
+        let doc = read_doc(root, 1);
+        assert_eq!(doc.finding.len(), 2, "injected finding survived");
+        assert_eq!(
+            doc.finding[0].status, "open",
+            "F-1 not clobbered to answered"
+        );
+        assert_eq!(doc.finding[1].id, "F-2");
+    }
+
+    /// VT-5(d): the same finding contested then verified — once a verify makes the
+    /// finding terminal, a contest can no longer fire on it (the per-finding gate
+    /// is the lost-update guard at finding granularity). Drives the two verbs in
+    /// order and asserts the FINAL ledger reflects only the winner.
+    #[test]
+    fn vt5d_same_finding_contest_racing_verify() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        // Verify wins first → terminal.
+        run_verify(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            None,
+            Role::Raiser,
+        )
+        .unwrap();
+        assert_eq!(read_doc(root, 1).finding[0].status, "verified");
+        // The racing contest now finds the finding terminal → per-finding gate
+        // refuses; the ledger is untouched (no double-apply).
+        let err = run_contest(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            None,
+            Role::Raiser,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("out of turn"),
+            "contest gated: {err}"
+        );
+        assert_eq!(
+            read_doc(root, 1).finding[0].status,
+            "verified",
+            "winner stands"
+        );
+    }
+
+    /// VT-8: an out-of-turn write is refused by the static role check AND the
+    /// per-finding gate.
+    #[test]
+    fn vt8_out_of_turn_refused() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        // Static role: dispose asserted --as raiser ⇒ refused.
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+        let err = run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Raiser, // wrong role
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("responder's verb"),
+            "static role: {err}"
+        );
+        // Per-finding state: verify an open (not answered) finding ⇒ refused.
+        let err = run_verify(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            None,
+            Role::Raiser,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("out of turn"),
+            "per-finding gate: {err}"
+        );
+        // Nothing moved.
+        assert_eq!(read_doc(root, 1).finding[0].status, "open");
+    }
+
+    /// VT-9: `status` rebuilds the baton — the cached await equals a fresh
+    /// recompute, even after the baton was deleted (cold) or stale.
+    #[test]
+    fn vt9_status_rebuilds_the_baton() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+        // Delete the baton (cold) — status must rebuild it == recompute.
+        fs::remove_file(baton_path(root, 1)).unwrap();
+        run_status(Some(root.to_path_buf()), "RV-001").unwrap();
+        let baton = read_baton(root, 1).unwrap().unwrap();
+        let doc = read_doc(root, 1);
+        let (_, awaited) = derived_status(&finding_states_of(&doc));
+        assert_eq!(baton.awaiting, awaited.as_str(), "cache == recompute");
+        assert_eq!(
+            baton.authored_hash,
+            crate::git::sha256(
+                fs::read_to_string(authored_path(root, 1))
+                    .unwrap()
+                    .as_bytes()
+            )
+        );
+    }
+
+    /// VT-10: a review verb on a fork-resolved root bails (IMP-024 guard), and the
+    /// baton/lock sit in the gitignored parent state tree. Builds a real linked
+    /// worktree to exercise `is_linked_worktree`.
+    #[test]
+    fn vt10_fork_root_refused_and_baton_in_parent_state() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let main = tmp.path().join("main");
+        std::fs::create_dir_all(&main).unwrap();
+        let git = |dir: &Path, args: &[&str]| {
+            let ok = Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(args)
+                .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00 +0000")
+                .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00 +0000")
+                .output()
+                .unwrap();
+            assert!(
+                ok.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&ok.stderr)
+            );
+        };
+        git(&main, &["init", "-b", "main"]);
+        git(&main, &["config", "user.name", "T"]);
+        git(&main, &["config", "user.email", "t@t.invalid"]);
+        plant_slice_target(&main, 1);
+        run_new(Some(main.clone()), &new_args(Facet::Design, "SL-001")).unwrap();
+        std::fs::write(main.join("seed"), "x").unwrap();
+        git(&main, &["add", "."]);
+        git(&main, &["commit", "-m", "seed"]);
+        // Add a linked worktree (the fork).
+        let fork = tmp.path().join("fork");
+        git(&main, &["worktree", "add", fork.to_str().unwrap()]);
+
+        // A verb resolved at the fork root bails (IMP-024).
+        let err = run_raise(
+            Some(fork.clone()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("worktree fork"),
+            "fork guard: {err}"
+        );
+
+        // A verb on the parent tree works, and the baton lands under the parent's
+        // gitignored .doctrine/state/review/ (never the fork).
+        run_raise(
+            Some(main.clone()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+        assert!(
+            main.join(".doctrine/state/review/001/baton.toml").is_file(),
+            "baton in parent state"
+        );
+        assert!(
+            !fork.join(".doctrine/state/review/001/baton.toml").exists(),
+            "no baton in the fork"
+        );
+    }
+
+    /// The `--as` role assertion parses cooperatively and defaults to the verb's
+    /// required role.
+    #[test]
+    fn parse_role_defaults_and_validates() {
+        assert_eq!(parse_role(None, Role::Responder).unwrap(), Role::Responder);
+        assert_eq!(
+            parse_role(Some("raiser"), Role::Responder).unwrap(),
+            Role::Raiser
+        );
+        assert!(parse_role(Some("bogus"), Role::Raiser).is_err());
+    }
+
+    /// A `--note` on verify/contest is ephemeral handoff chatter → the baton log
+    /// (D10), NOT a ledger field (durable rationale promotes to a finding).
+    #[test]
+    fn note_is_handoff_chatter_in_the_baton_not_the_ledger() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+        run_contest(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-1",
+            Some("please address the edge case"),
+            Role::Raiser,
+        )
+        .unwrap();
+        let baton = read_baton(root, 1).unwrap().unwrap();
+        assert!(
+            baton
+                .handoff
+                .iter()
+                .any(|h| h.contains("please address the edge case")),
+            "note in baton handoff log: {:?}",
+            baton.handoff
+        );
+        assert_eq!(baton.contests, 1, "contest counter bumped");
+        // The note is NOT in the authored ledger.
+        let text = fs::read_to_string(authored_path(root, 1)).unwrap();
+        assert!(
+            !text.contains("please address the edge case"),
+            "note not durable: {text}"
+        );
+    }
+
+    /// `unlock` removes a stale lock; on an unlocked review it is a clean no-op.
+    #[test]
+    fn unlock_clears_a_stale_lock() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        // Plant a stale lock (a hard-kill residue RAII never cleared).
+        let lock = lock_path(root, 1);
+        fs::create_dir_all(lock.parent().unwrap()).unwrap();
+        fs::write(&lock, "pid = 99999\nacquired = \"stale\"\n").unwrap();
+        run_unlock(Some(root.to_path_buf()), "RV-001").unwrap();
+        assert!(!lock.exists(), "stale lock removed");
+        // Idempotent on an unlocked review.
+        run_unlock(Some(root.to_path_buf()), "RV-001").unwrap();
     }
 }

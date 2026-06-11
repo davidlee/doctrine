@@ -1115,6 +1115,146 @@ enum ReviewCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Raise a finding on a review (the raiser's verb) — appends an `open`
+    /// finding with a fixed, raiser-owned severity/title/detail.
+    Raise {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Severity: blocker | major | minor | nit (only `blocker` gates close).
+        #[arg(long, value_parser = review::Severity::parse)]
+        severity: review::Severity,
+
+        /// The finding's title (fixed at raise).
+        #[arg(long)]
+        title: String,
+
+        /// The finding's detail (fixed at raise).
+        #[arg(long)]
+        detail: String,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Dispose a finding (the responder's verb) — answer an open/contested
+    /// finding, setting the responder-owned disposition + response.
+    Dispose {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// The disposition (free-text; e.g. fixed / design-wrong / tolerated).
+        #[arg(long)]
+        disposition: String,
+
+        /// The response detail (free-text).
+        #[arg(long)]
+        response: String,
+
+        /// Cooperative role assertion (default: responder).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Verify an answered finding (the raiser's verb) — accept it (terminal).
+    Verify {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// Ephemeral handoff chatter for the baton log — NOT durable rationale
+        /// (durable justification belongs in a finding).
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Contest an answered finding (the raiser's verb) — hand it back to the
+    /// responder (answered → contested).
+    Contest {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// Ephemeral handoff chatter for the baton log — NOT durable rationale
+        /// (durable justification belongs in a finding).
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Withdraw a finding (the raiser's verb) — retract an open/answered finding
+    /// (terminal).
+    Withdraw {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// The finding id, e.g. `F-2`.
+        #[arg(long)]
+        finding: String,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Report a review's derived state and rebuild its baton (cache == recompute).
+    Status {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Remove a stale per-review lock left by a hard kill (escape hatch).
+    Unlock {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1208,7 +1348,15 @@ fn write_class(cmd: &Command) -> WriteClass {
         },
         Command::Review { command } => match command {
             ReviewCommand::New { .. } => Write("review new"),
-            ReviewCommand::List { .. } | ReviewCommand::Show { .. } => Read,
+            ReviewCommand::Raise { .. } => Write("review raise"),
+            ReviewCommand::Dispose { .. } => Write("review dispose"),
+            ReviewCommand::Verify { .. } => Write("review verify"),
+            ReviewCommand::Contest { .. } => Write("review contest"),
+            ReviewCommand::Withdraw { .. } => Write("review withdraw"),
+            ReviewCommand::Unlock { .. } => Write("review unlock"),
+            ReviewCommand::List { .. }
+            | ReviewCommand::Show { .. }
+            | ReviewCommand::Status { .. } => Read,
         },
         Command::Adr { command } => match command {
             AdrCommand::New { .. } => Write("adr new"),
@@ -1462,6 +1610,77 @@ fn main() -> anyhow::Result<()> {
                 json,
                 path,
             } => review::run_show(path, &reference, if json { Format::Json } else { format }),
+            ReviewCommand::Raise {
+                reference,
+                severity,
+                title,
+                detail,
+                role,
+                path,
+            } => {
+                let role = review::parse_role(role.as_deref(), review::Role::Raiser)?;
+                review::run_raise(
+                    path,
+                    &review::RaiseArgs {
+                        reference,
+                        severity,
+                        title,
+                        detail,
+                    },
+                    role,
+                )
+            }
+            ReviewCommand::Dispose {
+                reference,
+                finding,
+                disposition,
+                response,
+                role,
+                path,
+            } => {
+                let role = review::parse_role(role.as_deref(), review::Role::Responder)?;
+                review::run_dispose(
+                    path,
+                    &review::DisposeArgs {
+                        reference,
+                        finding,
+                        disposition,
+                        response,
+                    },
+                    role,
+                )
+            }
+            ReviewCommand::Verify {
+                reference,
+                finding,
+                note,
+                role,
+                path,
+            } => {
+                let role = review::parse_role(role.as_deref(), review::Role::Raiser)?;
+                review::run_verify(path, &reference, &finding, note.as_deref(), role)
+            }
+            ReviewCommand::Contest {
+                reference,
+                finding,
+                note,
+                role,
+                path,
+            } => {
+                let role = review::parse_role(role.as_deref(), review::Role::Raiser)?;
+                review::run_contest(path, &reference, &finding, note.as_deref(), role)
+            }
+            ReviewCommand::Withdraw {
+                reference,
+                finding,
+                role,
+                path,
+            } => {
+                let role = review::parse_role(role.as_deref(), review::Role::Raiser)?;
+                review::run_withdraw(path, &reference, &finding, role)
+            }
+            ReviewCommand::Status { reference, path } => review::run_status(path, &reference),
+            ReviewCommand::Unlock { reference, path } => review::run_unlock(path, &reference),
         },
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),

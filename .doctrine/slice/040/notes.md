@@ -167,3 +167,55 @@ Durable carry-forwards for PHASE-03+ (the verb family rides this surface):
   core is in place but still test-only (the module `expect(dead_code)` covers it);
   the verb handlers + `with_turn` baton/lock retire that suppression. Finding ids
   are `F-<max+1>` append-only over `ReviewDoc.finding`.
+
+## PHASE-03 implementation notes (verb family + the turn guard)
+
+Durable carry-forwards (the close-gate PHASE-04 + warm-cache PHASE-05 ride this):
+
+- **`with_turn(root, id, verb, role, f)`** (review.rs) — the single coordination
+  seam, the 8-step §6 protocol verbatim. `with_turn_hooked` is the same fn with an
+  injectable `MidTurnHook` (a `&dyn Fn()` fired between the step-2 read and the
+  step-5 write) — the deterministic test seam for the pre-write CAS window (no
+  threads). Production `with_turn` passes a no-op hook.
+- **Two CAS windows, distinct (D-C4a / Charge I).** ENTRY CAS (step 3):
+  `sha256(authored) != baton.authored_hash` ⇒ heal the baton from authored truth
+  (D-C2 recompute), bail. PRE-WRITE CAS (step 5): re-read bytes, `sha256 !=` the
+  step-2 snapshot ⇒ bail before writing. A missing baton is COLD (proceed, the
+  per-turn write seeds it). The lock serializes *invocations*; the CAS catches a
+  *human* hand-edit the lock cannot see.
+- **`LockGuard`** (RAII): `fsutil::create_new_file` lockfile at
+  `.doctrine/state/review/NNN/lock` with a `pid`/`acquired` body; `Drop` removes it
+  (normal + panic, NOT `-9`). `AlreadyExists` ⇒ "busy; re-run". `review unlock` is
+  the hard-kill escape hatch (prints the body before removal). NOTE: `let _ignored =`
+  in `Drop` (the must-use Result) — NOT `let _ =` (repo lint bans it).
+- **Baton** (`baton.toml`, serde): `awaiting` (cached await display) ·
+  `authored_hash` (CAS key) · `rounds` (bump/turn) · `contests` (counter) ·
+  `handoff` (Vec<String>, the D10 ephemeral chatter; `--note` lands here, NEVER the
+  ledger). `reconcile_baton_fields` is the recompute floor shared by entry-CAS heal,
+  per-turn refresh, and `status`.
+- **Edit-preserving finding edits** (governance.rs:290 at finding scope):
+  `finding_table_mut(doc, id)` finds the `[[finding]]` by its `id` field (not array
+  position), `apply_transition` sets status + optional responder pair via
+  `toml_edit::value` (the structured-write twin of render's `toml_string`).
+  `append_finding` pushes `F-<max+1>` (append-only). Comments / unknown keys / sister
+  findings survive (VT-3 pins it).
+- **Responsibility split (§6):** `with_turn` owns coordination + the STATIC
+  verb→role check (`role != verb.required_role()`); the closure `f` owns the
+  PER-FINDING `can(verb, Some(from), role)` gate (`gate()` helper) — only the verb
+  knows its target finding id. `raise` targets `None` and is NOT await-blocked (D7).
+- **Fork-root guard** lives in `resolve_review_root` (every verb routes through it):
+  `worktree::is_linked_worktree(root)` true ⇒ bail (IMP-024). A non-git root returns
+  Err ⇒ `.unwrap_or(false)` ⇒ treated not-a-fork (tempdir tests proceed).
+- **Conduct (main.rs):** raise/dispose/verify/contest/withdraw/unlock = Write;
+  list/show/**status** = Read (status mutates only the gitignored baton, never
+  authored — Read-class per §9's prime/status rule). `--as` is `parse_role` (defaults
+  to the verb's required role). Verb flags bundled in `RaiseArgs`/`DisposeArgs`
+  (arg-ceiling).
+- **VT-5 no-clobber simulation (the proof obligation, R-c):** (a) hold a `LockGuard`
+  manually → second invocation bails busy, ledger untouched, loser re-runs post-drop
+  from the refreshed baton; (b) mutate authored bytes directly (a crash-after-5,
+  before-7) → next call's ENTRY CAS heals + bails, hash refreshed, no clobber; (c)
+  `with_turn_hooked` injects a hand-edit mid-turn → PRE-WRITE CAS aborts, injected
+  finding survives, F-1 not clobbered; (d) verify-then-contest same finding → the
+  terminal-state per-finding gate refuses the loser. All assert FINAL on-disk ledger
+  + baton, not just exit codes.
