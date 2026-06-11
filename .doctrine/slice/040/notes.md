@@ -263,3 +263,61 @@ Durable carry-forwards (PHASE-06 /audit rewire rides the teeth):
   RV targeting a slice refuse `slice status … reconcile|done`. The /audit rewire
   should lean on `blocker` as the sole gating severity (D-C9b); other severities
   record but never block close.
+
+---
+
+## PHASE-05 implementation notes (warm-cache + `prime`, D-C10 / §9)
+
+Durable carry-forwards (PHASE-06 `/audit` rewire rides this surface):
+
+- **`contentset` is now CONSUMED** — the module-level `cfg_attr(not(test),
+  expect(dead_code))` is gone (its self-clearing interval ended). Two API methods
+  had no production consumer (`ContentSet::is_stale_against`, the private
+  `SetDrift::is_empty` it wraps) — the warm-cache takes the `diff` path directly
+  (it needs the drifted path *list*, not a bool). They keep a scoped
+  `cfg_attr(not(test), expect(dead_code, reason="…IMP-025 primitive surface"))`
+  (the leaf is an IMP-025 candidate primitive; the broader API is deliberate).
+  Added two thin accessors: `from_hashes(BTreeMap)` / `hashes() -> &BTreeMap` —
+  the `[hashes]` table ⇄ `ContentSet` baseline round-trip.
+- **`cache.toml` shape (as implemented), beside `baton.toml`/`lock` in
+  `.doctrine/state/review/NNN/`** (runtime, gitignored, regenerable):
+  `[[area]]` (`name`/`purpose`/`paths`) = the curated load-bearing domain_map
+  (T-a); `[[invariant]]`/`[[risk]]` = `{text}` notes; `[hashes]` = the
+  `ContentSet` over `⋃ area.paths` (the staleness baseline). serde structs
+  `Cache`/`CacheArea`/`CacheNote`; `serde(rename)` maps `areas→area`,
+  `invariants→invariant`, `risks→risk`. `[hashes]` is ALWAYS recomputed from
+  `⋃ paths` on prime — any value the supplier put there is ignored, so the
+  baseline can never drift from the domain_map.
+- **`prime` flow.** `run_prime` is Read-class for authored conduct (mutates no
+  authored ledger) but **acquires the PHASE-03 `LockGuard`** around the
+  `cache.toml` write — lock ONLY, no baton, no CAS (§9). Two modes:
+  - `--seed`: `git status --porcelain --untracked-files=all` via `git::git_text`
+    (the existing impure seam — no new helper), parse `line.get(2..).trim()` +
+    `rsplit(" -> ")` for renames → emit candidates; writes NOTHING, takes no lock.
+    A *starting point* for curation, not authority (T-a).
+    NB the porcelain parse is `get(2..).trim_start`, NOT `get(3..)` — the latter
+    truncated deleted-file paths under the ` D ` spacing variant.
+  - populate: domain_map from `--from <file>` or stdin → `validate_domain_map`
+    (≥1 area; each named; each ≥1 path; every path root-relative — no absolute /
+    `..`) → `contentset::compute(root, ⋃ paths)` → `write_cache`.
+- **Staleness via `review status`** (extends the PHASE-03 verb). After the baton
+  rebuild, *if a cache is primed*, it computes `stored.baseline().diff(compute(
+  root, ⋃ paths))` and prints `cache: current` or `cache: stale (p1, p2, …)`
+  (changed ++ removed[absence⇒stale, R1] ++ added, sorted+deduped). An
+  optimization SIGNAL, never a gate — it cannot fail a verb. Unprimed ⇒ no cache
+  line at all.
+- **Pure/imperative split.** The staleness DIFF is pure (`contentset::diff`);
+  `compute` (disk+sha2) and the cache read/write are the shell. Single PARENT
+  root throughout; `resolve_review_root` (the fork guard) gates prime too (a
+  review verb).
+- **VT coverage** (all in review.rs `tests`): `vt1_prime_persists_domain_map_and_
+  hashes_then_current` (VT-1 — asserts `cache.toml` content + `[hashes]` ==
+  `compute(⋃ paths)` + `Current`); `vt2_status_reports_current_then_stale_on_
+  drift_and_absence` (VT-2 — current → mutate bytes ⇒ stale naming the path →
+  remove ⇒ stale naming it, R1). Plus: prime ignores supplied `[hashes]`; refuses
+  empty/no-path/absolute-path domain_maps (no write on refusal); serializes via
+  the lock (held lock ⇒ "busy", no clobber); status silent when unprimed.
+  Existing review/contentset suites unchanged (behaviour-preservation held).
+- **NOT built (additive, deferred):** a `subject` root for pre-import fork review
+  → IMP-024; region anchors (file-level hash is the key) → IDE-002; read-hook
+  attestation seeding (T-a) → future tooling.

@@ -17,19 +17,8 @@
 //! omission.
 //!
 //! Built ahead of its consumers (SL-040 PHASE-01): the first non-test caller is
-//! the warm-cache in PHASE-05 (`prime`/`review status`). The module-level
-//! `expect(dead_code)` is self-clearing — it errors the moment a consumer lands,
-//! forcing its removal (mem.pattern.lint.dead-code-self-clearing-leaf).
-//! The suppression is `cfg_attr(not(test), …)` so the test round-trips (real
-//! uses) do not leave the expectation unfulfilled in the test build
-//! (mem.pattern.lint.dead-code-expect-vs-cfg-test).
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "pure leaf stood up in SL-040 PHASE-01; first non-test consumer (warm-cache prime/status) lands in PHASE-05 — self-clearing"
-    )
-)]
+//! the warm-cache in PHASE-05 (`prime`/`review status`), now landed — the
+//! `dead_code` suppression that guarded the pre-consumer interval is gone.
 
 use std::collections::BTreeMap;
 use std::io;
@@ -58,12 +47,36 @@ pub(crate) struct SetDrift {
 
 impl SetDrift {
     /// Whether any class is non-empty — i.e. the two sets differ at all.
+    /// Part of the leaf's `is_stale_against` boolean shortcut (IMP-025 API
+    /// surface); the warm-cache consumer takes the `diff` path directly (it needs
+    /// the drifted paths to list), so this is exercised only by the leaf's tests.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "leaf API (is_stale_against shortcut); warm-cache consumer uses diff for the path list — IMP-025 primitive surface"
+        )
+    )]
     fn is_empty(&self) -> bool {
         self.changed.is_empty() && self.added.is_empty() && self.removed.is_empty()
     }
 }
 
 impl ContentSet {
+    /// Reconstruct a set from a stored `path → hash` map — the warm-cache
+    /// `[hashes]` table read back off disk as the staleness baseline (§9). The
+    /// inverse of [`hashes`](Self::hashes).
+    pub(crate) fn from_hashes(map: BTreeMap<String, String>) -> Self {
+        Self(map)
+    }
+
+    /// The underlying `path → hash` map — what the warm-cache serialises into
+    /// its `[hashes]` table (the staleness baseline). The inverse of
+    /// [`from_hashes`](Self::from_hashes).
+    pub(crate) fn hashes(&self) -> &BTreeMap<String, String> {
+        &self.0
+    }
+
     /// Build a set directly from `(path, hash)` pairs (test/seed convenience).
     #[cfg(test)]
     fn from_pairs<I, S>(pairs: I) -> Self
@@ -102,7 +115,17 @@ impl ContentSet {
 
     /// Whether this baseline is stale against `current` — i.e. any path
     /// changed, was added, or was removed. Absence of a recorded path in
-    /// `current` (a `removed`) counts as stale (R1).
+    /// `current` (a `removed`) counts as stale (R1). The boolean shortcut over
+    /// [`diff`](Self::diff); the warm-cache consumer takes `diff` directly (it
+    /// lists the drifted paths), so this is the IMP-025 primitive's API surface,
+    /// exercised by the leaf's tests.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "leaf API boolean shortcut; warm-cache consumer uses diff for the path list — IMP-025 primitive surface"
+        )
+    )]
     pub(crate) fn is_stale_against(&self, current: &ContentSet) -> bool {
         !self.diff(current).is_empty()
     }

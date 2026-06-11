@@ -1246,6 +1246,26 @@ enum ReviewCommand {
         path: Option<PathBuf>,
     },
 
+    /// Populate the reviewer-context warm-cache from a curated `domain_map`, or
+    /// (`--seed`) emit git-changed candidate paths to curate from (ADR-007 D-C10).
+    Prime {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Emit git-changed candidate paths (a starting point, not authority) and
+        /// exit, instead of priming. Writes nothing.
+        #[arg(long)]
+        seed: bool,
+
+        /// Read the curated `domain_map` from a file (default: stdin).
+        #[arg(long)]
+        from: Option<PathBuf>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Remove a stale per-review lock left by a hard kill (escape hatch).
     Unlock {
         /// Review reference — `RV-007` or the bare id `7`.
@@ -1356,7 +1376,8 @@ fn write_class(cmd: &Command) -> WriteClass {
             ReviewCommand::Unlock { .. } => Write("review unlock"),
             ReviewCommand::List { .. }
             | ReviewCommand::Show { .. }
-            | ReviewCommand::Status { .. } => Read,
+            | ReviewCommand::Status { .. }
+            | ReviewCommand::Prime { .. } => Read,
         },
         Command::Adr { command } => match command {
             AdrCommand::New { .. } => Write("adr new"),
@@ -1680,6 +1701,19 @@ fn main() -> anyhow::Result<()> {
                 review::run_withdraw(path, &reference, &finding, role)
             }
             ReviewCommand::Status { reference, path } => review::run_status(path, &reference),
+            ReviewCommand::Prime {
+                reference,
+                seed,
+                from,
+                path,
+            } => review::run_prime(
+                path,
+                &review::PrimeArgs {
+                    reference,
+                    seed,
+                    from,
+                },
+            ),
             ReviewCommand::Unlock { reference, path } => review::run_unlock(path, &reference),
         },
         Command::Adr { command } => match command {
