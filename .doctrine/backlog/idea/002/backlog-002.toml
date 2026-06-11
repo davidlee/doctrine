@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 2
+slug = "durable-intra-file-region-reference-primitive-anchor-a-code-region-without-rot-prone-line-numbers-content-hash-of-span-symbol-path-serves-rv-warm-cache-domain-map-sl-040-t-c-and-review-citations-generally"
+title = "Durable intra-file region reference primitive — anchor a code region without rot-prone line numbers (content-hash-of-span / symbol path); serves RV warm-cache domain_map (SL-040 T-c) and review citations generally"
+kind = "idea"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-11"
+updated = "2026-06-11"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
