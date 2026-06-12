@@ -4,7 +4,7 @@ version = 1
 id = 108
 slug = "persist-a-reconciliation-record-rec-of-each-reconciliation-act"
 title = "Persist a reconciliation record (REC) of each reconciliation act"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Each reconciliation act persists a REC entity capturing its status-deltas, move, evidence refs, and owning-slice relation."

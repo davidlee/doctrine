@@ -4,7 +4,7 @@ version = 1
 id = 111
 slug = "surface-drift-as-a-derived-read-that-never-writes-authored-truth"
 title = "Surface drift as a derived read that never writes authored truth"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Drift is surfaced as a derived read comparing authored status to composite coverage — a prompt, with no write to authored truth."

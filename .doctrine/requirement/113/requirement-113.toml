@@ -4,7 +4,7 @@ version = 1
 id = 113
 slug = "enforce-the-closure-gate-by-default-refusing-residual-drift-with-a-recorded-override"
 title = "Enforce the closure gate by default-refusing residual drift with a recorded override"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The closure gate default-refuses a terminal transition while owning specs carry residual drift, overridable only by a recorded reconciliation act."

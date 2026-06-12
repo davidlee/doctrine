@@ -4,7 +4,7 @@ version = 1
 id = 109
 slug = "store-observed-coverage-as-mode-discriminated-entries-keyed-by-requirement-and-contributing-change"
 title = "Store observed coverage as mode-discriminated entries keyed by requirement and contributing change"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Observed coverage is stored as mode-discriminated entries keyed by requirement and contributing change, slice-side and git-anchored."

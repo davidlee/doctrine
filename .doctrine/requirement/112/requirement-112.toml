@@ -4,7 +4,7 @@ version = 1
 id = 112
 slug = "route-reconciliation-through-a-sole-writer-applying-acceptreviseredesign"
 title = "Route reconciliation through a sole writer applying accept/revise/redesign"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Reconciliation is routed through a single writer that applies accept/revise/redesign and emits exactly one REC per act."

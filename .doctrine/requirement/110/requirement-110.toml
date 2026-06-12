@@ -4,7 +4,7 @@ version = 1
 id = 110
 slug = "compute-per-requirement-composite-coverage-as-a-derived-view"
 title = "Compute per-requirement composite coverage as a derived view"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The per-requirement composite coverage is computed as a derived view over its entries, never persisted as a stored scalar."
