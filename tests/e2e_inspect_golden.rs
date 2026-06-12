@@ -249,25 +249,30 @@ fn inspect_no_relations_entity_renders_cleanly() {
     );
 }
 
-/// A well-formed ref to a NON-EXISTENT id is an empty view, not an error (VT-3).
+/// A well-formed ref to a NON-EXISTENT id is now an ERROR (SL-050 F6 — flips the old
+/// empty-view contract): a never-minted id is indistinguishable from a real isolated
+/// node at the render layer, so the existence gate makes it a clean non-zero failure
+/// with EXACTLY `SL-999: no such entity`.
 #[test]
-fn inspect_nonexistent_id_is_empty_view_not_error() {
+fn inspect_nonexistent_id_is_no_such_entity_error() {
     let dir = tmp();
     seed_corpus(dir.path());
 
     let out = run(dir.path(), &["SL-999"]);
-    assert!(out.status.success(), "stderr: {}", stderr(&out));
-    // A non-existent id: the relation view is empty AND the actionability block shows
-    // a non-eligible node (no attrs entry → not eligible/actionable). Relation portion
-    // byte-identical; block appended.
-    assert_eq!(
-        stdout(&out),
-        "SL-999 — relations\n\n(no relations)\n\
-         \n\
-         actionability:\n\
-         \x20\x20eligible: false\n\
-         \x20\x20actionable: false\n\
-         \x20\x20consequence: 0\n"
+    assert!(
+        !out.status.success(),
+        "a never-minted id must exit non-zero"
+    );
+    let err = stderr(&out);
+    assert!(err.starts_with("Error: "), "clean anyhow error: {err}");
+    assert!(
+        err.contains("SL-999: no such entity"),
+        "exact existence-gate message: {err}"
+    );
+    assert!(!err.contains("panic"), "must not panic: {err}");
+    assert!(
+        stdout(&out).is_empty(),
+        "no partial render on the error path"
     );
 }
 

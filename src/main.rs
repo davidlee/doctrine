@@ -1722,15 +1722,29 @@ fn run_inspect(path: Option<PathBuf>, id: &str, format: Format, json: bool) -> a
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let resolved = if json { Format::Json } else { format };
-    let block = priority::surface::actionability_block(&root, id)?;
+
+    // SL-050 F2: ONE corpus scan shared by both consumers (was two — relation_graph and
+    // priority each walked the corpus). Both `_from` entry points consume this slice;
+    // the scan order is the same both saw (KINDS table / id ascending), preserving
+    // REQ-077 determinism and the byte-identical relation/priority surfaces (VT-4).
+    let scanned = relation_graph::scan_entities(&root)?;
+
     let out = match resolved {
         Format::Table => {
-            let relation = relation_graph::render(&root, id, Format::Table)?;
+            // Relation render FIRST (the cheap oracle): its F6 existence gate (inside
+            // render_from → inspect_from on the relation projection) errors a ghost id
+            // BEFORE the heavier priority block is built.
+            let relation = relation_graph::render_from(&scanned, &root, id, Format::Table)?;
+            // Only reached for a minted id (the render gate passed).
+            let block = priority::surface::actionability_block_from(&scanned, &root, id)?;
             let block = priority::render::actionability_block_human(&block);
             format!("{relation}{block}")
         }
         Format::Json => {
-            let view = relation_graph::inspect(&root, id)?;
+            // Relation view + gate FIRST, then the priority block (gate inside
+            // inspect_from on the relation projection).
+            let view = relation_graph::inspect_from(&scanned, &root, id)?;
+            let block = priority::surface::actionability_block_from(&scanned, &root, id)?;
             let mut value = relation_graph::inspect_value(&view);
             if let Some(obj) = value.as_object_mut() {
                 obj.insert(

@@ -369,6 +369,68 @@ fn explain_unblocked_entity_empty_channels_not_error() {
     assert_eq!(v["eligibility"]["class"], "Workable");
 }
 
+// === SL-050 F6 — keyed-surface existence gate ===========================
+
+/// The exact existence-gate failure: a well-formed but never-minted id exits non-zero
+/// with EXACTLY `SL-999: no such entity` on stderr, no stdout.
+fn assert_no_such_entity(out: &Output, expected_ref: &str) {
+    assert!(
+        !out.status.success(),
+        "a never-minted id must exit non-zero"
+    );
+    let err = stderr(out);
+    assert!(err.starts_with("Error: "), "clean anyhow error: {err}");
+    let msg = format!("{expected_ref}: no such entity");
+    assert!(
+        err.contains(&msg),
+        "exact existence-gate message ({msg}): {err}"
+    );
+    assert!(!err.contains("panic"), "must not panic: {err}");
+    assert!(
+        stdout(out).is_empty(),
+        "no partial output on the error path"
+    );
+}
+
+/// VT-1/VT-3 — `explain` over a never-minted id errors with the existence message,
+/// instead of explaining a phantom node.
+#[test]
+fn explain_nonexistent_id_is_no_such_entity_error() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+    let out = run(dir.path(), &["explain", "SL-999"]);
+    assert_no_such_entity(&out, "SL-999");
+    // The same under --json (the gate fires before any rendering).
+    let out = run(dir.path(), &["explain", "SL-999", "--json"]);
+    assert_no_such_entity(&out, "SL-999");
+}
+
+/// VT-1/VT-3 — `blockers` over a never-minted id errors with the existence message,
+/// instead of rendering empty blocked-by / blocking lists.
+#[test]
+fn blockers_nonexistent_id_is_no_such_entity_error() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+    let out = run(dir.path(), &["blockers", "SL-999"]);
+    assert_no_such_entity(&out, "SL-999");
+    // --transitive errors identically.
+    let out = run(dir.path(), &["blockers", "SL-999", "--transitive"]);
+    assert_no_such_entity(&out, "SL-999");
+}
+
+/// VT-1 — `inspect` over a never-minted id errors with the existence message (the
+/// appended actionability block is never reached). The relation-golden suite pins the
+/// human stdout; this confirms the priority-verb corpus errors identically.
+#[test]
+fn inspect_nonexistent_id_is_no_such_entity_error() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+    let out = run(dir.path(), &["inspect", "SL-999"]);
+    assert_no_such_entity(&out, "SL-999");
+    let out = run(dir.path(), &["inspect", "SL-999", "--json"]);
+    assert_no_such_entity(&out, "SL-999");
+}
+
 // === inspect — the appended actionability block ==========================
 
 /// inspect ISS-001: the relation view (here `(no relations)`) with the actionability

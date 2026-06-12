@@ -18,7 +18,7 @@
 
 use std::path::Path;
 
-use crate::relation_graph::EntityKey;
+use crate::relation_graph::{self, EntityKey};
 
 use super::channels;
 use super::graph::{self, NodeAttr, PriorityGraph};
@@ -204,6 +204,9 @@ fn parse_key(id: &str) -> anyhow::Result<EntityKey> {
 pub(crate) fn blockers(root: &Path, id: &str, transitive: bool) -> anyhow::Result<BlockersView> {
     let key = parse_key(id)?;
     let g = graph::build(root)?;
+    // Existence gate (SL-050 F6): a well-formed but never-minted id errors rather than
+    // rendering a clean empty block indistinguishable from a real isolated node.
+    relation_graph::require_minted(&g.projection, key)?;
     let (blocked_by, blocking) = if transitive {
         (
             channels::blocked_by_transitive(&g, key),
@@ -226,6 +229,9 @@ pub(crate) fn blockers(root: &Path, id: &str, transitive: bool) -> anyhow::Resul
 pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
     let key = parse_key(id)?;
     let g = graph::build(root)?;
+    // Existence gate (SL-050 F6): a well-formed but never-minted id errors rather than
+    // explaining a phantom node.
+    relation_graph::require_minted(&g.projection, key)?;
 
     let eligibility = eligibility_reason(&g, key);
 
@@ -282,13 +288,23 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
     })
 }
 
-/// The `inspect` actionability block (design §5.4 / SL-046 D1) — the eligible /
-/// actionable flags, the direct blockers + blocking, and the consequence for one
-/// entity. Composed at the command layer below the relation view. A well-formed ref
-/// to a non-existent id yields an all-empty block (mirrors `inspect`'s empty view).
-pub(crate) fn actionability_block(root: &Path, id: &str) -> anyhow::Result<ActionabilityBlock> {
+/// The `inspect` actionability block over a PRE-SCANNED entity slice (design §5.4 /
+/// SL-046 D1 + the SL-050 F2 shared-scan seam) — the eligible / actionable flags, the
+/// direct blockers + blocking, and the consequence for one entity. Composed at the
+/// command layer below the relation view (`run_inspect` passes the single corpus scan
+/// it already built). `root` is RETAINED for the per-backlog `dep_seq_for` reads inside
+/// `graph::build_from`. A well-formed ref to a never-minted id is an ERROR (F6), not an
+/// empty block.
+pub(crate) fn actionability_block_from(
+    scanned: &[relation_graph::ScannedEntity],
+    root: &Path,
+    id: &str,
+) -> anyhow::Result<ActionabilityBlock> {
     let key = parse_key(id)?;
-    let g = graph::build(root)?;
+    let g = graph::build_from(scanned, root)?;
+    // Existence gate (SL-050 F6): a well-formed but never-minted id errors rather than
+    // rendering an all-empty block indistinguishable from a real isolated node.
+    relation_graph::require_minted(&g.projection, key)?;
     Ok(ActionabilityBlock {
         eligible: channels::eligible(&g, key),
         actionable: channels::actionable(&g, key),
