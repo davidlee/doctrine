@@ -9,6 +9,7 @@ mod contentset;
 mod corpus;
 mod coverage;
 mod coverage_scan;
+mod coverage_view;
 mod entity;
 mod fsutil;
 mod git;

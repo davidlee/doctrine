@@ -1224,6 +1224,217 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
 }
 
 // ---------------------------------------------------------------------------
+// `spec req list` — the authored-only requirement roster (design §5.1/§5.2/§5.4)
+// ---------------------------------------------------------------------------
+
+/// One requirement membered by a spec, pre-materialised for the table (mirrors
+/// [`SpecListRow`], SL-037 §4). **Authored-only (INV-3):** every cell comes from
+/// an authored file — `id` is the canonical FK, `label` the sticky membership
+/// label (`FR-`/`NF-`), `kind`/`status` the requirement's own authored fields.
+/// There is deliberately **no observed/verdict column** — the roster never scans
+/// (no `coverage` import). On a dangling member FK the `kind`/`status` cells hold
+/// the inline load-error note instead (E5, degrade-and-continue). Table-only —
+/// NOT `Serialize` (the JSON path is [`ReqJsonRow`], mirroring spec's D2 split).
+struct ReqListRow {
+    id: String,
+    label: String,
+    kind: String,
+    status: String,
+}
+
+/// One roster entry projected to its faithful JSON row (mirrors [`SpecRow`]).
+/// The roster's JSON contract is lighter than coverage's: `id`/`label`/`kind`/
+/// `status` for a resolved member; a dangling member drops `kind`/`status` and
+/// surfaces `load_error` instead, so the corpus-health signal is machine-visible
+/// (`dangling: true`) rather than silently absent.
+#[derive(Debug, Serialize)]
+struct ReqJsonRow {
+    id: String,
+    label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    dangling: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    load_error: Option<String>,
+}
+
+/// The table columns a roster row can show (`--columns` tokens over
+/// `R = ReqListRow`). Non-capturing extractors (SL-037 D5). Declaration order is
+/// what the unknown-column error lists. Mirrors [`SPEC_COLUMNS`].
+const REQ_COLUMNS: [listing::Column<ReqListRow>; 4] = [
+    listing::Column {
+        name: "id",
+        header: "id",
+        cell: |r| r.id.clone(),
+    },
+    listing::Column {
+        name: "label",
+        header: "label",
+        cell: |r| r.label.clone(),
+    },
+    listing::Column {
+        name: "kind",
+        header: "kind",
+        cell: |r| r.kind.clone(),
+    },
+    listing::Column {
+        name: "status",
+        header: "status",
+        cell: |r| r.status.clone(),
+    },
+];
+
+/// The default visible set — every authored column (`id label kind status`).
+const REQ_DEFAULT: &[&str] = &["id", "label", "kind", "status"];
+
+/// Resolve a spec's membered requirements into rows, degrading a dangling member
+/// FK to an error-bearing row (E5). `member_reqs` (PHASE-02) supplies the ordered,
+/// FK-canonicalised members; each is loaded for its authored `kind`/`status`. A
+/// load failure does NOT abort the roster — the offending row carries the inline
+/// error in place of those cells and the walk continues (symmetric with the
+/// coverage scan's dangling tolerance). Returns each row paired with the loaded
+/// `Requirement` (when resolvable) so the caller can project its filter fields
+/// without a second read.
+fn req_rows(root: &Path, spec_ref: &str) -> anyhow::Result<Vec<(ReqListRow, Option<Requirement>)>> {
+    let members = member_reqs(root, spec_ref)?;
+    let mut rows = Vec::with_capacity(members.len());
+    for m in members {
+        match requirement::load(root, &m.requirement) {
+            Ok(req) => {
+                let row = ReqListRow {
+                    id: m.requirement.clone(),
+                    label: m.label.clone(),
+                    kind: req.kind.as_str().to_string(),
+                    status: req.status.as_str().to_string(),
+                };
+                rows.push((row, Some(req)));
+            }
+            Err(e) => {
+                // Degrade-and-continue (E5): the inline load-error replaces the
+                // authored cells rather than aborting the whole roster.
+                let note = format!("<load error: {e}>");
+                let row = ReqListRow {
+                    id: m.requirement.clone(),
+                    label: m.label.clone(),
+                    kind: note.clone(),
+                    status: note,
+                };
+                rows.push((row, None));
+            }
+        }
+    }
+    Ok(rows)
+}
+
+/// Project a resolved roster row to its filterable fields (design §5.2). The
+/// requirement's authored `slug`/`title`/`tags` come from the loaded entity; the
+/// canonical FK is the regex domain's leading field (mirrors spec's [`key`]).
+fn req_key(id: &str, req: &Requirement) -> listing::FilterFields {
+    listing::FilterFields {
+        canonical: id.to_string(),
+        slug: req.slug.clone(),
+        title: req.title.clone(),
+        status: req.status.as_str().to_string(),
+        tags: req.tags.clone(),
+    }
+}
+
+/// The `spec req list` output as a string — the compute half of [`run_req_list`],
+/// factored pure-ish so it is unit-testable without a CLI (mirrors [`list_rows`]).
+/// Rides the shared spine: `listing::build` resolves filter + format, `retain`
+/// applies `--status/--filter/--tag/--all` (E3). **Authored-only (INV-3):** no
+/// scan, no observed column. A dangling member FK is rendered as a degraded row
+/// and is **always kept** — its authored fields are unreadable, so the filter is
+/// moot, and dropping it would hide a corpus-health signal (E5). `Table` reuses
+/// `select_columns`/`render_columns` UNCHANGED (A5); `Json` emits a faithful
+/// `{kind:"requirement", rows:[…]}` envelope. Empty → `""` (§5.5).
+fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Result<String> {
+    let columns = args.columns.take();
+    let (filter, format) = listing::build(args)?;
+    let rows = req_rows(root, spec_ref)?;
+    // Filter the resolved rows through the shared spine ONCE (reusing `retain`,
+    // not a parallel filter); a dangling row is kept unconditionally — it has no
+    // authored fields for `--status`/`--filter` to speak to, and silencing the
+    // corpus-health signal would be a read that lies (E5). Indices keep both sets
+    // in their original member order (`member_reqs` ordering, which `retain`
+    // preserves) when re-interleaved.
+    let resolved: Vec<(usize, &ReqListRow, &Requirement)> = rows
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (row, req))| req.as_ref().map(|r| (i, row, r)))
+        .collect();
+    let kept_resolved: std::collections::BTreeSet<usize> =
+        listing::retain(resolved, &filter, is_hidden, |(_, row, req)| {
+            req_key(&row.id, req)
+        })
+        .into_iter()
+        .map(|(i, _, _)| i)
+        .collect();
+    let kept: Vec<(ReqListRow, Option<Requirement>)> = rows
+        .into_iter()
+        .enumerate()
+        .filter(|(i, (_, req))| req.is_none() || kept_resolved.contains(i))
+        .map(|(_, pair)| pair)
+        .collect();
+    match format {
+        Format::Table => {
+            let sel = listing::select_columns(&REQ_COLUMNS, REQ_DEFAULT, columns.as_deref())?;
+            let table_rows: Vec<ReqListRow> = kept.into_iter().map(|(row, _)| row).collect();
+            Ok(listing::render_columns(&table_rows, &sel))
+        }
+        Format::Json => {
+            let json_rows: Vec<ReqJsonRow> = kept
+                .into_iter()
+                .map(|(row, req)| match req {
+                    Some(_) => ReqJsonRow {
+                        id: row.id,
+                        label: row.label,
+                        kind: Some(row.kind),
+                        status: Some(row.status),
+                        dangling: false,
+                        load_error: None,
+                    },
+                    None => ReqJsonRow {
+                        id: row.id,
+                        label: row.label,
+                        kind: None,
+                        status: None,
+                        dangling: true,
+                        // `kind` held the load-error note for the table row.
+                        load_error: Some(row.kind),
+                    },
+                })
+                .collect();
+            listing::json_envelope("requirement", &json_rows)
+        }
+    }
+}
+
+/// `doctrine spec req list <SPEC>` — the authored requirement roster (design
+/// §5.4). The compute half is [`req_list_rows`]; this is the thin shell that
+/// resolves the root and writes it. Built ahead of its main.rs CLI wiring (a
+/// later phase), so it is dead in non-test builds until then.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "leaf built ahead of its consumer — main.rs wires `spec req list` in a later phase; self-clears then"
+    )
+)]
+pub(crate) fn run_req_list(
+    path: Option<PathBuf>,
+    spec_ref: &str,
+    args: ListArgs,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    write!(io::stdout(), "{}", req_list_rows(&root, spec_ref, args)?)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -2909,5 +3120,265 @@ parent = \"SPEC-002\"
                 .any(|p| p.to_string_lossy().ends_with(".rendered.md")),
             "no rendered file written"
         );
+    }
+
+    // --- PHASE-04: `spec req list` — the authored-only requirement roster ---
+
+    /// Mint a real requirement on disk and member it onto a spec at `order`. Uses
+    /// `reserve` (the producer's first step) + `set_kind`/`set_status` to vary the
+    /// authored fields, then `append_raw_member` for the membership row — no
+    /// stdout (unlike `run_req_add`), so the roster reads back from authored files.
+    fn member_a_requirement(
+        root: &Path,
+        spec_dir: &Path,
+        slug: &str,
+        title: &str,
+        kind: ReqKind,
+        status: ReqStatus,
+        label: &str,
+        order: u32,
+    ) -> String {
+        let reserved = requirement::reserve(root, slug, title, "2026-06-05").unwrap();
+        let id = reserved.eid.numeric_id().unwrap();
+        requirement::set_kind(root, id, kind).unwrap();
+        requirement::set_status(root, id, status).unwrap();
+        let fk = requirement::canonical_id(id);
+        append_raw_member(spec_dir, &fk, label, order);
+        fk
+    }
+
+    /// VT-1 (authored-only, INV-3): the roster carries only authored columns
+    /// (`id label kind status`) — no observed/verdict field — and the module
+    /// imports no `coverage` symbol (asserted by construction: this file has no
+    /// such `use`). The rendered surface shows the authored `kind`/`status`, never
+    /// an observed verdict token.
+    #[test]
+    fn req_list_is_authored_only_no_observed_column() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        let spec_dir = root.join(".doctrine/spec/tech/001");
+        member_a_requirement(
+            root,
+            &spec_dir,
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+
+        let out = req_list_rows(root, "SPEC-001", ListArgs::default()).unwrap();
+        // The four authored columns head the table; the membership label and the
+        // requirement's authored kind/status are present.
+        assert!(
+            out.starts_with("id"),
+            "authored columns head the table: {out}"
+        );
+        assert!(out.contains("label"));
+        assert!(out.contains("kind"));
+        assert!(out.contains("status"));
+        assert!(out.contains("REQ-001"), "the canonical FK: {out}");
+        assert!(out.contains("FR-001"), "the membership label: {out}");
+        assert!(out.contains("functional"), "authored kind: {out}");
+        assert!(out.contains("active"), "authored status: {out}");
+        // No observed/verdict vocabulary leaks in (the roster never scans).
+        for forbidden in ["observed", "verdict", "coverage", "verified"] {
+            assert!(
+                !out.contains(forbidden),
+                "no observed/verdict column (`{forbidden}`): {out}"
+            );
+        }
+    }
+
+    /// VT-2 (dangling tolerance, E5): a member whose FK points at an absent
+    /// requirement dir does NOT abort the roster — the row is rendered with an
+    /// inline load-error in place of kind/status, and the result is `Ok`.
+    #[test]
+    fn req_list_dangling_member_degrades_and_continues() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        let spec_dir = root.join(".doctrine/spec/tech/001");
+        // one resolvable member …
+        member_a_requirement(
+            root,
+            &spec_dir,
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+        // … and one dangling member (no REQ-099 dir exists).
+        append_raw_member(&spec_dir, "REQ-099", "FR-099", 2);
+
+        let out = req_list_rows(root, "SPEC-001", ListArgs::default()).unwrap();
+        // The resolvable row is intact …
+        assert!(out.contains("REQ-001"), "resolved row present: {out}");
+        assert!(out.contains("functional"));
+        // … and the dangling row is present with an inline load-error, not dropped.
+        assert!(out.contains("REQ-099"), "dangling row present: {out}");
+        assert!(out.contains("FR-099"), "dangling label present: {out}");
+        assert!(out.contains("load error"), "inline load-error note: {out}");
+
+        // The JSON surface flags the dangling row machine-visibly.
+        let json = req_list_rows(
+            root,
+            "SPEC-001",
+            ListArgs {
+                json: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["kind"], "requirement");
+        let rows = v["rows"].as_array().unwrap();
+        let dangling = rows.iter().find(|r| r["id"] == "REQ-099").unwrap();
+        assert_eq!(dangling["dangling"], true);
+        assert!(
+            dangling["load_error"].is_string(),
+            "load_error surfaced: {json}"
+        );
+        assert!(
+            dangling.get("kind").is_none(),
+            "no kind on a dangling row: {json}"
+        );
+    }
+
+    /// A dangling row survives a `--status` filter that its authored siblings would
+    /// fail — it carries no authored status for the filter to speak to, so dropping
+    /// it would silence a corpus-health signal (E5).
+    #[test]
+    fn req_list_status_filter_never_drops_a_dangling_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        let spec_dir = root.join(".doctrine/spec/tech/001");
+        member_a_requirement(
+            root,
+            &spec_dir,
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+        append_raw_member(&spec_dir, "REQ-099", "FR-099", 2);
+
+        // filter to `pending` — the resolved `active` row drops out, the dangling
+        // row stays.
+        let out = req_list_rows(
+            root,
+            "SPEC-001",
+            ListArgs {
+                status: vec!["pending".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(!out.contains("REQ-001"), "active row filtered out: {out}");
+        assert!(out.contains("REQ-099"), "dangling row retained: {out}");
+    }
+
+    /// The thin shell `run_req_list` resolves the root and writes the compute
+    /// half (smoke — exercises the CLI entry point ahead of its main.rs wiring, so
+    /// the `dead_code` suppression rides only the non-test gate build).
+    #[test]
+    fn run_req_list_writes_the_roster() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        member_a_requirement(
+            root,
+            &root.join(".doctrine/spec/tech/001"),
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+        run_req_list(Some(root.to_path_buf()), "SPEC-001", ListArgs::default()).unwrap();
+    }
+
+    /// VT-3: `--status` filters the resolved roster and `--columns` projects /
+    /// reorders; an unknown column is the SL-037 declaration-order error propagated
+    /// from `select_columns`.
+    #[test]
+    fn req_list_status_and_columns_honoured_unknown_column_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        let spec_dir = root.join(".doctrine/spec/tech/001");
+        member_a_requirement(
+            root,
+            &spec_dir,
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+        member_a_requirement(
+            root,
+            &spec_dir,
+            "store",
+            "Store",
+            ReqKind::Quality,
+            ReqStatus::Pending,
+            "NF-001",
+            2,
+        );
+
+        // --status active keeps only REQ-001.
+        let filtered = req_list_rows(
+            root,
+            "SPEC-001",
+            ListArgs {
+                status: vec!["active".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(filtered.contains("REQ-001"), "active kept: {filtered}");
+        assert!(!filtered.contains("REQ-002"), "pending dropped: {filtered}");
+
+        // --columns id,label projects + orders; kind/status are dropped.
+        let projected = req_list_rows(
+            root,
+            "SPEC-001",
+            ListArgs {
+                columns: Some(vec!["id".into(), "label".into()]),
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        assert!(projected.contains("REQ-001"));
+        assert!(projected.contains("FR-001"));
+        assert!(
+            !projected.contains("functional"),
+            "kind column dropped: {projected}"
+        );
+
+        // unknown column → the uniform SL-037 error listing the available tokens.
+        let err = req_list_rows(
+            root,
+            "SPEC-001",
+            ListArgs {
+                columns: Some(vec!["bogus".into()]),
+                ..ListArgs::default()
+            },
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("bogus"), "names the bad column: {msg}");
+        assert!(msg.contains("id"), "lists the available set: {msg}");
+        assert!(msg.contains("status"), "lists the available set: {msg}");
     }
 }
