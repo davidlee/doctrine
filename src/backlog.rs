@@ -231,7 +231,7 @@ impl Status {
 /// authority `--status` is validated against. Lockstep-guarded against the enum by
 /// `backlog_statuses_matches_the_variants`. backlog has a CLOSED status enum, so a
 /// *stored* status is always in-vocabulary — no drift marker is possible.
-const BACKLOG_STATUSES: &[&str] = &["open", "triaged", "started", "resolved", "closed"];
+pub(crate) const BACKLOG_STATUSES: &[&str] = &["open", "triaged", "started", "resolved", "closed"];
 
 /// The `backlog list` hide-set fed to `listing::retain` (design §5.3): the terminal
 /// statuses drop from the default list. This is the stringly bridge over the typed

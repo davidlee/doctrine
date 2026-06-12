@@ -1073,7 +1073,7 @@ pub(crate) fn run_validate(path: Option<PathBuf>, spec_ref: Option<&str>) -> any
 /// a drift-canary test (`spec_statuses_matches_the_variants`). spec has a CLOSED
 /// status enum, so a *stored* status is always in-vocabulary — no drift marker is
 /// possible (unlike slice's stringly status; design §5.5 vocabulary-drift).
-const SPEC_STATUSES: &[&str] = &["draft", "active", "deprecated", "superseded"];
+pub(crate) const SPEC_STATUSES: &[&str] = &["draft", "active", "deprecated", "superseded"];
 
 /// The `spec list` hide-set (design §5.3): a `superseded` spec no longer governs,
 /// so it drops from the default list. `--all` or any explicit `--status` reveals it

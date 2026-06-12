@@ -69,7 +69,7 @@ impl PolicyStatus {
 /// `--status` against. Mirrors `PolicyStatus`'s variants, kept in lockstep by
 /// `policy_known_set_matches_variants` (a drift canary). The enum kinds cannot
 /// store an out-of-vocab status, so this doubles as the complete vocabulary.
-const POLICY_STATUSES: &[&str] = &["draft", "required", "deprecated", "retired"];
+pub(crate) const POLICY_STATUSES: &[&str] = &["draft", "required", "deprecated", "retired"];
 
 /// The `policy list` hide-set (design §5.3): `deprecated` (sunsetting but extant)
 /// and `retired` (terminal off) policies no longer govern, so they drop from the
