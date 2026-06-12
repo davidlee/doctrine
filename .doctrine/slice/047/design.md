@@ -454,7 +454,9 @@ unknowns are downstream, not blocking:
   explainable; consequence is surfaced in reasons.
 - **R3 — partition drift** (a new status enum variant un-mirrored in `PARTITION`).
   *Mitigation*: the lockstep canary test (`workable ∪ terminal == <kind>_STATUSES`)
-  reds on drift — never a silent `Unrecognised` in production.
+  reds on drift for the closed-enum kinds — never a silent `Unrecognised` there. The
+  stringly `slice` kind has no closed enum; its canary binds to the ADR-009 lifecycle
+  status set, else the conservative `Unrecognised` default catches the gap (Charge VII).
 - **R4 — behaviour-preservation.** SL-047 adds a module + a scan-seam call; it must
   not touch `backlog_order`'s build. *Mitigation*: `backlog_order` + `cordage`
   suites stay green unchanged; `backlog order` golden byte-identical (the gate).
