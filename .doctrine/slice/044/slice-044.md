@@ -13,11 +13,12 @@ The hard line stays: observed evidence and authored truth never touch through a
 function (`REQ-105`/NF-001). Slice B is where authored truth is finally *written* —
 so it is the slice that must prove the no-derivation invariant at the seam where
 coverage is read and status is written (the reconcile writer authors an explicit
-`--to` value; it never computes status from coverage). The proof is **behavioural,
-not an import ban** — the writer legitimately imports `coverage` to read `drift` for
-prompting; the load-bearing test (IMP-030) is that the written status equals the
-operator's `--to` across every `drift` `Verdict`, plus a no-launder guard (design
-§5.6, D-B7).
+`--to` value; it never computes status from coverage). NF-001 is an **info-flow
+invariant, not type-expressible** — the writer legitimately imports `coverage` to
+read `drift` for prompting, so neither an import ban nor a return-type argument holds.
+The wall is layered (IMP-030): signature isolation (the status-select fn excludes
+coverage types — type-level) + the verdict consumed by the prompt builder + a
+verdict-independence test on the residual call site (design §5.6, D-B7).
 
 Foundations already ship: SL-042's coverage store + drift surfacer (the reads this
 writer consumes), the ADR-009 slice FSM (`slice status`, the F12 closure seam, and
@@ -84,11 +85,11 @@ exactly one REC per reconciliation act and closure refusing unreconciled drift.
   **revise** (write corrected spec truth), or **redesign** (escalate
   `reconcile → design` via `slice status`, ADR-009 — **no** instance write). Emits
   **exactly one REC per requirement** (D-B8 — forced by the single `move` field;
-  composed atomically). The writer authors status values explicitly; NF-001 holds by
-  **tested behaviour** — the writer *does* import `coverage` (to read `drift` for
-  prompting), so no type-level proof exists; instead a verdict-independence VT pins
-  the written status to the operator's `--to` across every `Verdict`, with a
-  no-launder guard (D-B7, IMP-030). Every act is committed + REC-cited so it is
+  composed atomically). The writer authors status values explicitly; NF-001 is an
+  **info-flow** invariant (no type-level proof exists — the writer *does* read
+  coverage): walled by signature isolation (status-select fn excludes coverage types)
+  + verdict consumed by the prompt builder + a verdict-independence test on the
+  residual call site (D-B7, IMP-030). Every act is committed + REC-cited so it is
   reconstructable from the authored tier alone (NF-003).
 - **B·P3 — Closure gate predicate** (D8, FR-006/REQ-113, H5). A predicate on the
   existing `slice status reconcile → done` edge: default-**refuse** while any req in
@@ -146,10 +147,11 @@ Builds SPEC-002's reconcile + close half: the authored-truth write seam (one
 writer (accept/revise/redesign → exactly one REC per requirement), and the closure
 gate
 (default-refuse residual drift, override only via a recorded REC). The NF-001
-no-derivation line — built into SL-042 by *absence* of a write path — is proven here
-**behaviourally**: the writer reads coverage yet its written status tracks the
-operator's `--to`, never the `drift` `Verdict` (verdict-independence VT + no-launder
-guard). Depends on SL-042. Resolves IMP-030.
+no-derivation line — built into SL-042 by *absence* of a write path — is an
+**info-flow** invariant here (not type-expressible): walled by signature isolation
+(the status-select fn excludes coverage types) + the verdict consumed by the prompt
+builder + a verdict-independence test on the residual call site (D-B7). Depends on
+SL-042. Resolves IMP-030.
 
 ## Follow-Ups
 
