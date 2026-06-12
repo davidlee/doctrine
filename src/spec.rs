@@ -524,6 +524,55 @@ fn canonicalize_spec_ref(raw: &str) -> String {
     resolve_spec_ref(raw).map_or_else(|_| raw.to_string(), |(s, n)| s.canonical_id(n))
 }
 
+/// One spec→requirement membership, surfaced for the downstream coverage scan: the
+/// sticky `label` carried verbatim (F-A8 — `member_reqs` is its only public-ish
+/// source; `read_members` is private) and the `requirement` FK in canonical form.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "leaf built ahead of its consumer — the coverage scan wires member_reqs/MemberReq in a later phase; self-clears then"
+    )
+)]
+pub(crate) struct MemberReq {
+    pub(crate) label: String,
+    pub(crate) requirement: String,
+}
+
+/// The spec-fan seam: resolve `<spec-ref>`'s members, ordered by advisory `order`,
+/// with every requirement FK canonicalised. The canonicalisation is load-bearing —
+/// the downstream scan matches evidence by exact string against canonical `REQ-NNN`
+/// keys, so a raw `REQ-1` would render observed=none, a read that lies (BLOCKER E2).
+/// Mirrors `run_req_add`'s spec-dir resolution; the private `resolve_spec_ref` /
+/// `read_members` stay private, with this their only `pub(crate)` exit.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "leaf built ahead of its consumer — the coverage scan wires this in a later phase; self-clears then"
+    )
+)]
+pub(crate) fn member_reqs(root: &Path, spec_ref: &str) -> anyhow::Result<Vec<MemberReq>> {
+    let (subtype, spec_id) = resolve_spec_ref(spec_ref)?;
+    let spec_dir = root.join(subtype.kind().dir).join(format!("{spec_id:03}"));
+    anyhow::ensure!(
+        spec_dir.is_dir(),
+        "no {} spec {spec_ref} at {}",
+        subtype.label(),
+        spec_dir.display()
+    );
+    let mut members = read_members(&spec_dir.join("members.toml"))?;
+    members.sort_by_key(|m| m.order);
+    Ok(members
+        .into_iter()
+        .map(|m| MemberReq {
+            label: m.label,
+            requirement: requirement::canonicalize_fk(&m.requirement),
+        })
+        .collect())
+}
+
 /// The source line enclosing `byte`, without its trailing newline. Used to attribute
 /// a parse error to the offending key.
 fn enclosing_line(src: &str, byte: usize) -> &str {
@@ -1564,6 +1613,55 @@ mod tests {
         );
         fs::write(&members, appended).unwrap();
         assert_eq!(member_count(&spec_dir).unwrap(), 1);
+    }
+
+    /// Append a raw `[[member]]` row to a spec's seeded `members.toml`, preserving the
+    /// seed (mirrors `member_count_reads_appended_rows`'s hand-edit style).
+    fn append_raw_member(spec_dir: &Path, requirement: &str, label: &str, order: u32) {
+        let members = spec_dir.join("members.toml");
+        let appended = format!(
+            "{}\n[[member]]\nrequirement = \"{requirement}\"\nlabel = \"{label}\"\norder = {order}\n",
+            fs::read_to_string(&members).unwrap()
+        );
+        fs::write(&members, appended).unwrap();
+    }
+
+    /// VT-1 (BLOCKER E2): a non-canonical member FK (`REQ-1`) is canonicalised to
+    /// `REQ-001` on the way out — the downstream scan keys on canonical ids, so a raw
+    /// FK would silently read observed=none.
+    #[test]
+    fn member_reqs_canonicalises_the_requirement_fk() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        append_raw_member(&root.join(".doctrine/spec/tech/001"), "REQ-1", "FR-001", 1);
+
+        let reqs = member_reqs(root, "SPEC-001").unwrap();
+        assert_eq!(reqs.len(), 1);
+        assert_eq!(reqs[0].requirement, "REQ-001");
+    }
+
+    /// VT-2: out-of-order members come back sorted by advisory `order`, each `label`
+    /// carried verbatim (F-A8).
+    #[test]
+    fn member_reqs_sorts_by_order_and_carries_labels_verbatim() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        let spec_dir = root.join(".doctrine/spec/tech/001");
+        // appended out of order: order 2 first, then order 1.
+        append_raw_member(&spec_dir, "REQ-002", "FR-002", 2);
+        append_raw_member(&spec_dir, "REQ-001", "FR-001", 1);
+
+        let reqs = member_reqs(root, "SPEC-001").unwrap();
+        let labels: Vec<&str> = reqs.iter().map(|m| m.label.as_str()).collect();
+        let fks: Vec<&str> = reqs.iter().map(|m| m.requirement.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["FR-001", "FR-002"],
+            "sorted by order; labels verbatim"
+        );
+        assert_eq!(fks, ["REQ-001", "REQ-002"]);
     }
 
     #[test]
