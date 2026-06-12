@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebbf463f17720ac9cf4262aec4fbd"
+memory_key = "mem.pattern.input.slug-charset-wall-at-resolve-slug"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Explicit --slug must be charset-validated at resolve_slug, the single chokepoint for all authored-entity slugs"
+summary = "A user value that becomes a path component needs a charset wall at resolve_slug, not just a byte cap"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["src/input.rs", "src/requirement.rs"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "faba18b517f3c47cf147f0a829400414b4fff020"
+ref_name = "refs/heads/main"
+checkout_state_id = "a7cae74007c65a23d90b5f3406b3807356735b201bf192553aec70bb5d0effa8"
+base_commit = "e2d91b5f7b0395a5ca48913113b1f7e0e595d3c3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
