@@ -15,8 +15,7 @@
 //! PHASE-03 `not(test)` `dead_code` expect retired itself here, as designed).
 
 use std::collections::BTreeMap;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use cordage::{Arity, CyclePolicy, EdgeAttrs, Graph, GraphBuilder, OverlayConfig, OverlayId};
 
@@ -169,28 +168,17 @@ struct RelationGraph {
 pub(crate) struct ScannedEntity {
     pub(crate) key: EntityKey,
     /// The kind descriptor (data, not `Ord`) — captured from the `KindRef` in the
-    /// scan, so a consumer needs no second `kind_by_prefix` lookup. Read only by the
-    /// priority consumer (SL-047); `not(test)`-scoped to stay dead-code-clean until
-    /// that consumer lands a non-test caller (self-clearing — `mem.pattern.lint.
-    /// dead-code-expect-vs-cfg-test`).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "read by the SL-047 priority consumer (PHASE-01 lands the adapter; \
-                      its CLI caller lands PHASE-02/03)"
-        )
-    )]
+    /// scan, so the priority consumer (SL-047) needs no second `kind_by_prefix`
+    /// lookup. Now live (the priority adapter reads it), so the PHASE-01 self-clearing
+    /// `dead_code` scope has retired itself.
     pub(crate) kind: &'static entity::Kind,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "read by the SL-047 priority consumer (PHASE-01 lands the adapter; \
-                      its CLI caller lands PHASE-02/03)"
-        )
-    )]
     pub(crate) status: Option<String>,
+    /// The entity's authored `title`, captured in the scan so the priority display
+    /// surfaces need no second read (SL-047 PHASE-03). Read leniently
+    /// ([`title_for`]) so a status-less kind (RV/REC, whose strict
+    /// [`crate::meta::Meta`] read fails for lack of a top-level `status`) still yields
+    /// its title.
+    pub(crate) title: String,
     pub(crate) outbound: Vec<RelationEdge>,
 }
 
@@ -218,6 +206,7 @@ pub(crate) fn scan_entities(root: &Path) -> anyhow::Result<Vec<ScannedEntity>> {
                 key: EntityKey { prefix, id },
                 kind: kref.kind,
                 status: status_for(root, kref, id)?,
+                title: title_for(root, kref, id)?,
                 outbound: outbound_for(root, kref.kind, id)?,
             });
         }
@@ -247,6 +236,29 @@ fn status_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result
             ))
         }
     }
+}
+
+/// One entity's authored `title` for the cross-kind scan, read leniently. Every
+/// kind authors a top-level `title` in its `<stem>-NNN.toml` (slice/governance/spec/
+/// requirement/backlog) or beside its `[review]`/`[rec]` table (RV/REC) — but the
+/// strict [`crate::meta::read_meta`] also demands `status`, which RV/REC do NOT
+/// author top-level. So a `title`-only deserialize (ignoring every other key) is the
+/// one reader that works across ALL kinds. The `kref` carries the tree dir + stem.
+fn title_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<String> {
+    #[derive(serde::Deserialize)]
+    struct TitleOnly {
+        title: String,
+    }
+    let name = format!("{id:03}");
+    let path = root
+        .join(kref.kind.dir)
+        .join(&name)
+        .join(format!("{}-{name}.toml", kref.stem));
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| anyhow::anyhow!("read {} for title: {e}", path.display()))?;
+    let parsed: TitleOnly = toml::from_str(&text)
+        .map_err(|e| anyhow::anyhow!("parse title from {}: {e}", path.display()))?;
+    Ok(parsed.title)
 }
 
 /// Build the cross-kind relation graph once (design §5.4 — mirrors
@@ -436,30 +448,23 @@ pub(crate) fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
 // PHASE-04 — the `inspect <ID>` command: render (human + --json) and the shell.
 // ---------------------------------------------------------------------------
 
-/// `doctrine inspect <ID> [--json]` — resolve the root, build the view once, and
-/// render per `Format` (design §5.1 — the main.rs handler delegates here, keeping
-/// the dispatch arm thin; mirrors `coverage_view::run`). An unknown prefix /
-/// malformed ref surfaces the clean `anyhow` error from [`inspect`] (a non-zero
-/// exit, never a panic — EX-1). `--json` forces `Json` over `--format` (the
-/// `coverage_view`/listing `--json` precedent).
-pub(crate) fn run(
-    path: Option<PathBuf>,
-    id: &str,
-    format: Format,
-    json: bool,
-) -> anyhow::Result<()> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    let view = inspect(&root, id)?;
-    let resolved = if json { Format::Json } else { format };
-    let out = match resolved {
+/// Render the relation view of `id` to a string (build the view once, format per
+/// `Format`) WITHOUT printing — the command-layer seam (SL-047 §5.4): `main.rs`'s
+/// `inspect` handler calls this for the relation portion, then APPENDS the priority
+/// actionability block BELOW it (the composition lives at the command layer, which
+/// alone may depend on both `relation_graph` and `priority`; ADR-001 forbids
+/// `relation_graph` from calling up into `priority`). The relation portion stays
+/// byte-identical — the appended block is additive (EX-2 / VT-2 behaviour-preserving).
+/// No trailing newline on JSON (the golden contract); the human surface ends in `\n`.
+pub(crate) fn render(root: &Path, id: &str, format: Format) -> anyhow::Result<String> {
+    let view = inspect(root, id)?;
+    match format {
         // The queried entity's per-edge interaction `type` is re-read from the
         // SOURCE here (C2 / §5.3) — a human-render annotation only; never carried
-        // in `InspectView`. Resolve the queried id once for the lookup.
-        Format::Table => render_human(&root, &view)?,
-        Format::Json => render_json(&view)?,
-    };
-    write!(io::stdout(), "{out}")?;
-    Ok(())
+        // in `InspectView`.
+        Format::Table => render_human(root, &view),
+        Format::Json => render_json(&view),
+    }
 }
 
 /// Render one entity's relation view for human reading (default). Fixed
@@ -572,6 +577,16 @@ fn render_danglers(parts: &mut Vec<String>, view: &InspectView) {
 /// reads the same shape `InspectView` carries. No trailing newline (the black-box
 /// golden contract — `write!`, not `writeln!`).
 fn render_json(view: &InspectView) -> anyhow::Result<String> {
+    serde_json::to_string_pretty(&inspect_value(view))
+        .map_err(|e| anyhow::anyhow!("failed to serialize inspect JSON: {e}"))
+}
+
+/// The `inspect` `--json` envelope as a [`serde_json::Value`] (the 4 `InspectView`
+/// surfaces under a `"kind": "inspect"` discriminant). Factored out so the command
+/// layer can INJECT the priority `actionability` block as an additive key (SL-047
+/// §5.4 / SL-046 D1) without `relation_graph` depending on `priority` (ADR-001) — the
+/// relation surfaces stay byte-identical; only a new key is added.
+pub(crate) fn inspect_value(view: &InspectView) -> serde_json::Value {
     let group = |label: RelationLabel, targets: &[String]| serde_json::json!({ "label": label.name(), "targets": targets });
     let outbound: Vec<serde_json::Value> =
         view.outbound.iter().map(|(l, t)| group(*l, t)).collect();
@@ -581,15 +596,13 @@ fn render_json(view: &InspectView) -> anyhow::Result<String> {
         .iter()
         .map(|(l, t)| serde_json::json!({ "label": l.name(), "target": t }))
         .collect();
-    let value = serde_json::json!({
+    serde_json::json!({
         "kind": "inspect",
         "id": view.id,
         "outbound": outbound,
         "inbound": inbound,
         "danglers": danglers,
-    });
-    serde_json::to_string_pretty(&value)
-        .map_err(|e| anyhow::anyhow!("failed to serialize inspect JSON: {e}"))
+    })
 }
 
 #[cfg(test)]

@@ -23,21 +23,10 @@
 //! cycle. The build is pure over the scanned `Vec` (the disk touch lives in
 //! `scan_entities`, the imperative shell).
 //!
-//! The whole adapter is built ahead of its first consumer — the `priority` CLI
-//! command lands PHASE-02/03. Until a non-test caller exists, every public symbol is
-//! dead under the gate (plain `cargo clippy`/`build`, `cfg(test)` inactive), so the
-//! suppression is `not(test)`-scoped and self-clearing: a real consumer makes the
-//! `not(test)` expect unfulfilled and forces its removal (`mem.pattern.lint.
-//! dead-code-expect-vs-cfg-test`). The `#[cfg(test)]` tests below DO exercise every
-//! symbol, so the test build never trips the suppression.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-047 priority adapter built ahead of its CLI consumer (PHASE-02/03); \
-                  self-clearing when a non-test caller lands"
-    )
-)]
+//! The whole adapter is consumed by the priority CLI surface (SL-047 PHASE-03 —
+//! `priority::surface` builds the view rows from `build()`), so the PHASE-01/02
+//! self-clearing `not(test)` `dead_code` suppression has retired itself, as designed
+//! (`mem.pattern.lint.dead-code-expect-vs-cfg-test`).
 
 use std::collections::BTreeMap;
 
@@ -62,6 +51,10 @@ pub(crate) struct NodeAttr {
     pub(crate) kind: &'static entity::Kind,
     pub(crate) status: Option<String>,
     pub(crate) promoted: bool,
+    /// The entity's authored `title`, captured from the scan (display-only — the pure
+    /// channel layer never reads it). Carried here so the impure surface shell needs
+    /// no second per-row disk read (one scan, one read per entity).
+    pub(crate) title: String,
 }
 
 /// An unresolved outbound edge — the authored `(source, label, target)` whose target
@@ -70,6 +63,15 @@ pub(crate) struct NodeAttr {
 /// per-entity query can return only its own). `label` is `None` for the dep/seq axes
 /// (`needs`/`after`), which carry no `RelationLabel` vocabulary entry (PRD-009 item→
 /// item edges, not the SL-046 reference labels).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "priority danglers are a built artifact (the unresolved-prereq record); \
+                  no PHASE-03 surface reads them yet — exercised by the graph tests, kept \
+                  for a future per-entity dangler query"
+    )
+)]
 pub(crate) struct Dangling {
     pub(crate) source: EntityKey,
     pub(crate) label: Option<RelationLabel>,
@@ -88,7 +90,29 @@ pub(crate) struct PriorityGraph {
     pub(crate) consequence: BTreeMap<EntityKey, u32>,
     pub(crate) dep_overlay: OverlayId,
     pub(crate) seq_overlay: OverlayId,
+    /// The reference/lineage consequence-input overlays. Their inbound contribution is
+    /// already tallied into `consequence` during build, so no post-build surface reads
+    /// these handles; kept for completeness + the graph tests' overlay-identity
+    /// assertions.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "consequence is pre-tallied into `consequence`; the ref overlay handles \
+                      have no post-build reader yet (exercised by the graph tests)"
+        )
+    )]
     pub(crate) ref_overlays: Vec<OverlayId>,
+    /// The edge-pass danglers (unresolved outbound targets). No PHASE-03 surface reads
+    /// them yet; exercised by the graph tests, kept for a future dangler query.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "no PHASE-03 surface reads the priority danglers yet (exercised by the \
+                      graph tests; kept for a future per-entity dangler query)"
+        )
+    )]
     pub(crate) dangling: Vec<Dangling>,
 }
 
@@ -236,6 +260,7 @@ pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
                 kind: entity.kind,
                 status: entity.status.clone(),
                 promoted: dep_seq.get(&entity.key).is_some_and(|ds| ds.promoted),
+                title: entity.title.clone(),
             },
         );
     }
