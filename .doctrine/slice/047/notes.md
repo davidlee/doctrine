@@ -123,3 +123,24 @@ reads `plan → Workable`. Goldens: `e2e_priority_golden` (13), `e2e_inspect_gol
   not reproduce against the README; likely a test-fixture artifact. Outside the
   `just check` gate (gate is green) and outside SL-047 scope. Audit to investigate /
   capture a cordage-hygiene backlog item if real.
+
+## Audit (RV-007) — reconciliation outcome
+
+Audited 2026-06-12 against design §9/§10, plan EX/VT, SPEC-001/PRD-011/ADR-001/004/009/010.
+Gate green; four verbs smoke-verified live; charge-bound §10 facts held (asserted by the
+13+9 passing goldens). Three findings raised, all terminal, NO blocker:
+
+- **F-1 (minor → follow-up, ISS-007).** The cordage denylist note WAS real (handover's
+  "does not reproduce" was a stale baked-`CARGO_MANIFEST_DIR` artifact). `cargo test -p
+  cordage --test denylist` is red on a whole-word `task` in `crates/cordage/README.md`
+  (REQ-079) — pre-existing (dc120a7), disjoint from SL-047, and outside the gate (`just
+  check`'s `cargo test` tests the root package only; cordage needs `--workspace`/`-p`).
+  Kept out of SL-047; captured as ISS-007 + recorded
+  `mem.pattern.build.just-check-tests-root-package-only`.
+- **F-2 (nit → tolerated).** Flag-1's `dangling`/`ref_overlays` expects are GONE at HEAD
+  (now read); only `ReasonKind::Fallback`'s self-clearing `#[expect(dead_code)]` remains —
+  §5.4 vocabulary completeness, accepted.
+- **F-3 (minor → tolerated).** `explain` v1 honest scope (`seq_rank=None` via
+  `evicted_seq_edges`; `dep_level` transitive-prereq proxy) meets REQ-072 + D11.
+
+RV-007 `done · await=none`. Ready for `/close`.

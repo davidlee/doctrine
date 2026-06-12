@@ -1,0 +1,43 @@
+id    = 7
+slug  = "reconciliation-review-of-sl-047"
+title = "reconciliation review of SL-047"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-047"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "cordage denylist test red at HEAD ('task' in cordage README) — pre-existing, outside SL-047 scope and outside the just-check gate"
+detail = "cargo test -p cordage --test denylist :: crate_source_carries_no_forbidden_vocabulary FAILS at HEAD: 'crates/cordage/README.md: forbidden token <task>' (whole-word, REQ-079 product-neutrality boundary), lines 22 and 223. Origin commit dc120a7 'doc(cordage): README' — NOT an SL-047 phase commit; SL-047 never touched crates/cordage/README.md (git log cb03be6~1..HEAD on that path is empty). The just-check gate stays green because cargo test runs only workspace default scope and cordage requires -p to test; the denylist suite is never exercised by the gate. Handover claimed the token was ABSENT and the failure a fixture artifact — that was wrong: the worker hit a STALE test binary baking a removed dispatch-worktree CARGO_MANIFEST_DIR (root-resolution panic, 0 files), masking the real README hit; a clean recompile surfaces the genuine token failure. Real cordage-hygiene defect, pre-existing, out of SL-047 scope."
+disposition = "follow-up"
+response = "Real cordage-hygiene defect but pre-existing (dc120a7) and disjoint from SL-047 source; outside the green just-check gate. Per scope discipline, NOT folded into SL-047. Captured as ISS-007 (reword README and/or close the gate-coverage hole so the denylist boundary is actually enforced)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "ReasonKind::Fallback carries a self-clearing #[expect(dead_code)] — design vocabulary variant with no v1 emitter"
+detail = "src/priority/view.rs:60-66: ReasonKind::Fallback is part of the design §5.4 reason vocabulary but no v1 surface emits it (every classification carries a concrete reason). It still renders (render::reason_human/json handle it) so the vocabulary is complete; the #[expect(dead_code, reason=...)] is self-clearing (errors if a future emitter makes the lint stop firing). NOTE: the notes.md/handover flag-1 also named priority 'dangling'/'ref_overlays' expects — those are GONE at HEAD (now read; clippy green), so flag 1 reduces to this single Fallback variant."
+disposition = "tolerated"
+response = "Conscious design call: §5.4 keeps the reason vocabulary complete; Fallback renders and the #[expect] is self-clearing (errors the moment a future emitter appears), so it cannot rot silently. Single remaining suppression — the dangling/ref_overlays expects flagged in notes are already gone (now read). Accepted as-is."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "explain v1 fidelity: OrderContrib.seq_rank is always None and dep_level is a transitive-prereq-count proxy, not the composed cordage level"
+detail = "src/priority/surface.rs:245-252: dep_level = transitive prereq count (agent-legible depth proxy; the composed cordage order level is internal), seq_rank = None hardcoded in v1. The soft-sequence story is surfaced instead via channels::evicted_seq_edges -> ReasonKind::EvictedEdge. render.rs:113-118/185-191 handle both Some/None. Design §5.4 documents seq_rank: Option<i32> as None when no 'after' edge constrains — consistent. REQ-072 (every classification carries reasons) and D11 (full chain via explain) are met: explain emits OrderContrib + evicted edges + consequence. Honest-scope v1 call documented in notes.md."
+disposition = "tolerated"
+response = "Honest v1 scope: seq_rank=None is design-sanctioned (§5.4 Option, None when no 'after' constrains); the soft-sequence story is surfaced via evicted_seq_edges, and dep_level is an agent-legible depth proxy. REQ-072 (reasons present) and D11 (full chain via explain) are met. No fidelity gap that blocks v1; documented in notes."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
