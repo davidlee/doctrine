@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 237
+slug = "rank-actionable-work-across-all-admitted-kinds-via-status-relation-synthesis"
+title = "Rank actionable work across all admitted kinds via status-relation synthesis"
+status = "pending"
+kind = "functional"
+
+description = "The derived surface ranks actionable work across all admitted kinds in one comparable view, deriving actionability per item as a synthesis of the item's own lifecycle status (workable vs terminal, per-kind mapping is policy) and its admitted graph relations (unblocked vs gated). No kind is barred as a kind."
+tags = []
+acceptance_criteria = [
+  "Items of more than one kind (e.g. a backlog issue, a pending requirement, a proposed slice) compete in one actionable ranking rather than separate per-kind lists.",
+  "An item is actionable only when its lifecycle status is workable AND its admitted relations leave it unblocked; a terminal status alone, or an unresolved admitted blocker alone, makes it non-actionable.",
+  "No kind is excluded as a kind — an accepted ADR is non-actionable because its status is terminal, while a proposed entity of the same kind with a workable status can be actionable.",
+  "The per-kind mapping of lifecycle statuses to workable-versus-terminal is doctrine policy, not a graph-core invariant.",
+]
