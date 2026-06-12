@@ -81,3 +81,45 @@ shape), `dep_cycles` (provenance cycles filtered to dep overlay → `remap_set`)
    order from PHASE-01.
 3. `status_class` takes `&entity::Kind` (by ref — not Copy/Eq); `NodeAttr.kind` is
    already `&'static entity::Kind`; identity is via `kind.prefix`.
+
+## PHASE-03 — surfaces, structured reasons, render + goldens (landed `ae569e4`)
+
+**`view.rs`** — `ReasonKind` + `SurveyRow/NextRow/Explanation/Actionability`
+(+`BlockersView`/`ActionabilityBlock`), the render source of truth (REQ-072).
+**`render.rs`** — human (rides `listing::render_table`) + `--json` (`serde_json::json!`)
+FROM the view types; stamps `PRIORITY_POLICY_VERSION = "priority.v1"`; `write!`, no
+trailing newline (golden contract). **`surface.rs`** — the impure shell: one
+`graph::build` per verb, composing the pure channels into rows.
+
+**`main.rs`** — four read verbs: `survey [--all][--json]`, `next [--json]`,
+`blockers <ID> [--transitive][--json]`, `explain <ID> [--json]`; plus the `inspect`
+actionability block. **The inspect block composes at the COMMAND layer**
+(`relation_graph::run`→`render(root,id,format)->String` + `inspect_value()` exposed;
+`main` appends the priority block) — `relation_graph` never calls `priority` (ADR-001).
+**Promoted backlog items are excluded from survey AND next** (F1/REQ-075 — the worker
+caught during smoke that the own-reason exclusion must also drop them from the
+actionable worklist). Titles via lenient `relation_graph::title_for` (status-less
+RV/REC safe), captured in `scan_entities`→`ScannedEntity.title`→`NodeAttr.title`;
+pure channels stay title-free. Added `channels::blocked_by_transitive`/
+`blocking_transitive` (cordage `reachable`) + `evicted_seq_edges`.
+
+Smoke-tested live: `survey`/`next` rank cross-kind by consequence; `explain SL-047`
+reads `plan → Workable`. Goldens: `e2e_priority_golden` (13), `e2e_inspect_golden`
+(+additive actionability block, relation portion byte-identical).
+
+### Audit flags (for /audit)
+
+- **Narrowed dead-code expects remain** (`not(test)`, per-field): priority
+  `dangling`/`ref_overlays` and `ReasonKind::Fallback` are design-vocabulary
+  completeness with no v1 surface emitting them. Investigated, intentionally kept
+  (not blindly re-suppressed) — audit should confirm this is acceptable or capture a
+  follow-up to wire/drop them.
+- **`explain` fidelity (v1 honest scope):** `OrderContrib.dep_level` uses the
+  transitive-prereq count as an agent-legible depth proxy (the composed cordage level
+  is internal); `seq_rank` is `None` in v1, surfaced instead via `evicted_seq_edges`.
+- **Cordage denylist note (worker-raised, UNCONFIRMED):** the worker reported
+  `cargo test -p cordage --test denylist` failing on a `<task>` token. The token is
+  ABSENT from `crates/cordage/README.md` at base `d2406e6` and at HEAD — claim does
+  not reproduce against the README; likely a test-fixture artifact. Outside the
+  `just check` gate (gate is green) and outside SL-047 scope. Audit to investigate /
+  capture a cordage-hygiene backlog item if real.
