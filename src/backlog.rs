@@ -746,15 +746,6 @@ fn read_item(root: &Path, item_kind: ItemKind, id: u32) -> anyhow::Result<Backlo
 /// [`ItemKind`] — the inverse of `ItemKind::prefix`, over the single `ItemKind::ALL`
 /// source. `pub(crate)` so the SL-046 cross-kind dispatch (`relation_graph`) routes a
 /// backlog prefix to [`relation_edges`] without a second prefix↔kind copy.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-046 PHASE-02 dispatch helper — sole caller is \
-                  relation_graph::outbound_for, itself dead until PHASE-03; live \
-                  under cfg(test), retires itself then"
-    )
-)]
 pub(crate) fn kind_from_prefix(prefix: &str) -> Option<ItemKind> {
     ItemKind::from_prefix(prefix)
 }
@@ -767,15 +758,6 @@ pub(crate) fn kind_from_prefix(prefix: &str) -> Option<ItemKind> {
 /// (PHASE-03), never edges. NEVER `needs`/`after`/`triggers` (the dep/sequence/mask
 /// axes — SL-047). Reads via the existing `read_item` reader (no new TOML parse). An
 /// empty axis emits nothing.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
-                  relation_graph::outbound_for, itself dead until PHASE-03; live \
-                  under cfg(test), retires itself then"
-    )
-)]
 pub(crate) fn relation_edges(
     root: &Path,
     item_kind: ItemKind,

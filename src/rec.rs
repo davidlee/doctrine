@@ -403,15 +403,6 @@ fn read_rec(rec_root: &Path, id: u32) -> anyhow::Result<RecDoc> {
 /// Decision 2): carried so the data is preserved, but its target never resolves and
 /// surfaces as a dangler at the scan (PHASE-03), never an edge. Reads via the
 /// existing `read_rec` reader (no new TOML parse). An absent edge emits nothing.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
-                  relation_graph::outbound_for, itself dead until PHASE-03; live \
-                  under cfg(test), retires itself then"
-    )
-)]
 pub(crate) fn relation_edges(
     root: &Path,
     id: u32,

@@ -16,22 +16,9 @@
 //! surface as danglers, never edges (§5.3). They are vocabulary labels with no
 //! overlay, carried so the data is preserved (visibility), not dropped.
 //!
-//! Self-clearing `not(test)` `dead_code` expect (the `dead-code-self-clearing-leaf`
-//! precedent): this vocabulary leaf lands ahead of its PHASE-03 graph consumer and
-//! PHASE-04 render. Under `cfg(test)` the round-trip tests exercise every item, so
-//! the expect scopes to `not(test)` where the gate's plain `cargo clippy` (bins/lib,
-//! no test cfg) sees the items as genuinely dead. It retires itself once
-//! `relation_graph` (PHASE-03) reads `.label`/`.target`/`name()`.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-046 PHASE-02 relation vocabulary leaf — built ahead of its \
-                  PHASE-03 relation_graph scan + PHASE-04 inspect render consumers; \
-                  every item is live under cfg(test) and the expect retires itself \
-                  as those phases wire up"
-    )
-)]
+//! As of SL-046 PHASE-04 the full vocabulary is LIVE: `relation_graph`'s scan reads
+//! `.label`/`.target`, and the `inspect` render reads `name()` — so the PHASE-02
+//! `not(test)` `dead_code` expect retired itself, as designed.
 
 /// The outbound relation vocabulary — one label per authored relation axis across
 /// the six edge-authoring kinds. `Copy + Ord` so callers can group/sort labels

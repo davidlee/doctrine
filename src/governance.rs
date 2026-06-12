@@ -218,15 +218,6 @@ fn read_doc(g: &GovKind, gov_root: &Path, id: u32) -> anyhow::Result<(Doc, Strin
 /// from `in_edges`) and NEVER `tags` (free-text classification, not entity refs).
 /// Reads via the shared `read_doc` reader (no new TOML parse). Shared by ADR / POL /
 /// STD via the caller-supplied `g`. An empty axis emits nothing.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
-                  relation_graph::outbound_for, itself dead until PHASE-03; live \
-                  under cfg(test), retires itself then"
-    )
-)]
 pub(crate) fn relation_edges(
     g: &GovKind,
     root: &Path,
