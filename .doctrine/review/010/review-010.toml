@@ -1,0 +1,52 @@
+id    = 10
+slug  = "reconciliation-review-of-sl-050"
+title = "reconciliation review of SL-050"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-050"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "F7 drift no-edge test is a near-vacuous witness (consequence==0 holds for two independent reasons)"
+detail = 'src/priority/graph.rs free_text_outbound_target_produces_no_edge asserts consequence==0 for a lone ISS-001 whose only edge is drift=["some-free-text"]. consequence is 0 here for TWO independent reasons: drift is not a consequence label AND the target is unresolved/no-overlay. So it would pass even if the no-overlay branch regressed. The pre-F7 test directly witnessed the Dangling{label:Drift,target} record. Post-F7 the ref-overlay handles were deliberately dropped from PriorityGraph (ref_by_label is now build-local), so no stronger post-build witness exists through the surviving public surface.'
+disposition = "tolerated"
+response = "Conscious tolerate. The strong witness for the unresolved-prereq branch is the sibling test dep_seq_edges_emitted_for_backlog_unresolved_contributes_no_edge (asserts dep_preds == vec![rsk1] exactly). The free-text/no-overlay branch has no stronger post-build observable: F7 deliberately dropped the ref-overlay handles from PriorityGraph, leaving consequence as the only surviving public surface. Paired with non_backlog_nodes_carry_no_dep_seq_edges (asserts consequence==1 for a resolvable REQ-005 ref), the consequence pair brackets the ref branch differentially. Re-exposing handles purely to strengthen one nit test would undo an intended F7 deletion. Not worth reopening a green slice."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "D4 policy bump v1->v2 fires on byte-identical survey/next/blockers --json (single shared constant)"
+detail = "PRIORITY_POLICY_VERSION (render.rs:17) is one shared constant stamped across survey/next/blockers/explain --json. Dropping order_contrib only changed the explain envelope shape, but all four surfaces now stamp v2 — a false staleness signal for 3 of 4 envelopes whose data is byte-identical. Consumer keying behaviour off the stamp will see a spurious bump on survey/next/blockers."
+disposition = "aligned"
+response = "Behaviour conforms to design D4, which consciously chose the single shared constant ('blast radius is the whole stamped set') and is honoured by REQ-094/NF-001: dropping a field from ANY versioned envelope is exactly the consumer-affecting change the stamp exists to flag. The slice non-goal pre-authorises this bump. Per-surface version granularity would be a new capability, not a defect of this slice; not capturing speculative follow-up."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "survey tie-break resolves on EntityKey Ord (prefix:&str,id), not canonical() string as F3 prose implies"
+detail = "surface.rs survey tie-break is a.key.cmp(&b.key) over derived EntityKey Ord = (prefix:&str, id:u32). Design §2/F3 prose says 'canonical-id asc'. These coincide for ids <1000 (fixed-width zero-padding) and diverge only at id>=1000. REQ-077 determinism/permutation-invariance holds either way. Basis is UNCHANGED from pre-F3 code (also a.cmp(&b) over EntityKey), so F3 introduced no ordering risk."
+disposition = "aligned"
+response = "REQ-077 holds: deterministic, permutation-invariant. The EntityKey-Ord basis predates SL-050 (pre-F3 code used the same a.cmp(&b)), so F3 changed nothing observable; goldens byte-identical. Divergence from canonical-string order only at id>=1000 is cosmetic and unreachable for the current corpus. Design prose wording is loose but the implemented order matches intent."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Three plan deviations (wrapper deletion count, dead_code count, walk count) — conformance confirmation"
+detail = "Verified against design EX-1/§1/§2: (1) 3 zero-caller root wrappers deleted (build_relation_graph, relation_graph::render, surface::actionability_block) not kept as thin delegates — the no-dead-code clippy gate forbids keeping them; inspect kept test-only under cfg_attr(not(test),expect(dead_code)) (real test callers), priority::graph::build kept (4 live callers surface.rs:104/175/221/246). (2) 4 dead_code suppressions removed not plan's 5 — OrderContrib/seq_rank were live-rendered, never suppressed; actual suppressions were Fallback+Dangling+dangling field+ref_overlays. (3) exactly ONE blocked_by_transitive walk remains in explain (surface.rs:253); the 2nd died with the order-contrib block (F4 via F5)."
+disposition = "aligned"
+response = "All three deviations verified conformant and are the correct moves: (1) the no-dead-code clippy gate forces deletion of the 3 zero-caller wrappers — keeping thin delegates would fail the gate; the design's 'keep thin delegate' wording assumed callers that the _from split removed. (2) the plan's '5 suppressions' miscounted — OrderContrib/seq_rank were live-rendered, so only 4 existed to remove; zero remain. (3) F4's double-walk is resolved structurally by the F5 drop, leaving one walk. No code change required."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
