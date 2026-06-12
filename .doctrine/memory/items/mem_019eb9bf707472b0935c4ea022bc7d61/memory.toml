@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb9bf707472b0935c4ea022bc7d61"
+memory_key = "mem.pattern.tooling.jpi-double-op-trust-gate"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "jpi double op-run strips pi's UI; pi 0.79 trust gate then exits silently on a repo with .pi/.agents"
+summary = "jpi nested op run strips pi UI -> pi 0.79 trust gate exits silently; fix is single op + project trust"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["flake.nix"]
+globs = []
+commands = ["jpi", "jailed-pi"]
+tags = ["jail", "pi", "op", "tooling"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0b838f0d0e6be88e4b313af09b65b645994a9010"
+ref_name = "refs/heads/main"
+checkout_state_id = "bf79b0545af9ca8207eeca90b4e0c33b88fc087deaadc10ef71eeac64ea172e8"
+base_commit = "90fc19f4d9239b682cc7a14dc50738dad97348eb"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
