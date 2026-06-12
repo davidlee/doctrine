@@ -499,8 +499,12 @@ fn read_interactions(interactions_path: &Path) -> anyhow::Result<Vec<Interaction
 /// `interactions.toml` `[[edge]]` rows → [`RelationLabel::Interactions`] (target =
 /// the edge `target`; the per-edge free-text `type` is a SINGLE relation class here
 /// and re-read from the source at render — C2/D2, never encoded in the label).
-/// Reads via the existing `read_members`/`read_interactions` readers (no new TOML
-/// parse). Ordering: lineage, members, interactions — each in authored order.
+/// Members + interactions read via the existing `read_members`/`read_interactions`
+/// readers; the spec toml itself is parsed inline here because `spec.rs` has no
+/// single `read_spec` reader yet — it is the only edge-authoring kind without one,
+/// so this is the 4th inline `from_str::<Spec>` copy in the module (IMP-037 extracts
+/// the reader and routes all four through it). Ordering: lineage, members,
+/// interactions — each in authored order.
 pub(crate) fn relation_edges(
     subtype: SpecSubtype,
     root: &Path,
