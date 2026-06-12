@@ -51,10 +51,13 @@ same subset/order/duplicate semantics as every other kind. Default (no
       Column { name: "key",    header: "key",    cell: |m| scrub_line(m.key.as_deref().unwrap_or("-")) },
       Column { name: "title",  header: "title",  cell: |m| scrub_line(&m.title) },
   ];
-  const MEMORY_DEFAULT: [&str; 6] = ["uid", "type", "status", "trust", "key", "title"];
+  const MEMORY_DEFAULT: &[&str] = &["uid", "type", "status", "trust", "key", "title"];
   ```
-  Every `cell` is a non-capturing `fn(&Memory) -> String` (the `Column.cell` fn-pointer
-  contract; `scrub_line` is a free fn, so the closures coerce). This preserves the
+  `*_DEFAULT` is `&[&str]` and passed bare to `select_columns` (the `REC_DEFAULT` /
+  `SLICE_DEFAULT` convention), `*_COLUMNS` passed by ref. Every `cell` is a
+  non-capturing closure coercing to `fn(&Memory) -> String` — `REC_COLUMNS` proves
+  the const-closure form compiles (`cell: |d| canonical_id(d.id)`); `scrub_line` is
+  a free fn. This preserves the
   full-uid lead (F-A11), the security `scrub_line` on free-text cells (F-A10), and
   keyless→`-`.
 - `list_rows`: delete the `args.columns.is_some()` bail; take columns before
@@ -68,7 +71,7 @@ same subset/order/duplicate semantics as every other kind. Default (no
   sort_default(&mut rows);
   match format {
       Format::Table => {
-          let sel = listing::select_columns(&MEMORY_COLUMNS, &MEMORY_DEFAULT, columns.as_deref())?;
+          let sel = listing::select_columns(&MEMORY_COLUMNS, MEMORY_DEFAULT, columns.as_deref())?;
           Ok(listing::render_columns(&rows, &sel))
       }
       Format::Json => listing::json_envelope("memory", &json_rows(&rows)),
@@ -134,8 +137,10 @@ reported trigger.
 `src/input.rs` — bound `resolve_slug`:
 ```rust
 /// Symlink filenames are `NNN-slug` / `requirement-NNN-slug`; the filesystem caps
-/// a single name at 255 bytes. Cap the slug well under that. Slug chars are
-/// ASCII (1 byte each), so the char cap is the byte cap.
+/// a single name at 255 **bytes**. Cap the slug well under that. The bound is in
+/// bytes, not chars: a derived slug is ASCII (1 byte/char) but an explicit
+/// `--slug` is taken verbatim and may be multibyte, so a char cap would let a
+/// short-looking-but-fat slug overflow the byte limit and re-abort.
 const SLUG_MAX: usize = 100;
 
 pub(crate) fn resolve_slug(title: &str, slug: Option<String>) -> anyhow::Result<String> {
@@ -144,8 +149,8 @@ pub(crate) fn resolve_slug(title: &str, slug: Option<String>) -> anyhow::Result<
             if s.is_empty() {
                 bail!("--slug must not be empty");
             }
-            if s.chars().count() > SLUG_MAX {
-                bail!("--slug too long ({} chars; max {SLUG_MAX})", s.chars().count());
+            if s.len() > SLUG_MAX {
+                bail!("--slug too long ({} bytes; max {SLUG_MAX})", s.len());
             }
             Ok(s)
         }
@@ -159,11 +164,12 @@ pub(crate) fn resolve_slug(title: &str, slug: Option<String>) -> anyhow::Result<
     }
 }
 ```
-`truncate_slug` (new, `input.rs`, pure): if the slug is within `SLUG_MAX`, return
-it unchanged; else take the longest `char`-boundary prefix ≤ `SLUG_MAX`, and if a
-`-` occurs within that prefix (and not at position 0), cut at the last `-` instead
-(trim the trailing `-`). Never empties a non-empty slug (if no usable `-`, the
-hard char-prefix stands).
+`truncate_slug` (new, `input.rs`, pure): derived slugs are ASCII, so byte len ==
+char count. If within `SLUG_MAX`, return unchanged; else take the longest byte
+prefix ≤ `SLUG_MAX` (ASCII, so any cut is a char boundary), and if a `-` occurs
+within that prefix (not at position 0), cut at the last `-` instead and trim the
+trailing `-`. Never empties a non-empty slug (no usable `-` → the hard prefix
+stands). It only ever receives the ASCII output of `derive_slug`.
 
 ### Invariants / boundary conditions
 
@@ -216,7 +222,41 @@ trivial merge if parallelised; serial avoids it entirely.
 
 ## 5. Open questions
 
-- **OQ-1 (resolved, confirm at execute):** `SLUG_MAX = 100` chars. Rationale: the
-  255-byte name limit minus the longest prefix (`requirement-NNN-`, ~16 bytes)
+- **OQ-1 (resolved, confirm at execute):** `SLUG_MAX = 100` **bytes**. Rationale:
+  the 255-byte name limit minus the longest prefix (`requirement-NNN-`, ~16 bytes)
   leaves >200; 100 is a safe, round, generous bound for any real slug. Adjustable
   at execute if a convention surfaces.
+
+## 6. Adversarial review log (internal pass)
+
+- **A-R1 (fixed)** — const-closure `Column` cells: confirmed against `REC_COLUMNS`
+  (`cell: |d| canonical_id(d.id)`) that non-capturing closures coerce to the
+  `fn(&R) -> String` field in a `const` array. Not a risk.
+- **A-R2 (fixed)** — `MEMORY_DEFAULT` typed `[&str; 6]` in the first draft; the
+  established convention is `const … : &[&str] = &[…]` passed bare to
+  `select_columns`. Corrected in §1.
+- **A-R3 (fixed)** — the slug cap was drafted on `chars().count()`; the filesystem
+  limit is **bytes** and an explicit `--slug` is verbatim/possibly-multibyte, so a
+  char cap could still overflow and re-abort. Switched the guard to `s.len()`
+  (bytes). Derived slugs are ASCII so truncation is unaffected. (§2)
+- **A-R4 (out of scope, flagged)** — an explicit `--slug` is spliced into the
+  symlink filename verbatim (`requirement.rs:212`), so a path-hostile value
+  (`/`, `..`) is not rejected. This exposure is **pre-existing on `spec new
+  --slug`** (which already plumbs `--slug`); SL-049 does not introduce it and the
+  "no new slug grammar" non-goal fences it out. Capture as a follow-up issue, do
+  not fix here.
+- **A-R5 (checked, clean)** — behaviour-preservation gate: the three existing
+  `resolve_slug` unit tests (`prefers_the_explicit_flag`, `derives_from_the_title`,
+  `bails_when_symbol_only`) all stay green under the restructure — the None-branch
+  bail message and the explicit-passthrough are preserved; only the new
+  explicit-empty and over-cap branches add behaviour. No existing suite changes.
+- **A-R6 (checked, clean)** — ADR-001 layering: `resolve_slug`/`derive_slug`/
+  `truncate_slug` stay pure leaves (no clock/rng/git/disk); the column cells are
+  pure. No new cross-layer edge.
+
+## 7. Follow-ups (capture at close)
+
+- **FU-1** — path-hostile explicit `--slug` (`/`, `..`, control chars) accepted
+  verbatim into the `NNN-slug` symlink name on `spec new` / `spec req add` /
+  every `--slug`-bearing scaffolder. Pre-existing; needs a slug-grammar
+  validation pass. New backlog issue (not SL-049).
