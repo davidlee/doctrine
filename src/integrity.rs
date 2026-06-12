@@ -338,7 +338,7 @@ pub(crate) fn ensure_ref_resolves(root: &Path, reference: &str) -> anyhow::Resul
 /// Parse a canonical ref (`SL-031`) into its kind and numeric id. Reseat keys on
 /// the canonical ref, never a bare number (X2/D7) — the kind disambiguates the
 /// per-namespace id.
-fn parse_canonical_ref(reference: &str) -> anyhow::Result<(&'static KindRef, u32)> {
+pub(crate) fn parse_canonical_ref(reference: &str) -> anyhow::Result<(&'static KindRef, u32)> {
     let (prefix, num) = reference
         .rsplit_once('-')
         .with_context(|| format!("`{reference}` is not a canonical ref (expected e.g. SL-031)"))?;
