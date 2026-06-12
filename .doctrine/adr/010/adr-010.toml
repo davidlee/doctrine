@@ -2,8 +2,8 @@ schema = "doctrine.adr"
 version = 1
 
 id = 10
-slug = "relation-modelling-unify-the-pure-ref-class-keep-payload-edges-typed"
-title = "Relation modelling: unify the pure-ref class, keep payload edges typed"
+slug = "relation-modelling-unify-contract-and-write-seam-keep-storage-bespoke"
+title = "Relation modelling: unify the contract and write seam, keep storage bespoke"
 status = "proposed"
 created = "2026-06-12"
 updated = "2026-06-12"
