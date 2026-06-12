@@ -1,9 +1,18 @@
 id = 44
 slug = "reconcile-writer-closure-gate"
 title = "Reconcile writer + closure gate (SPEC-002 B)"
-status = "design"
+status = "plan"
 created = "2026-06-12"
-updated = "2026-06-11"
+updated = "2026-06-12"
+
+# D-B5 — closure-gate drift scope (authored, additive; set & peer-reviewed at /plan).
+# The closure gate's req set is `covered ∪ declared ∪ reconciled`; `extra_reqs` is the
+# `declared` term — a risk-calibrated authored declaration the gate can never check
+# LESS than. For SL-044 this is the reqs the slice realises (REQ-112 FR-005 sole writer,
+# REQ-113 FR-006 closure gate) and strengthens (REQ-114 NF-001 no-derivation, REQ-116
+# NF-003 reconstructable), so the slice's own closure gate is answerable for them.
+[gate]
+extra_reqs = ["REQ-112", "REQ-113", "REQ-114", "REQ-116"]
 
 [relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.

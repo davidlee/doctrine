@@ -1,0 +1,163 @@
+# Implementation plan for SL-044 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-044"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Write seam — spec req status setter"
+objective = """
+The authored-truth write primitive the reconcile writer needs (B·P1, D-B4/D-B6):
+one `spec req status <REQ> --to <state> [--note]` edit-preserving transition on the
+requirement's authored `status`, mirroring `set_slice_status` (`toml_edit::DocumentMut`
+in-place mutation — preserve comments / `[relationships]` / unknown keys; stamp
+`updated`). D-B6 (LOCKED): a FREE any→any setter mirroring `governance::set_status`
+(the adr precedent), NOT the ordered `set_slice_status` FSM — `revise` must move any
+direction to correct a mis-claim (e.g. `active→pending` when evidence refutes a
+claimed satisfaction); a forward-only FSM would refuse exactly those corrections.
+`ReqStatus` enforces no lifecycle order today; NO v1 terminal guard (a mis-`retired`
+req must be un-retirable). Both accept and revise reuse this single setter (D-B4 —
+the "spec-truth revise path" collapses into it; revise differs only by REC move +
+direction + the human's prose hand-edit, routed to the future IDE-003 vehicle).
+Transition by requirement id only — no title/slug derivation, so it dodges the
+ISS-004 unescaped-slug abort. Rides the `spec req` command tree (`src/spec.rs`,
+`run_req_add` the only verb today); IMP-006 uniformity — fold into the `slice status`
+transition shape, not a parallel one. Clock/disk in the thin shell (ADR-001); the
+status select is trivial here (no coverage in scope yet). No reconcile logic.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked — adversarial pass (codex gpt-5.5) integrated, D-B1..D-B8 LOCKED, eligible-for-plan" },
+  { id = "EN-2", text = "set_slice_status edit-preserving pattern (slice.rs:478) + governance::set_status free-setter precedent present to mirror; spec req tree has add-only today (no status verb)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`spec req status <REQ> --to <state>` transitions the authored ReqStatus edit-preservingly: toml_edit DocumentMut; comments / [relationships] / unknown keys survive; `updated` stamped (mirrors set_slice_status)" },
+  { id = "EX-2", text = "Free any→any (D-B6): any ReqStatus → any ReqStatus accepted incl. backward (active→pending) and same-state; no FSM order, no terminal guard" },
+  { id = "EX-3", text = "Transition by requirement id only — no title/slug derivation (dodges ISS-004); unknown id / invalid --to rejected cleanly" },
+  { id = "EX-4", text = "Clock/disk confined to the thin shell (ADR-001); clippy zero-warning bins/lib, just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "B·P1: set status round-trips edit-preservingly — comments, [relationships], unknown keys survive; `updated` stamped (mirror of the set_slice_status pattern)" },
+  { id = "VT-2", expects = "B·P1/D-B6: free any→any — active→pending (backward) and a same-state set both succeed; no FSM refusal, no terminal guard" },
+  { id = "VT-3", expects = "B·P1: unknown REQ id and invalid --to state each rejected with a clear error; transition is by id, no slug derivation (ISS-004 dodge)" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Reconcile writer — sole author, one REC per act"
+objective = """
+The sole author of reconciled requirement status in the loop (B·P2, D7,
+REQ-112/FR-005; strengthens REQ-114/NF-001, REQ-116/NF-003). Per divergence it
+applies ONE move (§5.1) and emits EXACTLY ONE REC: accept (affirm — call the B·P1
+setter with the operator's EXPLICIT --to target, moves iff authored lagged; record
+the [req,from,to] delta + the backing `evidence_ref` CoverageKeys); revise (correct
+— B·P1 setter to the corrected status; delta; prose hand-edited → IDE-003); redesign
+(escalate — `slice status <S> design`, the ADR-009 back-edge; REC with EMPTY
+status_delta, F7; NO instance write). D-B8 (LOCKED): one REC per requirement, forced
+by the single `RecMeta.move` String — the writer COMPOSES the full RecDoc and writes
+it atomically (NOT `rec new` empty + append; append contradicts REC immutability,
+SL-042 D-Q3, and no append verb exists). A single CLI invocation MAY reconcile
+several reqs — one atomic REC each. NF-001 wall (D-B7, §5.6), layered — no single
+mechanism suffices: (1) status selection is a pure fn whose params EXCLUDE every
+coverage-derived type — `select_status(to: ReqStatus, prior: ReqStatus) -> ReqStatus`
+(type-level; shrinks laundering to one call site, the verdict→status `match` won't
+compile out of scope); (2) `drift`'s Verdict flows ONLY into `build_prompt(verdict)
+-> PromptText`, consumed there, absent at the write; (3) a verdict-independence VT on
+the residual handler site. Shell resolves scan_coverage(R) → composite → drift(authored,
+&composite) (read-only — PROMPTS only, never feeds the write). Each act commits + a
+REC → reconstructable from the authored tier alone (NF-003). Purity: move
+classification + RecDoc composition are pure over resolved inputs; git/disk/clock in
+the shell.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — the `spec req status` setter exists (accept & revise call it)" },
+  { id = "EN-2", text = "SL-042 reads available: drift(authored, &composite)->Verdict (coverage.rs:249), composite() (coverage.rs:182), scan_coverage (coverage_scan.rs:50); REC schema RecDoc/RecMeta/StatusDelta/EvidenceRef present (rec.rs)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Writer applies accept/revise via the B·P1 setter to the operator's explicit --to; redesign drives `slice status <S> design` and writes NO instance status (F7)" },
+  { id = "EX-2", text = "Exactly one REC per requirement (D-B8): full RecDoc composed and written atomically — no rec-new+append; redesign REC carries empty status_delta" },
+  { id = "EX-3", text = "NF-001 wall (D-B7): select_status's signature excludes every coverage-derived type (Verdict/Composite/CoverageKey); Verdict flows only into the prompt builder, absent at the write site" },
+  { id = "EX-4", text = "Each act commits + cites its REC — a requirement's current status is reconstructable from the authored tier alone (NF-003); clippy clean, just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "REQ-112: accept writes status via the B·P1 setter and emits ONE REC with the [req,from,to] delta and the backing evidence_ref CoverageKeys" },
+  { id = "VT-2", expects = "REQ-112: revise moves the corrected status + one REC; redesign escalates reconcile→design with an empty-status_delta REC and NO instance write (F7)" },
+  { id = "VT-3", expects = "REQ-112/D-B8: one REC per requirement — reconciling two reqs under different moves emits two distinct atomic RECs (forced by the single move field); no append path" },
+  { id = "VT-4", expects = "REQ-114/NF-001 (structural): select_status is reachable only with (--to, prior) — a check its params name no coverage-derived type; the Verdict is consumed by build_prompt, out of scope at the write" },
+  { id = "VT-5", expects = "REQ-114/NF-001 (behavioural): verdict-independence — hold --to fixed, vary EVERY coverage-derived handler input (full Composite/staleness, not just the Verdict discriminant); the written status never moves" },
+  { id = "VT-6", expects = "REQ-116/NF-003: a REC + its commit reconstruct the requirement's current status with no runtime-state recourse" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Closure gate predicate — refuse unreconciled drift"
+objective = """
+A second predicate in `run_status` (slice.rs) beside the RV-blocker scan, firing on
+the SAME `crosses_closure_seam` — specifically `reconcile→done` (B·P3, D8,
+REQ-113/FR-006). Gate req set = `covered ∪ declared ∪ reconciled` (D-B5): `covered` =
+the distinct reqs physically in S's OWN `.doctrine/slice/044/coverage.toml`, each
+VALIDATED `key.slice == S` (a foreign `slice =` in S's own file is an integrity
+error, refuse — codex finding 6) → needs a NEW slice-local coverage reader returning
+distinct reqs (R-B4; `scan_coverage` is per-req-across-all-slices, no enumerator);
+`declared` = the authored additive `[gate] extra_reqs` list in `slice-044.toml`
+(authored slice-metadata tier, set + peer-reviewed at /plan — codex finding 4);
+`reconciled` = every req a REC `owning_slice == S` names (closes the opt-in dodge —
+codex finding 3). Additive by construction — never checks less than the union. Per R:
+`drift(authored(R), composite(scan_coverage(R)))`; {Divergent, Indeterminate} =
+residual drift. Discharge predicate (LOCKED, R-B3 / codex finding 2): residual drift
+on R excused iff the LATEST REC for (owning_slice == S, R) satisfies ALL — (a)
+move == accept (an affirm); (b) status_delta names R with to == R's current authored
+status; (c) evidence_ref set ⊇ the current residual drift's evidence keys (so fresh
+contradictory evidence after the REC re-opens drift a stale REC cannot excuse).
+Undischarged residual drift → REFUSE (bail, like the blocker gate). Reverse req→REC
+lookup = on-demand max-id, owning_slice-scoped corpus scan (D-B3/ADR-004 — NO stored
+link, NO reverse index; perf escalation = RSK-006). The `done`-only-from-`reconcile`
+F12 topology stays hard independent of this check; composes with (does NOT replace)
+the D-C9b RV-blocker gate on the same seam. Gate predicate pure over resolved inputs
+(mirrors §5.4); git/disk in the shell. Gate lives in the command shell, not the FSM
+writer (ADR-001 shell→query one-way coupling).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — RECs with owning_slice / move / status_delta / evidence_ref exist to scan" },
+  { id = "EN-2", text = "`[gate] extra_reqs` declared in slice-044.toml (D-B5): set & peer-reviewed at /plan, calibrated to scope & risk" },
+  { id = "EN-3", text = "run_status close-gate shell present to extend: crosses_closure_seam (slice.rs:373→601) + the D-C9b review::unresolved_blockers_for scan to sit beside" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A drift predicate fires on the reconcile→done crossing in run_status beside the RV-blocker scan; F12 topology and the D-C9b blocker gate are both preserved and independent" },
+  { id = "EX-2", text = "Gate req set = covered ∪ declared ∪ reconciled (D-B5); the new slice-local coverage reader returns distinct reqs and REFUSES key.slice != S in S's own file (R-B4)" },
+  { id = "EX-3", text = "Discharge requires the latest (owning_slice==S, R) REC with move==accept ∧ to==current ∧ evidence_ref ⊇ residual evidence keys; otherwise the crossing is refused" },
+  { id = "EX-4", text = "Reverse req→REC lookup is an on-demand max-id owning_slice-scoped corpus scan — no stored link / reverse index (D-B3, ADR-004); clippy clean, just check green" },
+]
+verification = [
+  { id = "VT-1", expects = "REQ-113: gate refuses undischarged residual drift on a covered req; the F12 reconcile→done topology refuses an out-of-seam crossing independent of the drift check" },
+  { id = "VT-2", expects = "REQ-113/D-B5: an extra_reqs-declared req AND a REC-reconciled req each block closure on residual drift same as a covered one; no [gate] table → declared=∅, gate runs on covered ∪ reconciled (additive floor)" },
+  { id = "VT-3", expects = "REQ-113/D-B5/R-B4: the slice-local reader returns distinct covered reqs and refuses a foreign key.slice in S's own coverage.toml as an integrity error" },
+  { id = "VT-4", expects = "REQ-113 discharge (i): an owning_slice==S, move==accept, to==current REC whose evidence_ref covers the residual evidence DISCHARGES the drift" },
+  { id = "VT-5", expects = "REQ-113 discharge (ii, R-B3): the SAME REC does NOT discharge once a post-REC coverage cell introduces fresh drift (evidence-coverage clause)" },
+  { id = "VT-6", expects = "REQ-113 discharge (iii/iv): a revise/redesign REC does NOT discharge (move==accept clause); a foreign owning_slice REC does NOT discharge" },
+  { id = "VT-7", expects = "REQ-113: composes with D-C9b — an unresolved RV blocker and residual drift each independently refuse the same reconcile→done crossing" },
+]
+specs             = []
+requirements      = []
