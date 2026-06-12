@@ -891,25 +891,136 @@ const BL_COLUMNS: [listing::Column<BacklogItem>; 5] = [
 /// The default visible set — slug-free (SL-037 D4); `--columns …,slug` reveals it.
 const BL_DEFAULT: &[&str] = &["id", "kind", "status", "title"];
 
-/// The `backlog list` output as a string — the compute half of `run_list`, on the
-/// shared spine. `validate_statuses` guards `--status` (A-2); `listing::build`
-/// resolves the filter + format; `retain` applies the shared substr/regex/status/
-/// tag axes + the terminal hide-set ([`is_hidden`], reusing `Status::is_terminal`).
-/// The kind-specific `--kind` filter (not a shared axis) is applied here. backlog
-/// sorts by `(kind.ordinal, id)` — its variant ordering, never in `retain` (§5.3).
-fn list_rows(root: &Path, kind: Option<ItemKind>, mut args: ListArgs) -> anyhow::Result<String> {
+/// How `backlog list` orders its rows (SL-051, the folded-in `order` axis). The
+/// default `Sequence` composes the cordage `needs`/`after` work order over the live
+/// corpus; `Id` is the classic `(kind.ordinal, id)` grouping.
+#[derive(Clone, Copy, Debug, Default, clap::ValueEnum)]
+pub(crate) enum OrderBy {
+    /// The composed `needs`/`after` work order (default).
+    #[default]
+    Sequence,
+    /// The classic `(kind.ordinal, id)` grouping.
+    Id,
+}
+
+/// The composed ordering over the live corpus plus its honest-record diagnostic
+/// (SL-051 — the folded-in `order` view). `pos` maps each composed item to its
+/// position; `footer` is the `render_overrides` honest-record block (`""` when
+/// clean); `degraded`/`warning` carry the `needs`-cycle fallback signal.
+struct Ordering {
+    /// Composed positions; empty when degraded (a `needs` cycle forced the fallback).
+    pos: BTreeMap<ItemId, usize>,
+    /// The `render_overrides` honest-record block (`""` when nothing was dropped).
+    footer: String,
+    /// Whether a `needs` cycle forced the classic id-sort fallback.
+    degraded: bool,
+    /// The cycle advisory, for stderr (`Some` only when degraded).
+    warning: Option<String>,
+}
+
+/// Compose the `needs`/`after` work order over the live corpus (SL-051 — the former
+/// `order_rows` compute, folded into `list`). PURE over the read corpus. Projects the
+/// non-terminal node set, builds the adapter, and renders the honest-record `footer`.
+/// On a `needs` dependency cycle, `build` still succeeds; `compose` returns
+/// `degraded` (an empty `pos`) plus the cycle `warning`, so `list_rows` falls back to
+/// the classic id sort and emits the advisory to stderr (no misleading order, never a
+/// non-zero exit — SL-051 §4.4). Borrows `corpus` (then `list_rows` MOVES it into
+/// `retain`).
+fn compose(corpus: &[BacklogItem]) -> anyhow::Result<Ordering> {
+    let (inputs, absent) = project(corpus);
+    let order = BacklogOrder::build(&inputs)?;
+    let cmap: BTreeMap<ItemId, &BacklogItem> = corpus
+        .iter()
+        .map(|i| (ItemId::new(i.kind, i.id), i))
+        .collect();
+    let footer = render_overrides(&cmap, &absent, &order.overrides());
+    if let Some(cycle) = order.dep_cycles().first() {
+        return Ok(Ordering {
+            pos: BTreeMap::new(),
+            footer,
+            degraded: true,
+            warning: Some(format!(
+                "backlog list: `needs` dependency cycle — {} — ordering by id (resolve, then re-run)",
+                name_cycle(cycle)
+            )),
+        });
+    }
+    let pos = order
+        .ordered()
+        .iter()
+        .enumerate()
+        .map(|(i, id)| (*id, i))
+        .collect();
+    Ok(Ordering {
+        pos,
+        footer,
+        degraded: false,
+        warning: None,
+    })
+}
+
+/// The `backlog list` output — the compute half of `run_list`, on the shared spine.
+/// Returns `(stdout, stderr)` IN THAT ORDER (the shell must not transpose). `stdout`
+/// carries the rendered rows (plus the honest-record `footer` in table mode);
+/// `stderr` carries the cycle `warning` (and, under `--json`, the advisory `footer`).
+///
+/// `validate_statuses` guards `--status` (A-2); `listing::build` resolves the filter +
+/// format; `retain` applies the shared substr/regex/status/tag axes + the terminal
+/// hide-set ([`is_hidden`], reusing `Status::is_terminal`); the kind-specific `--kind`
+/// filter (not a shared axis) is applied here. The corpus is read ONCE: `--by
+/// sequence` composes the work order over the FULL non-terminal corpus (`compose`
+/// borrows first), then `retain` MOVES the corpus and the surviving rows tail by
+/// `(usize::MAX, kind.ordinal, id)` for off-sequence items. `--by id` (or a
+/// cycle-degrade) skips the graph and sorts by `(kind.ordinal, id)` (§5.3). Membership
+/// is EXACTLY `retain ∩ --kind` either way (A-2 invariant) — the ordering never filters.
+fn list_rows(
+    root: &Path,
+    kind: Option<ItemKind>,
+    by: OrderBy,
+    mut args: ListArgs,
+) -> anyhow::Result<(String, String)> {
     validate_statuses(&args.status, BACKLOG_STATUSES)?;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
-    let mut items = listing::retain(read_all(root)?, &filter, is_hidden, key);
+    let corpus = read_all(root)?;
+    let ordering = match by {
+        OrderBy::Sequence => Some(compose(&corpus)?),
+        OrderBy::Id => None,
+    };
+    let mut items = listing::retain(corpus, &filter, is_hidden, key);
     items.retain(|i| kind.is_none_or(|k| i.kind == k));
-    items.sort_by_key(|i| (i.kind.ordinal(), i.id));
+    match &ordering {
+        Some(o) if !o.degraded => items.sort_by_key(|i| {
+            (
+                o.pos
+                    .get(&ItemId::new(i.kind, i.id))
+                    .copied()
+                    .unwrap_or(usize::MAX),
+                i.kind.ordinal(),
+                i.id,
+            )
+        }),
+        _ => items.sort_by_key(|i| (i.kind.ordinal(), i.id)),
+    }
+    let footer = ordering.as_ref().map_or("", |o| o.footer.as_str());
+    let warning = ordering
+        .as_ref()
+        .and_then(|o| o.warning.as_deref())
+        .unwrap_or("");
     match format {
         Format::Table => {
             let sel = listing::select_columns(&BL_COLUMNS, BL_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&items, &sel))
+            let table = listing::render_columns(&items, &sel);
+            // Table: rows + footer to stdout; the cycle warning to stderr.
+            Ok((format!("{table}{footer}"), warning.to_string()))
         }
-        Format::Json => listing::json_envelope("backlog", &json_rows(&items)),
+        Format::Json => {
+            // JSON: the envelope (rows in composed sequence) to stdout; the warning
+            // and the advisory footer to stderr (the honest-record stays out of the
+            // envelope — no listing.rs change).
+            let envelope = listing::json_envelope("backlog", &json_rows(&items))?;
+            Ok((envelope, format!("{warning}{footer}")))
+        }
     }
 }
 
@@ -937,10 +1048,15 @@ fn json_rows(items: &[BacklogItem]) -> Vec<BacklogRow> {
 pub(crate) fn run_list(
     path: Option<PathBuf>,
     kind: Option<ItemKind>,
+    by: OrderBy,
     args: ListArgs,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    write!(io::stdout(), "{}", list_rows(&root, kind, args)?)?;
+    let (out, err) = list_rows(&root, kind, by, args)?;
+    write!(io::stdout(), "{out}")?;
+    if !err.is_empty() {
+        write!(io::stderr(), "{err}")?;
+    }
     Ok(())
 }
 
@@ -1368,7 +1484,8 @@ pub(crate) fn run_edit(
 /// A bad prefix / non-numeric tail (`parse_ref` Err) or a missing file is a HARD
 /// user error (`bail!` via the `?`), never a soft drop: a set verb must reject a
 /// stale ref at author time (design §5.6 — the absent case is rejected here, so
-/// `order` only ever defends against later staleness). Returns the resolved id.
+/// `list`'s sequence compose only ever defends against later staleness). Returns the
+/// resolved id.
 fn require_item(root: &Path, reference: &str) -> anyhow::Result<(ItemKind, u32)> {
     let (kind, id) = parse_ref(reference)?;
     read_item(root, kind, id)?;
@@ -1445,7 +1562,8 @@ pub(crate) fn run_needs(
 /// `doctrine backlog after <ITEM> <TO> [--rank N]` — append ONE soft-sequence edge
 /// (PRD-009, design §5.5). Thin shell: validate ITEM + the single TO exists, then
 /// append `{ to, rank }` (rank optional, default 0). **Never** rejects a cycle — a
-/// soft `after` cycle is surfaced (and an edge evicted) at `order` time (VT-6).
+/// soft `after` cycle is surfaced (and an edge evicted) when `list` composes the
+/// sequence (VT-6).
 pub(crate) fn run_after(
     path: Option<PathBuf>,
     reference: &str,
@@ -1471,7 +1589,7 @@ pub(crate) fn run_after(
 }
 
 // ---------------------------------------------------------------------------
-// PHASE-03 read verb: `backlog order` (composed order + the honest-record block)
+// The honest-record block (SL-051: folded into `backlog list --by sequence`)
 // ---------------------------------------------------------------------------
 
 /// Name a `Dangling` endpoint loudly (A-classify / DD1 / design §5.6 E1): the
@@ -1548,54 +1666,6 @@ fn render_overrides(
     let mut out = vec!["\noverrides:\n".to_string()];
     out.extend(lines);
     out.concat()
-}
-
-/// The `backlog order` output as a string — the compute half (PURE over the read
-/// corpus). Projects the non-terminal node set, builds the adapter, and — UNLESS a
-/// `needs` cycle is present — renders the composed order (the `list` column model,
-/// rows in cordage `ordered()` order) followed by the honest-record `overrides:`
-/// block. A `needs` **dep cycle is a hard error** (design §5.5 / EX-3): a returned
-/// `anyhow::Error` naming the members → `main`'s error path (stderr, non-zero exit),
-/// NO misleading order printed.
-fn order_rows(root: &Path) -> anyhow::Result<String> {
-    let items = read_all(root)?;
-    let (inputs, absent) = project(&items);
-    let order = BacklogOrder::build(&inputs)?;
-
-    if let Some(cycle) = order.dep_cycles().first() {
-        anyhow::bail!(
-            "`backlog order` cannot compose: a `needs` dependency cycle — {} (resolve it, then re-run)",
-            name_cycle(cycle)
-        );
-    }
-
-    // a fast ItemId → item index for the order render and the dangling classifier.
-    let corpus: BTreeMap<ItemId, &BacklogItem> = items
-        .iter()
-        .map(|i| (ItemId::new(i.kind, i.id), i))
-        .collect();
-
-    // the composed order — rows in cordage order (NOT (kind,id)); the `list` columns.
-    let ordered: Vec<BacklogItem> = order
-        .ordered()
-        .iter()
-        .filter_map(|id| corpus.get(id).map(|i| (*i).clone()))
-        .collect();
-    let sel = listing::select_columns(&BL_COLUMNS, BL_DEFAULT, None)?;
-    let table = listing::render_columns(&ordered, &sel);
-
-    let overrides = render_overrides(&corpus, &absent, &order.overrides());
-    Ok(format!("{table}{overrides}"))
-}
-
-/// `doctrine backlog order` — the composed-order view (PRD-009, design §5.5). Thin
-/// shell: find the root, compute, print. READ-only. A `needs` dep cycle returns an
-/// error (the shell never prints a misleading order) — `main` surfaces it on stderr
-/// with a non-zero exit.
-pub(crate) fn run_order(path: Option<PathBuf>) -> anyhow::Result<()> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
-    write!(io::stdout(), "{}", order_rows(&root)?)?;
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -2192,6 +2262,14 @@ tags = []
         ListArgs::default()
     }
 
+    /// Drive `list_rows` in the classic `--by id` mode and return just stdout — the
+    /// shape every pre-SL-051 list test expected (membership / filter / column
+    /// behaviour, asserted against the `(kind.ordinal, id)` grouping). The composed
+    /// `--by sequence` default is exercised separately (VT-1 / VT-2).
+    fn list_id(root: &Path, kind: Option<ItemKind>, args: ListArgs) -> anyhow::Result<String> {
+        list_rows(root, kind, OrderBy::Id, args).map(|(out, _)| out)
+    }
+
     // --- §5.5: the uniform table header (extends to backlog) ---
 
     #[test]
@@ -2200,7 +2278,7 @@ tags = []
         let root = dir.path();
         write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
 
-        let out = list_rows(root, None, list_args()).unwrap();
+        let out = list_id(root, None, list_args()).unwrap();
         let lines: Vec<&str> = out.lines().collect();
         // §5.5: rows present → a header row naming the columns, then the data.
         assert!(lines[0].starts_with("id"), "header row: {:?}", lines[0]);
@@ -2216,7 +2294,7 @@ tags = []
     fn backlog_list_empty_suppresses_the_header() {
         let dir = tempfile::tempdir().unwrap();
         // no items written → "" (header suppressed, §5.5 virgin-repo contract).
-        assert_eq!(list_rows(dir.path(), None, list_args()).unwrap(), "");
+        assert_eq!(list_id(dir.path(), None, list_args()).unwrap(), "");
     }
 
     // --- SL-037: the column model (default omits slug, --columns reveals) ---
@@ -2244,7 +2322,7 @@ tags = []
             &[],
         );
 
-        let out = list_rows(root, None, list_args()).unwrap();
+        let out = list_id(root, None, list_args()).unwrap();
         let header = out.lines().next().unwrap();
         // SL-037 D4: default visible set is [id, kind, status, title] — slug hidden.
         assert!(
@@ -2277,7 +2355,7 @@ tags = []
         );
 
         // Reorder slug ahead of title and reveal it.
-        let out = list_rows(root, None, columns_args(&["id", "slug", "title"])).unwrap();
+        let out = list_id(root, None, columns_args(&["id", "slug", "title"])).unwrap();
         let header = out.lines().next().unwrap();
         assert_eq!(
             header.split_whitespace().collect::<Vec<_>>(),
@@ -2295,7 +2373,7 @@ tags = []
         let root = dir.path();
         write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
 
-        let err = list_rows(root, None, columns_args(&["bogus"]))
+        let err = list_id(root, None, columns_args(&["bogus"]))
             .err()
             .map(|e| e.to_string())
             .unwrap_or_default();
@@ -2330,7 +2408,7 @@ tags = []
         );
         write_item(root, ItemKind::Issue, 5, "closed", "done", "e", "Echo", &[]);
 
-        let out = list_rows(root, None, list_args()).unwrap();
+        let out = list_id(root, None, list_args()).unwrap();
         assert_eq!(
             ids(&out),
             vec!["ISS-001", "ISS-002", "ISS-003"],
@@ -2368,7 +2446,7 @@ tags = []
         );
 
         // --all reveals every state.
-        let all = list_rows(
+        let all = list_id(
             root,
             None,
             ListArgs {
@@ -2385,7 +2463,7 @@ tags = []
 
         // an explicit --status resolved reveals exactly that terminal state
         // (open hidden, closed hidden; the promoted resolved item included).
-        let resolved = list_rows(
+        let resolved = list_id(
             root,
             None,
             ListArgs {
@@ -2439,7 +2517,7 @@ tags = []
         );
 
         // --kind issue AND --tag security AND substring "auth" → only ISS-001.
-        let out = list_rows(
+        let out = list_id(
             root,
             Some(ItemKind::Issue),
             ListArgs {
@@ -2467,7 +2545,7 @@ tags = []
         write_item(root, ItemKind::Idea, 1, "open", "", "d", "D", &[]);
         write_item(root, ItemKind::Chore, 1, "open", "", "c", "C", &[]);
 
-        let out = list_rows(root, None, list_args()).unwrap();
+        let out = list_id(root, None, list_args()).unwrap();
         assert_eq!(
             ids(&out),
             vec!["ISS-001", "ISS-002", "CHR-001", "RSK-001", "IDE-001"],
@@ -2484,7 +2562,7 @@ tags = []
         // only the issue tree exists; the other four kind dirs are absent.
         write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
 
-        let out = list_rows(root, None, list_args()).unwrap();
+        let out = list_id(root, None, list_args()).unwrap();
         assert_eq!(
             ids(&out),
             vec!["ISS-001"],
@@ -2497,7 +2575,7 @@ tags = []
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         // no `.doctrine/backlog` at all — every kind reads empty.
-        let out = list_rows(root, None, list_args()).unwrap();
+        let out = list_id(root, None, list_args()).unwrap();
         assert_eq!(
             out, "",
             "a virgin repo prints an empty table, never an error"
@@ -2515,7 +2593,7 @@ tags = []
 
         // --regexp over the canonical-id domain, made case-insensitive (-i): the
         // lower-case `iss` matches `ISS-001` only.
-        let out = list_rows(
+        let out = list_id(
             root,
             None,
             ListArgs {
@@ -2548,7 +2626,7 @@ tags = []
             &[],
         );
 
-        let json = list_rows(
+        let json = list_id(
             root,
             None,
             ListArgs {
@@ -2574,7 +2652,7 @@ tags = []
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
-        let err = list_rows(
+        let err = list_id(
             root,
             None,
             ListArgs {
@@ -3555,56 +3633,121 @@ tags = []
         );
     }
 
-    // --- PHASE-03 T5: `order_rows` compute (the render half) ---
+    // --- SL-051: the composed `backlog list --by sequence` (the folded-in order) ---
 
-    /// The table portion of an `order` render (before the `overrides:` block) → its
-    /// composed-order ids. Reuses [`ids`] over just the table half.
-    fn order_ids(out: &str) -> Vec<String> {
+    /// Drive `list_rows` in the default `--by sequence` mode, returning `(stdout,
+    /// stderr)` — the SL-051 tuple shape (rows + footer on stdout, the cycle advisory
+    /// on stderr).
+    fn list_seq(root: &Path, args: ListArgs) -> (String, String) {
+        list_rows(root, None, OrderBy::Sequence, args).unwrap()
+    }
+
+    /// The composed-order ids from a `--by sequence` stdout (before the `overrides:`
+    /// honest-record footer). Reuses [`ids`] over just the table half.
+    fn seq_ids(out: &str) -> Vec<String> {
         let table = out.split("\noverrides:").next().unwrap_or(out);
         ids(table)
     }
 
     #[test]
-    fn order_rows_composes_a_hard_needs_order() {
+    fn list_sequence_composes_a_hard_needs_order() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         // ISS-001 needs ISS-002 ⇒ ISS-002 must precede ISS-001 in the order.
         write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-002"], &[]);
         write_rel_item(root, ItemKind::Issue, 2, "open", &[], &[]);
 
-        let out = order_rows(root).unwrap();
+        let (out, err) = list_seq(root, list_args());
         assert_eq!(
-            order_ids(&out),
+            seq_ids(&out),
             vec!["ISS-002", "ISS-001"],
             "B precedes A: {out}"
         );
-        assert!(!out.contains("overrides:"), "no drops, no block: {out}");
+        assert!(!out.contains("overrides:"), "no drops, no footer: {out}");
+        assert!(err.is_empty(), "no advisory on a clean compose: {err:?}");
     }
 
+    // --- VT-1: --by sequence vs --by id share membership; differ on order ---
+
     #[test]
-    fn order_rows_hard_errors_on_a_needs_cycle_with_no_table() {
+    fn list_sequence_and_id_share_membership_differ_on_order() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        // VT-5: a hand-seeded mutual needs cycle {A,B}.
+        // ISS-001 needs ISS-002 — the sequence flips them; the id sort does not.
+        write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-002"], &[]);
+        write_rel_item(root, ItemKind::Issue, 2, "open", &[], &[]);
+        write_rel_item(root, ItemKind::Issue, 3, "open", &[], &[]);
+
+        let (seq, _) = list_seq(root, list_args());
+        let by_id = list_id(root, None, list_args()).unwrap();
+
+        // default sequence: the prerequisite (ISS-002) precedes its dependent (ISS-001);
+        // the unconstrained ISS-003 sits where the tie-break (id asc) places it — the
+        // key point is 002-before-001, which the plain id sort would NOT produce.
+        let seq_order = seq_ids(&seq);
+        let pos = |id: &str| seq_order.iter().position(|x| x == id).unwrap();
+        assert!(
+            pos("ISS-002") < pos("ISS-001"),
+            "needs flips 002 ahead of its dependent 001: {seq}"
+        );
+        // classic id sort: ascending id, unaffected by the dependency.
+        assert_eq!(
+            ids(&by_id),
+            vec!["ISS-001", "ISS-002", "ISS-003"],
+            "--by id is plain ascending: {by_id}"
+        );
+        // A-2: the two orderings are PERMUTATIONS — identical membership sets.
+        let mut a = seq_ids(&seq);
+        let mut b = ids(&by_id);
+        a.sort();
+        b.sort();
+        assert_eq!(a, b, "sequence and id list the same items, reordered");
+    }
+
+    // --- VT-2: a `needs` cycle degrades to the id sort with a stderr advisory ---
+
+    #[test]
+    fn compose_degrades_on_a_needs_cycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // a mutual needs cycle {ISS-001, ISS-002}.
         write_rel_item(root, ItemKind::Issue, 1, "open", &["ISS-002"], &[]);
         write_rel_item(root, ItemKind::Issue, 2, "open", &["ISS-001"], &[]);
 
-        let err = order_rows(root).unwrap_err();
-        let msg = err.to_string();
-        assert!(msg.contains("cycle"), "names the failure: {msg}");
+        let corpus = read_all(root).unwrap();
+        let ordering = compose(&corpus).unwrap();
+        assert!(ordering.degraded, "a needs cycle degrades");
         assert!(
-            msg.contains("ISS-001") && msg.contains("ISS-002"),
-            "names members: {msg}"
+            ordering.pos.is_empty(),
+            "no composed positions when degraded"
         );
+        let warning = ordering
+            .warning
+            .expect("a degraded compose carries a warning");
+        assert!(warning.contains("cycle"), "names the failure: {warning}");
+        assert!(
+            warning.contains("ISS-001") && warning.contains("ISS-002"),
+            "names members: {warning}"
+        );
+
+        // end to end: `list --by sequence` falls back to the id sort, EXITS 0 (no
+        // error), and routes the advisory to stderr — never an empty / misleading list.
+        let (out, err) = list_seq(root, list_args());
+        assert_eq!(
+            ids(&out),
+            vec!["ISS-001", "ISS-002"],
+            "degrade falls back to the id sort, never empty: {out}"
+        );
+        assert!(err.contains("cycle"), "the advisory is on stderr: {err}");
     }
 
     #[test]
-    fn order_rows_evicts_the_lower_rank_edge_of_a_soft_cycle() {
+    fn list_sequence_evicts_the_lower_rank_edge_of_a_soft_cycle() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         // VT-6: X.after=[{to=Y,rank=1}], Y.after=[{to=X,rank=5}] ⇒ the strictly
-        // lower-rank edge (X→Y, the edge X.after=[Y] flips to Y→X cordage… name by
-        // ItemId) is evicted. The order is still produced; the eviction is recorded.
+        // lower-rank edge is evicted. The order is still produced; the eviction is
+        // recorded in the stdout footer.
         write_rel_item(
             root,
             ItemKind::Issue,
@@ -3628,12 +3771,12 @@ tags = []
             }],
         );
 
-        let out = order_rows(root).unwrap();
+        let (out, _) = list_seq(root, list_args());
         // both nodes still ordered (the cycle was linearized, not refused).
-        let mut shown = order_ids(&out);
+        let mut shown = seq_ids(&out);
         shown.sort();
         assert_eq!(shown, vec!["ISS-001", "ISS-002"]);
-        // exactly the soft-cycle eviction is recorded.
+        // exactly the soft-cycle eviction is recorded in the footer.
         assert!(
             out.contains("overrides:"),
             "the eviction is recorded: {out}"
@@ -3642,7 +3785,7 @@ tags = []
     }
 
     #[test]
-    fn order_rows_records_terminal_and_absent_drops_with_status_and_resolution() {
+    fn list_sequence_records_terminal_and_absent_drops_with_status_and_resolution() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         // VT-7: ISS-001 needs a terminal (CHR-001 closed/wont-do) AND an absent ref.
@@ -3666,10 +3809,10 @@ tags = []
             &[],
         );
 
-        let out = order_rows(root).unwrap();
+        let (out, _) = list_seq(root, list_args());
         // the live node still orders.
         assert_eq!(
-            order_ids(&out),
+            seq_ids(&out),
             vec!["ISS-001"],
             "the live node survives: {out}"
         );
