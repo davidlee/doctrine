@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebb199a017d91b3af2ac09918b118"
+memory_key = "mem.pattern.design.unified-read-not-unified-write"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Unified read seam does not deliver a unified write seam"
+summary = "When weighing whether to unify entity storage, the authoring/link write verb is the deciding force, not the reader — a read adapter unifies reads without giving a shared writer"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["relations", "modelling", "adr-010"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "168eb34fc739ed6fbe67094b6ad83e83624898dc"
+ref_name = "refs/heads/main"
+checkout_state_id = "9f77058941f0c38e8a23dc335f364be2ac1543a8d89b66e5dc45f517e645ac11"
+base_commit = "69e667b7629dbe8800529d612a0a071929724d09"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
