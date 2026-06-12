@@ -17,20 +17,10 @@
 //! binds against the ADR-009/`SLICE_STATUSES` lifecycle vocabulary (its stringly status
 //! has no closed enum), and a slice status outside the table rides `Unrecognised`.
 //!
-//! Built ahead of its first non-test consumer (the `priority` CLI command, PHASE-03):
-//! until a non-test caller lands, every symbol is dead under the gate (plain
-//! `cargo clippy`, `cfg(test)` inactive), so the suppression is `not(test)`-scoped and
-//! self-clearing — a real consumer makes the `not(test)` expect unfulfilled and forces
-//! its removal (`mem.pattern.lint.dead-code-expect-vs-cfg-test`). The `#[cfg(test)]`
-//! tests below exercise every symbol, so the test build never trips it.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-047 priority policy core built ahead of its CLI consumer (PHASE-03); \
-                  self-clearing when a non-test caller lands"
-    )
-)]
+//! Consumed by the priority CLI surface (SL-047 PHASE-03 — `channels`/`surface` call
+//! [`status_class`]), so the PHASE-02 self-clearing `not(test)` `dead_code`
+//! suppression has retired itself, as designed (`mem.pattern.lint.
+//! dead-code-expect-vs-cfg-test`).
 
 use crate::entity;
 

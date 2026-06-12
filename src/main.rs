@@ -245,6 +245,89 @@ enum Command {
         path: Option<PathBuf>,
     },
 
+    /// Read-only cross-kind importance survey: every ELIGIBLE entity in importance
+    /// order (actionability, then consequence desc, then canonical-id), each blocked
+    /// row carrying a BLOCKED badge and its direct blocker. Terminal and
+    /// promoted-backlog items are excluded unless `--all`. Advisory — never writes.
+    Survey {
+        /// Include terminal + promoted-backlog items (the complete view).
+        #[arg(long)]
+        all: bool,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only advisory worklist: the ACTIONABLE entities (eligible AND unblocked),
+    /// in composed dependency/sequence order. Blocked items are absent (the divergence
+    /// from `survey`). Mutates nothing.
+    Next {
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only blocker view of one entity (`<ID>` = SL-NNN, ISS-NNN, …): its direct
+    /// blocked-by prerequisites + the items it is blocking. `--transitive` walks both
+    /// chains. Display depth never reorders.
+    Blockers {
+        /// Canonical ref of the entity (e.g. `ISS-007`, `SL-046`).
+        id: String,
+
+        /// Walk the full transitive blocked-by / blocking chains.
+        #[arg(long)]
+        transitive: bool,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only structured explanation of one entity's priority (`<ID>`): its
+    /// eligibility reason, the transitive blocker chain, the order-key contributors,
+    /// any evicted soft-sequence edges, and its consequence — always to root.
+    Explain {
+        /// Canonical ref of the entity (e.g. `ISS-007`, `SL-046`).
+        id: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Create and list architecture decision records.
     Adr {
         #[command(subcommand)]
@@ -1614,10 +1697,56 @@ fn write_class(cmd: &Command) -> WriteClass {
         // Read-only: the coverage/drift view (never writes / derives status, §5.3),
         // the corpus integrity scan (INV-3), and the cross-kind relation view
         // (SL-046 — reads only, never mints/derives status).
-        Command::Coverage { .. } | Command::Validate { .. } | Command::Inspect { .. } => Read,
+        // Read-only priority surfaces (SL-047 — derive per query, never write /
+        // mint / derive status; ADR-004 stores no reverse field).
+        Command::Coverage { .. }
+        | Command::Validate { .. }
+        | Command::Inspect { .. }
+        | Command::Survey { .. }
+        | Command::Next { .. }
+        | Command::Blockers { .. }
+        | Command::Explain { .. } => Read,
         // Mutates the canonical-id triple — an authored write (D2/D6).
         Command::Reseat { .. } => Write("reseat"),
     }
+}
+
+/// `doctrine inspect <ID> [--json]` — the COMMAND-LAYER composition (SL-047 §5.4 /
+/// SL-046 D1). Renders the cross-kind relation view (via `relation_graph`) AND the
+/// priority actionability block (via `priority`), then concatenates / injects: this
+/// is the one layer allowed to depend on BOTH (ADR-001 — `relation_graph` sits below
+/// `priority` and must never call up into it). The relation portion stays
+/// byte-identical; the actionability block is purely additive (EX-2).
+///
+/// - **human**: the relation render with the actionability block appended below.
+/// - **`--json`**: the inspect envelope with an additive `"actionability"` key —
+///   the relation surfaces (`outbound`/`inbound`/`danglers`) unchanged.
+fn run_inspect(path: Option<PathBuf>, id: &str, format: Format, json: bool) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let resolved = if json { Format::Json } else { format };
+    let block = priority::surface::actionability_block(&root, id)?;
+    let out = match resolved {
+        Format::Table => {
+            let relation = relation_graph::render(&root, id, Format::Table)?;
+            let block = priority::render::actionability_block_human(&block);
+            format!("{relation}{block}")
+        }
+        Format::Json => {
+            let view = relation_graph::inspect(&root, id)?;
+            let mut value = relation_graph::inspect_value(&view);
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert(
+                    "actionability".to_string(),
+                    priority::render::actionability_block_value(&block),
+                );
+            }
+            serde_json::to_string_pretty(&value)
+                .map_err(|e| anyhow::anyhow!("failed to serialize inspect JSON: {e}"))?
+        }
+    };
+    write!(std::io::stdout(), "{out}")?;
+    Ok(())
 }
 
 /// Worker context (ADR-006 D2a): a dispatched worker sets `DOCTRINE_WORKER=1`
@@ -1957,7 +2086,27 @@ fn main() -> anyhow::Result<()> {
             format,
             json,
             path,
-        } => relation_graph::run(path, &id, format, json),
+        } => run_inspect(path, &id, format, json),
+        Command::Survey {
+            all,
+            format,
+            json,
+            path,
+        } => priority::run_survey(path, all, format, json),
+        Command::Next { format, json, path } => priority::run_next(path, format, json),
+        Command::Blockers {
+            id,
+            transitive,
+            format,
+            json,
+            path,
+        } => priority::run_blockers(path, &id, transitive, format, json),
+        Command::Explain {
+            id,
+            format,
+            json,
+            path,
+        } => priority::run_explain(path, &id, format, json),
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
             AdrCommand::List { list, path } => adr::run_list(path, list.into_list_args()),

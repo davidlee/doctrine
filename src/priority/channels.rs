@@ -16,23 +16,14 @@
 //! Transitive reachability is for `blockers --transitive`/`explain` (PHASE-03), not
 //! this layer.
 //!
-//! Built ahead of its first non-test consumer (the `priority` CLI command, PHASE-03):
-//! until a non-test caller lands, every channel fn is dead under the gate (plain
-//! `cargo clippy`, `cfg(test)` inactive), so the suppression is `not(test)`-scoped and
-//! self-clearing — a real consumer makes the `not(test)` expect unfulfilled and forces
-//! its removal (`mem.pattern.lint.dead-code-expect-vs-cfg-test`). The `#[cfg(test)]`
-//! tests below exercise every fn, so the test build never trips it.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-047 priority channels built ahead of their CLI consumer (PHASE-03); \
-                  self-clearing when a non-test caller lands"
-    )
-)]
+//! Consumed by the priority CLI surface (SL-047 PHASE-03 — `surface` builds the view
+//! rows from these channels), so the PHASE-02 self-clearing `not(test)` `dead_code`
+//! suppression has retired itself, as designed (`mem.pattern.lint.
+//! dead-code-expect-vs-cfg-test`).
 
 use std::collections::BTreeSet;
 
+use crate::backlog_order::OverrideReason;
 use crate::relation_graph::EntityKey;
 
 use super::graph::PriorityGraph;
@@ -102,6 +93,85 @@ pub(crate) fn blocking(g: &PriorityGraph, node: EntityKey) -> Vec<EntityKey> {
         .collect::<BTreeSet<EntityKey>>()
         .into_iter()
         .collect()
+}
+
+/// The node's **transitive blockers** — every non-terminal node reachable from it
+/// along the `dep` overlay AGAINST direction (its prereqs, their prereqs, …), the
+/// `blockers --transitive`/`explain` chain (REQ-073). `reachable` walks the resolved
+/// dep adjacency (`Against` = predecessors via `in_edges`), excludes the node itself
+/// (cordage I6), and is total/terminating on a degraded cyclic view. Non-terminal
+/// filtered (a satisfied prereq is not a blocker) and sorted/deduped — a `BTreeSet`
+/// for a deterministic, permutation-invariant result. The DIRECT [`blocked_by`] is a
+/// subset; this is its transitive closure.
+pub(crate) fn blocked_by_transitive(g: &PriorityGraph, node: EntityKey) -> Vec<EntityKey> {
+    let Some(n) = g.projection.resolve(node) else {
+        return Vec::new();
+    };
+    g.graph
+        .reachable(g.dep_overlay, n, cordage::Direction::Against)
+        .into_iter()
+        .filter_map(|pred| g.projection.key_of(pred))
+        .filter(|pred| class_of(g, *pred) != StatusClass::Terminal)
+        .collect::<BTreeSet<EntityKey>>()
+        .into_iter()
+        .collect()
+}
+
+/// The node's **transitive dependents** — every node reachable from it ALONG the
+/// `dep` overlay (the items that need it, their dependents, …), the `blockers
+/// --transitive`/`explain` chain (REQ-073). Mirrors [`blocked_by_transitive`] in the
+/// opposite direction; the DIRECT [`blocking`] is a subset. No terminal filter — a
+/// dependent's own status is its concern; this is the structural cone.
+pub(crate) fn blocking_transitive(g: &PriorityGraph, node: EntityKey) -> Vec<EntityKey> {
+    let Some(n) = g.projection.resolve(node) else {
+        return Vec::new();
+    };
+    g.graph
+        .reachable(g.dep_overlay, n, cordage::Direction::Along)
+        .into_iter()
+        .filter_map(|succ| g.projection.key_of(succ))
+        .collect::<BTreeSet<EntityKey>>()
+        .into_iter()
+        .collect()
+}
+
+/// The **evicted `after` (seq) edges** touching `node` — the soft sequence
+/// preferences cordage dropped to linearize, surfaced by `explain` (design §5.4).
+/// Each is `(from, to, reason)` in `EntityKey` terms, mapping cordage's
+/// [`cordage::EvictReason`] onto the shared [`OverrideReason`] vocabulary (the
+/// `backlog_order::overrides` precedent — same projection, one reason vocabulary).
+/// Filtered to the seq overlay and to evictions where `node` is an endpoint; sorted
+/// by `(from, to)` for determinism. An `ArityViolation` cannot arise (the dep/seq
+/// overlays are `Unbounded`), so it is skipped defensively.
+pub(crate) fn evicted_seq_edges(
+    g: &PriorityGraph,
+    node: EntityKey,
+) -> Vec<(EntityKey, EntityKey, OverrideReason)> {
+    let Some(n) = g.projection.resolve(node) else {
+        return Vec::new();
+    };
+    let mut out: Vec<(EntityKey, EntityKey, OverrideReason)> = g
+        .graph
+        .provenance()
+        .evictions()
+        .iter()
+        .filter(|e| e.overlay() == g.seq_overlay)
+        .filter(|e| e.edge().src() == n || e.edge().dst() == n)
+        .filter_map(|e| {
+            let from = g.projection.key_of(e.edge().src())?;
+            let to = g.projection.key_of(e.edge().dst())?;
+            let reason = match e.reason() {
+                cordage::EvictReason::IntraOverlayCycle => OverrideReason::SoftCycleEvicted,
+                cordage::EvictReason::UnionCycleVsLayer => OverrideReason::Contradicted,
+                cordage::EvictReason::ArityViolation => return None,
+            };
+            Some((from, to, reason))
+        })
+        .collect();
+    // OverrideReason is not Ord; the (from, to) endpoint pair is the deterministic
+    // sort key (a given pair carries one eviction reason).
+    out.sort_by_key(|a| (a.0, a.1));
+    out
 }
 
 /// The node's **consequence** tally — the PHASE-01 pre-pass count of inbound

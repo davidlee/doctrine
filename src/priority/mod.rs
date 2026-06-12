@@ -9,7 +9,96 @@
 //! and an `OrderSpec`. PHASE-02 adds the pure policy core: [`partition`] (the OQ-8
 //! status-class table) and [`channels`] (eligibility / blockers / actionable /
 //! consequence / order-key / dep-cycle synthesis derived over a `PriorityGraph`).
-//! The CLI surface that consumes these lands PHASE-03.
+//! PHASE-03 adds the operator-facing layer: [`view`] (the structured-reason render
+//! source of truth), [`surface`] (the impure shell that builds the view rows from the
+//! graph + channels), and [`render`] (human + `--json`). The `main.rs` command layer
+//! consumes [`surface`]/[`render`] for the `survey`/`next`/`blockers`/`explain` verbs
+//! and the `inspect` actionability block — the live caller that retires the
+//! PHASE-01/02 self-clearing `dead_code` scopes.
 pub(crate) mod channels;
 pub(crate) mod graph;
 pub(crate) mod partition;
+pub(crate) mod render;
+pub(crate) mod surface;
+pub(crate) mod view;
+
+use std::io::{self, Write};
+use std::path::PathBuf;
+
+use crate::listing::Format;
+
+/// Resolve the project root (default markers), shared by every priority verb.
+fn root(path: Option<PathBuf>) -> anyhow::Result<std::path::PathBuf> {
+    crate::root::find(path, &crate::root::default_markers())
+}
+
+/// `doctrine survey [--all] [--json]` (design §5.4) — the importance survey. Builds
+/// the rows once via [`surface::survey`] and renders per `Format` (`--json` forces
+/// JSON). NO trailing newline on the JSON surface (the golden contract).
+pub(crate) fn run_survey(
+    path: Option<PathBuf>,
+    all: bool,
+    format: Format,
+    json: bool,
+) -> anyhow::Result<()> {
+    let root = root(path)?;
+    let rows = surface::survey(&root, all)?;
+    let out = if json || format == Format::Json {
+        render::survey_json(&rows)?
+    } else {
+        render::survey_human(&rows)
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
+/// `doctrine next [--json]` (design §5.4) — the actionable-only advisory worklist.
+pub(crate) fn run_next(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::Result<()> {
+    let root = root(path)?;
+    let rows = surface::next(&root)?;
+    let out = if json || format == Format::Json {
+        render::next_json(&rows)?
+    } else {
+        render::next_human(&rows)
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
+/// `doctrine blockers <ID> [--transitive] [--json]` (design §5.4). An unknown prefix
+/// / malformed ref surfaces a clean `anyhow` error (never a panic).
+pub(crate) fn run_blockers(
+    path: Option<PathBuf>,
+    id: &str,
+    transitive: bool,
+    format: Format,
+    json: bool,
+) -> anyhow::Result<()> {
+    let root = root(path)?;
+    let view = surface::blockers(&root, id, transitive)?;
+    let out = if json || format == Format::Json {
+        render::blockers_json(&view)?
+    } else {
+        render::blockers_human(&view)
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
+/// `doctrine explain <ID> [--json]` (design §5.4 / D11) — always to root.
+pub(crate) fn run_explain(
+    path: Option<PathBuf>,
+    id: &str,
+    format: Format,
+    json: bool,
+) -> anyhow::Result<()> {
+    let root = root(path)?;
+    let ex = surface::explain(&root, id)?;
+    let out = if json || format == Format::Json {
+        render::explain_json(&ex)?
+    } else {
+        render::explain_human(&ex)
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}

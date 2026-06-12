@@ -145,12 +145,21 @@ fn inspect_predecessor_human_byte_exact() {
 
     let out = run(dir.path(), &["SL-001"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
+    // SL-047 PHASE-03: the actionability block is appended below the relation view
+    // (SL-046 D1). The relation portion (inbound) stays byte-identical; only the
+    // trailing `actionability:` block is new (a proposed slice with no prereqs is
+    // eligible + actionable).
     assert_eq!(
         stdout(&out),
         "SL-001 — relations\n\
          \n\
          inbound:\n\
-         \x20\x20superseded by: SL-003\n"
+         \x20\x20superseded by: SL-003\n\
+         \n\
+         actionability:\n\
+         \x20\x20eligible: true\n\
+         \x20\x20actionable: true\n\
+         \x20\x20consequence: 0\n"
     );
 }
 
@@ -175,7 +184,12 @@ fn inspect_supersedor_human_byte_exact() {
          \x20\x20supersedes: SL-001\n\
          \n\
          danglers:\n\
-         \x20\x20specs: PRD-099\n"
+         \x20\x20specs: PRD-099\n\
+         \n\
+         actionability:\n\
+         \x20\x20eligible: true\n\
+         \x20\x20actionable: true\n\
+         \x20\x20consequence: 0\n"
     );
 }
 
@@ -201,7 +215,12 @@ fn inspect_tech_spec_interaction_type_annotated_byte_exact() {
          \x20\x20specs: SL-003\n\
          \n\
          danglers:\n\
-         \x20\x20interactions: SPEC-002\n"
+         \x20\x20interactions: SPEC-002\n\
+         \n\
+         actionability:\n\
+         \x20\x20eligible: true\n\
+         \x20\x20actionable: true\n\
+         \x20\x20consequence: 1\n"
     );
 }
 
@@ -217,7 +236,17 @@ fn inspect_no_relations_entity_renders_cleanly() {
 
     let out = run(dir.path(), &["SL-050"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
-    assert_eq!(stdout(&out), "SL-050 — relations\n\n(no relations)\n");
+    // The relation portion (`(no relations)`) stays byte-identical; the actionability
+    // block is appended (a proposed slice is eligible + actionable).
+    assert_eq!(
+        stdout(&out),
+        "SL-050 — relations\n\n(no relations)\n\
+         \n\
+         actionability:\n\
+         \x20\x20eligible: true\n\
+         \x20\x20actionable: true\n\
+         \x20\x20consequence: 0\n"
+    );
 }
 
 /// A well-formed ref to a NON-EXISTENT id is an empty view, not an error (VT-3).
@@ -228,7 +257,18 @@ fn inspect_nonexistent_id_is_empty_view_not_error() {
 
     let out = run(dir.path(), &["SL-999"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
-    assert_eq!(stdout(&out), "SL-999 — relations\n\n(no relations)\n");
+    // A non-existent id: the relation view is empty AND the actionability block shows
+    // a non-eligible node (no attrs entry → not eligible/actionable). Relation portion
+    // byte-identical; block appended.
+    assert_eq!(
+        stdout(&out),
+        "SL-999 — relations\n\n(no relations)\n\
+         \n\
+         actionability:\n\
+         \x20\x20eligible: false\n\
+         \x20\x20actionable: false\n\
+         \x20\x20consequence: 0\n"
+    );
 }
 
 /// An UNKNOWN prefix → a clean non-zero error mentioning the prefix, never a panic
@@ -269,10 +309,20 @@ fn inspect_json_supersedor_byte_exact_every_surface() {
     assert!(v["inbound"].is_array(), "inbound surface present");
     assert!(v["danglers"].is_array(), "danglers surface present");
 
-    // Byte-exact: the faithful serialized InspectView shape.
+    // The additive priority actionability block (SL-047 PHASE-03 / SL-046 D1) — the
+    // relation surfaces stay byte-identical; only this key is new.
+    assert!(
+        v["actionability"].is_object(),
+        "actionability block present"
+    );
+    assert_eq!(v["actionability"]["eligible"], true);
+    assert_eq!(v["actionability"]["actionable"], true);
+
+    // Byte-exact: the faithful serialized InspectView shape + the additive
+    // actionability block (serde_json sorts keys, so `actionability` leads).
     assert_eq!(
         body,
-        "{\n  \"danglers\": [\n    {\n      \"label\": \"specs\",\n      \"target\": \"PRD-099\"\n    }\n  ],\n  \"id\": \"SL-003\",\n  \"inbound\": [],\n  \"kind\": \"inspect\",\n  \"outbound\": [\n    {\n      \"label\": \"specs\",\n      \"targets\": [\n        \"SPEC-001\",\n        \"PRD-099\"\n      ]\n    },\n    {\n      \"label\": \"requirements\",\n      \"targets\": [\n        \"REQ-005\"\n      ]\n    },\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-001\"\n      ]\n    }\n  ]\n}"
+        "{\n  \"actionability\": {\n    \"actionable\": true,\n    \"blockers\": [],\n    \"blocking\": [],\n    \"consequence\": 0,\n    \"eligible\": true\n  },\n  \"danglers\": [\n    {\n      \"label\": \"specs\",\n      \"target\": \"PRD-099\"\n    }\n  ],\n  \"id\": \"SL-003\",\n  \"inbound\": [],\n  \"kind\": \"inspect\",\n  \"outbound\": [\n    {\n      \"label\": \"specs\",\n      \"targets\": [\n        \"SPEC-001\",\n        \"PRD-099\"\n      ]\n    },\n    {\n      \"label\": \"requirements\",\n      \"targets\": [\n        \"REQ-005\"\n      ]\n    },\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-001\"\n      ]\n    }\n  ]\n}"
     );
 }
 
@@ -286,9 +336,11 @@ fn inspect_json_predecessor_inbound_supersedes_surface() {
 
     let out = run(dir.path(), &["SL-001", "--json"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
+    // The relation surfaces stay byte-identical; the additive `actionability` key
+    // (serde sorts keys, so it leads) is the only change (SL-047 PHASE-03).
     assert_eq!(
         stdout(&out),
-        "{\n  \"danglers\": [],\n  \"id\": \"SL-001\",\n  \"inbound\": [\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-003\"\n      ]\n    }\n  ],\n  \"kind\": \"inspect\",\n  \"outbound\": []\n}"
+        "{\n  \"actionability\": {\n    \"actionable\": true,\n    \"blockers\": [],\n    \"blocking\": [],\n    \"consequence\": 0,\n    \"eligible\": true\n  },\n  \"danglers\": [],\n  \"id\": \"SL-001\",\n  \"inbound\": [\n    {\n      \"label\": \"supersedes\",\n      \"targets\": [\n        \"SL-003\"\n      ]\n    }\n  ],\n  \"kind\": \"inspect\",\n  \"outbound\": []\n}"
     );
 }
 
