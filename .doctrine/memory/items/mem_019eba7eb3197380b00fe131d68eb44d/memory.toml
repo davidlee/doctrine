@@ -1,0 +1,41 @@
+memory_uid = "mem_019eba7eb3197380b00fe131d68eb44d"
+memory_key = "mem.pattern.review.invariant-test-must-drive-the-write-seam"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Invariant test must knock on the wall: drive run(), not a pure helper"
+summary = "A behavioural invariant/independence test must drive the real write seam, not assert a tautology on a pure helper"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["src/reconcile.rs"]
+globs = []
+commands = []
+tags = ["testing", "review", "nf-001"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "af92aa6bf4595da86371ab3b64824f1dde868a4b"
+ref_name = "refs/heads/main"
+checkout_state_id = "e4e0157d8be4914ac2f96211e2647231b9af7fa4b13171b5bba1ee5ab26311a9"
+base_commit = "36156fd785cb1b6eedcb60ce8454f32ad84acdf6"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
