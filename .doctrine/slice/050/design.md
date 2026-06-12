@@ -100,17 +100,27 @@ Applied at all four keyed surfaces, each passing the projection it built:
   `graph::build_from`.
 
 One helper, one oracle *type*, one pinned message, four call sites — no second
-existence path to drift. `run_inspect` therefore needs **no** separate up-front
-check: it scans once, and the gate fires inside whichever `_from` builds first
-(the relation graph, for both table and JSON paths) before the priority block is
-reached:
+existence path to drift. `run_inspect` needs **no** separate up-front check, but
+it **must reorder**. Today (`main.rs:1731`) it computes `actionability_block`
+*first*, before the relation render/inspect in the match — so for a missing id the
+heavier priority graph (consequence pre-pass + mint + per-backlog `dep_seq` reads
++ builder) is built in full before any error fires. Post-F2 it scans once, builds
+the relation graph and gates on `rg.projection` first (the cheap oracle), and only
+then builds the priority block — a ghost id never builds the priority graph:
 
 ```rust
 let scanned = relation_graph::scan_entities(&root)?;   // ONE walk
-// table: relation_graph::render_from(&scanned, &root, id, Table)   — gates in inspect_from
+// 1. relation graph + gate (cheap) — gates in inspect_from / render_from on rg.projection
+// table: relation_graph::render_from(&scanned, &root, id, Table)
 // json:  relation_graph::inspect_from(&scanned, &root, id) → inspect_value
+// 2. THEN the priority block — only reached for a minted id
 // block: priority::surface::actionability_block_from(&scanned, &root, id)
 ```
+
+The gate message is identical from either surface, so the reorder is not a
+correctness change — but the relation graph is the cheaper oracle, and a slice
+about deleting redundant work must not build the heavy priority graph to reject a
+ghost id (the order the current code happens to use).
 
 ### Decisions
 
@@ -195,9 +205,11 @@ refactor; the survey goldens hold unchanged.
 ### F4 + F5 — drop `OrderContrib`, leaving one transitive walk
 
 `OrderContrib` carried `dep_level` (mislabelled "dep-topology level"; it is the
-*count* of transitive non-terminal blockers — and it equals `len(blocker_chain)`,
-which `explain` already emits) plus `seq_rank`, which is *always* `None`. It
-carries no information not already in `blocker_chain`. Drop it whole:
+*count* of transitive non-terminal blockers — equal to `len(refs(&chain))`, the
+emitted `BlockedBy` items, absent ⇒ 0; **not** `blocker_chain.len()`, which is
+0/1/2: the chain is `Vec<ReasonKind>` = `BlockedBy` + an optional `CycleDegraded`)
+plus `seq_rank`, which is *always* `None`. It carries no information not already in
+`blocker_chain`. Drop it whole:
 
 - **view.rs** — remove `ReasonKind::OrderContrib`; remove the `order_contrib`
   field from `Explanation`.
@@ -211,6 +223,22 @@ carries no information not already in `blocker_chain`. Drop it whole:
 
 **Goldens:** `explain` human output loses the `order:` line; `explain --json`
 loses the `order_contrib` field.
+
+**D4 — policy-version bump (`priority.v1` → `priority.v2`).** The priority `--json`
+envelopes are policy-versioned (`PRIORITY_POLICY_VERSION`, `render.rs:17`;
+REQ-094/NF-001 the staleness signal). Dropping `order_contrib` removes a field
+from a versioned envelope: a stored `v1` envelope no longer matches a fresh
+recompute — exactly the consumer-affecting change the stamp exists to flag, and
+the deliberate `explain` surface change the slice non-goal pre-authorises a bump
+for. **Bump the constant to `priority.v2`.** Blast radius is the whole stamped set
+— `survey`/`next`/`blockers`/`explain --json` all stamp the constant
+(`render.rs:233/256/265/277`); the `inspect` actionability block does **not** stamp
+it (`actionability_block_value`), so `inspect` goldens are unaffected. The three
+goldens asserting the literal `priority.v1` (`e2e_priority_golden.rs:271` survey,
+`:308` explain, `:328` next) flip to `v2`; `blockers_json` stamps it too — sweep
+for an assertion at execute time. So `survey`/`next`/`blockers --json` change
+*only* their `policy_version` line (one line, data byte-identical); `explain --json`
+changes both that line and the dropped field.
 
 ### F7 — resolve the remaining dead vocabulary (drop, not wire)
 
@@ -242,10 +270,11 @@ the assertion still carries behavioural weight, rather than against a removed
 
 | Surface | Change | Evidence |
 |---|---|---|
-| `explain` (human + json) | `order:` line / `order_contrib` field removed (F5) | explain goldens update (these change for *real* ids too) |
-| `inspect` missing id | empty view → `… : no such entity` error (F6) | VT-5 flips — **and enumerate any other empty-view/empty-block assertions** at execute time, not just VT-5 |
-| `explain` / `blockers` missing id | empty result → error (F6) | new test |
-| `survey` / `next` / `blockers` / `inspect` real ids | byte-identical (F1/F2/F3/F4/F7) | their existing goldens hold (the 9 inspect + the non-`explain` subset of the 13 priority) |
+| `explain` (human + json) | `order:` line / `order_contrib` field removed (F5) + `policy_version` v1→v2 (D4) | explain goldens update (change for *real* ids too): `e2e_priority_golden.rs:308` |
+| `survey` / `next` / `blockers --json` real ids | data byte-identical; `policy_version` line only moves v1→v2 (D4) | `e2e_priority_golden.rs:271` (survey), `:328` (next); sweep `blockers_json` for a version assert |
+| `survey` / `next` / `blockers` / `inspect` real ids (human) | byte-identical (F1/F2/F3/F4/F7) | their existing human goldens hold (the 9 inspect + the human subset of the 13 priority) |
+| `inspect` missing id | empty view → `… : no such entity` error (F6) | VT-5 flips. Concrete sites: `e2e_inspect_golden.rs:254` (`..._is_empty_view_not_error` — rename + invert), `relation_graph.rs:1099` (split the bundled missing-id-empty + unknown-prefix-error test; missing-id half inverts), false doc-comments `surface.rs:288` ("all-empty block") / `relation_graph.rs:378-381` ("empty-section view, not an error") |
+| `explain` / `blockers` missing id | empty result → error (F6) | net-new test (no existing empty-reliant test: `explain_unblocked_entity_empty_channels_not_error:361` is a real unblocked id, survives F6) |
 | graph tests | dead-artifact assertions dropped, behavioural ones re-expressed (F7) | unit tests; also sweep for unit tests constructing `Explanation { order_contrib, … }` |
 
 Gate: `just check` green; `cargo clippy` zero warnings (the five `dead_code`
@@ -265,6 +294,13 @@ suppressions are gone, not relocated).
 - **REQ-077 (determinism / permutation-invariance)** — preserved: scan order
   unchanged; the F3 decorate-sort uses the same total order
   (`act → consequence desc → canonical-id asc`).
+- **REQ-094 / NF-001 (policy-version staleness stamp)** — honoured, not bypassed:
+  dropping a field from the versioned `--json` envelope bumps `priority.v1` →
+  `v2` (D4), the staleness signal firing exactly as intended. Within the slice
+  non-goal, which pre-authorises a bump forced by a deliberate `explain` surface
+  change.
 - **Non-goal amendment** — `slice-050.md` "No `inspect` relation-portion output
   change" gains a carve-out: missing-id output legitimately changes (empty →
-  error) per F6; existing-entity output stays byte-identical.
+  error) per F6; existing-entity output stays byte-identical. The
+  no-policy-bump-beyond-`explain` non-goal is satisfied by D4 (the bump is forced
+  by F5's deliberate `explain` change).
