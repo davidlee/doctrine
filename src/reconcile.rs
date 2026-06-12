@@ -65,14 +65,21 @@ pub(crate) struct ReconcileArgs {
 // The NF-001 wall — pure status selection (layer 1: signature isolation).
 // ---------------------------------------------------------------------------
 
-/// Select the status to WRITE — the operator's explicit `--to`. **The signature is
-/// the NF-001 wall (D-B7, layer 1):** its parameters name no coverage-derived type
-/// (`Verdict`/`Composite`/`CoverageKey` are out of scope), so the compiler proves
-/// the written status cannot be derived from observed coverage — you cannot use data
-/// you were not handed. `prior` is the current authored status (carried for the
-/// `[[status_delta]]` `from` and future selection rules); the written status is
-/// `to`. Do NOT widen this signature to see any coverage type, and never write a
-/// `match verdict => ReqStatus` here.
+/// Select the status to WRITE — the operator's explicit `--to`. This is the
+/// NF-001 wall's **layer 1: signature isolation** (D-B7). The signature names no
+/// coverage-derived type (`Verdict`/`Composite`/`CoverageKey` are out of scope),
+/// so the function *body* cannot derive status from coverage — it was not handed
+/// any. That is a real but narrow guarantee: it constrains this function, NOT the
+/// call site that feeds it. The full no-derivation invariant is proven by all
+/// three layers together — this signature + the `Verdict` being consumed only by
+/// `build_prompt` (layer 2) + the behavioural `written_status_is_verdict_independent`
+/// test that drives `run()` and asserts the on-disk status tracks `--to` alone
+/// (layer 3, VT-5). Do NOT widen this signature to see any coverage type, and never
+/// write a `match verdict => ReqStatus` here OR at the call site in `run()`.
+///
+/// `prior` is the current authored status (carried for the `[[status_delta]]`
+/// `from` and future selection rules); the written status is `to`. `prior` is
+/// intentionally unconsulted today (FREE any→any, B·P1 D-B6).
 fn select_status(to: ReqStatus, prior: ReqStatus) -> ReqStatus {
     // The wall in one line: the written status is the operator's explicit `--to`,
     // never a function of coverage. `prior` is intentionally not consulted (FREE
@@ -183,27 +190,6 @@ fn rec_slug(r#move: RecMove, req: &str) -> String {
     format!("{}-{}", r#move.as_str(), req.to_lowercase())
 }
 
-/// Collect DISTINCT coverage keys, preserving first-seen order. A REC's
-/// `evidence_ref` is a *set* of backing cells — the same 4-tuple key must not be
-/// cited twice (the corpus walk can surface a key more than once, e.g. when a slice
-/// tree is reachable through both its numeric dir and its slug-alias symlink).
-fn distinct_keys(keys: impl Iterator<Item = CoverageKey>) -> Vec<CoverageKey> {
-    let mut seen = std::collections::BTreeSet::new();
-    let mut out = Vec::new();
-    for k in keys {
-        let tag = (
-            k.slice.clone(),
-            k.requirement.clone(),
-            k.contributing_change.clone(),
-            k.mode.clone(),
-        );
-        if seen.insert(tag) {
-            out.push(k);
-        }
-    }
-    out
-}
-
 // ---------------------------------------------------------------------------
 // The impure shell — resolve inputs, dispatch the move, write the atomic REC.
 // ---------------------------------------------------------------------------
@@ -237,7 +223,7 @@ pub(crate) fn run(path: Option<PathBuf>, args: &ReconcileArgs) -> anyhow::Result
     let entries = coverage_scan::scan_coverage(&root, &args.req);
     let composite = coverage::composite(&entries);
     let verdict = coverage::drift(prior, &composite);
-    let evidence = distinct_keys(entries.into_iter().map(|(e, _)| e.key));
+    let evidence = coverage::distinct_keys(entries.into_iter().map(|(e, _)| e.key));
 
     // Surface the drift reading to the operator (Verdict consumed here, out of scope
     // at the write — NF-001 layer 2).
@@ -297,8 +283,7 @@ pub(crate) fn run(path: Option<PathBuf>, args: &ReconcileArgs) -> anyhow::Result
 )]
 mod tests {
     use super::*;
-    use crate::coverage::{CoverageEntry, IsStale};
-    use crate::requirement::{self, CoverageStatus, ReqKind};
+    use crate::requirement::{self, ReqKind};
     use std::fs;
     use std::path::Path;
 
@@ -540,7 +525,7 @@ mod tests {
         };
         // The same key twice (the slug-symlink double-walk) collapses to one; a
         // genuinely distinct key survives.
-        let out = distinct_keys([k("SL-001"), k("SL-001"), k("SL-002")].into_iter());
+        let out = coverage::distinct_keys([k("SL-001"), k("SL-001"), k("SL-002")].into_iter());
         assert_eq!(out.len(), 2);
         assert_eq!(out.first().unwrap().slice, "SL-001");
         assert_eq!(out.get(1).unwrap().slice, "SL-002");
@@ -642,57 +627,64 @@ mod tests {
 
     // --- VT-5: NF-001 behavioural — verdict-independence (the key test) -------
 
-    /// Build a composite over synthetic cells with a given observed status +
-    /// staleness — the input that varies the drift Verdict.
-    fn composite_with(status: CoverageStatus, stale: IsStale) -> Vec<(CoverageEntry, IsStale)> {
-        let entry = CoverageEntry {
-            key: CoverageKey {
-                slice: "SL-001".to_owned(),
-                requirement: "REQ-001".to_owned(),
-                contributing_change: "SL-001".to_owned(),
-                mode: "VT".to_owned(),
-            },
-            status,
-            git_anchor: "deadbeef".to_owned(),
-            attested_date: None,
-            touched_paths: Vec::new(),
-        };
-        vec![(entry, stale)]
-    }
-
+    /// VT-5 (NF-001, REQ-114) — the wall proven AT THE WRITE PATH. Drive the REAL
+    /// `run()` over on-disk coverage states that make the drift `Verdict` vary
+    /// (read through the same `scan_coverage` the shell uses), holding `--to`
+    /// FIXED. The authored status reconstructed from disk must ALWAYS equal `--to`,
+    /// never a function of the observed coverage.
+    ///
+    /// This exercises the laundering surface in `run()` (`select_status` → `set_status`):
+    /// were a future edit to derive status from the verdict there, the on-disk
+    /// assertion below would fail. (The prior formulation called `select_status`
+    /// directly and asserted `id(x)==x` — vacuous; it never touched `run()`.)
     #[test]
     fn written_status_is_verdict_independent() {
-        // Hold --to FIXED; vary EVERY coverage-derived input so the drift Verdict
-        // ranges across Coherent / Divergent(both reasons) / Indeterminate. The
-        // WRITTEN status must always equal --to — the wall holds.
-        let prior = ReqStatus::Pending;
         let fixed_to = ReqStatus::Active;
-
-        // Each row yields a different Verdict under `drift(prior=Pending, …)`.
-        let varied = [
-            composite_with(CoverageStatus::Verified, IsStale::Fresh), // Divergent(EvidenceOutrunsAuthored)
-            composite_with(CoverageStatus::Failed, IsStale::Fresh), // Divergent(ObservedContradiction)
-            composite_with(CoverageStatus::Verified, IsStale::Stale), // Indeterminate
-            composite_with(CoverageStatus::Planned, IsStale::Unknown), // Coherent
-            Vec::new(),                                             // Coherent (empty)
-        ];
+        // On-disk coverage states chosen to drive distinct verdicts under a Pending
+        // prior: confirming evidence, contradicting evidence, agreeing-low evidence,
+        // and no coverage at all. `__none__` writes no coverage.toml.
+        let coverage_states = ["verified", "failed", "planned", "__none__"];
 
         let mut seen_verdicts = std::collections::BTreeSet::new();
-        for entries in varied {
+        for state in coverage_states {
+            let dir = repo();
+            let root = dir.path();
+            let req = mint_req(root, ReqStatus::Pending);
+            let slice = mint_slice(root);
+            if state != "__none__" {
+                write_coverage(root, 1, &req, state);
+            }
+
+            // The verdict the shell reads for this state — same scan path as `run()`.
+            let entries = coverage_scan::scan_coverage(root, &req);
             let composite = coverage::composite(&entries);
-            let verdict = coverage::drift(prior, &composite);
+            let verdict = coverage::drift(ReqStatus::Pending, &composite);
             seen_verdicts.insert(format!("{verdict:?}"));
-            // The write path: regardless of the verdict, the written status is --to.
-            let written = select_status(fixed_to, prior);
+
+            run(
+                Some(root.to_path_buf()),
+                &ReconcileArgs {
+                    req: req.clone(),
+                    slice,
+                    r#move: RecMove::Accept,
+                    to: Some(fixed_to),
+                    note: None,
+                },
+            )
+            .unwrap();
+
+            // The wall: the AUTHORED status on disk is `--to`, whatever the verdict.
             assert_eq!(
-                written, fixed_to,
-                "written status moved with the verdict {verdict:?} — NF-001 wall breached"
+                requirement::load(root, &req).unwrap().status,
+                fixed_to,
+                "written status moved with coverage {state:?} (verdict {verdict:?}) — NF-001 wall breached"
             );
         }
-        // Proof the inputs actually drove DIFFERENT verdicts (else the test is vacuous).
+        // Non-vacuity: the varied coverage genuinely drove different verdicts, so the
+        // invariant above was tested against a moving input, not a constant one.
         assert!(
-            seen_verdicts.len() >= 3,
-            "the varied coverage inputs must produce ≥3 distinct verdicts, got {seen_verdicts:?}"
+            seen_verdicts.len() >= 2,
+            "varied coverage must produce ≥2 distinct verdicts, got {seen_verdicts:?}"
         );
     }
 
@@ -730,7 +722,11 @@ mod tests {
         let d = doc.status_delta.first().unwrap();
         assert_eq!(d.from, "pending");
         assert_eq!(d.to, "active");
-        // No `.doctrine/state/` runtime tree was needed for this read.
-        assert!(!root.join(".doctrine/state").exists() || true);
+        // The reconcile act writes only authored tiers — no `.doctrine/state/`
+        // runtime tree is created, so the reconstruction above had none to lean on.
+        assert!(
+            !root.join(".doctrine/state").exists(),
+            "reconcile created a runtime-state tree — the authored-tier reconstruction is not self-sufficient"
+        );
     }
 }

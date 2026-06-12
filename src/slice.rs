@@ -390,7 +390,7 @@ pub(crate) fn run_status(
     // the `reconcile → done` crossing only. It COMPOSES with the blocker gate —
     // either can independently refuse this crossing. Undischarged residual drift on
     // any requirement in the gate set (`covered ∪ declared ∪ reconciled`) refuses.
-    if (&from, to) == (&"reconcile".to_owned(), "done") {
+    if from == "reconcile" && to == "done" {
         let undischarged = undischarged_drift(&root, id)?;
         if !undischarged.is_empty() {
             anyhow::bail!(
@@ -884,7 +884,11 @@ fn read_gate_extra_reqs(slice_root: &Path, id: u32) -> anyhow::Result<Vec<String
 /// `reconciled` from the `status_delta`s of S's owning RECs (codex finding 3 — you
 /// cannot reconcile a req via a REC then dodge its gate by not covering/declaring
 /// it).
-fn gate_requirement_set(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
+fn gate_requirement_set(
+    root: &Path,
+    id: u32,
+    owned_recs: &[crate::rec::RecDoc],
+) -> anyhow::Result<Vec<String>> {
     let canonical = canonical_id(id);
     let slice_root = root.join(SLICE_DIR);
 
@@ -895,10 +899,13 @@ fn gate_requirement_set(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
     )?);
     // declared — the authored additive `[gate].extra_reqs`.
     set.extend(read_gate_extra_reqs(&slice_root, id)?);
-    // reconciled — every req named in a status_delta of S's owning RECs.
-    for rec in crate::rec::recs_owned_by(root, &canonical)? {
-        set.extend(rec.status_delta.into_iter().map(|d| d.requirement));
-    }
+    // reconciled — every req named in a status_delta of S's owning RECs (passed in
+    // by the caller; the corpus is read once per close, not per helper).
+    set.extend(
+        owned_recs
+            .iter()
+            .flat_map(|rec| rec.status_delta.iter().map(|d| d.requirement.clone())),
+    );
     Ok(set.into_iter().collect())
 }
 
@@ -912,7 +919,7 @@ fn undischarged_drift(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
     let canonical = canonical_id(id);
     let owned_recs = crate::rec::recs_owned_by(root, &canonical)?;
     let mut undischarged = Vec::new();
-    for req in gate_requirement_set(root, id)? {
+    for req in gate_requirement_set(root, id, &owned_recs)? {
         let entries = crate::coverage_scan::scan_coverage(root, &req);
         let composite = crate::coverage::composite(&entries);
         let authored = crate::requirement::load(root, &req)
@@ -928,9 +935,9 @@ fn undischarged_drift(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
         // The CURRENT residual-drift evidence keys feeding R's composite — the keys
         // `scan_coverage` returned, DEDUPED (ISS-006: the corpus double-walks a
         // slice's dir + slug symlink, so a key can recur; do not over-demand).
-        let residual_keys = distinct_coverage_keys(entries.into_iter().map(|(e, _)| e.key));
+        let residual_keys = crate::coverage::distinct_keys(entries.into_iter().map(|(e, _)| e.key));
         let latest = latest_owning_rec_for(&owned_recs, &req);
-        if !rec_discharges(latest, authored, &residual_keys) {
+        if !rec_discharges(latest, &req, authored, &residual_keys) {
             undischarged.push(req);
         }
     }
@@ -956,14 +963,17 @@ fn latest_owning_rec_for<'a>(
 /// values: residual drift on R is EXCUSED iff R's latest owning-slice REC satisfies
 /// ALL THREE clauses —
 /// (a) `rec.move == "accept"` (an affirm — not revise/redesign);
-/// (b) its `status_delta` for R has `to == authored` (R's CURRENT authored status —
-///     guards a status edited away-and-back);
+/// (b) its `status_delta` **for R** has `to == authored` (R's CURRENT authored
+///     status — guards a status edited away-and-back). The delta must name R: a REC
+///     may carry deltas for several requirements (hand-authored TOML), so matching
+///     on `to` alone would let one requirement's delta discharge ANOTHER's drift.
 /// (c) its `evidence_ref` set ⊇ the current residual-drift evidence keys (so fresh
 ///     contradictory evidence arriving AFTER the REC re-opens drift a stale REC
 ///     cannot excuse).
 /// `None` (no owning REC for R) ⇒ never discharged.
 fn rec_discharges(
     latest: Option<&crate::rec::RecDoc>,
+    req: &str,
     authored: crate::requirement::ReqStatus,
     residual_keys: &[crate::coverage::CoverageKey],
 ) -> bool {
@@ -972,8 +982,12 @@ fn rec_discharges(
     if rec.rec.r#move != "accept" {
         return false;
     }
-    // (b) affirmed at the value R now holds.
-    let affirmed_at_current = rec.status_delta.iter().any(|d| d.to == authored.as_str());
+    // (b) affirmed FOR R at the value R now holds (the delta must name R, not just
+    // carry a coinciding `to` for some other requirement).
+    let affirmed_at_current = rec
+        .status_delta
+        .iter()
+        .any(|d| d.requirement == req && d.to == authored.as_str());
     if !affirmed_at_current {
         return false;
     }
@@ -981,28 +995,6 @@ fn rec_discharges(
     residual_keys
         .iter()
         .all(|k| rec.evidence_ref.iter().any(|e| e == k))
-}
-
-/// Collect DISTINCT coverage keys, first-seen order — the gate's local twin of
-/// `reconcile::distinct_keys`, deduping ISS-006's slug-symlink double-walk so
-/// clause (c) of [`rec_discharges`] does not spuriously OVER-demand evidence.
-fn distinct_coverage_keys(
-    keys: impl Iterator<Item = crate::coverage::CoverageKey>,
-) -> Vec<crate::coverage::CoverageKey> {
-    let mut seen = std::collections::BTreeSet::new();
-    let mut out = Vec::new();
-    for k in keys {
-        let tag = (
-            k.slice.clone(),
-            k.requirement.clone(),
-            k.contributing_change.clone(),
-            k.mode.clone(),
-        );
-        if seen.insert(tag) {
-            out.push(k);
-        }
-    }
-    out
 }
 
 /// Re-export of the spine's status validator, scoped to slice so callers read
@@ -3072,6 +3064,58 @@ mod tests {
             crate::coverage_scan::slice_local_covered_reqs(root, 1, "SL-001")
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    // --- F-3 regression: the discharge is FOR R — a multi-delta REC must not -----
+    // discharge R's drift on the strength of a foreign requirement's coinciding `to`.
+
+    #[test]
+    fn multi_delta_rec_does_not_discharge_via_foreign_requirement() {
+        // A single accept REC carrying deltas for TWO requirements: R1's own delta
+        // moves it to `active` (NOT R1's current authored `pending`), while R2's
+        // delta happens to land on `pending`. R1 is queried at authored=pending with
+        // no residual evidence. Clause (b) must look at R1's OWN delta (to=active ≠
+        // pending ⇒ NOT discharged), never R2's coinciding to=pending.
+        let rec = RecDoc {
+            id: 1,
+            slug: "accept-req-001".to_owned(),
+            title: "accept REQ-001".to_owned(),
+            rec: RecMeta {
+                r#move: "accept".to_owned(),
+                owning_slice: Some("SL-001".to_owned()),
+                decision_ref: None,
+            },
+            status_delta: vec![
+                StatusDelta {
+                    requirement: "REQ-001".to_owned(),
+                    from: "pending".to_owned(),
+                    to: "active".to_owned(),
+                },
+                StatusDelta {
+                    requirement: "REQ-002".to_owned(),
+                    from: "active".to_owned(),
+                    to: "pending".to_owned(),
+                },
+            ],
+            evidence_ref: Vec::new(),
+        };
+        assert!(
+            !rec_discharges(Some(&rec), "REQ-001", ReqStatus::Pending, &[]),
+            "a foreign requirement's coinciding `to` laundered R1's drift"
+        );
+        // Control: a single-delta REC that affirms R1 AT its current status discharges.
+        let affirm = RecDoc {
+            status_delta: vec![StatusDelta {
+                requirement: "REQ-001".to_owned(),
+                from: "pending".to_owned(),
+                to: "pending".to_owned(),
+            }],
+            ..rec
+        };
+        assert!(
+            rec_discharges(Some(&affirm), "REQ-001", ReqStatus::Pending, &[]),
+            "an accept REC affirming R1 at its current status should discharge"
         );
     }
 
