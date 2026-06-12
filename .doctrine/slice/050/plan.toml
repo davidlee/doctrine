@@ -1,0 +1,180 @@
+# Implementation plan for SL-050 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-050"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Shared scan _from seam + keyed-surface existence gate (F2 + F6)"
+objective = """
+The foundational signature change everything else rides (design §1). Extract the
+single corpus scan to the command layer and gate the keyed surfaces on existence.
+
+Builders gain pre-scanned `_from` entry points; the existing `root` wrappers
+become `scan_entities(root)?` + delegate, so the five standalone priority surfaces
+and standalone inspect/render still scan exactly once (never the defect) and stay
+byte-identical: relation_graph::{build_relation_graph_from, inspect_from,
+render_from} and priority::{graph::build_from, surface::actionability_block_from}
+(build_from keeps `root` for the per-backlog dep_seq reads; inspect_from keeps
+`root` for the queried entity's own outbound/interaction re-read).
+
+Add `relation_graph::require_minted(&Projection<EntityKey>, EntityKey)` — one
+shared existence oracle over the projection all keyed surfaces already hold
+(resolve(key).is_none() ⇔ never minted), one pinned message
+`<CANONICAL>: no such entity` (D2), applied at all four keyed surfaces
+(inspect_from / render_from / explain / blockers / actionability_block_from) so
+standalone callers refuse identically (D1).
+
+Rewire `run_inspect` (main.rs:1731): ONE `scan_entities(&root)`, build the relation
+graph and gate on `rg.projection` FIRST (the cheap oracle), build the priority
+block ONLY for a minted id — the F-2 reorder (today the block builds first, so a
+ghost id pays for the heavy priority graph before any error). ADR-001: the single
+scan lives in `main`; relation_graph and priority still never call each other.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked, both adversarial passes integrated; this plan approved and the PHASE-01 sheet materialised." },
+  { id = "EN-2", text = "Pre-F2 baseline green: the 13 priority + 9 inspect goldens and the relation_graph/priority unit suites pass on HEAD before the seam split." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "relation_graph exposes build_relation_graph_from(&[ScannedEntity]), inspect_from(&[ScannedEntity], &root, id), render_from(&[ScannedEntity], &root, id, fmt); priority exposes graph::build_from(&[ScannedEntity], &root) and surface::actionability_block_from(&[ScannedEntity], &root, id). Each `root` wrapper is scan_entities(root)? + delegate — no body duplicated." },
+  { id = "EX-2", text = "require_minted lives in relation_graph (owns EntityKey), errors `<CANONICAL>: no such entity`, and is called at all four keyed surfaces (inspect_from on rg.projection — replacing the empty-view early return; explain/blockers/actionability_block_from on g.projection)." },
+  { id = "EX-3", text = "run_inspect performs exactly one scan_entities; gates on the relation graph (rg.projection) before constructing the priority block; the priority graph is never built for a non-existent id. The two redundant scan_entities call sites are gone from run_inspect (D3 — structural, not counter-asserted)." },
+  { id = "EX-4", text = "False doc-comments corrected: surface.rs:288 (\"all-empty block\") and relation_graph.rs:378-381 (\"empty-section view, not an error\") now describe the error path." },
+]
+verification = [
+  { id = "VT-1", expects = "inspect/explain/blockers/actionability for a well-formed but unminted id (e.g. SL-999) error with exactly `SL-999: no such entity` from every one of the four surfaces — standalone callers included (D1)." },
+  { id = "VT-2", expects = "VT-5 flip: e2e_inspect_golden.rs:254 (`..._is_empty_view_not_error`) renamed + inverted to assert the error; relation_graph.rs:1099 bundled test split — the missing-id half inverts to error, the unknown-prefix-error half unchanged." },
+  { id = "VT-3", expects = "Net-new missing-id tests for explain and blockers (no existing empty-reliant test covers them; explain_unblocked_entity_empty_channels_not_error is a real unblocked id and stays green)." },
+  { id = "VT-4", expects = "Behaviour-preservation: every real-id golden (the 9 inspect + the human/json subset of the 13 priority) is byte-identical after the seam split — the single-scan restructure changes no output (D3 behavioural proof). Scan order REQ-077 unchanged (the one scan IS scan_entities, same order both consumers saw)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Kill the scan double-parse (F1)"
+objective = """
+Collapse scan_entities' two-parse-per-entity cost (design §2 F1). status_for
+deserializes the full meta::Meta (carrying title), then title_for re-opens and
+re-parses the SAME toml into TitleOnly. Merge into one combined reader
+status_and_title_for(root, kref, id) -> (Option<String>, String): the common
+(non-RV/REC) arm does ONE read_meta and yields both status and title; REC stays a
+lenient title-only read (no status); RV keeps its derived-status + lenient-title
+pair. scan_entities calls status_and_title_for once per entity; title_for survives
+as the RV/REC lenient reader. Pure refactor — no surface change.
+
+Scope-sanctioned residual (design §2 F1): RV still parses its toml twice (the
+finding-ledger read in review::derived_status_string + title_for) and REC once;
+de-duping RV would mean a review-module change, out of scope. \"One parse per
+entity\" is structural for the common path only (D3 — not instrumented).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the `_from` seam landed, real-id goldens byte-identical. scan_entities is the single scan both consumers share." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "status_and_title_for replaces the paired status_for + title_for calls in scan_entities; the non-RV/REC arm parses each entity's toml once and returns (Some(status), title) from a single read_meta." },
+  { id = "EX-2", text = "RV arm returns (Some(derived_status_string), title_for) and REC arm returns (None, title_for); title_for retained as their lenient reader (their strict read_meta fails for the absent top-level status)." },
+]
+verification = [
+  { id = "VT-1", expects = "All real-id goldens (13 priority + 9 inspect) and the relation_graph scan unit tests are byte-identical / green unchanged — F1 changes no derived status or title, only the parse count (behaviour-preservation gate)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Survey decorate-sort-undecorate (F3)"
+objective = """
+Stop the survey comparator doing graph work (design §2 F3). sort_by today calls
+actionability (→ blocked → blocked_by: in_edges walk + BTreeSet + per-predecessor
+class_of) and consequence for BOTH operands on every comparison, then the map
+recomputes the same per row. Materialise each node's signals once into a Row
+{ key, act, consequence, blockers }, then sort over the decorated set
+(act_rank → consequence desc → canonical-id asc) and map to SurveyRow reusing the
+decorated fields; reasons built from them. The comparator does zero graph work.
+Pure refactor — output order + bytes identical (REQ-077 same total order).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (the surface seam is settled). Independent of PHASE-02 — touches surface::survey, not scan_entities." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "surface::survey materialises a per-node Row (key/act/consequence/blockers) before sorting; the sort_by closure compares only pre-computed scalars (act_rank, consequence, key) and invokes no channel/graph fn; the map reuses the decorated fields rather than recomputing." },
+]
+verification = [
+  { id = "VT-1", expects = "The survey goldens (human + --json) hold byte-identical and the survey unit tests stay green — the decorate-sort preserves the act → consequence desc → canonical-id asc total order (REQ-077)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Drop OrderContrib + dead vocabulary + policy-version bump (F4 + F5 + F7 + D4)"
+objective = """
+The slice's only operator-observable surface change (design §2 F4+F5+F7, D4).
+
+F5 — drop OrderContrib whole: it carried dep_level (mislabelled \"dep-topology
+level\"; actually the count of transitive non-terminal blockers = len(refs(&chain)),
+NOT blocker_chain.len()) plus an always-None seq_rank — no information not already
+in blocker_chain. Remove ReasonKind::OrderContrib + the Explanation.order_contrib
+field (view.rs); delete the explain order-contrib block (surface.rs) — which
+contained the SECOND blocked_by_transitive walk, so F4's double walk is resolved as
+a consequence, no \"reuse the result\" plumbing; remove the OrderContrib human arm
+(`order: dep-level …`), its JSON arm, the order_contrib JSON field, and the
+reason_line(&ex.order_contrib) push (render.rs).
+
+F7 — resolve the remaining dead vocabulary by dropping (wiring a consumer is a
+non-goal): ReasonKind::Fallback (variant + render arms); OrderContrib.seq_rank's
+dead render Some-arm + JSON field (fall with OrderContrib); graph::Dangling struct
++ the dangling field (the edge pass's else/None arms become no-ops — an unresolved
+target already contributes no edge); graph::ref_overlays: Vec<OverlayId> field +
+the Vec (keep the local ref_by_label map + per-label overlay creation the edge pass
+needs). All FIVE #[expect(dead_code)] suppressions retire — gone, not relocated.
+
+D4 — bump PRIORITY_POLICY_VERSION priority.v1 → priority.v2 (render.rs:17):
+dropping order_contrib removes a field from the versioned --json envelope, exactly
+the consumer-affecting change the stamp flags (REQ-094/NF-001). Stamped set:
+survey/next/blockers/explain --json (render.rs:233/256/265/277); inspect's
+actionability block does NOT stamp it.
+
+F7 graph-test rewrite (design-deferred): drop the dead-artifact assertions
+(pg.ref_overlays ~graph.rs:512-520, pg.dangling ~:697-745) but PRESERVE the
+behavioural ones — the dangling-target cases were really asserting \"an unresolved
+target produces no edge\"; re-express that against the graph's edge set (dep/seq
+overlays), where it still carries weight.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01..03 complete: the seam, the parse merge, and the survey decorate are landed and green; the byte-identical baseline is established so PHASE-04's golden deltas are isolable." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ReasonKind::OrderContrib + Explanation.order_contrib removed (view.rs); explain's order-contrib block deleted in surface.rs, leaving exactly one blocked_by_transitive walk (the chain walk feeding blocker_chain) — F4 resolved; render.rs OrderContrib human + JSON arms, the order_contrib JSON field, and the reason_line push removed." },
+  { id = "EX-2", text = "ReasonKind::Fallback dropped (variant + render arms); graph::Dangling struct + dangling field dropped (edge-pass else/None arms become no-ops); ref_overlays: Vec<OverlayId> field + Vec dropped, ref_by_label map + per-label overlay creation retained. All five #[expect(dead_code)] suppressions gone." },
+  { id = "EX-3", text = "PRIORITY_POLICY_VERSION = \"priority.v2\" (render.rs:17). survey/next/blockers/explain --json stamp v2; inspect actionability block unchanged (does not stamp)." },
+  { id = "EX-4", text = "Graph unit tests: dead-artifact assertions (pg.ref_overlays, pg.dangling) removed; the behavioural \"unresolved target ⇒ no edge\" assertions re-expressed against the dep/seq edge set. Any unit test constructing Explanation { order_contrib, .. } swept and updated." },
+]
+verification = [
+  { id = "VT-1", expects = "explain golden (human) loses the `order:` line; explain --json loses the order_contrib field AND moves policy_version v1→v2 — e2e_priority_golden.rs:308 updated for real ids." },
+  { id = "VT-2", expects = "survey/next/blockers --json change ONLY the policy_version line v1→v2, data byte-identical — e2e_priority_golden.rs:271 (survey), :328 (next) flip; sweep blockers_json for a version assertion (not confirmed pinned — add/update if present)." },
+  { id = "VT-3", expects = "Human survey/next/blockers/inspect real-id goldens byte-identical (inspect block does not stamp the version; F4/F7 are non-surface)." },
+  { id = "VT-4", expects = "`just check` green (plain cargo clippy, NO --all-targets): zero warnings with all five dead_code suppressions removed — the dead vocabulary is gone, the suppressions are not relocated." },
+]
+specs        = []
+requirements = []
