@@ -785,6 +785,7 @@ pub(crate) fn run_req_add(
     title: Option<String>,
     kind: ReqKind,
     label: Option<String>,
+    slug: Option<String>,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (subtype, spec_id) = resolve_spec_ref(spec_ref)?;
@@ -807,7 +808,7 @@ pub(crate) fn run_req_add(
 
     // Step 2 (§5.4): reserve the requirement — H2-atomic, collision-proof.
     let title = crate::input::resolve_title(title)?;
-    let slug = crate::input::resolve_slug(&title, None)?;
+    let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let reserved = requirement::reserve(&root, &slug, &title, &date)?;
     let req_id = reserved
@@ -2190,6 +2191,7 @@ mod tests {
             Some("Route subcommands".into()),
             ReqKind::Functional,
             None,
+            None,
         )
         .unwrap();
 
@@ -2420,6 +2422,7 @@ parent = \"SPEC-002\"
             Some("User can sign up".into()),
             ReqKind::Functional,
             None,
+            None,
         )
         .unwrap();
 
@@ -2461,6 +2464,7 @@ parent = \"SPEC-002\"
             Some("X".into()),
             ReqKind::Functional,
             None,
+            None,
         )
         .unwrap();
 
@@ -2485,6 +2489,7 @@ parent = \"SPEC-002\"
                 Some(title.into()),
                 kind,
                 label.map(str::to_string),
+                None,
             )
             .unwrap();
         };
@@ -2525,6 +2530,7 @@ parent = \"SPEC-002\"
             "PRD-001",
             Some("X".into()),
             ReqKind::Functional,
+            None,
             None,
         );
         assert!(
@@ -3218,6 +3224,7 @@ parent = \"SPEC-002\"
             "SPEC-001",
             Some("Route".into()),
             ReqKind::Functional,
+            None,
             None,
         )
         .unwrap();

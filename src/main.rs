@@ -731,6 +731,10 @@ enum SpecReqCommand {
         #[arg(long)]
         label: Option<String>,
 
+        /// Explicit slug (default: derived from the title, bounded to a safe length).
+        #[arg(long)]
+        slug: Option<String>,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -2162,8 +2166,9 @@ fn main() -> anyhow::Result<()> {
                     title,
                     kind,
                     label,
+                    slug,
                     path,
-                } => spec::run_req_add(path, &spec_ref, title, kind, label),
+                } => spec::run_req_add(path, &spec_ref, title, kind, label, slug),
                 SpecReqCommand::Status {
                     req_ref,
                     to,
@@ -2654,6 +2659,7 @@ mod write_class_tests {
                     title: None,
                     kind: requirement::ReqKind::Functional,
                     label: None,
+                    slug: None,
                     path: None,
                 }
             }),
