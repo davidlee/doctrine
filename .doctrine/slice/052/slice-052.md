@@ -74,6 +74,19 @@ re-introduced vocab hit failing `just check`).
   whole-word `task` and observing `just check` go red.
 - ISS-007 transitioned to resolved at close.
 
+## Closure
+
+Closed **without a formal `/audit` pass** by deliberate call — the change is a
+trivial 3-line fix (2 README words + 1 justfile recipe token), no source/test
+logic touched, and verification was complete in-flight: VT-1 (`denylist` GREEN),
+VT-2 (old recipe runs 0 denylist tests, `--workspace` catches a planted hit), VH
+(`just check` GREEN end-to-end). No RV ledger was opened; nothing warranted
+reconciliation. Plan stage was likewise skipped (design → direct implementation,
+user-authorised).
+
+Evidence commits: `8e73b80` design · `874244d` fix · `d80ecea` lifecycle ·
+`8507272`/`f315b76` memory supersede + verify. ISS-007 closed (`fixed`).
+
 ## Follow-Ups
 
 - None anticipated. If `--workspace` surfaces unrelated red suites (R1), capture
