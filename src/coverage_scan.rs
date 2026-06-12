@@ -120,6 +120,12 @@ fn collect_matching_entries(root: &Path, req: &str) -> Vec<CoverageEntry> {
 
     let mut out = Vec::new();
     for slice in slices.flatten() {
+        // Skip the slug-alias symlink (`NNN-slug -> NNN`): it re-walks the same
+        // coverage.toml the numeric dir already yielded, double-counting every
+        // entry (ISS-006). The numeric canonical dir is never a symlink.
+        if slice.file_type().is_ok_and(|t| t.is_symlink()) {
+            continue;
+        }
         let coverage_path = slice.path().join("coverage.toml");
         let Ok(body) = fs::read_to_string(&coverage_path) else {
             continue; // no coverage.toml in this slice (or unreadable) → skip
@@ -198,6 +204,32 @@ mod tests {
             "only the two REQ-110 entries survive the filter"
         );
         assert!(cells.iter().all(|(e, _)| e.key.requirement == "REQ-110"));
+    }
+
+    #[test]
+    fn slug_alias_symlink_does_not_double_count() {
+        // ISS-006: doctrine seats a `NNN-slug -> NNN` symlink beside every numeric
+        // slice dir. The corpus walk must NOT re-read the aliased coverage.toml, or
+        // each entry is yielded twice.
+        let dir = tempfile::tempdir().unwrap();
+        write_coverage(
+            dir.path(),
+            42,
+            &one_entry_body("SL-042", "REQ-110", "planned"),
+        );
+        let slice_root = dir.path().join(SLICE_DIR);
+        std::os::unix::fs::symlink(
+            slice_root.join("042"),
+            slice_root.join("042-reconciliation-observe-substrate"),
+        )
+        .unwrap();
+
+        let cells = scan_coverage(dir.path(), "REQ-110");
+        assert_eq!(
+            cells.len(),
+            1,
+            "the slug-alias symlink must not re-yield the same coverage entry (ISS-006)"
+        );
     }
 
     #[test]
