@@ -25,12 +25,12 @@ tree = "0b838f0d0e6be88e4b313af09b65b645994a9010"
 ref_name = "refs/heads/main"
 checkout_state_id = "bf79b0545af9ca8207eeca90b4e0c33b88fc087deaadc10ef71eeac64ea172e8"
 base_commit = "90fc19f4d9239b682cc7a14dc50738dad97348eb"
-verified_sha = ""
+verified_sha = "1797ea699a7b37c3deaeb1291b5a5f50a3c4e760"
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-06-12"
 review_by = ""
 
 [trust]
