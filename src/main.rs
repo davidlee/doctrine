@@ -23,6 +23,7 @@ mod memory;
 mod meta;
 mod plan;
 mod policy;
+mod priority;
 mod projection;
 mod rec;
 mod reconcile;

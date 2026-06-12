@@ -681,6 +681,17 @@ pub(crate) fn relation_edges(
     )])
 }
 
+/// A review's DERIVED status string (`"active"`/`"done"`) for the cross-kind
+/// priority scan (SL-047 §5.2). An RV authors no `status` field (D-C8); its status
+/// is `derived_status` over the AUTHORED finding ledger — authored-tier, not a
+/// runtime read. Reads via the existing `read_review` reader (no new TOML parse),
+/// then runs the same pure `derived` the `show`/`list`/`status` surfaces use.
+pub(crate) fn derived_status_string(root: &Path, id: u32) -> anyhow::Result<String> {
+    let doc = read_review(&root.join(REVIEW_DIR), id)?;
+    let (status, _await) = doc.derived();
+    Ok(status.as_str().to_string())
+}
+
 /// Read every `review-NNN.toml` under the review tree as data (for `list`).
 fn read_reviews(review_root: &Path) -> anyhow::Result<Vec<ReviewDoc>> {
     let mut docs = Vec::new();
