@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebbc5792b72a3a9f21af25e497599"
+memory_key = "mem.pattern.build.just-check-tests-root-package-only"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "just check gate tests root package only; cordage crate suite is ungated"
+summary = "just check gate runs cargo test on the root package only — crates/cordage suites (incl. REQ-079 denylist) are ungated"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["crates/cordage"]
+globs = []
+commands = ["just check", "cargo test"]
+tags = ["testing", "gate", "cordage"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8142dac1993dcdb2b47e096d7717c0f1d99742b7"
+ref_name = "refs/heads/main"
+checkout_state_id = "ad0d7c4799b216df9863d939bce475f224974fd32e4fd2da646776ce82375678"
+base_commit = "fccb05134136b84dcfd4945a56daa3991e90b00e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

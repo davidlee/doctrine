@@ -1,0 +1,20 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 7
+slug = "cordage-denylist-test-red-task-whole-word-in-cratescordagereadmemd-trips-req-079-boundary"
+title = "cordage denylist test red: 'task' whole-word in crates/cordage/README.md trips REQ-079 boundary"
+kind = "issue"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-12"
+updated = "2026-06-12"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
