@@ -1,0 +1,26 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 7
+slug = "inspect-inbound-sort-is-lexical-on-canonical-ref-strings-not-numeric-sl-1000-sorts-before-sl-999-at-id1000-relation-graphrs-permutation-invariance-test-only-covers-single-digits"
+title = "inspect inbound sort is lexical on canonical-ref strings, not numeric: SL-1000 sorts before SL-999 at id>=1000 (relation_graph.rs); permutation-invariance test only covers single digits"
+kind = "risk"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-12"
+updated = "2026-06-12"
+tags = []
+
+[facet]                         # risk only — every field typed; seeded empty
+likelihood = "low"              # low | medium | high | critical
+impact     = "medium"           # low | medium | high | critical
+origin     = "SL-046 /code-review — inspect inbound render sort"
+controls   = ["zero-pad min 3 holds determinism below id 1000", "permutation-invariance test (single-digit) is green but does not exercise the cliff"]
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-046"]
+specs  = []
+drift  = []
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
