@@ -13,22 +13,9 @@
 //! malformed `coverage.toml`, or an unborn HEAD all narrow the result rather than
 //! erroring — a single bad file or a fresh repo must not abort a reconcile read.
 
-// The shell is a leaf built ahead of its consumer: P3 lands the scan; the CLI
-// reconcile reader that calls it is a future slice. Until then `scan_coverage`
-// is dead in the bins/lib build, so the module carries the self-clearing
-// `not(test)` dead_code expect (the `dead-code-self-clearing-leaf` precedent).
-// Under `cfg(test)` the perf-spike/integration tests exercise it, so the lint
-// would not fire there; scoping to `not(test)` fulfils the expectation exactly
-// where the lint applies. Retires itself when the reader is wired.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-042 P3 reconcile-reader shell is a leaf built ahead of its \
-                  CLI-reader consumer — scan_coverage is dead in the bins/lib \
-                  build until that reader is wired (future slice)"
-    )
-)]
+// SL-044 B·P2 wired the consumer: `crate::reconcile::run` calls `scan_coverage`,
+// so the shell is live in the bins/lib build — the self-clearing `not(test)`
+// dead_code expect this module carried has retired itself, as its reason foretold.
 
 use std::fs;
 use std::path::Path;
