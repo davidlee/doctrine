@@ -1,0 +1,84 @@
+# Implementation plan for SL-049 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-049"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "IMP-017 — memory list adopts the shared column model"
+objective = """
+Migrate `memory list`'s last unmigrated seam — the column projection — onto the \
+shared column model (`Column<Memory>` / `select_columns` / `render_columns`), \
+retiring the hand-rolled `format_rows` grid and lifting the `--columns` bail. \
+Default (no `--columns`) output stays byte-identical; `--columns` gains \
+subset/order/duplicate parity with every other kind. Design §1."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; §1 (Fix A) is the governing spec." },
+  { id = "EN-2", text = "`memory list` already rides validate_statuses/build/retain/json_envelope/render_table (the column model is the only unmigrated seam)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`MEMORY_COLUMNS: [Column<Memory>; 6]` + `MEMORY_DEFAULT: &[&str]` added beside the per-kind constants; cells are non-capturing fn(&Memory)->String, scrub_line on key/title/trust, keyless->`-`, full-uid lead." },
+  { id = "EX-2", text = "`list_rows` takes `columns` before `build`, routes Table through select_columns+render_columns, Json unchanged through json_envelope; the `args.columns.is_some()` bail is deleted and `format_rows` retired." },
+  { id = "EX-3", text = "`main.rs` CommonListArgs.columns doc drops the 'rejected on memory list' clause." },
+  { id = "EX-4", text = "Preserved invariants: empty->no header, security scrub on free-text cells, JSON path untouched, per-kind sort_default ordering after retain." },
+]
+verification = [
+  { id = "VT-1", expects = "`memory list` default output byte-identical to today (existing golden re-pinned, stays green)." },
+  { id = "VT-2", expects = "`memory list --columns key,title` projects that subset in order." },
+  { id = "VT-3", expects = "`memory list --columns nope` errors with the available-set message (select_columns parity with validate_statuses)." },
+  { id = "VT-4", expects = "Empty memory corpus -> no header (§5.5 unregressed)." },
+  { id = "VT-5", expects = "A memory with a newline in `title` cannot forge a second row (scrub_line still applied)." },
+  { id = "VT-6", expects = "`just check` green; `cargo clippy` zero warnings (fn-pointer Column cells)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "ISS-004 — spec req add overlong-slug abort + --slug escape"
+objective = """
+Remove the ENAMETOOLONG (OS error 36) abort on a long `spec req add` title and \
+close the latent gap for every kind: plumb a `--slug` escape through \
+`run_req_add` (parity with `spec new`), and length-bound the shared slug path \
+with provenance-differentiated handling — explicit `--slug` over cap errors \
+loud, derived slug over cap truncates best-effort on a char/`-` boundary. \
+Design §2."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; §2 (Fix B) is the governing spec." },
+  { id = "EN-2", text = "OQ-1 resolved: SLUG_MAX = 100 bytes (confirm at execute, §5)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`run_req_add` takes `slug: Option<String>` and calls `resolve_slug(&title, slug)`; `main.rs` `spec req add` clap command adds `#[arg(long)] slug: Option<String>` threaded in." },
+  { id = "EX-2", text = "`resolve_slug` (input.rs) bounds the slug: explicit over SLUG_MAX bytes -> bail naming the cap; explicit empty -> bail (preserved); derived over cap -> truncate_slug; derived empty -> bail." },
+  { id = "EX-3", text = "`truncate_slug` (new, pure, input.rs): within-cap unchanged; over-cap takes longest byte prefix <=SLUG_MAX, prefers cut at last `-` within prefix and trims trailing `-`; never empties a non-empty slug." },
+  { id = "EX-4", text = "Preserved invariants: collision-safe (numeric NNN is identity, slug is cosmetic); behaviour-preserving for every <=100-char caller; ADR-001 layering (pure leaves, no clock/rng/git/disk)." },
+]
+verification = [
+  { id = "VT-1", expects = "`spec req add <spec> \"<title>\" --slug short` succeeds, writes slug `short`." },
+  { id = "VT-2", expects = "A title long enough to previously abort succeeds; slug bounded to SLUG_MAX; no ENAMETOOLONG; files + NNN-slug symlink created." },
+  { id = "VT-3", expects = "`--slug <101-char>` errors naming the cap; nothing written." },
+  { id = "VT-4", expects = "`truncate_slug` unit: within-cap unchanged; over-cap cuts at last `-`; over-cap no `-` hard-cuts on a char boundary; never empties." },
+  { id = "VT-5", expects = "Two long titles sharing a 100-char prefix -> distinct REQ-NNN dirs (collision safety)." },
+  { id = "VT-6", expects = "The three existing resolve_slug unit tests stay green unchanged (A-R5 behaviour-preservation gate)." },
+  { id = "VT-7", expects = "`just check` green; `cargo clippy` zero warnings (bail!/format! string-assembly denies)." },
+]
+specs        = []
+requirements = []
