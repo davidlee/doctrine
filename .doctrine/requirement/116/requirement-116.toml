@@ -4,7 +4,7 @@ version = 1
 id = 116
 slug = "keep-reconciliation-outcomes-diffable-and-reconstructable-from-the-authored-tier"
 title = "Keep reconciliation outcomes diffable and reconstructable from the authored tier"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Every reconciliation outcome is diffable and reconstructable from the authored tier alone."

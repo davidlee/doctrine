@@ -4,7 +4,7 @@ version = 1
 id = 115
 slug = "decay-vhva-coverage-attestations-via-the-memory-git-anchor-staleness-seam"
 title = "Decay VH/VA coverage attestations via the memory git-anchor staleness seam"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "VH/VA coverage attestations decay via the existing memory git-anchor staleness seam — surfaced, never auto-demoted."

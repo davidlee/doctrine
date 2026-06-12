@@ -4,7 +4,7 @@ version = 1
 id = 114
 slug = "admit-no-code-path-that-derives-authored-status-from-coverage"
 title = "Admit no code path that derives authored status from coverage"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "No code path resolves authored requirement status as a function of coverage; the two tiers stay structurally apart."
