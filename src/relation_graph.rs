@@ -55,12 +55,18 @@ pub(crate) fn outbound_for(
         "REC" => crate::rec::relation_edges(root, id),
         // The five backlog kinds share one accessor, routed by their ItemKind (the
         // prefix↔kind map is backlog's single source — no second copy here).
-        other => match crate::backlog::kind_from_prefix(other) {
-            Some(item_kind) => crate::backlog::relation_edges(root, item_kind, id),
-            // Unreachable for any `integrity::KINDS` row; a defensive empty for an
-            // unknown prefix keeps the dispatch total without a panic.
-            None => Ok(Vec::new()),
-        },
+        other => {
+            if let Some(item_kind) = crate::backlog::kind_from_prefix(other) {
+                crate::backlog::relation_edges(root, item_kind, id)
+            } else {
+                // Unreachable for any `integrity::KINDS` row (the explicit arms above
+                // plus the five backlog prefixes route every kind). A new KINDS row
+                // with no arm here lands here — loud in debug (the invariant), a
+                // benign empty in release (dispatch stays total, never a panic).
+                debug_assert!(false, "outbound_for: unrouted KINDS prefix `{other}`");
+                Ok(Vec::new())
+            }
+        }
     }
 }
 
@@ -196,9 +202,14 @@ fn build_relation_graph(root: &Path) -> anyhow::Result<RelationGraph> {
         ids.sort_unstable();
         for id in ids {
             let src_key = EntityKey { prefix, id };
-            // Present by construction (just interned in pass 1); the `else` is
-            // defensive only, keeping the path panic-free.
+            // Present by construction (pass 1 interned every (prefix,id) from the same
+            // KINDS-ordered scan); loud in debug if that ever desyncs, a benign skip in
+            // release (the path stays panic-free).
             let Some(src) = projection.resolve(src_key) else {
+                debug_assert!(
+                    false,
+                    "build_relation_graph: pass-2 id not interned in pass 1"
+                );
                 continue;
             };
             for edge in outbound_for(root, kref.kind, id)? {
@@ -319,8 +330,11 @@ pub(crate) fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
             .collect();
         if !srcs.is_empty() {
             // in_edges orders by the (src,rank,age) adjacency key, but src NodeId
-            // order is mint order, not ref order — sort to canonical-ref order for a
-            // deterministic, permutation-invariant render (REQ-077).
+            // order is mint order, not ref order — sort for a deterministic,
+            // permutation-invariant render (REQ-077). NOTE: this is a LEXICAL sort of
+            // the canonical-ref strings, which equals numeric order only while every
+            // namespace stays below id 1000 (zero-pad is min-3, not fixed-width):
+            // "SL-1000" sorts before "SL-999". True numeric order is RSK-007.
             srcs.sort();
             inbound_by_label.entry(label).or_default().extend(srcs);
         }
@@ -472,9 +486,11 @@ fn render_danglers(parts: &mut Vec<String>, view: &InspectView) {
 /// `Serialize` on domain enums; `RelationLabel` renders via `.name()`). Each label
 /// group is `{ "label": <name>, "targets": [...] }`; each dangler is
 /// `{ "label": <name>, "target": <ref> }`. The interaction `type` is a human-render
-/// extra ONLY (design §5.2) — `--json` serializes the plain 4-field view, so an
-/// agent reads the same shape `InspectView` carries. No trailing newline (the
-/// black-box golden contract — `write!`, not `writeln!`).
+/// extra ONLY (design §5.2) — it is NOT in the JSON. The envelope is the 4
+/// `InspectView` fields (`id`/`outbound`/`inbound`/`danglers`) under a `"kind":
+/// "inspect"` discriminant (the `spec::show_json` envelope precedent), so an agent
+/// reads the same shape `InspectView` carries. No trailing newline (the black-box
+/// golden contract — `write!`, not `writeln!`).
 fn render_json(view: &InspectView) -> anyhow::Result<String> {
     let group = |label: RelationLabel, targets: &[String]| serde_json::json!({ "label": label.name(), "targets": targets });
     let outbound: Vec<serde_json::Value> =
@@ -502,7 +518,6 @@ mod tests {
     use crate::integrity::KINDS;
     use crate::relation::RelationLabel;
     use std::fs;
-    use std::path::PathBuf;
 
     /// Write `parent/dir/<name>` with `body`, creating parents.
     fn write(root: &Path, rel: &str, body: &str) {
@@ -521,23 +536,20 @@ mod tests {
         edges.iter().map(|e| (e.label, e.target.as_str())).collect()
     }
 
-    fn tmp() -> PathBuf {
-        let base = std::env::temp_dir().join(format!("sl046_relgraph_{}", std::process::id()));
-        let dir = base.join(format!(
-            "{:?}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    /// A throwaway corpus root under an RAII temp dir (auto-removed on drop), matching
+    /// the spec.rs tests' `tempfile::tempdir()` convention — no hand-rolled
+    /// pid/nanos uniqueness, no leaked dirs. Callers bind the `TempDir` and read
+    /// `.path()` so the dir outlives the test body.
+    fn tmp() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
     }
 
     // -- VT-1 outbound correctness per kind + outbound_for dispatch ----------
 
     #[test]
     fn slice_outbound_specs_requirements_supersedes() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         write(
             &root,
             ".doctrine/slice/001/slice-001.toml",
@@ -561,7 +573,8 @@ mod tests {
 
     #[test]
     fn governance_outbound_supersedes_related_only() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         // ADR with every axis populated — only supersedes + related must emit.
         write(
             &root,
@@ -585,7 +598,8 @@ mod tests {
 
     #[test]
     fn spec_outbound_lineage_members_interactions() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         write(
             &root,
             ".doctrine/spec/tech/001/spec-001.toml",
@@ -617,7 +631,8 @@ mod tests {
 
     #[test]
     fn product_spec_lineage_options_absent_emit_nothing() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         // A product spec has no descends_from/parent and no interactions.toml.
         write(
             &root,
@@ -635,7 +650,8 @@ mod tests {
 
     #[test]
     fn backlog_outbound_slices_specs_drift_only() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         // Every axis populated — only slices/specs/drift must emit (not
         // needs/after/triggers).
         write(
@@ -661,7 +677,8 @@ mod tests {
 
     #[test]
     fn review_outbound_single_reviews_edge() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         write(
             &root,
             ".doctrine/review/001/review-001.toml",
@@ -675,7 +692,8 @@ mod tests {
 
     #[test]
     fn rec_outbound_owning_slice_and_decision_ref() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         write(
             &root,
             ".doctrine/rec/001/rec-001.toml",
@@ -694,7 +712,8 @@ mod tests {
 
     #[test]
     fn requirement_authors_no_outbound() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         // REQ is an edge target only; the dispatch returns empty without touching disk.
         let edges = outbound_for(&root, kind_for("REQ"), 1).unwrap();
         assert!(edges.is_empty());
@@ -704,7 +723,8 @@ mod tests {
 
     #[test]
     fn rec_decision_ref_carried_as_free_text_not_dropped() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         write(
             &root,
             ".doctrine/rec/002/rec-002.toml",
@@ -722,7 +742,8 @@ mod tests {
 
     #[test]
     fn interactions_collapse_to_single_class_label() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         write(
             &root,
             ".doctrine/spec/tech/004/spec-004.toml",
@@ -813,7 +834,8 @@ mod tests {
     // successor's outbound `supersedes` via in_edges — ADR-004 §3 / REQ-074).
     #[test]
     fn inbound_derived_from_in_edges_including_supersedes_reciprocal() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         // SL-002 supersedes SL-001 and requires REQ-005; SL-001 authors nothing.
         seed_slice(&root, 1, "");
         seed_slice(
@@ -860,7 +882,8 @@ mod tests {
     // collapses in cordage's BTreeSet<Edge> (EdgeAttrs(0,0)).
     #[test]
     fn duplicate_authored_ref_collapses_to_single_inbound_no_panic() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         // SL-002 lists SL-001 twice under supersedes (an authoring duplicate).
         seed_slice(&root, 1, "");
         seed_slice(&root, 2, "supersedes = [\"SL-001\", \"SL-001\"]\n");
@@ -879,7 +902,8 @@ mod tests {
     // independent of NodeId mint order).
     #[test]
     fn inbound_render_is_permutation_invariant() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         // Three supersedors of SL-001, planted out of id order on disk; scan_ids is
         // read_dir order (unsorted), so the only thing making the render stable is
         // the ascending sort + the canonical-ref sort in inspect.
@@ -900,7 +924,8 @@ mod tests {
     // stored reverse field is never read (ADR-004 §5 carve-out, but §3 derivation).
     #[test]
     fn stored_superseded_by_without_reciprocal_yields_no_inbound() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         // ADR-002 carries a stored superseded_by = ADR-009 but NO entity authors
         // `supersedes = [ADR-002]`. ADR-009 exists but supersedes nothing.
         seed_adr(&root, 2, "superseded_by = [\"ADR-009\"]\n");
@@ -920,7 +945,8 @@ mod tests {
     // no relations yields empty sections, not an error.
     #[test]
     fn dangling_and_free_text_targets_surface_as_danglers() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         // A backlog issue with a free-text drift, an unresolved slice ref, and a
         // resolvable slice ref. drift → dangler (no DRIFT kind); SL-099 → dangler
         // (no such entity); SL-001 → a real edge.
@@ -978,7 +1004,8 @@ mod tests {
     // error; an unknown prefix is a clean error (not a panic).
     #[test]
     fn nonexistent_id_empty_view_unknown_prefix_clean_error() {
-        let root = tmp();
+        let dir = tmp();
+        let root = dir.path();
         seed_slice(&root, 1, "");
         // Well-formed ref, no such entity → empty sections.
         let ghost = inspect(&root, "SL-999").unwrap();

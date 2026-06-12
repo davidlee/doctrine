@@ -34,6 +34,22 @@ the hard-fail), and complete the inspect for every well-formed entity. The queri
 entity's own parse error may still be a hard error (you asked for it specifically),
 but an unrelated sibling's must not be.
 
+## Adjacent: read-amplification (same root)
+
+The corpus-wide blast radius and the cost profile are the same design choice. A
+single-entity `inspect <ID>` currently:
+
+- walks `integrity::KINDS` and `scan_ids` **twice** (mint pass, then edge pass),
+- parses **every** entity's TOML via `outbound_for`,
+- accumulates `danglers` for **all** sources, then discards all but the queried set,
+- re-parses the queried entity's outbound a **third** time in `inspect` (the build
+  already computed it).
+
+Inbound genuinely needs the global reverse index; the second scan pass, the
+all-corpus dangler map, and the third queried-entity parse are avoidable. Any harden
+here (SL-048 / a dedicated fix) should fold the read-amplification in, not just the
+malformed-sibling tolerance — they touch the same loop.
+
 ## Pointers
 
 - engine: `src/relation_graph.rs` `build_relation_graph` (the `outbound_for` `?`
