@@ -528,13 +528,6 @@ fn canonicalize_spec_ref(raw: &str) -> String {
 /// sticky `label` carried verbatim (F-A8 — `member_reqs` is its only public-ish
 /// source; `read_members` is private) and the `requirement` FK in canonical form.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "leaf built ahead of its consumer — the coverage scan wires member_reqs/MemberReq in a later phase; self-clears then"
-    )
-)]
 pub(crate) struct MemberReq {
     pub(crate) label: String,
     pub(crate) requirement: String,
@@ -546,13 +539,6 @@ pub(crate) struct MemberReq {
 /// keys, so a raw `REQ-1` would render observed=none, a read that lies (BLOCKER E2).
 /// Mirrors `run_req_add`'s spec-dir resolution; the private `resolve_spec_ref` /
 /// `read_members` stay private, with this their only `pub(crate)` exit.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "leaf built ahead of its consumer — the coverage scan wires this in a later phase; self-clears then"
-    )
-)]
 pub(crate) fn member_reqs(root: &Path, spec_ref: &str) -> anyhow::Result<Vec<MemberReq>> {
     let (subtype, spec_id) = resolve_spec_ref(spec_ref)?;
     let spec_dir = root.join(subtype.kind().dir).join(format!("{spec_id:03}"));
@@ -1415,15 +1401,7 @@ fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Res
 
 /// `doctrine spec req list <SPEC>` — the authored requirement roster (design
 /// §5.4). The compute half is [`req_list_rows`]; this is the thin shell that
-/// resolves the root and writes it. Built ahead of its main.rs CLI wiring (a
-/// later phase), so it is dead in non-test builds until then.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "leaf built ahead of its consumer — main.rs wires `spec req list` in a later phase; self-clears then"
-    )
-)]
+/// resolves the root and writes it.
 pub(crate) fn run_req_list(
     path: Option<PathBuf>,
     spec_ref: &str,

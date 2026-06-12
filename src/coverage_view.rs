@@ -44,7 +44,8 @@
 )]
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -416,6 +417,31 @@ fn json_row(row: &CoverageRow) -> CoverageJsonRow {
 pub(crate) fn render_json(rows: &[CoverageRow]) -> anyhow::Result<String> {
     let json_rows: Vec<CoverageJsonRow> = rows.iter().map(json_row).collect();
     listing::json_envelope("coverage", &json_rows)
+}
+
+/// The thin shell behind `doctrine coverage <reference>` — resolve the root,
+/// materialise the rows (the sole disk seam), then render. Mirrors
+/// [`crate::spec::run_req_list`]: a top-level leaf with its own
+/// `{ reference, columns, format, json }` (NOT a `CommonListArgs` surface — design
+/// Q3). A read only — never writes, never derives authored status (the F1 wall
+/// lives in [`rows`]).
+pub(crate) fn run(
+    path: Option<PathBuf>,
+    reference: &str,
+    columns: Option<&[String]>,
+    format: listing::Format,
+    json: bool,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let rows = rows(&root, reference)?;
+    // `--json` forces Json over any `--format` (A-9; mirror listing.rs:171).
+    let resolved = if json { listing::Format::Json } else { format };
+    let out = match resolved {
+        listing::Format::Json => render_json(&rows)?,
+        listing::Format::Table => render_table(&rows, columns)?,
+    };
+    write!(std::io::stdout(), "{out}")?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

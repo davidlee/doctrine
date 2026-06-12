@@ -197,6 +197,30 @@ enum Command {
         path: Option<PathBuf>,
     },
 
+    /// Read-only requirement coverage / drift view. `<reference>` is REQ-NNN (one
+    /// row) or PRD-/SPEC-NNN (a member fan). Derived observed coverage + the drift
+    /// verdict against authored status — never writes, never derives status.
+    Coverage {
+        /// Canonical ref: REQ-NNN | PRD-NNN | SPEC-NNN.
+        reference: String,
+
+        /// Select/order visible table columns (e.g. `--columns id,status,verdict`).
+        #[arg(long, value_delimiter = ',')]
+        columns: Option<Vec<String>>,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Create and list architecture decision records.
     Adr {
         #[command(subcommand)]
@@ -619,6 +643,20 @@ enum SpecReqCommand {
         /// Operator note (accepted for v1; not yet stored on the requirement).
         #[arg(long)]
         note: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List a spec's requirement members — authored roster (id, label, kind,
+    /// status).
+    List {
+        /// Canonical spec ref: PRD-NNN | SPEC-NNN.
+        spec_ref: String,
+
+        #[command(flatten)]
+        list: CommonListArgs,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -1520,6 +1558,8 @@ fn write_class(cmd: &Command) -> WriteClass {
             SpecCommand::Req { command } => match command {
                 SpecReqCommand::Add { .. } => Write("spec req add"),
                 SpecReqCommand::Status { .. } => Write("spec req status"),
+                // Read-only authored roster (design §5.3).
+                SpecReqCommand::List { .. } => Read,
             },
             SpecCommand::List { .. } | SpecCommand::Show { .. } | SpecCommand::Validate { .. } => {
                 Read
@@ -1547,8 +1587,9 @@ fn write_class(cmd: &Command) -> WriteClass {
             | WorktreeCommand::CheckAllowlist { .. }
             | WorktreeCommand::BranchPointCheck { .. } => Read,
         },
-        // Read-only corpus integrity scan (INV-3).
-        Command::Validate { .. } => Read,
+        // Read-only: the coverage/drift view (never writes / derives status, §5.3)
+        // and the corpus integrity scan (INV-3).
+        Command::Coverage { .. } | Command::Validate { .. } => Read,
         // Mutates the canonical-id triple — an authored write (D2/D6).
         Command::Reseat { .. } => Write("reseat"),
     }
@@ -1879,6 +1920,13 @@ fn main() -> anyhow::Result<()> {
                 note,
             },
         ),
+        Command::Coverage {
+            reference,
+            columns,
+            format,
+            json,
+            path,
+        } => coverage_view::run(path, &reference, columns.as_deref(), format, json),
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
             AdrCommand::List { list, path } => adr::run_list(path, list.into_list_args()),
@@ -1943,6 +1991,11 @@ fn main() -> anyhow::Result<()> {
                     note,
                     path,
                 } => spec::run_req_status(path, &req_ref, to, note),
+                SpecReqCommand::List {
+                    spec_ref,
+                    list,
+                    path,
+                } => spec::run_req_list(path, &spec_ref, list.into_list_args()),
             },
         },
         Command::Backlog { command } => match command {
