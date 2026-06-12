@@ -265,6 +265,31 @@ pub(crate) enum DivergentReason {
     EvidenceOutrunsAuthored,
 }
 
+impl Verdict {
+    /// The terse verdict cell text — the SINGLE source of a verdict's display
+    /// label (the read's table/JSON render; design §5 D5). Deliberately distinct
+    /// from reconcile's `build_prompt` register (two separate registers): this is
+    /// a column cell, not an operator prompt. `Divergent` folds in the reason.
+    pub(crate) fn label(self) -> String {
+        match self {
+            Verdict::Coherent => "Coherent".to_owned(),
+            Verdict::Indeterminate => "Indeterminate".to_owned(),
+            Verdict::Divergent(r) => format!("Divergent: {}", r.label()),
+        }
+    }
+}
+
+impl DivergentReason {
+    /// The terse reason token spliced into a `Divergent` verdict label. Borrowed
+    /// `&'static str` (no allocation) — [`Verdict::label`] owns the `format!`.
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            DivergentReason::EvidenceOutrunsAuthored => "evidence-outruns-authored",
+            DivergentReason::ObservedContradiction => "observed-contradiction",
+        }
+    }
+}
+
 /// The total drift decision tree (design §5.2; every `ReqStatus` × composite-state
 /// cell single-valued). Read-only: classifies the authored/observed relationship,
 /// never mutates or derives status. Pure — `composite` already carries resolved
