@@ -80,32 +80,34 @@ outside F2's "two full corpus scans" target — and are left as-is to bound chur
 
 ### Existence gate — `require_minted`
 
-One shared helper, pinned message, in `relation_graph` (where `EntityKey` lives;
-`priority` already imports it):
+One shared helper over the existence oracle that **all** the keyed surfaces
+already hold — the `Projection<EntityKey>` (it contains exactly the scanned/
+minted keys, so `resolve(key).is_none()` ⇔ the id was never minted). Lives in
+`relation_graph` (where `EntityKey` lives; `priority` already imports it):
 
 ```rust
 // Err: "{}: no such entity", key.canonical()   e.g.  "SL-999: no such entity"
-pub(crate) fn require_minted(scanned: &[ScannedEntity], key: EntityKey) -> anyhow::Result<()>;
+pub(crate) fn require_minted(projection: &Projection<EntityKey>, key: EntityKey)
+    -> anyhow::Result<()>;
 ```
 
-Applied at all four keyed surfaces:
+Applied at all four keyed surfaces, each passing the projection it built:
 
-- `inspect` — replaces the empty-view early return (which also guarded
-  `outbound_for` off a missing file; the bail does the same, earlier).
-- `explain` / `blockers` / `actionability_block` — after `graph::build`, via the
-  projection: `g.projection.resolve(key).is_none()` ⇒ the same error. (These hold
-  a `PriorityGraph`, not the scanned slice; the projection is the existence
-  oracle — it contains exactly the scanned/minted keys. A second
-  projection-based overload or a shared inner check keeps the message single-
-  sourced.)
+- `inspect_from` — `rg.projection`; replaces the empty-view early return (which
+  also guarded `outbound_for` off a missing file — the bail does the same,
+  earlier). VT-5 flips here, at the `inspect` level the test asserts.
+- `explain` / `blockers` / `actionability_block_from` — `g.projection`, after
+  `graph::build_from`.
 
-`run_inspect` checks once, up front, so its two `_from` calls cannot trip it:
+One helper, one oracle *type*, one pinned message, four call sites — no second
+existence path to drift. `run_inspect` therefore needs **no** separate up-front
+check: it scans once, and the gate fires inside whichever `_from` builds first
+(the relation graph, for both table and JSON paths) before the priority block is
+reached:
 
 ```rust
-let key = parse_key(id)?;                              // shape-validate
 let scanned = relation_graph::scan_entities(&root)?;   // ONE walk
-relation_graph::require_minted(&scanned, key)?;        // F6 gate, once
-// table: relation_graph::render_from(&scanned, &root, id, Table)
+// table: relation_graph::render_from(&scanned, &root, id, Table)   — gates in inspect_from
 // json:  relation_graph::inspect_from(&scanned, &root, id) → inspect_value
 // block: priority::surface::actionability_block_from(&scanned, &root, id)
 ```
@@ -157,9 +159,14 @@ fn status_and_title_for(root: &Path, kref: &integrity::KindRef, id: u32)
 
 `title_for` survives as the RV/REC lenient reader (their strict `read_meta` fails
 for lack of a top-level `status`). `scan_entities` calls `status_and_title_for`
-once per entity. Common path: one `<stem>-NNN.toml` parse. RV/REC: one lenient
-parse (+ RV's separate finding-ledger read, which is a different file). "One
-parse per entity" is structural (see D3 — not instrumented).
+once per entity. Common (non-RV/REC) path: one `<stem>-NNN.toml` parse — the F1
+win. **Residual (scope-sanctioned):** RV still parses *its* toml twice — once in
+`review::derived_status_string` (the finding-ledger read) and once in `title_for`
+— and REC parses once (title only). Scope special-cases RV/REC explicitly;
+de-duplicating RV's two reads would mean refactoring `derived_status_string` to
+also yield the title (a `review`-module change), out of scope here. "One parse
+per entity" is therefore structural for the common path (see D3 — not
+instrumented).
 
 ### F3 — `survey` decorate-sort-undecorate
 
@@ -235,11 +242,11 @@ the assertion still carries behavioural weight, rather than against a removed
 
 | Surface | Change | Evidence |
 |---|---|---|
-| `explain` (human + json) | `order:` line / `order_contrib` field removed (F5) | golden update |
-| `inspect` missing id | empty view → `… : no such entity` error (F6) | VT-5 flips |
+| `explain` (human + json) | `order:` line / `order_contrib` field removed (F5) | explain goldens update (these change for *real* ids too) |
+| `inspect` missing id | empty view → `… : no such entity` error (F6) | VT-5 flips — **and enumerate any other empty-view/empty-block assertions** at execute time, not just VT-5 |
 | `explain` / `blockers` missing id | empty result → error (F6) | new test |
-| `survey` / `next` / `blockers` / `inspect` real ids | byte-identical (F1/F2/F3/F4/F7) | existing goldens hold (13 priority + 9 inspect) |
-| graph tests | dead-artifact assertions dropped, behavioural ones re-expressed (F7) | unit tests |
+| `survey` / `next` / `blockers` / `inspect` real ids | byte-identical (F1/F2/F3/F4/F7) | their existing goldens hold (the 9 inspect + the non-`explain` subset of the 13 priority) |
+| graph tests | dead-artifact assertions dropped, behavioural ones re-expressed (F7) | unit tests; also sweep for unit tests constructing `Explanation { order_contrib, … }` |
 
 Gate: `just check` green; `cargo clippy` zero warnings (the five `dead_code`
 suppressions are gone, not relocated).
