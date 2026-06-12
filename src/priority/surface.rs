@@ -83,6 +83,16 @@ fn actionability(g: &PriorityGraph, key: EntityKey) -> Actionability {
     }
 }
 
+/// A survey node decorated ONCE with its sort + render signals, so the comparator
+/// and the row map reuse them instead of re-walking the graph per comparison (the
+/// decorate-sort-undecorate refactor, SL-050 F3).
+struct SurveyDecorated {
+    key: EntityKey,
+    act: Actionability,
+    consequence: u32,
+    blockers: Vec<String>,
+}
+
 /// `survey [--all]` (design §5.4) — the eligible set in importance order (D10).
 ///
 /// Set: every `eligible` node, MINUS `promoted` backlog items (excluded as their own
@@ -93,7 +103,9 @@ fn actionability(g: &PriorityGraph, key: EntityKey) -> Actionability {
 pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
     let g = graph::build(root)?;
 
-    let mut keys: Vec<EntityKey> = g
+    // Decorate ONCE: materialise each surfaced node's sort/render signals so neither
+    // the comparator nor the row map recomputes a graph walk per comparison (SL-050 F3).
+    let mut rows: Vec<SurveyDecorated> = g
         .attrs
         .keys()
         .copied()
@@ -104,40 +116,43 @@ pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
             // Default: eligible, and not a promoted backlog item (its own exclusion).
             channels::eligible(&g, k) && !channels::promoted(&g, k)
         })
+        .map(|k| SurveyDecorated {
+            key: k,
+            act: actionability(&g, k),
+            consequence: channels::consequence(&g, k),
+            blockers: refs(&channels::blocked_by(&g, k)),
+        })
         .collect();
 
     // Importance order (D10), authored-priority slot empty → actionability → cons → id.
-    keys.sort_by(|&a, &b| {
-        let aa = actionability(&g, a);
-        let ab = actionability(&g, b);
+    // The comparator does ZERO graph work — it compares only pre-computed scalars.
+    rows.sort_by(|a, b| {
         // Actionable before Blocked.
-        let act = act_rank(aa).cmp(&act_rank(ab));
-        let cons = channels::consequence(&g, b).cmp(&channels::consequence(&g, a));
-        act.then(cons).then_with(|| a.cmp(&b))
+        let act = act_rank(a.act).cmp(&act_rank(b.act));
+        let cons = b.consequence.cmp(&a.consequence); // consequence DESC
+        act.then(cons).then_with(|| a.key.cmp(&b.key))
     });
 
-    let rows = keys
+    let rows = rows
         .into_iter()
-        .map(|k| {
-            let act = actionability(&g, k);
-            let blockers = refs(&channels::blocked_by(&g, k));
-            let mut reasons = vec![eligibility_reason(&g, k)];
-            if !blockers.is_empty() {
+        .map(|d| {
+            let mut reasons = vec![eligibility_reason(&g, d.key)];
+            if !d.blockers.is_empty() {
                 reasons.push(ReasonKind::BlockedBy {
-                    items: blockers.clone(),
+                    items: d.blockers.clone(),
                 });
             }
             reasons.push(ReasonKind::Consequence {
-                inbound: channels::consequence(&g, k),
+                inbound: d.consequence,
             });
             SurveyRow {
-                id: k.canonical(),
-                title: title_of(&g, k),
-                kind: kind_of(&g, k),
-                status: status_of(&g, k),
-                act,
-                consequence: channels::consequence(&g, k),
-                blockers,
+                id: d.key.canonical(),
+                title: title_of(&g, d.key),
+                kind: kind_of(&g, d.key),
+                status: status_of(&g, d.key),
+                act: d.act,
+                consequence: d.consequence,
+                blockers: d.blockers,
                 reasons,
             }
         })
