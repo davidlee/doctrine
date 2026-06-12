@@ -66,7 +66,7 @@ impl AdrStatus {
 /// `--status` against (A-2). Mirrors `AdrStatus`'s variants, kept in lockstep by
 /// `adr_known_set_matches_variants` (a drift canary). The enum kinds cannot store
 /// an out-of-vocab status, so this doubles as the complete vocabulary.
-const ADR_STATUSES: &[&str] = &[
+pub(crate) const ADR_STATUSES: &[&str] = &[
     "proposed",
     "accepted",
     "rejected",

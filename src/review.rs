@@ -185,7 +185,7 @@ impl ReviewStatus {
 
 /// The `ReviewStatus` known-set. Lockstep-guarded by
 /// `review_status_known_set_matches_variants`.
-const REVIEW_STATUSES: &[&str] = &["active", "done"];
+pub(crate) const REVIEW_STATUSES: &[&str] = &["active", "done"];
 
 /// Whose turn the review summarizes to (design §8, D-C2 — the baton caches this).
 /// A *priority summary* for display/handoff routing, **not** an independent gate

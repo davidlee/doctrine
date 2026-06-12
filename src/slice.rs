@@ -552,7 +552,7 @@ fn set_slice_status(
 /// closure seam / a terminal source, but an out-of-vocab *stored* status is
 /// tolerated on disk and surfaced with a drift marker, not rejected (§5.5
 /// vocabulary-drift invariant); see [`is_drifted`].
-const SLICE_STATUSES: &[&str] = &[
+pub(crate) const SLICE_STATUSES: &[&str] = &[
     "proposed",
     "design",
     "plan",
