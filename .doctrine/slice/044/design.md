@@ -1,10 +1,11 @@
 # Design SL-044: Reconcile writer + closure gate (SPEC-002 B)
 
-> **STATUS: COMPLETE — pending adversarial pass + lock.** All four OPEN questions
-> resolved (D-B5..D-B8, §6/§7); §5 fully drafted incl. the §5.4 sequence. Remaining
-> before lock: external adversarial pass (`/inquisition` or codex), reconcile
-> `slice-044.md` B·P1 wording, then `/plan`. Reference forms: padded entity ids
-> (`SL-044`, `REQ-112`, `ADR-004`); doc-local refs bare (`D1`, `OPEN-1`).
+> **STATUS: LOCKED (2026-06-12).** All four OPEN questions resolved (D-B5..D-B8,
+> §6/§7); §5 fully drafted incl. the §5.4 sequence. External adversarial pass (codex
+> gpt-5.5, 3 blockers + 4 majors) integrated; `slice-044.md` B·P1 wording reconciled;
+> user signed off via `/plan`. Plan authored (`plan.toml`/`plan.md`), D-B5 gate scope
+> declared in `slice-044.toml`. Reference forms: padded entity ids (`SL-044`,
+> `REQ-112`, `ADR-004`); doc-local refs bare (`D1`, `OPEN-1`).
 
 ## 1. Design Problem
 
