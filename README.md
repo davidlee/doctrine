@@ -179,14 +179,14 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [PRD-008 — ADRs](.doctrine/spec/product/008/spec-008.md) — `active`
 - [PRD-009 — Backlog](.doctrine/spec/product/009/spec-009.md) — `active`
 - [PRD-010 — Epistemic and Governance Records](.doctrine/spec/product/010/spec-010.md) — `active`
-- [PRD-011 — Graph-Derived Backlog Priority](.doctrine/spec/product/011/spec-011.md) — `active`
+- [PRD-011 — Graph-Derived Priority and Actionability](.doctrine/spec/product/011/spec-011.md) — `active`
 - [PRD-012 — Technical Specifications](.doctrine/spec/product/012/spec-012.md) — `draft`
-- [PRD-013 — Requirement Reconciliation](.doctrine/spec/product/013/spec-013.md) — `draft`
+- [PRD-013 — Requirement Reconciliation](.doctrine/spec/product/013/spec-013.md) — `active`
 
 ### Technical Specifications
 
 - [SPEC-001 — Graph-Derived Priority Engine](.doctrine/spec/tech/001/spec-001.md) — `active`
-- [SPEC-002 — Requirement Reconciliation Engine](.doctrine/spec/tech/002/spec-002.md) — `draft`
+- [SPEC-002 — Requirement Reconciliation Engine](.doctrine/spec/tech/002/spec-002.md) — `active`
 - [SPEC-003 — Doctrine](.doctrine/spec/tech/003/spec-003.md) — `draft`
 - [SPEC-004 — Entity engine](.doctrine/spec/tech/004/spec-004.md) — `draft`
 - [SPEC-005 — ADR entity surface](.doctrine/spec/tech/005/spec-005.md) — `draft`
@@ -214,4 +214,5 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-007 — Adversarial review as a first-class kind with turn-based ledger coordination](.doctrine/adr/007/adr-007.md) — `accepted`
 - [ADR-008 — Project-local jail build isolation and worker confinement for parallel dispatch](.doctrine/adr/008/adr-008.md) — `proposed`
 - [ADR-009 — Slice lifecycle state machine and conduct axis](.doctrine/adr/009/adr-009.md) — `accepted`
+- [ADR-010 — Relation modelling: unify the contract and write seam, keep storage bespoke](.doctrine/adr/010/adr-010.md) — `accepted`
 <!-- END:readme-index -->
