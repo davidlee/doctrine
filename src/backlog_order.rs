@@ -15,12 +15,13 @@
 //! production-live — the PHASE-02 self-clearing `dead_code` scope removed itself per
 //! plan (mem.pattern.lint.dead-code-expect-vs-cfg-test).
 use crate::backlog::ItemKind;
+use crate::projection::Projection;
 use cordage::{
-    Arity, CyclePolicy, Direction, EdgeAttrs, EvictReason, Graph, GraphBuilder, NodeId, OrderLayer,
+    Arity, CyclePolicy, Direction, EdgeAttrs, EvictReason, Graph, GraphBuilder, OrderLayer,
     OrderSpec, OverlayConfig, OverlayId,
 };
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 /// A backlog item handle in the ordering domain — kind + numeric id, the inputs to
 /// the canonical ref (`RSK-002`). Opaque cordage ids map to and from this; callers
@@ -137,13 +138,13 @@ pub(crate) enum OverrideReason {
     Dangling,
 }
 
-/// The built ordering: the cordage graph, the `NodeId → ItemId` reverse map for
+/// The built ordering: the cordage graph, the `ItemId ↔ NodeId` projection for
 /// reading results back, the two named overlay handles, and the ingest-time
 /// dangling drops. Construct with [`BacklogOrder::build`].
 #[derive(Debug)]
 pub(crate) struct BacklogOrder {
     graph: Graph,
-    by_node: BTreeMap<NodeId, ItemId>,
+    projection: Projection<ItemId>,
     needs_overlay: OverlayId,
     after_overlay: OverlayId,
     dangling: Vec<Override>,
@@ -189,25 +190,35 @@ impl BacklogOrder {
                 .then_with(|| a.item.cmp(&b.item))
         });
 
-        let mut by_item: BTreeMap<ItemId, NodeId> = BTreeMap::new();
-        let mut by_node: BTreeMap<NodeId, ItemId> = BTreeMap::new();
+        // Dedicated pre-intern pass: mint EVERY input's node first, in the sorted
+        // order above, so the monotonic NodeId carries tiers 2–4 of the order key
+        // (C4 — the gate's three-step shape). `intern` is mint-or-get; the inputs
+        // are distinct `ItemId`s by construction (backlog ids unique, RSK-005), so
+        // this asserts the precondition — a duplicate would silently reuse a node
+        // and corrupt the tie-break (VT-3).
+        let mut projection: Projection<ItemId> = Projection::new();
         for input in &ordered_inputs {
-            let node = builder.node();
-            by_item.insert(input.item, node);
-            by_node.insert(node, input.item);
+            assert!(
+                projection.resolve(input.item).is_none(),
+                "backlog_order: duplicate ItemId {} in inputs (ids must be distinct, RSK-005)",
+                input.item.render()
+            );
+            projection.intern(&mut builder, input.item);
         }
 
         let mut dangling: Vec<Override> = Vec::new();
         for input in &ordered_inputs {
-            // Present by construction (just inserted); the `else` is defensive only,
-            // keeping the path panic-free.
-            let Some(&src) = by_item.get(&input.item) else {
+            // Present by construction (just interned); the `else` is defensive only,
+            // keeping the path panic-free. Resolve is get-only — NEVER intern inside
+            // the edge loop, which would mint in dependency-reference order (a
+            // tie-break regression).
+            let Some(src) = projection.resolve(input.item) else {
                 continue;
             };
             for dep in &input.needs {
-                match by_item.get(dep) {
+                match projection.resolve(*dep) {
                     // `A.needs=[B]` ⇒ B before A: edge B→A, hard edges never evict.
-                    Some(&prereq) => {
+                    Some(prereq) => {
                         builder.edge(needs_overlay, prereq, src, EdgeAttrs::new(0, 0));
                     }
                     // The missing predecessor is `from`, the dependent `to` —
@@ -221,11 +232,11 @@ impl BacklogOrder {
                 }
             }
             for (idx, (to, rank)) in input.after.iter().enumerate() {
-                match by_item.get(to) {
+                match projection.resolve(*to) {
                     // `A.after=[{to=B, rank}]` ⇒ B before A: edge B→A (the flip),
                     // carrying the genuine `(rank, age)` eviction key; `age` is the
                     // entry's index in this item's `after` array (§5.4, A7).
-                    Some(&prereq) => {
+                    Some(prereq) => {
                         let age = u64::try_from(idx).map_err(|e| {
                             anyhow::anyhow!("backlog_order: after-edge index overflows u64: {e}")
                         })?;
@@ -255,7 +266,7 @@ impl BacklogOrder {
 
         Ok(Self {
             graph,
-            by_node,
+            projection,
             needs_overlay,
             after_overlay,
             dangling,
@@ -268,7 +279,7 @@ impl BacklogOrder {
         self.graph
             .ordered()
             .iter()
-            .filter_map(|node| self.by_node.get(node).copied())
+            .filter_map(|node| self.projection.key_of(*node))
             .collect()
     }
 
@@ -280,13 +291,7 @@ impl BacklogOrder {
             .cycles()
             .iter()
             .filter(|cycle| cycle.overlay() == self.needs_overlay)
-            .map(|cycle| {
-                cycle
-                    .nodes()
-                    .iter()
-                    .filter_map(|node| self.by_node.get(node).copied())
-                    .collect()
-            })
+            .map(|cycle| self.projection.remap_set(cycle.nodes()))
             .collect()
     }
 
@@ -303,8 +308,8 @@ impl BacklogOrder {
             .iter()
             .filter(|evicted| evicted.overlay() == self.after_overlay)
             .filter_map(|evicted| {
-                let from = self.by_node.get(&evicted.edge().src()).copied()?;
-                let to = self.by_node.get(&evicted.edge().dst()).copied()?;
+                let from = self.projection.key_of(evicted.edge().src())?;
+                let to = self.projection.key_of(evicted.edge().dst())?;
                 let reason = match evicted.reason() {
                     EvictReason::IntraOverlayCycle => OverrideReason::SoftCycleEvicted,
                     EvictReason::UnionCycleVsLayer => OverrideReason::Contradicted,
@@ -640,6 +645,22 @@ mod tests {
             pos(&order, lo) < pos(&order, hi),
             "the after edge (lo→hi) beats hi's exposure; got {order:?}"
         );
+    }
+
+    // --- VT-3: the distinct-key precondition fires on a duplicate ItemId. The
+    // pre-intern pass asserts each input's id is absent before interning; a
+    // duplicate (a corpus invariant violation, RSK-005) must panic, never silently
+    // reuse a node and corrupt the tie-break. ---
+
+    #[test]
+    #[should_panic(expected = "duplicate ItemId")]
+    fn duplicate_item_id_in_inputs_trips_the_precondition() {
+        let a = rsk(1);
+        let inputs = vec![
+            inp(a, "2026-06-01", 0, vec![], vec![]),
+            inp(a, "2026-06-02", 0, vec![], vec![]), // same ItemId — must fire
+        ];
+        let _ = BacklogOrder::build(&inputs);
     }
 
     // --- T7: VT-10 no pub(crate) signature leaks an opaque cordage id ---
