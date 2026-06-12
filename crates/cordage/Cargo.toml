@@ -4,7 +4,7 @@
 # (ADR-001 leaf).
 [package]
 name = "cordage"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 rust-version.workspace = true
 description = "Generic graph core: typed overlays, deterministic ordering, channel propagation"
