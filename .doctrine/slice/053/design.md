@@ -60,7 +60,17 @@ tty::stdout_color_enabled() ─bool──▶ render_columns(rows, cols, color)
   NO_COLOR set?  (var_os)              ├─ header cells → bold      (when color)
   io::stdout().is_terminal()          ├─ data cells  → ColumnPaint (when color)
                                        └─ render_table(grid) ──▶ comfy-table layout
+                                            (force_no_tty — D6, load-bearing)
 ```
+
+**Load-bearing purity guard (D6).** comfy-table built with `custom_styling`
+transitively enables its `tty` feature (see §5); without intervention its content
+formatter calls `Table::should_style()` → `is_tty()` → `stdout().is_terminal()` at
+*format time* (table.rs:396,360,371). That is a tty read inside the pure render
+layer and makes piped output terminal-dependent. `render_table` **must** call
+`Table::force_no_tty()` before `to_string()`; this is not optional polish, it is
+the seam that keeps `render_table` pure and the goldens stable. A test asserts
+identical bytes under a forced-terminal vs forced-no-terminal stdout.
 
 **Doctrinal load-bearing decision (D3):** colour uses owo_colors' *unconditional*
 colorize methods (`.green()`, `.bold()`, …), gated by the injected `color` bool.
@@ -80,17 +90,22 @@ Responsibility split stays clean:
 // src/listing.rs (pure)
 
 /// How a column's data cells are coloured when colour is enabled.
-pub(crate) enum ColumnPaint {
+pub(crate) enum ColumnPaint<R> {
     None,
     Fixed(owo_colors::AnsiColors),
-    ByValue(fn(&str) -> Option<owo_colors::AnsiColors>),
+    /// Hue derived from the ROW, not the emitted cell text. The display cell may
+    /// carry decoration the hue map can't match — `slice list` emits `done ⚠` /
+    /// `bogus? ⚠` (slice.rs `decorated_status`), `review list` emits
+    /// `open (await …)` (review.rs). The extractor reads the row's *semantic*
+    /// status, so decoration never costs the cell its colour.
+    ByValue(fn(&R) -> Option<owo_colors::AnsiColors>),
 }
 
 pub(crate) struct Column<R> {
     pub(crate) name: &'static str,
     pub(crate) header: &'static str,
     pub(crate) cell: fn(&R) -> String,
-    pub(crate) paint: ColumnPaint,          // NEW
+    pub(crate) paint: ColumnPaint<R>,       // NEW
 }
 
 pub(crate) fn render_columns<R>(
@@ -110,9 +125,9 @@ fn render_table(grid: &[Vec<String>]) -> String;
   raw `cell` output via owo when `color` is true; when false (or `None`), the raw
   string passes through unchanged.
 
-**Shared status hue (no per-kind duplication).** One function maps a status
-token to a hue, reused by every kind's status column via
-`ColumnPaint::ByValue(status_hue)`:
+**Shared status hue (no per-kind duplication).** One function maps a *bare*
+status token to a hue. It is fed the row's semantic status by a per-column
+extractor, **never** the decorated display cell:
 
 ```rust
 fn status_hue(s: &str) -> Option<owo_colors::AnsiColors> {
@@ -123,11 +138,21 @@ fn status_hue(s: &str) -> Option<owo_colors::AnsiColors> {
         _ => None, // proposed/open/ready/… → default colour
     }
 }
+
+// each kind's status column wires the row→token extractor, e.g.
+//   slice:  ColumnPaint::ByValue(|r| status_hue(r.authored_status()))
+//   review: ColumnPaint::ByValue(|r| status_hue(r.status.as_str()))
 ```
 
-The exact token→hue table is finalised at implementation against the live status
+The shared map stays singular (no per-kind duplication of the token→hue table);
+only the *source* is per-column — the raw status field on the row, not
+`render_columns`' emitted string. This is the fix for the refuted "status cell
+stays a bare token" premise (§9a F-4): `slice`/`review` decorate the cell, so a
+match on emitted text would silently drop colour exactly where it's wanted. The
+exact token→hue table is finalised at implementation against the live status
 vocabularies (`doctrine <kind> --help` / the status enums); the design fixes the
-*mechanism* (one shared `ByValue` fn), not an authoritative token list.
+*mechanism* (one shared map + per-column row extractor), not an authoritative
+token list.
 
 ## 4. Colour capability resolution (impure shell)
 
@@ -155,15 +180,21 @@ Piped output must be byte-stable and terminal-size-independent, or the black-box
 goldens flake.
 
 - `Table::set_content_arrangement(ContentArrangement::Disabled)` and never set a
-  table width → comfy-table never queries the terminal; column widths derive only
-  from content. (comfy-table's default `Dynamic` arrangement consults terminal
-  width via crossterm — that path is disabled.)
-- comfy-table dependency: `default-features = false` to drop the crossterm/tty
-  width machinery; enable the **`custom_styling`** feature so display-width
-  measurement strips ANSI (colour applied upstream in `render_columns` must not
-  desync alignment). Exact feature set is verified at execute against the
-  resolved crate version — if `custom_styling` cannot be enabled without
-  crossterm, re-open here rather than forcing it (ASM-1).
+  table width → comfy-table never *arranges* against the terminal; column widths
+  derive only from content. (comfy-table's default `Dynamic` arrangement consults
+  terminal width via crossterm — that path is disabled.) Disabling arrangement is
+  necessary but **not sufficient**: see the tty read below.
+- comfy-table dependency (corrected against the resolved crate, 7.2.2):
+  `default-features = false` + the **`custom_styling`** feature (needed so
+  display-width measurement strips the ANSI that `render_columns` applies upstream,
+  keeping separators aligned). **`custom_styling` is not crossterm-free** — its
+  feature graph is `custom_styling = ["dep:ansi-str","dep:console","tty"]` and
+  `tty = ["dep:crossterm"]` (Cargo.toml:41-48). We therefore **accept crossterm as
+  a transitive dependency** (path A, user decision); the earlier "drop the
+  crossterm/tty machinery" framing was refuted (§9a F-3). Crossterm being linked is
+  harmless to determinism *only because* arrangement is `Disabled` (no width query)
+  **and** `force_no_tty()` is called (no style/tty query — D6). Both are
+  load-bearing; neither alone suffices.
 - `render_table` re-appends the trailing `\n` (comfy-table's `to_string()` omits
   it; backlog.rs:1045 documents callers printing the result verbatim, relying on
   the seam's own newline). Empty grid → `""` preserved.
@@ -202,14 +233,23 @@ New / changed evidence:
   IMP-018 concern the `--columns` flag, not the renderer, and stay out of scope.
 - **D5** — `--color=auto|always|never` flag is **out of scope**; auto-detection
   (`NO_COLOR` + isatty) only. Captured as a follow-up.
+- **D6** — `render_table` calls `Table::force_no_tty()` before `to_string()`. The
+  `custom_styling` → `tty` feature edge makes the content formatter read
+  `stdout().is_terminal()` at format time; `force_no_tty` is the load-bearing seam
+  that keeps the pure layer pure and piped output stable (§2, §9a F-3).
 
-Residual: none blocking. ASM-1 (comfy-table can express the minimalist style and
-ANSI-aware width without re-introducing terminal-width dependence) is verified at
-execute; failure re-opens D1.
+Residual: none blocking. ASM-1 is **resolved against crate 7.2.2** (not deferred):
+comfy-table cannot give ANSI-aware width without `custom_styling`→`tty`→crossterm,
+so crossterm is accepted (D1/path A) and neutralised by `ContentArrangement::
+Disabled` + `force_no_tty()` (D6). The execute-time spike now *proves* that pair
+deterministic, rather than testing whether crossterm can be dropped.
 
-## 9a. Adversarial review (internal pass)
+## 9a. Adversarial review (internal + external pass)
 
-Hostile self-review of this design; findings integrated above.
+Hostile self-review of this design, then an external adversarial pass
+(codex/GPT-5.5, read-only) that **refuted** internal F-3 and F-4 against the
+resolved crate manifest and live source. Findings integrated above; the external
+refutations rewrote F-3 (feature graph) and F-4 (status_hue) and added D6.
 
 - **F-1 — scope imprecision (integrated §1).** "Everything through
   `render_columns`" was loose. Corrected to a precise surface inventory:
@@ -222,17 +262,27 @@ Hostile self-review of this design; findings integrated above.
   hand-built grids are fixed 7/5 columns with a matching header. **Invariant:**
   `render_table` is only ever handed rectangular grids. A guard test pins this so
   a future ragged caller fails loudly rather than mis-rendering.
-- **F-3 — comfy-table feature gamble (integrated §10).** `custom_styling` working
-  under `default-features = false` (no crossterm) together with
-  `ContentArrangement::Disabled` for determinism is load-bearing and unverified
-  in-repo. Elevated to a **spike at the head of phase 1** — resolve the feature
-  set and prove deterministic, ANSI-aware, terminal-size-independent output on a
-  throwaway table *before* swapping the real renderer. Failure re-opens D1 cheaply.
-- **F-4 — status_hue robustness (documented).** `ByValue` receives the emitted
-  cell text. Sibling columns carry markers (slice rollup `—`/`!N`/`?N`/`⚠`), but
-  those live in their *own* columns (paint `None`); the status column stays a
-  bare token. Should a marker ever contaminate a status cell, `status_hue`
-  returns `None` ⇒ no colour, no breakage. Graceful degradation by construction.
+- **F-3 — comfy-table feature gamble (REFUTED by external pass; design corrected
+  §2/§5/§7).** Internal pass assumed `custom_styling` could work under
+  `default-features = false` *without crossterm*. The external review checked the
+  resolved manifest (comfy-table 7.2.2): `custom_styling = ["dep:ansi-str",
+  "dep:console","tty"]`, `tty = ["dep:crossterm"]` — the feature is **inseparable
+  from crossterm**. Worse, the `tty` feature makes the content formatter call
+  `should_style()` → `is_tty()` → `stdout().is_terminal()` at format time
+  (table.rs:396,360,371), so `ContentArrangement::Disabled` alone does **not**
+  buy determinism or purity. Resolution: accept crossterm transitively (D1/path A)
+  and add the mandatory `force_no_tty()` guard (**D6**). The phase-1 spike stands
+  but its goalpost moves — it proves `Disabled + force_no_tty` deterministic, not
+  that crossterm is absent.
+- **F-4 — status_hue premise REFUTED by external pass; design corrected §3.**
+  Internal pass claimed the status column "stays a bare token" so matching on
+  emitted text is safe. False: `slice list` decorates the status cell itself —
+  `done ⚠` / `bogus? ⚠` (slice.rs `decorated_status`) — and `review list` emits
+  composite `open (await …)` (review.rs). `ByValue(fn(&str))` on the emitted cell
+  would silently drop colour on exactly those surfaces. Fix: `ColumnPaint<R>`'s
+  `ByValue` now takes `fn(&R)` and reads the row's **semantic** status; the shared
+  `status_hue` token map is unchanged. Graceful `None` survives as a backstop, but
+  is no longer load-bearing — the correct source is wired in.
 - **F-5 — not behaviour-preserving by design (clarified §6).** The CLAUDE.md
   behaviour-preservation gate ("shared machinery suites stay green unchanged")
   targets the entity engine; this change deliberately alters listing output. The
@@ -248,8 +298,8 @@ Hostile self-review of this design; findings integrated above.
 
 | Path | Change |
 |---|---|
-| `Cargo.toml` (workspace + bin) | add `comfy-table` (`default-features=false`, `custom_styling`) + `owo_colors` to `[workspace.dependencies]` and the bin `[dependencies]` |
-| `src/listing.rs` | `render_table` reimplemented over comfy-table (layout only); `render_columns` gains `color` param + paint application; `ColumnPaint` enum; `status_hue`; hand-rolled width/pad maths deleted; pure colour + alignment tests |
+| `Cargo.toml` (workspace + bin) | add `comfy-table` (`default-features=false`, features `["custom_styling"]` — pulls crossterm transitively, accepted per D1/path A) + `owo_colors` to `[workspace.dependencies]` and the bin `[dependencies]` |
+| `src/listing.rs` | `render_table` reimplemented over comfy-table (layout only; **`force_no_tty()` before `to_string()` — D6**); `render_columns` gains `color` param + paint application; `ColumnPaint<R>` enum (`ByValue` reads the row, not the cell); `status_hue`; hand-rolled width/pad maths deleted; pure colour + alignment + force-no-tty determinism tests |
 | `src/tty.rs` (new) | `stdout_color_enabled()` — impure capability resolution |
 | 11 `run_list` call sites | resolve + pass the `color` bool into `render_columns` |
 | each kind's `Column` literals | id columns gain `Fixed(hue)`; status columns gain `ByValue(status_hue)`; others `None` |
@@ -260,12 +310,13 @@ Hostile self-review of this design; findings integrated above.
 Provisional, to keep RSK-1 clean:
 
 1. **Renderer swap** — *spike first* (F-3): prove comfy-table with the resolved
-   feature set (`default-features=false` + `custom_styling`) renders a throwaway
-   table deterministically, ANSI-aware, terminal-size-independent
-   (`ContentArrangement::Disabled`). Then swap comfy-table behind `render_table`
-   (no colour yet), minimalist `│` separators, rectangular-grid guard test;
-   re-baseline goldens. Pure shape change, isolated commit. If the spike fails,
-   re-open D1 before any further work.
+   feature set (`default-features=false` + `custom_styling`, crossterm transitive)
+   renders a throwaway table deterministically and terminal-size-independent under
+   `ContentArrangement::Disabled` **+ `force_no_tty()`** — assert identical bytes
+   with stdout forced-terminal vs forced-pipe (D6). Then swap comfy-table behind
+   `render_table` (no colour yet), minimalist `│` separators, rectangular-grid
+   guard test; re-baseline goldens. Pure shape change, isolated commit. If the
+   spike fails, re-open D1 before any further work.
 2. **Colour seam** — `tty.rs`, `color` param on `render_columns`, `ColumnPaint`,
    `status_hue`, paint the column literals across the ~13 sites, pure colour
    tests. Goldens stay green (piped ⇒ plain). priority stays monochrome (layout
