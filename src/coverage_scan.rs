@@ -58,6 +58,57 @@ pub(crate) fn scan_coverage(root: &Path, req: &str) -> Vec<(CoverageEntry, IsSta
         .collect()
 }
 
+/// The DISTINCT requirements physically covered by ONE slice's OWN
+/// `.doctrine/slice/<NNN>/coverage.toml` (R-B4, the closure-gate `covered` term).
+///
+/// Distinct from [`scan_coverage`], which is per-requirement ACROSS all slices and
+/// never enumerates a single slice's reqs — this reads exactly that one file and
+/// collects the distinct `entry.key.requirement` (first-seen order; ISS-006's
+/// slug-symlink double-walk does not apply — we read one concrete path, not a
+/// dir-walk). A missing/empty `coverage.toml` ⇒ `covered = ∅` (NOT an error — a
+/// slice may close having authored/reconciled reqs but covered none).
+///
+/// **Integrity (codex finding 6):** every entry's `key.slice` MUST equal `canonical`
+/// (`"SL-<NNN>"`) — a FOREIGN `slice =` in S's own coverage.toml is an authoring
+/// error, REFUSED here rather than silently swept in-or-out of the gate set.
+pub(crate) fn slice_local_covered_reqs(
+    root: &Path,
+    slice_id: u32,
+    canonical: &str,
+) -> anyhow::Result<Vec<String>> {
+    let path = root
+        .join(SLICE_DIR)
+        .join(format!("{slice_id:03}"))
+        .join("coverage.toml");
+    let body = match fs::read_to_string(&path) {
+        Ok(b) => b,
+        // Absent ⇒ covered = ∅ (not an error).
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => {
+            return Err(e).map_err(|e| anyhow::anyhow!("failed to read {}: {e}", path.display()));
+        }
+    };
+    let file = coverage::parse(&body)
+        .map_err(|e| anyhow::anyhow!("failed to parse {}: {e}", path.display()))?;
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for entry in file.entry {
+        anyhow::ensure!(
+            entry.key.slice == canonical,
+            "integrity error: {} carries a foreign coverage entry slice = \"{}\" \
+             (expected \"{canonical}\") for requirement {} — a slice's own \
+             coverage.toml must cite only itself",
+            path.display(),
+            entry.key.slice,
+            entry.key.requirement,
+        );
+        if seen.insert(entry.key.requirement.clone()) {
+            out.push(entry.key.requirement);
+        }
+    }
+    Ok(out)
+}
+
 /// The disk half: corpus-walk `<root>/.doctrine/slice/*/coverage.toml`, parse
 /// each, and keep entries whose key requirement matches `req`. Missing dir →
 /// empty; an unreadable or malformed file is skipped (degradation, not error).
