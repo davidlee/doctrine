@@ -39,16 +39,31 @@ pub(crate) fn resolve_title(title: Option<String>) -> anyhow::Result<String> {
 }
 
 /// Symlink filenames are `NNN-slug` / `requirement-NNN-slug`; the filesystem caps
-/// a single name at 255 bytes. Cap the slug well under that. Bound is in BYTES,
-/// not chars: a derived slug is ASCII (1 byte/char) but an explicit `--slug` is
-/// taken verbatim and may be multibyte, so a char cap could let a short-looking
-/// but fat slug overflow the byte limit and re-abort.
+/// a single name at 255 bytes. Cap the slug well under that. Both a derived slug
+/// and a validated explicit `--slug` are slug-charset (ASCII, 1 byte/char), so the
+/// cap in bytes equals a cap in chars — it is expressed in bytes because the FS
+/// limit it defends is a byte limit.
 const SLUG_MAX: usize = 100;
 
+/// An explicit `--slug` must conform to the shape `derive_slug` already
+/// guarantees: lowercase ASCII alphanumerics joined by interior `-`, no leading or
+/// trailing dash (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`). The slug is spliced straight
+/// into the `NNN-slug` symlink name (e.g. `requirement.rs`), so admitting a `/`,
+/// `.`, whitespace, or control character would let it traverse or break out of the
+/// entity directory — a path-component injection. The charset cap is the wall.
+fn slug_is_well_formed(s: &str) -> bool {
+    !s.starts_with('-')
+        && !s.ends_with('-')
+        && !s.is_empty()
+        && s.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
 /// Resolve the slug: an explicit `--slug`, else derive it from the title. An
-/// explicit slug is taken verbatim (empty or over-`SLUG_MAX` bails); a title that
-/// derives to nothing (symbol-only) bails for an explicit `--slug`, and a derived
-/// slug over `SLUG_MAX` is truncated rather than left to overflow the FS name cap.
+/// explicit slug is validated to the slug charset (empty / over-`SLUG_MAX` /
+/// malformed bails) then taken verbatim; a title that derives to nothing
+/// (symbol-only) bails for an explicit `--slug`, and a derived slug over
+/// `SLUG_MAX` is truncated rather than left to overflow the FS name cap.
 pub(crate) fn resolve_slug(title: &str, slug: Option<String>) -> anyhow::Result<String> {
     if let Some(s) = slug {
         if s.is_empty() {
@@ -56,6 +71,9 @@ pub(crate) fn resolve_slug(title: &str, slug: Option<String>) -> anyhow::Result<
         }
         if s.len() > SLUG_MAX {
             bail!("--slug too long ({} bytes; max {SLUG_MAX})", s.len());
+        }
+        if !slug_is_well_formed(&s) {
+            bail!("--slug must be lowercase a-z, 0-9 and '-' (no leading/trailing '-'): {s:?}");
         }
         return Ok(s);
     }
@@ -66,15 +84,15 @@ pub(crate) fn resolve_slug(title: &str, slug: Option<String>) -> anyhow::Result<
     Ok(truncate_slug(&derived, SLUG_MAX))
 }
 
-/// Truncate a derived slug to `max` bytes, preferring a clean cut at a `-`.
+/// Truncate a slug-charset string to `max` bytes, preferring a clean cut at a `-`.
 ///
-/// The input is always `derive_slug` output: ASCII (1 byte/char, no edge dashes),
-/// so byte length equals char count and any byte prefix is a char boundary.
-/// Within `max` it is returned unchanged. Over `max`, the longest `max`-byte
-/// prefix is taken; if that prefix contains a `-` past position 0 the cut moves
-/// back to the last such `-` (trimming it), so the slug ends on a word boundary.
-/// A non-empty slug is never emptied — with no usable interior `-` the hard byte
-/// prefix stands.
+/// Operates on a slug-charset string (ASCII, 1 byte/char), so byte length equals
+/// char count and any byte prefix is a char boundary. Within `max` it is returned
+/// unchanged. Over `max`, the longest `max`-byte prefix is taken; if that prefix
+/// contains a `-` past position 0 the cut moves back to the last such `-`
+/// (trimming it), so the slug ends on a word boundary. Defensive on the empty
+/// edge: a non-empty input is never emptied — with no usable interior `-` (or only
+/// a dash at position 0) the hard byte prefix stands.
 fn truncate_slug(slug: &str, max: usize) -> String {
     if slug.len() <= max {
         return slug.to_string();
@@ -131,6 +149,40 @@ mod tests {
     fn resolve_slug_rejects_an_empty_explicit_flag() {
         let err = resolve_slug("My Title", Some(String::new())).unwrap_err();
         assert!(err.to_string().contains("must not be empty"));
+    }
+
+    #[test]
+    fn resolve_slug_accepts_a_well_formed_explicit_flag_verbatim() {
+        assert_eq!(
+            resolve_slug("My Title", Some("a-clean-slug".into())).unwrap(),
+            "a-clean-slug"
+        );
+        // single char is well-formed (the interior group is optional).
+        assert_eq!(resolve_slug("My Title", Some("a".into())).unwrap(), "a");
+    }
+
+    #[test]
+    fn resolve_slug_rejects_a_path_hostile_explicit_flag() {
+        // F-1 (RV-008): the slug is spliced into the `NNN-slug` symlink name, so a
+        // separator / traversal / control char must never reach the filesystem.
+        for hostile in [
+            "../../etc",   // traversal
+            "a/b",         // separator
+            "..",          // parent ref
+            ".hidden",     // dot
+            "has space",   // whitespace
+            "UPPER",       // uppercase (not in derive_slug's charset)
+            "under_score", // underscore
+            "-leading",    // edge dash
+            "trailing-",   // edge dash
+            "tab\tslug",   // control
+        ] {
+            let err = resolve_slug("My Title", Some(hostile.into())).unwrap_err();
+            assert!(
+                err.to_string().contains("lowercase"),
+                "{hostile:?} must be rejected with the charset message: {err}"
+            );
+        }
     }
 
     #[test]

@@ -207,6 +207,41 @@ fn an_overlong_explicit_slug_errors_and_reserves_nothing() {
     assert!(!repo.req_dir().join("001").exists());
 }
 
+// --- VT-4: a path-hostile --slug is refused at the CLI; nothing reserved ------
+
+#[test]
+fn a_path_hostile_explicit_slug_errors_and_reserves_nothing() {
+    // F-1 (RV-008): the slug is spliced into the `requirement-NNN-slug` symlink
+    // name, so a traversal / separator / control char must be refused at the seam,
+    // never reach the filesystem. The byte-cap alone is no wall against `..`/`/`.
+    for hostile in ["../../pwn", "a/b", "..", ".hidden", "has space"] {
+        let repo = Repo::new();
+        host_spec(&repo);
+        let out = repo.run(&[
+            "spec",
+            "req",
+            "add",
+            "PRD-001",
+            "A Title",
+            "--kind",
+            "functional",
+            "--slug",
+            hostile,
+        ]);
+        assert!(
+            !out.status.success(),
+            "hostile --slug {hostile:?} must fail"
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("lowercase"),
+            "{hostile:?} carries the charset message: {stderr}"
+        );
+        // Nothing reserved, and no stray entry under the requirement dir.
+        assert!(!repo.req_dir().join("001").exists());
+    }
+}
+
 // --- VT-5: collision safety — distinct REQ dirs despite a shared 100-byte slug -
 
 #[test]
