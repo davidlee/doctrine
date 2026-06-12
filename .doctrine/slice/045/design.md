@@ -4,13 +4,12 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-> **STATUS: DRAFT — internal (A1–A7) + external (E1–E6, codex gpt-5.5) adversarial passes
-> integrated (2026-06-12).** All three scope OQs resolved (OQ-1/2/3, §6→§7); §5 drafted;
-> both hostile passes folded in (§10); Q2 closed, Q3 amended. Two external blockers (E1
-> CoverageRow enum, E2 member_reqs canonicalize) fixed. Awaiting user sign-off before lock,
-> then `/plan`. Descends **SPEC-002** / **PRD-013**; completes the user-facing half of
-> **REQ-110** / **REQ-111**. Reference forms: padded entity ids (`SL-045`, `REQ-110`,
-> `ADR-001`); doc-local refs bare (`D1`, `OQ-1`, `E1`).
+> **STATUS: LOCKED (2026-06-12).** Internal (A1–A7) + external (E1–E6, codex gpt-5.5)
+> adversarial passes integrated (§10); user signed off. All scope OQs resolved (§6→§7);
+> Q2 closed, Q3 amended; two external blockers (E1 CoverageRow enum, E2 member_reqs
+> canonicalize) fixed. Ready for `/plan`. Descends **SPEC-002** / **PRD-013**; completes
+> the user-facing half of **REQ-110** / **REQ-111**. Reference forms: padded entity ids
+> (`SL-045`, `REQ-110`, `ADR-001`); doc-local refs bare (`D1`, `OQ-1`, `E1`).
 
 ## 1. Design Problem
 
