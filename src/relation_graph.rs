@@ -209,14 +209,15 @@ pub(crate) struct ScannedEntity {
 /// `scan_ids` (already skips the `NNN-slug` symlink + non-dirs — VT-5 free), **sort
 /// ids ascending** (C5 — `scan_ids` is unsorted `read_dir` order; the sort makes the
 /// scan order — and thus every consumer's mint/render — permutation-invariant,
-/// REQ-077), then per entity read its AUTHORED status ([`status_for`]) and its
-/// authored outbound edges ([`outbound_for`]). Yields entities in KINDS-table /
+/// REQ-077), then per entity read its AUTHORED status and title in one combined read
+/// ([`status_and_title_for`]) and its authored outbound edges ([`outbound_for`]).
+/// Yields entities in KINDS-table /
 /// id-ascending order — the SAME order `build_relation_graph`'s old pass-1 minted in,
 /// so `inspect`'s mint order (and therefore its byte-identical output) is preserved.
 ///
-/// Disk touches live here (the thin imperative shell — `scan_ids`/`status_for`/
-/// `outbound_for` read the entity tomls); a consumer's tally/mint/edge policy stays
-/// pure over the returned `Vec`.
+/// Disk touches live here (the thin imperative shell — `scan_ids`/
+/// `status_and_title_for`/`outbound_for` read the entity tomls); a consumer's
+/// tally/mint/edge policy stays pure over the returned `Vec`.
 pub(crate) fn scan_entities(root: &Path) -> anyhow::Result<Vec<ScannedEntity>> {
     let mut out = Vec::new();
     for kref in integrity::KINDS {
@@ -224,11 +225,12 @@ pub(crate) fn scan_entities(root: &Path) -> anyhow::Result<Vec<ScannedEntity>> {
         let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
         ids.sort_unstable();
         for id in ids {
+            let (status, title) = status_and_title_for(root, kref, id)?;
             out.push(ScannedEntity {
                 key: EntityKey { prefix, id },
                 kind: kref.kind,
-                status: status_for(root, kref, id)?,
-                title: title_for(root, kref, id)?,
+                status,
+                title,
                 outbound: outbound_for(root, kref.kind, id)?,
             });
         }
@@ -236,26 +238,39 @@ pub(crate) fn scan_entities(root: &Path) -> anyhow::Result<Vec<ScannedEntity>> {
     Ok(out)
 }
 
-/// One entity's AUTHORED status string for the cross-kind scan, dispatched by
-/// canonical prefix (the same data-driven shape as [`outbound_for`]). REC is
-/// genuinely status-less (one record per act, no lifecycle) ⇒ `None`. RV authors no
-/// `status` field either, but carries a status DERIVED at read time from its
-/// authored finding ledger (`review::derived_status_string`, D-C8) — authored-tier,
-/// not a runtime read. Every other kind stores `status` top-level in its
-/// `<stem>-NNN.toml`, read through the shared `meta::read_meta` (one reader, no new
-/// parse). The `kref` carries both the tree dir and the toml `stem`.
-fn status_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<Option<String>> {
+/// One entity's AUTHORED `(status, title)` for the cross-kind scan, dispatched by
+/// canonical prefix (the same data-driven shape as [`outbound_for`]). For the COMMON
+/// (non-RV/REC) path this is ONE parse: the shared `meta::read_meta` deserializes the
+/// full [`crate::meta::Meta`], which already carries BOTH `status` and `title`, so the
+/// status and title come from a single toml read (SL-050 F1 — collapsing the former
+/// `status_for` + `title_for` double-parse).
+///
+/// REC is genuinely status-less (one record per act, no lifecycle) ⇒ `None` status,
+/// and its title comes from the lenient [`title_for`] (its toml authors no top-level
+/// `status`, so strict `read_meta` would fail). RV authors no `status` field either,
+/// but carries a status DERIVED at read time from its authored finding ledger
+/// (`review::derived_status_string`, D-C8) — authored-tier, not a runtime read — with
+/// its title likewise read leniently. RV/REC therefore still take two reads each
+/// (derived/ledger status + lenient title); that residual is scope-sanctioned (F1).
+/// The `kref` carries both the tree dir and the toml `stem`.
+fn status_and_title_for(
+    root: &Path,
+    kref: &integrity::KindRef,
+    id: u32,
+) -> anyhow::Result<(Option<String>, String)> {
     match kref.kind.prefix {
-        // Status-less by design — no diagnostic, just absent.
-        "REC" => Ok(None),
-        // Derived (authored-tier) over the finding ledger, never stored.
-        "RV" => Ok(Some(crate::review::derived_status_string(root, id)?)),
-        // Every other kind stores `status` top-level — the shared status reader.
+        // Status-less by design — no diagnostic, just absent; lenient title.
+        "REC" => Ok((None, title_for(root, kref, id)?)),
+        // Derived (authored-tier) status over the finding ledger; lenient title.
+        "RV" => Ok((
+            Some(crate::review::derived_status_string(root, id)?),
+            title_for(root, kref, id)?,
+        )),
+        // Every other kind stores both `status` and `title` top-level — ONE parse.
         _ => {
             let tree_root = root.join(kref.kind.dir);
-            Ok(Some(
-                crate::meta::read_meta(&tree_root, kref.stem, id)?.status,
-            ))
+            let m = crate::meta::read_meta(&tree_root, kref.stem, id)?;
+            Ok((Some(m.status), m.title))
         }
     }
 }
