@@ -80,15 +80,15 @@ pub(crate) fn outbound_for(
 /// corpus-wide identity, and renders its canonical ref through the same
 /// `listing::canonical_id` source `ItemId` uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct EntityKey {
-    prefix: &'static str,
-    id: u32,
+pub(crate) struct EntityKey {
+    pub(crate) prefix: &'static str,
+    pub(crate) id: u32,
 }
 
 impl EntityKey {
     /// The canonical ref string (`SL-046`) for this key — the single id-form
     /// authority, shared with every other prefixed surface (`listing::canonical_id`).
-    fn canonical(self) -> String {
+    pub(crate) fn canonical(self) -> String {
         listing::canonical_id(self.prefix, self.id)
     }
 }
@@ -159,70 +159,150 @@ struct RelationGraph {
     danglers: BTreeMap<EntityKey, Vec<(RelationLabel, String)>>,
 }
 
+/// One scanned entity from the all-kind raw scan (the SL-047 D5 seam): its
+/// [`EntityKey`], its AUTHORED status (`None` for the genuinely status-less kinds),
+/// and its authored outbound relations verbatim (unresolved — resolution is the
+/// consumer's edge pass). This is the REUSABLE half of the old `build_relation_graph`
+/// — the KINDS-walk scan with NO reference graph built on top — consumed by BOTH
+/// `inspect` (`build_relation_graph`) and `priority::graph::build` (EX-5). No second
+/// KINDS-walk lives anywhere else (no parallel implementation).
+pub(crate) struct ScannedEntity {
+    pub(crate) key: EntityKey,
+    /// The kind descriptor (data, not `Ord`) — captured from the `KindRef` in the
+    /// scan, so a consumer needs no second `kind_by_prefix` lookup. Read only by the
+    /// priority consumer (SL-047); `not(test)`-scoped to stay dead-code-clean until
+    /// that consumer lands a non-test caller (self-clearing — `mem.pattern.lint.
+    /// dead-code-expect-vs-cfg-test`).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "read by the SL-047 priority consumer (PHASE-01 lands the adapter; \
+                      its CLI caller lands PHASE-02/03)"
+        )
+    )]
+    pub(crate) kind: &'static entity::Kind,
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "read by the SL-047 priority consumer (PHASE-01 lands the adapter; \
+                      its CLI caller lands PHASE-02/03)"
+        )
+    )]
+    pub(crate) status: Option<String>,
+    pub(crate) outbound: Vec<RelationEdge>,
+}
+
+/// The all-kind raw scan (design §5.2 — the reusable seam factored out of
+/// `build_relation_graph`). Walk `integrity::KINDS` in TABLE order; per kind
+/// `scan_ids` (already skips the `NNN-slug` symlink + non-dirs — VT-5 free), **sort
+/// ids ascending** (C5 — `scan_ids` is unsorted `read_dir` order; the sort makes the
+/// scan order — and thus every consumer's mint/render — permutation-invariant,
+/// REQ-077), then per entity read its AUTHORED status ([`status_for`]) and its
+/// authored outbound edges ([`outbound_for`]). Yields entities in KINDS-table /
+/// id-ascending order — the SAME order `build_relation_graph`'s old pass-1 minted in,
+/// so `inspect`'s mint order (and therefore its byte-identical output) is preserved.
+///
+/// Disk touches live here (the thin imperative shell — `scan_ids`/`status_for`/
+/// `outbound_for` read the entity tomls); a consumer's tally/mint/edge policy stays
+/// pure over the returned `Vec`.
+pub(crate) fn scan_entities(root: &Path) -> anyhow::Result<Vec<ScannedEntity>> {
+    let mut out = Vec::new();
+    for kref in integrity::KINDS {
+        let prefix = kref.kind.prefix;
+        let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
+        ids.sort_unstable();
+        for id in ids {
+            out.push(ScannedEntity {
+                key: EntityKey { prefix, id },
+                kind: kref.kind,
+                status: status_for(root, kref, id)?,
+                outbound: outbound_for(root, kref.kind, id)?,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// One entity's AUTHORED status string for the cross-kind scan, dispatched by
+/// canonical prefix (the same data-driven shape as [`outbound_for`]). REC is
+/// genuinely status-less (one record per act, no lifecycle) ⇒ `None`. RV authors no
+/// `status` field either, but carries a status DERIVED at read time from its
+/// authored finding ledger (`review::derived_status_string`, D-C8) — authored-tier,
+/// not a runtime read. Every other kind stores `status` top-level in its
+/// `<stem>-NNN.toml`, read through the shared `meta::read_meta` (one reader, no new
+/// parse). The `kref` carries both the tree dir and the toml `stem`.
+fn status_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<Option<String>> {
+    match kref.kind.prefix {
+        // Status-less by design — no diagnostic, just absent.
+        "REC" => Ok(None),
+        // Derived (authored-tier) over the finding ledger, never stored.
+        "RV" => Ok(Some(crate::review::derived_status_string(root, id)?)),
+        // Every other kind stores `status` top-level — the shared status reader.
+        _ => {
+            let tree_root = root.join(kref.kind.dir);
+            Ok(Some(
+                crate::meta::read_meta(&tree_root, kref.stem, id)?.status,
+            ))
+        }
+    }
+}
+
 /// Build the cross-kind relation graph once (design §5.4 — mirrors
 /// `backlog_order::build`). A SEPARATE cordage `Graph` from `backlog_order`: they
 /// share the `Projection` *type*, never a graph instance or a scan.
 ///
-/// 1. Mint nodes: walk `integrity::KINDS` in TABLE order; per kind `scan_ids`
-///    (already skips the `NNN-slug` symlink + non-dirs — VT-5 free), **sort ids
-///    ascending** (C5 — `scan_ids` is unsorted `read_dir` order; the sort makes
-///    mint + render permutation-invariant, REQ-077), and `intern` each in that
-///    order.
-/// 2. Emit edges: per minted entity, `outbound_for` → per edge, parse + resolve the
-///    target; a resolvable target whose label has an overlay ⇒ `builder.edge`,
+/// Re-expressed on the [`scan_entities`] seam (SL-047 D5): the KINDS-walk raw scan is
+/// the shared seam; this fn only builds the REFERENCE-overlay graph on top of it. The
+/// scan order (KINDS table / id ascending) is unchanged, so the mint order — and thus
+/// the byte-identical `inspect` output (VT-4 behaviour-preservation gate) — is
+/// preserved exactly.
+///
+/// 1. Mint nodes: one `intern` per scanned entity, in scan order.
+/// 2. Emit edges: per minted entity, per outbound edge, parse + resolve the target; a
+///    resolvable target whose label has an overlay ⇒ `builder.edge`,
 ///    `EdgeAttrs::new(0, 0)` (C3 — two authored rows with the same `(label,src,dst)`
 ///    collapse to one in cordage's `BTreeSet<Edge>`); anything else (unresolved,
 ///    parse-error / free-text, or a no-overlay label like `Drift`/`DecisionRef`,
 ///    INCLUDING a resolvable target under a no-overlay label) ⇒ a dangler.
 /// 3. `builder.build()` — NO `OrderSpec` over reference overlays (I2: direct-only,
 ///    composition-free; no union-cycle pass touches them).
-///
-/// Factored out of `inspect` (a `pub(crate)`-shaped named fn) per the SL-047
-/// forward-coupling request — SL-047's transitive walk reuses this same scan.
 fn build_relation_graph(root: &Path) -> anyhow::Result<RelationGraph> {
+    let scanned = scan_entities(root)?;
+
     let mut builder = GraphBuilder::new();
     let overlays = OverlayMap::build(&mut builder);
     let mut projection: Projection<EntityKey> = Projection::new();
 
-    // Pass 1 — mint every entity's node (KINDS table order, ids ascending).
-    for kref in integrity::KINDS {
-        let prefix = kref.kind.prefix;
-        let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
-        ids.sort_unstable();
-        for id in ids {
-            projection.intern(&mut builder, EntityKey { prefix, id });
-        }
+    // Pass 1 — mint every entity's node (scan order: KINDS table, ids ascending).
+    for entity in &scanned {
+        projection.intern(&mut builder, entity.key);
     }
 
     // Pass 2 — emit edges (resolve only, never intern) and collect danglers.
     let mut danglers: BTreeMap<EntityKey, Vec<(RelationLabel, String)>> = BTreeMap::new();
-    for kref in integrity::KINDS {
-        let prefix = kref.kind.prefix;
-        let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
-        ids.sort_unstable();
-        for id in ids {
-            let src_key = EntityKey { prefix, id };
-            // Present by construction (pass 1 interned every (prefix,id) from the same
-            // KINDS-ordered scan); loud in debug if that ever desyncs, a benign skip in
-            // release (the path stays panic-free).
-            let Some(src) = projection.resolve(src_key) else {
-                debug_assert!(
-                    false,
-                    "build_relation_graph: pass-2 id not interned in pass 1"
-                );
-                continue;
-            };
-            for edge in outbound_for(root, kref.kind, id)? {
-                if let Some(dst) = resolve_target(&projection, &edge)
-                    && let Some(ov) = overlays.overlay_for(edge.label)
-                {
-                    builder.edge(ov, src, dst, EdgeAttrs::new(0, 0));
-                } else {
-                    danglers
-                        .entry(src_key)
-                        .or_default()
-                        .push((edge.label, edge.target.clone()));
-                }
+    for entity in &scanned {
+        // Present by construction (pass 1 interned every key from the same scan);
+        // loud in debug if that ever desyncs, a benign skip in release (the path
+        // stays panic-free).
+        let Some(src) = projection.resolve(entity.key) else {
+            debug_assert!(
+                false,
+                "build_relation_graph: pass-2 key not interned in pass 1"
+            );
+            continue;
+        };
+        for edge in &entity.outbound {
+            if let Some(dst) = resolve_target(&projection, edge)
+                && let Some(ov) = overlays.overlay_for(edge.label)
+            {
+                builder.edge(ov, src, dst, EdgeAttrs::new(0, 0));
+            } else {
+                danglers
+                    .entry(entity.key)
+                    .or_default()
+                    .push((edge.label, edge.target.clone()));
             }
         }
     }

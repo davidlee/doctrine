@@ -777,6 +777,38 @@ pub(crate) fn relation_edges(
     Ok(edges)
 }
 
+/// A backlog item's `needs`/`after` dependency-sequence edges plus its `promoted`
+/// flag, for the cross-kind priority scan (SL-047 §5.2). Targets are the AUTHORED
+/// ref strings verbatim (the priority adapter resolves them through its own
+/// projection — resolve-only, like `relation_edges`'s targets); each `after` edge
+/// carries its per-edge `rank`. `promoted` is `resolution == Resolution::Promoted`
+/// — the typed authority (PRD-009 §5.5), a DISTINCT flag from status-terminal and
+/// NOT the free-text `origin`. Reads via the existing `read_item` reader (no new
+/// TOML parse). Only backlog authors `needs`/`after`; every other kind routes here
+/// not at all, so non-backlog nodes carry none (DD-2, dormant until IMP-033).
+pub(crate) struct DepSeq {
+    pub(crate) needs: Vec<String>,
+    pub(crate) after: Vec<(String, i32)>,
+    pub(crate) promoted: bool,
+}
+
+/// Read one backlog item's [`DepSeq`] (the SL-047 priority adapter's dep/seq +
+/// promoted seam).
+pub(crate) fn dep_seq_for(root: &Path, item_kind: ItemKind, id: u32) -> anyhow::Result<DepSeq> {
+    let item = read_item(root, item_kind, id)?;
+    let after = item
+        .relationships
+        .after
+        .iter()
+        .map(|e| (e.to.clone(), e.rank))
+        .collect();
+    Ok(DepSeq {
+        needs: item.relationships.needs.clone(),
+        after,
+        promoted: item.resolution == Some(Resolution::Promoted),
+    })
+}
+
 /// Read all five kinds' trees, merged (declaration order, pre-sort). Each absent
 /// kind dir contributes the empty set, so a virgin repo reads to `[]`.
 fn read_all(root: &Path) -> anyhow::Result<Vec<BacklogItem>> {
