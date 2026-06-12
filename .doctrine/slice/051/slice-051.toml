@@ -1,7 +1,7 @@
 id = 51
 slug = "fold-backlog-order-into-list"
 title = "retire backlog order; fold ordering into list as default-on comparator"
-status = "design"
+status = "plan"
 created = "2026-06-12"
 updated = "2026-06-12"
 
