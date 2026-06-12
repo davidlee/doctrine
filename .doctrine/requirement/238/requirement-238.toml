@@ -1,0 +1,18 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 238
+slug = "actionability-synthesises-a-per-kind-status-class-partition-with-relation-blocking-uniformly-across-kinds"
+title = "Actionability synthesises a per-kind status-class partition with relation-blocking, uniformly across kinds"
+status = "pending"
+kind = "functional"
+
+description = "The policy computes actionability uniformly across every admitted kind as `actionable = eligible ∧ ¬blocked` (SPEC-001 D12): `eligible` is the status half — each admitted kind's lifecycle statuses partition into a policy-owned workable|terminal status-class table, an item being eligible iff its status is workable; `¬blocked` is the relations half — no unresolved dep blocker and no firing trigger mask. The core stays kind-agnostic; the partition is policy data, not core truth."
+tags = []
+acceptance_criteria = [
+  "Actionability is computed as eligible ∧ ¬blocked uniformly across all admitted kinds; the per-kind workable|terminal status-class partition lives in policy, not the graph core.",
+  "A terminal-status item is non-actionable regardless of relations; a workable-status item with an unresolved dep blocker (or a firing trigger mask) is non-actionable; only a workable-status, unblocked item is actionable.",
+  "No kind is barred as a kind — an accepted ADR is non-actionable because its status is terminal, while a proposed ADR with a workable status and no blocker is actionable.",
+  "An unrecognised status within an admitted kind is treated as non-eligible (never falsely actionable) and surfaced as a diagnostic.",
+  "Over a seeded multi-kind corpus, next ranks workable-status unblocked items across kinds in one comparable view and the order is identical under input permutation.",
+]
