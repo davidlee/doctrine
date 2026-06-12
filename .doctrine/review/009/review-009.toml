@@ -1,0 +1,52 @@
+id    = 9
+slug  = "reconciliation-review-of-sl-051"
+title = "reconciliation review of SL-051"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-051"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "R-1: verb name retired but PRD-009/REQ-097 capability must stay satisfied"
+detail = "REQ-097 (PRD-009 FR-010, the next-work views) binds the ordering *capability*, not the literal verb `order`. Expected: retiring the verb keeps the requirement satisfied, no spec amendment. Observed: `backlog list` (default `--by sequence`) carries the composed after/needs order — capability preserved on a verb the user already knows. All non-test `backlog order` hits are historical slice/spec/ADR prose (untouched). Reconcile note, not a spec change."
+disposition = "aligned"
+response = "Capability preserved on a known verb: `backlog list` default-on emits the composed sequence; REQ-097/PRD-009 FR-010 bind the next-work-views capability, not the verb name. No spec amendment; close records the reconcile note."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "A-1: compose builds the cordage graph on every default list invocation"
+detail = "§8 A-1: `compose` runs the BacklogOrder graph build on each default (`--by sequence`) `list`. Expected per design: acceptable at backlog scale (dozens-hundreds nodes); `--by id` is the zero-cost escape; explicitly 'note, do not optimise'. Observed: matches — graph cost is paid only on the default path, skipped entirely on `--by id` (compose is never called). Conscious tradeoff."
+disposition = "tolerated"
+response = "Accepted per §8 A-1: graph cost paid only on the default path, `--by id` is the zero-cost escape. Do not optimise — explicit design call."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "DD-3 ∧ DD-4: JSON+cycle has no in-band degrade signal"
+detail = "On a needs-cycle, a pure-JSON consumer that discards stderr receives id-ordered rows + exit 0 with no envelope marker that ordering degraded (the warning rides stderr only; the diagnostic stays out of the json_envelope per DD-4). Expected per §8: the accepted cost of DD-3 (survey stays total) ∧ DD-4 (diagnostic out of the envelope). Observed: matches design. Conscious tradeoff."
+disposition = "follow-up"
+response = "Explicit non-goal; tracked as RSK-005 in the backlog. Fold consolidates the project→build call site, so a future fix is marginally cheaper — noted, not actioned here."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "RSK-005 deferred: backlog_order adapter duplicate-ItemId bimap corruption"
+detail = "§9 follow-up: RSK-005 (adapter silently corrupts the NodeId bimap on a duplicate ItemId in &[OrderInput]) is an explicit non-goal of SL-051, stays open. The fold routes the default `list` through the same `project`→`BacklogOrder::build` call site `compose` now owns — so a future RSK-005 fix lands at one consolidated site, marginally cheaper. Already captured as RSK-005 in the backlog (verified present in `backlog list`)."
+disposition = "tolerated"
+response = "Accepted cost of DD-3 (survey total) ∧ DD-4 (diagnostic out of the JSON envelope). A JSON consumer wanting the signal reads stderr or checks --by id."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
