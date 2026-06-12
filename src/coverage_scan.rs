@@ -17,6 +17,7 @@
 // so the shell is live in the bins/lib build — the self-clearing `not(test)`
 // dead_code expect this module carried has retired itself, as its reason foretold.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -35,16 +36,53 @@ const SLICE_DIR: &str = ".doctrine/slice";
 /// touched_paths)`. An unborn/non-repo HEAD makes every cell [`IsStale::Unknown`].
 /// A missing slice tree or any unreadable/malformed file is skipped, never fatal.
 pub(crate) fn scan_coverage(root: &Path, req: &str) -> Vec<(CoverageEntry, IsStale)> {
-    let matched = collect_matching_entries(root, req);
+    // Q1 DELEGATE (SL-045 PHASE-01, design §5.2): the single-req path rides the
+    // batched walker — one shared corpus walk, no parallel impl (F3). The
+    // single-elem wanted-set yields a one-key dense map; the bucket accumulates in
+    // the identical read_dir order, so the result is byte-identical to the former
+    // dedicated walk. The existing single-req suite (unchanged) is that proof.
+    scan_coverage_batch(root, &BTreeSet::from([req.to_owned()]))
+        .remove(req)
+        .unwrap_or_default()
+}
 
-    // Resolve HEAD ONCE for the whole scan (the single git anchor for staleness).
-    // None ⇒ unborn / non-repo / git failure ⇒ every cell is Unknown.
+/// Walk every slice's `coverage.toml` ONCE and fan the entries into a DENSE
+/// per-requirement bucketing over `wanted` — every wanted req keyed (empty `Vec`
+/// if uncovered), each matched cell's [`IsStale`] resolved against a single
+/// `HEAD`. The batched generalization of [`scan_coverage`] (design §5.2, D4):
+/// it bounds a spec's whole requirement fan to ONE walk + ONE git anchor (INV-2,
+/// RSK-006). Same degradations as the single-req path — a missing tree, an
+/// unreadable or malformed file, or an unborn HEAD narrows the result, never
+/// errors.
+pub(crate) fn scan_coverage_batch(
+    root: &Path,
+    wanted: &BTreeSet<String>,
+) -> BTreeMap<String, Vec<(CoverageEntry, IsStale)>> {
+    let buckets = collect_matching_entries_batch(root, wanted);
+
+    // Resolve HEAD ONCE for the whole batch (the single git anchor for the entire
+    // requirement fan — INV-2). None ⇒ unborn / non-repo / git failure ⇒ Unknown.
     let head = git::head_sha(root);
 
-    matched
+    buckets
+        .into_iter()
+        .map(|(req, entries)| (req, stale_each(root, head.as_deref(), entries)))
+        .collect()
+}
+
+/// Resolve each entry's [`IsStale`] against an already-resolved `head` (`None` ⇒
+/// every cell [`IsStale::Unknown`]). Lifted from the former per-cell closure so the
+/// single- and batched-scan paths share one staleness mapping (F3) — staleness is
+/// resolved here, in the shell, never inside a pure fold.
+fn stale_each(
+    root: &Path,
+    head: Option<&str>,
+    entries: Vec<CoverageEntry>,
+) -> Vec<(CoverageEntry, IsStale)> {
+    entries
         .into_iter()
         .map(|entry| {
-            let stale = match head.as_deref() {
+            let stale = match head {
                 Some(head) => IsStale::from(git::commits_touching(
                     root,
                     &entry.touched_paths,
@@ -109,16 +147,25 @@ pub(crate) fn slice_local_covered_reqs(
     Ok(out)
 }
 
-/// The disk half: corpus-walk `<root>/.doctrine/slice/*/coverage.toml`, parse
-/// each, and keep entries whose key requirement matches `req`. Missing dir →
-/// empty; an unreadable or malformed file is skipped (degradation, not error).
-fn collect_matching_entries(root: &Path, req: &str) -> Vec<CoverageEntry> {
+/// The disk half: corpus-walk `<root>/.doctrine/slice/*/coverage.toml` ONCE and
+/// fan every entry whose key requirement ∈ `wanted` into a DENSE bucketing —
+/// pre-seeded so every wanted req is present (empty `Vec` if uncovered). Missing
+/// dir → the dense-empty seed; an unreadable or malformed file is skipped
+/// (degradation, not error). The membership test is the dense map's own
+/// `get_mut`, so an unwanted req's entries are dropped in one lookup.
+fn collect_matching_entries_batch(
+    root: &Path,
+    wanted: &BTreeSet<String>,
+) -> BTreeMap<String, Vec<CoverageEntry>> {
+    // Dense seed: every wanted req keyed up front, so callers always find a row.
+    let mut out: BTreeMap<String, Vec<CoverageEntry>> =
+        wanted.iter().map(|r| (r.clone(), Vec::new())).collect();
+
     let slice_root = root.join(SLICE_DIR);
     let Ok(slices) = fs::read_dir(&slice_root) else {
-        return Vec::new(); // absent / unreadable tree → empty
+        return out; // absent / unreadable tree → dense-empty
     };
 
-    let mut out = Vec::new();
     for slice in slices.flatten() {
         // Skip the slug-alias symlink (`NNN-slug -> NNN`): it re-walks the same
         // coverage.toml the numeric dir already yielded, double-counting every
@@ -133,7 +180,12 @@ fn collect_matching_entries(root: &Path, req: &str) -> Vec<CoverageEntry> {
         let Ok(file) = coverage::parse(&body) else {
             continue; // malformed coverage.toml → skip, never abort the scan
         };
-        out.extend(file.entry.into_iter().filter(|e| e.key.requirement == req));
+        for entry in file.entry {
+            // Keep only wanted reqs; the dense seed's get_mut IS the filter.
+            if let Some(bucket) = out.get_mut(&entry.key.requirement) {
+                bucket.push(entry);
+            }
+        }
     }
     out
 }
@@ -627,5 +679,153 @@ mod tests {
                  parallel impl"
             );
         }
+    }
+
+    // --- SL-045 PHASE-01: batched corpus scanner (EX-1/2/3, VT-1/2/3) --------
+    //
+    // `scan_coverage_batch(root, &wanted)` does ONE corpus walk and returns a
+    // DENSE per-requirement bucketing: every wanted req keyed (empty Vec if
+    // uncovered). Equivalence is pinned at the `composite` seam (E4) — read_dir
+    // order is incidental, so we never assert raw Vec order.
+
+    use std::collections::BTreeSet;
+
+    /// The wanted-set as the shell consumes it.
+    fn wanted(reqs: &[&str]) -> BTreeSet<String> {
+        reqs.iter().map(|r| (*r).to_owned()).collect()
+    }
+
+    /// VT-1 — partition + per-req equivalence at the composite seam + density.
+    /// Fixture: ≥3 slices, ≥2 reqs, REQ-110 covered in TWO slices (40, 42).
+    #[test]
+    fn batch_partitions_each_req_and_matches_single_scan_at_composite_seam() {
+        let dir = tempfile::tempdir().unwrap();
+        write_coverage(
+            dir.path(),
+            40,
+            &one_entry_body("SL-040", "REQ-110", "verified"),
+        );
+        write_coverage(
+            dir.path(),
+            41,
+            &one_entry_body("SL-041", "REQ-200", "planned"),
+        );
+        write_coverage(
+            dir.path(),
+            42,
+            &one_entry_body("SL-042", "REQ-110", "planned"),
+        );
+        write_coverage(
+            dir.path(),
+            43,
+            &one_entry_body("SL-043", "REQ-999", "planned"),
+        );
+
+        let batch = scan_coverage_batch(dir.path(), &wanted(&["REQ-110", "REQ-200", "REQ-300"]));
+
+        // Density: every wanted req is a key; REQ-300 (uncovered) present as [].
+        assert_eq!(
+            batch.keys().cloned().collect::<Vec<_>>(),
+            vec![
+                "REQ-110".to_owned(),
+                "REQ-200".to_owned(),
+                "REQ-300".to_owned()
+            ],
+            "dense: exactly the wanted reqs are keyed"
+        );
+        assert!(
+            batch["REQ-300"].is_empty(),
+            "uncovered wanted req → empty bucket"
+        );
+
+        // Partition: each bucket holds exactly its req's entries (no leakage of
+        // the unwanted REQ-999 decoy).
+        assert_eq!(batch["REQ-110"].len(), 2, "REQ-110 covered in two slices");
+        assert_eq!(batch["REQ-200"].len(), 1);
+        for (req, bucket) in &batch {
+            assert!(
+                bucket.iter().all(|(e, _)| &e.key.requirement == req),
+                "bucket {req} holds only its own req's entries"
+            );
+        }
+
+        // Equivalence at the composite seam: batching N reqs gives the same
+        // per-req composite as scanning that req alone. NOT raw Vec order (E4).
+        for req in ["REQ-110", "REQ-200"] {
+            assert_eq!(
+                coverage::composite(&batch[req]),
+                coverage::composite(&scan_coverage(dir.path(), req)),
+                "composite(batch[{req}]) equals composite(scan_coverage({req}))"
+            );
+        }
+    }
+
+    /// VT-3 — the slug-alias symlink must not double-count through the batch walk.
+    #[test]
+    fn batch_slug_alias_symlink_does_not_double_count() {
+        let dir = tempfile::tempdir().unwrap();
+        write_coverage(
+            dir.path(),
+            42,
+            &one_entry_body("SL-042", "REQ-110", "planned"),
+        );
+        let slice_root = dir.path().join(SLICE_DIR);
+        std::os::unix::fs::symlink(
+            slice_root.join("042"),
+            slice_root.join("042-reconciliation-observe-substrate"),
+        )
+        .unwrap();
+
+        let batch = scan_coverage_batch(dir.path(), &wanted(&["REQ-110"]));
+        assert_eq!(
+            batch["REQ-110"].len(),
+            1,
+            "the slug-alias symlink must not re-yield the entry through the batch (ISS-006)"
+        );
+    }
+
+    /// VT-2 — determinism (via composite, across two runs) + degradation
+    /// tolerance: a malformed file is skipped, a missing tree yields an
+    /// all-empty DENSE map (every wanted key present with []).
+    #[test]
+    fn batch_is_deterministic_and_degradation_tolerant() {
+        let dir = tempfile::tempdir().unwrap();
+        write_coverage(
+            dir.path(),
+            40,
+            &one_entry_body("SL-040", "REQ-110", "verified"),
+        );
+        write_coverage(dir.path(), 41, "this is not valid toml = = =");
+
+        let w = wanted(&["REQ-110", "REQ-200"]);
+        let a = scan_coverage_batch(dir.path(), &w);
+        let b = scan_coverage_batch(dir.path(), &w);
+        for req in ["REQ-110", "REQ-200"] {
+            assert_eq!(
+                coverage::composite(&a[req]),
+                coverage::composite(&b[req]),
+                "composite(batch[{req}]) is stable across runs"
+            );
+        }
+        // Malformed slice 41 skipped; the good REQ-110 entry survives.
+        assert_eq!(
+            a["REQ-110"].len(),
+            1,
+            "malformed file skipped, good one kept"
+        );
+        assert!(a["REQ-200"].is_empty());
+
+        // Missing tree → all-empty dense map.
+        let empty_dir = tempfile::tempdir().unwrap();
+        let m = scan_coverage_batch(empty_dir.path(), &w);
+        assert_eq!(
+            m.keys().cloned().collect::<Vec<_>>(),
+            vec!["REQ-110".to_owned(), "REQ-200".to_owned()],
+            "missing tree still yields a dense map over the wanted set"
+        );
+        assert!(
+            m.values().all(Vec::is_empty),
+            "every bucket empty on a missing tree"
+        );
     }
 }
