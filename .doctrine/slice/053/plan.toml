@@ -1,0 +1,116 @@
+# Implementation plan for SL-053 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-053"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Renderer swap — comfy-table behind render_table (monochrome)"
+objective = """
+Make comfy-table the sole layout and width-measurement authority behind
+`render_table`, styled minimalist (interior `│` column separators only; no outer
+frame, no horizontal/header rules), while preserving the old renderer's exact
+line shape — no leading space, no trailing whitespace (D7) — and byte-stable,
+terminal-size-independent piped output (ContentArrangement::Disabled +
+force_no_tty, D6). Spike-first: prove determinism before the swap. No colour in
+this phase; `render_table` and `render_columns` signatures are unchanged, so the
+direct `render_table` callers (priority) are untouched.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (D1–D7); comfy-table resolves to 7.2.2; render_table/render_columns/Column anchors in src/listing.rs confirmed unmoved by the SL-050/SL-051 merges." },
+  { id = "EN-2", text = "working tree green on main (`just check` passes); pre-existing unrelated dirty file tests/e2e_backlog_list_order_golden.rs left unstaged." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "comfy-table added to [workspace.dependencies] and the bin [dependencies] with default-features=false, features=[\"custom_styling\"] (pulls crossterm transitively, accepted per D1/path A). `cargo tree -d` run; any crossterm-subtree multiple_crate_versions collision resolved by an expect+reason allow on the bin (F-8), not a bare allow." },
+  { id = "EX-2", text = "render_table reimplemented over comfy-table: ContentArrangement::Disabled, no table width set, force_no_tty() called before to_string() (D6); outer borders REMOVED component-by-component (not load_preset(NOTHING) — its components are space-filled), only TableComponent::VerticalLines = '│'; interior padding (1,1) with the first column's left pad and the last column's right pad set to 0 (D7); trailing '\\n' re-appended; empty grid → \"\"." },
+  { id = "EX-3", text = "render_table signature unchanged (fn(&[Vec<String>]) -> String); render_columns signature unchanged this phase (no color param yet); priority's two direct render_table callers (render.rs:46,71) untouched." },
+  { id = "EX-4", text = "hand-rolled layout maths deleted: the chars().count() per-column width pass, COL_GAP, the pad loop, and the last-column-unpadded special case are gone — comfy-table is the sole layout/measurement authority." },
+  { id = "EX-5", text = "shared-surface goldens re-baselined to the `│`-separated plain shape in a commit SEPARATE from any logic change (RSK-1), so a shape-churn diff cannot mask a content regression." },
+]
+verification = [
+  { id = "VT-1", expects = "force-no-tty determinism (D6 spike): a listing.rs test asserts render_table yields byte-identical output with stdout forced-terminal vs forced-pipe — force_no_tty neutralises the only tty read; width is UnicodeWidthStr, tty-independent." },
+  { id = "VT-2", expects = "exact line shape (D7): a byte-exact small-table test — every line has no leading space and no trailing whitespace, interior separators are ` │ `." },
+  { id = "VT-3", expects = "rectangular-grid guard (F-2): a test pins that render_table is only ever handed rectangular grids; a ragged grid fails loudly rather than mis-rendering." },
+  { id = "VT-4", expects = "empty grid → \"\" preserved; non-empty output terminates in exactly one trailing newline." },
+  { id = "VT-5", expects = "e2e_list_conformance plus the per-verb goldens (e2e_list_columns_golden, e2e_adr_cli_golden, e2e_coverage_view_golden, e2e_inspect_golden, e2e_priority_golden, e2e_standard_cli_golden) re-baselined and green against piped (colour-free) output." },
+  { id = "VT-6", expects = "`just check` green; `cargo clippy` (plain, not --all-targets) zero warnings." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Colour seam — inject capability, paint behind render_columns"
+objective = """
+Add colour to the listing surfaces strictly behind the `render_columns` seam:
+resolve colour capability once in the impure shell and inject it as a `bool` into
+the pure render layer (the date/uid pattern, D3 — no if_supports_color in the pure
+layer). Paint bold headers, fixed-hue id columns, and status-by-value via a single
+shared `status_hue` map fed the row's semantic status (not the decorated cell,
+F-4). Piped output stays byte-for-byte plain — goldens unchanged. priority stays
+monochrome (it calls render_table directly, bypassing the paint path).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: comfy-table renderer landed behind render_table, goldens re-baselined and green; render_columns/render_table on main." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "new src/tty.rs: stdout_color_enabled() returns false when NO_COLOR is set (var_os — repo bans std::env::var), else std::io::IsTerminal::is_terminal(&stdout()); impure, lives in the command shell." },
+  { id = "EX-2", text = "render_columns gains a `color: bool` param; ColumnPaint<R> enum added (None | Fixed(AnsiColors) | ByValue(fn(&R) -> Option<AnsiColors>)); Column<R> gains a `paint` field; one shared status_hue(&str) -> Option<AnsiColors> map (no per-kind duplication of the token→hue table; token list finalised against live status vocabularies at implementation)." },
+  { id = "EX-3", text = "when color=true: header cells bold, data cells painted per their ColumnPaint; when color=false (or None): raw cell strings pass through unchanged, zero ANSI emitted." },
+  { id = "EX-4", text = "ByValue reads the row's semantic status field, never render_columns' emitted cell — slice's decorated `done ⚠` / `bogus? ⚠` (Meta, Option<PhaseRollup>) and review's composite `open (await …)` (ReviewDoc, ReviewStatus, Await) still receive colour (F-4)." },
+  { id = "EX-5", text = "every render_columns call site (~13 across the 8 colour+layout kinds: backlog, rec, governance, slice ×3, memory ×2, review ×2, spec ×2, coverage_view) resolves and passes the color bool; id columns wired Fixed(hue), status columns ByValue(status_hue), others None. priority's render_table callers stay monochrome." },
+  { id = "EX-6", text = "in-crate render_columns tests updated for the new color arg." },
+]
+verification = [
+  { id = "VT-1", expects = "pure colour test: render_columns(rows, cols, true) contains ANSI escapes for painted columns and a bold header; render_columns(rows, cols, false) contains zero ANSI." },
+  { id = "VT-2", expects = "alignment under colour: a width/alignment test with a painted column proves comfy-table's custom_styling ANSI-aware measurement keeps the `│` separators aligned despite the embedded escapes." },
+  { id = "VT-3", expects = "tty.rs test: NO_COLOR present ⇒ false (env injected per-test); the isatty branch is exercised only indirectly and documented as such." },
+  { id = "VT-4", expects = "the PHASE-01 goldens stay green UNCHANGED (piped ⇒ colour-free) — this phase performs no golden re-baseline; a diff there would signal colour leaking into piped output." },
+  { id = "VT-5", expects = "`just check` green; `cargo clippy` (plain) zero warnings." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Follow-ups capture — tracked backlog for the deferred surfaces"
+objective = """
+Capture the surfaces deliberately deferred by this slice as tracked backlog items
+so closeout loses nothing (defer-needs-backlog-before-close). This phase authors
+doctrine entities (`backlog new`) — it is run by the orchestrator directly and is
+NOT a dispatch worker fan-out (authoring entities is not dispatchable). No code.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 and PHASE-02 complete — the deferred surfaces are known and stable." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "a backlog item exists for the deferred-colour surfaces: the ad-hoc writeln! listing surfaces PLUS priority (survey_human / next_human) colour — one item, keeping the colour story to the single render_columns seam mechanism." },
+  { id = "EX-2", text = "a backlog item exists for the `--color=auto|always|never` flag (D5 — auto-detection only shipped this slice)." },
+]
+verification = [
+  { id = "VA-1", expects = "`backlog list` shows both items with assigned ids; each cites SL-053 and its governing decision (D5 for the flag). Verified by agent — backlog new is entity authoring run directly by the orchestrator." },
+]
+specs        = []
+requirements = []
