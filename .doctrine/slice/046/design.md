@@ -300,8 +300,9 @@ downstream, not blocking:
 - Whether `inspect` should later surface reference-overlay cycle *diagnostics* —
   deferred to a `validate` integration (SL-048).
 - Whether **all** relations modelling should be refactored to a uniform schema —
-  filed as a direct follow-up to interrogate (IMP-034), parallelisable with or
-  after this slice; see §7 D4 note and §10.
+  was IMP-034; **resolved by ADR-010** (proposed): unify the relation *contract* +
+  the cross-kind *write seam*, keep storage bespoke, migrate only the clean tier-1
+  subset opportunistically. SL-046 (reader) composes with it unchanged — see §7 D4.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -350,11 +351,19 @@ downstream, not blocking:
   backlog for SL-048 triage (user disposition: reframe D4 only), where the honest
   follow-up is at most a `validate` cross-check that stored and derived agree, never
   a removal. `related` is genuinely symmetric and legitimately appears on both sides
-  — not redundant. *Note*: this
-  surfaced a broader question — whether the per-kind relation *modelling* itself
-  (three private `Relationships` structs, spec lineage on `Meta` vs a table, mixed
-  cardinality) should be unified — interrogated as a direct follow-up (IMP-034),
-  out of scope for this reader.
+  — not redundant. *Note (resolved by ADR-010, proposed)*: the broader question this
+  surfaced — whether the per-kind relation *modelling* itself (private
+  `Relationships` structs, spec lineage on `Meta` vs a table, mixed cardinality)
+  should be unified — was IMP-034, now answered by **ADR-010**: unify the *contract*
+  + *write seam*, keep storage bespoke (tier-1 migration opportunistic). Two
+  forward-couplings land on SL-046's successors, **not** on this reader: (1) SL-046's
+  `RelationLabel` + the `OverlayId → Label` map + the §5.3 src→dst overlay table are
+  the **seed** of ADR-010's code-authoritative vocabulary — SL-048 *extends that same
+  enum + the legal-set table, never a parallel one*, and owns the divergence test
+  (ADR-010 Verification: reader labels and vocabulary derive from one code source).
+  (2) That vocabulary must cover **all six** edge-authoring kinds incl. RV/REC (this
+  slice's C1 fix), not the four `[relationships]`-block kinds. Neither changes
+  SL-046's code; both are recorded so SL-048 cannot fork the contract.
 
 ## 8. Risks & Mitigations
 
@@ -450,9 +459,14 @@ Full record: `inquisition.md`. Every charge re-verified against source.
   `provenance()`. §5.4.
 - **C8 (minor, confirmatory) — lone-`superseded_by` fixture.** §9.
 
-**Direct follow-up to interrogate (IMP-034):** whether to refactor *all* relations
-modelling to a uniform schema — a single generic `[[relation]] kind=… target=…`
-surface across every kind vs today's bespoke per-kind typed fields. Surfaced by D4;
-adjacent to IMP-006 (uniform verbs) and IMP-016 (cross-corpus links). Should be run
-in parallel with, or as a direct successor to, this slice — and likely feeds the
-relation-governance ADR that SL-048 needs.
+**Follow-up IMP-034 — RESOLVED by ADR-010 (proposed).** The question "refactor
+*all* relations modelling to a uniform schema?" is answered **no**: unify the
+relation *contract* + the cross-kind *write seam*, keep storage bespoke, migrate
+only the clean tier-1 subset opportunistically (tier-2 typed guarantees kept).
+ADR-010 is the relation-governance ADR SL-048 needs; it **ratifies** SL-046 D2
+(label = overlay identity) and D4 (`superseded_by` = ADR-004 §5 carve-out). SL-046
+(reader) composes unchanged; the two forward-couplings for SL-048 are in the §7 D4
+note. Adjacent: IMP-006 (uniform verbs), IMP-016 (cross-corpus links, realised by
+SL-048). *(A structured slice→ADR relation can't be authored — the slice
+`[relationships]` schema has no ADR slot; that absence is itself the cross-corpus
+gap SL-048/IMP-016 close.)*

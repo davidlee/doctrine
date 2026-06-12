@@ -147,11 +147,15 @@ Open questions — **all resolved in `design.md`** (D1–D4):
   seam (PRD-010, unbuilt).
 
 Filed during design (challenges captured now, fixes land downstream):
-- **IMP-032** — governance `superseded_by` is a stored reciprocal; derive it, don't
-  store it (ADR-004). SL-046's reader already ignores it; field removal + migration
-  is slice 3.
+- **IMP-032** — governance `superseded_by`: the filed "derive it, don't store it"
+  premise is **void** — it is the ADR-004 §5-sanctioned reverse carve-out (verb-
+  written, kept), confirmed by SL-046 D4 and ADR-010 D4. SL-046's reader already
+  declines to project it; the honest follow-up is at most a `validate` cross-check
+  (stored agrees with derived `in_edges`), never a removal. SL-048 triage.
 - **IMP-033** — cross-kind dep/seq capture (extend `needs`/`after` to specs/slices).
   Capture-side; slice 3 / PRD-009 + the relation-governance ADR.
-- **IMP-034** — interrogate refactoring *all* relations modelling to a uniform
-  schema. Parallel with or direct successor to this slice; likely feeds slice 3's
-  ADR.
+- **IMP-034** — **RESOLVED by ADR-010** (proposed): refactor *all* relations
+  modelling to a uniform schema? No — unify the *contract* + cross-kind *write seam*,
+  keep storage bespoke, migrate only the clean tier-1 subset opportunistically.
+  ADR-010 is the relation-governance ADR slice 3 / SL-048 needs; it ratifies SL-046
+  D2 and D4. SL-046 (reader) composes unchanged.
