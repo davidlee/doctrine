@@ -119,8 +119,14 @@ scope** — they go through a future **Revision** vehicle (IDE-003); `revise` he
 ### 5.2 B·P1 — the write seam (one setter)
 
 `spec req status <REQ> --to <state> [--note]` — an edit-preserving transition on the
-requirement's authored `status`, mirroring `set_slice_status`
-(`toml_edit::DocumentMut`, preserve comments/unknown keys, stamp `updated`). **Both
+requirement's authored `status`, mirroring `set_slice_status`'s edit-preserving
+shape (`toml_edit::DocumentMut`, preserve comments/`[relationships]`/unknown keys).
+**No `updated` stamp** (codex-missed, resolved via `/consult` 2026-06-12): the
+requirement entity deliberately carries no `created`/`updated` field — git is the
+trail (`requirement.rs:70`, "the contract, not an omission"; the template seeds no
+such key). `set_slice_status` stamps because slices are seeded with `updated`;
+requirements are not, so the setter mirrors its *edit-preservation* only, like
+`governance::set_status` writes its field without inventing a stamp. **Both
 accept and revise reuse this one setter** (the "spec-truth revise path" in the scope
 doc collapses into it — revise differs only by REC move + direction + the human's
 prose hand-edit). **D-B6 (LOCKED):** the setter is a **free any→any** edit-preserving
