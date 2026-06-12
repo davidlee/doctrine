@@ -1,0 +1,34 @@
+id    = 6
+slug  = "reconciliation-review-of-sl-046"
+title = "reconciliation review of SL-046"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-046"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "inspect full-corpus scan aborts corpus-wide on a single unparseable sibling entity"
+detail = "build_relation_graph walks every integrity::KINDS entity and propagates any per-entity TOML parse Err, so one corrupt entity anywhere fails 'inspect <ANY-ID>'. Confirmed on the real corpus (SL-003 supersedes=[2], ADR-002 related=[1] each aborted the whole scan). Behaviour is per design (§5.4 step 6 scopes diagnostics/validation to validate/SL-048; a v1 inspector assumes a parseable corpus) but the fragility is real: latent single-entity corruption becomes total. Engine site: the outbound_for ? in the edge pass."
+disposition = "follow-up"
+response = "Owned future work, not a SL-046 scope expansion. Captured as IMP-036 (linked slices=[SL-046]): harden the scan to skip/note a malformed sibling, hard-fail only the queried entity, optional --strict. Design consciously scoped diagnostics/validation to validate/SL-048, so this is the correct route; non-blocking for close."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "legacy pre-canonical-ref bare-int relation data (SL-003, ADR-002) surfaced by the full-corpus scan"
+detail = "SL-003 supersedes=[2] and ADR-002 related=[1] stored bare integers where the reader expects canonical-ref strings — pre-existing corruption from the pre-canonical-ref era (commits 805410c / adr-002 seed), independent of SL-046. It already broke 'slice show 3' / 'adr show 2'; SL-046's full-corpus scan made it fatal to all inspects. Not a SL-046 conformance defect, but reconciliation must leave the corpus parseable."
+disposition = "fix-now"
+response = """Reconciled inside this drive: corpus repaired to canonical-ref strings (SL-003 supersedes=["SL-002"], ADR-002 related=["ADR-001"]; intent confirmed by each entity's own inline comment) in commit 6eb5796, a separate chore from the SL-046 feature commits. 'slice show 3' / 'adr show 2' / 'inspect <any>' now succeed; grep confirms no other bare-int relation arrays remain in authored .toml."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
