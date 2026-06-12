@@ -165,6 +165,14 @@ CLI invocation MAY still reconcile several reqs — it just emits one atomic REC
 
 ### 5.4 Data flow / sequence
 
+**CLI surface (SPEC-002 D9 resolved here, 2026-06-12):** a top-level
+`doctrine reconcile <REQ-NNN> --slice <SL-NNN> --move <accept|revise|redesign>
+[--to <state>] [--note <text>]`. One requirement per invocation (loopable — each
+emits its own atomic REC, D-B8); `--to` required for accept/revise, absent/ignored
+for redesign; evidence keys are auto-collected by the shell from coverage (the
+operator never hand-types 4-tuples). Reconcile is a first-class loop verb (ADR-003),
+hence its own top-level command rather than a `spec` subtree leaf.
+
 **Reconcile (B·P2), per requirement R the operator chose to reconcile:**
 
 1. Shell resolves inputs: `scan_coverage(R)` → `composite`; read R's authored
