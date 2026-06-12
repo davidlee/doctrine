@@ -1,0 +1,25 @@
+id    = 5
+slug  = "reconciliation-review-of-sl-045"
+title = "reconciliation review of SL-045"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-045"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "spec req list omits --status validation that every sibling list surface performs"
+detail = "req_list_rows (src/spec.rs:1340) flattens CommonListArgs and applies --status via listing::retain, but never calls listing::validate_statuses before filtering. Every other list surface validates the requested status against its kind's known-set first: spec list (spec.rs:1170, SPEC_STATUSES), governance.rs:67, review.rs:900, memory.rs:1288, slice.rs:1014, backlog.rs:834, rec.rs:541. Consequence: 'doctrine spec req list <SPEC> --status bogus' silently returns an empty roster instead of erroring 'unknown status bogus (known: ...)'. Breaks the F4/SL-025 uniform list/show contract (an explicit design force). Found by external review (codex gpt-5.5, charge E#1); confirmed against the live tree. Fix is one line mirroring spec.rs:1170 — validate_statuses(&args.status, REQ_STATUSES)? — but requirement.rs ships no REQ status known-set const yet (the 6 ReqStatus as_str values: pending,in-progress,active,deprecated,retired,superseded), so a small known-set must be added alongside."
+disposition = "fix-now"
+response = "Reconciled inside SL-045 (commit 03a0d7a). req_list_rows now calls validate_statuses(&args.status, requirement::REQ_STATUSES) before filtering, mirroring list_rows:1170; added the REQ_STATUSES known-set const + a drift canary (req_statuses_matches_the_variants) + red/green test (req_list_rejects_an_unknown_status_with_the_uniform_error). 'spec req list --status bogus' now errors naming the value. just check green (979 bin + integration); clippy zero-warning. F4/SL-025 uniform contract restored."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

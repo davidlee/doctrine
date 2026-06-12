@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebb51fd8478d09a7bdca8797e25ed"
+memory_key = "mem.pattern.listing.validate-statuses-is-opt-in"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Each list surface must call listing::validate_statuses itself"
+summary = "validate_statuses is an opt-in call, not enforced by listing::build/retain — every new list surface must call it explicitly"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["src/listing.rs", "src/spec.rs"]
+globs = []
+commands = []
+tags = ["listing", "list-surface", "status-filter"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "28d8f6caa7c614a4de68a06fccf19f07cc7fe879"
+ref_name = "refs/heads/main"
+checkout_state_id = "d5ecda57a4bfb3ecb3b15e02c211d3b7bb5a28cd079b10099899d38832289718"
+base_commit = "03a0d7a402286e7aa89dab9119e5116b1fe54ab3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
