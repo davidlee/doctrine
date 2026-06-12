@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebc3cfa0a7572992f761cfab49885"
+memory_key = "mem.pattern.render.comfy-table-custom-styling-pulls-tty"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "comfy-table custom_styling is inseparable from tty/crossterm; force_no_tty mandatory"
+summary = "comfy-table custom_styling pulls tty->crossterm and reads stdout tty at format time; force_no_tty() is mandatory for deterministic/pure render"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["src/listing.rs"]
+globs = []
+commands = []
+tags = ["comfy-table", "rendering", "determinism", "purity"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "9ec8f06febf96778a89ee634fa4e1e89f8751245"
+tree = "eac16e5934c6784dd964269a17ec5460a72a9103"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "9ec8f06febf96778a89ee634fa4e1e89f8751245"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
