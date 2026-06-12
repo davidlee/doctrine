@@ -1,0 +1,182 @@
+# Implementation plan for SL-046 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-046"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Projection<K> leaf + backlog_order swap (behaviour-preservation gate)"
+objective = """
+Extract the generic id↔node bimap into a new leaf `src/projection.rs`:
+`Projection<K: Copy + Ord>` with `by_key`/`by_node` BTreeMaps and
+`intern` (mint-or-get) / `resolve` (get-only) / `key_of` / `remap_set`
+(design §5.2, D3). Then swap `backlog_order`'s inline `by_item`/`by_node`
+bimap onto `Projection<ItemId>` — the SERIAL GATE everything else rides.
+Preserve the mint-sequence contract exactly (C4): keep the three-step shape —
+(1) sort projected inputs (backlog_order.rs:184-190), (2) pre-intern every
+input in that sorted order in a DEDICATED pass (replacing the builder.node()
+loop at :194-198), (3) only then emit edges via `resolve`, never `intern`.
+Folding intern into edge-emission would mint in dependency-reference order — a
+tie-break regression. Assert distinct keys at the boundary (C6 — mint-or-get
+diverges from today's unconditional double-mint only on a duplicate ItemId;
+backlog ids are unique by construction, RSK-005). The byte-exact `backlog
+order` golden is the tripwire.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md LOCKED (ADR-010-reconciled); backlog_order + cordage suites green on the entry tree" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/projection.rs exists as a leaf: Projection<K: Copy + Ord> with intern (mint-or-get) / resolve (get-only) / key_of / remap_set; pure, no clock/disk/rng; rides cordage GraphBuilder only" },
+  { id = "EX-2", text = "backlog_order uses Projection<ItemId>; inline by_item/by_node bimap removed (no parallel implementation); scan + overlays + OrderSpec otherwise untouched" },
+  { id = "EX-3", text = "mint-sequence three-step shape preserved: sort → pre-intern-all-in-sorted-order (dedicated pass) → emit via resolve; distinct-key assertion at the projection boundary (C6)" },
+  { id = "EX-4", text = "ADR-001 layering holds: projection is a leaf below backlog_order (engine); no new cycle" },
+]
+verification = [
+  { id = "VT-1", expects = "behaviour-preservation gate: `backlog order` byte-identical; backlog_order unit suite green UNCHANGED (R1 — if any drift, the swap is wrong)" },
+  { id = "VT-2", expects = "Projection<ItemId> unit: mint-or-get idempotence (intern same key → same NodeId), caller-order mint (NodeIds follow call order, not key order), resolve get-only returns None for unminted, remap_set round-trip" },
+  { id = "VT-3", expects = "duplicate-key precondition: distinct-key assertion fires on a duplicate ItemId; no silent double-mint divergence (C6)" },
+  { id = "VT-4", expects = "cordage suite green UNCHANGED (crate untouched, REQ-079)" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Relation extraction seam: vocab types + per-kind accessors + outbound_for"
+objective = """
+Build the data-driven outbound extraction seam (design §5.2 extraction seam,
+§5.3). Define the relation vocabulary types `RelationLabel` (the ~11-label enum
+— the SEED of ADR-010's code-authoritative vocabulary, §7 D4: SL-048 extends
+THIS enum, never forks one) and `RelationEdge { label, target: String }` in a
+module BELOW the per-kind engine modules — `relation_graph` calls each kind's
+accessor (imports them) so the types cannot live in `relation_graph` without an
+ADR-001 cycle; place them in the projection leaf (or integrity, near KINDS).
+Add a `pub(crate) relation_edges` accessor to each of the SIX edge-authoring
+kinds, each reading its OWN private Relationships (parsing stays put —
+cohesion; the adapter never re-parses TOML):
+  slice      -> specs / requirements / supersedes
+  spec       -> descends_from / parent / members(.toml) / interactions(.toml)
+  governance -> supersedes / related   (NOT superseded_by — ADR-004 §3/§5; NOT tags)
+  backlog    -> slices / specs / drift  (NOT needs/after/triggers — those are SL-047)
+  review     -> reviews  ([target].ref, review.rs)
+  rec        -> owning_slice  (decision_ref -> free-text dangler, no DEC kind)
+Then the data-driven dispatch `outbound_for(kind: entity::Kind, id: u32) ->
+Vec<RelationEdge>` — ONE match over all 11 KINDS (kind-is-data, not a trait).
+The C1 fix (RV+REC) and C2 (interactions free-text type, single class) make the
+"all-entity" claim honest.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (projection leaf landed) — the chosen home for the vocab types exists below the engine layer" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RelationLabel enum (~11 labels) + RelationEdge { label, target } defined in a leaf-layer module below the per-kind engine modules (no relation_graph↔kind cycle, ADR-001)" },
+  { id = "EX-2", text = "pub(crate) relation_edges accessor on all SIX edge-authoring kinds (slice/spec/governance/backlog/review/rec), each reading only its own private Relationships; no TOML re-parse in the adapter" },
+  { id = "EX-3", text = "spec accessor covers Option singles (descends_from/parent on Meta), members.toml, and interactions.toml typed edges (single interactions class; free-text type re-read at render — C2/D2)" },
+  { id = "EX-4", text = "governance accessor emits supersedes/related only — never the stored superseded_by (ADR-004 §3 derived-inbound) and never tags (free-text); backlog omits needs/after/triggers (SL-047)" },
+  { id = "EX-5", text = "outbound_for(kind, id) dispatches over all 11 KINDS in one data-driven match; non-edge-authoring kinds return empty" },
+]
+verification = [
+  { id = "VT-1", expects = "outbound correctness per kind: outbound_for returns the authored relations with correct labels for ALL 11 kinds (spec Option singles + members.toml + interactions.toml; RV reviews; REC owning_slice) — §9 outbound correctness / REQ-091" },
+  { id = "VT-2", expects = "exclusion proof: governance omits superseded_by + tags; backlog omits needs/after/triggers; REC decision_ref carried as free-text target (will dangle), not dropped" },
+  { id = "VT-3", expects = "interactions per-edge free-text type round-trips from the source Interaction struct (single overlay class, type re-read — C2)" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "relation_graph engine: all-kind scan, overlays, inspect query"
+objective = """
+Build the engine `src/relation_graph.rs` (design §5.1/§5.2/§5.4). Define
+`EntityKey { kind: entity::Kind, id: u32 }` (renders its canonical ref via the
+same KINDS/listing source ItemId uses). Build a SEPARATE cordage Graph from
+backlog_order (shared projection TYPE only, never a graph or scan):
+  1. walk KINDS in table order; per kind entity::scan_ids (skips symlinks/non-
+     dirs — NNN-slug skip is free) then SORT ids ascending (C5 — scan_ids is
+     read_dir order, unsorted; omitting the sort makes mint+render order
+     filesystem-dependent, breaches REQ-077); intern each into
+     Projection<EntityKey> in that sorted order.
+  2. second pass: per entity outbound_for(kind, id); per RelationEdge resolve
+     target -> resolved ⇒ builder.edge(overlay_for(label), src, dst,
+     EdgeAttrs::new(0,0)); unresolved/free-text ⇒ push dangler.
+  3. builder.build() (no OrderSpec over reference overlays — no composition).
+Own the OverlayId↔RelationLabel map (~11 entries, label = overlay identity,
+all Reject/Unbounded — D2). Implement `inspect(id: &str) -> Result<InspectView>`
+(§5.2): id-parse via integrity::kind_by_prefix / parse_canonical_ref (promote
+parse_canonical_ref to pub(crate) — no new parser); outbound = entity's own
+RelationEdges grouped by label; inbound = per overlay graph.in_edges -> key_of,
+grouped by label_of(overlay), supersedes-inbound rendering as "superseded by"
+(derived reciprocal, ADR-004 §3 — NO stored superseded_by read). NEVER read
+graph.provenance() (C7 — benign symmetric-related 2-cycle Reject diagnostic
+must not leak). Direct-only, one-hop, composition-free (I2).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 (Projection<K>) and PHASE-02 (outbound_for + RelationLabel/RelationEdge) complete and green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/relation_graph.rs builds a separate cordage Graph: EntityKey scan over KINDS (table order, ids sorted ascending), Projection<EntityKey>, ~11 Reject/Unbounded reference overlays keyed by label, OverlayId↔RelationLabel map" },
+  { id = "EX-2", text = "inspect(id) -> Result<InspectView { id, outbound, inbound, danglers }>: outbound from outbound_for grouped by label; inbound derived from in_edges per overlay (no stored reverse field read, ADR-004 §3); danglers from unresolved/free-text targets" },
+  { id = "EX-3", text = "parse_canonical_ref promoted to pub(crate); id-parse rides integrity::kind_by_prefix / parse_canonical_ref — no new parser; unknown prefix → clean error" },
+  { id = "EX-4", text = "inspect never reads graph.provenance() (C7); direct-only one-hop, no reachable/OrderSpec over reference overlays (I2); ADR-001 layering: relation_graph (engine) → projection (leaf) → cordage, no cycle" },
+]
+verification = [
+  { id = "VT-1", expects = "derived inbound correctness over a seeded multi-kind corpus: correct inbound per kind incl. supersedes reciprocal rendered 'superseded by'; structural proof NO stored reverse field is read (ADR-004/REQ-074)" },
+  { id = "VT-2", expects = "I1 dedupe (C3): two authored rows sharing (label,src,dst) surface as ONE inbound edge, no panic — asserted at the projection boundary" },
+  { id = "VT-3", expects = "scan-order determinism (C5): out-of-order planted entity dirs yield identical output (ascending sort after scan_ids); identical output under input permutation (REQ-077)" },
+  { id = "VT-4", expects = "superseded_by fixture (C8/R3): stored superseded_by with NO reciprocal supersedes → inspect reports NO inbound from it (R3 drop), accessor reads no stored reverse field" },
+  { id = "VT-5", expects = "dangler tolerance (R4): free-text/dangling targets (drift, decision_ref, unresolved) surface as danglers, never panic; NNN-slug symlink skipped; empty-relations entity → empty outbound/inbound, not an error" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "inspect CLI + render (--json, uniform read surface)"
+objective = """
+Wire the `inspect <ID>` command (design §5.1/§5.2 render contract, D1). Add the
+main.rs handler: parse <ID>, call relation_graph::inspect, render InspectView.
+Conform to the uniform list/show/render contract (SL-025; SL-045 precedent):
+default human render (one entity, grouped outbound / inbound / dangler sections
+in a fixed deterministic order) PLUS --json (agent-readable, the InspectView
+serialized — SL-025/SL-045 read-surface contract). Ride src/listing.rs
+rendering helpers where the grouped sections map onto them; reuse SL-045's
+`spec req list` read-surface template, do not re-invent
+(mem.pattern.authoring.reuse-tuned-prior-art-verbatim). interactions edges
+re-read their per-edge free-text type at render (C2). Relation-only,
+direct-only — SL-047 layers actionability/blockers onto the same verb later.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: relation_graph::inspect returns InspectView, green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine inspect <ID>` command wired in main.rs: id-parse → relation_graph::inspect → render; unknown prefix → clean error (not a panic)" },
+  { id = "EX-2", text = "default human render: grouped outbound / inbound / dangler sections in fixed deterministic order; rides listing.rs helpers, reuses the SL-045 read-surface template (no re-invention)" },
+  { id = "EX-3", text = "--json emits the serialized InspectView (uniform read-surface contract, SL-025/SL-045)" },
+  { id = "EX-4", text = "interactions per-edge free-text type surfaced at render (re-read from source, C2); relation-only/direct-only (no --transitive — that is SL-047)" },
+]
+verification = [
+  { id = "VT-1", expects = "black-box CLI golden: `doctrine inspect <ID>` human output byte-exact over a seeded corpus (outbound/inbound/dangler sections, deterministic order)" },
+  { id = "VT-2", expects = "--json conformance: every InspectView surface present in the JSON (not just the envelope — assert id/outbound/inbound/danglers), agent-readable" },
+  { id = "VT-3", expects = "unknown-prefix and no-relations entities render cleanly (clean error / empty sections, never panic)" },
+  { id = "VT-4", expects = "full slice acceptance: REQ-091 three criteria discharged (adapter-minted opaque node ids; every edge from an authored outbound relation; diagnostics re-mapped to doctrine ids + label names)" },
+]
+specs             = []
+requirements      = []
