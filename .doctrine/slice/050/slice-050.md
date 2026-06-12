@@ -87,8 +87,11 @@ surface text legitimately changes, behaviour-preservation otherwise held.
 - **No cordage core change** (SPEC-001 D1).
 - **No cross-kind dep/seq capture** (DD-2 / IMP-033) — still dormant.
 - **No `inspect` relation-portion output change** — the relation surface stays
-  byte-identical; only the redundant *work* behind it and the additive block are
-  in scope.
+  byte-identical *for existing entities*; only the redundant *work* behind it and
+  the additive block are in scope. **Carve-out (F6):** the missing-id path
+  legitimately changes — a well-formed ref to an unminted id now errors
+  (`<CANONICAL>: no such entity`) instead of rendering an empty view (VT-5 flips),
+  aligning `inspect`/`explain`/`blockers`/the actionability block with `show`.
 - The `just check` cordage-suite gate hole (ISS-007) is separate; not this slice.
 
 ## Summary
