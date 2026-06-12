@@ -1,0 +1,98 @@
+# Implementation plan for SL-051 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-051"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Fold ordering into list (in-crate) + retire the order verb"
+objective = """
+Move the cordage ordering from the standalone `order` verb into the default
+`list` path as a pure comparator, and delete the retired verb — all in-crate,
+ending compiling and green. Add `OrderBy` (Sequence default | Id) + the
+`Ordering` record + `compose`; rewrite `list_rows` to compose-then-filter with
+the `(stdout, stderr)` return (doc-comment-bound order, design §4.3); rewrite
+`run_list` to take `by` and emit the stderr arm; delete `order_rows`/`run_order`;
+re-home `project`/`render_overrides`/`name_cycle`/`AbsentDrop` under `compose`
+with no logic change. In `main.rs` delete all three live `Order` refs — clap
+variant (887), dispatch arm (2222), access-classify arm (1685) — add `--by` to
+the backlog `List` variant, thread `by` into `run_list`. Adapt the ~16 in-crate
+`list_rows` unit tests to the tuple return; delete the 4 `order_rows` unit tests.
+Remove the now-orphaned `tests/e2e_backlog_order_golden.rs` so the root suite
+compiles and stays green (its replacement is authored in PHASE-02; the line-167
+hard-error assertion is superseded by the degrade golden there). `listing.rs`,
+`backlog_order.rs`, and the engine are untouched (DD-2, ADR-001).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design SL-051 is locked, inquisition-survived, and committed; no unresolved design question (§8: OQ-1/2/3 settled)." },
+  { id = "EN-2", text = "`cargo build` and `just check` are green on a clean HEAD before edits begin." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`OrderBy`, `Ordering`, and `compose` exist in `backlog.rs`; `compose` builds the graph over the full non-terminal corpus and returns the diagnostic record (pos / footer / degraded / warning) per §4.2." },
+  { id = "EX-2", text = "`list_rows` is compose-then-filter (membership = `retain` ∩ `--kind`, unchanged; A-2), sorts retained rows by composed position with the `(kind.ordinal, id)` tiebreak and `usize::MAX` tail, and returns `anyhow::Result<(String, String)>` with the stdout/stderr order bound by its doc-comment." },
+  { id = "EX-3", text = "`run_list` takes `by: OrderBy`, writes stdout, and writes stderr only when non-empty; dispatch passes 4 positional args (under the clippy `too_many_arguments` ceiling)." },
+  { id = "EX-4", text = "`order_rows` and `run_order` are deleted; `project`/`render_overrides`/`name_cycle`/`AbsentDrop` survive re-homed with no logic change." },
+  { id = "EX-5", text = "All three live `Order` refs in `main.rs` (variant 887, dispatch 2222, access-classify arm 1685) are removed; the backlog `List` variant carries `--by` (values `sequence` | `id`, default `sequence`)." },
+  { id = "EX-6", text = "The ~16 in-crate `list_rows` unit tests are adapted to the tuple return; the 4 `order_rows` unit tests are deleted; `tests/e2e_backlog_order_golden.rs` is removed." },
+  { id = "EX-7", text = "`just check` green and `cargo clippy` (plain, not `--all-targets`) zero warnings." },
+]
+verification = [
+  { id = "VT-1", expects = "The adapted in-crate `list_rows` unit tests pass, asserting on the `(stdout, _)` tuple: default-sequence ordering, the `--by id` classic sort, and membership equality between the two (the A-2 invariant at unit level)." },
+  { id = "VT-2", expects = "An in-crate unit test drives `compose` on a `needs`-cycle corpus and asserts `degraded == true`, empty `pos`, and a non-empty `warning` (the degrade contract that PHASE-02 then pins as a golden)." },
+  { id = "VT-3", expects = "`cargo build` succeeds with no reference to the deleted `Order` variant / `order_rows` / `run_order`; `just check` green; `cargo clippy` zero warnings." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Black-box e2e golden suite for the folded list ordering"
+objective = """
+Author `tests/e2e_backlog_list_order_golden.rs` (the rename/replacement of the
+removed `e2e_backlog_order_golden.rs`) to pin the new CLI surface byte-exact over
+a fixture carrying `after`/`needs` edges. Cover the eight §6 VTs: default-on
+composed sequence, `--by id` opt-out, the membership-set invariant (A-2), filtered
+compose, footer conditionality, cycle-degrade (id-sort + stderr warn + exit 0,
+replacing the old line-167 hard-error), the retired-verb clap error, and JSON
+composed-sequence order with the envelope shape unchanged. Black-box goldens
+against the already-shipped surface (the established repo pattern) — capture
+actual, verify it matches the design's stated behaviour, pin it.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 is complete: the fold and verb retirement are in-crate green; the new `list --by` surface and the degrade/JSON behaviour exist to capture goldens against." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`tests/e2e_backlog_list_order_golden.rs` exists and contains the eight VT goldens below; no `backlog order` golden remains." },
+  { id = "EX-2", text = "`just check` green and `cargo clippy` (plain) zero warnings; the full root suite passes." },
+]
+verification = [
+  { id = "VT-1", expects = "default-on: `backlog list` (no flag) emits the composed `after`/`needs` sequence over the fixture (golden)." },
+  { id = "VT-2", expects = "opt-out: `backlog list --by id` restores the `(kind.ordinal, id)` sort (golden)." },
+  { id = "VT-3", expects = "membership invariant (A-2): the row set of `backlog list` == the row set of `backlog list --by id` over the same fixture — only order differs." },
+  { id = "VT-4", expects = "filtered compose: `backlog list --status open --kind improvement` orders the retained subset by global position (survivors keep relative order)." },
+  { id = "VT-5", expects = "footer conditionality: the `overrides:` footer is absent on a clean survey, present on stdout (table) when a soft edge is dropped." },
+  { id = "VT-6", expects = "cycle degrade: a `needs` cycle ⇒ id-sorted table on stdout + warning on stderr + exit 0; never empty (supersedes the old line-167 hard-error golden)." },
+  { id = "VT-7", expects = "verb retired: `backlog order` is an unknown-subcommand clap error." },
+  { id = "VT-8", expects = "JSON sequence: `backlog list --json` array order == the composed sequence; the `json_envelope` shape is unchanged (diagnostic stays out of the envelope)." },
+]
+specs        = []
+requirements = []
