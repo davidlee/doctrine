@@ -904,28 +904,28 @@ pub(crate) enum OrderBy {
 }
 
 /// The composed ordering over the live corpus plus its honest-record diagnostic
-/// (SL-051 — the folded-in `order` view). `pos` maps each composed item to its
-/// position; `footer` is the `render_overrides` honest-record block (`""` when
-/// clean); `degraded`/`warning` carry the `needs`-cycle fallback signal.
-struct Ordering {
-    /// Composed positions; empty when degraded (a `needs` cycle forced the fallback).
-    pos: BTreeMap<ItemId, usize>,
-    /// The `render_overrides` honest-record block (`""` when nothing was dropped).
-    footer: String,
-    /// Whether a `needs` cycle forced the classic id-sort fallback.
-    degraded: bool,
-    /// The cycle advisory, for stderr (`Some` only when degraded).
-    warning: Option<String>,
+/// (SL-051 — the folded-in `order` view). The two outcomes are distinct variants so
+/// the illegal mixes — a degrade carrying composed positions, a clean compose carrying
+/// a warning — are unrepresentable. `footer` (the `render_overrides` honest-record
+/// block, `""` when nothing was dropped) rides both.
+enum Ordering {
+    /// A clean compose: `pos` maps each composed item to its sequence position.
+    Composed {
+        pos: BTreeMap<ItemId, usize>,
+        footer: String,
+    },
+    /// A `needs` cycle forced the classic id-sort fallback; `warning` is the stderr
+    /// advisory naming the cycle.
+    Degraded { footer: String, warning: String },
 }
 
 /// Compose the `needs`/`after` work order over the live corpus (SL-051 — the former
 /// `order_rows` compute, folded into `list`). PURE over the read corpus. Projects the
 /// non-terminal node set, builds the adapter, and renders the honest-record `footer`.
 /// On a `needs` dependency cycle, `build` still succeeds; `compose` returns
-/// `degraded` (an empty `pos`) plus the cycle `warning`, so `list_rows` falls back to
-/// the classic id sort and emits the advisory to stderr (no misleading order, never a
-/// non-zero exit — SL-051 §4.4). Borrows `corpus` (then `list_rows` MOVES it into
-/// `retain`).
+/// `Degraded` (carrying the cycle `warning`), so `list_rows` falls back to the classic
+/// id sort and emits the advisory to stderr (no misleading order, never a non-zero
+/// exit — SL-051 §4.4). Borrows `corpus` (then `list_rows` MOVES it into `retain`).
 fn compose(corpus: &[BacklogItem]) -> anyhow::Result<Ordering> {
     let (inputs, absent) = project(corpus);
     let order = BacklogOrder::build(&inputs)?;
@@ -935,14 +935,12 @@ fn compose(corpus: &[BacklogItem]) -> anyhow::Result<Ordering> {
         .collect();
     let footer = render_overrides(&cmap, &absent, &order.overrides());
     if let Some(cycle) = order.dep_cycles().first() {
-        return Ok(Ordering {
-            pos: BTreeMap::new(),
+        return Ok(Ordering::Degraded {
             footer,
-            degraded: true,
-            warning: Some(format!(
+            warning: format!(
                 "backlog list: `needs` dependency cycle — {} — ordering by id (resolve, then re-run)",
                 name_cycle(cycle)
-            )),
+            ),
         });
     }
     let pos = order
@@ -951,18 +949,21 @@ fn compose(corpus: &[BacklogItem]) -> anyhow::Result<Ordering> {
         .enumerate()
         .map(|(i, id)| (*id, i))
         .collect();
-    Ok(Ordering {
-        pos,
-        footer,
-        degraded: false,
-        warning: None,
-    })
+    Ok(Ordering::Composed { pos, footer })
+}
+
+/// The `list_rows` output split — the two destination streams named so the `run_list`
+/// shell cannot transpose them (a swap would misroute the cycle warning into stdout
+/// and corrupt the goldens — SL-051 §4.3). The type, not a doc-comment, is the guard.
+struct ListOutput {
+    stdout: String,
+    stderr: String,
 }
 
 /// The `backlog list` output — the compute half of `run_list`, on the shared spine.
-/// Returns `(stdout, stderr)` IN THAT ORDER (the shell must not transpose). `stdout`
-/// carries the rendered rows (plus the honest-record `footer` in table mode);
-/// `stderr` carries the cycle `warning` (and, under `--json`, the advisory `footer`).
+/// Returns a [`ListOutput`]: `stdout` carries the rendered rows (plus the honest-record
+/// `footer` in table mode); `stderr` carries the cycle `warning` (and, under `--json`,
+/// the advisory `footer`).
 ///
 /// `validate_statuses` guards `--status` (A-2); `listing::build` resolves the filter +
 /// format; `retain` applies the shared substr/regex/status/tag axes + the terminal
@@ -978,7 +979,7 @@ fn list_rows(
     kind: Option<ItemKind>,
     by: OrderBy,
     mut args: ListArgs,
-) -> anyhow::Result<(String, String)> {
+) -> anyhow::Result<ListOutput> {
     validate_statuses(&args.status, BACKLOG_STATUSES)?;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
@@ -989,11 +990,13 @@ fn list_rows(
     };
     let mut items = listing::retain(corpus, &filter, is_hidden, key);
     items.retain(|i| kind.is_none_or(|k| i.kind == k));
+    // Only a clean `Composed` sorts by sequence; a `Degraded` cycle and `--by id`
+    // both fall to the classic `(kind.ordinal, id)`. Off-sequence rows tail via the
+    // `usize::MAX` sentinel.
     match &ordering {
-        Some(o) if !o.degraded => items.sort_by_key(|i| {
+        Some(Ordering::Composed { pos, .. }) => items.sort_by_key(|i| {
             (
-                o.pos
-                    .get(&ItemId::new(i.kind, i.id))
+                pos.get(&ItemId::new(i.kind, i.id))
                     .copied()
                     .unwrap_or(usize::MAX),
                 i.kind.ordinal(),
@@ -1002,24 +1005,30 @@ fn list_rows(
         }),
         _ => items.sort_by_key(|i| (i.kind.ordinal(), i.id)),
     }
-    let footer = ordering.as_ref().map_or("", |o| o.footer.as_str());
-    let warning = ordering
-        .as_ref()
-        .and_then(|o| o.warning.as_deref())
-        .unwrap_or("");
+    let (footer, warning) = match &ordering {
+        Some(Ordering::Composed { footer, .. }) => (footer.as_str(), ""),
+        Some(Ordering::Degraded { footer, warning }) => (footer.as_str(), warning.as_str()),
+        None => ("", ""),
+    };
     match format {
         Format::Table => {
             let sel = listing::select_columns(&BL_COLUMNS, BL_DEFAULT, columns.as_deref())?;
             let table = listing::render_columns(&items, &sel);
             // Table: rows + footer to stdout; the cycle warning to stderr.
-            Ok((format!("{table}{footer}"), warning.to_string()))
+            Ok(ListOutput {
+                stdout: format!("{table}{footer}"),
+                stderr: warning.to_string(),
+            })
         }
         Format::Json => {
             // JSON: the envelope (rows in composed sequence) to stdout; the warning
             // and the advisory footer to stderr (the honest-record stays out of the
             // envelope — no listing.rs change).
             let envelope = listing::json_envelope("backlog", &json_rows(&items))?;
-            Ok((envelope, format!("{warning}{footer}")))
+            Ok(ListOutput {
+                stdout: envelope,
+                stderr: format!("{warning}{footer}"),
+            })
         }
     }
 }
@@ -1052,10 +1061,10 @@ pub(crate) fn run_list(
     args: ListArgs,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (out, err) = list_rows(&root, kind, by, args)?;
-    write!(io::stdout(), "{out}")?;
-    if !err.is_empty() {
-        write!(io::stderr(), "{err}")?;
+    let ListOutput { stdout, stderr } = list_rows(&root, kind, by, args)?;
+    write!(io::stdout(), "{stdout}")?;
+    if !stderr.is_empty() {
+        write!(io::stderr(), "{stderr}")?;
     }
     Ok(())
 }
@@ -2267,7 +2276,7 @@ tags = []
     /// behaviour, asserted against the `(kind.ordinal, id)` grouping). The composed
     /// `--by sequence` default is exercised separately (VT-1 / VT-2).
     fn list_id(root: &Path, kind: Option<ItemKind>, args: ListArgs) -> anyhow::Result<String> {
-        list_rows(root, kind, OrderBy::Id, args).map(|(out, _)| out)
+        list_rows(root, kind, OrderBy::Id, args).map(|o| o.stdout)
     }
 
     // --- §5.5: the uniform table header (extends to backlog) ---
@@ -3639,7 +3648,8 @@ tags = []
     /// stderr)` — the SL-051 tuple shape (rows + footer on stdout, the cycle advisory
     /// on stderr).
     fn list_seq(root: &Path, args: ListArgs) -> (String, String) {
-        list_rows(root, None, OrderBy::Sequence, args).unwrap()
+        let out = list_rows(root, None, OrderBy::Sequence, args).unwrap();
+        (out.stdout, out.stderr)
     }
 
     /// The composed-order ids from a `--by sequence` stdout (before the `overrides:`
@@ -3715,15 +3725,9 @@ tags = []
         write_rel_item(root, ItemKind::Issue, 2, "open", &["ISS-001"], &[]);
 
         let corpus = read_all(root).unwrap();
-        let ordering = compose(&corpus).unwrap();
-        assert!(ordering.degraded, "a needs cycle degrades");
-        assert!(
-            ordering.pos.is_empty(),
-            "no composed positions when degraded"
-        );
-        let warning = ordering
-            .warning
-            .expect("a degraded compose carries a warning");
+        let Ordering::Degraded { warning, .. } = compose(&corpus).unwrap() else {
+            panic!("a needs cycle degrades to Ordering::Degraded");
+        };
         assert!(warning.contains("cycle"), "names the failure: {warning}");
         assert!(
             warning.contains("ISS-001") && warning.contains("ISS-002"),
