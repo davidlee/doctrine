@@ -31,7 +31,8 @@ to move first — see Follow-Ups.
 2. **Edges from existing authored outbound relations only — reference/lineage,
    not dep/seq.** Emit typed edges from the *reference and lineage* relations each
    kind already authors — slice `specs`/`requirements`/`supersedes`; spec
-   `descends_from`/`parent`/members; backlog `specs`/`slices`/`drift`; governance
+   `descends_from`/`parent`/members; backlog `specs`/`slices` (+ `drift`, read but
+   free-text with no entity kind → always a dangler, no overlay); governance
    `supersedes`/`related`. The inert governance `[relationships]` becomes a
    **read-only** graph input here (no new authored fields — that is slice 3).
    ADR-004 holds: outbound only. **Excluded**: `needs`/`after` (dep/seq —
@@ -46,7 +47,10 @@ to move first — see Follow-Ups.
    `--transitive` in v1) — never a stored reverse field (REQ-074 / REQ-078 / D8).
 4. **`doctrine inspect <ID>`** — the dedicated cross-kind verb (D1). SPEC-001's
    reserved `inspect` surface, shipped relation-only here; slice 2 layers
-   actionability/blockers onto the same verb.
+   actionability/blockers onto the same verb. Conforms to the uniform
+   list/show/render contract (SL-025) — default human render + `--json` — riding
+   the SL-045 read-surface precedent (`src/listing.rs`); id parse rides the
+   existing `integrity::kind_by_prefix` / `parse_canonical_ref` seam.
 
 ## Non-Goals
 

@@ -7,7 +7,9 @@
 > **STATUS: LOCKED (2026-06-12).** Internal (A1–A7) + external (E1–E6, codex gpt-5.5)
 > adversarial passes integrated (§10); user signed off. All scope OQs resolved (§6→§7);
 > Q2 closed, Q3 amended; two external blockers (E1 CoverageRow enum, E2 member_reqs
-> canonicalize) fixed. Ready for `/plan`. Descends **SPEC-002** / **PRD-013**; completes
+> canonicalize) fixed. Post-lock fresh-eyes review at `/plan` (F-A8, §10): the A1
+> seam now returns `MemberReq` pairs so the spec-fan label column is fillable.
+> Descends **SPEC-002** / **PRD-013**; completes
 > the user-facing half of **REQ-110** / **REQ-111**. Reference forms: padded entity ids
 > (`SL-045`, `REQ-110`, `ADR-001`); doc-local refs bare (`D1`, `OQ-1`, `E1`).
 
@@ -144,9 +146,13 @@ map) are **lifted, not reinvented** (F3).
 **Spec-fan seam** (A1 — the one exported entry point `coverage_view` calls):
 ```rust
 // spec.rs — resolve the ref, read members, sort by advisory `order`, return the
-// ordered REQ FKs, EACH canonicalized (E2). Encapsulates resolve_spec_ref +
-// read_members (both private).
-pub(crate) fn member_reqs(root: &Path, spec_ref: &str) -> anyhow::Result<Vec<String>>;
+// ordered (label, canonical REQ FK) pairs. Encapsulates resolve_spec_ref +
+// read_members (both private). The label is carried because the spec-fan row
+// needs it (CoverageRow.label = Some in a fan; the Dangling row's label comes
+// from the membership edge) and read_members is private — member_reqs is the
+// SOLE exported seam, so the label has no other source (F-A8, post-lock review).
+pub(crate) struct MemberReq { label: String, requirement: String /* canonical */ }
+pub(crate) fn member_reqs(root: &Path, spec_ref: &str) -> anyhow::Result<Vec<MemberReq>>;
 ```
 **Canonicalization is load-bearing (E2 — blocker).** Member FKs are non-canonical at
 rest (`members.toml` may carry `REQ-1`); the registry already canonicalizes them on read
@@ -247,8 +253,9 @@ would touch reconcile (behaviour-preservation gate). The shared invariant — th
 `doctrine coverage <ref>` flow:
 1. **Dispatch** `<ref>` by prefix → `Target::Req(REQ-NNN)` | `Target::Spec(SpecRef)`;
    unknown prefix → error (`expected REQ-/PRD-/SPEC-NNN`).
-2. **Resolve req set** — single: `{canonicalize_fk(ref)}`; spec: `spec::member_reqs`
-   (A1) → ordered `[REQ-NNN]` (member `order`).
+2. **Resolve req set** — single: `[{label: None, canonicalize_fk(ref)}]`; spec:
+   `spec::member_reqs` (A1) → ordered `[(label, REQ-NNN)]` (member `order`), the
+   label flowing into each row.
 3. **Shell scan (once)** — `scan_coverage_batch(root, &wanted)` (the sole git/disk seam).
 4. **Per req (pure)** — `requirement::load` → authored `status`/`kind`; `composite(cells)`;
    `drift(status, &composite)`; `observed_state(&composite)` → a `CoverageRow`. A **dangling
@@ -448,3 +455,14 @@ mortal. User triaged the three open dispositions (E1/E3/E5).
   independent lossy partition; test the predicate partition, not a fake "five drift states."
 - **E-Q2 (cleared).** No conformance gate constrains the `kind:"coverage"` view label
   (`json_envelope` takes arbitrary `&str`); Q2 closed.
+
+**Post-lock fresh-eyes review (2026-06-12, at `/plan`) — integrated.**
+- **F-A8 (major → fixed §5.2/§5.4).** The A1 seam signature `member_reqs -> Vec<String>`
+  returned only canonicalized REQ FKs, **dropping the membership label** the spec-fan row
+  requires (`CoverageRow.label = Some` in a fan; the Dangling row's label "from the
+  membership edge"). The label lives only in `Member.label`, reachable only through the
+  private `read_members` — and `member_reqs` is the sole exported seam, so the label had
+  **no other source**: the spec-fan `label` column was unfillable as specified. Fix:
+  `member_reqs` returns ordered `MemberReq { label, requirement /*canonical*/ }` pairs
+  (order + canonicalization unchanged). `spec req list` is unaffected (owns `read_members`
+  in-module). All other cited seams verified against the live tree and stand unchanged.
