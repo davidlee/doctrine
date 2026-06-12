@@ -248,8 +248,14 @@ pub(crate) fn run(path: Option<PathBuf>, args: &ReconcileArgs) -> anyhow::Result
             // from the wall (`select_status(to, prior)`), never from the verdict.
             let written =
                 select_status(to.context("accept/revise require --to (validated)")?, prior);
-            let doc =
-                compose_status_rec(&args.req, &args.slice, args.r#move, prior, written, evidence);
+            let doc = compose_status_rec(
+                &args.req,
+                &args.slice,
+                args.r#move,
+                prior,
+                written,
+                evidence,
+            );
             let rec_id = crate::rec::materialise_populated(&root, &doc)?; // WAL first
             requirement::set_status(&root, req_id, written)?; // then authored status
             rec_id
