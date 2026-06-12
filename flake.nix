@@ -175,10 +175,9 @@
           # flag it passes through `-nodefaultlibs`. Append so a caller's own
           # RUSTFLAGS survive. No-op off darwin (glibc provides iconv) and off
           # nix (Apple's /usr/bin/cc finds the SDK's libiconv.tbd natively).
-          devshell.startup.iconv-rustflags.text =
-            lib.optionalString stdenv.isDarwin ''
-              export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-L ${pkgs.libiconv}/lib"
-            '';
+          devshell.startup.iconv-rustflags.text = lib.optionalString stdenv.isDarwin ''
+            export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-L ${pkgs.libiconv}/lib"
+          '';
 
           env = [
             {
@@ -195,8 +194,8 @@
             }
             {
               name = "jpi";
-              help = "op -> jailed-pi";
-              command = "op run -- jailed-pi $@";
+              help = "jailed-pi";
+              command = "jailed-pi $@";
             }
             {
               name = "jcl";
