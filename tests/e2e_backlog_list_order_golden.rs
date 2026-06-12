@@ -388,6 +388,47 @@ fn vt6_needs_cycle_degrades_to_id_sort_with_a_warning_and_exit_zero() {
     );
 }
 
+// === VT-9 — off-sequence tail: a terminal row sorts AFTER the live chain ===
+
+/// The Sequence comparator tails any retained row with NO composed position via
+/// `unwrap_or(usize::MAX)` (`src/backlog.rs` `list_rows`). A row gets no `pos` when
+/// it is TERMINAL — `project` filters terminal items out of the ordering graph — so
+/// the only way to reveal such a row in Sequence mode is `--all`/`--status`. No other
+/// test drives that branch.
+///
+/// Fixture: a live chain ISS-006 `needs` ISS-005 (composes to ISS-005, ISS-006) plus a
+/// CLOSED, edge-free ISS-001 (terminal ⇒ no `pos`, hidden by default, revealed by
+/// `--all`). The discriminator is the LOWEST id sitting LAST: the composed order is
+/// `ISS-005, ISS-006, ISS-001` — ISS-001 tails despite id 1, which only holds while
+/// the sentinel is `usize::MAX`. Invert it (e.g. `0`) and ISS-001 sorts to the front.
+#[test]
+fn vt9_terminal_row_tails_the_live_chain_under_all() {
+    let dir = tmp();
+    seed(
+        dir.path(),
+        "issue",
+        6,
+        "f",
+        "Eff",
+        "open",
+        "needs = [\"ISS-005\"]\n",
+    );
+    seed(dir.path(), "issue", 5, "e", "Eee", "open", "");
+    // Closed ⇒ terminal: excluded from the ordering graph, so no composed `pos`.
+    seed(dir.path(), "issue", 1, "a", "Aye", "closed", "");
+    let out = list(dir.path(), &["--all"]);
+    ok(&out);
+    assert_eq!(
+        stdout(&out),
+        "id       kind   status  title\n\
+         ISS-005  issue  open    Eee\n\
+         ISS-006  issue  open    Eff\n\
+         ISS-001  issue  closed  Aye\n",
+        "the terminal ISS-001 tails the live chain despite the lowest id"
+    );
+    assert_eq!(stderr(&out), "", "clean survey: no advisory on stderr");
+}
+
 // === VT-7 — verb retired: `backlog order` is an unknown subcommand ========
 
 /// `backlog order` is now an unknown-subcommand clap error: non-zero exit, the clap
