@@ -28,8 +28,13 @@ In scope:
    vertical column delimiters only, no outer border, no horizontal lines.
    `render_columns` and all per-kind list call sites keep their current
    signatures; only the renderer changes.
-2. Adopt **owo_colors** for colour on the **shared listing surfaces**
-   (everything routed through `render_columns`, plus `memory list`).
+2. Adopt **owo_colors** for colour on the surfaces that ride the
+   `render_columns` seam — backlog, rec, governance, slice, memory, review, spec,
+   coverage_view. (`memory list` already rides `render_columns`, so OQ-1 is void;
+   `coverage_view::render_table` is a thin wrapper over `render_columns`, not a
+   parallel renderer.) `priority` (`survey_human`/`next_human`) calls
+   `render_table` directly and gains the new `│` layout but stays monochrome —
+   its colour is deferred (see Follow-Ups).
 3. **Colour gating** — emit ANSI only to a colour-capable TTY; honour `NO_COLOR`
    and non-tty (piped) output. Piped/golden output stays byte-for-byte plain so
    the black-box CLI goldens have a deterministic, colour-free target.
@@ -56,17 +61,22 @@ Out of scope (deferred — capture as follow-ups, do not implement here):
 
 ## Risks, assumptions, open questions
 
-- **OQ-1 — memory list seam.** `memory list` is not yet on the shared column
-  model (open backlog item IMP-017). To colour it "through the shared seam" this
-  slice must either (a) fold IMP-017's migration in, or (b) colour it ad-hoc and
-  leave IMP-017 to migrate later. Decide in `/design`.
-- **OQ-2 — colour-capability detection.** Which mechanism gates colour
-  (`owo_colors::if_supports_color` + `supports-color`, or a hand-rolled
-  isatty + `NO_COLOR` check). Must not pull a heavy dep; must be testable.
-- **OQ-3 — minimalist preset.** Exact comfy-table preset/modifier combo that
-  yields *inner vertical separators only* (no outer frame, no header/row rules)
-  and still respects the "last column unpadded" intent — or whether trailing
-  padding is now acceptable given separators.
+(Design `design.md` is canon; OQ-1..3 are resolved there — recorded here for the
+scope trail.)
+
+- **OQ-1 — RESOLVED (void).** `memory list` already renders through
+  `listing::render_columns` (memory.rs:1312); colouring it is free. IMP-017 /
+  IMP-018 concern the `--columns` flag, not the renderer, and stay out of scope.
+- **OQ-2 — RESOLVED.** Capability resolved in the impure shell (`tty.rs`:
+  `NO_COLOR` via `var_os` + `io::stdout().is_terminal()`, stdlib) and injected as
+  a `bool` into the pure render layer. owo_colors used via *unconditional*
+  colorize methods gated by that bool — **not** `if_supports_color` (it reads
+  env/tty, which would poison the pure layer).
+- **OQ-3 — RESOLVED.** comfy-table `presets::NOTHING` +
+  `set_style(VerticalLines, '│')`; `ContentArrangement::Disabled` for
+  determinism; comfy-table owns all width/padding (no "last column unpadded"
+  special case survives). Feature set (`default-features=false` + `custom_styling`)
+  proven by a spike at the head of phase 1.
 - **RSK-1 — golden churn.** Table-shape change touches every list golden;
   scope the re-baseline carefully so a shape change can't hide a content
   regression. Re-baseline shape and content in separate reviewable steps.
@@ -92,7 +102,8 @@ Out of scope (deferred — capture as follow-ups, do not implement here):
 
 ## Follow-Ups
 
-- Colour the ad-hoc `writeln!` output surfaces (adr/policy/install/reconcile/
-  corpus) via the colour seam this slice establishes.
-- (Possibly) IMP-017 — `memory list` onto the shared column model, if OQ-1 lands
-  on option (b).
+- Colour the **deferred-colour surfaces** via the colour seam this slice
+  establishes: the ad-hoc `writeln!` output (adr/policy/install/reconcile/corpus)
+  **and** `priority` (`survey_human`/`next_human`, which rides `render_table`
+  directly). One follow-up item.
+- `--color=auto|always|never` global flag (this slice ships auto-detection only).

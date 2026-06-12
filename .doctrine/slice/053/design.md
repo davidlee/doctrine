@@ -28,6 +28,23 @@
   columns, status coloured by value. Colour is emitted **only** to a
   colour-capable TTY; piped output is byte-for-byte plain.
 
+**Surface inventory (precise — adversarial-review corrected).** Colour flows
+through the `render_columns` seam, and *only* there:
+
+- **Colour + layout** (ride `render_columns`): backlog, rec, governance, slice,
+  memory, review, spec, **coverage_view** (its `render_table` at
+  coverage_view.rs:330 is a thin wrapper that delegates to
+  `listing::render_columns` — it is *not* a parallel renderer).
+- **Layout only, no colour** (call `listing::render_table` directly, bypassing
+  the paint path): `priority/render.rs` (`survey_human`, `next_human`). These
+  gain the `│` separators for free but stay monochrome this slice; their colour
+  is deferred to the same follow-up as the ad-hoc `writeln!` surfaces, keeping
+  the colour story to a single mechanism (the `render_columns` seam).
+
+`render_table`'s signature is **unchanged** (`fn(&[Vec<String>]) -> String`) — it
+never carried colour and does not now. Only `render_columns` gains the `color`
+param, so the direct `render_table` callers (priority) are untouched.
+
 ## 2. Architecture — the pure/impure boundary
 
 The pure/imperative split (slices-spec § Architecture; CLAUDE.md) forbids env,
@@ -190,6 +207,43 @@ Residual: none blocking. ASM-1 (comfy-table can express the minimalist style and
 ANSI-aware width without re-introducing terminal-width dependence) is verified at
 execute; failure re-opens D1.
 
+## 9a. Adversarial review (internal pass)
+
+Hostile self-review of this design; findings integrated above.
+
+- **F-1 — scope imprecision (integrated §1).** "Everything through
+  `render_columns`" was loose. Corrected to a precise surface inventory:
+  coverage_view rides the seam (colour free); priority calls `render_table`
+  directly (layout only, colour deferred). No surface is silently dropped.
+- **F-2 — ragged grids / behaviour preservation (dismissed).** comfy-table can
+  misbehave on rows of unequal column count; the old hand-rolled `render_table`
+  tolerated raggedness (`max` cols + `get(c)`). Verified every producer is
+  rectangular: `render_columns` always emits header+uniform cells; priority's
+  hand-built grids are fixed 7/5 columns with a matching header. **Invariant:**
+  `render_table` is only ever handed rectangular grids. A guard test pins this so
+  a future ragged caller fails loudly rather than mis-rendering.
+- **F-3 — comfy-table feature gamble (integrated §10).** `custom_styling` working
+  under `default-features = false` (no crossterm) together with
+  `ContentArrangement::Disabled` for determinism is load-bearing and unverified
+  in-repo. Elevated to a **spike at the head of phase 1** — resolve the feature
+  set and prove deterministic, ANSI-aware, terminal-size-independent output on a
+  throwaway table *before* swapping the real renderer. Failure re-opens D1 cheaply.
+- **F-4 — status_hue robustness (documented).** `ByValue` receives the emitted
+  cell text. Sibling columns carry markers (slice rollup `—`/`!N`/`?N`/`⚠`), but
+  those live in their *own* columns (paint `None`); the status column stays a
+  bare token. Should a marker ever contaminate a status cell, `status_hue`
+  returns `None` ⇒ no colour, no breakage. Graceful degradation by construction.
+- **F-5 — not behaviour-preserving by design (clarified §6).** The CLAUDE.md
+  behaviour-preservation gate ("shared machinery suites stay green unchanged")
+  targets the entity engine; this change deliberately alters listing output. The
+  governing gate here is the `e2e_list_conformance` net, which *forces*
+  acknowledgment of any shared-surface format change — the re-baseline is that
+  acknowledgment, performed in an isolated commit (RSK-1).
+- **Ripple correction.** ~13 `render_columns` call sites across 8 files (slice ×3,
+  memory ×2, review ×2, spec ×2, backlog, rec, governance, coverage_view) plus
+  in-crate tests gain the `color` arg; `render_table` callers (priority ×2) are
+  unaffected (signature unchanged).
+
 ## 8. Code impact summary
 
 | Path | Change |
@@ -205,10 +259,17 @@ execute; failure re-opens D1.
 
 Provisional, to keep RSK-1 clean:
 
-1. **Renderer swap** — comfy-table behind `render_table` (no colour yet),
-   minimalist separators, determinism guards; re-baseline goldens. Pure shape
-   change, isolated.
-2. **Colour seam** — `tty.rs`, `color` param, `ColumnPaint`, `status_hue`, paint
-   the column literals, pure colour tests. Goldens stay green (piped ⇒ plain).
-3. **Follow-ups capture** — backlog items for ad-hoc `writeln!` surface colouring
-   and the `--color` flag.
+1. **Renderer swap** — *spike first* (F-3): prove comfy-table with the resolved
+   feature set (`default-features=false` + `custom_styling`) renders a throwaway
+   table deterministically, ANSI-aware, terminal-size-independent
+   (`ContentArrangement::Disabled`). Then swap comfy-table behind `render_table`
+   (no colour yet), minimalist `│` separators, rectangular-grid guard test;
+   re-baseline goldens. Pure shape change, isolated commit. If the spike fails,
+   re-open D1 before any further work.
+2. **Colour seam** — `tty.rs`, `color` param on `render_columns`, `ColumnPaint`,
+   `status_hue`, paint the column literals across the ~13 sites, pure colour
+   tests. Goldens stay green (piped ⇒ plain). priority stays monochrome (layout
+   only).
+3. **Follow-ups capture** — backlog items for: ad-hoc `writeln!` surface
+   colouring **+ priority colour** (one item, the deferred-colour surfaces); and
+   the `--color=auto|always|never` flag.
