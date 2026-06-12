@@ -147,6 +147,19 @@ pub(crate) struct InspectView {
 fn inspect(id: &str) -> Result<InspectView>;
 ```
 
+**Id parse — ride the existing seam.** `inspect` resolves `<ID>` via
+`integrity::kind_by_prefix` / `parse_canonical_ref` (integrity.rs:315/341) — no new
+parser; `parse_canonical_ref` is promoted to `pub(crate)`. `EntityKey` renders its
+canonical ref through the same `KINDS`/`listing::canonical_id` source `ItemId` uses.
+
+**Render contract — conform to the uniform read surface (SL-025; SL-045 precedent).**
+`inspect` is `show`-like (one entity, grouped outbound/inbound/dangler sections), but
+honours the uniform list/show/render contract: a default human render plus **`--json`**
+(agent-readable, the `InspectView` serialized). It rides `src/listing.rs` rendering
+helpers where the grouped sections map onto them — SL-045's `spec req list` (landing
+first) is the read-surface template to reuse, not re-invent
+(mem.pattern.authoring.reuse-tuned-prior-art-verbatim).
+
 ### 5.3 Data, State & Ownership
 
 - **Adapter owns**: the all-kind scan, `Projection<EntityKey>`, edge emission, the
@@ -171,12 +184,15 @@ the same label from different source kinds shares one overlay. All
 | `parent` | spec → spec |
 | `members` | spec → req |
 | `slices` | backlog → slice |
-| `drift` | backlog → drift |
 | `related` | governance → governance |
 
-**Not** overlays: `superseded_by` (derived = inbound of `supersedes`, the IMP-032
-reader rule), `tags` (free-text, not entity refs), `needs`/`after`/`triggers`
-(dep/seq/mask — SL-047).
+~8 overlays + an 8-entry `OverlayId → Label` map. **Not** overlays: `superseded_by`
+(derived = inbound of `supersedes`, the IMP-032 reader rule), `tags` (free-text,
+not entity refs), `needs`/`after`/`triggers` (dep/seq/mask — SL-047), and **`drift`**
+— backlog `drift` is a free-text `Vec<String>` with **no DRIFT kind** in `KINDS`, so
+its targets never resolve to a node; they surface as danglers (visibility preserved),
+not edges. A drift string that *does* happen to be a resolvable canonical ref still
+dangles unless its kind is admitted — there is no dedicated drift overlay.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -309,10 +325,30 @@ downstream, not blocking:
   (mint-or-get idempotence; caller-order mint; remap round-trip).
 - **Core neutrality** — `cordage` test suite carries no doctrine vocabulary
   (REQ-079) — unchanged, since the crate is untouched.
+- **REQ-091 (adapter)** — the three acceptance criteria are discharged: (1) node
+  ids minted by the adapter from doctrine ids, opaque to the core; (2) every edge
+  emitted from an authored outbound relation (ADR-004), no inbound/derived field
+  authored; (3) diagnostics re-mapped to doctrine ids + relation-kind names via
+  `Projection::remap_set` + the `OverlayId → Label` map.
 
 ## 10. Review Notes
 
-(Adversarial pass + integration recorded here.)
+### Internal adversarial pass (pre-plan) — integrated
+
+- **A — `entity::Kind` exists, is the right type.** Confirmed (integrity.rs:37
+  `kind: &'static entity::Kind`). `EntityKey` uses it; no change.
+- **B — id parse already built.** `inspect` rides `integrity::kind_by_prefix` /
+  `parse_canonical_ref` (integrity.rs:315/341) instead of a new parser; the latter
+  is promoted `pub(crate)`. Integrated into §5.2.
+- **C — `drift` overlay was a phantom.** `drift` is free-text with no `DRIFT` kind;
+  its targets never resolve. Dropped from the overlay set (9 → 8); drift refs
+  surface as danglers. Integrated into §5.3.
+- **D — REQ-091 traceability.** All three criteria mapped (see §9).
+- **SL-045 bearing.** SL-045 (requirement status-visibility read surface, `plan`,
+  lands first) is the read-surface precedent: it rides the uniform list/show/render
+  contract (SL-025) + `src/listing.rs` with `--columns`/`--json`. `inspect` must
+  conform — at least `--json`. Integrated into §5.2 (render contract). No code
+  collision (disjoint subsystems); the bearing is render-contract consistency.
 
 **Direct follow-up to interrogate (IMP-034):** whether to refactor *all* relations
 modelling to a uniform schema — a single generic `[[relation]] kind=… target=…`

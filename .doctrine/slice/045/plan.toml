@@ -60,26 +60,28 @@ id        = "PHASE-02"
 name      = "Spec-fan seam + canonicalization"
 objective = """
 Add the single exported fan entry `pub(crate) fn member_reqs(root, spec_ref) ->
-anyhow::Result<Vec<String>>` to spec.rs (design §5.2, A1): resolve the ref, read
-members, sort by advisory member `order`, return the ordered REQ FKs — EACH
-canonicalized via requirement::canonicalize_fk (E2 — BLOCKER, mirrors
-spec.rs:909). Encapsulates resolve_spec_ref + read_members, both of which STAY
-private (encapsulation + ADR-001: spec never imports coverage_view). Rationale
-for canonicalize: scan_coverage matches evidence by EXACT string against
-canonical REQ-001 keys; a raw REQ-1 member would silently render observed=none —
-a read that fabricates non-divergence. A read that lies is worse than one that
-crashes.
+anyhow::Result<Vec<MemberReq>>` to spec.rs (design §5.2, A1; F-A8): resolve the
+ref, read members, sort by advisory member `order`, return ordered
+`MemberReq { label, requirement }` pairs — each `requirement` canonicalized via
+requirement::canonicalize_fk (E2 — BLOCKER, mirrors spec.rs:907). The label is
+CARRIED (F-A8): the spec-fan row needs it and read_members is private, so
+member_reqs is its only source. Encapsulates resolve_spec_ref + read_members,
+both of which STAY private (encapsulation + ADR-001: spec never imports
+coverage_view). Rationale for canonicalize: scan_coverage matches evidence by
+EXACT string against canonical REQ-001 keys; a raw REQ-1 member would silently
+render observed=none — a read that fabricates non-divergence. A read that lies
+is worse than one that crashes.
 """
 entrance_criteria = [
-  { id = "EN-1", text = "design.md LOCKED; spec.rs read_members + resolve_spec_ref present (verified §2)" },
+  { id = "EN-1", text = "design.md LOCKED (+F-A8 amendment); spec.rs read_members + resolve_spec_ref + Member{label,order} present (verified §2)" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "member_reqs exported pub(crate); resolve_spec_ref and read_members remain private; spec.rs imports no coverage_view (ADR-001 holds)" },
-  { id = "EX-2", text = "every returned FK is canonicalized (canonicalize_fk) before return; ordering follows advisory member `order`" },
+  { id = "EX-1", text = "member_reqs exported pub(crate) returning ordered MemberReq{label, requirement} pairs; resolve_spec_ref and read_members remain private; spec.rs imports no coverage_view (ADR-001 holds)" },
+  { id = "EX-2", text = "every returned requirement is canonicalized (canonicalize_fk); the membership label is carried verbatim (F-A8); ordering follows advisory member `order`" },
 ]
 verification = [
-  { id = "VT-1", expects = "non-canonical-member coverage (E2): members.toml carrying REQ-1 + canonical REQ-001 coverage — assert the resolved set sees the evidence (observed ≠ none). Red against raw FKs, green after canonicalize_fk" },
-  { id = "VT-2", expects = "member order preserved in the returned Vec" },
+  { id = "VT-1", expects = "canonicalization (E2): a members.toml carrying non-canonical REQ-1 yields MemberReq.requirement == REQ-001 (canonical). Red against raw FK, green after canonicalize_fk — the silent-false-negative guard (end-to-end observed≠none asserted at the seam/golden level once the scan rides it)" },
+  { id = "VT-2", expects = "label carried (F-A8) and member `order` preserved in the returned Vec" },
 ]
 specs        = []
 requirements = []
