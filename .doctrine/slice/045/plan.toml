@@ -1,0 +1,200 @@
+# Implementation plan for SL-045 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-045"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Batched corpus scanner"
+objective = """
+Add the additive batched shell `scan_coverage_batch(root, &wanted) ->
+BTreeMap<String, Vec<(CoverageEntry, IsStale)>>` to coverage_scan.rs (design
+§5.2, D4): ONE corpus walk, parse each coverage.toml once, keep entries whose
+key.requirement ∈ wanted, resolve HEAD once, stale each matched cell. Dense
+result — every wanted req present (empty Vec if uncovered). Inherits the
+ISS-006 slug-symlink skip, single-HEAD-resolve, skip-malformed tolerance. The
+single-REQ path rides it too (one shared walker). Resolve Q1 by the
+behaviour-preservation gate: delegate scan_coverage to the batch fn ONLY if
+byte-identical for the single-req case, else keep both over a lifted shared
+private walker (collect_matching_entries / symlink skip / HEAD-once map lifted,
+not reinvented — F3). RSK-006 fix: bounds a spec fan to one walk (INV-2).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md LOCKED; existing coverage_scan suite green on the entry tree" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "scan_coverage_batch exists, pub(crate), additive; returns a dense BTreeMap (every wanted req keyed, empty Vec when uncovered)" },
+  { id = "EX-2", text = "scan_coverage behaviour unchanged — delegates to the batch walker iff byte-identical for the single-req case, otherwise shares a lifted private walker; no walk logic reinvented (F3)" },
+  { id = "EX-3", text = "ISS-006 slug-symlink skip and single-HEAD-resolve preserved in the batched walk" },
+]
+verification = [
+  { id = "VT-1", expects = "composite-seam equivalence (E4): composite(batch[req]) == composite(scan_coverage(req)) for every req over a multi-slice fixture — NOT raw Vec equality (read_dir order is incidental)" },
+  { id = "VT-2", expects = "determinism across runs; empty / missing / malformed coverage.toml tolerated (skipped, never fatal)" },
+  { id = "VT-3", expects = "ISS-006 slug-symlink no-double-count over a fixture carrying the NNN-slug alias (R3)" },
+  { id = "VT-4", expects = "behaviour-preservation: existing coverage_scan suite green UNCHANGED (F6)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Spec-fan seam + canonicalization"
+objective = """
+Add the single exported fan entry `pub(crate) fn member_reqs(root, spec_ref) ->
+anyhow::Result<Vec<String>>` to spec.rs (design §5.2, A1): resolve the ref, read
+members, sort by advisory member `order`, return the ordered REQ FKs — EACH
+canonicalized via requirement::canonicalize_fk (E2 — BLOCKER, mirrors
+spec.rs:909). Encapsulates resolve_spec_ref + read_members, both of which STAY
+private (encapsulation + ADR-001: spec never imports coverage_view). Rationale
+for canonicalize: scan_coverage matches evidence by EXACT string against
+canonical REQ-001 keys; a raw REQ-1 member would silently render observed=none —
+a read that fabricates non-divergence. A read that lies is worse than one that
+crashes.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md LOCKED; spec.rs read_members + resolve_spec_ref present (verified §2)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "member_reqs exported pub(crate); resolve_spec_ref and read_members remain private; spec.rs imports no coverage_view (ADR-001 holds)" },
+  { id = "EX-2", text = "every returned FK is canonicalized (canonicalize_fk) before return; ordering follows advisory member `order`" },
+]
+verification = [
+  { id = "VT-1", expects = "non-canonical-member coverage (E2): members.toml carrying REQ-1 + canonical REQ-001 coverage — assert the resolved set sees the evidence (observed ≠ none). Red against raw FKs, green after canonicalize_fk" },
+  { id = "VT-2", expects = "member order preserved in the returned Vec" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Coverage view leaf"
+objective = """
+New src/coverage_view.rs leaf (design §5.1/§5.2) — the read's pure compute +
+render. enum CoverageRow { Healthy | Dangling } (E1 — BLOCKER: a dangling member
+FK has no ReqKind/ReqStatus/Verdict to hold, so one struct cannot carry both).
+observed_state(&Composite) -> ObservedState: a TOTAL fold over Composite's four
+public predicates (is_empty / any_failed_or_blocked / any_fresh_verified /
+only_forward), an INDEPENDENT lossy presentation partition — NOT a 1:1 view of
+the drift tree (E6). Ref dispatch (Target::Req | Target::Spec). Row
+materialisation joins authored (requirement::load → status/kind, F1) with derived
+(composite → drift → observed_state) DISPLAY-ONLY. Column model + typed JSON rows.
+Add terse Verdict::label() / DivergentReason::label() in coverage.rs as the single
+source for verdict cell text; reconcile's build_prompt deliberately NOT merged (D5).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (scan_coverage_batch) and PHASE-02 complete (member_reqs)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "coverage_view.rs is a leaf (ADR-001, no cycle); CoverageRow is an enum { Healthy | Dangling }, the Dangling arm carrying id/label/load_error only (no typed cells)" },
+  { id = "EX-2", text = "observed_state is total over the 5 CoverageStatus variants (Stale arm = verified-but-stale/mixed residue); it is an independent partition, not derived from drift" },
+  { id = "EX-3", text = "Verdict::label()/DivergentReason::label() land in coverage.rs; the pure fold and reconcile.rs are untouched (D5, F6)" },
+  { id = "EX-4", text = "row materialisation joins authored + derived display-only — status always from requirement::load, never derived (F1)" },
+]
+verification = [
+  { id = "VT-1", expects = "observed_state predicate partition is TOTAL and non-overlapping across the five canonical composite states (reuse coverage.rs composites() fixture); NOT asserted as 1:1 onto drift (E6)" },
+  { id = "VT-2", expects = "row materialisation: spec fan preserves member order; single-REQ path label=None; dangling member FK → CoverageRow::Dangling, fan continues, no fabricated ReqStatus in row or JSON (dangling:true + load_error, no status/verdict keys) — INV-4/E1/A2" },
+  { id = "VT-3", expects = "ref dispatch: REQ / SPEC / PRD resolve; garbage prefix → error (expected REQ-/PRD-/SPEC-NNN)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Requirement roster — spec req list"
+objective = """
+Add `doctrine spec req list <SPEC>` to spec.rs (design §5.1/§5.2, D3): an
+authored-only roster of a spec's members — REQ-NNN, membership label (FR-/NF-),
+kind, authored status. Flattens CommonListArgs (E3), so it inherits
+--status/--filter/--tag/--all FREE in v1 (--status NOT deferred for the roster).
+A requirement-row column model lives in spec.rs mirroring SPEC_COLUMNS; the
+generic listing.rs Column/select_columns/render_columns is REUSED UNCHANGED (A5).
+NO scan, NO observed/verdict column (INV-3 — authored-only). A dangling member
+FK degrades-and-continues here too (E5 — symmetric with coverage): the row
+renders an inline load-error in place of kind/status, the roster does not abort.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md LOCKED; SPEC_COLUMNS / SpecListRow / select_columns column-model pattern present (§2, SL-037)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "spec req list emits authored-only rows (default columns id, label, kind, status); no observed/verdict field exists on this surface; no corpus scan performed (INV-3)" },
+  { id = "EX-2", text = "the command flattens CommonListArgs (inherits --status/--filter/--tag/--all/--columns/--json); listing.rs reused unchanged (A5)" },
+  { id = "EX-3", text = "a dangling member FK renders a degraded load-error row and the roster continues (E5, symmetric with coverage)" },
+]
+verification = [
+  { id = "VT-1", expects = "authored-only (INV-3): output carries no observed/verdict field and performs no scan" },
+  { id = "VT-2", expects = "roster dangling tolerance (E5): spec req list over a spec with a dangling member FK renders a degraded row and does NOT abort" },
+  { id = "VT-3", expects = "--status filter and --columns honoured; unknown column → SL-037 declaration-order error" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "CLI wiring"
+objective = """
+Wire the surfaces into src/main.rs (design §5.1): the top-level leaf
+`Coverage { reference, columns, format/json, path }` (NOT a CommonListArgs
+surface — Q3 leaf gap) dispatching the §5.4 flow, and SpecReqCommand::List.
+Both honour --columns / --json (SL-025 uniform contract). Unknown ref prefix →
+error; empty spec (no members) → "" (the §5.5 empty contract).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 (coverage_view) and PHASE-04 (spec req list) complete" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine coverage <ref>` invocable: REQ single row, PRD/SPEC fan in member order; one batched walk (INV-2)" },
+  { id = "EX-2", text = "`doctrine spec req list <SPEC>` invocable; both surfaces honour --columns/--json" },
+  { id = "EX-3", text = "unknown ref prefix → error; empty spec → empty output; cargo build clean, clippy zero warnings (just check)" },
+]
+verification = [
+  { id = "VT-1", expects = "smoke: coverage REQ / coverage SPEC / coverage PRD dispatch and render; spec req list runs; garbage ref errors" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Seam wall + goldens + behaviour-preservation"
+objective = """
+The cross-cutting seam-level proof (design §9). INV-1 wall test, seam-driven
+(A3): drive the coverage command's RENDERED output, vary the on-disk coverage
+state across the §5.2 spectrum while holding the requirement file's authored
+status FIXED, assert the rendered status cell never moves (a pure-helper test
+cannot witness the wall). Black-box CLI goldens asserting EVERY surface, not just
+the JSON envelope: coverage REQ / coverage SPEC / --json (healthy AND dangling
+row shapes) / --columns / unknown-column error; spec req list table/json/columns.
+Confirm the behaviour-preservation gate (F6).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete — both commands wired and invocable" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "INV-1 wall pinned at the COMMAND seam: rendered status cell invariant under the full on-disk coverage spectrum with authored status held fixed (F1/NF-001)" },
+  { id = "EX-2", text = "black-box goldens cover coverage REQ/SPEC/--json (healthy + dangling)/--columns/unknown-column + spec req list table/json/columns; every surface asserted, not just the envelope" },
+]
+verification = [
+  { id = "VT-1", expects = "INV-1 wall test green (seam-driven, status cell never moves across the coverage spectrum)" },
+  { id = "VT-2", expects = "black-box CLI goldens green for both commands across all listed shapes including the dangling JSON row (dangling:true, load_error, no status/verdict keys)" },
+  { id = "VT-3", expects = "behaviour-preservation: coverage / coverage_scan / reconcile suites + the SL-044 NF-001 import-edge proof green UNCHANGED (F6)" },
+]
+specs        = []
+requirements = []

@@ -1,7 +1,7 @@
 id = 45
 slug = "requirement-status-visibility-roster-and-drift-read"
 title = "Requirement status visibility: spec req roster + standalone drift read"
-status = "design"
+status = "plan"
 created = "2026-06-12"
 updated = "2026-06-12"
 
