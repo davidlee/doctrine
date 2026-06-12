@@ -279,13 +279,15 @@ fn backlog_list_default_table_is_byte_exact() {
     seed_backlog_corpus(dir.path());
     let out = list(dir.path(), "backlog", &[]);
     ok(&out);
-    // Default = [id, kind, status, title] (slug hidden, SL-037 D4). Sorted by
-    // (kind.ordinal, id): issue before improvement; `closed` (terminal) ABSENT.
+    // Default = [id, kind, status, title] (slug hidden, SL-037 D4). SL-051: the
+    // default is now `--by sequence` — edge-free + same-dated items compose by the
+    // tie-break `(exposure, created, ItemId)`, ItemId by prefix string, so IMP-
+    // precedes ISS-; `closed` (terminal) ABSENT.
     assert_eq!(
         stdout(&out),
         "id       kind         status   title\n\
-         ISS-002  issue        triaged  Flaky test\n\
-         IMP-009  improvement  open     Shared columns\n"
+         IMP-009  improvement  open     Shared columns\n\
+         ISS-002  issue        triaged  Flaky test\n"
     );
 }
 
@@ -358,11 +360,14 @@ fn backlog_list_columns_selects_orders_and_reveals_slug() {
     // orders slug before status.
     let out = list(dir.path(), "backlog", &["--columns", "id,slug,status"]);
     ok(&out);
+    // SL-051: `backlog list` now defaults to `--by sequence`. Both items are
+    // edge-free + same-dated, so they compose by the tie-break `(exposure, created,
+    // ItemId)` — ItemId sorts by prefix string, so IMP- precedes ISS-.
     assert_eq!(
         stdout(&out),
         "id       slug         status\n\
-         ISS-002  flaky-test   triaged\n\
-         IMP-009  shared-cols  open\n"
+         IMP-009  shared-cols  open\n\
+         ISS-002  flaky-test   triaged\n"
     );
 }
 
@@ -446,7 +451,7 @@ fn backlog_list_json_is_byte_exact() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"backlog\",\n  \"rows\": [\n    {\n      \"id\": \"ISS-002\",\n      \"kind\": \"issue\",\n      \"resolution\": null,\n      \"slug\": \"flaky-test\",\n      \"status\": \"triaged\",\n      \"title\": \"Flaky test\"\n    },\n    {\n      \"id\": \"IMP-009\",\n      \"kind\": \"improvement\",\n      \"resolution\": null,\n      \"slug\": \"shared-cols\",\n      \"status\": \"open\",\n      \"title\": \"Shared columns\"\n    }\n  ]\n}"
+        "{\n  \"kind\": \"backlog\",\n  \"rows\": [\n    {\n      \"id\": \"IMP-009\",\n      \"kind\": \"improvement\",\n      \"resolution\": null,\n      \"slug\": \"shared-cols\",\n      \"status\": \"open\",\n      \"title\": \"Shared columns\"\n    },\n    {\n      \"id\": \"ISS-002\",\n      \"kind\": \"issue\",\n      \"resolution\": null,\n      \"slug\": \"flaky-test\",\n      \"status\": \"triaged\",\n      \"title\": \"Flaky test\"\n    }\n  ]\n}"
     );
 }
 

@@ -800,6 +800,11 @@ enum BacklogCommand {
         #[arg(long)]
         kind: Option<backlog::ItemKind>,
 
+        /// Row order: `sequence` (the composed `needs`/`after` work order, default) or
+        /// `id` (the classic kind-then-id grouping).
+        #[arg(long = "by", value_enum, default_value_t = backlog::OrderBy::Sequence)]
+        by: backlog::OrderBy,
+
         #[command(flatten)]
         list: CommonListArgs,
 
@@ -879,15 +884,6 @@ enum BacklogCommand {
         #[arg(long, default_value_t = 0)]
         rank: i32,
 
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-    },
-
-    /// Print the composed work order across all non-terminal items, followed by an
-    /// honest-record block of any dropped edges. A `needs` dependency cycle is a hard
-    /// error (no misleading order is printed).
-    Order {
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -1680,9 +1676,7 @@ fn write_class(cmd: &Command) -> WriteClass {
             BacklogCommand::Edit { .. } => Write("backlog edit"),
             BacklogCommand::Needs { .. } => Write("backlog needs"),
             BacklogCommand::After { .. } => Write("backlog after"),
-            BacklogCommand::List { .. }
-            | BacklogCommand::Show { .. }
-            | BacklogCommand::Order { .. } => Read,
+            BacklogCommand::List { .. } | BacklogCommand::Show { .. } => Read,
         },
         Command::Boot { command, .. } => match command {
             None => Write("boot"),
@@ -2191,6 +2185,7 @@ fn main() -> anyhow::Result<()> {
             } => backlog::run_new(path, kind, title, slug),
             BacklogCommand::List {
                 kind,
+                by,
                 mut list,
                 substr,
                 path,
@@ -2201,7 +2196,7 @@ fn main() -> anyhow::Result<()> {
                 if list.filter.is_none() {
                     list.filter = substr;
                 }
-                backlog::run_list(path, kind, list.into_list_args())
+                backlog::run_list(path, kind, by, list.into_list_args())
             }
             BacklogCommand::Show {
                 id,
@@ -2219,7 +2214,6 @@ fn main() -> anyhow::Result<()> {
             BacklogCommand::After { id, to, rank, path } => {
                 backlog::run_after(path, &id, &to, rank)
             }
-            BacklogCommand::Order { path } => backlog::run_order(path),
         },
         Command::Boot {
             command,
@@ -2726,6 +2720,7 @@ mod write_class_tests {
         assert_eq!(
             w(BacklogCommand::List {
                 kind: None,
+                by: backlog::OrderBy::Sequence,
                 list: clist(),
                 substr: None,
                 path: None,
