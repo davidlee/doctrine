@@ -230,25 +230,31 @@ pub(crate) fn run(path: Option<PathBuf>, args: &ReconcileArgs) -> anyhow::Result
     let mut out = std::io::stdout();
     writeln!(out, "{}", build_prompt(verdict))?;
 
-    let doc = match args.r#move {
+    // Write ordering within the act (F-5 / RV-004). The two arms order their two
+    // writes differently, by which torn-write window each must avoid:
+    //   • accept/revise WRITE authored status, so NF-003 (REQ-116) binds: the
+    //     authored tier must always reconstruct status. The REC is materialised
+    //     FIRST as a write-ahead record, so a failure between the two writes leaves
+    //     the REC present and the status lagging — a detectable, re-runnable drift,
+    //     never a status move with no REC explaining it.
+    //   • redesign writes NO requirement status (F7), so NF-003 does not bind. Its
+    //     effect is the guarded ADR-009 reconcile→design back-edge, which may
+    //     legitimately REFUSE; driving the transition FIRST means a refusal mints no
+    //     REC (no orphan ledger entry), and the REC records the escalation that
+    //     actually happened.
+    let rec_id = match args.r#move {
         RecMove::Accept | RecMove::Revise => {
             // `to` is Some here (require_to enforced it). The WRITTEN status comes
             // from the wall (`select_status(to, prior)`), never from the verdict.
             let written =
                 select_status(to.context("accept/revise require --to (validated)")?, prior);
-            requirement::set_status(&root, req_id, written)?;
-            compose_status_rec(
-                &args.req,
-                &args.slice,
-                args.r#move,
-                prior,
-                written,
-                evidence,
-            )
+            let doc =
+                compose_status_rec(&args.req, &args.slice, args.r#move, prior, written, evidence);
+            let rec_id = crate::rec::materialise_populated(&root, &doc)?; // WAL first
+            requirement::set_status(&root, req_id, written)?; // then authored status
+            rec_id
         }
         RecMove::Redesign => {
-            // Drive the ADR-009 reconcile→design back-edge via the existing slice
-            // transition path; write NO requirement status (F7).
             let slice_id = crate::slice::parse_ref(&args.slice)?;
             crate::slice::run_status(
                 Some(root.clone()),
@@ -256,15 +262,15 @@ pub(crate) fn run(path: Option<PathBuf>, args: &ReconcileArgs) -> anyhow::Result
                 crate::slice::SliceStatus::Design,
                 args.note.as_deref(),
             )?;
-            compose_redesign_rec(&args.req, &args.slice, evidence)
+            let doc = compose_redesign_rec(&args.req, &args.slice, evidence);
+            crate::rec::materialise_populated(&root, &doc)?
         }
     };
-
-    let rec_id = crate::rec::materialise_populated(&root, &doc)?;
     writeln!(
         out,
         "Recorded rec {rec_id:03}: {} {}",
-        doc.rec.r#move, args.req
+        args.r#move.as_str(),
+        args.req
     )?;
     if let Some(note) = &args.note {
         writeln!(out, "note: {note}")?;
