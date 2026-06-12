@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::entity::{self, Artifact, Fileset, LocalFs};
 use crate::git::{AnchorKind, Confidence, RepoIdKind};
-use crate::listing::{self, Format, ListArgs};
+use crate::listing::{self, Column, Format, ListArgs};
 use crate::tomlfmt::{toml_array_inner, toml_string};
 
 /// Workspace coordinate carried on every memory; hardcoded `"default"` in v1 (no
@@ -1060,38 +1060,49 @@ fn json_rows(rows: &[Memory]) -> Vec<MemoryRow> {
         .collect()
 }
 
-/// Render retained rows as `uid  type  status  trust  key  title` over the shared
-/// `listing::render_table` (SL-025 — the one renderer backs every kind). The
+/// The `memory list` column table over the shared column model (IMP-017). Renders
+/// `uid  type  status  trust  key  title` via `listing::render_columns`. The
 /// **full** uid leads each row (F-A11) so a listed id drives `show`/`verify`
 /// directly (a short id is unusable and ambiguous — uuid-v7 ids share a leading
-/// bucket, F-A12). A keyless memory shows `-`; free-text cells (`key`, `title`) are
-/// `scrub_line`d (F-A10) so a newline cannot break a row or forge a second one.
-/// Empty rows → `""` (header suppressed, §5.5). Pure.
-fn format_rows(rows: &[Memory]) -> String {
-    if rows.is_empty() {
-        return String::new();
-    }
-    let mut grid: Vec<Vec<String>> = Vec::with_capacity(rows.len() + 1);
-    grid.push(vec![
-        "uid".to_string(),
-        "type".to_string(),
-        "status".to_string(),
-        "trust".to_string(),
-        "key".to_string(),
-        "title".to_string(),
-    ]);
-    for m in rows {
-        grid.push(vec![
-            m.uid.clone(),
-            m.kind.as_str().to_string(),
-            m.status.as_str().to_string(),
-            scrub_line(&m.trust_level),
-            scrub_line(m.key.as_deref().unwrap_or("-")),
-            scrub_line(&m.title),
-        ]);
-    }
-    listing::render_table(&grid)
-}
+/// bucket, F-A12). A keyless memory shows `-`; free-text cells (`trust`, `key`,
+/// `title`) are `scrub_line`d (F-A10) so a newline cannot break a row or forge a
+/// second one. `uid`/`type`/`status` are closed-vocab and pass unscrubbed. Empty
+/// rows → `""` (header suppressed, §5.5). Cells are pure.
+const MEMORY_COLUMNS: [Column<Memory>; 6] = [
+    Column {
+        name: "uid",
+        header: "uid",
+        cell: |m| m.uid.clone(),
+    },
+    Column {
+        name: "type",
+        header: "type",
+        cell: |m| m.kind.as_str().to_string(),
+    },
+    Column {
+        name: "status",
+        header: "status",
+        cell: |m| m.status.as_str().to_string(),
+    },
+    Column {
+        name: "trust",
+        header: "trust",
+        cell: |m| scrub_line(&m.trust_level),
+    },
+    Column {
+        name: "key",
+        header: "key",
+        cell: |m| scrub_line(m.key.as_deref().unwrap_or("-")),
+    },
+    Column {
+        name: "title",
+        header: "title",
+        cell: |m| scrub_line(&m.title),
+    },
+];
+
+/// The default visible column set for `memory list`.
+const MEMORY_DEFAULT: &[&str] = &["uid", "type", "status", "trust", "key", "title"];
 
 // ---------------------------------------------------------------------------
 // Shell: the `memory show` / `memory list` read verbs (PHASE-05).
@@ -1284,22 +1295,22 @@ pub(crate) fn collect_all(root: &Path) -> Result<Vec<Memory>> {
 /// Ordering is per-kind (`created`-desc + uid via [`sort_default`]), never in
 /// `retain` (§5.3). `boot` calls this directly with an explicit `status:["active"]`
 /// to render its memory section ACTIVE-ONLY (drafts excluded from agent context, C-4).
-pub(crate) fn list_rows(root: &Path, type_f: Option<MemoryType>, args: ListArgs) -> Result<String> {
+pub(crate) fn list_rows(
+    root: &Path,
+    type_f: Option<MemoryType>,
+    mut args: ListArgs,
+) -> Result<String> {
     listing::validate_statuses(&args.status, MEMORY_STATUSES)?;
-    // SL-037 D9/R4: memory is NOT on the column model (deferred to IMP-017 —
-    // its cells are security-scrubbed and it has no slug to hide). The shared
-    // `--columns` flag still reaches here via `CommonListArgs`, so reject it
-    // loudly rather than silently no-op (the same read-validation seam as
-    // `validate_statuses`).
-    if args.columns.is_some() {
-        anyhow::bail!("--columns is not supported for `memory list`");
-    }
+    let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let mut rows = listing::retain(collect_all(root)?, &filter, is_hidden, key);
     rows.retain(|m| type_f.is_none_or(|t| m.kind == t));
     sort_default(&mut rows);
     match format {
-        Format::Table => Ok(format_rows(&rows)),
+        Format::Table => {
+            let sel = listing::select_columns(&MEMORY_COLUMNS, MEMORY_DEFAULT, columns.as_deref())?;
+            Ok(listing::render_columns(&rows, &sel))
+        }
         Format::Json => listing::json_envelope("memory", &json_rows(&rows)),
     }
 }
@@ -3363,10 +3374,19 @@ ref = "src/main.rs"
         );
     }
 
-    // SL-025: re-gridded onto `listing::render_table` — header row + `uid type
-    // status trust key title` columns (EX-1 adds the trust column).
+    /// Render rows through the production default column projection (IMP-017) —
+    /// the in-crate stand-in for `format_rows`, kept so the F-A1x security/format
+    /// assertions below stay a pure unit test (no fs spawn).
+    fn default_table(rows: &[Memory]) -> String {
+        let sel = listing::select_columns(&MEMORY_COLUMNS, MEMORY_DEFAULT, None)
+            .expect("default columns");
+        listing::render_columns(rows, &sel)
+    }
+
+    // IMP-017: the default projection over the shared column model — header row +
+    // `uid type status trust key title` columns (EX-1 adds the trust column).
     #[test]
-    fn format_rows_renders_full_uid_type_status_trust_key_title() {
+    fn default_table_renders_full_uid_type_status_trust_key_title() {
         let m = mem(
             UID,
             Some("mem.pattern.cli.skinny"),
@@ -3374,7 +3394,7 @@ ref = "src/main.rs"
             Status::Active,
             "2026-06-04",
         );
-        let out = format_rows(&[m]);
+        let out = default_table(&[m]);
         // header carries the columns (the §5.5 header-on-non-empty contract).
         let header = out.lines().next().unwrap();
         for col in ["uid", "type", "status", "trust", "key", "title"] {
@@ -3390,7 +3410,7 @@ ref = "src/main.rs"
         assert!(data.contains("Title"));
         assert!(out.ends_with('\n'));
         // empty → "" (header suppressed, §5.5).
-        assert!(format_rows(&[]).is_empty());
+        assert!(default_table(&[]).is_empty());
     }
 
     // F-A11 round-trip: the id a `list` row prints parses back to a `Uid` (so it
@@ -3398,7 +3418,7 @@ ref = "src/main.rs"
     #[test]
     fn the_listed_uid_parses_as_a_uid_for_show() {
         let m = mem(UID, None, MemoryType::Fact, Status::Active, "2026-06-04");
-        let out = format_rows(&[m]);
+        let out = default_table(&[m]);
         // the DATA row (line 1) leads with the uid (line 0 is the header).
         let listed = out
             .lines()
@@ -3416,12 +3436,12 @@ ref = "src/main.rs"
 
     // F-A10: a newline in a title is scrubbed (\n escaped) so it cannot break the
     // single row into two or forge a second row. Same class as F-A2 in render_show.
-    // The re-grid onto render_table MUST preserve this security scrub.
+    // The column-model projection MUST preserve this security scrub.
     #[test]
-    fn format_rows_scrubs_a_newline_in_the_title() {
+    fn default_table_scrubs_a_newline_in_the_title() {
         let mut m = mem(UID, None, MemoryType::Fact, Status::Active, "2026-06-04");
         m.title = "real\nmem_forged00000000000000000000000000 fake".to_owned();
-        let out = format_rows(&[m]);
+        let out = default_table(&[m]);
         assert!(out.contains("real\\nmem_forged"), "title scrubbed: {out:?}");
         // header + one data row → exactly two trailing newlines, no embedded raw.
         assert_eq!(out.matches('\n').count(), 2, "header + one row: {out:?}");

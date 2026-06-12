@@ -123,26 +123,23 @@ fn status_flag_is_recognised_grammar_on_every_kind() {
 }
 
 #[test]
-fn columns_flag_is_rejected_on_memory_list_never_silently_ignored() {
-    // SL-037 D9/R4 (VT-3): memory stays bespoke — not on the column model until
-    // IMP-017 — so the shared `--columns` flag reaching it must fail LOUDLY with
-    // the unsupported message, never no-op. Silent acceptance would change
-    // behaviour the day IMP-017 wires memory in.
+fn columns_flag_is_accepted_on_memory_list() {
+    // SL-049 IMP-017: memory is now ON the shared column model, so `--columns`
+    // is accepted (no longer rejected with the SL-037 D9/R4 unsupported message).
+    // On an empty root it succeeds with no header (render_columns suppresses it).
+    // Per-column projection behaviour is pinned byte-exact in
+    // `tests/e2e_list_columns_golden.rs` (memory T8 block).
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = list("memory", tmp.path(), &["--columns", "key"]);
     assert!(
-        !out.status.success(),
-        "memory list --columns must be rejected"
+        out.status.success(),
+        "memory list --columns is accepted post-IMP-017: {}",
+        String::from_utf8_lossy(&out.stderr)
     );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("--columns is not supported for `memory list`"),
-        "rejection carries the unsupported message: {stderr}"
-    );
-    // and the flag itself stays recognised grammar (a clap parse, not a typo).
-    assert!(
-        !stderr.contains("unexpected argument") && !stderr.contains("unrecognized"),
-        "rejected by the guard, not the parser: {stderr}"
+        !stderr.contains("--columns is not supported"),
+        "the old unsupported-message rejection is gone: {stderr}"
     );
 }
 
