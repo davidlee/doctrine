@@ -154,7 +154,7 @@ Filed during design (challenges captured now, fixes land downstream):
   (stored agrees with derived `in_edges`), never a removal. SL-048 triage.
 - **IMP-033** — cross-kind dep/seq capture (extend `needs`/`after` to specs/slices).
   Capture-side; slice 3 / PRD-009 + the relation-governance ADR.
-- **IMP-034** — **RESOLVED by ADR-010** (proposed): refactor *all* relations
+- **IMP-034** — **RESOLVED by ADR-010** (accepted): refactor *all* relations
   modelling to a uniform schema? No — unify the *contract* + cross-kind *write seam*,
   keep storage bespoke, migrate only the clean tier-1 subset opportunistically.
   ADR-010 is the relation-governance ADR slice 3 / SL-048 needs; it ratifies SL-046

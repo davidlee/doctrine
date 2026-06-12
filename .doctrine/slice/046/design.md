@@ -300,7 +300,7 @@ downstream, not blocking:
 - Whether `inspect` should later surface reference-overlay cycle *diagnostics* —
   deferred to a `validate` integration (SL-048).
 - Whether **all** relations modelling should be refactored to a uniform schema —
-  was IMP-034; **resolved by ADR-010** (proposed): unify the relation *contract* +
+  was IMP-034; **resolved by ADR-010** (accepted): unify the relation *contract* +
   the cross-kind *write seam*, keep storage bespoke, migrate only the clean tier-1
   subset opportunistically. SL-046 (reader) composes with it unchanged — see §7 D4.
 
@@ -351,7 +351,7 @@ downstream, not blocking:
   backlog for SL-048 triage (user disposition: reframe D4 only), where the honest
   follow-up is at most a `validate` cross-check that stored and derived agree, never
   a removal. `related` is genuinely symmetric and legitimately appears on both sides
-  — not redundant. *Note (resolved by ADR-010, proposed)*: the broader question this
+  — not redundant. *Note (resolved by ADR-010, accepted)*: the broader question this
   surfaced — whether the per-kind relation *modelling* itself (private
   `Relationships` structs, spec lineage on `Meta` vs a table, mixed cardinality)
   should be unified — was IMP-034, now answered by **ADR-010**: unify the *contract*
@@ -459,7 +459,7 @@ Full record: `inquisition.md`. Every charge re-verified against source.
   `provenance()`. §5.4.
 - **C8 (minor, confirmatory) — lone-`superseded_by` fixture.** §9.
 
-**Follow-up IMP-034 — RESOLVED by ADR-010 (proposed).** The question "refactor
+**Follow-up IMP-034 — RESOLVED by ADR-010 (accepted).** The question "refactor
 *all* relations modelling to a uniform schema?" is answered **no**: unify the
 relation *contract* + the cross-kind *write seam*, keep storage bespoke, migrate
 only the clean tier-1 subset opportunistically (tier-2 typed guarantees kept).
