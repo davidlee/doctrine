@@ -64,10 +64,11 @@ capture deferred (DD-2). See `design.md` §7 for DD-1..DD-4.
   (their actionability reduces to `eligible`). Cross-kind dep authoring is IMP-033 +
   an unsettled governance call (ADR-010 excluded the dep/seq axis); it auto-lights
   here with zero change when authored.
-- **No runtime-state-derived actionability** (DD-4). v1 reads authored lifecycle
-  `status` only. RV (active/done derived from the findings tree), REC (no
-  lifecycle), and slice phase-rollup are **context-only**; RV/REC are non-eligible
-  via the status-less path (no diagnostic, not barred as kinds).
+- **No *runtime*-state-derived actionability** (DD-4). v1 reads authored state only.
+  **RV is admitted** — its active/done is authored-derived (`review::derived_status`
+  over the committed finding ledger), so an `Active` RV is eligible. Only **REC** (no
+  lifecycle) and the **slice phase-rollup** (gitignored runtime) stay context-only;
+  REC is non-eligible via the status-less path (no diagnostic, not barred as a kind).
 - **No persisted cache** (D6). v1 recomputes per query (SPEC-001 H1); `--json`
   stamps `policy_version`.
 
@@ -98,9 +99,11 @@ Open questions — **all resolved in `design.md`**:
   **DD-3**: the work-only partition table (`design.md` §5.3) — `active`/governing/
   `accepted`/satisfied = terminal-as-work, only in-flight authoring statuses
   workable; the revision out-clause covers governing artifacts that later need work.
-- ~~**Cross-kind `consequence`**~~ Settled: v1 = existing reference/lineage edges
-  only (SPEC-001 OQ-2 deferred knowledge_record). Computed as a pre-pass inbound
-  tally; drives survey's tier-3 key + next's fallback mint order.
+- ~~**Cross-kind `consequence`**~~ Settled: v1 = the **work/lineage label subset** of
+  existing reference edges (`specs`/`requirements`/`slices`/`descends_from`/`parent`/
+  `members`; `reviews`/`owning_slice` bookkeeping excluded, Charge V; SPEC-001 OQ-2
+  deferred knowledge_record). Computed as a pre-pass inbound tally; drives survey's
+  tier-3 key + next's fallback mint order.
 - ~~**CLI shape consistency**~~ Resolved (D5): `inspect` extended (same verb,
   SL-046 D1); `render.rs` rides `src/listing.rs` + SL-045/SL-046 precedent.
 
@@ -126,8 +129,9 @@ Assumptions:
 
 - **Cross-kind dep/seq capture** (IMP-033 + governance) — authors `needs`/`after`
   on slices/specs; auto-lights this slice's already-kind-agnostic engine (DD-2).
-- **Runtime-state-derived actionability** (DD-4) — RV findings (active/done) +
-  slice phase rollup, as one coherent slice; keeps the v1 scan over authored TOML.
+- **Slice phase-rollup actionability** (DD-4) — read the gitignored runtime phase
+  tree to enrich mid-flight-slice actionability; kept out of v1 so the scan stays over
+  authored state. (RV active/done is authored-derived and already in v1.)
 - **Persisted policy-stamped cache** (D6) — disposable, recompute-equivalent.
 - **Coverage-driven requirement actionability** — the 2nd-enum (`CoverageStatus`)
   axis; v1 uses authored `ReqStatus` only.

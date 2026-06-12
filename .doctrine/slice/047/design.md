@@ -50,8 +50,10 @@ mechanism**.
 - **Per-kind status enums** (closed, serde-validated, each with a `*_STATUSES`
   known-set lockstep canary): `SliceStatus`, `AdrStatus`, `PolicyStatus`,
   `StandardStatus`, `SpecStatus` (PRD + tech share it), `ReqStatus`, backlog
-  `Status` (5 item-kinds share it). **RV** authored toml is status-LESS (active/done
-  is *derived* from the runtime findings tree); **REC** is status-less, no
+  `Status` (5 item-kinds share it). **RV** has no *stored* status, but a derived
+  `ReviewStatus{Active,Done}` is computed at read time by `review::derived_status`
+  over its **authored** append-only `[[finding]]` ledger (`review.rs:312,594` —
+  committed, not the gitignored runtime baton); **REC** is status-less, no
   lifecycle.
 
 ## 3. Forces & Constraints
@@ -123,7 +125,7 @@ seam) → `projection` (leaf) → `cordage`. No new cycle.
 | SL-047 needs | Already exists | Source |
 |---|---|---|
 | all-kind scan → `Projection<EntityKey>` | `KINDS` walk + sorted ids + `outbound_for` | SL-046 `relation_graph` (scan seam) |
-| reference/lineage overlays = **consequence** inputs | the ~11 reference overlays + `in_edges` | SL-046 |
+| work/lineage overlays = **consequence** inputs (excl. `reviews`/`owning_slice`, Q3) | the reference overlays + `in_edges` | SL-046 |
 | `dep`(Reject)+`seq`(Evict) overlays + `OrderSpec` → `order_key` | exact build + `ordered()`/`dep_cycles()`/`overrides()` | `backlog_order` pattern |
 | transitive blockers | `Graph::reachable` | cordage |
 | direct blockers / blocking | `Graph::in_edges`/`out_edges` (one hop) | cordage |
@@ -139,10 +141,12 @@ SL-046 §5.1's established pattern), reusing SL-046's scan seam and adding the
 dep/seq overlays + node attributes + `OrderSpec`:
 
 ```rust
-// status: None = authored status-less (RV/REC). promoted: backlog resolution=promoted —
-// a DISTINCT exclusion from status-terminal (REQ-075 AC2; the promoted slice is
-// authoritative), since `Status` has no Promoted variant. Read from the backlog
-// resolution field / origin promote bridge, not derivable from `status` alone (F1).
+// status: None = status-less REC only. RV carries a status DERIVED at read time
+// (review::derived_status over its authored finding ledger → "active"/"done"),
+// authored-tier like every other kind — never a runtime/gitignored read (Charge I).
+// promoted: backlog `resolution == Promoted` (backlog.rs:259, the typed authority) —
+// a DISTINCT exclusion from status-terminal (REQ-075 AC2), since `Status` has no
+// Promoted variant. NOT read from the free-text `origin` field (F1 / Charge VI).
 struct NodeAttr { kind: entity::Kind, status: Option<String>, promoted: bool }
 
 pub(crate) struct PriorityGraph {
@@ -160,10 +164,13 @@ fn build() -> anyhow::Result<PriorityGraph>;
 
 Build order (breaks the mint-order ↔ consequence ↔ graph cycle):
 1. **Scan** via SL-046's seam → the entity set, each kind's reference/lineage edges,
-   and `NodeAttr` (read each kind's authored `status`; `None` for RV/REC).
-2. **Consequence pre-pass** — tally inbound reference/lineage targets into
-   `BTreeMap<EntityKey, u32>` directly from the scanned outbound edges (no graph
-   needed yet).
+   and `NodeAttr` (read each kind's authored `status`; **RV's via `derived_status`**
+   over its authored findings; `None` for REC only).
+2. **Consequence pre-pass** — tally inbound targets of the **consequence-bearing
+   label subset** (work/lineage: `specs` / `requirements` / `slices` /
+   `descends_from` / `parent` / `members`; **excludes** the `reviews` / `owning_slice`
+   bookkeeping edges, Q3 / Charge V) into `BTreeMap<EntityKey, u32>` directly from the
+   scanned outbound edges (no graph needed yet).
 3. **Mint** every node into `Projection<EntityKey>` in **`(consequence desc,
    canonical-id asc)`** order — the cross-kind analog of `backlog_order`'s
    `(exposure desc, created asc, id asc)` fallback; this monotonic `NodeId` is
@@ -209,14 +216,20 @@ pub(crate) fn status_class(kind: entity::Kind, status: Option<&str>) -> StatusCl
 
 Resolution: `Some(s)` → table lookup (`s ∈ workable → Workable`; `s ∈ terminal →
 Terminal`; else **`Unrecognised`** → non-eligible **+ diagnostic**, D12 conservative
-default). `None` + known status-less kind (RV/REC) → **Terminal**, *no* diagnostic
-(DD-4 context-only, expected). A backlog node with `promoted == true` is excluded
+default). `None` + known status-less kind (**REC** only) → **Terminal**, *no*
+diagnostic (DD-4 context-only, expected). **RV** resolves via its derived
+`active`/`done` through the same table (Charge I). A backlog node with
+`promoted == true` is excluded
 from default active output regardless of its `status_class` — the distinct
 promoted-exclusion (F1; REQ-075 AC2), surfaced as its own reason.
 
 The drift canary asserts `workable ∪ terminal` equals each kind's status vocabulary;
 for kinds with a `*_STATUSES` const (ADR/POLICY/STANDARD/BACKLOG/…) it compares to
-that const, otherwise it iterates the enum's variants via `as_str` (F4).
+that const, otherwise it iterates the enum's variants via `as_str` (F4). **`slice` is
+stringly (open) status** (`spec.rs:1058` contrast) — no closed enum to compare, so
+its canary compares against the lifecycle state-machine's status set (ADR-009; the
+`slice status` transition vocabulary), the actual authority; absent that, a slice
+status outside the table rides the conservative `Unrecognised` default (Charge VII).
 
 **Surfaces (command, `main.rs`).**
 
@@ -255,7 +268,7 @@ work — the revision out-clause below). Generalises D12's `ADR accepted → ter
 | tech spec | draft | active, deprecated, superseded |
 | requirement | pending, in-progress | active, deprecated, retired, superseded |
 | backlog ×5 | open, triaged, started | resolved, closed (+ promoted resolution) |
-| RV (review) | — (authored status-less → context-only, DD-4) | all |
+| RV (review) | active (derived: open findings remain) | done (every finding terminal) |
 | REC | — (no lifecycle → context-only, DD-4) | all |
 
 **The revision out-clause (DD-3 rationale).** A governing artifact (`active`
@@ -264,9 +277,13 @@ status flipping, but when a *revision* is needed — and that revision-need surf
 as its own actionable entity (a slice / backlog item, potentially
 canon-revision-flagged), never via the static partition. So the priority engine
 needs no special mechanism for "active specs that need work"; it rides the existing
-capture loop. Soft pointer toward a brewing revision-need: a spec carrying `drift`
-gains **consequence** weight (drift is a v1 consequence input), surfacing the
-pressure indirectly without making the spec itself actionable.
+capture loop. **Honest scope (Charge IV):** SL-047 ranks *already-captured* work; it
+does **not** surface uncaptured revision demand — a stale governing artifact that
+needs revision but carries no captured revision-need is, correctly, absent from
+`next`/`survey`. Detecting un-captured staleness is a separate captured signal
+(`validate`/drift), explicitly out of scope. *(No drift-as-consequence net is
+claimed: specs author no `drift` field and SL-046 makes backlog `drift` a dangler —
+no node, no edge — so it contributes zero consequence; Charge III.)*
 
 **`audit`/`reconcile` are workable** (live closure work) — D12 enumerated
 `proposed→started` and `done/abandoned` and was silent on the closure-seam statuses;
@@ -358,10 +375,10 @@ unknowns are downstream, not blocking:
   at the target scale); no persisted cache built. `--json` stamps `policy_version`
   (REQ-094 spirit + lets a future cache slot in without reshaping output). A
   policy-stamped disposable cache is a follow-up.
-- **Runtime-state-derived actionability** (DD-4) — RV's derived active/done (from
-  the findings tree) and slice's phase rollup would make active reviews / mid-flight
-  slices richer; deferred as one coherent follow-up to keep the v1 scan purely over
-  authored TOML.
+- **Slice phase-rollup actionability** (DD-4) — slice's mid-flight progress lives in
+  the gitignored runtime phase tree; reading it would enrich mid-flight-slice
+  actionability. Deferred to keep the v1 scan over authored state. (RV's derived
+  active/done is **not** here — it is authored-derived and admitted to v1, Charge I.)
 - **Coverage-driven requirement actionability** — a req whose observed
   `CoverageStatus` is Failed/Blocked is arguably work; v1 uses authored `ReqStatus`
   only (D12: lifecycle status). The 2nd-enum axis is a follow-up.
@@ -380,7 +397,9 @@ unknowns are downstream, not blocking:
   *overlay + policy* kind-agnostic and consumes existing backlog `needs`/`after`;
   cross-kind blocking auto-lights when IMP-033 authors edges. The broadened intent
   (PRD-011 §5) rests on the **`eligible` (status) half**, which is fully cross-kind
-  here — so all PRD-011 acceptance gates pass without cross-kind dep. *Alts
+  here — every PRD-011 / SPEC-001 acceptance gate is discharged by the status half
+  alone (the v1 honest contract: **cross-kind eligibility + backlog-only,
+  wired-dormant dep blocking**, Charge II); no gate needs a non-backlog `dep` edge. *Alts
   rejected*: full cross-kind dep authoring in SL-047 (pulls capture + an unsettled
   governance call into a read-derived slice — breaks the SL-046/SL-047/SL-048
   partition); narrow slice→slice-only capture (still a capture-surface + governance
@@ -393,13 +412,18 @@ unknowns are downstream, not blocking:
   capture loop, not the partition — so no third "context" class / D12 amendment is
   needed. *Alt rejected*: keep governing artifacts workable (they'd then show in
   `next` as do-now work — misreads a finished artifact; needs a canon revision).
-- **DD-4 — v1 actionability reads authored lifecycle status only; RV/REC + slice
-  phase-rollup context-only.** REC has no lifecycle (forced); RV's active/done is
-  derived from the gitignored runtime findings tree; slice's real progress is its
-  phase rollup. Reading runtime state for actionability is a coherent **bundled
-  follow-up** (RV findings + slice rollup), kept out of v1 so the scan stays over
-  authored TOML. RV/REC are non-eligible via the status-less path (no diagnostic) —
-  not barred as kinds (D12), and their consequence still propagates.
+- **DD-4 — v1 actionability reads authored state only (incl. RV's authored-derived
+  status); only genuinely-runtime state is deferred.** **RV is admitted to v1** (User
+  call, Charge I): its `active`/`done` is a pure read-time derivation
+  (`review::derived_status`) over its **authored** finding ledger — authored-tier, not
+  the gitignored runtime baton — so an `Active` RV is `eligible`. **REC** has no
+  lifecycle (forced status-less → non-eligible via the status-less path, no
+  diagnostic — not barred as a kind, D12; its consequence still propagates). The only
+  genuinely-deferred runtime signal is the **slice phase-rollup**
+  (`.doctrine/state/slice/`, gitignored) — a coherent follow-up enriching mid-flight
+  slice actionability, kept out of v1 so the scan stays over authored state.
+  *(Correction: the locked design wrongly attributed RV's derived status to a "runtime
+  findings tree"; the findings are authored — Charge I.)*
 - **D5 — the priority adapter builds a third graph from a shared scan seam.**
   `backlog_order`, `inspect`, and `priority` each build their own Graph sharing only
   the `Projection` *type* (SL-046 §5.1 pattern). The all-kind scan is factored into
@@ -422,9 +446,12 @@ unknowns are downstream, not blocking:
   SL-046 so the seam exists when SL-047 implements. Integration risk bounded by
   SL-046 being design-locked.
 - **R2 — consequence-as-fallback couples ordering to reference-edge counts.** A
-  pure-noise inbound reference could nudge fallback order. *Mitigation*: fallback is
-  the *last* tier (after dep + seq); canonical-id is the total tiebreak, so order is
-  always deterministic and explainable; consequence is surfaced in reasons.
+  pure-noise inbound reference could nudge fallback order. *Mitigation*: the
+  consequence-bearing labels are a **policy subset** (work/lineage only;
+  `reviews`/`owning_slice` bookkeeping edges excluded, Q3 / Charge V) — administrative
+  attachment no longer perturbs importance; fallback is the *last* tier (after dep +
+  seq); canonical-id is the total tiebreak, so order is always deterministic and
+  explainable; consequence is surfaced in reasons.
 - **R3 — partition drift** (a new status enum variant un-mirrored in `PARTITION`).
   *Mitigation*: the lockstep canary test (`workable ∪ terminal == <kind>_STATUSES`)
   reds on drift — never a silent `Unrecognised` in production.
@@ -450,17 +477,63 @@ Pure unit tests (channels/partition) + black-box CLI goldens (the 4 verbs;
   false topo.
 - **Determinism (REQ-077)** — identical output under input permutation.
 - **Cross-kind actionability (FR-006/REQ-238, FR-008/REQ-237)** — non-backlog
-  workable+unblocked item in `next`; same-kind terminal omitted; workable-but-dep-
-  blocked omitted; one comparable view across kinds.
+  workable+unblocked item (incl. an `Active` RV) in `next`; same-kind terminal
+  omitted; one comparable view across kinds. **Dep-blocking is verified
+  backlog-scoped** (the dep-blocked-omitted fixture is a backlog item — non-backlog
+  kinds cannot author a `dep` edge in v1; SPEC-001 D12's verification does not require
+  the blocked item be non-backlog, Charge II). Cross-kind blocking is wired
+  kind-agnostic but **dormant** until IMP-033.
 - **Partition drift canary (DD-3)** — `workable ∪ terminal == <kind>_STATUSES` per
   partitioned kind.
 - **Terminal exclusion (REQ-075)** — terminal excluded by default, revealed by
   `--all`; a **promoted** backlog item excluded as its own reason even if its
   `status` is not terminal (F1).
 - **Conservative default (D12) / status-less (DD-4)** — unrecognised status →
-  non-eligible + diagnostic; RV/REC status-less → non-eligible, **no** diagnostic.
-- **Consequence** — inbound reference count drives `survey` order + `next` fallback.
+  non-eligible + diagnostic; **REC** status-less → non-eligible, **no** diagnostic;
+  an **`Active` RV is eligible**, a `Done` RV terminal (derived status, Charge I).
+- **Consequence** — inbound count over the **work/lineage label subset** drives
+  `survey` order + `next` fallback; a `reviews`/`owning_slice` edge does **not** raise
+  a target's consequence (Charge V).
 - **Structured reasons (REQ-072)** — every classification carries reasons; `--json`
   stamps `policy_version`.
 - **Behaviour-preservation gate** — `backlog_order` + `cordage` suites green
   **unchanged**; `backlog order` byte-identical.
+
+## 10. Review Notes
+
+### External adversarial pass — Inquisition (codex GPT-5.5) — integrated
+
+Full record: `inquisition.md`. Seven charges; every one re-verified against source
+before integration. User dispositions (3 design calls) folded in.
+
+- **Charge I (major) — RV deferred on a false premise.** The locked design claimed
+  RV's active/done came from a "gitignored runtime findings tree." Source disproves
+  it: findings are **authored** (`review.rs:594`, committed via `.gitignore` negation)
+  and `review::derived_status` (`review.rs:312`) is a pure read-time function over
+  them. **User call: admit RV to v1** — `Active` RV is `eligible`. §2/§5.2/§5.3
+  partition row/§7 DD-4/§9 corrected; the `.doctrine/state/review/` runtime baton is
+  *not* the findings.
+- **Charge II (major) — "all gates pass" rested on an unconstructable state.**
+  Non-backlog kinds cannot author a `dep` blocker in v1 (`backlog.rs:946` `parse_ref →
+  ItemId`). **User call: v1 contract = cross-kind eligibility + backlog-only,
+  wired-dormant blocking.** §7 DD-2 + §9 verification reworded; the dep-blocked
+  fixture is backlog-scoped (SPEC-001 D12 does not require it be non-backlog).
+- **Charge III (major) — drift-consequence net was a phantom.** Specs author no
+  `drift` field and SL-046 makes backlog `drift` a dangler (no node/edge) — zero
+  consequence. The claim is **struck** (§5.3).
+- **Charge IV (major) — revision out-clause over-promised.** Reworded to the truth:
+  SL-047 ranks *captured* work; it does not surface uncaptured revision demand (§5.3).
+- **Charge V (major) — consequence tally was indiscriminate.** `reviews`/`owning_slice`
+  bookkeeping edges perturbed importance/fallback. **User call: work/lineage label
+  subset only**; the two bookkeeping labels are excluded (§5.1/§5.2/§5.3/§8 R2/§9).
+- **Charge VI (minor) — F1 muddied "promoted" authority.** Fixed to
+  `resolution == Promoted` (`backlog.rs:259`); the free-text `origin` is not read
+  (§5.2).
+- **Charge VII (minor) — slice drift-canary over-claimed.** `slice` is stringly
+  status; its canary compares against the ADR-009 lifecycle status set, else rides the
+  conservative `Unrecognised` default (§5.3).
+
+**Survived interrogation (no change):** layering no-cycle, behaviour-preservation
+gate, `cordage` boundary-purity, D12 `eligible ∧ ¬blocked` synthesis, I1
+direct-blocker-suffices, I2/F2 consequence-pre-pass cycle-break and `Reject`-preserves
+/ fallback-decides degrade.
