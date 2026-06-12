@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebb0f21d075a1aa1bcd1a790169de"
+memory_key = "mem.system.coordination.concurrent-design-shared-main-worktree"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "Concurrent design work on the shared main worktree is expected — don't panic at commingled commits"
+summary = "Concurrent design agents on shared main are expected; a sibling commit -a may sweep your unstaged files under a foreign message — benign, never rewrite history"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = [".doctrine"]
+globs = []
+commands = []
+tags = ["coordination", "worktree", "git", "multi-agent"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "ef42ae06af53c284d3bddd99eab34e4d896ca973"
+tree = "0372ce8e70bc44936a57875897f3e658a230102c"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "ef42ae06af53c284d3bddd99eab34e4d896ca973"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
