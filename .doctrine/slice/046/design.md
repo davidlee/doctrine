@@ -470,3 +470,23 @@ note. Adjacent: IMP-006 (uniform verbs), IMP-016 (cross-corpus links, realised b
 SL-048). *(A structured slice→ADR relation can't be authored — the slice
 `[relationships]` schema has no ADR slot; that absence is itself the cross-corpus
 gap SL-048/IMP-016 close.)*
+
+## SL-047 coordination — expose the scan as a `pub(crate)` seam
+
+SL-047 (the derived priority CLI, design-locked) builds a **third** Graph over the
+*same* all-kind scan this slice owns: it reuses the `KINDS`-walk → sorted-id intern
+→ `Projection<EntityKey>` build (§5.4 steps 1–2) and the per-kind `outbound_for`
+edge dispatch, then **adds** dep/seq overlays (from `needs`/`after`, excluded here)
++ node attributes + an `OrderSpec`. SL-046 §5.1 already establishes the
+separate-Graph / shared-`Projection`-type pattern (`backlog_order` vs
+`relation_graph`); SL-047 is the third rider.
+
+**Coordination ask (SL-047 design D5):** factor the scan — the `KINDS` walk that
+mints every entity into `Projection<EntityKey>` and resolves `outbound_for(kind, id)`
+edges — into a `pub(crate)` function (e.g. `relation_graph::scan_all() ->
+(Projection<EntityKey>, …edges/attrs…)`) rather than inlining it solely inside the
+`inspect` build. Additive and **non-breaking to `inspect`** (it consumes the same
+seam). If SL-046 lands without it, SL-047 performs the extraction as a pure refactor
+behind the behaviour-preservation gate — but exposing it here is the clean home.
+A thin per-kind authored-`status` accessor (for SL-047's `NodeAttr`) rides the same
+per-kind modules this slice already touches for `relation_edges` (cohesion).

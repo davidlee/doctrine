@@ -23,11 +23,11 @@ longer a blocker):
   eligible ∧ ¬blocked`, uniform across kinds; the per-kind **workable|terminal
   status-class partition** is policy data. New FR-006/`REQ-238` anchors it.
 
-This slice now designs against settled canon. Two design-time inputs remain (not
-blockers): the exact per-kind partition **rows** (SPEC-001 **OQ-8** / PRD-011
-OQ-010 — settled *at this slice's design*, esp. whether a `draft`/`active` spec or
-`active` PRD is actionable work), and SL-046 landing first (the graph spine this
-slice consumes — see Non-Goals / Risks).
+This slice now designs against settled canon. **Design is locked** (`design.md`):
+OQ-8 is settled (the work-only partition table, DD-3), SL-046 is `ready`
+(design-locked → contract firm to design against; implementation sequences after
+SL-046 lands, DD-1), and the dep/seq engine is built kind-agnostic with cross-kind
+capture deferred (DD-2). See `design.md` §7 for DD-1..DD-4.
 
 ## Scope & Objectives
 
@@ -58,17 +58,33 @@ slice consumes — see Non-Goals / Risks).
   allows this). No behaviour rests on it.
 - **No architectural-trigger actionability mask** (IMP-026 / D6) — separate,
   prerequisite-bound.
+- **No cross-kind dep/seq *capture*** (DD-2). v1 builds the dep/seq overlay +
+  actionability policy **kind-agnostic** but consumes only existing backlog
+  `needs`/`after`; so `¬blocked` is real for backlog, vacuous for other kinds
+  (their actionability reduces to `eligible`). Cross-kind dep authoring is IMP-033 +
+  an unsettled governance call (ADR-010 excluded the dep/seq axis); it auto-lights
+  here with zero change when authored.
+- **No runtime-state-derived actionability** (DD-4). v1 reads authored lifecycle
+  `status` only. RV (active/done derived from the findings tree), REC (no
+  lifecycle), and slice phase-rollup are **context-only**; RV/REC are non-eligible
+  via the status-less path (no diagnostic, not barred as kinds).
+- **No persisted cache** (D6). v1 recomputes per query (SPEC-001 H1); `--json`
+  stamps `policy_version`.
 
 ## Affected Surface
 
-- New policy/derived-surface module(s) (likely `src/priority/…` per SPEC-001
-  diagram) — channel semantics: eligibility, actionability, consequence, render.
-- The SL-046 all-kind adapter — consumed; may need actionability node-attributes
-  (lifecycle/resolution per kind) added at the projection boundary.
-- `src/main.rs` — four new CLI verbs + handlers.
-- `crates/cordage/` — consumed, not modified.
-- Per-kind lifecycle readers — to classify actionable/terminal across kinds (the
-  policy mapping the revision defines).
+- `src/priority/` — **new**: `graph.rs` (priority adapter: shared scan → 3rd Graph
+  with dep/seq overlays + node attrs + `OrderSpec`), `partition.rs` (OQ-8 table),
+  `channels.rs` (eligible/actionable/blocked/blocking/consequence/order_key),
+  `view.rs` (structured reasons + rows), `render.rs` (human + `--json`).
+- `src/relation_graph.rs` (SL-046) — its `KINDS`-walk → `Projection` scan exposed as
+  a `pub(crate)` seam, reused by the priority adapter (**fed into SL-046**, design D5);
+  `inspect` extended with the actionability block.
+- `src/main.rs` — four new CLI verbs (`survey`/`next`/`explain`/`blockers`) +
+  `inspect` actionability extension.
+- `crates/cordage/`, `src/projection.rs` — consumed, not modified.
+- Per-kind modules — a thin authored-`status` accessor where not already exposed
+  (cohesion: each module parses its own).
 
 ## Risks, Assumptions, Open Questions
 
@@ -77,21 +93,20 @@ Blocking dependency:
   (PRD-011 `6d59397`, SPEC-001 `c3cb719`) — see Context. Remaining hard
   prerequisite: **SL-046 lands first** (the graph spine this slice consumes).
 
-Open questions (design-time):
-- **Which per-kind statuses are "actionable"?** The *model* is settled — actionable
-  = workable status ∧ unblocked, no kind barred as a kind (SPEC-001 D12). What
-  remains is the per-kind **status-class partition rows** (SPEC-001 OQ-8): clear-cut
-  for most (backlog open → workable, ADR accepted → terminal), genuinely open for
-  kinds with no work-shaped lifecycle (`draft`/`active` spec? `active` PRD?). Settle
-  these rows here, as policy data (D2 boundary test).
-- **Cross-kind `consequence`** — inbound reference weight across kinds; PRD-011
-  OQ-002 deferred knowledge_record (still unbuilt). v1 = existing reference/
-  lineage edges only.
-- **CLI shape consistency** with SL-046's query verb (shared render/column model).
+Open questions — **all resolved in `design.md`**:
+- ~~**Which per-kind statuses are "actionable"?** (SPEC-001 OQ-8)~~ Resolved by
+  **DD-3**: the work-only partition table (`design.md` §5.3) — `active`/governing/
+  `accepted`/satisfied = terminal-as-work, only in-flight authoring statuses
+  workable; the revision out-clause covers governing artifacts that later need work.
+- ~~**Cross-kind `consequence`**~~ Settled: v1 = existing reference/lineage edges
+  only (SPEC-001 OQ-2 deferred knowledge_record). Computed as a pre-pass inbound
+  tally; drives survey's tier-3 key + next's fallback mint order.
+- ~~**CLI shape consistency**~~ Resolved (D5): `inspect` extended (same verb,
+  SL-046 D1); `render.rs` rides `src/listing.rs` + SL-045/SL-046 precedent.
 
 Assumptions:
-- SL-046 lands first and exposes a graph + node attributes sufficient for the
-  actionability policy.
+- SL-046 lands first and exposes the scan as a `pub(crate)` seam (design D5,
+  fed into SL-046) sufficient for the priority adapter.
 - Determinism posture (no clock/RNG/map-order) inherited from cordage + adapter.
 
 ## Verification / Closure Intent
@@ -109,6 +124,13 @@ Assumptions:
 
 ## Follow-Ups
 
+- **Cross-kind dep/seq capture** (IMP-033 + governance) — authors `needs`/`after`
+  on slices/specs; auto-lights this slice's already-kind-agnostic engine (DD-2).
+- **Runtime-state-derived actionability** (DD-4) — RV findings (active/done) +
+  slice phase rollup, as one coherent slice; keeps the v1 scan over authored TOML.
+- **Persisted policy-stamped cache** (D6) — disposable, recompute-equivalent.
+- **Coverage-driven requirement actionability** — the 2nd-enum (`CoverageStatus`)
+  axis; v1 uses authored `ReqStatus` only.
 - Architectural-trigger actionability mask (IMP-026 / SPEC-001 D6) once its
   file-set sources are built.
 - Item-level authored-priority scalar (PRD-011 OQ-001 / PRD-009) — fills survey's
