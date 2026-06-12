@@ -1,0 +1,12 @@
+# SL-045 coverage — requirement status visibility read surface
+# Evidence recorded 2026-06-12, CHR-002 dogfood reconciliation follow-up.
+# Mode VA — verified by agent (code review of shipped implementation).
+
+[[entry]]
+slice = "SL-045"
+requirement = "REQ-111"
+contributing_change = "P3-coverage-view-drift-surfacer"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/coverage_view.rs", "src/coverage_scan.rs"]

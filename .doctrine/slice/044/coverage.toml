@@ -1,0 +1,48 @@
+# SL-044 coverage — reconcile writer + closure gate (SPEC-002 B)
+# Evidence recorded 2026-06-12, CHR-002 dogfood reconciliation follow-up.
+# Mode VA — verified by agent (code review of shipped implementation).
+
+[[entry]]
+slice = "SL-044"
+requirement = "REQ-108"
+contributing_change = "BP1-req-status-setter"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/requirement.rs"]
+
+[[entry]]
+slice = "SL-044"
+requirement = "REQ-112"
+contributing_change = "BP2-reconcile-writer"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/reconcile.rs", "src/rec.rs", "src/coverage.rs", "src/coverage_scan.rs"]
+
+[[entry]]
+slice = "SL-044"
+requirement = "REQ-113"
+contributing_change = "BP3-closure-gate"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/reconcile.rs", "src/slice.rs"]
+
+[[entry]]
+slice = "SL-044"
+requirement = "REQ-114"
+contributing_change = "BP2-info-flow-wall"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/reconcile.rs"]
+
+[[entry]]
+slice = "SL-044"
+requirement = "REQ-116"
+contributing_change = "BP2-diffable-reconstructable"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/reconcile.rs", "src/rec.rs"]
