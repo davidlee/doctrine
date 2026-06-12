@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebc8e4662732185d4356a9a0f0ad6"
+memory_key = "mem.pattern.dispatch.worktree-removal-stale-manifest-dir-false-red"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Removing a dispatch worktree leaves env!(CARGO_MANIFEST_DIR)-baked test binaries pointing at the deleted fork path — false RED until recompiled"
+summary = "After removing a dispatch worker worktree, cordage denylist test false-REDs: env!(CARGO_MANIFEST_DIR) baked the deleted fork path; touch+rebuild fixes"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["crates/cordage/tests/denylist.rs"]
+globs = []
+commands = ["just check"]
+tags = ["dispatch", "cordage", "stale-build"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8f483520975932e2849d08667ae10f75250c6a73"
+ref_name = "refs/heads/main"
+checkout_state_id = "a60936ef3c679d9cb8860158211592caf0421c8ec8bfc08524688cf53d35102f"
+base_commit = "19edc20b96a3123cd2a4dd6bf4fe3c3b9b9ad0ef"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

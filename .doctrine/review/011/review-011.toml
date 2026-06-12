@@ -1,0 +1,52 @@
+id    = 11
+slug  = "reconciliation-review-of-sl-053"
+title = "reconciliation review of SL-053"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-053"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "D7 line-shape mechanism incomplete in design — pad-zeroing alone leaves last-column fill"
+detail = "design.md §5/D7 specifies the no-trailing-whitespace property is achieved by zeroing the first column's left pad and the last column's right pad. In practice comfy-table (Disabled arrangement) still fills each short cell to its column width, so the last column's short cells acquire trailing fill that pad-zeroing does NOT remove. The implementation (src/listing.rs:461-474) keeps the pad-zeroing AND adds a per-line trim_end() to guarantee no trailing whitespace. Code is correct (VT-2 byte-exact shape test green); the design's stated mechanism is the incomplete artifact."
+disposition = "design-wrong"
+response = "Code correct (VT-2 byte-exact shape test green); design.md §5/D7 was the incomplete artifact. Reconciled design.md to document that pad-zeroing alone leaves comfy-table's last-column cell-fill and the per-line trim_end() is required for the no-trailing-whitespace property."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Golden inventory incomplete in design §6 — in-crate goldens omitted"
+detail = "design.md §6 'Golden re-baseline' lists only the black-box tests/e2e_*.rs goldens. The render_table shape change also tripped in-crate unit-test goldens in src/backlog.rs, src/boot.rs (governance snapshot), src/governance.rs, src/slice.rs, src/spec.rs — these were re-baselined too (commit 5b28112). The omission caused two dispatch-worker file-set escalations before the set was widened. Code/goldens are correct; design's inventory under-counted the shared-surface consumers."
+disposition = "design-wrong"
+response = "Goldens/code correct; design §6 inventory under-counted. Reconciled design.md §6 to add e2e_backlog_list_order_golden plus the in-crate goldens (src/backlog,boot,governance,slice,spec.rs)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "tty capability split into a pure seam — design §4 sketch superseded (purity-strengthening)"
+detail = "design.md §4 sketches stdout_color_enabled() reading NO_COLOR (var_os) + isatty directly, with a NO_COLOR test via env injection. The workspace-wide unsafe_code='forbid' blocks set_var, so the impl (src/tty.rs) splits a PURE color_enabled(no_color: Option<&OsStr>, is_tty: bool) seam (VT-3 drives it directly, four arms) behind the thin impure stdout_color_enabled shell — mirroring git::trunk_tree_ish. Design INTENT (capability resolved in shell, bool injected — D3) fully honored; the split strengthens the pure/impure boundary."
+disposition = "aligned"
+response = "Design intent (capability in shell, bool injected, D3) fully honored; the pure color_enabled seam is a doctrinally-stronger realisation forced by unsafe_code=forbid. No code or design change needed — §4's literal sketch is illustrative, the split is the better seam and is tested directly (VT-3)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Colour bool resolved once via ListArgs, not 11 inline call-site reads"
+detail = "design.md §4 anticipates '~11 one-line edits' each calling stdout_color_enabled() at the render_columns call sites. The impl resolves capability ONCE in the command shell (CommonListArgs::into_list_args + coverage_view::run) and threads it through ListArgs.color into render_columns. Cleaner (single capability read, default false so boot/tests/pipes stay plain) and equally pure; design intent preserved."
+disposition = "aligned"
+response = "Resolve-once via ListArgs.color is cleaner than 11 inline reads and equally pure; default-false keeps piped/boot/test output plain. Design intent preserved; no change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
