@@ -742,6 +742,59 @@ fn read_item(root: &Path, item_kind: ItemKind, id: u32) -> anyhow::Result<Backlo
     validate(raw)
 }
 
+/// Resolve a backlog canonical-id prefix (`ISS`/`IMP`/`CHR`/`RSK`/`IDE`) back to its
+/// [`ItemKind`] — the inverse of `ItemKind::prefix`, over the single `ItemKind::ALL`
+/// source. `pub(crate)` so the SL-046 cross-kind dispatch (`relation_graph`) routes a
+/// backlog prefix to [`relation_edges`] without a second prefix↔kind copy.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-046 PHASE-02 dispatch helper — sole caller is \
+                  relation_graph::outbound_for, itself dead until PHASE-03; live \
+                  under cfg(test), retires itself then"
+    )
+)]
+pub(crate) fn kind_from_prefix(prefix: &str) -> Option<ItemKind> {
+    ItemKind::from_prefix(prefix)
+}
+
+/// A backlog item's authored outbound relations (SL-046 §5.2/§5.3): `slices` →
+/// [`RelationLabel::Slices`], `specs` → [`RelationLabel::Specs`], and `drift` →
+/// [`RelationLabel::Drift`]. `drift` is free-text with no `DRIFT` kind in `KINDS`, so
+/// it is a TARGET-UNVALIDATED label (ADR-010 Decision 2): emitted so the data is
+/// preserved, but its targets never resolve and surface as danglers at the scan
+/// (PHASE-03), never edges. NEVER `needs`/`after`/`triggers` (the dep/sequence/mask
+/// axes — SL-047). Reads via the existing `read_item` reader (no new TOML parse). An
+/// empty axis emits nothing.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
+                  relation_graph::outbound_for, itself dead until PHASE-03; live \
+                  under cfg(test), retires itself then"
+    )
+)]
+pub(crate) fn relation_edges(
+    root: &Path,
+    item_kind: ItemKind,
+    id: u32,
+) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
+    use crate::relation::{RelationEdge, RelationLabel};
+    let item = read_item(root, item_kind, id)?;
+    let rel = &item.relationships;
+    let mut edges = Vec::new();
+    for (label, refs) in [
+        (RelationLabel::Slices, &rel.slices),
+        (RelationLabel::Specs, &rel.specs),
+        (RelationLabel::Drift, &rel.drift),
+    ] {
+        edges.extend(refs.iter().map(|t| RelationEdge::new(label, t.clone())));
+    }
+    Ok(edges)
+}
+
 /// Read all five kinds' trees, merged (declaration order, pre-sort). Each absent
 /// kind dir contributes the empty set, so a virgin repo reads to `[]`.
 fn read_all(root: &Path) -> anyhow::Result<Vec<BacklogItem>> {

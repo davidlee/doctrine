@@ -211,6 +211,40 @@ fn read_doc(g: &GovKind, gov_root: &Path, id: u32) -> anyhow::Result<(Doc, Strin
     Ok((doc, body))
 }
 
+/// A governance entity's authored outbound relations (SL-046 §5.2). Emits
+/// `supersedes` → [`RelationLabel::Supersedes`] and `related` →
+/// [`RelationLabel::Related`] ONLY. NEVER `superseded_by` (ADR-004 §3/§5: a
+/// derived-inbound carve-out, not projected — the reader derives "superseded by"
+/// from `in_edges`) and NEVER `tags` (free-text classification, not entity refs).
+/// Reads via the shared `read_doc` reader (no new TOML parse). Shared by ADR / POL /
+/// STD via the caller-supplied `g`. An empty axis emits nothing.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
+                  relation_graph::outbound_for, itself dead until PHASE-03; live \
+                  under cfg(test), retires itself then"
+    )
+)]
+pub(crate) fn relation_edges(
+    g: &GovKind,
+    root: &Path,
+    id: u32,
+) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
+    use crate::relation::{RelationEdge, RelationLabel};
+    let (doc, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    let rel = &doc.relationships;
+    let mut edges = Vec::new();
+    for (label, refs) in [
+        (RelationLabel::Supersedes, &rel.supersedes),
+        (RelationLabel::Related, &rel.related),
+    ] {
+        edges.extend(refs.iter().map(|t| RelationEdge::new(label, t.clone())));
+    }
+    Ok(edges)
+}
+
 /// Render the readable whole for `Table` mode: an identity header, the flat
 /// fields, the non-empty relationship axes, then the prose body verbatim. House
 /// style: `Vec<String>` parts each carrying their own newline, joined by `concat`
