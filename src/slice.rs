@@ -385,6 +385,23 @@ pub(crate) fn run_status(
             );
         }
     }
+    // Closure-gate drift predicate (D-B5/D-B3, REQ-113/FR-006): a SECOND gate
+    // BESIDE the blocker scan, firing on the SAME closure seam but SPECIFICALLY on
+    // the `reconcile → done` crossing only. It COMPOSES with the blocker gate —
+    // either can independently refuse this crossing. Undischarged residual drift on
+    // any requirement in the gate set (`covered ∪ declared ∪ reconciled`) refuses.
+    if (&from, to) == (&"reconcile".to_owned(), "done") {
+        let undischarged = undischarged_drift(&root, id)?;
+        if !undischarged.is_empty() {
+            anyhow::bail!(
+                "slice {} → {to}: refused — undischarged residual drift on \
+                 requirement(s): {} (reconcile each via an `accept` REC whose evidence \
+                 covers the current drift, or resolve the drift, then retry)",
+                canonical_id(id),
+                undischarged.join(", "),
+            );
+        }
+    }
     set_slice_status(&slice_root, id, &from, state, &crate::clock::today())?;
     // Advisory conduct posture (F15/F19): the SOURCE state's exit posture —
     // `autonomy` governs advancing *out* of `from`. Never blocks; surfaced only.
@@ -838,6 +855,156 @@ fn canonical_id(id: u32) -> String {
     listing::canonical_id(SLICE_KIND.prefix, id)
 }
 
+// ---------------------------------------------------------------------------
+// Closure-gate drift predicate (D-B5/D-B3, REQ-113/FR-006). The shell resolves
+// coverage / RECs / authored status from disk+git (ADR-001 impure half); the
+// discharge DECISION is pure over those resolved values. One-way coupling: this
+// `slice`-close shell QUERIES `coverage`/`coverage_scan`/`rec`/`requirement`; those
+// modules NEVER import `slice` — same direction as the blocker gate's
+// `slice-shell → review-query` edge (ADR-001).
+// ---------------------------------------------------------------------------
+
+/// Read the authored `[gate].extra_reqs` declaration of slice `id` (the `declared`
+/// term of the gate set). Absent `[gate]` table ⇒ `∅` (`#[serde(default)]`). Reads
+/// only the toml — no `.md` body needed (cf. `read_slice`).
+fn read_gate_extra_reqs(slice_root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
+    let name = format!("{id:03}");
+    let path = slice_root.join(&name).join(format!("slice-{name}.toml"));
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("slice {name} not found at {}", path.display()))?;
+    let doc: SliceDoc =
+        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+    Ok(doc.gate.extra_reqs)
+}
+
+/// The closure-gate requirement set (D-B5, LOCKED) = `covered ∪ declared ∪
+/// reconciled` for the closing slice `id`, sorted + DISTINCT. ADDITIVE by
+/// construction — the gate can never check LESS than this union. Impure (reads
+/// disk): `covered` from S's own `coverage.toml`, `declared` from `[gate]`,
+/// `reconciled` from the `status_delta`s of S's owning RECs (codex finding 3 — you
+/// cannot reconcile a req via a REC then dodge its gate by not covering/declaring
+/// it).
+fn gate_requirement_set(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
+    let canonical = canonical_id(id);
+    let slice_root = root.join(SLICE_DIR);
+
+    let mut set = std::collections::BTreeSet::new();
+    // covered — S's OWN coverage.toml, validated to cite only S (R-B4).
+    set.extend(crate::coverage_scan::slice_local_covered_reqs(
+        root, id, &canonical,
+    )?);
+    // declared — the authored additive `[gate].extra_reqs`.
+    set.extend(read_gate_extra_reqs(&slice_root, id)?);
+    // reconciled — every req named in a status_delta of S's owning RECs.
+    for rec in crate::rec::recs_owned_by(root, &canonical)? {
+        set.extend(rec.status_delta.into_iter().map(|d| d.requirement));
+    }
+    Ok(set.into_iter().collect())
+}
+
+/// The requirements in the closing slice's gate set that carry UNDISCHARGED residual
+/// drift (D-B5/D-B3). For each gate req R: compute today's residual drift (authored
+/// status vs the composite of its scanned coverage); `Coherent` ⇒ no drift, skip.
+/// `Divergent`/`Indeterminate` ⇒ residual drift — EXCUSED iff R's latest
+/// owning-slice REC discharges it ([`rec_discharges`]); otherwise R is undischarged.
+/// Impure (disk+git resolution); the per-req discharge DECISION is pure.
+fn undischarged_drift(root: &Path, id: u32) -> anyhow::Result<Vec<String>> {
+    let canonical = canonical_id(id);
+    let owned_recs = crate::rec::recs_owned_by(root, &canonical)?;
+    let mut undischarged = Vec::new();
+    for req in gate_requirement_set(root, id)? {
+        let entries = crate::coverage_scan::scan_coverage(root, &req);
+        let composite = crate::coverage::composite(&entries);
+        let authored = crate::requirement::load(root, &req)
+            .with_context(|| format!("closure gate: requirement {req} not found"))?
+            .status;
+        // Residual drift: anything but Coherent. Coherent ⇒ nothing to discharge.
+        if matches!(
+            crate::coverage::drift(authored, &composite),
+            crate::coverage::Verdict::Coherent
+        ) {
+            continue;
+        }
+        // The CURRENT residual-drift evidence keys feeding R's composite — the keys
+        // `scan_coverage` returned, DEDUPED (ISS-006: the corpus double-walks a
+        // slice's dir + slug symlink, so a key can recur; do not over-demand).
+        let residual_keys = distinct_coverage_keys(entries.into_iter().map(|(e, _)| e.key));
+        let latest = latest_owning_rec_for(&owned_recs, &req);
+        if !rec_discharges(latest, authored, &residual_keys) {
+            undischarged.push(req);
+        }
+    }
+    Ok(undischarged)
+}
+
+/// R's LATEST owning-slice REC naming R in a `status_delta` (D-B3 / ADR-004):
+/// the on-demand reverse scan — filter the already-read owning RECs to those whose
+/// `status_delta` names R, take MAX id ("latest"; REC ids are authored + monotonic).
+/// NO stored `req→last_rec` field, NO reverse index (the denormalization ADR-004
+/// prevents). `None` ⇒ no owning REC reconciled R, so nothing can discharge it.
+fn latest_owning_rec_for<'a>(
+    owned_recs: &'a [crate::rec::RecDoc],
+    req: &str,
+) -> Option<&'a crate::rec::RecDoc> {
+    owned_recs
+        .iter()
+        .filter(|rec| rec.status_delta.iter().any(|d| d.requirement == req))
+        .max_by_key(|rec| rec.id)
+}
+
+/// The discharge predicate (R-B3, LOCKED — strengthened). PURE over resolved
+/// values: residual drift on R is EXCUSED iff R's latest owning-slice REC satisfies
+/// ALL THREE clauses —
+/// (a) `rec.move == "accept"` (an affirm — not revise/redesign);
+/// (b) its `status_delta` for R has `to == authored` (R's CURRENT authored status —
+///     guards a status edited away-and-back);
+/// (c) its `evidence_ref` set ⊇ the current residual-drift evidence keys (so fresh
+///     contradictory evidence arriving AFTER the REC re-opens drift a stale REC
+///     cannot excuse).
+/// `None` (no owning REC for R) ⇒ never discharged.
+fn rec_discharges(
+    latest: Option<&crate::rec::RecDoc>,
+    authored: crate::requirement::ReqStatus,
+    residual_keys: &[crate::coverage::CoverageKey],
+) -> bool {
+    let Some(rec) = latest else { return false };
+    // (a) an affirm.
+    if rec.rec.r#move != "accept" {
+        return false;
+    }
+    // (b) affirmed at the value R now holds.
+    let affirmed_at_current = rec.status_delta.iter().any(|d| d.to == authored.as_str());
+    if !affirmed_at_current {
+        return false;
+    }
+    // (c) the REC's evidence ⊇ today's residual evidence keys.
+    residual_keys
+        .iter()
+        .all(|k| rec.evidence_ref.iter().any(|e| e == k))
+}
+
+/// Collect DISTINCT coverage keys, first-seen order — the gate's local twin of
+/// `reconcile::distinct_keys`, deduping ISS-006's slug-symlink double-walk so
+/// clause (c) of [`rec_discharges`] does not spuriously OVER-demand evidence.
+fn distinct_coverage_keys(
+    keys: impl Iterator<Item = crate::coverage::CoverageKey>,
+) -> Vec<crate::coverage::CoverageKey> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for k in keys {
+        let tag = (
+            k.slice.clone(),
+            k.requirement.clone(),
+            k.contributing_change.clone(),
+            k.mode.clone(),
+        );
+        if seen.insert(tag) {
+            out.push(k);
+        }
+    }
+    out
+}
+
 /// Re-export of the spine's status validator, scoped to slice so callers read
 /// intent locally. Guards `--status` against [`SLICE_STATUSES`] (READ input only).
 fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()> {
@@ -937,10 +1104,24 @@ struct SliceDoc {
     updated: String,
     #[serde(default)]
     relationships: Relationships,
+    #[serde(default)]
+    gate: Gate,
 }
 
-// note: `relationships` carries `#[serde(default)]` so a hand-trimmed file with
-// no `[relationships]` table still parses.
+// note: `relationships` and `gate` carry `#[serde(default)]` so a hand-trimmed file
+// with no `[relationships]` / `[gate]` table still parses.
+
+/// The authored `[gate]` table (D-B5): the closure-gate's *declared* requirement
+/// term — an additive, risk-calibrated list the slice's own closure gate is
+/// answerable for, ON TOP OF its observed coverage. `#[serde(default)]` everywhere
+/// so a slice with no `[gate]` table parses to `extra_reqs = ∅` (declared = ∅, the
+/// gate still runs on `covered ∪ reconciled`). Authored slice-metadata tier — NOT
+/// the observed `coverage.toml`.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
+struct Gate {
+    #[serde(default)]
+    extra_reqs: Vec<String>,
+}
 
 /// Parse a slice reference — `SL-025`, `sl-25`, or the bare id `25` — to its
 /// numeric id. The prefix is optional and case-insensitive; the id may be padded.
@@ -1958,6 +2139,7 @@ mod tests {
                 requirements: vec![],
                 supersedes: vec![],
             },
+            gate: Gate::default(),
         };
         // `started` defaults to self/auto (no plan/reconcile gate) — VT-3 show side.
         let posture =
@@ -2606,6 +2788,448 @@ mod tests {
              shell `run_status`); a second `set_slice_status(` call site bypasses \
              the close-gate (design §7 Charge VIII — re-invoke the gate, or move \
              it into the FSM writer)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // B·P3 — closure-gate drift predicate (D-B5/D-B3, REQ-113/FR-006).
+    //
+    // A real born git repo so coverage staleness resolves (anchor..HEAD over the
+    // touched paths): Fresh evidence ⇒ live drift; the discharge clause (c) demands
+    // the REC's evidence cover today's residual keys.
+    // -----------------------------------------------------------------------
+
+    use crate::coverage::CoverageKey;
+    use crate::rec::{RecDoc, RecMeta, StatusDelta};
+    use crate::requirement::{self, ReqKind, ReqStatus};
+
+    fn git(root: &Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args([
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap().trim().to_owned()
+    }
+
+    /// A born git repo at a tempdir root, with one committed source file whose HEAD
+    /// SHA is returned as the universal coverage anchor (Fresh when paths untouched
+    /// since). Caller keeps the `TempDir` alive.
+    fn drift_repo() -> (tempfile::TempDir, String) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q", "-b", "main"]);
+        std::fs::write(root.join("src.rs"), "fn a() {}\n").unwrap();
+        git(root, &["add", "src.rs"]);
+        git(root, &["commit", "-q", "-m", "seed"]);
+        let anchor = git(root, &["rev-parse", "HEAD"]);
+        (dir, anchor)
+    }
+
+    /// Mint a requirement at `status`, returning its canonical FK (`REQ-NNN`).
+    fn mint_req(root: &Path, status: ReqStatus) -> String {
+        let id = requirement::reserve(root, "fast-boot", "Fast boot", "2026-06-12")
+            .unwrap()
+            .eid
+            .numeric_id()
+            .unwrap();
+        requirement::set_kind(root, id, ReqKind::Functional).unwrap();
+        requirement::set_status(root, id, status).unwrap();
+        requirement::canonical_id(id)
+    }
+
+    /// Write a slice's OWN `coverage.toml` carrying one `Verified` entry for `req`,
+    /// anchored at `anchor` over `src.rs` (Fresh in the seeded repo). `cov_slice` is
+    /// the entry's `slice =` field — usually the owning slice, foreign for the
+    /// integrity test.
+    fn write_own_coverage(root: &Path, dir_id: u32, cov_slice: &str, req: &str, anchor: &str) {
+        let d = root.join(SLICE_DIR).join(format!("{dir_id:03}"));
+        fs::create_dir_all(&d).unwrap();
+        let body = format!(
+            "[[entry]]\nslice = \"{cov_slice}\"\nrequirement = \"{req}\"\n\
+             contributing_change = \"{cov_slice}\"\nmode = \"VT\"\n\
+             status = \"verified\"\ngit_anchor = \"{anchor}\"\n\
+             touched_paths = [\"src.rs\"]\n"
+        );
+        fs::write(d.join("coverage.toml"), body).unwrap();
+    }
+
+    /// The DISTINCT coverage key the seeded `write_own_coverage` cell carries — what
+    /// a discharging REC's `evidence_ref` must cover (clause c).
+    fn cov_key(cov_slice: &str, req: &str) -> CoverageKey {
+        CoverageKey {
+            slice: cov_slice.to_owned(),
+            requirement: req.to_owned(),
+            contributing_change: cov_slice.to_owned(),
+            mode: "VT".to_owned(),
+        }
+    }
+
+    /// Materialise an owning-slice REC: `move`, one `status_delta` (req: from→to),
+    /// and the given evidence keys. Returns the assigned REC id.
+    fn mint_rec(
+        root: &Path,
+        owning: &str,
+        r#move: &str,
+        req: &str,
+        from: ReqStatus,
+        to: ReqStatus,
+        evidence: Vec<CoverageKey>,
+    ) -> u32 {
+        let doc = RecDoc {
+            id: 0,
+            slug: format!("{move}-{}", req.to_lowercase()),
+            title: format!("{move} {req}"),
+            rec: RecMeta {
+                r#move: r#move.to_owned(),
+                owning_slice: Some(owning.to_owned()),
+                decision_ref: None,
+            },
+            status_delta: vec![StatusDelta {
+                requirement: req.to_owned(),
+                from: from.as_str().to_owned(),
+                to: to.as_str().to_owned(),
+            }],
+            evidence_ref: evidence,
+        };
+        crate::rec::materialise_populated(root, &doc).unwrap()
+    }
+
+    /// Drive the closing slice to `reconcile` (the legal source for `→ done`).
+    fn slice_at_reconcile(root: &Path) {
+        make_slice(root, "s", "S", "2026-06-12");
+        set_status_raw(root, 1, "reconcile");
+    }
+
+    /// Attempt the `reconcile → done` crossing; return the error string (the gate
+    /// refusal) — panics if it unexpectedly SUCCEEDS.
+    fn expect_close_refused(root: &Path) -> String {
+        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None)
+            .expect_err("reconcile → done should be refused")
+            .to_string()
+    }
+
+    // --- VT-1: residual drift on a COVERED req refuses; F12 topology refuses an
+    //           out-of-seam crossing INDEPENDENT of the drift check. ------------
+
+    #[test]
+    fn vt1_covered_req_residual_drift_refuses_close() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        // `pending` req with Fresh Verified coverage ⇒ Divergent(EvidenceOutruns).
+        let req = mint_req(root, ReqStatus::Pending);
+        write_own_coverage(root, 1, "SL-001", &req, &anchor);
+
+        let err = expect_close_refused(root);
+        assert!(err.contains("undischarged residual drift"), "{err}");
+        assert!(err.contains(&req), "names the offending req: {err}");
+        // Refused BEFORE the write — status stays at reconcile.
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
+    }
+
+    #[test]
+    fn vt1_f12_topology_refuses_out_of_seam_independent_of_drift() {
+        let (dir, _anchor) = drift_repo();
+        let root = dir.path();
+        // A slice in `started` (NOT `reconcile`) → `done` is an F12 SeamBreach,
+        // refused structurally — no coverage/REC in sight, the drift gate never runs.
+        make_slice(root, "s", "S", "2026-06-12");
+        set_status_raw(root, 1, "started");
+        let err = run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("reconcile") && !err.contains("residual drift"),
+            "F12 topology refusal, not the drift gate: {err}"
+        );
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "started");
+    }
+
+    // --- VT-2 (D-B5): declared + reconciled reqs each block; additive floor. ----
+
+    #[test]
+    fn vt2_declared_extra_req_blocks_on_residual_drift() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        // The req is NOT in S's coverage.toml — only DECLARED via [gate].extra_reqs;
+        // its drift must still gate. Coverage lives under a foreign slice dir so the
+        // composite (corpus scan) sees it, but S's own coverage stays empty.
+        let req = mint_req(root, ReqStatus::Pending);
+        write_own_coverage(root, 999, "SL-999", &req, &anchor);
+        // Declare it on the closing slice.
+        let p = slice_root(root).join("001").join("slice-001.toml");
+        let mut toml = fs::read_to_string(&p).unwrap();
+        toml.push_str(&format!("\n[gate]\nextra_reqs = [\"{req}\"]\n"));
+        fs::write(&p, toml).unwrap();
+
+        let err = expect_close_refused(root);
+        assert!(err.contains(&req), "declared req gates: {err}");
+    }
+
+    #[test]
+    fn vt2_reconciled_req_blocks_on_residual_drift() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        // Reconciled-only: named in an owning REC's status_delta, NOT in S's
+        // coverage.toml nor declared. A `revise` REC (not accept) cannot discharge,
+        // so the drift it left behind still gates (the opt-in dodge is closed).
+        let req = mint_req(root, ReqStatus::Pending);
+        write_own_coverage(root, 999, "SL-999", &req, &anchor);
+        mint_rec(
+            root,
+            "SL-001",
+            "revise",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![cov_key("SL-999", &req)],
+        );
+
+        let err = expect_close_refused(root);
+        assert!(err.contains(&req), "reconciled req gates: {err}");
+    }
+
+    #[test]
+    fn vt2_no_gate_table_runs_on_covered_union_reconciled() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        // No [gate] table at all (declared = ∅). A covered req with residual drift
+        // still gates — the floor is `covered ∪ reconciled`.
+        let req = mint_req(root, ReqStatus::Pending);
+        write_own_coverage(root, 1, "SL-001", &req, &anchor);
+        let toml = fs::read_to_string(slice_root(root).join("001").join("slice-001.toml")).unwrap();
+        assert!(!toml.contains("[gate]"), "fixture has no [gate] table");
+
+        let err = expect_close_refused(root);
+        assert!(err.contains(&req), "{err}");
+    }
+
+    // --- VT-3 (R-B4): slice-local reader — distinct reqs; foreign slice refused. -
+
+    #[test]
+    fn vt3_slice_local_reader_returns_distinct_reqs() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let d = root.join(SLICE_DIR).join("001");
+        fs::create_dir_all(&d).unwrap();
+        // Two entries for REQ-001 (distinct modes) + one for REQ-002 → {001, 002}.
+        let body = "\
+            [[entry]]\nslice = \"SL-001\"\nrequirement = \"REQ-001\"\n\
+            contributing_change = \"SL-001\"\nmode = \"VT\"\nstatus = \"planned\"\n\
+            git_anchor = \"a\"\n\
+            [[entry]]\nslice = \"SL-001\"\nrequirement = \"REQ-001\"\n\
+            contributing_change = \"SL-001\"\nmode = \"VA\"\nstatus = \"planned\"\n\
+            git_anchor = \"a\"\n\
+            [[entry]]\nslice = \"SL-001\"\nrequirement = \"REQ-002\"\n\
+            contributing_change = \"SL-001\"\nmode = \"VT\"\nstatus = \"planned\"\n\
+            git_anchor = \"a\"\n";
+        fs::write(d.join("coverage.toml"), body).unwrap();
+        let reqs = crate::coverage_scan::slice_local_covered_reqs(root, 1, "SL-001").unwrap();
+        assert_eq!(reqs, vec!["REQ-001".to_owned(), "REQ-002".to_owned()]);
+    }
+
+    #[test]
+    fn vt3_foreign_slice_in_own_coverage_is_an_integrity_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let d = root.join(SLICE_DIR).join("001");
+        fs::create_dir_all(&d).unwrap();
+        // SL-001's OWN coverage.toml citing SL-042 — a foreign slice =, refused.
+        let body = "[[entry]]\nslice = \"SL-042\"\nrequirement = \"REQ-001\"\n\
+            contributing_change = \"SL-042\"\nmode = \"VT\"\nstatus = \"planned\"\n\
+            git_anchor = \"a\"\n";
+        fs::write(d.join("coverage.toml"), body).unwrap();
+        let err = crate::coverage_scan::slice_local_covered_reqs(root, 1, "SL-001")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("integrity error"), "{err}");
+        assert!(err.contains("SL-042"), "names the foreign slice: {err}");
+    }
+
+    #[test]
+    fn vt3_absent_coverage_is_empty_not_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        assert!(
+            crate::coverage_scan::slice_local_covered_reqs(root, 1, "SL-001")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    // --- VT-4 (discharge i): accept + to==current + evidence ⊇ residual ⇒ close. -
+
+    #[test]
+    fn vt4_matching_accept_rec_discharges_the_drift() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        // `active` req with Fresh Verified coverage: drift is Coherent for active —
+        // so instead use a residual-drift status the REC then affirms. A `pending`
+        // req carries Divergent drift; an accept REC with `to == pending` (current)
+        // whose evidence covers the key discharges it.
+        let req = mint_req(root, ReqStatus::Pending);
+        write_own_coverage(root, 1, "SL-001", &req, &anchor);
+        mint_rec(
+            root,
+            "SL-001",
+            "accept",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![cov_key("SL-001", &req)],
+        );
+
+        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None).unwrap();
+        assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
+    }
+
+    // --- VT-5 (discharge ii, clause c): post-REC fresh evidence re-opens drift. --
+
+    #[test]
+    fn vt5_post_rec_fresh_evidence_undischarges() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        let req = mint_req(root, ReqStatus::Pending);
+        // S's coverage has the original VT cell; the REC affirms over THAT key only.
+        write_own_coverage(root, 1, "SL-001", &req, &anchor);
+        mint_rec(
+            root,
+            "SL-001",
+            "accept",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![cov_key("SL-001", &req)],
+        );
+        // Fresh contradictory evidence arrives AFTER the REC: a NEW key (different
+        // contributing_change) the REC's evidence_ref does not cover. The composite
+        // now carries a residual key clause (c) lacks → undischarged.
+        let d = root.join(SLICE_DIR).join("001");
+        let extra = format!(
+            "\n[[entry]]\nslice = \"SL-001\"\nrequirement = \"{req}\"\n\
+             contributing_change = \"SL-002\"\nmode = \"VT\"\nstatus = \"verified\"\n\
+             git_anchor = \"{anchor}\"\ntouched_paths = [\"src.rs\"]\n"
+        );
+        let p = d.join("coverage.toml");
+        let mut body = fs::read_to_string(&p).unwrap();
+        body.push_str(&extra);
+        fs::write(&p, body).unwrap();
+
+        let err = expect_close_refused(root);
+        assert!(
+            err.contains(&req),
+            "stale REC cannot excuse fresh evidence: {err}"
+        );
+    }
+
+    // --- VT-6 (discharge iii/iv): revise/redesign + foreign-slice REC don't. -----
+
+    #[test]
+    fn vt6_revise_rec_does_not_discharge() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        let req = mint_req(root, ReqStatus::Pending);
+        write_own_coverage(root, 1, "SL-001", &req, &anchor);
+        // A `revise` REC (move != accept) cannot discharge — clause (a) fails.
+        mint_rec(
+            root,
+            "SL-001",
+            "revise",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![cov_key("SL-001", &req)],
+        );
+        let err = expect_close_refused(root);
+        assert!(err.contains(&req), "revise REC does not discharge: {err}");
+    }
+
+    #[test]
+    fn vt6_foreign_owning_slice_rec_does_not_discharge() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        let req = mint_req(root, ReqStatus::Pending);
+        write_own_coverage(root, 1, "SL-001", &req, &anchor);
+        // An accept REC that would discharge — but owned by a DIFFERENT slice. A
+        // gate honours only its OWN slice's RECs, so it is not even in scope.
+        mint_rec(
+            root,
+            "SL-777",
+            "accept",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![cov_key("SL-001", &req)],
+        );
+        let err = expect_close_refused(root);
+        assert!(
+            err.contains(&req),
+            "foreign-slice REC does not discharge: {err}"
+        );
+    }
+
+    // --- VT-7: composes with D-C9b — blocker AND drift each independently refuse. -
+
+    #[test]
+    fn vt7_blocker_and_drift_each_independently_refuse() {
+        let (dir, anchor) = drift_repo();
+        let root = dir.path();
+        slice_at_reconcile(root);
+        let req = mint_req(root, ReqStatus::Pending);
+        write_own_coverage(root, 1, "SL-001", &req, &anchor);
+
+        // (i) Blocker alone refuses: discharge the drift (matching accept REC), then
+        // raise an unresolved blocker — the blocker gate must still refuse.
+        let rec_id = mint_rec(
+            root,
+            "SL-001",
+            "accept",
+            &req,
+            ReqStatus::Pending,
+            ReqStatus::Pending,
+            vec![cov_key("SL-001", &req)],
+        );
+        let _ = rec_id;
+        raise_blocker_rv(root, 1);
+        let err_blocker = expect_close_refused(root);
+        assert!(
+            err_blocker.contains("blocker review finding"),
+            "blocker gate refuses independently: {err_blocker}"
+        );
+
+        // (ii) Drift alone refuses: a SEPARATE slice with residual drift but NO
+        // blocker — the drift gate refuses on its own.
+        let (dir2, anchor2) = drift_repo();
+        let root2 = dir2.path();
+        slice_at_reconcile(root2);
+        let req2 = mint_req(root2, ReqStatus::Pending);
+        write_own_coverage(root2, 1, "SL-001", &req2, &anchor2);
+        let err_drift = expect_close_refused(root2);
+        assert!(
+            err_drift.contains("residual drift"),
+            "drift gate refuses independently: {err_drift}"
         );
     }
 }

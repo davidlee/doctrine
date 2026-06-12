@@ -405,6 +405,26 @@ fn read_recs(rec_root: &Path) -> anyhow::Result<Vec<RecDoc>> {
     Ok(docs)
 }
 
+/// The REC corpus owned by `slice` (canonical `SL-NNN`) — every `rec-NNN.toml`
+/// whose `[rec].owning_slice` matches. The reverse req→REC lookup the closure-gate
+/// drift discharge needs is an **on-demand scan** of this corpus (D-B3 / ADR-004:
+/// no stored `req→last_rec` reverse index — a denormalization that desyncs), so the
+/// gate shell resolves "R's latest owning-slice REC" by filtering this list on a
+/// `status_delta` naming R and taking the MAX id. An absent REC tree → empty (no
+/// reconciliation has happened yet). One-way coupling: the `slice`-close shell
+/// queries `rec`; `rec` never imports `slice` (ADR-001). O(#REC)/close (RSK-006 —
+/// index later, never now).
+pub(crate) fn recs_owned_by(root: &Path, slice: &str) -> anyhow::Result<Vec<RecDoc>> {
+    let rec_root = root.join(REC_DIR);
+    if !rec_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    Ok(read_recs(&rec_root)?
+        .into_iter()
+        .filter(|doc| doc.rec.owning_slice.as_deref() == Some(slice))
+        .collect())
+}
+
 /// The `owning_slice` edge label for display, or `—` when the REC is freestanding.
 fn owning_label(doc: &RecDoc) -> String {
     doc.rec
