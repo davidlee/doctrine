@@ -12,7 +12,7 @@ updated = "2026-06-12"
 tags = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
-slices = []
+slices = ["SL-052"]
 specs  = []
 drift  = []
 needs    = []                   # item→item hard prerequisite
