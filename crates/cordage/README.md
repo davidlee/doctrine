@@ -19,7 +19,7 @@ It is designed for systems where the same set of entities participates in multip
 
 Many systems eventually grow more than one relationship graph over the same objects.
 
-For example, a task, rule, document, workflow step, package, policy item, or build unit might have:
+For example, a job, rule, document, workflow step, package, policy item, or build unit might have:
 
 * a parent/child relationship
 * dependency relationships
@@ -220,7 +220,7 @@ Use `cordage` when you need a small, deterministic graph-evaluation core for:
 * policy engines
 * rule evaluation
 * workflow ordering
-* document or task dependency models
+* document or job dependency models
 * build or planning systems
 * explainable propagation over typed relationships
 * systems where cycles should be diagnosed or resolved predictably

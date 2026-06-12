@@ -21,7 +21,7 @@ build:
   cargo build
 
 test:
-  cargo test
+  cargo test --workspace
 
 install:
   cargo install --path .
