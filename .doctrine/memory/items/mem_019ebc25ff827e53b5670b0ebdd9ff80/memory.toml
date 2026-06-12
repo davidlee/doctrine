@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebc25ff827e53b5670b0ebdd9ff80"
+memory_key = "mem.pattern.backlog.list-sequence-orders-by-itemid-string"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Default backlog list orders by ItemId prefix-string, diverging from --by id grouping"
+summary = "Default backlog list --by sequence orders edge-free rows by cordage tie-break (ItemId prefix-string), not (kind.ordinal,id)"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["src/backlog.rs", "src/backlog_order.rs"]
+globs = []
+commands = []
+tags = ["backlog", "ordering", "cordage"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "344b89b46e7a8f5cf140e7c28a60aa8a8d648610"
+tree = "d28af9f248ecf6ff45aa8a91c8c7907a90b59359"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "344b89b46e7a8f5cf140e7c28a60aa8a8d648610"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
