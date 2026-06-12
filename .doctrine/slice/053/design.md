@@ -139,9 +139,10 @@ fn status_hue(s: &str) -> Option<owo_colors::AnsiColors> {
     }
 }
 
-// each kind's status column wires the row→token extractor, e.g.
-//   slice:  ColumnPaint::ByValue(|r| status_hue(r.authored_status()))
-//   review: ColumnPaint::ByValue(|r| status_hue(r.status.as_str()))
+// each kind's status column wires the row→token extractor against the row's
+// real shape (row types are tuples — destructure to the bare status element):
+//   slice:  ColumnPaint::ByValue(|(m, _)| status_hue(&m.status))        // (Meta, Option<PhaseRollup>)
+//   review: ColumnPaint::ByValue(|(_, s, _)| status_hue(s.as_str()))    // (ReviewDoc, ReviewStatus, Await)
 ```
 
 The shared map stays singular (no per-kind duplication of the token→hue table);
@@ -195,6 +196,30 @@ goldens flake.
   harmless to determinism *only because* arrangement is `Disabled` (no width query)
   **and** `force_no_tty()` is called (no style/tty query — D6). Both are
   load-bearing; neither alone suffices.
+- **Exact line shape — leading/trailing whitespace pinned (D7).** The old
+  hand-rolled renderer produced **no leading space** (first cell at column 0) and
+  **no trailing whitespace** (last column left unpadded). comfy-table does **not**
+  reproduce this for free, and the `NOTHING` preset is a trap: it sets every border
+  component to a literal *space* (presets.rs:154), so `style_exists(LeftBorder)` is
+  true → a leading space is drawn, and the default column padding `(1,1)`
+  (column.rs:48) appends a right pad to the final column → a trailing space. Both
+  reverse the old property and bake fragile edge-whitespace into the goldens
+  (editors/CI that strip trailing WS would corrupt them). The seam therefore pins
+  the shape explicitly:
+  - **Outer borders absent, not spaced.** Build the style by *removing* every
+    border/corner/horizontal/intersection component (`remove_style`), then set only
+    `TableComponent::VerticalLines` to `│`. Do **not** `load_preset(NOTHING)` (its
+    components exist-as-space). `should_draw_left_border`/`_right_border` then return
+    false (borders.rs:229) → no outer edge char.
+  - **Per-column padding zeroes the outer edges.** Interior padding `(1,1)` gives
+    the minimalist ` │ ` inner separator; then set the **first** column's left pad
+    and the **last** column's right pad to `0`. Result: `id │ kind │ status │ title`
+    — clean both edges, exactly matching the old no-leading/no-trailing property,
+    while gaining the `│` separators. (render_table knows the column count at
+    runtime, so the first/last zeroing is a post-build mutation.)
+  - A determinism test asserts the **exact** bytes of a small table — including the
+    absence of any leading or trailing space on every line — not merely "separators
+    present".
 - `render_table` re-appends the trailing `\n` (comfy-table's `to_string()` omits
   it; backlog.rs:1045 documents callers printing the result verbatim, relying on
   the seam's own newline). Empty grid → `""` preserved.
@@ -207,6 +232,19 @@ New / changed evidence:
   contains ANSI escapes for painted columns + bold header; `(.., false)` contains
   zero ANSI. A width/alignment test with a painted column proves comfy-table's
   ANSI-aware measurement keeps separators aligned (no drift from the escapes).
+- **Shape test (D7)**: a small table asserts exact bytes — no leading space on any
+  line, no trailing whitespace on any line, ` │ ` interior separators.
+- **force-no-tty determinism (D6)**: identical bytes from `render_table` whether
+  stdout is a terminal or a pipe (the `force_no_tty()` guard neutralises the only
+  tty read). Width measurement itself is `UnicodeWidthStr::width` — tty-independent —
+  so this test pins the colour/style path, the only tty-sensitive surface.
+- **Wide-char caveat (latent).** Width shifts from `chars().count()` to
+  display-width (unicode-width via `custom_styling`); these diverge for CJK /
+  combining / wide-emoji cells. No *current* golden seeds a wide cell — the `⚠`
+  divergence marker only renders against a seeded state tree, which no fixture
+  provides, and `—` (U+2014) is width 1 either way — so the re-baseline hides no
+  present alignment change. This safety is *incidental*: the day a golden seeds a
+  `done ⚠` slice row, alignment will shift. Noted, not blocking.
 - **`tty.rs` test**: `NO_COLOR` present ⇒ `false` (env injected per-test; the
   isatty branch is exercised only indirectly, documented as such).
 - **Golden re-baseline**: the shared-surface format change (separators) trips
@@ -237,6 +275,11 @@ New / changed evidence:
   `custom_styling` → `tty` feature edge makes the content formatter read
   `stdout().is_terminal()` at format time; `force_no_tty` is the load-bearing seam
   that keeps the pure layer pure and piped output stable (§2, §9a F-3).
+- **D7** — exact line shape is pinned (§5): outer borders *removed* (not the
+  space-filled `NOTHING` preset), only `VerticalLines = │`, interior padding `(1,1)`
+  with the first column's left pad and last column's right pad zeroed → no leading
+  or trailing whitespace, matching the old renderer's property. Pinned by a
+  byte-exact shape test (§9a F-6).
 
 Residual: none blocking. ASM-1 is **resolved against crate 7.2.2** (not deferred):
 comfy-table cannot give ANSI-aware width without `custom_styling`→`tty`→crossterm,
@@ -244,12 +287,17 @@ so crossterm is accepted (D1/path A) and neutralised by `ContentArrangement::
 Disabled` + `force_no_tty()` (D6). The execute-time spike now *proves* that pair
 deterministic, rather than testing whether crossterm can be dropped.
 
-## 9a. Adversarial review (internal + external pass)
+## 9a. Adversarial review (internal + two external passes)
 
-Hostile self-review of this design, then an external adversarial pass
-(codex/GPT-5.5, read-only) that **refuted** internal F-3 and F-4 against the
-resolved crate manifest and live source. Findings integrated above; the external
-refutations rewrote F-3 (feature graph) and F-4 (status_hue) and added D6.
+Hostile self-review, then an external pass (codex/GPT-5.5, read-only) that
+**refuted** internal F-3 and F-4 against the resolved crate manifest and live
+source (rewrote F-3 feature graph, F-4 status_hue, added D6), then a **second
+adversarial pass** (opus inquisitor, read-only) targeting the integration itself —
+which surfaced the line-shape gap (F-6), corrected the §3 examples, and added the
+cargo-group caveat (F-8). The three integrated findings verified sound; the F-4
+generic refactor introduces no new heresy (const column tables still construct;
+every painted kind has a bare-token status accessor; `force_no_tty` neutralises the
+*only* tty read — width is `UnicodeWidthStr`, tty-independent).
 
 - **F-1 — scope imprecision (integrated §1).** "Everything through
   `render_columns`" was loose. Corrected to a precise surface inventory:
@@ -293,12 +341,28 @@ refutations rewrote F-3 (feature graph) and F-4 (status_hue) and added D6.
   memory ×2, review ×2, spec ×2, backlog, rec, governance, coverage_view) plus
   in-crate tests gain the `color` arg; `render_table` callers (priority ×2) are
   unaffected (signature unchanged).
+- **F-6 — line-shape gap (opus pass; integrated §5/§6, D7).** The design swapped
+  renderers without pinning padding/border/trim. comfy's `NOTHING` preset fills
+  borders with spaces → a leading space; default padding `(1,1)` → a trailing
+  space — both *reverse* the old no-leading/no-trailing property and bake fragile
+  edge-whitespace into goldens. Resolved by D7 (remove outer borders, zero the
+  outer-edge pads) + a byte-exact shape test.
+- **F-7 — fictional §3 examples (opus pass; fixed §3).** The illustrative
+  `ByValue` accessors (`r.authored_status()`, `r.status.as_str()`) named methods
+  the tuple row types don't have. Rewritten to destructure the real tuples
+  (`(Meta, Option<PhaseRollup>)`, `(ReviewDoc, ReviewStatus, Await)`). Doc-accuracy
+  only — the mechanism was always sound.
+- **F-8 — cargo-group caveat (opus pass; documented §8).** Repo clippy `cargo`
+  group is `deny`; the crossterm subtree could trip `multiple_crate_versions` on a
+  duplicate-major collision. Not design heresy — a phase-1 `cargo tree -d` check;
+  if a dup surfaces, an `expect`+reason allow on the bin. (The known
+  new-*member*-metadata memory does **not** apply — deps land in an existing member.)
 
 ## 8. Code impact summary
 
 | Path | Change |
 |---|---|
-| `Cargo.toml` (workspace + bin) | add `comfy-table` (`default-features=false`, features `["custom_styling"]` — pulls crossterm transitively, accepted per D1/path A) + `owo_colors` to `[workspace.dependencies]` and the bin `[dependencies]` |
+| `Cargo.toml` (workspace + bin) | add `comfy-table` (`default-features=false`, features `["custom_styling"]` — pulls crossterm transitively, accepted per D1/path A) + `owo_colors` to `[workspace.dependencies]` and the bin `[dependencies]`. Phase-1 `cargo tree -d` check: the `cargo` clippy group is `deny`, so a crossterm-subtree `multiple_crate_versions` collision needs an `expect`+reason allow (§9a F-8) |
 | `src/listing.rs` | `render_table` reimplemented over comfy-table (layout only; **`force_no_tty()` before `to_string()` — D6**); `render_columns` gains `color` param + paint application; `ColumnPaint<R>` enum (`ByValue` reads the row, not the cell); `status_hue`; hand-rolled width/pad maths deleted; pure colour + alignment + force-no-tty determinism tests |
 | `src/tty.rs` (new) | `stdout_color_enabled()` — impure capability resolution |
 | 11 `run_list` call sites | resolve + pass the `color` bool into `render_columns` |
