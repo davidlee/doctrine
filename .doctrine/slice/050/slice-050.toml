@@ -1,0 +1,16 @@
+id = 50
+slug = "priority-surface-cleanup"
+title = "Priority surface efficiency and conceptual-precision cleanup"
+status = "proposed"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[relationships]
+specs = ["SPEC-001"]
+requirements = ["REQ-072", "REQ-077"]
+# REQ-072 (reasons are the render source of truth) — finding 5 renames the
+#   `explain` order label, touching that surface. REQ-077 (determinism) — the
+#   comparator/double-walk fixes preserve it while removing redundant work.
+# Follows up SL-047 / RV-007: this slice is the disposition of the /code-review
+#   cluster the RV-007 closure left out of scope. No slice→slice dep field exists
+#   (mirrors SL-047's SL-046 note); provenance recorded in the scope doc.
