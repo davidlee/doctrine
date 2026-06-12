@@ -10,8 +10,9 @@
 //! a `BacklogItem` or the filesystem (the projection lives in `backlog::project`,
 //! PHASE-03). Opaque cordage ids never escape a `pub(crate)` signature (§10 E4).
 //!
-//! The CLI consumer (`backlog order`/`needs`) landed in PHASE-03 (`backlog::project`,
-//! `order_rows`, the set-verb cycle oracle), so the whole public surface is now
+//! The CLI consumer landed in PHASE-03 (`backlog::project`, the set-verb cycle oracle)
+//! and folded into `backlog list --by sequence` at SL-051 (`backlog::compose`, which
+//! retired the standalone `order` verb), so the whole public surface is now
 //! production-live — the PHASE-02 self-clearing `dead_code` scope removed itself per
 //! plan (mem.pattern.lint.dead-code-expect-vs-cfg-test).
 use crate::backlog::ItemKind;
