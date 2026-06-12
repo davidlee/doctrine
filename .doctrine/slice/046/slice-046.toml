@@ -1,7 +1,7 @@
 id = 46
 slug = "cross-kind-relation-graph-spine-all-entity-adapter-relatedinbound-query"
 title = "Cross-kind relation graph spine: all-entity adapter + related/inbound query"
-status = "proposed"
+status = "design"
 created = "2026-06-12"
 updated = "2026-06-12"
 
