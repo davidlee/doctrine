@@ -71,19 +71,18 @@ descends from **SPEC-002** / **PRD-013** and completes the user-facing half of
 
 ## Risks, assumptions, open questions
 
-- **OQ-1 (placement).** Where does the drift read live — top-level `doctrine drift`,
-  `spec req drift`, or a `coverage show`? `reconcile` earned a top-level slot as a
-  loop verb (SL-044); a read may not. `/design`.
-- **OQ-2 (scope unit).** Per-requirement, per-spec (fan over all members), or both?
-  Coverage entries are slice-side keyed `(req × contributing_change)`, so a per-spec
-  drift read scans across every slice's `coverage.toml`. `/design`.
-- **OQ-3 (roster columns).** Does the roster show authored status only, or also a
-  coverage/drift column (joining both reads)? A joined view risks *visually* implying
-  `authored = f(coverage)`; must stay a derived read and never blur the two tiers
-  (`NF-001`/`REQ-114`). `/design`.
-- **RSK (perf).** A spec-wide drift read amplifies the coverage-scan / staleness cost
-  flagged by `RSK-006` (deferred, no cliff yet). Bound the scope or accept for v1 —
-  assess at `/design`.
+- **OQ-1 (placement).** RESOLVED (design D1) → top-level `doctrine coverage <ref>`, a
+  noun-as-verb leaf. Not `doctrine drift` (name-collides with SL-009's slice-rollup `⚠`),
+  not `spec req drift` (reads wrong for a polymorphic spec ref).
+- **OQ-2 (scope unit).** RESOLVED (design D2) → polymorphic `<ref>`: `REQ-NNN` single
+  row, spec ref (`PRD-/SPEC-NNN`) fans over members in `order`.
+- **OQ-3 (roster columns).** RESOLVED (design D3) → `spec req list` stays authored-only;
+  the observed/verdict join lives **solely** in `doctrine coverage`. Tier split by
+  command boundary is the strongest defence of the `NF-001`/`REQ-114` wall — no shared
+  output path to blur, and the roster stays scan-free.
+- **RSK (perf).** RESOLVED (design D4) → a new additive `scan_coverage_batch` collapses a
+  spec fan to **one** corpus walk (not N), bounding the `RSK-006` amplification; staleness
+  stays one-HEAD-resolve. Accepted for v1 (no cliff).
 - **ASM.** `composite()`/`drift()` are pure and read-only by construction, reusable
   as-is for a read path with no signature change.
 - **Behaviour-preservation gate.** The SL-044 `NF-001` no-derivation import-edge
