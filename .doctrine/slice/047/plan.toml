@@ -1,0 +1,121 @@
+# Implementation plan for SL-047 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-047"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Priority graph adapter (scan seam + third graph)"
+objective = """
+Build src/priority/graph.rs — the priority adapter that reuses SL-046's all-kind
+scan to construct a THIRD cordage Graph (distinct from backlog_order's and
+inspect's; shares only the Projection type) carrying the dep/seq overlays, per-node
+attributes, the consequence pre-pass tally, and the OrderSpec (design §5.2). Expose
+the shared scan as a pub(crate) seam in relation_graph — D5 fallback: SL-046 landed
+WITHOUT a reusable raw-scan seam (build_relation_graph is private; only outbound_for
+is pub(crate)), so this phase does the scan-seam extraction as a pure refactor behind
+the behaviour-preservation gate. Add thin per-kind authored-status accessors where a
+kind does not already expose one (R5 cohesion). No partition/channel policy yet —
+NodeAttr stores raw status; classification is PHASE-02.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-046 landed on main: relation_graph all-kind scan + Projection<EntityKey> + inspect present; outbound_for pub(crate)." },
+  { id = "EN-2", text = "design.md locked + inquisition-integrated; this plan approved and PHASE-01 sheet materialised." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/priority/graph.rs::build() returns PriorityGraph{graph, projection, attrs, consequence, dep_overlay, seq_overlay, ref_overlays, dangling} via the §5.2 order: scan -> consequence pre-pass -> mint -> edges -> OrderSpec -> cordage build()." },
+  { id = "EX-2", text = "NodeAttr{kind,status,promoted} reads each kind's AUTHORED status; RV's via review::derived_status over its authored finding ledger; status None for REC only; promoted from backlog resolution==Promoted (NOT the free-text origin field)." },
+  { id = "EX-3", text = "Consequence pre-pass tallies inbound targets of the work/lineage label SUBSET only (specs, requirements, slices, descends_from, parent, members) into BTreeMap<EntityKey,u32>; reviews/owning_slice bookkeeping labels excluded (Charge V)." },
+  { id = "EX-4", text = "needs->dep_overlay (Reject, B->A flip, EdgeAttrs::new(0,0)) and after->seq_overlay (Evict, EdgeAttrs::new(rank,age)) emitted kind-agnostically (DD-2); reference/lineage edges onto ref_overlays resolve-only, unresolved -> dangler." },
+  { id = "EX-5", text = "The all-kind scan is a pub(crate) seam in relation_graph consumed by both inspect and priority; mint order is (consequence desc, canonical-id asc) with distinct keys asserted (C4 pre-intern discipline)." },
+]
+verification = [
+  { id = "VT-1", expects = "Over a seeded multi-kind corpus, PriorityGraph builds; node set equals the scanned entity set; distinct-key assertion holds (canonical ids unique by prefix)." },
+  { id = "VT-2", expects = "Consequence tally counts ONLY work/lineage labels: a reviews/owning_slice edge does not raise its target's consequence; a specs/requirements/slices/descends_from/parent/members edge does (Charge V)." },
+  { id = "VT-3", expects = "Mint order is (consequence desc, canonical-id asc) and is identical under input permutation (REQ-077 determinism; no clock/RNG/map-order; BTree not Hash)." },
+  { id = "VT-4", expects = "Behaviour-preservation gate: backlog_order + cordage suites green UNCHANGED; `backlog order` golden byte-identical; inspect output byte-identical after the scan-seam extraction." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Partition + channels (pure policy core)"
+objective = """
+Ship the pure policy core: src/priority/partition.rs (the OQ-8 work-only
+workable|terminal status-class table, the status_class resolver, and the lockstep
+drift canary) and src/priority/channels.rs (the pure channel synthesis over
+PriorityGraph — eligible/blocked_by/blocked/actionable/blocking/consequence/
+order_key/dep_cycles, design §5.2). No I/O, no clock/RNG — heavy unit tests over a
+constructed graph fixture. This is the slice's correctness heart: D12's
+eligible ∧ ¬blocked synthesis and the I1 direct-blocker-suffices invariant.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: PriorityGraph (graph + attrs + consequence + dep/seq overlays) available to read." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "partition.rs ships PARTITION (the §5.3 table) + status_class(kind, Option<&str>) -> StatusClass{Workable,Terminal,Unrecognised}: Some(s) table lookup, None+REC -> Terminal (no diagnostic), RV resolved via its derived active/done through the table, unrecognised status -> Unrecognised + diagnostic (D12 conservative default)." },
+  { id = "EX-2", text = "channels.rs pure fns match the §5.2 signatures; actionable = eligible && !blocked (D12); blocked_by = in_edges(dep,n) ∩ {status_class != Terminal} (I1 direct test suffices for the boolean); blocking = out_edges(dep,n); consequence reads the pre-pass tally; order_key = graph.ordered() remapped (D9)." },
+  { id = "EX-3", text = "A backlog node with promoted==true is excluded from default-active regardless of status_class, surfaced as its own reason (F1 / REQ-075 AC2)." },
+  { id = "EX-4", text = "dep_cycles() surfaces provenance cycles; the affected component degrades to the consequence/NodeId fallback, never a false topological order (REQ-076 / F2)." },
+]
+verification = [
+  { id = "VT-1", expects = "Partition drift canary: workable ∪ terminal == <kind>_STATUSES for each closed-enum kind; slice (stringly status) binds to the ADR-009 lifecycle status set; a status outside the table rides the Unrecognised default (R3 / Charge VII)." },
+  { id = "VT-2", expects = "D12 synthesis: workable+unblocked -> actionable; workable+blocked -> eligible-but-not-actionable; terminal -> not eligible. audit/reconcile slice statuses are workable." },
+  { id = "VT-3", expects = "Conservative/status-less: REC None -> non-eligible, NO diagnostic; unrecognised status -> non-eligible + diagnostic; an Active RV is eligible, a Done RV terminal (derived status, Charge I)." },
+  { id = "VT-4", expects = "Cycle degrade: a dep cycle -> dep_cycles() names the component nodes, fallback order applied, no false topo emitted; ordering elsewhere unaffected (REQ-076)." },
+  { id = "VT-5", expects = "Determinism: channel outputs identical under input permutation (REQ-077)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Surfaces, structured reasons, render + goldens"
+objective = """
+Build the operator-facing layer: src/priority/view.rs (the structured ReasonKind
+enum + SurveyRow/NextRow/Explanation/Actionability types — reasons are the render
+source of truth, REQ-072), src/priority/render.rs (human + --json riding
+src/listing.rs and the SL-045/SL-046 read-surface precedent; stamps
+PRIORITY_POLICY_VERSION), the four CLI verbs in src/main.rs
+(survey/next/blockers/explain), and the inspect actionability-block extension (same
+verb, SL-046 D1). Black-box CLI goldens over a seeded multi-kind corpus drive the
+design §9 validation list. End on the full behaviour-preservation gate.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: partition + channels available; status_class and the channel synthesis pass their unit tests." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "view.rs ships the ReasonKind enum + SurveyRow/NextRow/Explanation/Actionability (§5.4); render.rs produces human + --json FROM the structured reasons (REQ-072 AC3) and stamps a PRIORITY_POLICY_VERSION const in --json (D6 / REQ-094)." },
+  { id = "EX-2", text = "main.rs ships survey [--all][--json] (importance order D10; empty authored-priority slot -> actionability -> consequence desc -> id), next [--json] (actionable-only, order_key D9, advisory REQ-071), blockers <ID> [--transitive][--json] (direct by default; --transitive walks reachable), explain <ID> [--json] (always to root); inspect appends the actionability block." },
+  { id = "EX-3", text = "No channel mutates authored status/relations; no stored reverse field (ADR-004 / REQ-078); unknown prefix -> clean error, entity with no relations/status -> empty channels not an error." },
+]
+verification = [
+  { id = "VT-1", expects = "Divergence (D10): a workable-but-blocked item tops survey with a BLOCKED badge + direct blocker and is ABSENT from next; an equal unblocked item leads next." },
+  { id = "VT-2", expects = "Blocking display (D11/REQ-073): blockers --transitive + explain surface the full chain; survey/next/inspect rows are direct-only; toggling display depth never changes ordering." },
+  { id = "VT-3", expects = "Cross-kind (FR-008/REQ-237, FR-006/REQ-238): a non-backlog workable+unblocked item (incl. an Active RV) appears in next; a same-kind terminal item is omitted; one comparable view across kinds. Dep-blocking verified BACKLOG-SCOPED (the dep-blocked-omitted fixture is a backlog item — non-backlog kinds cannot author a dep edge in v1; Charge II)." },
+  { id = "VT-4", expects = "Terminal exclusion (REQ-075): terminal excluded by default, revealed by --all; a promoted backlog item excluded as its own reason even when status is non-terminal (F1)." },
+  { id = "VT-5", expects = "Structured reasons (REQ-072): every classification carries reasons; --json stamps policy_version." },
+  { id = "VT-6", expects = "Behaviour-preservation gate (final): full backlog_order + cordage suites green unchanged; `backlog order` byte-identical; `just check` clean (plain cargo clippy, zero warnings)." },
+]
+specs        = []
+requirements = []
