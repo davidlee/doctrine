@@ -1,0 +1,41 @@
+memory_uid = "mem_019eba28977b7573b10c1c5ac2134296"
+memory_key = "mem.pattern.dispatch.worker-verify-unset-doctrine-worker"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch worker verify gate: run with DOCTRINE_WORKER unset when tests mint entities"
+summary = "Dispatch/worktree worker tests that mint entities in tempdirs must run the verify gate with DOCTRINE_WORKER unset — the self-arm's D2a guard blocks tempdir mints too"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["src/reconcile.rs", "src/rec.rs"]
+globs = []
+commands = ["reconcile", "spec req status"]
+tags = ["dispatch", "worktree", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "87b5a457e57a5e6921700d9ce01268b9d531ce3e"
+tree = "912cd960f241277c46129f1588a37b9093bf2f74"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "87b5a457e57a5e6921700d9ce01268b9d531ce3e"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
