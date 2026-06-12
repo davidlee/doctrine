@@ -1,0 +1,48 @@
+# SL-042 coverage — observe substrate (SPEC-002 A)
+# Evidence recorded 2026-06-12, CHR-002 dogfood reconciliation follow-up.
+# Mode VA — verified by agent (code review of shipped implementation).
+
+[[entry]]
+slice = "SL-042"
+requirement = "REQ-108"
+contributing_change = "P1-recv2-entity-wiring"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/rec.rs", "src/entity.rs"]
+
+[[entry]]
+slice = "SL-042"
+requirement = "REQ-109"
+contributing_change = "P2-coverage-substrate"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/coverage.rs"]
+
+[[entry]]
+slice = "SL-042"
+requirement = "REQ-110"
+contributing_change = "P3-composite-drift-folds"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/coverage.rs", "src/coverage_scan.rs"]
+
+[[entry]]
+slice = "SL-042"
+requirement = "REQ-114"
+contributing_change = "P4-nf001-no-derivation-wall"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/coverage.rs", "src/coverage_scan.rs", "src/reconcile.rs", "src/requirement.rs"]
+
+[[entry]]
+slice = "SL-042"
+requirement = "REQ-115"
+contributing_change = "P5-staleness-via-memory-seam"
+mode = "VA"
+status = "verified"
+git_anchor = "78b4b0036c7305c4f51ba3cd45358876349b6d92"
+touched_paths = ["src/coverage.rs", "src/coverage_scan.rs", "src/git.rs"]
