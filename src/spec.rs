@@ -38,7 +38,7 @@ use crate::meta::{self, Meta};
 use crate::registry::{
     BuildFinding, DescentEdge, InteractionEdge, MemberEdge, ParentEdge, Registry,
 };
-use crate::requirement::{self, ReqKind, Requirement};
+use crate::requirement::{self, ReqKind, ReqStatus, Requirement};
 use crate::tomlfmt::toml_string;
 
 /// The toml/md file stem — shared by both subtypes (`spec-NNN.toml`). Distinct
@@ -725,6 +725,31 @@ pub(crate) fn run_req_add(
     append_member(&members_path, &fk, &label, order)?;
 
     writeln!(io::stdout(), "Added {label} ({fk}) to {spec_ref}")?;
+    Ok(())
+}
+
+/// `doctrine spec req status <REQ-NNN> --to <state> [--note <text>]` — the single
+/// authored-`status` write seam (SL-044 B·P1, design §5.2). The thin impure shell:
+/// find the root, resolve the requirement **by id only** (`REQ-NNN`, no slug/title
+/// derivation — dodges the ISS-004 unescaped-slug abort), and delegate the
+/// edit-preserving FREE any→any transition to `requirement::set_status`. The `--to`
+/// `ReqStatus` is a closed clap `ValueEnum`, so an out-of-vocab value is rejected
+/// before the verb runs; an unknown id surfaces as a read failure.
+///
+/// `--note` is operator prose with no structural home on the requirement entity in
+/// v1 (material prose routes to the future IDE-003 vehicle); it is accepted and
+/// intentionally not spliced into the TOML — preferring no invented field over a
+/// speculative one.
+pub(crate) fn run_req_status(
+    path: Option<PathBuf>,
+    req_ref: &str,
+    to: ReqStatus,
+    _note: Option<String>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let id = requirement::id_from_fk(req_ref)?;
+    requirement::set_status(&root, id, to)?;
+    writeln!(io::stdout(), "Set {} status to {}", req_ref, to.as_str())?;
     Ok(())
 }
 
