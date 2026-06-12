@@ -3,15 +3,16 @@ version = 1
 
 id = 11
 slug = "graph-derived-backlog-priority"
-title = "Graph-Derived Backlog Priority"
+title = "Graph-Derived Priority and Actionability"
 status = "active"
 kind = "product"
 category = "prioritisation"
-tags = ["priority", "backlog", "graph", "actionability", "dependency-resolution", "explanation"]
+tags = ["priority", "actionability", "cross-kind", "graph", "backlog", "dependency-resolution", "explanation"]
 
 responsibilities = [
-  "Derive an explainable priority and actionability view over the registry graph without storing derived judgement as backlog truth.",
-  "Answer 'what should I look at next, and why?' across every work kind in one comparable view.",
+  "Derive an explainable priority and actionability view over the registry graph without storing derived judgement as authored truth.",
+  "Answer 'what should I look at next, and why?' across every work kind in one comparable view, ranking actionable work uniformly rather than backlog alone.",
+  "Synthesise actionability from each item's own lifecycle status and its admitted graph relations — neither half alone decides it.",
   "Resolve typed blockers, blocking, and reverse inbound references from authored outbound relations alone.",
   "Keep authored backlog priority deliberately minimal — operator intent only — while richer ordering is derived and disposable.",
   "Report cycle diagnostics under a relation-kind acyclicity contract and degrade rather than emit a false topological order.",

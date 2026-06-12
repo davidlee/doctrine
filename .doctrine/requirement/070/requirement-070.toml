@@ -3,14 +3,14 @@ version = 1
 
 id = 70
 slug = "survey-the-backlog-in-derived-priority-order"
-title = "Survey the backlog in derived-priority order"
+title = "Survey the corpus in derived-priority order across kinds"
 status = "pending"
 kind = "functional"
 
-description = "An operator can survey the backlog with derived priority, returning active items ordered by the doctrine policy precedence: explicit authored priority, actionability, relation-derived consequence, kind/status, then deterministic fallback."
+description = "An operator can survey the corpus with derived priority, returning active items across all admitted kinds ordered by the doctrine policy precedence: explicit authored priority, actionability, relation-derived consequence, kind/status, then deterministic fallback."
 tags = []
 acceptance_criteria = [
-  "Active backlog items render in the policy-defined precedence with authored priority taking precedence over derived consequence among eligible peers.",
+  "Active items across kinds render in the policy-defined precedence with authored priority taking precedence over derived consequence among eligible peers.",
   "An item captured without authored priority still appears, ordered by derived context and the deterministic fallback.",
   "The ordering precedence is doctrine policy, not a graph-core invariant, and is applied consistently across the result set.",
 ]

@@ -3,14 +3,14 @@ version = 1
 
 id = 75
 slug = "exclude-terminal-and-promoted-items-from-default-active-output"
-title = "Exclude terminal and promoted items from default active output"
+title = "Exclude terminal items of any admitted kind from default active output"
 status = "pending"
 kind = "functional"
 
-description = "A derived priority query excludes terminal backlog items and promoted items from default active output, including them only when explicitly requested."
+description = "A derived priority query excludes terminal items of any admitted kind — and promoted backlog items — from default active output, including them only when explicitly requested."
 tags = []
 acceptance_criteria = [
-  "Terminal (resolved/closed) items are hidden from default active derived output and appear only on explicit request.",
-  "An item with resolution = promoted is excluded from default active output because the promoted slice is authoritative for the scoped work.",
+  "Terminal items of any admitted kind are hidden from default active derived output and appear only on explicit request; the per-kind terminal status mapping is doctrine policy.",
+  "A promoted backlog item is excluded from default active output because the promoted slice is authoritative for the scoped work.",
   "Excluded items remain addressable and are never deleted — exclusion is a view.",
 ]
