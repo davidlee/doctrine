@@ -36,6 +36,7 @@ handover.md
 # Added by cargo
 
 /target
+.worktrees/
 .doctrine/state/
 .doctrine/skills/*
 .doctrine/memory/index/*
