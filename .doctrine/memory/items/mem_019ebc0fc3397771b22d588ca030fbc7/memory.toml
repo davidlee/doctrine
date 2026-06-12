@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebc0fc3397771b22d588ca030fbc7"
+memory_key = "mem.pattern.build.just-check-workspace-gates-members"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "just check gates workspace members — cordage suite now run (SL-052 closed the hole)"
+summary = "just check runs cargo test --workspace; cordage tests/denylist.rs is gated as of SL-052 — supersedes the bare-cargo-test hole memory"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["justfile", "crates/cordage"]
+globs = []
+commands = ["just check", "cargo test"]
+tags = ["testing", "gate", "cordage"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0684b09fa20a8dc488149b749db9324938a36135"
+ref_name = "refs/heads/main"
+checkout_state_id = "64f06a5ad68b2948ba268674af992a27ebf46addf7623edb8595be85c7ff02dc"
+base_commit = "d80ecea5d9c1d40a56be5c5348c292c1efd5a252"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
