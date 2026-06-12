@@ -8,8 +8,8 @@
 //!   emitted KIND-AGNOSTICALLY (DD-2: today only backlog authors `needs`/`after`, so
 //!   they connect only backlog nodes; non-backlog nodes carry none and that is
 //!   correct);
-//! - the SL-046 **reference/lineage overlays** (`ref_overlays`) — the consequence
-//!   inputs;
+//! - the SL-046 **reference/lineage overlays** (one per [`REF_LABELS`] entry) — the
+//!   consequence inputs;
 //! - per-node [`NodeAttr`] (kind, RAW authored status, `promoted`);
 //! - a **consequence pre-pass** tally of inbound work/lineage references; and
 //! - an `OrderSpec` over `[dep Along, seq Along]`.
@@ -57,31 +57,9 @@ pub(crate) struct NodeAttr {
     pub(crate) title: String,
 }
 
-/// An unresolved outbound edge — the authored `(source, label, target)` whose target
-/// did not resolve to a minted node (free-text, dangling, or a no-overlay label),
-/// mirroring `relation_graph`'s dangler shape (keyed by source key here so a future
-/// per-entity query can return only its own). `label` is `None` for the dep/seq axes
-/// (`needs`/`after`), which carry no `RelationLabel` vocabulary entry (PRD-009 item→
-/// item edges, not the SL-046 reference labels).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "priority danglers are a built artifact (the unresolved-prereq record); \
-                  no PHASE-03 surface reads them yet — exercised by the graph tests, kept \
-                  for a future per-entity dangler query"
-    )
-)]
-pub(crate) struct Dangling {
-    pub(crate) source: EntityKey,
-    pub(crate) label: Option<RelationLabel>,
-    pub(crate) target: String,
-}
-
 /// The assembled priority graph (design §5.2). The cordage `Graph`, the
 /// `EntityKey ↔ NodeId` projection, the per-node attributes, the consequence pre-pass
-/// tally, the two dep/seq overlay handles, the reference/lineage overlay set (the
-/// consequence inputs), and the edge-pass danglers. Opaque cordage ids never escape a
+/// tally, and the two dep/seq overlay handles. Opaque cordage ids never escape a
 /// `pub(crate)` signature.
 pub(crate) struct PriorityGraph {
     pub(crate) graph: Graph,
@@ -90,37 +68,13 @@ pub(crate) struct PriorityGraph {
     pub(crate) consequence: BTreeMap<EntityKey, u32>,
     pub(crate) dep_overlay: OverlayId,
     pub(crate) seq_overlay: OverlayId,
-    /// The reference/lineage consequence-input overlays. Their inbound contribution is
-    /// already tallied into `consequence` during build, so no post-build surface reads
-    /// these handles; kept for completeness + the graph tests' overlay-identity
-    /// assertions.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "consequence is pre-tallied into `consequence`; the ref overlay handles \
-                      have no post-build reader yet (exercised by the graph tests)"
-        )
-    )]
-    pub(crate) ref_overlays: Vec<OverlayId>,
-    /// The edge-pass danglers (unresolved outbound targets). No PHASE-03 surface reads
-    /// them yet; exercised by the graph tests, kept for a future dangler query.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "no PHASE-03 surface reads the priority danglers yet (exercised by the \
-                      graph tests; kept for a future per-entity dangler query)"
-        )
-    )]
-    pub(crate) dangling: Vec<Dangling>,
 }
 
 /// The reference/lineage relation labels that back a consequence-input overlay — the
 /// SL-046 overlay-backed labels MINUS the two target-unvalidated ones (`Drift`/
-/// `DecisionRef`, which never resolve). One `Reject`/`Unbounded` overlay each; these
-/// are the `ref_overlays`. Label is overlay identity (the same label from different
-/// source kinds shares ONE overlay).
+/// `DecisionRef`, which never resolve). One `Reject`/`Unbounded` overlay each — the
+/// reference/lineage consequence-input overlays. Label is overlay identity (the same
+/// label from different source kinds shares ONE overlay).
 const REF_LABELS: &[RelationLabel] = &[
     RelationLabel::Specs,
     RelationLabel::Requirements,
@@ -179,8 +133,9 @@ pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
 ///    dedicated pre-intern pass (the `backlog_order` C4 discipline): mint EVERY node
 ///    first, distinct keys asserted, THEN resolve+emit edges (resolve is get-only,
 ///    never intern inside the edge pass).
-/// 4. **Edges** — reference/lineage onto `ref_overlays` (resolve-only; unresolved →
-///    dangler). `needs` → `dep_overlay` (`Reject`, oriented prereq→src i.e. B→A flip,
+/// 4. **Edges** — reference/lineage onto the ref overlays (resolve-only; an
+///    unresolved target contributes no edge). `needs` → `dep_overlay` (`Reject`,
+///    oriented prereq→src i.e. B→A flip,
 ///    `EdgeAttrs::new(0, 0)`). `after` → `seq_overlay` (`Evict`, `EdgeAttrs::new(rank,
 ///    age)`). The dep/seq edges read kind-agnostically (DD-2) — today only backlog
 ///    authors them.
@@ -235,11 +190,9 @@ pub(crate) fn build_from(
     // Reference/lineage overlays (the consequence inputs) + the two dep/seq overlays.
     // Capture every OverlayId from the builder — never fabricate an id.
     let mut ref_by_label: BTreeMap<RelationLabel, OverlayId> = BTreeMap::new();
-    let mut ref_overlays: Vec<OverlayId> = Vec::new();
     for &label in REF_LABELS {
         let ov = builder.overlay(OverlayConfig::new(CyclePolicy::Reject, Arity::Unbounded));
         ref_by_label.insert(label, ov);
-        ref_overlays.push(ov);
     }
     let dep_overlay = builder.overlay(OverlayConfig::new(CyclePolicy::Reject, Arity::Unbounded));
     let seq_overlay = builder.overlay(OverlayConfig::new(CyclePolicy::Evict, Arity::Unbounded));
@@ -282,60 +235,43 @@ pub(crate) fn build_from(
         );
     }
 
-    // 4. Edges — resolve-only (never intern inside the edge pass).
-    let mut dangling: Vec<Dangling> = Vec::new();
+    // 4. Edges — resolve-only (never intern inside the edge pass). An unresolved
+    //    target simply contributes NO edge (it is not recorded — there is no node to
+    //    edge from / to).
     for entity in scanned {
         let Some(src) = projection.resolve(entity.key) else {
             debug_assert!(false, "priority::graph: edge-pass key not interned");
             continue;
         };
 
-        // Reference/lineage edges onto ref_overlays (consequence inputs). Unresolved
-        // or no-overlay (target-unvalidated) targets → dangler.
+        // Reference/lineage edges onto the ref overlays (consequence inputs). An
+        // unresolved or no-overlay (target-unvalidated) target contributes no edge.
         for edge in &entity.outbound {
             if let Some(dst) = resolve(&projection, &edge.target)
                 && let Some(&ov) = ref_by_label.get(&edge.label)
             {
                 builder.edge(ov, src, dst, EdgeAttrs::new(0, 0));
-            } else {
-                dangling.push(Dangling {
-                    source: entity.key,
-                    label: Some(edge.label),
-                    target: edge.target.clone(),
-                });
             }
         }
 
         // dep/seq edges — kind-agnostic (DD-2): present only for backlog entities.
         if let Some(ds) = dep_seq.get(&entity.key) {
             // `A.needs = [B]` ⇒ B must precede A: edge B→A (the flip), hard, never
-            // evicts. An unresolved prereq is a dangler (no node to edge from).
+            // evicts. An unresolved prereq contributes no edge (no node to edge from).
             for prereq_ref in &ds.needs {
-                match resolve(&projection, prereq_ref) {
-                    Some(prereq) => builder.edge(dep_overlay, prereq, src, EdgeAttrs::new(0, 0)),
-                    None => dangling.push(Dangling {
-                        source: entity.key,
-                        label: None, // dep (needs) is item→item, no RelationLabel class
-                        target: prereq_ref.clone(),
-                    }),
+                if let Some(prereq) = resolve(&projection, prereq_ref) {
+                    builder.edge(dep_overlay, prereq, src, EdgeAttrs::new(0, 0));
                 }
             }
             // `A.after = [{to=B, rank}]` ⇒ B before A: edge B→A carrying the genuine
             // `(rank, age)` eviction key; `age` is the entry's index in this item's
             // `after` array (the `backlog_order` discipline).
             for (idx, (to_ref, rank)) in ds.after.iter().enumerate() {
-                match resolve(&projection, to_ref) {
-                    Some(prereq) => {
-                        let age = u64::try_from(idx).map_err(|e| {
-                            anyhow::anyhow!("priority::graph: after-edge index overflows u64: {e}")
-                        })?;
-                        builder.edge(seq_overlay, prereq, src, EdgeAttrs::new(*rank, age));
-                    }
-                    None => dangling.push(Dangling {
-                        source: entity.key,
-                        label: None, // seq (after) is item→item, no RelationLabel class
-                        target: to_ref.clone(),
-                    }),
+                if let Some(prereq) = resolve(&projection, to_ref) {
+                    let age = u64::try_from(idx).map_err(|e| {
+                        anyhow::anyhow!("priority::graph: after-edge index overflows u64: {e}")
+                    })?;
+                    builder.edge(seq_overlay, prereq, src, EdgeAttrs::new(*rank, age));
                 }
             }
         }
@@ -360,8 +296,6 @@ pub(crate) fn build_from(
         consequence,
         dep_overlay,
         seq_overlay,
-        ref_overlays,
-        dangling,
     })
 }
 
@@ -526,15 +460,6 @@ mod tests {
                 "NodeAttr.kind matches the key prefix"
             );
         }
-        // ref_overlays is the SL-046 reference/lineage set (one per REF_LABELS entry),
-        // distinct from the dep/seq overlay handles.
-        assert_eq!(
-            pg.ref_overlays.len(),
-            REF_LABELS.len(),
-            "one ref overlay per reference/lineage label"
-        );
-        assert!(!pg.ref_overlays.contains(&pg.dep_overlay));
-        assert!(!pg.ref_overlays.contains(&pg.seq_overlay));
     }
 
     // -- VT-1 + EX-2: NodeAttr status/promoted reads -------------------------
@@ -678,13 +603,13 @@ mod tests {
         assert!(m6 < m5 && m5 < m7, "mint order is permutation-invariant");
     }
 
-    // -- EX-4: dep/seq edges + danglers (kind-agnostic emission) ---------------
+    // -- EX-4: dep/seq edges; an unresolved target contributes no edge ---------
 
     #[test]
-    fn dep_seq_edges_emitted_for_backlog_unresolved_dangles() {
+    fn dep_seq_edges_emitted_for_backlog_unresolved_contributes_no_edge() {
         let dir = tmp();
         let root = dir.path();
-        // ISS-001 needs RSK-001 (resolvable) and ISS-099 (dangling); after ISS-002.
+        // ISS-001 needs RSK-001 (resolvable) and ISS-099 (unresolved); after ISS-002.
         seed_issue(
             root,
             1,
@@ -705,16 +630,13 @@ mod tests {
             .in_edges(pg.dep_overlay, iss1)
             .map(|(s, _)| s)
             .collect();
-        assert!(
-            dep_preds.contains(&rsk1),
-            "needs edge oriented prereq→src (B→A)"
-        );
-        // The unresolved ISS-099 needs ref dangles.
-        assert!(
-            pg.dangling
-                .iter()
-                .any(|d| d.source == key("ISS", 1) && d.target == "ISS-099"),
-            "unresolved needs prereq dangles"
+        // The unresolved ISS-099 needs ref produced NO edge — RSK-001 is the ONLY
+        // dep predecessor of ISS-001 (the dangling-record was dropped; the absence of
+        // a phantom edge is the surviving behaviour).
+        assert_eq!(
+            dep_preds,
+            vec![rsk1],
+            "only the resolvable needs prereq edges (B→A); unresolved adds nothing"
         );
         // The after edge (ISS-002 → ISS-001) lands on the seq overlay.
         let iss2 = pg.projection.resolve(key("ISS", 2)).unwrap();
@@ -734,35 +656,41 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // Slices author no needs/after — the kind-agnostic read finds nothing; no
-        // panic, no edge. (DD-2: dormant for non-backlog.)
-        seed_slice(root, 1, "");
-        seed_slice(root, 2, "supersedes = [\"SL-001\"]\n");
+        // panic, no dep/seq edge. (DD-2: dormant for non-backlog.) SL-001 references
+        // REQ-005 via the `requirements` consequence label, so resolution is
+        // observable through the consequence tally (the dangling-record is gone; a
+        // resolvable ref still produces its edge, witnessed as a consequence increment).
+        seed_requirement(root, 5);
+        seed_slice(root, 1, "requirements = [\"REQ-005\"]\n");
+        seed_slice(root, 2, "");
         let pg = build(root).unwrap();
         let sl1 = pg.projection.resolve(key("SL", 1)).unwrap();
         assert_eq!(pg.graph.in_edges(pg.dep_overlay, sl1).count(), 0);
         assert_eq!(pg.graph.in_edges(pg.seq_overlay, sl1).count(), 0);
-        // But the reference edge (supersedes) DID land on a ref overlay → consequence
-        // is unaffected (supersedes is not a consequence label) but the edge exists.
-        assert!(
-            pg.dangling.iter().all(|d| d.target != "SL-001"),
-            "SL-001 ref resolves, no dangle"
+        // The resolvable `requirements` ref edge landed: REQ-005's consequence counts it.
+        assert_eq!(
+            pg.consequence.get(&key("REQ", 5)).copied().unwrap_or(0),
+            1,
+            "resolvable consequence ref produces its edge (no phantom dangle)"
         );
     }
 
-    // -- A free-text / no-overlay outbound target dangles ----------------------
+    // -- A free-text / no-overlay outbound target produces no edge -------------
 
     #[test]
-    fn free_text_outbound_target_dangles() {
+    fn free_text_outbound_target_produces_no_edge() {
         let dir = tmp();
         let root = dir.path();
-        // A backlog drift edge is target-unvalidated (no overlay) → always dangles.
+        // A backlog drift edge is target-unvalidated (no overlay) → it produces no
+        // edge at all. With the lone item, its consequence stays zero (the
+        // unresolved free-text target contributes nothing — the surviving behaviour
+        // of the dropped dangling record).
         seed_issue(root, 1, "open", "", "drift = [\"some-free-text\"]\n");
         let pg = build(root).unwrap();
-        assert!(
-            pg.dangling.iter().any(|d| d.source == key("ISS", 1)
-                && d.label == Some(RelationLabel::Drift)
-                && d.target == "some-free-text"),
-            "free-text drift dangles"
+        assert_eq!(
+            pg.consequence.get(&key("ISS", 1)).copied().unwrap_or(0),
+            0,
+            "free-text drift target produces no edge → no consequence"
         );
     }
 }
