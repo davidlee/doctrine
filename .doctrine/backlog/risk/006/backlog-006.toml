@@ -3,12 +3,12 @@ version = 1
 
 id = 6
 slug = "sl-042-coverage-scanstaleness-perf-conditioned-reverse-index-staleness-batching-triggers-revisit-at-the-slice-b-reader"
-title = "SL-042 coverage scan/staleness perf: conditioned reverse-index + staleness-batching triggers, revisit at the Slice-B reader"
+title = "SL-042 coverage scan/staleness perf: reverse-index + staleness-batching — revisited at the SL-044 reader, deferred (no cliff); build on real-scale cliff"
 kind = "risk"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-11"
-updated = "2026-06-11"
+updated = "2026-06-12"
 tags = []
 
 [facet]                         # risk only — every field typed; seeded empty
