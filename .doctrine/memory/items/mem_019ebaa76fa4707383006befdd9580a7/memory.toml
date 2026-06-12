@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebaa76fa4707383006befdd9580a7"
+memory_key = "mem.pattern.entity.corpus-walk-skip-slug-symlink"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Corpus dir-walks must skip the NNN-slug symlink alias beside each numeric entity dir"
+summary = "Entity corpus-walks (read_dir .doctrine/<kind>/*) must skip the NNN-slug symlink alias or every entry doubles"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["src/coverage_scan.rs"]
+globs = []
+commands = []
+tags = ["corpus-walk", "symlink", "coverage"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "6a96b3995df84a7b9e048971987b75821457b031"
+tree = "d7cec8f630cd1c46c3148482ae898c8227bd7151"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "6a96b3995df84a7b9e048971987b75821457b031"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
