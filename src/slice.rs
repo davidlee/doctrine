@@ -1354,13 +1354,13 @@ mod tests {
         assert!(lines[0].contains("phases"), "phases column: {:?}", lines[0]);
         // SL-025: prefixed ids, not bare `001`.
         // consistent terminal slice: no ⚠, full rollup
-        assert!(lines[1].starts_with("SL-001  done"), "{:?}", lines[1]);
+        assert!(lines[1].starts_with("SL-001 │ done"), "{:?}", lines[1]);
         assert!(lines[1].contains("6/6"));
         // done but 2/6 → divergent ⚠ (marker preserved in the status cell value)
-        assert!(lines[2].starts_with("SL-007  done ⚠"), "{:?}", lines[2]);
+        assert!(lines[2].starts_with("SL-007 │ done ⚠"), "{:?}", lines[2]);
         assert!(lines[2].contains("2/6"));
         // untracked → —
-        assert!(lines[3].starts_with("SL-009  proposed"), "{:?}", lines[3]);
+        assert!(lines[3].starts_with("SL-009 │ proposed"), "{:?}", lines[3]);
         assert!(lines[3].contains("—"));
         // no bare numeric id anywhere
         assert!(!out.contains("\n001  "), "no bare numeric id: {out}");
@@ -1394,7 +1394,7 @@ mod tests {
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(
             lines[0].split_whitespace().collect::<Vec<_>>(),
-            vec!["id", "status", "phases", "slug"]
+            vec!["id", "│", "status", "│", "phases", "│", "slug"]
         );
         assert!(
             out.contains("anchoring"),
@@ -1844,7 +1844,7 @@ mod tests {
         let lines: Vec<&str> = out.lines().collect();
         assert!(lines[0].starts_with("id"), "header row: {:?}", lines[0]);
         assert!(lines[0].contains("phases"), "phases column named");
-        assert!(out.contains("SL-001  proposed"), "prefixed id: {out}");
+        assert!(out.contains("SL-001 │ proposed"), "prefixed id: {out}");
         assert!(out.contains("SL-002"), "second slice present: {out}");
         assert!(!out.contains("\n001  "), "no bare numeric id: {out}");
     }

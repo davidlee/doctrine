@@ -162,11 +162,11 @@ fn vt1_default_emits_the_composed_sequence() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "id       kind         status  title\n\
-         ISS-003  issue        open    Cee\n\
-         ISS-002  issue        open    Bee\n\
-         ISS-001  issue        open    Aye\n\
-         IMP-005  improvement  open    Eee\n"
+        "id      │ kind        │ status │ title\n\
+         ISS-003 │ issue       │ open   │ Cee\n\
+         ISS-002 │ issue       │ open   │ Bee\n\
+         ISS-001 │ issue       │ open   │ Aye\n\
+         IMP-005 │ improvement │ open   │ Eee\n"
     );
     assert_eq!(stderr(&out), "", "clean survey: no advisory on stderr");
 }
@@ -184,11 +184,11 @@ fn vt2_by_id_restores_the_classic_kind_then_id_sort() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "id       kind         status  title\n\
-         ISS-001  issue        open    Aye\n\
-         ISS-002  issue        open    Bee\n\
-         ISS-003  issue        open    Cee\n\
-         IMP-005  improvement  open    Eee\n"
+        "id      │ kind        │ status │ title\n\
+         ISS-001 │ issue       │ open   │ Aye\n\
+         ISS-002 │ issue       │ open   │ Bee\n\
+         ISS-003 │ issue       │ open   │ Cee\n\
+         IMP-005 │ improvement │ open   │ Eee\n"
     );
 }
 
@@ -253,9 +253,9 @@ fn vt4_filtered_subset_keeps_global_position() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "id       kind         status  title\n\
-         IMP-007  improvement  open    Imp seven\n\
-         IMP-003  improvement  open    Imp three\n",
+        "id      │ kind        │ status │ title\n\
+         IMP-007 │ improvement │ open   │ Imp seven\n\
+         IMP-003 │ improvement │ open   │ Imp three\n",
         "survivors keep global sequence order (IMP-007 before IMP-003)"
     );
 
@@ -294,9 +294,9 @@ fn vt5_footer_absent_on_a_clean_survey() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "id       kind   status  title\n\
-         ISS-002  issue  open    Bee\n\
-         ISS-001  issue  open    Aye\n"
+        "id      │ kind  │ status │ title\n\
+         ISS-002 │ issue │ open   │ Bee\n\
+         ISS-001 │ issue │ open   │ Aye\n"
     );
     assert!(
         !stdout(&out).contains("overrides:"),
@@ -334,9 +334,9 @@ fn vt5_footer_present_on_stdout_when_a_soft_edge_is_dropped() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "id       kind   status  title\n\
-         ISS-002  issue  open    Bee\n\
-         ISS-001  issue  open    Aye\n\
+        "id      │ kind  │ status │ title\n\
+         ISS-002 │ issue │ open   │ Bee\n\
+         ISS-001 │ issue │ open   │ Aye\n\
          \n\
          overrides:\n\
          \x20\x20ISS-001 \u{2192} ISS-002 dropped (contradicts a need)\n"
@@ -375,9 +375,9 @@ fn vt6_needs_cycle_degrades_to_id_sort_with_a_warning_and_exit_zero() {
     ok(&out); // exit 0 — the degrade never fails the command
     assert_eq!(
         stdout(&out),
-        "id       kind   status  title\n\
-         ISS-001  issue  open    Aye\n\
-         ISS-002  issue  open    Bee\n",
+        "id      │ kind  │ status │ title\n\
+         ISS-001 │ issue │ open   │ Aye\n\
+         ISS-002 │ issue │ open   │ Bee\n",
         "degrade to id-sort on stdout, never empty"
     );
     assert_eq!(
@@ -420,10 +420,10 @@ fn vt9_terminal_row_tails_the_live_chain_under_all() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "id       kind   status  title\n\
-         ISS-005  issue  open    Eee\n\
-         ISS-006  issue  open    Eff\n\
-         ISS-001  issue  closed  Aye\n",
+        "id      │ kind  │ status │ title\n\
+         ISS-005 │ issue │ open   │ Eee\n\
+         ISS-006 │ issue │ open   │ Eff\n\
+         ISS-001 │ issue │ closed │ Aye\n",
         "the terminal ISS-001 tails the live chain despite the lowest id"
     );
     assert_eq!(stderr(&out), "", "clean survey: no advisory on stderr");
