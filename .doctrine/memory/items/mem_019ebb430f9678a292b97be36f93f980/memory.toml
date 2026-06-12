@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebb430f9678a292b97be36f93f980"
+memory_key = "mem.pattern.dispatch.reanchor-base-on-disjoint-head-move"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch funnel re-anchors B to a moved coordination HEAD on a disjointness proof"
+summary = "Dispatch funnel: re-anchor B to the moved coordination HEAD when intervening commits are disjoint from the delta's files, instead of re-dispatching"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch"]
+tags = ["dispatch", "worktree", "funnel"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "092d1aaeb5bab49fe20dff8db42842beddd327c1"
+tree = "52342be15aed221131ce4600952c0704e6494107"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "092d1aaeb5bab49fe20dff8db42842beddd327c1"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
