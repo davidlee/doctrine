@@ -29,18 +29,23 @@ to move first — see Follow-Ups.
    table) into the graph as opaque nodes keyed by globally-unique canonical id,
    re-mapping diagnostics back to doctrine ids (REQ-091).
 2. **Edges from existing authored outbound relations only — reference/lineage,
-   not dep/seq.** Emit typed edges from the *reference and lineage* relations each
-   kind already authors — slice `specs`/`requirements`/`supersedes`; spec
-   `descends_from`/`parent`/members; backlog `specs`/`slices` (+ `drift`, read but
-   free-text with no entity kind → always a dangler, no overlay); governance
-   `supersedes`/`related`. The inert governance `[relationships]` becomes a
-   **read-only** graph input here (no new authored fields — that is slice 3).
-   ADR-004 holds: outbound only. **Excluded**: `needs`/`after` (dep/seq —
-   actionability, slice 2's overlays), `triggers` (mask), `tags` (free-text).
-   **Reader rule (D4):** project the canonical *outbound* direction only and derive
-   reciprocals from `in_edges`; do **not** project governance `superseded_by` (it is
-   the derived inbound of `supersedes`; storing it is the ADR-004 violation IMP-032
-   reconciles in slice 3).
+   not dep/seq.** Emit typed edges from the *reference and lineage* relations
+   **every one of the 11 `KINDS`** already authors — slice
+   `specs`/`requirements`/`supersedes`; spec
+   `descends_from`/`parent`/members/`interactions` (typed spec→spec, single overlay
+   — decision B); backlog `specs`/`slices` (+ `drift`, read but free-text with no
+   entity kind → always a dangler, no overlay); governance `supersedes`/`related`;
+   **RV `reviews`** (`[target].ref`) and **REC `owning_slice`** (decision A — the
+   "all-entity" claim made honest; `decision_ref` → free-text dangler). The inert
+   governance `[relationships]` becomes a **read-only** graph input here (no new
+   authored fields — that is slice 3). ADR-004 holds: outbound only. **Excluded**:
+   `needs`/`after` (dep/seq — actionability, slice 2's overlays), `triggers`
+   (mask), `tags` (free-text). **Reader rule (D4):** project the canonical
+   *outbound* direction only and derive reciprocals from `in_edges`; do **not**
+   project governance `superseded_by` — **not because it is a violation** (it is
+   ADR-004 §5-sanctioned canon, the sole permitted stored reverse field) but
+   because inbound is the registry surface's *derived* job (ADR-004 §3). SL-046
+   removes nothing; IMP-032's removal premise is void (see design §7 D4).
 3. **Universal related/inbound query — direct-only.** Given any entity id, report
    (a) its authored **outbound** relations and (b) its **derived inbound**
    references, computed from cordage `in_edges` (one hop; no `reachable` walk — no
@@ -80,8 +85,9 @@ Boundary — explicitly **out**, deferred to later slices or untouched:
 - `src/integrity.rs` — `KINDS` corpus-wide id table (read; the single id source +
   prefix→kind resolution).
 - Per-kind relation readers — `src/slice.rs`, `src/spec.rs`, `src/governance.rs`,
-  `src/backlog.rs` — each gains a `pub(crate) relation_edges` accessor reading its
-  own (currently private) `Relationships`.
+  `src/backlog.rs`, **`src/review.rs`, `src/rec.rs`** — each gains a `pub(crate)
+  relation_edges` accessor reading its own (currently private) relation struct
+  (`Relationships` / `Target` / `RecMeta`).
 - `src/main.rs` — `inspect` CLI wiring (command layer).
 - `crates/cordage/` — **consumed, not modified** (`in_edges`, `GraphBuilder`).
 
