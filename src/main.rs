@@ -224,6 +224,26 @@ enum Command {
         path: Option<PathBuf>,
     },
 
+    /// Read-only cross-kind relation view of one entity (`<ID>` = SL-NNN, ADR-NNN,
+    /// …): its authored outbound relations, the derived inbound relations, and any
+    /// unresolved / free-text dangling targets — grouped, direct-only (one hop).
+    Inspect {
+        /// Canonical ref of the entity to inspect (e.g. `SL-046`, `ADR-004`).
+        id: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Create and list architecture decision records.
     Adr {
         #[command(subcommand)]
@@ -1590,9 +1610,10 @@ fn write_class(cmd: &Command) -> WriteClass {
             | WorktreeCommand::CheckAllowlist { .. }
             | WorktreeCommand::BranchPointCheck { .. } => Read,
         },
-        // Read-only: the coverage/drift view (never writes / derives status, §5.3)
-        // and the corpus integrity scan (INV-3).
-        Command::Coverage { .. } | Command::Validate { .. } => Read,
+        // Read-only: the coverage/drift view (never writes / derives status, §5.3),
+        // the corpus integrity scan (INV-3), and the cross-kind relation view
+        // (SL-046 — reads only, never mints/derives status).
+        Command::Coverage { .. } | Command::Validate { .. } | Command::Inspect { .. } => Read,
         // Mutates the canonical-id triple — an authored write (D2/D6).
         Command::Reseat { .. } => Write("reseat"),
     }
@@ -1930,6 +1951,12 @@ fn main() -> anyhow::Result<()> {
             json,
             path,
         } => coverage_view::run(path, &reference, columns.as_deref(), format, json),
+        Command::Inspect {
+            id,
+            format,
+            json,
+            path,
+        } => relation_graph::run(path, &id, format, json),
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
             AdrCommand::List { list, path } => adr::run_list(path, list.into_list_args()),
@@ -2613,6 +2640,20 @@ mod write_class_tests {
         assert_eq!(
             cls(Command::Worktree {
                 command: WorktreeCommand::CheckAllowlist { path: None }
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn inspect_is_read() {
+        // SL-046: the cross-kind relation view reads only — never mints/derives.
+        assert_eq!(
+            cls(Command::Inspect {
+                id: "SL-046".to_string(),
+                format: Format::Table,
+                json: false,
+                path: None,
             }),
             None
         );

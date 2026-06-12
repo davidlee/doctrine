@@ -669,15 +669,6 @@ fn read_review(review_root: &Path, id: u32) -> anyhow::Result<ReviewDoc> {
 /// `[target].ref` subject edge `RV-N ──reviews──▶ target` →
 /// [`RelationLabel::Reviews`]. Reads via the existing `read_review` reader (no new
 /// TOML parse). Always exactly one edge (the target ref is required at `new`).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
-                  relation_graph::outbound_for, itself dead until PHASE-03; live \
-                  under cfg(test), retires itself then"
-    )
-)]
 pub(crate) fn relation_edges(
     root: &Path,
     id: u32,

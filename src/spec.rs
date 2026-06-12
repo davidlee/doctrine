@@ -501,15 +501,6 @@ fn read_interactions(interactions_path: &Path) -> anyhow::Result<Vec<Interaction
 /// and re-read from the source at render — C2/D2, never encoded in the label).
 /// Reads via the existing `read_members`/`read_interactions` readers (no new TOML
 /// parse). Ordering: lineage, members, interactions — each in authored order.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
-                  relation_graph::outbound_for, itself dead until PHASE-03; live \
-                  under cfg(test), retires itself then"
-    )
-)]
 pub(crate) fn relation_edges(
     subtype: SpecSubtype,
     root: &Path,
@@ -538,6 +529,26 @@ pub(crate) fn relation_edges(
         edges.push(RelationEdge::new(RelationLabel::Interactions, i.target));
     }
     Ok(edges)
+}
+
+/// The per-edge free-text `type` of a tech spec's outbound `interactions` edges,
+/// keyed by target ref (SL-046 §5.3 / C2 — the `inspect` render re-reads the type
+/// from the SOURCE at render time; it is NOT carried in `InspectView`). Returns an
+/// empty map for a product spec (no `interactions.toml`) or a tech spec with no
+/// edges. Re-uses the existing `read_interactions` reader — no new TOML parse. A
+/// duplicate target keeps the LAST authored type (the map is target-keyed; a spec
+/// authoring two interactions to the same target is degenerate, §5.5).
+pub(crate) fn interaction_types(
+    root: &Path,
+    id: u32,
+) -> anyhow::Result<std::collections::BTreeMap<String, String>> {
+    let name = format!("{id:03}");
+    let dir = root.join(TECH_SPEC_KIND.dir).join(&name);
+    let mut by_target = std::collections::BTreeMap::new();
+    for i in read_interactions(&dir.join("interactions.toml"))? {
+        by_target.insert(i.target, i.kind);
+    }
+    Ok(by_target)
 }
 
 // ---------------------------------------------------------------------------

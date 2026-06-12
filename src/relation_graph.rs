@@ -8,35 +8,21 @@
 //! back, so there is no cycle (the whole reason the vocabulary lives in the leaf).
 //!
 //! PHASE-02 landed the outbound extraction dispatch ([`outbound_for`]). PHASE-03
-//! extends this same file with the all-kind scan ([`build_relation_graph`]), the
+//! extended this file with the all-kind scan ([`build_relation_graph`]), the
 //! `Projection<EntityKey>`, the reference overlays, and the [`inspect`] query
-//! (design §5.4). `inspect` is still unreachable from any binary until PHASE-04
-//! wires the CLI command, so it (and the scan it drives) remains `not(test)`-dead.
-//!
-//! Self-clearing `not(test)` `dead_code` expect (the `dead-code-self-clearing-leaf`
-//! precedent): the scan and `inspect` land ahead of their PHASE-04 `inspect` CLI
-//! consumer. Under `cfg(test)` the VTs exercise the full surface, so the expect
-//! scopes to `not(test)` where the gate's plain `cargo clippy` (bins/lib, no test
-//! cfg) sees the items as genuinely dead; it retires itself when PHASE-04 wires the
-//! command.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-046 PHASE-03 all-kind scan + inspect query — built ahead of \
-                  their PHASE-04 inspect CLI consumer; live under cfg(test), retires \
-                  itself when PHASE-04 wires the command"
-    )
-)]
+//! (design §5.4). PHASE-04 wires the `inspect <ID>` CLI command ([`run`]) — the
+//! render + `--json` surface — so the scan and `inspect` are now live (the
+//! PHASE-03 `not(test)` `dead_code` expect retired itself here, as designed).
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
 use cordage::{Arity, CyclePolicy, EdgeAttrs, Graph, GraphBuilder, OverlayConfig, OverlayId};
 
 use crate::entity;
 use crate::integrity;
-use crate::listing;
+use crate::listing::{self, Format};
 use crate::projection::Projection;
 use crate::relation::{RelationEdge, RelationLabel};
 
@@ -264,11 +250,11 @@ fn resolve_target(
 /// (I2). Inbound is recomputed every query from `in_edges` — nothing stores a
 /// reverse field (ADR-004 §3 / REQ-074).
 #[derive(Debug)]
-struct InspectView {
-    id: String,
-    outbound: Vec<(RelationLabel, Vec<String>)>,
-    inbound: Vec<(RelationLabel, Vec<String>)>,
-    danglers: Vec<(RelationLabel, String)>,
+pub(crate) struct InspectView {
+    pub(crate) id: String,
+    pub(crate) outbound: Vec<(RelationLabel, Vec<String>)>,
+    pub(crate) inbound: Vec<(RelationLabel, Vec<String>)>,
+    pub(crate) danglers: Vec<(RelationLabel, String)>,
 }
 
 /// `inspect <ID>` — the cross-kind relation view of one entity (design §5.2/§5.4).
@@ -290,7 +276,7 @@ struct InspectView {
 /// view, not an error (VT-5 — mirrors a `show`-like read surface over an empty
 /// entity). NEVER reads `graph.provenance()` (C7 — a benign symmetric-`related`
 /// 2-cycle yields a `Reject` `CycleDiagnostic` that must not leak into the view).
-fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
+pub(crate) fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
     let (kref, qid) = integrity::parse_canonical_ref(id)?;
     let query_key = EntityKey {
         prefix: kref.kind.prefix,
@@ -350,6 +336,164 @@ fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
         inbound,
         danglers,
     })
+}
+
+// ---------------------------------------------------------------------------
+// PHASE-04 — the `inspect <ID>` command: render (human + --json) and the shell.
+// ---------------------------------------------------------------------------
+
+/// `doctrine inspect <ID> [--json]` — resolve the root, build the view once, and
+/// render per `Format` (design §5.1 — the main.rs handler delegates here, keeping
+/// the dispatch arm thin; mirrors `coverage_view::run`). An unknown prefix /
+/// malformed ref surfaces the clean `anyhow` error from [`inspect`] (a non-zero
+/// exit, never a panic — EX-1). `--json` forces `Json` over `--format` (the
+/// `coverage_view`/listing `--json` precedent).
+pub(crate) fn run(
+    path: Option<PathBuf>,
+    id: &str,
+    format: Format,
+    json: bool,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let view = inspect(&root, id)?;
+    let resolved = if json { Format::Json } else { format };
+    let out = match resolved {
+        // The queried entity's per-edge interaction `type` is re-read from the
+        // SOURCE here (C2 / §5.3) — a human-render annotation only; never carried
+        // in `InspectView`. Resolve the queried id once for the lookup.
+        Format::Table => render_human(&root, &view)?,
+        Format::Json => render_json(&view)?,
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
+/// Render one entity's relation view for human reading (default). Fixed
+/// deterministic section order — **outbound, then inbound, then danglers** (EX-2);
+/// each section omitted when empty (the `show`-surface convention — governance /
+/// spec `format_show` omit empty relationship blocks; VT-3). Within a section,
+/// labels are already ordered (the `RelationLabel` `Ord`), targets in the view's
+/// order. House style: `Vec<String>` parts each carrying their own newline, joined
+/// by `concat` (the `governance::format_show` / `backlog::format_show` precedent —
+/// avoids the `push_str(&format!)` lint).
+///
+/// Two presentation flips, both by SECTION (never by reading a stored field):
+/// - inbound `Supersedes` renders the word **"superseded by"** (the derived
+///   reciprocal — ADR-004 §3); outbound `Supersedes` stays **"supersedes"**.
+/// - the queried entity's OUTBOUND `Interactions` targets are annotated with their
+///   per-edge free-text `type`, re-read from the source `interactions.toml` via the
+///   spec reader (C2 / EX-4) — `SPEC-002 (calls)`.
+fn render_human(root: &Path, view: &InspectView) -> anyhow::Result<String> {
+    // Re-read the queried entity's interaction types from source (C2) — only a tech
+    // spec authors any; every other kind yields an empty map, so the annotation is a
+    // no-op there. `parse_canonical_ref` already classified the id in `inspect`; the
+    // queried id is `view.id`.
+    let interaction_types = match integrity::parse_canonical_ref(&view.id) {
+        Ok((kref, qid)) if kref.kind.prefix == "SPEC" => crate::spec::interaction_types(root, qid)?,
+        _ => BTreeMap::new(),
+    };
+
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(format!("{} — relations\n", view.id));
+
+    render_outbound(&mut parts, view, &interaction_types);
+    render_inbound(&mut parts, view);
+    render_danglers(&mut parts, view);
+
+    // An entity with no relations at all renders the header plus an explicit note,
+    // so an empty view is never a bare one-liner (VT-3 — empty sections render
+    // cleanly).
+    if view.outbound.is_empty() && view.inbound.is_empty() && view.danglers.is_empty() {
+        parts.push("\n(no relations)\n".to_string());
+    }
+    Ok(parts.concat())
+}
+
+/// Append the outbound section (omitted when empty). The queried tech spec's
+/// `Interactions` targets carry their re-read free-text `type` annotation (C2).
+fn render_outbound(
+    parts: &mut Vec<String>,
+    view: &InspectView,
+    interaction_types: &BTreeMap<String, String>,
+) {
+    if view.outbound.is_empty() {
+        return;
+    }
+    parts.push("\noutbound:\n".to_string());
+    for (label, targets) in &view.outbound {
+        let rendered: Vec<String> = if *label == RelationLabel::Interactions {
+            targets
+                .iter()
+                .map(|t| match interaction_types.get(t) {
+                    Some(ty) => format!("{t} ({ty})"),
+                    None => t.clone(),
+                })
+                .collect()
+        } else {
+            targets.clone()
+        };
+        parts.push(format!("  {}: {}\n", label.name(), rendered.join(", ")));
+    }
+}
+
+/// Append the inbound section (omitted when empty). The `Supersedes` overlay's
+/// inbound is the derived reciprocal — rendered as the word "superseded by"
+/// (ADR-004 §3); the flip is by SECTION, not by reading any stored field.
+fn render_inbound(parts: &mut Vec<String>, view: &InspectView) {
+    if view.inbound.is_empty() {
+        return;
+    }
+    parts.push("\ninbound:\n".to_string());
+    for (label, srcs) in &view.inbound {
+        let word = if *label == RelationLabel::Supersedes {
+            "superseded by"
+        } else {
+            label.name()
+        };
+        parts.push(format!("  {word}: {}\n", srcs.join(", ")));
+    }
+}
+
+/// Append the danglers section (omitted when empty) — the queried entity's
+/// unresolved / free-text / no-overlay outbound targets, grouped by label.
+fn render_danglers(parts: &mut Vec<String>, view: &InspectView) {
+    if view.danglers.is_empty() {
+        return;
+    }
+    parts.push("\ndanglers:\n".to_string());
+    for (label, target) in &view.danglers {
+        parts.push(format!("  {}: {target}\n", label.name()));
+    }
+}
+
+/// Render the `--json` view: the serialized `InspectView`, every surface asserted
+/// (`id`, `outbound`, `inbound`, `danglers` — VT-2). Built MANUALLY with
+/// `serde_json::json!` (the `spec::show_json` precedent — the repo derives no
+/// `Serialize` on domain enums; `RelationLabel` renders via `.name()`). Each label
+/// group is `{ "label": <name>, "targets": [...] }`; each dangler is
+/// `{ "label": <name>, "target": <ref> }`. The interaction `type` is a human-render
+/// extra ONLY (design §5.2) — `--json` serializes the plain 4-field view, so an
+/// agent reads the same shape `InspectView` carries. No trailing newline (the
+/// black-box golden contract — `write!`, not `writeln!`).
+fn render_json(view: &InspectView) -> anyhow::Result<String> {
+    let group = |label: RelationLabel, targets: &[String]| serde_json::json!({ "label": label.name(), "targets": targets });
+    let outbound: Vec<serde_json::Value> =
+        view.outbound.iter().map(|(l, t)| group(*l, t)).collect();
+    let inbound: Vec<serde_json::Value> = view.inbound.iter().map(|(l, t)| group(*l, t)).collect();
+    let danglers: Vec<serde_json::Value> = view
+        .danglers
+        .iter()
+        .map(|(l, t)| serde_json::json!({ "label": l.name(), "target": t }))
+        .collect();
+    let value = serde_json::json!({
+        "kind": "inspect",
+        "id": view.id,
+        "outbound": outbound,
+        "inbound": inbound,
+        "danglers": danglers,
+    });
+    serde_json::to_string_pretty(&value)
+        .map_err(|e| anyhow::anyhow!("failed to serialize inspect JSON: {e}"))
 }
 
 #[cfg(test)]
