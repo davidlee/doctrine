@@ -1,0 +1,79 @@
+id    = 4
+slug  = "sl-044-reconciliation-reconcile-writer-closure-gate-vs-designnf-001"
+title = "SL-044 reconciliation: reconcile writer + closure gate vs design/NF-001"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-044"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "VT-5 verdict-independence test never exercises the write path (vacuous)"
+detail = "reconcile.rs:663 written_status_is_verdict_independent is billed (plan VT-5, docstring §5.6 layer 3) as the BEHAVIOURAL proof of NF-001 — the slice's headline invariant. It varies coverage, computes a verdict, then asserts select_status(fixed_to, prior) == fixed_to (line 686). That is id(x)==x — it never calls run(). The real laundering surface is run() at reconcile.rs:251 (select_status(to, prior) then requirement::set_status). A future edit to select_status(status_from_verdict(verdict), prior) leaves every assertion here green. The ≥3-distinct-verdicts guard (line 693) only proves the INPUTS varied, not that the WRITTEN status is verdict-independent. VT-6 (reconcile.rs:701) already drives run() end-to-end with on-disk assertion but at a single coverage state. Fix: rewire VT-5 through run() reusing VT-6's harness — hold --to fixed, vary on-disk coverage so the verdict ranges, assert the requirement file on disk == --to."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "select_status is an identity fn; docstring overclaims compiler-enforced NF-001 wall"
+detail = "reconcile.rs:76 select_status(to, prior) -> ReqStatus { let _ = prior; to } is fn identity. prior is threaded only to be discarded — the delta's from is read straight from prior in compose_status_rec:155, not via this fn. The docstring (lines 68-75) claims the SIGNATURE is the NF-001 wall the compiler proves. True only because the body does nothing; the real derivation risk is the call site, which the signature does not constrain. Coupled to F1: once VT-5 actually exercises run(), the honest description is 'discipline + VT-5 behavioural test', not 'compiler-proven'. Fix: correct the docstring to claim only signature-isolation (no coverage type in scope) + the VT-5 proof; do not assert the compiler forbids the call site from deriving status."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "major"
+title = "rec_discharges clause (b) drops the for-R qualifier — cross-requirement laundering"
+detail = "slice.rs:976 affirmed_at_current = rec.status_delta.iter().any(|d| d.to == authored.as_str()). Design clause (b): R's status_delta for R must have to == R's current authored status. rec_discharges is not given req, so it cannot check d.requirement == req. latest_owning_rec_for (slice.rs:945) ensures the REC names R somewhere, but clause (b) then scans ALL deltas in that REC. A hand-edited multi-delta REC (schema permits it; RECs are authored hand-editable TOML) discharges R's residual drift on the strength of ANOTHER requirement's to-value coinciding with R's authored status. Latent because the writer emits one-delta RECs — but the close-gate consumes the whole authored corpus, not writer output. Fix: pass req into rec_discharges and match d.requirement == req && d.to == authored."
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "major"
+title = "Parallel implementation: distinct_coverage_keys is a byte-twin of reconcile::distinct_keys"
+detail = "slice.rs:989 distinct_coverage_keys and reconcile.rs:190 distinct_keys are byte-for-byte identical (BTreeSet dedupe on the 4-tuple slice/requirement/contributing_change/mode). slice.rs:986 docstring literally calls it 'the gate's local twin of reconcile::distinct_keys'. CLAUDE.md line 1: 'No parallel implementation! Find potential duplication before writing new code.' Found, named, shipped anyway. Fix: one pub(crate) home — a fn on CoverageKey or in the coverage module — consumed by both call sites."
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "major"
+title = "Reconcile act is not atomic despite the design's 'exactly one atomic REC' (NF-003 torn write)"
+detail = "reconcile.rs:253 requirement::set_status then :254 compose + :277 materialise_populated are two unguarded disk writes, no transaction, no rollback. If the REC mint fails after set_status (id-claim race, disk full), the authored status has moved with no REC recording why — precisely the unreconstructable authored tier NF-003/REQ-116 forbids. 'Exactly one atomic REC' holds for the REC file write in isolation, not for the act. The redesign arm (run_status then no REC) shares the window shape. Needs a /consult: single recovery story (write-REC-first or recover-on-next-run) vs documented ordering + accepted failure mode."
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "minor"
+title = "Dead assertion: assert!(!path.exists() || true) is unconditionally true"
+detail = 'reconcile.rs:734 assert!(!root.join(".doctrine/state").exists() || true). X || true is always true; the assertion proves nothing while the comment claims it proves no runtime-state tree was needed. Fix: assert !exists() or delete the line.'
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "minor"
+title = "Stringly-typed closure-seam check allocates and ignores crosses_closure_seam"
+detail = 'slice.rs:393 if (&from, to) == (&"reconcile".to_owned(), "done") allocates a String purely to compare it, hand-rolling a seam test three lines below the existing crosses_closure_seam(&from, to) helper (slice.rs:618, used by the blocker gate at :373). Fix: at minimum from == "reconcile" && to == "done" (no alloc); better, route both closure gates through one seam classifier so the reconcile->done crossing has a single definition. (crosses_closure_seam matches BOTH seams, so it cannot be reused verbatim for the done-only gate — extend it or add a sibling.)'
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "minor"
+title = "REC corpus read twice per close: undischarged_drift + gate_requirement_set both call recs_owned_by"
+detail = "slice.rs:913 undischarged_drift reads owned_recs via recs_owned_by, then :915 calls gate_requirement_set which at :899 calls recs_owned_by AGAIN — a second full read-and-parse of every owning REC. RSK-006 already flags per-req scan_coverage corpus walks; no need to double the REC read on top. Fix: pass owned_recs into gate_requirement_set."
+
+[[finding]]
+id = "F-9"
+status = "open"
+severity = "nit"
+title = "The --note flag carries three different semantics across the new surface"
+detail = "spec req status binds --note to _note and discards it (spec.rs:747 — documented intent at :739-742, 'no invented field'). reconcile --note for accept/revise is printed then dropped; for redesign it is forwarded into the slice transition record (reconcile.rs:271). Same flag, three behaviours, none 'stored on the thing changed'. The spec discard is a conscious choice, not a hidden lie, but the cross-surface inconsistency is real. Pick one story or document the divergence as intentional per surface."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

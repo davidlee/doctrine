@@ -92,6 +92,29 @@ pub(crate) struct CoverageFile {
     pub(crate) entry: Vec<CoverageEntry>,
 }
 
+/// Collect DISTINCT [`CoverageKey`]s, preserving first-seen order. A key set is a
+/// *set* of backing cells — the same 4-tuple key must not be cited twice. The
+/// corpus walk can surface a key more than once (a slice tree reachable through
+/// both its numeric dir and its slug-alias symlink — ISS-006), so every key-set
+/// producer dedupes through HERE: the reconcile writer's `evidence_ref` and the
+/// close-gate's residual-evidence set share this one deduper (no parallel twin).
+pub(crate) fn distinct_keys(keys: impl Iterator<Item = CoverageKey>) -> Vec<CoverageKey> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for k in keys {
+        let tag = (
+            k.slice.clone(),
+            k.requirement.clone(),
+            k.contributing_change.clone(),
+            k.mode.clone(),
+        );
+        if seen.insert(tag) {
+            out.push(k);
+        }
+    }
+    out
+}
+
 /// Parse a `coverage.toml` body. Serde auto-unescapes; no hand-templating.
 pub(crate) fn parse(s: &str) -> Result<CoverageFile> {
     Ok(toml::from_str(s)?)
