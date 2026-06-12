@@ -2,8 +2,9 @@
 
 ## Context
 
-Slice **3 of 3** in the graph-relations work, and the realisation of **IMP-016**:
-cross-corpus relations are **prose-only** today. The capture surface is uneven —
+Slice **3 of 3** in the graph-relations work, and the realisation of **IMP-016**
+(and **IMP-035**, the slice↔ADR slot): cross-corpus relations are **prose-only**
+today. The capture surface is uneven —
 slices have `specs`/`requirements`/`supersedes`; specs have `descends_from` +
 members; backlog has `specs`/`slices`/`needs`/`after`/`drift`. But:
 - governance kinds (POL/STD/ADR) carry a `[relationships]` block
@@ -11,6 +12,10 @@ members; backlog has `specs`/`slices`/`needs`/`after`/`drift`. But:
   never queried** (`src/governance.rs`);
 - there is **no structural spec↔ADR edge** (a spec citing a governing ADR is
   prose);
+- there is **no structural slice↔ADR edge** — a slice's `[relationships]` block is
+  `{specs, requirements, supersedes}` with **no governance slot**, so a slice
+  governed by an ADR can only cite it in prose (**IMP-035**, surfaced by the
+  SL-046 ↔ ADR-010 interrogation);
 - there is **no product↔product edge** (PRD-to-PRD links are prose).
 
 SL-046 makes the graph read **all existing authored relations** (including the
@@ -28,8 +33,9 @@ first.
    relations** — a `link`-style verb (or `--related`/`--supersedes` flags on the
    existing governance verbs) so POL/STD/ADR relations are *authorable*, not just
    hand-edited inert TOML; surfaced by `show` and the SL-046 query.
-2. **Spec↔ADR structural edge** — a spec can cite the ADR(s) that govern it as a
-   typed relation, not prose.
+2. **Spec↔ADR and slice↔ADR structural edge** — a spec, or a slice (**IMP-035**),
+   can cite the ADR(s) that govern it as a typed relation, not prose. The slice
+   source-kind row gains a governance-target label in ADR-010 D2's legal-set table.
 3. **Product↔product structural edge** — PRD-to-PRD links (e.g. PRD-011 reads
    PRD-009's seam) become a typed relation.
 4. **Forward-edge validation** where the target is a numbered kind in
@@ -51,6 +57,8 @@ first.
 - `src/governance.rs` — make the `[relationships]` block authorable + validated
   (the spine of POL/STD/ADR relations).
 - `src/spec.rs` — spec↔ADR + product↔product relation fields + author verb.
+- `src/slice.rs` — slice→ADR/governance relation field (IMP-035); additive to the
+  existing `{specs, requirements, supersedes}` block.
 - `src/main.rs` — relation-authoring verbs/flags.
 - `src/integrity.rs` — forward-edge validation against `KINDS` (extend the
   existing dangling-citation logic, do not duplicate).

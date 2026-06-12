@@ -1,0 +1,20 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 35
+slug = "slice-relationships-schema-has-no-adr-slot-slice-to-adr-refs-are-prose-only"
+title = "Slice relationships schema has no ADR slot: slice to ADR refs are prose-only"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-12"
+updated = "2026-06-12"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = ["SL-048"]             # realised by SL-048 (structural cross-corpus edges)
+specs  = []
+drift  = []
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
