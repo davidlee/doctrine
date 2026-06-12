@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebb7a25ad72e09551711fed583995"
+memory_key = "mem.pattern.dispatch.three-way-import-onto-moved-shared-main"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch funnel import: 3-way net-diff onto moved shared main, stage-only-delta, commit without -a"
+summary = "Import a worker's net diff onto a HEAD that moved under you: git diff B..S | git apply --3way --index, then commit WITHOUT -a so foreign untracked/dirty stays out; re-capture B=rev-parse HEAD immediately pre-spawn, fork from explicit B"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = []
+globs = []
+commands = ["git apply", "git diff"]
+tags = ["dispatch", "worktree", "funnel"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f320a2928b355c7182ea275b3c65c306d7eb58c2"
+ref_name = "refs/heads/main"
+checkout_state_id = "378fda83650095b43159f7bcf3c05e0544d862ebf57554d9fe61796c1d34ce1d"
+base_commit = "a1dbc1da418137d1b148324d9adca54a13168ec6"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

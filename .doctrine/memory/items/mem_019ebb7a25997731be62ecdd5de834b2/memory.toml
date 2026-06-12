@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebb7a25997731be62ecdd5de834b2"
+memory_key = "mem.pattern.dispatch.shared-target-false-green-touch-rerun"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch verify shared-target false-green: touch + re-run to confirm a fresh compile"
+summary = "Jail shares CARGO_TARGET_DIR across worktrees: a worker's first just check can read a stale compile (false green, new tests unrun) — touch edited files + re-run, confirm new test names executed"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = []
+globs = []
+commands = ["just check"]
+tags = ["dispatch", "worktree", "verify"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f320a2928b355c7182ea275b3c65c306d7eb58c2"
+ref_name = "refs/heads/main"
+checkout_state_id = "40c7419dd6ac2c2609fcd44c7c4a1b17646818f036e9cfa1c64f820511f56467"
+base_commit = "a1dbc1da418137d1b148324d9adca54a13168ec6"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
