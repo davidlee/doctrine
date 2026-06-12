@@ -1338,6 +1338,10 @@ fn req_key(id: &str, req: &Requirement) -> listing::FilterFields {
 /// `select_columns`/`render_columns` UNCHANGED (A5); `Json` emits a faithful
 /// `{kind:"requirement", rows:[…]}` envelope. Empty → `""` (§5.5).
 fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Result<String> {
+    // F4/SL-025 parity: validate `--status` against the requirement known-set
+    // before filtering, exactly as `list_rows` does against `SPEC_STATUSES` — a
+    // bogus status errors here rather than silently emptying the roster (RV-005 F-1).
+    validate_statuses(&args.status, requirement::REQ_STATUSES)?;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let rows = req_rows(root, spec_ref)?;
@@ -3358,5 +3362,39 @@ parent = \"SPEC-002\"
         assert!(msg.contains("bogus"), "names the bad column: {msg}");
         assert!(msg.contains("id"), "lists the available set: {msg}");
         assert!(msg.contains("status"), "lists the available set: {msg}");
+    }
+
+    /// F4/SL-025 parity (RV-005 F-1): `spec req list --status` validates the
+    /// requested value against the requirement known-set, mirroring `spec list`
+    /// (`spec_list_rejects_an_unknown_status_…`) — a bogus status errors naming
+    /// the value, never a silently-empty roster.
+    #[test]
+    fn req_list_rejects_an_unknown_status_with_the_uniform_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        member_a_requirement(
+            root,
+            &root.join(".doctrine/spec/tech/001"),
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+        let err = req_list_rows(
+            root,
+            "SPEC-001",
+            ListArgs {
+                status: vec!["bogus".into()],
+                ..ListArgs::default()
+            },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("bogus"),
+            "names the bad value: {err}"
+        );
     }
 }
