@@ -25,6 +25,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use anyhow::Context;
+use comfy_table::{ContentArrangement, Table, TableComponent};
 use regex_lite::Regex;
 use serde::Serialize;
 
@@ -306,14 +307,29 @@ pub(crate) fn render_columns<R>(rows: &[R], cols: &[&Column<R>]) -> String {
     render_table(&grid)
 }
 
-/// The two-space inter-column gap — the single source of column spacing for every
-/// `*list` surface.
-const COL_GAP: &str = "  ";
+/// The interior column separator: a single box-drawing vertical, surrounded by the
+/// `(1,1)` column padding into the ` │ ` inner gap. The single source of column
+/// spacing for every `*list` surface (SL-053 D7).
+const COLUMN_SEPARATOR: char = '│';
 
-/// Render `rows` as a left-aligned, two-space-gapped text table: each column is
-/// padded to its widest cell, the final column of each row is never padded, and a
-/// trailing newline terminates non-empty output (no rows → `""`, which keeps the
-/// header suppressed on an empty list — design §5.5).
+/// Render `rows` as a left-aligned text table with interior `│` column separators
+/// and no outer frame, no horizontal/header rules: each column is padded to its
+/// widest cell, the first column carries no leading space and the last no trailing
+/// space, and a trailing newline terminates non-empty output (no rows → `""`, which
+/// keeps the header suppressed on an empty list — design §5.5).
+///
+/// comfy-table is the **sole** layout + width-measurement authority (SL-053): all
+/// hand-rolled width maths is gone. The minimalist style is built component-by-
+/// component (D7) — every outer border / corner / horizontal / intersection style
+/// is removed (so `should_draw_left/right_border` and `should_draw_horizontal_lines`
+/// return false → clean edges, no rules) and only [`TableComponent::VerticalLines`]
+/// is set, yielding the interior ` │ ` separator. The first column's left pad and
+/// the last column's right pad are zeroed post-build so both outer edges are clean.
+/// Determinism is bought by BOTH [`ContentArrangement::Disabled`] (never measure the
+/// terminal) AND [`Table::force_no_tty`] (`custom_styling` transitively enables `tty`,
+/// whose content formatter would otherwise consult `stdout().is_terminal()` at format
+/// time — D6). comfy-table omits the final newline; we re-append it for the caller's
+/// print-verbatim seam.
 ///
 /// The single layout authority for every list surface (relocated from `meta.rs`
 /// — it served only numeric kinds there, but the spine serves named (memory) and
@@ -321,37 +337,56 @@ const COL_GAP: &str = "  ";
 /// nothing but a grid of strings (not a column framework). Callers bake any
 /// markers — and the header row — into the cell strings, so it stays
 /// presentation-neutral.
+///
+/// PRECONDITION: `rows` is rectangular (every row the same length). The shared
+/// `render_columns` assembler only ever produces rectangular grids; a ragged grid
+/// is a caller bug and fails loudly under `debug_assert` rather than mis-rendering
+/// (SL-053 F-2) — the old hand-rolled renderer silently tolerated raggedness.
 pub(crate) fn render_table(rows: &[Vec<String>]) -> String {
     if rows.is_empty() {
         return String::new();
     }
-    let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
-    let widths: Vec<usize> = (0..cols)
-        .map(|c| {
-            rows.iter()
-                .filter_map(|r| r.get(c))
-                .map(|cell| cell.chars().count())
-                .max()
-                .unwrap_or(0)
-        })
-        .collect();
-    let mut out = String::new();
+    let width = rows.first().map_or(0, Vec::len);
+    debug_assert!(
+        rows.iter().all(|r| r.len() == width),
+        "render_table requires a rectangular grid; got ragged rows"
+    );
+
+    let mut table = Table::new();
+    // Never measure the terminal, and never let the content formatter consult a tty
+    // at format time — together these make output byte-stable terminal-vs-pipe (D6).
+    table.set_content_arrangement(ContentArrangement::Disabled);
+    table.force_no_tty();
+
+    // Strip every outer/rule component, then set ONLY the interior vertical. The
+    // header row is just the grid's first row (callers bake it in) — we never call
+    // set_header, so no header line is ever drawn.
+    for component in TableComponent::iter() {
+        table.remove_style(component);
+    }
+    table.set_style(TableComponent::VerticalLines, COLUMN_SEPARATOR);
+
     for row in rows {
-        let last = row.len().saturating_sub(1);
-        for (c, cell) in row.iter().enumerate() {
-            if c > 0 {
-                out.push_str(COL_GAP);
-            }
-            out.push_str(cell);
-            if c != last {
-                let pad = widths
-                    .get(c)
-                    .copied()
-                    .unwrap_or(0)
-                    .saturating_sub(cell.chars().count());
-                out.extend(std::iter::repeat_n(' ', pad));
-            }
-        }
+        table.add_row(row.clone());
+    }
+
+    // Zero the first column's left pad and the last column's right pad so the outer
+    // edges carry no separator padding — interior cells keep `(1,1)` for the ` │ `
+    // gap. (comfy-table still fills each cell to its column width, so the last
+    // column's short cells acquire trailing fill; the per-line right-trim below
+    // removes it, reproducing the old renderer's never-pad-the-last-column property
+    // and guaranteeing NO trailing whitespace on any line — SL-053 D7.)
+    let last = width.saturating_sub(1);
+    for (index, column) in table.column_iter_mut().enumerate() {
+        let left = u16::from(index != 0);
+        let right = u16::from(index != last);
+        column.set_padding((left, right));
+    }
+
+    let rendered = table.to_string();
+    let mut out = String::with_capacity(rendered.len() + 1);
+    for line in rendered.lines() {
+        out.push_str(line.trim_end());
         out.push('\n');
     }
     out
@@ -753,20 +788,65 @@ mod tests {
         cells.iter().map(|s| (*s).to_string()).collect()
     }
 
+    // VT-4: empty grid → "" (header suppressed on an empty list).
     #[test]
     fn render_table_empty_is_empty_string() {
         assert_eq!(render_table(&[]), "");
     }
 
+    // VT-1 (force-no-tty determinism): render_table is terminal-size- and
+    // tty-independent. force_no_tty() makes comfy-table's content formatter
+    // short-circuit before stdout().is_terminal(), so the output never carries an
+    // ANSI escape and is byte-stable across repeated calls regardless of the
+    // process's actual stdout state (SL-053 D6). We assert both observable
+    // properties: no ESC byte, and idempotent output.
     #[test]
-    fn render_table_aligns_ragged_columns_and_leaves_last_unpadded() {
-        let out = render_table(&[
-            cells(&["a", "longvalue", "x"]),
-            cells(&["bb", "y", "trailing"]),
-        ]);
-        assert_eq!(out, "a   longvalue  x\nbb  y          trailing\n");
+    fn render_table_is_deterministic_and_carries_no_ansi() {
+        let grid = [
+            cells(&["id", "kind", "status", "title"]),
+            cells(&["SL-001", "slice", "proposed", "Alpha"]),
+        ];
+        let first = render_table(&grid);
+        let second = render_table(&grid);
+        assert_eq!(first, second, "render_table must be byte-stable");
+        assert!(
+            !first.contains('\u{1b}'),
+            "force_no_tty must suppress ANSI styling: {first:?}"
+        );
     }
 
+    // VT-2 (exact line shape): every line has NO leading space, NO trailing
+    // whitespace, and interior separators are ` │ `.
+    #[test]
+    fn render_table_line_shape_minimalist_vertical_separators() {
+        let out = render_table(&[
+            cells(&["id", "kind", "status", "title"]),
+            cells(&["SL-001", "slice", "proposed", "Alpha Thing"]),
+        ]);
+        assert_eq!(
+            out,
+            "id     │ kind  │ status   │ title\n\
+             SL-001 │ slice │ proposed │ Alpha Thing\n"
+        );
+        for line in out.lines() {
+            assert!(
+                !line.starts_with(' '),
+                "no leading space on a line: {line:?}"
+            );
+            assert_eq!(
+                line.trim_end(),
+                line,
+                "no trailing whitespace on a line: {line:?}"
+            );
+            assert!(
+                line.contains(" │ "),
+                "interior separator is ` │ `: {line:?}"
+            );
+        }
+    }
+
+    // VT-2 (the slice-list middle-column case): a wider middle column pads cleanly
+    // and the last column stays edge-clean.
     #[test]
     fn render_table_aligns_a_middle_column_the_slice_case() {
         let out = render_table(&[
@@ -782,12 +862,34 @@ mod tests {
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(
             lines[0],
-            "001  done      4/6  memory-entity-v1     Memory entity v1"
+            "001 │ done     │ 4/6 │ memory-entity-v1    │ Memory entity v1"
         );
         assert_eq!(
             lines[1],
-            "009  proposed  —    slice-status-rollup  Slice status rollup"
+            "009 │ proposed │ —   │ slice-status-rollup │ Slice status rollup"
         );
+    }
+
+    // VT-4 (trailing newline): non-empty output ends in EXACTLY one newline.
+    #[test]
+    fn render_table_non_empty_ends_in_exactly_one_newline() {
+        let out = render_table(&[cells(&["a", "b"]), cells(&["c", "d"])]);
+        assert!(out.ends_with('\n'), "ends in a newline: {out:?}");
+        assert!(
+            !out.ends_with("\n\n"),
+            "exactly one trailing newline: {out:?}"
+        );
+    }
+
+    // VT-3 (rectangular-grid guard, F-2): a ragged grid must fail LOUDLY rather
+    // than mis-render. The old hand-rolled renderer silently tolerated raggedness;
+    // comfy-table is the sole authority now, so we pin the rectangularity invariant
+    // with a debug_assert that panics on a ragged grid (debug builds — tests run
+    // debug).
+    #[test]
+    #[should_panic(expected = "rectangular")]
+    fn render_table_ragged_grid_panics_loudly() {
+        let _ = render_table(&[cells(&["a", "b", "c"]), cells(&["short", "row"])]);
     }
 
     // -- select_columns ----------------------------------------------------
@@ -889,7 +991,7 @@ mod tests {
         let out = render_columns(&rows, &sel);
         assert_eq!(
             out,
-            "id       slug\nADR-001  module-layering\nADR-004  relations\n"
+            "id      │ slug\nADR-001 │ module-layering\nADR-004 │ relations\n"
         );
     }
 
