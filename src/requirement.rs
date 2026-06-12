@@ -115,6 +115,19 @@ impl ReqStatus {
     }
 }
 
+/// The authored-status known-set for `--status` validation on requirement-rostering
+/// list surfaces (`spec req list`), mirroring `spec`'s `SPEC_STATUSES`. Must stay in
+/// lockstep with the [`ReqStatus`] variants — the `req_statuses_matches_the_variants`
+/// drift canary pins it.
+pub(crate) const REQ_STATUSES: &[&str] = &[
+    "pending",
+    "in-progress",
+    "active",
+    "deprecated",
+    "retired",
+    "superseded",
+];
+
 /// A requirement's **observed-evidence** status — the second half of the two-enum
 /// truth model (ADR-009 §3; SL-028 design §5.2/§5.3). Closed set, kebab serde,
 /// mirroring `ReqKind`'s derive shape.
@@ -390,6 +403,26 @@ mod tests {
         // no date token, no leftover placeholder.
         assert!(!body.contains("{{"));
         assert!(!body.contains("created"));
+    }
+
+    /// Drift canary: `REQ_STATUSES` must stay in lockstep with the `ReqStatus`
+    /// variants' kebab serde — adding a variant without the const (or vice versa)
+    /// would desync the `spec req list --status` known-set (mirrors spec's
+    /// `spec_statuses_matches_the_variants`).
+    #[test]
+    fn req_statuses_matches_the_variants() {
+        let from_variants: Vec<&str> = [
+            ReqStatus::Pending,
+            ReqStatus::InProgress,
+            ReqStatus::Active,
+            ReqStatus::Deprecated,
+            ReqStatus::Retired,
+            ReqStatus::Superseded,
+        ]
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
+        assert_eq!(from_variants, REQ_STATUSES);
     }
 
     #[test]
