@@ -4,11 +4,11 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-> **STATUS: DRAFT (2026-06-12).** All three scope OQs resolved (OQ-1/2/3, §6→§7);
-> §5 drafted. Awaiting internal adversarial pass + external challenge before lock.
-> Descends **SPEC-002** / **PRD-013**; completes the user-facing half of **REQ-110**
-> / **REQ-111**. Reference forms: padded entity ids (`SL-045`, `REQ-110`, `ADR-001`);
-> doc-local refs bare (`D1`, `OQ-1`).
+> **STATUS: DRAFT — internal adversarial pass integrated (2026-06-12).** All three scope
+> OQs resolved (OQ-1/2/3, §6→§7); §5 drafted; internal hostile pass (A1–A7, §10) folded in.
+> Awaiting optional external challenge + user sign-off before lock. Descends **SPEC-002** /
+> **PRD-013**; completes the user-facing half of **REQ-110** / **REQ-111**. Reference forms:
+> padded entity ids (`SL-045`, `REQ-110`, `ADR-001`); doc-local refs bare (`D1`, `OQ-1`).
 
 ## 1. Design Problem
 
@@ -111,7 +111,13 @@ the joined view, with no `--coverage` flag on the roster.
   unchanged in behaviour.
 - `src/coverage.rs` — **+** terse `label()` on `Verdict` / `DivergentReason` (display
   helper; the pure fold is untouched).
-- `src/spec.rs` — `spec req list` (mirrors `spec list`'s column-model shape).
+- `src/spec.rs` — `spec req list` (mirrors `spec list`'s column-model shape) **+** one
+  new `pub(crate)` seam `member_reqs` (A1): `resolve_spec_ref` + `read_members` are
+  **private**, so `coverage_view`'s fan must call **one** exported spec entry point, not
+  reach into spec internals (encapsulation + ADR-001 — `spec` never imports
+  `coverage_view`). The requirement-row column model lives **in `spec.rs`** (like
+  `SPEC_COLUMNS`); `src/listing.rs`'s generic `Column`/`select_columns`/`render_columns`
+  is reused **unchanged** (A5 — the slice's "listing.rs edit" note is reuse, not an edit).
 - `src/main.rs` — wire the top-level `Coverage { reference, columns, format/json, path }`
   leaf + `SpecReqCommand::List`.
 
@@ -134,6 +140,13 @@ single-req case, its existing tests being the equivalence proof) or stays as-is;
 walk internals (`collect_matching_entries`, the symlink skip, the HEAD-once staleness
 map) are **lifted, not reinvented** (F3).
 
+**Spec-fan seam** (A1 — the one exported entry point `coverage_view` calls):
+```rust
+// spec.rs — resolve the ref, read members, sort by advisory `order`, return the
+// ordered REQ FKs. Encapsulates resolve_spec_ref + read_members (both private).
+pub(crate) fn member_reqs(root: &Path, spec_ref: &str) -> anyhow::Result<Vec<String>>;
+```
+
 **View compute** (pure over resolved inputs):
 ```rust
 struct CoverageRow {
@@ -154,9 +167,12 @@ fn observed_state(c: &Composite) -> ObservedState {
     else                              { ObservedState::Stale }
 }
 ```
-`observed` is a lossy *hint*; `verdict` is the authoritative reading. The classifier's
-five outputs map 1:1 onto the §5.2 drift-tree branch points (SL-042) — it adds no new
-decision logic, it labels the same states.
+`observed` is a lossy *hint*; `verdict` is the authoritative reading. The classifier is
+**total** over `CoverageStatus ∈ {Planned, InProgress, Verified, Failed, Blocked}`
+(`requirement.rs:131`): the `Stale` arm is the residue — non-empty, no Failed/Blocked, no
+fresh-Verified, not all-forward — i.e. *verified-but-stale or mixed* evidence. Its five
+outputs map 1:1 onto the §5.2 drift-tree branch points (SL-042) — no new decision logic,
+it labels the same states.
 
 **Verdict display** — terse `Verdict::label()` / `DivergentReason::label()` added in
 `coverage.rs`, the **single source** for verdict cell text (`Coherent`,
@@ -192,14 +208,17 @@ would touch reconcile (behaviour-preservation gate). The shared invariant — th
 `doctrine coverage <ref>` flow:
 1. **Dispatch** `<ref>` by prefix → `Target::Req(REQ-NNN)` | `Target::Spec(SpecRef)`;
    unknown prefix → error (`expected REQ-/PRD-/SPEC-NNN`).
-2. **Resolve req set** — single: `{canonicalize_fk(ref)}`; spec: `resolve_spec_ref` →
-   `read_members` → ordered `[REQ-NNN]` (member `order`).
+2. **Resolve req set** — single: `{canonicalize_fk(ref)}`; spec: `spec::member_reqs`
+   (A1) → ordered `[REQ-NNN]` (member `order`).
 3. **Shell scan (once)** — `scan_coverage_batch(root, &wanted)` (the sole git/disk seam).
 4. **Per req (pure)** — `requirement::load` → authored `status`/`kind`; `composite(cells)`;
-   `drift(status, &composite)`; `observed_state(&composite)` → a `CoverageRow`.
+   `drift(status, &composite)`; `observed_state(&composite)` → a `CoverageRow`. A **dangling
+   member FK** (A2 — `load` errors, a corpus health issue `spec validate` flags) does **not**
+   abort the read: the row renders degraded (`status = ?`, an inline load-error note) and the
+   fan continues. A bare single REQ that doesn't exist is still a hard `load` error (no fan to
+   protect).
 5. **Render** — `Table` via the column model, or `Json` typed rows. Empty spec (no
-   members) → `""` (the §5.5 empty contract). Single REQ that doesn't exist →
-   `load` error.
+   members) → `""` (the §5.5 empty contract).
 
 `doctrine spec req list <SPEC>` flow: `resolve_spec_ref` → `read_members` → per member
 `requirement::load` for kind/status → authored rows → column-model render. **No scan.**
@@ -208,8 +227,13 @@ would touch reconcile (behaviour-preservation gate). The shared invariant — th
 
 - **INV-1 (wall, F1/NF-001).** No import/data edge from the coverage fold into the
   authored-status load. `status` is *always* sourced from `requirement::load`, never
-  derived. Pinned by a test asserting `coverage_view` row `status` equals the requirement
-  file's status regardless of coverage state.
+  derived. **Pinned at the command seam, not a pure helper**
+  (`mem.pattern.review.invariant-test-must-drive-the-write-seam`,
+  `mem.pattern.architecture.info-flow-wall-at-signature`): the test drives the `coverage`
+  command's rendered output, varies the on-disk coverage state across the §5.2 spectrum
+  while holding the requirement file's authored status **fixed**, and asserts the rendered
+  `status` cell never moves. (A pure-`observed_state` test can't witness the wall — the
+  wall is at the seam where authored and derived meet, the rendered row.)
 - **INV-2 (one walk).** A spec fan triggers exactly **one** corpus walk
   (`scan_coverage_batch`), independent of member count. Pinned by the equivalence test +
   (where cheap) a walk-count assertion.
@@ -217,11 +241,15 @@ would touch reconcile (behaviour-preservation gate). The shared invariant — th
   field and performs no scan. Pinned by an output-surface assertion.
 - **ASM-1.** `composite`/`drift` are pure and reusable as-is — verified: signatures take
   in-memory cells, no shell. No engine change.
+- **INV-4 (read tolerates corpus health issues, A2).** A spec fan never aborts on a
+  dangling member FK — it renders a degraded row and continues; only a bare single-REQ
+  `load` failure is fatal. Pinned by a fan-with-dangling-member test.
 - **Edge cases.** Bare REQ ref → `label = None` (renders `—`); no spec context exists.
-  Spec with zero members → empty table (`""`). Uncovered requirement → `observed = none`,
-  `composite` empty, `drift` per the §5.2 tree (`Indeterminate` for most authored states).
-  Unborn/non-repo HEAD → every cell `IsStale::Unknown` (inherited from the shell).
-  Malformed `coverage.toml` → skipped, never fatal (inherited).
+  Spec with zero members → empty table (`""`). Dangling member FK → degraded row
+  (INV-4). Uncovered requirement → `observed = none`, `composite` empty, `drift` per the
+  §5.2 tree (`Indeterminate` for most authored states). Unborn/non-repo HEAD → every cell
+  `IsStale::Unknown` (inherited from the shell). Malformed `coverage.toml` → skipped,
+  never fatal (inherited).
 
 ## 6. Open Questions & Unknowns
 
@@ -235,6 +263,12 @@ All three scope OQs are **resolved** (§7). No open blockers.
   `scan_coverage_batch` (delegation) or left standalone? Decide at implementation by the
   behaviour-preservation gate — delegate **only** if byte-identical for the single-req
   case; else keep both over a shared private walker. Not a design blocker.
+- **Q2 (A4, confirm at impl).** The `--json` envelope `kind:"coverage"` labels a **derived
+  view**, not a corpus entity kind. Confirm no conformance check constrains `kind` to the
+  entity set; if it does, name the view field distinctly. Low risk.
+- **Q3 (A7, deferred).** SL-025's `--status` filter is **out of v1 scope** for both reads
+  (an intentional gap, not an oversight). `spec req list` could later filter the roster by
+  authored status; `coverage` by authored status or verdict. Captured, not built.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -289,8 +323,12 @@ TDD red/green/refactor. New tests:
   **ISS-006 slug-symlink no-double-count** (R3).
 - **`observed_state` classifier** — total over the five canonical composite states (reuse
   `coverage.rs`'s `composites()` fixture shape).
-- **`coverage_view` row materialisation** — authored `status` independent of coverage
-  (INV-1); spec fan preserves member order; single-REQ path; `label = None` for a bare REQ.
+- **INV-1 wall, seam-driven** — drive the `coverage` command's rendered output, vary the
+  on-disk coverage state across the §5.2 spectrum with the requirement's authored status
+  held fixed, assert the rendered `status` cell never moves (not a pure-helper test, A3).
+- **`coverage_view` row materialisation** — spec fan preserves member `order`; single-REQ
+  path; `label = None` for a bare REQ; **dangling member FK → degraded row, fan continues**
+  (INV-4, A2).
 - **ref dispatch** — REQ / SPEC / PRD / garbage.
 - **black-box CLI goldens** (`mem.pattern.testing.black-box-cli-golden` + assert *every*
   surface, not just the JSON envelope: `mem.pattern.testing.conformance-asserts-surface-not-just-envelope`)
@@ -304,5 +342,25 @@ Lint as you go (`cargo clippy` zero warnings; `just check` before each commit).
 
 ## 10. Review Notes
 
-- Internal adversarial pass: pending.
-- External challenge (codex gpt-5.5): pending — offered at lock.
+**Internal adversarial pass (2026-06-12) — integrated.**
+- **A1 (blocker → fixed §5.1/§5.2/§5.4).** Cross-module seam was undefined:
+  `resolve_spec_ref`/`read_members` are private, so the fan had no way to the member
+  list. Fix: one exported `spec::member_reqs` seam; spec internals stay private; ADR-001
+  holds.
+- **A2 (major → fixed §5.4/§5.5 INV-4/§9).** Spec fan would crash on a dangling member FK
+  (a corpus health issue `spec validate` flags). Fix: degraded row + continue; only a bare
+  single-REQ `load` failure is fatal.
+- **A3 (major → fixed INV-1/§9).** The wall test must drive the **command seam**, not a
+  pure `observed_state` helper (`mem.pattern.review.invariant-test-must-drive-the-write-seam`,
+  `mem.pattern.architecture.info-flow-wall-at-signature`). Fix: vary coverage at the rendered
+  output with authored status held fixed.
+- **A4 (minor → Q2).** `--json kind:"coverage"` is a view label, not an entity kind —
+  confirm at impl.
+- **A5 (minor → fixed §5.1).** `src/listing.rs` is **reused unchanged**, not edited; the
+  requirement column model lives in `spec.rs`. Slice affected-surface note reconciled.
+- **A6 (minor → fixed §5.2).** `observed_state` confirmed total over the 5 `CoverageStatus`
+  variants; `Stale` arm documented as the verified-but-stale/mixed residue.
+- **A7 (minor → Q3).** `--status` filter intentionally deferred from v1 (captured, not an
+  oversight).
+
+**External challenge (codex gpt-5.5):** pending — offered at lock.
