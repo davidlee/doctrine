@@ -10,4 +10,3 @@ updated = "2026-06-04"
 # When specs land, this section gains (illustrative, not v1):
 #   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
 #   requirements = ["..."]   # implements / updates / verifies
-#   supersedes   = [2]       # slice-to-slice links

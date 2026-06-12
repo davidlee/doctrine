@@ -19,4 +19,3 @@ extra_reqs = ["REQ-112", "REQ-113", "REQ-114", "REQ-116"]
 # When specs land, this section gains (illustrative, not v1):
 #   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
 #   requirements = ["..."]   # implements / updates / verifies
-#   supersedes   = [2]       # slice-to-slice links
