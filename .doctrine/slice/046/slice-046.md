@@ -28,18 +28,25 @@ to move first — see Follow-Ups.
    beyond backlog: scan every numbered entity kind (the `integrity::KINDS` id
    table) into the graph as opaque nodes keyed by globally-unique canonical id,
    re-mapping diagnostics back to doctrine ids (REQ-091).
-2. **Edges from existing authored outbound relations only.** Emit typed edges
-   from the relations each kind already authors — slice `specs`/`requirements`/
-   `supersedes`; spec `descends_from` + members; backlog `specs`/`slices`/`drift`/
-   `needs`/`after`; governance `supersedes`/`superseded_by`/`related`. The inert
-   governance `[relationships]` becomes a **read-only** graph input here (no new
-   authored fields — that is slice 3). ADR-004 holds: outbound only.
-3. **Universal related/inbound query.** Given any entity id, report (a) its
-   authored **outbound** relations and (b) its **derived inbound** references,
-   computed from cordage `in_edges`/`reachable` — never a stored reverse field
-   (REQ-074 / REQ-078 / D8).
-4. **A CLI surface for the query.** Exact shape is a design decision (enrich
-   `<kind> show` vs a dedicated verb) — see Open Questions.
+2. **Edges from existing authored outbound relations only — reference/lineage,
+   not dep/seq.** Emit typed edges from the *reference and lineage* relations each
+   kind already authors — slice `specs`/`requirements`/`supersedes`; spec
+   `descends_from`/`parent`/members; backlog `specs`/`slices`/`drift`; governance
+   `supersedes`/`related`. The inert governance `[relationships]` becomes a
+   **read-only** graph input here (no new authored fields — that is slice 3).
+   ADR-004 holds: outbound only. **Excluded**: `needs`/`after` (dep/seq —
+   actionability, slice 2's overlays), `triggers` (mask), `tags` (free-text).
+   **Reader rule (D4):** project the canonical *outbound* direction only and derive
+   reciprocals from `in_edges`; do **not** project governance `superseded_by` (it is
+   the derived inbound of `supersedes`; storing it is the ADR-004 violation IMP-032
+   reconciles in slice 3).
+3. **Universal related/inbound query — direct-only.** Given any entity id, report
+   (a) its authored **outbound** relations and (b) its **derived inbound**
+   references, computed from cordage `in_edges` (one hop; no `reachable` walk — no
+   `--transitive` in v1) — never a stored reverse field (REQ-074 / REQ-078 / D8).
+4. **`doctrine inspect <ID>`** — the dedicated cross-kind verb (D1). SPEC-001's
+   reserved `inspect` surface, shipped relation-only here; slice 2 layers
+   actionability/blockers onto the same verb.
 
 ## Non-Goals
 
@@ -60,15 +67,19 @@ Boundary — explicitly **out**, deferred to later slices or untouched:
 
 ## Affected Surface
 
-- `src/backlog_order.rs` — the existing adapter; design decides generalise-in-place
-  vs extract a shared all-kind adapter module (the backlog ordering must keep
-  working unchanged — behaviour-preservation gate).
-- `src/integrity.rs` — `KINDS` corpus-wide id table (read; the single id source).
+- `src/projection.rs` — **new (leaf)**: the generic `Projection<K>` bimap primitive
+  (D3), shared by both adapters.
+- `src/relation_graph.rs` — **new (engine)**: the all-kind scan → projection + ref
+  overlays → `inspect` query.
+- `src/backlog_order.rs` — its inline bimap swaps to `Projection<ItemId>`; scan +
+  overlays + `OrderSpec` otherwise **unchanged** (behaviour-preservation gate).
+- `src/integrity.rs` — `KINDS` corpus-wide id table (read; the single id source +
+  prefix→kind resolution).
 - Per-kind relation readers — `src/slice.rs`, `src/spec.rs`, `src/governance.rs`,
-  `src/backlog.rs` — read each kind's authored outbound relations.
-- `src/main.rs` — CLI wiring for the query surface.
-- `crates/cordage/` — **consumed, not modified** (`in_edges`, `reachable`,
-  `GraphBuilder`).
+  `src/backlog.rs` — each gains a `pub(crate) relation_edges` accessor reading its
+  own (currently private) `Relationships`.
+- `src/main.rs` — `inspect` CLI wiring (command layer).
+- `crates/cordage/` — **consumed, not modified** (`in_edges`, `GraphBuilder`).
 
 ## Risks, Assumptions, Open Questions
 
@@ -89,16 +100,16 @@ Assumptions:
 - Canonical id (prefixed, e.g. `SL-046`) is the stable, globally-unique node key
   across all kinds.
 
-Open questions (for `/design`, not resolved here):
-- **Query CLI shape** — enrich each `<kind> show` with a related/inbound section,
-  or a single dedicated cross-kind verb (e.g. `doctrine related <ID>`)? Affects
-  discoverability and the column/render model.
-- **Overlay typing for the relation view** — do spine edges land in a generic
-  "reference" overlay distinct from `dep`/`seq`, or reuse existing overlays? The
-  inbound view needs reachability over reference/lineage edges; actionability
-  (`dep`/`seq`) is slice 2's concern.
-- **Adapter structure** — generalise `backlog_order` vs a new shared adapter the
-  backlog ordering also rides. Must not regress `backlog order`.
+Open questions — **all resolved in `design.md`** (D1–D4):
+- **Query CLI shape** → D1: dedicated `doctrine inspect <ID>`, relation-only,
+  direct-only (SPEC-001's reserved surface; slice 2 layers priority onto it).
+- **Overlay typing** → D2: one `Reject`/`Unbounded` overlay per relation label
+  (label = overlay identity), distinct from `dep`/`seq`. Cycle/error semantics
+  proven safe (`Reject` loses no edges; `in_edges` is composition-free, so no
+  overlay- or union-acyclicity is assumed).
+- **Adapter structure** → D3: extract a generic `Projection<K>` primitive;
+  `backlog_order` and the new `relation_graph` adapter both ride it (backlog scan +
+  overlays untouched — the gate).
 
 ## Verification / Closure Intent
 
@@ -124,3 +135,13 @@ Open questions (for `/design`, not resolved here):
 - Deferred engine seams unaffected here: item-level priority scalar (PRD-011
   OQ-001), trigger file-set sources (IMP-026 / D6), `knowledge_record` consequence
   seam (PRD-010, unbuilt).
+
+Filed during design (challenges captured now, fixes land downstream):
+- **IMP-032** — governance `superseded_by` is a stored reciprocal; derive it, don't
+  store it (ADR-004). SL-046's reader already ignores it; field removal + migration
+  is slice 3.
+- **IMP-033** — cross-kind dep/seq capture (extend `needs`/`after` to specs/slices).
+  Capture-side; slice 3 / PRD-009 + the relation-governance ADR.
+- **IMP-034** — interrogate refactoring *all* relations modelling to a uniform
+  schema. Parallel with or direct successor to this slice; likely feeds slice 3's
+  ADR.
