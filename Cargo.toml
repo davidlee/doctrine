@@ -30,6 +30,7 @@ toml_edit.workspace = true
 glob.workspace = true
 bm25.workspace = true
 regex-lite.workspace = true
+comfy-table.workspace = true
 cordage = { path = "crates/cordage", version = "0.1.1" }
 
 [dev-dependencies]
@@ -85,6 +86,11 @@ glob = "0.3"
 # over full `regex` deliberately: no regex-automata/aho-corasick — id/slug/title
 # matching needs nothing fancy, and it keeps compile time + binary size down.
 regex-lite = "0.1"
+# Table layout + width measurement for every `list` surface (SL-053). The sole
+# authority behind listing::render_table — default-features OFF, custom_styling ON
+# (transitively pulls crossterm via its tty feature, accepted per SL-053 D1/path A;
+# force_no_tty makes piped output terminal-size-independent, D6).
+comfy-table = { version = "7", default-features = false, features = ["custom_styling"] }
 # Corpus-relative BM25 lexical scorer (SL-017). default-features = false drops the
 # DefaultTokenizer/Language stack (stemming/stopwords/deunicode + 5 deps); we drive
 # it with a custom Tokenizer delegating to doctrine's lexer (design D2).
