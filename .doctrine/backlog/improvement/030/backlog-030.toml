@@ -5,10 +5,10 @@ id = 30
 slug = "slice-b-reconcile-writer-closure-gate-nf-001-coverage-status-writer-import-edge-enforcement-sl-042-dependent"
 title = "Slice B: reconcile writer + closure gate + NF-001 coverage->status-writer import-edge enforcement (SL-042 dependent)"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "done"
 created = "2026-06-11"
-updated = "2026-06-11"
+updated = "2026-06-12"
 tags = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
