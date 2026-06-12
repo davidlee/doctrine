@@ -23,6 +23,7 @@ mod meta;
 mod plan;
 mod policy;
 mod rec;
+mod reconcile;
 mod registry;
 mod requirement;
 mod retrieve;
@@ -164,6 +165,35 @@ enum Command {
     Rec {
         #[command(subcommand)]
         command: RecCommand,
+    },
+
+    /// Reconcile ONE requirement against observed coverage — the sole author of
+    /// reconciled requirement status (SL-044). Applies exactly one move and emits
+    /// one atomic REC. `--to` is required for accept/revise, omitted for redesign.
+    Reconcile {
+        /// The requirement to reconcile, canonical `REQ-NNN`.
+        req: String,
+
+        /// The owning slice this act is recorded against, canonical `SL-NNN`.
+        #[arg(long)]
+        slice: String,
+
+        /// The reconciliation move: accept | revise | redesign.
+        #[arg(long = "move", value_parser = rec::RecMove::parse)]
+        r#move: rec::RecMove,
+
+        /// The explicit target status (required for accept/revise; omit for
+        /// redesign). The WRITTEN status — never derived from coverage (NF-001).
+        #[arg(long, value_enum)]
+        to: Option<requirement::ReqStatus>,
+
+        /// Optional operator note (surfaced; not stored in the REC).
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
     },
 
     /// Create and list architecture decision records.
@@ -1467,6 +1497,8 @@ fn write_class(cmd: &Command) -> WriteClass {
             RecCommand::New { .. } => Write("rec new"),
             RecCommand::List { .. } | RecCommand::Show { .. } => Read,
         },
+        // Writes authored requirement status + an authored REC — an authored write.
+        Command::Reconcile { .. } => Write("reconcile"),
         Command::Adr { command } => match command {
             AdrCommand::New { .. } => Write("adr new"),
             AdrCommand::Status { .. } => Write("adr status"),
@@ -1829,6 +1861,23 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => rec::run_show(path, &reference, if json { Format::Json } else { format }),
         },
+        Command::Reconcile {
+            req,
+            slice,
+            r#move,
+            to,
+            note,
+            path,
+        } => reconcile::run(
+            path,
+            &reconcile::ReconcileArgs {
+                req,
+                slice,
+                r#move,
+                to,
+                note,
+            },
+        ),
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
             AdrCommand::List { list, path } => adr::run_list(path, list.into_list_args()),

@@ -928,15 +928,9 @@ pub(crate) fn commits_touching(
 /// `target`. Reuses the `rev-parse --verify HEAD^{commit}` form (the born-frame
 /// capture seam, ~line 629). `None` on an unborn HEAD / non-repo / git failure —
 /// the caller degrades every cell to `IsStale::Unknown`.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-042 P3 reconcile-reader seam: head_sha feeds coverage_scan's \
-                  staleness resolution; no bins/lib consumer until the CLI reader \
-                  slice wires it"
-    )
-)]
+// SL-044 B·P2 wired the consumer (`reconcile` → `coverage_scan::scan_coverage` →
+// `head_sha`), so this is live in the bins/lib build; the self-clearing `not(test)`
+// dead_code expect retired itself as its reason foretold.
 pub(crate) fn head_sha(root: &Path) -> Option<String> {
     git_opt(root, &["rev-parse", "--verify", "HEAD^{commit}"])
         .ok()

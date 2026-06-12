@@ -944,7 +944,7 @@ struct SliceDoc {
 
 /// Parse a slice reference — `SL-025`, `sl-25`, or the bare id `25` — to its
 /// numeric id. The prefix is optional and case-insensitive; the id may be padded.
-fn parse_ref(reference: &str) -> anyhow::Result<u32> {
+pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
     let digits = reference
         .strip_prefix("SL-")
         .or_else(|| reference.strip_prefix("sl-"))

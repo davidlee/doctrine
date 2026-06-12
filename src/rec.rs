@@ -201,6 +201,95 @@ fn render_rec_md(canonical: &str, r#move: &str) -> anyhow::Result<String> {
         .replace("{{move}}", r#move))
 }
 
+/// Render the POPULATED `rec-NNN.toml` for the atomic reconcile-writer path
+/// (SL-044 B·P2, D-B8): the template head (`id`/`slug`/`title`/`[rec]`) plus the
+/// `[[status_delta]]` and `[[evidence_ref]]` array-of-tables appended for each
+/// recorded fact. One materialise, never `rec new` + append (REC immutability,
+/// SL-042 D-Q3). Every spliced value rides `toml_string` so a hostile delta/key
+/// can neither break the document nor inject a key
+/// (mem.pattern.render.toml-splice-escape-user-values) — the array-of-tables idiom
+/// already used by the read schema, hand-emitted so no naive `toml::to_string`
+/// bypasses the escaping seam.
+fn render_rec_toml_populated(doc: &RecDoc) -> anyhow::Result<String> {
+    let mut out = render_rec_toml(doc.id, &doc.slug, &doc.title, &doc.rec)?;
+    for d in &doc.status_delta {
+        out.push_str(&status_delta_table(d));
+    }
+    for e in &doc.evidence_ref {
+        out.push_str(&evidence_ref_table(e));
+    }
+    Ok(out)
+}
+
+/// One `[[status_delta]]` table (the read-schema idiom), every value escaped.
+fn status_delta_table(d: &StatusDelta) -> String {
+    [
+        "\n[[status_delta]]\n".to_owned(),
+        format!("requirement = {}\n", toml_string(&d.requirement)),
+        format!("from = {}\n", toml_string(&d.from)),
+        format!("to = {}\n", toml_string(&d.to)),
+    ]
+    .concat()
+}
+
+/// One `[[evidence_ref]]` table — the stable 4-tuple coverage key, every value
+/// escaped (never a raw splice).
+fn evidence_ref_table(e: &EvidenceRef) -> String {
+    [
+        "\n[[evidence_ref]]\n".to_owned(),
+        format!("slice = {}\n", toml_string(&e.slice)),
+        format!("requirement = {}\n", toml_string(&e.requirement)),
+        format!(
+            "contributing_change = {}\n",
+            toml_string(&e.contributing_change)
+        ),
+        format!("mode = {}\n", toml_string(&e.mode)),
+    ]
+    .concat()
+}
+
+/// Atomically materialise a POPULATED REC from a pre-composed [`RecDoc`] — the sole
+/// author seam the reconcile writer (SL-044 B·P2) calls. Mirrors [`run_new`]'s
+/// claim-retry materialise but writes the populated ledger (deltas + evidence) in
+/// ONE shot (D-B8): one CLI invocation = one move = one atomic REC. The caller has
+/// already composed and validated the doc and resolved any `owning_slice` forward
+/// edge; this fn owns only the id-claim + write. `doc.id` is a placeholder — the
+/// engine assigns the real reserved id and rewrites the `id`/`{{ref}}` tokens.
+/// Returns the materialised id.
+pub(crate) fn materialise_populated(root: &Path, doc: &RecDoc) -> anyhow::Result<u32> {
+    let trunk_ids = crate::git::trunk_entity_ids(root, REC_DIR)?;
+    let out: Materialised = entity::materialise_fresh_prebuilt(
+        &LocalFs,
+        root,
+        REC_DIR,
+        REC_KIND.prefix,
+        &trunk_ids,
+        |id, canonical| {
+            let name = format!("{id:03}");
+            // The claimed id overrides the placeholder so the rendered `id =` and
+            // every id-bearing path match the reserved id.
+            let placed = RecDoc { id, ..doc.clone() };
+            Ok(vec![
+                entity::Artifact::File {
+                    rel_path: PathBuf::from(format!("{name}/rec-{name}.toml")),
+                    body: render_rec_toml_populated(&placed)?,
+                },
+                entity::Artifact::File {
+                    rel_path: PathBuf::from(format!("{name}/rec-{name}.md")),
+                    body: render_rec_md(canonical, &doc.rec.r#move)?,
+                },
+                entity::Artifact::Symlink {
+                    rel_path: PathBuf::from(format!("{name}-{}", doc.slug)),
+                    target: name,
+                },
+            ])
+        },
+    )?;
+    out.eid
+        .numeric_id()
+        .context("rec kind must yield a numeric id")
+}
+
 // ---------------------------------------------------------------------------
 // CLI: `rec new`
 // ---------------------------------------------------------------------------
@@ -571,6 +660,106 @@ mod tests {
         let back: RecDoc = toml::from_str(&text).unwrap();
         assert!(back.status_delta.is_empty(), "empty deltas admitted (F7)");
         assert_eq!(back, doc);
+    }
+
+    /// The populated atomic renderer (B·P2): the head + one `[[status_delta]]` +
+    /// one `[[evidence_ref]]` round-trip back into a faithful `RecDoc` (D-B8).
+    #[test]
+    fn populated_render_round_trips_deltas_and_evidence() {
+        let doc = RecDoc {
+            id: 3,
+            slug: "accept-req-110".to_owned(),
+            title: "accept REQ-110".to_owned(),
+            rec: RecMeta {
+                r#move: "accept".to_owned(),
+                owning_slice: Some("SL-044".to_owned()),
+                decision_ref: None,
+            },
+            status_delta: vec![StatusDelta {
+                requirement: "REQ-110".to_owned(),
+                from: "pending".to_owned(),
+                to: "active".to_owned(),
+            }],
+            evidence_ref: vec![EvidenceRef {
+                slice: "SL-044".to_owned(),
+                requirement: "REQ-110".to_owned(),
+                contributing_change: "SL-040".to_owned(),
+                mode: "VT".to_owned(),
+            }],
+        };
+        let text = render_rec_toml_populated(&doc).unwrap();
+        // A REAL (un-commented) array-of-tables header, not the template's `#  …`
+        // example comment — match a line that is exactly the header.
+        assert!(
+            text.lines().any(|l| l == "[[status_delta]]"),
+            "real delta table: {text}"
+        );
+        assert!(
+            text.lines().any(|l| l == "[[evidence_ref]]"),
+            "real evidence table: {text}"
+        );
+        let back: RecDoc = toml::from_str(&text).unwrap();
+        assert_eq!(back.status_delta, doc.status_delta);
+        assert_eq!(back.evidence_ref, doc.evidence_ref);
+        assert_eq!(back.rec.r#move, "accept");
+        assert_eq!(back.rec.owning_slice.as_deref(), Some("SL-044"));
+    }
+
+    /// A `redesign` REC renders with NO `[[status_delta]]` table (F7) but still
+    /// parses to an empty delta list.
+    #[test]
+    fn populated_render_emits_no_delta_table_when_empty() {
+        let doc = RecDoc {
+            id: 1,
+            slug: "redesign".to_owned(),
+            title: "redesign".to_owned(),
+            rec: RecMeta {
+                r#move: "redesign".to_owned(),
+                owning_slice: Some("SL-044".to_owned()),
+                decision_ref: None,
+            },
+            status_delta: Vec::new(),
+            evidence_ref: Vec::new(),
+        };
+        let text = render_rec_toml_populated(&doc).unwrap();
+        // No REAL (un-commented) status_delta table — only the template's `#  …`
+        // example comment may mention the header.
+        assert!(
+            !text.lines().any(|l| l == "[[status_delta]]"),
+            "no real delta table (F7): {text}"
+        );
+        let back: RecDoc = toml::from_str(&text).unwrap();
+        assert!(back.status_delta.is_empty());
+    }
+
+    /// Hostile free-text in a delta/evidence field rides `toml_string`: a `"` /
+    /// newline cannot break the document or inject a key.
+    #[test]
+    fn populated_render_escapes_hostile_delta_values() {
+        let doc = RecDoc {
+            id: 1,
+            slug: "s".to_owned(),
+            title: "t".to_owned(),
+            rec: RecMeta {
+                r#move: "accept".to_owned(),
+                owning_slice: None,
+                decision_ref: None,
+            },
+            status_delta: vec![StatusDelta {
+                requirement: "REQ-1\"\ninjected = \"x".to_owned(),
+                from: "pending".to_owned(),
+                to: "active".to_owned(),
+            }],
+            evidence_ref: Vec::new(),
+        };
+        let text = render_rec_toml_populated(&doc).unwrap();
+        // The document still parses (the breaker was escaped, not spliced raw) …
+        let back: RecDoc = toml::from_str(&text).unwrap();
+        // … and the hostile value round-trips verbatim, no injected key.
+        assert_eq!(
+            back.status_delta.first().unwrap().requirement,
+            "REQ-1\"\ninjected = \"x"
+        );
     }
 
     /// The `move` field renders to the bare `move` key on disk (serde rename of the
