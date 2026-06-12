@@ -10,17 +10,24 @@ surfaces SPEC-001 names but that do not yet exist —
 `survey` / `next` / `explain` / `blockers` (and `inspect` if not folded into
 SL-046's query).
 
-**This slice broadens intent beyond current canon** and is therefore **blocked on
-a spec revision**. PRD-011 today scopes the *actionable* channel to backlog
-lifecycle only (resolution = promoted/terminal, FR-006); the agreed intent is
+**This slice broadens intent beyond the original canon** — the agreed intent is
 that **all kinds rank as actionable work** (slices, requirements, specs, … with a
-work-like lifecycle). Realising that needs:
-- a **PRD-011 revision** — extend the actionable channel + survey/next semantics
-  to all kinds (or carve which kinds are "actionable"), and
-- a **SPEC-001 revision** — D10 (survey/next sort keys) and the policy/adapter
-  actionability mapping currently assume backlog lifecycle.
+work-like lifecycle), not backlog alone. **The canon revision has now landed** (no
+longer a blocker):
+- **PRD-011** (commit `6d59397`) — renamed "Graph-Derived Priority and
+  Actionability"; the actionable channel spans all admitted kinds via the
+  **status×relations synthesis** (actionable when the item's own lifecycle status
+  is workable *and* its admitted relations leave it unblocked; no kind barred as a
+  kind). New FR-008/`REQ-237` anchors it.
+- **SPEC-001** (commit `c3cb719`) — **D12** fixes the mechanism: `actionable =
+  eligible ∧ ¬blocked`, uniform across kinds; the per-kind **workable|terminal
+  status-class partition** is policy data. New FR-006/`REQ-238` anchors it.
 
-Until those land, this slice cannot be designed against settled canon.
+This slice now designs against settled canon. Two design-time inputs remain (not
+blockers): the exact per-kind partition **rows** (SPEC-001 **OQ-8** / PRD-011
+OQ-010 — settled *at this slice's design*, esp. whether a `draft`/`active` spec or
+`active` PRD is actionable work), and SL-046 landing first (the graph spine this
+slice consumes — see Non-Goals / Risks).
 
 ## Scope & Objectives
 
@@ -66,13 +73,17 @@ Until those land, this slice cannot be designed against settled canon.
 ## Risks, Assumptions, Open Questions
 
 Blocking dependency:
-- **Canon revision is a hard prerequisite** (PRD-011 + SPEC-001). Designing/
-  building before it = building against stale canon (route gate).
+- ~~**Canon revision is a hard prerequisite** (PRD-011 + SPEC-001).~~ **Landed**
+  (PRD-011 `6d59397`, SPEC-001 `c3cb719`) — see Context. Remaining hard
+  prerequisite: **SL-046 lands first** (the graph spine this slice consumes).
 
-Open questions (design-time, after the revision):
-- **Which kinds are "actionable"?** A pending requirement or proposed slice is
-  work; an accepted ADR is not. The revision must define the per-kind
-  actionable/terminal lifecycle mapping (policy, not core — D2 boundary test).
+Open questions (design-time):
+- **Which per-kind statuses are "actionable"?** The *model* is settled — actionable
+  = workable status ∧ unblocked, no kind barred as a kind (SPEC-001 D12). What
+  remains is the per-kind **status-class partition rows** (SPEC-001 OQ-8): clear-cut
+  for most (backlog open → workable, ADR accepted → terminal), genuinely open for
+  kinds with no work-shaped lifecycle (`draft`/`active` spec? `active` PRD?). Settle
+  these rows here, as policy data (D2 boundary test).
 - **Cross-kind `consequence`** — inbound reference weight across kinds; PRD-011
   OQ-002 deferred knowledge_record (still unbuilt). v1 = existing reference/
   lineage edges only.
