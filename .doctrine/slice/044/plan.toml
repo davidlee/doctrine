@@ -28,9 +28,12 @@ name      = "Write seam — spec req status setter"
 objective = """
 The authored-truth write primitive the reconcile writer needs (B·P1, D-B4/D-B6):
 one `spec req status <REQ> --to <state> [--note]` edit-preserving transition on the
-requirement's authored `status`, mirroring `set_slice_status` (`toml_edit::DocumentMut`
-in-place mutation — preserve comments / `[relationships]` / unknown keys; stamp
-`updated`). D-B6 (LOCKED): a FREE any→any setter mirroring `governance::set_status`
+requirement's authored `status`, mirroring `set_slice_status`'s edit-preserving shape
+(`toml_edit::DocumentMut` in-place mutation — preserve comments / `[relationships]` /
+unknown keys). NO `updated` stamp (consult 2026-06-12): the requirement entity carries
+no `created`/`updated` field by deliberate contract (`requirement.rs:70`, git is the
+trail) — mirror the edit-preservation only, like `governance::set_status`. D-B6
+(LOCKED): a FREE any→any setter mirroring `governance::set_status`
 (the adr precedent), NOT the ordered `set_slice_status` FSM — `revise` must move any
 direction to correct a mis-claim (e.g. `active→pending` when evidence refutes a
 claimed satisfaction); a forward-only FSM would refuse exactly those corrections.
@@ -49,13 +52,13 @@ entrance_criteria = [
   { id = "EN-2", text = "set_slice_status edit-preserving pattern (slice.rs:478) + governance::set_status free-setter precedent present to mirror; spec req tree has add-only today (no status verb)" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "`spec req status <REQ> --to <state>` transitions the authored ReqStatus edit-preservingly: toml_edit DocumentMut; comments / [relationships] / unknown keys survive; `updated` stamped (mirrors set_slice_status)" },
+  { id = "EX-1", text = "`spec req status <REQ> --to <state>` transitions the authored ReqStatus edit-preservingly: toml_edit DocumentMut; comments / [relationships] / unknown keys survive; NO `updated` stamp — requirements carry no such field (consult 2026-06-12)" },
   { id = "EX-2", text = "Free any→any (D-B6): any ReqStatus → any ReqStatus accepted incl. backward (active→pending) and same-state; no FSM order, no terminal guard" },
   { id = "EX-3", text = "Transition by requirement id only — no title/slug derivation (dodges ISS-004); unknown id / invalid --to rejected cleanly" },
   { id = "EX-4", text = "Clock/disk confined to the thin shell (ADR-001); clippy zero-warning bins/lib, just check green" },
 ]
 verification = [
-  { id = "VT-1", expects = "B·P1: set status round-trips edit-preservingly — comments, [relationships], unknown keys survive; `updated` stamped (mirror of the set_slice_status pattern)" },
+  { id = "VT-1", expects = "B·P1: set status round-trips edit-preservingly — comments, [relationships], unknown keys survive; NO `updated` stamp (requirement entity has no such field; consult 2026-06-12)" },
   { id = "VT-2", expects = "B·P1/D-B6: free any→any — active→pending (backward) and a same-state set both succeed; no FSM refusal, no terminal guard" },
   { id = "VT-3", expects = "B·P1: unknown REQ id and invalid --to state each rejected with a clear error; transition is by id, no slug derivation (ISS-004 dodge)" },
 ]
