@@ -1118,7 +1118,7 @@ mod tests {
         // SL-025: the ADR section now renders via the migrated spine path —
         // prefixed ADR- ids + a header row.
         assert!(
-            snap.contains("ADR-001  accepted"),
+            snap.contains("ADR-001 │ accepted"),
             "accepted ADR row projected with prefixed id:\n{snap}"
         );
         assert!(
@@ -1176,7 +1176,7 @@ mod tests {
 
         // the required policy projects with a prefixed POL- id + header row.
         assert!(
-            snap.contains("POL-001  required"),
+            snap.contains("POL-001 │ required"),
             "required policy row projected with prefixed id:\n{snap}"
         );
         // draft / deprecated / retired are all absent — boot is the in-force view.
@@ -1254,11 +1254,11 @@ mod tests {
 
         // both in-force standards project with prefixed STD- ids.
         assert!(
-            snap.contains("STD-002  default"),
+            snap.contains("STD-002 │ default"),
             "default standard row projected with prefixed id:\n{snap}"
         );
         assert!(
-            snap.contains("STD-003  required"),
+            snap.contains("STD-003 │ required"),
             "required standard row projected with prefixed id:\n{snap}"
         );
         // draft / deprecated / retired are absent — boot is the in-force view.

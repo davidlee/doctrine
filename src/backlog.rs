@@ -2368,7 +2368,7 @@ tags = []
         let header = out.lines().next().unwrap();
         assert_eq!(
             header.split_whitespace().collect::<Vec<_>>(),
-            vec!["id", "slug", "title"]
+            vec!["id", "│", "slug", "│", "title"]
         );
         assert!(
             out.contains("token-expiry"),

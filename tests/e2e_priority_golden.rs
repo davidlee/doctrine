@@ -143,11 +143,11 @@ fn survey_human_importance_order_blocked_last_terminal_promoted_excluded() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id       kind  status           cons  blocker  title\n\
-         ISS-002  ISS   open             0              Free work\n\
-         RSK-001  RSK   open             0              The prereq\n\
-         RV-001   RV    active           0              The review\n\
-         ISS-001  ISS   open    BLOCKED  0     RSK-001  Blocked work\n"
+        "id      │ kind │ status │         │ cons │ blocker │ title\n\
+         ISS-002 │ ISS  │ open   │         │ 0    │         │ Free work\n\
+         RSK-001 │ RSK  │ open   │         │ 0    │         │ The prereq\n\
+         RV-001  │ RV   │ active │         │ 0    │         │ The review\n\
+         ISS-001 │ ISS  │ open   │ BLOCKED │ 0    │ RSK-001 │ Blocked work\n"
     );
 }
 
@@ -162,11 +162,11 @@ fn survey_all_reveals_terminal_and_promoted() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let body = stdout(&out);
     assert!(
-        body.contains("ISS-003  ISS   closed"),
+        body.contains("ISS-003 │ ISS  │ closed"),
         "terminal revealed: {body}"
     );
     assert!(
-        body.contains("ISS-004  ISS   open"),
+        body.contains("ISS-004 │ ISS  │ open"),
         "promoted revealed: {body}"
     );
 }
@@ -185,10 +185,10 @@ fn next_human_actionable_only_blocked_absent() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id       kind  status  unblocks  title\n\
-         ISS-002  ISS   open    0         Free work\n\
-         RSK-001  RSK   open    1         The prereq\n\
-         RV-001   RV    active  0         The review\n"
+        "id      │ kind │ status │ unblocks │ title\n\
+         ISS-002 │ ISS  │ open   │ 0        │ Free work\n\
+         RSK-001 │ RSK  │ open   │ 1        │ The prereq\n\
+         RV-001  │ RV   │ active │ 0        │ The review\n"
     );
     // The blocked item is absent from the actionable worklist.
     assert!(

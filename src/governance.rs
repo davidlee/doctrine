@@ -567,7 +567,7 @@ mod tests {
         // VT-1: a header row, then prefixed ADR- ids — not bare `001`.
         assert!(lines[0].starts_with("id"), "header row: {:?}", lines[0]);
         assert!(lines[0].contains("status"), "header names columns");
-        assert!(out.contains("ADR-001  accepted"), "prefixed id: {out}");
+        assert!(out.contains("ADR-001 │ accepted"), "prefixed id: {out}");
         assert!(out.contains("ADR-002"), "second ADR present: {out}");
         assert!(!out.contains("\n001  "), "no bare numeric id: {out}");
     }
@@ -745,7 +745,7 @@ mod tests {
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(
             lines[0].split_whitespace().collect::<Vec<_>>(),
-            ["id", "status", "title"],
+            ["id", "│", "status", "│", "title"],
             "default header is slug-free: {out}"
         );
         assert!(!out.contains("use-rust"), "slug cell hidden: {out}");
@@ -770,7 +770,7 @@ mod tests {
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(
             lines[0].split_whitespace().collect::<Vec<_>>(),
-            ["slug", "id"],
+            ["slug", "│", "id"],
             "requested order wins: {out}"
         );
         assert!(out.contains("use-rust"), "slug revealed: {out}");

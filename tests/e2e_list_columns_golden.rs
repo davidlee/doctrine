@@ -285,9 +285,9 @@ fn backlog_list_default_table_is_byte_exact() {
     // precedes ISS-; `closed` (terminal) ABSENT.
     assert_eq!(
         stdout(&out),
-        "id       kind         status   title\n\
-         IMP-009  improvement  open     Shared columns\n\
-         ISS-002  issue        triaged  Flaky test\n"
+        "id      │ kind        │ status  │ title\n\
+         IMP-009 │ improvement │ open    │ Shared columns\n\
+         ISS-002 │ issue       │ triaged │ Flaky test\n"
     );
 }
 
@@ -301,9 +301,9 @@ fn slice_list_default_table_is_byte_exact() {
     // tree); ascending by id; `done` (hidden) ABSENT.
     assert_eq!(
         stdout(&out),
-        "id      status    phases  title\n\
-         SL-009  proposed  —       Status rollup\n\
-         SL-025  started   —       Listing spine\n"
+        "id     │ status   │ phases │ title\n\
+         SL-009 │ proposed │ —      │ Status rollup\n\
+         SL-025 │ started  │ —      │ Listing spine\n"
     );
 }
 
@@ -319,12 +319,12 @@ fn spec_list_default_table_is_byte_exact_multi_block() {
     assert_eq!(
         stdout(&out),
         "product\n\
-         id       status  title       #members\n\
-         PRD-003  draft   Onboarding  0\n\
-         PRD-007  active  Billing     2\n\
+         id      │ status │ title      │ #members\n\
+         PRD-003 │ draft  │ Onboarding │ 0\n\
+         PRD-007 │ active │ Billing    │ 2\n\
          tech\n\
-         id        status  title       #members\n\
-         SPEC-002  active  Auth spine  3\n"
+         id       │ status │ title      │ #members\n\
+         SPEC-002 │ active │ Auth spine │ 3\n"
     );
 }
 
@@ -340,9 +340,9 @@ fn policy_list_default_table_is_byte_exact() {
     // e2e_standard_cli_golden.rs:288; policy is the breadth representative (T7).
     assert_eq!(
         stdout(&out),
-        "id       status    title\n\
-         POL-002  draft     Branch naming\n\
-         POL-004  required  Commit style\n"
+        "id      │ status   │ title\n\
+         POL-002 │ draft    │ Branch naming\n\
+         POL-004 │ required │ Commit style\n"
     );
 }
 
@@ -365,9 +365,9 @@ fn backlog_list_columns_selects_orders_and_reveals_slug() {
     // ItemId)` — ItemId sorts by prefix string, so IMP- precedes ISS-.
     assert_eq!(
         stdout(&out),
-        "id       slug         status\n\
-         IMP-009  shared-cols  open\n\
-         ISS-002  flaky-test   triaged\n"
+        "id      │ slug        │ status\n\
+         IMP-009 │ shared-cols │ open\n\
+         ISS-002 │ flaky-test  │ triaged\n"
     );
 }
 
@@ -380,9 +380,9 @@ fn slice_list_columns_selects_orders_and_reveals_slug() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "id      slug           phases\n\
-         SL-009  status-rollup  —\n\
-         SL-025  listing-spine  —\n"
+        "id     │ slug          │ phases\n\
+         SL-009 │ status-rollup │ —\n\
+         SL-025 │ listing-spine │ —\n"
     );
 }
 
@@ -397,12 +397,12 @@ fn spec_list_columns_reveals_slug_per_block() {
     assert_eq!(
         stdout(&out),
         "product\n\
-         id       slug        #members\n\
-         PRD-003  onboarding  0\n\
-         PRD-007  billing     2\n\
+         id      │ slug       │ #members\n\
+         PRD-003 │ onboarding │ 0\n\
+         PRD-007 │ billing    │ 2\n\
          tech\n\
-         id        slug        #members\n\
-         SPEC-002  auth-spine  3\n"
+         id       │ slug       │ #members\n\
+         SPEC-002 │ auth-spine │ 3\n"
     );
 }
 
@@ -416,9 +416,9 @@ fn policy_list_columns_reorders_and_reveals_slug() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "id       status    slug           title\n\
-         POL-002  draft     branch-naming  Branch naming\n\
-         POL-004  required  commit-style   Commit style\n"
+        "id      │ status   │ slug          │ title\n\
+         POL-002 │ draft    │ branch-naming │ Branch naming\n\
+         POL-004 │ required │ commit-style  │ Commit style\n"
     );
 }
 
@@ -556,8 +556,8 @@ fn spec_omits_an_empty_subtype_block_entirely() {
     assert_eq!(
         stdout(&out),
         "tech\n\
-         id        status  title       #members\n\
-         SPEC-002  active  Auth spine  3\n"
+         id       │ status │ title      │ #members\n\
+         SPEC-002 │ active │ Auth spine │ 3\n"
     );
 }
 
@@ -659,9 +659,9 @@ fn memory_list_default_table_is_byte_exact() {
     // keyless memory shows `-`; uid-asc within one date (MEM_A before MEM_B).
     assert_eq!(
         stdout(&out),
-        "uid                                   type     status  trust   key                     title\n\
-         mem_0000000000000000000000000000000a  pattern  active  high    mem.pattern.cli.skinny  Skinny CLI\n\
-         mem_0000000000000000000000000000000b  fact     active  medium  -                       A bare fact\n"
+        "uid                                  │ type    │ status │ trust  │ key                    │ title\n\
+         mem_0000000000000000000000000000000a │ pattern │ active │ high   │ mem.pattern.cli.skinny │ Skinny CLI\n\
+         mem_0000000000000000000000000000000b │ fact    │ active │ medium │ -                      │ A bare fact\n"
     );
 }
 
@@ -674,9 +674,9 @@ fn memory_list_columns_selects_a_subset_in_order() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "key                     title\n\
-         mem.pattern.cli.skinny  Skinny CLI\n\
-         -                       A bare fact\n"
+        "key                    │ title\n\
+         mem.pattern.cli.skinny │ Skinny CLI\n\
+         -                      │ A bare fact\n"
     );
 }
 

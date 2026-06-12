@@ -1798,8 +1798,8 @@ mod tests {
         let out = list_rows(root, list_args()).unwrap();
         assert!(out.starts_with("product\n"), "product block leads: {out}");
         assert!(out.contains("#members"));
-        assert!(out.contains("PRD-001  draft   Onboarding"), "{out}");
-        assert!(out.contains("PRD-002  draft   Billing"), "{out}");
+        assert!(out.contains("PRD-001 │ draft  │ Onboarding"), "{out}");
+        assert!(out.contains("PRD-002 │ draft  │ Billing"), "{out}");
         // slug is dropped from the default set (still reachable via --columns).
         assert!(!out.contains("onboarding"), "slug hidden by default: {out}");
         assert!(!out.contains("billing"), "slug hidden by default: {out}");
@@ -1836,7 +1836,7 @@ mod tests {
         assert!(out.starts_with("product\n"), "block label preserved: {out}");
         assert!(out.contains("id"));
         assert!(out.contains("slug"));
-        assert!(out.contains("PRD-001  onboarding"), "{out}");
+        assert!(out.contains("PRD-001 │ onboarding"), "{out}");
         // unselected columns are gone (title/status/#members).
         assert!(!out.contains("#members"), "members dropped: {out}");
         assert!(!out.contains("Onboarding"), "title dropped: {out}");
@@ -2013,7 +2013,7 @@ mod tests {
         .unwrap();
         // default table shows the title (D4 swap); the status filter still
         // selects within the subtype.
-        assert!(active.contains("PRD-002  active  Billing"), "{active}");
+        assert!(active.contains("PRD-002 │ active │ Billing"), "{active}");
         assert!(!active.contains("Onboarding"));
     }
 

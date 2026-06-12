@@ -246,8 +246,8 @@ fn coverage_req_table_is_byte_exact_no_label_column() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id       status   observed  verdict\n\
-         REQ-001  pending  none      Coherent\n"
+        "id      │ status  │ observed │ verdict\n\
+         REQ-001 │ pending │ none     │ Coherent\n"
     );
 }
 
@@ -273,9 +273,9 @@ fn coverage_spec_table_member_fan_in_order_with_label_column() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "label   id       status   observed  verdict\n\
-         FR-001  REQ-001  pending  none      Coherent\n\
-         NF-001  REQ-002  active   none      Indeterminate\n"
+        "label  │ id      │ status  │ observed │ verdict\n\
+         FR-001 │ REQ-001 │ pending │ none     │ Coherent\n\
+         NF-001 │ REQ-002 │ active  │ none     │ Indeterminate\n"
     );
 }
 
@@ -412,17 +412,21 @@ fn coverage_spec_table_dangling_member_inline_error_fan_continues() {
     // not fixed-width byte prefixes.
     assert_eq!(
         lines[0].split_whitespace().collect::<Vec<_>>(),
-        ["label", "id", "status", "observed", "verdict"]
+        [
+            "label", "│", "id", "│", "status", "│", "observed", "│", "verdict"
+        ]
     );
     // healthy member renders fully (fan did not abort): label/id + the typed cells.
     let healthy: Vec<&str> = lines[1].split_whitespace().collect();
     assert_eq!(
         healthy,
-        ["FR-001", "REQ-001", "pending", "none", "Coherent"]
+        [
+            "FR-001", "│", "REQ-001", "│", "pending", "│", "none", "│", "Coherent"
+        ]
     );
     // dangling member renders the inline load-error note in place of typed cells.
     assert!(
-        lines[2].starts_with("FR-002  REQ-999  "),
+        lines[2].starts_with("FR-002 │ REQ-999 │ "),
         "dangling row label/id: {}",
         lines[2]
     );
@@ -444,8 +448,8 @@ fn coverage_columns_selects_and_orders() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id       verdict\n\
-         REQ-001  Coherent\n"
+        "id      │ verdict\n\
+         REQ-001 │ Coherent\n"
     );
 }
 
@@ -501,9 +505,9 @@ fn spec_req_list_table_roster_byte_exact() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id       label   kind        status\n\
-         REQ-001  FR-001  functional  pending\n\
-         REQ-002  NF-001  quality     active\n"
+        "id      │ label  │ kind       │ status\n\
+         REQ-001 │ FR-001 │ functional │ pending\n\
+         REQ-002 │ NF-001 │ quality    │ active\n"
     );
 }
 
@@ -566,8 +570,8 @@ fn spec_req_list_columns_selects() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id       status\n\
-         REQ-001  pending\n"
+        "id      │ status\n\
+         REQ-001 │ pending\n"
     );
 }
 
@@ -624,9 +628,9 @@ fn spec_req_list_dangling_member_degrades_does_not_abort() {
     // absolute path — split on whitespace for the healthy row's typed cells.
     assert_eq!(
         lines[1].split_whitespace().collect::<Vec<_>>(),
-        ["REQ-001", "FR-001", "functional", "pending"]
+        ["REQ-001", "│", "FR-001", "│", "functional", "│", "pending"]
     );
-    assert!(lines[2].starts_with("REQ-999  FR-002  "));
+    assert!(lines[2].starts_with("REQ-999 │ FR-002 │ "));
     assert!(
         lines[2].contains("load error"),
         "degraded row note: {}",
