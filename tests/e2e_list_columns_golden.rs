@@ -557,9 +557,167 @@ fn spec_omits_an_empty_subtype_block_entirely() {
 }
 
 // ===========================================================================
-// T8 — memory `--columns` rejection (VT-2, EX-2). CITED, NOT duplicated: this is
-// already green at `tests/e2e_list_conformance.rs:126`
-// (`columns_flag_is_rejected_on_memory_list_never_silently_ignored`, D9/R4). A
-// second copy here would be parallel implementation (CLAUDE.md / A4). This module
-// treats that test as the harness's memory-rejection assertion by reference.
+// T8 — memory on the shared column model (SL-049 IMP-017). memory was the last
+// unmigrated `list` verb; its `--columns` flag was REJECTED before IMP-017. These
+// own the memory column surface byte-exact: the default table (VT-1), a projected
+// subset in order (VT-2), the uniform unknown-column error (VT-3), the empty-tree
+// header-suppressed `""` (VT-4), and the F-A10 newline-scrub forge-defence (VT-5).
+// The `--columns`-acceptance grammar is also pinned at
+// `tests/e2e_list_conformance.rs` (`columns_flag_is_accepted_on_memory_list`).
+//
+// Memory is keyed by an opaque `mem_<32hex>` uid (NOT a prefixed numeric id) and
+// renders `uid type status trust key title` — so the seeder writes a literal uid
+// and FIXED dates (A2), never `memory record` (which would stamp clock::today()
+// and mint a fresh uid).
 // ===========================================================================
+
+/// memory: `.doctrine/memory/items/<uid>/memory.toml` + `memory.md`. Minimal
+/// authored shape (the read path tolerates absent optional tables — trust defaults
+/// least-trusted, but we set it for a stable `trust` cell). `key` is optional → a
+/// keyless memory renders `-`.
+#[allow(clippy::too_many_arguments)]
+fn seed_memory(
+    root: &Path,
+    uid: &str,
+    key: Option<&str>,
+    kind: &str,
+    status: &str,
+    trust: &str,
+    title: &str,
+) {
+    let dir = root.join(format!(".doctrine/memory/items/{uid}"));
+    fs::create_dir_all(&dir).unwrap();
+    let key_line = match key {
+        Some(k) => format!("memory_key = \"{k}\"\n"),
+        None => String::new(),
+    };
+    fs::write(
+        dir.join("memory.toml"),
+        format!(
+            "memory_uid = \"{uid}\"\n\
+             {key_line}\
+             schema_version = 1\n\
+             memory_type = \"{kind}\"\n\
+             status = \"{status}\"\n\
+             title = \"{title}\"\n\
+             summary = \"\"\n\
+             created = \"2026-01-02\"\n\
+             updated = \"2026-01-02\"\n\
+             \n\
+             [scope]\n\
+             workspace = \"default\"\n\
+             repo = \"github.com/davidlee/doctrine\"\n\
+             \n\
+             [git]\n\
+             anchor_kind = \"none\"\n\
+             \n\
+             [trust]\n\
+             trust_level = \"{trust}\"\n"
+        ),
+    )
+    .unwrap();
+    fs::write(dir.join("memory.md"), format!("# {title}\n")).unwrap();
+    if let Some(k) = key {
+        // The slug alias the resolver follows — harmless for `list`, mirrors the
+        // on-disk shape the producer writes.
+        std::os::unix::fs::symlink(uid, root.join(format!(".doctrine/memory/items/{k}"))).ok();
+    }
+}
+
+// Two stable uids — fixed (never minted) so the byte-exact goldens are deterministic.
+const MEM_A: &str = "mem_0000000000000000000000000000000a";
+const MEM_B: &str = "mem_0000000000000000000000000000000b";
+
+/// Shared memory corpus: a keyed pattern and a keyless fact, both visible (active).
+/// Ordering is per-kind `sort_default` (created-desc then uid-asc); same date here,
+/// so uid-asc decides: MEM_A before MEM_B.
+fn seed_memory_corpus(root: &Path) {
+    seed_memory(
+        root,
+        MEM_A,
+        Some("mem.pattern.cli.skinny"),
+        "pattern",
+        "active",
+        "high",
+        "Skinny CLI",
+    );
+    seed_memory(root, MEM_B, None, "fact", "active", "medium", "A bare fact");
+}
+
+#[test]
+fn memory_list_default_table_is_byte_exact() {
+    let dir = tmp();
+    seed_memory_corpus(dir.path());
+    let out = list(dir.path(), "memory", &[]);
+    ok(&out);
+    // Default = [uid, type, status, trust, key, title]; FULL uid leads (F-A11); a
+    // keyless memory shows `-`; uid-asc within one date (MEM_A before MEM_B).
+    assert_eq!(
+        stdout(&out),
+        "uid                                   type     status  trust   key                     title\n\
+         mem_0000000000000000000000000000000a  pattern  active  high    mem.pattern.cli.skinny  Skinny CLI\n\
+         mem_0000000000000000000000000000000b  fact     active  medium  -                       A bare fact\n"
+    );
+}
+
+#[test]
+fn memory_list_columns_selects_a_subset_in_order() {
+    let dir = tmp();
+    seed_memory_corpus(dir.path());
+    // `key,title`: drops uid/type/status/trust, keeps the requested two IN ORDER.
+    let out = list(dir.path(), "memory", &["--columns", "key,title"]);
+    ok(&out);
+    assert_eq!(
+        stdout(&out),
+        "key                     title\n\
+         mem.pattern.cli.skinny  Skinny CLI\n\
+         -                       A bare fact\n"
+    );
+}
+
+#[test]
+fn memory_list_unknown_column_errors_with_the_available_set() {
+    let dir = tmp();
+    seed_memory_corpus(dir.path());
+    // The one uniform unknown-column error (select_columns) — available tokens in
+    // MEMORY_COLUMNS declaration order.
+    let out = list(dir.path(), "memory", &["--columns", "nope"]);
+    assert!(!out.status.success());
+    assert_eq!(
+        stderr(&out),
+        "Error: unknown column `nope` (available: uid, type, status, trust, key, title)\n"
+    );
+}
+
+#[test]
+fn memory_list_empty_tree_suppresses_the_header() {
+    let dir = tmp();
+    let out = list(dir.path(), "memory", &[]);
+    ok(&out);
+    assert_eq!(stdout(&out), "", "empty memory tree must emit \"\"");
+}
+
+#[test]
+fn memory_list_scrubs_a_newline_in_the_title_so_it_cannot_forge_a_row() {
+    let dir = tmp();
+    // A title carrying a newline + a forged-looking second row. F-A10: the newline
+    // is escaped (`\n`) so the cell stays one line — no second row materialises.
+    seed_memory(
+        dir.path(),
+        MEM_A,
+        None,
+        "fact",
+        "active",
+        "medium",
+        "real\\nmem_forged00000000000000000000000000 fake",
+    );
+    let out = list(dir.path(), "memory", &[]);
+    ok(&out);
+    let body = stdout(&out);
+    // header + exactly one data row → exactly two newlines, no embedded raw break.
+    assert_eq!(body.matches('\n').count(), 2, "header + one row: {body:?}");
+    assert!(
+        body.contains("real\\nmem_forged"),
+        "title scrubbed: {body:?}"
+    );
+}

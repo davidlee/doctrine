@@ -100,8 +100,7 @@ pub(crate) struct CommonListArgs {
 
     /// Select/order visible table columns, e.g. `--columns id,status,slug`.
     /// Unknown names error with the available set. No effect with `--json`
-    /// (JSON rows are faithful/full — SL-037 D7); rejected on `memory list`
-    /// (not yet on the column model — D9 / IMP-017), never silently ignored.
+    /// (JSON rows are faithful/full — SL-037 D7).
     #[arg(long, value_delimiter = ',')]
     pub(crate) columns: Option<Vec<String>>,
 }
