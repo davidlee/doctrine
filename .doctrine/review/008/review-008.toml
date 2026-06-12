@@ -1,0 +1,52 @@
+id    = 8
+slug  = "reconciliation-review-of-sl-049"
+title = "reconciliation review of SL-049"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-049"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Explicit --slug reaches symlink path component unsanitized — traversal/separator injection"
+detail = """input::resolve_slug returns an explicit --slug verbatim after only empty + SLUG_MAX byte checks; no charset guard. It flows to requirement.rs:212 format!("{name}-{}", ctx.slug) as a symlink rel_path. --slug '../../foo', 'a/b', '..', or control/NUL chars pass the cap and reach fs symlink creation. derive_slug sanitizes the DERIVED path (strips non-alphanumeric) but PHASE-02 widened the explicit escape to spec req add, bypassing it. The cap doc cites filesystem safety yet guards only byte-length, not separators/traversal — the actual FS hazard. TOML sink is escaped (toml_string); the path sink is not. This is FU-1, promoted from backlog footnote to blocker: PHASE-02 expanded the attack surface to a new verb while advertising safety."""
+disposition = "fix-now"
+response = "Fixed in 88fd7c5. slug_is_well_formed enforces ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ on explicit --slug at the shared resolve_slug chokepoint, sanitizing slice/adr/spec-req in one place. Path separators, dots (no '..'), whitespace, control chars and edge dashes are refused before the slug reaches the symlink name. Charset = user-chosen 'mirror derive_slug' policy."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "No test covers a path-hostile explicit --slug"
+detail = "tests/e2e_spec_req_add_slug.rs VT-1/2/3/5 pin length + collision byte-exact but there is zero coverage for a hostile --slug (../, /, .., control char). The one behaviour a 'slug escape + filesystem safety' phase most needed to lock down has no red test. Pairs with F-1."
+disposition = "fix-now"
+response = "Fixed in 88fd7c5. Added e2e VT-4 (a_path_hostile_explicit_slug_errors_and_reserves_nothing) over ../../pwn, a/b, .., .hidden, has-space — asserts the verb fails with the charset message and reserves nothing; plus a resolve_slug unit table over the same class."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "truncate_slug guards inputs its documented contract forbids"
+detail = """input::truncate_slug doc states input is ALWAYS derive_slug output (ASCII, no edge dashes). Given that, the 'Some(cut) if cut > 0' guard and the truncate_slug("-leadingdash", 4) test defend against a leading interior dash derive_slug provably cannot emit. Either the helper is general (drop the 'always derive_slug output' claim) or private-to-this-caller (the cut>0 branch + its test are dead complexity). Pick one."""
+disposition = "fix-now"
+response = "Fixed in 88fd7c5. truncate_slug doc reframed: operates on a slug-charset string and is defensive on the empty edge (never empties), instead of claiming 'always derive_slug output, no edge dashes' while testing a leading dash. Doc and the leading-dash test are now consistent; the cut>0 guard stays as honest robustness."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "default column set validated against available only at first request, not construction"
+detail = "MEMORY_DEFAULT re-lists all six MEMORY_COLUMNS names; a rename desyncs them into a runtime select_columns error ('default names are curated-valid' is an assumption, not a type guarantee). Pre-existing to the column model, not introduced by SL-049; memory is now the Nth kind carrying the latent footgun. Recordable as a model-wide follow-up, not an SL-049 blocker."
+disposition = "follow-up"
+response = "Captured as IMP-038 (backlog improvement). Model-wide and pre-existing — every kind's *_DEFAULT is checked against *_COLUMNS only at first columns-less request; out of SL-049's IMP-017/ISS-004 scope. Not a blocker."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
