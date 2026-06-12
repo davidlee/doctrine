@@ -250,6 +250,14 @@ New / changed evidence:
   all other hits are historical slice/spec/ADR prose (do not touch). PRD-009 /
   `REQ-097` bind the ordering *capability*, not the verb name — satisfied by `list`;
   a reconcile note at close, not a spec change.
+- **Membership-alignment invariant (strengthens A-2).** A *default* survey's hide-set
+  reuses `Status::is_terminal` (backlog.rs:897) and `project` filters `!is_terminal`,
+  so default-`list` membership == `project`'s node set exactly — every default row
+  gets a `pos`; off-sequence tailing only occurs when `--all`/`--status` reveal
+  terminal rows (which cannot be live-ordered → tail by `(kind.ordinal, id)`).
+- **JSON + cycle has no in-band signal.** A pure-JSON pipe with stderr discarded gets
+  id-ordered rows + exit 0 on a degraded cycle, with the warning only on stderr — the
+  accepted cost of DD-3 (total) ∧ DD-4 (diagnostic out of the envelope).
 - **No open questions remain** — OQ-1/2/3 + the two seam calls are settled (§7).
 
 ## 9. Follow-Ups
