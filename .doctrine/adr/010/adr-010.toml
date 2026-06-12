@@ -4,7 +4,7 @@ version = 1
 id = 10
 slug = "relation-modelling-unify-contract-and-write-seam-keep-storage-bespoke"
 title = "Relation modelling: unify the contract and write seam, keep storage bespoke"
-status = "proposed"
+status = "accepted"
 created = "2026-06-12"
 updated = "2026-06-12"
 
