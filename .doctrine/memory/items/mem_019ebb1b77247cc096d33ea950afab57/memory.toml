@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebb1b77247cc096d33ea950afab57"
+memory_key = "mem.pattern.review.superseded-by-is-adr004-carveout"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Governance superseded_by is ADR-004 §5 sanctioned canon, not an outbound-only violation"
+summary = "Governance superseded_by is ADR-004 §5 sanctioned canon (sole permitted reverse field), not an outbound-only violation"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["src/governance.rs"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "5e0d5a5d3460f19519595e806731f8bf5107dbd5"
+tree = "faf0d97ac5f13ab39276e2d275b71fbb6da7a7f2"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "5e0d5a5d3460f19519595e806731f8bf5107dbd5"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
