@@ -211,12 +211,20 @@ goldens flake.
     `TableComponent::VerticalLines` to `│`. Do **not** `load_preset(NOTHING)` (its
     components exist-as-space). `should_draw_left_border`/`_right_border` then return
     false (borders.rs:229) → no outer edge char.
-  - **Per-column padding zeroes the outer edges.** Interior padding `(1,1)` gives
-    the minimalist ` │ ` inner separator; then set the **first** column's left pad
-    and the **last** column's right pad to `0`. Result: `id │ kind │ status │ title`
-    — clean both edges, exactly matching the old no-leading/no-trailing property,
-    while gaining the `│` separators. (render_table knows the column count at
-    runtime, so the first/last zeroing is a post-build mutation.)
+  - **Per-column padding zeroes the outer edges, then a per-line right-trim
+    removes residual cell fill.** Interior padding `(1,1)` gives the minimalist
+    ` │ ` inner separator; then set the **first** column's left pad and the
+    **last** column's right pad to `0`. (render_table knows the column count at
+    runtime, so the first/last zeroing is a post-build mutation.) Pad-zeroing
+    alone is **not sufficient**: under `ContentArrangement::Disabled` comfy-table
+    still fills each short cell to its column width, so the last column's short
+    cells acquire trailing fill that no padding setting removes. `render_table`
+    therefore also `trim_end()`s every rendered line before re-appending `\n`,
+    reproducing the old renderer's never-pad-the-last-column property and
+    guaranteeing no trailing whitespace on any line. Result: `id │ kind │ status
+    │ title` — clean both edges, exactly matching the old no-leading/no-trailing
+    property, while gaining the `│` separators. (Reconciled post-implementation,
+    RV-011 F-1: the spike found pad-zeroing alone left last-column fill.)
   - A determinism test asserts the **exact** bytes of a small table — including the
     absence of any leading or trailing space on every line — not merely "separators
     present".
@@ -250,10 +258,15 @@ New / changed evidence:
 - **Golden re-baseline**: the shared-surface format change (separators) trips
   `tests/e2e_list_conformance.rs` *by design* — it exists to force acknowledgment
   of any `listing.rs` format change at the shared surface — plus the per-verb
-  goldens (`e2e_list_columns_golden`, `e2e_adr_cli_golden`,
+  black-box goldens (`e2e_list_columns_golden`, `e2e_adr_cli_golden`,
   `e2e_coverage_view_golden`, `e2e_inspect_golden`, `e2e_priority_golden`,
-  `e2e_standard_cli_golden`). These run against piped output ⇒ colour-free; they
-  re-baseline to the `│`-separated plain shape only.
+  `e2e_standard_cli_golden`, `e2e_backlog_list_order_golden`) **and the in-crate
+  unit-test goldens** that pin the same surface — `src/backlog.rs`, `src/boot.rs`
+  (governance snapshot), `src/governance.rs`, `src/slice.rs`, `src/spec.rs`.
+  (Reconciled post-implementation, RV-011 F-2: the original inventory listed only
+  the `tests/e2e_*.rs` files and under-counted the in-crate consumers.) These all
+  run against piped output ⇒ colour-free; they re-baseline to the `│`-separated
+  plain shape only.
 - **RSK-1 mitigation**: the golden re-baseline lands in a commit **separate** from
   any logic change, so a pure shape-churn diff cannot mask a content regression.
 - `just check` green; `cargo clippy` zero warnings.

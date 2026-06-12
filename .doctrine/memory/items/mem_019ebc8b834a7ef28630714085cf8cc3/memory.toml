@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebc8b834a7ef28630714085cf8cc3"
+memory_key = "mem.pattern.render.comfy-table-disabled-last-col-fill-needs-trim"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "comfy-table last-column cell-fill survives zero padding — trim_end each line for no trailing whitespace"
+summary = "comfy-table fills short cells to column width even under Disabled+zero padding; per-line trim_end needed for no trailing whitespace"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = ["src/listing.rs"]
+globs = []
+commands = []
+tags = ["comfy-table", "render", "listing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8f483520975932e2849d08667ae10f75250c6a73"
+ref_name = "refs/heads/main"
+checkout_state_id = "f24579bd918b040aafbbd9035406aeaced43586b58895a91336859a87abb5d3a"
+base_commit = "19edc20b96a3123cd2a4dd6bf4fe3c3b9b9ad0ef"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
