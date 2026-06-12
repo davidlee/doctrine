@@ -28,3 +28,33 @@ sheets; this survives them.
 ### Surface the later phases ride
 - PHASE-03 (`coverage_view`) calls `scan_coverage_batch` per spec fan — ONE walk
   for all members (INV-2). PHASE-05 wires `doctrine coverage <ref>` onto it.
+
+## AUDIT + CLOSE (RV-005, commit `03a0d7a`)
+
+Reconciliation review RV-005 (`done · await=none`). Two-pass review: my own
+seam-read of the design contract + an external adversarial pass (codex gpt-5.5).
+
+- **F-1 (major → fix-now → verified).** `spec req list` skipped the
+  `validate_statuses` known-set guard every sibling list surface performs, so
+  `--status bogus` silently emptied the roster instead of erroring (F4/SL-025
+  uniform-contract breach). Surfaced by codex (E#1), confirmed at the seam. Fixed
+  in-slice (03a0d7a): `requirement::REQ_STATUSES` const + drift canary; the
+  `validate_statuses` call in `req_list_rows` mirroring `list_rows:1170`; red/green
+  test. Durable lesson → memory `mem.pattern.listing.validate-statuses-is-opt-in`.
+- **Codex E#2 REJECTED (no finding).** Claimed the `coverage_view.rs:39`
+  `expect(dead_code)` is now an unfulfilled lint expectation breaking the gate.
+  Empirically false — `cargo clippy` recompiles clean; the expectation still holds
+  (a residual not-yet-wired item keeps `dead_code` firing). Static reasoning
+  without building.
+- **All design invariants verified holding at the seam** (not inferred from green
+  tests): INV-1 wall, E2 canonicalize, E1/INV-4 dangling (enum + forbidden-keys),
+  INV-2 one walk, INV-3 authored-only, E6 partition, ADR-001 no cycle, D5 single
+  source, F6 (977 baseline + integration unchanged; SL-044 residency proof green).
+- **Relaxed dangling-table goldens** consciously accepted (tempdir-path float;
+  healthy cells stay byte-exact, dangling JSON forbidden-keys asserted exactly).
+- **Dogfood drift → CHR-003.** REQ-108..116 still authored `pending` while the
+  read surface ships; reconciling that corpus drift is out of SL-045 scope
+  (a surfacing slice) — captured as a backlog chore.
+
+Lifecycle: `plan → ready → started → audit → reconcile → done` (D-C9b gate clear,
+RV-005 has no unresolved blocker).
