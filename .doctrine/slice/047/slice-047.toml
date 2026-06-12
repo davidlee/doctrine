@@ -1,0 +1,18 @@
+id = 47
+slug = "cross-kind-actionable-surveynextexplainblockers-cli"
+title = "Cross-kind actionable survey/next/explain/blockers CLI"
+status = "proposed"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[relationships]
+specs = ["PRD-011", "SPEC-001"]
+requirements = ["REQ-073", "REQ-075", "REQ-076"]
+# REQ-073 (PRD-011 FR-004) — typed blockers/blocking. REQ-075 (FR-006) — exclude
+#   terminal/promoted from default active. REQ-076 (FR-007) — cycle diagnostics +
+#   degrade. These surface-defining FRs are stable; the actionable-channel SCOPE
+#   broadens under the pending PRD-011/SPEC-001 revision (see scope doc) and the
+#   binding set may grow then.
+# Depends on SL-046 (the all-kind graph spine) — no structural slice→slice dep
+#   field exists, recorded in the scope doc instead (itself a motivation for the
+#   broader graph-relations work).
