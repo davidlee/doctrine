@@ -9,10 +9,10 @@ kind = "tech"
 category = "prioritisation"
 c4_level = "container"
 descends_from = "PRD-011"
-tags = ["priority", "graph", "backlog", "actionability", "crate-boundary", "policy-adapter", "explanation"]
+tags = ["priority", "actionability", "cross-kind", "graph", "backlog", "crate-boundary", "policy-adapter", "explanation"]
 responsibilities = [
   "Define the generic priority graph core — opaque node ids, typed directed edges, reverse-edge index, reachability, typed acyclicity with cycle diagnostics, deterministic ordering, structured explanation paths — as a standalone publishable crate free of doctrine vocabulary.",
-  "Specify the doctrine policy layer that maps entity kind, lifecycle, resolution, and relation type into derived channels (actionable / blocked / blocking / priority hint / reason).",
+  "Specify the doctrine policy layer that maps entity kind, lifecycle, resolution, and relation type into derived channels (actionable / blocked / blocking / priority hint / reason), including the per-kind workable-versus-terminal status-class partition that makes actionability span all admitted kinds.",
   "Specify the registry adapter that scans doctrine entities into the core node/edge model preserving canonical ids, keeping all policy interpretation out of the core.",
   "Fix the crate and module boundary and the external-publishing posture (closes PRD-011 OQ-003).",
   "Define the derived-surface CLI contracts (survey / next / explain / blockers / inspect) and their disposable cache/projection shape.",

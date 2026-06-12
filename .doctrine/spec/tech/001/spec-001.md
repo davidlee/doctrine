@@ -5,9 +5,10 @@
 
 ## Overview
 
-The mechanism realising **PRD-011** (graph-derived backlog priority): a derived,
-explainable "what should I look at next, and why?" view over doctrine's existing
-entity graph, recomputed from authored state and never written back as truth.
+The mechanism realising **PRD-011** (graph-derived priority and actionability): a
+derived, explainable "what should I look at next, and why?" view over doctrine's
+existing entity graph **across all admitted kinds**, recomputed from authored state
+and never written back as truth.
 
 The system is three separable layers (the central principle — *core owns how
 values flow; policy owns what they mean; the adapter owns where they come from*):
@@ -32,11 +33,12 @@ The crate is **`cordage`** (`crates/cordage/`) — rigging over a tree of typed
 overlays; doctrine stays the workspace root crate and depends on it by path (D1).
 
 The **graph core** is a generic multi-channel evaluation engine over a tree plus
-typed directed (DAG) overlays — *not* a backlog-priority library. Prioritisation
+typed directed (DAG) overlays — *not* a priority library. Prioritisation
 is one application of it; blocking diagnostics, reachability, and rollups are
-others. Backlog-priority meaning lives entirely in the doctrine **policy**; the
-mapping from authored entity TOML to the core's node/edge model lives entirely in
-the **adapter**. C4 frame: the new crate is a fresh *container*; policy + adapter
+others. Cross-kind priority and actionability meaning — including each kind's
+lifecycle interpretation — lives entirely in the doctrine **policy**; the mapping
+from authored entity TOML to the core's node/edge model lives entirely in the
+**adapter**. C4 frame: the new crate is a fresh *container*; policy + adapter
 are *components* inside the doctrine container.
 
 ## Responsibilities
@@ -125,10 +127,12 @@ urgency, or product vocabulary in the crate).
   reverse index, reachability, topological order, cycle diagnostics,
   deterministic traversal, generic propagation, structured provenance; **adapter**
   owns registry-scan reading, doctrine-id↔node-id mapping, edge emission from
-  authored relations, node attributes, diagnostic re-mapping; **policy** owns
-  active-state rules, terminal-for-priority resolutions, relation-kind
-  classification, rank↔consequence combination, inclusion/exclusion of
-  terminal/promoted nodes, and explanation rendering. The crate boundary respects
+  authored relations, node attributes, diagnostic re-mapping; **policy** owns the
+  **per-kind status-class partition** (which of each admitted kind's lifecycle
+  statuses are *workable* versus *terminal*, D12), active-state rules, relation-kind
+  classification, rank↔consequence combination, inclusion/exclusion of terminal
+  nodes of any kind (promoted backlog items being the backlog-specific instance),
+  and explanation rendering. The crate boundary respects
   module layering (ADR-001): the core is a leaf the doctrine engine depends on,
   never the reverse. *Alt rejected:* doctrine-internal module (`src/graph/`) —
   cheap, but makes "external" a future refactor rather than a preserved seam;
@@ -137,8 +141,8 @@ urgency, or product vocabulary in the crate).
 - **D2 — the §9 boundary test governs every core/policy placement.** A rule
   belongs in the core iff it can be stated without product nouns ("propagate a
   channel backward over a DAG with `max`"); a rule that needs semantic
-  interpretation ("a promoted backlog item is not active work") belongs in
-  policy. Appendix B (forbidden core: task/project/habit terms, deadline /
+  interpretation ("a promoted backlog item is not active work"; "an accepted ADR is
+  terminal, a proposed one workable") belongs in policy. Appendix B (forbidden core: task/project/habit terms, deadline /
   scheduled-for / best-before, lateness cost, remaining-work, commitment
   pressure, urgency scoring, calendar/capacity, sequential/parallel policy,
   resurfacing, product defaults) is the standing prohibition list.
@@ -310,6 +314,44 @@ urgency, or product vocabulary in the crate).
   from authored outbound edges (ADR-004). *Verification:* `survey`/`next` rows name
   only the immediate blocker; `blockers X --transitive` and `explain X` surface the
   whole chain; toggling display depth never changes ordering.
+- **D12 — actionability is the cross-kind status×relations synthesis; the per-kind
+  status-class partition is policy.** Closes the *mechanism* half of PRD-011 OQ-010
+  and realises the broadened intent (PRD-011 §1/§3, FR-008/`REQ-237`). Actionability
+  is computed **uniformly across every admitted kind** as `actionable = eligible ∧
+  ¬blocked` — the synthesis already latent in D3's separate `eligible` and
+  `blocked_by` channels:
+  - **`eligible`** is the *status* half. Policy classifies each admitted kind's
+    lifecycle statuses into a **workable | terminal partition** — a per-kind
+    status-class table that is policy data, not core truth (the D2 boundary test: it
+    needs semantic interpretation). An item is `eligible` iff its status is workable;
+    terminal-status items of any kind are excluded from default active output
+    (REQ-075), promoted backlog items being the backlog-specific terminal instance.
+  - **`¬blocked`** is the *relations* half: no unresolved `dep` blocker (D4/D9) and no
+    firing trigger mask (D6, where present).
+  - **Neither half alone decides it.** A terminal-status item is non-actionable
+    regardless of relations; a workable-status item with an unresolved `dep` blocker is
+    non-actionable; only a workable-status, unblocked item is `actionable`.
+
+  **No kind is barred as a kind.** An accepted ADR is non-actionable because
+  `accepted` is a terminal status, not because ADRs are excluded; a `proposed` ADR
+  (workable status), unblocked, is actionable. The survey/next/explain/blockers
+  surfaces (D10/D11) therefore rank a pending requirement, a proposed slice, and an
+  open issue in one comparable view.
+
+  **Conservative default.** An unrecognised status within an admitted kind is treated
+  as **non-eligible** (never falsely actionable) and surfaced as a diagnostic — the
+  degrade-don't-lie posture (REQ-076 spirit) applied to the status axis. The partition
+  is kind-extensible without reshaping the core.
+
+  D12 fixes the *contract and synthesis*; the exact partition **rows** are policy data
+  settled at SL-047 design — the clear-cut rows are mechanical (backlog
+  resolved/promoted, slice done/abandoned, ADR accepted/superseded → terminal; backlog
+  open, slice proposed→started, requirement pending, ADR proposed → workable), but
+  kinds with no obviously work-shaped lifecycle are the genuinely-open rows (**OQ-8**,
+  narrowing PRD-011 OQ-010). *Verification:* over a seeded multi-kind corpus,
+  `next` lists a workable-status unblocked item of a non-backlog kind and omits the
+  same kind's terminal-status item and any workable-but-`dep`-blocked item; the order
+  is identical under input permutation.
 
 ## Open Questions
 
@@ -320,7 +362,20 @@ authored `triggers` field is now blessed, the plan/audit file-set sources remain
 unbuilt). PRD-011 OQ-001 (item-level authored-priority seam) is PRD-009's, not this
 spec's. The `dep`/`seq` and trigger **authored schemas** D4/D6 rely on are PRD-009's
 capture surface — now minted there (PRD-009 OQ-007 resolved: FR-010 `needs`/`after`,
-FR-011 `triggers`); this spec consumes them, it does not mint them.
+FR-011 `triggers`); this spec consumes them, it does not mint them. PRD-011 OQ-010
+(cross-kind actionability) is **mechanism-closed by D12** — the synthesis and the
+per-kind status-class partition contract — leaving only the partition rows open (OQ-8).
+
+Active:
+
+- **OQ-8** (narrows PRD-011 OQ-010) — the per-kind **status-class partition rows**.
+  D12 fixes the synthesis and the contract (each admitted kind's statuses partition
+  into workable | terminal; unrecognised → non-eligible); the clear-cut rows are
+  mechanical, but kinds with no obviously work-shaped lifecycle are open: is a `draft`
+  or `active` **spec** actionable work, or consequential-context-only (visible in
+  `survey`, never in `next`)? Is an `active` **PRD** the same? These are settled as
+  policy data at **SL-047 design**, not before — they do not block the engine
+  mechanism, only the final per-kind table.
 
 Resolved:
 
