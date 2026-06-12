@@ -1173,26 +1173,31 @@ const SPEC_COLUMNS: [listing::Column<SpecListRow>; 5] = [
         name: "id",
         header: "id",
         cell: |r| r.id.clone(),
+        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
     },
     listing::Column {
         name: "status",
         header: "status",
         cell: |r| r.status.clone(),
+        paint: listing::ColumnPaint::ByValue(|r| listing::status_hue(&r.status)),
     },
     listing::Column {
         name: "slug",
         header: "slug",
         cell: |r| r.slug.clone(),
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "title",
         header: "title",
         cell: |r| r.title.clone(),
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "members",
         header: "#members",
         cell: |r| r.members.to_string(),
+        paint: listing::ColumnPaint::None,
     },
 ];
 
@@ -1232,6 +1237,7 @@ pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<
 /// two envelopes. Empty → `""` (§5.5).
 pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     validate_statuses(&args.status, SPEC_STATUSES)?;
+    let color = args.color;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     match format {
@@ -1250,7 +1256,7 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
                 blocks.push(format!(
                     "{}\n{}",
                     subtype.label(),
-                    listing::render_columns(&block_rows, &sel)
+                    listing::render_columns(&block_rows, &sel, color)
                 ));
             }
             Ok(blocks.concat())
@@ -1319,21 +1325,25 @@ const REQ_COLUMNS: [listing::Column<ReqListRow>; 4] = [
         name: "id",
         header: "id",
         cell: |r| r.id.clone(),
+        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
     },
     listing::Column {
         name: "label",
         header: "label",
         cell: |r| r.label.clone(),
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "kind",
         header: "kind",
         cell: |r| r.kind.clone(),
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "status",
         header: "status",
         cell: |r| r.status.clone(),
+        paint: listing::ColumnPaint::ByValue(|r| listing::status_hue(&r.status)),
     },
 ];
 
@@ -1406,6 +1416,7 @@ fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Res
     // before filtering, exactly as `list_rows` does against `SPEC_STATUSES` — a
     // bogus status errors here rather than silently emptying the roster (RV-005 F-1).
     validate_statuses(&args.status, requirement::REQ_STATUSES)?;
+    let color = args.color;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let rows = req_rows(root, spec_ref)?;
@@ -1437,7 +1448,7 @@ fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Res
         Format::Table => {
             let sel = listing::select_columns(&REQ_COLUMNS, REQ_DEFAULT, columns.as_deref())?;
             let table_rows: Vec<ReqListRow> = kept.into_iter().map(|(row, _)| row).collect();
-            Ok(listing::render_columns(&table_rows, &sel))
+            Ok(listing::render_columns(&table_rows, &sel, color))
         }
         Format::Json => {
             let json_rows: Vec<ReqJsonRow> = kept

@@ -865,26 +865,31 @@ const BL_COLUMNS: [listing::Column<BacklogItem>; 5] = [
         name: "id",
         header: "id",
         cell: |i| i.kind.canonical_id(i.id),
+        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
     },
     listing::Column {
         name: "kind",
         header: "kind",
         cell: |i| i.kind.as_str().to_string(),
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "status",
         header: "status",
         cell: |i| i.status.as_str().to_string(),
+        paint: listing::ColumnPaint::ByValue(|i| listing::status_hue(i.status.as_str())),
     },
     listing::Column {
         name: "slug",
         header: "slug",
         cell: |i| i.slug.clone(),
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "title",
         header: "title",
         cell: |i| i.title.clone(),
+        paint: listing::ColumnPaint::None,
     },
 ];
 
@@ -981,6 +986,7 @@ fn list_rows(
     mut args: ListArgs,
 ) -> anyhow::Result<ListOutput> {
     validate_statuses(&args.status, BACKLOG_STATUSES)?;
+    let color = args.color;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let corpus = read_all(root)?;
@@ -1013,7 +1019,7 @@ fn list_rows(
     match format {
         Format::Table => {
             let sel = listing::select_columns(&BL_COLUMNS, BL_DEFAULT, columns.as_deref())?;
-            let table = listing::render_columns(&items, &sel);
+            let table = listing::render_columns(&items, &sel, color);
             // Table: rows + footer to stdout; the cycle warning to stderr.
             Ok(ListOutput {
                 stdout: format!("{table}{footer}"),

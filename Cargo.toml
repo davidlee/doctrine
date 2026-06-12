@@ -31,6 +31,7 @@ glob.workspace = true
 bm25.workspace = true
 regex-lite.workspace = true
 comfy-table.workspace = true
+owo-colors.workspace = true
 cordage = { path = "crates/cordage", version = "0.1.1" }
 
 [dev-dependencies]
@@ -91,6 +92,11 @@ regex-lite = "0.1"
 # (transitively pulls crossterm via its tty feature, accepted per SL-053 D1/path A;
 # force_no_tty makes piped output terminal-size-independent, D6).
 comfy-table = { version = "7", default-features = false, features = ["custom_styling"] }
+# Unconditional ANSI colorize methods (`.green()`/`.bold()`/`.color(..)`) for the
+# list colour seam (SL-053 PHASE-02). We use ONLY the unconditional API gated on an
+# injected `color` bool — never `if_supports_color`, which would re-read env+tty at
+# apply-time and reintroduce impurity in the pure listing leaf (D3).
+owo-colors = "4"
 # Corpus-relative BM25 lexical scorer (SL-017). default-features = false drops the
 # DefaultTokenizer/Language stack (stemming/stopwords/deunicode + 5 deps); we drive
 # it with a custom Tokenizer delegating to doctrine's lexer (design D2).

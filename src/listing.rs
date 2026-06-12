@@ -142,6 +142,12 @@ pub(crate) struct ListArgs {
     /// `args.columns.take()` *before* [`build`], which never reads it — the
     /// table is the only axis it touches (D2; no effect under `--json`, D7).
     pub(crate) columns: Option<Vec<String>>,
+    /// Whether the table render may emit ANSI colour (SL-053 PHASE-02, D3). The
+    /// impure shell resolves it ONCE ([`crate::tty::stdout_color_enabled`]) and
+    /// injects it here; the verb reads `args.color` before [`build`] and passes it
+    /// to [`render_columns`]. `default = false` (piped/in-process output, and every
+    /// `..Default::default()` test or `boot` call, stays plain — VT-4).
+    pub(crate) color: bool,
 }
 
 /// Build a [`Filter`] + resolved [`Format`] from the parsed [`ListArgs`].
@@ -262,6 +268,46 @@ pub(crate) struct Column<R> {
     pub(crate) name: &'static str,
     pub(crate) header: &'static str,
     pub(crate) cell: fn(&R) -> String,
+    /// How this column's data cells are coloured when colour is enabled (SL-053
+    /// PHASE-02). [`ColumnPaint::None`] for most columns; [`ColumnPaint::Fixed`]
+    /// for id columns (a stable hue per kind); [`ColumnPaint::ByValue`] for status
+    /// columns (the hue is a function of the ROW's raw status, NOT the emitted cell
+    /// — F-4). Inert under `color = false` (every cell passes through unchanged).
+    pub(crate) paint: ColumnPaint<R>,
+}
+
+/// How a [`Column`]'s data cells are coloured (SL-053 PHASE-02, D3). Headers are
+/// painted uniformly (bold) by [`render_columns`]; this governs only the *data*
+/// cells, and ONLY when the injected `color` bool is true.
+pub(crate) enum ColumnPaint<R> {
+    /// No colour — the cell string passes through byte-for-byte (the default; the
+    /// only behaviour under `color = false`).
+    None,
+    /// A single fixed hue for every cell in the column (e.g. id columns).
+    Fixed(owo_colors::AnsiColors),
+    /// A hue derived from the ROW — reads the row's raw semantic status, never the
+    /// emitted/decorated cell text (F-4: `slice list` decorates `done ⚠`, `review
+    /// list` emits `open (await …)`; matching the cell would drop colour on exactly
+    /// those surfaces). `None` ⇒ that row's cell is left uncoloured.
+    ByValue(fn(&R) -> Option<owo_colors::AnsiColors>),
+}
+
+/// The single shared status→hue map for every coloured `list` surface (SL-053
+/// PHASE-02) — no per-kind duplication. Greens are settled/accepted/required
+/// states, yellows are in-flight lifecycle states, reds are stopped/adverse states;
+/// any unrecognised token (proposed/open/ready/draft/…) is left uncoloured.
+///
+/// Covers the union of the painted kinds' live status vocabularies: slice lifecycle
+/// (`proposed→…→done`/`abandoned`), governance (`accepted`/`required`/`active`),
+/// review (`active`/`done`), memory (`active`/…), spec/req (`active`/`draft`/…).
+pub(crate) fn status_hue(s: &str) -> Option<owo_colors::AnsiColors> {
+    use owo_colors::AnsiColors::{Green, Red, Yellow};
+    match s {
+        "done" | "active" | "accepted" | "required" => Some(Green),
+        "in_progress" | "started" | "design" | "plan" | "audit" | "reconcile" => Some(Yellow),
+        "blocked" | "abandoned" | "contested" => Some(Red),
+        _ => None,
+    }
 }
 
 /// Resolve the visible, ordered selection. `requested` = parsed `--columns`
@@ -294,17 +340,53 @@ pub(crate) fn select_columns<'a, R>(
 /// Header row + one cell-row per `R`, over [`render_table`]. Empty rows → `""`
 /// (header suppressed, SL-025 §5.5). Replaces every kind's bespoke table
 /// assembler.
-pub(crate) fn render_columns<R>(rows: &[R], cols: &[&Column<R>]) -> String {
+pub(crate) fn render_columns<R>(rows: &[R], cols: &[&Column<R>], color: bool) -> String {
     if rows.is_empty() {
         return String::new();
     }
     let mut grid: Vec<Vec<String>> = Vec::with_capacity(rows.len() + 1);
-    grid.push(cols.iter().map(|c| c.header.to_string()).collect());
-    grid.extend(
-        rows.iter()
-            .map(|r| cols.iter().map(|c| (c.cell)(r)).collect()),
-    );
+    // Header row: bold when colour is on (D-EX3), raw otherwise.
+    grid.push(cols.iter().map(|c| paint_header(c.header, color)).collect());
+    grid.extend(rows.iter().map(|r| {
+        cols.iter()
+            .map(|c| paint_cell(&(c.cell)(r), &c.paint, r, color))
+            .collect()
+    }));
+    // comfy-table's custom_styling makes its width measurement ANSI-aware, so the
+    // embedded escapes do not disturb the ` │ ` separator alignment (VT-2).
     render_table(&grid)
+}
+
+/// Paint a header cell bold when `color`; otherwise return it raw. The bold escape
+/// is emitted ONLY under colour, so piped output (`color = false`) is byte-clean.
+fn paint_header(header: &str, color: bool) -> String {
+    use owo_colors::OwoColorize;
+    if color {
+        header.bold().to_string()
+    } else {
+        header.to_string()
+    }
+}
+
+/// Paint one data `cell` per its column's [`ColumnPaint`], reading the ROW for the
+/// `ByValue` hue (F-4 — never the emitted cell). Under `color = false` or
+/// [`ColumnPaint::None`] (or a `ByValue` returning `None`) the cell is returned
+/// UNCHANGED — zero ANSI (EX-3). Uses `owo_colors`' UNCONDITIONAL `.color(..)`, gated
+/// solely on the injected bool (never `if_supports_color`, D3).
+fn paint_cell<R>(cell: &str, paint: &ColumnPaint<R>, row: &R, color: bool) -> String {
+    use owo_colors::OwoColorize;
+    if !color {
+        return cell.to_string();
+    }
+    let hue = match paint {
+        ColumnPaint::None => None,
+        ColumnPaint::Fixed(c) => Some(*c),
+        ColumnPaint::ByValue(f) => f(row),
+    };
+    match hue {
+        Some(c) => cell.color(c).to_string(),
+        None => cell.to_string(),
+    }
 }
 
 /// The interior column separator: a single box-drawing vertical, surrounded by the
@@ -906,11 +988,13 @@ mod tests {
             name: "id",
             header: "id",
             cell: |r| r.id.to_string(),
+            paint: ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
         },
         Column {
             name: "slug",
             header: "slug",
             cell: |r| r.slug.to_string(),
+            paint: ColumnPaint::None,
         },
     ];
 
@@ -972,7 +1056,7 @@ mod tests {
     #[test]
     fn render_columns_empty_rows_is_empty_string_header_suppressed() {
         let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
-        assert_eq!(render_columns::<CRow>(&[], &sel), "");
+        assert_eq!(render_columns::<CRow>(&[], &sel, false), "");
     }
 
     #[test]
@@ -988,11 +1072,95 @@ mod tests {
             },
         ];
         let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
-        let out = render_columns(&rows, &sel);
+        let out = render_columns(&rows, &sel, false);
         assert_eq!(
             out,
             "id      │ slug\nADR-001 │ module-layering\nADR-004 │ relations\n"
         );
+    }
+
+    // -- VT-1 / VT-2: colour seam -----------------------------------------
+
+    /// VT-1: `color = true` emits ANSI for painted columns AND a bold header;
+    /// `color = false` emits ZERO ANSI (no `\x1b` anywhere) — the byte-clean piped
+    /// path the goldens depend on.
+    #[test]
+    fn render_columns_colour_emits_ansi_only_when_enabled() {
+        let rows = [
+            CRow {
+                id: "ADR-001",
+                slug: "module-layering",
+            },
+            CRow {
+                id: "ADR-004",
+                slug: "relations",
+            },
+        ];
+        let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
+
+        let plain = render_columns(&rows, &sel, false);
+        assert!(
+            !plain.contains('\u{1b}'),
+            "color=false must emit zero ANSI: {plain:?}"
+        );
+
+        let coloured = render_columns(&rows, &sel, true);
+        assert!(
+            coloured.contains('\u{1b}'),
+            "color=true must emit ANSI for the painted id column + bold header"
+        );
+        // The bold-header SGR (ESC[1m) is present — the header is painted, not just
+        // the data cells.
+        assert!(
+            coloured.contains("\u{1b}[1m"),
+            "color=true bolds the header: {coloured:?}"
+        );
+    }
+
+    /// VT-2: alignment survives colour. With ANSI embedded in a painted column,
+    /// stripping the escapes must reproduce the EXACT plain layout — proving
+    /// comfy-table's custom_styling measures display width, not byte length, so the
+    /// ` │ ` separators stay aligned despite the escapes.
+    #[test]
+    fn render_columns_colour_keeps_separators_aligned() {
+        let rows = [
+            CRow {
+                id: "ADR-001",
+                slug: "module-layering",
+            },
+            CRow {
+                id: "ADR-004",
+                slug: "relations",
+            },
+        ];
+        let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
+        let plain = render_columns(&rows, &sel, false);
+        let coloured = render_columns(&rows, &sel, true);
+        assert_eq!(
+            strip_ansi(&coloured),
+            plain,
+            "stripping ANSI from the coloured render must reproduce the plain layout"
+        );
+    }
+
+    /// Strip SGR escape sequences (`ESC [ … m`) for the VT-2 alignment proof. Pure
+    /// test helper — not a render-path concern.
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut chars = s.chars();
+        while let Some(c) = chars.next() {
+            if c == '\u{1b}' {
+                // Consume up to and including the final `m` of an SGR sequence.
+                for inner in chars.by_ref() {
+                    if inner == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
     }
 
     // -- json_envelope -----------------------------------------------------

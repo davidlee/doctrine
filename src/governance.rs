@@ -65,6 +65,7 @@ struct GovRow {
 /// hide-set, the kind owns the sort (by id) and the column/JSON projection.
 pub(crate) fn list_rows(g: &GovKind, root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     listing::validate_statuses(&args.status, g.statuses)?;
+    let color = args.color;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let gov_root = root.join(g.kind.dir);
@@ -81,7 +82,7 @@ pub(crate) fn list_rows(g: &GovKind, root: &Path, mut args: ListArgs) -> anyhow:
     match format {
         Format::Table => {
             let sel = listing::select_columns(&GOV_COLUMNS, GOV_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&rows, &sel))
+            Ok(listing::render_columns(&rows, &sel, color))
         }
         Format::Json => listing::json_envelope(g.stem, &rows),
     }
@@ -109,21 +110,25 @@ const GOV_COLUMNS: [listing::Column<GovRow>; 4] = [
         name: "id",
         header: "id",
         cell: |r| r.id.clone(),
+        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
     },
     listing::Column {
         name: "status",
         header: "status",
         cell: |r| r.status.clone(),
+        paint: listing::ColumnPaint::ByValue(|r| listing::status_hue(&r.status)),
     },
     listing::Column {
         name: "slug",
         header: "slug",
         cell: |r| r.slug.clone(),
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "title",
         header: "title",
         cell: |r| r.title.clone(),
+        paint: listing::ColumnPaint::None,
     },
 ];
 

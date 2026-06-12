@@ -875,6 +875,7 @@ const REVIEW_COLUMNS: [Column<ReviewRow>; 5] = [
         name: "id",
         header: "id",
         cell: |(d, _, _)| canonical_id(d.id),
+        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
     },
     Column {
         name: "status",
@@ -886,21 +887,27 @@ const REVIEW_COLUMNS: [Column<ReviewRow>; 5] = [
             cell.push(')');
             cell
         },
+        // ByValue reads the row's RAW derived status, NOT the emitted composite
+        // `active (await …)` cell (F-4) — matching the cell text would drop colour.
+        paint: listing::ColumnPaint::ByValue(|(_, s, _)| listing::status_hue(s.as_str())),
     },
     Column {
         name: "facet",
         header: "facet",
         cell: |(d, _, _)| d.review.facet.clone(),
+        paint: listing::ColumnPaint::None,
     },
     Column {
         name: "target",
         header: "target",
         cell: |(d, _, _)| edge_label(d),
+        paint: listing::ColumnPaint::None,
     },
     Column {
         name: "title",
         header: "title",
         cell: |(d, _, _)| d.title.clone(),
+        paint: listing::ColumnPaint::None,
     },
 ];
 
@@ -925,6 +932,7 @@ fn key(d: &ReviewDoc) -> listing::FilterFields {
 /// carrying its derived status.
 fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     listing::validate_statuses(&args.status, REVIEW_STATUSES)?;
+    let color = args.color;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let review_root = root.join(REVIEW_DIR);
@@ -940,7 +948,7 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     match format {
         Format::Table => {
             let sel = listing::select_columns(&REVIEW_COLUMNS, REVIEW_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&rows, &sel))
+            Ok(listing::render_columns(&rows, &sel, color))
         }
         Format::Json => listing::json_envelope("review", &json_rows(&rows)),
     }
@@ -2326,7 +2334,7 @@ mod tests {
         let (status, awaited) = doc.derived();
         let rows = vec![(doc, status, awaited)];
         let sel = listing::select_columns(&REVIEW_COLUMNS, REVIEW_DEFAULT, None).unwrap();
-        let out = listing::render_columns(&rows, &sel);
+        let out = listing::render_columns(&rows, &sel, false);
         let lines: Vec<&str> = out.lines().collect();
         assert!(lines[0].starts_with("id"), "header: {:?}", lines[0]);
         assert!(lines[1].starts_with("RV-005"), "{:?}", lines[1]);
