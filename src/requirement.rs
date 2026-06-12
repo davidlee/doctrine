@@ -86,7 +86,11 @@ impl ReqKind {
 /// status is reconciled against observed coverage by **explicit authorship**, never
 /// derived by precedence (the named spec-driver divergence). The reconcile writer
 /// is a deferred follow-on; the absence here is the contract, not an omission.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Derives `clap::ValueEnum` so it binds directly as the `spec req status --to`
+/// selector (mirroring `ReqKind`'s `spec req add --kind` shape) — a closed set, so
+/// an out-of-vocab `--to` is rejected by clap before the verb runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum ReqStatus {
     Pending,
@@ -247,7 +251,7 @@ pub(crate) fn tree_root(root: &Path) -> PathBuf {
 /// Parse a canonical requirement FK (`REQ-NNN`) into its numeric id. The prefix
 /// is required and matched against `REQUIREMENT_KIND.prefix` — the single source,
 /// never hardcoded at the call site (mirrors `spec::resolve_spec_ref`).
-fn id_from_fk(canonical_fk: &str) -> anyhow::Result<u32> {
+pub(crate) fn id_from_fk(canonical_fk: &str) -> anyhow::Result<u32> {
     let (prefix, num) = canonical_fk.rsplit_once('-').with_context(|| {
         format!("`{canonical_fk}` is not a canonical requirement ref (expected REQ-NNN)")
     })?;
@@ -297,6 +301,56 @@ pub(crate) fn set_kind(root: &Path, id: u32, kind: ReqKind) -> anyhow::Result<()
         anyhow::bail!("malformed requirement {name}: missing `kind` (regenerate via the scaffold)");
     }
     table.insert("kind", toml_edit::value(kind.as_str()));
+    std::fs::write(&path, doc.to_string())
+        .with_context(|| format!("Failed to write {}", path.display()))
+}
+
+/// Edit-preserving `status` transition on a requirement's authored
+/// `requirement-NNN.toml` (SL-044 B·P1, design §5.2 / D-B4 / D-B6). FREE any→any —
+/// `ReqStatus` enforces NO lifecycle order: any status → any status is accepted,
+/// including backward (`active`→`pending`), same-state (no-op), and leaving
+/// `retired` (a mis-`retired` requirement MUST be un-retirable). This mirrors
+/// `governance::set_status`'s free shape, NOT the ordered slice FSM.
+///
+/// `toml_edit` mutates the file in place — the `[relationships]` table, comments,
+/// and unknown keys all survive verbatim (never a parse→serialise round-trip).
+///
+/// **Writes `status` and nothing else.** The requirement entity deliberately
+/// carries no `created`/`updated` field (§5.1/§5.3 — git is the trail), so unlike
+/// `governance::set_status` there is NO stamp; only the one managed key moves.
+///
+/// Carries the no-op guard (an unchanged status writes nothing — content + mtime
+/// hold) before the F-1 malformed-refuse (a missing scaffold-seeded `status` would
+/// otherwise tail-insert *inside* the trailing `[relationships]` subtable = silent
+/// corruption, so `bail!` instead).
+pub(crate) fn set_status(root: &Path, id: u32, status: ReqStatus) -> anyhow::Result<()> {
+    let name = format!("{id:03}");
+    let path = root
+        .join(REQUIREMENT_DIR)
+        .join(&name)
+        .join(format!("requirement-{name}.toml"));
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("requirement {name} not found at {}", path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+    // No-op guard (before the malformed check): an unchanged status writes nothing.
+    if doc.get("status").and_then(toml_edit::Item::as_str) == Some(status.as_str()) {
+        return Ok(());
+    }
+
+    let table = doc.as_table_mut();
+    // F-1: `status` is scaffold-seeded — this verb edits in place, never creates.
+    // Its absence means a malformed (hand-edited) file; a tail `insert` would land
+    // the key after the trailing `[relationships]` header, inside that subtable
+    // (silent corruption). Refuse instead.
+    if !table.contains_key("status") {
+        anyhow::bail!(
+            "malformed requirement {name}: missing `status` (regenerate via the scaffold)"
+        );
+    }
+    table.insert("status", toml_edit::value(status.as_str()));
     std::fs::write(&path, doc.to_string())
         .with_context(|| format!("Failed to write {}", path.display()))
 }
@@ -535,6 +589,130 @@ kind = \"functional\"
             .join("\n");
         fs::write(&toml, stripped).unwrap();
         assert!(set_kind(root, id, ReqKind::Quality).is_err());
+    }
+
+    // --- SL-044 B·P1: the `status` setter (VT-1/VT-2/VT-3) ---
+
+    /// Reserve a requirement and hand-add a comment, an inert `[relationships]`
+    /// table, and an unknown key — the surfaces edit-preservation must keep.
+    fn reserve_with_extras(root: &Path) -> std::path::PathBuf {
+        let id = reserve(root, "fast-boot", "Fast boot", "2026-06-05")
+            .unwrap()
+            .eid
+            .numeric_id()
+            .unwrap();
+        let toml = root
+            .join(REQUIREMENT_DIR)
+            .join(format!("{id:03}/requirement-{id:03}.toml"));
+        let augmented = format!(
+            "{}\n# hand-added note\nfuture_key = \"survives\"\n\n[relationships]\nsupersedes = \"REQ-009\"\n",
+            fs::read_to_string(&toml).unwrap()
+        );
+        fs::write(&toml, augmented).unwrap();
+        toml
+    }
+
+    #[test]
+    fn set_status_round_trips_edit_preservingly_with_no_updated_stamp() {
+        // VT-1: status moves; comments, [relationships], and unknown keys all
+        // survive; NO `updated` key is introduced (the requirement carries none).
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let toml = reserve_with_extras(root);
+
+        set_status(root, 1, ReqStatus::Active).unwrap();
+        let body = fs::read_to_string(&toml).unwrap();
+        assert!(body.contains("status = \"active\""));
+        assert!(!body.contains("status = \"pending\""));
+        // edit-preservation: the inert table, comment, and unknown key all held.
+        assert!(body.contains("# hand-added note"));
+        assert!(body.contains("future_key = \"survives\""));
+        assert!(body.contains("[relationships]"));
+        assert!(body.contains("supersedes = \"REQ-009\""));
+        // the entity carries no created/updated stamp — none must appear.
+        assert!(!body.contains("updated"));
+        assert!(!body.contains("created"));
+    }
+
+    #[test]
+    fn set_status_is_free_any_to_any_backward_and_same_state() {
+        // VT-2 / D-B6: no FSM order, no terminal guard. A backward move
+        // (active→pending) and a same-state set both succeed.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let toml = reserve_with_extras(root);
+
+        set_status(root, 1, ReqStatus::Active).unwrap();
+        // backward: active → pending (an ordered FSM would refuse this).
+        set_status(root, 1, ReqStatus::Pending).unwrap();
+        assert!(
+            fs::read_to_string(&toml)
+                .unwrap()
+                .contains("status = \"pending\"")
+        );
+
+        // leaving a "terminal" status is allowed — a mis-retired req is un-retirable.
+        set_status(root, 1, ReqStatus::Retired).unwrap();
+        set_status(root, 1, ReqStatus::Active).unwrap();
+        assert!(
+            fs::read_to_string(&toml)
+                .unwrap()
+                .contains("status = \"active\"")
+        );
+
+        // same-state set is accepted (no-op): it writes nothing but does not error.
+        set_status(root, 1, ReqStatus::Active).unwrap();
+        assert!(
+            fs::read_to_string(&toml)
+                .unwrap()
+                .contains("status = \"active\"")
+        );
+    }
+
+    #[test]
+    fn set_status_no_op_writes_nothing() {
+        // the no-op guard holds content + mtime when status is unchanged.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let toml = reserve_with_extras(root);
+        let before = fs::read_to_string(&toml).unwrap();
+
+        set_status(root, 1, ReqStatus::Pending).unwrap(); // seeded pending → no-op
+        assert_eq!(fs::read_to_string(&toml).unwrap(), before);
+    }
+
+    #[test]
+    fn set_status_on_unknown_id_errors() {
+        // VT-3: an id with no requirement dir is a clear read failure (by id only).
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        assert!(set_status(root, 99, ReqStatus::Active).is_err());
+    }
+
+    #[test]
+    fn set_status_on_malformed_requirement_missing_status_refuses() {
+        // F-1: a hand-stripped `status` key is malformed — refuse, never blind-insert.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let toml = reserve_with_extras(root);
+        let stripped: String = fs::read_to_string(&toml)
+            .unwrap()
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("status ="))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&toml, stripped).unwrap();
+        assert!(set_status(root, 1, ReqStatus::Active).is_err());
+    }
+
+    #[test]
+    fn id_from_fk_rejects_slug_and_wrong_prefix() {
+        // VT-3: resolution is by id only — no slug/title derivation path exists.
+        assert_eq!(id_from_fk("REQ-007").unwrap(), 7);
+        assert_eq!(id_from_fk("REQ-1").unwrap(), 1);
+        assert!(id_from_fk("REQ-fast-boot").is_err()); // slug, not an id
+        assert!(id_from_fk("PRD-001").is_err()); // wrong prefix
+        assert!(id_from_fk("007").is_err()); // bare, no prefix
     }
 
     #[test]

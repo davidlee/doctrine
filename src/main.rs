@@ -574,6 +574,25 @@ enum SpecReqCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Transition a requirement's authored status (free any→any, edit-preserving).
+    Status {
+        /// Canonical requirement ref: `REQ-NNN` (by id only — no slug derivation).
+        req_ref: String,
+
+        /// Target status: pending | in-progress | active | deprecated | retired |
+        /// superseded.
+        #[arg(long)]
+        to: requirement::ReqStatus,
+
+        /// Operator note (accepted for v1; not yet stored on the requirement).
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1467,6 +1486,7 @@ fn write_class(cmd: &Command) -> WriteClass {
             SpecCommand::New { .. } => Write("spec new"),
             SpecCommand::Req { command } => match command {
                 SpecReqCommand::Add { .. } => Write("spec req add"),
+                SpecReqCommand::Status { .. } => Write("spec req status"),
             },
             SpecCommand::List { .. } | SpecCommand::Show { .. } | SpecCommand::Validate { .. } => {
                 Read
@@ -1867,6 +1887,12 @@ fn main() -> anyhow::Result<()> {
                     label,
                     path,
                 } => spec::run_req_add(path, &spec_ref, title, kind, label),
+                SpecReqCommand::Status {
+                    req_ref,
+                    to,
+                    note,
+                    path,
+                } => spec::run_req_status(path, &req_ref, to, note),
             },
         },
         Command::Backlog { command } => match command {
@@ -2350,6 +2376,18 @@ mod write_class_tests {
                 }
             }),
             Some("spec req add")
+        );
+        // sibling: Spec -> Req -> Status is also a Write.
+        assert_eq!(
+            w(SpecCommand::Req {
+                command: SpecReqCommand::Status {
+                    req_ref: String::new(),
+                    to: requirement::ReqStatus::Active,
+                    note: None,
+                    path: None,
+                }
+            }),
+            Some("spec req status")
         );
         assert_eq!(
             w(SpecCommand::List {
