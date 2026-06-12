@@ -1,0 +1,16 @@
+id = 46
+slug = "cross-kind-relation-graph-spine-all-entity-adapter-relatedinbound-query"
+title = "Cross-kind relation graph spine: all-entity adapter + related/inbound query"
+status = "proposed"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[relationships]
+specs = ["SPEC-001", "PRD-011"]
+requirements = ["REQ-091", "REQ-074"]
+# REQ-091 (SPEC-001 FR-002) — adapter maps doctrine ids to opaque nodes, re-maps
+#   diagnostics back; extended here from backlog-only to all kinds.
+# REQ-074 (PRD-011 FR-005) — derived inbound references computed from authored
+#   outbound edges alone (ADR-004), no stored reverse field.
+# Invariants honoured, not implemented: REQ-078 (derived disposable), REQ-079
+#   (core stays generic). Holds slices 2/3 behind it (see Follow-Ups in scope doc).
