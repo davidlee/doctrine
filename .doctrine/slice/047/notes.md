@@ -45,3 +45,39 @@ The priority adapter has **no live CLI consumer yet**, so `graph.rs` rides a
 PHASE-02/03 wiring a real caller must **remove** these suppressions (the `expect`
 fails if the lint stops firing). `backlog::dep_seq_for`/`DepSeq` are reachable from
 live code only via priority but are test-exercised; keep a live caller or they go dead.
+
+## PHASE-02 — partition + channels, pure policy core (landed `1402dc3`)
+
+**`src/priority/partition.rs`.** `pub(crate) enum StatusClass{Workable,Terminal,
+Unrecognised}` + `const PARTITION` (the §5.3 table verbatim, keyed by `kind.prefix`
+since `entity::Kind` is not `Eq`/`Copy`). `pub(crate) fn status_class(&entity::Kind,
+Option<&str>) -> StatusClass`: `Some(s)`→table; `None`+REC→Terminal (no diagnostic);
+unknown status→Unrecognised. Drift canary reads each kind's REAL `*_STATUSES` const
+(now `pub(crate)`: adr/backlog/policy/standard/spec/review/slice; req already was);
+slice binds the ADR-009 lifecycle set via `SLICE_STATUSES`; `SPEC_STATUSES` covers
+both PRD + tech-spec rows.
+
+**`src/priority/channels.rs`** — pure over `PriorityGraph`: `eligible`,
+`blocked_by` (`in_edges(dep) ∩ {class != Terminal}`, BTreeSet-deduped), `blocked`,
+`actionable = eligible && !blocked` (D12; direct-blocker I1, no closure), `blocking`
+(`out_edges(dep)`), `consequence` (reads `g.consequence`), `order_key`
+(`graph.ordered()` remapped via `projection.key_of`, the `backlog_order::ordered`
+shape), `dep_cycles` (provenance cycles filtered to dep overlay → `remap_set`).
+**`promoted` is its OWN channel** reading `NodeAttr.promoted` (NOT folded into
+`status_class`, per F1).
+
+### ⚠ Flags for PHASE-03
+
+1. **THREE dead-code suppressions to self-clear.** `graph.rs`, `partition.rs`, AND
+   `channels.rs` each carry the `not(test)` self-clearing `#[expect(dead_code)]`
+   (no live caller until the CLI lands). PHASE-03 wires the four verbs + inspect
+   block — the live consumer — which must make ALL THREE suppressions stop firing.
+   Remove each as its module gains a live caller (the `expect` errors if left when
+   the lint no longer fires).
+2. PHASE-03 render inputs: `StatusClass::Unrecognised` (D12 conservative diagnostic),
+   `promoted()` (F1 reason), `dep_cycles()` (REQ-076 cycle-degrade) are the diagnostic
+   signals the surfaces layer renders. `order_key` is the topo order; seq-rank /
+   consequence fallback tiers are already baked into the graph's OrderSpec + mint
+   order from PHASE-01.
+3. `status_class` takes `&entity::Kind` (by ref — not Copy/Eq); `NodeAttr.kind` is
+   already `&'static entity::Kind`; identity is via `kind.prefix`.
