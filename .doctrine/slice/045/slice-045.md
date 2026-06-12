@@ -60,14 +60,18 @@ descends from **SPEC-002** / **PRD-013** and completes the user-facing half of
 
 ## Affected surface (concrete)
 
-- `src/spec.rs` — `spec req list` subcommand + render; optionally a compact
-  status-count header on `spec show`.
-- `src/main.rs` — command wiring for the roster and the drift read.
-- `src/listing.rs` — likely column-model extension for the requirement row
-  (`mem.pattern.listing.column-model-extension`: pre-materialised typed row, `const`
-  non-capturing `fn(&R) -> String` extractors, JSON stays per-kind typed).
-- `src/coverage.rs`, `src/coverage_scan.rs` — read reuse, **no behaviour change**.
-- `src/requirement.rs` — reuse `ReqStatus` rendering.
+- `src/coverage_view.rs` *(new leaf)* — the derived read: ref dispatch, `CoverageRow`
+  materialisation, the `observed_state` classifier, column model + JSON rows.
+- `src/spec.rs` — `spec req list` subcommand + render (requirement column model here,
+  mirroring `SPEC_COLUMNS`) **+** one new `pub(crate) member_reqs` seam for the fan.
+- `src/main.rs` — wire the top-level `coverage` leaf + `spec req list`.
+- `src/listing.rs` — generic `Column`/`select_columns`/`render_columns` **reused
+  unchanged** (`mem.pattern.listing.column-model-extension`: pre-materialised typed row,
+  `const` non-capturing `fn(&R) -> String` extractors, JSON per-kind typed). No edit.
+- `src/coverage_scan.rs` — **+1 additive** `scan_coverage_batch` (one walk, bucket by req);
+  `scan_coverage` behaviour unchanged.
+- `src/coverage.rs` — **+** terse `Verdict::label()` display helper; the pure fold untouched.
+- `src/requirement.rs` — reuse `load` / `ReqStatus` / `ReqKind` / `CoverageStatus`.
 
 ## Risks, assumptions, open questions
 
