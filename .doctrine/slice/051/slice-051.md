@@ -62,25 +62,28 @@ The decomposition default-on forces — ordering is a *sort*, not a *view*:
   comparator branch; remove `run_order` (1595); decouple the non-terminal
   projection from membership (it survives only to feed the diagnostic).
 - `src/main.rs` — remove the `Order` variant + dispatch (`main.rs:2222`, help
-  ~887); add the opt-out flag to the `list` command / `ListArgs`.
+  ~887); add the `--by` opt-out to the backlog `List` clap variant (NOT the shared
+  `CommonListArgs`/`ListArgs` — ordering is backlog-local); thread it into `run_list`.
 - `src/backlog_order.rs` — the cordage `BacklogOrder` adapter is reused unchanged.
-- `src/listing.rs` — read-only (column model + render). Whether the comparator
-  plugs in via `listing` or stays in `backlog.rs` is a design call.
+- `src/listing.rs` — read-only and **unchanged** (column model + render). The
+  comparator stays in `backlog.rs` (design DD-2): it needs backlog-domain types and
+  replaces the existing `sort_by_key` line in `list_rows`.
 - `tests/e2e_backlog_order_golden.rs` (373 lines) — migrate onto `list`; add
   goldens for default-on, opt-out, filtered-compose, and cycle-degrade.
 
 ## Risks / Assumptions / Open Questions
 
-- **OQ-1 (open, design — the crux)** — compose-then-filter vs filter-then-compose,
-  now hit on *every* default `list`, not an edge case. Compose the graph over the
-  full corpus then drop filtered rows (survivors keep global order), or filter
-  first then compose (edges to dropped nodes dangle, changing order)? Lean
-  compose-then-filter — stable global order, membership stays the filter's.
-- **OQ-2 (open, design)** — `list --json` under default ordering: does JSON emit
-  the composed sequence, and where do overrides / cycle-drops land (JSON has no
-  footer)? Decide the envelope shape or omit the diagnostic from JSON.
-- **OQ-3 (open, design)** — cycle-degrade exit semantics: total + warn on stderr +
-  exit 0 (lean), vs a non-zero advisory. Must never print an empty table.
+- **OQ-1 (RESOLVED, design DD-1)** — **compose-then-filter.** Build the graph over
+  the full non-terminal corpus → global sequence; `retain`'s set is ordered by
+  position. Forced by the locked decomposition (membership = filter, ordering =
+  pure comparator); filter-first would dangle edges and perturb survivor order.
+- **OQ-2 (RESOLVED, design DD-4)** — `list --json` emits the **composed sequence**
+  (array order = order); the `overrides`/cycle diagnostic stays **out of the JSON
+  envelope** (no `json_envelope` change) and routes to stderr as an advisory.
+- **OQ-3 (RESOLVED, design DD-3)** — cycle-degrade: id-sort fallback + warning on
+  stderr + **exit 0**. The survey verb stays total; never an empty table.
+- **Flag spelling (RESOLVED, design DD-5)** — `--by id` (values `sequence` | `id`,
+  default `sequence`), not `--no-order`.
 - **A-1** — the cordage `BacklogOrder` adapter is reused as-is; the graph-build
   cost on every `list` is acceptable at backlog scale (note, don't optimise).
 - **A-2** — today's `list` membership = the `retain` filter (status/kind/tag/
@@ -94,9 +97,9 @@ The decomposition default-on forces — ordering is a *sort*, not a *view*:
 - Default `list` emits composed order (golden); the opt-out flag restores id-sort
   (golden).
 - A `needs` cycle degrades the default `list` to id-sort + warning — never an
-  empty table; exit semantics per OQ-3.
+  empty table; total + stderr warn + exit 0 (DD-3).
 - Filtered compose: `list --status open --kind improvement` orders the retained
-  subset per the OQ-1 decision (golden).
+  subset compose-then-filter (DD-1, golden).
 - The footer prints only when overrides / drops are non-empty; absent on a clean
   survey.
 - `backlog order` is removed — the CLI rejects it; the old golden is migrated, not
