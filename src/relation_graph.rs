@@ -92,6 +92,28 @@ impl EntityKey {
     }
 }
 
+/// The single existence gate for the keyed read surfaces (SL-050 F6). A well-formed
+/// ref to a never-minted id (e.g. `SL-999`) is indistinguishable from a real isolated
+/// node at the render layer — this turns it into a clean error instead. The oracle is
+/// the `Projection<EntityKey>` each keyed surface already holds: it contains EXACTLY
+/// the minted keys, so `resolve(key).is_none()` ⇔ the entity was never minted (no
+/// entity dir). One helper, one message, every keyed surface (`inspect`/`render`/
+/// `explain`/`blockers`/`actionability_block`) routes through it — no second
+/// existence path to drift.
+///
+/// # Errors
+///
+/// `"{KIND-NNN}: no such entity"` when `key` is absent from `projection`.
+pub(crate) fn require_minted(
+    projection: &Projection<EntityKey>,
+    key: EntityKey,
+) -> anyhow::Result<()> {
+    if projection.resolve(key).is_none() {
+        anyhow::bail!("{}: no such entity", key.canonical());
+    }
+    Ok(())
+}
+
 /// The overlay-identity map: one cordage overlay per OVERLAY-BACKED relation label
 /// (the 11 of design §5.3), keyed both ways. The two target-unvalidated labels —
 /// `Drift` and `DecisionRef` (ADR-010 Decision 2) — get NO overlay (their targets
@@ -261,15 +283,13 @@ fn title_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<
     Ok(parsed.title)
 }
 
-/// Build the cross-kind relation graph once (design §5.4 — mirrors
-/// `backlog_order::build`). A SEPARATE cordage `Graph` from `backlog_order`: they
-/// share the `Projection` *type*, never a graph instance or a scan.
-///
-/// Re-expressed on the [`scan_entities`] seam (SL-047 D5): the KINDS-walk raw scan is
-/// the shared seam; this fn only builds the REFERENCE-overlay graph on top of it. The
-/// scan order (KINDS table / id ascending) is unchanged, so the mint order — and thus
-/// the byte-identical `inspect` output (VT-4 behaviour-preservation gate) — is
-/// preserved exactly.
+/// Build the cross-kind reference-overlay graph from a PRE-SCANNED entity slice (the
+/// SL-050 F2 shared-scan seam — a SEPARATE cordage `Graph` from `backlog_order`/
+/// `priority`: they share the `Projection` *type*, never a graph instance or a scan).
+/// Takes only the slice — it touches no disk beyond the scan it is handed (the F2
+/// seam: the single corpus walk lives at the command layer). The mint/edge order is the
+/// scan order the caller supplies (KINDS table / id ascending), so the mint order — and
+/// thus the byte-identical `inspect` output (VT-4) — is preserved exactly.
 ///
 /// 1. Mint nodes: one `intern` per scanned entity, in scan order.
 /// 2. Emit edges: per minted entity, per outbound edge, parse + resolve the target; a
@@ -280,21 +300,19 @@ fn title_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<
 ///    INCLUDING a resolvable target under a no-overlay label) ⇒ a dangler.
 /// 3. `builder.build()` — NO `OrderSpec` over reference overlays (I2: direct-only,
 ///    composition-free; no union-cycle pass touches them).
-fn build_relation_graph(root: &Path) -> anyhow::Result<RelationGraph> {
-    let scanned = scan_entities(root)?;
-
+fn build_relation_graph_from(scanned: &[ScannedEntity]) -> anyhow::Result<RelationGraph> {
     let mut builder = GraphBuilder::new();
     let overlays = OverlayMap::build(&mut builder);
     let mut projection: Projection<EntityKey> = Projection::new();
 
     // Pass 1 — mint every entity's node (scan order: KINDS table, ids ascending).
-    for entity in &scanned {
+    for entity in scanned {
         projection.intern(&mut builder, entity.key);
     }
 
     // Pass 2 — emit edges (resolve only, never intern) and collect danglers.
     let mut danglers: BTreeMap<EntityKey, Vec<(RelationLabel, String)>> = BTreeMap::new();
-    for entity in &scanned {
+    for entity in scanned {
         // Present by construction (pass 1 interned every key from the same scan);
         // loud in debug if that ever desyncs, a benign skip in release (the path
         // stays panic-free).
@@ -375,29 +393,56 @@ pub(crate) struct InspectView {
 /// - **danglers**: the queried entity's unresolved / free-text / no-overlay
 ///   outbound targets.
 ///
-/// A well-formed ref to a non-existent id (never minted) returns an empty-section
-/// view, not an error (VT-5 — mirrors a `show`-like read surface over an empty
-/// entity). NEVER reads `graph.provenance()` (C7 — a benign symmetric-`related`
-/// 2-cycle yields a `Reject` `CycleDiagnostic` that must not leak into the view).
+/// A well-formed ref to a non-existent id (never minted) is an ERROR — `"{KIND-NNN}:
+/// no such entity"` (SL-050 F6): an unminted id is indistinguishable from a real
+/// isolated node at the render layer, so the existence gate makes it a clean failure.
+/// The `require_minted` bail also keeps `outbound_for` (which reads the entity's own
+/// toml) off a missing file — the gate subsumes the old missing-file guard. NEVER
+/// reads `graph.provenance()` (C7 — a benign symmetric-`related` 2-cycle yields a
+/// `Reject` `CycleDiagnostic` that must not leak into the view).
+///
+/// The own-scan convenience wrapper over [`inspect_from`] for callers that do NOT
+/// already hold a corpus scan — the unit suite below. The command layer (`main.rs`)
+/// holds the single F2 scan and calls `inspect_from`/`render_from` directly, so in a
+/// non-test build this wrapper has no caller.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "own-scan convenience wrapper for the unit suite; the F2 command layer \
+                  calls inspect_from with the shared scan, so it is test-only"
+    )
+)]
 pub(crate) fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
+    inspect_from(&scan_entities(root)?, root, id)
+}
+
+/// `inspect` over a PRE-SCANNED entity slice (the SL-050 F2 shared-scan seam). `inspect`
+/// is now the thin `scan_entities(root)?` + delegate wrapper; this carries the body.
+/// `root` is RETAINED for the queried entity's OWN per-entity re-reads — its outbound
+/// `outbound_for` (its own toml) and `render_human`'s interaction-type read — which are
+/// per-entity, not corpus, so they are not part of `scan_entities` and stay as-is.
+pub(crate) fn inspect_from(
+    scanned: &[ScannedEntity],
+    root: &Path,
+    id: &str,
+) -> anyhow::Result<InspectView> {
     let (kref, qid) = integrity::parse_canonical_ref(id)?;
     let query_key = EntityKey {
         prefix: kref.kind.prefix,
         id: qid,
     };
 
-    let rg = build_relation_graph(root)?;
+    let rg = build_relation_graph_from(scanned)?;
 
-    // A well-formed ref to a non-existent id (never minted — no entity dir) is an
-    // empty-section view, not an error (VT-5). The node-existence gate also keeps
-    // `outbound_for` (which reads the entity's own toml) off a missing file.
+    // Existence gate (F6): a well-formed ref to a never-minted id is an error, not an
+    // empty-section view — the `Projection` holds exactly the minted keys. This also
+    // keeps `outbound_for` (which reads the entity's own toml below) off a missing file.
+    require_minted(&rg.projection, query_key)?;
+    // Present by construction now the gate has passed.
     let Some(node) = rg.projection.resolve(query_key) else {
-        return Ok(InspectView {
-            id: query_key.canonical(),
-            outbound: Vec::new(),
-            inbound: Vec::new(),
-            danglers: Vec::new(),
-        });
+        debug_assert!(false, "inspect_from: gate passed but key not resolvable");
+        anyhow::bail!("{}: no such entity", query_key.canonical());
     };
 
     // outbound — the entity's own authored edges, grouped by label (targets in
@@ -448,16 +493,26 @@ pub(crate) fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
 // PHASE-04 — the `inspect <ID>` command: render (human + --json) and the shell.
 // ---------------------------------------------------------------------------
 
-/// Render the relation view of `id` to a string (build the view once, format per
-/// `Format`) WITHOUT printing — the command-layer seam (SL-047 §5.4): `main.rs`'s
-/// `inspect` handler calls this for the relation portion, then APPENDS the priority
-/// actionability block BELOW it (the composition lives at the command layer, which
-/// alone may depend on both `relation_graph` and `priority`; ADR-001 forbids
+/// Render the relation view of `id` to a string from a PRE-SCANNED entity slice (the
+/// command-layer seam, SL-047 §5.4 + SL-050 F2): `main.rs`'s `inspect` handler builds
+/// the single corpus scan ONCE, calls this for the relation portion, then APPENDS the
+/// priority actionability block BELOW it (the composition lives at the command layer,
+/// which alone may depend on both `relation_graph` and `priority`; ADR-001 forbids
 /// `relation_graph` from calling up into `priority`). The relation portion stays
 /// byte-identical — the appended block is additive (EX-2 / VT-2 behaviour-preserving).
 /// No trailing newline on JSON (the golden contract); the human surface ends in `\n`.
-pub(crate) fn render(root: &Path, id: &str, format: Format) -> anyhow::Result<String> {
-    let view = inspect(root, id)?;
+///
+/// Delegates through [`inspect_from`], so it inherits the F6 existence gate (a
+/// never-minted id errors before any render). `root` is retained for the queried
+/// entity's own per-entity re-reads (`inspect_from`'s outbound + `render_human`'s
+/// interaction types).
+pub(crate) fn render_from(
+    scanned: &[ScannedEntity],
+    root: &Path,
+    id: &str,
+    format: Format,
+) -> anyhow::Result<String> {
+    let view = inspect_from(scanned, root, id)?;
     match format {
         // The queried entity's per-edge interaction `type` is re-read from the
         // SOURCE here (C2 / §5.3) — a human-render annotation only; never carried
@@ -1093,20 +1148,29 @@ mod tests {
         assert_eq!(inbound_for(&empty, RelationLabel::Slices), vec!["ISS-001"]);
     }
 
-    // VT-5 — a well-formed ref to a non-existent id returns an empty view, not an
-    // error; an unknown prefix is a clean error (not a panic).
+    // SL-050 F6 — a well-formed ref to a never-minted id is now an ERROR (flips the old
+    // empty-view half); the exact message is `KIND-NNN: no such entity`.
     #[test]
-    fn nonexistent_id_empty_view_unknown_prefix_clean_error() {
+    fn nonexistent_id_is_no_such_entity_error() {
         let dir = tmp();
         let root = dir.path();
         seed_slice(&root, 1, "");
-        // Well-formed ref, no such entity → empty sections.
-        let ghost = inspect(&root, "SL-999").unwrap();
-        assert_eq!(ghost.id, "SL-999");
-        assert!(ghost.outbound.is_empty());
-        assert!(ghost.inbound.is_empty());
-        assert!(ghost.danglers.is_empty());
-        // Unknown prefix → clean error.
+        // Well-formed ref, no such entity → the existence gate errors (not an empty view).
+        let err = inspect(&root, "SL-999").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "SL-999: no such entity",
+            "the exact existence-gate message"
+        );
+    }
+
+    // An unknown prefix is a clean error (not a panic) — the parse-classification path,
+    // unchanged by the F6 existence gate (it fails before the scan).
+    #[test]
+    fn unknown_prefix_clean_error() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(&root, 1, "");
         let err = inspect(&root, "ZZZ-001").unwrap_err();
         assert!(
             err.to_string().contains("ZZZ"),

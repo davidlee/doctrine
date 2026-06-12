@@ -152,11 +152,24 @@ fn counts_toward_consequence(label: RelationLabel) -> bool {
     CONSEQUENCE_LABELS.contains(&label)
 }
 
-/// Build the priority graph once (design §5.2). The exact build order breaks the
-/// mint-order ↔ consequence ↔ graph cycle:
+/// Build the priority graph once (design §5.2) — the thin `scan_entities(root)?` +
+/// delegate wrapper over [`build_from`] (the SL-050 F2 shared-scan seam). A command
+/// layer that already holds a scan calls `build_from` directly to avoid a second walk.
 ///
-/// 1. **Scan** via the `relation_graph` seam → entity set + each entity's outbound
-///    edges + RAW authored status (RV derived, REC `None`).
+/// # Errors
+///
+/// Propagates a scan/read error, or an internal cordage rejection of well-formed
+/// adapter input (an adapter bug, not a recoverable condition).
+pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
+    build_from(&relation_graph::scan_entities(root)?, root)
+}
+
+/// Build the priority graph from a PRE-SCANNED entity slice (the SL-050 F2 shared-scan
+/// seam — the body of [`build`]). The exact build order breaks the mint-order ↔
+/// consequence ↔ graph cycle:
+///
+/// 1. **Scan** — supplied by the caller (the `relation_graph` seam → entity set + each
+///    entity's outbound edges + RAW authored status, RV derived / REC `None`).
 /// 2. **Consequence pre-pass** — tally inbound targets of the WORK/LINEAGE label
 ///    subset ONLY ([`CONSEQUENCE_LABELS`]) into a `BTreeMap<EntityKey, u32>`, directly
 ///    from the scanned outbound edges (no graph needed yet). `reviews`/`owning_slice`
@@ -173,21 +186,25 @@ fn counts_toward_consequence(label: RelationLabel) -> bool {
 ///    authors them.
 /// 5. `OrderSpec::new([dep Along, seq Along])`, then `builder.build()`.
 ///
+/// `root` is RETAINED: the per-backlog `dep_seq_for` reads (step 3b) are per-item reads
+/// NOT part of `scan_entities`, so the body still needs disk access. The mint/edge order
+/// is unchanged (the scan order the caller supplies), preserving byte-identical output.
+///
 /// # Errors
 ///
-/// Propagates a scan/read error, or an internal cordage rejection of well-formed
-/// adapter input (an adapter bug, not a recoverable condition).
-pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
-    // 1. Scan — the shared seam (KINDS table / id-ascending, permutation-invariant).
-    let scanned = relation_graph::scan_entities(root)?;
-
+/// Propagates a read error, or an internal cordage rejection of well-formed adapter
+/// input (an adapter bug, not a recoverable condition).
+pub(crate) fn build_from(
+    scanned: &[relation_graph::ScannedEntity],
+    root: &std::path::Path,
+) -> anyhow::Result<PriorityGraph> {
     // 2. Consequence pre-pass — tally inbound work/lineage references directly from
     //    the scanned outbound edges (in-memory, derived; ADR-004 stores no reverse).
     //    A consequence edge counts only when its target resolves to a SCANNED entity
     //    (a real node); free-text / dangling targets contribute nothing.
     let keys: std::collections::BTreeSet<EntityKey> = scanned.iter().map(|e| e.key).collect();
     let mut consequence: BTreeMap<EntityKey, u32> = BTreeMap::new();
-    for entity in &scanned {
+    for entity in scanned {
         for edge in &entity.outbound {
             if !counts_toward_consequence(edge.label) {
                 continue;
@@ -241,7 +258,7 @@ pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
     //     DD-2 — the per-kind dispatch finds nothing for non-backlog kinds), so the
     //     attrs pass and the edge pass share one read per item (no double parse).
     let mut dep_seq: BTreeMap<EntityKey, backlog::DepSeq> = BTreeMap::new();
-    for entity in &scanned {
+    for entity in scanned {
         if let Some(item_kind) = backlog::kind_from_prefix(entity.key.prefix) {
             dep_seq.insert(
                 entity.key,
@@ -253,7 +270,7 @@ pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
     // 3c. Per-node attributes — RAW authored status verbatim, kind, promoted. Only a
     //     backlog item can be `promoted`; every other kind is never promoted.
     let mut attrs: BTreeMap<EntityKey, NodeAttr> = BTreeMap::new();
-    for entity in &scanned {
+    for entity in scanned {
         attrs.insert(
             entity.key,
             NodeAttr {
@@ -267,7 +284,7 @@ pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
 
     // 4. Edges — resolve-only (never intern inside the edge pass).
     let mut dangling: Vec<Dangling> = Vec::new();
-    for entity in &scanned {
+    for entity in scanned {
         let Some(src) = projection.resolve(entity.key) else {
             debug_assert!(false, "priority::graph: edge-pass key not interned");
             continue;
