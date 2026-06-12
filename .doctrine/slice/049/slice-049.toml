@@ -1,7 +1,7 @@
 id = 49
 slug = "cli-hygiene-listing-validation"
 title = "CLI list-surface & input-validation hygiene"
-status = "design"
+status = "ready"
 created = "2026-06-12"
 updated = "2026-06-12"
 
