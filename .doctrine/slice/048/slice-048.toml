@@ -1,0 +1,16 @@
+id = 48
+slug = "structural-cross-corpus-relation-edges-governance-seam-spec-adr-product-product"
+title = "Structural cross-corpus relation edges: governance seam + spec-ADR + product-product"
+status = "proposed"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[relationships]
+specs = ["SPEC-016", "SPEC-005", "SPEC-006"]
+# Capture-surface homes for the new structural relations (all draft today):
+#   SPEC-016 governance kinds (the inert [relationships] seam), SPEC-005 ADR
+#   surface, SPEC-006 spec composition. PRD-011/SPEC-001 are downstream consumers.
+# No requirements yet — this slice MINTS new capture surface; requirements get
+#   authored as part of the prerequisite relation-governance work (a new ADR +
+#   kind-spec updates). Originating backlog item IMP-016 (no slice→backlog ref
+#   field; recorded in the scope doc). Depends on SL-046 (the live reader).
