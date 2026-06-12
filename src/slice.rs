@@ -1171,6 +1171,38 @@ fn read_slice(slice_root: &Path, id: u32) -> anyhow::Result<(SliceDoc, String)> 
     Ok((doc, body))
 }
 
+/// The slice's authored outbound relations (SL-046 §5.2 extraction seam): the
+/// `[relationships]` axes `specs`/`requirements`/`supersedes`, each ref one
+/// [`RelationEdge`]. Reads via the existing `read_slice` show-path reader (no new
+/// TOML parse — cohesion); an empty axis emits nothing. Ordering follows the axis
+/// order then the authored ref order (deterministic — REQ-077).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
+                  relation_graph::outbound_for, itself dead until PHASE-03; live \
+                  under cfg(test), retires itself then"
+    )
+)]
+pub(crate) fn relation_edges(
+    root: &Path,
+    id: u32,
+) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
+    use crate::relation::{RelationEdge, RelationLabel};
+    let (doc, _body) = read_slice(&root.join(SLICE_DIR), id)?;
+    let rel = &doc.relationships;
+    let mut edges = Vec::new();
+    for (label, refs) in [
+        (RelationLabel::Specs, &rel.specs),
+        (RelationLabel::Requirements, &rel.requirements),
+        (RelationLabel::Supersedes, &rel.supersedes),
+    ] {
+        edges.extend(refs.iter().map(|t| RelationEdge::new(label, t.clone())));
+    }
+    Ok(edges)
+}
+
 /// Render the readable whole for `Table` mode: an identity header, the flat
 /// fields, the advisory conduct posture line (`resolve(current)`, F15/F19), the
 /// non-empty relationship axes, then the scope body verbatim. House style:

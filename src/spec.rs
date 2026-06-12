@@ -492,6 +492,54 @@ fn read_interactions(interactions_path: &Path) -> anyhow::Result<Vec<Interaction
     Ok(doc.edge)
 }
 
+/// A spec's authored outbound relations (SL-046 §5.2/§5.3): the `Meta` lineage
+/// Options `descends_from` → [`RelationLabel::DescendsFrom`] and `parent` →
+/// [`RelationLabel::Parent`] (tech-only, absent on a product → emit nothing), the
+/// `members.toml` rows → [`RelationLabel::Members`], and the tech-spec
+/// `interactions.toml` `[[edge]]` rows → [`RelationLabel::Interactions`] (target =
+/// the edge `target`; the per-edge free-text `type` is a SINGLE relation class here
+/// and re-read from the source at render — C2/D2, never encoded in the label).
+/// Reads via the existing `read_members`/`read_interactions` readers (no new TOML
+/// parse). Ordering: lineage, members, interactions — each in authored order.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
+                  relation_graph::outbound_for, itself dead until PHASE-03; live \
+                  under cfg(test), retires itself then"
+    )
+)]
+pub(crate) fn relation_edges(
+    subtype: SpecSubtype,
+    root: &Path,
+    id: u32,
+) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
+    use crate::relation::{RelationEdge, RelationLabel};
+    let name = format!("{id:03}");
+    let spec_dir = root.join(subtype.kind().dir).join(&name);
+    let spec_toml = spec_dir.join(format!("{SPEC_STEM}-{name}.toml"));
+    let spec_text = std::fs::read_to_string(&spec_toml)
+        .with_context(|| format!("Failed to read {}", spec_toml.display()))?;
+    let spec: Spec = toml::from_str(&spec_text)
+        .with_context(|| format!("Failed to parse {}", spec_toml.display()))?;
+
+    let mut edges = Vec::new();
+    if let Some(d) = &spec.descends_from {
+        edges.push(RelationEdge::new(RelationLabel::DescendsFrom, d.clone()));
+    }
+    if let Some(p) = &spec.parent {
+        edges.push(RelationEdge::new(RelationLabel::Parent, p.clone()));
+    }
+    for m in read_members(&spec_dir.join("members.toml"))? {
+        edges.push(RelationEdge::new(RelationLabel::Members, m.requirement));
+    }
+    for i in read_interactions(&spec_dir.join("interactions.toml"))? {
+        edges.push(RelationEdge::new(RelationLabel::Interactions, i.target));
+    }
+    Ok(edges)
+}
+
 // ---------------------------------------------------------------------------
 // `req add` — resolver, label/order, the edit-preserving member append
 // ---------------------------------------------------------------------------
@@ -1510,6 +1558,75 @@ mod tests {
             reg.interactions
                 .iter()
                 .any(|e| e.spec == "SPEC-001" && e.target == "SPEC-002")
+        );
+    }
+
+    // --- SL-046 VT-1/VT-3: the relation_edges accessor ---
+
+    /// VT-1: a tech spec's outbound relations — lineage Options, members, and
+    /// interactions — surface with the right labels via the show-path readers.
+    #[test]
+    fn relation_edges_tech_lineage_members_interactions() {
+        use crate::relation::RelationLabel;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        // Hand-author lineage Options onto the toml (no verb in v1).
+        let toml_path = root.join(".doctrine/spec/tech/001/spec-001.toml");
+        let mut t = fs::read_to_string(&toml_path).unwrap();
+        t.push_str("descends_from = \"PRD-005\"\nparent = \"SPEC-000\"\n");
+        fs::write(&toml_path, t).unwrap();
+        append_member(
+            &root.join(".doctrine/spec/tech/001/members.toml"),
+            "REQ-009",
+            "FR-001",
+            1,
+        )
+        .unwrap();
+        let ix = root.join(".doctrine/spec/tech/001/interactions.toml");
+        let mut s = fs::read_to_string(&ix).unwrap();
+        s.push_str("\n[[edge]]\ntarget = \"SPEC-002\"\ntype = \"calls\"\nnotes = \"sync\"\n");
+        fs::write(&ix, s).unwrap();
+
+        let edges = relation_edges(SpecSubtype::Tech, root, 1).unwrap();
+        let got: Vec<(RelationLabel, &str)> =
+            edges.iter().map(|e| (e.label, e.target.as_str())).collect();
+        assert_eq!(
+            got,
+            vec![
+                (RelationLabel::DescendsFrom, "PRD-005"),
+                (RelationLabel::Parent, "SPEC-000"),
+                (RelationLabel::Members, "REQ-009"),
+                (RelationLabel::Interactions, "SPEC-002"),
+            ]
+        );
+    }
+
+    /// VT-3: the per-edge free-text `type` is NOT carried on the `RelationEdge`
+    /// (single `Interactions` class), but it round-trips from the SOURCE
+    /// `Interaction` struct for re-read at render (C2/D2).
+    #[test]
+    fn interactions_free_text_type_round_trips_from_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        let ix = root.join(".doctrine/spec/tech/001/interactions.toml");
+        let mut s = fs::read_to_string(&ix).unwrap();
+        s.push_str("\n[[edge]]\ntarget = \"SPEC-002\"\ntype = \"depends-on\"\nnotes = \"n\"\n");
+        fs::write(&ix, s).unwrap();
+
+        // The accessor collapses the type into a single class label.
+        let edges = relation_edges(SpecSubtype::Tech, root, 1).unwrap();
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].label, crate::relation::RelationLabel::Interactions);
+        assert_eq!(edges[0].target, "SPEC-002");
+
+        // The free-text type is recoverable from the source for the PHASE-04 render.
+        let src = read_interactions(&ix).unwrap();
+        assert_eq!(src.len(), 1);
+        assert_eq!(
+            src[0].kind, "depends-on",
+            "free-text type survives at source"
         );
     }
 

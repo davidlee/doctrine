@@ -665,6 +665,31 @@ fn read_review(review_root: &Path, id: u32) -> anyhow::Result<ReviewDoc> {
     toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
+/// A review's authored outbound relation (SL-046 §5.2/§5.3): the single
+/// `[target].ref` subject edge `RV-N ──reviews──▶ target` →
+/// [`RelationLabel::Reviews`]. Reads via the existing `read_review` reader (no new
+/// TOML parse). Always exactly one edge (the target ref is required at `new`).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
+                  relation_graph::outbound_for, itself dead until PHASE-03; live \
+                  under cfg(test), retires itself then"
+    )
+)]
+pub(crate) fn relation_edges(
+    root: &Path,
+    id: u32,
+) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
+    use crate::relation::{RelationEdge, RelationLabel};
+    let doc = read_review(&root.join(REVIEW_DIR), id)?;
+    Ok(vec![RelationEdge::new(
+        RelationLabel::Reviews,
+        doc.target.reference,
+    )])
+}
+
 /// Read every `review-NNN.toml` under the review tree as data (for `list`).
 fn read_reviews(review_root: &Path) -> anyhow::Result<Vec<ReviewDoc>> {
     let mut docs = Vec::new();

@@ -396,6 +396,38 @@ fn read_rec(rec_root: &Path, id: u32) -> anyhow::Result<RecDoc> {
     toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
+/// A rec's authored outbound relations (SL-046 §5.2/§5.3): the optional
+/// `owning_slice` → [`RelationLabel::OwningSlice`] (→ SL) and the optional
+/// `decision_ref` → [`RelationLabel::DecisionRef`]. `decision_ref` is a free-text DEC
+/// ref with no `DEC` kind in `KINDS`, so it is a TARGET-UNVALIDATED label (ADR-010
+/// Decision 2): carried so the data is preserved, but its target never resolves and
+/// surfaces as a dangler at the scan (PHASE-03), never an edge. Reads via the
+/// existing `read_rec` reader (no new TOML parse). An absent edge emits nothing.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-046 PHASE-02 relation accessor — sole caller is \
+                  relation_graph::outbound_for, itself dead until PHASE-03; live \
+                  under cfg(test), retires itself then"
+    )
+)]
+pub(crate) fn relation_edges(
+    root: &Path,
+    id: u32,
+) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
+    use crate::relation::{RelationEdge, RelationLabel};
+    let doc = read_rec(&root.join(REC_DIR), id)?;
+    let mut edges = Vec::new();
+    if let Some(s) = &doc.rec.owning_slice {
+        edges.push(RelationEdge::new(RelationLabel::OwningSlice, s.clone()));
+    }
+    if let Some(d) = &doc.rec.decision_ref {
+        edges.push(RelationEdge::new(RelationLabel::DecisionRef, d.clone()));
+    }
+    Ok(edges)
+}
+
 /// Read every `rec-NNN.toml` under the REC tree as data (for `list`).
 fn read_recs(rec_root: &Path) -> anyhow::Result<Vec<RecDoc>> {
     let mut docs = Vec::new();
