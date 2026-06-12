@@ -5,10 +5,10 @@ id = 4
 slug = "req-add-long-slug-abort"
 title = "spec req add aborts on overlong title-derived slug (os error 36), no --slug escape"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-11"
-updated = "2026-06-11"
+updated = "2026-06-12"
 tags = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

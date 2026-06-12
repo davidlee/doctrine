@@ -5,10 +5,10 @@ id = 5
 slug = "backlog-order-adapter-duplicate-itemid-in-orderinput-silently-corrupts-the-nodeid-bimap"
 title = "backlog_order adapter: duplicate ItemId in &[OrderInput] silently corrupts the NodeId bimap"
 kind = "risk"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "mitigated"
 created = "2026-06-11"
-updated = "2026-06-11"
+updated = "2026-06-12"
 tags = ["cordage", "adapter"]
 
 [facet]                         # risk only — every field typed; seeded empty
