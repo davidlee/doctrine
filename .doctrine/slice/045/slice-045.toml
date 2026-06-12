@@ -1,0 +1,20 @@
+id = 45
+slug = "requirement-status-visibility-roster-and-drift-read"
+title = "Requirement status visibility: spec req roster + standalone drift read"
+status = "proposed"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+# Closure-gate req set (authored; set & peer-reviewed at /plan). This slice
+# discharges the user-facing read-surface half of REQ-110 (composite view) and
+# REQ-111 (drift surfacer) — the library folds shipped in SL-042 A·P3, but the
+# "reported as a derived read" intent needed a CLI surface. Descends SPEC-002.
+[gate]
+extra_reqs = ["REQ-110", "REQ-111"]
+
+[relationships]
+# Reserved. Empty in v1 — no spec/requirement registry to point at yet.
+# When specs land, this section gains (illustrative, not v1):
+#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
+#   requirements = ["..."]   # implements / updates / verifies
+#   supersedes   = [2]       # slice-to-slice links

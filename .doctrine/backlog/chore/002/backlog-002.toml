@@ -1,0 +1,20 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 2
+slug = "reconcile-spec-002-corpus-pending-requirements"
+title = "Reconcile SPEC-002/PRD-013 own requirements: all still pending despite engine shipped (SL-042/SL-044)"
+kind = "chore"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-12"
+updated = "2026-06-12"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
