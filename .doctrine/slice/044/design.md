@@ -85,11 +85,11 @@ closure on drift.
 ## 4. Guiding Principles
 
 - **Author, never derive.** The writer reads `drift` only to *prompt*; the human/
-  agent supplies the move and the explicit `--to` status. NF-001 holds by **tested
-  behaviour** — the written status equals the operator's `--to` across every
-  `Verdict`; the verdict never reaches the code path that picks it (§5.6, D-B7). (A
-  pure type-level proof is *not* available — `coverage` imports `ReqStatus`, so a
-  match-launder would compile; the test is the guard.)
+  agent supplies the move and the explicit `--to` status. NF-001 is an **info-flow
+  invariant** (no coverage→authored-status path but through human judgment) — not
+  type-expressible, so the wall is layered: a status-select fn whose params exclude
+  coverage types (type-level), the verdict consumed by the prompt builder, and a
+  verdict-independence test on the residual call site (§5.6, D-B7).
 - **One act, one REC, fully reconstructable.** Every reconciliation act commits + a
   REC; the REC plus commits reconstruct *why* a requirement holds its current status
   from the authored tier alone (NF-003) — no recourse to chat/runtime state.
@@ -237,39 +237,52 @@ close-gate; SL-042 D-Q2 coverage fan-in). **Perf escalation is RSK-006** — if 
 scan cliffs below realistic scale, the reverse-index lands there, documented, rather
 than denormalizing now.
 
-### 5.6 NF-001 enforcement = behavioural no-derivation, not a type-level proof (D-B7, LOCKED)
+### 5.6 NF-001 enforcement = info-flow, walled at the function signature (D-B7, LOCKED)
 
-**Two prior framings, both wrong.** (a) "No import edge `coverage → status-writer`" —
-wrong: the writer **must** import `coverage` to read `drift` for prompting. (b) "The
-type system makes `status = f(coverage)` non-compiling" — **also wrong** (codex
-finding 1). `coverage` itself imports `ReqStatus` (`coverage.rs:45`); a writer can
-trivially *launder* a status out of the verdict and still compile:
+**NF-001 is an information-flow invariant**, not a type property: *no causal path
+carries observed coverage into authored `ReqStatus`, except through human judgment.*
+Rust's type system cannot express information flow (no taint/effect tracking), so
+**no choice of types makes the forbidden derivation un-writable** — any value in
+scope can be hand-mapped to any enum. Three prior framings drew the wall at the wrong
+granularity:
 
-```rust
-let to = match verdict {            // <- this compiles; it IS a coverage→status derivation
-    Verdict::Divergent(EvidenceOutrunsAuthored) => ReqStatus::Active,
-    Verdict::Divergent(ObservedContradiction)   => ReqStatus::Pending,
-    _ => authored,
-};
-```
+- ✗ **import boundary** ("no `use coverage` in the writer") — wrong: the writer
+  *must* read `drift` to prompt.
+- ✗ **return-type boundary** ("`coverage` exposes no `ReqStatus`") — wrong (codex
+  finding 1): a `match` over the verdict launders one and still compiles —
+  ```rust
+  let to = match verdict {            // compiles; IS a coverage→status derivation
+      Verdict::Divergent(EvidenceOutrunsAuthored) => ReqStatus::Active,
+      Verdict::Divergent(ObservedContradiction)   => ReqStatus::Pending,
+      _ => authored,
+  };
+  ```
+- ✓ **function-parameter boundary** — the correct structural wall.
 
-The `Verdict`-carries-no-`ReqStatus` shape raises the bar but is **not** a proof.
+**The wall (D-B7), layered — no single mechanism suffices:**
 
-**The real guard is behavioural (D-B7):**
-1. `spec req status <REQ> --to <ReqStatus>` parses `--to` as an **independent CLI
-   input** — the operator's explicit value, structurally separate from any verdict.
-2. **VT — verdict-independence:** for a fixed reconcile input, the status the writer
-   passes to the B·P1 setter equals the `--to` argument **across every `Verdict`
-   variant** (hold `--to` fixed, vary the synthesized verdict — the written status
-   must not move). This is the test the laundering example above would fail.
-3. **Guard — no-launder:** no writer-path helper has signature
-   `… -> ReqStatus` derived from `Verdict`/`DivergentReason`. Enforced by a unit
-   test over the writer module's surface (doctrine has no arch-test framework; the
-   guard is a targeted test, not a grep over the tree).
+1. **Signature isolation (type-level, the load-bearing part).** Status selection is a
+   pure fn whose parameter list **excludes every coverage-derived type**:
+   ```rust
+   fn select_status(to: ReqStatus, prior: ReqStatus) -> ReqStatus  // no Verdict/Composite/coverage in scope
+   ```
+   Inside `select_status` the compiler *does* prove no derivation — you cannot use
+   data you were never handed; the laundering `match` won't compile because `verdict`
+   is out of scope. This shrinks the laundering surface from "anywhere in the writer"
+   to **one call site**.
+2. **Verdict consumed by the prompt builder.** `drift`'s `Verdict` flows *only* into
+   `fn build_prompt(verdict) -> PromptText` and is consumed there — not live at the
+   write — so it cannot be threaded into `select_status`'s `to` argument.
+3. **Test on the one residual site.** `--to` is a clap-parsed independent CLI input;
+   a **verdict-independence VT** holds `--to` fixed, varies **every coverage-derived
+   input the handler can see** (the whole `Composite`/staleness, not just the
+   `Verdict` discriminant), and asserts the written status never moves. This guards
+   the only place left to launder — the handler wiring `--to` into `select_status`.
 
-The verdict's *only* role is to populate the human-facing prompt; it never reaches
-the code path that selects `to`. NF-001 holds by **tested behaviour**, not by the
-type system alone.
+**Honest limit:** info-flow is *approximated, never proven* in Rust. (1) makes the
+bulk type-impossible; (2) removes the verdict from the write scope; (3) covers the
+residual call site. The combination is the guarantee — the test alone (an earlier
+framing) understates it, the type system alone cannot reach it.
 
 ## 6. Open Questions (a continuing agent MUST close before lock)
 
@@ -335,16 +348,18 @@ type system alone.
   corrections; `ReqStatus` enforces no order today. No v1 terminal guard. *Alt
   rejected:* ordered FSM (fights reconcile's correction use case; no lifecycle order
   to enforce anyway).
-- **D-B7 — NF-001 is enforced by *tested behaviour*, not a type-level proof.** The
-  writer *must* `use coverage` (to read `drift` for prompting), and a pure type-level
-  proof is unavailable — `coverage` imports `ReqStatus` (`coverage.rs:45`), so a
-  `match verdict { … => ReqStatus::X }` launder compiles (codex finding 1). Guard:
-  `--to` is an independent CLI input; a **verdict-independence VT** pins the written
-  status equal to `--to` across every `Verdict`; a **no-launder test** forbids a
-  writer helper returning `ReqStatus` from `Verdict`/`DivergentReason`. *Alt
-  rejected:* (a) a grep `use coverage` ban — brittle *and* wrong (forbids the
-  legitimate read); (b) "type system makes it non-compiling" — **false**, the launder
-  compiles. *Corrects two* prior framings (import-edge, then type-level).
+- **D-B7 — NF-001 is an info-flow invariant, walled at the function signature +
+  tested at the residual site.** Info-flow is not type-expressible in Rust, so no
+  type choice forbids the derivation outright. The wall is layered (§5.6):
+  (1) status selection is a pure fn whose params **exclude** every coverage-derived
+  type (`select_status(to, prior) -> ReqStatus`) — type-level, shrinks laundering to
+  one call site; (2) the `Verdict` is consumed by the prompt builder, not live at the
+  write; (3) a verdict-independence VT (vary *all* coverage-derived inputs, hold
+  `--to`) guards the residual handler site. *Alt rejected:* (a) import-edge ban —
+  wrong, writer must read `drift`; (b) "`coverage` exposes no `ReqStatus`, so it can't
+  compile" — **false**, a `match` launders it (codex finding 1); (c) behavioural test
+  *alone* — understates it, misses non-`Verdict` channels. *Corrects three* prior
+  framings (import → return-type → test-only).
 - **D-B8 — one REC per requirement, composed atomically.** Forced by the single
   `RecMeta.move` String (mixed-move sessions can't share a REC). Writer composes the
   full `RecDoc` and writes it once; no `rec new`+append. *Alt rejected:* one
@@ -394,11 +409,13 @@ type system alone.
   post-REC coverage cell introduces fresh drift (evidence-coverage clause); (iii) a
   `revise`/`redesign` REC does **not** discharge (move==accept clause); (iv) a foreign
   `owning_slice` REC does **not** discharge.
-- **REQ-114 / NF-001** — behavioural (D-B7): a **verdict-independence VT** — hold
-  `--to` fixed, vary the synthesized `Verdict` across all variants, assert the written
-  status never moves; a **no-launder test** that no writer helper derives `ReqStatus`
-  from `Verdict`/`DivergentReason`. (No type-level proof claimed — the launder
-  compiles; the tests are the guard.)
+- **REQ-114 / NF-001** — info-flow, layered (D-B7, §5.6): **(structural)**
+  `select_status`'s signature excludes every coverage-derived type — a unit/compile
+  check that the fn is called with only `(--to, prior)`; **(structural)** the
+  `Verdict` is consumed by the prompt builder, absent at the write; **(behavioural)** a
+  verdict-independence VT — hold `--to` fixed, vary *all* coverage-derived handler
+  inputs (`Composite`/staleness, not just the `Verdict` discriminant), assert the
+  written status never moves.
 - **REQ-116 / NF-003** — a REC + commits reconstruct a requirement's current status
   with no runtime-state recourse; the on-demand scan resolves "last act" from
   authored REC ids alone.
@@ -416,8 +433,11 @@ type system alone.
 - **Codex adversarial pass (gpt-5.5, 2026-06-12) — 3 blockers + 4 majors, all
   actioned:**
   - *Finding 1 (blocker)* — D-B7's type-level claim was **false** (the verdict→status
-    launder compiles). Reframed to a behavioural verdict-independence + no-launder
-    guard. §5.6, D-B7.
+    launder compiles). Reframed twice: first to a behavioural test (still too weak —
+    misses non-`Verdict` channels), then to the **layered info-flow** wall — signature
+    isolation (`select_status` excludes coverage types) + verdict-consumed-by-prompt +
+    a residual-site VT. §5.6, D-B7. (User pressed the point that no type substitution
+    can fix an info-flow invariant — drove the signature-boundary framing.)
   - *Finding 2 (blocker)* — discharge predicate let stale RECs excuse live drift.
     Strengthened: latest-REC + `move==accept` + `evidence_ref ⊇ residual keys`. §5.5
     step 3, R-B3.

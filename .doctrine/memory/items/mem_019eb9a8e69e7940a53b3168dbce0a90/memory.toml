@@ -1,0 +1,41 @@
+memory_uid = "mem_019eb9a8e69e7940a53b3168dbce0a90"
+memory_key = "mem.pattern.architecture.info-flow-wall-at-signature"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Info-flow no-derivation invariants: wall at the function signature, not the import or return type"
+summary = "No-derivation/info-flow invariants are not type-provable; wall them at the function signature (exclude the source type from params), then test only the residual call site"
+created = "2026-06-12"
+updated = "2026-06-12"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["nf-001", "information-flow", "architecture", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2462cd7dc66c225a3c6a04486f705fcdfdff7038"
+ref_name = "refs/heads/main"
+checkout_state_id = "7e99e6a035e0fdd4ef0590512f41e38d0f3cd169e5f584c83f82645afd4de2a0"
+base_commit = "d105da636bacb8560f8cdab2d8245750888d94c8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
