@@ -259,17 +259,6 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
         }]
     };
 
-    // Order contributors: the dep-topology level (the count of transitive prereqs as
-    // a proxy for depth) + the seq rank of any after edge constraining it. The
-    // authoritative composed level is cordage-internal; the transitive-prereq count
-    // is the agent-legible depth proxy (design §5.4 — contributors, not the raw key).
-    let dep_level =
-        u32::try_from(channels::blocked_by_transitive(&g, key).len()).unwrap_or(u32::MAX);
-    let order_contrib = ReasonKind::OrderContrib {
-        dep_level,
-        seq_rank: None,
-    };
-
     let evictions = channels::evicted_seq_edges(&g, key)
         .into_iter()
         .map(|(from, to, reason)| ReasonKind::EvictedEdge {
@@ -297,7 +286,6 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
         id: key.canonical(),
         eligibility,
         blocker_chain,
-        order_contrib,
         evictions,
         consequence,
     })

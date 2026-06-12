@@ -36,12 +36,6 @@ pub(crate) enum ReasonKind {
     Blocking { items: Vec<String> },
     /// The node's consequence tally — the inbound work/lineage reference count.
     Consequence { inbound: u32 },
-    /// The node's order-key contributors: its dep-topology level and its seq rank
-    /// (the soft-sequence tiebreak), `None` when no `after` edge constrains it.
-    OrderContrib {
-        dep_level: u32,
-        seq_rank: Option<i32>,
-    },
     /// A soft `after` edge cordage evicted to linearize — the honest record
     /// (`from → to`, with the cordage reason re-expressed in the shared vocabulary).
     EvictedEdge {
@@ -52,17 +46,6 @@ pub(crate) enum ReasonKind {
     /// The node sits in a diagnosed dep cycle — its order degraded to the fallback
     /// rather than a false topological order (REQ-076 / F2).
     CycleDegraded { nodes: Vec<String> },
-    /// No structured reason applies (e.g. a promoted backlog item excluded by its own
-    /// reason carries this where eligibility is moot) — the explicit empty signal.
-    /// Part of the design §5.4 reason vocabulary; no surface emits it in v1 (every
-    /// classification carries a concrete reason), but it renders (`render::reason_*`)
-    /// so the vocabulary is complete and a future reason can adopt it.
-    #[expect(
-        dead_code,
-        reason = "design §5.4 reason vocabulary completeness; no v1 surface emits Fallback \
-                  (every classification carries a concrete reason) but it renders"
-    )]
-    Fallback,
 }
 
 /// Whether an eligible node is ready to start now, or held by a blocker (design
@@ -151,15 +134,14 @@ pub(crate) struct ActionabilityBlock {
 }
 
 /// The `explain <ID>` result (design §5.4 / D11) — always walked to root: the
-/// eligibility reason, the transitive blocker chain, the order-key contributors, the
-/// evicted seq edges, and the consequence. Each field is a structured reason (or a
-/// list of them) so the renderer only formats.
+/// eligibility reason, the transitive blocker chain, the evicted seq edges, and the
+/// consequence. Each field is a structured reason (or a list of them) so the renderer
+/// only formats.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Explanation {
     pub(crate) id: String,
     pub(crate) eligibility: ReasonKind,
     pub(crate) blocker_chain: Vec<ReasonKind>,
-    pub(crate) order_contrib: ReasonKind,
     pub(crate) evictions: Vec<ReasonKind>,
     pub(crate) consequence: ReasonKind,
 }

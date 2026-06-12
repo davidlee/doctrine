@@ -235,7 +235,7 @@ fn blockers_transitive_byte_exact() {
 }
 
 /// explain ISS-001: the full structured account — eligibility, the blocker chain,
-/// the order contributors, and the consequence, each from a structured reason.
+/// and the consequence, each from a structured reason.
 #[test]
 fn explain_human_byte_exact() {
     let dir = tmp();
@@ -248,7 +248,6 @@ fn explain_human_byte_exact() {
         "ISS-001 — explain\n\
          \x20\x20eligibility: open → Workable\n\
          \x20\x20blocked by: RSK-001\n\
-         \x20\x20order: dep-level 1\n\
          \x20\x20consequence: 0\n"
     );
 }
@@ -268,7 +267,7 @@ fn survey_json_every_surface_and_policy_version() {
     let body = stdout(&out);
     let v: serde_json::Value = serde_json::from_str(&body).expect("valid JSON");
     assert_eq!(v["kind"], "survey");
-    assert_eq!(v["policy_version"], "priority.v1");
+    assert_eq!(v["policy_version"], "priority.v2");
     let rows = v["rows"].as_array().expect("rows array");
     // ISS-002 leads; every surface present on it.
     let lead = &rows[0];
@@ -305,13 +304,16 @@ fn explain_json_structured_reasons_and_policy_version() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("valid JSON");
     assert_eq!(v["kind"], "explain");
-    assert_eq!(v["policy_version"], "priority.v1");
+    assert_eq!(v["policy_version"], "priority.v2");
     assert_eq!(v["id"], "ISS-001");
     assert_eq!(v["eligibility"]["kind"], "eligibility");
     assert_eq!(v["eligibility"]["class"], "Workable");
     assert_eq!(v["blocker_chain"][0]["kind"], "blocked_by");
     assert_eq!(v["blocker_chain"][0]["items"][0], "RSK-001");
-    assert_eq!(v["order_contrib"]["kind"], "order_contrib");
+    assert!(
+        v.get("order_contrib").is_none(),
+        "order_contrib field dropped from the explain --json envelope (SL-050 F5)"
+    );
     assert_eq!(v["consequence"]["inbound"], 0);
 }
 
@@ -325,7 +327,7 @@ fn next_json_actionable_only_policy_version() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("valid JSON");
     assert_eq!(v["kind"], "next");
-    assert_eq!(v["policy_version"], "priority.v1");
+    assert_eq!(v["policy_version"], "priority.v2");
     let ids: Vec<&str> = v["rows"]
         .as_array()
         .unwrap()

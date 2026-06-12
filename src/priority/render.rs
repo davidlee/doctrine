@@ -14,7 +14,7 @@ use super::view::{ActionabilityBlock, BlockersView, Explanation, NextRow, Reason
 /// The priority policy version stamped into every `--json` envelope (D6 / REQ-094).
 /// A consumer keys behaviour off this; bump it whenever the policy (partition,
 /// channel synthesis, or order composition) changes its observable verdicts.
-pub(crate) const PRIORITY_POLICY_VERSION: &str = "priority.v1";
+pub(crate) const PRIORITY_POLICY_VERSION: &str = "priority.v2";
 
 /// Render `survey` for human reading — one row per eligible node in importance order.
 /// Columns: id, kind, status, BLOCKED badge (or blank), consequence, direct blocker.
@@ -110,32 +110,23 @@ fn reason_line(reason: &ReasonKind) -> String {
         ReasonKind::BlockedBy { items } => format!("  blocked by: {}\n", items.join(", ")),
         ReasonKind::Blocking { items } => format!("  blocking: {}\n", items.join(", ")),
         ReasonKind::Consequence { inbound } => format!("  consequence: {inbound}\n"),
-        ReasonKind::OrderContrib {
-            dep_level,
-            seq_rank,
-        } => match seq_rank {
-            Some(rank) => format!("  order: dep-level {dep_level}, seq-rank {rank}\n"),
-            None => format!("  order: dep-level {dep_level}\n"),
-        },
         ReasonKind::EvictedEdge { from, to, reason } => {
             format!("  evicted seq edge: {from} → {to} ({reason:?})\n")
         }
         ReasonKind::CycleDegraded { nodes } => {
             format!("  dep cycle (order degraded): {}\n", nodes.join(", "))
         }
-        ReasonKind::Fallback => "  (no further reason)\n".to_string(),
     }
 }
 
 /// Render `explain` for human reading — every structured reason in a fixed section
-/// order: eligibility, blocker chain, order contributors, evicted edges, consequence.
+/// order: eligibility, blocker chain, evicted edges, consequence.
 pub(crate) fn explain_human(ex: &Explanation) -> String {
     let mut parts: Vec<String> = vec![format!("{} — explain\n", ex.id)];
     parts.push(reason_line(&ex.eligibility));
     for r in &ex.blocker_chain {
         parts.push(reason_line(r));
     }
-    parts.push(reason_line(&ex.order_contrib));
     for r in &ex.evictions {
         parts.push(reason_line(r));
     }
@@ -182,14 +173,6 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
         ReasonKind::Consequence { inbound } => {
             serde_json::json!({ "kind": "consequence", "inbound": inbound })
         }
-        ReasonKind::OrderContrib {
-            dep_level,
-            seq_rank,
-        } => serde_json::json!({
-            "kind": "order_contrib",
-            "dep_level": dep_level,
-            "seq_rank": seq_rank,
-        }),
         ReasonKind::EvictedEdge { from, to, reason } => serde_json::json!({
             "kind": "evicted_edge",
             "from": from,
@@ -199,7 +182,6 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
         ReasonKind::CycleDegraded { nodes } => {
             serde_json::json!({ "kind": "cycle_degraded", "nodes": nodes })
         }
-        ReasonKind::Fallback => serde_json::json!({ "kind": "fallback" }),
     }
 }
 
@@ -278,7 +260,6 @@ pub(crate) fn explain_json(ex: &Explanation) -> anyhow::Result<String> {
         "id": ex.id,
         "eligibility": reason_json(&ex.eligibility),
         "blocker_chain": ex.blocker_chain.iter().map(reason_json).collect::<Vec<_>>(),
-        "order_contrib": reason_json(&ex.order_contrib),
         "evictions": ex.evictions.iter().map(reason_json).collect::<Vec<_>>(),
         "consequence": reason_json(&ex.consequence),
     }))
