@@ -787,26 +787,33 @@ const SLICE_COLUMNS: [listing::Column<SliceRowTuple>; 5] = [
         name: "id",
         header: "id",
         cell: |(m, _)| canonical_id(m.id),
+        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
     },
     listing::Column {
         name: "status",
         header: "status",
         cell: |(m, r)| decorated_status(&m.status, r.as_ref()),
+        // F-4: hue from the row's RAW `m.status`, NOT the decorated `done ⚠`/`bogus?`
+        // cell — matching the emitted cell would drop colour on decorated rows.
+        paint: listing::ColumnPaint::ByValue(|(m, _)| listing::status_hue(&m.status)),
     },
     listing::Column {
         name: "phases",
         header: "phases",
         cell: |(_, r)| phases_cell(r.as_ref()),
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "slug",
         header: "slug",
         cell: |(m, _)| m.slug.clone(),
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "title",
         header: "title",
         cell: |(m, _)| m.title.clone(),
+        paint: listing::ColumnPaint::None,
     },
 ];
 
@@ -1012,6 +1019,7 @@ fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()> {
 /// for the surviving rows.
 pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     validate_statuses(&args.status, SLICE_STATUSES)?;
+    let color = args.color;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let slice_root = root.join(SLICE_DIR);
@@ -1032,7 +1040,7 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
     match format {
         Format::Table => {
             let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&rows, &sel))
+            Ok(listing::render_columns(&rows, &sel, color))
         }
         Format::Json => listing::json_envelope("slice", &json_rows(&rows)),
     }
@@ -1320,14 +1328,14 @@ mod tests {
     /// Render rows over the default column set (the migrated `render_table` path).
     fn render_default(rows: &[SliceRowTuple]) -> String {
         let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, None).unwrap();
-        listing::render_columns(rows, &sel)
+        listing::render_columns(rows, &sel, false)
     }
 
     /// Render rows over an explicit `--columns` set.
     fn render_cols(rows: &[SliceRowTuple], cols: &[&str]) -> String {
         let owned: Vec<String> = cols.iter().map(|s| (*s).to_string()).collect();
         let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, Some(&owned)).unwrap();
-        listing::render_columns(rows, &sel)
+        listing::render_columns(rows, &sel, false)
     }
 
     #[test]

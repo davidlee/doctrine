@@ -40,6 +40,7 @@ mod spec;
 mod standard;
 mod state;
 mod tomlfmt;
+mod tty;
 mod worktree;
 
 use std::path::PathBuf;
@@ -119,6 +120,9 @@ impl CommonListArgs {
             format: self.format,
             json: self.json,
             columns: self.columns,
+            // Resolve colour capability ONCE at the clap→leaf seam (SL-053 D3): the
+            // sole impure read, injected as a plain bool the pure leaf consumes.
+            color: crate::tty::stdout_color_enabled(),
         }
     }
 }

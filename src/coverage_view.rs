@@ -278,6 +278,16 @@ impl CoverageRow {
     fn label_cell(&self) -> String {
         self.label().unwrap_or("-").to_owned()
     }
+
+    /// The status-column hue from the ROW's raw authored status (SL-053 PHASE-02,
+    /// F-4) — a `Dangling` row (whose `status` cell is the inline load-error note)
+    /// is never coloured.
+    fn status_hue(&self) -> Option<owo_colors::AnsiColors> {
+        match self {
+            CoverageRow::Healthy { status, .. } => listing::status_hue(status.as_str()),
+            CoverageRow::Dangling { .. } => None,
+        }
+    }
 }
 
 /// The table columns a coverage row can show (`--columns` tokens over
@@ -290,31 +300,37 @@ const COVERAGE_COLUMNS: [listing::Column<CoverageRow>; 6] = [
         name: "id",
         header: "id",
         cell: |r| r.id().to_owned(),
+        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
     },
     listing::Column {
         name: "label",
         header: "label",
         cell: CoverageRow::label_cell,
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "kind",
         header: "kind",
         cell: CoverageRow::kind_cell,
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "status",
         header: "status",
         cell: CoverageRow::status_cell,
+        paint: listing::ColumnPaint::ByValue(CoverageRow::status_hue),
     },
     listing::Column {
         name: "observed",
         header: "observed",
         cell: CoverageRow::observed_cell,
+        paint: listing::ColumnPaint::None,
     },
     listing::Column {
         name: "verdict",
         header: "verdict",
         cell: CoverageRow::verdict_cell,
+        paint: listing::ColumnPaint::None,
     },
 ];
 
@@ -330,6 +346,7 @@ const COVERAGE_DEFAULT: &[&str] = &["id", "status", "observed", "verdict"];
 pub(crate) fn render_table(
     rows: &[CoverageRow],
     columns: Option<&[String]>,
+    color: bool,
 ) -> anyhow::Result<String> {
     // Prepend `label` to the default set only when some row carries one — a spec
     // fan shows the membership label; a bare REQ read omits the column entirely.
@@ -342,7 +359,7 @@ pub(crate) fn render_table(
         COVERAGE_DEFAULT.to_vec()
     };
     let sel = listing::select_columns(&COVERAGE_COLUMNS, &default, columns)?;
-    Ok(listing::render_columns(rows, &sel))
+    Ok(listing::render_columns(rows, &sel, color))
 }
 
 /// One coverage row's faithful JSON shape (design §5 D5 contract; PHASE-06
@@ -438,7 +455,9 @@ pub(crate) fn run(
     let resolved = if json { listing::Format::Json } else { format };
     let out = match resolved {
         listing::Format::Json => render_json(&rows)?,
-        listing::Format::Table => render_table(&rows, columns)?,
+        // Resolve colour capability ONCE in the impure shell (SL-053 D3), inject as
+        // a bool — JSON stays plain.
+        listing::Format::Table => render_table(&rows, columns, crate::tty::stdout_color_enabled())?,
     };
     write!(std::io::stdout(), "{out}")?;
     Ok(())
@@ -743,7 +762,7 @@ mod tests {
             observed: ObservedState::None,
             verdict: Verdict::Indeterminate,
         };
-        let out = render_table(std::slice::from_ref(&labelled), None).unwrap();
+        let out = render_table(std::slice::from_ref(&labelled), None, false).unwrap();
         let header = out.lines().next().unwrap();
         assert!(
             header.starts_with("label"),
@@ -758,7 +777,7 @@ mod tests {
             observed: ObservedState::None,
             verdict: Verdict::Indeterminate,
         };
-        let out = render_table(std::slice::from_ref(&bare), None).unwrap();
+        let out = render_table(std::slice::from_ref(&bare), None, false).unwrap();
         let header = out.lines().next().unwrap();
         assert!(
             header.starts_with("id"),

@@ -1073,31 +1073,37 @@ const MEMORY_COLUMNS: [Column<Memory>; 6] = [
         name: "uid",
         header: "uid",
         cell: |m| m.uid.clone(),
+        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
     },
     Column {
         name: "type",
         header: "type",
         cell: |m| m.kind.as_str().to_string(),
+        paint: listing::ColumnPaint::None,
     },
     Column {
         name: "status",
         header: "status",
         cell: |m| m.status.as_str().to_string(),
+        paint: listing::ColumnPaint::ByValue(|m| listing::status_hue(m.status.as_str())),
     },
     Column {
         name: "trust",
         header: "trust",
         cell: |m| scrub_line(&m.trust_level),
+        paint: listing::ColumnPaint::None,
     },
     Column {
         name: "key",
         header: "key",
         cell: |m| scrub_line(m.key.as_deref().unwrap_or("-")),
+        paint: listing::ColumnPaint::None,
     },
     Column {
         name: "title",
         header: "title",
         cell: |m| scrub_line(&m.title),
+        paint: listing::ColumnPaint::None,
     },
 ];
 
@@ -1301,6 +1307,7 @@ pub(crate) fn list_rows(
     mut args: ListArgs,
 ) -> Result<String> {
     listing::validate_statuses(&args.status, MEMORY_STATUSES)?;
+    let color = args.color;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let mut rows = listing::retain(collect_all(root)?, &filter, is_hidden, key);
@@ -1309,7 +1316,7 @@ pub(crate) fn list_rows(
     match format {
         Format::Table => {
             let sel = listing::select_columns(&MEMORY_COLUMNS, MEMORY_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&rows, &sel))
+            Ok(listing::render_columns(&rows, &sel, color))
         }
         Format::Json => listing::json_envelope("memory", &json_rows(&rows)),
     }
@@ -3380,7 +3387,7 @@ ref = "src/main.rs"
     fn default_table(rows: &[Memory]) -> String {
         let sel = listing::select_columns(&MEMORY_COLUMNS, MEMORY_DEFAULT, None)
             .expect("default columns");
-        listing::render_columns(rows, &sel)
+        listing::render_columns(rows, &sel, false)
     }
 
     // IMP-017: the default projection over the shared column model — header row +
