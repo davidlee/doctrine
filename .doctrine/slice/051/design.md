@@ -60,10 +60,11 @@ are reused unchanged — only their *call site* moves from a standalone verb int
 - **Pure/imperative split:** the compute half (`list_rows`/`compose`) returns
   strings; only the thin shell (`run_list`) touches stdout/stderr. The cycle warning
   is *returned*, not `eprintln!`'d from the compute half.
-- **A-2 (membership invariant):** today's `list` membership = the `retain` filter.
-  Ordering must preserve **exactly** that set; `order`'s non-terminal projection is
-  **not** re-imposed as a membership filter — it survives only to build the graph and
-  feed the diagnostic.
+- **A-2 (membership invariant):** today's `list` membership = the `retain` filter
+  **∩ the `--kind` axis** (backlog.rs:905, applied after `retain`). Ordering must
+  preserve **exactly** that set; `order`'s non-terminal projection is **not**
+  re-imposed as a membership filter — it survives only to build the graph and feed
+  the diagnostic.
 
 ## 4. Target Design
 
@@ -147,7 +148,9 @@ are **deleted**.
 ### 4.3 Output assembly per format (OQ-2, diagnostic decision)
 
 `list_rows` return type changes to `anyhow::Result<(String, String)>` —
-`(stdout, stderr)`:
+`(stdout, stderr)` **in that order; `list_rows`' doc-comment binds it** so the
+`run_list` shell cannot transpose the pair silently (a swap would misroute the
+cycle warning into stdout and corrupt the goldens):
 
 | format | stdout | stderr |
 |---|---|---|
@@ -184,8 +187,11 @@ a cyclic graph). The `--by id` opt-out skips `compose` entirely, so it never war
 
 ### 4.5 `main.rs`
 
-- **Delete** the `Order` clap variant (887–894), its dispatch arm (2222), and
-  `backlog::run_order`.
+- **Delete** the `Order` clap variant (887–894), its dispatch arm (2222), the
+  **access-classify arm** (`BacklogCommand::Order { .. } => Read` at 1685 — drop
+  the `Order` operand; `List`/`Show` stay in the `Read` bucket), and
+  `backlog::run_order`. (Three live `Order` refs, not two: variant, dispatch,
+  classifier — leaving the classifier arm fails to compile on the unknown variant.)
 - The backlog `List` variant gains one field:
   `#[arg(long = "by", value_enum, default_value_t = backlog::OrderBy::Sequence)] by: backlog::OrderBy`
   (clap renders the values `sequence` | `id`).
@@ -197,9 +203,10 @@ a cyclic graph). The `--by id` opt-out skips `compose` entirely, so it never war
 | path | change |
 |---|---|
 | `src/backlog.rs` | add `OrderBy` + `Ordering` + `compose`; rewrite `list_rows` (compose-then-filter, comparator, `(String, String)` return); rewrite `run_list` (stderr arm, `by` param); **delete** `order_rows` + `run_order`; re-home `project`/`render_overrides`/`name_cycle`/`AbsentDrop` (no logic change). |
-| `src/main.rs` | **delete** `Order` variant + dispatch + help; add `--by` to `List`; thread `by` into `run_list`. |
+| `src/main.rs` | **delete** `Order` variant (887) + dispatch arm (2222) + **access-classify arm** (`BacklogCommand::Order` at 1685) + help; add `--by` to `List`; thread `by` into `run_list`. |
 | `src/backlog_order.rs` | **unchanged** (reused as-is). |
 | `src/listing.rs` | **unchanged** (read-only — comparator and `OrderBy` are backlog-local). |
+| `src/backlog.rs` (`#[cfg(test)]`) | the `(String, String)` return forces adapting the **~16 in-crate `list_rows` unit tests** (2203–2577 — destructure `(out, _)` / assert on `.0`); **delete** the 4 `order_rows` unit tests (3568–3672, the verb is retired); the line-167-equivalent cycle assertion moves to the degrade golden. Not a behaviour-gate breach — backlog is local tooling, `listing.rs`/engine untouched. |
 | `tests/e2e_backlog_order_golden.rs` | migrate onto `list`; replace the dep-cycle hard-error golden with the degrade golden; add default-on / `--by id` / filtered-compose / footer goldens. Rename → `e2e_backlog_list_order_golden.rs`. |
 
 ## 6. Verification Alignment
