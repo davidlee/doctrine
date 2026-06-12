@@ -61,9 +61,10 @@ The decomposition default-on forces — ordering is a *sort*, not a *view*:
 - `src/backlog.rs` — fold `order_rows` (1560) into the `list_rows` (900) path as a
   comparator branch; remove `run_order` (1595); decouple the non-terminal
   projection from membership (it survives only to feed the diagnostic).
-- `src/main.rs` — remove the `Order` variant + dispatch (`main.rs:2222`, help
-  ~887); add the `--by` opt-out to the backlog `List` clap variant (NOT the shared
-  `CommonListArgs`/`ListArgs` — ordering is backlog-local); thread it into `run_list`.
+- `src/main.rs` — remove the `Order` variant (887) + dispatch (`main.rs:2222`) +
+  the access-classify arm (`BacklogCommand::Order` at 1685) + help; add the `--by`
+  opt-out to the backlog `List` clap variant (NOT the shared `CommonListArgs`/
+  `ListArgs` — ordering is backlog-local); thread it into `run_list`.
 - `src/backlog_order.rs` — the cordage `BacklogOrder` adapter is reused unchanged.
 - `src/listing.rs` — read-only and **unchanged** (column model + render). The
   comparator stays in `backlog.rs` (design DD-2): it needs backlog-domain types and
