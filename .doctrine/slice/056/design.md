@@ -76,12 +76,16 @@ guard (in run(), before dispatching a write-classed OR Orchestrator Command):
 - **Lifecycle (owned):** written by `fork --worker` (codex/pi) or the WorktreeCreate
   hook (claude); removed by `gc`; rolled back if `fork` fails; cleared by `marker
   --clear` for a stray marker (below). A tree may become a coordination/direct-writer
-  root only after the **`doctrine worktree assert-writable`** check (the named owner of
+  root only after the **`doctrine worktree status --assert`** check (the named owner of
   the assert-marker-absent gate, charge-3 — `Read`-classed, no mutation) that, on a stray
-  marker in a linked worktree, refuses with a distinct **`stale-marker`** token and
-  **names the remedy** (`marker --clear --operator`) — detection carries a cure. Pure
-  core `classify_writable(is_linked, marker_present) -> Result<(), Refusal>`; the verb is
-  the single chokepoint, called at **every** transition of a linked worktree into a
+  marker in a linked worktree, exits non-zero with a distinct **`stale-marker`** token and
+  **names the remedy** (`marker --clear --operator`) — detection carries a cure. `--assert`
+  is **not a parallel implementation**: it derives its exit from the *same*
+  `describe_mode` state the human status line reads (no `classify_writable` twin); the
+  early check is a pre-flight of the *very same* worker-mode condition the `run()` guard
+  enforces later (`is_linked && marker_present`), surfaced at the transition so a stale
+  marker is cleared **before** a direct-writer is confused by a mid-work refusal. The
+  single chokepoint is called at **every** transition of a linked worktree into a
   direct-writer role: (1) `/execute`'s isolated-worktree entry; (2) any solo
   worktree→direct-writer handoff; (3) `land`/`gc` when they operate on a tree as a
   direct-writer rather than the coordination root. **Solo `/execute` included** (D6a makes
@@ -324,7 +328,7 @@ classes join the worker-mode guard, one stays open, one is bespoke:
 |---|---|---|
 | **Orchestrator** | `fork`, `import`, `land`, `gc` | **Yes** — they mutate git refs/dirs (create/remove worktrees, delete branches, merge commits, reap dirs). Classifying them `Read` because they spare the authored TOML corpus is a category error (a worker could delete branches, violating ADR-006 D2). |
 | **Hook-mint** | `create-fork`, `marker --stamp-subagent` | **Yes** — they mint a worktree+marker (and `create-fork` runs `git worktree add`). A *worker* invoking them is a privilege bypass on the newest path. The **legitimate** caller is exempt by construction, not by carve-out: the hook fires in the orchestrator's session at the coordination root, where `worker_mode` is **false** (no marker, not a linked worktree) — so refused-under-`worker_mode` and "never self-refused for the legit hook" are the *same* rule, not a contradiction. |
-| **write** | authoring writes (`slice new`/`design`/`plan`/`memory record`/status-transition) **and `claude install`** (+ its hidden `skills install` alias, §9 — writes skills/agents/hooks into `.claude/`) | Yes (`claude install` is new to the guard, charge-5; the rest unchanged) |
+| **write** | authoring writes (`slice new`/`design`/`plan`/`memory record`/status-transition) **and `claude install`** (+ its hidden `skills install` alias, §9 — installs skills/agents/hooks into `.claude/`) | Yes. `claude install` is new to the guard (charge-5); the rest unchanged. **Justification (corrected): ADR-006 D2 applied uniformly — a worker performs no doctrine-mediated writes, and must not reconfigure its own harness (hooks/agents) mid-run. NOT a ride-back defense** — `.claude/` is gitignored, so a worker's installer output can never funnel back through `import` and is torn down at `gc` regardless. |
 | **Read** | `provision`, `check-allowlist`, `branch-point-check`, `status` | No — open to workers |
 | **`marker --clear`** | bespoke 5th class (§3) | **No** — locking the marker's only remover behind the marker is the self-brick. Refused instead by env-set, cwd-not-tree-root, and the `--operator` accident-fence in a linked worktree. |
 
@@ -398,11 +402,19 @@ a hard refusal (no auto-merge):
    `HEAD != B` → `head-moved`; dirty → `tree-unclean`.
 2. `S^ == B` (single-non-merge fork delta) else `multi-commit`.
 3. **belt:** reject if the `B..S` **name-only** diff touches any **governance/config
-   tier** path (prefix-match, tracked files only): a `.doctrine/` touch → `doctrine-touch`;
-   a `.claude/` touch → `claude-touch` (charge-5 — the installed skills/agents/hooks tier;
-   a worker's source delta never legitimately edits it, source lives in `install/` +
-   `plugins/`, so an installer- or hand-produced `.claude/` delta must not ride back as
-   source). A forced-added marker is caught by the `.doctrine/` leg too (defense in depth).
+   tier** path (prefix-match, **tracked files only**): a `.doctrine/` touch →
+   `doctrine-touch`; a `.claude/` touch → `claude-touch`. **Honest scope (charge-5,
+   corrected — `.claude/` is wholly gitignored, `.gitignore` `.claude`).** Because the
+   diff is tracked-files-only and *all* of `.claude/` is gitignored, **normal** installer
+   output and the harness's own permission-grant writes to `.claude/settings.local.json`
+   **never appear in the diff and cannot ride back** — so the original "installer output
+   rides back as source" framing was wrong. The `.claude/` leg closes exactly **one**
+   residual: a **deliberately force-added** `.claude/` path (`git add -f`) becomes
+   *tracked in commit `S`*, would show in `B..S`, and `git apply --index` would carry it
+   into the coordination commit. That is **malice-containment parity with the `.doctrine/`
+   leg and the forced-added-marker note** — not a defense against normal `.claude/`
+   activity, which is gitignored and invisible to import. A force-added marker is caught
+   by the `.doctrine/` leg the same way (defense in depth).
 4. `git apply --3way --index` (non-committing). Under **both** preconds the patch
    applies onto the exact tree it was cut from ⇒ cannot conflict ⇒ `apply-conflict` is
    **not** a v1 refusal. The orchestrator commits **separately** (ADR-006 D7 cadence;
@@ -418,15 +430,18 @@ shell drives git + apply.
 ### 7b. Belt scope (honest)
 
 The governance/config-tier rejection belt (`.doctrine/` **and** `.claude/`, charge-5)
-is the **dispatch/import-path** containment — a dispatch worker's doctrine *or* installed-
-config delta never funnels back through `import`. It is **not** an unconditional all-
-funnel containment: solo's `land` (§6) is a second, **beltless** sanctioned funnel — solo
-is a trusted self-orchestrator that *legitimately* lands doctrine, so a belt there is a
-category error. The belt's true scope: the import/dispatch path, conditioned on dispatch
-deltas routing through `import` and never `land` — mechanised by `land`'s `dispatch-fork`
-+ `worktree-gone` guards (§6). The `.claude/` leg is belt-only containment of source
-ride-back; the *worker invoking the installer at all* is separately blocked by the
-write-class refusal on `claude install` (§5) — two independent fences on the same hazard.
+is the **dispatch/import-path** containment — a dispatch worker's doctrine delta (and a
+**force-added** `.claude/` path, §7a) never funnels back through `import`. It is **not**
+an unconditional all-funnel containment: solo's `land` (§6) is a second, **beltless**
+sanctioned funnel — solo is a trusted self-orchestrator that *legitimately* lands
+doctrine, so a belt there is a category error. The belt's true scope: the import/dispatch
+path, conditioned on dispatch deltas routing through `import` and never `land` —
+mechanised by `land`'s `dispatch-fork` + `worktree-gone` guards (§6). **The `.claude/`
+leg is narrow (corrected):** since `.claude/` is wholly gitignored, normal installer/
+harness output is invisible to the tracked-files-only diff and cannot ride back — the leg
+contains **only force-add injection**, parity with the `.doctrine/` leg. The *worker
+running the installer at all* is a separate concern, handled by the §5 write-class
+refusal on `claude install` (ADR-006 D2, not ride-back).
 
 ### 7c. Quiescence constraint
 
@@ -551,6 +566,19 @@ for the Claude surface:
 > dispatching the same handler (no flag-day break), sweep the docs to `claude install`,
 > and update the memory. The alias is a plan-level deliverable, called out here so it is
 > not forgotten.
+>
+> **`settings.local.json` non-interference (charge-5 follow-up).** `claude install`
+> merges the WorktreeCreate `HookSpec` into `.claude/settings.local.json` via the
+> existing `HookSpec` merge core, which **preserves pre-existing entries** (χ golden) and
+> writes only the **hooks** key. It must **not** collide with Claude Code's own
+> permission-grant persistence (non-sandbox/non-YOLO "always allow" → harness appends to
+> the **permissions** key of the same file): different keys, and the doctrine worker-mode
+> guard gates only `doctrine` subcommands, never the harness's own writes. The `.claude/`
+> import belt is tracked-files-only and `.claude/` is gitignored, so harness permission
+> writes never enter the diff. **Constraint on the future D6 bwrap profile (§11):** it
+> ro-binds **only the marker**, never `.claude/settings.local.json` — a confined worker
+> must keep writing its (ephemeral, gitignored) permission state, else interactive
+> permission flow breaks under confinement.
 
 `doctrine worktree create-fork` is the verb the hook calls: reads the WorktreeCreate
 payload JSON on stdin, `classify_create(payload) -> ForkWorker | PlainCreate | Refuse`
@@ -631,15 +659,15 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
 | Path | Change |
 |---|---|
-| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_create_fork`** (claude WorktreeCreate handler — parses stdin payload with **bad-payload refusals** `bad-payload`/`missing-agent-type`/`missing-cwd`/`bad-dir` (ψ, fail-closed), gates on `DISPATCH_WORKER_AGENT_TYPE` (τ), on a match does git-add+provision+`write_marker` **with §4a's compensating rollback** (ρ — post-`add` failure → `git worktree remove --force`+`branch -D`+reap before non-zero exit; half-failed rollback → distinct `orphan-leftover` token; **reuses `run_fork`'s rollback core**), else **creates+provisions** a worktree by doctrine conventions (σ — same core, marker omitted: a benign subagent still gets `.worktreeinclude` provisioning) and prints the path, no marker), plus a thinner **`run_stamp_subagent`** for the SubagentStart fallback. New `run_status` (charge-4) + `run_assert_writable` (charge-3) verbs. `run_import`'s belt now rejects **`.claude/`** as well as `.doctrine/` (charge-5 — distinct `claude-touch` token). Pure: `target_dir_for_branch`, `marker_path`, `classify_import` (belt over both `.doctrine/`+`.claude/`), `classify_land`, `classify_gc`, `classify_create` (**three-valued: `ForkWorker | PlainCreate | Refuse`**, ψ)/`classify_stamp`, **`classify_writable(is_linked, marker_present)`** (charge-3) and **`describe_mode(is_linked, marker_present, env_set)`** (charge-4). **`const DISPATCH_WORKER_AGENT_TYPE`** is the single source of truth `classify_create` reads (τ). New `write_marker`/`marker_present`/`remove_marker` (`write_marker` invoked by `fork --worker` and `create-fork`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the per-worktree-creation hook.** |
-| `src/main.rs` | `fork`/`import`/`gc`/`land`/**`status`** (charge-4, `Read`)/**`assert-writable`** (charge-3, `Read`) subcommands + `marker {--clear --operator, --stamp-subagent}` (watch bool/arg clippy ceilings, [[mem.pattern.lint.cli-handler-args-struct]]). Worker-mode guard `worker_mode(root) = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`. The exhaustive `write_class` mapping is **behaviour-preserving for existing members**; the worker-mode *refusal set* gains three entries: **`fork`/`import`/`gc`/`land` = `Orchestrator`** (refused, NOT `Read`); **`create-fork`/`marker --stamp-subagent` = `Hook-mint`** (charge-1 — refused under `worker_mode`, exempt for the legit hook because it runs at worker_mode=false); **`claude install` (+ hidden `skills install` alias) = `write`** (charge-5 — refused under `worker_mode`). The env-leg refusal on a non-linked tree carries the named dual-cause message for authoring **and** funnel verbs. |
+| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_create_fork`** (claude WorktreeCreate handler — parses stdin payload with **bad-payload refusals** `bad-payload`/`missing-agent-type`/`missing-cwd`/`bad-dir` (ψ, fail-closed), gates on `DISPATCH_WORKER_AGENT_TYPE` (τ), on a match does git-add+provision+`write_marker` **with §4a's compensating rollback** (ρ — post-`add` failure → `git worktree remove --force`+`branch -D`+reap before non-zero exit; half-failed rollback → distinct `orphan-leftover` token; **reuses `run_fork`'s rollback core**), else **creates+provisions** a worktree by doctrine conventions (σ — same core, marker omitted: a benign subagent still gets `.worktreeinclude` provisioning) and prints the path, no marker), plus a thinner **`run_stamp_subagent`** for the SubagentStart fallback. New **`run_status`** verb (charge-4 observability + charge-3 gate; `--assert` derives a non-zero `stale-marker` exit from the same state as the human line — **no separate gate verb or `classify_writable` twin**). `run_import`'s belt now rejects **`.claude/`** as well as `.doctrine/` (charge-5 — distinct `claude-touch` token). Pure: `target_dir_for_branch`, `marker_path`, `classify_import` (belt over both `.doctrine/`+`.claude/`), `classify_land`, `classify_gc`, `classify_create` (**three-valued: `ForkWorker | PlainCreate | Refuse`**, ψ)/`classify_stamp`, and **`describe_mode(is_linked, marker_present, env_set)`** (the single source for both the status line and the `--assert` exit). **`const DISPATCH_WORKER_AGENT_TYPE`** is the single source of truth `classify_create` reads (τ). New `write_marker`/`marker_present`/`remove_marker` (`write_marker` invoked by `fork --worker` and `create-fork`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the per-worktree-creation hook.** |
+| `src/main.rs` | `fork`/`import`/`gc`/`land`/**`status [--assert]`** (charge-4 observability + charge-3 gate — one `Read`-classed verb, `--assert` swaps the human line for a `stale-marker` non-zero exit; no second verb) subcommands + `marker {--clear --operator, --stamp-subagent}` (watch bool/arg clippy ceilings, [[mem.pattern.lint.cli-handler-args-struct]]). Worker-mode guard `worker_mode(root) = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`. The exhaustive `write_class` mapping is **behaviour-preserving for existing members**; the worker-mode *refusal set* gains three entries: **`fork`/`import`/`gc`/`land` = `Orchestrator`** (refused, NOT `Read`); **`create-fork`/`marker --stamp-subagent` = `Hook-mint`** (charge-1 — refused under `worker_mode`, exempt for the legit hook because it runs at worker_mode=false); **`claude install` (+ hidden `skills install` alias) = `write`** (charge-5 — refused under `worker_mode`). The env-leg refusal on a non-linked tree carries the named dual-cause message for authoring **and** funnel verbs. |
 | `src/skills.rs` → install surface | **Rename `skills install` → `claude install`** (keep `skills install` as a **hidden deprecated alias** → same handler, SR-3); add the **agents** leg (symlink `install/agents/claude/*.md` into `.claude/agents/`) and trigger the WorktreeCreate hook merge. Update `Write("skills install")` audit label + goldens; sweep docs + the `[[mem.pattern.distribution.skill-refresh-command]]` memory. **χ: every leg is golden-pinned in §12** — alias→same-handler, agent-def symlink presence, hook merge that preserves pre-existing hooks, idempotent reinstall, rename audit-label. |
 | `src/boot.rs` | A **WorktreeCreate** `HookSpec` (SubagentStart on the fallback ladder) reusing the existing merge core; wired by `claude install`. The hook command **creates + provisions + stamps** with the ρ compensating rollback (fail-closed, SR-1), gated on `agent_type == DISPATCH_WORKER_AGENT_TYPE` (τ const); non-dispatch agent_types get a **serviceable default-creation** branch (σ — doctrine conventions, no marker; deleted if a matcher scopes the hook) or a bad-payload refusal (ψ). |
 | `src/git.rs` | new reads behind the verbs: worktree list, **patch-id reachability** (`git cherry`), `B..S` name-only diff. Impure boundary only. |
 | `install/agents/claude/dispatch-worker.md` | **New** — the dispatch-worker subagent definition (name, description, tool allowlist). Its `name` is **pinned to `DISPATCH_WORKER_AGENT_TYPE`** (τ); the drift test reds if it diverges. |
 | `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` + new `{dispatch-subprocess,dispatch-agent}/SKILL.md` | Rewrite prose to *call* the verbs. **`/dispatch` becomes a harness router** → `/dispatch-subprocess` (codex/pi) \| `/dispatch-agent` (claude). Router input: the agent's harness self-belief **cross-checked against env-marker detection** (`CLAUDECODE` etc., names resolved in-skill/at spike — see IDE-005 for pushing this into the binary); routes only when detection **agrees**; mismatch/unknown → refuse **naming the cause**, never a blind spawn. The detection signal is itself spike-gated **per harness** (a green for claude does not bless codex/pi). `/dispatch-subprocess` binds the worker cwd (`env -C "$D"` / bwrap `--chdir`); `/dispatch-agent` spawns `subagent_type: dispatch-worker` — **the literal pinned to `DISPATCH_WORKER_AGENT_TYPE`** (τ; drift test reds on mismatch). One identical cadence, two ~2-line spawn templates. Re-embed ritual [[mem.pattern.distribution.skill-refresh-command]]. |
 | ADR-008 / ADR-006 / **the spawn-interface ADR (new — id via `doctrine adr new`)** / SPEC-012 | G1–G4. |
-| `flake.nix` | none for the spike; a `dispatch-worker` bwrap profile only if D6 lands (`--ro-bind`s the marker so a confined worker cannot `rm` it). |
+| `flake.nix` | none for the spike; a `dispatch-worker` bwrap profile only if D6 lands (`--ro-bind`s **the marker only** so a confined worker cannot `rm` it — **never `.claude/settings.local.json`**, which must stay writable for the harness's permission-grant persistence, §9). |
 
 ## 12. Verification
 
@@ -705,15 +733,15 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   coordination root → writes + `gc` refused; `marker --clear --operator` (env unset)
   restores both from within the CLI; refused when `DOCTRINE_WORKER` set or run outside
   the marker's tree; a bare `--clear` in a linked worktree refuses (accident-fence).
-- **`assert-writable` gate (charge-3 — the named owner of assert-marker-absent):** drive
-  `run()` — (a) clean direct-writer entry (linked worktree, no marker) → exit 0; (b) a
-  stale marker in a linked worktree → refuse `stale-marker` **naming the remedy** (`marker
-  --clear --operator`); (c) entry succeeds after `marker --clear --operator`. Pure
-  `classify_writable` unit-tested for both arms.
-- **`worktree status` observability (charge-4):** golden the four signal states — (a) no
+- **`worktree status [--assert]` — observability (charge-4) and the assert-marker-absent
+  gate (charge-3), one verb.** Plain `status` goldens the four signal states — (a) no
   signal → `writes allowed`; (b) marker only → `refused; signal: marker`; (c) env only →
-  `refused; signal: env`; (d) both → `refused; signal: both`. Pure `describe_mode` covers
-  the matrix; the verb golden pins the rendered line (`force_no_tty`).
+  `refused; signal: env`; (d) both → `refused; signal: both` (`force_no_tty`-pinned line).
+  `status --assert` goldens the gate from the *same* state: (a) clean direct-writer entry
+  (linked worktree, no marker) → exit 0; (b) stale marker in a linked worktree → non-zero
+  `stale-marker` **naming the remedy** (`marker --clear --operator`); (c) exit 0 after
+  `marker --clear --operator`. Both behaviours read one pure `describe_mode` — assert that
+  the human line and the `--assert` exit never disagree (no parallel implementation).
 - **`fork` compensating cleanup:** a forced provision failure rolls back leaving no
   orphan; a rollback that half-fails exits non-zero naming the leftover; a pre-marker
   failure leaves no unmarked fork.
@@ -807,6 +835,27 @@ Headline dispositions carried into this clean design:
   altitude (O3-green fail-closed / O3-red fail-open SubagentStart window), cell `proposed`.
 - **Round-8 χ** (install surface unverified) → §12 alias/agents/hook-merge/idempotent/
   rename goldens.
+- **Round-9 charges 1–8** → §3/§5/§7/§9/§10/§11/§12. Each *introduced* mechanism was put
+  through the design-history **Mechanism admission rule** (ten questions); the contested
+  answers and corrections:
+  - **charge-1 Hook-mint class** (`create-fork`/`marker --stamp-subagent`): Q5 → new
+    Hook-mint class, **refused under `worker_mode`**; Q7 → a worker cannot mint a
+    worktree/marker; the legit hook is exempt because it runs at worker_mode=false. Admitted.
+  - **charge-3 stale-marker gate**: admitted **without new parallel surface** — folded
+    into **`worktree status --assert`** (one `describe_mode`, Q1–Q4 N/A: stateless read;
+    Q8 `stale-marker` + remedy; Q9 §12 golden; Q10 a pre-flight of the `run()` guard, not
+    new enforcement).
+  - **charge-4 `worktree status`**: read-only observability verb, mints nothing — trivially
+    admitted (Q9 four-state golden).
+  - **charge-5 `.claude/` containment — CORRECTED.** The original "installer output rides
+    back as source" claim **failed Q6/Q7/Q10**: `.claude/` is wholly gitignored
+    (`.gitignore` `.claude`), the import belt is tracked-files-only, so normal installer/
+    harness output **never enters the diff and cannot ride back**. Honestly rescoped: the
+    `.claude/` belt leg contains **only force-add injection** (parity with `.doctrine/`);
+    the `claude install` worker-refusal is justified by **ADR-006 D2 uniformly**, not
+    ride-back. Non-interference with the harness's `settings.local.json` permission writes
+    (different key, gitignored, guard gates only `doctrine`) documented in §9; D6 bwrap
+    ro-binds **the marker only**.
 - **Round-7 ν** (codex/pi cwd not bound to fork) → §4a `env -C "$D"` / bwrap `--chdir`.
 - **Round-7 ξ** (gc no idempotent recovery) → §8.2 idempotent state machine.
 - **Round-7 ο** (arm-lease uses timeout as proof-of-death) → **dissolved**: the
