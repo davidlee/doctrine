@@ -37,7 +37,9 @@ Inputs:
      agent, `VH-n` by human — use `VA`/`VH` when a test cannot judge the
      criterion, so it is still checked downstream rather than silently skipped.
      These ids are local to the phase and equally immutable.
-   - `specs` / `requirements` stay empty in v1 (no registry yet).
+   - `specs` / `requirements` stay empty in v1 (no registry yet). When a slice
+     does carry relations, they are written with `doctrine link` (not typed keys
+     here) — see `using-doctrine.md` § Relating entities.
 5. Author `plan.md` — the rationale and sequencing prose: why these phases, in
    this order, with these boundaries. Honour the storage rule: **no queried or
    derived data in `plan.md`**; the structured criteria live in `plan.toml`, and

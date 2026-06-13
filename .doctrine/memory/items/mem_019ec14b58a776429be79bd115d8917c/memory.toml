@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec14b58a776429be79bd115d8917c"
+memory_key = "mem.pattern.relation.relate-via-link-not-hand-authored-rows"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Relate entities via doctrine link, not hand-authored relation rows"
+summary = "Relate entities via doctrine link (Writable axes) — never hand-author [[relation]] rows; RELATION_RULES is the vocabulary, typed-spine axes stay typed"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["src/relation.rs"]
+globs = [".doctrine/slice/*/slice-*.toml", ".doctrine/adr/*/adr-*.toml"]
+commands = ["doctrine link", "doctrine unlink"]
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2ca1c2ac8a8ad57ac19ba7740c606527413ab776"
+ref_name = "refs/heads/main"
+checkout_state_id = "21108d09909753d57d53c3bf764d2fb56442a196e49bb8a30c2b99070b190af6"
+base_commit = "547b33a140db3a6a4bdb81f7271fe31308cb26c3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

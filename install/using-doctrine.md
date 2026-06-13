@@ -24,6 +24,7 @@ reach-for-it map):
 | capture a unit of work intent | `doctrine backlog new <kind>` |
 | survey / inspect the backlog | `doctrine backlog list` · `doctrine backlog show <ID>` |
 | transition a backlog item | `doctrine backlog edit <ID>` |
+| relate two entities (a slice to its spec/ADR, a backlog item to its slice) | `doctrine link` · `doctrine unlink` |
 | transition a phase (e.g. flip `in_progress` → `completed`) | `doctrine slice phase` |
 | record a durable fact | `doctrine memory record` |
 | find / retrieve a memory | `doctrine memory find` · `doctrine memory retrieve` |
@@ -79,6 +80,23 @@ Three tiers; know which one you are writing:
 **Hand-edit vs verb.** Reach for a verb to create or transition an entity; hand-
 edit the TOML for fields no verb yet owns (cite the CLI gap if so). Prose is always
 hand-edited. Keep each datum on its correct side of the tier split.
+
+## Relating entities
+
+Connect entities with the **`link` verb**, not a hand-written row. `doctrine link
+<source-id> <label> <target-id>` writes the outbound relation; `doctrine unlink`
+removes it. Storage is **outbound-only** — you link from the source side and
+reciprocity is derived (ADR-004); `inspect` / `show` render both directions.
+
+The legal `(source, label) → target` vocabulary lives in **`RELATION_RULES`**
+(`src/relation.rs`, ADR-010) — the single source of truth. Don't transcribe it;
+`link` rejects an illegal pair. Not every axis is `link`-writable: most relations
+(e.g. a slice's `governed_by` / `specs` / `supersedes`) are, but the spec spine
+(`descends_from` / `parent` / `members` / …) stays a typed key written by its own
+flow — `RELATION_RULES` says which is which, so ask it rather than guess.
+
+Either way, do **not** hand-author `[[relation]]` rows into a `.toml` — hand-rows
+drift malformed and skip the legality check (`doctrine link` is the validated seam).
 
 ## Edit-preserving rules
 
