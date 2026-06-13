@@ -150,7 +150,15 @@ enum Command {
         yes: bool,
     },
 
-    /// Manage agent skills.
+    /// Manage the Claude harness surface (skills, agents, hooks).
+    Claude {
+        #[command(subcommand)]
+        command: ClaudeCommand,
+    },
+
+    /// Deprecated alias for `claude` (skills install). Hidden — kept so existing
+    /// `skills install` invocations do not flag-day break (SR-3).
+    #[command(hide = true)]
     Skills {
         #[command(subcommand)]
         command: SkillsCommand,
@@ -1759,6 +1767,47 @@ enum SkillsCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum ClaudeCommand {
+    /// Install the doctrine Claude surface: skills, the dispatch-worker agent,
+    /// and the `SubagentStart` hook (SL-056). The same handler as the deprecated
+    /// `skills install` alias.
+    Install {
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+
+        /// Target agent(s); repeatable. Default: auto-detect claude.
+        #[arg(short = 'a', long)]
+        agent: Vec<String>,
+
+        /// Skill id(s) to install; repeatable. Default: all.
+        #[arg(short = 's', long)]
+        skill: Vec<String>,
+
+        /// Domain(s) to install; repeatable. Default: all.
+        #[arg(short = 'd', long)]
+        domain: Vec<String>,
+
+        /// Install only the memory skills (record-memory + retrieve-memory).
+        /// Mutually exclusive with --skill / --domain.
+        #[arg(long, conflicts_with_all = ["skill", "domain"])]
+        only_memory: bool,
+
+        /// Install to the user directory instead of the project.
+        #[arg(short = 'g', long)]
+        global: bool,
+
+        /// Print the plan and exit without making changes.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+}
+
 /// Mutation classification for the worker-mode guard (ADR-006 D2a). `Write`
 /// carries the verb label named in the refusal. EXHAUSTIVE by design (§7-D6):
 /// no wildcard arm, so a future `Command` variant is a compile error — never a
@@ -1788,9 +1837,16 @@ fn write_class(cmd: &Command) -> WriteClass {
     use WriteClass::{Hookmint, MarkerClear, Orchestrator, Read, Write};
     match cmd {
         Command::Install { .. } => Write("install"),
+        Command::Claude { command } => match command {
+            // Reconfigures this harness's skills/agents/hooks — a worker must not
+            // (charge-5; ADR-006 D2 applied uniformly, not a verb carve-out).
+            ClaudeCommand::Install { .. } => Write("claude install"),
+        },
         Command::Skills { command } => match command {
             SkillsCommand::List { .. } => Read,
-            SkillsCommand::Install { .. } => Write("skills install"),
+            // The hidden deprecated alias dispatches the SAME handler as
+            // `claude install`, so it carries the SAME refusal label.
+            SkillsCommand::Install { .. } => Write("claude install"),
         },
         Command::Slice { command } => match command {
             SliceCommand::New { .. } => Write("slice new"),
@@ -2023,10 +2079,34 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Install { path, dry_run, yes } => install::run(path, dry_run, yes),
+        Command::Claude { command } => match command {
+            ClaudeCommand::Install {
+                path,
+                agent,
+                skill,
+                domain,
+                only_memory,
+                global,
+                dry_run,
+                yes,
+            } => skills::run_install(
+                path,
+                &skills::InstallArgs {
+                    agents: &agent,
+                    skills: &skill,
+                    domains: &domain,
+                    only_memory,
+                    global,
+                    dry_run,
+                    yes,
+                },
+            ),
+        },
         Command::Skills { command } => match command {
             SkillsCommand::List { agent, installed } => {
                 skills::run_list(agent.as_deref(), installed)
             }
+            // The deprecated alias routes into the SAME handler as `claude install`.
             SkillsCommand::Install {
                 path,
                 agent,
@@ -2753,6 +2833,8 @@ mod write_class_tests {
             }),
             None
         );
+        // The hidden `skills install` alias carries the SAME label as the
+        // canonical `claude install` (SR-3 — one handler, one refusal label).
         assert_eq!(
             cls(Command::Skills {
                 command: SkillsCommand::Install {
@@ -2766,7 +2848,26 @@ mod write_class_tests {
                     yes: false,
                 }
             }),
-            Some("skills install")
+            Some("claude install")
+        );
+    }
+
+    #[test]
+    fn claude_install_is_write() {
+        assert_eq!(
+            cls(Command::Claude {
+                command: ClaudeCommand::Install {
+                    path: None,
+                    agent: Vec::new(),
+                    skill: Vec::new(),
+                    domain: Vec::new(),
+                    only_memory: false,
+                    global: false,
+                    dry_run: false,
+                    yes: false,
+                }
+            }),
+            Some("claude install")
         );
     }
 

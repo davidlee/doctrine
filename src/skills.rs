@@ -265,6 +265,31 @@ fn canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
     Ok(install_base(root, global)?.join(".doctrine/skills"))
 }
 
+// ---------------------------------------------------------------------------
+// Agents leg (SL-056 PHASE-11) — install the Claude dispatch-worker agent def
+// the same way skills install: materialize a canonical copy from the embed,
+// then symlink the agent dir at it (reusing classify_link/write_link/
+// relative_target — no parallel symlink impl).
+// ---------------------------------------------------------------------------
+
+/// The dispatch-worker agent def's file name — the canonical-copy id and the
+/// `.claude/agents/` link name.
+const DISPATCH_WORKER_AGENT_FILE: &str = "dispatch-worker.md";
+
+/// The embedded source of the agent def, relative to `install/`.
+const DISPATCH_WORKER_AGENT_ASSET: &str = "agents/claude/dispatch-worker.md";
+
+/// The Claude agents directory (project-local or, with `global`, user home).
+fn claude_agents_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".claude/agents"))
+}
+
+/// The canonical agents tree, mirroring `canonical_dir` so the relative link
+/// target is stable.
+fn agent_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".doctrine/agents"))
+}
+
 /// Relative path from `from` to `to`. Both must be absolute and normalised
 /// (no `.`/`..` components) — the root-/`$HOME`-derived dirs always are.
 fn relative_path(from: &Path, to: &Path) -> PathBuf {
@@ -699,6 +724,51 @@ fn print_plan(plan: &Plan, out: &mut dyn Write) -> io::Result<()> {
     Ok(())
 }
 
+/// Install the Claude dispatch-worker agent def: materialize the canonical copy
+/// from the embed into `.doctrine/agents/`, then symlink `.claude/agents/<file>`
+/// at it. Idempotent — refreshes the canonical each run and only (re)writes a
+/// link that is missing or proven ours, never clobbering a foreign one. A no-op
+/// under `dry_run` (the plan line is printed by the caller). Reuses
+/// `classify_link`/`write_link`/`relative_target` — no parallel symlink impl.
+fn install_agents(root: &Path, global: bool, dry_run: bool, out: &mut dyn Write) -> anyhow::Result<()> {
+    let canon_dir = agent_canonical_dir(root, global)?;
+    let link_dir = claude_agents_dir(root, global)?;
+    let canon = canon_dir.join(DISPATCH_WORKER_AGENT_FILE);
+    let dest = link_dir.join(DISPATCH_WORKER_AGENT_FILE);
+    let target = relative_target(&link_dir, &canon_dir, DISPATCH_WORKER_AGENT_FILE);
+
+    writeln!(out, "agent claude (dispatch-worker):")?;
+    writeln!(out, "  agent     {DISPATCH_WORKER_AGENT_FILE} → {}", dest.display())?;
+    if dry_run {
+        return Ok(());
+    }
+
+    // 1. Refresh the canonical copy from the embed (always overwrite — derived).
+    let data = crate::install::embedded_asset(DISPATCH_WORKER_AGENT_ASSET).with_context(|| {
+        format!("Embedded agent def '{DISPATCH_WORKER_AGENT_ASSET}' not found")
+    })?;
+    fs::create_dir_all(&canon_dir)
+        .with_context(|| format!("Failed to create {}", canon_dir.display()))?;
+    crate::fsutil::write_atomic(&canon, &data)?;
+
+    // 2. Reconcile the agent link by proven ownership (re-classify at mutation
+    //    time, like `execute`'s skill links).
+    match classify_link(DISPATCH_WORKER_AGENT_FILE, &dest, &target) {
+        Link::Create { .. } => {
+            write_link(&dest, &target)?;
+            writeln!(out, "  linked    {DISPATCH_WORKER_AGENT_FILE}")?;
+        }
+        Link::Relink { .. } => {
+            write_link(&dest, &target)?;
+            writeln!(out, "  relinked  {DISPATCH_WORKER_AGENT_FILE}")?;
+        }
+        Link::KeepForeign { reason, .. } => {
+            writeln!(out, "  kept      {DISPATCH_WORKER_AGENT_FILE} ({})", foreign_reason(&reason))?;
+        }
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // CLI entry points (thin)
 // ---------------------------------------------------------------------------
@@ -744,9 +814,10 @@ pub(crate) fn run_list(agent: Option<&str>, installed_only: bool) -> anyhow::Res
     Ok(())
 }
 
-/// `doctrine skills install` arguments (selection + flags). Mirrors the
-/// `memory::RecordArgs` pattern so the command handler stays under the bool/arg
-/// clippy ceilings; `path` stays a separate param, as in `run_record`.
+/// `doctrine claude install` arguments (selection + flags), shared by the hidden
+/// deprecated `skills install` alias. Mirrors the `memory::RecordArgs` pattern so
+/// the command handler stays under the bool/arg clippy ceilings; `path` stays a
+/// separate param, as in `run_record`.
 pub(crate) struct InstallArgs<'a> {
     pub(crate) agents: &'a [String],
     pub(crate) skills: &'a [String],
@@ -758,6 +829,10 @@ pub(crate) struct InstallArgs<'a> {
     pub(crate) yes: bool,
 }
 
+/// The shared `claude install` handler (SL-056): installs the Claude skills, the
+/// dispatch-worker agent def (`install_agents`), and the `SubagentStart` stamp
+/// hook (`boot::install_claude_hook`). Both the `claude install` verb and the
+/// hidden deprecated `skills install` alias dispatch here (SR-3).
 pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyhow::Result<()> {
     let catalog = discover()?;
     // `--only-memory` derives the subset from the embed; otherwise pass `skills`
@@ -793,8 +868,45 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     // `--global` ignores its $HOME tree rather than the project (SL-010 B1).
     crate::install::ensure_gitignored(&install_base(&root, args.global)?, ".doctrine/skills/*")?;
     execute(&plan, &catalog, &Npx, &mut out)?;
+
+    // Agents leg + SubagentStart hook are Claude-surface-only: install them iff
+    // Claude is a resolved target (skip a codex-only / global-npx install).
+    if agents.iter().any(|a| matches!(a, Agent::Claude)) {
+        crate::install::ensure_gitignored(
+            &install_base(&root, args.global)?,
+            ".doctrine/agents/*",
+        )?;
+        install_agents(&root, args.global, args.dry_run, &mut out)?;
+
+        // Wire the dispatch-worker SubagentStart hook into the project's
+        // settings (project-local only — the hook command is an absolute exec
+        // path that belongs out of git, like the boot/sync hooks; `--global`
+        // skips it). Reuses the boot.rs HookSpec merge core — no parallel impl.
+        if !args.global {
+            let exec = std::env::current_exe()
+                .context("Failed to resolve the doctrine executable path")?;
+            let outcome = crate::boot::install_claude_hook(
+                &root,
+                &crate::boot::HookSpec::stamp_subagent(&exec),
+                args.dry_run,
+            )?;
+            writeln!(out, "subagent hook: {}", hook_outcome_label(&outcome))?;
+        }
+    }
+
     writeln!(out, "Done.")?;
     Ok(())
+}
+
+/// A short human label for a hook-merge outcome (the `SubagentStart` wiring line).
+fn hook_outcome_label(outcome: &crate::boot::RefreshOutcome) -> &'static str {
+    use crate::boot::RefreshOutcome::{None, PrintedFallback, Refreshed, Wired};
+    match outcome {
+        Wired(_) => "wired",
+        Refreshed(_) => "refreshed",
+        None => "already current",
+        PrintedFallback => "could not merge (settings left untouched)",
+    }
 }
 
 // ---------------------------------------------------------------------------
