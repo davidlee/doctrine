@@ -529,7 +529,9 @@ pub(crate) fn git_text(root: &Path, args: &[&str]) -> Result<String, CaptureErro
 }
 
 /// Run a git command that may legitimately fail; `None` on non-zero exit.
-fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, CaptureError> {
+/// `pub(crate)` for the worktree fork verb's "is `<B>` a commit?" probe
+/// (`rev-parse --verify --quiet <B>^{commit}`, SL-056 PHASE-06).
+pub(crate) fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, CaptureError> {
     let output = run_git(root, args)?;
     if !output.status.success() {
         return Ok(None);

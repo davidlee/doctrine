@@ -486,6 +486,33 @@ enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
+    /// Create an orchestrator-owned worktree fork off `<base>` on a NEW branch,
+    /// provision it (the sole copier), optionally stamp the worker marker, and emit
+    /// the per-worktree env contract on stdout (SL-056 PHASE-06). Orchestrator-classed
+    /// — refused under worker-mode. Atomic via compensating rollback.
+    Fork {
+        /// The base commit `B` the fork is created from (the orchestrator's
+        /// captured coordination HEAD).
+        #[arg(long)]
+        base: String,
+
+        /// The NEW branch to create at `<base>` for the fork.
+        #[arg(long)]
+        branch: String,
+
+        /// The fork worktree directory (must not already exist; unique per branch).
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// Stamp the worker-mode marker so the fork resolves to worker mode.
+        #[arg(long)]
+        worker: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Print the resolved worker-mode and cause (SL-056 §3). `--assert` derives a
     /// non-zero `stale-marker` exit from the SAME state the human line reads.
     /// Read-classed — open to workers.
@@ -1664,6 +1691,11 @@ enum SkillsCommand {
 enum WriteClass {
     Read,
     Write(&'static str),
+    /// Orchestrator-only privileged verbs (SL-056 PHASE-06): `fork` is the FIRST
+    /// member; later phases add `import`/`land`/`gc`. Carries the verb label like
+    /// `Write`. REFUSED under worker-mode — these are the orchestrator's funnel
+    /// operations, never a worker's.
+    Orchestrator(&'static str),
     /// `worktree marker --clear` (SL-056 §3, §5): a bespoke class that the
     /// worker-mode guard does NOT refuse (locking the marker's only remover behind
     /// the marker is a self-brick we reject). Its own bespoke refusals live in
@@ -1672,7 +1704,7 @@ enum WriteClass {
 }
 
 fn write_class(cmd: &Command) -> WriteClass {
-    use WriteClass::{MarkerClear, Read, Write};
+    use WriteClass::{MarkerClear, Orchestrator, Read, Write};
     match cmd {
         Command::Install { .. } => Write("install"),
         Command::Skills { command } => match command {
@@ -1768,6 +1800,9 @@ fn write_class(cmd: &Command) -> WriteClass {
             | WorktreeCommand::CheckAllowlist { .. }
             | WorktreeCommand::BranchPointCheck { .. }
             | WorktreeCommand::Status { .. } => Read,
+            // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
+            // first Orchestrator-classed verb; refused under worker-mode.
+            WorktreeCommand::Fork { .. } => Orchestrator("fork"),
             // marker --clear is the bespoke self-brick cure (SL-056 §3) — NOT
             // refused by the worker-mode guard; its own fences live in the handler.
             WorktreeCommand::Marker { .. } => MarkerClear,
@@ -1850,9 +1885,11 @@ fn run_inspect(path: Option<PathBuf>, id: &str, format: Format, json: bool) -> a
 /// marker leg is evaluated LAZILY — only a Write verb resolves the root, so a Read
 /// verb in a non-doctrine cwd never gains a new failure path (design §3).
 fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
-    let WriteClass::Write(verb) = write_class(cmd) else {
-        // Read and the bespoke MarkerClear are never refused by the guard.
-        return Ok(());
+    // Write and Orchestrator are both refused under worker-mode with the SAME
+    // branches; Read and the bespoke MarkerClear pass through (SL-056 PHASE-06).
+    let verb = match write_class(cmd) {
+        WriteClass::Write(verb) | WriteClass::Orchestrator(verb) => verb,
+        WriteClass::Read | WriteClass::MarkerClear => return Ok(()),
     };
     // No doctrine/project root above the cwd: the marker leg cannot apply. Fall
     // back to the env leg alone (a leaked env on a rootless cwd), never a new error.
@@ -2357,6 +2394,13 @@ fn main() -> anyhow::Result<()> {
             WorktreeCommand::BranchPointCheck { base, head, path } => {
                 worktree::run_branch_point_check(path, &base, head)
             }
+            WorktreeCommand::Fork {
+                base,
+                branch,
+                dir,
+                worker,
+                path,
+            } => worktree::run_fork(path, &base, &branch, &dir, worker),
             WorktreeCommand::Status { assert, path } => worktree::run_status(path, assert),
             WorktreeCommand::Marker {
                 clear,
@@ -2549,7 +2593,8 @@ mod write_class_tests {
     fn cls(cmd: Command) -> Option<&'static str> {
         match write_class(&cmd) {
             WriteClass::Read => None,
-            WriteClass::Write(v) => Some(v),
+            // Both refused classes carry a verb label; the guard refuses each.
+            WriteClass::Write(v) | WriteClass::Orchestrator(v) => Some(v),
             // The bespoke MarkerClear class is neither Read nor a guarded Write;
             // the dedicated `worktree_marker_is_bespoke_class` test pins it.
             WriteClass::MarkerClear => None,
@@ -3081,6 +3126,27 @@ mod write_class_tests {
         );
         // And therefore not seen as a guarded Write by `cls`.
         assert_eq!(cls(c), None);
+    }
+
+    // SL-056 PHASE-06: `worktree fork` is the FIRST Orchestrator-classed verb —
+    // refused under worker-mode, carries the "fork" verb label.
+    #[test]
+    fn worktree_fork_is_orchestrator() {
+        let c = Command::Worktree {
+            command: WorktreeCommand::Fork {
+                base: "B".to_string(),
+                branch: "wkr".to_string(),
+                dir: PathBuf::from("x"),
+                worker: false,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("fork")),
+            "fork must be Orchestrator(\"fork\")"
+        );
+        // The guard treats it like a Write: cls surfaces the verb label.
+        assert_eq!(cls(c), Some("fork"));
     }
 
     #[test]
