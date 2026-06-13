@@ -733,10 +733,7 @@ pub(crate) fn run_import(path: Option<PathBuf>, base: &str, fork: &str) -> anyho
         .is_some_and(|p| matches(p, &base_sha));
 
     // --- gather: belt input — B..<fork> name-only, TRACKED-files-only diff ---
-    let diff = git::git_text(
-        &root,
-        &["diff", "--name-only", &format!("{base}..{fork}")],
-    )?;
+    let diff = git::git_text(&root, &["diff", "--name-only", &format!("{base}..{fork}")])?;
     let delta_paths: Vec<String> = diff.lines().map(str::to_owned).collect();
 
     // --- pure classify ---
@@ -914,7 +911,12 @@ pub(crate) fn run_land(path: Option<PathBuf>, fork: &str) -> anyhow::Result<()> 
     // --- gather: precond — <fork> exists (resolves to a commit) ---
     let exists = git::git_opt(
         &root,
-        &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{fork}^{{commit}}")],
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{fork}^{{commit}}"),
+        ],
     )?
     .is_some();
 
@@ -940,17 +942,23 @@ pub(crate) fn run_land(path: Option<PathBuf>, fork: &str) -> anyhow::Result<()> 
     // --- act: git merge --no-ff <fork> (NEVER --squash) ---
     let merged = git::git_opt(&root, &["merge", "--no-ff", "--no-edit", fork])?;
     if merged.is_some() {
-        writeln!(io::stdout(), "landed {fork}: --no-ff merge onto coordination HEAD")?;
+        writeln!(
+            io::stdout(),
+            "landed {fork}: --no-ff merge onto coordination HEAD"
+        )?;
         return Ok(());
     }
 
     // --- merge failed: classify the merge-time refusal from MERGE_HEAD + abort ---
     // Guard the abort to fire ONLY mid-merge: a failed merge with no MERGE_HEAD is
     // an inconsistent state, never a silent abort masquerading as a clean conflict.
-    let mid_merge = git::git_opt(&root, &["rev-parse", "--verify", "--quiet", "MERGE_HEAD"])?
-        .is_some();
+    let mid_merge =
+        git::git_opt(&root, &["rev-parse", "--verify", "--quiet", "MERGE_HEAD"])?.is_some();
     if !mid_merge {
-        bail!("land-refused: {}", LandRefusal::InconsistentMergeState.token());
+        bail!(
+            "land-refused: {}",
+            LandRefusal::InconsistentMergeState.token()
+        );
     }
 
     // Mid-merge: capture the unmerged paths, then abort FIRST to restore the tree.
@@ -1183,7 +1191,12 @@ pub(crate) fn run_gc(
     let branch_ref = format!("refs/heads/{fork}");
     let branch_head = git::git_opt(
         &root,
-        &["rev-parse", "--verify", "--quiet", &format!("{branch_ref}^{{commit}}")],
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{branch_ref}^{{commit}}"),
+        ],
     )?;
     let branch_exists = branch_head.is_some();
 
@@ -1211,7 +1224,12 @@ pub(crate) fn run_gc(
             // symbolic ref verbatim); an unresolvable SHA simply cannot match.
             match git::git_opt(
                 &root,
-                &["rev-parse", "--verify", "--quiet", &format!("{sha}^{{commit}}")],
+                &[
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    &format!("{sha}^{{commit}}"),
+                ],
             )? {
                 Some(resolved) => matches(&resolved, head),
                 None => false,
@@ -1234,7 +1252,10 @@ pub(crate) fn run_gc(
     if dry_run {
         match verdict {
             GcVerdict::Reap(_) => {
-                writeln!(io::stdout(), "{fork}: landed ✓ — would reap (worktree/branch/target)")?;
+                writeln!(
+                    io::stdout(),
+                    "{fork}: landed ✓ — would reap (worktree/branch/target)"
+                )?;
             }
             GcVerdict::Refuse(GcRefusal::NotLanded) => {
                 writeln!(
@@ -1281,8 +1302,7 @@ pub(crate) fn run_gc(
     if plan.delete_branch {
         let deleted = git::git_opt(&root, &["branch", "-D", fork])?;
         if deleted.is_none()
-            && git::git_opt(&root, &["rev-parse", "--verify", "--quiet", &branch_ref])?
-                .is_some()
+            && git::git_opt(&root, &["rev-parse", "--verify", "--quiet", &branch_ref])?.is_some()
         {
             leftovers.push(format!("branch {fork}"));
         }
@@ -1298,7 +1318,10 @@ pub(crate) fn run_gc(
     }
 
     if !leftovers.is_empty() {
-        bail!("gc-incomplete: leftover(s) need manual cleanup: {}", leftovers.join(", "));
+        bail!(
+            "gc-incomplete: leftover(s) need manual cleanup: {}",
+            leftovers.join(", ")
+        );
     }
 
     // Step 4: WARN that env!(CARGO_MANIFEST_DIR)-baked test binaries now point at a
@@ -1308,7 +1331,10 @@ pub(crate) fn run_gc(
         io::stderr(),
         "warning: test binaries baked with the reaped fork's CARGO_MANIFEST_DIR are now stale — recompile before trusting a RED"
     )?;
-    writeln!(io::stdout(), "gc {fork}: reaped (worktree/branch/target as present)")?;
+    writeln!(
+        io::stdout(),
+        "gc {fork}: reaped (worktree/branch/target as present)"
+    )?;
     Ok(())
 }
 
@@ -1514,6 +1540,13 @@ pub(crate) fn run_fork(
 // Worker identity — disk marker shell (SL-056 §3)
 // ---------------------------------------------------------------------------
 
+/// The Claude Code `agent_type` discriminator a dispatch worker carries — the
+/// SINGLE source of truth for the literal (SL-056 PHASE-10). The `SubagentStart`
+/// matcher scopes the stamp hook to this agent type, and the agent definition
+/// `install/agents/claude/dispatch-worker.md` MUST declare `name:` equal to it
+/// (the T6 drift test pins that). Never a free-floating string literal.
+pub(crate) const DISPATCH_WORKER_AGENT_TYPE: &str = "dispatch-worker";
+
 /// The withheld-tier marker the trusted orchestrator stamps before a worker runs.
 /// Presence-only (no contents). Sits under `.doctrine/state/**`, so it inherits
 /// every gitignore / provision-drop / import-exclude rule with zero new tier
@@ -1659,6 +1692,201 @@ pub(crate) fn run_marker_clear(path: Option<PathBuf>, operator: bool) -> anyhow:
 }
 
 // ---------------------------------------------------------------------------
+// stamp-subagent — Claude harness SubagentStart provision+mark (SL-056 PHASE-10)
+// ---------------------------------------------------------------------------
+
+/// Verdict of the PURE stamp classifier: the resolved inputs hold ⇒ the shell may
+/// provision + mark the already-created worktree. Mirror of [`Apply`]/[`Merge`] —
+/// the pure core decides, the shell ([`run_stamp_subagent`]) acts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stamp {
+    /// All preconds hold ⇒ the shell runs `run_provision` then `write_marker`.
+    Ok,
+}
+
+/// Why a `marker --stamp-subagent` refuses (SL-056 PHASE-10, design — the claude
+/// spawn path's mark step). Two-valued classifier (Stamp vs Refuse): there is NO
+/// `PlainCreate` / else-branch — the `SubagentStart` matcher scopes the hook to
+/// dispatch workers, so a benign subagent never reaches this verb. Each variant
+/// fails closed with a distinct named token (the property the goldens assert).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StampRefusal {
+    /// The payload `cwd` is absent/empty (also the malformed-JSON fold target).
+    MissingCwd,
+    /// `cwd` is not under the repo, OR is not a linked worktree.
+    BadDir,
+    /// `agent_type` is absent, OR present but != [`DISPATCH_WORKER_AGENT_TYPE`].
+    MissingAgentType,
+}
+
+impl StampRefusal {
+    /// The distinct named token each refusal fails closed with.
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            StampRefusal::MissingCwd => "missing-cwd",
+            StampRefusal::BadDir => "bad-dir",
+            StampRefusal::MissingAgentType => "missing-agent-type",
+        }
+    }
+}
+
+/// PURE stamp classifier (no git / disk / env / clock — ADR-001 leaf, CLAUDE.md
+/// pure/imperative split). Mirror of [`classify_import`]/[`classify_land`]/
+/// [`classify_gc`]: it takes the gathered, already-resolved FACTS and returns the
+/// verdict. The shell resolves cwd-presence and the under-repo + linked-worktree
+/// probes (impure git/disk), then calls this.
+///
+/// * `agent_type` — the payload `agent_type` ("" if absent); must equal
+///   [`DISPATCH_WORKER_AGENT_TYPE`].
+/// * `cwd_present` — the payload carried a non-empty `cwd`.
+/// * `cwd_is_under_repo_linked_worktree` — the resolved cwd is under the repo AND
+///   a live linked worktree (both probes folded by the shell into one bool).
+///
+/// Precond order: cwd-presence → dir-validity → agent-type. (Agent-type LAST so a
+/// missing/wrong cwd names the dir problem first.)
+pub(crate) fn classify_stamp(
+    agent_type: &str,
+    cwd_present: bool,
+    cwd_is_under_repo_linked_worktree: bool,
+) -> Result<Stamp, StampRefusal> {
+    if !cwd_present {
+        return Err(StampRefusal::MissingCwd);
+    }
+    if !cwd_is_under_repo_linked_worktree {
+        return Err(StampRefusal::BadDir);
+    }
+    if agent_type != DISPATCH_WORKER_AGENT_TYPE {
+        return Err(StampRefusal::MissingAgentType);
+    }
+    Ok(Stamp::Ok)
+}
+
+/// The `SubagentStart` payload subset we read (tolerate extra fields). JSON on
+/// stdin: `{ "cwd": "<worktree path>", "agent_type": "<e.g. dispatch-worker>" }`.
+#[derive(Debug, Default, serde::Deserialize)]
+struct SubagentPayload {
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    agent_type: Option<String>,
+}
+
+/// True iff `cwd` belongs to the SAME repo as `repo` — they resolve to the same
+/// `git-common-dir`. This is the worktree notion of "under the repo": a linked
+/// worktree lives in a SEPARATE directory (a sibling, not a path-prefix child of
+/// the source), so a path-`starts_with` test would wrongly reject every real fork.
+/// Shared-common-dir membership is exactly what [`verify_sibling_worktree`] (inside
+/// [`run_provision`]) re-checks before copying. A git failure on either side ⇒ not
+/// the same repo (fail-closed). Impure (the git reads).
+fn cwd_shares_repo(repo: &Path, cwd: &Path) -> bool {
+    let repo_common = git::git_text(repo, &["rev-parse", "--git-common-dir"])
+        .ok()
+        .and_then(|c| resolve_common_dir(repo, &c).ok());
+    let cwd_common = git::git_text(cwd, &["rev-parse", "--git-common-dir"])
+        .ok()
+        .and_then(|c| resolve_common_dir(cwd, &c).ok());
+    match (repo_common, cwd_common) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// `doctrine worktree marker --stamp-subagent` — the claude harness spawn path's
+/// mark step (SL-056 PHASE-10). Claude itself creates the worker's worktree (the
+/// `WorktreeCreate` payload carries no `agent_type`/path, so `create-fork` is
+/// DROPPED); this verb runs from the matcher-scoped `SubagentStart` hook to
+/// **provision + stamp** the already-created worktree named by the payload `cwd`.
+///
+/// `SubagentStart` is a READ-ONLY hook event — a non-zero exit does NOT abort the
+/// subagent. So this verb only stamps-or-refuses and exits honestly; it cannot and
+/// must not try to block an unstamped worker (fenced elsewhere: the import belt,
+/// the worker-mode guard, and the orchestrator's post-spawn check).
+///
+/// Shell flow (gather → pure-classify → act):
+/// 1. read stdin → parse JSON (malformed ⇒ empty payload ⇒ `missing-cwd`);
+/// 2. resolve cwd: a [`is_linked_worktree`] of the SAME repo as the source (shared
+///    git-common-dir — [`cwd_shares_repo`], the worktree notion of "under the repo");
+/// 3. [`classify_stamp`]; on Refuse print the token to stderr + exit non-zero;
+/// 4. on Stamp: [`run_provision`] (the SOLE copier, source = the orchestrator tree,
+///    destination = the worker worktree `cwd`) THEN [`write_marker`].
+///
+/// M3 failure posture: if provision/mark fails, print a LOUD stderr diagnostic and
+/// exit non-zero — and do NOT `git worktree remove` (we added no worktree; Claude
+/// owns it, the worker is already cleared to run). There is NO compensating
+/// rollback here (that was the dropped create-fork's behaviour); the half-stamped
+/// fork is left for the orchestrator's post-spawn check.
+///
+/// NOTE: the `SubagentStart`-matcher wiring and the `/dispatch-agent` skill leg are
+/// LATER phases (out of scope here).
+pub(crate) fn run_stamp_subagent(path: Option<PathBuf>) -> anyhow::Result<()> {
+    let mut raw = String::new();
+    io::Read::read_to_string(&mut io::stdin(), &mut raw).context("read SubagentStart payload")?;
+    // Malformed JSON folds to an empty payload ⇒ classified as `missing-cwd`
+    // (fail-closed on the stamp decision; we never block the worker either way).
+    let payload: SubagentPayload = serde_json::from_str(&raw).unwrap_or_default();
+
+    let agent_type = payload.agent_type.unwrap_or_default();
+    let cwd_str = payload.cwd.unwrap_or_default();
+    let cwd_present = !cwd_str.is_empty();
+
+    // Resolve the SOURCE repo (the orchestrator's tree) from the PROCESS cwd — the
+    // SubagentStart hook fires inside it. This is the copy SOURCE for `run_provision`
+    // (the worker worktree is the destination), mirroring how `run_fork --worker`
+    // passes `Some(repo)`/`dir` — never `Some(fork)`/`fork` (that would make source
+    // == fork and trip the sibling-worktree guard). `None` ⇒ no doctrine root above
+    // the process cwd ⇒ the cwd cannot be validated against a repo ⇒ bad-dir.
+    let repo = root::find(path, &root::default_markers())
+        .ok()
+        .and_then(|r| fs::canonicalize(&r).ok());
+    let cwd_canon = if cwd_present {
+        fs::canonicalize(&cwd_str).ok()
+    } else {
+        None
+    };
+    // Valid iff the payload cwd is a linked worktree of the SAME repo as the source
+    // (shared git-common-dir) — the worktree notion of "under the repo". A path
+    // prefix-check is WRONG: a linked worktree is a sibling dir, not a child.
+    let cwd_valid = match (repo.as_deref(), cwd_canon.as_deref()) {
+        (Some(repo), Some(cwd)) => {
+            is_linked_worktree(cwd).unwrap_or(false) && cwd_shares_repo(repo, cwd)
+        }
+        _ => false,
+    };
+
+    match classify_stamp(&agent_type, cwd_present, cwd_valid) {
+        Ok(Stamp::Ok) => {}
+        Err(refusal) => {
+            writeln!(io::stderr(), "stamp-refused: {}", refusal.token())?;
+            bail!("stamp-refused: {}", refusal.token());
+        }
+    }
+    // Stamp passed ⇒ both the source repo and the canonical cwd resolved (cwd_valid
+    // required Some of each). Source = the orchestrator tree (provision copies FROM
+    // it); the worker worktree `cwd` is the destination. Fail closed if either is
+    // somehow absent — never panic on a hook input.
+    let (Some(source), Some(cwd)) = (repo, cwd_canon) else {
+        let token = StampRefusal::BadDir.token();
+        writeln!(io::stderr(), "stamp-refused: {token}")?;
+        bail!("stamp-refused: {token}");
+    };
+
+    // --- act: provision (SOLE copier) THEN mark. M3: NO rollback on failure. ---
+    if let Err(cause) = run_provision(Some(source), &cwd).and_then(|()| write_marker(&cwd)) {
+        // LOUD diagnostic; the worktree is LEFT in place (Claude owns it). No
+        // `git worktree remove` — there is no compensating rollback for a stamp.
+        writeln!(
+            io::stderr(),
+            "STAMP FAILED for {} — worktree LEFT in place (not removed); orchestrator post-spawn check will catch the unstamped worker: {cause:#}",
+            cwd.display()
+        )?;
+        return Err(cause.context(format!("stamp worker worktree {}", cwd.display())));
+    }
+
+    writeln!(io::stderr(), "stamped worker worktree {}", cwd.display())?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1725,7 +1953,10 @@ mod tests {
         // `head` documents the contextual coordination-root precond; it gates NO
         // token, so the verdict is invariant under any HEAD value.
         let st = fork_state(true, true, false);
-        assert_eq!(classify_land(true, "main", st), classify_land(true, "detached-xyz", st));
+        assert_eq!(
+            classify_land(true, "main", st),
+            classify_land(true, "detached-xyz", st)
+        );
     }
 
     #[test]
@@ -1788,7 +2019,12 @@ mod tests {
     #[test]
     fn classify_gc_skips_absent_steps() {
         // Worktree already gone (crash mid-gc), target gone too ⇒ only branch -D.
-        let v = classify_gc(gc_state(true, false, false, Some(true)), false, false, false);
+        let v = classify_gc(
+            gc_state(true, false, false, Some(true)),
+            false,
+            false,
+            false,
+        );
         assert_eq!(
             v,
             GcVerdict::Reap(GcPlan {
@@ -2178,5 +2414,77 @@ mod tests {
 
         assert!(is_linked_worktree(&fork).unwrap(), "a linked worktree");
         assert!(!is_linked_worktree(&primary).unwrap(), "the primary tree");
+    }
+
+    // --- SL-056 PHASE-10: classify_stamp pure arms (T2) ---
+
+    #[test]
+    fn classify_stamp_ok_when_all_inputs_hold() {
+        assert_eq!(
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, true),
+            Ok(Stamp::Ok)
+        );
+    }
+
+    #[test]
+    fn classify_stamp_missing_cwd_refuses() {
+        // cwd absent ⇒ missing-cwd, regardless of the other inputs.
+        assert_eq!(
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, false, false),
+            Err(StampRefusal::MissingCwd)
+        );
+        assert_eq!(StampRefusal::MissingCwd.token(), "missing-cwd");
+    }
+
+    #[test]
+    fn classify_stamp_bad_dir_refuses_when_cwd_present_but_invalid() {
+        // cwd present but not under-repo-and-linked ⇒ bad-dir (checked before
+        // agent-type, so even a wrong agent_type still names the dir problem).
+        assert_eq!(
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, false),
+            Err(StampRefusal::BadDir)
+        );
+        assert_eq!(
+            classify_stamp("anything", true, false),
+            Err(StampRefusal::BadDir)
+        );
+        assert_eq!(StampRefusal::BadDir.token(), "bad-dir");
+    }
+
+    #[test]
+    fn classify_stamp_missing_agent_type_refuses() {
+        // agent_type absent ("") OR present-but-wrong ⇒ missing-agent-type.
+        assert_eq!(
+            classify_stamp("", true, true),
+            Err(StampRefusal::MissingAgentType)
+        );
+        assert_eq!(
+            classify_stamp("some-other-agent", true, true),
+            Err(StampRefusal::MissingAgentType)
+        );
+        assert_eq!(StampRefusal::MissingAgentType.token(), "missing-agent-type");
+    }
+
+    // --- SL-056 PHASE-10 T6 / VT-4: agent-def `name` ↔ const drift gate ---
+    //
+    // Reds if `install/agents/claude/dispatch-worker.md` frontmatter `name:`
+    // diverges from `DISPATCH_WORKER_AGENT_TYPE`. The SubagentStart matcher leg and
+    // the /dispatch-agent skill leg are LATER phases — this covers only the
+    // agent-def ↔ const leg.
+    #[test]
+    fn dispatch_worker_agent_def_name_matches_const() {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let def = manifest.join("install/agents/claude/dispatch-worker.md");
+        let text =
+            fs::read_to_string(&def).unwrap_or_else(|e| panic!("read {}: {e}", def.display()));
+        let name = text
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("name:"))
+            .map(str::trim)
+            .unwrap_or_else(|| panic!("no `name:` frontmatter in {}", def.display()));
+        assert_eq!(
+            name, DISPATCH_WORKER_AGENT_TYPE,
+            "agent-def name must equal DISPATCH_WORKER_AGENT_TYPE"
+        );
     }
 }

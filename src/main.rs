@@ -608,6 +608,12 @@ enum WorktreeCommand {
         #[arg(long)]
         operator: bool,
 
+        /// Provision + stamp the worker marker into the `SubagentStart` payload's
+        /// worktree (SL-056 PHASE-10). Reads `{cwd, agent_type}` JSON on stdin;
+        /// the claude harness spawn path's mark step.
+        #[arg(long)]
+        stamp_subagent: bool,
+
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -1770,10 +1776,16 @@ enum WriteClass {
     /// the marker is a self-brick we reject). Its own bespoke refusals live in
     /// `run_marker_clear`.
     MarkerClear,
+    /// `worktree marker --stamp-subagent` (SL-056 PHASE-10): the claude harness
+    /// spawn path's provision+mark step. REFUSED under worker-mode via the SAME
+    /// branch as `Orchestrator`/`Write` — NO verb-identity carve-out. The legit
+    /// first stamp passes automatically: the target worktree bears no marker yet,
+    /// so `worker_mode == false` (marker-absent ⇒ allow). Carries the verb label.
+    Hookmint(&'static str),
 }
 
 fn write_class(cmd: &Command) -> WriteClass {
-    use WriteClass::{MarkerClear, Orchestrator, Read, Write};
+    use WriteClass::{Hookmint, MarkerClear, Orchestrator, Read, Write};
     match cmd {
         Command::Install { .. } => Write("install"),
         Command::Skills { command } => match command {
@@ -1881,8 +1893,15 @@ fn write_class(cmd: &Command) -> WriteClass {
             // gc reaps a spent worktree fork once provably landed (SL-056 PHASE-09)
             // — Orchestrator-classed; refused under worker-mode.
             WorktreeCommand::Gc { .. } => Orchestrator("gc"),
-            // marker --clear is the bespoke self-brick cure (SL-056 §3) — NOT
-            // refused by the worker-mode guard; its own fences live in the handler.
+            // marker --stamp-subagent is the claude spawn path's provision+mark
+            // step (SL-056 PHASE-10) — Hookmint, refused under worker-mode (the
+            // legit first stamp lands on a marker-absent worktree ⇒ allowed). All
+            // other marker forms (--clear, bare) are the bespoke self-brick cure —
+            // NOT refused by the worker-mode guard; their fences live in the handler.
+            WorktreeCommand::Marker {
+                stamp_subagent: true,
+                ..
+            } => Hookmint("marker --stamp-subagent"),
             WorktreeCommand::Marker { .. } => MarkerClear,
         },
         // Read-only: the coverage/drift view (never writes / derives status, §5.3),
@@ -1966,7 +1985,9 @@ fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
     // Write and Orchestrator are both refused under worker-mode with the SAME
     // branches; Read and the bespoke MarkerClear pass through (SL-056 PHASE-06).
     let verb = match write_class(cmd) {
-        WriteClass::Write(verb) | WriteClass::Orchestrator(verb) => verb,
+        WriteClass::Write(verb) | WriteClass::Orchestrator(verb) | WriteClass::Hookmint(verb) => {
+            verb
+        }
         WriteClass::Read | WriteClass::MarkerClear => return Ok(()),
     };
     // No doctrine/project root above the cwd: the marker leg cannot apply. Fall
@@ -2494,12 +2515,15 @@ fn main() -> anyhow::Result<()> {
             WorktreeCommand::Marker {
                 clear,
                 operator,
+                stamp_subagent,
                 path,
             } => {
-                if clear {
+                if stamp_subagent {
+                    worktree::run_stamp_subagent(path)
+                } else if clear {
                     worktree::run_marker_clear(path, operator)
                 } else {
-                    anyhow::bail!("`worktree marker` requires `--clear` (the only marker op today)")
+                    anyhow::bail!("`worktree marker` requires `--clear` or `--stamp-subagent`")
                 }
             }
         },
@@ -2682,8 +2706,8 @@ mod write_class_tests {
     fn cls(cmd: Command) -> Option<&'static str> {
         match write_class(&cmd) {
             WriteClass::Read => None,
-            // Both refused classes carry a verb label; the guard refuses each.
-            WriteClass::Write(v) | WriteClass::Orchestrator(v) => Some(v),
+            // All refused classes carry a verb label; the guard refuses each.
+            WriteClass::Write(v) | WriteClass::Orchestrator(v) | WriteClass::Hookmint(v) => Some(v),
             // The bespoke MarkerClear class is neither Read nor a guarded Write;
             // the dedicated `worktree_marker_is_bespoke_class` test pins it.
             WriteClass::MarkerClear => None,
@@ -3206,6 +3230,7 @@ mod write_class_tests {
             command: WorktreeCommand::Marker {
                 clear: true,
                 operator: false,
+                stamp_subagent: false,
                 path: None,
             },
         };
@@ -3215,6 +3240,30 @@ mod write_class_tests {
         );
         // And therefore not seen as a guarded Write by `cls`.
         assert_eq!(cls(c), None);
+    }
+
+    // SL-056 PHASE-10: `worktree marker --stamp-subagent` is the Hookmint class —
+    // refused under worker-mode via the SAME branch as Orchestrator/Write (NO
+    // verb-identity carve-out), carries the "marker --stamp-subagent" verb label.
+    #[test]
+    fn worktree_marker_stamp_subagent_is_hookmint() {
+        let c = Command::Worktree {
+            command: WorktreeCommand::Marker {
+                clear: false,
+                operator: false,
+                stamp_subagent: true,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(
+                write_class(&c),
+                WriteClass::Hookmint("marker --stamp-subagent")
+            ),
+            "marker --stamp-subagent must be the Hookmint class"
+        );
+        // A guarded Write to `cls` — the worker-mode guard refuses it.
+        assert_eq!(cls(c), Some("marker --stamp-subagent"));
     }
 
     // SL-056 PHASE-06: `worktree fork` is the FIRST Orchestrator-classed verb —
