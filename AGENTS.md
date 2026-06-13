@@ -78,9 +78,11 @@ These are the project-specific additions.)
   the thin shell.
 - **behaviour-preservation gate**: when changing shared machinery (the entity engine),
   the existing suites are the proof — they must stay green unchanged.
-- **lint as you go** — `cargo clippy` zero warnings; `just check` before every commit.
-  (The gate runs plain `cargo clippy` — bins/lib only; do NOT use `--all-targets`,
-  which lights up `unwrap_used`/`expect_used` denials in test code.)
+- **lint as you go** — `cargo clippy` zero warnings; `just gate` before every commit
+  (`just check` is the fast inner-loop variant — root package only, skips the cordage
+  workspace crate; `gate` runs `--workspace`). (The gate runs plain `cargo clippy` —
+  bins/lib only; do NOT use `--all-targets`, which lights up
+  `unwrap_used`/`expect_used` denials in test code.)
 - **no parallel implementation** — ride existing seams; find duplication before writing.
 
 ## known CLI gaps (todo as the tooling surface expands)

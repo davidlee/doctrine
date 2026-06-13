@@ -3,15 +3,15 @@ memory_key = "mem.pattern.build.just-check-workspace-gates-members"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "just check gates workspace members — cordage suite now run (SL-052 closed the hole)"
-summary = "just check runs cargo test --workspace; cordage tests/denylist.rs is gated as of SL-052 — supersedes the bare-cargo-test hole memory"
+title = "just gate runs the --workspace test gate; just check is the fast root-only inner loop"
+summary = "justfile splits gates: check = bare cargo test (root pkg, fast inner loop), gate = cargo test --workspace (cordage gated, end-of-phase/CI). Pre-commit guard is now just gate"
 created = "2026-06-12"
-updated = "2026-06-12"
+updated = "2026-06-13"
 
 [scope]
 paths = ["justfile", "crates/cordage"]
 globs = []
-commands = ["just check", "cargo test"]
+commands = ["just check", "just gate", "cargo test", "cargo test --workspace"]
 tags = ["testing", "gate", "cordage"]
 workspace = "default"
 repo = "github.com/davidlee/doctrine"
@@ -29,8 +29,8 @@ verified_sha = "effc8140e109ceff01c464c832eaf9a145276ba9"
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "verified"
-reviewed = "2026-06-12"
+verification_state = "unverified"
+reviewed = "2026-06-13"
 review_by = ""
 
 [trust]
