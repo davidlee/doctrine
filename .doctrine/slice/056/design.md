@@ -8,7 +8,12 @@ mechanism belongs in the CLI (identical under claude/codex/pi by construction);
 judgment and harness concessions belong in prose. This design moves the
 worktree/dispatch creation ladder, the import funnel, build isolation, and the
 worker-mode guard out of fail-open prose into fail-closed, golden-testable CLI
-verbs, with the orchestrator-owned spawn seam as the keystone.
+verbs, with **orchestrator-owned fork + a disk marker as the harness-agnostic
+keystone**. The subprocess spawn seam (`codex exec`, pi self-subagent) is a
+*codex/pi enhancement layer*, not the keystone — `claude -p` is API-billed +
+harness-specific so claude runs the agnostic core via the `Agent` tool at
+marker-only altitude (Charge XIII; see DC-1/DC-2 and the per-harness altitude
+table in D7/G3).
 
 The unifying principle: **the pure/imperative wall, lifted to the orchestration
 layer.** The binary is the pure mechanism core; the harness subprocess invocation
@@ -18,36 +23,51 @@ is the thin impure shell. Every decision below is an application of that wall.
 
 Two cruxes were adjudicated before drafting:
 
-- **DC-1 (seam boundary).** `doctrine worktree fork` owns create + provision +
-  marker + env-emission; the orchestrator's only harness-specific act is invoking
-  `claude -p` / `codex exec` / pi with the emitted env. The line falls exactly
-  between env-emission (mechanism, harness-identical → binary) and invocation
-  (concession, harness-shaped → prose). Rejected: marker-only (leaves the creation
-  ladder + env in prose — the very smell); full spawn verb (pulls the harness
-  invocation into the binary — re-couples + the config-knob Rube Goldberg ADR-006
-  D1 rejects).
-- **DC-2 (worker identity — env *and* marker, post-inquisition).** Worker-mode is
-  a property of the **process**, not the disk location. Two complementary signals,
-  both set by the trusted orchestrator at spawn:
-  - **`DOCTRINE_WORKER=1` env** — the *process-identity* signal. The orchestrator
-    now owns the subprocess spawn (`claude -p`/`codex exec`), so it sets this env
-    **reliably**. This obsoletes the original DC-2 premise: env "failed open" only
-    under Claude's `Agent` tool, which exposed no env seam (self-arm by prompt,
-    nothing enforcing). **The spawn seam this very slice introduces removes that
-    constraint** — orchestrator-set env catches the **worker-on-main** hazard
-    (ADR-006 D2b: harness drops the worker on the coordination root) that a
-    fork-resident marker is blind to.
-  - **fork marker** — the *disk backstop* at `.doctrine/state/dispatch/worker`
-    (withheld runtime tier, self-labelling sibling dir). Fails closed if env is
-    lost (a new shell without the export → marker still present in the fork).
-  - **Guard:** refuse a write-classed verb when
-    `env DOCTRINE_WORKER set OR (is_linked_worktree && marker_present)`. Env covers
-    worker-on-main; marker covers dropped-env-in-fork; together neither failure
-    mode is open. Solo `/execute` sets neither → writes freely (D6a: mode, not
-    location, decides). Marker lifecycle is owned (DC-3 below; D2).
-  - Rejected: marker-only (the original draft — fail-open on worker-on-main, since
-    a worker the harness leaves on `main` is not a linked worktree and carries no
-    marker; inquisition Charge III); git-dir marker (lower observability, no real
+- **DC-1 (seam boundary, per-harness spawn — Charge XIII).** The
+  mechanism/concession line still falls between **what the binary does**
+  (create-or-mark + provision + per-wt env *contract* emission — harness-identical)
+  and **how the worker is spawned** (harness-shaped → prose, selected by the
+  `/dispatch-*` router). The harness templates differ in *who creates the worktree
+  and how identity is stamped*:
+  - **codex/pi:** `doctrine worktree fork` creates the worktree, stamps the marker,
+    provisions, emits the per-wt env contract; the orchestrator spawns the
+    subprocess (`codex exec` / pi) with that env (+ `DOCTRINE_WORKER`, + bwrap).
+  - **claude:** the `Agent` tool creates its *own* worktree (no dir param, no env
+    seam), so the marker is stamped by the orchestrator-configured **WorktreeCreate
+    hook** (ADR-006 D9) — disk identity, no subprocess, no env. Per-wt env is
+    unreachable (degraded to jail-wide; D5).
+  Rejected: marker-only-in-prose (leaves the creation ladder + identity self-armed —
+  the very smell); a `claude -p` *required* backend (API-billed + harness-specific —
+  Charge XIII); a full spawn verb pulling the harness invocation into the binary
+  (re-couples + the config-knob Rube Goldberg ADR-006 D1 rejects).
+- **DC-2 (worker identity — disk marker primary, env a codex/pi optimisation;
+  Charge XIII).** Worker-mode is a property of the **worker**, signalled by a
+  **disk marker the trusted orchestrator stamps** before the worker runs. Disk is
+  the one identity substrate *every* harness has; an env seam is not (claude's
+  `Agent` tool has none, and `claude -p` is non-viable — Charge XIII). So:
+  - **fork marker (PRIMARY, harness-agnostic)** — at
+    `.doctrine/state/dispatch/worker` (withheld runtime tier, self-labelling sibling
+    dir). Stamped by `doctrine worktree fork` (codex/pi) or by the WorktreeCreate
+    hook (claude). Fail-closed: present in the worker's linked worktree ⇒ writes
+    refused.
+  - **`DOCTRINE_WORKER=1` env (codex/pi OPTIMISATION)** — set by the orchestrator
+    *only* on a subprocess it spawns. It buys one thing the marker cannot: it
+    catches the **worker-on-main** hazard (ADR-006 D2b: harness drops the worker on
+    the coordination root, where no fork marker exists and `is_linked_worktree` is
+    false). For codex/pi this closes worker-on-main; **for claude it is
+    unavailable**, so worker-on-main reduces to the already-deferred D2b residual,
+    mitigated by always-isolating the worker (`Agent isolation:worktree`) + the
+    hook-stamped marker — not closed. (The prior draft made env the *only*
+    worker-on-main catch and *primary*; Charge XIII showed that collapses to
+    fail-open on the dominant harness.)
+  - **Guard:** refuse a write-classed OR `Orchestrator` verb when
+    `(is_linked_worktree && marker_present) OR env DOCTRINE_WORKER set`. The marker
+    conjunct is the agnostic floor; the env disjunct is the codex/pi worker-on-main
+    catch. Solo `/execute` sets neither → writes freely (D6a: mode, not location,
+    decides). Marker lifecycle is owned (DC-3 below; D2) and clearable (Charge II).
+  - Rejected: env-primary (collapses to fail-open on claude — Charge XIII);
+    marker-only with *no* env even for codex/pi (discards a free worker-on-main
+    catch where the seam exists); git-dir marker (lower observability, no real
     gain).
 - **DC-3 (verb privilege — fork/import/gc are orchestrator-only).** `fork`,
   `import`, and `gc` **mutate git refs and directories** (create/remove worktrees,
@@ -59,7 +79,7 @@ Two cruxes were adjudicated before drafting:
   are. Only the non-mutating helpers (`provision`, `check-allowlist`,
   `branch-point-check`) stay `Read` and open to workers.
 
-## D1 — `doctrine worktree fork` (the spawn seam)
+## D1 — `doctrine worktree fork` (codex/pi creation verb) + claude's hook path
 
 **Current.** The `/worktree` skill prose drives a creation ladder (existing
 isolation → Claude `WorktreeCreate` hook → `git worktree add` → work-in-place).
@@ -68,7 +88,10 @@ ADR-006 D9, which already mandates the orchestrator provision + baseline-verify
 "before handing the worker its task." `DOCTRINE_WORKER=1` self-arm and
 `CARGO_TARGET_DIR` have no spawn seam under Claude's `Agent` tool (no env seam).
 
-**Target.** One verb, run by the trusted orchestrator at the source root:
+**Target (codex/pi creation path).** One verb, run by the trusted orchestrator at
+the source root. (For **claude** the orchestrator does not call `fork` — the `Agent`
+tool creates its own worktree and the WorktreeCreate hook provisions + stamps the
+marker; see the per-harness orchestrator-usage templates below — Charge XIII.)
 
 ```
 doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]
@@ -91,29 +114,42 @@ worktree (inquisition Charge VIII):
    excluded by construction — unchanged).
 3. If `--worker`: write the marker (D2) into the fork **before** any window in
    which a worker could be spawned. Solo `/execute` omits `--worker` → no marker.
-4. Emit the env contract on **stdout** (machine; one `KEY=value` per line); human
-   status to **stderr**. v1 emits exactly:
-   `CARGO_TARGET_DIR=<jail-root>/wt/<branch>` (D5). The orchestrator additionally
-   exports `DOCTRINE_WORKER=1` into the spawned subprocess for a `--worker` fork
-   (DC-2 process-identity signal) — it is the spawn-time env, not a fork-emitted
-   line, because identity belongs to the process the orchestrator launches.
+4. Emit the **per-worktree env contract** on **stdout** (machine; one `KEY=value`
+   per line); human status to **stderr**. The contract is *generalisable* — the
+   project declares its per-wt env needs; doctrine-the-repo declares
+   `CARGO_TARGET_DIR=<jail-root>/wt/<branch>` (D5, a project-local consumer, **not**
+   a framework primitive — Charge XIII). For a codex/pi `--worker` fork the
+   orchestrator additionally sets `DOCTRINE_WORKER=1` on the spawned subprocess —
+   the **DC-2 codex/pi optimisation** (worker-on-main catch), *not* the identity
+   (identity is the step-3 marker). Both are spawn-time env on a subprocess; claude
+   (Agent tool, no env seam) consumes neither — its identity is the hook-stamped
+   marker and it shares the jail-wide target (D5).
 
-Orchestrator usage (the thin, irreducibly harness-specific prose shell). Capture
-and **check the exit code** before consuming env — `eval "$(cmd)"` swallows the
-status of `cmd` (a fail-open trap, ironic here), so we do not use it:
+Orchestrator usage is the thin, harness-specific prose shell, selected by the
+`/dispatch-*` router (Charge XIII). **Two templates:**
+
+*codex/pi (`/dispatch-subprocess`)* — fork verb creates+marks+provisions; capture
+and **check the exit code** before consuming env (`eval "$(cmd)"` swallows the
+status — a fail-open trap, so we never use it):
 ```sh
 fork_env="$(doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worker)" \
   || { echo "fork failed: $?" >&2; exit 1; }   # halt, do not spawn
-env DOCTRINE_WORKER=1 $fork_env claude -p "<pre-distilled prompt>"
-#   ^ process identity  ^ env lines  ^ the harness-shaped line (bwrap-wrapped once D6 lands)
+env DOCTRINE_WORKER=1 $fork_env codex exec "<pre-distilled prompt>"
+#   ^ codex/pi worker-on-main optimisation   ^ per-wt env   ^ harness-shaped line
 ```
-`$fork_env` is the stdout env block (`CARGO_TARGET_DIR=…`); status went to stderr.
-When D6 lands the wrap (`bwrap <profile> env $fork_env claude -p …`) extends *this
-prose shell*, not the verb — confinement is a harness/OS concession, DC-1 keeps it
-in prose.
+`$fork_env` is the stdout per-wt env block; status went to stderr. When D6 lands the
+bwrap wrap (`bwrap <profile> env … codex exec …`) it extends *this prose shell*, not
+the verb — confinement is a harness/OS concession, DC-1 keeps it in prose.
 
-**Why a verb, not the skill.** Steps 1–4 are pure mechanism; only the final `env …
-claude -p` differs across harnesses. The verb makes the spawn obey the same
+*claude (`/dispatch-agent`)* — no fork verb, no env. The orchestrator configures the
+WorktreeCreate hook (ADR-006 D9) to provision + stamp the marker, then launches the
+worker via the `Agent` tool with `isolation:worktree`. Identity is the hook-stamped
+marker (disk); `DOCTRINE_WORKER` and bwrap are unavailable; the worker shares the
+jail-wide target (D5); worker-on-main is the deferred D2b residual (DC-2).
+
+**Why a verb, not the skill.** Steps 1–4 are pure mechanism; only the spawn line
+(`env … codex exec` for codex/pi; `Agent`+hook for claude) differs across harnesses,
+selected by the `/dispatch-*` router. The verb makes the spawn obey the same
 no-impurity-in-the-core wall the rest of the codebase obeys.
 
 **Pure/imperative split** (ADR-001 leaf). Pure: `target_dir_for_branch(jail_root,
@@ -126,33 +162,41 @@ add, provision call, marker write, stdout/stderr emission.
 `Command`) bails on every authored/doctrine-mediated write. Fails open: only the
 prompt can self-arm, nothing enforces it (ADR-006 D2b; research §3 C-I).
 
-**Target.** The guard trigger is the **DC-2 dual signal** — env *or* marker.
-`write_class` itself is unchanged (behaviour-preserving); a new `Orchestrator`
-class (DC-3) joins it under the same guard.
+**Target.** The guard trigger is the **DC-2 signal — disk marker primary, env a
+codex/pi optimisation** (Charge XIII). `write_class` itself is unchanged
+(behaviour-preserving); a new `Orchestrator` class (DC-3) joins it under the same
+guard.
 
 ```
 marker path:  <root>/.doctrine/state/dispatch/worker
-worker_mode(root)  :=  env DOCTRINE_WORKER set
-                       OR (is_linked_worktree(root) && marker_present(root))
+worker_mode(root)  :=  (is_linked_worktree(root) && marker_present(root))   // primary, agnostic
+                       OR env DOCTRINE_WORKER set                            // codex/pi worker-on-main catch
 guard (in run(), before dispatching a write-classed OR Orchestrator Command):
     if worker_mode(root):
         refuse(verb)        // names the verb, as today
 ```
 
-- **Env is the worker-on-main fix.** A worker the harness leaves on the
-  coordination root (D2b hazard) carries no marker and is not a linked worktree —
-  the marker conjunct is blind to it (inquisition Charge III). The
-  orchestrator-set `DOCTRINE_WORKER` env catches it: identity rides the process,
-  not the disk. The marker remains the fail-closed backstop for a fork shell that
-  loses the env.
+- **Marker is the primary, harness-agnostic identity.** Disk is the one substrate
+  every harness has; the orchestrator stamps the marker into the worker's worktree
+  (via `fork` for codex/pi, via the WorktreeCreate hook for claude — Charge XIII)
+  before the worker runs. Present in a linked worktree ⇒ writes refused.
+- **Env is the codex/pi worker-on-main optimisation.** A worker the harness leaves
+  on the coordination root (D2b hazard) carries no marker and is not a linked
+  worktree — the marker conjunct is blind to it (inquisition Charge III). An
+  orchestrator-set `DOCTRINE_WORKER` env catches it — but **only where a subprocess
+  spawn carries env (codex/pi); claude has no env seam** (Charge XIII), so for
+  claude worker-on-main stays the deferred D2b residual, mitigated by
+  always-isolating the worker + the hook-stamped marker.
 - `is_linked_worktree` is the existing predicate (two consumers today: memory
   squash-warn, RV-verb refusal — now three).
 - The marker is **presence-only** — no contents. (The earlier "optionally the
   base SHA" is dropped: it was written and never read — dead/misleading state,
   inquisition Charge XI.)
 - **Lifecycle (owned, not assumed — inquisition Charge V).** Written by
-  `fork --worker` (transactionally, D1); **removed by `gc`** (D4); rolled back if
-  `fork` fails. A tree may serve as a coordination root only after an
+  `fork --worker` (transactionally, D1) for codex/pi, or by the WorktreeCreate hook
+  for claude (Charge XIII); **removed by `gc`** (D4); rolled back if `fork` fails;
+  **cleared by a non-Orchestrator path** for a stray coordination-tree marker
+  (Charge II — step 2). A tree may serve as a coordination root only after an
   **assert-marker-absent** check — so a reused/stale fork dir cannot fail-close a
   legitimate writer. Marker-absence on the coordination tree is now *guarded*, not
   presumed.
@@ -161,22 +205,23 @@ guard (in run(), before dispatching a write-classed OR Orchestrator Command):
   yes — writes refused; signal: env|marker") so the mode is discoverable without
   knowing the gitignored path.
 - **D6a preserved.** The orchestrator (trusted, source root, marker absent —
-  asserted) writes the marker into the *worker* fork before the worker exists and
-  sets the worker's env at spawn. Solo `/execute` forks carry neither → write
-  freely. Mode, not location, decides.
+  asserted) stamps the marker into the *worker* worktree before the worker exists
+  (and, for codex/pi, additionally sets the worker's env at spawn). Solo `/execute`
+  carries neither → writes freely. Mode, not location, decides.
 - Withheld tier: `.doctrine/state/**` is already gitignored, already dropped by
   `provision`, already absent from the import delta — the marker inherits all
   exclusions with zero new logic. The new `dispatch/` sub-path needs no separate
   tier entry (the `State` glob `.doctrine/state/**` already covers it; confirm in
   `is_withheld` test).
 
-`DOCTRINE_WORKER` env is **retained as the process-identity signal** (DC-2) — *not*
-retired (the original draft retired it; the inquisition restored it as the only
-signal that sees worker-on-main). It is now **orchestrator-set at spawn**, never
-prompt-self-armed, which is what makes it reliable (the spawn seam). Tests that
-unset it (`[[mem.pattern.dispatch.worker-verify-unset-doctrine-worker]]`) still run
-the green gate with `env -u DOCTRINE_WORKER` *and* outside a marked linked worktree,
-so neither guard signal trips in a tempdir fixture.
+`DOCTRINE_WORKER` env is **retained as a codex/pi optimisation** (DC-2 / Charge
+XIII), not the identity — the disk marker is identity. It is **orchestrator-set on
+the spawned subprocess**, never prompt-self-armed; its sole job is the
+worker-on-main catch, available only where a subprocess seam carries env (codex/pi,
+not claude). Tests that unset it
+(`[[mem.pattern.dispatch.worker-verify-unset-doctrine-worker]]`) still run the green
+gate with `env -u DOCTRINE_WORKER` *and* outside a marked linked worktree, so
+neither guard signal trips in a tempdir fixture.
 
 ## D3 — `doctrine worktree import` (the funnel belt)
 
@@ -278,22 +323,37 @@ the inquisition made it the v1 gate, because delta inference cannot work once
 Cleanup ownership becomes trivial: **the caller of `fork` owns `gc`.** `/dispatch`
 concludes with it; solo `/execute` ends with it.
 
-## D5 — Per-worktree build isolation (≡ ADR-008 D-B1)
+## D5 — Per-worktree env provisioning (generalisable) + build isolation (its project-local instance; ≡ ADR-008 D-B1)
 
+The framework primitive is the **per-worktree env contract** D1 emits: the project
+declares its per-wt env, the orchestrator injects it where the spawn backend carries
+env. Doctrine-the-repo's instance is build isolation —
 `CARGO_TARGET_DIR = <jail-root>/wt/<branch>`, computed by `fork` (pure
 `target_dir_for_branch`; branch names carry `/` — `slice/SL-056-x` → nested
 `wt/slice/SL-056-x`, which cargo accepts; collision-safe since branch names are
-unique), emitted on stdout, set by the orchestrator at subprocess
-spawn (D1). Not baked in the flake (ADR-008 D-B5); cargo env-precedence means a
-fork-resident `.cargo/config.toml` cannot override the ambient jail-wide var — only
-the spawn-set env can. **No flake change for the spike.** Warm across launches
-(in-jail `~/.cargo` persists) → cold cost is per-branch, not per-session; disk is
-the residual, reaped by D4. Obsoletes the three §5.1 mitigation rituals.
+unique). This is **ADR-008 / project-local, not an ADR-011 framework primitive**
+(Charge XIII).
 
-## D6 — Per-worker bwrap confinement (ADR-008 D-B3, spike)
+**Harness-conditional deliverability.** Not baked in the flake (ADR-008 D-B5); cargo
+env-precedence means a fork-resident `.cargo/config.toml` cannot override the
+ambient jail-wide var — only spawn-set env can. So:
+- **codex/pi:** the orchestrator sets it at subprocess spawn → per-wt isolation;
+  obsoletes the three §5.1 mitigation rituals. Warm across launches (in-jail
+  `~/.cargo` persists) → cold cost is per-branch, not per-session; disk residual
+  reaped by D4. **No flake change for the spike.**
+- **claude:** no env seam → the worker **shares the jail-wide target** and the three
+  §5.1 mitigation rituals (touch+re-run, fingerprint-rm, cordage recompile)
+  **stand**. Build isolation is a perf/false-green concern, not a trust signal, so
+  this is *confessed, not closed* (Charge XIII). A future channels backend (IDE-004)
+  could lift it.
 
-Timeboxed spike, OS-enforced discharge of ADR-006 D2b. Feasibility gate is
-unprivileged userns *inside* the jail (outer bwrap may seccomp-block
+## D6 — Per-worker bwrap confinement (ADR-008 D-B3, spike — codex/pi-only)
+
+Timeboxed spike, OS-enforced discharge of ADR-006 D2b. **Subprocess-only (Charge
+XIII):** bwrap wraps a spawned process, which claude's in-session `Agent` tool is
+not — so this rung is codex/pi-only; for claude, D2b stays the deferred residual.
+Feasibility gate is unprivileged userns *inside* the jail (outer bwrap may
+seccomp-block
 `clone(CLONE_NEWUSER)`) — empirical, probe `bwrap --unshare-user --ro-bind / / true`
 at spike time. Land → worker rw-mounts only its worktree + target dir, ro
 everything else (a write to main's `.doctrine` denied by the OS). Too costly →
@@ -311,25 +371,36 @@ inquisition Charge IX).
 - **G1 — ADR-008 revise→accept** (the gate). Fold §5.1 evidence; record D-B2 as
   standing fact (ro `~/.cargo/bin` ⇒ no in-jail install, no race); re-scope D-B3
   around the userns question. Acceptance gates IMP-004.
-- **G2 — ADR-006 amend.** (a) D5/D9 ladder: demote native hook to opportunistic,
-  cite SL-050/051. (b) D2a mechanism: replace the `DOCTRINE_WORKER=1` *self-arm*
-  with the **DC-2 dual signal** — orchestrator-set `DOCTRINE_WORKER` env (now
-  reliable via the spawn seam) *plus* the fork-resident marker — and the DC-3
-  `Orchestrator` verb class. (Not "env→marker"; env is retained, its arming moved
-  from prompt to orchestrator — inquisition Charge III.) Withheld-tier D1/D4/D9
-  invariants preserved. **Spike-first (inquisition Charge IX):** the guard +
-  privilege model (DC-2/DC-3) is validated by a small O3 code spike *before* G2
-  amends the accepted ADR — symmetry with the D6 bwrap spike-first treatment.
+- **G2 — ADR-006 amend.** (a) D5/D9 ladder: demote the native hook as a *creation*
+  preference (base-pinning + subprocess spawn supersede it for codex/pi), cite
+  SL-050/051 — **but promote it as claude's marker-stamping seam** (the
+  WorktreeCreate hook provisions + stamps the marker; Charge XIII). (b) D2a
+  mechanism: replace the `DOCTRINE_WORKER=1` *self-arm* with the **DC-2 signal —
+  disk marker primary** (harness-agnostic), env a **codex/pi optimisation** (the
+  worker-on-main catch), plus the DC-3 `Orchestrator` verb class. (Not "env→marker"
+  wholesale, nor "env-primary" — marker is primary and agnostic; env is retained as
+  a codex/pi-only enhancement, its arming moved from prompt to orchestrator —
+  Charges III/XIII.) State the **per-harness enforcement altitude** in D2b (claude:
+  marker-only, worker-on-main deferred; codex/pi: full). Withheld-tier D1/D4/D9
+  invariants preserved. **Spike-first (Charge IX):** the guard + privilege model
+  (DC-2/DC-3) *and* the claude marker-via-hook path are validated by a small O3 code
+  spike *before* G2 amends the accepted ADR — symmetry with the D6 bwrap spike-first.
   Governance follows proven mechanism, not the reverse.
-- **G3 — ADR (new): the spawn seam.** ADR id allocated via `doctrine adr new` at
-  authoring (likely ADR-011 — next free — but not hardcoded). Orchestrator-owned fork + subprocess
-  spawn + what it buys (env-arm, per-wt target, bwrap wrap); `Agent` is the
-  degraded rung where no subprocess exists. ADR-006-references; framework-level
-  (harness-agnostic).
+- **G3 — ADR (new): the spawn-seam contract + per-harness capability profile.** ADR
+  id allocated via `doctrine adr new` at authoring (likely ADR-011 — next free —
+  not hardcoded). Records a **harness-agnostic contract** (orchestrator owns
+  fork-or-mark + provision + per-wt env emission; worker identity is the disk
+  marker) and a **per-harness capability profile + altitude table** (Charge XIII):
+  codex/pi = subprocess spawn buys env-arm + per-wt env + bwrap (full); claude =
+  `Agent` tool, marker-via-hook, marker-only altitude (no env, no per-wt target, no
+  bwrap), with `Agent` a **first-class** backend, not a degraded rung. **No
+  harness-specific command (`claude -p`) is a required element.** ADR-006-references;
+  framework-level (harness-agnostic).
 - **G4 — SPEC-012 rewrite.** Reframe Overview + Concerns (drop "the funnel is a
   discipline, not enforced code" — now enforced); rewrite D3 (fail-open env →
-  fail-closed marker); add a D for the verb family; add FRs (fork, import, gc,
-  marker guard).
+  fail-closed **marker-primary** guard) and **state the achievable enforcement
+  altitude per harness** (Charge XIII) — no uniform fail-closed claim; add a D for
+  the verb family; add FRs (fork, import, gc, marker guard, per-wt env contract).
 
 Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
@@ -337,11 +408,11 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
 | Path | Change |
 |---|---|
-| `src/worktree.rs` | `run_fork`, `run_import`, `run_gc` (imperative shells, **transactional fork** rollback); pure: `target_dir_for_branch`, `marker_path`, `classify_import`, gc receipt-check. Reuse `select_copies`/`branch-point` core. New `write_marker`/`marker_present`/`remove_marker`, import-receipt read/write. Third `is_linked_worktree` consumer. |
-| `src/main.rs` | `fork`/`import`/`gc` subcommands + arg structs (watch the bool/arg clippy ceilings, `[[mem.pattern.lint.cli-handler-args-struct]]`). Worker-mode guard = `worker_mode(root)` = `env DOCTRINE_WORKER set OR (is_linked_worktree && marker_present)` (DC-2). `write_class` unchanged. **fork/import/gc are a new `Orchestrator` class — refused under `worker_mode`, NOT `Read`** (they mutate git refs/dirs; inquisition Charge IV / DC-3). |
+| `src/worktree.rs` | `run_fork`, `run_import`, `run_gc` (imperative shells, **transactional fork** rollback); pure: `target_dir_for_branch`, `marker_path`, `classify_import`, gc receipt-check. Reuse `select_copies`/`branch-point` core. New `write_marker`/`marker_present`/`remove_marker` (`write_marker` also invoked by claude's WorktreeCreate hook — Charge XIII), import-receipt read/write. Third `is_linked_worktree` consumer. |
+| `src/main.rs` | `fork`/`import`/`gc` subcommands + arg structs (watch the bool/arg clippy ceilings, `[[mem.pattern.lint.cli-handler-args-struct]]`). Worker-mode guard = `worker_mode(root)` = `(is_linked_worktree && marker_present) OR env DOCTRINE_WORKER set` — **marker primary, env a codex/pi optimisation** (DC-2 / Charge XIII). `write_class` unchanged. **fork/import/gc are a new `Orchestrator` class — refused under `worker_mode`, NOT `Read`** (they mutate git refs/dirs; inquisition Charge IV / DC-3). A marker-stamping entry point (claude WorktreeCreate hook) + a marker-clear path (Charge II) join the verb family. |
 | `src/git.rs` | new reads behind the verbs: worktree list, merged-branch test (gc), `B..S` diff name-only (import). Impure seam only. |
 | ADR-008 / ADR-006 / **ADR-011 (new)** / SPEC-012 | G1–G4. |
-| `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` | rewrite prose to *call* the verbs (the token/agnostic payoff); re-embed ritual `[[mem.pattern.distribution.skill-refresh-command]]`. |
+| `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` + new `{dispatch-subprocess,dispatch-agent}/SKILL.md` | rewrite prose to *call* the verbs (the token/agnostic payoff); **`/dispatch` becomes a harness router** → `/dispatch-subprocess` (codex/pi) \| `/dispatch-agent` (claude), Charge XIII; re-embed ritual `[[mem.pattern.distribution.skill-refresh-command]]`. |
 | `flake.nix` | none for the spike; `dispatch-worker` bwrap profile only if D6 lands. |
 
 ## Verification alignment
@@ -353,10 +424,11 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   unmerged refusal, stale-binary warning).
 - **Worker-mode guard — invariant test driving `run()`, not a pure helper**
   (`[[mem.pattern.review.invariant-test-must-drive-the-write-seam]]`): (a) linked
-  worktree + marker → `memory record` / `slice new` / status-transition refuse;
-  (b) **`DOCTRINE_WORKER` set on the coordination root (worker-on-main) → refuse**
-  (the env signal; Charge III); (c) same worktree without marker and no env (solo)
-  → allowed; (d) non-worktree tempdir, no env → allowed.
+  worktree + marker → `memory record` / `slice new` / status-transition refuse
+  (the **primary, agnostic** signal); (b) **`DOCTRINE_WORKER` set on the
+  coordination root (worker-on-main) → refuse** (the codex/pi env optimisation;
+  Charges III/XIII); (c) same worktree without marker and no env (solo) → allowed;
+  (d) non-worktree tempdir, no env → allowed.
 - **`Orchestrator`-class refusal (Charge IV):** from a marked fork (or with env
   set), `fork` / `import` / `gc --force` are **refused** — drive `run()`, not a
   pure helper. The worker cannot delete branches.
@@ -368,8 +440,15 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 - **`gc` receipt oracle (Charge I):** sibling moves HEAD between spawn and import;
   gc still reaps the **receipted** fork and **refuses** an unreceipted one (no
   `--force`); delta-emptiness is *not* the gate.
-- **D5**: two parallel worktree builds, no cargo-lock contention, each spawns its
-  own correct `CARGO_BIN_EXE`.
+- **Claude marker-via-hook + per-harness altitude (Charge XIII):** the O3 spike
+  confirms the WorktreeCreate hook stamps the marker into the Agent-created worktree
+  (claude worker → marker present → writes refused) **without** a subprocess or env;
+  and that a codex/pi subprocess worker reads the orchestrator-set `DOCTRINE_WORKER`
+  (the env optimisation; Charge III propagation gate). The altitude table is
+  asserted per-harness, not uniform.
+- **D5** (codex/pi path): two parallel worktree builds, no cargo-lock contention,
+  each spawns its own correct `CARGO_BIN_EXE`. (Claude shares the jail-wide target —
+  the §5.1 rituals are the proof there, not isolation.)
 - **D6** (if landed): an out-of-tree write from the worker process is OS-denied.
 - **Behaviour-preservation gate — be precise about what is preserved vs what
   changes.** The migration legitimately *changes* worker-mode behaviour
@@ -390,9 +469,11 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 - **OQ-2:** bwrap userns feasibility — empirical at the D6 spike.
 - **OQ-3:** disk pressure under N concurrent `wt/<branch>` targets — gc reaps;
   worktree cap or D-B4 (`sccache`) only if it bites.
-- **OQ-4:** ADR-011 spawn-backend enumeration per harness (claude `-p` flags,
-  `codex exec`, pi self-subagent depth) — the thin prose call is harness-templated
-  in the *skill*, never the binary. ADR-011 records the contract, not the flags.
+- **OQ-4:** ADR-011 records the harness-agnostic **contract** + per-harness
+  **capability profile** (Charge XIII), not spawn flags. Per-harness spawn templates
+  (`codex exec`, pi self-subagent depth, claude `Agent`+hook) live in the
+  `/dispatch-*` *skills*, never the binary. `claude -p` is excluded (API-billed +
+  harness-specific).
 
 ## Adversarial self-review — findings integrated
 
@@ -421,7 +502,7 @@ External hostile pass — Opus + GPT-5.5 (codex mcp), converged. Adjudicated via
 |---|---|---|---|
 | I | gc delta-emptiness oracle unsound (false-negates on moved HEAD; `branch -d` always refuses) | CRIT | **import receipt** `{base, fork-head}`; gc deletes only on receipt; `-D` after receipt (D3.5, D4) |
 | II | import refuses moved-HEAD; A2 unmet; `apply-conflict` dead code | CRIT | **stationary-only v1**; refusal set `{head-moved, multi-commit, doctrine-touch}`; `apply-conflict` purged; **A2 struck**; moved-head → named follow-up (D3) |
-| III | marker guard fail-opens worker-on-main (`is_linked_worktree &&` blind) | CRIT | **DC-2 dual signal** — orchestrator-set env (catches worker-on-main) *or* marker (backstop); env reinstated, reliable via spawn seam |
+| III | marker guard fail-opens worker-on-main (`is_linked_worktree &&` blind) | CRIT | **DC-2 dual signal** — orchestrator-set env (catches worker-on-main) *or* marker (backstop). **⚠ Superseded by round-2 Charge XIII:** env-primary collapses on claude (no env seam); marker is now primary+agnostic, env a codex/pi-only optimisation. |
 | IV | fork/import/gc `Read` → untrusted worker deletes refs | CRIT | **DC-3 `Orchestrator` class** — refused under worker identity |
 | V | marker has no removal owner; stale marker bricks coordination writer | HIGH | marker lifecycle owned: gc removes; fork rollback; assert-marker-absent before coordination-root (D2) |
 | VI | `git worktree add <dir> <branch> <B>` invalid git | HIGH | `git worktree add -b <branch> <dir> <B>` + golden (D1) |
@@ -431,6 +512,29 @@ External hostile pass — Opus + GPT-5.5 (codex mcp), converged. Adjudicated via
 | X | design cites SL-055's research; handover path nonexistent | MED | citations re-pathed to `slice/055/...`; handover corrected |
 | XI | marker stores base-SHA never read | LOW | dropped — presence-only (D2) |
 | — | pure/imperative wall | **acquitted** | `target_dir_for_branch`/`classify_import`/`marker_path` take inputs; no clock/git/disk/rng crosses the signature |
+
+## Second inquisition findings integrated (`inquisition-2.md`)
+
+Confirmatory re-pass; `nihil obstat` denied. 3 CRITICAL + 5 HIGH + 5 lesser. Rows
+fill as each charge is remediated this re-lock pass; XIII (the keystone, gating the
+rest) lands first via `/consult`.
+
+| # | Charge | Sev | Resolution |
+|---|---|---|---|
+| XIII | keystone `claude -p` API-billed + harness-specific → subprocess seam unusable for claude → DC-2 env leg dead → worker-on-main reopens | **CRIT** | **`/consult`-resolved.** Spawn-subprocess demoted to a **codex/pi enhancement layer**; agnostic keystone = orchestrator-owned fork + **disk-marker-primary** identity (DC-1/DC-2). `claude -p` rejected as required; claude uses `Agent` + WorktreeCreate-hook marker (first-class), env an agnostic→codex/pi optimisation. Per-wt env generalised (CARGO_TARGET_DIR a project-local consumer; D5). bwrap codex/pi-only (D6). Per-harness altitude table in slice scope + G3/ADR-011 + G4/SPEC-012. `/dispatch` → harness router (`/dispatch-subprocess`\|`/dispatch-agent`, O8). Channels follow-up = IDE-004. |
+| I | import receipt certifies *apply* not *commit*; gc trusts crash-surviving runtime-tier flag | CRIT | *pending — step 2* |
+| II | stray coordination-tree marker has no remover; gc (Orchestrator-classed) locked behind the guard it trips | CRIT | *pending — step 2* |
+| III | DC-2 env leg propagation unvalidated; spike scoped to guard logic not propagation | HIGH | *pending — reshaped by XIII (env now codex/pi-only optimisation; propagation gate folds into O3 spike)* |
+| IV | import receipt has no removal owner | HIGH | *pending — step 4* |
+| V | import refusal set omits `tree-unclean`; `apply-conflict` purge unsound without it | HIGH | *pending — step 3* |
+| VI | assert-marker-absent scoped to coordination root; solo `/execute` direct-writer ungated | MED | *pending — amplified by XIII (marker now primary)* |
+| VII | refused-then-re-dispatched forks need `--force` to gc; reflex returns | MED | *pending — step 4* |
+| VIII | "transactional fork" overclaims; rollback half-fail / dirty `worktree remove` needs `--force` | MED | *pending — step 4* |
+| IX | gc receipt lookup key `{base, fork-head}` underspecified; base unsuppliable | LOW | *pending — step 4* |
+| X | no receipt observability surface | LOW | *pending — step 4* |
+| XI | env leg location-unqualified → leaked `DOCTRINE_WORKER` bricks main-side authoring + self-aborts dispatch | HIGH | *pending — shrunk by XIII (identity off env; only the orchestrator-own-env-clean hardening remains)* |
+| XII | stationary-only import livelocks vs expected concurrent main-side authoring | HIGH | *pending — step 3 (name the D8 quiescence constraint)* |
+| — | receipt-vs-branch-point independence; orchestrator never env-worker-id'd at call time; pure/imperative wall | **acquitted ×3** | sound — no change |
 
 ## Invariants preserved
 
