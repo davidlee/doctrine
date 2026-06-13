@@ -1,0 +1,25 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = {{id}}
+slug = {{slug}}
+title = {{title}}
+record_kind = "decision"
+status = "proposed"
+created = "{{date}}"
+updated = "{{date}}"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
