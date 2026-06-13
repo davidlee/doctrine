@@ -37,10 +37,11 @@ explicit-authorship-not-derivation), ADR-009 (FSM, conduct axis). The hard line
 holds: this slice writes only the **observed** tier; `reconcile` remains the
 **sole** author of authored requirement/spec truth (NF-001 / `REQ-105`).
 
-**Relations** (prose — no structural slice-relation surface in v1; IMP-016):
+**Relations.** Tier-1 edges are structural `[[relation]]` rows in `slice-057.toml`
+(SL-048 shipped the cross-corpus relation surface, IMP-016): `specs` → SPEC-002,
+PRD-013; `governed_by` → ADR-003, ADR-009. The links below that have no structural
+label stay prose:
 - *Realises / completes* — SPEC-002 (its deferred test-run surface half).
-- *Descends product* — PRD-013.
-- *Governed by* — ADR-003, ADR-009.
 - *Sibling / shared seam (reuse, do not re-implement)* — SL-042 (coverage store,
   `src/coverage.rs`; git-anchor staleness via `src/git.rs`), SL-044 (reconcile
   writer / closure gate; observed-tier discipline).
