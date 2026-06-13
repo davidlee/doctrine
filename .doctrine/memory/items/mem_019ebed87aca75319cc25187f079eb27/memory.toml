@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebed87aca75319cc25187f079eb27"
+memory_key = "mem.pattern.dispatch.landed-oracle-needs-import-receipt"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch fork landed-oracle: --merged and delta-emptiness both unsound; use an import receipt"
+summary = "Dispatch fork 'landed' check needs an explicit import receipt; neither git --merged nor a tree-diff is sound"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["src/worktree.rs"]
+globs = []
+commands = []
+tags = ["dispatch", "worktree", "gc"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "22cfa1d3eaf611b560e4c9081fb4767e2f6f29d2"
+ref_name = "refs/heads/main"
+checkout_state_id = "71c1c6f16825d6ab79425c1dfad69e852593021f2f502511b5da325a18a9f6f2"
+base_commit = "f406981bdd4a11cac776de639664aefd656ef010"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
