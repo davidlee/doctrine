@@ -77,7 +77,9 @@ Two cruxes were adjudicated before drafting:
   error (inquisition Charge IV): it lets the untrusted worker delete branches,
   violating ADR-006 D2 (workers mutate **source only**). They are a new
   **`Orchestrator`** class, refused under worker identity (`marker OR env`) exactly
-  as write-classed verbs are. Only the non-mutating helpers (`provision`,
+  as write-classed verbs are. (`land` joined this class round-4; **`marker
+  --arm`/`marker --disarm` join it round-6 — Charge κ — so a worker cannot grief-arm
+  the claude dispatch sentinel.**) Only the non-mutating helpers (`provision`,
   `check-allowlist`, `branch-point-check`) stay `Read` and open to workers.
   **`marker --clear` (Charge II) is a deliberate fourth class:** it mutates runtime
   state but is *not* `Orchestrator`-classed — locking the marker's only remover
@@ -111,9 +113,16 @@ Two cruxes were adjudicated before drafting:
   self-orchestrator (D6a) that *legitimately* lands doctrine, so a `.doctrine/` belt
   there is a category error. The belt's true scope is therefore **the import/dispatch
   path, conditioned on dispatch deltas routing through `import` and never `land`**.
-  That condition is **mechanised, not prose**: **`land` refuses a fork bearing the
-  worker marker** (`dispatch-fork`, D4b) — a misrouted orchestrator running `land` on a
-  dispatch worker's branch is *named-refused*, not silently belt-bypassed. A
+  That condition is **mechanised** (not prose) **across two guards** — honestly
+  scoped, not over-claimed (round-6 Charge μ): **(1)** on a **live-worktree** dispatch
+  fork, **`land` refuses a fork bearing the worker marker** (`dispatch-fork`, D4b) — a
+  misrouted orchestrator running `land` on a dispatch worker's branch is *named-refused*,
+  not silently belt-bypassed; this guard is a **live-worktree accident-fence**, *not* a
+  universal provenance proof, because the marker is uncommitted (D2) and **evaporates
+  with the worktree**. **(2)** on a **worktree-less** dispatch branch (gc crash-window
+  or manual `worktree remove`) the marker is unreachable from the branch, so `land`
+  instead refuses **`worktree-gone`** (D4b) — defense in depth, never a silent beltless
+  merge of an unverifiable branch. Neither guard mechanises the *malicious* case. A
   *malicious* worker reaching `land` to funnel doctrine is the **already-confessed D2b
   raw-tree residual** (a worker that can reach the coordination root to run `land` can
   already write `main/.doctrine/` directly; under D6/bwrap it can reach neither),
@@ -123,8 +132,42 @@ Two cruxes were adjudicated before drafting:
   is accident-fenced like claude.** **No harness claims a "full mechanism floor"
   unconditionally** (round-4 Charge β), and **no funnel claims unconditional
   doctrine-containment** (round-5 Charge ζ); the G3/ADR-011 altitude table states each
-  honestly — import belt on the dispatch path; `land`-refuses-marker-fork on the solo
+  honestly — import belt on the dispatch path; `land`-refuses-marker-fork
+  (live-worktree) **and** `land`-refuses-`worktree-gone` (worktree-less) on the solo
   path; bwrap+ro-marker for codex/pi under D6; claude deferred to IDE-004/userns-bwrap.
+
+## Mechanism admission rule
+
+Six rounds of inquisition share one root cause: a remediation mints a new
+mechanism — a marker, a sentinel, a lock, a guard, a cleanup path, a git-mutating
+verb — and *leaks at the seam* the next round, because the mechanism was admitted
+without its full lifecycle. The rule, applied from here forward and **immediately to
+the sixth-round fixes below:** before the design may rely on **any** runtime marker,
+sentinel, lock, guard, cleanup path, or git-mutating verb, that mechanism must
+answer all ten questions. A mechanism that cannot is **rejected, not shipped with a
+gap.**
+
+1. **Who creates it?**
+2. **Who removes it?** (a named owner, not "assumed")
+3. **What happens if creation fails halfway?** (no corrupt/half-armed state)
+4. **What happens if removal or cleanup fails?** (report the leftover **by name**, exit
+   non-zero — never silent-success; the Charge VIII standard)
+5. **What is its privilege class?** (`Read` / write / `Orchestrator` / the bespoke
+   `marker --clear` class)
+6. **Where exactly is it stored?** (an explicit path in a named tier — never "its own
+   runtime tier")
+7. **Can a worker mutate it?** (and if a *non-compliant* worker can, which harness —
+   is that the already-confessed D2b/claude residual, or a **new** hole?)
+8. **What refusal names its bad states?**
+9. **What golden/spike proves the bad path?**
+10. **What ADR/SPEC/governance claim depends on it, and is that claim scoped
+    honestly?**
+
+The sixth inquisition (κ/λ/μ) found three round-5 mechanisms admitted without
+answering Q2/Q4/Q6/Q7/Q8/Q9. The rows below answer them; the **Sixth-inquisition
+findings** table records the answers. This section is not decorative — every
+round-6 mechanism (`marker --disarm`, the arm lease, the `wedged-merge` refusal, the
+`worktree-gone` refusal) carries its ten answers inline.
 
 ## D1 — `doctrine worktree fork` (codex/pi creation verb) + claude's hook path
 
@@ -194,9 +237,11 @@ the verb — confinement is a harness/OS concession, DC-1 keeps it in prose.
 
 *claude (`/dispatch-agent`)* — no fork verb, no env. Before launching the worker the
 orchestrator **arms a dispatch sentinel** via **`doctrine worktree marker --arm`** (a
-transient signal in its own runtime tier the hook reads; **single-slot — refuses
-`already-armed` if a sentinel is armed or a stamp is still awaited**, round-5 Charge
-θ); it then launches the worker via the `Agent` tool with `isolation:worktree`. The orchestrator-configured WorktreeCreate hook (ADR-006 D9)
+**lease file at `.doctrine/state/dispatch/arm`** — the explicit path, sibling of the
+worker marker, in the same withheld tier — the hook reads; **single-slot — refuses
+`already-armed` while a *live-lease* sentinel is armed or a stamp is still awaited**,
+round-5 Charge θ; **`--arm`/`--disarm` are `Orchestrator`-classed**, round-6 Charge κ);
+it then launches the worker via the `Agent` tool with `isolation:worktree`. The orchestrator-configured WorktreeCreate hook (ADR-006 D9)
 provisions the fork **and**, *only when armed*, stamps the marker — then **disarms**
 (Charge C, round 3: the hook fires on **every** Agent worktree, so an unconditional
 stamp would brand non-dispatch isolated worktrees and brick their writes; the
@@ -231,6 +276,62 @@ the D6/spike back-outs. The O3 spike is **widened** to confirm the serial
 arm→stamp→disarm, **that a second `--arm` while armed refuses**, and that the
 concurrent case produces **no second stamp** — so serial-only is mechanised and
 evidence-based, not assumed (Charge III's "spike what you rely on").
+
+**Sentinel lifecycle (round-6 Charge κ — owned, not assumed; the marker's law
+applied one tier up).** The round-5 single-slot lock minted a sentinel with **one**
+owner (disarm-on-stamp) and **no failure owner** — an `Agent` that dies before
+WorktreeCreate fires (the impure shell doing what impure shells do) never triggers
+the hook's disarm, so the slot stays `already-armed` forever and bricks **all** future
+claude dispatch with **no in-CLI exit**. That is the Charge V / Charge II self-brick
+recurring at the sentinel. The sentinel is therefore given the marker's full
+lifecycle, answering the admission checklist:
+- **Path (Q6):** `.doctrine/state/dispatch/arm` — a lease file beside the worker
+  marker in the same withheld `.doctrine/state/**` tier (inherits every exclusion:
+  gitignored, provision-dropped, import-absent — zero new tier logic).
+- **Creator (Q1):** `doctrine worktree marker --arm`, run by the orchestrator at the
+  coordination root before it launches the single Agent.
+- **Removers (Q2) — three, mirroring the marker's:** (a) the hook's **disarm-on-stamp**
+  (happy path) — this rides the same *privileged marker-stamping entry point* that
+  mints the marker, **not** the guarded CLI verb, so it is never worker-refused; (b)
+  an explicit in-CLI **`doctrine worktree marker --disarm`** (`Orchestrator`-classed,
+  run by the orchestrator at the coordination root — **outside** `worker_mode`, never
+  self-bricked) — the recovery verb a compliant orchestrator whose Agent died calls to
+  clear the slot **without filesystem surgery** (the Charge II cure, applied to the
+  sentinel); (c) **lease expiry** — `--arm` writes a staleness bound (a lease deadline
+  stamped by the *impure* shell, the clock passed in per the date/uid pattern so the
+  pure wall holds), so an **abandoned** arm (dead orchestrator, lost handover) cannot
+  brick dispatch indefinitely: a later `--arm` that finds an **expired** lease
+  auto-reclaims it, emitting **`stale-arm-cleared`**, and proceeds. Expiry is the
+  **verb-independent backstop** — it needs no successful invocation, so even a
+  coordination tree wedged by an unrelated stale *worker* marker (Charge II, cured by
+  `marker --clear`) cannot permanently strand the arm. The lease is generous (longer
+  than any plausible spawn→WorktreeCreate window); serial-only dispatch means no
+  *live* arm is ever concurrently contended, so expiry only ever reclaims a genuinely
+  abandoned slot.
+- **Creation half-fails (Q3):** `--arm` writes the lease **atomically**
+  (write-temp-then-rename); a partial write leaves no lease (the slot reads empty →
+  the next `--arm` succeeds), never a corrupt half-armed state.
+- **Removal/cleanup fails (Q4):** `--disarm` on an absent sentinel refuses
+  **`no-armed-sentinel`** (named, non-zero), never a silent success; a `--disarm` that
+  cannot remove the lease (fs error) **reports the leftover path by name and exits
+  non-zero** — the Charge VIII standard `fork`'s rollback already meets.
+- **Privilege class (Q5):** `--arm` and `--disarm` are **`Orchestrator`-classed**
+  (DC-3) — refused under `worker_mode`, so a compliant worker in its marked linked
+  worktree cannot arm/disarm. A *non-compliant* claude worker-on-main (no marker, not
+  linked) could still arm to grief — but that is the **already-confessed D2b raw-tree
+  residual** (a worker that can reach the coordination root can already write
+  `main/.doctrine/` directly), **not** a new capability; under codex/pi D6 bwrap the
+  coordination root is unreachable.
+- **Worker mutability (Q7):** the lease lives at the coordination root, **outside** any
+  worker's linked worktree, so a confined worker cannot `rm` it; the unconfined-claude
+  case is the D2b residual above.
+- **Named bad states (Q8):** `already-armed` (live lease), `no-armed-sentinel` (disarm
+  with nothing armed), `stale-arm-cleared` (a later arm reclaimed an expired lease),
+  plus the standard `Orchestrator` worker-refusal naming the verb.
+- **Verification (Q9):** Verification alignment, *Sixth-inquisition additions*.
+- **Governance claim (Q10):** ADR-011's claude marker-stamping altitude depends on the
+  sentinel; the altitude table states claude dispatch is **serial-only and
+  lease-bounded**, recoverable in-CLI — not a permanent-brick risk.
 
 **Why a verb, not the skill.** Steps 1–4 are pure mechanism; only the spawn line
 (`env … codex exec` for codex/pi; `Agent`+hook for claude) differs across harnesses,
@@ -467,6 +568,17 @@ delete branches; inquisition Charge IV). **Target.** `doctrine worktree gc --for
 4. warn (stderr) that `env!(CARGO_MANIFEST_DIR)`-baked test binaries need
    recompile before the next close-time `just check`.
 
+**gc ordering and the worktree-gone crash window (round-6 Charge μ).** Steps 1
+(`worktree remove`) and 2 (`branch -D`) are two **non-atomic** git mutations; a crash
+between them strands a **branch alive, worktree gone, marker unreachable** — exactly
+the state μ shows `land` would otherwise silently merge. The order **cannot** be
+inverted: `git branch -D` **refuses a branch checked out in a live worktree**, so the
+worktree *must* be removed first. The crash window is therefore **intrinsic to git**,
+not a design choice — and it is closed **downstream** by `land`'s `worktree-gone`
+refusal (D4b step 1): a stranded worktree-less branch is **named-refused**, never
+silently landed. Defense in depth, since the producing window cannot be eliminated at
+its source.
+
 **The "landed" oracle — durable patch-id, not a runtime receipt or tree diff
 (Charge I, rounds 1+2).** `--merged` is wrong (the apply-funnel branch is never a
 git-ancestor). The
@@ -590,6 +702,19 @@ Mechanical sequence, each step a hard refusal on violation (no auto-resolve):
    linked worktree (if any) does *not* bear the worker marker** else `dispatch-fork`
    (round-5 Charge ζ — `land` is solo-only; a marker-bearing fork is a dispatch worker
    whose delta must funnel through the belted `import`, never `land`'s beltless merge).
+   **Round-6 Charge μ — `<branch>` must have a *live linked worktree*:** the worker
+   marker is a file *inside* the worktree (D2, `.doctrine/state/dispatch/worker`),
+   uncommitted by construction, so once the worktree is gone the marker is
+   **unreachable from the branch** and the `dispatch-fork` guard above would pass
+   *vacuously* on a worktree-less dispatch branch — re-opening a beltless `land`. So
+   `land` **inspects whether `<branch>` has a linked worktree** and, if **none**,
+   refuses **`worktree-gone`** (*"this branch has no live worktree — I cannot verify it
+   is not a dispatch fork; re-create the worktree, route through `import`, or `--force`
+   knowingly"*) — never a silent `git merge --no-ff` of an unverifiable branch.
+   `--force` is the **explicit, named override** (the operator asserting provenance),
+   never a silent bypass. The `dispatch-fork` marker guard is therefore honestly a
+   **live-worktree accident-fence**, not a universal provenance proof; `worktree-gone`
+   is the defense-in-depth that catches the worktree-less case the marker cannot see.
 2. `git merge --no-ff <branch>` — **never `--squash`** (the verb cannot express a
    squash; that is its entire reason to exist). Ancestry preserved ⇒ fork commits
    reachable from the new coordination HEAD ⇒ gc's ancestry leg reaps (D4).
@@ -603,14 +728,34 @@ Mechanical sequence, each step a hard refusal on violation (no auto-resolve):
    `git apply` under import's preconds never mutates), so the half-merge **must** be
    aborted — else it wedges the coordination tree against the verb's own `tree-clean`
    re-entry guard (and against every other `Orchestrator` verb) until manual surgery,
-   the exact toil this verb family abolishes.
+   the exact toil this verb family abolishes. **Round-6 Charge λ — the abort is itself
+   a fallible git mutation with an owned failure path (admission Q4):** `git merge
+   --abort` can fail (a half-resolved tree it cannot unwind, an index lock, a
+   concurrent toucher, an fs error). It is **guarded to fire only mid-merge**
+   (`MERGE_HEAD` present — the conflict branch guarantees it; if step 3 is ever reached
+   with **no** merge in progress the verb reports **`inconsistent-merge-state`** by
+   name, never a silent abort that errors *"no merge to abort"* and masquerades as a
+   clean conflict). On **abort success** → ordinary `merge-conflict`, coordination tree
+   **guaranteed clean**. On **abort failure** → a **distinct non-zero refusal
+   `wedged-merge`** — it does **not** fall through to the clean `merge-conflict` code —
+   naming the leftover state: `MERGE_HEAD` set, the unmerged paths (`git diff
+   --name-only --diff-filter=U` where available), that **the coordination tree is not
+   clean**, and the manual remedy (`git merge --abort` by hand / resolve + commit /
+   reset). This holds `land`'s abort to the exact Charge VIII honesty `fork`'s rollback
+   already meets: a fallible cleanup reports the leftover **by name** and exits non-zero,
+   never a silent or success-coded half-abort.
 
-**Refusal set:** `{tree-unclean, no-such-fork, dispatch-fork, merge-conflict}` —
-machine-readable on a non-zero exit.
+**Refusal set:** `{tree-unclean, no-such-fork, dispatch-fork, worktree-gone,
+merge-conflict, wedged-merge, inconsistent-merge-state}` — machine-readable on a
+non-zero exit.
 
-Pure core: precond classification (`classify_land(tree_status, head, fork_exists) ->
-Result<Merge, Refusal>`); imperative shell drives `git merge --no-ff`. Reuses the
-tree-clean check shared with `import` (no parallel implementation).
+Pure core: precond classification (`classify_land(tree_status, head, fork_state) ->
+Result<Merge, Refusal>`, where `fork_state` carries `{exists, has_live_worktree,
+bears_marker}` — `no-such-fork`, `worktree-gone` and `dispatch-fork` are pure
+classifications over the impure-gathered fork state); imperative shell drives `git
+merge --no-ff` and, on conflict, the **mid-merge-guarded** `git merge --abort` with
+the `wedged-merge` honest-failure path (round-6 Charge λ). Reuses the tree-clean check
+shared with `import` (no parallel implementation).
 
 **Symmetry restored (round-4 Charge α).** Both landing routes are now CLI verbs —
 `import` for dispatch, `land` for solo — so the slice thesis (*mechanism in the verb,
@@ -703,7 +848,13 @@ inquisition Charge IX).
   table **says so plainly** rather than claiming a fail-closed inversion claude does
   not yet reach. **No harness-specific command (`claude -p`) is a required element.** The
   **env-reliability claim stays `proposed`** until the O3 propagation gate is green
-  (Charge III) — governance trails proven mechanism. ADR-006-references;
+  (Charge III) — governance trails proven mechanism. **Round-6 Charge κ:** the table
+  records claude dispatch as **serial-only and lease-bounded** — the arm sentinel
+  (`.doctrine/state/dispatch/arm`) has a `marker --disarm` in-CLI remover and a
+  lease-expiry backstop, so a dead-Agent arm is recoverable, not a permanent brick.
+  **Round-6 Charge μ:** the table records that `land`'s `dispatch-fork` guard is a
+  **live-worktree** accident-fence and the worktree-less case is caught by a separate
+  **`worktree-gone`** refusal — neither a universal provenance proof. ADR-006-references;
   framework-level (harness-agnostic).
 - **G4 — SPEC-012 rewrite.** Reframe Overview + Concerns (drop "the funnel is a
   discipline, not enforced code" — now enforced); rewrite D3 (fail-open env →
@@ -715,7 +866,9 @@ inquisition Charge IX).
   squash-merge is structurally uncertifiable by gc — round-4 Charge α); **state the
   belt's scope** (the `.doctrine/` belt is the **dispatch/import-path** containment,
   **not** an all-funnel one — `land` is a solo-trusted, beltless funnel guarded by a
-  `dispatch-fork` marker refusal — round-5 Charge ζ); add a D for the verb family; add
+  `dispatch-fork` marker refusal **on a live worktree and a `worktree-gone` refusal
+  when the worktree is absent — neither a universal provenance proof** — round-5 Charge
+  ζ, round-6 Charge μ); add a D for the verb family; add
   FRs (fork, import, **land**, gc, marker guard, per-wt env contract).
 
 Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
@@ -724,11 +877,11 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
 | Path | Change |
 |---|---|
-| `src/worktree.rs` | `run_fork`, `run_import`, `run_gc`, `run_land` (round-4 Charge α — solo's non-squash merge; **`git merge --abort` on conflict** before refusing, round-5 Charge η), `run_marker_clear` (imperative shells, **compensating-cleanup** fork rollback — `remove --force`, honest non-zero on rollback failure, Charge VIII); pure: `target_dir_for_branch`, `marker_path`, `classify_import`, `classify_land` (round-4 Charge α — reuses the shared tree-clean check, no parallel impl; refuses `dispatch-fork` on a marker-bearing fork, round-5 Charge ζ). gc landed-oracle is **two legs** — `git merge-base --is-ancestor` (the `land` route) **OR** a `git cherry` patch-id check (the `import` route), not a runtime receipt (Charge I / round-4 Charge α); a squash-merge trips neither and gc refuses with a named message. Reuse `select_copies`/`branch-point` core. New `write_marker`/`marker_present`/`remove_marker` (`write_marker` also invoked by claude's WorktreeCreate hook — Charge XIII; `remove_marker` behind `marker --clear` — Charge II). Third `is_linked_worktree` consumer. |
-| `src/main.rs` | `fork`/`import`/`gc`/`land` subcommands + arg structs (watch the bool/arg clippy ceilings, `[[mem.pattern.lint.cli-handler-args-struct]]`). Worker-mode guard = `worker_mode(root)` = `(is_linked_worktree && marker_present) OR env DOCTRINE_WORKER set` — **marker primary, env a codex/pi optimisation** (DC-2 / Charge XIII). `write_class` unchanged. **fork/import/gc/land are a new `Orchestrator` class — refused under `worker_mode`, NOT `Read`** (they mutate git refs/dirs; inquisition Charge IV / DC-3 / round-4 Charge α — `land` writes a coordination merge commit). A marker-stamping entry point (claude WorktreeCreate hook, gated by an orchestrator **arming sentinel** via `marker --arm`, a **single-slot lock** refusing `already-armed` — round-5 Charge θ, **serial-dispatch-only** — round-3 Charge C / round-4 Charge γ) + a marker-clear path (Charge II) join the verb family. `gc` gains `--superseded-head <SHA>` (round-3 Charge A — an operator **assertion** of a spent-and-abandoned head, TOCTOU-guarded; **not a landed oracle** — round-4 Charge δ) and a **two-leg** landed check (`--is-ancestor` for `land`, `git cherry` for `import`; squash → named refusal — round-4 Charge α); `marker --clear` gains `--operator` (Charge B); the worker-mode guard's env-leg refusal on a **non-linked** tree carries the named dual-cause message for authoring **and** funnel verbs (Charge D). |
+| `src/worktree.rs` | `run_fork`, `run_import`, `run_gc`, `run_land` (round-4 Charge α — solo's non-squash merge; **`git merge --abort` on conflict** before refusing, round-5 Charge η; **mid-merge-guarded abort → distinct `wedged-merge`/`inconsistent-merge-state` non-zero, honest leftover-naming, Charge VIII / round-6 Charge λ**; **`worktree-gone` refusal on a worktree-less fork, round-6 Charge μ**), `run_marker_arm`/`run_marker_disarm` (**lease-bounded single-slot arm sentinel** at `.doctrine/state/dispatch/arm` — atomic write-temp-rename, lease-expiry auto-reclaim, in-CLI `--disarm` remover, honest non-zero on cleanup failure — round-6 Charge κ), `run_marker_clear` (imperative shells, **compensating-cleanup** fork rollback — `remove --force`, honest non-zero on rollback failure, Charge VIII); pure: `target_dir_for_branch`, `marker_path`, `arm_path`, `classify_import`, `classify_land` (round-4 Charge α — reuses the shared tree-clean check, no parallel impl; refuses `dispatch-fork` on a marker-bearing fork, round-5 Charge ζ, and `worktree-gone` on a worktree-less fork over the impure-gathered `fork_state`, round-6 Charge μ). gc landed-oracle is **two legs** — `git merge-base --is-ancestor` (the `land` route) **OR** a `git cherry` patch-id check (the `import` route), not a runtime receipt (Charge I / round-4 Charge α); a squash-merge trips neither and gc refuses with a named message. Reuse `select_copies`/`branch-point` core. New `write_marker`/`marker_present`/`remove_marker` (`write_marker` also invoked by claude's WorktreeCreate hook — Charge XIII; `remove_marker` behind `marker --clear` — Charge II). Third `is_linked_worktree` consumer. |
+| `src/main.rs` | `fork`/`import`/`gc`/`land` subcommands + arg structs (watch the bool/arg clippy ceilings, `[[mem.pattern.lint.cli-handler-args-struct]]`). Worker-mode guard = `worker_mode(root)` = `(is_linked_worktree && marker_present) OR env DOCTRINE_WORKER set` — **marker primary, env a codex/pi optimisation** (DC-2 / Charge XIII). `write_class` unchanged. **fork/import/gc/land are a new `Orchestrator` class — refused under `worker_mode`, NOT `Read`** (they mutate git refs/dirs; inquisition Charge IV / DC-3 / round-4 Charge α — `land` writes a coordination merge commit). A marker-stamping entry point (claude WorktreeCreate hook, gated by an orchestrator **arming sentinel** at **`.doctrine/state/dispatch/arm`** (round-6 Charge κ — explicit path) via `marker --arm`, a **lease-bounded single-slot lock** refusing `already-armed` while the lease is live — round-5 Charge θ, **serial-dispatch-only** — round-3 Charge C / round-4 Charge γ; **`marker --disarm`** is the in-CLI recovery remover (refuses `no-armed-sentinel` when nothing is armed) and lease-expiry auto-reclaims an abandoned arm (`stale-arm-cleared`) — round-6 Charge κ; **`--arm`/`--disarm` are `Orchestrator`-classed**, refused under `worker_mode`) + a marker-clear path (Charge II) join the verb family. `gc` gains `--superseded-head <SHA>` (round-3 Charge A — an operator **assertion** of a spent-and-abandoned head, TOCTOU-guarded; **not a landed oracle** — round-4 Charge δ) and a **two-leg** landed check (`--is-ancestor` for `land`, `git cherry` for `import`; squash → named refusal — round-4 Charge α); `marker --clear` gains `--operator` (Charge B); the worker-mode guard's env-leg refusal on a **non-linked** tree carries the named dual-cause message for authoring **and** funnel verbs (Charge D). |
 | `src/git.rs` | new reads behind the verbs: worktree list, **patch-id reachability** (`git cherry`, gc landed-oracle — Charge I), `B..S` diff name-only (import). Impure seam only. |
 | ADR-008 / ADR-006 / **ADR-011 (new)** / SPEC-012 | G1–G4. |
-| `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` + new `{dispatch-subprocess,dispatch-agent}/SKILL.md` | rewrite prose to *call* the verbs (the token/agnostic payoff); **`/dispatch` becomes a harness router** → `/dispatch-subprocess` (codex/pi) \| `/dispatch-agent` (claude), Charge XIII. **Routing input (round-3 Charge G, mechanised round-4 Charge ε, spike-gated round-5 Charge ι): the dispatching agent's harness self-knowledge, cross-checked against env-marker detection.** Self-belief (it runs *as* claude/codex/pi) is no longer trusted alone — *belief alone routes nothing*. The orchestrator (which runs bash) probes **env markers** (`CLAUDECODE` for Claude Code; the codex/pi equivalents — precise names resolved in-skill/at the O3 spike, not hardcoded in the binary) and routes **only when detection *agrees* with self-belief**; **mismatch *or* unknown → refuse**, never guess (no blind `claude -p`/`codex exec`). **The refusal names the cause** (round-5 Charge ι: "env marker for claimed harness `<h>` not found — harness mis-seeded, renamed, or launch-mode-stripped; dispatch refused", never a bare "refused"), so a marker-name drift is diagnosable, not a silent brick. **The detection *signal* is itself spike-gated, symmetric with C and D6 (round-5 Charge ι):** the O3 spike must confirm a **stable, harness-unique, launch-mode-robust** marker exists per harness (env markers vary across headless/cron/nested/IDE launches — version-fragile, cf. `[[mem.pattern.parse.toml-error-classification-fragile]]`). **Named fallback if the spike finds no reliable marker:** the router **refuses *all* dispatch with that diagnostic** rather than silently reverting to self-belief-only (which would reopen ε); the operator falls back to manual or a corrected marker name. The ε cross-check claim stays **`proposed` until the marker-existence gate is green** (symmetric with the env-propagation claim, G2/G3). This closes the *confident-misidentification* gap "unknown⇒refuse" left open (a wrong-but-certain belief now fails the cross-check instead of routing to the wrong spawn). **No duplicated cadence (Charge G):** the funnel cadence *is* the CLI verb sequence (`fork`→`import`/`land`→verify→branch-point→one commit→`gc`/record), called **identically** by both sub-skills — the slice's whole thesis; the sub-skills differ only in the ~2-line spawn template. Re-embed ritual `[[mem.pattern.distribution.skill-refresh-command]]`. |
+| `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` + new `{dispatch-subprocess,dispatch-agent}/SKILL.md` | rewrite prose to *call* the verbs (the token/agnostic payoff); **`/dispatch` becomes a harness router** → `/dispatch-subprocess` (codex/pi) \| `/dispatch-agent` (claude), Charge XIII. **Routing input (round-3 Charge G, mechanised round-4 Charge ε, spike-gated round-5 Charge ι): the dispatching agent's harness self-knowledge, cross-checked against env-marker detection.** Self-belief (it runs *as* claude/codex/pi) is no longer trusted alone — *belief alone routes nothing*. The orchestrator (which runs bash) probes **env markers** (`CLAUDECODE` for Claude Code; the codex/pi equivalents — precise names resolved in-skill/at the O3 spike, not hardcoded in the binary) and routes **only when detection *agrees* with self-belief**; **mismatch *or* unknown → refuse**, never guess (no blind `claude -p`/`codex exec`). **The refusal names the cause** (round-5 Charge ι: "env marker for claimed harness `<h>` not found — harness mis-seeded, renamed, or launch-mode-stripped; dispatch refused", never a bare "refused"), so a marker-name drift is diagnosable, not a silent brick. **The detection *signal* is itself spike-gated, symmetric with C and D6 (round-5 Charge ι):** the O3 spike must confirm a **stable, harness-unique, launch-mode-robust** marker exists per harness (env markers vary across headless/cron/nested/IDE launches — version-fragile, cf. `[[mem.pattern.parse.toml-error-classification-fragile]]`). **Named fallback, *per harness* (round-6 Charge ι residual):** the marker-existence gate is **per harness** — a green result for Claude does **not** bless codex/pi, and a red result for codex/pi does **not** brick Claude. Each route is enabled only for harnesses whose marker passed the spike: a **proven** harness marker that **agrees** with self-belief routes; an **unproven or absent** marker for the claimed harness **refuses that harness by name** (never a silent revert to self-belief-only, which would reopen ε; never a global brick of all dispatch merely because one harness lacks a stable marker). The diagnostic **names the claimed harness and the marker failure**; the operator falls back to manual or a corrected marker name **for the unproven harness only**. The ε cross-check claim stays **`proposed` until the marker-existence gate is green** for that harness (symmetric with the env-propagation claim, G2/G3). This closes the *confident-misidentification* gap "unknown⇒refuse" left open (a wrong-but-certain belief now fails the cross-check instead of routing to the wrong spawn). **No duplicated cadence (Charge G):** the funnel cadence *is* the CLI verb sequence (`fork`→`import`/`land`→verify→branch-point→one commit→`gc`/record), called **identically** by both sub-skills — the slice's whole thesis; the sub-skills differ only in the ~2-line spawn template. Re-embed ritual `[[mem.pattern.distribution.skill-refresh-command]]`. |
 | `flake.nix` | none for the spike; `dispatch-worker` bwrap profile only if D6 lands (the profile `--ro-bind`s the marker path so the confined worker cannot `rm` it — round-4 Charge β). |
 
 ## Verification alignment
@@ -853,12 +1006,39 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   the detected env marker **contradicts** the claimed self-belief → the router
   **refuses** (no spawn); agreement → routes; **marker absent → refuses *naming the
   cause*** (round-5 Charge ι), never a bare refusal. The widened O3 spike confirms a
-  stable, launch-mode-robust, harness-unique marker exists per harness; if none, the
-  **named fallback** (refuse-all-dispatch with the diagnostic) is exercised. The
-  cross-check claim stays `proposed` until that marker-existence gate is green.
+  stable, launch-mode-robust, harness-unique marker exists per harness; if the spike
+  proves a marker for **some** harnesses but not others, the **per-harness fallback**
+  is exercised — the proven harness (e.g. Claude) routes while the unproven harness
+  (e.g. codex) **refuses by name**, never a global refuse-all and never a
+  self-belief-only fallback (round-6 Charge ι residual). The cross-check claim stays
+  `proposed` until that marker-existence gate is green for the harness.
 - **`--superseded-head` honesty (Charge δ):** a moved branch (recorded SHA ≠ live
   head) → **refuse**; a lost SHA → **refuse** (forces a knowing `--force`); the verb
   is exercised as an operator assertion, **not** asserted to prove landing.
+
+**Sixth-inquisition additions.**
+- **sentinel lifecycle (Charge κ):** the widened O3 spike asserts — `marker --arm` on
+  a clean slot **succeeds**; a second `--arm` while the lease is **live** refuses
+  **`already-armed`**; a **simulated Agent death** (arm, then no stamp) leaves the slot
+  **recoverable**: an explicit **`marker --disarm`** clears it (and refuses
+  **`no-armed-sentinel`** when nothing is armed) **and** a later `--arm` after **lease
+  expiry** auto-reclaims (**`stale-arm-cleared`**) — never the permanent `already-armed`
+  brick; `--arm`/`--disarm` from a marked worker worktree are **refused**
+  (`Orchestrator`-classed), so a worker cannot grief-arm.
+- **`land` abort-failure honesty (Charge λ):** a golden where `git merge --abort` is
+  **forced to fail** asserts a **distinct non-zero `wedged-merge`** (not the clean
+  `merge-conflict` code), an honestly-reported **non-clean** tree naming `MERGE_HEAD` +
+  unmerged paths + the manual remedy — symmetric with `fork`'s half-rollback golden; a
+  step-3 reached **not mid-merge** → **`inconsistent-merge-state`**, never a
+  clean-conflict masquerade.
+- **`land` worktree-gone (Charge μ):** `land --fork <b>` on a branch whose **worktree
+  was removed** asserts a **named `worktree-gone` refusal**, never a silent beltless
+  `--no-ff` merge; `--force` is the explicit named override; the gc crash-window
+  (worktree-remove-then-branch-delete) is shown to produce only the
+  `worktree-gone`-refused state, not a silently-landable one.
+- **per-harness router fallback (Charge ι residual):** a spike result proving Claude's
+  marker but **not** codex's asserts Claude **routes** while codex **refuses by name** —
+  never a global refuse-all, never a self-belief-only fallback.
 
 ## Open questions (post-lock)
 
@@ -999,9 +1179,31 @@ wall) **stand unchanged**. Awaiting a **sixth** confirmatory inquisition before
 | ζ | Belt is **not** unconditional containment; `land` (D4b) is a second, **beltless** sanctioned funnel — a misrouted orchestrator lands a worker's `.doctrine/` delta beltless; the round-4 α and β fixes contradict | HIGH | **Resolved (honest re-scope + mechanised condition).** The belt's scope is **the import/dispatch path, conditioned on dispatch deltas routing through `import` not `land`**; `land` is a **solo-trusted, beltless** funnel (solo is a self-orchestrator, D6a — legitimately lands doctrine; a belt there is a category error). The condition is **mechanised**: `land` **refuses a marker-bearing fork** (`dispatch-fork`) — a misroute is named-refused, not silently belt-bypassed; a *malicious* worker reaching `land` is the already-confessed **D2b raw-tree residual**, not a new capability. "No funnel claims unconditional doctrine-containment" carried into DC-3, G3/ADR-011, G4/SPEC-012 (DC-3, D4b, Verification). |
 | η | `land`'s `merge-conflict` path is **destructive and unowned** — `git merge` mutates-then-conflicts, leaving a half-merge that `land`'s own `tree-clean` precond rejects; "mirrors import's report-don't-merge" is mechanically false; no `--abort` specified | HIGH | **Resolved (`git merge --abort` on conflict).** D4b step 3 now **aborts the merge** before refusing `merge-conflict`, restoring the clean tree the precond demands — a *true* mirror of import's leave-nothing-behind posture; solo fixes the coupling at source and re-runs `land` onto a clean tree. Golden asserts the coordination tree is **clean** after a real conflict (D4b, code-impact, Verification). |
 | θ | "Serial-only" claude stamping is **prose with no enforcement point**; the blessed parallel batch re-enters a **fail-open** race the γ remedy claimed to retire — *faith, not works* | HIGH | **Resolved (single-slot arming mechanism).** Arming is `doctrine worktree marker --arm`, which **refuses `already-armed` if a sentinel is armed or a stamp is awaited** (single-slot runtime lock). A second `--arm` while armed is **physically refused** → the racy armed-and-concurrent middle is **unreachable**; an orchestrator going parallel **cannot arm** → honest prompt-enforced no-marker degrade. Serial-only is now mechanism, not discipline. Widened O3 spike asserts a second `--arm` refuses and the concurrent case produces no second stamp (D1, code-impact, Verification). |
-| ι | The ε router cross-check mechanised the **logic** but deferred its **load-bearing input** (marker names + reliability) with **no spike-gate and no fallback**, unlike siblings C/D6; Charge III recursion | MED | **Resolved (spike-gate + named fallback + cause-naming).** The detection *signal* is **spike-gated** (O3 confirms a stable, harness-unique, launch-mode-robust marker per harness); **named fallback** if none exists: refuse **all** dispatch with the diagnostic, never a silent revert to self-belief; the refusal **names the cause** (marker mis-seeded/renamed/launch-mode-stripped). The cross-check claim stays **`proposed`** until the marker-existence gate is green (router prose, Verification, G3). |
+| ι | The ε router cross-check mechanised the **logic** but deferred its **load-bearing input** (marker names + reliability) with **no spike-gate and no fallback**, unlike siblings C/D6; Charge III recursion | MED | **Resolved (spike-gate + named fallback + cause-naming).** The detection *signal* is **spike-gated** (O3 confirms a stable, harness-unique, launch-mode-robust marker per harness); **named fallback** if none exists: refuse **all** dispatch with the diagnostic, never a silent revert to self-belief; the refusal **names the cause** (marker mis-seeded/renamed/launch-mode-stripped). The cross-check claim stays **`proposed`** until the marker-existence gate is green (router prose, Verification, G3). **⚠ Refined by round-6 Charge ι residual:** the gate is **per harness** — a partial spike result refuses only the *unproven* harness by name, not all dispatch globally. |
 | δ | `gc --superseded-head` reframe — stray "oracle"/"proving-landed" language | — | **Acquitted (round 5).** No stray oracle/proving language survives near `--superseded-head`; the reframe ("operator assertion … TOCTOU movement-guard, not a proof of landing") is clean. No change. |
 | — | gc ancestry-leg monotonicity under advancing HEAD; patch-id crash-proofness; quiescence; compensating cleanup; env-not-self-set; pure/imperative wall | **acquitted (stand)** | round-4 acquittals + soundly-reshaped resolutions re-affirmed — no change |
+
+## Sixth inquisition findings integrated (`inquisition-6.md`)
+
+Sixth confirmatory re-pass (fresh adversarial agent); `nihil obstat` **denied** — 3
+HIGH (κ/λ/μ) + 1 MED near-acquitted residual (ι). Every charge attacked a **round-5
+weld**: the single-slot `--arm` lock (θ-remedy), `land`'s `git merge --abort`
+(η-remedy), and the `dispatch-fork` marker guard (ζ-remedy) — *penance breeds fresh
+sin at the welds*. Remediated under a new **Mechanism admission rule** (above): every
+round-6 fix answers the ten-question checklist before the design leans on it. ι's
+**core** (spike-gate + named fallback + cause-naming + `proposed` status) **stands
+acquitted**; only its per-harness-partial granularity needed an answer. Round-5
+acquittals (patch-id oracle crash-proofness, gc ancestry-leg monotonicity, quiescence
+constraint, compensating cleanup *for fork*, env-not-self-set, pure/imperative wall)
+**stand unchanged**. Awaiting a **seventh** confirmatory inquisition before `/plan`.
+
+| # | Charge | Sev | Disposition · sections changed · verification |
+|---|---|---|---|
+| κ | armed sentinel has **no remover, timeout, path, or privilege class** → an Agent dying before stamp bricks all claude dispatch with no in-CLI exit (Charge V/II self-brick, one tier up) | HIGH | **Resolved** (admission Q1–Q10 answered). The sentinel gets the marker's full lifecycle (D1 *Sentinel lifecycle*): **path** `.doctrine/state/dispatch/arm` (withheld tier, sibling of the worker marker); **creator** `marker --arm` (orchestrator, coordination root); **three removers** — hook disarm-on-stamp (privileged stamping entry point, not the guarded verb), in-CLI **`marker --disarm`**, and **lease-expiry auto-reclaim** (`stale-arm-cleared`, the verb-independent backstop); **half-fail** → atomic write-temp-rename, no corrupt arm; **cleanup-fail** → `no-armed-sentinel` / Charge VIII non-zero; **privilege** `--arm`/`--disarm` `Orchestrator`-classed (a worker grief-arm is the confessed D2b residual, not a new hole); **named refusals** `already-armed`/`no-armed-sentinel`/`stale-arm-cleared`/Orchestrator worker-refusal; **governance** ADR-011 altitude table records claude dispatch as serial-only, lease-bounded, in-CLI-recoverable. *Sections:* DC-3, D1, code-impact (worktree.rs + main.rs), Verification (round-6), G3. *Verification:* arm succeeds; second live-lease arm → `already-armed`; simulated Agent-death → `--disarm` (or lease expiry) restores a later `--arm`; worker `--arm`/`--disarm` refused. |
+| λ | `land`'s `git merge --abort` is a **fallible mutation with no failure owner** → on abort-failure it falls through to the clean `merge-conflict` refusal and **lies it left nothing behind** (Charge VIII dishonesty) | HIGH | **Resolved** (admission Q4). D4b step 3: abort **guarded mid-merge only** (`MERGE_HEAD` present; else **`inconsistent-merge-state`**); abort **success** → `merge-conflict`, tree **guaranteed clean**; abort **failure** → a **distinct non-zero `wedged-merge`** naming `MERGE_HEAD` + unmerged paths + tree-not-clean + the manual remedy — **never** the clean `merge-conflict` code. Held to `fork`'s Charge VIII standard. *Sections:* D4b step 3, refusal set, code-impact (run_land), Verification. *Verification:* forced-abort-failure golden asserts non-zero `wedged-merge` distinct from `merge-conflict` + honest non-clean tree; not-mid-merge invocation → `inconsistent-merge-state`, not a clean-conflict masquerade. |
+| μ | `dispatch-fork` marker lives **inside the worktree** → a worktree-less dispatch branch (gc crash-window / manual remove) bears **no reachable marker** → guard passes vacuously → **beltless `land` reachable again**; DC-3's "mechanised, not prose" is over-broad | HIGH | **Resolved** (honest re-scope + closed window). D4b step 1: `land` inspects for a **live linked worktree** and refuses **`worktree-gone`** (named `--force` override only) when absent — never a silent `--no-ff` of an unverifiable branch. The `dispatch-fork` guard is honestly re-scoped to a **live-worktree accident-fence**, not universal provenance proof. gc ordering (D4): `branch -D` **cannot** precede `worktree remove` (git refuses on a checked-out branch), so the crash window is **intrinsic** and is closed **downstream** by `worktree-gone` — defense in depth. *Sections:* DC-3, D4b step 1, D4 (gc ordering note), G3, G4/SPEC-012, code-impact, Verification. *Verification:* `land` on a worktree-removed fork → `worktree-gone`, never a silent beltless merge; altitude table scopes the marker guard to the live-worktree misroute only. |
+| ι (residual) | spike proves a stable marker for **some** harnesses but not others; the global "refuse all dispatch" fallback has **no per-harness behaviour** | MED (near-acquitted) | **Resolved** (per-harness gate). The marker-existence gate is **per harness**: a proven marker agreeing with self-belief **routes**; an unproven/absent marker for the claimed harness **refuses that harness by name** — never a global brick of all dispatch, never a self-belief-only fallback. A green Claude result does not bless codex/pi; a red codex/pi result does not brick Claude. *Sections:* code-impact (router fallback), Verification. *Verification:* Claude proven + codex unproven → Claude routes, codex refuses by name; absent/mismatched marker for claimed harness → named refusal; no self-belief-only fallback. ι's **core** stands **acquitted** from round 5. |
+| — | patch-id oracle crash-proofness; gc ancestry-leg monotonicity; quiescence constraint; compensating cleanup (for fork); env-not-self-set; pure/imperative wall | **acquitted (stand)** | round-5 acquittals re-affirmed — no change |
 
 ## Invariants preserved
 
