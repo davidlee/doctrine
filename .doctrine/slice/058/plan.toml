@@ -1,0 +1,96 @@
+# Implementation plan for SL-058 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-058"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Templates & scaffold-output guard"
+objective = """
+Bring all six scaffold templates to the post-cut shape and prove the rendered \
+scaffold output by black-box test — stopping new malformation at the source and \
+defeating the RustEmbed false-green. Add the kind-specific template-level guard \
+so the next stale template is caught before any entity is born from it."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked — external adversarial pass integrated (§10 F-D..F-I); the six affected templates and the post-cut shape per kind are settled (design §5.2)." },
+  { id = "EN-2", text = "Green baseline: `just gate` clean, tree clean at phase start." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Six templates at post-cut shape — slice.toml: `[relationships]` table removed entirely; adr/policy/standard.toml: `related` dropped, `supersedes`/`superseded_by`/`tags` kept typed; backlog/backlog-risk.toml: `slices`/`specs`/`drift` dropped, `needs`/`after`/`triggers` kept typed. Each carries a `[[relation]]` + `doctrine link` guidance comment." },
+  { id = "EX-2", text = "Embedding crate touched and rebuilt so the edited assets are re-embedded (RustEmbed recompile footgun)." },
+  { id = "EX-3", text = "Kind-specific template-guard unit test present and green: a text scan over each embedded template asset — slice asserts NO `[relationships]` header; gov/backlog assert migrated tier-1 keys absent AND kept-typed keys present AND the guidance comment present. Text-scan, never `toml::from_str` (placeholders are invalid TOML)." },
+]
+verification = [
+  { id = "VT-1", expects = "Black-box scaffold test: `slice new`/`adr new`/`policy new`/`standard new`/`backlog new` + the risk-backlog scaffold path emit no migrated typed key and carry the guidance comment; `slice new` emits no `[relationships]` header." },
+  { id = "VT-2", expects = "Behaviour-preservation: SL-048 / SL-046 / relation / cordage suites green unchanged; `just gate` clean, clippy zero warnings." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Detection-gap closure & entity migration"
+objective = """
+Close the parser detection gap and migrate the existing entity fallout in one \
+move — these are irreducibly coupled: hardening `view()` to see inline-comment \
+headers makes the latent backlog items visible (corpus invariant red) until they \
+are stripped. End with the hardened corpus invariant green as the honest closure \
+proof."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — templates fixed so no new fallout is minted during migration." },
+  { id = "EN-2", text = "Execution-start re-scan of the slice + backlog corpus for current fallout (concurrent authoring may have inflated the list past the design's 10 backlog + SL-056); apply the D1 cutover rule before proceeding." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`view()` hardened: header match is comment-stripped exact (`line.split('#').next().trim() == \"[relationships]\"`, no `[relationships.x]` false-match), and key extraction strips surrounding quotes (F-H)." },
+  { id = "EX-2", text = "IMP-045's populated `slices = [\"SL-056\"]` authored as a `[[relation]]` row via `doctrine link` BEFORE the typed key is stripped — the edge is preserved, not dropped." },
+  { id = "EX-3", text = "All migrated typed keys removed from the fallout entities: the backlog files (`slices`/`specs`/`drift`) and SL-056 (its whole stale comment-only `[relationships]` table). Kept-typed axes (`needs`/`after`/`triggers`) untouched." },
+  { id = "EX-4", text = "Corpus invariant strengthened: the slice corpus check asserts no `[relationships]` header for the slice kind, and the `name == \"056\"` hardcode skip is removed." },
+]
+verification = [
+  { id = "VT-1", expects = "`e2e_relation_migration_storage` green over the FULL corpus — previously-latent backlog items now visible-and-clean, SL-056 stripped, hardcode gone — under the hardened parser." },
+  { id = "VT-2", expects = "Round-trip fixture: scaffold an entity, `link` a relation, assert it renders in `slice show`/`inspect`; `unlink` removes it; IMP-045's migrated edge renders post-strip; `validate` clean." },
+  { id = "VT-3", expects = "Behaviour-preservation suites green unchanged; `just gate` clean." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Agent guidance"
+objective = """
+Land durable agent guidance so relate-intent does not drift back into \
+hand-authored malformed `[relationships]` rows — pointing at `RELATION_RULES` as \
+the vocabulary source, never restating it (IMP-049, design D4)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01/02 complete — the corrected template + corpus surface is what the guidance points at." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A doctrine memory (pattern) recorded: how/when to relate structurally, the `RELATION_RULES` vocabulary pointer, the `link`/`unlink` verb, and the dev-binary-vs-stale-installed trap." },
+  { id = "EX-2", text = "A `using-doctrine.md` section added: relate via `link`, the `[[relation]]` idiom, kept-typed vs migrated axes — a pointer to `RELATION_RULES`, not a restatement." },
+  { id = "EX-3", text = "Targeted insertions in the authoring skills at the points relate-intent arises (`/slice`, `/design`, `/plan` and peers per D4); edited in `plugins/` source, then reinstalled + re-embedded (`mem.pattern.distribution.skill-refresh-command`)." },
+]
+verification = [
+  { id = "VA-1", expects = "Agent review: every guidance surface points at `RELATION_RULES` / the `link` verb and nowhere restates the relation vocabulary (no transcription drift)." },
+  { id = "VT-1", expects = "Skill content re-embedded (install + touch `src/skills.rs`); `just gate` clean." },
+]
+specs             = []
+requirements      = []
