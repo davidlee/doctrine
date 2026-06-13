@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec13f45a075539dee9a018801a166"
+memory_key = "mem.pattern.migration.rescan-cutover-and-stray-key-table-disposition"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Locked-design migration-fallout count goes stale on shared main; re-scan + F-G cutover re-eval at execution, and the stray-key-table disposition"
+summary = "Migration EN-2 re-scan is load-bearing on shared main; stray-key [relationships] tables: convert-to-legal-label or comment-out, then drop the table"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["tests/e2e_relation_migration_storage.rs"]
+globs = [".doctrine/**"]
+commands = []
+tags = ["migration", "relation", "corpus"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "bdc70f51b8d54723ed451171749634f605130f31"
+ref_name = "refs/heads/main"
+checkout_state_id = "874714e1b7d9eb2d15e71d4f81926659f6bdb63a53d60d5811a1b486c9819977"
+base_commit = "071f0a3ba7180bbf3b2048b077be11f575418d68"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
