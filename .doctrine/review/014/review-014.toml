@@ -1,0 +1,43 @@
+id    = 14
+slug  = "sl-058-reconciliation-relation-surface-tooling"
+title = "SL-058 reconciliation — relation surface tooling"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-058"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "EN-2 re-scan: design's fallout count was stale on shared main"
+detail = """design.md fixed the fallout at '10 backlog + SL-056'. Execution-start re-scan (PHASE-02 EN-2) found 14 backlog files carrying slices/specs/drift, TWO populated migrated keys (IMP-045 AND IMP-052, both slices=["SL-056"]) not one, and SL-054's stray-key table. The F-G cutover rule (link+strip holds while populated keys <=1 ...) literally fired; user ruled to hand link+strip both trivial identical edges rather than build a migrator. Observed vs design: design count diverged; the design's own cutover-re-eval gate absorbed it as intended."""
+disposition = "aligned"
+response = "The cutover-re-eval gate (design F-G) is itself part of the locked design and it fired exactly as intended — caught the 2nd populated key and the SL-054 stray-key class the snapshot count never saw. The design's literal count was always a point-in-time snapshot on shared main; the durable lesson is captured in mem.pattern.migration.rescan-cutover-and-stray-key-table-disposition. No reconciliation needed: code and the design's actual gate agree."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "SL-054 extends=[53] has no legal slice->slice relation label"
+detail = "Migrating SL-054's hand-authored stray-key table: adrs=[1] mapped cleanly to a governed_by ADR-001 edge, but extends=[53] (slice->slice lineage) has NO entry in RELATION_RULES — the only slice->slice label is supersedes, which is not the intended meaning. User ruling: demote extends=[53] to prose, drop the typed table. Observed: a slice expressed lineage the vocabulary cannot represent."
+disposition = "tolerated"
+response = "Consciously accepted: slice->slice lineage ('extends') is not an established doctrine relation — supersedes covers replacement, and one historical freestyle key (SL-054) is not evidence of a vocabulary gap. Prose is the correct home for an unrepresentable relation; the typed table was the defect, not its absence. Adding a label is an ADR-010 amendment, out of SL-058 scope. If slice-lineage recurs, that recurrence is the backlog trigger."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "RustEmbed false-green re-encountered during the close gate"
+detail = "Full parallel 'cargo test --workspace' reddened scaffolded_entities_are_post_cut_shape_all_six_paths (scaffolded slice carried a stale [relationships]) while the isolated/filtered test stayed green — a stale embed baked into the jail-target doctrine binary, not a code regression (edits touch no templates; on-disk templates correct+committed). 'touch src/install.rs && cargo build -p doctrine' cleared it; just gate then green. Standing risk for future template/doc work."
+disposition = "aligned"
+response = "Process gotcha, not a slice defect — encountered and cleared during the gate (touch embedding crate + rebuild). Already covered by mem.pattern.dispatch.shared-target-false-green-touch-rerun and mem.pattern.embed.rustembed-recompile-and-symlinks, and recorded in SL-058 notes.md. Final state: just gate green. No code change warranted."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

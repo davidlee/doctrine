@@ -1,7 +1,7 @@
 id = 58
 slug = "relation-surface-tooling"
 title = "Finish the relation surface: fix stale scaffold templates, migrate their entity fallout, add agent guidance"
-status = "ready"
+status = "reconcile"
 created = "2026-06-13"
 updated = "2026-06-13"
 
