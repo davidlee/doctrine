@@ -1108,11 +1108,14 @@ mod tests {
             &root,
             ".doctrine/rec/002/rec-002.toml",
             "id = 2\nslug = \"r\"\ntitle = \"R\"\n\
-             [rec]\nmove = \"accept\"\ndecision_ref = \"DEC-001\"\n",
+             [rec]\nmove = \"accept\"\ndecision_ref = \"DEC-001-A\"\n",
         );
         let edges = outbound_for(&root, kind_for("REC"), 2).unwrap();
         // decision_ref survives even with no owning_slice — carried, will dangle.
-        assert_eq!(pairs(&edges), vec![(RelationLabel::DecisionRef, "DEC-001")]);
+        assert_eq!(
+            pairs(&edges),
+            vec![(RelationLabel::DecisionRef, "DEC-001-A")]
+        );
     }
 
     // -- VT-3 interactions collapse to a single `Interactions` class ---------
@@ -1624,7 +1627,7 @@ mod tests {
             &root,
             ".doctrine/rec/001/rec-001.toml",
             "id = 1\nslug = \"r\"\ntitle = \"R\"\n\
-             [rec]\nmove = \"accept\"\nowning_slice = \"SL-001\"\ndecision_ref = \"DEC-001\"\n",
+             [rec]\nmove = \"accept\"\nowning_slice = \"SL-001\"\ndecision_ref = \"DEC-001-A\"\n",
         );
         assert_eq!(
             emitted_labels(root, "REC", 1),

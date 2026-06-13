@@ -160,8 +160,10 @@ pub(crate) enum TargetSpec {
     /// The target may be any numbered kind — RV `reviews` (the subject of a review
     /// is any entity).
     AnyNumbered,
-    /// The target is free-text with no kind in `integrity::KINDS` (`drift`,
-    /// `decision_ref`): never resolves, always dangles, no overlay (ADR-010 D2).
+    /// The target is free-text, not a doctrine entity (`drift`, `decision_ref`):
+    /// a `decision_ref` is an *external* 3-part forgettable cite (e.g. `DEC-005-C`),
+    /// not the 2-part numbered DEC kind — so it never resolves, always dangles, no
+    /// overlay (ADR-010 D2).
     Unvalidated,
 }
 

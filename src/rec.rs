@@ -315,8 +315,9 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<(
     // Forward-edge validation: refuse a dangling `owning_slice` BEFORE claiming an
     // id (reusing the corpus id table, integrity::KINDS) — a slice is a numbered
     // doctrine entity, so the edge must resolve. `decision_ref` is NOT validated:
-    // a DEC is a doc-local decision reference (e.g. `DEC-005-C`), not a numbered
-    // entity kind in `KINDS`, so it carries as free-text (design §5.3).
+    // a DEC is now a 2-part numbered kind, but `decision_ref` carries an *external*
+    // 3-part forgettable cite (e.g. `DEC-005-C`), not a doctrine entity in `KINDS`,
+    // so it carries as free-text (design §5.3).
     if let Some(owning) = &args.owning_slice {
         crate::integrity::ensure_ref_resolves(&root, owning)?;
     }
@@ -670,7 +671,7 @@ mod tests {
             rec: RecMeta {
                 r#move: "accept".to_owned(),
                 owning_slice: Some("SL-042".to_owned()),
-                decision_ref: Some("DEC-005".to_owned()),
+                decision_ref: Some("DEC-005-C".to_owned()),
             },
             status_delta: vec![StatusDelta {
                 requirement: "REQ-108".to_owned(),
