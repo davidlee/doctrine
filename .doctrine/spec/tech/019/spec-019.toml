@@ -1,0 +1,21 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 19
+slug = "knowledge-record-entity-surface"
+title = "Knowledge-record entity surface"
+status = "draft"
+kind = "tech"
+category = "knowledge-governance"
+c4_level = "component"
+parent = "SPEC-004"
+descends_from = "PRD-010"
+tags = ["knowledge-record", "epistemic", "governance", "record-kinds", "per-kind-lifecycle", "typed-facets", "evidence", "supersession", "kind-surface"]
+responsibilities = [
+  "Bind four `record_kind`s (assumption, decision, question, constraint) onto four engine `Kind`s, each its own tree and reservation namespace under `.doctrine/knowledge/<kind>/`, diverging only by prefix (ASM/DEC/QUE/CON) and the per-kind `[facet]` seed — one `knowledge_record` entity discriminated by `record_kind`, never parallel per-kind schemas.",
+  "Carry a per-kind lifecycle vocabulary — assumption `held→testing→validated|invalidated|obsolete`, decision `proposed→accepted|rejected|superseded`, question `open→answered|obsolete`, constraint `active→waived|superseded|retired` — keyed by `record_kind`, with a per-kind `is_terminal` predicate driving the default-list hide-set; a transition to a state outside the record's own kind vocabulary is refused, never coerced.",
+  "Hold the kind-specific typed `[facet]` block per kind (assumption: claim/confidence/basis/validation-plan/validated-by; decision: context/choice/alternatives/rationale/consequences/decided-by; question: question/why-matters/answer/answered-by; constraint: statement/source/applies-to/waiver) and the shared minimal evidence support structure (`supports`/`contradicts`/`notes` of citations) as typed enumerated storage through the `\"\" -> None` optional seam — confidence is assumption-only, never a common field.",
+  "Resolve `record_kind` from the id prefix on the read path (`show`/transition/relate), so one verb set dispatches across all four prefixes; identity (kind prefix + number) is permanent and `record_kind` is fixed at capture — a record never silently changes kind.",
+  "Hold the outbound relation seam over the SPEC-018 cross-corpus relation contract — forward links to backlog items, risks, slices, specs, ADRs, requirements, and drift records, and the spawn-work edge authored once on the record (ADR-004), reverse derived — always present even when empty.",
+  "Own the cross-kind supersession lifecycle: a transactional supersede verb that co-writes `supersedes`/`superseded_by` (the ADR-004 §5 carve-out), moves the predecessor to a terminal status valid for its own kind without changing that kind, and admits a `record_kind` crossing only along the §6 allowed matrix when the successor is the authoritative continuation — never for mere influence, evidence, consequence, or origin.",
+]

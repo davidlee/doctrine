@@ -1,0 +1,11 @@
+# Interactions — outbound spec -> spec edges (tech specs only).
+# Seeded empty; hand-authored in v1 (no verb — design §7 D-Q4):
+#   [[edge]]
+#   target = "SPEC-002"       # canonical FK into .doctrine/spec/tech/NNN
+#   type = "uses"             # free-text edge kind (calls / extends / uses / …)
+#   notes = "…"               # optional
+
+[[edge]]
+target = "SPEC-018"
+type = "uses"
+notes = "Outbound record relations and the spawn-work edge are authored over the cross-corpus relation contract (RELATION_RULES); the supersedes/superseded_by pair is the LifecycleOnly carve-out the contract reserves for the transactional supersede verb."

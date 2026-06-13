@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 243
+slug = "hold-the-outbound-relation-and-spawn-work-seam-over-the-spec-018-cross-corpus-contract-authored"
+title = "Hold the outbound relation and spawn-work seam over the SPEC-018 cross-corpus contract, authored outbound-only with the reverse derived (ADR-004), present even when empty, and mutating no linked or spawned artefact's lifecycle"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 240
+slug = "carry-a-per-kind-lifecycle-vocabulary-keyed-by-record-kind-the-transition-verb-validates-the-target"
+title = "Carry a per-kind lifecycle vocabulary keyed by record_kind; the transition verb validates the target against the record's own kind vocabulary and refuses a foreign-kind state, with a per-kind is_terminal predicate driving the default-list hide-set"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
