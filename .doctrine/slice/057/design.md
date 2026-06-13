@@ -101,8 +101,9 @@ invariant (NF-001).
   │ verify.rs (leaf)      VerificationConfig + pure resolve(cfg, check) -> argv + source
   │ coverage.rs (leaf)    VtCheck/Matcher types; pure derive_status, evaluate_matcher, valid
   │ coverage_store.rs     impure: load/save ONE slice coverage.toml; record/forget = load→upsert|retain→save
-  │ coverage_verify.rs    impure shell: read doctrine.toml; dedup by argv; ONE run per argv (Command);
-  │                       per-entry matcher eval; derive_status; re-stamp HEAD; save
+  │                       (NEW — nothing writes coverage.toml today; render + atomic tempfile write, entity.rs precedent)
+  │ coverage_verify.rs    impure shell: read doctrine.toml; dedup by argv (GLOBAL over the invocation);
+  │                       ONE run per argv (Command); per-entry matcher eval; derive_status; re-stamp git::head_sha; save
   └───────────────────────────────────────────────────────┘
         │ writes coverage.toml (observed)         × never authored requirement status (NF-001)
 ```
@@ -145,9 +146,16 @@ matcher = { source = "stdout", pattern = "coverage::upsert .* ok" }
 | ran, `exit 0` AND (matcher matches, when present) | `Verified` |
 | ran, otherwise (`exit≠0` or matcher miss) | `Failed` |
 
-**Validity (record-time, fail-fast):** `mode ∈ {VT,VA,VH}`; `alias ⊕ command`
-(never both); **matcher mandatory unless explicit `command`**; a runnable base must
-resolve. Malformed matcher regex rejected at record (not silent `Failed` at verify).
+**Validity (record-time, fail-fast) — two composed checks (F-1):**
+- `coverage::valid(&VtCheck)` (pure, config-free): `mode ∈ {VT,VA,VH}`; `alias ⊕
+  command` (never both); **matcher mandatory unless explicit `command`**; matcher
+  regex parses.
+- `verify::resolve(cfg, check)` (needs config): a runnable base actually resolves
+  (`alias` exists / a default `command` is present) — else `ResolveError`.
+
+The `record` shell runs both before writing; `valid` alone cannot judge base
+resolution (it has no config). Malformed matcher regex is rejected here, not left
+to surface as a `Failed`/`Blocked` at verify.
 
 ### 5.3 Data, State & Ownership
 
@@ -168,8 +176,8 @@ enum MatchSource { Stdout, Stderr, File(String /* glob */) }
 
 enum RunOutcome { Unobtainable, Ran { exit_ok: bool, matched: Option<bool> } }
 fn derive_status(&RunOutcome) -> CoverageStatus       // the verdict table (pure)
-fn evaluate_matcher(pattern, haystack) -> bool        // empty => true; else regex_lite (pure)
-fn valid(&VtCheck) -> Result<(), …>                   // the validity rule (pure)
+fn evaluate_matcher(pattern, haystack) -> Option<bool> // None = unparseable pattern; empty => Some(true); else regex_lite
+fn valid(&VtCheck) -> Result<(), …>                   // XOR + matcher rule + regex-parses (pure; NOT base resolution — F-1)
 ```
 
 `verify.rs` (leaf): `VerificationConfig { command, default_source, aliases }` +
@@ -193,13 +201,18 @@ No second `doctrine.toml` parser.
 
 1. `cfg = dtoml::parse(read doctrine.toml)?.verification` (absent ⇒ default ⇒
    alias/default-base checks resolve to `Blocked`).
-2. `file = coverage_store::load(root, slice)`; `head = git::<HEAD resolver>`.
-3. **Dedup:** group runnable VT entries by resolved `argv`; run each distinct `argv`
-   **once** (`Command::new(argv[0]).args(&argv[1..]).output()`).
-4. Per entry: build `RunOutcome` — `exit_ok` from `status.success()`; `matched =
-   check.matcher.map(|m| evaluate_matcher(&m.pattern, captured(source)))`. `source`
-   text is stdout/stderr from the captured `Output`, or a `File(glob)` read from
-   disk (unreadable ⇒ `Unobtainable`).
+2. `file = coverage_store::load(root, slice)`; `head = git::head_sha(root)`
+   (the resolver `coverage_scan` already uses — `None` on unborn/non-repo HEAD).
+3. **Dedup (global over the invocation — F-2):** group *all* runnable VT entries
+   being verified — across every slice swept by `--all` — by resolved `argv`; run
+   each distinct `argv` **once** (`Command::new(argv[0]).args(&argv[1..]).output()`).
+   Per-slice is the *write* unit (§5.3); dedup spans the whole invocation, or a
+   project whose default is `cargo test` would run the full suite once per slice.
+4. Per entry: build `RunOutcome` — `exit_ok` from `status.success()`; for a matcher,
+   `evaluate_matcher(&m.pattern, captured(source))` → `Some(bool)`, or `None` for an
+   **unparseable hand-edited pattern** ⇒ `Unobtainable` ⇒ `Blocked` (a config error,
+   not a test contradiction — F-3). `source` text is stdout/stderr from the captured
+   `Output`, or a `File(glob)` read from disk (unreadable/no-match ⇒ `Unobtainable`).
 5. `upsert(status = derive_status(outcome), git_anchor = head)`; preserve key /
    `touched_paths` / `check`.
 6. `coverage_store::save(root, slice, &file)`. Report per entry (`key: old → new`)
@@ -226,7 +239,13 @@ Fresh after a green verify. This *is* the continuous re-derivation.
 - **Edge — check-less legacy VT.** Not run; status left untouched; reported as
   backfill-needed (no auto-`Blocked`, which would manufacture noise; no shim).
 - **Edge — empty matcher pattern.** Trivially satisfied ⇒ verdict on exit alone.
-- **Edge — malformed regex.** Rejected at record-time validity (fail-fast).
+- **Edge — malformed regex.** Rejected at record-time validity (fail-fast); a
+  hand-edited one surviving into `coverage.toml` ⇒ `Blocked` at verify, never a
+  silent `Failed` (F-3).
+- **Edge — `record` covers all modes (F-4).** `record`/`forget` are the general
+  observed-tier write/withdraw path (VT/VA/VH); the check + `verify` machinery
+  applies to **VT only**. A VA/VH record carries `status` + `attested_date`, no
+  `check`; SL-057 does not run them.
 - **Assumption.** `coverage.toml` parse stays tolerant/additive — pre-SL-057 entries
   without `check` still parse (the `touched_paths` precedent), so `coverage_scan`
   /drift never break on old files.
@@ -242,6 +261,11 @@ Fresh after a green verify. This *is* the continuous re-derivation.
 - **OQ-4 (deferred).** Per-cell coverage withdrawal-*status* (vs `forget` removal) —
   only if `forget` proves insufficient; would perturb the `drift` matrix, so avoided
   for now.
+- **OQ-5.** Is `touched_paths` meaningful on a VT check? `verify` re-stamps
+  `git_anchor = HEAD` ⇒ staleness is Fresh immediately after, so `touched_paths`
+  only bites *between* verifies. Lean optional for VT → `/plan`.
+- **OQ-6.** `File(glob)` matching multiple files — search the concatenation, any-match,
+  or reject ambiguity? → `/plan` / impl.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -315,4 +339,31 @@ withdrawal-status.
 
 ## 10. Review Notes
 
-(Adversarial pass + integration to follow before lock.)
+**Adversarial self-review pass 1 (author, integrated above).**
+
+- **F-1 — `valid` over-claimed (precision).** A pure `valid(&VtCheck)` cannot decide
+  "a runnable base resolves" — that needs the config. *Fixed §5.2/§5.3:* split into
+  `coverage::valid` (XOR + matcher rule + regex-parses, pure) and `verify::resolve`
+  (base resolution); `record` composes both.
+- **F-2 — `--all` would run the suite once per slice (perf/correctness).** *Fixed
+  §5.1/§5.4:* dedup is **global over the invocation**; per-slice is only the *write*
+  unit.
+- **F-3 — bad matcher regex at verify-time.** Record rejects it, but a hand-edited
+  `coverage.toml` can carry one. *Fixed §5.4/§5.5:* unparseable pattern ⇒
+  `Blocked` (config error), never a silent `Failed`; `evaluate_matcher` returns
+  `Option<bool>`.
+- **F-4 — record mode scope ambiguous.** *Fixed §5.5:* `record`/`forget` are the
+  general observed-tier write/withdraw path (VT/VA/VH); check + `verify` is VT-only.
+- **F-5 — `coverage_store` is new, not a ridden write seam.** Verified: nothing writes
+  `coverage.toml` today, so it is *not* a parallel-impl violation. *Noted §5.1:* model
+  `save` on render + atomic tempfile write (the `entity.rs::write_fileset` precedent).
+- **F-6 — `git::head_sha` confirmed** as the reusable HEAD resolver (`coverage_scan`
+  uses it); `None` on unborn/non-repo HEAD. *Named §5.4.*
+
+**Verified against source:** `git::head_sha` / `git::commits_touching` (`git.rs`,
+called from `coverage_scan`); the `not(test)` dead_code expect on `coverage.rs`
+write helpers (this slice retires it); `conduct.rs` private `DoctrineToml`
+(the D2 delegate target); `CoverageStatus` has no withdrawn variant (D6 rationale).
+
+**Pending external pass:** offer `/inquisition` or an external adversarial reviewer
+(codex / Opus sub-agent) before lock — see next step.
