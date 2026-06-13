@@ -364,3 +364,48 @@ design §3 belt-as-fence pointer added; plan PHASE-05 unchanged; **IMP-052** min
 decision note stamped LOCKED + §7. Worker delta **`ec81b5e` kept** (it implements C).
 **Next:** re-verify `ec81b5e` against the amended ADR, flip PHASE-05 `blocked →
 completed`, continue the drive to PHASE-06.
+
+## PHASE-06 — `fork` verb + per-wt env contract (done · /dispatch · `sl056-coord` e3d3ca2)
+
+Driven via `/dispatch` (one worker, batch of one). Base **B = `ec81b5e`**; worker
+fork `sl056-p06` returned **S = `ee504a2`** (`S^ == B`, single non-merge). Funnel
+clean: precond clean+HEAD==B → S^==B → R-5 belt (src+tests only, no `.doctrine/`)
+→ `git apply` net diff → verify → branch-point stationary → one commit `e3d3ca2`.
+
+**Built (source delta):**
+- `doctrine worktree fork --base/--branch/--dir [--worker]` (`run_fork`): step-1
+  `git worktree add -b <branch> <dir> <B>` with pre-add refusals (dir-exists,
+  branch-exists, B-not-a-commit → no fork); step-2 reuses `run_provision`; step-3
+  `write_marker` under `--worker` (before any spawn window; solo omits); step-4 env
+  contract on **stdout**, human status on **stderr**.
+- **Compensating-cleanup rollback** (not a git transaction) factored as reusable
+  `rollback_fork(repo, branch, dir)` — PHASE-10 `create-fork` reuse. Post-add
+  failure reaps worktree+branch+dir; leftover → distinct non-zero
+  `fork-rollback-debris:` token naming dir+branch; clean rollback re-raises the
+  original cause.
+- Pure `target_dir_for_branch(branch) -> wt/<branch>` (unit-tested). The
+  `CARGO_TARGET_DIR` consumer is **project-declared** (`project_env_contract`, jail
+  base from inherited `CARGO_TARGET_DIR` else `<fork>/target`) — kept separate from
+  the generalisable mechanism; `run_fork` emits whatever pairs the consumer returns
+  and never names `CARGO_TARGET_DIR` itself (ADR-008 D-B5 honoured).
+- New **`Orchestrator(&'static str)` WriteClass** variant (first member; `import`/
+  `land`/`gc` join later). `write_class` Fork arm → `Orchestrator("fork")`;
+  `worker_guard` refuses Orchestrator via the SAME branches as Write. Other arms
+  behaviour-preserving. Removed the `cfg(not(test)) expect(dead_code)` on
+  `write_marker` (now has `run_fork` as non-test consumer); `git::git_opt` made
+  `pub(crate)` for the B-is-a-commit probe.
+- Floor posture **C** ridden as-is (no fail-closed floor added).
+- Goldens `tests/e2e_worktree_fork.rs` (4): happy solo+worker (VT-1), pre-add
+  refusals leave no fork, rollback-on-provision-failure (VT-2), Orchestrator
+  refusal drives run() from marked-fork AND env-set (VT-4). VT-3 (parallel-build
+  per-wt target) is codex/pi env-level — not in the worker delta.
+
+**Verify:** `env -u DOCTRINE_WORKER cargo test -p doctrine` — all suites green
+**except** the pre-existing `governance_corpus_supersession_…` (e2e_relation_
+migration_storage.rs): foreign in-flight SL-048 relation-migration condition on
+`.doctrine/adr/011/adr-011.toml` (not in the PHASE-06 delta). **Correction to the
+PHASE-05 handover claim that it "PASSES at B":** it reds at B too — proven by
+stashing the import and re-running at clean `ec81b5e` (identical failure). It is
+NOT a PHASE-06 regression. clippy zero. (`just` broken in fork — used `cargo`.)
+
+**Next:** PHASE-07 (`import` funnel verb) — EN: PHASE-06 green ✓.
