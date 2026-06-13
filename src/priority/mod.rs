@@ -46,7 +46,7 @@ pub(crate) fn run_survey(
     let out = if json || format == Format::Json {
         render::survey_json(&rows)?
     } else {
-        render::survey_human(&rows)
+        render::survey_human(&rows, None)
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
@@ -59,7 +59,7 @@ pub(crate) fn run_next(path: Option<PathBuf>, format: Format, json: bool) -> any
     let out = if json || format == Format::Json {
         render::next_json(&rows)?
     } else {
-        render::next_human(&rows)
+        render::next_human(&rows, None)
     };
     write!(io::stdout(), "{out}")?;
     Ok(())

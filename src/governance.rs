@@ -65,7 +65,7 @@ struct GovRow {
 /// hide-set, the kind owns the sort (by id) and the column/JSON projection.
 pub(crate) fn list_rows(g: &GovKind, root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     listing::validate_statuses(&args.status, g.statuses)?;
-    let color = args.color;
+    let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let gov_root = root.join(g.kind.dir);
@@ -82,7 +82,7 @@ pub(crate) fn list_rows(g: &GovKind, root: &Path, mut args: ListArgs) -> anyhow:
     match format {
         Format::Table => {
             let sel = listing::select_columns(&GOV_COLUMNS, GOV_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&rows, &sel, color))
+            Ok(listing::render_columns(&rows, &sel, render))
         }
         Format::Json => listing::json_envelope(g.stem, &rows),
     }

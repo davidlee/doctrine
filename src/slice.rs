@@ -1019,7 +1019,7 @@ fn validate_statuses(given: &[String], known: &[&str]) -> anyhow::Result<()> {
 /// for the surviving rows.
 pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     validate_statuses(&args.status, SLICE_STATUSES)?;
-    let color = args.color;
+    let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let slice_root = root.join(SLICE_DIR);
@@ -1040,7 +1040,7 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
     match format {
         Format::Table => {
             let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&rows, &sel, color))
+            Ok(listing::render_columns(&rows, &sel, render))
         }
         Format::Json => listing::json_envelope("slice", &json_rows(&rows)),
     }
@@ -1328,14 +1328,14 @@ mod tests {
     /// Render rows over the default column set (the migrated `render_table` path).
     fn render_default(rows: &[SliceRowTuple]) -> String {
         let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, None).unwrap();
-        listing::render_columns(rows, &sel, false)
+        listing::render_columns(rows, &sel, listing::RenderOpts::default())
     }
 
     /// Render rows over an explicit `--columns` set.
     fn render_cols(rows: &[SliceRowTuple], cols: &[&str]) -> String {
         let owned: Vec<String> = cols.iter().map(|s| (*s).to_string()).collect();
         let sel = listing::select_columns(&SLICE_COLUMNS, SLICE_DEFAULT, Some(&owned)).unwrap();
-        listing::render_columns(rows, &sel, false)
+        listing::render_columns(rows, &sel, listing::RenderOpts::default())
     }
 
     #[test]

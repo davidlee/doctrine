@@ -566,7 +566,7 @@ fn key(d: &RecDoc) -> listing::FilterFields {
 /// (REC has no lifecycle), sorted by id. `--status` is rejected (no status axis).
 fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     listing::validate_statuses(&args.status, &[])?;
-    let color = args.color;
+    let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let rec_root = root.join(REC_DIR);
@@ -576,7 +576,7 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
             Format::Table => Ok(listing::render_columns::<RecDoc>(
                 &[],
                 &listing::select_columns(&REC_COLUMNS, REC_DEFAULT, columns.as_deref())?,
-                color,
+                render,
             )),
             Format::Json => listing::json_envelope::<ListRow>("rec", &[]),
         };
@@ -586,7 +586,7 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     match format {
         Format::Table => {
             let sel = listing::select_columns(&REC_COLUMNS, REC_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&docs, &sel, color))
+            Ok(listing::render_columns(&docs, &sel, render))
         }
         Format::Json => listing::json_envelope("rec", &json_rows(&docs)),
     }

@@ -986,7 +986,7 @@ fn list_rows(
     mut args: ListArgs,
 ) -> anyhow::Result<ListOutput> {
     validate_statuses(&args.status, BACKLOG_STATUSES)?;
-    let color = args.color;
+    let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let corpus = read_all(root)?;
@@ -1019,7 +1019,7 @@ fn list_rows(
     match format {
         Format::Table => {
             let sel = listing::select_columns(&BL_COLUMNS, BL_DEFAULT, columns.as_deref())?;
-            let table = listing::render_columns(&items, &sel, color);
+            let table = listing::render_columns(&items, &sel, render);
             // Table: rows + footer to stdout; the cycle warning to stderr.
             Ok(ListOutput {
                 stdout: format!("{table}{footer}"),

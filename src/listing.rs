@@ -142,12 +142,28 @@ pub(crate) struct ListArgs {
     /// `args.columns.take()` *before* [`build`], which never reads it — the
     /// table is the only axis it touches (D2; no effect under `--json`, D7).
     pub(crate) columns: Option<Vec<String>>,
-    /// Whether the table render may emit ANSI colour (SL-053 PHASE-02, D3). The
-    /// impure shell resolves it ONCE ([`crate::tty::stdout_color_enabled`]) and
-    /// injects it here; the verb reads `args.color` before [`build`] and passes it
-    /// to [`render_columns`]. `default = false` (piped/in-process output, and every
-    /// `..Default::default()` test or `boot` call, stays plain — VT-4).
+    /// The render-axis bundle handed to [`render_columns`] (SL-054 PHASE-01). The
+    /// impure shell resolves its `color` ONCE ([`crate::tty::stdout_color_enabled`])
+    /// and injects it here; the verb reads `args.render` before [`build`] and passes
+    /// it to [`render_columns`]. `default = RenderOpts { color: false, term_width:
+    /// None }` (piped/in-process output, and every `..Default::default()` test or
+    /// `boot` call, stays plain and unwrapped — VT-4).
+    pub(crate) render: RenderOpts,
+}
+
+/// The render-axis bundle threaded into [`render_columns`] (SL-054 PHASE-01). One
+/// struct rather than a widening positional list keeps the render seam stable as
+/// axes accrete. `Default` is the plain path: `{ color: false, term_width: None }`
+/// (no colour, no terminal-width wrapping) — VT-2.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct RenderOpts {
+    /// Whether the table render may emit ANSI colour (SL-053 D3). Resolved ONCE by
+    /// the impure shell; `false` keeps piped/in-process output byte-clean.
     pub(crate) color: bool,
+    /// Terminal width for wrapping. `None` ⇒ the unwrapped (`ContentArrangement::
+    /// Disabled`) path; the `Some(w)` wrapping arm is a later SL-054 phase. This
+    /// phase always renders unwrapped regardless of this field.
+    pub(crate) term_width: Option<u16>,
 }
 
 /// Build a [`Filter`] + resolved [`Format`] from the parsed [`ListArgs`].
@@ -350,10 +366,11 @@ pub(crate) fn select_columns<'a, R>(
 /// Header row + one cell-row per `R`, over [`render_table`]. Empty rows → `""`
 /// (header suppressed, SL-025 §5.5). Replaces every kind's bespoke table
 /// assembler.
-pub(crate) fn render_columns<R>(rows: &[R], cols: &[&Column<R>], color: bool) -> String {
+pub(crate) fn render_columns<R>(rows: &[R], cols: &[&Column<R>], opts: RenderOpts) -> String {
     if rows.is_empty() {
         return String::new();
     }
+    let color = opts.color;
     let mut grid: Vec<Vec<String>> = Vec::with_capacity(rows.len() + 1);
     // Header row: bold when colour is on (D-EX3), raw otherwise.
     grid.push(cols.iter().map(|c| paint_header(c.header, color)).collect());
@@ -364,7 +381,7 @@ pub(crate) fn render_columns<R>(rows: &[R], cols: &[&Column<R>], color: bool) ->
     }));
     // comfy-table's custom_styling makes its width measurement ANSI-aware, so the
     // embedded escapes do not disturb the ` │ ` separator alignment (VT-2).
-    render_table(&grid)
+    render_table(&grid, opts.term_width)
 }
 
 /// Paint a header cell bold when `color`; otherwise return it raw. The bold escape
@@ -434,7 +451,12 @@ const COLUMN_SEPARATOR: char = '│';
 /// `render_columns` assembler only ever produces rectangular grids; a ragged grid
 /// is a caller bug and fails loudly under `debug_assert` rather than mis-rendering
 /// (SL-053 F-2) — the old hand-rolled renderer silently tolerated raggedness.
-pub(crate) fn render_table(rows: &[Vec<String>]) -> String {
+pub(crate) fn render_table(rows: &[Vec<String>], term_width: Option<u16>) -> String {
+    // SL-054 PHASE-01: the width param is threaded but inert — the body STILL always
+    // selects `ContentArrangement::Disabled` (unwrapped). The `Some(w)` wrapping arm
+    // is a later phase; `None` is the only behaviour now, so existing exact-shape
+    // tests pass unchanged (the None-invariance proof).
+    let _ = term_width;
     if rows.is_empty() {
         return String::new();
     }
@@ -883,7 +905,7 @@ mod tests {
     // VT-4: empty grid → "" (header suppressed on an empty list).
     #[test]
     fn render_table_empty_is_empty_string() {
-        assert_eq!(render_table(&[]), "");
+        assert_eq!(render_table(&[], None), "");
     }
 
     // VT-1 (no-ANSI + idempotence). `force_no_tty()` is UNCONDITIONAL inside
@@ -900,8 +922,8 @@ mod tests {
             cells(&["id", "kind", "status", "title"]),
             cells(&["SL-001", "slice", "proposed", "Alpha"]),
         ];
-        let first = render_table(&grid);
-        let second = render_table(&grid);
+        let first = render_table(&grid, None);
+        let second = render_table(&grid, None);
         assert_eq!(first, second, "render_table must be byte-stable");
         assert!(
             !first.contains('\u{1b}'),
@@ -913,10 +935,13 @@ mod tests {
     // whitespace, and interior separators are ` │ `.
     #[test]
     fn render_table_line_shape_minimalist_vertical_separators() {
-        let out = render_table(&[
-            cells(&["id", "kind", "status", "title"]),
-            cells(&["SL-001", "slice", "proposed", "Alpha Thing"]),
-        ]);
+        let out = render_table(
+            &[
+                cells(&["id", "kind", "status", "title"]),
+                cells(&["SL-001", "slice", "proposed", "Alpha Thing"]),
+            ],
+            None,
+        );
         assert_eq!(
             out,
             "id     │ kind  │ status   │ title\n\
@@ -943,16 +968,19 @@ mod tests {
     // and the last column stays edge-clean.
     #[test]
     fn render_table_aligns_a_middle_column_the_slice_case() {
-        let out = render_table(&[
-            cells(&["001", "done", "4/6", "memory-entity-v1", "Memory entity v1"]),
-            cells(&[
-                "009",
-                "proposed",
-                "—",
-                "slice-status-rollup",
-                "Slice status rollup",
-            ]),
-        ]);
+        let out = render_table(
+            &[
+                cells(&["001", "done", "4/6", "memory-entity-v1", "Memory entity v1"]),
+                cells(&[
+                    "009",
+                    "proposed",
+                    "—",
+                    "slice-status-rollup",
+                    "Slice status rollup",
+                ]),
+            ],
+            None,
+        );
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(
             lines[0],
@@ -967,7 +995,7 @@ mod tests {
     // VT-4 (trailing newline): non-empty output ends in EXACTLY one newline.
     #[test]
     fn render_table_non_empty_ends_in_exactly_one_newline() {
-        let out = render_table(&[cells(&["a", "b"]), cells(&["c", "d"])]);
+        let out = render_table(&[cells(&["a", "b"]), cells(&["c", "d"])], None);
         assert!(out.ends_with('\n'), "ends in a newline: {out:?}");
         assert!(
             !out.ends_with("\n\n"),
@@ -983,7 +1011,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "rectangular")]
     fn render_table_ragged_grid_panics_loudly() {
-        let _ = render_table(&[cells(&["a", "b", "c"]), cells(&["short", "row"])]);
+        let _ = render_table(&[cells(&["a", "b", "c"]), cells(&["short", "row"])], None);
     }
 
     // -- select_columns ----------------------------------------------------
@@ -1063,12 +1091,26 @@ mod tests {
         assert!(select_columns(&none, &[], None).unwrap().is_empty());
     }
 
+    // -- RenderOpts --------------------------------------------------------
+
+    // VT-2: the default render-axis bundle is the plain, unwrapped path — no colour,
+    // no terminal-width wrapping. Every `..Default::default()` caller rides this.
+    #[test]
+    fn render_opts_default_is_plain_unwrapped() {
+        let opts = RenderOpts::default();
+        assert!(!opts.color, "default is colourless");
+        assert_eq!(
+            opts.term_width, None,
+            "default is unwrapped (no term width)"
+        );
+    }
+
     // -- render_columns ----------------------------------------------------
 
     #[test]
     fn render_columns_empty_rows_is_empty_string_header_suppressed() {
         let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
-        assert_eq!(render_columns::<CRow>(&[], &sel, false), "");
+        assert_eq!(render_columns::<CRow>(&[], &sel, RenderOpts::default()), "");
     }
 
     #[test]
@@ -1084,7 +1126,7 @@ mod tests {
             },
         ];
         let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
-        let out = render_columns(&rows, &sel, false);
+        let out = render_columns(&rows, &sel, RenderOpts::default());
         assert_eq!(
             out,
             "id      │ slug\nADR-001 │ module-layering\nADR-004 │ relations\n"
@@ -1110,13 +1152,20 @@ mod tests {
         ];
         let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
 
-        let plain = render_columns(&rows, &sel, false);
+        let plain = render_columns(&rows, &sel, RenderOpts::default());
         assert!(
             !plain.contains('\u{1b}'),
             "color=false must emit zero ANSI: {plain:?}"
         );
 
-        let coloured = render_columns(&rows, &sel, true);
+        let coloured = render_columns(
+            &rows,
+            &sel,
+            RenderOpts {
+                color: true,
+                ..Default::default()
+            },
+        );
         assert!(
             coloured.contains('\u{1b}'),
             "color=true must emit ANSI for the painted id column + bold header"
@@ -1146,8 +1195,15 @@ mod tests {
             },
         ];
         let sel = select_columns(&CROW_COLUMNS, &["id", "slug"], None).unwrap();
-        let plain = render_columns(&rows, &sel, false);
-        let coloured = render_columns(&rows, &sel, true);
+        let plain = render_columns(&rows, &sel, RenderOpts::default());
+        let coloured = render_columns(
+            &rows,
+            &sel,
+            RenderOpts {
+                color: true,
+                ..Default::default()
+            },
+        );
         assert_eq!(
             strip_ansi(&coloured),
             plain,

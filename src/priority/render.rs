@@ -21,7 +21,7 @@ pub(crate) const PRIORITY_POLICY_VERSION: &str = "priority.v2";
 /// Rides `listing::render_table` (the shared list layout). A blocked row shows its
 /// badge + first direct blocker (the rest live in `blockers`/`explain` — direct-only
 /// here, D11).
-pub(crate) fn survey_human(rows: &[SurveyRow]) -> String {
+pub(crate) fn survey_human(rows: &[SurveyRow], term_width: Option<u16>) -> String {
     if rows.is_empty() {
         return "(no eligible work)\n".to_string();
     }
@@ -43,12 +43,12 @@ pub(crate) fn survey_human(rows: &[SurveyRow]) -> String {
             r.title.clone(),
         ]);
     }
-    crate::listing::render_table(&grid)
+    crate::listing::render_table(&grid, term_width)
 }
 
 /// Render `next` for human reading — actionable-only, in `order_key` order. Columns:
 /// id, kind, status, blocking-count, title. Advisory.
-pub(crate) fn next_human(rows: &[NextRow]) -> String {
+pub(crate) fn next_human(rows: &[NextRow], term_width: Option<u16>) -> String {
     if rows.is_empty() {
         return "(nothing actionable)\n".to_string();
     }
@@ -68,7 +68,7 @@ pub(crate) fn next_human(rows: &[NextRow]) -> String {
             r.title.clone(),
         ]);
     }
-    crate::listing::render_table(&grid)
+    crate::listing::render_table(&grid, term_width)
 }
 
 /// Render `blockers` for human reading — the blocked-by and blocking lists (direct or

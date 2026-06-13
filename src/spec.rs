@@ -1237,7 +1237,7 @@ pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<
 /// two envelopes. Empty → `""` (§5.5).
 pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     validate_statuses(&args.status, SPEC_STATUSES)?;
-    let color = args.color;
+    let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     match format {
@@ -1256,7 +1256,7 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
                 blocks.push(format!(
                     "{}\n{}",
                     subtype.label(),
-                    listing::render_columns(&block_rows, &sel, color)
+                    listing::render_columns(&block_rows, &sel, render)
                 ));
             }
             Ok(blocks.concat())
@@ -1416,7 +1416,7 @@ fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Res
     // before filtering, exactly as `list_rows` does against `SPEC_STATUSES` — a
     // bogus status errors here rather than silently emptying the roster (RV-005 F-1).
     validate_statuses(&args.status, requirement::REQ_STATUSES)?;
-    let color = args.color;
+    let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let rows = req_rows(root, spec_ref)?;
@@ -1448,7 +1448,7 @@ fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Res
         Format::Table => {
             let sel = listing::select_columns(&REQ_COLUMNS, REQ_DEFAULT, columns.as_deref())?;
             let table_rows: Vec<ReqListRow> = kept.into_iter().map(|(row, _)| row).collect();
-            Ok(listing::render_columns(&table_rows, &sel, color))
+            Ok(listing::render_columns(&table_rows, &sel, render))
         }
         Format::Json => {
             let json_rows: Vec<ReqJsonRow> = kept

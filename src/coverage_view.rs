@@ -346,7 +346,7 @@ const COVERAGE_DEFAULT: &[&str] = &["id", "status", "observed", "verdict"];
 pub(crate) fn render_table(
     rows: &[CoverageRow],
     columns: Option<&[String]>,
-    color: bool,
+    opts: listing::RenderOpts,
 ) -> anyhow::Result<String> {
     // Prepend `label` to the default set only when some row carries one — a spec
     // fan shows the membership label; a bare REQ read omits the column entirely.
@@ -359,7 +359,7 @@ pub(crate) fn render_table(
         COVERAGE_DEFAULT.to_vec()
     };
     let sel = listing::select_columns(&COVERAGE_COLUMNS, &default, columns)?;
-    Ok(listing::render_columns(rows, &sel, color))
+    Ok(listing::render_columns(rows, &sel, opts))
 }
 
 /// One coverage row's faithful JSON shape (design §5 D5 contract; PHASE-06
@@ -457,7 +457,14 @@ pub(crate) fn run(
         listing::Format::Json => render_json(&rows)?,
         // Resolve colour capability ONCE in the impure shell (SL-053 D3), inject as
         // a bool — JSON stays plain.
-        listing::Format::Table => render_table(&rows, columns, crate::tty::stdout_color_enabled())?,
+        listing::Format::Table => render_table(
+            &rows,
+            columns,
+            listing::RenderOpts {
+                color: crate::tty::stdout_color_enabled(),
+                term_width: None,
+            },
+        )?,
     };
     write!(std::io::stdout(), "{out}")?;
     Ok(())
@@ -762,7 +769,12 @@ mod tests {
             observed: ObservedState::None,
             verdict: Verdict::Indeterminate,
         };
-        let out = render_table(std::slice::from_ref(&labelled), None, false).unwrap();
+        let out = render_table(
+            std::slice::from_ref(&labelled),
+            None,
+            listing::RenderOpts::default(),
+        )
+        .unwrap();
         let header = out.lines().next().unwrap();
         assert!(
             header.starts_with("label"),
@@ -777,7 +789,12 @@ mod tests {
             observed: ObservedState::None,
             verdict: Verdict::Indeterminate,
         };
-        let out = render_table(std::slice::from_ref(&bare), None, false).unwrap();
+        let out = render_table(
+            std::slice::from_ref(&bare),
+            None,
+            listing::RenderOpts::default(),
+        )
+        .unwrap();
         let header = out.lines().next().unwrap();
         assert!(
             header.starts_with("id"),
