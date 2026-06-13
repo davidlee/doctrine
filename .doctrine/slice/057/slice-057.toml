@@ -5,9 +5,27 @@ status = "proposed"
 created = "2026-06-13"
 updated = "2026-06-13"
 
-[relationships]
-# Reserved. Empty in v1 — no spec/requirement registry to point at yet.
-# When specs land, this section gains (illustrative, not v1):
-#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
-#   requirements = ["..."]   # implements / updates / verifies
-#   supersedes   = [2]       # slice-to-slice links
+# Structural relations — uniform [[relation]] rows (SL-048 PHASE-04 "the cut";
+# read generically by the SL-046 reader / `inspect`). No `link` writer wired yet,
+# so these are hand-authored (authored tier; corpus `validate` is read-tolerant).
+[[relation]]
+label = "specs"
+target = "SPEC-002"
+
+[[relation]]
+label = "specs"
+target = "PRD-013"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-003"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-009"
+
+# requirements — none yet. This slice MINTS the test-run-surface capability;
+#   the requirements it realises (the SPEC-002 deltas lifting the deferral) get
+#   authored at /design → /plan, then added as `requirements` rows. Sibling
+#   slices SL-042/SL-044 and product lineage beyond PRD-013 stay in the scope doc
+#   (no slice→slice sibling label; supersedes is wrong semantics).
