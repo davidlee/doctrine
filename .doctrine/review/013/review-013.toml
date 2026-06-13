@@ -1,0 +1,43 @@
+id    = 13
+slug  = "reconciliation-review-of-sl-048"
+title = "reconciliation review of SL-048"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-048"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Latent X5 inbound-render gap from PHASE-04, closed in PHASE-05"
+detail = """render_inbound (relation_graph.rs) hardcoded Supersedes->"superseded by" and fell back to raw label.name() for all other labels, so governed_by/consumes derived inbound rendered backwards (governed_by instead of governs) — a latent gap from PHASE-04's format_show rewire that never updated the INBOUND path for the new inbound_name. Latent because no migrated entity carried a governed_by/consumes edge, so goldens held. EX-1's X5 (derived inbound shows 'governs') would have failed. Closed in-scope in PHASE-05 by rewiring render_inbound to table-driven relation::inbound_name; legacy inbound_name==name() keeps inspect/adr goldens byte-identical; --json keeps the raw label (R2-M3). Evidence: relation.rs:760 inbound_name, e2e_link_unlink::link_persists_shows_and_appears_in_derived_inbound asserts 'governs'."""
+disposition = "fix-now"
+response = "Reconciled inside the slice: the gap was caught and fixed in PHASE-05 (b62d527) by rewiring render_inbound to the table-driven relation::inbound_name. EX-1 X5 now passes (e2e asserts derived inbound 'governs'); inspect/adr goldens byte-identical; --json keeps raw label. No residual work."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "validate dangler message says '[[relation]] edge' for a typed gov supersedes dangler"
+detail = "validate_relations (1) walks entity.outbound, which for governance includes the TYPED supersedes axis (not a [[relation]] row). A dangling gov supersedes target is correctly DETECTED but the message labels it 'dangling [[relation]] edge', which is storage-tier-inaccurate for supersedes (stored typed, OD-3). Detection is sound; only the wording is loose. Cosmetic."
+disposition = "tolerated"
+response = "Cosmetic wording only — detection of a dangling validated target (incl. typed gov supersedes) is correct and is the behaviour that matters. The '[[relation]] edge' phrasing is loose for the typed supersedes axis but not wrong enough to warrant a message-shape special-case. Consciously accepted."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "validate_relations makes three disk passes over the corpus"
+detail = "validate_relations scans entities (scan_entities), then re-reads every entity file for the IllegalRow read_block pass, then validate_supersession re-reads every gov file again. Three reads/file. Acceptable at ~130-file corpus scale (validate is not hot-path); noted for the record, not a correctness issue."
+disposition = "tolerated"
+response = "validate is a cold integrity command, not hot-path; three reads over a ~130-file corpus is immaterial. Collapsing to a single pass would couple the id-scan, read_block, and gov-typed reads into one walk for no user-visible gain. Accepted as-is."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
