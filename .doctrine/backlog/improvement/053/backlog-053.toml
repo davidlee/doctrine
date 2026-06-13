@@ -1,0 +1,20 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 53
+slug = "recordrecord-associative-relation-class-informsbears-on-for-spec-019-slice-b"
+title = "Record↔record associative relation class (informs/bears-on) for SPEC-019 Slice B"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-13"
+updated = "2026-06-13"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }

@@ -96,14 +96,19 @@ Deliver SPEC-019 **FR-001/002/003/004**, **FR-007** (the four shared verbs only)
 - **R2 — ordered-golden churn.** `KINDS` insertion position is load-bearing
   (`RELATION_RULES` is enum-`Ord`-ordered; the kinds-table golden is ordered).
   Pick the insertion point deliberately.
-- **OQ1 — facet typed shapes.** SPEC-019 names facet fields but not cardinality/
-  type for plural/named fields (`alternatives`, `consequences`, the `…-by`/`-on`
-  pairs, `applies-to`). `/design` firms each as scalar/list/ref/date/enum and the
-  empty-string legality (review finding M6).
-- **OQ2 — `DecisionRef` posture under a numbered DEC** (D8, item 8) — keep
-  free-text (recommended) vs validate. `/design`'s call.
-- **A1 — naming** (`knowledge` namespace, `record-NNN` fileset, `.doctrine/
-  knowledge/<kind>/` dir) — proposed by SPEC-019, confirmed at `/design`.
+- **OQ1 — facet typed shapes. RESOLVED** (design §9): each field fixed as
+  text/enum/list/date with `""`/`[]`→absent; plural fields (`alternatives`,
+  `consequences`, `applies_to`) → list; `…_by` → text attribution; `…_on` → date
+  (review finding M6).
+- **OQ2 — `DecisionRef` posture under a numbered DEC. RESOLVED** (design §4 L3):
+  keep free-text `Unvalidated` (external 3-part `DEC-NNN-XX` cites survive); D8
+  work is comment/example disambiguation only, no behaviour change.
+- **A1 — naming. RESOLVED** (design §4 L4): accepted as SPEC-019 proposes —
+  `knowledge` namespace, `record-NNN` fileset, `.doctrine/knowledge/<kind>/`.
+- **KINDS insertion point. RESOLVED** (design §4 L5): append after `REC`
+  (`[…,"RV","REC","ASM","DEC","QUE","CON"]`), zero churn to other goldens.
+- **Status modeling. RESOLVED** (design §4 L1): data-driven `&[&str]` per kind +
+  `record_kind` lookup (not a typed enum). Facet is a typed enum-of-structs (L2).
 
 ## Summary
 
@@ -123,3 +128,8 @@ the `knowledge` CLI — no relations, no supersession, no gating. Ships alone.
 - **Slice C — supersession (FR-006).** Captured as a backlog item. The IMP-006
   transactional verb + the §6 cross-kind matrix + the `Supersedes` RECORD
   `LifecycleOnly` rule row. Gated on IMP-006.
+- **IMP-053 — record↔record associative relation class** (surfaced at `/design`).
+  No current SPEC-019 label covers QUE↔ASM / ASM→DEC associative intent; a new
+  `RelationLabel` is a SPEC-019 amendment feeding Slice B.
+- **IDE-006 — constraint owner + immutability/enforceability facet axis.**
+- **IDE-007 — guidance: when a DEC record vs an ADR vs a governance surface.**

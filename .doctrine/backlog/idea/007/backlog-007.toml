@@ -1,0 +1,20 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 7
+slug = "guidance-when-a-dec-record-vs-an-adr-vs-a-governance-surface-architectural-significance-governance"
+title = "Guidance: when a DEC record vs an ADR vs a governance surface (architectural significance / governance reach)"
+kind = "idea"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-13"
+updated = "2026-06-13"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
