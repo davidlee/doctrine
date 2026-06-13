@@ -54,12 +54,13 @@ No code exists for this surface yet.
 
 ## 3. Forces & Constraints
 
-- **NF-001 (REQ-245) — one entity, one schema.** Four kinds as one
-  `record_kind`-discriminated entity; never parallel per-kind schemas; reuse the shared
-  scaffold so existing suites stay green.
-- **NF-002 (REQ-246) — disjointness + behaviour preservation.** No `record_kind` may
-  collide with a backlog `item_kind`; the slice/ADR/spec/backlog/memory/relation suites
+- **NF-001 (REQ-245) — one entity, one schema + behaviour preservation.** Four kinds as
+  one `record_kind`-discriminated entity; never parallel per-kind schemas; reuse the
+  shared scaffold so the existing slice/ADR/spec/backlog/memory (and relation) suites
   stay green **unchanged** (the entity engine is shared machinery).
+- **NF-002 (REQ-246) — disjointness + outbound-only.** No `record_kind` may collide
+  with a backlog `item_kind`; every outbound relation is stored one-way with the reverse
+  derived (ADR-004), the supersession pair the sole sanctioned typed carve-out.
 - **NF-003 (REQ-247) — never actionable.** No record state is ever `Workable`; records
   never appear in `survey`/`next`; identity permanent; `record_kind` fixed at capture.
 - **ADR-001** — module layering: `knowledge.rs` is a leaf/command module; it may be
@@ -123,6 +124,19 @@ and adds the implementation-shaping local decisions (L-series):
   adversarial pass, §14 F-A1; it refutes the "touches no relation code" simplification
   and corrects the scope/spec claim that `sources_match_shipped_accessors` — which is
   label-keyed, not KINDS-keyed — is edited by Slice A.)
+- **L8 — records are valid `reviews` targets the moment they join KINDS (allowed).**
+  The shipped `reviews` label is `TargetSpec::AnyNumbered` (`relation.rs:354`), and
+  `review new --target REF` validates via `ensure_ref_resolves` (`review.rs`/
+  `integrity.rs:319`). So admitting ASM/DEC/QUE/CON to `KINDS` makes
+  `doctrine review new --target ASM-001` resolve, and `inspect` surfaces the inbound
+  `reviews` edge on the record — an **inbound, RV-authored** edge, free, with no Slice-A
+  code beyond the KINDS rows. **Decision: allow it** — reviewing an assumption/decision
+  is sensible; the alternative (special-casing `AnyNumbered` to exclude records) is more
+  code, less general, and against "variation is data." It does **not** touch NF-003: the
+  edge is the review's outbound, not a record dependency, so no record becomes workable.
+  This is *not* the Slice-B relation seam (records still author no outbound relations) —
+  it is RV's pre-existing reach extending to a new target kind. (Codex inquisition
+  Charge 1, §14 C-1.)
 
 ## 5. Module & Types
 
@@ -285,9 +299,11 @@ in v1).
 relation machinery); every `…_on` → **date** (unvalidated string). Three closed enums →
 three drift canaries (`confidence`/`basis`/`source`).
 
-## 10. D8 Disambiguation (comments/example only — no behaviour change)
+## 10. D8 Disambiguation (no behaviour change — `DecisionRef` stays `Unvalidated`, L3)
 
-`DecisionRef` stays `Unvalidated` (L3). The numbered DEC kind makes some prose stale:
+The numbered DEC kind makes the 2-part `DEC-NNN` form read as a doctrine entity, so
+every site that uses 2-part `DEC-` as an *external* forgettable cite is now misleading.
+Disambiguate them all to the unmistakable 3-part `DEC-NNN-XX` external form:
 
 - `src/rec.rs:318` comment — reword: a DEC *is* now a 2-part numbered kind, but
   `decision_ref` carries **external 3-part** forgettable cites (`DEC-005-C`), not
@@ -295,10 +311,15 @@ three drift canaries (`confidence`/`basis`/`source`).
 - `src/relation.rs:164` `TargetSpec::Unvalidated` doc — same reword (rationale shifts
   from "no kind in KINDS" to "3-part external cites are not entities").
 - `src/main.rs:1537` `--decision` example `DEC-005` → `DEC-005-C`.
-- **Fixtures** (`relation_graph.rs`/`rec.rs`, `decision_ref="DEC-001"`/`"DEC-005-C"`):
-  **left untouched.** They are green regardless (`Unvalidated` carries any string), and
-  NF-002 requires existing suites green-*unchanged*. The cosmetic 2-part→3-part swap is
-  skipped to honour behaviour-preservation.
+- **Fixtures (disambiguate — the spec + scope name these D8 targets; codex Charge 2).**
+  `src/rec.rs:673` (`decision_ref="DEC-005"`) and `src/relation_graph.rs:1062`
+  (`decision_ref="DEC-001"`), plus any sibling `DEC-001`/`DEC-005` *decision_ref* fixture
+  values → 3-part external form, **updating the matching assertion in the same test** so
+  it stays green. `DecisionRef` is `Unvalidated`, so the string is opaque to behaviour —
+  this is a lockstep value+assertion edit, not an engine-behaviour change (NF-001 holds:
+  the value swap is a *deliberate* clarity edit, not a forced fix to make a suite pass).
+  Earlier draft pardoned these "to honour green-unchanged" — that was overcautious and
+  contradicted the scope; superseded.
 - **Sweep (F-A4)** — at execute, grep `DEC-0` across `install/templates/`, `doc/`, and
   `.claude/` for other 2-part `DEC-NNN` examples used as *external* cites that the new
   numbered kind now makes ambiguous; disambiguate to 3-part or note them. D8's named
@@ -317,6 +338,10 @@ three drift canaries (`confidence`/`basis`/`source`).
 - **Read path:** prefix→kind resolution; foreign-kind-state **refuse** (FR-002/FR-004).
 - **`outbound_for` total-dispatch (F-A1):** `outbound_for` returns `Ok(vec![])` (never
   panics) for each of ASM/DEC/QUE/CON — the regression guard for the empty arm.
+- **RV→record reviews target (L8 / C-1):** `review new --target ASM-001` resolves
+  (`ensure_ref_resolves`), and a cross-kind graph scan / `inspect` surfaces the inbound
+  `reviews` edge on the record — confirming the free `AnyNumbered` surface is sound and
+  records stay non-workable.
 - **Decision `accepted` divergence (F-A5):** pin `is_hidden(Decision,"accepted")==false`
   (visible) **and** `status_class("DEC","accepted")==Terminal` (never workable) — the two
   concepts deliberately disagree on this state.
@@ -327,13 +352,15 @@ three drift canaries (`confidence`/`basis`/`source`).
 - **Disjointness (NF-002 / F-A6):** the four new prefixes collide with **no** existing
   corpus prefix (not just backlog — all of SL/ADR/POL/STD/PRD/SPEC/REQ/ISS/IMP/CHR/RSK/
   IDE/RV/REC); the new `KINDS` rows don't overlap any existing partition.
-- **Behaviour preservation (NF-002):** slice/ADR/spec/backlog/memory/relation suites
+- **Behaviour preservation (NF-001):** slice/ADR/spec/backlog/memory/relation suites
   green **unchanged**.
 
 ## 12. Out of Scope / Deferred
 
 - **Relation seam (FR-005)** — Slice B (→ IMP-050). No `RECORD` `RELATION_RULES` rows,
-  no minted labels, no `outbound_for` arm, no record `relation_edges` reader.
+  no minted labels, no record `relation_edges` reader/accessor, no edges. **Slice A does
+  land the *empty* four-prefix `outbound_for` arm** (§4 L7, §8) — routing only, no
+  relations; B swaps it for the real accessor.
 - **Supersession (FR-006)** — Slice C (→ IMP-051); IMP-006-gated.
 - **Direct gating** — IMP-047 (the `Gating` priority class). Interim: all-`Terminal`
   inert, gating via a spawned backlog proxy.
@@ -353,7 +380,7 @@ three drift canaries (`confidence`/`basis`/`source`).
 - **R2 — superset `RawFacet` laxity.** A kind-blind raw facet admits a stray
   foreign-kind key (ignored by the kind-aware `validate`). Accepted: tolerant-read
   behaviour, matching `RawBacklogToml`; the validated `RecordFacet` is fully typed.
-- **R3 — behaviour preservation (NF-002).** The engine `Kind` is data, not a trait, so
+- **R3 — behaviour preservation (NF-001).** The engine `Kind` is data, not a trait, so
   the four new kinds add table rows, not engine changes; the existing suites are the
   proof and stay green unchanged.
 - **R4 — disjointness.** New prefixes ASM/DEC/QUE/CON must not collide with backlog
@@ -387,5 +414,22 @@ A hostile self-review before external challenge. Findings + dispositions:
   TOML reads (no per-kind dispatch assert). ADR-001 layering holds (knowledge.rs is a
   leaf; integrity/partition/relation_graph reference its consts, the existing pattern).
   The superset `RawFacet` laxity is the sanctioned tolerant-read tier (R2).
+
+### External adversarial pass (codex / GPT-5.5)
+
+Ran via the inquisition brief (`handover.md`). It **confirmed** the load-bearing
+claims: `status_and_title_for` safe through the common arm, `sources_match_shipped_
+accessors` label-keyed (untouched by A), `DecisionRef` forward-edge behaviourally
+`Unvalidated`, and **no second KINDS-prefix dispatch-panic** beyond `outbound_for`.
+Four charges, all integrated:
+
+- **C-1 (must-fix).** Blast-radius understatement: records become valid `reviews`
+  targets (`AnyNumbered`) on KINDS admission. → §4 L8 (acknowledge + allow), §11 guard.
+- **C-2 (should-fix).** Self-contradiction — scope names the D8 fixtures as targets,
+  §10 pardoned them. → §10 now disambiguates them (lockstep value+assertion edit).
+- **C-3 (should-fix).** Self-contradiction — §12 said "no `outbound_for` arm" vs L7. →
+  §12 corrected.
+- **C-4 (nit).** REQ miscitation — behaviour-preservation is NF-001/REQ-245, not
+  NF-002 (disjointness). → §3/§11/§13 citations corrected.
 </content>
 </invoke>
