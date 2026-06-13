@@ -80,9 +80,14 @@ fn terminal_width(is_tty: bool, cols: Option<u16>) -> Option<u16> {
     }
 }
 
-/// Coarse shell-side floor: guards only the degenerate `size() == 0` / unreadably-
-/// narrow case so a junk width never reaches the pure layer. NOT the real fit test —
-/// that is grid-dependent and lives in `render_table` (`grid_min_width`, PHASE-02).
+/// Coarse shell-side pre-filter for degenerate sizes (`size() == 0`, headless /
+/// unreadably-narrow terminals): below it, skip wrapping and emit clean overflow.
+/// NOT the authoritative fit test — that is grid-dependent (`render_table`'s
+/// `grid_min_width`, PHASE-02), which the pure layer applies to the real column
+/// count and which already falls back to `Disabled` for any width it can't seat. So
+/// this floor protects nothing the grid floor wouldn't; it is a cheap shell-side
+/// cutoff (the shell has no grid) that also, as a side effect, suppresses the rare
+/// legitimate few-column wrap on a sub-`16` terminal in favour of clean overflow.
 const MIN_WRAP_WIDTH: u16 = 16;
 
 #[cfg(test)]
