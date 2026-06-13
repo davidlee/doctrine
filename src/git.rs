@@ -541,6 +541,44 @@ pub(crate) fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, Capt
     Ok(Some(text.trim().to_string()))
 }
 
+/// Apply a unified-diff `patch` into the index via `git apply --3way --index`,
+/// NON-committing (SL-056 PHASE-07 import: the orchestrator commits separately,
+/// ADR-006 D7). The patch is streamed on stdin; a non-zero exit (a real conflict
+/// or malformed patch) errors. Invoked from the coordination root so the index it
+/// writes is the coordination index. Impure shell only.
+pub(crate) fn git_apply_index(root: &Path, patch: &str) -> Result<(), CaptureError> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(NORMATIVE_FLAGS)
+        .args(["apply", "--3way", "--index"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| CaptureError::Git(format!("spawn git apply: {e}")))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| CaptureError::Git("git apply: no stdin pipe".to_owned()))?
+        .write_all(patch.as_bytes())
+        .map_err(|e| CaptureError::Git(format!("git apply: write stdin: {e}")))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| CaptureError::Git(format!("git apply: wait: {e}")))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(CaptureError::Git(format!(
+            "apply --3way --index: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
 /// Resolve trunk's commit-ish via the peeled ladder (ADR-006 D3): an explicit
 /// `DOCTRINE_TRUNK_REF`, else `origin/HEAD`, `main`, `master` in turn. Each
 /// candidate is peeled with `rev-parse --verify --quiet <ref>^{commit}`; the
