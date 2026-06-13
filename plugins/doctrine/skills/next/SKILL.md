@@ -13,7 +13,7 @@ Print:
 ```
 
 If the next task is implementation-bound, include the specific artefacts to read
-(`design.md`, `plan.toml`, the active phase sheet) and name any unresolved
+(`design.md`, `plan.toml`, the active runtime phase sheet) and name any unresolved
 assumptions or design questions the next agent must assess before declaring
 readiness.
 

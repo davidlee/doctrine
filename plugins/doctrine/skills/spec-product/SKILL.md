@@ -1,6 +1,6 @@
 ---
 name: spec-product
-description: use when authoring, revising, normalising, or reviewing a doctrine product specification/prd - the durable product intent, requirements, success measures, behaviours, and verification basis for an evergreen capability. use before creating or scoping slices that descend from shared product intent. use when a request asks for product requirements, functional requirements, non-functional requirements, product scope, acceptance gates, out-of-scope boundaries, success measures, or agent-readable product context. do not use for one-off change planning, implementation design, technical architecture, or phase execution.
+description: Use when authoring, revising, normalising, or reviewing a doctrine product specification/PRD - the durable product intent, requirements, success measures, behaviours, and verification basis for an evergreen capability. use before creating or scoping slices that descend from shared product intent. use when a request asks for product requirements, functional requirements, non-functional requirements, product scope, acceptance gates, out-of-scope boundaries, success measures, or agent-readable product context. do not use for one-off change planning, implementation design, technical architecture, or phase execution.
 ---
 
 # Spec Product

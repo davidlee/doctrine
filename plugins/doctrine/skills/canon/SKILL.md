@@ -25,7 +25,7 @@ commands), `/retrieve-memory` rather than rediscovering it.
 rule + read-via-`show` discipline are resident in the boot digest and detailed in
 `using-doctrine.md`. Reading one tier and concluding "empty" is false witness.
 
-The governance prefix you are reading (`@.doctrine/state/boot.md`) was inlined
+The boot snapshot you are reading (`@.doctrine/state/boot.md`) was inlined
 at session start. If you just edited governance (`governance.md`, an ADR, a
 memory) and need *this* context to reflect it, run `doctrine boot` to regenerate
 the snapshot, **then** `/clear` or restart — regenerate THEN clear. `doctrine

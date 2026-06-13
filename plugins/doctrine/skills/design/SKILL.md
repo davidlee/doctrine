@@ -22,7 +22,7 @@ Complete in order without deviation. Each depends on the preceding stage:
 4. **Present design** — in sections scaled to their complexity, get user approval after each section.
 5. **Write design.md** — save to the slice `design.md` file and commit
 6. **Adversarial Review** — perform a hostile review of the design doc, probing for imprecision and flawed reasoning
-7. **Integrate Review Feedback** — triage and respond to feedback; integrate into slice / design doc; repeat until design approved
+7. **Integrate Review Feedback** — triage and respond to feedback; integrate into slice / design doc; repeat until the design locks (explicit user approval)
 8. **Transition to planning** — record the lifecycle move (`doctrine slice
    status <id> plan` — bare number), then invoke `/plan` to create the
    implementation plan
@@ -153,7 +153,7 @@ reflects your current shared understanding before proceeding.
    choice:
    1. run a formal hostile pass via `/inquisition`, or print a prompt for an
       external adversarial reviewer.
-   2. initiate `/plan` to create the implementation plan and phase sheets.
+   2. initiate `/plan` to create the implementation plan and runtime phase sheets.
 6. Multiple passes of review & feedback may be required before acceptance. Do
    not presume approval until it is explicitly granted.
 
