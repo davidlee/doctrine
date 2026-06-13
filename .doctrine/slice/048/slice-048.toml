@@ -1,7 +1,7 @@
 id = 48
 slug = "structural-cross-corpus-relation-edges-governance-seam-spec-adr-product-product"
 title = "Structural cross-corpus relation edges: governance seam + spec-ADR + product-product"
-status = "design"
+status = "plan"
 created = "2026-06-12"
 updated = "2026-06-13"
 
