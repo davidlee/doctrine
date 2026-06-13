@@ -932,7 +932,7 @@ fn key(d: &ReviewDoc) -> listing::FilterFields {
 /// carrying its derived status.
 fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     listing::validate_statuses(&args.status, REVIEW_STATUSES)?;
-    let color = args.color;
+    let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let review_root = root.join(REVIEW_DIR);
@@ -948,7 +948,7 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     match format {
         Format::Table => {
             let sel = listing::select_columns(&REVIEW_COLUMNS, REVIEW_DEFAULT, columns.as_deref())?;
-            Ok(listing::render_columns(&rows, &sel, color))
+            Ok(listing::render_columns(&rows, &sel, render))
         }
         Format::Json => listing::json_envelope("review", &json_rows(&rows)),
     }
@@ -2334,7 +2334,7 @@ mod tests {
         let (status, awaited) = doc.derived();
         let rows = vec![(doc, status, awaited)];
         let sel = listing::select_columns(&REVIEW_COLUMNS, REVIEW_DEFAULT, None).unwrap();
-        let out = listing::render_columns(&rows, &sel, false);
+        let out = listing::render_columns(&rows, &sel, listing::RenderOpts::default());
         let lines: Vec<&str> = out.lines().collect();
         assert!(lines[0].starts_with("id"), "header: {:?}", lines[0]);
         assert!(lines[1].starts_with("RV-005"), "{:?}", lines[1]);

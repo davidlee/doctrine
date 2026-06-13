@@ -121,8 +121,13 @@ impl CommonListArgs {
             json: self.json,
             columns: self.columns,
             // Resolve colour capability ONCE at the clap→leaf seam (SL-053 D3): the
-            // sole impure read, injected as a plain bool the pure leaf consumes.
-            color: crate::tty::stdout_color_enabled(),
+            // sole impure read, injected into the render bundle the pure leaf consumes.
+            // `term_width: None` keeps this phase unwrapped (the `Some(w)` wrapping arm
+            // is a later SL-054 phase).
+            render: crate::listing::RenderOpts {
+                color: crate::tty::stdout_color_enabled(),
+                term_width: None,
+            },
         }
     }
 }
