@@ -5,11 +5,9 @@ status = "done"
 created = "2026-06-11"
 updated = "2026-06-11"
 
-[relationships]
-# Engine consumed — SL-039 is the FIRST consumer of cordage (SPEC-001). It rides
-# the public builder/query surface and adds the doctrine→cordage path dep; it does
-# not modify cordage src/. Hand-authored per SL-038's shape; no `slice link` verb.
-specs = ["SPEC-001"]
+[[relation]]
+label = "specs"
+target = "SPEC-001"
 # No `requirements` — no REQ registry for the backlog capability yet (a backlog
 # spec is SL-021 territory; non-goal here).
 # Risk coordination is OUTBOUND-derived (ADR-004), not stored here: RSK-002's

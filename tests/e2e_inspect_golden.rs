@@ -32,14 +32,41 @@ fn write(root: &Path, rel: &str, body: &str) {
     fs::write(path, body).unwrap();
 }
 
-/// Seed a slice entity (toml + md) with the given `[relationships]` body.
+/// Rewrite a legacy slice `[relationships]` body (`label = [refs]` lines) into the
+/// SL-048 migrated `[[relation]]` rows. Slice has no typed tier-2/3 leftovers, so
+/// every authored axis becomes rows (read_block launders order — emit order here is
+/// irrelevant). An empty body yields no rows.
+fn slice_relation_rows(rels: &str) -> String {
+    let mut rows = String::new();
+    for line in rels.lines() {
+        let line = line.trim();
+        let Some((label, rest)) = line.split_once('=') else {
+            continue;
+        };
+        let label = label.trim();
+        let inner = rest.trim().trim_start_matches('[').trim_end_matches(']');
+        for t in inner.split(',') {
+            let t = t.trim().trim_matches('"');
+            if !t.is_empty() {
+                rows.push_str(&format!(
+                    "[[relation]]\nlabel = \"{label}\"\ntarget = \"{t}\"\n"
+                ));
+            }
+        }
+    }
+    rows
+}
+
+/// Seed a slice entity (toml + md) with the given relations (SL-048 migrated shape —
+/// the legacy axis body is rewritten to `[[relation]]` rows).
 fn seed_slice(root: &Path, id: u32, rels: &str) {
     write(
         root,
         &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
         &format!(
             "id = {id}\nslug = \"s{id}\"\ntitle = \"S{id}\"\nstatus = \"proposed\"\n\
-             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[relationships]\n{rels}"
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{}",
+            slice_relation_rows(rels)
         ),
     );
     write(

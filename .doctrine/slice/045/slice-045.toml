@@ -11,8 +11,6 @@ updated = "2026-06-12"
 # "reported as a derived read" intent needed a CLI surface. Descends SPEC-002.
 [gate]
 extra_reqs = ["REQ-110", "REQ-111"]
-
-[relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
 # When specs land, this section gains (illustrative, not v1):
 #   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates

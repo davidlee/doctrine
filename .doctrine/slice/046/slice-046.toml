@@ -5,9 +5,21 @@ status = "done"
 created = "2026-06-12"
 updated = "2026-06-12"
 
-[relationships]
-specs = ["SPEC-001", "PRD-011"]
-requirements = ["REQ-091", "REQ-074"]
+[[relation]]
+label = "specs"
+target = "SPEC-001"
+
+[[relation]]
+label = "specs"
+target = "PRD-011"
+
+[[relation]]
+label = "requirements"
+target = "REQ-091"
+
+[[relation]]
+label = "requirements"
+target = "REQ-074"
 # REQ-091 (SPEC-001 FR-002) — adapter maps doctrine ids to opaque nodes, re-maps
 #   diagnostics back; extended here from backlog-only to all kinds.
 # REQ-074 (PRD-011 FR-005) — derived inbound references computed from authored

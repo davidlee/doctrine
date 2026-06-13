@@ -70,8 +70,11 @@ fn adr001_toml() -> &'static str {
      [relationships]\n\
      supersedes = []\n\
      superseded_by = []\n\
-     related = [\"ADR-002\"]\n\
-     tags = [\"lang\"]\n"
+     tags = [\"lang\"]\n\
+     \n\
+     [[relation]]\n\
+     label = \"related\"\n\
+     target = \"ADR-002\"\n"
 }
 fn adr001_md() -> &'static str {
     "# ADR-001: Use Rust\n\nbody text here.\n"
@@ -206,10 +209,12 @@ fn adr_status_transition_prints_exact_and_preserves_edits() {
         "updated bumped"
     );
     // Edit-preservation (the toml_edit in-place contract): comment + rels survive.
+    // SL-048 PHASE-04: `related` is now a `[[relation]]` row (migrated out of the
+    // typed `[relationships]` table); the typed supersedes/superseded_by/tags stay.
     assert!(after.contains("# hand-added comment"), "comment preserved");
     assert!(
-        after.contains("related = [\"ADR-002\"]"),
-        "related preserved"
+        after.contains("[[relation]]") && after.contains("target = \"ADR-002\""),
+        "related [[relation]] row preserved"
     );
     assert!(after.contains("tags = [\"lang\"]"), "tags preserved");
 }

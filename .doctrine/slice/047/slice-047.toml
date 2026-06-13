@@ -5,9 +5,25 @@ status = "done"
 created = "2026-06-12"
 updated = "2026-06-12"
 
-[relationships]
-specs = ["PRD-011", "SPEC-001"]
-requirements = ["REQ-073", "REQ-075", "REQ-076"]
+[[relation]]
+label = "specs"
+target = "PRD-011"
+
+[[relation]]
+label = "specs"
+target = "SPEC-001"
+
+[[relation]]
+label = "requirements"
+target = "REQ-073"
+
+[[relation]]
+label = "requirements"
+target = "REQ-075"
+
+[[relation]]
+label = "requirements"
+target = "REQ-076"
 # REQ-073 (PRD-011 FR-004) — typed blockers/blocking. REQ-075 (FR-006) — exclude
 #   terminal/promoted from default active. REQ-076 (FR-007) — cycle diagnostics +
 #   degrade. These surface-defining FRs are stable; the actionable-channel SCOPE

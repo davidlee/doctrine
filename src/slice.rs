@@ -1079,21 +1079,16 @@ pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<
 // show — reassemble slice-NNN.toml (as data) + slice-NNN.md (scope body)
 // ---------------------------------------------------------------------------
 
-/// The inert `[relationships]` table, read as data for `show` (preserved on disk,
-/// ignored by `Meta`). Every axis defaults to empty so a hand-trimmed file parses.
-#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
-struct Relationships {
-    #[serde(default)]
-    specs: Vec<String>,
-    #[serde(default)]
-    requirements: Vec<String>,
-    #[serde(default)]
-    supersedes: Vec<String>,
-}
-
 /// The full `slice-NNN.toml` read as data for `show` — `Meta`'s four list fields
-/// plus the dates and the relationships table. JSON-faithful; `Meta` ignores the
-/// extra keys on the list path, this surfaces them on the inspect path.
+/// plus the dates and the `[gate]` table. JSON-faithful; `Meta` ignores the extra
+/// keys on the list path, this surfaces them on the inspect path.
+///
+/// SL-048 PHASE-04 (the cut): the tier-1 relations (`specs`/`requirements`/
+/// `supersedes`/`governed_by`) no longer live in a typed `[relationships]` table —
+/// they migrated to uniform `[[relation]]` rows, read by `relation::read_block`. The
+/// show paths (`relation_edges`/`format_show`/`show_json`) reconstruct them from the
+/// raw TOML text, so this struct no longer carries a `relationships` field (slice has
+/// no typed tier-2/3 leftovers). `gate` stays typed.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
 struct SliceDoc {
     id: u32,
@@ -1103,13 +1098,11 @@ struct SliceDoc {
     created: String,
     updated: String,
     #[serde(default)]
-    relationships: Relationships,
-    #[serde(default)]
     gate: Gate,
 }
 
-// note: `relationships` and `gate` carry `#[serde(default)]` so a hand-trimmed file
-// with no `[relationships]` / `[gate]` table still parses.
+// note: `gate` carries `#[serde(default)]` so a hand-trimmed file with no `[gate]`
+// table still parses.
 
 /// The authored `[gate]` table (D-B5): the closure-gate's *declared* requirement
 /// term — an additive, risk-calibrated list the slice's own closure gate is
@@ -1148,24 +1141,28 @@ pub(crate) fn run_show(
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let id = parse_ref(reference)?;
-    let (doc, body) = read_slice(&root.join(SLICE_DIR), id)?;
+    let (doc, toml_text, body) = read_slice(&root.join(SLICE_DIR), id)?;
+    // Tier-1 relations now live in `[[relation]]`, read generically (SL-048 PHASE-04).
+    let tier1 = crate::relation::tier1_edges(&SLICE_KIND, &toml_text)?;
     let out = match format {
         Format::Table => {
             // Advisory posture (F19): the displayed (current) state's exit posture.
             let cfg = load_conduct(&root)?;
             let posture = crate::conduct::resolve(&cfg, &doc.status);
-            format_show(&doc, &body, posture)
+            format_show(&doc, &tier1, &body, posture)
         }
         // JSON stays byte-stable — posture is a Table-line addition only (design §5.2).
-        Format::Json => show_json(&doc, &body)?,
+        Format::Json => show_json(&doc, &tier1, &body)?,
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
 }
 
 /// Read one slice's `slice-NNN.toml` (as data) and `slice-NNN.md` (scope body)
-/// ONLY — never design/plan/notes (A-5).
-fn read_slice(slice_root: &Path, id: u32) -> anyhow::Result<(SliceDoc, String)> {
+/// ONLY — never design/plan/notes (A-5). Returns the parsed `SliceDoc`, the raw TOML
+/// `text` (so the tier-1 `[[relation]]` block can be read by `relation::read_block` —
+/// SL-048 PHASE-04), and the scope body.
+fn read_slice(slice_root: &Path, id: u32) -> anyhow::Result<(SliceDoc, String, String)> {
     let name = format!("{id:03}");
     let dir = slice_root.join(&name);
     let toml_path = dir.join(format!("slice-{name}.toml"));
@@ -1176,38 +1173,38 @@ fn read_slice(slice_root: &Path, id: u32) -> anyhow::Result<(SliceDoc, String)> 
     let md_path = dir.join(format!("slice-{name}.md"));
     let body = fs::read_to_string(&md_path)
         .with_context(|| format!("Failed to read {}", md_path.display()))?;
-    Ok((doc, body))
+    Ok((doc, text, body))
 }
 
-/// The slice's authored outbound relations (SL-046 §5.2 extraction seam): the
-/// `[relationships]` axes `specs`/`requirements`/`supersedes`, each ref one
-/// [`RelationEdge`]. Reads via the existing `read_slice` show-path reader (no new
-/// TOML parse — cohesion); an empty axis emits nothing. Ordering follows the axis
-/// order then the authored ref order (deterministic — REQ-077).
+/// The slice's authored outbound relations (SL-046 §5.2 extraction seam). SL-048
+/// PHASE-04 (the cut): the tier-1 axes (`specs`/`requirements`/`supersedes`/
+/// `governed_by`) now live in uniform `[[relation]]` rows, read generically via
+/// `relation::tier1_edges` in canonical [`RELATION_RULES`] order (X1). Slice has NO
+/// typed tier-2/3 leftovers, so the tier-1 edges ARE the whole edge set. Reads the
+/// raw `slice-NNN.toml` text via the show-path reader (no new TOML parse — cohesion).
 pub(crate) fn relation_edges(
     root: &Path,
     id: u32,
 ) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
-    use crate::relation::{RelationEdge, RelationLabel};
-    let (doc, _body) = read_slice(&root.join(SLICE_DIR), id)?;
-    let rel = &doc.relationships;
-    let mut edges = Vec::new();
-    for (label, refs) in [
-        (RelationLabel::Specs, &rel.specs),
-        (RelationLabel::Requirements, &rel.requirements),
-        (RelationLabel::Supersedes, &rel.supersedes),
-    ] {
-        edges.extend(refs.iter().map(|t| RelationEdge::new(label, t.clone())));
-    }
-    Ok(edges)
+    let (_doc, toml_text, _body) = read_slice(&root.join(SLICE_DIR), id)?;
+    crate::relation::tier1_edges(&SLICE_KIND, &toml_text)
 }
 
 /// Render the readable whole for `Table` mode: an identity header, the flat
 /// fields, the advisory conduct posture line (`resolve(current)`, F15/F19), the
 /// non-empty relationship axes, then the scope body verbatim. House style:
 /// `Vec<String>` parts joined by `concat` (avoids the `push_str(&format!)`
-/// lint). Metadata + scope only (A-5).
-fn format_show(doc: &SliceDoc, body: &str, posture: crate::conduct::Conduct) -> String {
+/// lint). Metadata + scope only (A-5). SL-048 PHASE-04: the tier-1 axes come from
+/// `tier1` (read via `read_block`), not a typed `[relationships]` table; the new
+/// `governed_by` axis renders only when populated (additive — no current slice
+/// authors it, so render output is byte-identical across the migration).
+fn format_show(
+    doc: &SliceDoc,
+    tier1: &[crate::relation::RelationEdge],
+    body: &str,
+    posture: crate::conduct::Conduct,
+) -> String {
+    use crate::relation::{RelationLabel, targets_for};
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("{} — {}\n", canonical_id(doc.id), doc.title));
     parts.push(format!("{} · {}\n", doc.slug, doc.status));
@@ -1218,14 +1215,20 @@ fn format_show(doc: &SliceDoc, body: &str, posture: crate::conduct::Conduct) -> 
         doc.created, doc.updated
     ));
 
-    let rel = &doc.relationships;
-    if !rel.specs.is_empty() || !rel.requirements.is_empty() || !rel.supersedes.is_empty() {
+    // Tier-1 axes in canonical order (specs, requirements, supersedes, governed_by);
+    // each renders only when non-empty, the block only when any axis is populated.
+    let axes = [
+        ("specs", targets_for(tier1, RelationLabel::Specs)),
+        (
+            "requirements",
+            targets_for(tier1, RelationLabel::Requirements),
+        ),
+        ("supersedes", targets_for(tier1, RelationLabel::Supersedes)),
+        ("governed_by", targets_for(tier1, RelationLabel::GovernedBy)),
+    ];
+    if axes.iter().any(|(_, refs)| !refs.is_empty()) {
         parts.push("\nrelationships:\n".to_string());
-        for (label, refs) in [
-            ("specs", &rel.specs),
-            ("requirements", &rel.requirements),
-            ("supersedes", &rel.supersedes),
-        ] {
+        for (label, refs) in &axes {
             if !refs.is_empty() {
                 parts.push(format!("  {label}: {}\n", refs.join(", ")));
             }
@@ -1238,8 +1241,47 @@ fn format_show(doc: &SliceDoc, body: &str, posture: crate::conduct::Conduct) -> 
 
 /// Render the `Json` show: the faithful toml-as-data (`SliceDoc`) plus the scope
 /// body, under the shared `{kind, …}` envelope. Metadata + scope only (A-5).
-fn show_json(doc: &SliceDoc, body: &str) -> anyhow::Result<String> {
-    let value = serde_json::json!({ "kind": "slice", "slice": doc, "body": body });
+///
+/// SL-048 PHASE-04 (R2-C2′): the tier-1 relations migrated out of the typed struct
+/// into `[[relation]]`, so the serialized `SliceDoc` no longer carries them — they
+/// are reconstructed here from `tier1` (read via `read_block`) and spliced back into
+/// the `slice` object under the SAME `relationships` key, preserving the byte-exact
+/// JSON shape (OD-2). The three legacy axes (`requirements`/`specs`/`supersedes`) are
+/// ALWAYS present (empty `[]` when unauthored — the pre-migration struct-default
+/// shape); the new `governed_by` axis is emitted only when populated (additive — no
+/// current slice authors it, so the object is byte-identical across the migration).
+/// `serde_json` sorts object keys, so the emitted order is alphabetical (unchanged).
+fn show_json(
+    doc: &SliceDoc,
+    tier1: &[crate::relation::RelationEdge],
+    body: &str,
+) -> anyhow::Result<String> {
+    use crate::relation::{RelationLabel, targets_for};
+    let mut relationships = serde_json::Map::new();
+    relationships.insert(
+        "specs".to_string(),
+        serde_json::json!(targets_for(tier1, RelationLabel::Specs)),
+    );
+    relationships.insert(
+        "requirements".to_string(),
+        serde_json::json!(targets_for(tier1, RelationLabel::Requirements)),
+    );
+    relationships.insert(
+        "supersedes".to_string(),
+        serde_json::json!(targets_for(tier1, RelationLabel::Supersedes)),
+    );
+    let governed_by = targets_for(tier1, RelationLabel::GovernedBy);
+    if !governed_by.is_empty() {
+        relationships.insert("governed_by".to_string(), serde_json::json!(governed_by));
+    }
+    let mut slice = serde_json::to_value(doc).context("failed to serialize slice doc")?;
+    if let Some(obj) = slice.as_object_mut() {
+        obj.insert(
+            "relationships".to_string(),
+            serde_json::Value::Object(relationships),
+        );
+    }
+    let value = serde_json::json!({ "kind": "slice", "slice": slice, "body": body });
     serde_json::to_string_pretty(&value).context("failed to serialize slice show JSON")
 }
 
@@ -2138,18 +2180,21 @@ mod tests {
         let root = dir.path();
         make_slice(root, "my-slug", "My Title", "2026-06-04");
 
-        let (doc, body) = read_slice(&slice_root(root), 1).unwrap();
+        let (doc, toml_text, body) = read_slice(&slice_root(root), 1).unwrap();
         assert_eq!(doc.id, 1);
         assert_eq!(doc.slug, "my-slug");
         assert_eq!(doc.status, "proposed");
-        // the inert relationships table parses as data (empty by default).
-        assert!(doc.relationships.specs.is_empty());
+        // SL-048: tier-1 relations come from the `[[relation]]` block; a virgin slice
+        // has none, so `read_block` yields no edges.
+        let edges = crate::relation::tier1_edges(&SLICE_KIND, &toml_text).unwrap();
+        assert!(edges.is_empty());
         // the md scope body is read verbatim.
         assert!(body.contains("My Title"));
     }
 
     #[test]
     fn format_show_renders_identity_and_scope_body() {
+        use crate::relation::{RelationEdge, RelationLabel};
         let doc = SliceDoc {
             id: 25,
             slug: "uniform-cli".into(),
@@ -2157,17 +2202,14 @@ mod tests {
             status: "started".into(),
             created: "2026-06-01".into(),
             updated: "2026-06-08".into(),
-            relationships: Relationships {
-                specs: vec!["PRD-010".into()],
-                requirements: vec![],
-                supersedes: vec![],
-            },
             gate: Gate::default(),
         };
+        // SL-048: tier-1 edges are passed in (read from `[[relation]]`), not a struct.
+        let tier1 = vec![RelationEdge::new(RelationLabel::Specs, "PRD-010".into())];
         // `started` defaults to self/auto (no plan/reconcile gate) — VT-3 show side.
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
-        let out = format_show(&doc, "# Scope\n\nthe scope body.\n", posture);
+        let out = format_show(&doc, &tier1, "# Scope\n\nthe scope body.\n", posture);
         assert!(out.contains("SL-025 — Uniform CLI"), "identity: {out}");
         assert!(out.contains("uniform-cli · started"), "flat fields: {out}");
         assert!(out.contains("conduct: self/auto"), "conduct posture: {out}");
@@ -2191,11 +2233,12 @@ mod tests {
         fs::write(sr.join("001/plan.md"), "PLAN_SECRET").unwrap();
         fs::write(sr.join("001/notes.md"), "NOTES_SECRET").unwrap();
 
-        let (doc, body) = read_slice(&sr, 1).unwrap();
+        let (doc, toml_text, body) = read_slice(&sr, 1).unwrap();
+        let tier1 = crate::relation::tier1_edges(&SLICE_KIND, &toml_text).unwrap();
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
-        let table = format_show(&doc, &body, posture);
-        let json = show_json(&doc, &body).unwrap();
+        let table = format_show(&doc, &tier1, &body, posture);
+        let json = show_json(&doc, &tier1, &body).unwrap();
         for needle in ["DESIGN_SECRET", "PLAN_SECRET", "NOTES_SECRET"] {
             assert!(!table.contains(needle), "table leaked {needle}: {table}");
             assert!(!json.contains(needle), "json leaked {needle}: {json}");
@@ -2207,15 +2250,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         make_slice(root, "my-slug", "My Title", "2026-06-04");
-        let (doc, body) = read_slice(&slice_root(root), 1).unwrap();
+        let (doc, toml_text, body) = read_slice(&slice_root(root), 1).unwrap();
+        let tier1 = crate::relation::tier1_edges(&SLICE_KIND, &toml_text).unwrap();
 
-        let out = show_json(&doc, &body).unwrap();
+        let out = show_json(&doc, &tier1, &body).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(parsed["kind"], "slice");
         assert_eq!(parsed["slice"]["id"], 1);
         assert_eq!(parsed["slice"]["slug"], "my-slug");
         assert_eq!(parsed["slice"]["status"], "proposed");
+        // SL-048: the `relationships` object is reconstructed from `[[relation]]`; the
+        // three legacy axes are always present (empty `[]` here — a virgin slice).
         assert!(parsed["slice"]["relationships"]["specs"].is_array());
+        assert!(parsed["slice"]["relationships"]["requirements"].is_array());
+        assert!(parsed["slice"]["relationships"]["supersedes"].is_array());
         assert!(parsed["body"].as_str().unwrap().contains("My Title"));
     }
 

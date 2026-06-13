@@ -115,7 +115,7 @@ impl RelationLabel {
     /// Drives [`read_block`]'s "label not in the table at all" `IllegalRow` arm (X2);
     /// the exhaustive `match` over `name()` keeps it in lock-step with the enum (a new
     /// variant fails to compile until it is added here).
-    fn from_name(name: &str) -> Option<RelationLabel> {
+    pub(crate) fn from_name(name: &str) -> Option<RelationLabel> {
         let label = match name {
             "specs" => RelationLabel::Specs,
             "requirements" => RelationLabel::Requirements,
@@ -535,6 +535,78 @@ fn canonical_position(source: &Kind, label: RelationLabel) -> Option<usize> {
     RELATION_RULES
         .iter()
         .position(|r| r.label == label && r.sources.iter().any(|k| k.prefix == source.prefix))
+}
+
+/// The live-reader convenience seam (PHASE-04): parse the `[[relation]]` block out of
+/// one entity's authored TOML `text` and return only the **legal** tier-1 edges, in
+/// canonical [`RELATION_RULES`] order (X1). The illegal findings are dropped here —
+/// the show / `relation_edges` paths surface only live edges; `validate` (PHASE-05) is
+/// the sole consumer of [`IllegalRow`]s. The per-kind `relation_edges`/`format_show`/
+/// `show_json` consumers call this for their tier-1 edges, then concatenate their own
+/// typed tier-2/3 edges (the X1 merge order, §5.3 point 3).
+pub(crate) fn tier1_edges(source_kind: &Kind, text: &str) -> anyhow::Result<Vec<RelationEdge>> {
+    let doc = RelationDoc::parse(text)?;
+    let (edges, _illegal) = read_block(source_kind, &doc);
+    Ok(edges)
+}
+
+/// The targets of one tier-1 `label` among `edges`, in their canonical-then-authored
+/// order — the projection the `format_show` / `show_json` consumers splice per axis
+/// (e.g. slice's `specs` line, the reconstructed JSON `relationships.specs` array).
+/// An axis with no edges yields an empty `Vec`, matching the read-tolerant empty-axis
+/// convention every kind's relationship renderer already follows.
+pub(crate) fn targets_for(edges: &[RelationEdge], label: RelationLabel) -> Vec<String> {
+    edges
+        .iter()
+        .filter(|e| e.label == label)
+        .map(|e| e.target.clone())
+        .collect()
+}
+
+/// Test-only fixture helper (SL-048 PHASE-04): render an entity's relations in the
+/// MIGRATED on-disk shape from structured `axes` — each `(label, targets)`. An axis
+/// whose `(source, label)` is a tier-1 migrated rule (`Tier::One` AND NOT the
+/// storage-excluded gov `supersedes`, OD-3) becomes `[[relation]]` rows; every other
+/// axis (typed tier-2/3, gov `supersedes`, or a non-relation key like `tags`/
+/// `superseded_by`) stays in a `[relationships]` table emitted FIRST (F1 — typed
+/// tables precede all arrays-of-tables). Mirrors what the one-shot corpus migrator
+/// produces, so unit fixtures exercise the post-cut shape the live readers expect.
+#[cfg(test)]
+pub(crate) fn rels_block(source: &Kind, axes: &[(&str, &[&str])]) -> String {
+    let migrated = |label: RelationLabel| -> bool {
+        // Tier-1 AND link-writable-or-not-lifecycle: the migration moves a label iff
+        // it is `Tier::One` and not the OD-3-excluded gov supersedes (LifecycleOnly).
+        lookup(source, label)
+            .map(|r| r.tier == Tier::One && r.link != LinkPolicy::LifecycleOnly)
+            .unwrap_or(false)
+    };
+    let mut typed = String::new();
+    let mut rows = String::new();
+    for (label, targets) in axes {
+        let is_migrated = RelationLabel::from_name(label)
+            .map(migrated)
+            .unwrap_or(false);
+        if is_migrated {
+            for t in *targets {
+                rows.push_str(&format!(
+                    "[[relation]]\nlabel = \"{label}\"\ntarget = \"{t}\"\n"
+                ));
+            }
+        } else {
+            let list = targets
+                .iter()
+                .map(|t| format!("\"{t}\""))
+                .collect::<Vec<_>>()
+                .join(", ");
+            typed.push_str(&format!("{label} = [{list}]\n"));
+        }
+    }
+    let typed_table = if typed.is_empty() {
+        String::new()
+    } else {
+        format!("[relationships]\n{typed}")
+    };
+    format!("{typed_table}{rows}")
 }
 
 #[cfg(test)]

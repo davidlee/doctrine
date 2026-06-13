@@ -4,8 +4,6 @@ title = "Cache-friendly session boot context"
 status = "done"
 created = "2026-06-05"
 updated = "2026-06-05"
-
-[relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
 # When specs land, this section gains (illustrative, not v1):
 #   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates

@@ -18,9 +18,10 @@ origin     = "SL-039 PHASE-02 codex adversarial review"
 controls   = ["project enforces distinct ItemIds at the projection boundary (DD4, src/backlog.rs)"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
-slices = ["SL-039"]
-specs  = []
-drift  = []
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "slices"
+target = "SL-039"

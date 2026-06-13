@@ -231,14 +231,16 @@ mod tests {
         EntityKey { prefix, id }
     }
 
-    /// Seed a slice with a given lifecycle status and a `[relationships]` body.
-    fn seed_slice(root: &Path, id: u32, status: &str, rels: &str) {
+    /// Seed a slice with a given lifecycle status and relations (SL-048 migrated
+    /// shape — tier-1 axes become `[[relation]]` rows, typed leftovers a table).
+    fn seed_slice(root: &Path, id: u32, status: &str, axes: &[(&str, &[&str])]) {
+        let rels = crate::relation::rels_block(&crate::slice::SLICE_KIND, axes);
         write(
             root,
             &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
             &format!(
                 "id = {id}\nslug = \"s\"\ntitle = \"S\"\nstatus = \"{status}\"\n\
-                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[relationships]\n{rels}"
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{rels}"
             ),
         );
         write(
@@ -248,15 +250,16 @@ mod tests {
         );
     }
 
-    /// Seed a backlog issue with status, resolution, and a `[relationships]` body.
-    fn seed_issue(root: &Path, id: u32, status: &str, resolution: &str, rels: &str) {
+    /// Seed a backlog issue with status, resolution, and relations (migrated shape).
+    fn seed_issue(root: &Path, id: u32, status: &str, resolution: &str, axes: &[(&str, &[&str])]) {
+        let rels = crate::relation::rels_block(&crate::backlog::ISSUE_KIND, axes);
         write(
             root,
             &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.toml"),
             &format!(
                 "id = {id}\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"{status}\"\n\
                  resolution = \"{resolution}\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-                 [relationships]\n{rels}"
+                 {rels}"
             ),
         );
         write(
@@ -267,14 +270,15 @@ mod tests {
     }
 
     /// Seed a risk backlog item (a second backlog kind for prereqs).
-    fn seed_risk(root: &Path, id: u32, status: &str, rels: &str) {
+    fn seed_risk(root: &Path, id: u32, status: &str, axes: &[(&str, &[&str])]) {
+        let rels = crate::relation::rels_block(&crate::backlog::RISK_KIND, axes);
         write(
             root,
             &format!(".doctrine/backlog/risk/{id:03}/backlog-{id:03}.toml"),
             &format!(
                 "id = {id}\nslug = \"k\"\ntitle = \"K\"\nkind = \"risk\"\nstatus = \"{status}\"\n\
                  resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-                 [relationships]\n{rels}"
+                 {rels}"
             ),
         );
         write(
@@ -317,7 +321,7 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // ISS-001 open (workable) with no prereqs → actionable.
-        seed_issue(root, 1, "open", "", "");
+        seed_issue(root, 1, "open", "", &[]);
         let g = build(root).unwrap();
         let n = key("ISS", 1);
         assert!(eligible(&g, n), "open issue is eligible");
@@ -330,8 +334,8 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // ISS-001 needs RSK-001; RSK-001 is open (non-terminal) → blocks.
-        seed_issue(root, 1, "open", "", "needs = [\"RSK-001\"]\n");
-        seed_risk(root, 1, "open", "");
+        seed_issue(root, 1, "open", "", &[("needs", &["RSK-001"])]);
+        seed_risk(root, 1, "open", &[]);
         let g = build(root).unwrap();
         let n = key("ISS", 1);
         assert!(eligible(&g, n), "open issue is eligible");
@@ -345,8 +349,8 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // ISS-001 needs RSK-001; RSK-001 is closed (terminal) → satisfied, no block.
-        seed_issue(root, 1, "open", "", "needs = [\"RSK-001\"]\n");
-        seed_risk(root, 1, "closed", "");
+        seed_issue(root, 1, "open", "", &[("needs", &["RSK-001"])]);
+        seed_risk(root, 1, "closed", &[]);
         let g = build(root).unwrap();
         let n = key("ISS", 1);
         assert!(
@@ -361,8 +365,8 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // A done slice (terminal) and a closed issue (terminal) are not eligible.
-        seed_slice(root, 1, "done", "");
-        seed_issue(root, 1, "closed", "", "");
+        seed_slice(root, 1, "done", &[]);
+        seed_issue(root, 1, "closed", "", &[]);
         let g = build(root).unwrap();
         assert!(!eligible(&g, key("SL", 1)), "done slice not eligible");
         assert!(!actionable(&g, key("SL", 1)));
@@ -374,8 +378,8 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // VT-2 boundary: audit / reconcile slice statuses are WORKABLE.
-        seed_slice(root, 1, "audit", "");
-        seed_slice(root, 2, "reconcile", "");
+        seed_slice(root, 1, "audit", &[]);
+        seed_slice(root, 2, "reconcile", &[]);
         let g = build(root).unwrap();
         assert!(eligible(&g, key("SL", 1)), "audit slice is workable");
         assert!(actionable(&g, key("SL", 1)));
@@ -389,7 +393,7 @@ mod tests {
     fn rec_status_less_is_not_eligible() {
         let dir = tmp();
         let root = dir.path();
-        seed_slice(root, 1, "proposed", "");
+        seed_slice(root, 1, "proposed", &[]);
         seed_rec(root, 1, "SL-001");
         let g = build(root).unwrap();
         // REC None → Terminal class → not eligible, not actionable.
@@ -403,7 +407,7 @@ mod tests {
         let root = dir.path();
         // A slice with a status outside the table (stringly status tolerated on disk)
         // rides Unrecognised → not eligible (the conservative default).
-        seed_slice(root, 1, "frobnicate", "");
+        seed_slice(root, 1, "frobnicate", &[]);
         let g = build(root).unwrap();
         assert!(
             !eligible(&g, key("SL", 1)),
@@ -417,8 +421,8 @@ mod tests {
         let root = dir.path();
         // EX-3: a promoted (resolution=promoted) backlog node is excluded regardless
         // of status class — surfaced as its OWN reason (F1), distinct from terminal.
-        seed_issue(root, 1, "resolved", "promoted", "");
-        seed_issue(root, 2, "open", "", "");
+        seed_issue(root, 1, "resolved", "promoted", &[]);
+        seed_issue(root, 2, "open", "", &[]);
         let g = build(root).unwrap();
         assert!(
             promoted(&g, key("ISS", 1)),
@@ -437,8 +441,8 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // ISS-001 needs RSK-001 → RSK-001 is blocking ISS-001.
-        seed_issue(root, 1, "open", "", "needs = [\"RSK-001\"]\n");
-        seed_risk(root, 1, "open", "");
+        seed_issue(root, 1, "open", "", &[("needs", &["RSK-001"])]);
+        seed_risk(root, 1, "open", &[]);
         let g = build(root).unwrap();
         assert_eq!(
             blocking(&g, key("RSK", 1)),
@@ -456,8 +460,8 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // Two slices' `requirements` edges onto REQ-005 (work/lineage) raise its tally.
-        seed_slice(root, 1, "proposed", "requirements = [\"REQ-005\"]\n");
-        seed_slice(root, 2, "proposed", "requirements = [\"REQ-005\"]\n");
+        seed_slice(root, 1, "proposed", &[("requirements", &["REQ-005"])]);
+        seed_slice(root, 2, "proposed", &[("requirements", &["REQ-005"])]);
         seed_requirement(root, 5);
         let g = build(root).unwrap();
         assert_eq!(consequence(&g, key("REQ", 5)), 2);
@@ -473,10 +477,10 @@ mod tests {
         // ISS-001 needs ISS-002, ISS-002 needs ISS-001 → a dep cycle. cordage Reject
         // preserves the edges and still yields ordered(); dep_cycles names the
         // component; ordering elsewhere is unaffected.
-        seed_issue(root, 1, "open", "", "needs = [\"ISS-002\"]\n");
-        seed_issue(root, 2, "open", "", "needs = [\"ISS-001\"]\n");
+        seed_issue(root, 1, "open", "", &[("needs", &["ISS-002"])]);
+        seed_issue(root, 2, "open", "", &[("needs", &["ISS-001"])]);
         // A separate, acyclic slice — its order is unaffected.
-        seed_slice(root, 9, "proposed", "");
+        seed_slice(root, 9, "proposed", &[]);
         let g = build(root).unwrap();
 
         let cycles = dep_cycles(&g);
@@ -502,8 +506,8 @@ mod tests {
     fn no_cycle_means_no_diagnostic() {
         let dir = tmp();
         let root = dir.path();
-        seed_issue(root, 1, "open", "", "needs = [\"RSK-001\"]\n");
-        seed_risk(root, 1, "open", "");
+        seed_issue(root, 1, "open", "", &[("needs", &["RSK-001"])]);
+        seed_risk(root, 1, "open", &[]);
         let g = build(root).unwrap();
         assert!(dep_cycles(&g).is_empty(), "acyclic corpus → no cycles");
     }
@@ -518,18 +522,22 @@ mod tests {
             let dir = tmp();
             let root = dir.path().to_path_buf();
             let pieces: [&dyn Fn(&Path); 5] = [
-                &|r: &Path| seed_issue(r, 1, "open", "", "needs = [\"RSK-001\"]\n"),
+                &|r: &Path| seed_issue(r, 1, "open", "", &[("needs", &["RSK-001"])]),
+                // `after` carries a per-edge payload (a typed tier-2 axis, NOT migrated
+                // to `[[relation]]`), so it is seeded directly as a `[relationships]`
+                // table rather than through the simple-list `axes` seam.
                 &|r: &Path| {
-                    seed_issue(
+                    write(
                         r,
-                        2,
-                        "open",
-                        "",
-                        "after = [{ to = \"ISS-001\", rank = 0 }]\n",
-                    )
+                        ".doctrine/backlog/issue/002/backlog-002.toml",
+                        "id = 2\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
+                         resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+                         [relationships]\nafter = [{ to = \"ISS-001\", rank = 0 }]\n",
+                    );
+                    write(r, ".doctrine/backlog/issue/002/backlog-002.md", "b\n");
                 },
-                &|r: &Path| seed_risk(r, 1, "open", ""),
-                &|r: &Path| seed_slice(r, 5, "design", "requirements = [\"REQ-007\"]\n"),
+                &|r: &Path| seed_risk(r, 1, "open", &[]),
+                &|r: &Path| seed_slice(r, 5, "design", &[("requirements", &["REQ-007"])]),
                 &|r: &Path| seed_requirement(r, 7),
             ];
             // Two distinct seeding orders over the same logical corpus.

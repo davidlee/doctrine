@@ -157,14 +157,19 @@ fn gov_rows(g: &GovKind, metas: &[Meta]) -> Vec<GovRow> {
 /// The inert `[relationships]` table, read as data for `show` (preserved on disk,
 /// ignored by `Meta`). Every axis defaults to empty so a hand-trimmed file still
 /// parses. Replaces the per-kind `Relationships`.
+///
+/// SL-048 PHASE-04 (the cut, OD-3): the `related` axis migrated to uniform
+/// `[[relation]]` rows (read via `relation::read_block`), so it is NO LONGER a typed
+/// field here. The supersession PAIR (`supersedes` + its ADR-004 §5 carve-out reverse
+/// `superseded_by`) and `tags` (free-text classification, not entity refs) stay TYPED
+/// — `supersedes` excluded from migration until IMP-006 builds the transactional
+/// supersede verb, `superseded_by`/`tags` never were tier-1.
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
 struct Relationships {
     #[serde(default)]
     supersedes: Vec<String>,
     #[serde(default)]
     superseded_by: Vec<String>,
-    #[serde(default)]
-    related: Vec<String>,
     #[serde(default)]
     tags: Vec<String>,
 }
@@ -202,7 +207,9 @@ fn parse_ref(g: &GovKind, reference: &str) -> anyhow::Result<u32> {
 }
 
 /// Read one entity's `<stem>-NNN.toml` (as data) and `<stem>-NNN.md` (prose body).
-fn read_doc(g: &GovKind, gov_root: &Path, id: u32) -> anyhow::Result<(Doc, String)> {
+/// Returns the parsed `Doc`, the raw TOML `text` (so the tier-1 `related` `[[relation]]`
+/// rows can be read by `relation::read_block` — SL-048 PHASE-04), and the prose body.
+fn read_doc(g: &GovKind, gov_root: &Path, id: u32) -> anyhow::Result<(Doc, String, String)> {
     let name = format!("{id:03}");
     let dir = gov_root.join(&name);
     let toml_path = dir.join(format!("{}-{name}.toml", g.stem));
@@ -213,7 +220,7 @@ fn read_doc(g: &GovKind, gov_root: &Path, id: u32) -> anyhow::Result<(Doc, Strin
     let md_path = dir.join(format!("{}-{name}.md", g.stem));
     let body = fs::read_to_string(&md_path)
         .with_context(|| format!("Failed to read {}", md_path.display()))?;
-    Ok((doc, body))
+    Ok((doc, text, body))
 }
 
 /// A governance entity's authored outbound relations (SL-046 §5.2). Emits
@@ -228,16 +235,22 @@ pub(crate) fn relation_edges(
     root: &Path,
     id: u32,
 ) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
-    use crate::relation::{RelationEdge, RelationLabel};
-    let (doc, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
-    let rel = &doc.relationships;
+    use crate::relation::{RelationEdge, RelationLabel, tier1_edges};
+    let (doc, toml_text, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    // OD-3 split: `supersedes` stays TYPED (storage-excluded from the migration), so
+    // it is emitted from the typed field; `related` migrated to `[[relation]]`, so it
+    // is read generically. Canonical order is supersedes → related (RELATION_RULES).
     let mut edges = Vec::new();
-    for (label, refs) in [
-        (RelationLabel::Supersedes, &rel.supersedes),
-        (RelationLabel::Related, &rel.related),
-    ] {
-        edges.extend(refs.iter().map(|t| RelationEdge::new(label, t.clone())));
-    }
+    edges.extend(
+        doc.relationships
+            .supersedes
+            .iter()
+            .map(|t| RelationEdge::new(RelationLabel::Supersedes, t.clone())),
+    );
+    // `read_block` for a governance source emits only `related` (its sole tier-1
+    // migrated label — `supersedes` is read above from the typed field and a gov
+    // `[[relation]]` row carries only `related`).
+    edges.extend(tier1_edges(&g.kind, &toml_text)?);
     Ok(edges)
 }
 
@@ -245,7 +258,12 @@ pub(crate) fn relation_edges(
 /// fields, the non-empty relationship axes, then the prose body verbatim. House
 /// style: `Vec<String>` parts each carrying their own newline, joined by `concat`
 /// (the `backlog::format_show` precedent — avoids the `push_str(&format!)` lint).
-fn format_show(g: &GovKind, doc: &Doc, body: &str) -> String {
+///
+/// SL-048 PHASE-04 (OD-3): `supersedes`/`superseded_by`/`tags` stay TYPED (read from
+/// the struct); only `related` is reconstructed from the migrated `[[relation]]` block
+/// (passed in as `related`). The axis render order is unchanged (`supersedes` →
+/// `superseded_by` → `related` → `tags`), so output is byte-identical across the migration.
+fn format_show(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
         "{} — {}\n",
@@ -261,14 +279,14 @@ fn format_show(g: &GovKind, doc: &Doc, body: &str) -> String {
     let rel = &doc.relationships;
     if !rel.supersedes.is_empty()
         || !rel.superseded_by.is_empty()
-        || !rel.related.is_empty()
+        || !related.is_empty()
         || !rel.tags.is_empty()
     {
         parts.push("\nrelationships:\n".to_string());
         for (label, refs) in [
             ("supersedes", &rel.supersedes),
             ("superseded_by", &rel.superseded_by),
-            ("related", &rel.related),
+            ("related", &related.to_vec()),
             ("tags", &rel.tags),
         ] {
             if !refs.is_empty() {
@@ -286,17 +304,31 @@ fn format_show(g: &GovKind, doc: &Doc, body: &str) -> String {
 /// key forces a hand-built `serde_json::Map` — the `json!` macro cannot take a
 /// runtime key (design R2). Keys serialize BTreeMap-sorted (no `preserve_order`)
 /// with no trailing newline — the contract the black-box golden pins.
-fn show_json(g: &GovKind, doc: &Doc, body: &str) -> anyhow::Result<String> {
+///
+/// SL-048 PHASE-04 (R2-C2′ / OD-3): `related` migrated out of the typed `Doc` into
+/// `[[relation]]`, so the serialized `Doc` no longer carries it — it is reconstructed
+/// from `related` (read via `read_block`) and spliced back into the `relationships`
+/// object under the SAME `related` key, preserving the byte-exact JSON shape (OD-2;
+/// all four axes present, `[]` when empty). `serde_json` sorts object keys, so the
+/// emitted `relationships` key order (`related`, `superseded_by`, `supersedes`,
+/// `tags`) is unchanged across the migration.
+fn show_json(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> anyhow::Result<String> {
     let mut map = serde_json::Map::new();
     map.insert(
         "kind".to_string(),
         serde_json::Value::String(g.stem.to_string()),
     );
-    map.insert(
-        g.stem.to_string(),
-        serde_json::to_value(doc)
-            .with_context(|| format!("failed to serialize {} show JSON", g.stem))?,
-    );
+    let mut doc_value =
+        serde_json::to_value(doc).with_context(|| format!("failed to serialize {}", g.stem))?;
+    // Splice the migrated `related` axis back into the `relationships` object so the
+    // JSON shape is byte-identical to the pre-migration typed-field serialization.
+    if let Some(rel) = doc_value
+        .get_mut("relationships")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        rel.insert("related".to_string(), serde_json::json!(related));
+    }
+    map.insert(g.stem.to_string(), doc_value);
     map.insert(
         "body".to_string(),
         serde_json::Value::String(body.to_string()),
@@ -418,10 +450,15 @@ pub(crate) fn run_show(
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let id = parse_ref(g, reference)?;
-    let (doc, body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    let (doc, toml_text, body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    // OD-3: only `related` migrated to `[[relation]]`; read it generically.
+    let related: Vec<String> = crate::relation::tier1_edges(&g.kind, &toml_text)?
+        .into_iter()
+        .map(|e| e.target)
+        .collect();
     let out = match format {
-        Format::Table => format_show(g, &doc, &body),
-        Format::Json => show_json(g, &doc, &body)?,
+        Format::Table => format_show(g, &doc, &related, &body),
+        Format::Json => show_json(g, &doc, &related, &body)?,
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
@@ -950,7 +987,7 @@ mod tests {
         )
         .unwrap();
 
-        let (doc, body) = read_doc(&ADR_KIND, &adr_root(root), 1).unwrap();
+        let (doc, _toml_text, body) = read_doc(&ADR_KIND, &adr_root(root), 1).unwrap();
         assert_eq!(doc.id, 1);
         assert_eq!(doc.slug, "use-rust");
         assert_eq!(doc.status, "proposed");
@@ -973,15 +1010,17 @@ mod tests {
             relationships: Relationships {
                 supersedes: vec!["ADR-003".into()],
                 superseded_by: vec![],
-                related: vec![],
                 tags: vec!["lang".into()],
             },
         };
-        let out = format_show(&ADR_KIND, &doc, "# ADR-007: Use Rust\n\nbody.\n");
+        // SL-048: `related` is now passed in (read from `[[relation]]`), not a field.
+        let related = vec!["ADR-004".to_string()];
+        let out = format_show(&ADR_KIND, &doc, &related, "# ADR-007: Use Rust\n\nbody.\n");
         assert!(out.contains("ADR-007 — Use Rust"), "identity: {out}");
         assert!(out.contains("use-rust · accepted"), "flat fields: {out}");
         assert!(out.contains("created 2026-06-01 · updated 2026-06-08"));
         assert!(out.contains("supersedes: ADR-003"), "relationships: {out}");
+        assert!(out.contains("related: ADR-004"), "related axis: {out}");
         assert!(out.contains("tags: lang"), "tags axis: {out}");
         assert!(
             out.contains("# ADR-007: Use Rust"),
@@ -1000,16 +1039,18 @@ mod tests {
             None,
         )
         .unwrap();
-        let (doc, body) = read_doc(&ADR_KIND, &adr_root(root), 1).unwrap();
+        let (doc, _toml_text, body) = read_doc(&ADR_KIND, &adr_root(root), 1).unwrap();
 
-        let out = show_json(&ADR_KIND, &doc, &body).unwrap();
+        let out = show_json(&ADR_KIND, &doc, &[], &body).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(parsed["kind"], "adr");
         assert_eq!(parsed["adr"]["id"], 1);
         assert_eq!(parsed["adr"]["slug"], "use-rust");
         assert_eq!(parsed["adr"]["status"], "proposed");
-        // OQ-2: relationships are included (toml-as-data is faithful).
+        // OQ-2: relationships are included (toml-as-data is faithful). SL-048: the
+        // `related` axis is reconstructed from `[[relation]]` and spliced back in.
         assert!(parsed["adr"]["relationships"]["supersedes"].is_array());
+        assert!(parsed["adr"]["relationships"]["related"].is_array());
         assert!(
             parsed["body"].as_str().unwrap().contains("## Context"),
             "body carried in json"

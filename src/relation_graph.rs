@@ -721,10 +721,13 @@ mod tests {
         write(
             &root,
             ".doctrine/slice/001/slice-001.toml",
+            // SL-048 PHASE-04: tier-1 axes migrated to `[[relation]]` rows.
             "id = 1\nslug = \"a\"\ntitle = \"A\"\nstatus = \"proposed\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [relationships]\nspecs = [\"PRD-010\"]\nrequirements = [\"REQ-001\", \"REQ-002\"]\n\
-             supersedes = [\"SL-000\"]\n",
+             [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
+             [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-001\"\n\
+             [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-002\"\n\
+             [[relation]]\nlabel = \"supersedes\"\ntarget = \"SL-000\"\n",
         );
         write(&root, ".doctrine/slice/001/slice-001.md", "scope\n");
         let edges = outbound_for(&root, kind_for("SL"), 1).unwrap();
@@ -747,10 +750,13 @@ mod tests {
         write(
             &root,
             ".doctrine/adr/002/adr-002.toml",
+            // SL-048 PHASE-04 (OD-3): supersedes/superseded_by/tags stay TYPED in a
+            // `[relationships]` table preceding the arrays; only `related` migrates.
             "id = 2\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
              [relationships]\nsupersedes = [\"ADR-001\"]\nsuperseded_by = [\"ADR-009\"]\n\
-             related = [\"ADR-004\"]\ntags = [\"layering\"]\n",
+             tags = [\"layering\"]\n\
+             [[relation]]\nlabel = \"related\"\ntarget = \"ADR-004\"\n",
         );
         write(&root, ".doctrine/adr/002/adr-002.md", "body\n");
         let edges = outbound_for(&root, kind_for("ADR"), 2).unwrap();
@@ -825,21 +831,30 @@ mod tests {
         write(
             &root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
+            // SL-048 PHASE-04: slices/specs/drift migrated to `[[relation]]`; the typed
+            // `needs` axis stays in a `[relationships]` table preceding the arrays (F1).
             "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [relationships]\nslices = [\"SL-020\"]\nspecs = [\"PRD-009\"]\n\
-             drift = [\"some-free-text\"]\nneeds = [\"ISS-002\"]\n",
+             [relationships]\nneeds = [\"ISS-002\"]\n\
+             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-020\"\n\
+             [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-009\"\n\
+             [[relation]]\nlabel = \"drift\"\ntarget = \"some-free-text\"\n",
         );
         write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "b\n");
         let edges = outbound_for(&root, kind_for("ISS"), 1).unwrap();
+        // SL-048 PHASE-04 (X1): `read_block` emits in canonical RELATION_RULES order —
+        // specs (pos 0) precedes slices (pos 10) precedes drift (pos 14). The former
+        // hardcoded accessor order (slices, specs, drift) is replaced; no render golden
+        // depends on the raw accessor order (inspect regroups by enum Ord, which is the
+        // same specs<slices<drift; format_show/show_json keep their own literal order).
         assert_eq!(
             pairs(&edges),
             vec![
-                (RelationLabel::Slices, "SL-020"),
                 (RelationLabel::Specs, "PRD-009"),
+                (RelationLabel::Slices, "SL-020"),
                 (RelationLabel::Drift, "some-free-text"),
             ],
-            "backlog emits slices/specs/drift ONLY (no needs/after/triggers)"
+            "backlog emits slices/specs/drift ONLY (no needs/after/triggers), canonical order"
         );
     }
 
@@ -957,20 +972,22 @@ mod tests {
             .unwrap_or_default()
     }
 
-    /// A minimal slice toml with the given relationships block body.
-    fn slice_toml(id: u32, rels: &str) -> String {
+    /// A minimal slice toml with the given relations, in the SL-048 migrated shape
+    /// (`axes` → `[relationships]` typed leftovers then `[[relation]]` rows).
+    fn slice_toml(id: u32, axes: &[(&str, &[&str])]) -> String {
         format!(
             "id = {id}\nslug = \"s\"\ntitle = \"S\"\nstatus = \"proposed\"\n\
-             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[relationships]\n{rels}"
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{}",
+            crate::relation::rels_block(kind_for("SL"), axes)
         )
     }
 
     /// Seed a slice entity (toml + md) under `root`.
-    fn seed_slice(root: &Path, id: u32, rels: &str) {
+    fn seed_slice(root: &Path, id: u32, axes: &[(&str, &[&str])]) {
         write(
             root,
             &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
-            &slice_toml(id, rels),
+            &slice_toml(id, axes),
         );
         write(
             root,
@@ -979,14 +996,16 @@ mod tests {
         );
     }
 
-    /// Seed an ADR governance entity.
-    fn seed_adr(root: &Path, id: u32, rels: &str) {
+    /// Seed an ADR governance entity (SL-048 migrated shape — only `related` moves to
+    /// `[[relation]]`; supersedes/superseded_by/tags stay typed, OD-3).
+    fn seed_adr(root: &Path, id: u32, axes: &[(&str, &[&str])]) {
         write(
             root,
             &format!(".doctrine/adr/{id:03}/adr-{id:03}.toml"),
             &format!(
                 "id = {id}\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
-                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[relationships]\n{rels}"
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{}",
+                crate::relation::rels_block(kind_for("ADR"), axes)
             ),
         );
         write(
@@ -1005,11 +1024,11 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // SL-002 supersedes SL-001 and requires REQ-005; SL-001 authors nothing.
-        seed_slice(&root, 1, "");
+        seed_slice(&root, 1, &[]);
         seed_slice(
             &root,
             2,
-            "requirements = [\"REQ-005\"]\nsupersedes = [\"SL-001\"]\n",
+            &[("requirements", &["REQ-005"]), ("supersedes", &["SL-001"])],
         );
         // REQ-005 is an edge target only (no outbound).
         write(
@@ -1053,8 +1072,8 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // SL-002 lists SL-001 twice under supersedes (an authoring duplicate).
-        seed_slice(&root, 1, "");
-        seed_slice(&root, 2, "supersedes = [\"SL-001\", \"SL-001\"]\n");
+        seed_slice(&root, 1, &[]);
+        seed_slice(&root, 2, &[("supersedes", &["SL-001", "SL-001"])]);
         let view = inspect(&root, "SL-001").unwrap();
         assert_eq!(
             inbound_for(&view, RelationLabel::Supersedes),
@@ -1075,10 +1094,10 @@ mod tests {
         // Three supersedors of SL-001, planted out of id order on disk; scan_ids is
         // read_dir order (unsorted), so the only thing making the render stable is
         // the ascending sort + the canonical-ref sort in inspect.
-        seed_slice(&root, 1, "");
-        seed_slice(&root, 4, "supersedes = [\"SL-001\"]\n");
-        seed_slice(&root, 2, "supersedes = [\"SL-001\"]\n");
-        seed_slice(&root, 3, "supersedes = [\"SL-001\"]\n");
+        seed_slice(&root, 1, &[]);
+        seed_slice(&root, 4, &[("supersedes", &["SL-001"])]);
+        seed_slice(&root, 2, &[("supersedes", &["SL-001"])]);
+        seed_slice(&root, 3, &[("supersedes", &["SL-001"])]);
         let view = inspect(&root, "SL-001").unwrap();
         assert_eq!(
             inbound_for(&view, RelationLabel::Supersedes),
@@ -1096,8 +1115,8 @@ mod tests {
         let root = dir.path();
         // ADR-002 carries a stored superseded_by = ADR-009 but NO entity authors
         // `supersedes = [ADR-002]`. ADR-009 exists but supersedes nothing.
-        seed_adr(&root, 2, "superseded_by = [\"ADR-009\"]\n");
-        seed_adr(&root, 9, "");
+        seed_adr(&root, 2, &[("superseded_by", &["ADR-009"])]);
+        seed_adr(&root, 9, &[]);
         let view = inspect(&root, "ADR-002").unwrap();
         assert!(
             view.inbound.is_empty(),
@@ -1118,13 +1137,16 @@ mod tests {
         // A backlog issue with a free-text drift, an unresolved slice ref, and a
         // resolvable slice ref. drift → dangler (no DRIFT kind); SL-099 → dangler
         // (no such entity); SL-001 → a real edge.
-        seed_slice(&root, 1, "");
+        seed_slice(&root, 1, &[]);
         write(
             &root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
+            // SL-048 PHASE-04: slices/drift migrated to `[[relation]]` rows.
             "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [relationships]\nslices = [\"SL-001\", \"SL-099\"]\ndrift = [\"some-free-text\"]\n",
+             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-099\"\n\
+             [[relation]]\nlabel = \"drift\"\ntarget = \"some-free-text\"\n",
         );
         write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "b\n");
         let view = inspect(&root, "ISS-001").unwrap();
@@ -1159,7 +1181,7 @@ mod tests {
         let empty = inspect(&root, "SL-001").unwrap();
         // SL-001 is referenced by ISS-001's slices edge → it DOES have inbound;
         // a freshly-isolated no-relation entity proves the empty path instead.
-        seed_slice(&root, 50, "");
+        seed_slice(&root, 50, &[]);
         let lone = inspect(&root, "SL-050").unwrap();
         assert!(lone.outbound.is_empty());
         assert!(lone.inbound.is_empty());
@@ -1174,7 +1196,7 @@ mod tests {
     fn nonexistent_id_is_no_such_entity_error() {
         let dir = tmp();
         let root = dir.path();
-        seed_slice(&root, 1, "");
+        seed_slice(&root, 1, &[]);
         // Well-formed ref, no such entity → the existence gate errors (not an empty view).
         let err = inspect(&root, "SL-999").unwrap_err();
         assert_eq!(
@@ -1190,7 +1212,7 @@ mod tests {
     fn unknown_prefix_clean_error() {
         let dir = tmp();
         let root = dir.path();
-        seed_slice(&root, 1, "");
+        seed_slice(&root, 1, &[]);
         let err = inspect(&root, "ZZZ-001").unwrap_err();
         assert!(
             err.to_string().contains("ZZZ"),
@@ -1251,5 +1273,167 @@ mod tests {
         // The 13 = 15 distinct labels minus the 2 Unvalidated. The set, not just the
         // count, is the real assertion above; the count is a human-readable sanity tag.
         assert_eq!(overlay_backed.len(), 13, "overlay-backed label count is 13");
+    }
+
+    // -- PHASE-04 VT-4 / X3 arm (a): exact reader coverage (read_block live) ---
+
+    /// The distinct labels `RELATION_RULES` legalises for a given source prefix.
+    fn table_labels_for(prefix: &str) -> std::collections::BTreeSet<RelationLabel> {
+        use crate::relation::RELATION_RULES;
+        RELATION_RULES
+            .iter()
+            .filter(|r| r.sources.iter().any(|k| k.prefix == prefix))
+            .map(|r| r.label)
+            .collect()
+    }
+
+    /// The distinct labels a kind's live `outbound_for` accessor ACTUALLY emits over a
+    /// corpus where every legal axis is authored.
+    fn emitted_labels(
+        root: &Path,
+        prefix: &str,
+        id: u32,
+    ) -> std::collections::BTreeSet<RelationLabel> {
+        outbound_for(root, kind_for(prefix), id)
+            .unwrap()
+            .iter()
+            .map(|e| e.label)
+            .collect()
+    }
+
+    /// VT-4 (X3 arm (a), now `read_block` is LIVE): per source kind, the label set the
+    /// shipped `relation_edges` accessor EMITS == the label set `RELATION_RULES`
+    /// legalises for that source — no off-table emission, no table rule without a reader
+    /// path. The exact set (not ⊆) is the assertion: a fully-populated fixture authors
+    /// one edge of every legal axis (tier-1 via `[[relation]]`, tier-2/3 via its typed
+    /// structure), and the emitted distinct-label set must equal the table's.
+    #[test]
+    fn reader_emitted_labels_equal_table_labels_per_source() {
+        let dir = tmp();
+        let root = dir.path();
+
+        // --- SL: specs, requirements, supersedes, governed_by (all tier-1) ---
+        write(
+            &root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
+             [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-001\"\n\
+             [[relation]]\nlabel = \"supersedes\"\ntarget = \"SL-002\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+        );
+        write(&root, ".doctrine/slice/001/slice-001.md", "s\n");
+        assert_eq!(
+            emitted_labels(root, "SL", 1),
+            table_labels_for("SL"),
+            "slice reader emits exactly its table labels"
+        );
+
+        // --- ADR (governance): supersedes (typed) + related (tier-1) ---
+        write(
+            &root,
+            ".doctrine/adr/001/adr-001.toml",
+            "id = 1\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = [\"ADR-002\"]\nsuperseded_by = []\ntags = []\n\
+             [[relation]]\nlabel = \"related\"\ntarget = \"ADR-003\"\n",
+        );
+        write(&root, ".doctrine/adr/001/adr-001.md", "a\n");
+        assert_eq!(
+            emitted_labels(root, "ADR", 1),
+            table_labels_for("ADR"),
+            "governance reader emits exactly supersedes + related"
+        );
+
+        // --- ISS (backlog): specs + slices + drift (all tier-1) ---
+        write(
+            &root,
+            ".doctrine/backlog/issue/001/backlog-001.toml",
+            "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
+             resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
+             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"drift\"\ntarget = \"free-text\"\n",
+        );
+        write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
+        assert_eq!(
+            emitted_labels(root, "ISS", 1),
+            table_labels_for("ISS"),
+            "backlog reader emits exactly specs + slices + drift"
+        );
+
+        // --- SPEC (tech): governed_by (tier-1) + descends_from/parent (typed) +
+        //     members (members.toml) + interactions (interactions.toml) ---
+        write(
+            &root,
+            ".doctrine/spec/tech/001/spec-001.toml",
+            "id = 1\nslug = \"sp\"\ntitle = \"SP\"\nstatus = \"draft\"\nkind = \"tech\"\n\
+             descends_from = \"PRD-010\"\nparent = \"SPEC-002\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+        );
+        write(&root, ".doctrine/spec/tech/001/spec-001.md", "sp\n");
+        write(
+            &root,
+            ".doctrine/spec/tech/001/members.toml",
+            "[[member]]\nlabel = \"M\"\norder = 0\nrequirement = \"REQ-001\"\n",
+        );
+        write(
+            &root,
+            ".doctrine/spec/tech/001/interactions.toml",
+            "[[edge]]\ntarget = \"SPEC-003\"\ntype = \"calls\"\nnotes = \"\"\n",
+        );
+        assert_eq!(
+            emitted_labels(root, "SPEC", 1),
+            table_labels_for("SPEC"),
+            "tech spec reader emits governed_by + descends_from + parent + members + interactions"
+        );
+
+        // --- PRD (product): governed_by + consumes (tier-1) + members (members.toml) ---
+        write(
+            &root,
+            ".doctrine/spec/product/001/spec-001.toml",
+            "id = 1\nslug = \"pr\"\ntitle = \"PR\"\nstatus = \"draft\"\nkind = \"product\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"consumes\"\ntarget = \"PRD-002\"\n",
+        );
+        write(&root, ".doctrine/spec/product/001/spec-001.md", "pr\n");
+        write(
+            &root,
+            ".doctrine/spec/product/001/members.toml",
+            "[[member]]\nlabel = \"M\"\norder = 0\nrequirement = \"REQ-001\"\n",
+        );
+        assert_eq!(
+            emitted_labels(root, "PRD", 1),
+            table_labels_for("PRD"),
+            "product spec reader emits governed_by + consumes + members"
+        );
+
+        // --- RV: reviews (the [target].ref) ---
+        write(
+            &root,
+            ".doctrine/review/001/review-001.toml",
+            "id = 1\nslug = \"r\"\ntitle = \"R\"\n\
+             [review]\nfacet = \"reconciliation\"\nraiser = \"a\"\nresponder = \"b\"\n\
+             [target]\nref = \"SL-001\"\n",
+        );
+        assert_eq!(
+            emitted_labels(root, "RV", 1),
+            table_labels_for("RV"),
+            "review reader emits exactly reviews"
+        );
+
+        // --- REC: owning_slice + decision_ref ---
+        write(
+            &root,
+            ".doctrine/rec/001/rec-001.toml",
+            "id = 1\nslug = \"r\"\ntitle = \"R\"\n\
+             [rec]\nmove = \"accept\"\nowning_slice = \"SL-001\"\ndecision_ref = \"DEC-001\"\n",
+        );
+        assert_eq!(
+            emitted_labels(root, "REC", 1),
+            table_labels_for("REC"),
+            "rec reader emits exactly owning_slice + decision_ref"
+        );
     }
 }

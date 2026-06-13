@@ -360,6 +360,11 @@ pub(crate) struct BacklogItem {
     tags: Vec<String>,
     facet: Option<RiskFacet>,
     relationships: Relationships,
+    /// SL-048 PHASE-04: the migrated tier-1 cross-kind edges (`slices`/`specs`/
+    /// `drift`) read generically from the `[[relation]]` block in canonical order.
+    /// Populated by [`read_item`] from the raw TOML text; the `validate` test seam
+    /// leaves it empty (those tests assert the typed dep/sequence axes, not tier-1).
+    tier1: Vec<crate::relation::RelationEdge>,
 }
 
 /// The validated risk facet (risk only). Every axis typed — no untyped bag
@@ -393,21 +398,18 @@ struct Trigger {
     note: String,
 }
 
-/// Outbound-only relations (ADR-004): a backlog item points OUT at the slices,
-/// specs, and drift it touches, plus three item→item axes (PRD-009) — `needs`
-/// (hard prerequisite, payload-free), `after` (soft manual sequence, per-edge
-/// optional `rank`), and the `triggers` rider (watched source globs). The reverse
-/// view is derived (deferred, PRD-011). Shared verbatim by the raw and validated
-/// layers (no `"" -> None` seam), seeded empty so `#[serde(default)]` parses a
-/// virgin item.
+/// The item→item dependency / sequence / mask axes (PRD-009) — `needs` (hard
+/// prerequisite, payload-free), `after` (soft manual sequence, per-edge optional
+/// `rank`), and the `triggers` rider (watched source globs). Shared verbatim by the
+/// raw and validated layers (no `"" -> None` seam), seeded empty so `#[serde(default)]`
+/// parses a virgin item.
+///
+/// SL-048 PHASE-04 (the cut): the tier-1 cross-kind axes (`slices`/`specs`/`drift`)
+/// migrated to uniform `[[relation]]` rows (read via `relation::read_block` →
+/// `BacklogItem::tier1`), so they are NO LONGER typed fields here. The dep/sequence/
+/// mask axes (SL-047) carry per-edge payloads and stay typed.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
 struct Relationships {
-    #[serde(default)]
-    slices: Vec<String>,
-    #[serde(default)]
-    specs: Vec<String>,
-    #[serde(default)]
-    drift: Vec<String>,
     #[serde(default)]
     needs: Vec<String>,
     #[serde(default)]
@@ -467,6 +469,8 @@ fn validate(raw: RawBacklogToml) -> anyhow::Result<BacklogItem> {
         tags: raw.tags,
         facet,
         relationships: raw.relationships,
+        // Filled by `read_item` from the raw TOML text (read_block); empty otherwise.
+        tier1: Vec::new(),
     })
 }
 
@@ -739,7 +743,11 @@ fn read_item(root: &Path, item_kind: ItemKind, id: u32) -> anyhow::Result<Backlo
         .with_context(|| format!("backlog item not found at {}", path.display()))?;
     let raw: RawBacklogToml =
         toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
-    validate(raw)
+    let mut item = validate(raw)?;
+    // SL-048 PHASE-04: the migrated tier-1 axes (slices/specs/drift) come from the
+    // `[[relation]]` block, read generically in canonical order.
+    item.tier1 = crate::relation::tier1_edges(item_kind.kind(), &text)?;
+    Ok(item)
 }
 
 /// Resolve a backlog canonical-id prefix (`ISS`/`IMP`/`CHR`/`RSK`/`IDE`) back to its
@@ -763,18 +771,12 @@ pub(crate) fn relation_edges(
     item_kind: ItemKind,
     id: u32,
 ) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
-    use crate::relation::{RelationEdge, RelationLabel};
+    // SL-048 PHASE-04 (the cut): the tier-1 axes (slices/specs/drift) now live in the
+    // uniform `[[relation]]` block, read generically into `item.tier1` in canonical
+    // [`RELATION_RULES`] order (X1). Backlog has no other tier-1 edges; the typed
+    // needs/after/triggers axes are NOT outbound relation edges (the SL-047 dep seam).
     let item = read_item(root, item_kind, id)?;
-    let rel = &item.relationships;
-    let mut edges = Vec::new();
-    for (label, refs) in [
-        (RelationLabel::Slices, &rel.slices),
-        (RelationLabel::Specs, &rel.specs),
-        (RelationLabel::Drift, &rel.drift),
-    ] {
-        edges.extend(refs.iter().map(|t| RelationEdge::new(label, t.clone())));
-    }
-    Ok(edges)
+    Ok(item.tier1)
 }
 
 /// A backlog item's `needs`/`after` dependency-sequence edges plus its `promoted`
@@ -1109,6 +1111,7 @@ fn parse_ref(reference: &str) -> anyhow::Result<(ItemKind, u32)> {
 /// The facet block is gated on `item.facet` (risk only); relationship axes and the
 /// optional fields render only when populated.
 fn format_show(item: &BacklogItem) -> String {
+    use crate::relation::{RelationLabel, targets_for};
     let mut parts: Vec<String> = Vec::new();
 
     // identity + the flat fields (resolution shown only on a terminal item).
@@ -1154,10 +1157,16 @@ fn format_show(item: &BacklogItem) -> String {
 
     // outbound relations (§5.5) — each axis only when non-empty; inbound is the
     // deferred registry surface's, NOT computed here (D-PHASE04-2 / ADR-004).
+    // SL-048 PHASE-04: the tier-1 axes (slices/specs/drift) come from `item.tier1`
+    // (read via `read_block`), the dep/sequence axes stay typed; render order and
+    // gating are unchanged, so output is byte-identical across the migration.
     let rel = &item.relationships;
-    if !rel.slices.is_empty()
-        || !rel.specs.is_empty()
-        || !rel.drift.is_empty()
+    let slices = targets_for(&item.tier1, RelationLabel::Slices);
+    let specs = targets_for(&item.tier1, RelationLabel::Specs);
+    let drift = targets_for(&item.tier1, RelationLabel::Drift);
+    if !slices.is_empty()
+        || !specs.is_empty()
+        || !drift.is_empty()
         || !rel.needs.is_empty()
         || !rel.after.is_empty()
         || !rel.triggers.is_empty()
@@ -1166,9 +1175,9 @@ fn format_show(item: &BacklogItem) -> String {
         // the four string axes share the one loop; `after`/`triggers` carry payload
         // (per-edge rank, glob+note) and render bespoke below, in §5.2 key order.
         for (label, refs) in [
-            ("slices", &rel.slices),
-            ("specs", &rel.specs),
-            ("drift", &rel.drift),
+            ("slices", &slices),
+            ("specs", &specs),
+            ("drift", &drift),
             ("needs", &rel.needs),
         ] {
             if !refs.is_empty() {
@@ -1239,6 +1248,7 @@ pub(crate) fn run_show(
 /// `[facet]` (risk only), and the outbound relationships — the same data the table
 /// reassembles, structured. Pure over the item's own state (no cross-corpus scan).
 fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
+    use crate::relation::{RelationLabel, targets_for};
     let facet = item.facet.as_ref().map(|f| {
         serde_json::json!({
             "likelihood": f.likelihood.map(RiskLevel::as_str),
@@ -1247,6 +1257,10 @@ fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
             "controls": f.controls,
         })
     });
+    // SL-048 PHASE-04 (R2-C2′): the tier-1 axes (slices/specs/drift) migrated to
+    // `[[relation]]`, so they are reconstructed from `item.tier1` (read via
+    // `read_block`) into the SAME `relationships` JSON shape, preserving OD-2's
+    // byte-identical `show --json`. serde_json sorts object keys, unchanged.
     let rel = &item.relationships;
     let value = serde_json::json!({
         "kind": "backlog",
@@ -1262,9 +1276,9 @@ fn show_json(item: &BacklogItem) -> anyhow::Result<String> {
             "tags": item.tags,
             "facet": facet,
             "relationships": {
-                "slices": rel.slices,
-                "specs": rel.specs,
-                "drift": rel.drift,
+                "slices": targets_for(&item.tier1, RelationLabel::Slices),
+                "specs": targets_for(&item.tier1, RelationLabel::Specs),
+                "drift": targets_for(&item.tier1, RelationLabel::Drift),
                 "needs": rel.needs,
                 "after": rel.after,
                 "triggers": rel.triggers,
@@ -1877,7 +1891,10 @@ drift = []
         assert_eq!(facet.impact, Some(RiskLevel::Critical));
         assert_eq!(facet.origin.as_deref(), Some("audit"));
         assert_eq!(facet.controls, vec!["rate-limit"]);
-        assert_eq!(item.relationships.slices, vec!["SL-020"]);
+        // SL-048: `slices` is no longer a typed `[relationships]` field — it migrated
+        // to `[[relation]]` (read by `read_item` via `read_block`, not `validate`). A
+        // stray `[relationships].slices` key in the fixture is now simply ignored on
+        // parse. The tier-1 read seam is covered by the show/relation_edges tests.
     }
 
     #[test]
@@ -2207,18 +2224,31 @@ tags = []
                 toml_list(x.controls),
             )
         });
+        // SL-048 PHASE-04 (the cut): the migrated tier-1 axes (slices/specs/drift) are
+        // emitted as `[[relation]]` rows AFTER the typed `[relationships]` table (F1 —
+        // typed tables precede all arrays-of-tables). The dep/sequence axes stay typed.
         let rels = f.rels.as_ref().map_or_else(String::new, |x| {
             format!(
-                "\n[relationships]\nslices = [{}]\nspecs = [{}]\ndrift = []\n\
-                 needs = [{}]\nafter = [{}]\ntriggers = [{}]\n",
-                toml_list(x.slices),
-                toml_list(x.specs),
+                "\n[relationships]\nneeds = [{}]\nafter = [{}]\ntriggers = [{}]\n",
                 toml_list(x.needs),
                 toml_after(x.after),
                 toml_triggers(x.triggers),
             )
         });
-        format!("{head}{facet}{rels}")
+        let mut relation_rows = String::new();
+        if let Some(x) = f.rels.as_ref() {
+            for s in x.slices {
+                relation_rows.push_str(&format!(
+                    "\n[[relation]]\nlabel = \"slices\"\ntarget = \"{s}\"\n"
+                ));
+            }
+            for s in x.specs {
+                relation_rows.push_str(&format!(
+                    "\n[[relation]]\nlabel = \"specs\"\ntarget = \"{s}\"\n"
+                ));
+            }
+        }
+        format!("{head}{facet}{rels}{relation_rows}")
     }
 
     /// The sole path/dir/write: render the fixture and lay it under its kind tree.

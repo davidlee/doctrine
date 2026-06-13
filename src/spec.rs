@@ -532,6 +532,13 @@ pub(crate) fn relation_edges(
     for i in read_interactions(&spec_dir.join("interactions.toml"))? {
         edges.push(RelationEdge::new(RelationLabel::Interactions, i.target));
     }
+    // SL-048 PHASE-04 (the cut): the NEW tier-1 axes (`governed_by`, `consumes`) live
+    // in the uniform `[[relation]]` block, read generically. They sit AFTER the typed
+    // lineage/members/interactions edges in canonical RELATION_RULES order (X1 merge
+    // order — for a spec source the tier-1 labels follow the typed ones). No corpus
+    // spec authors them yet, so this is additive: the emitted edge set is unchanged
+    // until a `governed_by`/`consumes` row is authored (PHASE-05 `link`).
+    edges.extend(crate::relation::tier1_edges(subtype.kind(), &spec_text)?);
     Ok(edges)
 }
 

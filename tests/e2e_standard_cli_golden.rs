@@ -71,8 +71,11 @@ fn std001_toml() -> &'static str {
      [relationships]\n\
      supersedes = []\n\
      superseded_by = []\n\
-     related = [\"STD-002\"]\n\
-     tags = [\"style\"]\n"
+     tags = [\"style\"]\n\
+     \n\
+     [[relation]]\n\
+     label = \"related\"\n\
+     target = \"STD-002\"\n"
 }
 fn std001_md() -> &'static str {
     "# STD-001: Two-space indent\n\nbody text here.\n"
@@ -208,10 +211,12 @@ fn standard_status_transition_prints_exact_and_preserves_edits() {
         "updated bumped"
     );
     // Edit-preservation (the toml_edit in-place contract): comment + rels survive.
+    // SL-048 PHASE-04: `related` migrated to a `[[relation]]` row; the row + the typed
+    // supersedes/superseded_by/tags all survive the in-place status edit.
     assert!(after.contains("# hand-added comment"), "comment preserved");
     assert!(
-        after.contains("related = [\"STD-002\"]"),
-        "related preserved"
+        after.contains("[[relation]]") && after.contains("target = \"STD-002\""),
+        "related [[relation]] row preserved"
     );
     assert!(after.contains("tags = [\"style\"]"), "tags preserved");
 }
