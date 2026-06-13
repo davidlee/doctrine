@@ -3,8 +3,8 @@ memory_key = "mem.pattern.dispatch.landed-oracle-needs-import-receipt"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Dispatch fork landed-oracle: --merged and delta-emptiness both unsound; use an import receipt"
-summary = "Dispatch fork 'landed' check needs an explicit import receipt; neither git --merged nor a tree-diff is sound"
+title = "Dispatch fork landed-oracle: --merged, delta-emptiness AND the import receipt all unsound; use a git patch-id check (git cherry) over all B..fork commits"
+summary = "Dispatch fork 'landed' check: --merged, tree-diff, and the runtime-tier import receipt are all unsound; the sound oracle is a durable git patch-id check (git cherry) over every B..fork commit (slug 'needs-import-receipt' is historical — the receipt was rejected)"
 created = "2026-06-13"
 updated = "2026-06-13"
 
