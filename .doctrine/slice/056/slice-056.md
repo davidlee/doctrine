@@ -112,8 +112,8 @@ ADR-008, SPEC-012):
   funnel *cannot* enforce in prose… the funnel is a discipline, not enforced code"
   — is the exact sentence the thesis attacks. Reframe Overview + Concerns; rewrite
   D3 (currently "fails open at the env boundary") to the fail-closed marker; add a
-  D for the verb family; add FRs (import verb, gc verb, orchestrator-fork verb,
-  marker guard).
+  D for the verb family; add FRs (import verb, land verb, gc verb,
+  orchestrator-fork verb, marker guard).
 
 Untouched governance (every proposal preserves exclusion-by-construction):
 ADR-007 (turn-based ledger — orthogonal), ADR-001/003/004 (layering/loop/relations),
@@ -157,6 +157,14 @@ the withheld-tier model.
   warn re stale `env!(CARGO_MANIFEST_DIR)` test binaries. Makes cleanup ownership
   trivial: caller of fork owns gc. IMP-041 and D-B1 disk-reclamation are the same
   verb.
+- **O5b — `doctrine worktree land`** (round-4 Charge α). Solo `/execute`'s analog of
+  `import`: a fail-closed, `Orchestrator`-classed, **structurally non-squash**
+  (`--no-ff`) verb that lands a solo isolated-worktree TDD branch onto the
+  coordination branch with ancestry preserved. Closes the unmechanised-prose smell
+  (solo's land was "normal git merge" — an unenforced wish); a squash-merge is
+  structurally uncertifiable by gc, so the verb cannot express one. gc gains a
+  **two-leg** landed check (ancestry for `land`, patch-id for `import`). Both landing
+  routes are now verbs — the mechanism-in-the-verb thesis holds for both callers.
 - **O6 — Per-worktree env provisioning (generalisable) + build isolation as its
   project-local instance** (#5 ≡ ADR-008 D-B1). The framework primitive is an
   **orchestrator-injected per-worktree env contract**, deliverable only where the
@@ -206,7 +214,7 @@ the withheld-tier model.
 
 ## Affected surface
 
-- `src/worktree.rs` — new `fork`, `import`, `gc` verbs + marker helpers + the
+- `src/worktree.rs` — new `fork`, `import`, `gc`, `land` verbs + marker helpers + the
   worker-mode observability surface; third `is_linked_worktree` consumer (ADR-001
   leaf; preserve pure/imperative split).
 - `src/main.rs` — CLI wiring + read/write classification for the new verbs.
