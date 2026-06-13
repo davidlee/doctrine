@@ -409,3 +409,36 @@ stashing the import and re-running at clean `ec81b5e` (identical failure). It is
 NOT a PHASE-06 regression. clippy zero. (`just` broken in fork — used `cargo`.)
 
 **Next:** PHASE-07 (`import` funnel verb) — EN: PHASE-06 green ✓.
+
+## PHASE-07 — `import` verb + governance/config belt (done · /dispatch · `sl056-coord` 436da7d)
+
+Driven via `/dispatch` (one worker, batch of one). Base **B' = `e3d3ca2`**; worker
+fork `sl056-p07-import` returned **S = `5cc9c5b`** (`S^ == B'`, single non-merge).
+Funnel clean: precond → S^==B' → R-5 belt (src+tests only) → `git apply` → verify
+→ branch-point stationary → one commit `436da7d`.
+
+**Built (source delta):**
+- `doctrine worktree import --base <B> --fork <branch>` — mechanizes the funnel's
+  deterministic steps as one fail-closed verb (v1 stationary-head only).
+- Pure `classify_import(head_at_base, tree_clean, single_commit, &delta_paths) ->
+  Result<Apply, Refusal>`: precond order HEAD→tree→single-commit→belt; belt
+  prefix-matches `.doctrine/` then `.claude/` (no special-casing). Exhaustive
+  refusal set `{head-moved, tree-unclean, multi-commit, doctrine-touch,
+  claude-touch}`, each a distinct token.
+- Shell `run_import` reuses `resolve_commit`/`matches` (HEAD==B), tracked-only
+  `status --untracked-files=no`, `S^==B`, name-only `B..fork` diff → `git apply
+  --3way --index` **non-committing** (orchestrator commits separately; no runtime
+  receipt — landed-ness stays git-derived for gc §8.1). New impure
+  `git::git_apply_index` (patch on stdin) — the only added git seam.
+- `import` joins the **Orchestrator** class (`write_class` arm `Import =>
+  Orchestrator("import")`; `worker_guard` unchanged — already refuses Orchestrator).
+- Goldens `tests/e2e_worktree_import.rs` (8): VT-1 happy drives run() asserting
+  delta STAGED+uncommitted & HEAD==B; VT-2 all 5 refusal tokens; VT-3 untracked
+  scratch ignored; VT-4 Orchestrator refusal (marked-fork AND env-set).
+
+**Verify:** full `-p doctrine` suite green EXCEPT the same pre-existing foreign
+`governance_corpus_supersession_…` red (SL-048 WIP, reds at base too — not a
+PHASE-07 regression). clippy zero.
+
+**Next:** PHASE-08 (`gc` verb — idempotent state machine, two-leg landed oracle) —
+EN: PHASE-07 green ✓; reuses `target_dir_for_branch` (PHASE-06) + Orchestrator class.
