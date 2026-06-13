@@ -24,6 +24,26 @@ target = "ADR-003"
 label = "governed_by"
 target = "ADR-009"
 
+[[relation]]
+label = "requirements"
+target = "REQ-254"
+
+[[relation]]
+label = "requirements"
+target = "REQ-255"
+
+[[relation]]
+label = "requirements"
+target = "REQ-256"
+
+[[relation]]
+label = "requirements"
+target = "REQ-257"
+
+[[relation]]
+label = "requirements"
+target = "REQ-114"
+
 # requirements — none yet. This slice MINTS the test-run-surface capability;
 #   the requirements it realises (the SPEC-002 deltas lifting the deferral) get
 #   authored at /design → /plan, then added as `requirements` rows. Sibling

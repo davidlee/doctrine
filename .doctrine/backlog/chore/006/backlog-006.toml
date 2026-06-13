@@ -11,10 +11,11 @@ created = "2026-06-13"
 updated = "2026-06-13"
 tags = []
 
-[relationships]                 # outbound-only (ADR-004); seeded empty
-slices = []
-specs  = []
-drift  = []
+# outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
+# `[[relation]]` rows now (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
