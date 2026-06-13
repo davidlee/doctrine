@@ -48,3 +48,4 @@ handover.md
 .doctrine/slice/*/handover.md
 .doctrine/slice/*/inquisition.md
 .doctrine/slice/*/research/
+.doctrine/**/handover.md
