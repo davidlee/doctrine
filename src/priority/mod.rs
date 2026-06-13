@@ -46,7 +46,9 @@ pub(crate) fn run_survey(
     let out = if json || format == Format::Json {
         render::survey_json(&rows)?
     } else {
-        render::survey_human(&rows, None)
+        // Resolve terminal width ONCE in the impure shell (SL-054 D3) — `None` off a
+        // tty keeps piped output width-free; on a tty the pure render layer wraps.
+        render::survey_human(&rows, crate::tty::stdout_terminal_width())
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
@@ -59,7 +61,9 @@ pub(crate) fn run_next(path: Option<PathBuf>, format: Format, json: bool) -> any
     let out = if json || format == Format::Json {
         render::next_json(&rows)?
     } else {
-        render::next_human(&rows, None)
+        // Resolve terminal width ONCE in the impure shell (SL-054 D3) — `None` off a
+        // tty keeps piped output width-free; on a tty the pure render layer wraps.
+        render::next_human(&rows, crate::tty::stdout_terminal_width())
     };
     write!(io::stdout(), "{out}")?;
     Ok(())

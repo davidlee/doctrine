@@ -120,13 +120,13 @@ impl CommonListArgs {
             format: self.format,
             json: self.json,
             columns: self.columns,
-            // Resolve colour capability ONCE at the clap→leaf seam (SL-053 D3): the
-            // sole impure read, injected into the render bundle the pure leaf consumes.
-            // `term_width: None` keeps this phase unwrapped (the `Some(w)` wrapping arm
-            // is a later SL-054 phase).
+            // Resolve terminal capability ONCE at the clap→leaf seam (SL-053/SL-054 D3):
+            // the sole impure reads (colour, width), injected into the render bundle the
+            // pure leaf consumes. `term_width` is `None` off a tty ⇒ piped output stays
+            // width-free; on a tty it carries the live width and the pure layer wraps.
             render: crate::listing::RenderOpts {
                 color: crate::tty::stdout_color_enabled(),
-                term_width: None,
+                term_width: crate::tty::stdout_terminal_width(),
             },
         }
     }

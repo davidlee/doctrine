@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! The impure colour-capability shell (SL-053 PHASE-02, D3).
+//! The impure terminal-capability shell (SL-053 PHASE-02 colour; SL-054 PHASE-03 width).
 //!
-//! Colour *capability* is the one impurity the colour seam needs: it reads the
-//! `NO_COLOR` environment variable and whether stdout is a terminal. Per the
-//! pure/imperative split (slices-spec § Architecture, the date/uid injection
-//! pattern) that read lives HERE, in the thin shell, and is injected as a plain
-//! `bool` into the pure render layer ([`crate::listing`]) — which itself never
-//! touches env, tty, clock, rng, git, or disk.
+//! Two terminal capabilities are read HERE, in the thin shell, and injected as plain
+//! values into the pure render layer ([`crate::listing`]) — which itself never touches
+//! env, tty, clock, rng, git, or disk (the pure/imperative split, slices-spec
+//! § Architecture, the date/uid injection pattern):
 //!
-//! The bool is the single authority: `owo_colors`' UNCONDITIONAL colorize methods
-//! are gated on it in the leaf, never `if_supports_color` (which would re-read
-//! env+tty at apply-time and smuggle impurity back into the pure layer).
+//! - **colour** — reads `NO_COLOR` + isatty, injected as a `bool`. The bool is the
+//!   single authority: `owo_colors`' UNCONDITIONAL colorize methods are gated on it in
+//!   the leaf, never `if_supports_color` (which would re-read env+tty at apply-time and
+//!   smuggle impurity back into the pure layer).
+//! - **width** — reads isatty + the `crossterm::terminal::size()` ioctl, injected as an
+//!   `Option<u16>`. `None` (a pipe / unreadable / degenerate size) ⇒ no wrapping, so
+//!   piped output stays width-free and the SL-053 deterministic goldens stay frozen.
+//!
+//! Each capability follows the same shape: a thin `stdout_*` wrapper holding the
+//! impurities and a pure both-injected decision fn, testable without a real tty.
 
 use std::ffi::OsStr;
 
@@ -40,6 +45,45 @@ fn color_enabled(no_color: Option<&OsStr>, is_tty: bool) -> bool {
     }
     is_tty
 }
+
+/// Terminal width for stdout, in columns — `None` ⇒ no wrapping.
+///
+/// Thin shell (mirrors [`stdout_color_enabled`]): the isatty probe and the
+/// `crossterm::terminal::size()` ioctl are the only impurities; the decision is the
+/// pure, both-injected [`terminal_width`], testable without a real tty. Wrapping
+/// applies only on a tty — piped/redirected output gets `None` and stays width-free,
+/// keeping the SL-053 deterministic goldens frozen. The live isatty branch is
+/// documented-not-driven (mirrors [`stdout_color_enabled`]): under `cargo test`
+/// stdout is not a terminal, so it returns `None`; a pty is out of scope.
+pub(crate) fn stdout_terminal_width() -> Option<u16> {
+    terminal_width(
+        std::io::IsTerminal::is_terminal(&std::io::stdout()),
+        crossterm::terminal::size().ok().map(|(cols, _rows)| cols),
+    )
+}
+
+/// The pure width decision with both impurities injected (`is_tty`, `cols`).
+///
+/// `None` ⇒ no wrapping (the deterministic SL-053 path): a pipe (`!is_tty`), an
+/// unreadable size (`cols == None`), or a degenerate width below [`MIN_WRAP_WIDTH`].
+/// Otherwise the live column count flows to the pure render layer, which runs the
+/// real grid-dependent fit test ([`crate::listing::render_table`]'s `grid_min_width`,
+/// PHASE-02).
+fn terminal_width(is_tty: bool, cols: Option<u16>) -> Option<u16> {
+    if !is_tty {
+        return None;
+    }
+    match cols {
+        Some(w) if w >= MIN_WRAP_WIDTH => Some(w),
+        // 0 / unreadably-narrow / unavailable ⇒ fall back to no-wrap.
+        _ => None,
+    }
+}
+
+/// Coarse shell-side floor: guards only the degenerate `size() == 0` / unreadably-
+/// narrow case so a junk width never reaches the pure layer. NOT the real fit test —
+/// that is grid-dependent and lives in `render_table` (`grid_min_width`, PHASE-02).
+const MIN_WRAP_WIDTH: u16 = 16;
 
 #[cfg(test)]
 mod tests {
@@ -74,6 +118,32 @@ mod tests {
         assert!(
             !color_enabled(None, false),
             "no NO_COLOR + non-tty (pipe) ⇒ colour disabled"
+        );
+    }
+
+    /// VT-1: the pure width decision, both impurities injected. A pipe is always
+    /// width-free; on a tty the live width passes through above the [`MIN_WRAP_WIDTH`]
+    /// floor and collapses to `None` at/below it (incl. the degenerate `0`).
+    ///
+    /// The *live* isatty branch in [`stdout_terminal_width`] is documented-not-driven
+    /// (mirrors `color_enabled`): under `cargo test` stdout is not a terminal, so it
+    /// returns `None`; a pty is out of scope.
+    #[test]
+    fn terminal_width_decides_from_injected_tty_and_cols() {
+        // Pipe ⇒ no wrapping, regardless of any reported size.
+        assert_eq!(terminal_width(false, None), None);
+        assert_eq!(terminal_width(false, Some(80)), None);
+        // tty + readable width above the floor ⇒ that width flows through.
+        assert_eq!(terminal_width(true, Some(80)), Some(80));
+        // tty + degenerate / below-floor width ⇒ fall back to no-wrap.
+        assert_eq!(terminal_width(true, Some(0)), None);
+        assert_eq!(terminal_width(true, Some(8)), None);
+        // tty but size() unreadable ⇒ no-wrap.
+        assert_eq!(terminal_width(true, None), None);
+        // Boundary: the floor itself is inclusive.
+        assert_eq!(
+            terminal_width(true, Some(MIN_WRAP_WIDTH)),
+            Some(MIN_WRAP_WIDTH)
         );
     }
 }
