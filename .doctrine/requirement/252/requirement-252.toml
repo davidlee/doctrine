@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 252
+slug = "per-worktree-env-contract-emission"
+title = "The orchestrator computes and emits a per-worktree env contract (`KEY=value` per line on stdout) whose consumers the project declares (e.g. `CARGO_TARGET_DIR`); emission is harness-identical, delivery is subprocess-only (codex/pi), never a framework primitive."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
