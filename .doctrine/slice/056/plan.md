@@ -63,8 +63,9 @@ The trust topology is the spine, so it lands first and everything rides it:
   error until classified. PHASE-05 establishes the enum + guard and classifies the
   *existing* surface behaviour-preservingly plus the marker/status verbs it
   introduces; **each later phase classifies its own new verb** (`fork`/`import`/
-  `land`/`gc` → `Orchestrator`; `create-fork`/`marker --stamp-subagent` →
-  `Hook-mint`; `claude install` → `write`). This is why the worker-mode refusal
+  `land`/`gc` → `Orchestrator`; `marker --stamp-subagent` → `Hook-mint` (the
+  WorktreeCreate `create-fork` verb is deferred, O3-RED); `claude install` →
+  `write`). This is why the worker-mode refusal
   tests for, e.g., `claude install` live in PHASE-11, not PHASE-05 — the verb does
   not exist until then. Each Orchestrator verb proves its **own** run()-driven
   refusal in its introducing phase (fork/import/land at PHASE-06/07/08), and
@@ -75,9 +76,11 @@ The trust topology is the spine, so it lands first and everything rides it:
 - **PHASE-06 (`fork` + per-wt env)** is the codex/pi orchestrator-owned creator and
   the marker's codex/pi writer. It carries O6's per-worktree env contract because
   the contract is *emitted by fork on stdout* — the same atomic act. Its
-  compensating-cleanup rollback core is deliberately built here so **PHASE-10's
-  `create-fork` can reuse it** (one cleanup implementation, two callers) — a
-  forward dependency that fixes fork before the claude path.
+  compensating-cleanup rollback core is deliberately built here for `fork` itself;
+  it was authored to be reusable by PHASE-10's deferred `create-fork`, but the
+  shipped claude path is `marker --stamp-subagent`, which does **no** `git worktree
+  add` and so does **no** rollback (M3 leaves the harness-owned worktree in place).
+  The rollback core therefore has the single `fork` caller today.
 - **PHASE-07 → PHASE-09 (`import` → `land` → `gc`)** are the funnel verbs. `import`
   (dispatch route, ancestry severed) and `land` (solo route, ancestry preserved)
   are the two landing routes; `gc`'s **two-leg oracle** certifies *both*, so gc must
@@ -85,13 +88,15 @@ The trust topology is the spine, so it lands first and everything rides it:
   implementation), so import precedes land. The belt (R1, "the real protection")
   lands inside `import` and is tested by an invariant that **drives the write seam**,
   not a pure helper.
-- **PHASE-10 (claude spawn path)** depends on two upstreams: PHASE-02 fixes the
-  else-branch disposition (matcher-green deletes it; matcher-red keeps the
-  serviceable default) and the fallback rung; PHASE-06 supplies the rollback core it
-  reuses. `create-fork` is the verb the install hook will call, so it precedes the
-  installer.
-- **PHASE-11 (install surface)** wires the WorktreeCreate hook to `create-fork` and
-  symlinks the `dispatch-worker` agent def — both must exist first (PHASE-10). The
+- **PHASE-10 (claude spawn path)** depends on PHASE-02, which resolved O3-RED: the
+  WorktreeCreate `create-fork` path is **not buildable** (payload carries no
+  `agent_type`/path/base), so the shipped verb is the matcher-scoped
+  **SubagentStart-stamp** — `marker --stamp-subagent` (provision + `write_marker`
+  into an already-created worktree, `classify_stamp` two-valued, σ moot). It is the
+  verb the install hook will call, so it precedes the installer.
+- **PHASE-11 (install surface)** wires the **SubagentStart hook** (matcher
+  `dispatch-worker`, calling `marker --stamp-subagent`) and symlinks the
+  `dispatch-worker` agent def — both must exist first (PHASE-10). The
   `claude install` rename reuses the existing `HookSpec` merge core (no parallel
   merge), and its orphan-reference sweep (SR-3, the hidden `skills install` alias +
   the memory update) is an explicit deliverable so the rename does not strand

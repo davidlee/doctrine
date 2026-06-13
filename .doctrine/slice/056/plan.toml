@@ -441,10 +441,10 @@ Consolidate the Claude-surface installer (design §9/§11; O8 install leg, SR-3,
 **hidden deprecated alias** dispatching the same handler (no flag-day break);
 extend it to install, for the Claude surface: **skills** (unchanged), **agents**
 (symlink `install/agents/claude/*.md` into `.claude/agents/`), and the
-**WorktreeCreate hook** (SubagentStart on the fallback ladder) — a `HookSpec`
+**SubagentStart hook** (matcher-scoped to `dispatch-worker`) — a `HookSpec`
 (`src/boot.rs`) merged into `.claude/settings.local.json` via the **existing merge
 core** (same machinery as the SessionStart boot/sync hooks), command = the §4b one
-line (`doctrine worktree create-fork`). The merge **preserves pre-existing entries
+line (`doctrine worktree marker --stamp-subagent`). The merge **preserves pre-existing entries
 and writes only the hooks key** — must not collide with Claude's own
 permission-grant persistence (the `permissions` key). Update the `Write(...)` audit
 label + goldens; **sweep docs** that say "skills install" and update the
@@ -453,18 +453,18 @@ the hidden alias) joins the **`write`** class (charge-5 — a worker must not
 reconfigure its own harness; ADR-006 D2 uniformly, NOT ride-back).
 """
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-10 green: `doctrine worktree create-fork` exists — it is the command the WorktreeCreate HookSpec wires; the dispatch-worker agent def exists to symlink." },
+  { id = "EN-1", text = "PHASE-10 green: `doctrine worktree marker --stamp-subagent` exists (the WorktreeCreate `create-fork` path is deferred, O3-RED) — it is the command the SubagentStart HookSpec (matcher `dispatch-worker`) wires; the dispatch-worker agent def exists to symlink." },
   { id = "EN-2", text = "the existing `HookSpec` merge core (src/boot.rs, SessionStart wiring) is the reused machinery — no parallel merge implementation." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "`claude install` installs skills + symlinks `install/agents/claude/dispatch-worker.md` into `.claude/agents/` + merges the WorktreeCreate HookSpec; the hidden `skills install` alias dispatches the identical handler (SR-3)." },
+  { id = "EX-1", text = "`claude install` installs skills + symlinks `install/agents/claude/dispatch-worker.md` into `.claude/agents/` + merges the SubagentStart HookSpec (matcher `dispatch-worker`); the hidden `skills install` alias dispatches the identical handler (SR-3)." },
   { id = "EX-2", text = "the hook merge preserves pre-existing hooks and writes only the hooks key (no collision with Claude's `permissions` persistence); reinstall is idempotent (no duplicate symlinks/hook entries); the audit label + goldens reflect `claude install`." },
   { id = "EX-3", text = "docs saying 'skills install' are swept to 'claude install' and the skill-refresh-command memory is updated; `claude install` (+ alias) is refused under worker_mode (write class, charge-5); re-embed ritual applied; clippy zero, just check green." },
 ]
 verification = [
   { id = "VT-1", expects = "χ alias→same-handler: `skills install` (hidden alias) and `claude install` dispatch the identical handler and produce the same effect (SR-3, no flag-day break)." },
   { id = "VT-2", expects = "χ agents leg: after `claude install`, `install/agents/claude/dispatch-worker.md` is present as a symlink under `.claude/agents/` that resolves." },
-  { id = "VT-3", expects = "χ hook merge: merging the WorktreeCreate HookSpec into a settings.local.json already carrying unrelated hooks leaves those intact (cite the boot HookSpec merge tests, same core); a reinstall yields no duplicate symlinks/hook entries (idempotent)." },
+  { id = "VT-3", expects = "χ hook merge: merging the SubagentStart HookSpec into a settings.local.json already carrying unrelated hooks leaves those intact (cite the boot HookSpec merge tests, same core); a reinstall yields no duplicate symlinks/hook entries (idempotent)." },
   { id = "VT-4", expects = "χ rename audit-label: the `Write(...)` audit label + goldens read `claude install`, not the stale `skills install`." },
   { id = "VT-5", expects = "charge-5 worker-mode refusal: from a marked fork AND an env-set process, `claude install` AND its hidden `skills install` alias are both refused (a worker cannot mutate `.claude/` skills/agents/hooks) — both spellings, both signals, drive run()." },
 ]
