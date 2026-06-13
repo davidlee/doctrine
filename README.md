@@ -202,6 +202,8 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [SPEC-015 — Backlog entity surface](.doctrine/spec/tech/015/spec-015.md) — `draft`
 - [SPEC-016 — Governance kinds (POL/STD)](.doctrine/spec/tech/016/spec-016.md) — `draft`
 - [SPEC-017 — Tech-spec spine](.doctrine/spec/tech/017/spec-017.md) — `draft`
+- [SPEC-018 — Cross-corpus relation contract](.doctrine/spec/tech/018/spec-018.md) — `draft`
+- [SPEC-019 — Knowledge-record entity surface](.doctrine/spec/tech/019/spec-019.md) — `draft`
 
 ### Architecture Decision Records
 
@@ -212,7 +214,8 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-005 — Shipped knowledge is tiered by access pattern; skills route, reference docs explain](.doctrine/adr/005/adr-005.md) — `accepted`
 - [ADR-006 — Worktree posture: policy-agnostic framework, orchestrator-sole-writer dispatch](.doctrine/adr/006/adr-006.md) — `accepted`
 - [ADR-007 — Adversarial review as a first-class kind with turn-based ledger coordination](.doctrine/adr/007/adr-007.md) — `accepted`
-- [ADR-008 — Project-local jail build isolation and worker confinement for parallel dispatch](.doctrine/adr/008/adr-008.md) — `proposed`
+- [ADR-008 — Project-local jail build isolation and worker confinement for parallel dispatch](.doctrine/adr/008/adr-008.md) — `accepted`
 - [ADR-009 — Slice lifecycle state machine and conduct axis](.doctrine/adr/009/adr-009.md) — `accepted`
 - [ADR-010 — Relation modelling: unify the contract and write seam, keep storage bespoke](.doctrine/adr/010/adr-010.md) — `accepted`
+- [ADR-011 — Harness-agnostic orchestrator spawn interface and per-harness capability altitude](.doctrine/adr/011/adr-011.md) — `accepted`
 <!-- END:readme-index -->
