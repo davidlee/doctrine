@@ -48,7 +48,11 @@ Out of scope:
 Boundary: Memory owns the *shape of meaning* — what a recalled unit is, where it
 applies, and how far it can be trusted — and deliberately does not own the
 persistence substrate or the matching mechanism. A memory is knowledge to be judged,
-never an instruction to be obeyed.
+never an instruction to be obeyed. Memory is also distinct from the epistemic and
+governance records (PRD-010): a unit that must be cited, transitioned, superseded, or
+used to govern work is a `knowledge_record`, while knowledge that only needs scoped
+recall stays a memory — and one that becomes load-bearing is promoted by linking, never
+mutated in place (PRD-010 §3).
 
 ## 3. Principles
 
