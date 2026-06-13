@@ -107,11 +107,47 @@ next_human}` call `listing::render_table` directly — each gains a
 the deterministic path, so every `..Default::default()` test and the `boot`
 projection stay plain with no change.
 
+**Exact caller inventory (grep-derived, not "~13").** The external review (codex,
+GPT-5.5) flagged the fuzzy count as a miss-risk — the empty-result early-return in
+`rec::run_list` is an easy-to-skip `render_columns` site. The complete production
+surface:
+
+| # | site | arg today | note |
+|---|------|-----------|------|
+| 1 | `backlog.rs:1022` | `color` | |
+| 2 | `coverage_view.rs:362` | `color` | inside the `coverage_view::render_table` wrapper |
+| 3 | `slice.rs:1043` | `color` | |
+| 4 | `spec.rs:1259` | `color` | block rows |
+| 5 | `spec.rs:1451` | `color` | req list |
+| 6 | `memory.rs:1319` | `color` | |
+| 7 | `governance.rs:85` | `color` | |
+| 8 | `review.rs:951` | `color` | |
+| 9 | `rec.rs:576` | `color` | **empty-branch early-`return match`** — easy to miss |
+| 10 | `rec.rs:589` | `color` | populated branch |
+
+Ten production `render_columns` calls across 8 surfaces. Each `run_list` already
+threads its `color` from `ListArgs`; replacing `ListArgs.color: bool` with
+`ListArgs.render: RenderOpts` makes the change mechanical at each.
+
+Test-helper callers update mechanically too (all inside `#[cfg(test)]`): `slice.rs:1331/1338`,
+`memory.rs:3390`, `review.rs:2337`, plus the in-crate `listing.rs` tests — they pass
+`false` literals → `RenderOpts::default()` / `RenderOpts { color: true, .. }`.
+
+`listing::render_table` direct callers: `priority::render::{survey_human:46,
+next_human:71}` (gain `term_width`) and `coverage_view.rs:460` (via its wrapper).
+
+**Shell resolution = 3 points** (unchanged): `CommonListArgs::into_list_args`
+(main.rs:112 — the *single* `color` resolution serving all ~10 list subcommands
+dispatched at main.rs:1831–2217), `coverage_view::run`, and `priority::mod` run.
+
 **Behaviour-preservation gate.** This is shared-machinery churn (the entity
 engine's list spine). The existing in-crate + black-box suites are the proof —
 they must stay green. The `color = false` / `term_width = None` defaults guarantee
 the piped path is byte-identical; the in-crate callers update mechanically from
-`, false)` / `, color)` to `, RenderOpts { .. }` / `, opts`.
+`, false)` / `, color)` to `, RenderOpts { .. }` / `, opts`. **No caller currently
+passes `color: true` that a careless `..Default::default()` could silently flip to
+mono** — every coloured site threads the shell-resolved `color`, never a literal
+`true`, so the field-for-field rewrite preserves it.
 
 ## 4. render_table — arrangement switch, everything else unconditional (D2)
 
@@ -120,9 +156,16 @@ pub(crate) fn render_table(rows: &[Vec<String>], term_width: Option<u16>) -> Str
     if rows.is_empty() { return String::new(); }
     // ... rectangular-grid debug_assert (unchanged) ...
     let mut table = Table::new();
+    // Per-grid structural floor (D3, F-B from the external review): Dynamic only
+    // when `w` can actually fit THIS grid — borders + padding + ≥1 content col each.
+    // A 6–7-col priority table needs ~25+ cols; comfy-table `available_content_width`
+    // saturating_subs to ~0 below that and forces 1 char/col → unreadable slivers.
+    // Below the grid minimum, Disabled (clean overflow) beats Dynamic (garbage).
+    let cols = rows.first().map_or(0, Vec::len);
+    let fits = |w: u16| usize::from(w) >= grid_min_width(cols);   // borders+padding+cols
     match term_width {
-        Some(w) => { table.set_content_arrangement(ContentArrangement::Dynamic); table.set_width(w); }
-        None    => { table.set_content_arrangement(ContentArrangement::Disabled); }
+        Some(w) if fits(w) => { table.set_content_arrangement(ContentArrangement::Dynamic); table.set_width(w); }
+        _                  => { table.set_content_arrangement(ContentArrangement::Disabled); }
     }
     table.force_no_tty();                 // UNCONDITIONAL — D6 purity guard (spike: orthogonal to wrap)
     // ... strip components, set VerticalLines '│' (unchanged) ...
@@ -164,11 +207,25 @@ fn terminal_width(is_tty: bool, cols: Option<u16>) -> Option<u16> {
     }
 }
 
-/// Below this, `│`-separated columns degrade to 1–2 chars each — overflow is more
-/// legible than per-char wrapping. A judgment floor (real terminals are ≥40);
-/// guards the degenerate `size() == 0` case (odd/headless environments). Adjustable.
+/// Coarse shell-side floor: guards only the degenerate `size() == 0` /
+/// unreadably-narrow case (odd/headless environments) so a junk width never even
+/// reaches the pure layer. It is NOT the real fit test — that is grid-dependent and
+/// lives in `render_table` (`grid_min_width`, §4), since the shell has no grid.
 const MIN_WRAP_WIDTH: u16 = 16;
 ```
+
+**Two-tier floor (D3, F-B).** The width gate is split across the two layers that
+own the two facts:
+- `tty.rs` (shell) knows the *terminal* but not the *grid* → the coarse
+  `MIN_WRAP_WIDTH` degenerate guard only.
+- `render_table` (pure) knows the *grid* (column count + minimalist `│` style) but
+  not the terminal → the real `grid_min_width(cols)` structural fit test. When
+  `w < grid_min_width`, fall back to `Disabled` (clean overflow) rather than feed
+  Dynamic a budget it will shred. `grid_min_width(cols) = borders(cols) +
+  padding(cols) + cols` (≥1 content char per visible column), matching
+  comfy-table's own `available_content_width` accounting so the design's fit test
+  agrees with the library's. `cols == 0` (empty grid) returns early before either
+  test (existing `rows.is_empty()` guard).
 
 **OQ-1 resolved — no `NO_WRAP` env gate.** Width follows isatty alone. `NO_COLOR`
 does **not** gate wrapping (monochrome-wrapped output is legitimate — the two axes
@@ -205,6 +262,10 @@ transitive dep via comfy-table's `custom_styling → tty` (no new dependency, no
   SGR per wrapped segment — spike-confirmed). **This doubles as the first test that
   exercises a `ByValue` column under wrapping**, extending the SL-053-review
   coverage (the `paint_cell` ByValue path) into the wrap dimension.
+- **VT — grid floor falls back (F-B).** `render_table(wide_7col_grid, Some(20))`
+  produces the **Disabled** byte-output (overflow), not a Dynamic sliver render —
+  `20 < grid_min_width(7)`. And `render_table(grid, Some(w))` for `w` just at/above
+  `grid_min_width` does wrap. Pins the structural-minimum boundary.
 - **VT — `terminal_width` pure seam.** `terminal_width(false, _) == None`;
   `terminal_width(true, Some(80)) == Some(80)`; `terminal_width(true, Some(0)) ==
   None`; `terminal_width(true, Some(8)) == None` (below floor). The live isatty
@@ -223,8 +284,10 @@ transitive dep via comfy-table's `custom_styling → tty` (no new dependency, no
   (`Some → Dynamic+set_width`, `None → Disabled`); `force_no_tty()`, edge-zeroing,
   and `trim_end` stay **unconditional**.
 - **D3** — width resolved in `tty.rs` via crossterm, pure split
-  (`terminal_width(is_tty, cols)`), floored at `MIN_WRAP_WIDTH = 16`, `0`/narrow ⇒
-  `None`.
+  (`terminal_width(is_tty, cols)`), coarse `MIN_WRAP_WIDTH = 16` degenerate guard
+  there; the real per-grid `grid_min_width(cols)` fit test lives in `render_table`
+  (pure, owns the grid), falling back to `Disabled` when `w` can't fit the grid
+  (F-B, external review). `0`/narrow ⇒ `None`.
 - **D4** — two independent isatty probes; no shared shell state.
 - **D5** — OQ-1: no `NO_WRAP`; width follows isatty; manual override deferred to a
   `--width` flag follow-up.
@@ -239,11 +302,18 @@ transitive dep via comfy-table's `custom_styling → tty` (no new dependency, no
 - **RSK-4 (trim under Dynamic)** — *refuted by spike;* trim stays unconditional.
 - **ASM-1 (Dynamic vs force_no_tty)** — *refuted by spike;* force_no_tty
   unconditional. The scope doc's ASM-1 is superseded by this design (§2).
-- **ASM-2 (new)** — `set_width(w)` treats `w` as the **total table width**
-  (separators + padding + content), per comfy-table semantics; we pass the full
-  terminal column count. The outer-edge padding-zero loop runs *after* measurement,
-  so the *rendered* width is ≤ `w` (two outer pad chars stripped) — strictly safe,
-  never overflows `w`. Accepted: a table at ~terminal width is the goal.
+- **ASM-2 (CONFIRMED — comfy-table 7.2.2 source)** — `set_width(w)` treats `w` as
+  the **total table width** (separators + padding + content). Verified in-tree:
+  `set_width` sets `table.width = Some(w)` (`table.rs:255`), consumed as
+  `table_width` in `arrangement::arrange` → `dynamic::arrange`, where
+  `available_content_width` *subtracts* `count_border_columns` + per-column padding
+  from `w` (`dynamic.rs:135`). So `w` is the full-table budget, not content-only.
+  We pass the full terminal column count. Second-order (codex): the outer-edge
+  padding-zero loop runs *after* measurement, so comfy measures padding it won't
+  render → the *rendered* width is **≤ `w`** (strictly narrower, never overflows).
+  The discrepancy is one-directional and safe; the only requirement is that the
+  minimalist `│`-only style is set *before* arrangement runs (it is — style strip
+  precedes row add), so `count_border_columns` matches the rendered separators.
 - **OQ (closed)** — OQ-1 resolved (D5). No open questions remain.
 
 ## 9. Follow-Ups

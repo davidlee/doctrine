@@ -38,8 +38,10 @@ In scope:
      (force_no_tty already unconditional). Goldens stay green untouched.
 4. Resolve terminal width in the impure shell — `tty.rs` gains a
    `stdout_terminal_width() -> Option<u16>` using crossterm (already a transitive
-   dep via comfy-table's `custom_styling` → `tty`). Returns `None` when piped or
-   `NO_COLOR`-style gating applies.
+   dep via comfy-table's `custom_styling` → `tty`). Returns `None` when piped; width
+   follows isatty **alone** (design D5 — no `NO_COLOR`/`NO_WRAP` env gating; the
+   colour and wrap axes are independent). A coarse `MIN_WRAP_WIDTH=16` guards the
+   degenerate `size()==0` case; the real per-grid fit test lives in `render_table`.
 5. Thread `RenderOpts` through all ~13 `render_columns` call sites (replacing the
    `color` bool); flip `coverage_view::render_table`'s wrapper to `RenderOpts`; pass
    `term_width` to `priority::render::{survey_human,next_human}` (third shell point,
@@ -60,13 +62,17 @@ Out of scope:
 ## Affected surface
 
 - `src/tty.rs` — add `stdout_terminal_width() -> Option<u16>` (crossterm
-  `terminal::size`, gated by isatty + `NO_COLOR`/`NO_WRAP`).
-- `src/listing.rs` — `render_table` gains `term_width: Option<u16>`;
-  `render_columns` gains same (transitively, to wire through); `ListArgs` gains
-  `term_width` field.
-- ~13 `render_columns` call sites — add `term_width` arg (mechanical).
-- `priority/render.rs` (×2) — calls `render_table` directly; add `term_width` arg
-  (two lines).
+  `terminal::size`, gated by isatty alone; coarse `MIN_WRAP_WIDTH=16` degenerate floor).
+- `src/listing.rs` — `render_table` gains `term_width: Option<u16>` + a per-grid
+  `grid_min_width` fit test; `render_columns` takes `RenderOpts` (replaces `color:
+  bool`); `ListArgs.color` becomes `ListArgs.render: RenderOpts`.
+- **10 production `render_columns` call sites** (exact, grep-derived — design §3):
+  backlog, coverage_view-wrapper, slice, spec ×2, memory, governance, review, rec ×2
+  (incl. the `rec.rs:576` empty-branch early-return). Plus 4 `#[cfg(test)]` helpers.
+- `priority/render.rs` (×2: `survey_human`, `next_human`) — call `render_table`
+  directly; add `term_width` arg (they wrap, stay monochrome).
+- 3 shell resolution points: `CommonListArgs::into_list_args` (one point, ~10 list
+  subcommands), `coverage_view::run`, `priority::mod` run.
 
 ## Risks, assumptions, open questions
 
@@ -87,6 +93,14 @@ Out of scope:
   isatty alone (`!isatty` → `None` → no wrap); `NO_COLOR` does not gate wrapping
   (monochrome-wrapped is valid). Manual override deferred to a `--width` flag
   follow-up.
+- **ASM-2 — set_width accounting. CONFIRMED (comfy-table 7.2.2 source).** `set_width(w)`
+  is the *total* table width (borders+padding+content); `dynamic::arrange` subtracts
+  borders+padding from `w`. Zeroing outer padding after measurement renders ≤`w` —
+  safe, one-directional. (design §8.)
+- **F-B — MIN_WRAP_WIDTH floor too low. FIXED (external review, design D3/§4).** A
+  flat 16 admits garbage renders for wide (6–7-col) tables. Split: coarse 16 in the
+  shell for the degenerate case; real per-grid `grid_min_width` fit test in
+  `render_table` → fall back to `Disabled` (overflow) when `w` can't fit the grid.
 - **ASM-1 — Dynamic + force_no_tty contradiction. REFUTED (spike).** Not a
   contradiction: wrapping is the arrangement axis, `force_no_tty` the styling axis.
   `Dynamic + set_width` wraps identically with force_no_tty on or off (we set no
@@ -105,5 +119,5 @@ Out of scope:
 
 ## Follow-Ups
 
-- `--width=N` CLI flag for manual override.
-- `--no-wrap` / `NO_WRAP` env var gate (if not resolved in OQ-1).
+- `--width=N` CLI flag for manual override / scripted wrapping.
+- `--no-wrap` flag (manual counterpart to the auto floor), if demand surfaces.
