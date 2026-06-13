@@ -64,9 +64,15 @@ Deliver SPEC-019 **FR-001/002/003/004**, **FR-007** (the four shared verbs only)
 ## Non-Goals
 
 - **The relation/spawn seam (FR-005)** — Slice B. No RECORD `RELATION_RULES`
-  rows, no minted labels, no `outbound_for` arm, no record `relation_edges`
-  reader here. (The generic `[[relation]]` EOF-append attachment point exists
-  once the KINDS rows land; B wires the rules + reader.)
+  rows, no minted labels, no record `relation_edges` reader/accessor, no edges
+  here. (The generic `[[relation]]` EOF-append attachment point exists once the
+  KINDS rows land; B wires the rules + reader.) **Exception (design §4 L7, F-A1):**
+  Slice A DOES add a four-prefix *empty* `outbound_for` arm
+  (`"ASM"|"DEC"|"QUE"|"CON" => Ok(vec![])`) — pure routing so the KINDS-driven
+  dispatch stays total and debug-safe (the `debug_assert!(false)` fallthrough
+  would otherwise panic every debug-build graph scan once a record exists). This
+  is routing, not a relation: no rules, no labels, no reader. B swaps the empty
+  arm for the real accessor.
 - **Supersession (FR-006)** — Slice C; gated on the unbuilt IMP-006 verb.
 - **Direct gating** — IMP-047 (priority-engine `Gating` class). Interim is
   all-`Terminal`-inert; gating only via a spawned backlog proxy (out of scope
@@ -83,7 +89,9 @@ Deliver SPEC-019 **FR-001/002/003/004**, **FR-007** (the four shared verbs only)
 - `src/integrity.rs` — `KINDS` rows (ordered golden).
 - `src/priority/partition.rs` — four `KindPartition` entries + canaries.
 - `src/main.rs` — the `knowledge` subcommand; the `--decision` doc example (D8).
-- `src/rec.rs`, `src/relation_graph.rs` — `decision_ref` comment/fixtures (D8).
+- `src/rec.rs`, `src/relation.rs` — `decision_ref`/`Unvalidated` comments (D8).
+- `src/relation_graph.rs` — `outbound_for` four-prefix empty arm (L7, F-A1:
+  total-dispatch / debug-safe); D8 comment.
 - `install/` + `.gitignore` — authored-entity wiring (manifest dir + negation,
   per `mem.pattern.install.authored-entity-wiring`).
 

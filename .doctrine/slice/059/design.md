@@ -111,6 +111,18 @@ and adds the implementation-shaping local decisions (L-series):
   new <kind> [title]` seeds the default status + an empty `[facet]`/`[evidence]`; the
   body is filled by hand-editing the toml (the backlog risk-facet precedent). Every
   facet field is therefore optional.
+- **L7 — `outbound_for` gets a four-prefix empty arm (the total-dispatch fix).**
+  Admitting ASM/DEC/QUE/CON to `KINDS` without an `outbound_for` arm drops them through
+  to `relation_graph.rs:65`'s `debug_assert!(false, "unrouted KINDS prefix")` — so once
+  any record exists, every **debug-build** graph scan (`inspect`/`slice show`/
+  `build_relation_graph`) panics (release is benign-empty). Slice A adds
+  `"ASM" | "DEC" | "QUE" | "CON" => Ok(Vec::new())`, mirroring the existing
+  `"REQ" => Ok(Vec::new())` arm (a kind that authors no outbound relations). This is
+  **routing, not relations** — no rules, no labels, no reader; Slice B replaces the
+  empty arm with the real `knowledge::relation_edges` accessor. (Found by the internal
+  adversarial pass, §14 F-A1; it refutes the "touches no relation code" simplification
+  and corrects the scope/spec claim that `sources_match_shipped_accessors` — which is
+  label-keyed, not KINDS-keyed — is edited by Slice A.)
 
 ## 5. Module & Types
 
@@ -184,6 +196,13 @@ A seeds **no** `[[relation]]` block and **no** typed `[relationships]` supersess
 (B/C add those). `KnowledgeRecord` carries no `tier1` field yet (Slice B adds the
 reader). Records are **status-ful** → scanned via the standard `meta::Meta` path.
 
+**On-disk keys + meta round-trip (F-A3).** Top-level `id`/`slug`/`title`/`status`/
+`created`/`updated`/`tags` round-trip into the strict `meta::Meta`; `record_kind` is a
+top-level kebab key (the stored discriminator, also implied by the tree dir, stored for
+one-read). `meta::read_meta` (used by `integrity` and `status_and_title_for`'s common
+arm) tolerates the extra `record_kind`/`[facet]`/`[evidence]` keys — serde ignores
+unknowns (proven by `adr.rs`'s `…relationships_are_preserved_and_ignored_by_meta`).
+
 ## 6. CLI Surface (`doctrine knowledge`)
 
 Rides SPEC-013's `<kind> <verb>` grammar and the kind-blind listing spine; main.rs
@@ -219,11 +238,16 @@ full`). This is the **positive all-`Terminal` declaration**, not REC's status-le
 `None → Terminal` path. Direct gating (the `Gating` class + record→item dep edge) is
 **IMP-047** — out of scope; interim gating is via a spawned backlog item.
 
-## 8. KINDS / integrity / install wiring
+## 8. KINDS / integrity / install / dispatch wiring
 
 - **`integrity::KINDS`** — append four `KindRef { kind: &…_KIND, stem: "record",
   state_dir: None }` after `REC`. Update the ordered golden to
   `[…,"RV","REC","ASM","DEC","QUE","CON"]`; the stateful assertion stays `["SL","RV"]`.
+- **`relation_graph::outbound_for`** (L7, F-A1) — add
+  `"ASM" | "DEC" | "QUE" | "CON" => Ok(Vec::new())` so the prefix dispatch stays total
+  and debug-safe. The *only* relation-layer touch in Slice A; Slice B swaps it for the
+  real accessor. `sources_match_shipped_accessors` and `status_and_title_for` need **no**
+  change (the former is label-keyed; records route through the latter's common `_` arm).
 - **`.gitignore`** — add `!.doctrine/knowledge/` (one negation covers all four
   subtrees, the backlog precedent). Without it the tree is silently uncommittable.
 - **`install/manifest.toml [dirs].create`** — add `.doctrine/knowledge` (per-kind
@@ -275,6 +299,10 @@ three drift canaries (`confidence`/`basis`/`source`).
   **left untouched.** They are green regardless (`Unvalidated` carries any string), and
   NF-002 requires existing suites green-*unchanged*. The cosmetic 2-part→3-part swap is
   skipped to honour behaviour-preservation.
+- **Sweep (F-A4)** — at execute, grep `DEC-0` across `install/templates/`, `doc/`, and
+  `.claude/` for other 2-part `DEC-NNN` examples used as *external* cites that the new
+  numbered kind now makes ambiguous; disambiguate to 3-part or note them. D8's named
+  sites are necessary, not provably exhaustive.
 
 ## 11. Verification Alignment
 
@@ -283,13 +311,22 @@ three drift canaries (`confidence`/`basis`/`source`).
 - **Drift canaries:** 3 facet-enum (`confidence`/`basis`/`source`) + 4 partition VT-1 +
   the per-kind status known-set.
 - **Optional seam:** `""`/`[]`→absent for the optional facet fields.
-- **Scaffold:** 2 files + symlink per kind; correct default-status seed; F1 ordering.
+- **Scaffold:** 2 files + symlink per kind; F1 ordering. **Seed-status anti-drift
+  (F-A2):** assert the scaffolded toml's `status` == `default_status(kind)` per kind
+  (the seed lives in both the template literal and `default_status()`).
 - **Read path:** prefix→kind resolution; foreign-kind-state **refuse** (FR-002/FR-004).
+- **`outbound_for` total-dispatch (F-A1):** `outbound_for` returns `Ok(vec![])` (never
+  panics) for each of ASM/DEC/QUE/CON — the regression guard for the empty arm.
+- **Decision `accepted` divergence (F-A5):** pin `is_hidden(Decision,"accepted")==false`
+  (visible) **and** `status_class("DEC","accepted")==Terminal` (never workable) — the two
+  concepts deliberately disagree on this state.
 - **CLI:** black-box per-verb goldens (new/show/list/status) + the SPEC-013
   parse-conformance matrix row for `knowledge`; kind-relative `--status` known-set;
-  hide-set behaviour (`--all`/explicit reveal).
-- **Disjointness (NF-002):** no prefix collision with backlog; the two `KINDS`
-  partitions don't overlap.
+  hide-set behaviour (`--all`/explicit reveal); a cross-kind `--status` filter on a
+  **shared** token (`obsolete`, `superseded`) returns items across kinds.
+- **Disjointness (NF-002 / F-A6):** the four new prefixes collide with **no** existing
+  corpus prefix (not just backlog — all of SL/ADR/POL/STD/PRD/SPEC/REQ/ISS/IMP/CHR/RSK/
+  IDE/RV/REC); the new `KINDS` rows don't overlap any existing partition.
 - **Behaviour preservation (NF-002):** slice/ADR/spec/backlog/memory/relation suites
   green **unchanged**.
 
@@ -323,5 +360,32 @@ three drift canaries (`confidence`/`basis`/`source`).
   ISS/IMP/CHR/RSK/IDE — they don't; enforced by the KINDS golden + a disjointness test.
 - No open design questions remain; all SPEC-019 OQs for Slice A are closed (OQ1 §9,
   OQ2 §4 L3, A1 §4 L4, KINDS insertion §4 L5).
+- **R5 — `outbound_for` total-dispatch (was the sharpest miss; now §4 L7 / §8 / §14
+  F-A1).** Resolved by the empty four-prefix arm.
+
+## 14. Internal Adversarial Pass
+
+A hostile self-review before external challenge. Findings + dispositions:
+
+- **F-A1 (MUST-FIX, integrated).** Adding KINDS rows without an `outbound_for` arm
+  drops ASM/DEC/QUE/CON to `relation_graph.rs:65`'s `debug_assert!(false)` — every
+  debug-build graph scan panics once a record exists. → §4 L7, §8 (empty arm), §11
+  (total-dispatch guard). Also corrected the inherited scope/spec claim that
+  `sources_match_shipped_accessors` is edited by Slice A — it is label-keyed and
+  untouched; only `outbound_for` is.
+- **F-A2 (integrated).** Seed status duplicated (template literal + `default_status()`)
+  → §11 anti-drift test.
+- **F-A3 (integrated).** On-disk `record_kind` key + strict-`meta` tolerance pinned → §5.
+- **F-A4 (integrated).** D8's named sites aren't provably exhaustive → §10 execute-time
+  `DEC-0` sweep.
+- **F-A5 (integrated).** `accepted` decision is list-visible yet partition-Terminal —
+  deliberate, surprising → §11 dual assertion.
+- **F-A6 (integrated).** Disjointness must cover all corpus prefixes, not just backlog
+  → §11.
+- **Checked, no change:** `status_and_title_for` routes records through its common `_`
+  arm (status-ful, top-level status+title) — safe. `read_block`/`title_for` are generic
+  TOML reads (no per-kind dispatch assert). ADR-001 layering holds (knowledge.rs is a
+  leaf; integrity/partition/relation_graph reference its consts, the existing pattern).
+  The superset `RawFacet` laxity is the sanctioned tolerant-read tier (R2).
 </content>
 </invoke>
