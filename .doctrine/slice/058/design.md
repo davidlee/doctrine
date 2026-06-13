@@ -45,7 +45,8 @@ storage shape, and machinery are fixed (ADR-004, ADR-010, SPEC-018) and correct.
 - **Entity fallout** — `ADR-011` (fixed). Backlog: `ISS-009`, `ISS-010`,
   `IMP-045..051`, `IDE-005` (10 files) carry typed migrated keys. Of these only
   `IMP-045` has a *populated* migrated key (`slices = ["SL-056"]`); the rest are
-  empty.
+  empty. `SL-056` (slice kind, F-E) additionally carries a stale comment-only
+  `[relationships]` table — benign (no edges) but non-conformant with D2; in scope.
 - **Detection gap** — `tests/e2e_relation_migration_storage.rs::view()`
   attributes `[relationships]` keys only when `line == "[relationships]"`
   (exact). A header with a trailing inline comment (`[relationships]  # …`, the
@@ -92,7 +93,7 @@ Four work streams, ordered by dependency:
 ```
 templates ──(re-embed)──► scaffold-output guard (test)
     │
-    └─► entity migration (link IMP-045; strip 9 empty) ──► corpus invariant green
+    └─► entity migration (link IMP-045; strip 9 empty backlog + SL-056) ──► corpus invariant green
                                                               ▲
 parser hardening (view inline-comment) ──────────────────────┘
 guidance (memory + using-doctrine.md + authoring skills) ── independent
@@ -119,7 +120,9 @@ No new code interfaces. Surfaces touched:
   i.e. `line.split('#').next().trim() == "[relationships]"`, NOT a loose
   `starts_with` (which would false-match a sub-table `[relationships.x]`). Same
   treatment for `[[relation]]`. Preserves the textual-position F1 semantics (the
-  header index is still the line number).
+  header index is still the line number). Key extraction additionally strips
+  surrounding quotes (`"slices"` → `slices`) so a legal quoted migrated key cannot
+  evade `assert_no_migrated_key_left` (F-H).
 - **Guidance**: a doctrine memory (pattern), a `using-doctrine.md` section, and
   targeted insertions in the authoring skills.
 
@@ -132,7 +135,10 @@ No new code interfaces. Surfaces touched:
   `[[relation]]` row via `link`; (ii) remove the three migrated keys
   (`slices`/`specs`/`drift`) from the typed `[relationships]` table, leaving
   `needs`/`after`/`triggers`. Empty migrated keys carry no data — pure removal.
-  IMP-045 is the only (i) case.
+  IMP-045 is the only (i) case. **SL-056** (slice kind, F-E) carries a stale
+  comment-only `[relationships]` table from the old slice template — strip the
+  whole table (no edge, pure removal), matching D2's table-absent slice shape. The
+  execution re-scan covers the slice corpus too, not only backlog.
 - **`needs`/`after`/`triggers`** stay under `[relationships]` typed — NOT
   migrated, not touched.
 
@@ -140,14 +146,18 @@ No new code interfaces. Surfaces touched:
 
 Execution order (one phase boundary at re-embed):
 
-1. Edit the four templates → **touch the embedding crate** → rebuild → assert
-   `slice new`/`adr new`/`backlog new` emit the new shape (defeats RustEmbed
-   false green).
+1. Edit the six templates → **touch the embedding crate** → rebuild → assert
+   `slice new`/`adr new`/`policy new`/`standard new`/`backlog new` (+ risk-backlog)
+   emit the new shape (defeats RustEmbed false green).
 2. Harden `view()`; add the template-level guard test — a TEXT scan (reusing the
-   hardened `view()`) over each embedded template asset, asserting zero migrated
-   tier-1 keys for its kind. NB raw templates carry `{{slug}}`/`{{id}}`
-   placeholders and are NOT valid TOML, so the guard must text-scan, never
-   `toml::from_str` (the black-box scaffold test in §9 covers the rendered shape).
+   hardened `view()`) over each embedded template asset, **kind-specific** (F-D):
+   for the slice kind, assert NO `[relationships]` header at all (the bare-key scan
+   alone passes slice.toml, whose migrated axes are only commented); for
+   governance/backlog, assert migrated tier-1 keys absent AND the kept-typed keys
+   present AND the `[[relation]]` guidance comment present. NB raw templates carry
+   `{{slug}}`/`{{id}}` placeholders and are NOT valid TOML, so the guard must
+   text-scan, never `toml::from_str` (the black-box scaffold test in §9 covers the
+   rendered shape).
 3. Migrate the 10 entities (link IMP-045; strip all 10).
 4. Author guidance: memory + `using-doctrine.md` + authoring-skill insertions.
 
@@ -157,9 +167,12 @@ proof: previously-latent items are now both well-formed AND covered.
 ### 5.5 Invariants, Assumptions & Edge Cases
 
 - INV: no embedded template emits a migrated tier-1 key in `[relationships]`
-  (new guard).
+  (new guard); the **slice** template emits no `[relationships]` header at all
+  (kind-specific guard, F-D).
 - INV: corpus carries no migrated tier-1 key in a typed `[relationships]` slot
-  (existing test, now with a parser that actually sees inline-comment headers).
+  (existing test, now with a parser that actually sees inline-comment headers);
+  the slice corpus invariant additionally asserts no `[relationships]` header for
+  the slice kind, and the `name == "056"` hardcode skip is removed (F-E).
 - INV: `RELATION_RULES` unchanged; machinery suites green unchanged.
 - Edge: a populated migrated key (IMP-045) must round-trip to a `[[relation]]`
   row before strip — verify the edge renders in `inspect`/`backlog show` after.
@@ -184,9 +197,14 @@ proof: previously-latent items are now both well-formed AND covered.
 
 - **D1 — Entity migration via `link` + strip, not a one-shot migrator.** Only one
   edge exists (IMP-045); a bespoke migrator (as SL-048 used for the bulk cut) is
-  overkill for 10 files and 1 edge. Dogfooding `link` also exercises the shipped
+  overkill for 11 files and 1 edge. Dogfooding `link` also exercises the shipped
   writer on real data. Alt: pure hand-edit — rejected for the populated key (loses
-  the dogfood signal and risks a malformed hand row).
+  the dogfood signal and risks a malformed hand row). **Cutover rule (F-G):**
+  link+strip holds while populated migrated keys ≤ 1 AND every other fallout file
+  is an empty-key removal AND the total malformed set ≤ ~12. If the execution
+  re-scan finds >1 populated migrated key, OR any populated *non-backlog* fallout,
+  OR a materially larger malformed set → switch to a scan-driven migrator (or
+  rescope) before continuing.
 - **D2 — Slice template drops the whole `[relationships]` table.** Slices have no
   kept-typed axis; an empty stub would re-tempt typed authoring and re-introduce
   the F1 trailing-table hazard. A comment documents the `[[relation]]` idiom. Alt:
@@ -223,15 +241,20 @@ proof: previously-latent items are now both well-formed AND covered.
 ## 9. Quality Engineering & Validation
 
 - **Scaffold-output black-box test** (`mem.pattern.testing.black-box-cli-golden`):
-  `slice new`/`adr new`/`backlog new` produce no migrated typed key and carry the
-  `[[relation]]` guidance comment.
+  `slice new`/`adr new`/`policy new`/`standard new`/`backlog new` + the risk-backlog
+  scaffold path (all six fixed templates, F-F) produce no migrated typed key and
+  carry the `[[relation]]` guidance comment; `slice new` produces no
+  `[relationships]` header at all.
 - **Template-guard unit test**: a TEXT scan (hardened `view()`) over each embedded
-  template asset yields zero migrated tier-1 keys for its kind — the root guard,
-  independent of the CLI. Text-scan, not `toml::from_str` (placeholders are
-  invalid TOML).
+  template asset, kind-specific (F-D) — slice: no `[relationships]` header;
+  governance/backlog: migrated tier-1 keys absent, kept-typed keys present,
+  guidance comment present. The root guard, independent of the CLI. Text-scan, not
+  `toml::from_str` (placeholders are invalid TOML).
 - **Hardened corpus invariant**: `e2e_relation_migration_storage` passes over the
-  full corpus including the now-migrated backlog items, with the inline-comment
-  header visible to `view()`.
+  full corpus including the now-migrated backlog items AND a stripped SL-056, with
+  the inline-comment header visible to `view()` and the `name == "056"` hardcode
+  removed (F-E); the slice corpus check asserts no `[relationships]` header for
+  slices.
 - **Round-trip fixture**: scaffold an entity, `link` a relation, assert it renders
   in `slice show`/`inspect`; `unlink` removes it; `validate` clean.
 - **Behaviour-preservation**: SL-048 / SL-046 / relation / cordage suites green
@@ -253,6 +276,71 @@ Internal adversarial pass (integrated):
 - **F-C — parser-hardening precision.** Loose `starts_with("[relationships]")`
   would false-match `[relationships.x]`; specified comment-stripped exact match.
 
-Open for external pass: whether the entity migration should instead ride a
-one-shot migrator if concurrent authoring inflates the fallout list materially
-before execution (currently 10; was 7 at scoping).
+External adversarial pass (codex / GPT-5.5, integrated). Each finding
+re-derived against ground truth (`RELATION_RULES` @ `src/relation.rs:252`,
+`tests/e2e_relation_migration_storage.rs`, the templates) before disposition.
+
+- **F-D — template guard is toothless for the slice kind. (MAJOR; ACCEPT.)**
+  `slice.toml` emits its migrated axes only as *commented* examples under a
+  `[relationships]` header (lines 8-14) — no bare keys. The §5.2/§9 guard ("zero
+  migrated tier-1 keys" via the bare-key `view()` scan) therefore PASSES the
+  current stale slice template, because `view()` skips `#` lines. The guard does
+  not enforce D2's whole-table removal. Fix: the template guard is **kind-specific**
+  — for the slice kind it asserts NO `[relationships]` header at all; for
+  governance/backlog it asserts migrated keys absent AND the kept-typed keys
+  present AND the `[[relation]]` guidance comment present. (adr/backlog templates
+  emit real bare keys, so the bare-key scan already catches *those* kinds — F-D is
+  slice-only.) §5.2, §5.5, §9 updated.
+- **F-E — slice-kind conformance is asserted nowhere; SL-056 + a test hardcode.
+  (MAJOR; ACCEPT.)** The slice corpus invariant (`e2e_…::slice_corpus_…`, line
+  146) checks only bare migrated keys + F1 ordering — it does NOT assert
+  table-absence, so a slice born with a comment-only `[relationships]` table passes
+  vacuously. SL-056 carries exactly that stale table and is *additionally*
+  hardcoded-skipped (`if name == "056" continue`, line 154). The entity is benign
+  (no edges, render-identical), but (a) D2 makes the correct slice shape
+  table-absent, and (b) a hardcoded entity skip contradicts SL-058's "close the
+  detection gap" mandate. Fix: the slice corpus invariant asserts NO
+  `[relationships]` header for the slice kind (matching the F-D guard); strip
+  SL-056's comment-only table as fallout (pure removal — no edge); remove the
+  `name == "056"` hardcode; re-scan all slices at execution for other comment-only
+  stale tables. Entity scope +1 (now: ADR-011 done + 10 backlog + SL-056). §5.3,
+  §5.5 updated.
+- **F-F — §9 black-box coverage omits policy/standard/backlog-risk. (MAJOR;
+  ACCEPT.)** Six templates are fixed but §9 named only `slice new`/`adr new`/
+  `backlog new`. `doctrine policy new` / `standard new` exist; the risk backlog has
+  its own template (`backlog-risk.toml`). With the RustEmbed footgun, an unasserted
+  scaffold path is an unverified fix. Fix: §9 black-box set adds `policy new`,
+  `standard new`, and the risk-backlog scaffold path.
+- **F-G — D1 has no bounded cutover rule. (MAJOR; ACCEPT.)** "Switch to a
+  migrator if inflation is material" deferred the threshold to the executor. Fix:
+  D1 pins it — link+strip holds while populated migrated keys ≤ 1 (today: IMP-045
+  only) AND every other fallout file is an empty-key removal AND total malformed
+  files ≤ ~12. If the execution re-scan finds >1 populated migrated key, OR any
+  populated non-backlog fallout, OR a materially larger malformed set → switch to a
+  scan-driven migrator or rescope before continuing.
+- **F-H — `view()` quoted-key false negative. (MINOR; ACCEPT, low-likelihood.)**
+  `view()` extracts a key with `line.split('=').next().trim()`, keeping the quotes
+  on a legal `"slices" = []`, so a quoted migrated key would evade
+  `assert_no_migrated_key_left`. The corpus is template-born (bare keys only), so
+  this cannot arise today, but the guard is meant to be defensive. Fix: strip
+  surrounding quotes when extracting the key in `view()`. (A full `toml`-parsed
+  entity check is deferred — YAGNI until a quoted-key entity is ever observed.)
+- **F-I — internal count contradiction. (MINOR; ACCEPT.)** §5.4 step 1 said
+  "the four templates"; §5.2/§10 say six. `slice-058.md` §Context still framed
+  three. Fix: §5.4 → six; `slice-058.md` reconciled.
+
+Scope-completeness re-derivation (charge item 1, independent): every `Tier::One`
+rule in `RELATION_RULES` was cross-checked against every entity template.
+`GovernedBy` (SLICE/PRD/SPEC) and `Consumes` (PRD) are tier-1, but
+`spec-product.toml` / `spec-tech.toml` emit NO `[relationships]` table and never
+template `governed_by`/`consumes` — confirmed clean. The six-template set is
+**complete**; no kind beyond {slice, adr, policy, standard, backlog,
+backlog-risk} is born malformed.
+
+Governance-alignment re-derivation (charge item 4): the kept-typed partition is
+not an assumption — `e2e_relation_migration_storage` lines 184-223 (governance)
+and 226-249 (backlog) assert it against the corpus. adr/policy/standard keep
+`supersedes`/`superseded_by`/`tags` typed (OD-3: gov `supersedes` is
+`LifecycleOnly`, storage-excluded) and migrate only `related`; backlog keeps
+`needs`/`after`/`triggers` typed and migrates `slices`/`specs`/`drift`. Design
+§5.3 matches `RELATION_RULES` exactly.
