@@ -23,11 +23,22 @@
 //!   stable order; across labels the migrator emits in the per-kind axis sequence.
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// The repo root — this test runs from the crate dir, and the corpus is `.doctrine/`
 /// beside `Cargo.toml`.
 fn doctrine_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".doctrine")
+}
+
+/// The freshly-built binary under test (SL-058 PHASE-01 scaffold goldens).
+const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
+
+/// The on-disk template-source dir (the source that RustEmbed snapshots into the
+/// binary). The PHASE-01 template guard scans these directly: it guards the SOURCE
+/// shape, while the black-box scaffold test below proves the embedded/rendered shape.
+fn templates_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("install/templates")
 }
 
 /// The numeric (`NNN`) entity dirs directly under `tree` (skips the `NNN-slug` symlink
@@ -298,4 +309,143 @@ fn relation_rows_of_one_label_are_contiguous() {
             prev = Some(label.clone());
         }
     }
+}
+
+// === SL-058 PHASE-01: post-cut template shape (source guard + scaffold golden) ===
+//
+// Two complementary proofs over the SIX scaffold templates the cut left stale:
+// - the **template guard** scans the on-disk `install/templates/*.toml` SOURCE
+//   (catches a future bad template edit at the source);
+// - the **black-box scaffold golden** spawns the freshly-built binary and reads
+//   what `<kind> new` actually renders (catches the RustEmbed false-green and
+//   proves the rendered shape — the embed must be re-snapshotted: `touch
+//   src/install.rs`).
+// Both reuse the same `view()` parser, so the post-cut shape is asserted once per
+// kind. `view()` is comment-skipping and placeholder-tolerant, so it reads the
+// raw `{{slug}}` templates and the rendered entities identically.
+
+/// A migrated key is asserted absent (no typed `[relationships]` slot) AND the
+/// guidance comment is present, for every kind.
+fn assert_guidance_comment_present(label: &str, text: &str) {
+    assert!(
+        text.contains("doctrine link"),
+        "{label}: post-cut template must carry the `doctrine link` guidance comment:\n{text}"
+    );
+}
+
+/// Slice kind (F-D): the whole `[relationships]` table is gone — NO header at all
+/// (the migrated axes survive only as commented examples, which the bare-key scan
+/// alone would pass; the header-absent assertion is what gives the guard teeth).
+fn assert_slice_shape(label: &str, text: &str) {
+    let v = view(text);
+    assert!(
+        v.first_relationships.is_none(),
+        "{label}: slice template must emit NO `[relationships]` header (whole table cut):\n{text}"
+    );
+    assert_guidance_comment_present(label, text);
+}
+
+/// Governance kinds (adr/policy/standard): `related` migrated OUT; the supersession
+/// pair + tags stay typed.
+fn assert_governance_shape(label: &str, text: &str) {
+    let v = view(text);
+    assert_no_migrated_key_left(Path::new(label), &v, &["related"]);
+    for kept in ["supersedes", "superseded_by", "tags"] {
+        assert!(
+            v.relationships_keys.iter().any(|k| k == kept),
+            "{label}: governance template must keep `{kept}` typed in [relationships]:\n{text}"
+        );
+    }
+    assert_guidance_comment_present(label, text);
+}
+
+/// Backlog kinds (backlog/backlog-risk): slices/specs/drift migrated OUT; the
+/// dep/seq axes needs/after/triggers stay typed with their per-edge payloads.
+fn assert_backlog_shape(label: &str, text: &str) {
+    let v = view(text);
+    assert_no_migrated_key_left(Path::new(label), &v, &["slices", "specs", "drift"]);
+    for kept in ["needs", "after", "triggers"] {
+        assert!(
+            v.relationships_keys.iter().any(|k| k == kept),
+            "{label}: backlog template must keep `{kept}` typed in [relationships]:\n{text}"
+        );
+    }
+    assert_guidance_comment_present(label, text);
+}
+
+/// Read one on-disk template source.
+fn template_text(name: &str) -> String {
+    let p = templates_dir().join(name);
+    std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read template {}: {e}", p.display()))
+}
+
+#[test]
+fn template_source_is_post_cut_shape_kind_specific() {
+    assert_slice_shape("slice.toml", &template_text("slice.toml"));
+    for gov in ["adr.toml", "policy.toml", "standard.toml"] {
+        assert_governance_shape(gov, &template_text(gov));
+    }
+    for bk in ["backlog.toml", "backlog-risk.toml"] {
+        assert_backlog_shape(bk, &template_text(bk));
+    }
+}
+
+/// Scaffold one entity via the real `<kind> new` verb into a throwaway project and
+/// return the rendered TOML of the created file (`toml_rel` is its path under
+/// `.doctrine/`). DOCTRINE_WORKER is unset — `new` is an authored write the
+/// self-arm guard would refuse under a stray inherited worker var.
+fn scaffold(new_args: &[&str], toml_rel: &str) -> String {
+    let t = tempfile::tempdir().expect("tempdir");
+    let root = t.path();
+    let out = Command::new(BIN)
+        .args(new_args)
+        .arg("-p")
+        .arg(root)
+        .env_remove("DOCTRINE_WORKER")
+        .output()
+        .expect("spawn doctrine");
+    assert!(
+        out.status.success(),
+        "`{new_args:?}` scaffold failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    std::fs::read_to_string(root.join(".doctrine").join(toml_rel))
+        .unwrap_or_else(|e| panic!("read scaffolded {toml_rel}: {e}"))
+}
+
+#[test]
+fn scaffolded_entities_are_post_cut_shape_all_six_paths() {
+    assert_slice_shape(
+        "slice new",
+        &scaffold(&["slice", "new", "Fixture"], "slice/001/slice-001.toml"),
+    );
+    assert_governance_shape(
+        "adr new",
+        &scaffold(&["adr", "new", "Fixture"], "adr/001/adr-001.toml"),
+    );
+    assert_governance_shape(
+        "policy new",
+        &scaffold(&["policy", "new", "Fixture"], "policy/001/policy-001.toml"),
+    );
+    assert_governance_shape(
+        "standard new",
+        &scaffold(
+            &["standard", "new", "Fixture"],
+            "standard/001/standard-001.toml",
+        ),
+    );
+    assert_backlog_shape(
+        "backlog new improvement",
+        &scaffold(
+            &["backlog", "new", "improvement", "Fixture"],
+            "backlog/improvement/001/backlog-001.toml",
+        ),
+    );
+    assert_backlog_shape(
+        "backlog new risk",
+        &scaffold(
+            &["backlog", "new", "risk", "Fixture"],
+            "backlog/risk/001/backlog-001.toml",
+        ),
+    );
 }
