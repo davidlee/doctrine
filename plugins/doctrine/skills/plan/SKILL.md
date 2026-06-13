@@ -45,7 +45,8 @@ Inputs:
 7. If plan complexity or policy ambiguity emerges, `/consult`.
 8. Hand off to `/phase-plan` to expand the next phase's runtime sheet just before
    execution — then `/execute`. Do this only after slice scope, `design.md`, and
-   the plan tell the same story.
+   the plan tell the same story. Record the lifecycle move on handoff:
+   `doctrine slice status <id> ready` (bare number).
 
 ## Outcomes
 
