@@ -5,10 +5,10 @@ id = 4
 slug = "close-skill-text-is-stale-pre-adr-009-lifecycle-needs-reconcile-against-slice-status-state-machine"
 title = "close skill text is stale (pre-ADR-009 lifecycle), needs reconcile against slice status state machine"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-12"
-updated = "2026-06-12"
+updated = "2026-06-13"
 tags = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
