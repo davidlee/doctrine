@@ -44,6 +44,13 @@ facet on one entity, never a fork of parallel per-kind schemas — the same disc
 backlog applies to its five item kinds. The `record_kind` enum is the `clap::ValueEnum`
 positional on capture and the kebab serde of the stored `record_kind` field.
 
+The `DEC` prefix is **dual-namespaced**, deliberately (D8): the numbered decision kind is
+the **2-part** form `DEC-NNN` (`DEC-003`); the entrenched **3-part** `DEC-NNN-XX` refs
+already in the corpus (`DEC-005-C`, `DEC-010-06`) are *external* forgettable
+decision-log citations, not doctrine entities — they stay free-text prose and are never
+renumbered. The shipped `DecisionRef` Unvalidated label and `rec.decision_ref`, which
+carry those external refs today, are disambiguated inside the DEC-kind slice, not here.
+
 ```text
 .doctrine/knowledge/<kind>/NNN/
   record-NNN.toml      # identity, record_kind, status, summary, tags;
@@ -151,10 +158,15 @@ Plugging the four record kinds in therefore requires, concretely:
 1. **`integrity::KINDS` rows** for ASM/DEC/QUE/CON (kind constants + each kind's
    stateful status set) — the corpus-wide id table the contract and graph both scan.
 2. **A `RECORD` source-group and rules in `RELATION_RULES`** — the records' outbound
-   labels: forward links to backlog items, risks, slices, specs, ADRs, requirements,
-   and drift records, plus the **spawn-work** edge (e.g. `ASM-001 → RSK-004`,
-   `DEC-003 → SL-020`). These are `Tier::One` (`[[relation]]`) and `Writable`; the
-   inbound origin on the spawned/linked artefact is derived, never authored on it.
+   labels. Most **reuse existing** labels by joining the `RECORD` source-group to their
+   `sources` set, the target sets already matching: `specs` (→ PRD/SPEC), `slices`
+   (→ SLICE), `requirements` (→ REQ), `drift`, and `governed_by` (→ the governance set —
+   the record→ADR axis). **Two axes have no existing label and must be minted** (the
+   reuse option is foreclosed — see the verdict below): a record→backlog-item *relate*
+   label targeting the five backlog kinds (so record→risk is just this label aimed at
+   `RSK`) and a distinct `spawns` origin label (e.g. `ASM-001 → RSK-004`,
+   `DEC-003 → SL-020`). All are `Tier::One` (`[[relation]]`) and `Writable`; the inbound
+   origin on the spawned/linked artefact is derived, never authored on it.
 3. **An `outbound_for` dispatch arm** (or a shared record accessor, mirroring the
    five-backlog-kinds-one-accessor pattern) — `outbound_for` `debug_assert!`s that
    every `KINDS` prefix is routed, so a new kind with no arm is a loud invariant
@@ -162,17 +174,26 @@ Plugging the four record kinds in therefore requires, concretely:
 4. **Extending the exact-coverage invariant** to the record source kinds, so the
    reader and the table cannot drift.
 
-**The gap this opens (a real design question, flagged not closed):** `RelationLabel`
-is a *closed* vocabulary, and PRD-010's link list does not map cleanly onto it. `specs`
-/`slices`/`requirements`/`drift`/`governed_by` exist but are scoped to other source
-sets; **a record→risk link, a record→ADR *relate* (distinct from `governed_by`), and a
-`spawns` edge have no existing label** — so new `RelationLabel` variants are almost
-certainly required, each with a wire name, an `inbound_name`, and a rule row. Which
-labels to mint, and whether spawn reuses `slices`/backlog labels or earns its own
-`spawns`, is per-slice `/design`'s call; what is fixed here is that the seam is an
-*extension of the SL-046/SL-048 vocabulary*, authored in `RELATION_RULES` and never
-transcribed into this spec (storage rule). The seam is always present, even empty, and
-relating or spawning never mutates the linked artefact's lifecycle.
+**The closed-vocabulary verdict (pinned, not deferred):** `RelationLabel` is a *closed*
+enum, so PRD-010's link list resolves into exactly three classes, and fixing that
+classification is the one decision a tech spec owes its slice:
+
+1. **Source-set extensions** — `specs`/`slices`/`requirements`/`drift`/`governed_by`
+   already exist with matching target sets; the record kinds simply join their `sources`.
+   No new label. record→ADR rides `governed_by` (the governance sense); **no separate
+   peer-relate to an ADR is in v1** — minting one is deferred until a concrete
+   non-governance need surfaces (avoid over-minting).
+2. **New variants** — a record→backlog-item *relate* label and a `spawns` origin label.
+   Nothing existing targets the backlog kinds (`Slices` is `BACKLOG`-sourced and
+   `SLICE`-targeted, and a record is in neither set), so **spawn cannot reuse
+   `slices`/backlog labels** — the option the prior draft left open is closed. Each
+   minted variant carries a wire name, an `inbound_name`, and a rule row.
+3. **Reused as-is** — `Supersedes`, via a new RECORD-sourced `LifecycleOnly` rule row
+   (next section).
+
+The *rule rows themselves* live in `RELATION_RULES`, never transcribed here (storage
+rule); what this spec fixes is the **class of each link**. The seam is always present,
+even empty, and relating or spawning never mutates the linked artefact's lifecycle.
 
 ### Cross-kind supersession
 
@@ -182,7 +203,9 @@ the `supersedes` / `superseded_by` pair — the ADR-004 §5 reverse carve-out, c
 both records, sanctioned because the supersession already moves the predecessor to a
 terminal status and rewrites its file, so the reverse edge adds zero marginal coupling.
 In `RELATION_RULES` terms this is the `Supersedes` label at `LinkPolicy::LifecycleOnly`
-— never plain-`link` — and, like governance supersession (SPEC-018 OD-3), it is
+— never plain-`link` — added as a **new RECORD-sourced rule row** whose `TargetSpec` is
+the four record kinds (cross-kind *within the family*, unlike the governance row's
+`SameKind`). Like governance supersession (SPEC-018 OD-3), it is
 **storage-excluded from the tier-1 `[[relation]]` migration**: the pair stays a typed
 `[relationships]` block (mirroring SPEC-005's ADR seam) because the sanctioned reverse
 `superseded_by` is structurally un-authorable as a `[[relation]]` row — the table admits
@@ -205,9 +228,14 @@ tells you to *do*. That is the durable invariant — **no record state is ever
 `Workable`**, so records are never `eligible`, never in `survey`/`next`, and carry zero
 work-lineage consequence (record→artefact labels stay out of `counts_toward_consequence`
 — a record *shaping* an artefact is not the artefact *depending on it for work*). Admitting
-the four kinds to `integrity::KINDS` forces a `priority::partition` entry (the invariant
-requires `workable ∪ terminal` to cover each kind's whole vocabulary, else `Unrecognised`
-— a diagnostic), so this posture is a **positive declaration, not an omission**.
+the four kinds to `integrity::KINDS` forces **four full `priority::partition` entries** —
+one per kind, each `workable: &[]` with *every* status of that kind in `terminal` (the
+invariant requires `workable ∪ terminal` to cover the whole vocabulary, else
+`Unrecognised`), plus the four VT-1 drift canaries binding each kind's `*_STATUSES` const.
+This is **not** the status-less REC path: REC carries no status and rides `status_class`'s
+`None → Terminal` fast path with no table entry; records are status-ful and *cannot*, so
+the interim is an explicit all-`Terminal` partition — a **positive declaration, not an
+omission**.
 
 But *never actionable* is not *never relevant to the graph*. Records are meant to **gate**
 work — the load-bearing expressions are blocking ones:
@@ -226,8 +254,9 @@ record→item gating edge allocated into the `dep` overlay — is a priority-eng
 (SPEC-001/PRD-011) change tracked as **IMP-047**. The settle→unblock semantics fall out:
 a record at a terminal status leaves the `Gating` class and stops gating.
 
-**Until IMP-047 lands, records are parked `Terminal`-inert** (the REC posture — neither
-eligible nor blocking), and a belief that gates work does so *indirectly*, through a
+**Until IMP-047 lands, records are parked in an explicit all-`Terminal` partition**
+(status-ful, not REC's status-less path — neither eligible nor blocking), and a belief
+that gates work does so *indirectly*, through a
 **spawned backlog item** (PRD-010 §6): that item is workable, joins the `dep` overlay,
 and blocks the dependent, while the record links to it. The two paths compose under the
 target model — the spike (work) answers the `QUE` *and* the `QUE` gates the slice
@@ -259,8 +288,11 @@ here. The verb set is the shared one plus the family's lifecycle verbs:
   foreign-kind state.
 
 Relate and supersede do not get bespoke kind verbs: **relate** rides the uniform
-`link`/`unlink` verb once SPEC-018 ships it, and **supersede** is the transactional
-IMP-006 verb (cross-kind, lifecycle-gated) — both cited above, neither restated. The
+`link`/`unlink` verb — **already shipped and wired** (SL-046/SL-048), so FR-005 is
+v1-deliverable once the record kinds carry `RELATION_RULES` rows and a `relation_edges`
+reader; it is blocked on minting the new labels, not on an unbuilt verb. **Supersede** is
+the transactional IMP-006 verb (cross-kind, lifecycle-gated) — genuinely unbuilt, so
+FR-006 is IMP-006-gated and lands after it. Both cited above, neither restated. The
 surface is pinned the same way every kind's is: the SPEC-013 parse-conformance matrix
 plus per-verb black-box goldens.
 
@@ -271,6 +303,10 @@ plus per-verb black-box goldens.
   per-kind analogue of the backlog's `backlog_statuses_matches_the_variants` guard). The
   failure mode is a kind's known-set drifting from its enum, or a transition validated
   against the wrong kind's vocabulary after a prefix→kind misresolution.
+- **Facet-enum drift.** The closed facet enums (`confidence`, `basis`, constraint
+  `source`) each need a known-set guard mirroring their variant set — the facet analogue
+  of the status canary above — or a renamed/added variant silently slips the `validate`
+  pass.
 - **Disjointness with the backlog.** No `record_kind` may be admitted as a
   `backlog_item.item_kind` and no `item_kind` as a `record_kind` (PRD-010 §4); the two
   families are disjoint by the work-intake membership test. The two prefix sets and two
@@ -287,18 +323,24 @@ plus per-verb black-box goldens.
   coupled sites — `integrity::KINDS`, `RELATION_RULES`, the `outbound_for` dispatch, and
   the exact-coverage invariant test. They must move together: a `KINDS` row with no
   `outbound_for` arm trips the routing `debug_assert!`, and a reader/table label
-  divergence trips the coverage invariant. The storage-ordering F1 invariant (typed
-  tables before `[[relation]]` arrays) is the other on-disk hazard.
+  divergence trips the coverage invariant. The `outbound_for` guard is a `debug_assert!`
+  only — in release an unrouted prefix falls through to a silent empty edge list, so the
+  lockstep is test/debug-time, not a compile error. The blast radius also includes two
+  **ordered** goldens — `kinds_table_covers_the_numbered_kinds` (the prefix vector is
+  pinned in order) and `sources_match_shipped_accessors` — both of which the four new
+  kinds edit. The storage-ordering F1 invariant (typed tables before `[[relation]]`
+  arrays) is the other on-disk hazard.
 - **Closed-vocabulary coverage gap.** `RelationLabel` is closed; PRD-010's link list
-  exceeds it (record→risk, record→ADR relate, spawn). New variants must be minted with
-  their `inbound_name` and rule row, and the coverage invariant updated — under-minting
-  silently drops a legal link, over-minting leaves an un-routed label.
-- **Forced partition entry.** Adding the record kinds to `integrity::KINDS` obliges a
-  `priority::partition` entry covering every record status, or the partition invariant
-  flags them `Unrecognised`. No record state is ever `Workable`; the interim entry is
-  all-`Terminal`, and IMP-047 later splits the unsettled states into the `Gating` class.
-  The hazard is forgetting the entry, or mis-classing a live state `Workable` and leaking
-  records into `next` as fake work.
+  resolves into source-set extensions plus two minted variants (the record→backlog-item
+  relate label and `spawns`) — the verdict is pinned in D6, not deferred. Under-minting
+  silently drops a legal link; over-minting leaves an un-routed label tripping the
+  coverage invariant.
+- **Forced partition entry.** Adding the record kinds to `integrity::KINDS` obliges
+  **four** `priority::partition` entries (one per kind), each `workable: &[]` /
+  all-`Terminal`, plus four VT-1 drift canaries — *not* the status-less REC path. No
+  record state is ever `Workable`; IMP-047 later splits the unsettled states into the
+  `Gating` class. The hazard is forgetting an entry (→ `Unrecognised`), or mis-classing a
+  live state `Workable` and leaking records into `next` as fake work.
 - **Behaviour preservation.** This family rides the shared entity scaffold *and* the
   shipped relation machinery; introducing it must leave the existing slice / ADR / spec /
   backlog / memory suites — and the relation-contract suites — green unchanged (PRD-010
@@ -347,13 +389,19 @@ plus per-verb black-box goldens.
   one `[evidence]` table of typed `supports`/`contradicts`/`notes` citations; it is never
   its own entity kind and never a free-form blob, and graph/search machinery over it is
   out of v1 (PRD-010 §2).
-- **D6 — the relation seam extends the SL-046/SL-048 machinery, never forks it.** Record
-  relations are realised by adding `integrity::KINDS` rows, a `RECORD` source-group and
-  rules in `RELATION_RULES`, an `outbound_for` dispatch arm, and extending the
-  exact-coverage invariant — plus any new `RelationLabel` variants the link list demands.
-  No bespoke per-record relation store, no second reader: one contract, one graph
-  (no parallel implementation). Artefact/spawn links are tier-1 `[[relation]]` `Writable`;
-  the supersession pair is the `LifecycleOnly` typed carve-out owned by the IMP-006 verb.
+- **D6 — the relation seam extends the SL-046/SL-048 machinery, never forks it; the
+  label classes are pinned.** Record relations are realised by adding `integrity::KINDS`
+  rows, a `RECORD` source-group and rules in `RELATION_RULES`, an `outbound_for` dispatch
+  arm, and extending the exact-coverage invariant. The closed link list resolves into
+  three pinned classes (§ relation seam): **source-set extensions**
+  (`specs`/`slices`/`requirements`/`drift`/`governed_by`, the record→ADR axis riding
+  `governed_by` — no separate peer-relate in v1), **two minted variants** (a
+  record→backlog-item relate label + `spawns`, reuse foreclosed by the table), and
+  **`Supersedes` reused** via a new RECORD `LifecycleOnly` rule row. No bespoke per-record
+  store, no second reader: one contract, one graph. The relate path rides the
+  **already-shipped** `link`/`unlink` verb — FR-005 is v1-deliverable, label-blocked not
+  verb-blocked; the `LifecycleOnly` supersession pair is owned by the **unbuilt** IMP-006
+  verb, so FR-006 is IMP-006-gated.
 - **D7 — records are never actionable, but they gate work; gating needs IMP-047.** The
   durable invariant: no record state is ever `Workable`, so a record is never `eligible`,
   never in `survey`/`next`, and carries zero work-lineage consequence — *truth is not
@@ -364,10 +412,20 @@ plus per-verb black-box goldens.
   non-`Terminal` nodes, which are necessarily also `eligible`). Decoupling blocking from
   eligibility — a third `Gating` status-class plus a record→item gating edge into the
   `dep` overlay — is **IMP-047**, a priority-engine (SPEC-001/PRD-011) change. Until it
-  lands, records are parked `Terminal`-inert (the REC posture) and a belief gates work
-  only indirectly, through a *spawned backlog item* (PRD-010 §6). The target is direct
-  gating; the interim is inert. The partition invariant forces this to be a *declaration*,
-  not a silent skip of SL-047.
+  lands, records are parked in an explicit all-`Terminal` partition (status-ful, *not*
+  REC's status-less `None → Terminal` path) and a belief gates work only indirectly,
+  through a *spawned backlog item* (PRD-010 §6). The target is direct gating; the interim
+  is inert. The partition invariant forces this to be a *declaration*, not a silent skip
+  of SL-047.
+- **D8 — `DEC` is dual-namespaced; the decision kind takes the 2-part form, external
+  citations keep the 3-part.** The numbered decision kind is `DEC-NNN` (2-part); the
+  entrenched `DEC-NNN-XX` (3-part) refs in the corpus are *external* forgettable
+  decision-log citations, not doctrine entities, and stay free-text prose — never
+  renumbered (provenance). The shipped `DecisionRef` Unvalidated label and
+  `rec.decision_ref`, which carry those external refs today, are disambiguated inside the
+  DEC-kind slice (the stale "DEC is not a numbered kind" comment, the test fixtures, the
+  `--decision` example), not here. Doctrine's own doc-local decisions remain the bare
+  `D1` form (glossary), never `DEC-`.
 
 ## Open Questions
 

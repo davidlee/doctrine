@@ -275,7 +275,7 @@ case is an assumption hardening into a constraint:
 # ASM-004              # CON-002
 record_kind = "assumption"   record_kind = "constraint"
 status = "validated"         status = "active"
-[relations]                  [relations]
+[relationships]              [relationships]
 superseded_by = ["CON-002"]  supersedes = ["ASM-004"]
 ```
 
