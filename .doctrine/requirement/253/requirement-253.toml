@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 253
+slug = "front-the-family-through-the-uniform-doctrine-knowledge-command-surface-spec-013-new-record-kind"
+title = "Front the family through the uniform doctrine knowledge command surface (SPEC-013): new <record_kind> capture, show, kind-relative list over the shared CommonListArgs/known-set/JSON/columns spine, and a status transition verb — relate via the uniform link verb and supersede via the IMP-006 verb, neither a bespoke kind verb"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
