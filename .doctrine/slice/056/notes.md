@@ -132,3 +132,49 @@ continuing the drive.**
 **Empirically reconfirmed this session:** SubagentStart carries `agent_type`
 (general-purpose) + `cwd`=worktree; hook can write the marker into cwd; hook
 duration honoured (3s). Blocking semantics: **OPEN**.
+
+### PHASE-03 prep — A result (blocking probe RESOLVED — CLOSED)
+
+Probe re-run with a legitimately-framed `general-purpose` worker at `isolation:
+worktree`; SubagentStart matcher-`*` hook timestamping HOOK_START / sleep / stamp
+marker into `cwd` / HOOK_DONE to a shared absolute log; worker's first command
+timestamps WORKER_FIRST + marker-presence into the same log. Settings backed up,
+hook merged mid-session (took effect, no restart), restored + worktrees/artifacts
+removed after. **Two findings:**
+
+1. **BLOCKING — CONFIRMED.** The SubagentStart **command** hook gates worker
+   execution until the hook process exits. Two runs, sleep scaled to disambiguate
+   from worker startup latency:
+   - sleep 3s → HOOK_DONE at +3.0s, WORKER_FIRST at +7.0s from HOOK_START.
+   - sleep 10s → HOOK_DONE at +10.0s, WORKER_FIRST at +13.7s from HOOK_START.
+   WORKER_FIRST tracks the sleep **1:1** and is strictly **after** HOOK_DONE in
+   both → the worker cannot run until the hook returns. The worker–done lag is a
+   ~constant ~3.7s intrinsic post-unblock startup, not a race. **Marker `present`
+   at the worker's first action both runs.** ⇒ The D6 "created-but-unstamped"
+   fail-open window is **NOT a worker-execution race** — the stamp is mechanically
+   guaranteed present before any worker command, *when the hook succeeds*.
+
+2. **FAIL-OPEN on hook ERROR — CONFIRMED (new, load-bearing for the ADR).** Third
+   run: hook stamps then exits **nonzero with no stdout**. The worker's turn
+   **still ran** (it produced a full reasoned response) — the harness did **not**
+   abort the subagent. Contrast WorktreeCreate, which is fail-**closed** on
+   no-output (aborts creation). ⇒ SubagentStart-stamp **cannot be made fail-closed
+   via hook exit status.** The "guaranteed-present-before-worker" property holds
+   **only on hook success**; on hook failure the worker proceeds **unstamped**. The
+   residual fail-open window therefore **collapses from a timing race to a
+   hook-failure case** — narrower and differently-shaped than the design assumed.
+
+**Net for B/ADR:** the achievable claude altitude is **stronger on the race axis**
+than ADR-011 D6 O3-red optimistically claimed (no worker-write race at all), but
+carries a **distinct hook-failure fail-open** that WorktreeCreate did not (its
+fail-closed capability was real). The φ row should read: *SubagentStart-stamp,
+blocking ⇒ stamp-before-worker on hook success; fail-OPEN on hook failure (no
+exit-status gate); accident-fenced + prompt-enforced, not malice-proof.* charge-2
+opaque-base residual unchanged.
+
+**Worker-prompt note (reconfirmed, sharper):** the bare/suspicious framing trips
+`general-purpose` skepticism — the 3rd worker **refused** the failure-variant
+command (flagged it as writing a misrepresenting `WORKER_RAN` marker + bypassing
+`/route`). Its *turn ran* (giving the fail-open datum), but it declined the op.
+Real dispatch-worker prompts must carry genuine task context + rationale, never
+bare "run this" orders — itself input to PHASE-05+ worker-prompt design.
