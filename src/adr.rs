@@ -233,12 +233,6 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-        assert!(
-            doc["relationships"]["related"]
-                .as_array()
-                .unwrap()
-                .is_empty()
-        );
         assert!(doc["relationships"]["tags"].as_array().unwrap().is_empty());
         // … yet Meta deserialises fine, ignoring the unknown table.
         assert!(toml::from_str::<Meta>(&body).is_ok());

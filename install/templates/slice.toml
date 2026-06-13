@@ -5,9 +5,10 @@ status = "proposed"
 created = "{{date}}"
 updated = "{{date}}"
 
-[relationships]
-# Reserved. Empty in v1 — no spec/requirement registry to point at yet.
-# When specs land, this section gains (illustrative, not v1):
-#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
-#   requirements = ["..."]   # implements / updates / verifies
-#   supersedes   = [2]       # slice-to-slice links
+# Structural relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` table (SL-048 "the cut"). Slices carry no typed relation axes.
+# Author an edge with the `doctrine link` verb — it validates the (source, label)
+# pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
