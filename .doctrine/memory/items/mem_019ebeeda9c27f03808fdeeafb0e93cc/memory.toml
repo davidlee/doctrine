@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebeeda9c27f03808fdeeafb0e93cc"
+memory_key = "mem.pattern.dispatch.spawn-backend-harness-agnostic-no-free-env-seam"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch spawn backend must be harness-agnostic; worker-identity cannot rely on a free env seam"
+summary = "Dispatch worker-spawn must be harness-agnostic: claude -p is API-billed/harness-specific, Agent tool has no env seam — worker-identity cannot depend on a free env signal"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = []
+globs = ["plugins/doctrine/skills/dispatch/**", "src/worktree.rs"]
+commands = ["worktree"]
+tags = ["dispatch", "harness", "spawn", "billing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c3e7481345ead572a67008d6fe428abba3acabce"
+ref_name = "refs/heads/main"
+checkout_state_id = "d6edcb4953e54357620adc5423710f3b8b6a8000d92bedeade155f30fb565146"
+base_commit = "b7b78e18341537ddbbf0ef1da3304849d3daafb2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 3
