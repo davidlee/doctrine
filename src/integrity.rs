@@ -18,6 +18,7 @@ use anyhow::{Context, bail};
 
 use crate::adr::ADR_KIND;
 use crate::backlog::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
+use crate::knowledge::{ASSUMPTION_KIND, CONSTRAINT_KIND, DECISION_KIND, QUESTION_KIND};
 use crate::policy::POLICY_KIND;
 use crate::rec::REC_KIND;
 use crate::requirement::REQUIREMENT_KIND;
@@ -119,6 +120,32 @@ pub(crate) const KINDS: &[KindRef] = &[
     KindRef {
         kind: &REC_KIND,
         stem: "rec",
+        state_dir: None,
+    },
+    // Knowledge records (SL-059) — four numbered kinds over one engine, each its
+    // own tree + reservation namespace. Status-ful (scanned via the standard
+    // `meta::Meta` path), one shared `record-NNN.{toml,md}` stem, no runtime state
+    // tree. Their `outbound_for` arm (`relation_graph.rs`, L7) co-lands so the
+    // KINDS-driven dispatch stays total (a row with no arm panics every debug-build
+    // graph scan).
+    KindRef {
+        kind: &ASSUMPTION_KIND,
+        stem: "record",
+        state_dir: None,
+    },
+    KindRef {
+        kind: &DECISION_KIND,
+        stem: "record",
+        state_dir: None,
+    },
+    KindRef {
+        kind: &QUESTION_KIND,
+        stem: "record",
+        state_dir: None,
+    },
+    KindRef {
+        kind: &CONSTRAINT_KIND,
+        stem: "record",
         state_dir: None,
     },
 ];
@@ -721,16 +748,32 @@ mod tests {
             prefixes,
             [
                 "SL", "ADR", "POL", "STD", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE",
-                "RV", "REC"
+                "RV", "REC", "ASM", "DEC", "QUE", "CON"
             ]
         );
         // Slice and review (SL-040) own a runtime state tree (F3 guard surface).
-        // REC (SL-042) is status-less but stateless — no runtime tree.
+        // REC (SL-042) is status-less but stateless — no runtime tree. The four
+        // knowledge kinds (SL-059) are status-ful but stateless — no runtime tree.
         let stateful: Vec<_> = KINDS
             .iter()
             .filter(|k| k.state_dir.is_some())
             .map(|k| k.kind.prefix)
             .collect();
         assert_eq!(stateful, ["SL", "RV"]);
+    }
+
+    #[test]
+    fn kinds_prefixes_are_corpus_wide_disjoint() {
+        // NF-002 / F-A6: every numbered-kind prefix is distinct — the four SL-059
+        // additions (ASM/DEC/QUE/CON) collide with NO existing corpus prefix. A
+        // duplicate prefix here would route two kinds to one namespace.
+        use std::collections::BTreeSet;
+        let prefixes: Vec<_> = KINDS.iter().map(|k| k.kind.prefix).collect();
+        let distinct: BTreeSet<_> = prefixes.iter().copied().collect();
+        assert_eq!(
+            distinct.len(),
+            prefixes.len(),
+            "all KINDS prefixes are distinct: {prefixes:?}"
+        );
     }
 }

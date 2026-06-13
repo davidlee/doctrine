@@ -136,6 +136,32 @@ const PARTITION: &[KindPartition] = &[
         workable: &["active"],
         terminal: &["done"],
     },
+    // Knowledge records (SL-059, NF-003 / D7) — NEVER `Workable`: each kind's entry
+    // is `workable: &[]`, `terminal: <KIND>_STATUSES` (the FULL vocab), so every
+    // record status classifies `Terminal` (the positive all-`Terminal` declaration,
+    // distinct from REC's status-less `None → Terminal` path). The terminal set
+    // reads the REAL `knowledge::*_STATUSES` const, so the VT-1 canary fails if a
+    // kind adds a status the table forgot. Direct gating is IMP-047 (out of scope).
+    KindPartition {
+        prefix: "ASM",
+        workable: &[],
+        terminal: crate::knowledge::ASSUMPTION_STATUSES,
+    },
+    KindPartition {
+        prefix: "DEC",
+        workable: &[],
+        terminal: crate::knowledge::DECISION_STATUSES,
+    },
+    KindPartition {
+        prefix: "QUE",
+        workable: &[],
+        terminal: crate::knowledge::QUESTION_STATUSES,
+    },
+    KindPartition {
+        prefix: "CON",
+        workable: &[],
+        terminal: crate::knowledge::CONSTRAINT_STATUSES,
+    },
 ];
 
 /// The shared backlog workable set (the five backlog prefixes partition identically).
@@ -178,7 +204,7 @@ pub(crate) fn status_class(kind: &entity::Kind, status: Option<&str>) -> StatusC
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{adr, backlog, policy, requirement, review, slice, spec, standard};
+    use crate::{adr, backlog, knowledge, policy, requirement, review, slice, spec, standard};
     use std::collections::BTreeSet;
 
     /// Look up a partition entry by prefix (test helper).
@@ -254,6 +280,53 @@ mod tests {
     #[test]
     fn review_partition_covers_the_real_vocabulary() {
         assert_eq!(vocab("RV"), set(review::REVIEW_STATUSES));
+    }
+
+    // -- SL-059 VT-3: the four knowledge partitions cover their real vocabulary --
+
+    #[test]
+    fn knowledge_partitions_cover_the_real_vocabularies() {
+        // workable ∪ terminal == statuses(kind) per kind (∅ ∪ full = full); the
+        // canary reads the REAL `knowledge::*_STATUSES` const.
+        for kind in knowledge::RecordKind::ALL {
+            let prefix = kind.prefix();
+            assert_eq!(
+                vocab(prefix),
+                set(knowledge::statuses(kind)),
+                "{prefix} partition matches statuses({kind:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn every_knowledge_status_classifies_terminal_never_workable() {
+        // NF-003: records are NEVER `Workable` — every status in every kind's full
+        // vocab classifies `Terminal` (workable: &[] makes the workable arm dead).
+        for kind in knowledge::RecordKind::ALL {
+            for status in knowledge::statuses(kind) {
+                assert_eq!(
+                    status_class(kind.kind(), Some(status)),
+                    StatusClass::Terminal,
+                    "{:?}/{status} must be Terminal, never Workable",
+                    kind
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn decision_accepted_diverges_hidden_from_status_class() {
+        // F-A5 (VT-4): the two notions deliberately disagree on `accepted` — it is
+        // LIST-VISIBLE (`is_hidden == false`, a live decision is not settled-away)
+        // yet never workable (`status_class == Terminal`, NF-003).
+        assert!(!knowledge::is_hidden(
+            knowledge::RecordKind::Decision,
+            "accepted"
+        ));
+        assert_eq!(
+            status_class(&knowledge::DECISION_KIND, Some("accepted")),
+            StatusClass::Terminal
+        );
     }
 
     // -- VT-3: conservative / status-less classification ----------------------
