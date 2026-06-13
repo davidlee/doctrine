@@ -1,0 +1,3 @@
+# Verify governance freshness before distilling a worker prompt — plan/design can lag a later ADR amendment
+
+A slice's plan/design section can be STALE vs a LATER ADR amendment; before distilling a dispatch worker prompt or phase-planning, check ADR amendment dates + the slice notes' carry-forwards, not just plan+design. SL-056 PHASE-05 built the stale 'solo writes freely' rule because ADR-006 D2a's later fail-closed (B2/B3) amendment — authored in response to the PHASE-02/03 SubagentStart empirics — was not wired into the worker prompt. Resolve doc conflicts by edit recency: the later edit, made in response to testing, usually wins.

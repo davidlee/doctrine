@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec0f2bba97c51a114dbe360910197"
+memory_key = "mem.pattern.dispatch.verify-governance-freshness-before-distilling-worker"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Verify governance freshness before distilling a worker prompt — plan/design can lag a later ADR amendment"
+summary = "A slice's plan/design section can be STALE vs a LATER ADR amendment; before distilling a dispatch worker prompt or phase-planning, check ADR amendment dates + the slice notes' carry-forwards, not just plan+design. SL-056 PHASE-05 built the stale 'solo writes freely' rule because ADR-006 D2a's later fail-closed (B2/B3) amendment — authored in response to the PHASE-02/03 SubagentStart empirics — was not wired into the worker prompt. Resolve doc conflicts by edit recency: the later edit, made in response to testing, usually wins."
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["plugins/doctrine/skills/dispatch", "plugins/doctrine/skills/phase-plan"]
+globs = []
+commands = ["doctrine adr show", "doctrine slice phase"]
+tags = ["dispatch", "governance", "phase-plan"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e2a48417823a77618d499e505e143a5e946aa7b1"
+ref_name = "refs/heads/main"
+checkout_state_id = "fc6bb9ddced6051fc8e5c0acf23a0d4522b13570d186da47ff6ca961897f395d"
+base_commit = "138038c650602c1581c71c7cbec6b306e265670d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
