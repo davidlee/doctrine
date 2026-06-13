@@ -22,72 +22,32 @@ familiar, simple, urgent, or "probably fine", you are doing it wrong:
 
 When unsure, route to the stricter skill, not the looser one.
 
-## CLI
+## The table rides the boot snapshot
 
-`doctrine --help` (dev: `./target/debug/doctrine --help`). If `doctrine` is
-unavailable, STOP and alert the user.
+The routing table, mid-flight rules (consult / record-memory / backlog / notes /
+next / conduct postures), and core guardrails are already inlined in this
+session's prefix (`@.doctrine/state/boot.md`). Apply them from there — this
+skill does not restate them. What follows is route-unique.
 
-## Boot snapshot freshness
+## Route-unique rules
 
-The governance snapshot (`@.doctrine/state/boot.md`) is inlined into this
-session's cached prefix. Two distinct checks — keep them apart:
-
-- **Disk health.** Run `doctrine boot --check` (the disk sentry). It reports
-  whether the on-disk snapshot is *stale* (≠ a recompute from current
-  governance) or has *unpopulated sections*. `stale` → run `doctrine boot` to
-  rewrite it. This is a DISK check only — a `clean` report does **not** prove
-  *this* session's inlined prefix is current.
-- **In-session lag.** Your inlined prefix was written by a prior session's
-  hook, so a recent governance edit can lag **up to two sessions** behind. To
-  guarantee *this* context reflects a just-made edit, use the freshen-now
-  ritual: run `doctrine boot`, **then** `/clear` or restart (regenerate THEN
-  clear — `doctrine boot` alone cannot refresh the already-inlined prefix).
-
-## Choose the governing skill
-
-At the start of substantive work, also **consult the backlog** — `backlog list`
-(or `backlog show <ID>`): is this intent already captured as an open item, and
-do any open items bear on it?
-
-1. Correctness depends on project governance, an unfamiliar subsystem, or "what
-   is the right way here?" → `/canon` and `/retrieve-memory` first.
-2. Substantive new work and the path is not yet clear → `/preflight`.
-3. Understand or audit an existing artifact with no change intended →
-   `/walkthrough` (no slice). A walkthrough that surfaces a concrete change
-   re-enters routing.
-4. Code-changing intent with no governing slice → `/slice`.
-5. Slice exists, design missing / stale / unapproved → `/design`
-   (then `/inquisition` for an adversarial pass before locking).
-6. Design locked, no plan → `/plan`; expand the next phase just before
-   executing it → `/phase-plan`.
-7. Plan approved and a phase is active → `/execute`.
-8. Implementation done, now evidence / reconciliation → `/audit` → `/close`.
-
-Mid-flight, regardless of stage:
-
-- Unanticipated obstacle, decision, or emergent complexity → `/consult`.
-- Durable fact / gotcha / pattern worth keeping → `/record-memory`.
-- Latent **work** intent surfaced but not for now (issue / improvement / chore /
-  risk / idea) → capture it with `backlog new`, don't lose it. Is it work or
-  knowledge or a decision? See the boundary in `using-doctrine.md`.
-- Finished a coherent unit → `/notes`; handing off to fresh context → `/next`.
-- Authoring evergreen specs under `doc/*` → `/spec-product`, `/spec-tech`.
-- **Pairing / walkthrough are conduct postures**, orthogonal to the stage — layer
-  them on the routed stage, don't route to them *instead* of it.
-
-## Priority order
-
-1. `/canon` + `/retrieve-memory` — when correctness depends on project truth.
-2. `/preflight` — when the path is not clear.
-3. shaping — `/slice` `/design` `/plan` `/phase-plan`.
-4. execution — `/execute`.
-5. close-out — `/audit` `/inquisition` `/close`.
-
-## Guardrails
-
-- **No code without an approved plan** (the gate). Do not jump "there is a
-  slice" → `/execute`; the design, plan, and phase sheet must exist first.
-- Do not guess slice ids, command shapes, or file locations — use the CLI.
-- Do not treat the plan as higher authority than the design or `/canon`.
+- **Consult the backlog before choosing**: `backlog list` — is this intent
+  already captured, and do open items bear on it?
+- Authoring evergreen specs under `doc/*` → `/spec-product`, `/spec-tech`
+  (not in the boot table).
+- "There is a slice" does **not** route to `/execute` — the design, plan, and
+  phase sheet must exist first (the no-code-without-approved-plan gate).
 - Do not import stricter ceremony than the project has adopted; surface a
   conflict between local doctrine and a routing default rather than improvising.
+
+## CLI
+
+`doctrine --help` (dev: `./target/debug/doctrine --help`) is the source of
+truth. If `doctrine` is unavailable, STOP and alert the user.
+
+## Governance edited this session?
+
+The inlined prefix is written by a prior session's hook, so it can lag a
+just-made edit. Freshen-now ritual: run `doctrine boot`, **then** `/clear` or
+restart — regenerate THEN clear; `doctrine boot` alone cannot refresh the
+already-inlined prefix. (Disk sentry, separate check: `doctrine boot --check`.)
