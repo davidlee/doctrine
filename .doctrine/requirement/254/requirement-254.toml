@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 254
+slug = "carry-a-runnable-executable-check-identity-on-vt-coverage-entries"
+title = "Carry a runnable executable check identity on VT coverage entries"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
