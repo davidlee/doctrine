@@ -526,6 +526,7 @@ mod tests {
             git_anchor: anchor.to_owned(),
             attested_date: Some("2026-06-12".to_owned()),
             touched_paths: paths.iter().map(|p| (*p).to_owned()).collect(),
+            check: None,
         }
     }
 

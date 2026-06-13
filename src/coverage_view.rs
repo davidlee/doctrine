@@ -508,6 +508,7 @@ mod tests {
                 git_anchor: "anchor-abc123".to_owned(),
                 attested_date: None,
                 touched_paths: Vec::new(),
+                check: None,
             },
             stale,
         )
