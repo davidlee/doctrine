@@ -1,0 +1,14 @@
+id = 54
+slug = "table-cell-wrapping"
+title = "Table cell wrapping for terminal-width-constrained output"
+status = "design"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[relationships]
+extends = [53]
+adrs = [1]
+# SL-053: terminal output polish (comfy-table + owo_colors) — this slice extends
+# its render_table with terminal-width-aware wrapping.
+# ADR-001: module layering leaf ← engine ← command — the pure/imperative split
+# that governs where terminal-width resolution lives (tty.rs shell, not listing.rs).
