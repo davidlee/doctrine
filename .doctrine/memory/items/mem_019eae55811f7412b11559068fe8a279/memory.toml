@@ -3,15 +3,15 @@ memory_key = "mem.pattern.distribution.skill-refresh-command"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Skill content refresh = doctrine skills install + touch src/skills.rs to re-embed"
-summary = "Refresh an installed skill with 'doctrine skills install', not 'doctrine install'; touch src/skills.rs first to re-embed"
+title = "Skill content refresh = doctrine claude install + touch src/skills.rs to re-embed"
+summary = "Refresh an installed skill with 'doctrine claude install' (SL-056 rename; alias 'skills install'), not 'doctrine install'; touch src/skills.rs first to re-embed"
 created = "2026-06-09"
-updated = "2026-06-09"
+updated = "2026-06-14"
 
 [scope]
 paths = ["src/skills.rs"]
 globs = ["plugins/**"]
-commands = ["doctrine skills install", "doctrine install"]
+commands = ["doctrine claude install", "doctrine skills install", "doctrine install"]
 tags = ["skills", "distribution", "rust-embed"]
 workspace = "default"
 repo = "github.com/davidlee/doctrine"

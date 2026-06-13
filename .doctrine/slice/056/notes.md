@@ -638,3 +638,69 @@ refusal). ⚠ plan.toml PHASE-11 still says "WorktreeCreate hook" in places — 
 prep must re-scope its hook leg to **SubagentStart**, mirroring PHASE-10's re-scope.
 ⚠ design §5 Hook-mint reconciliation flagged for the PHASE-10 VH lock — owner confirms
 at close that the exemption rides Option C's positive signal (no verb-identity carve-out).
+
+## PHASE-11 — `claude install` rename + agents leg + SubagentStart hook wiring (done · /dispatch · `sl056-coord` e87c522)
+
+Re-scoped onto SubagentStart first (plan re-scope `7a56d96`: plan.toml PHASE-11
+objective/EN-1/EX-1/VT-3 + plan.md PHASE-10/11 prose; the dead WorktreeCreate
+`create-fork` references retired). Driven via `/dispatch` (one worker, batch of one).
+Base **B = `a74a513`**; worker fork `sl056-p11-claude-install` returned **S =
+`33f815f`** (`S^ == B`, single non-merge). Funnel clean: precond → S^==B → R-5 belt
+(README.md + src/boot.rs + src/install.rs + src/main.rs + src/skills.rs +
+tests/e2e_claude_install.rs + tests/e2e_worker_guard.rs — NO `.doctrine/`) →
+`git apply --3way --index` → verify → branch-point stationary → one commit
+**`e87c522`**; fork reaped.
+
+**Built (source delta):**
+- **THE CRUX — generalized the `src/boot.rs` HookSpec merge core over event+matcher
+  (no parallel impl).** The core was generic over `HookSpec{command, is_ours}` but
+  **hardcoded** the event (`SessionStart`) and matcher (`SESSION_MATCHER="startup|clear"`)
+  at `desired_entry`/`session_start_array_mut`. Widened `HookSpec` with
+  `event: &'static str` + `matcher: &'static str`; `desired_entry(spec)` emits
+  `spec.matcher`; `session_start_array_mut` → generalized `hook_array_mut(value, event)`
+  (navigates `hooks.<event>`); `fallback_for` reads the spec. boot/sync pass
+  `("SessionStart", SESSION_MATCHER)` — **behaviour-preserving** (their tests @1869/@1905
+  green unchanged). ONE implementation, three callers.
+- `HookSpec::stamp_subagent(exec)` — command `<exec> worktree marker --stamp-subagent`,
+  event `SubagentStart`, matcher = `crate::worktree::DISPATCH_WORKER_AGENT_TYPE` (the
+  const, not a re-spelled literal — drift-pinned), `is_ours = is_doctrine_stamp_command`
+  (suffix-strip ` worktree marker --stamp-subagent`, disjoint from boot/sync predicates).
+- **`Command::Claude{ClaudeCommand::Install}`** (main.rs) — same args as
+  `SkillsCommand::Install`; `Command::Skills` hidden (`#[command(hide=true)]`) as the
+  deprecated alias → BOTH dispatch the one `skills::run_install` handler (SR-3). The
+  separate top-level `Command::Install` (project-files installer) untouched. Args
+  bundled in `ClaudeInstallArgs` (clap arg-ceiling, [[mem.pattern.lint.cli-handler-args-struct]]).
+- **Agents leg** (skills.rs): `install_agents` mirrors the skills canonical+link model —
+  materialize `.doctrine/agents/dispatch-worker.md` from the `install/` embed, symlink
+  `.claude/agents/dispatch-worker.md` via the existing `relative_target`/`classify_link`/
+  `write_link` (no parallel symlink). `.doctrine/agents/*` added to the derived-tree
+  gitignore self-enforce (mirrors SL-010 F4 for skills). Idempotent reinstall.
+- Agents + hook legs **gated on Claude being a resolved target**; `--global` **skips
+  the hook** (the command is an absolute exec path that belongs out of git, consistent
+  with boot/sync settings staying project-local). [worker judgment calls, reviewed
+  SOUND at import.]
+- `write_class`: `Claude{Install}` AND the hidden `skills install` alias both →
+  `Write("claude install")` (charge-5, refused under worker-mode; exhaustive, no wildcard).
+- Goldens moved `skills install`→`claude install` (e2e_worker_guard `WRITE_VERBS`,
+  main.rs write_class_tests). README swept. New `tests/e2e_claude_install.rs` (VT-1
+  alias→same-handler, VT-2 agent-def resolves, VT-3 hook merge preserves unrelated
+  SessionStart hooks + idempotent). VT-5 (`claude_install_and_skills_alias_refuse_in_worker_mode`)
+  drives `run()` from marked-fork AND env-set.
+
+**Verify:** full `-p doctrine` green EXCEPT the one foreign SL-048
+`e2e_relation_migration_storage` red (red at B; delta touches neither it nor
+`.doctrine/adr`). Bin unit 1108 passed (+4 boot.rs merge tests over PHASE-10's 1104);
+e2e_claude_install 2/2; e2e_worker_guard 7/7; clippy zero.
+
+**Durable gotcha recorded:** the boot.rs HookSpec merge core was SessionStart/matcher-
+hardcoded — generalized over event+matcher in PHASE-11 (memory
+`mem.pattern.distribution.hookspec-merge-core-generalized-event-matcher`). The
+`skill-refresh-command` memory updated (`skills install` → `claude install`).
+
+**Deferred (backlog):** `.doctrine/spec/tech/010` still documents the `skills
+install` surface name — the live tech-spec rename is orchestrator/authored work
+outside the worker belt; captured to backlog rather than swept silently mid-dispatch.
+
+**Next:** PHASE-12 (`dispatch-worker` bwrap profile — LAND the OS-floor D2b confinement
+OR formal BACK-OUT to D-B1 + the D2a CLI guard, recorded symmetrically). Then PHASE-13
+(the router/skill-rewrite prose leg). Base for PHASE-12 = `e87c522`.
