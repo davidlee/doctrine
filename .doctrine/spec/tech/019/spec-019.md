@@ -215,3 +215,16 @@ question`) as a relation, not a supersession.
   one `[evidence]` table of typed `supports`/`contradicts`/`notes` citations; it is never
   its own entity kind and never a free-form blob, and graph/search machinery over it is
   out of v1 (PRD-010 §2).
+
+## Open Questions
+
+- OQ-1 — the **memory-interaction seam** is deferred to v2 and out of this spec's
+  mechanism. PRD-010 §3 fixes the record↔memory boundary *policy* (govern → record;
+  recall → memory; promote by linking, never mutate), and PRD-010 OQ-006 (promotion path,
+  memory → record) and OQ-007 (recall bridge, `memory retrieve` surfacing record refs)
+  hold the open design. Both need the memory↔record link to cross the named-identity /
+  numbered-kind divide — memory is `mem_<uid>`, while the SPEC-018 contract targets
+  numbered kinds in `integrity::KINDS` — so the seam is cross-spec (SPEC-007 + SPEC-018 +
+  this surface) and is not specified here. This spec assumes only that a record is a
+  *citable* target; how memory cites or is promoted into one is owned elsewhere when v2
+  opens it.

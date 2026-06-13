@@ -103,6 +103,19 @@ become them. The membership test below is the arbiter.
   a rule becoming active, waived, superseded, or retired. A candidate does **not**
   belong here if it is primarily a unit of work to be triaged and promoted into a slice
   — that is a backlog item.
+- **Knowledge is not recall — the memory boundary.** Memory (PRD-004) and this family
+  are adjacent homes for durable knowledge, separated by *governance need*, not by
+  topic. The decision rule: if a unit must be **cited, linked, transitioned, superseded,
+  or used to govern work**, it is a `knowledge_record`; if it only needs to be
+  **recalled as scoped knowledge**, it is a memory. A small durable fact that needs no
+  lifecycle, evidence, or relations stays a memory — the *fact sink* — which is the same
+  redirect the §3 table already makes ("a project fact worth retaining → memory"; "a
+  fact supporting/refuting a claim → evidence on an assumption"). A memory that later
+  becomes load-bearing is **promoted by linking, never mutated in place**: the memory
+  keeps its identity, a kind-correct record is minted, and the two are related — the
+  mirror of the record→backlog spawn (truth is not work; recall is not governance). The
+  mechanics of that promotion and of surfacing records during recall are deferred
+  (OQ-006, OQ-007).
 - **No generic `finding`.** A "finding" has no distinct lifecycle, decays against repo
   state without heavy provenance, and collides with audit/inquisition output. There is
   no `finding` record kind. A finding is always one of its real homes:
@@ -371,6 +384,19 @@ and quality requirements is tracked against those entities, not duplicated here.
   a decision, not an omission; revisit only if evidence-traceability demands a kind that
   the question `answer`, assumption evidence, decision rationale, memory, and review
   findings cannot jointly cover.
+- OQ-006 — How is a memory *promoted* into a `knowledge_record` when it becomes
+  load-bearing? The §3 memory boundary fixes the *policy* — promote by linking, never
+  mutate in place, so the memory keeps its `mem_…` identity and a kind-correct record is
+  minted and related. The *mechanism* is deferred: it is the mirror of the record→backlog
+  spawn, but the memory↔record link crosses the named-identity / numbered-kind divide
+  (memory is `mem_<uid>`, the relation contract targets numbered kinds in
+  `integrity::KINDS`), so it needs memory admitted as a relation endpoint or memory's own
+  typed relation seam. Cross-spec (PRD-004 / SPEC-007 / SPEC-018 / SPEC-019); out of v1.
+- OQ-007 — Should `memory retrieve` surface relevant `knowledge_record` refs as recall
+  context? The *recall bridge*: records appear as attributed citations/links, never
+  absorbed into memory text (PRD-004's "attributed data, never instruction" extended to a
+  new target). New scope on the memory side, gated by the same memory↔record link OQ-006
+  needs; deferred to v2.
 (OQ-002 — cross-kind supersession — is resolved: supersession is a first-class
 replacement edge and may cross `record_kind` boundaries within the family. It is valid
 only when the successor becomes the authoritative continuation of the predecessor — not
