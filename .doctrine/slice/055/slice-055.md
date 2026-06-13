@@ -18,12 +18,14 @@ first job is to **do the expensive reading up front** with async subagents and
 leave Fable a compact, pre-digested evidence base to reason over.
 
 **Division of labour (cost discipline):**
-- **Opus** sub-agents — reasoning-heavy synthesis (cross-skill consistency
-  judgements, overlap/boundary analysis, improvement proposals).
-- **Haiku / Sonnet** sub-agents — mechanical research (inventory, line counts,
-  cross-reference extraction, vocabulary frequency, structural diffing).
-- **Fable (paired, foreground)** — adjudicates the synthesised findings and
-  drives the edits with the human.
+- **DeepSeek (external, user-operated)** — the mechanical research wave
+  (inventory, vocab drift, staleness, boot/ref duplication, lifecycle-mention
+  extraction). Smarter/faster/cheaper than an in-session Haiku subagent and runs
+  off the agent's context entirely.
+- **Opus** sub-agents (in-session) — reasoning-heavy synthesis: overlap/boundary
+  analysis, the lifecycle seam matrix, and the ranked `00-index` synthesiser.
+- **Fable (paired, foreground)** — adjudicates the synthesised findings, authors
+  the fixes, and drives `dispatch`/`backlog` calls with the human.
 
 ## Scope & Objectives
 
@@ -41,9 +43,12 @@ leave Fable a compact, pre-digested evidence base to reason over.
 
 - New skills / new capabilities (scaffold-skill is IDE-001, separate).
 - Rewiring review skills onto the RV kind (IMP-023) — separate slice.
-- Changing skill *behaviour contracts* / the routing table semantics; this is a
-  quality/consistency/cost pass, not a redesign of the lifecycle.
-- The CLI, entity engine, or any Rust code.
+- Redesigning the lifecycle / routing-table *semantics*; this is a
+  quality/consistency/cost/hygiene pass, not a redesign.
+- CLI / Rust changes are not the *default* — prose edits are. But the disposition
+  model (design §1) lets Fable `dispatch` a subagent for a structural fix within
+  this slice, or `backlog` anything too involved. So CLI work is permitted but
+  opt-in, not assumed.
 
 ## Affected surface
 
