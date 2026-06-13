@@ -154,25 +154,39 @@ removed after. **Two findings:**
    fail-open window is **NOT a worker-execution race** — the stamp is mechanically
    guaranteed present before any worker command, *when the hook succeeds*.
 
-2. **FAIL-OPEN on hook FAILURE — CONFIRMED against the correct block code
-   (`exit 2`), load-bearing for the ADR.** Claude Code hooks are **sync by default**
-   (`async: true` opts out); the *only* exit status that blocks the gated action is
-   **`exit 2`** (other nonzero codes are non-blocking errors). The first pass mistook
-   `exit 1` for "hook failure" — re-probed properly:
-   - Hook does **not** stamp, emits a stderr reason, **`exit 2`**. A benign worker
-     (`echo $((17*23))`) still **executed its tool and returned `391`**; the hook
-     fired + exited 2 around it (two HOOK_EXIT2 log rows). ⇒ **`exit 2` at
-     SubagentStart does NOT abort or block the subagent.**
-   - Contrast WorktreeCreate, which **is** fail-closed (a no-output hook aborts
-     *creation*: `WorktreeCreate hook failed: no output`). SubagentStart has no
-     equivalent — the subagent runs regardless of the hook's exit status.
+2. **NOT FAIL-CLOSABLE — confirmed by official docs + empirics (triple-checked,
+   load-bearing for the ADR).** Settled against the authoritative source after two
+   exit-code corrections from the design owner (read the docs first next time):
+   - **Official docs** (`code.claude.com/docs/en/hooks.md`): **SubagentStart is a
+     read-only event — "no blocking or decision control."** Exit 2 only shows
+     stderr to the user; the subagent runs anyway. The exit-2-blocks table covers
+     only `PreToolUse`/`PermissionRequest`/`UserPromptSubmit`/`UserPromptExpansion`/
+     `Stop`/`SubagentStop`/`PreCompact`/`WorktreeCreate`; "other events" (incl.
+     SubagentStart, SessionStart, Setup) are non-blocking. **There is NO documented
+     hook event that fail-closed-aborts a subagent before it works.** Claude Code
+     hooks are **sync by default** (`async: true` opts out).
+   - **Empirics agree** (deployed version): an `exit 2` no-stamp hook fired around a
+     benign **two-step** worker (`date +%s` then `expr 6 \* 7`) and it returned
+     `STEP1=… STEP2=42 DONE` — both steps **and** the final summary completed. The
+     prior single-tool run returned `391` likewise. So `exit 2` neither blocks nor
+     defer-terminates the subagent. (The owner-cited "waits for current tool call
+     completion before termination" is **not** in the docs and does not describe
+     SubagentStart.)
+   - Contrast **WorktreeCreate**, which **is** fail-closed (any non-zero exit fails
+     *creation*). SubagentStart has no equivalent.
+   - **Matcher confirmed doc-supported** on `agent_type` (`general-purpose`,
+     `Explore`, `Plan`, custom names) — so scoping the stamp to `dispatch-worker` is
+     spec-blessed, not just empirically observed (feeds the σ-moot finding in B).
    ⇒ SubagentStart-stamp **cannot be made fail-closed.** The
    "guaranteed-present-before-worker" property (finding 1) holds **only when the
-   hook succeeds**; on stamp failure the worker proceeds **unstamped** and **cannot
-   be stopped by the hook**. The residual fail-open window is a **hook-failure case**
-   (stamp errors), not a timing race — narrower than a race but **un-gateable**, so
-   the malice/accident fence is the **import belt + worker-mode guard + prompt**,
-   never the SubagentStart hook's exit status.
+   hook succeeds**; on stamp failure the worker proceeds **unstamped and
+   un-gateable by any hook**. The fail-open residual is a **hook-failure case**, not
+   a timing race — so the fence against an unstamped worker is the **import belt +
+   `DOCTRINE_WORKER` worker-mode guard + the pre-distilled prompt**, never a hook
+   exit status. (Docs list the WorktreeCreate payload as `{…, worktree_id,
+   base_path}`; the *deployed* payload showed `name`=instance-id and no base_path —
+   docs and deployed still diverge, but **both lack `agent_type`** ⇒ create-fork
+   cannot gate-on-type regardless.)
 
 **Net for B/ADR:** the achievable claude altitude is **stronger on the race axis**
 than ADR-011 D6 O3-red optimistically claimed (no worker-write race at all), but

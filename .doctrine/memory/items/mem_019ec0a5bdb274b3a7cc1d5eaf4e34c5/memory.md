@@ -17,15 +17,20 @@ and is strictly **after** the hook's exit. The marker the hook stamps into `cwd`
 window is **NOT a worker-execution race**: a SubagentStart-stamp is mechanically
 guaranteed present before any worker command — **when the hook succeeds**.
 
-## 2. SubagentStart CANNOT be made fail-closed — `exit 2` does not abort the subagent
+## 2. SubagentStart CANNOT be made fail-closed — it is a read-only event
 
-The only exit status that blocks a gated action in Claude Code hooks is **`exit 2`**
-(other nonzero codes are non-blocking errors). At `SubagentStart`, `exit 2` does
-**not** prevent the subagent from running: a hook that refused to stamp, emitted a
-stderr reason, and exited 2 still let a benign worker execute its tool and return a
-result (the hook fired + exited 2 around it). Contrast **`WorktreeCreate`**, which
-**is** fail-closed — a no-output hook aborts *creation* (`WorktreeCreate hook
-failed: no output`). SubagentStart has no equivalent.
+**Authoritative** (`code.claude.com/docs/en/hooks.md`): **SubagentStart is a
+read-only event — "no blocking or decision control."** `exit 2` only shows stderr
+to the user; the subagent runs anyway. The exit-2-blocks table covers only
+`PreToolUse`/`PermissionRequest`/`UserPromptSubmit`/`UserPromptExpansion`/`Stop`/
+`SubagentStop`/`PreCompact`/`WorktreeCreate` — "other events" (incl. SubagentStart,
+SessionStart, Setup) are non-blocking. **No documented hook event fail-closed-aborts
+a subagent before it works.** Empirically confirmed: an `exit 2` no-stamp hook fired
+around a benign two-step worker and it completed both steps + its final line.
+Contrast **`WorktreeCreate`**, which **is** fail-closed — any non-zero exit aborts
+*creation*. SubagentStart has no equivalent. (The matcher on `agent_type` —
+`general-purpose`/`Explore`/`Plan`/custom — IS doc-supported, so scoping the stamp
+to `dispatch-worker` is spec-blessed.)
 
 ⇒ The stamp-before-worker guarantee (fact 1) holds **only on hook success**. On a
 stamp failure the worker proceeds **unstamped and un-gateable by the hook**. So a
