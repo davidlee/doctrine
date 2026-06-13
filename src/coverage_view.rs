@@ -455,14 +455,15 @@ pub(crate) fn run(
     let resolved = if json { listing::Format::Json } else { format };
     let out = match resolved {
         listing::Format::Json => render_json(&rows)?,
-        // Resolve colour capability ONCE in the impure shell (SL-053 D3), inject as
-        // a bool — JSON stays plain.
+        // Resolve terminal capability ONCE in the impure shell (SL-053/SL-054 D3),
+        // inject (colour bool, width Option) — JSON stays plain; width is `None` off a
+        // tty so piped output stays width-free.
         listing::Format::Table => render_table(
             &rows,
             columns,
             listing::RenderOpts {
                 color: crate::tty::stdout_color_enabled(),
-                term_width: None,
+                term_width: crate::tty::stdout_terminal_width(),
             },
         )?,
     };

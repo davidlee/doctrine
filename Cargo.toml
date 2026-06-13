@@ -32,6 +32,13 @@ bm25.workspace = true
 regex-lite.workspace = true
 comfy-table.workspace = true
 owo-colors.workspace = true
+# Direct dep for nameability only: terminal::size() (impure width probe, src/tty.rs,
+# SL-054 PHASE-03). Unifies with the existing transitive v0.29.0 (via comfy-table) —
+# default-features = false is REQUIRED: crossterm's default `events` feature drags in
+# mio/signal-hook/derive_more (9 new compiled crates) that comfy-table's
+# `default-features = false` build never activated. terminal::size() is not feature-
+# gated, so OFF keeps zero new compiled weight (single crossterm v0.29.0 in the lock).
+crossterm = { version = "0.29", default-features = false }
 cordage = { path = "crates/cordage", version = "0.1.1" }
 
 [dev-dependencies]
