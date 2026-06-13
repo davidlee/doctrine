@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 251
+slug = "worktree-gc-durable-patch-id-gated-reap"
+title = "`worktree gc --fork BR` reaps worktree+branch+target-dir only when the fork commit provably landed via `git cherry` (ancestry OR every-commit patch-id); an idempotent re-run completes or names the leftover; no runtime receipt is trusted. Orchestrator-classed."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

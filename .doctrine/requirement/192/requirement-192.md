@@ -1,4 +1,4 @@
-# REQ-192: Under `DOCTRINE_WORKER=1`, bail on every authored/doctrine-mediated write via an exhaustive `write_class` match, leaving reads and the three fork-side worktree verbs open.
+# REQ-192: Enforce worker-sole-writer via a disk-marker-primary, fail-closed guard: refuse authored/Orchestrator/Hook-mint writes under `worker_mode = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`; a marker-absent linked worktree is fail-closed; reads and the fork-side read verbs stay open; `write_class` is exhaustive (a new verb is a compile error).
 
 ## Statement
 

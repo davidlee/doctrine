@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 248
+slug = "worktree-fork-create-provision-stamp-emit-env"
+title = "`worktree fork --base B --branch N --dir P [--worker]` creates the worktree, provisions it (sole copier, withheld excluded), stamps the worker marker before any spawn window, and emits the per-worktree env contract — Orchestrator-classed, with compensating rollback that names any leftover on failure."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
