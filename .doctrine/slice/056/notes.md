@@ -261,3 +261,36 @@ agent-def registry needs a fresh session).
 
 **Next:** resume the dispatch drive — PHASE-04 (G4 SPEC-012 rewrite, inline), then code
 phases 05+ via workers.
+
+## PHASE-04 — G4 SPEC-012 rewrite (done · commit 8dbc029)
+
+Prose-only; no code, no gate. SPEC-012 rewritten downstream of locked ADR-006 (G2)
++ ADR-011.
+
+- **Overview/Concerns reframed** — funnel = enforced `Orchestrator` verb family +
+  the worker-mode guard, not "a discipline carried by skill text". Forbidden framing
+  swept (VA-1 grep clean): no "discipline, not enforced code" / "fails open at the
+  env boundary".
+- **D3 rewritten** env-fails-open → **disk-marker-primary, fail-closed guard**
+  (`worker_mode = (is_linked && marker_present) OR env DOCTRINE_WORKER`; marker-absent
+  linked worktree refused). **+D5** funnel verb family; **+D6** per-harness altitude
+  (codex/pi explicit-base + pre-dispatch verify vs claude O3-red SubagentStart-stamp —
+  not fail-closable, no pre-dispatch verify, opaque base/IMP-043); **+D7** honest scope
+  (narrow `.claude/` belt = force-add only / solo non-squash `land` / quiescent v1
+  import, one-landing-per-base).
+- **New "Per-harness altitude" subsection** states the codex/pi vs claude reach
+  faithfully to ADR-011 D3/D5/D6 (the locked O3-red truth, NOT the deferred create-fork
+  story).
+- **Requirements:** revised **REQ-192 (FR-004)** to the marker-primary guard (slug +
+  symlink renamed `worker-mode-guard-disk-marker-primary-fail-closed`); added
+  **FR-006..010 = REQ-248..252** (fork / import / land / gc / per-wt-env-contract). All
+  `pending` (forward-intent — verbs land PHASE-05+). `spec validate SPEC-012` clean.
+- Watch-out honoured: did NOT describe `create-fork`/WorktreeCreate as the live claude
+  mechanism (named deferred); altitude reflects the weaker baseline class + the
+  marker-absent fail-closed rule.
+
+**Next:** PHASE-05 — first code phase (agnostic trust core: `worker_mode`
+marker-primary + Orchestrator class + `worktree status`/`marker --clear`). Re-read the
+**dispatch skill** funnel/escalation contract before the first worker phase; PHASE-05+
+implement the B2/B3 marker-absent fail-closed rule (notes PHASE-10 carry-forward +
+g2-draft §4/§6).
