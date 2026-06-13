@@ -7,16 +7,10 @@ description: Use to formally close a slice once its phases are complete and audi
 
 You are executing formal closure, not just marking work done.
 
-> **Tooling gaps.** Doctrine has no `complete slice` command and no lifecycle
-> transition verb — `slice-nnn.toml` `status` is hand-edited. `slice list`
-> *reveals* divergence between the authored status and the phase rollup (`⚠`),
-> but reconciling it is this skill's manual job. The terminal-status set lives in
-> `slice::is_terminal_status` (v1 `{"done"}`).
-
 Inputs:
 
 - completed, audited implementation phases
-- `audit.md` with every finding dispositioned (see `/audit`)
+- the reconciliation review (RV) with every finding dispositioned (see `/audit`)
 - the governing slice id
 
 ## Process
@@ -25,10 +19,10 @@ Inputs:
    - Phase exit criteria (`EX-`) and verification (`VT-`) are met. Confirm the
      rollup: `doctrine slice list` should show the slice as `X/X complete` with
      no `!N` blocked, no `?N` anomalous, no `—` untracked.
-   - `/audit` is done: every finding has a disposition; "design was wrong"
-     findings already reconciled into `design.md`.
+   - `/audit` is done: every finding on the RV ledger has a disposition;
+     "design was wrong" findings already reconciled into `design.md`.
    - Durable facts, patterns, or gotchas from the slice are harvested into
-     `notes.md` / `audit.md`, and reusable ones captured via `/record-memory`,
+     `notes.md`, and reusable ones captured via `/record-memory`,
      before closure — or consciously rejected. Durable follow-up **work** the
      slice leaves behind (risks / issues / chores) is captured as backlog items
      with `backlog new` (the work / knowledge / decision boundary:
@@ -38,15 +32,24 @@ Inputs:
    conventional commits scoped with the slice id, rather than letting them
    accumulate. Code and workflow edits go together or separately, whichever
    commits cleanly first.
-3. **Transition lifecycle:** hand-edit `slice-nnn.toml` `status` to a terminal
-   value (`done`). Re-run `doctrine slice list` and confirm the `⚠` divergence
-   marker is gone — authored status now agrees with the rollup.
-4. If a blocking finding remains unresolved, do **not** close — return to
+3. **Transition lifecycle:** `doctrine slice status <id> reconcile`, then
+   `doctrine slice status <id> done` (`<id>` is the bare number, e.g. `40`).
+   The closure seam enforces the order and refuses while an RV targeting the
+   slice carries an unresolved blocker. Re-run `doctrine slice list` and confirm
+   the `⚠` divergence marker is gone — authored status now agrees with the
+   rollup. (The terminal set is `{done, abandoned}`; closure here is the `done`
+   path — abandoning a slice is a separate decision, not this skill.)
+4. **Close the originating backlog item:** if a backlog item (ISS/IMP/CHR/RSK)
+   spawned this slice, transition it too — `doctrine backlog edit <ID>
+   --status resolved --resolution fixed` (or the resolution that fits). A closed
+   slice with its origin still open is hygiene debt.
+5. If a blocking finding remains unresolved, do **not** close — return to
    `/audit` or `/execute`. If closure depends on tolerated drift with material
    tradeoffs, `/consult` before normalising around it.
 
 ## Outcomes
 
-- The slice is in a terminal lifecycle status, with the rollup in agreement.
+- The slice is `done`, with the rollup in agreement.
+- The originating backlog item (if any) is resolved.
 - Durable guidance is captured in memory or consciously rejected.
 - The tree is clean and the workflow artefacts are committed.
