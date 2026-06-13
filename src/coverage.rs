@@ -82,6 +82,12 @@ pub(crate) struct CoverageEntry {
     /// an empty set (Unknown-leaning, never falsely Fresh).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) touched_paths: Vec<String>,
+    /// The VT-check recipe this entry's evidence is produced from (SL-057): the
+    /// alias / literal command, extra args, and the optional output [`Matcher`].
+    /// Additive (`#[serde(default)]`, skip-if-none), so pre-SL-057 entries with no
+    /// `check` key parse to `None` (the `touched_paths` additive precedent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) check: Option<VtCheck>,
 }
 
 /// The full `coverage.toml` read/written as data: a `[[entry]]` array-of-tables.
@@ -330,6 +336,216 @@ pub(crate) fn drift(authored: ReqStatus, composite: &Composite) -> Verdict {
     }
 }
 
+// ---------------------------------------------------------------------------
+// SL-057 PHASE-01 — pure VT-check model + verdict folds.
+//
+// A *VT-check* is the recipe a `VT` coverage entry's evidence is produced from:
+// an alias (XOR) or a literal `command`, optional `extra_args`, and an optional
+// output `Matcher`. This is a PURE leaf (ADR-001): the types + the verdict folds
+// below touch NO clock / rng / git / disk / process — running the check and
+// reading its output is the shell's job (PHASE-02+). These folds only classify a
+// `RunOutcome` the shell hands them, evaluate a matcher over a haystack string,
+// and statically validate a `VtCheck`'s shape.
+// ---------------------------------------------------------------------------
+
+/// One VT-check recipe (persisted under `[entry.check]`). Either an `alias` into
+/// the project base set OR a literal `command` argv — never both (the XOR rule,
+/// [`valid`] (a)). `extra_args` are appended to whichever base resolves.
+/// `matcher` decides the verdict from the run's output; absent ⇒ exit-code-only.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub(crate) struct VtCheck {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) alias: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) command: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) extra_args: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) matcher: Option<Matcher>,
+}
+
+/// An output matcher: search `source` (defaulting to stdout when absent at the
+/// run seam) for `pattern`, as a literal substring (`regex == false`) or a
+/// `regex_lite` pattern (`regex == true`). `regex` defaults to `false` on parse.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub(crate) struct Matcher {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source: Option<MatchSource>,
+    pub(crate) pattern: String,
+    #[serde(default)]
+    pub(crate) regex: bool,
+}
+
+/// Where a [`Matcher`] reads its haystack from.
+///
+/// **Serde repr (the `coverage.toml` byte surface PHASE-05 goldens pin).** This
+/// enum serializes/deserializes as a single TOML **string** scalar (NOT a table),
+/// so a [`Matcher`] renders as a clean inline table. The three forms (under
+/// `source = …`) are exactly:
+///
+/// ```toml
+/// source = "stdout"
+/// source = "stderr"
+/// source = "file:doc/*.md"
+/// ```
+///
+/// `Stdout ⇄ "stdout"`, `Stderr ⇄ "stderr"`, and `File(glob) ⇄ "file:<glob>"`
+/// (literal `file:` prefix, then the glob verbatim). On deserialize, an exact
+/// `"stdout"`/`"stderr"` maps to the unit variant, a string starting with `file:`
+/// maps to `File(<remainder>)`, and anything else is an unknown-source error. The
+/// repr is wired via `#[serde(into / try_from = "String")]` over the [`Display`] /
+/// [`TryFrom<String>`] pair below — all three round-trip cleanly (proven by the
+/// VT-4 round-trip test). The `File` glob is repo-tree-relative and confined by
+/// [`valid`] (c) (no absolute path, no `..` ascent).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(into = "String", try_from = "String")]
+pub(crate) enum MatchSource {
+    Stdout,
+    Stderr,
+    File(String),
+}
+
+/// The literal prefix that tags a [`MatchSource::File`] glob in its string repr.
+const MATCH_SOURCE_FILE_PREFIX: &str = "file:";
+
+impl std::fmt::Display for MatchSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MatchSource::Stdout => f.write_str("stdout"),
+            MatchSource::Stderr => f.write_str("stderr"),
+            MatchSource::File(glob) => write!(f, "{MATCH_SOURCE_FILE_PREFIX}{glob}"),
+        }
+    }
+}
+
+impl From<MatchSource> for String {
+    fn from(src: MatchSource) -> Self {
+        src.to_string()
+    }
+}
+
+impl TryFrom<String> for MatchSource {
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        match s.as_str() {
+            "stdout" => Ok(MatchSource::Stdout),
+            "stderr" => Ok(MatchSource::Stderr),
+            other => match other.strip_prefix(MATCH_SOURCE_FILE_PREFIX) {
+                Some(glob) => Ok(MatchSource::File(glob.to_owned())),
+                None => Err(format!("unknown match source: {other}")),
+            },
+        }
+    }
+}
+
+/// The outcome of (attempting to) run a VT-check — produced by the shell, fed to
+/// [`derive_status`]. In-memory only (NOT persisted): NO serde derive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RunOutcome {
+    /// The check could not be obtained/run at all (unresolved alias, spawn
+    /// failure, timeout — the F-VII framing). Yields [`CoverageStatus::Blocked`].
+    Unobtainable,
+    /// The check ran to completion. `exit_ok` is the exit-code verdict; `matched`
+    /// is the matcher verdict (`None` ⇒ no matcher present ⇒ exit-code-only).
+    Ran {
+        exit_ok: bool,
+        matched: Option<bool>,
+    },
+}
+
+/// Classify a [`RunOutcome`] into the observed [`CoverageStatus`] (PURE).
+/// `Unobtainable ⇒ Blocked`; a clean exit with no matcher (`matched: None`) or a
+/// satisfied matcher (`Some(true)`) ⇒ `Verified`; a non-zero exit OR a failed
+/// matcher (`Some(false)`) ⇒ `Failed`. INV-3: `Unobtainable` NEVER yields
+/// `Verified`.
+pub(crate) fn derive_status(outcome: &RunOutcome) -> CoverageStatus {
+    match outcome {
+        RunOutcome::Unobtainable => CoverageStatus::Blocked,
+        RunOutcome::Ran { exit_ok: false, .. }
+        | RunOutcome::Ran {
+            exit_ok: true,
+            matched: Some(false),
+        } => CoverageStatus::Failed,
+        RunOutcome::Ran {
+            exit_ok: true,
+            matched: None | Some(true),
+        } => CoverageStatus::Verified,
+    }
+}
+
+/// Evaluate a matcher pattern over a haystack (PURE). Substring mode
+/// (`regex == false`) is `Some(haystack.contains(pattern))` — metacharacters
+/// match LITERALLY and the empty pattern is `Some(true)`, NEVER `None`. Regex
+/// mode (`regex == true`) compiles under `regex_lite`: a parse error ⇒ `None`,
+/// otherwise `Some(re.is_match(haystack))` (the empty pattern matches anything).
+pub(crate) fn evaluate_matcher(pattern: &str, regex: bool, haystack: &str) -> Option<bool> {
+    if regex {
+        match regex_lite::Regex::new(pattern) {
+            Ok(re) => Some(re.is_match(haystack)),
+            Err(_) => None,
+        }
+    } else {
+        Some(haystack.contains(pattern))
+    }
+}
+
+/// Why [`valid`] rejected a [`VtCheck`] — one variant per reject reason so callers
+/// assert the REASON, not merely `is_err()`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ValidError {
+    /// (a) Both `alias` and `command` are set — they are mutually exclusive.
+    AliasCommandConflict,
+    /// (b) A non-empty matcher is mandatory unless a literal `command` is set: an
+    /// empty-or-absent matcher on an alias, or on the project-default base
+    /// (neither alias nor command), is rejected (the D3/A matcher rule).
+    MatcherRequired,
+    /// (c) A `File` glob escaped the repo tree — an absolute path or a `..` ascent
+    /// component (the F-III glob-confinement rule; pure string inspection).
+    GlobEscapesTree,
+    /// (d) A `regex == true` matcher whose pattern does not parse under
+    /// `regex_lite`.
+    BadRegex,
+}
+
+/// Statically validate a [`VtCheck`]'s shape (PURE, CONFIG-FREE). Enforces the
+/// alias/command XOR (a), the mandatory-matcher rule (b), `File`-glob confinement
+/// (c), and regex parseability (d). Does NOT resolve the base (does the alias
+/// exist? is a default command present?) — that is `verify::resolve`'s job in
+/// PHASE-02 (design F-1); this fold never reaches for config.
+pub(crate) fn valid(check: &VtCheck) -> Result<(), ValidError> {
+    // (a) alias/command XOR.
+    if check.alias.is_some() && check.command.is_some() {
+        return Err(ValidError::AliasCommandConflict);
+    }
+
+    // (b) D3/A: a non-empty matcher is mandatory UNLESS a literal command is set.
+    // An empty matcher = matcher is None, or its pattern is "".
+    let matcher_empty = match &check.matcher {
+        None => true,
+        Some(m) => m.pattern.is_empty(),
+    };
+    if matcher_empty && check.command.is_none() {
+        return Err(ValidError::MatcherRequired);
+    }
+
+    if let Some(matcher) = &check.matcher {
+        // (c) F-III: confine a `File` glob to the repo tree (pure string check).
+        if let Some(MatchSource::File(glob)) = &matcher.source {
+            let escapes = glob.starts_with('/') || glob.split('/').any(|segment| segment == "..");
+            if escapes {
+                return Err(ValidError::GlobEscapesTree);
+            }
+        }
+        // (d) regex-mode patterns must parse under regex_lite.
+        if matcher.regex && regex_lite::Regex::new(&matcher.pattern).is_err() {
+            return Err(ValidError::BadRegex);
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 #[expect(
     clippy::unwrap_used,
@@ -354,6 +570,7 @@ mod tests {
             git_anchor: "anchor-abc123".to_owned(),
             attested_date: attested.map(str::to_owned),
             touched_paths: Vec::new(),
+            check: None,
         }
     }
 
@@ -779,6 +996,319 @@ git_anchor = "anchor-abc123"
         assert!(
             !stale_verified.any_fresh_verified(),
             "stale Verified is not fresh-verified"
+        );
+    }
+
+    // === SL-057 PHASE-01: VT-check model + verdict folds =====================
+
+    /// Build a [`VtCheck`] from the parts a test cares about; the rest default.
+    fn vtcheck(
+        alias: Option<&str>,
+        command: Option<Vec<&str>>,
+        matcher: Option<Matcher>,
+    ) -> VtCheck {
+        VtCheck {
+            alias: alias.map(str::to_owned),
+            command: command.map(|c| c.into_iter().map(str::to_owned).collect()),
+            extra_args: Vec::new(),
+            matcher,
+        }
+    }
+
+    /// A [`Matcher`] over the given source/pattern/regex-flag.
+    fn matcher(source: Option<MatchSource>, pattern: &str, regex: bool) -> Matcher {
+        Matcher {
+            source,
+            pattern: pattern.to_owned(),
+            regex,
+        }
+    }
+
+    // --- VT-1: derive_status truth table (INV-3 included) --------------------
+
+    #[test]
+    fn derive_status_truth_table() {
+        // Unobtainable ⇒ Blocked.
+        assert_eq!(
+            derive_status(&RunOutcome::Unobtainable),
+            CoverageStatus::Blocked
+        );
+        // Clean exit, no matcher ⇒ Verified (exit-code-only).
+        assert_eq!(
+            derive_status(&RunOutcome::Ran {
+                exit_ok: true,
+                matched: None
+            }),
+            CoverageStatus::Verified
+        );
+        // Clean exit, matcher satisfied ⇒ Verified.
+        assert_eq!(
+            derive_status(&RunOutcome::Ran {
+                exit_ok: true,
+                matched: Some(true)
+            }),
+            CoverageStatus::Verified
+        );
+        // Non-zero exit (matcher irrelevant) ⇒ Failed.
+        assert_eq!(
+            derive_status(&RunOutcome::Ran {
+                exit_ok: false,
+                matched: None
+            }),
+            CoverageStatus::Failed
+        );
+        assert_eq!(
+            derive_status(&RunOutcome::Ran {
+                exit_ok: false,
+                matched: Some(true)
+            }),
+            CoverageStatus::Failed
+        );
+        // Clean exit but matcher failed ⇒ Failed.
+        assert_eq!(
+            derive_status(&RunOutcome::Ran {
+                exit_ok: true,
+                matched: Some(false)
+            }),
+            CoverageStatus::Failed
+        );
+    }
+
+    #[test]
+    fn inv3_unobtainable_never_verified() {
+        // INV-3: no Unobtainable path yields Verified.
+        assert_ne!(
+            derive_status(&RunOutcome::Unobtainable),
+            CoverageStatus::Verified
+        );
+    }
+
+    // --- VT-2: evaluate_matcher (substring + regex) --------------------------
+
+    #[test]
+    fn evaluate_matcher_substring_literal_and_metachars() {
+        // Plain substring match / miss.
+        assert_eq!(evaluate_matcher("ok", false, "all ok here"), Some(true));
+        assert_eq!(evaluate_matcher("nope", false, "all ok here"), Some(false));
+        // Metacharacters match LITERALLY in substring mode: `a.c` does NOT match
+        // "abc" (the `.` is a literal dot) but DOES match "a.c".
+        assert_eq!(evaluate_matcher("a.c", false, "abc"), Some(false));
+        assert_eq!(evaluate_matcher("a.c", false, "xx a.c yy"), Some(true));
+        // Empty pattern ⇒ Some(true), never None.
+        assert_eq!(evaluate_matcher("", false, "anything"), Some(true));
+        assert_eq!(evaluate_matcher("", false, ""), Some(true));
+    }
+
+    #[test]
+    fn evaluate_matcher_regex_mode() {
+        // Regex match / miss.
+        assert_eq!(evaluate_matcher("a.c", true, "abc"), Some(true));
+        assert_eq!(evaluate_matcher("a.c", true, "axyzc"), Some(false));
+        // Unparseable regex ⇒ None.
+        assert_eq!(evaluate_matcher("(", true, "anything"), None);
+        // Empty pattern ⇒ Some(true) under regex_lite too.
+        assert_eq!(evaluate_matcher("", true, "anything"), Some(true));
+    }
+
+    // --- VT-3: valid reject matrix (assert the SPECIFIC variant) -------------
+
+    #[test]
+    fn valid_rejects_alias_command_conflict() {
+        let check = vtcheck(
+            Some("test"),
+            Some(vec!["cargo", "test"]),
+            Some(matcher(None, "ok", false)),
+        );
+        assert_eq!(valid(&check), Err(ValidError::AliasCommandConflict));
+    }
+
+    #[test]
+    fn valid_rejects_empty_matcher_on_alias() {
+        // Absent matcher on an alias ⇒ MatcherRequired.
+        assert_eq!(
+            valid(&vtcheck(Some("test"), None, None)),
+            Err(ValidError::MatcherRequired)
+        );
+        // Empty-pattern matcher on an alias ⇒ MatcherRequired.
+        assert_eq!(
+            valid(&vtcheck(Some("test"), None, Some(matcher(None, "", false)))),
+            Err(ValidError::MatcherRequired)
+        );
+    }
+
+    #[test]
+    fn valid_rejects_empty_matcher_on_default_base() {
+        // Neither alias nor command (project-default base): absent matcher rejected.
+        assert_eq!(
+            valid(&vtcheck(None, None, None)),
+            Err(ValidError::MatcherRequired)
+        );
+    }
+
+    #[test]
+    fn valid_accepts_empty_matcher_with_literal_command() {
+        // An empty/absent matcher is legal ONLY alongside a literal command.
+        assert_eq!(valid(&vtcheck(None, Some(vec!["true"]), None)), Ok(()));
+        assert_eq!(
+            valid(&vtcheck(
+                None,
+                Some(vec!["true"]),
+                Some(matcher(None, "", false))
+            )),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn valid_rejects_absolute_file_glob() {
+        let check = vtcheck(
+            Some("test"),
+            None,
+            Some(matcher(
+                Some(MatchSource::File("/etc/x".to_owned())),
+                "ok",
+                false,
+            )),
+        );
+        assert_eq!(valid(&check), Err(ValidError::GlobEscapesTree));
+    }
+
+    #[test]
+    fn valid_rejects_ascending_file_glob() {
+        let check = vtcheck(
+            Some("test"),
+            None,
+            Some(matcher(
+                Some(MatchSource::File("../x".to_owned())),
+                "ok",
+                false,
+            )),
+        );
+        assert_eq!(valid(&check), Err(ValidError::GlobEscapesTree));
+        // A `..` nested deeper in the path is caught too.
+        let nested = vtcheck(
+            Some("test"),
+            None,
+            Some(matcher(
+                Some(MatchSource::File("doc/../../x".to_owned())),
+                "ok",
+                false,
+            )),
+        );
+        assert_eq!(valid(&nested), Err(ValidError::GlobEscapesTree));
+    }
+
+    #[test]
+    fn valid_rejects_unparseable_regex() {
+        let check = vtcheck(Some("test"), None, Some(matcher(None, "(", true)));
+        assert_eq!(valid(&check), Err(ValidError::BadRegex));
+    }
+
+    #[test]
+    fn valid_accepts_wellformed_alias_with_matcher() {
+        let check = vtcheck(
+            Some("test"),
+            None,
+            Some(matcher(Some(MatchSource::Stdout), "ok", false)),
+        );
+        assert_eq!(valid(&check), Ok(()));
+        // A relative File glob with no ascent is fine.
+        let file_ok = vtcheck(
+            Some("test"),
+            None,
+            Some(matcher(
+                Some(MatchSource::File("doc/*.md".to_owned())),
+                "ok",
+                false,
+            )),
+        );
+        assert_eq!(valid(&file_ok), Ok(()));
+    }
+
+    // --- VT-4: MatchSource serde repr round-trips all three variants ---------
+
+    #[test]
+    fn match_source_serde_repr_all_three_variants() {
+        // Render each variant inside a full entry and assert the exact byte form,
+        // then parse it back — this pins the PHASE-05 golden surface.
+        for (src, token) in [
+            (MatchSource::Stdout, "\"stdout\""),
+            (MatchSource::Stderr, "\"stderr\""),
+            (
+                MatchSource::File("doc/*.md".to_owned()),
+                "\"file:doc/*.md\"",
+            ),
+        ] {
+            let m = matcher(Some(src.clone()), "ok", false);
+            let rendered = toml::to_string(&m).unwrap();
+            assert!(
+                rendered.contains(&format!("source = {token}")),
+                "expected `source = {token}` in:\n{rendered}"
+            );
+            let back: Matcher = toml::from_str(&rendered).unwrap();
+            assert_eq!(back.source, Some(src), "MatchSource round-trips");
+        }
+    }
+
+    #[test]
+    fn vtcheck_full_round_trip_through_entry() {
+        // A full VtCheck (alias + extra_args + File matcher) survives the
+        // CoverageEntry render → parse round-trip.
+        let mut e = entry(
+            key("SL-057", "REQ-200", "SL-057", "VT"),
+            CoverageStatus::Verified,
+            None,
+        );
+        e.check = Some(VtCheck {
+            alias: Some("test".to_owned()),
+            command: None,
+            extra_args: vec!["--quiet".to_owned()],
+            matcher: Some(matcher(
+                Some(MatchSource::File("doc/spec.md".to_owned())),
+                "PASS",
+                true,
+            )),
+        });
+        let file = CoverageFile { entry: vec![e] };
+        let back = parse(&render(&file).unwrap()).unwrap();
+        assert_eq!(back, file, "the full VtCheck round-trips byte-clean");
+    }
+
+    #[test]
+    fn vtcheck_command_variant_round_trips() {
+        // The `command` (literal argv) + Stderr-source variant also round-trips.
+        let mut e = entry(
+            key("SL-057", "REQ-201", "SL-057", "VT"),
+            CoverageStatus::Verified,
+            None,
+        );
+        e.check = Some(vtcheck(
+            None,
+            Some(vec!["cargo", "test"]),
+            Some(matcher(Some(MatchSource::Stderr), "ok", false)),
+        ));
+        let file = CoverageFile { entry: vec![e] };
+        let back = parse(&render(&file).unwrap()).unwrap();
+        assert_eq!(back, file);
+    }
+
+    #[test]
+    fn pre_sl057_entry_without_check_parses_to_none() {
+        // A pre-SL-057 [[entry]] body carries no `check` key — it must still parse,
+        // with `check == None` (the additive-field precedent).
+        let body = r#"
+[[entry]]
+slice = "SL-042"
+requirement = "REQ-109"
+contributing_change = "SL-042"
+mode = "VT"
+status = "verified"
+git_anchor = "anchor-abc123"
+"#;
+        let file = parse(body).unwrap();
+        assert!(
+            file.entry.first().unwrap().check.is_none(),
+            "absent check defaults None"
         );
     }
 }
