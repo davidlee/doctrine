@@ -414,6 +414,37 @@ enum Command {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Author a tier-1 `[[relation]]` edge: `link SL-048 governed_by ADR-010`
+    /// (SL-048 §5.4). The label must be `link`-writable for the source kind, and the
+    /// target must resolve to an entity of a legal kind (forward-edge validation,
+    /// §5.5). Idempotent — re-linking an existing edge is a no-op.
+    Link {
+        /// The source entity's canonical ref, e.g. `SL-048`.
+        source: String,
+        /// The relation label, e.g. `governed_by`, `consumes`, `related`.
+        label: String,
+        /// The target — a canonical ref (`ADR-010`) for validated labels, free text
+        /// for `drift`.
+        target: String,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Remove a tier-1 `[[relation]]` edge authored by `link` (SL-048 §5.4). Symmetric
+    /// on the same write seam; idempotent — unlinking an absent edge is a no-op.
+    Unlink {
+        /// The source entity's canonical ref, e.g. `SL-048`.
+        source: String,
+        /// The relation label to remove, e.g. `governed_by`.
+        label: String,
+        /// The target ref the edge points at.
+        target: String,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1714,6 +1745,9 @@ fn write_class(cmd: &Command) -> WriteClass {
         | Command::Explain { .. } => Read,
         // Mutates the canonical-id triple — an authored write (D2/D6).
         Command::Reseat { .. } => Write("reseat"),
+        // Author / remove a tier-1 `[[relation]]` edge — authored writes (SL-048 §5.4).
+        Command::Link { .. } => Write("link"),
+        Command::Unlink { .. } => Write("unlink"),
     }
 }
 
@@ -2259,13 +2293,133 @@ fn main() -> anyhow::Result<()> {
                 worktree::run_branch_point_check(path, &base, head)
             }
         },
-        Command::Validate { path } => integrity::run_validate(path),
+        Command::Validate { path } => run_validate(path),
         Command::Reseat {
             reference,
             to,
             path,
         } => integrity::run_reseat(path, &reference, to),
+        Command::Link {
+            source,
+            label,
+            target,
+            path,
+        } => run_link(path, &source, &label, &target),
+        Command::Unlink {
+            source,
+            label,
+            target,
+            path,
+        } => run_unlink(path, &source, &label, &target),
     }
+}
+
+/// Resolve a `link`/`unlink` source+label to (the source entity's toml path, the
+/// validated label). Shared by both verbs (design §5.4): parse the source ref →
+/// `(KindRef, id)`; `relation::validate_link` (the `(source, label)` legality +
+/// `link`-writability gate); compute the entity's `<stem>-NNN.toml` path. Target
+/// validation is link-only (a dangling target must still be `unlink`-able), so it lives
+/// in `run_link`, not here.
+fn resolve_link_path(
+    root: &std::path::Path,
+    source: &str,
+    label: &str,
+) -> anyhow::Result<(PathBuf, &'static relation::RelationRule)> {
+    let (kref, id) = integrity::parse_canonical_ref(source)?;
+    let rule = relation::validate_link(kref.kind, label)?;
+    let name = format!("{id:03}");
+    let toml_path = root
+        .join(kref.kind.dir)
+        .join(&name)
+        .join(format!("{}-{name}.toml", kref.stem));
+    Ok((toml_path, rule))
+}
+
+/// `doctrine link <SOURCE-ID> <LABEL> <TARGET>` (SL-048 §5.4) — author a tier-1
+/// `[[relation]]` edge. Validates the source/label ([`resolve_link_path`]) then the
+/// forward target (§5.5 — `Unvalidated` `drift` is free text; every other label's
+/// target must BOTH resolve (`ensure_ref_resolves` — never write a dangler) AND pass
+/// the legal-KIND assertion), then appends edit-preservingly. Idempotent (a re-link
+/// reports `already linked`, file untouched).
+fn run_link(path: Option<PathBuf>, source: &str, label: &str, target: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (toml_path, rule) = resolve_link_path(&root, source, label)?;
+    // Forward-edge validation (§5.5): free-text labels skip both gates; validated
+    // labels must resolve AND be of a legal target kind.
+    if !matches!(rule.target, relation::TargetSpec::Unvalidated) {
+        integrity::ensure_ref_resolves(&root, target)?;
+        let (tkref, _tid) = integrity::parse_canonical_ref(target)?;
+        let (skref, _sid) = integrity::parse_canonical_ref(source)?;
+        relation::check_target_kind(rule, skref.kind, tkref.kind.prefix)?;
+    }
+    let outcome = relation::append_edge(&toml_path, rule.label, target)?;
+    match outcome {
+        relation::AppendOutcome::Wrote => {
+            writeln!(std::io::stdout(), "linked: {source} {label} {target}")?;
+        }
+        relation::AppendOutcome::Noop => {
+            writeln!(
+                std::io::stdout(),
+                "already linked: {source} {label} {target}"
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// `doctrine unlink <SOURCE-ID> <LABEL> <TARGET>` (SL-048 §5.4) — remove a tier-1
+/// `[[relation]]` edge. Same validation pipeline (the source/label must still be legal
+/// to name the right file); idempotent (an absent edge reports `not linked`).
+fn run_unlink(
+    path: Option<PathBuf>,
+    source: &str,
+    label: &str,
+    target: &str,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (toml_path, rule) = resolve_link_path(&root, source, label)?;
+    let outcome = relation::remove_edge(&toml_path, rule.label, target)?;
+    match outcome {
+        relation::RemoveOutcome::Removed => {
+            writeln!(std::io::stdout(), "unlinked: {source} {label} {target}")?;
+        }
+        relation::RemoveOutcome::Absent => {
+            writeln!(std::io::stdout(), "not linked: {source} {label} {target}")?;
+        }
+    }
+    Ok(())
+}
+
+/// `doctrine validate` — the corpus integrity scan. The COMMAND-LAYER composition
+/// (mirrors `run_inspect`, ADR-001): the one layer allowed to depend on BOTH the
+/// `integrity` id-scan AND the `relation_graph` relation-edge walk (which depends back
+/// on `integrity` — composing them here keeps that edge acyclic). Resolves the root
+/// ONCE, concatenates the id-integrity findings (D3 detect-half) with the SL-048
+/// relation findings (danglers, `IllegalRows`, supersession drift — §5.5), prints them,
+/// and exits non-zero on any. All report-only; nothing is rewritten (the reseat
+/// precedent).
+fn run_validate(path: Option<PathBuf>) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    let mut findings = integrity::id_integrity_findings(&root)?;
+    findings.extend(relation_graph::validate_relations(&root)?);
+
+    writeln!(
+        std::io::stdout(),
+        "validate: scanned {}",
+        integrity::scanned_kinds()
+    )?;
+    if findings.is_empty() {
+        writeln!(std::io::stdout(), "validate: corpus clean")?;
+        return Ok(());
+    }
+    for f in &findings {
+        writeln!(std::io::stdout(), "  {f}")?;
+    }
+    anyhow::bail!("validate: {} finding(s)", findings.len())
 }
 
 #[cfg(test)]

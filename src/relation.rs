@@ -563,6 +563,303 @@ pub(crate) fn targets_for(edges: &[RelationEdge], label: RelationLabel) -> Vec<S
         .collect()
 }
 
+// ---------------------------------------------------------------------------
+// PHASE-05 — the tier-1 write seam (link/unlink). Edit-preserving toml_edit over
+// a `DocumentMut` (comments / inert tables / unknown keys survive verbatim —
+// `mem.pattern.entity.edit-preserving-status-transition`), idempotent, with the
+// F1 EOF-append defence (R2-m1, design §5.3/§5.5).
+// ---------------------------------------------------------------------------
+
+/// The outcome of [`append_edge`] — idempotent. `Wrote` ⇒ a new `[[relation]]` row
+/// was appended; `Noop` ⇒ the `(label, target)` row already existed, file untouched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AppendOutcome {
+    Wrote,
+    Noop,
+}
+
+/// The outcome of [`remove_edge`] — idempotent. `Removed` ⇒ a matching `[[relation]]`
+/// row was deleted; `Absent` ⇒ no such row, file untouched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoveOutcome {
+    Removed,
+    Absent,
+}
+
+/// Does the top-level document place a typed table or array AFTER the first
+/// `[[relation]]` array-of-tables? That is the F1 trap (design §5.1/§5.3): a bare
+/// `[relationships]` header sitting *after* the `[[relation]]` array would, on a naive
+/// tail-`insert`, bind the new keys INTO the last array element = silent corruption.
+/// We refuse rather than corrupt. Walks the document in source order; once a
+/// `[[relation]]` array is seen, any later non-`relation` top-level item is the trap.
+/// Returns the offending key for the refusal message, or `None` when the layout is safe
+/// (every typed table precedes all `[[relation]]` arrays — the migrator's F1 shape).
+fn trailing_typed_table_after_relation(doc: &toml_edit::DocumentMut) -> Option<String> {
+    let mut seen_relation = false;
+    for (key, item) in doc.as_table() {
+        if key == "relation" && item.is_array_of_tables() {
+            seen_relation = true;
+        } else if seen_relation {
+            // A non-`relation` top-level item authored AFTER the relation array — the
+            // F1 trap. (A second `relation` key cannot occur — toml has one per table.)
+            return Some(key.to_string());
+        }
+    }
+    None
+}
+
+/// Append one tier-1 `[[relation]]` row to an entity's authored TOML `text`, edit-
+/// preserving and idempotent (design §5.3). PURE: text in, text out — the impure
+/// read/write shell is [`append_edge`]. Order of operations is load-bearing:
+///
+/// 1. **Idempotent no-op guard FIRST** — if a `[[relation]]` row already carries this
+///    `(label, target)`, return `Noop` with the text byte-unchanged (before any
+///    structural assert, so a re-link of an already-linked edge never even inspects
+///    the layout — `mem.pattern.entity.edit-preserving-status-transition`).
+/// 2. **F1 EOF-append defence** ([`trailing_typed_table_after_relation`]) — refuse a
+///    hand-edited file whose typed table trails the `[[relation]]` array, rather than
+///    tail-inserting into the last array element (R2-m1). The refusal is an
+///    `IllegalRow`-class hard error, never a silent corruption.
+/// 3. Append via `toml_edit::value(target)` — escapes the target automatically, so a
+///    target with a quote/backslash can never break out of the string literal
+///    (`mem.pattern.render.toml-splice-escape-user-values`); never `.replace()`-splice.
+fn append_relation_row(
+    text: &str,
+    label: RelationLabel,
+    target: &str,
+) -> anyhow::Result<(String, AppendOutcome)> {
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| anyhow::anyhow!("parse TOML for relation append: {e}"))?;
+
+    // (1) idempotent no-op guard — before any structural inspection.
+    if relation_row_present(&doc, label, target) {
+        return Ok((text.to_string(), AppendOutcome::Noop));
+    }
+
+    // (2) F1 defence — refuse a trailing typed table rather than corrupt it.
+    if let Some(offending) = trailing_typed_table_after_relation(&doc) {
+        anyhow::bail!(
+            "refusing to append [[relation]]: typed table `[{offending}]` is authored AFTER \
+             the [[relation]] array (F1 — appending would corrupt it by tail-inserting into \
+             the last array element). Re-home `[{offending}]` above the [[relation]] block."
+        );
+    }
+
+    // (3) append a new array-of-tables element with escaped values.
+    let array = doc
+        .as_table_mut()
+        .entry("relation")
+        .or_insert_with(|| toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
+        .as_array_of_tables_mut()
+        .ok_or_else(|| {
+            anyhow::anyhow!("`relation` is present but is not an array-of-tables (corrupt file)")
+        })?;
+    let mut row = toml_edit::Table::new();
+    row.insert("label", toml_edit::value(label.name()));
+    row.insert("target", toml_edit::value(target));
+    array.push(row);
+
+    Ok((doc.to_string(), AppendOutcome::Wrote))
+}
+
+/// Remove one tier-1 `[[relation]]` row from `text`, edit-preserving and idempotent.
+/// PURE — the impure shell is [`remove_edge`]. Removes EVERY array element matching
+/// `(label, target)` (a hand-duplicated pair collapses to one logical edge, so both
+/// rows go); `Absent` when none match (idempotent double-unlink). Comments and every
+/// other table survive verbatim (the `DocumentMut` round-trip).
+fn remove_relation_row(
+    text: &str,
+    label: RelationLabel,
+    target: &str,
+) -> anyhow::Result<(String, RemoveOutcome)> {
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| anyhow::anyhow!("parse TOML for relation remove: {e}"))?;
+    let Some(array) = doc
+        .as_table_mut()
+        .get_mut("relation")
+        .and_then(toml_edit::Item::as_array_of_tables_mut)
+    else {
+        return Ok((text.to_string(), RemoveOutcome::Absent));
+    };
+    let before = array.len();
+    array.retain(|row| !row_matches(row, label, target));
+    if array.len() == before {
+        return Ok((text.to_string(), RemoveOutcome::Absent));
+    }
+    Ok((doc.to_string(), RemoveOutcome::Removed))
+}
+
+/// Is there a `[[relation]]` row carrying exactly this `(label, target)` in `doc`?
+/// The idempotency oracle for both verbs — reads the live array-of-tables, comparing
+/// the authored `label`/`target` strings verbatim.
+fn relation_row_present(doc: &toml_edit::DocumentMut, label: RelationLabel, target: &str) -> bool {
+    doc.as_table()
+        .get("relation")
+        .and_then(toml_edit::Item::as_array_of_tables)
+        .is_some_and(|array| array.iter().any(|row| row_matches(row, label, target)))
+}
+
+/// One `[[relation]]` array element matches `(label, target)` iff both string cells
+/// equal the queried values verbatim.
+fn row_matches(row: &toml_edit::Table, label: RelationLabel, target: &str) -> bool {
+    row.get("label").and_then(toml_edit::Item::as_str) == Some(label.name())
+        && row.get("target").and_then(toml_edit::Item::as_str) == Some(target)
+}
+
+/// Append a tier-1 `[[relation]]` edge to the entity TOML at `toml_path` (design §5.3).
+/// The impure shell over the pure [`append_relation_row`]: read the file, apply the
+/// edit-preserving append, write it back ONLY when a row was actually added (`Wrote`)
+/// — a `Noop` never rewrites the file (no spurious mtime churn). The caller resolves
+/// `toml_path` from `(source_kind, id)` via `integrity::KINDS` (the command shell).
+pub(crate) fn append_edge(
+    toml_path: &std::path::Path,
+    label: RelationLabel,
+    target: &str,
+) -> anyhow::Result<AppendOutcome> {
+    let text = std::fs::read_to_string(toml_path)
+        .map_err(|e| anyhow::anyhow!("read {} for relation append: {e}", toml_path.display()))?;
+    let (next, outcome) = append_relation_row(&text, label, target)?;
+    if outcome == AppendOutcome::Wrote {
+        std::fs::write(toml_path, next).map_err(|e| {
+            anyhow::anyhow!("write {} after relation append: {e}", toml_path.display())
+        })?;
+    }
+    Ok(outcome)
+}
+
+/// Remove a tier-1 `[[relation]]` edge from the entity TOML at `toml_path` (design
+/// §5.3). The impure shell over the pure [`remove_relation_row`]: write back only on
+/// `Removed`; `Absent` leaves the file untouched (idempotent double-unlink).
+pub(crate) fn remove_edge(
+    toml_path: &std::path::Path,
+    label: RelationLabel,
+    target: &str,
+) -> anyhow::Result<RemoveOutcome> {
+    let text = std::fs::read_to_string(toml_path)
+        .map_err(|e| anyhow::anyhow!("read {} for relation remove: {e}", toml_path.display()))?;
+    let (next, outcome) = remove_relation_row(&text, label, target)?;
+    if outcome == RemoveOutcome::Removed {
+        std::fs::write(toml_path, next).map_err(|e| {
+            anyhow::anyhow!("write {} after relation remove: {e}", toml_path.display())
+        })?;
+    }
+    Ok(outcome)
+}
+
+/// The derived-inbound render text for `label` (design §5.5 X5 / R2-M3): the
+/// `inbound_name` the [`RELATION_RULES`] rows pin for that label. Every rule carrying a
+/// given label declares the SAME `inbound_name` (VT-3 pins this), so the FIRST match is
+/// authoritative: `governed_by` renders governs, `consumes` renders consumed-by,
+/// `supersedes` renders superseded-by; every other label renders its own `name()`.
+/// Table-driven: the human inbound render reads this so the `supersedes` special-case
+/// collapses into one path; the `--json` inbound keeps the raw label regardless (R2-M3).
+/// Falls back to `name()` for a label with no rule (defensive — every variant is in the
+/// table by `every_variant_appears_in_the_table`).
+pub(crate) fn inbound_name(label: RelationLabel) -> &'static str {
+    RELATION_RULES
+        .iter()
+        .find(|r| r.label == label)
+        .map_or(label.name(), |r| r.inbound_name)
+}
+
+/// The `link`-writable labels a `source_kind` may author, as their authored spellings
+/// — for the refusal message that lists the legal labels (design §5.4 step 2). Only
+/// `LinkPolicy::Writable` rules are offered; `LifecycleOnly`/`TypedVerbOnly` labels are
+/// authored through their own verbs, not generic `link`.
+fn writable_labels_for(source: &Kind) -> Vec<&'static str> {
+    RELATION_RULES
+        .iter()
+        .filter(|r| {
+            r.link == LinkPolicy::Writable && r.sources.iter().any(|k| k.prefix == source.prefix)
+        })
+        .map(|r| r.label.name())
+        .collect()
+}
+
+/// The verb that DOES author a non-`link`-writable label, named in the refusal so the
+/// user is pointed at the right tool (design §5.4 step 2):
+/// - `LifecycleOnly` (governance `supersedes`) ⇒ the transactional supersede verb
+///   (IMP-006, unbuilt) — never plain `link`.
+/// - `TypedVerbOnly` ⇒ the kind's bespoke verb (`spec req add`, `spec parent`,
+///   `review …`).
+fn owning_verb_for(rule: &RelationRule) -> &'static str {
+    match rule.link {
+        LinkPolicy::Writable => "link",
+        LinkPolicy::LifecycleOnly => "the transactional supersede verb (IMP-006)",
+        LinkPolicy::TypedVerbOnly => "the kind's typed verb (e.g. `spec req add`, `review …`)",
+    }
+}
+
+/// Validate that `source_kind` may author `label_str` via the generic `link` verb,
+/// returning the governing [`RelationRule`] (design §5.4 step 2). PURE — no disk, no
+/// target resolution. Two refusals, both naming the remedy:
+/// - the `(source, label)` pair is off-table (an unknown label, or a real label this
+///   source may not author) ⇒ error listing the source's legal `link` labels;
+/// - the label is real but `link ≠ Writable` ⇒ error naming the owning verb.
+pub(crate) fn validate_link(
+    source_kind: &Kind,
+    label_str: &str,
+) -> anyhow::Result<&'static RelationRule> {
+    let legal = || writable_labels_for(source_kind).join(", ");
+    let label = RelationLabel::from_name(label_str).ok_or_else(|| {
+        anyhow::anyhow!(
+            "`{label_str}` is not a relation label authorable by {} via `link`. Legal labels: {}",
+            source_kind.prefix,
+            legal()
+        )
+    })?;
+    let rule = lookup(source_kind, label).ok_or_else(|| {
+        anyhow::anyhow!(
+            "{} may not author `{label_str}` (illegal for this source). Legal `link` labels: {}",
+            source_kind.prefix,
+            legal()
+        )
+    })?;
+    anyhow::ensure!(
+        rule.link == LinkPolicy::Writable,
+        "`{label_str}` is not `link`-writable — author it through {}, not generic `link`",
+        owning_verb_for(rule)
+    );
+    Ok(rule)
+}
+
+/// The forward-edge legal-KIND check (design §5.5, R2-M1 — NEW code). Given a `rule`
+/// already known `link`-writable, the `source_kind`, and the target's parsed kind
+/// `target_prefix`, assert the target kind is admissible for the rule's [`TargetSpec`]:
+/// - `Kinds(set)` ⇒ `target_prefix` must be in `set` (e.g. `governed_by` → ADR·POL·STD,
+///   so `link SL-048 governed_by SL-003` is REFUSED even though `SL-003` resolves);
+/// - `SameKind` ⇒ `target_prefix == source_kind.prefix` (governance `related` → same
+///   gov kind; a cross-gov target is refused);
+/// - `AnyNumbered` ⇒ any numbered kind is fine;
+/// - `Unvalidated` ⇒ unreachable here (free-text targets skip the kind check entirely).
+///
+/// `ensure_ref_resolves` (existence) is the caller's complementary gate — it does NOT
+/// check kind, which is exactly why this assertion is needed.
+pub(crate) fn check_target_kind(
+    rule: &RelationRule,
+    source_kind: &Kind,
+    target_prefix: &str,
+) -> anyhow::Result<()> {
+    match rule.target {
+        TargetSpec::Kinds(set) => anyhow::ensure!(
+            set.iter().any(|k| k.prefix == target_prefix),
+            "`{}` target must be one of [{}], got a {target_prefix}",
+            rule.label.name(),
+            set.iter().map(|k| k.prefix).collect::<Vec<_>>().join(", ")
+        ),
+        TargetSpec::SameKind => anyhow::ensure!(
+            target_prefix == source_kind.prefix,
+            "`{}` target must be the same kind as the source ({}), got a {target_prefix}",
+            rule.label.name(),
+            source_kind.prefix
+        ),
+        TargetSpec::AnyNumbered | TargetSpec::Unvalidated => {}
+    }
+    Ok(())
+}
+
 /// Test-only fixture helper (SL-048 PHASE-04): render an entity's relations in the
 /// MIGRATED on-disk shape from structured `axes` — each `(label, targets)`. An axis
 /// whose `(source, label)` is a tier-1 migrated rule (`Tier::One` AND NOT the
@@ -1036,6 +1333,190 @@ mod tests {
         let (edges, illegal) = read_block(&SLICE_KIND, &doc);
         assert!(edges.is_empty());
         assert!(illegal.is_empty());
+    }
+
+    // -- PHASE-05: the tier-1 write seam (append_edge / remove_edge) ----------
+
+    /// Append onto a clean file writes a new `[[relation]]` row with both cells, and
+    /// the pre-existing keys/comments survive (edit-preserving). The new row parses
+    /// back as a legal edge for the source.
+    #[test]
+    fn append_relation_row_appends_and_preserves() {
+        let text = "# a comment\nid = 1\ntitle = \"x\"\n";
+        let (next, outcome) =
+            append_relation_row(text, RelationLabel::GovernedBy, "ADR-010").unwrap();
+        assert_eq!(outcome, AppendOutcome::Wrote);
+        assert!(next.contains("# a comment"), "comment preserved");
+        assert!(next.contains("[[relation]]"));
+        assert!(next.contains("label = \"governed_by\""));
+        assert!(next.contains("target = \"ADR-010\""));
+        // Round-trips as a legal slice edge.
+        let edges = tier1_edges(&SLICE_KIND, &next).unwrap();
+        assert_eq!(
+            edge_pairs(&edges),
+            vec![(RelationLabel::GovernedBy, "ADR-010")]
+        );
+    }
+
+    /// Appending the SAME `(label, target)` twice is a `Noop` the second time — the
+    /// text is byte-unchanged and no duplicate row is written (idempotent, VT-6).
+    #[test]
+    fn append_relation_row_is_idempotent() {
+        let text = "id = 1\n";
+        let (once, o1) = append_relation_row(text, RelationLabel::GovernedBy, "ADR-010").unwrap();
+        assert_eq!(o1, AppendOutcome::Wrote);
+        let (twice, o2) = append_relation_row(&once, RelationLabel::GovernedBy, "ADR-010").unwrap();
+        assert_eq!(o2, AppendOutcome::Noop);
+        assert_eq!(once, twice, "a no-op append leaves the text byte-identical");
+    }
+
+    /// VT-1 (F1 / R2-m1 — the EOF-append defence): a hand-edited file with a typed
+    /// `[relationships]` table placed AFTER a `[[relation]]` array is REFUSED rather
+    /// than tail-inserting bare keys into the last array element (silent corruption).
+    /// The idempotent no-op guard runs first, so the refusal only fires for a genuinely
+    /// new edge.
+    #[test]
+    fn append_relation_row_refuses_trailing_typed_table() {
+        // The F1 trap: a [relationships] header AFTER the [[relation]] array.
+        let trap = "id = 1\n\
+                    [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
+                    [relationships]\ntags = [\"x\"]\n";
+        let err = append_relation_row(trap, RelationLabel::GovernedBy, "ADR-010").unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("relationships") && msg.contains("AFTER"),
+            "refusal must name the offending trailing table: {msg}"
+        );
+        // But an ALREADY-present edge is a Noop even on the trap layout (guard-first):
+        // re-linking the existing specs row must not trip the structural refusal.
+        let (out, outcome) = append_relation_row(trap, RelationLabel::Specs, "PRD-010").unwrap();
+        assert_eq!(outcome, AppendOutcome::Noop);
+        assert_eq!(out, trap);
+    }
+
+    /// `append_relation_row` escapes the target via `toml_edit::value` — a target
+    /// carrying a quote cannot break out of the string literal (the migrator never
+    /// authors such a target, but the write seam must be splice-safe regardless).
+    #[test]
+    fn append_relation_row_escapes_target() {
+        let text = "id = 1\n";
+        let (next, _) = append_relation_row(text, RelationLabel::Drift, "a\"b").unwrap();
+        // Parses cleanly (no broken literal) and the target round-trips verbatim.
+        let doc = RelationDoc::parse(&next).unwrap();
+        let (edges, _illegal) = read_block(&ISSUE_KIND, &doc);
+        assert_eq!(edge_pairs(&edges), vec![(RelationLabel::Drift, "a\"b")]);
+    }
+
+    /// `remove_relation_row` deletes a matching row (edit-preserving) and is idempotent
+    /// — a second remove is `Absent`, the text byte-unchanged (VT-6 double-unlink).
+    #[test]
+    fn remove_relation_row_round_trips_and_is_idempotent() {
+        let (with, _) =
+            append_relation_row("id = 1\n", RelationLabel::GovernedBy, "ADR-010").unwrap();
+        let (without, o1) =
+            remove_relation_row(&with, RelationLabel::GovernedBy, "ADR-010").unwrap();
+        assert_eq!(o1, RemoveOutcome::Removed);
+        assert!(
+            tier1_edges(&SLICE_KIND, &without).unwrap().is_empty(),
+            "the edge is gone after remove"
+        );
+        let (again, o2) =
+            remove_relation_row(&without, RelationLabel::GovernedBy, "ADR-010").unwrap();
+        assert_eq!(o2, RemoveOutcome::Absent);
+        assert_eq!(without, again, "a second remove is a byte-identical no-op");
+    }
+
+    /// `inbound_name` is the table-driven derived-inbound render text (X5/R2-M3): the
+    /// three inverted labels carry their pinned spelling; every other label renders its
+    /// own `name()` so shipped inbound goldens are unchanged.
+    #[test]
+    fn inbound_name_is_table_driven() {
+        assert_eq!(inbound_name(RelationLabel::GovernedBy), "governs");
+        assert_eq!(inbound_name(RelationLabel::Consumes), "consumed_by");
+        assert_eq!(inbound_name(RelationLabel::Supersedes), "superseded by");
+        // Every non-inverted label renders its own name().
+        for label in distinct_labels_in_decl_order() {
+            let inverted = matches!(
+                label,
+                RelationLabel::GovernedBy | RelationLabel::Consumes | RelationLabel::Supersedes
+            );
+            if !inverted {
+                assert_eq!(
+                    inbound_name(label),
+                    label.name(),
+                    "{label:?} inbound render must equal its name()"
+                );
+            }
+        }
+    }
+
+    // -- PHASE-05: link validation (validate_link + check_target_kind) --------
+
+    /// `validate_link` accepts a writable `(source, label)` and returns its rule; it
+    /// refuses an off-table label (listing the legal ones), an illegal-for-source label,
+    /// and a non-`Writable` label (naming the owning verb).
+    #[test]
+    fn validate_link_gates_source_label_and_policy() {
+        // Writable: SL governed_by → ok, returns the GovernedBy rule. (`RelationRule`
+        // has no Debug — it holds `&Kind` — so match rather than `.unwrap()`.)
+        match validate_link(&SLICE_KIND, "governed_by") {
+            Ok(rule) => assert_eq!(rule.label, RelationLabel::GovernedBy),
+            Err(e) => panic!("governed_by should be writable for a slice: {e}"),
+        }
+
+        // `RelationRule` has no Debug, so `.unwrap_err()` (which Debug-formats Ok) won't
+        // compile — extract the refusal message by hand.
+        let refusal = |src: &Kind, label: &str| -> String {
+            match validate_link(src, label) {
+                Ok(_) => panic!("expected `{label}` to be refused for {}", src.prefix),
+                Err(e) => e.to_string(),
+            }
+        };
+
+        // Unknown label spelling — refused, message lists legal labels.
+        let e = refusal(&SLICE_KIND, "nonsense");
+        assert!(e.contains("governed_by"), "lists legal labels: {e}");
+
+        // Real label, illegal for this source (a slice cannot author `related`).
+        let e = refusal(&SLICE_KIND, "related");
+        assert!(e.contains("illegal for this source"), "{e}");
+
+        // Governance `supersedes` is LifecycleOnly — refused, names the supersede verb.
+        let e = refusal(&ADR_KIND.kind, "supersedes");
+        assert!(e.contains("supersede verb"), "names the owning verb: {e}");
+
+        // A TypedVerbOnly label (spec `members`) — refused, names the typed verb.
+        let e = refusal(&PRODUCT_SPEC_KIND, "members");
+        assert!(e.contains("typed verb"), "names the typed verb: {e}");
+    }
+
+    /// VT-2 (R2-M1): the forward legal-KIND check. `governed_by` (→ ADR·POL·STD) refuses
+    /// a slice target even though it would resolve; `SameKind` (gov `related`) refuses a
+    /// cross-gov target; the legal kinds pass.
+    #[test]
+    fn check_target_kind_enforces_target_kind() {
+        // `RelationRule` has no Debug — unwrap the rule by hand.
+        let unwrap_rule = |r: anyhow::Result<&'static RelationRule>| -> &'static RelationRule {
+            match r {
+                Ok(rule) => rule,
+                Err(e) => panic!("expected a writable rule: {e}"),
+            }
+        };
+        let gov_by = unwrap_rule(validate_link(&SLICE_KIND, "governed_by"));
+        // SL-003 (a slice) is NOT a legal governed_by target — refused.
+        assert!(check_target_kind(gov_by, &SLICE_KIND, "SL").is_err());
+        // ADR/POL/STD all pass.
+        for p in ["ADR", "POL", "STD"] {
+            assert!(check_target_kind(gov_by, &SLICE_KIND, p).is_ok());
+        }
+
+        // SameKind: gov `related` from an ADR accepts an ADR target, refuses a POL.
+        let related = unwrap_rule(validate_link(&ADR_KIND.kind, "related"));
+        assert!(check_target_kind(related, &ADR_KIND.kind, "ADR").is_ok());
+        assert!(
+            check_target_kind(related, &ADR_KIND.kind, "POL").is_err(),
+            "SameKind refuses a cross-gov target"
+        );
     }
 
     /// `lookup` keys on `(source ∈ sources, label)`: an illegal pairing returns

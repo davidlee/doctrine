@@ -278,33 +278,27 @@ fn scan_aliases(tree_root: &Path, stem: &str) -> anyhow::Result<Vec<AliasFacts>>
     Ok(aliases)
 }
 
-/// `doctrine validate` — scan every numbered kind for id-integrity violations
-/// (ADR-006 D3 detect-half). Names the kinds scanned (so the memory omission is
-/// visible, D-A), prints each finding, and exits non-zero if any; a clean corpus
-/// prints an all-clear and exits zero. Read-only.
-pub(crate) fn run_validate(path: Option<PathBuf>) -> anyhow::Result<()> {
-    let root = root::find(path, &root::default_markers())?;
-
+/// The id-integrity finding lines for `validate` (ADR-006 D3 detect-half) over an
+/// ALREADY-resolved `root` — the per-kind `check_kind` rules as display strings. Split
+/// from the printer so the command shell composes these with the SL-048 relation-edge
+/// findings (`relation_graph::validate_relations`) WITHOUT this engine module depending
+/// on `relation_graph` (which depends back on `integrity` — the cycle the split avoids).
+pub(crate) fn id_integrity_findings(root: &Path) -> anyhow::Result<Vec<String>> {
     let mut findings = Vec::new();
     for kind in KINDS {
-        findings.extend(check_kind(&scan_kind(&root, kind)?));
+        findings.extend(check_kind(&scan_kind(root, kind)?).into_iter().map(|f| f.0));
     }
+    Ok(findings)
+}
 
-    let scanned = KINDS
+/// The roster of kinds `validate` scanned, for the summary line (so the memory
+/// omission is visible, D-A).
+pub(crate) fn scanned_kinds() -> String {
+    KINDS
         .iter()
         .map(|k| k.kind.prefix)
         .collect::<Vec<_>>()
-        .join(", ");
-    writeln!(io::stdout(), "validate: scanned {scanned}")?;
-
-    if findings.is_empty() {
-        writeln!(io::stdout(), "validate: corpus clean")?;
-        return Ok(());
-    }
-    for f in &findings {
-        writeln!(io::stdout(), "  {f}")?;
-    }
-    bail!("validate: {} integrity finding(s)", findings.len())
+        .join(", ")
 }
 
 // ---------------------------------------------------------------------------
