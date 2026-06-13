@@ -15,10 +15,11 @@
 //! - **No migrated label in a typed slot** — the migrated tier-1 axes are gone from
 //!   `[relationships]` (slice: the whole table is gone; backlog: only needs/after/
 //!   triggers remain; governance: only supersedes/superseded_by/tags remain).
-//! - **OD-3 asserted POSITIVELY** — governance `supersedes`/`superseded_by`/`tags`
-//!   remain TYPED in `[relationships]`, and a governance `[[relation]]` block contains
-//!   ONLY `related` rows (NOT via "only tier-1 labels in [[relation]]", which
-//!   `supersedes` — tier-1-by-shape — would satisfy).
+//! - **OD-3** — the supersession pair stays typed, proven by constraining the array:
+//!   a governance `[[relation]]` block contains ONLY `related` rows, so `supersedes`
+//!   (tier-1-by-shape) can never have leaked in. This is the negative form — the corpus
+//!   test does not assert the typed keys are *present* (a hand-trimmed file may omit
+//!   one); the positive rendered shape is proven by the scaffold-path guard below.
 //! - **Same-label row order** — within one label, `[[relation]]` rows preserve a
 //!   stable order; across labels the migrator emits in the per-kind axis sequence.
 
@@ -57,6 +58,46 @@ fn numeric_dirs(tree: &Path) -> Vec<PathBuf> {
     }
     out.sort();
     out
+}
+
+/// The `{stem}-{NNN}.toml` files under one entity tree (`tree` is the dir holding the
+/// numeric entity dirs). One construction site for every corpus invariant's iteration
+/// set, so they cannot silently diverge.
+fn entity_tomls(tree: &Path, stem: &str) -> Vec<PathBuf> {
+    numeric_dirs(tree)
+        .into_iter()
+        .map(|dir| {
+            let name = dir.file_name().unwrap().to_string_lossy().to_string();
+            dir.join(format!("{stem}-{name}.toml"))
+        })
+        .collect()
+}
+
+fn slice_files() -> Vec<PathBuf> {
+    entity_tomls(&doctrine_root().join("slice"), "slice")
+}
+
+fn governance_files() -> Vec<PathBuf> {
+    ["adr", "policy", "standard"]
+        .into_iter()
+        .flat_map(|stem| entity_tomls(&doctrine_root().join(stem), stem))
+        .collect()
+}
+
+fn backlog_files() -> Vec<PathBuf> {
+    ["issue", "improvement", "chore", "risk", "idea"]
+        .into_iter()
+        .flat_map(|sub| entity_tomls(&doctrine_root().join("backlog").join(sub), "backlog"))
+        .collect()
+}
+
+/// Every relation-bearing entity TOML in the corpus — the union the contiguity
+/// invariant scans, and the same files the per-kind tests scan in subsets.
+fn all_relation_files() -> Vec<PathBuf> {
+    let mut v = slice_files();
+    v.extend(governance_files());
+    v.extend(backlog_files());
+    v
 }
 
 /// A lightweight line view of one TOML file: the index of the first `[relationships]`
@@ -166,10 +207,7 @@ fn assert_no_migrated_key_left(path: &Path, v: &TomlView, migrated: &[&str]) {
 
 #[test]
 fn slice_corpus_has_no_relationships_table_only_relation_arrays() {
-    let root = doctrine_root();
-    for dir in numeric_dirs(&root.join("slice")) {
-        let name = dir.file_name().unwrap().to_string_lossy().to_string();
-        let f = dir.join(format!("slice-{name}.toml"));
+    for f in slice_files() {
         let text = std::fs::read_to_string(&f).unwrap();
         let v = view(&text);
         assert_f1(&f, &v);
@@ -198,68 +236,48 @@ fn slice_corpus_has_no_relationships_table_only_relation_arrays() {
 
 #[test]
 fn governance_corpus_supersession_pair_and_tags_stay_typed_relation_is_related_only() {
-    let root = doctrine_root();
-    for (sub, stem) in [
-        ("adr", "adr"),
-        ("policy", "policy"),
-        ("standard", "standard"),
-    ] {
-        for dir in numeric_dirs(&root.join(sub)) {
-            let name = dir.file_name().unwrap().to_string_lossy().to_string();
-            let f = dir.join(format!("{stem}-{name}.toml"));
-            let text = std::fs::read_to_string(&f).unwrap();
-            let v = view(&text);
-            assert_f1(&f, &v);
-            // OD-3 negative: `related` must NOT be a typed key (it migrated).
-            assert_no_migrated_key_left(&f, &v, &["related"]);
-            // OD-3 POSITIVE: every `[[relation]]` row is `related` ONLY — `supersedes`
-            // (tier-1-by-shape) must NEVER appear in the array (it stays typed).
-            for label in &v.relation_labels {
-                assert_eq!(
-                    label,
-                    "related",
-                    "{}: governance [[relation]] must contain ONLY `related`, found `{label}` \
-                     (supersedes/superseded_by stay typed — OD-3)",
-                    f.display()
-                );
-            }
-            // OD-3 POSITIVE: the supersession pair + tags remain authorable as typed
-            // keys. (They may be absent only if the file never carried a
-            // `[relationships]` table at all; every governance entity here does.)
-            if v.first_relationships.is_some() {
-                for typed in ["supersedes", "superseded_by", "tags"] {
-                    // Not asserting presence of every key on every file (a hand-trimmed
-                    // file may omit one), but asserting that IF present they are typed,
-                    // never in `[[relation]]` — covered by the label-only check above.
-                    let _ = typed;
-                }
-            }
+    for f in governance_files() {
+        let text = std::fs::read_to_string(&f).unwrap();
+        let v = view(&text);
+        assert_f1(&f, &v);
+        // OD-3 negative: `related` must NOT be a typed key (it migrated).
+        assert_no_migrated_key_left(&f, &v, &["related"]);
+        // OD-3 POSITIVE: the supersession pair stays typed, never migrated. We assert
+        // this as the array's contents: every `[[relation]]` row is `related` ONLY, so
+        // `supersedes`/`superseded_by` (tier-1-by-shape) can never have leaked into the
+        // array. Presence of the typed keys is NOT asserted here — a hand-trimmed file
+        // may legitimately omit one — so "stays typed" is proven negatively (absent from
+        // the array) rather than positively (present in the table). The freshly-rendered
+        // positive shape is proven by `assert_governance_shape` on the scaffold path.
+        for label in &v.relation_labels {
+            assert_eq!(
+                label,
+                "related",
+                "{}: governance [[relation]] must contain ONLY `related`, found `{label}` \
+                 (supersedes/superseded_by stay typed — OD-3)",
+                f.display()
+            );
         }
     }
 }
 
 #[test]
 fn backlog_corpus_keeps_dep_seq_typed_migrates_cross_kind_axes() {
-    let root = doctrine_root();
-    for sub in ["issue", "improvement", "chore", "risk", "idea"] {
-        for dir in numeric_dirs(&root.join("backlog").join(sub)) {
-            let name = dir.file_name().unwrap().to_string_lossy().to_string();
-            let f = dir.join(format!("backlog-{name}.toml"));
-            let text = std::fs::read_to_string(&f).unwrap();
-            let v = view(&text);
-            assert_f1(&f, &v);
-            // slices/specs/drift migrated OUT of the typed table.
-            assert_no_migrated_key_left(&f, &v, &["slices", "specs", "drift"]);
-            // Every `[[relation]]` label is a backlog tier-1 label (NOT needs/after/
-            // triggers — those stay typed with their per-edge payloads).
-            for label in &v.relation_labels {
-                assert!(
-                    ["slices", "specs", "drift"].contains(&label.as_str()),
-                    "{}: unexpected backlog [[relation]] label `{label}` (dep/seq axes \
-                     needs/after/triggers must stay typed)",
-                    f.display()
-                );
-            }
+    for f in backlog_files() {
+        let text = std::fs::read_to_string(&f).unwrap();
+        let v = view(&text);
+        assert_f1(&f, &v);
+        // slices/specs/drift migrated OUT of the typed table.
+        assert_no_migrated_key_left(&f, &v, &["slices", "specs", "drift"]);
+        // Every `[[relation]]` label is a backlog tier-1 label (NOT needs/after/
+        // triggers — those stay typed with their per-edge payloads).
+        for label in &v.relation_labels {
+            assert!(
+                ["slices", "specs", "drift"].contains(&label.as_str()),
+                "{}: unexpected backlog [[relation]] label `{label}` (dep/seq axes \
+                 needs/after/triggers must stay typed)",
+                f.display()
+            );
         }
     }
 }
@@ -270,29 +288,7 @@ fn backlog_corpus_keeps_dep_seq_typed_migrates_cross_kind_axes() {
 /// contiguous (no A,B,A interleave) — the per-label authored order is preserved.
 #[test]
 fn relation_rows_of_one_label_are_contiguous() {
-    let root = doctrine_root();
-    let mut all_files: Vec<PathBuf> = Vec::new();
-    for dir in numeric_dirs(&root.join("slice")) {
-        let name = dir.file_name().unwrap().to_string_lossy().to_string();
-        all_files.push(dir.join(format!("slice-{name}.toml")));
-    }
-    for (sub, stem) in [
-        ("adr", "adr"),
-        ("policy", "policy"),
-        ("standard", "standard"),
-    ] {
-        for dir in numeric_dirs(&root.join(sub)) {
-            let name = dir.file_name().unwrap().to_string_lossy().to_string();
-            all_files.push(dir.join(format!("{stem}-{name}.toml")));
-        }
-    }
-    for sub in ["issue", "improvement", "chore", "risk", "idea"] {
-        for dir in numeric_dirs(&root.join("backlog").join(sub)) {
-            let name = dir.file_name().unwrap().to_string_lossy().to_string();
-            all_files.push(dir.join(format!("backlog-{name}.toml")));
-        }
-    }
-    for f in all_files {
+    for f in all_relation_files() {
         let text = std::fs::read_to_string(&f).unwrap();
         let labels = view(&text).relation_labels;
         // A label is contiguous iff, once we leave its run, we never see it again.
