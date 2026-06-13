@@ -21,20 +21,28 @@ no relations). On that false premise two items were filed and are now closed:
 The corrected memory: `mem.pattern.relation.authored-rows-tooling-half-wired`.
 
 What is genuinely unfinished: **the scaffold templates were never updated for the
-cut.** All three still emit the migrated tier-1 axes as typed `[relationships]`
-slots, so every entity scaffolded since SL-048 is born malformed:
+cut.** Six templates still emit the migrated tier-1 axes as typed `[relationships]`
+slots (slice; adr/policy/standard; backlog/backlog-risk), so every entity
+scaffolded since SL-048 is born malformed:
 
 - `install/templates/slice.toml` — emits a `[relationships]` table (the whole
-  table migrated away for slices). (**ISS-009**, originally filed.)
-- `install/templates/adr.toml` — emits `related = []` (governance `related`
-  migrated to `[[relation]]`). This gave **ADR-011** its stale key, which tripped
-  `e2e_relation_migration_storage` and blocked the binary update; the entity was
-  repaired in `138038c`.
-- `install/templates/backlog.toml` — emits `slices`/`specs`/`drift` (migrated to
-  `[[relation]]` for backlog). Entities `ISS-009/ISS-010/IMP-045..049`,
-  `IDE-005` carry the stale keys; latent (their `[relationships]` header's inline
-  comment slips past the migration test's exact-match parser, so they are not
-  red — but they are malformed).
+  table migrated away for slices). (**ISS-009**, originally filed.) Note the
+  migrated axes appear only as commented examples, so the bare-key guard alone
+  misses it — the slice guard must assert the header is absent (design F-D).
+  **SL-056** was born from this template and carries the stale comment-only table;
+  benign but in-scope for the cleanup (design F-E).
+- `install/templates/adr.toml` (+ `policy.toml` / `standard.toml`) — emit
+  `related = []` (governance `related` migrated to `[[relation]]`; the
+  supersession pair + `tags` stay typed). This gave **ADR-011** its stale key,
+  which tripped `e2e_relation_migration_storage` and blocked the binary update; the
+  entity was repaired in `138038c`. No policy/standard entity is malformed yet —
+  their template fix is preventive.
+- `install/templates/backlog.toml` (+ `backlog-risk.toml`) — emit
+  `slices`/`specs`/`drift` (migrated to `[[relation]]` for backlog; `needs`/
+  `after`/`triggers` stay typed). Entities `ISS-009/ISS-010/IMP-045..051`,
+  `IDE-005` (10) carry the stale keys; latent (their `[relationships]` header's
+  inline comment slips past the migration test's exact-match parser, so they are
+  not red — but they are malformed).
 
 ## Scope & Objectives
 
@@ -51,9 +59,12 @@ entities already malformed.
    adversarial review; no policy/standard entity is malformed yet, so their fix is
    preventive.)
 2. **Entity fallout** — migrate the already-scaffolded malformed entities to the
-   correct shape: backlog `ISS-009`/`ISS-010`/`IMP-045..049`/`IDE-005` (drop the
-   typed migrated keys; none carry real edges, so no `[[relation]]` rows needed).
-   ADR-011 already done.
+   correct shape: backlog `ISS-009`/`ISS-010`/`IMP-045..051`/`IDE-005` (10; drop
+   the typed migrated keys — only `IMP-045` carries a real edge
+   (`slices=["SL-056"]`), authored via `link` before strip; the rest are empty
+   removals) plus `SL-056` (strip its stale comment-only `[relationships]` table).
+   ADR-011 already done. Re-scan slice + backlog corpus at execution start —
+   concurrent authoring keeps minting fallout until the template fix lands.
 3. **Guidance (IMP-049)** — agent-facing support: how/when to relate, the legal
    vocabulary pointer (`RELATION_RULES`), the `link`/`unlink` verb, the
    dev-binary-vs-stale-installed trap. Skill / memory / docs — surface TBD at
