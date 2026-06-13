@@ -202,3 +202,62 @@ command (flagged it as writing a misrepresenting `WORKER_RAN` marker + bypassing
 `/route`). Its *turn ran* (giving the fail-open datum), but it declined the op.
 Real dispatch-worker prompts must carry genuine task context + rationale, never
 bare "run this" orders — itself input to PHASE-05+ worker-prompt design.
+
+## PHASE-03 (G2) — LOCKED ✅ (B→C→D complete)
+
+The A→D sequence is done; the governance is locked. Surface: `g2-draft.md` (pivot
+delta + draft amendments + the full C-review findings + D-disposition).
+
+**B — drafts** authored in `g2-draft.md` (ADR-006 G2 amendment, ADR-011 φ/σ/D5
+firming, PHASE-10 re-scope, open items).
+
+**C — adversarial review** (codex GPT-5.5 primary + independent Opus verify/extend).
+Net **3 blockers, 4 majors, 3 minors** — all in `g2-draft.md §6`. Headlines: B1 lost
+pre-dispatch baseline-verify; B2 stamp-failure privilege fail-open; B3 legit-hook
+exemption breaks (SubagentStart `cwd` IS the worker worktree); M1 base residual
+sharper (clean-applying-semantically-wrong import possible); σ-moot verified SOUND.
+
+**D — owner rulings (VH-1):**
+- **B1 → accept weaker class.** Claude loses ADR-006 D9 pre-dispatch baseline-verify;
+  an unbuildable fork is caught late at `import → verify` (cost: wasted run ×batch
+  width). Folded into ADR-006 D9 amendment.
+- **B2+B3 → adopt the fix.** `is_linked_worktree && !marker_present` ⇒ **fail-closed**
+  (refuse Orchestrator/Hook-mint/write); `marker --stamp-subagent` exempt **by verb
+  identity**. Also closes the deliberate self-clear. Folded into ADR-006 D2a + ADR-011
+  D6.
+- **M1 → accept as confessed residual.** Sharpened opaque-base residual named in
+  ADR-011 D5; import-time content-base assertion deferred to IMP-043.
+
+**Locked artifacts:**
+- **ADR-006** amended (`accepted`): D2a (marker-primary signal + Orchestrator class +
+  the marker-absent fail-closed rule + stamp-verb identity exemption); D9 amendment
+  (claude rung = SubagentStart-stamp; create-fork deferred; baseline-verify weaker
+  class).
+- **ADR-011** firmed + **promoted `proposed → accepted`**: D3 table (claude marker
+  writer / base / fail-closed cells), D4 (create-fork stale ref fixed), D5 (opaque
+  base + M1 residual + multi-commit not head-moved), D6 (φ RESOLVED to O3-red:
+  blocking + read-only + privilege-fenced), D7 (σ WITHDRAWN), Consequences +
+  Verification rows.
+- **design.md §4b** — SUPERSEDED banner added (pivot pointer); detailed §4b/§5/§11/§12
+  rewrite deferred to PHASE-10 prep.
+
+**Carried into PHASE-10 (code re-scope — see `g2-draft.md §4` + §6 M4):**
+1. `run_create_fork` **deferred/dropped from v1**; `run_stamp_subagent` is the primary
+   claude verb (thinner: no `git worktree add`; provision+stamp into `cwd`).
+2. `classify_create` three-valued **collapses** (no `PlainCreate` else-branch — σ moot).
+3. Worker-mode: implement the **marker-absent-in-linked-worktree fail-closed** rule;
+   `run_stamp_subagent` exempt by verb identity (B2/B3).
+4. `src/boot.rs`: WorktreeCreate `HookSpec` → **matcher-scoped `SubagentStart`
+   HookSpec**.
+5. design §4b/§5/§11/§12 are **internally stale** vs the deferral (M4) — rewrite at
+   PHASE-10 prep, not carried as the build target.
+6. **M3:** provision now runs inside the read-only stamp hook — a mid-copy provision
+   failure leaves a half-provisioned worktree + a running worker (un-rollback-able,
+   un-abortable). Design the stamp verb's failure posture accordingly.
+
+**Open IMP (tracked in backlog):** fresh-session probe of the literal `dispatch-worker`
+SubagentStart **matcher** path (M2 — currently doc-supported, not end-to-end proven;
+agent-def registry needs a fresh session).
+
+**Next:** resume the dispatch drive — PHASE-04 (G4 SPEC-012 rewrite, inline), then code
+phases 05+ via workers.
