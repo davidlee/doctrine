@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec093bd7b71518489dd187b77f0f0"
+memory_key = "mem.pattern.dispatch.claude-worktreecreate-payload-minimal-no-type-no-path"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Claude Code WorktreeCreate hook payload carries no type, no target path, no base — use SubagentStart to stamp worker identity"
+summary = "Claude Code WorktreeCreate payload is minimal (no subagent_type, no worktree_path, no base/ref) — gate identity at SubagentStart, not WorktreeCreate"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "claude", "harness"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "b421cd9af4d676bf8936a0a5f74d6fd4113add97"
+tree = "e48189c9132d9072ff2e22f6366d4a3271bfde73"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "b421cd9af4d676bf8936a0a5f74d6fd4113add97"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
