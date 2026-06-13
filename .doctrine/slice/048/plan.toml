@@ -129,8 +129,13 @@ these across phases would strand readers expecting [[relation]] over still-typed
 tier-1 via read_block, keeps only its tier-2/3 typed edges (design §5.3 shrink); (b)
 each kind's format_show reads tier-1 via read_block in canonical order and threads the
 new governed_by/consumes axes (R2-C2 — format_show is the SECOND consumer of the
-deleted typed fields; unaddressed, show silently loses its relationships block); (c)
-delete the migrated typed struct fields; (d) run the DETERMINISTIC one-shot corpus
+deleted typed fields; unaddressed, show silently loses its relationships block); (b')
+each kind's `show_json` path is the THIRD consumer (review-found, beyond design R2-C2):
+slice/governance serde the whole doc, backlog hand-projects `item.relationships` —
+so deleting the typed fields changes `show --json` (backlog won't even compile).
+`show_json` must reconstruct the tier-1 relations from read_block in the SAME
+JSON shape so OD-2's byte-identical `show --json` holds; (c) delete the migrated
+typed struct fields; (d) run the DETERMINISTIC one-shot corpus
 migrator (out-of-band script/LLM, no shipped surface, no dual-read branch) over this
 repo's TOML, moving tier-1 fields to `[[relation]]` with typed leftovers in a
 `[relationships]` table PRECEDING all arrays (F1 — bare keys after an array-of-tables
@@ -140,16 +145,16 @@ governance `related`; slice drops `[relationships]` entirely. Gate the whole pha
 before/after byte-identical render goldens AND a storage-level post-check.
 """
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-03 green — read_block + table-driven overlay proven in isolation; before-goldens captured on the un-migrated corpus (inspect / *-show / show --json)." },
+  { id = "EN-1", text = "PHASE-03 green — read_block + table-driven overlay proven in isolation. Baseline for the gate is the EXISTING committed golden suite (inspect / *-show / e2e_*_golden); no orphan capture step — the migrator's before-snapshot of any live-corpus `show`/`inspect`/`show --json` output is taken INTRA-PHASE at PHASE-04 start, before the first mutation, and asserted byte-identical after." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "Every kind's relation_edges + format_show read tier-1 via read_block (canonical order, governed_by/consumes threaded); the migrated typed struct fields are deleted; show/inspect still render the relationships block (R2-C2 — not silently lost)." },
+  { id = "EX-1", text = "Every kind's relation_edges + format_show + show_json read tier-1 via read_block (canonical order, governed_by/consumes threaded); the migrated typed struct fields are deleted; show/inspect AND show --json still render the relationships block in the same shape (R2-C2 + the review-found JSON third consumer — neither silently lost)." },
   { id = "EX-2", text = "The corpus migrator has run: every migrated file carries `[[relation]]` for tier-1 with typed leftovers (gov supersession pair + tags; spec lineage/interactions/members) in a `[relationships]` table preceding all arrays (F1); only governance `related` migrated, the supersession pair untouched (OD-3); slice carries only `[[relation]]`." },
   { id = "EX-3", text = "backlog order byte-identical (needs/after/triggers untouched); per-kind + cordage + backlog_order suites green unchanged; clippy zero, just check green." },
 ]
 verification = [
-  { id = "VT-1", expects = "Before/after render goldens byte-identical across the migration — inspect + every *-show golden (covers the format_show rewire R2-C2 and the inbound_name pinning R2-M3) + show --json (OD-2)." },
-  { id = "VT-2", expects = "Storage-level post-check over every migrated file (R2-m3 — render goldens are necessary but NOT sufficient, since X1 decouples on-disk row order from rendered output): typed leftovers precede all [[relation]] arrays (F1); only tier-1 labels appear in [[relation]]; no migrated label left in a typed slot; same-label row order follows the declared policy." },
+  { id = "VT-1", expects = "Before/after goldens byte-identical across the migration — inspect + every *-show golden (covers the format_show rewire R2-C2 and the inbound_name pinning R2-M3) + show --json (OD-2; covers the JSON third-consumer rewire — the JSON relationships shape is unchanged)." },
+  { id = "VT-2", expects = "Storage-level post-check over every migrated file (R2-m3 — render goldens are necessary but NOT sufficient, since X1 decouples on-disk row order from rendered output): typed leftovers precede all [[relation]] arrays (F1); no migrated label left in a typed slot; same-label row order follows the declared policy. The OD-3 exclusion is asserted POSITIVELY, not via 'only tier-1 labels in [[relation]]' (which `supersedes` — tier-1-by-shape — would satisfy): governance `supersedes`/`superseded_by`/`tags` remain TYPED, and governance `[[relation]]` contains ONLY `related`." },
   { id = "VT-3", expects = "Post-migration SL-046 reader emits the SAME edges for already-authored relations (same edges, new on-disk shape) — the anti-double-count/ordering cohabitation gate (R2)." },
   { id = "VT-4", expects = "Exact-coverage arm (a) (X3, now read_block is live): per source kind, the reader's capable label set == the table's labels for that source — no off-table emission, no rule without a reader path." },
   { id = "VT-5", expects = "Whole-corpus round-trip `doctrine <kind> show` clean on the migrated corpus (the `validate` teeth land in PHASE-05)." },
@@ -196,6 +201,7 @@ verification = [
   { id = "VT-3", expects = "Corpus-edge validate (R2-M5/X2): a deleted target leaves a [[relation]] dangler that validate reports; a hand-edited illegal (source,label) row is reported as an IllegalRow; both report-only, never rewritten (the reseat precedent)." },
   { id = "VT-4", expects = "Supersession cross-check (R2-m2/OD-3): reads superseded_by via the typed read seam (governance read_doc, not the generic path) and reports disagreement with the supersedes in_edge reciprocal — may surface pre-existing hand-authored drift (intended, C3), never rewrites." },
   { id = "VT-5", expects = "End-to-end (§7): a governed_by / PRD↔PRD consumes / governance related edge authored via link is validated, persisted as [[relation]], surfaced by show + the SL-046 query, and present in the target's derived inbound." },
+  { id = "VT-6", expects = "unlink round-trips (§7): after `link` then `unlink` the edge disappears from storage, show, the SL-046 query, and the target's derived inbound; a second `unlink` is an idempotent no-op (Absent), and `link` of the same triple twice is idempotent (Noop) — both directions pinned." },
 ]
 specs        = []
 requirements = []

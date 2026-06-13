@@ -15,8 +15,9 @@ phase ends green and demonstrable and the one irreversible step (mutating
 committed authored TOML) lands alone, fully gated, on machinery already proven by
 tests. The design is locked at v3 (round-2 hostile pass integrated); this plan
 sequences it and re-decides nothing. Where it departs from the design's §8 sketch
-it is on **phase boundaries only** — the sketch's authority is explicitly
-indicative, and the departure is forced by the design's own constraints, below.
+it is on **phase boundaries only** (every shift enumerated in Notes) — the
+sketch's authority is explicitly indicative; the load-bearing move is forced by
+the design's own hard-cut constraint (below), the rest are cohesion.
 
 ## Sequencing & Rationale
 
@@ -102,10 +103,29 @@ final workspace gate.
 
 - **Criteria immutability.** `PHASE-NN` and `EN-/EX-/VT-/VA-` ids are fixed once
   authored — corrections append, they never renumber.
-- **Boundary departure from design §8, recorded.** The sketch's PHASE-03 is split
-  (read machinery / the cut) and its migrator is pulled forward into the cut; the
-  sketch's PHASE-05 docs tail becomes PHASE-06. Rationale above; design content
-  unchanged. The decomposition, not the design, is `/plan`'s authority here.
+- **Boundary departure from design §8, fully enumerated.** §8 is explicitly
+  indicative — "`/plan` owns the authoritative phase decomposition + EN/EX/VT"
+  (design §8 close). Every shift from the sketch is a phase-BOUNDARY move; no
+  design-content decision is changed. Complete list, so the artefacts cannot
+  *appear* to disagree: (1) the sketch's PHASE-03 is split into read machinery
+  (PHASE-03) and the cut (PHASE-04); (2) the `relation_edges` + `format_show`
+  live rewire moves from sketch-PHASE-03 into the cut (PHASE-04), where it must
+  co-occur with the migration to stay green; (3) the one-shot migrator is pulled
+  forward from sketch-PHASE-05 into the cut (PHASE-04) — the load-bearing
+  correction above; (4) the new corpus-edge `validate` + supersession cross-check
+  move from sketch-PHASE-04 into PHASE-05, cohering with the `link`/`unlink`
+  write-path teeth they share machinery with (and because they can only run once
+  the corpus is migrated and read_block is live); (5) the sketch-PHASE-05 docs
+  tail (ADR-010 amendment, spec references, IMP reclassification) becomes PHASE-06.
+- **One review-found scope addition, not a boundary move.** The adversarial pass
+  on this plan found a THIRD consumer of the deleted typed `[relationships]`
+  fields that design R2-C2 named only two of: each kind's `show_json` path
+  (slice/governance serde the whole doc; backlog hand-projects `relationships`).
+  Deleting the typed fields changes `show --json` (backlog will not compile), so
+  PHASE-04 also rewires `show_json` to reconstruct the tier-1 relations from
+  `read_block` in the same JSON shape — OD-2's byte-identical `show --json` gate
+  already mandated the outcome; the plan now names the work and pins it (PHASE-04
+  EX-1 / VT-1).
 - **Exact-coverage lands where its driver is rewired.** Arm (a) (reader-capable
   labels == table labels) is by-construction once `read_block` is live, so it is a
   PHASE-04 VT; arm (b) (overlay coverage) is a PHASE-03 VT; both are seeded by the
