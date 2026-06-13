@@ -575,3 +575,66 @@ variant did NOT trip the bool/arg ceiling (a derive struct variant, not a fn).
 green ✓ (the O3 spike disposition). Base **B = 53c53fe**. NOTE: the four core verbs
 (fork/import/land/gc) are now COMPLETE; remaining phases (10–13) are the claude
 spawn path + `claude install` + bwrap profile + skill rewrites.
+
+## PHASE-10 — `marker --stamp-subagent` (SubagentStart provision+mark) (done · /dispatch · `sl056-coord` a74a513)
+
+**RE-SCOPED** off the dead WorktreeCreate `create-fork` path (PHASE-02 O3-RED) onto
+the **SubagentStart-stamp** mechanism (re-scope authored on main `9f265eb`: design
+§4b/§5/§9/§11/§12 + decision-tree + plan.toml PHASE-10). Driven via `/dispatch` (one
+worker, batch of one). Base **B = `53c53fe`**; worker fork `sl056-p10-stamp` returned
+**S = `0274417`** (`S^ == B`, single non-merge). Funnel clean: precond → S^==B → R-5
+belt (install/agents/claude/dispatch-worker.md + src/main.rs + src/worktree.rs +
+tests/e2e_worktree_stamp.rs — NO `.doctrine/`) → `git apply --3way --index` → verify
+→ branch-point stationary → one commit **`a74a513`**; fork reaped.
+
+**Built (source delta — src/worktree.rs, src/main.rs, install/agents/claude/dispatch-worker.md, tests/e2e_worktree_stamp.rs):**
+- `doctrine worktree marker --stamp-subagent` — the claude harness spawn-path's
+  provision+mark step. Reads `{cwd, agent_type}` JSON on stdin (SubagentStart
+  payload), and on a valid dispatch-worker worktree runs `run_provision` (the SOLE
+  copier, source = orchestrator tree) THEN `write_marker`. `create-fork` /
+  WorktreeCreate is DROPPED (its payload carries no `agent_type`/path — see
+  `mem.pattern.dispatch.claude-worktreecreate-payload-minimal-no-type-no-path`).
+- Pure `classify_stamp(agent_type, cwd_present, cwd_is_under_repo_linked_worktree)
+  -> Result<Stamp, StampRefusal>` — TWO-valued (Stamp::Ok vs Refuse), NO PlainCreate
+  branch (the matcher scopes the hook to dispatch workers, so a benign subagent never
+  reaches the verb). Precond order cwd-presence → dir-validity → agent-type; three
+  distinct fail-closed tokens `missing-cwd` / `bad-dir` / `missing-agent-type`.
+- `DISPATCH_WORKER_AGENT_TYPE = "dispatch-worker"` const — SINGLE source of truth for
+  the discriminator; the agent-def `name:` must equal it (T6 drift test pins them).
+- `cwd_shares_repo` = git-common-dir EQUALITY, not a path `starts_with` prefix (a
+  linked worktree is a SIBLING dir, not a child) — same notion `verify_sibling_worktree`
+  uses. Impure git read gathered in the shell; `classify_stamp` stays pure.
+- `WriteClass::Hookmint(&'static str)` variant (exhaustive, no wildcard) — refused
+  under worker-mode via the SAME branch as Orchestrator/Write, **NO verb-identity
+  carve-out**. The legit first stamp lands on a marker-absent worktree ⇒ `worker_mode
+  == false` ⇒ allowed automatically. The `Marker { stamp_subagent: true, .. }`
+  discriminate arm MUST sit BEFORE the `Marker { .. } => MarkerClear` catch-all.
+- **M3 failure posture:** on provision/mark failure print a LOUD stderr diagnostic +
+  exit non-zero, but do NOT `git worktree remove` (Claude owns the worktree; the
+  worker is already cleared to run). No compensating rollback — the half-stamped fork
+  is left for the orchestrator's post-spawn check. SubagentStart is read-only
+  (exit≠0 does NOT abort the subagent — `mem.pattern.dispatch.subagentstart-blocking-but-not-failclosable`).
+- `install/agents/claude/dispatch-worker.md` (NEW; source in `install/`, not
+  `.doctrine/`) — agent def, `name: dispatch-worker` pinned to the const.
+- Goldens `tests/e2e_worktree_stamp.rs` (8, VT-1..5 black-box, stdin-fed JSON) + 4
+  pure `classify_stamp` arm tests + the T6 drift test.
+
+**Worker decisions verified at import (all SOUND):** (1) `run_provision(Some(orchestrator_tree),
+cwd)` — the literal prompt's `Some(cwd), cwd` would self-bail on `verify_sibling_worktree`;
+worker mirrored `run_fork --worker`. (2) "under repo" = git-common-dir equality, not
+prefix. (3) VT-1 asserts `run_provision`'s own `provisioned <path>` STDOUT line (the
+sole copier, reused — cannot suppress); the stamp verb itself writes only STDERR.
+(4) clippy-denied `unreachable!` replaced with a fail-closed `bad-dir` refusal.
+
+**Verify:** full `-p doctrine` suite green EXCEPT the one pre-existing **foreign**
+SL-048 relation-migration red in `e2e_relation_migration_storage.rs`
+(`governance_corpus_supersession_…`, reds identically at clean B — delta touches
+neither that test nor `.doctrine/adr`). New stamp suite 8/8, clippy zero.
+
+**Next:** PHASE-11 (`claude install`: rename `skills install` → `claude install` +
+hidden deprecated alias; agents-symlink leg; the **SubagentStart** HookSpec matcher
+`dispatch-worker` merged via the `src/boot.rs` HookSpec core; charge-5 worker-mode
+refusal). ⚠ plan.toml PHASE-11 still says "WorktreeCreate hook" in places — PHASE-11
+prep must re-scope its hook leg to **SubagentStart**, mirroring PHASE-10's re-scope.
+⚠ design §5 Hook-mint reconciliation flagged for the PHASE-10 VH lock — owner confirms
+at close that the exemption rides Option C's positive signal (no verb-identity carve-out).
