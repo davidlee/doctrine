@@ -485,6 +485,37 @@ enum WorktreeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Print the resolved worker-mode and cause (SL-056 §3). `--assert` derives a
+    /// non-zero `stale-marker` exit from the SAME state the human line reads.
+    /// Read-classed — open to workers.
+    Status {
+        /// Gate exit: non-zero with a `stale-marker` token if a stray marker sits
+        /// in this linked worktree (clean direct-writer entry ⇒ exit 0).
+        #[arg(long)]
+        assert: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Manage the worker-mode disk marker (SL-056 §3). `--clear` removes it at the
+    /// cwd tree root with a loud receipt — the self-brick cure; never refused by
+    /// the marker conjunct itself.
+    Marker {
+        /// Remove the marker at the cwd tree root.
+        #[arg(long)]
+        clear: bool,
+
+        /// Confirm a clear inside a linked worktree (the accident-fence).
+        #[arg(long)]
+        operator: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1633,10 +1664,15 @@ enum SkillsCommand {
 enum WriteClass {
     Read,
     Write(&'static str),
+    /// `worktree marker --clear` (SL-056 §3, §5): a bespoke class that the
+    /// worker-mode guard does NOT refuse (locking the marker's only remover behind
+    /// the marker is a self-brick we reject). Its own bespoke refusals live in
+    /// `run_marker_clear`.
+    MarkerClear,
 }
 
 fn write_class(cmd: &Command) -> WriteClass {
-    use WriteClass::{Read, Write};
+    use WriteClass::{MarkerClear, Read, Write};
     match cmd {
         Command::Install { .. } => Write("install"),
         Command::Skills { command } => match command {
@@ -1723,13 +1759,18 @@ fn write_class(cmd: &Command) -> WriteClass {
             Some(BootCommand::Install { .. }) => Write("boot install"),
         },
         Command::Worktree { command } => match command {
-            // Both write *fork* files, not the doctrine state the guard protects,
-            // and never run in worker context (§5.2) — Read on purpose.
+            // Provision/check-allowlist write *fork* files, not the doctrine state
+            // the guard protects, and never run in worker context (§5.2) — Read.
             // branch-point-check is a HEAD read + ref compare — no authored write,
             // callable under worker-mode by construction (§5.2, C-V).
+            // status reads the resolved mode (SL-056 §3) — open to workers.
             WorktreeCommand::Provision { .. }
             | WorktreeCommand::CheckAllowlist { .. }
-            | WorktreeCommand::BranchPointCheck { .. } => Read,
+            | WorktreeCommand::BranchPointCheck { .. }
+            | WorktreeCommand::Status { .. } => Read,
+            // marker --clear is the bespoke self-brick cure (SL-056 §3) — NOT
+            // refused by the worker-mode guard; its own fences live in the handler.
+            WorktreeCommand::Marker { .. } => MarkerClear,
         },
         // Read-only: the coverage/drift view (never writes / derives status, §5.3),
         // the corpus integrity scan (INV-3), and the cross-kind relation view
@@ -1803,22 +1844,46 @@ fn run_inspect(path: Option<PathBuf>, id: &str, format: Format, json: bool) -> a
     Ok(())
 }
 
-/// Worker context (ADR-006 D2a): a dispatched worker sets `DOCTRINE_WORKER=1`
-/// and may read freely but must mint/anchor nothing — it returns a source delta.
-fn worker_mode() -> bool {
-    std::env::var_os("DOCTRINE_WORKER").as_deref() == Some(std::ffi::OsStr::new("1"))
+/// Worker-mode guard (ADR-006 D2a / SL-056 §3): refuse a Write-classed verb when
+/// the cwd tree resolves to worker mode (marker in a linked worktree OR the
+/// `DOCTRINE_WORKER` env optimisation). Read / `MarkerClear` pass through. The
+/// marker leg is evaluated LAZILY — only a Write verb resolves the root, so a Read
+/// verb in a non-doctrine cwd never gains a new failure path (design §3).
+fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
+    let WriteClass::Write(verb) = write_class(cmd) else {
+        // Read and the bespoke MarkerClear are never refused by the guard.
+        return Ok(());
+    };
+    // No doctrine/project root above the cwd: the marker leg cannot apply. Fall
+    // back to the env leg alone (a leaked env on a rootless cwd), never a new error.
+    let Ok(root) = root::find(None, &root::default_markers()) else {
+        if worktree::env_worker_set() {
+            anyhow::bail!("{}: refusing authored write `{verb}`", worktree::DUAL_CAUSE);
+        }
+        return Ok(());
+    };
+    let mode = worktree::resolve_mode(&root);
+    if !mode.refused {
+        return Ok(());
+    }
+    // The env leg on a NON-linked tree carries the NAMED dual-cause message (never
+    // a bare "worker refused"); the marker / linked-fork legs name the verb plainly.
+    if mode.is_env_on_nonlinked() {
+        anyhow::bail!("{}: refusing authored write `{verb}`", worktree::DUAL_CAUSE);
+    }
+    anyhow::bail!(
+        "worker fork (signal: {}): refusing authored write `{verb}` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator.",
+        mode.cause_token()
+    );
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // ADR-006 D2a worker-mode guard: a dispatched worker mints/anchors nothing.
-    // Bail before dispatch on any Write-classed verb; Read paths stay open (INV-3).
-    if let (true, WriteClass::Write(verb)) = (worker_mode(), write_class(&cli.command)) {
-        anyhow::bail!(
-            "DOCTRINE_WORKER=1: refusing authored write `{verb}` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator."
-        );
-    }
+    // ADR-006 D2a / SL-056 §3 worker-mode guard: a dispatched worker mints/anchors
+    // nothing. Bail before dispatch on any Write-classed verb; Read / MarkerClear
+    // paths stay open (INV-3 / the self-brick carve-out).
+    worker_guard(&cli.command)?;
 
     match cli.command {
         Command::Install { path, dry_run, yes } => install::run(path, dry_run, yes),
@@ -2292,6 +2357,18 @@ fn main() -> anyhow::Result<()> {
             WorktreeCommand::BranchPointCheck { base, head, path } => {
                 worktree::run_branch_point_check(path, &base, head)
             }
+            WorktreeCommand::Status { assert, path } => worktree::run_status(path, assert),
+            WorktreeCommand::Marker {
+                clear,
+                operator,
+                path,
+            } => {
+                if clear {
+                    worktree::run_marker_clear(path, operator)
+                } else {
+                    anyhow::bail!("`worktree marker` requires `--clear` (the only marker op today)")
+                }
+            }
         },
         Command::Validate { path } => run_validate(path),
         Command::Reseat {
@@ -2473,6 +2550,9 @@ mod write_class_tests {
         match write_class(&cmd) {
             WriteClass::Read => None,
             WriteClass::Write(v) => Some(v),
+            // The bespoke MarkerClear class is neither Read nor a guarded Write;
+            // the dedicated `worktree_marker_is_bespoke_class` test pins it.
+            WriteClass::MarkerClear => None,
         }
     }
 
@@ -2970,6 +3050,37 @@ mod write_class_tests {
             }),
             None
         );
+        // SL-056 §3: `worktree status` reads the resolved mode — Read (open to
+        // workers), so it survives the guard.
+        assert_eq!(
+            cls(Command::Worktree {
+                command: WorktreeCommand::Status {
+                    assert: false,
+                    path: None,
+                }
+            }),
+            None
+        );
+    }
+
+    // SL-056 §3/§5: `worktree marker --clear` is the bespoke MarkerClear class —
+    // NOT a guarded Write (locking the marker's remover behind the marker is a
+    // self-brick). The guard must not refuse it; its own fences live in the handler.
+    #[test]
+    fn worktree_marker_is_bespoke_class() {
+        let c = Command::Worktree {
+            command: WorktreeCommand::Marker {
+                clear: true,
+                operator: false,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(write_class(&c), WriteClass::MarkerClear),
+            "marker --clear must be the bespoke MarkerClear class"
+        );
+        // And therefore not seen as a guarded Write by `cls`.
+        assert_eq!(cls(c), None);
     }
 
     #[test]
