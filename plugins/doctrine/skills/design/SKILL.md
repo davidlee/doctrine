@@ -148,7 +148,8 @@ reflects your current shared understanding before proceeding.
 4. After integrating design feedback, reconcile the owning slice — `slice-nnn.md`
    so scope, risks, acceptance criteria, open questions, and follow-up direction
    still match the revised design, **and** `slice-nnn.toml` (relations, metadata);
-   lifecycle status moves via `doctrine slice status`, not hand-edits.
+   relations move via `doctrine link` and lifecycle status via `doctrine slice
+   status` — not hand-edits (`using-doctrine.md` § Relating entities).
 5. After the internal adversarial pass is integrated, you MUST offer the user a
    choice:
    1. run a formal hostile pass via `/inquisition`, or print a prompt for an
