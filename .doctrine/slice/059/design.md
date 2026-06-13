@@ -338,6 +338,14 @@ Disambiguate them all to the unmistakable 3-part `DEC-NNN-XX` external form:
 - **Read path:** prefix→kind resolution; foreign-kind-state **refuse** (FR-002/FR-004).
 - **`outbound_for` total-dispatch (F-A1):** `outbound_for` returns `Ok(vec![])` (never
   panics) for each of ASM/DEC/QUE/CON — the regression guard for the empty arm.
+- **Scan-side totality (F-A7, the L7 partner):** `build_relation_graph` scans **every**
+  `KINDS` dir, so admitting the four rows makes each graph scan visit the record trees
+  even on a record-less repo. It is benign only because `entity::scan_ids` returns
+  `Ok(vec![])` on a missing dir (`entity.rs:195`, `NotFound → empty`) — the load-bearing
+  guarantee behind "existing suites green unchanged" for the all-KINDS scan, symmetric to
+  L7's outbound-side totality. Guard: a `build_relation_graph` over a fixture with the
+  KINDS rows present but **no** record tree returns the pre-existing graph unchanged
+  (regression tripwire if `scan_ids` is ever made strict).
 - **RV→record reviews target (L8 / C-1):** `review new --target ASM-001` resolves
   (`ensure_ref_resolves`), and a cross-kind graph scan / `inspect` surfaces the inbound
   `reviews` edge on the record — confirming the free `AnyNumbered` surface is sound and
@@ -431,5 +439,24 @@ Four charges, all integrated:
   §12 corrected.
 - **C-4 (nit).** REQ miscitation — behaviour-preservation is NF-001/REQ-245, not
   NF-002 (disjointness). → §3/§11/§13 citations corrected.
+
+### Second Opus adversarial pass (variety reviewer)
+
+A third hostile pass, source-verified rather than design-trusted. **Verdict: clean —
+lock.** Every load-bearing claim re-confirmed against source: `outbound_for` empty-arm
+necessity (`relation_graph.rs:65` `debug_assert`), the KINDS golden append, `meta::Meta`
+carrying no `deny_unknown_fields` (F-A3 holds), `status_and_title_for`'s common arm
+(records status-ful, top-level), `sources_match_shipped_accessors` label-keyed (untouched
+by A), `reviews`/`AnyNumbered` (`relation.rs:355`, L8), the partition empty-`workable`
+canary, and **facets matching SPEC-019 prose exactly** (validated/invalidated/decided/
+answered by-and-on, waiver reason + waived by-and-on).
+
+- **F-A7 (nit, integrated).** Named the scan-side total-dispatch guarantee — the L7
+  partner. `build_relation_graph` scans all KINDS dirs; admitting the rows is benign only
+  because `scan_ids` tolerates a missing dir (`entity.rs:195`). → §11 guard.
+- **Noted for `/plan` (no design change):** gitignore/install wiring (§8) need not land
+  before P1–P3 (tempdir tests don't touch the real tree) but should not lag the first
+  real-record use; KINDS rows and the `outbound_for` arm are coupled (must co-land — a
+  KINDS row without the arm panics every debug graph scan), so they belong in one phase.
 </content>
 </invoke>
