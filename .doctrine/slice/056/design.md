@@ -82,11 +82,24 @@ Two cruxes were adjudicated before drafting:
   **`marker --clear` (Charge II) is a deliberate fourth class:** it mutates runtime
   state but is *not* `Orchestrator`-classed — locking the marker's only remover
   behind the guard the marker trips is the self-brick Charge II names. It is refused
-  only by `DOCTRINE_WORKER`-env-set (a real codex/pi worker cannot self-unmark) and
-  by cwd-is-not-this-tree, **never by the marker conjunct** — so the env-unset
-  orchestrator with a stray coordination-tree marker always escapes. (A claude
-  marker-only worker self-clearing is the accepted D2b residual: the guard fences
-  accidents/misplacement, not malice — that is D6/bwrap.)
+  only by `DOCTRINE_WORKER`-env-set (a real codex/pi worker cannot self-unmark), by
+  cwd-is-not-this-tree, and — when the tree is a **linked worktree** (where a marker
+  is presumptively a worker's) — by the absence of an explicit **`--operator`**
+  acknowledgement, **never by the marker conjunct**. The `--operator` ack is the
+  accident-fence: a bare `marker --clear` cannot fire inside a linked worktree, so a
+  stray-marker mishap or an absent-minded invocation is caught, while the team-mode
+  coordination operator (D8, on a linked delta-branch tree) clears deliberately with
+  `--operator` (Charge II's in-CLI remedy preserved). **Charge B (round 3) —
+  confessed, not closed, for claude.** The env-lock is the mechanism that stops a
+  *deliberate* self-clear; claude has no env seam, so a non-compliant claude worker
+  can pass `--operator` and self-unmark — restoring write- and `Orchestrator`-class
+  verbs to itself. This is **not** bwrap's job (bwrap is codex/pi-only, D6); for
+  claude there is **no mechanism floor against a deliberate self-clear** until a free
+  env seam or OS confinement (IDE-004 channels / userns-bwrap) lands. So claude
+  worker-sole-writer is **accident-fenced + prompt-enforced, not malice-proof** — the
+  altitude this design honestly claims for claude (DC-2/Charge XIII extended; stated
+  in the G3/ADR-011 per-harness altitude table). codex/pi: env-locked clear + bwrap =
+  full mechanism floor.
 
 ## D1 — `doctrine worktree fork` (codex/pi creation verb) + claude's hook path
 
@@ -154,11 +167,22 @@ env DOCTRINE_WORKER=1 $fork_env codex exec "<pre-distilled prompt>"
 bwrap wrap (`bwrap <profile> env … codex exec …`) it extends *this prose shell*, not
 the verb — confinement is a harness/OS concession, DC-1 keeps it in prose.
 
-*claude (`/dispatch-agent`)* — no fork verb, no env. The orchestrator configures the
-WorktreeCreate hook (ADR-006 D9) to provision + stamp the marker, then launches the
-worker via the `Agent` tool with `isolation:worktree`. Identity is the hook-stamped
+*claude (`/dispatch-agent`)* — no fork verb, no env. Before launching the worker the
+orchestrator **arms a dispatch sentinel** (a transient signal in its own runtime tier
+that the hook can read); it then launches the worker via the `Agent` tool with
+`isolation:worktree`. The orchestrator-configured WorktreeCreate hook (ADR-006 D9)
+provisions the fork **and**, *only when armed*, stamps the marker — then **disarms**
+(Charge C, round 3: the hook fires on **every** Agent worktree, so an unconditional
+stamp would brand non-dispatch isolated worktrees and brick their writes; the
+arm/stamp/disarm gate confines branding to dispatch workers). Marker-stamping is a
+**distinct act** from allowlist provisioning and is **permitted to write the
+provisioning-excluded `.doctrine/state/` tier** — D9's allowlist excludes that tier
+from *copying*; the marker is *minted*, not copied. Identity is the hook-stamped
 marker (disk); `DOCTRINE_WORKER` and bwrap are unavailable; the worker shares the
-jail-wide target (D5); worker-on-main is the deferred D2b residual (DC-2).
+jail-wide target (D5); worker-on-main is the deferred D2b residual (DC-2). **Fallback
+(Charge C): the arming-read and stamp-in-time are O3-spike-gated; if the spike refutes
+them, claude dispatch degrades to prompt-enforced worker-sole-writer (no marker
+mechanism)** — altitude-table-confessed, symmetric with D6's bwrap back-out.
 
 **Why a verb, not the skill.** Steps 1–4 are pure mechanism; only the spawn line
 (`env … codex exec` for codex/pi; `Agent`+hook for claude) differs across harnesses,
@@ -215,13 +239,23 @@ guard (in run(), before dispatching a write-classed OR Orchestrator Command):
   the remedy** (`marker --clear`), so detection now carries a cure, not just a
   diagnosis (Charge II). Marker-absence on the coordination tree is *guarded*, not
   presumed.
-- **`marker --clear` (Charge II remedy).** `doctrine worktree marker --clear` removes
-  the marker at the cwd tree root and prints a loud receipt of what it cleared.
-  Refused if `DOCTRINE_WORKER` is set (a spawned codex/pi worker cannot self-unmark)
-  or if cwd is not the marker's tree root; **not** refused by the marker conjunct of
-  `worker_mode` — that is the lock Charge II condemned. Restores writes + `gc` to an
+- **`marker --clear` (Charge II remedy; hardened by round-3 Charge B).** `doctrine
+  worktree marker --clear` removes the marker at the cwd tree root and prints a loud
+  receipt of what it cleared. Refused if `DOCTRINE_WORKER` is set (a codex/pi worker
+  cannot self-unmark), if cwd is not the marker's tree root, and — when the cwd tree
+  is a **linked worktree** (where a marker is presumptively a worker's) — unless an
+  explicit **`--operator`** ack is given; **never** refused by the marker conjunct of
+  `worker_mode` (the lock Charge II condemned). The `--operator` ack is an
+  **accident-fence**: a bare clear cannot fire inside a linked worktree, so a
+  stray-marker mishap is caught while the team-mode coordination operator (D8, a
+  linked delta-branch tree) clears deliberately. Restores writes + `gc` to an
   orchestrator self-bricked by a stale marker, entirely in-CLI (no filesystem
-  surgery).
+  surgery). **Residual (Charge B, confessed): for claude the env-lock is absent**, so
+  a non-compliant claude worker can supply `--operator` and self-unmark — claude
+  worker-sole-writer is **accident-fenced + prompt-enforced, not malice-proof** (no
+  env-lock, and bwrap is codex/pi-only, D6); the full mechanism floor is deferred to
+  IDE-004/userns-bwrap. codex/pi: the env-lock is a real anti-self-clear mechanism.
+  Stated in the G3/ADR-011 per-harness altitude table.
 - **Solo `/execute` is a second direct-writer class (Charge VI).** D6a makes solo
   `/execute` a full self-orchestrator that writes doctrine state directly while in a
   linked worktree (`is_linked_worktree` true) — a stale marker in a reused dir would
@@ -261,10 +295,20 @@ rules: (a) `DOCTRINE_WORKER` is set **only in the spawned child's env**
 shell** — a hard rule, not an example; (b) the orchestrator **never sets the var on
 itself** (acquittal: it is the top-level process), so any `DOCTRINE_WORKER` it reads
 in its *own* env is a leak by construction — before any `Orchestrator`-classed funnel
-verb it **asserts its own env clean and fails loud with a named error** ("`DOCTRINE_
-WORKER` set on the orchestrator — env polluted, unset it; workers do not run this
-verb") rather than presenting a leak as a routine guard refusal. The test discipline
-extends to the orchestrator path.
+verb it **asserts its own env clean and fails loud with a named error**,
+defence-in-depth on the orchestrator path. **And the guard itself names the cause
+(round-3 Charge D).** Whenever the **env disjunct** trips `worker_mode` on a tree
+that is **not a linked worktree** — main, a plain checkout: a place a genuine worker
+fork never is — the env is provably either a **worker-on-main** (DC-2's target) *or*
+a **leak**, the two being the same ambient state. So for **every** guarded verb
+tripped this way — write-classed *authoring* (`slice new`/`design`/`plan`) **and**
+`Orchestrator` funnel verbs alike, not the funnel verbs only — the refusal carries a
+**named dual-cause message** ("`DOCTRINE_WORKER` set outside a worker worktree: a
+worker was dropped on the coordination root → re-dispatch isolated; **or** the env
+leaked into this process → unset it"), never a bare "worker refused." This closes
+Charge XI's masquerade on the **authoring** path it was raised about — a leaked var
+bricking a concurrent main-side `slice new` now reports the leak by name. The test
+discipline extends to both the authoring and the orchestrator paths.
 
 ## D3 — `doctrine worktree import` (the funnel belt)
 
@@ -279,17 +323,25 @@ R-5 belt is called "the real protection" yet lives as an instruction.
 doctrine worktree import --base <B> --fork <branch>     # runs at coordination root
 ```
 
-`Orchestrator`-classed (DC-3) — refused under worker identity. Mechanical
-sequence, **v1 is the stationary-head case only** (inquisition Charge II; A2
-struck — see below), each step a hard refusal on violation (no auto-merge, no
+`Orchestrator`-classed (DC-3) — refused under worker identity. **This funnel is the
+`/dispatch` path only** (a single distilled worker commit applied with `apply --3way`,
+ancestry severed); **solo `/execute` does not use it** — it merges its multi-commit
+TDD branch to the coordination branch by normal git, so the `multi-commit` refusal
+below is a dispatch-funnel constraint, not a solo one (round-3 Charge E; see D4).
+Mechanical sequence, **v1 is the stationary-head case only** (inquisition Charge II;
+A2 struck — see below), each step a hard refusal on violation (no auto-merge, no
 judgment):
 1. precond — **two guards, neither assumed** (Charge V): `HEAD == B`
    (`branch-point-check` — a **ref-equality** compare, blind to the working tree)
-   **and** the coordination tree is **clean** (a separate `git status
-   --porcelain`-empty check, which `branch-point-check` does *not* perform). `HEAD !=
-   B` → refuse `head-moved` (orchestrator re-dispatches from the moved HEAD — no
-   in-verb re-anchor in v1; see the quiescence constraint below — XII). Dirty tree →
-   refuse `tree-unclean`.
+   **and** the coordination tree is **clean** (a separate `git status --porcelain
+   --untracked-files=no`-empty check — tracked modifications + staged changes only —
+   which `branch-point-check` does *not* perform). Untracked files are **excluded
+   deliberately** (round-3 Charge F): they cannot affect a tracked-delta `git apply`,
+   and the repo's ordinary working state carries benign untracked paths (gitignored
+   scratch, memory items, withheld review sheets) — refusing on them would
+   false-`tree-unclean` the common case. `HEAD != B` → refuse `head-moved`
+   (orchestrator re-dispatches from the moved HEAD — no in-verb re-anchor in v1; see
+   the quiescence constraint below — XII). Dirty tree → refuse `tree-unclean`.
 2. `S^ == B` assert (single-non-merge fork delta) — else `multi-commit`.
 3. R-5 belt: reject if the `B..S` **name-only** diff touches any `.doctrine/`
    path — else `doctrine-touch`. Match semantics pinned: prefix-match on
@@ -386,9 +438,14 @@ runtime receipt.** gc deletes **only** when the fork's commit has *provably land
 on the coordination branch — tested by **patch-id equivalence against durable git
 state**, not a runtime-tier flag. Concretely `git cherry <coordination-HEAD>
 <fork-branch>` (merge-base computed internally, so no `--base` is needed — this also
-disposes Charge IX): the fork commit marked `-` ⇒ its patch is already present in
-coordination's history ⇒ safe to reap; marked `+` ⇒ not landed ⇒ refuse unless
-`--force` (the explicit "I know it's spent" override). This survives the two failure
+disposes Charge IX) lists every commit in the fork's `B..fork` range, each marked `-`
+(patch already present in coordination's history) or `+` (not present). gc reaps
+**only when every listed commit is `-`** ⇒ the fork's whole delta has provably landed
+⇒ safe to reap; **any** `+` ⇒ not (fully) landed ⇒ refuse unless
+`--superseded-head`/`--force`. Ranging over **all** commits (not a single tip) is
+what lets one oracle serve both callers (round-3 Charge E): the single-commit dispatch
+fork (one `-`) and the multi-commit solo `/execute` fork (all `-` after a normal
+merge; a partial merge leaves a `+` and gc refuses). This survives the two failure
 modes that sank the alternatives: it is robust to a sibling moving HEAD (patch-id
 matches the *commit's patch*, not a whole-tree diff — §5.4 no longer false-refuses)
 and to `apply --3way` severing ancestry (patch-id ≠ ancestry, so a non-ancestor
@@ -403,18 +460,39 @@ no receipt lifecycle to own (disposing Charge IV) and no receipt key to specify
 patch-id verdict per fork — "`<b>`: landed ✓ / not-landed — `--force` to reap" —
 computed from git, so the operator never defaults to `--force` blind.
 
-**Superseded forks — a non-`--force` disposition (Charge VII).** Moved-HEAD
-re-dispatch is the *common* case (XII), and a re-dispatched fork genuinely *is* spent
-yet never landed → patch-id `+` → bare gc would demand `--force`, training the very
-reflex the landed-oracle exists to kill. So **re-dispatch records the abandoned
-fork-head as `superseded`** (a small runtime record), and gc reaps on **patch-id
-landed OR a `superseded` record**. The superseded record is **fail-safe**, unlike
-the eliminated receipt: its *absence* only costs a `--force`, never an erroneous reap
-(Charge I's hazard does not recur). `--force` is thereby reserved for the
-genuinely-unknown fork, so the reflex never becomes muscle.
+**Superseded forks — a non-`--force`, no-stored-flag disposition (Charge VII;
+re-armoured by round-3 Charge A).** Moved-HEAD re-dispatch is the *common* case (XII),
+and a re-dispatched fork genuinely *is* spent yet never landed → patch-id `+` → bare
+gc would demand `--force`, training the very reflex the landed-oracle exists to kill.
+The round-2 fix — a **stored `superseded` runtime record** — was itself the burned
+receipt in new robes (round-3 Charge A): a disposable, crash-surviving, name-matchable
+flag with no removal owner, gating `branch -D` on its mere *presence*. **Struck.**
+Instead, re-dispatch reaps the spent fork by **naming its exact commit**: `gc --fork
+<branch> --superseded-head <SHA>` reaps without patch-id-landing **iff** the supplied
+`<SHA>` **equals the branch's current head** (proving the operator named the right,
+*current* commit — not a stale name). The orchestrator holds the abandoned fork-head
+SHA in its own **disposable** re-dispatch context (the abandoned branch is untouched
+after abandonment, so its head stays that SHA) and passes it at gc time; it stamps
+**no durable-tier flag**. This is fail-safe in **both** directions: a *lost* SHA
+(orchestrator crash/handover) only costs a `--force` — gc refuses, the safe side, so
+Charge A's crash-reaps-live-work hazard cannot fire, because nothing reaps without a
+*live-supplied, head-matching* SHA; and a *wrong* SHA cannot match a live fork's head
+unless it *is* that head, which is the operator deliberately naming it. No stored
+record ⇒ no removal owner to forget (disposing the re-incurred Charge IV) and no
+branch-name key to false-match across a `gc`-freed name (disposing the re-incurred
+Charge IX). `--force` stays reserved for the genuinely-unknown fork. (Observability,
+D4: `gc --dry-run` shows "not-landed" so the operator names the SHA or `--force`s
+knowingly, never blind.)
 
-Cleanup ownership becomes trivial: **the caller of `fork` owns `gc`.** `/dispatch`
-concludes with it; solo `/execute` ends with it.
+Cleanup ownership becomes trivial: **the caller of `fork` owns `gc`** — but the two
+callers land their work by **different routes**, and gc's all-commits oracle (above)
+spans both (round-3 Charge E). **Dispatch** funnels a single distilled commit through
+`import` (`apply --3way`, ancestry severed) → gc's patch-id check. **Solo `/execute`**
+does *not* use the import funnel: it merges its multi-commit TDD branch to the
+coordination branch (main, D8) by **normal git** (ancestry intact), so the
+`multi-commit` `import` refusal (D3) is a dispatch-funnel constraint, not a solo one.
+After either route gc reaps on the same all-commits-`-` oracle. `/dispatch` concludes
+with gc; solo `/execute` ends with it.
 
 ## D5 — Per-worktree env provisioning (generalisable) + build isolation (its project-local instance; ≡ ADR-008 D-B1)
 
@@ -486,8 +564,14 @@ inquisition Charge IX).
   marker) and a **per-harness capability profile + altitude table** (Charge XIII):
   codex/pi = subprocess spawn buys env-arm + per-wt env + bwrap (full); claude =
   `Agent` tool, marker-via-hook, marker-only altitude (no env, no per-wt target, no
-  bwrap), with `Agent` a **first-class** backend, not a degraded rung. **No
-  harness-specific command (`claude -p`) is a required element.** The
+  bwrap), with `Agent` a **first-class** backend, not a degraded rung. **Round-3 B/C
+  sharpen claude's floor honestly:** the marker is **accident-fencing +
+  prompt-enforced**, not malice-proof — there is no env-lock against a deliberate
+  `marker --clear` (Charge B), and the marker-via-hook stamp is O3-spike-contingent
+  with a prompt-enforced fallback (Charge C). So claude's mechanism floor against a
+  *non-compliant* worker is deferred to IDE-004 channels / userns-bwrap; the altitude
+  table **says so plainly** rather than claiming a fail-closed inversion claude does
+  not yet reach. **No harness-specific command (`claude -p`) is a required element.** The
   **env-reliability claim stays `proposed`** until the O3 propagation gate is green
   (Charge III) — governance trails proven mechanism. ADR-006-references;
   framework-level (harness-agnostic).
@@ -506,10 +590,10 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 | Path | Change |
 |---|---|
 | `src/worktree.rs` | `run_fork`, `run_import`, `run_gc`, `run_marker_clear` (imperative shells, **compensating-cleanup** fork rollback — `remove --force`, honest non-zero on rollback failure, Charge VIII); pure: `target_dir_for_branch`, `marker_path`, `classify_import`. gc landed-oracle is a **git patch-id check** (`git cherry`), not a runtime receipt (Charge I). Reuse `select_copies`/`branch-point` core. New `write_marker`/`marker_present`/`remove_marker` (`write_marker` also invoked by claude's WorktreeCreate hook — Charge XIII; `remove_marker` behind `marker --clear` — Charge II). Third `is_linked_worktree` consumer. |
-| `src/main.rs` | `fork`/`import`/`gc` subcommands + arg structs (watch the bool/arg clippy ceilings, `[[mem.pattern.lint.cli-handler-args-struct]]`). Worker-mode guard = `worker_mode(root)` = `(is_linked_worktree && marker_present) OR env DOCTRINE_WORKER set` — **marker primary, env a codex/pi optimisation** (DC-2 / Charge XIII). `write_class` unchanged. **fork/import/gc are a new `Orchestrator` class — refused under `worker_mode`, NOT `Read`** (they mutate git refs/dirs; inquisition Charge IV / DC-3). A marker-stamping entry point (claude WorktreeCreate hook) + a marker-clear path (Charge II) join the verb family. |
+| `src/main.rs` | `fork`/`import`/`gc` subcommands + arg structs (watch the bool/arg clippy ceilings, `[[mem.pattern.lint.cli-handler-args-struct]]`). Worker-mode guard = `worker_mode(root)` = `(is_linked_worktree && marker_present) OR env DOCTRINE_WORKER set` — **marker primary, env a codex/pi optimisation** (DC-2 / Charge XIII). `write_class` unchanged. **fork/import/gc are a new `Orchestrator` class — refused under `worker_mode`, NOT `Read`** (they mutate git refs/dirs; inquisition Charge IV / DC-3). A marker-stamping entry point (claude WorktreeCreate hook, gated by an orchestrator **arming sentinel** — round-3 Charge C) + a marker-clear path (Charge II) join the verb family. `gc` gains `--superseded-head <SHA>` (round-3 Charge A — no stored record; reaps iff SHA == live branch head) and ranges its patch-id oracle over **all** `B..fork` commits (Charge E); `marker --clear` gains `--operator` (Charge B); the worker-mode guard's env-leg refusal on a **non-linked** tree carries the named dual-cause message for authoring **and** funnel verbs (Charge D). |
 | `src/git.rs` | new reads behind the verbs: worktree list, **patch-id reachability** (`git cherry`, gc landed-oracle — Charge I), `B..S` diff name-only (import). Impure seam only. |
 | ADR-008 / ADR-006 / **ADR-011 (new)** / SPEC-012 | G1–G4. |
-| `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` + new `{dispatch-subprocess,dispatch-agent}/SKILL.md` | rewrite prose to *call* the verbs (the token/agnostic payoff); **`/dispatch` becomes a harness router** → `/dispatch-subprocess` (codex/pi) \| `/dispatch-agent` (claude), Charge XIII; re-embed ritual `[[mem.pattern.distribution.skill-refresh-command]]`. |
+| `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` + new `{dispatch-subprocess,dispatch-agent}/SKILL.md` | rewrite prose to *call* the verbs (the token/agnostic payoff); **`/dispatch` becomes a harness router** → `/dispatch-subprocess` (codex/pi) \| `/dispatch-agent` (claude), Charge XIII. **Routing input (round-3 Charge G): the dispatching agent's own harness self-knowledge** (it runs *as* claude/codex/pi — no external detection); an **unknown harness refuses, never guesses** (no blind `claude -p`/`codex exec`). **No duplicated cadence (Charge G):** the funnel cadence *is* the CLI verb sequence (`fork`→`import`→verify→branch-point→one commit→`gc`/record), called **identically** by both sub-skills — the slice's whole thesis; the sub-skills differ only in the ~2-line spawn template. Re-embed ritual `[[mem.pattern.distribution.skill-refresh-command]]`. |
 | `flake.nix` | none for the spike; `dispatch-worker` bwrap profile only if D6 lands. |
 
 ## Verification alignment
@@ -565,6 +649,37 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   provision, `branch-point-check`, `is_withheld` / allowlist, the `git.rs`
   born-frame seam. Conflating the two would hide a real behaviour change behind a
   "green" claim.
+
+**Third-inquisition additions.**
+- **gc superseded — no stored flag (Charge A):** `gc --fork <b> --superseded-head
+  <SHA>` reaps a re-dispatched fork **only** when `<SHA>` == the branch's live head;
+  a stale/mismatched SHA **refuses**; **no record** is written or read; a crash that
+  loses the orchestrator's SHA list ⇒ gc **refuses** (safe), never reaps; a reused
+  branch name **cannot** false-match (no name key).
+- **gc all-commits oracle (Charge E):** a multi-commit fork reaps only when **every**
+  `B..fork` commit is `-`; one `+` (partial landing) **refuses**. A solo `/execute`
+  normally-merged multi-commit branch reaps; the dispatch single-commit fork reaps;
+  solo multi-commit work does **not** traverse the `multi-commit`-refusing `import`.
+- **`marker --clear --operator` (Charge B):** a bare `marker --clear` in a **linked
+  worktree refuses** (accident-fence); `--operator` clears it; refused under
+  `DOCTRINE_WORKER` (codex/pi worker cannot self-unmark). The **claude residual** (no
+  env-lock) is asserted as a **documented altitude**, not a passing guard test — the
+  G3/ADR-011 table states claude worker-sole-writer is prompt-enforced against a
+  deliberate self-clear.
+- **claude hook arming (Charge C):** the O3 spike confirms the WorktreeCreate hook
+  stamps the marker **only** when the orchestrator armed it (a non-dispatch
+  `isolation:worktree` Agent worktree is **not** branded), **and** exercises the
+  spike-failure branch (prompt-enforced fallback, no marker mechanism).
+- **env named dual-cause (Charge D):** a leaked `DOCTRINE_WORKER` on main **refuses a
+  concurrent `slice new`** (authoring verb) with the **named dual-cause** message, not
+  a bare worker refusal; worker-on-main still refuses (same ambient state, same
+  message).
+- **import untracked-clean (Charge F):** import **succeeds** with benign untracked
+  files present in the coordination tree; **refuses** `tree-unclean` on a tracked
+  uncommitted modification or a staged change.
+- **router self-knowledge (Charge G):** an unknown harness **refuses** to dispatch
+  (no blind subprocess); one cadence golden proves the verb sequence is identical
+  across both sub-skills (two spawn shells, one cadence).
 
 ## Open questions (post-lock)
 
@@ -638,13 +753,35 @@ obstat` before `/plan`.
 | IV | import receipt has no removal owner | HIGH | **Disposed by Charge I** — no receipt exists, so no lifecycle to own (D4). |
 | V | import refusal set omits `tree-unclean`; `apply-conflict` purge unsound without it | HIGH | **Resolved.** Added a named `tree-unclean` refusal + a real `git status --porcelain`-empty check (separate from `branch-point-check`, which is ref-equality-blind to the tree); refusal set now `{head-moved, tree-unclean, multi-commit, doctrine-touch}`; the `apply-conflict` purge is sound on **both** conjuncts (D3 step 1/4). |
 | VI | assert-marker-absent scoped to coordination root; solo `/execute` direct-writer ungated | MED | **Resolved (amplified by XIII).** assert-marker-absent + `marker --clear` now gate **every** linked-worktree→direct-writer transition, solo `/execute` included — the writer is defined by *write-mode*, not the word "coordination" (D2). |
-| VII | refused-then-re-dispatched forks need `--force` to gc; reflex returns | MED | **Resolved.** Re-dispatch records the abandoned fork-head as `superseded`; gc reaps on patch-id-landed **OR** superseded record. The record is **fail-safe** (absence only costs a `--force`, never an erroneous reap — Charge I's hazard does not recur); `--force` reserved for the genuinely-unknown (D4). |
+| VII | refused-then-re-dispatched forks need `--force` to gc; reflex returns | MED | ~~Re-dispatch records the abandoned fork-head as `superseded`~~ **⚠ Superseded by round-3 Charge A:** the stored `superseded` record was itself an unsound runtime-tier flag (false-*presence* reaps live work; no removal owner; name-matchable). Replaced by `gc --superseded-head <SHA>`, reaping only when the named SHA == the branch's live head — **no stored record** (D4). |
 | VIII | "transactional fork" overclaims; rollback half-fail / dirty `worktree remove` needs `--force` | MED | **Resolved.** Renamed **compensating cleanup**, not a transaction; rollback uses `git worktree remove --force` (provisioned fork is dirty), is best-effort, and on rollback failure **reports the leftover by name + exits non-zero** — no silent/success-coded half-rollback (D1). |
 | IX | gc receipt lookup key `{base, fork-head}` underspecified; base unsuppliable | LOW | **Disposed by Charge I** — no receipt key; `git cherry` computes the merge-base internally, so gc needs only `--fork` (D4). |
 | X | no receipt observability surface | LOW | **Resolved (via Charge I).** `gc --fork <b>` / `--dry-run` prints the live patch-id verdict per fork ("landed ✓ / not-landed — `--force` to reap"), computed from git (D4). |
 | XI | env leg location-unqualified → leaked `DOCTRINE_WORKER` bricks main-side authoring + self-aborts dispatch | HIGH | **Resolved (shrunk by XIII).** Identity is off env, so the blast radius is small; bounded further by (a) setting `DOCTRINE_WORKER` **child-only**, never `export`ed into the orchestrator shell, and (b) the orchestrator **asserting its own env clean** before any funnel verb, failing **loud with a named error** (a leak is a leak by construction — the orchestrator never self-sets it) rather than a silent guard refusal (D2). |
 | XII | stationary-only import livelocks vs expected concurrent main-side authoring | HIGH | **Resolved.** Named + enforced **quiescence constraint**: v1 dispatch requires a coordination branch with no external committers; a live main **mandates delta-branch coordination (D8)**; the orchestrator detects a moved coordination HEAD and **reports the external mover by name** rather than livelocking. IMP-043 re-anchor is the eventual fix (D3, G4/SPEC-012). |
 | — | receipt-vs-branch-point independence; orchestrator never env-worker-id'd at call time; pure/imperative wall | **acquitted ×3** | sound — no change |
+
+## Third inquisition findings integrated (`inquisition-3.md`)
+
+Third confirmatory re-pass (fresh adversarial agent); `nihil obstat` **denied** — 2
+CRIT + 3 HIGH + 2 MED + 1 LOW, every charge attacking the welds the round-2
+remediation *opened* (the `superseded` record, `marker --clear`, the claude hook, the
+env-assertion's scope, gc's second caller). **All 8 now dispositioned** this re-lock
+pass. Round-2 acquittals and the soundly-reshaped resolutions (patch-id oracle,
+quiescence constraint, compensating cleanup, env-not-self-set, the pure/imperative
+wall) **stand unchanged**. Awaiting a **fourth** confirmatory inquisition before
+`/plan`.
+
+| # | Charge | Sev | Resolution |
+|---|---|---|---|
+| A | `superseded` runtime record re-incurs the burned-receipt anti-pattern — disposable, crash-surviving, name-matchable flag with no removal owner gating `branch -D`; "fail-safe" defends only false-*absence* | **CRIT** | **Resolved.** Stored record **struck**; re-dispatch reaps by **naming the exact commit** — `gc --superseded-head <SHA>` reaps iff `<SHA>` == the branch's **live head**. No durable flag (crash ⇒ safe refusal), SHA-keyed (no name false-match), no removal owner. Disposes the re-incurred IV/IX (D4). |
+| B | `marker --clear` self-pressable by a **claude** worker (no env-lock, bwrap codex/pi-only) → restores write- + `Orchestrator`-class verbs → reopens round-1 III+IV on the dominant harness | **CRIT** | **Confessed, not faked (XIII-consistent).** `marker --clear` in a linked worktree now needs an explicit `--operator` ack (accident-fence) + env-lock (codex/pi anti-self-clear). For claude (no env-lock) the residual is **stated as a documented altitude**: worker-sole-writer is accident-fenced + prompt-enforced, malice-floor deferred to IDE-004/userns-bwrap (DC-3, D2, G3 altitude table). |
+| C | claude marker-via-hook over-broad (brands every Agent worktree, no `--worker` discriminator), tier-incoherent, and unfallbacked if the spike refutes it | HIGH | **Resolved.** Orchestrator **arms a sentinel**; the hook stamps **only when armed**, then disarms (non-dispatch worktrees unbranded). Marker-stamping declared a distinct act, permitted to *mint* into the copy-excluded `.doctrine/state/` tier. **Named fallback**: spike-refutes ⇒ claude degrades to prompt-enforced (D1, code-impact, Verification). |
+| D | Charge XI named-error guards only `Orchestrator` funnel verbs; the leaked-env-bricks-*authoring* hazard it was raised about still misreports as bare "worker refused" | HIGH | **Resolved.** The guard now names the cause for **every** verb tripped by the **env disjunct on a non-linked tree** (authoring + funnel alike): a **dual-cause** message (worker-on-main → re-dispatch / leak → unset), the two being one ambient state. Orchestrator self-assertion kept as defence-in-depth (D2). |
+| E | gc oracle + import funnel tuned for the single-commit dispatch fork, but D4 conscripts gc for multi-commit solo `/execute` — unreconciled commit shape | HIGH | **Resolved.** gc's `git cherry` oracle ranges over **all** `B..fork` commits (reap iff every `-`); **solo `/execute` merges normally** (ancestry intact, no import funnel — `multi-commit` is a dispatch-funnel constraint only). One oracle, two landing routes (D3, D4). |
+| F | `tree-unclean` via `git status --porcelain`-empty over-refuses on benign untracked files — the repo's *ordinary* state | MED | **Resolved.** Scoped to `--untracked-files=no` (tracked mods + staged only); untracked files cannot affect a tracked-delta `apply`. Golden: import succeeds with untracked present, refuses on a tracked uncommitted mod (D3, Verification). |
+| G | per-harness router (O8) names no detection mechanism; misdetection → wrong altitude; cadence may be duplicated across two sub-skills | MED | **Resolved.** Routing input = the dispatching agent's **harness self-knowledge** (runs *as* claude/codex/pi); **unknown refuses, never guesses**. Cadence **is** the shared CLI verb sequence (no duplication; sub-skills are ~2-line spawn shells) (code-impact). |
+| H | durable memory `mem_019ebed8` still prescribes the **eliminated receipt** as "the sound oracle," scoped to `src/worktree.rs`/gc | LOW | **Actioned.** Memory superseded/rewritten to record the `git cherry` patch-id oracle as sound and the receipt as the rejected predecessor (keeps its true damnation of `--merged`/delta-emptiness). |
 
 ## Invariants preserved
 
