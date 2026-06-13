@@ -340,6 +340,39 @@ fn knowledge_status_no_op_writes_nothing() {
     assert_eq!(fs::read_to_string(&path).unwrap(), before);
 }
 
+#[test]
+fn knowledge_status_on_malformed_toml_refuses_and_leaves_file_untouched() {
+    // Hand-stripped `status`/`updated` → a tail `insert` would land AFTER the trailing
+    // `[facet]`/`[evidence]` header, inside that subtable (silent corruption).
+    // set_record_status must REFUSE, not append (mirrors the adr/standard guard goldens).
+    let dir = tmp();
+    let toml = "schema = \"doctrine.knowledge\"\n\
+                version = 1\n\
+                \n\
+                id = 50\n\
+                slug = \"bad\"\n\
+                title = \"Bad\"\n\
+                record_kind = \"assumption\"\n\
+                created = \"2026-01-01\"\n\
+                tags = []\n\
+                \n\
+                [facet]\n\
+                \n\
+                [evidence]\n";
+    seed(dir.path(), "assumption", 50, toml);
+    let path = dir
+        .path()
+        .join(".doctrine/knowledge/assumption/050/record-050.toml");
+
+    let out = run(dir.path(), &["status", "ASM-050", "validated"]);
+    assert!(!out.status.success());
+    assert_eq!(
+        stderr(&out),
+        "Error: malformed record 050: missing seeded `status`/`updated` (regenerate via `knowledge new`)\n"
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), toml, "file untouched");
+}
+
 // === T6 — `knowledge list` goldens (cross-kind, hide-set, shared token) ===
 
 /// Seed a six-record cross-kind corpus spanning visible + hidden (settled) states,
