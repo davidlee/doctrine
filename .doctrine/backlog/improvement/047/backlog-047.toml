@@ -12,9 +12,6 @@ updated = "2026-06-13"
 tags = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
-slices = []
-specs  = []
-drift  = []
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "IMP-033", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }

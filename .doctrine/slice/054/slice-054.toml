@@ -5,10 +5,12 @@ status = "done"
 created = "2026-06-13"
 updated = "2026-06-13"
 
-[relationships]
-extends = [53]
-adrs = [1]
-# SL-053: terminal output polish (comfy-table + owo_colors) — this slice extends
-# its render_table with terminal-width-aware wrapping.
-# ADR-001: module layering leaf ← engine ← command — the pure/imperative split
-# that governs where terminal-width resolution lives (tty.rs shell, not listing.rs).
+# SL-054 builds on SL-053 (terminal output polish — comfy-table + owo_colors),
+# extending its render_table with terminal-width-aware wrapping. There is no legal
+# slice→slice relation label for "extends" (RELATION_RULES), so this stays prose,
+# not a [[relation]] row.
+[[relation]]
+label = "governed_by"
+target = "ADR-001"
+# ADR-001 (module layering: leaf ← engine ← command) governs where terminal-width
+# resolution lives — the pure/imperative split: tty.rs shell, not listing.rs.

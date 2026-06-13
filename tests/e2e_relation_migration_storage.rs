@@ -90,22 +90,33 @@ fn view(text: &str) -> TomlView {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        if line == "[relationships]" {
+        // Header detection is comment-stripped + exact (F-C): a trailing `# …`
+        // comment on the header line (e.g. `[relationships]   # outbound-only`) must
+        // not defeat the match, and a sub-table `[relationships.x]` must NOT match.
+        let head = line.split('#').next().unwrap_or("").trim();
+        if head == "[relationships]" {
             first_relationships.get_or_insert(i);
             cur = In::Relationships;
             continue;
         }
-        if line == "[[relation]]" {
+        if head == "[[relation]]" {
             first_relation_array.get_or_insert(i);
             cur = In::Relation;
             continue;
         }
-        if line.starts_with('[') {
+        if head.starts_with('[') {
             cur = In::Other;
             continue;
         }
-        // A `key = value` line inside the current table.
-        let key = line.split('=').next().unwrap_or("").trim().to_string();
+        // A `key = value` line inside the current table. Strip surrounding quotes so
+        // a legal quoted key (`"slices" = []`) cannot evade the migrated-key scan (F-H).
+        let key = line
+            .split('=')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_matches('"')
+            .to_string();
         match cur {
             In::Relationships => relationships_keys.push(key),
             In::Relation => {
@@ -158,27 +169,21 @@ fn slice_corpus_has_no_relationships_table_only_relation_arrays() {
     let root = doctrine_root();
     for dir in numeric_dirs(&root.join("slice")) {
         let name = dir.file_name().unwrap().to_string_lossy().to_string();
-        // SL-056 is concurrent work outside this migration's scope (its scaffold
-        // `[relationships]` table is empty — no tier-1 edges — so it is left untouched
-        // and surfaces identically under the read_block reader). The orchestrator
-        // reconciles it; this post-check excludes it.
-        if name == "056" {
-            continue;
-        }
         let f = dir.join(format!("slice-{name}.toml"));
         let text = std::fs::read_to_string(&f).unwrap();
         let v = view(&text);
         assert_f1(&f, &v);
-        // No MIGRATED tier-1 label may remain in a typed `[relationships]` slot. The
-        // migrator drops the table entirely when it has no leftovers — the COMMON case
-        // for slices, which have no typed tier-2/3 axes. (A slice that hand-authored a
-        // non-vocabulary key like `extends`/`adrs` — never read by any relation reader,
-        // before or after the cut — legitimately retains a `[relationships]` table
-        // holding ONLY those stray keys; that is render-invariant and allowed.)
-        assert_no_migrated_key_left(
-            &f,
-            &v,
-            &["specs", "requirements", "supersedes", "governed_by"],
+        // F-E (SL-058 PHASE-02): the post-cut slice shape has NO `[relationships]`
+        // table AT ALL — not a typed one, not a comment-only stale one (SL-056), and
+        // not a hand-authored stray-key one (SL-054's `extends`/`adrs` were converted
+        // to a `governed_by` edge + prose). The whole-table-absence assertion is what
+        // closes the F-D detection gap: the migrated axes survive only as `#` examples
+        // in the old template, which a bare-key scan alone would pass.
+        assert!(
+            v.first_relationships.is_none(),
+            "{}: slice carries a [relationships] table (line {:?}) — slices are table-absent post-cut",
+            f.display(),
+            v.first_relationships
         );
         // Every `[[relation]]` label must be a slice tier-1 label.
         for label in &v.relation_labels {
