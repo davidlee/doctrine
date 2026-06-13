@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec34a12307b93b3a16e3637240b86"
+memory_key = "mem.pattern.testing.migration-oracle-restates-not-derives-from-ssot"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Migration oracle restates expected vocab; never derive from the SSoT under test"
+summary = "A migration/conformance oracle must restate expected vocab as literals, not derive from the production SSoT it checks"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["tests/e2e_relation_migration_storage.rs"]
+globs = []
+commands = []
+tags = ["testing", "oracle", "relation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7e573384567fbeefa2d5b46db819b75a3efda7ce"
+ref_name = "refs/heads/main"
+checkout_state_id = "0a1fea7c01b722e488c1fa8b646f76c9d159de0bfcadfb9bb9bb2e909bc0116f"
+base_commit = "3ee3266609ed3116f04a1a3655ccc10c39961e59"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
