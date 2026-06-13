@@ -2,8 +2,8 @@
 //!
 //! The shared list surface (`CommonListArgs`, main.rs §5.2) is the MANDATORY spine
 //! of every kind's `list` subcommand. clap exposes no structural "is this flattened?"
-//! check (A-4), so conformance is proven BEHAVIOURALLY: for every one of the five
-//! kinds, each shared spine flag must PARSE and the command must SUCCEED. A kind
+//! check (A-4), so conformance is proven BEHAVIOURALLY: for every spine kind,
+//! each shared spine flag must PARSE and the command must SUCCEED. A kind
 //! that quietly dropped the flatten — or shadowed a shared flag with a bespoke one —
 //! would fail to parse the flag (clap error, non-zero exit) and trip this test.
 //!
@@ -28,8 +28,15 @@ const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
 /// the matrix previously omitted even policy (SL-033 VT-7). `skills list` is NOT
 /// on the spine — it does not flatten `CommonListArgs` — so it is deliberately
 /// excluded.
-const SPINE_KINDS: [&str; 7] = [
-    "adr", "policy", "standard", "slice", "spec", "backlog", "memory",
+const SPINE_KINDS: [&str; 8] = [
+    "adr",
+    "policy",
+    "standard",
+    "slice",
+    "spec",
+    "backlog",
+    "memory",
+    "knowledge",
 ];
 
 /// Every shared spine flag, in both its short and long forms where it has one,
@@ -108,7 +115,7 @@ fn status_flag_is_recognised_grammar_on_every_kind() {
     // `-s/--status` flag is present (parsed) even when its value is out of vocab.
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
-    for kind in ["adr", "slice", "backlog"] {
+    for kind in ["adr", "slice", "backlog", "knowledge"] {
         let out = list(kind, dir, &["-s", "draft"]);
         assert!(
             !out.status.success(),

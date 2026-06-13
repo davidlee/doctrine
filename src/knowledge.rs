@@ -32,11 +32,16 @@
     )
 )]
 
-use std::path::PathBuf;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{
+    self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
+};
+use crate::listing::{self, Format, ListArgs};
 use crate::tomlfmt::{toml_array_inner, toml_string};
 
 /// The toml/md file stem — shared by all four kinds (`record-NNN.toml`). Distinct
@@ -764,6 +769,570 @@ fn record_scaffold(kind: RecordKind, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fi
             target: name,
         },
     ])
+}
+
+// ---------------------------------------------------------------------------
+// Prefix → kind resolution (FR-004) — the shared `show`/`status` auto-detect
+// ---------------------------------------------------------------------------
+
+/// Resolve a canonical record ref (`ASM-007` / `dec-3`) into its `(RecordKind, id)`
+/// — the prefix auto-detect shared by `show` and `status` (FR-004, design §6).
+/// Split on the LAST `-`, upper-case the prefix (`dec-3` is tolerated, mirroring
+/// `backlog::parse_ref`), resolve it via [`RecordKind::from_prefix`], and parse the
+/// numeric tail (`DEC-7` and `DEC-007` both yield 7). The four counters are
+/// independent, so the prefix is load-bearing for disambiguation (`ASM-1` ≠ `DEC-1`).
+/// An unknown prefix or a non-numeric tail is a hard error — never an implicit create.
+fn resolve_ref(reference: &str) -> anyhow::Result<(RecordKind, u32)> {
+    let (prefix, tail) = reference.rsplit_once('-').with_context(|| {
+        format!("`{reference}` is not a canonical record ref (expected e.g. ASM-007)")
+    })?;
+    let kind = RecordKind::from_prefix(&prefix.to_uppercase()).with_context(|| {
+        format!("unknown record prefix `{prefix}` in `{reference}` (expected ASM/DEC/QUE/CON)")
+    })?;
+    let id: u32 = tail
+        .parse()
+        .with_context(|| format!("`{tail}` is not a numeric id in `{reference}`"))?;
+    Ok((kind, id))
+}
+
+/// The union of all four kinds' status vocabularies — the cross-kind `--status`
+/// known-set for `knowledge list` (design §6: the validator admits any token that is
+/// in-vocab for ANY kind, so `-s superseded` spans DEC + CON). De-duplicated, in a
+/// stable `RecordKind::ALL` × vocab order.
+fn union_statuses() -> Vec<&'static str> {
+    let mut union: Vec<&'static str> = Vec::new();
+    for kind in RecordKind::ALL {
+        for &status in statuses(kind) {
+            if !union.contains(&status) {
+                union.push(status);
+            }
+        }
+    }
+    union
+}
+
+// ---------------------------------------------------------------------------
+// Read: per-kind tree → validated records (total over a missing dir)
+// ---------------------------------------------------------------------------
+
+/// Read ONE record's `record-<NNN>.toml` into a validated [`KnowledgeRecord`] — the
+/// single-id read shared by `read_kind`'s loop and `show` (DRY: one parse path). The
+/// caller owns kind disambiguation (`resolve_ref`). A missing file is a hard error
+/// (the id must already be reserved — `show` never implicitly creates), mirroring
+/// `backlog::read_item`.
+fn read_record(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<KnowledgeRecord> {
+    let name = format!("{id:03}");
+    let path = root
+        .join(kind.kind().dir)
+        .join(&name)
+        .join(format!("{RECORD_STEM}-{name}.toml"));
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("record not found at {}", path.display()))?;
+    let raw: RawRecordToml =
+        toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
+    validate(raw)
+}
+
+/// Read every record under one kind's tree into validated [`KnowledgeRecord`]s. Rides
+/// `entity::scan_ids` (numeric dirs only; a MISSING tree → empty set, the total-function
+/// tolerance), then parses + `validate`s each `record-NNN.toml`. Mirrors
+/// `backlog::read_kind`.
+fn read_kind(root: &Path, kind: RecordKind) -> anyhow::Result<Vec<KnowledgeRecord>> {
+    let tree = root.join(kind.kind().dir);
+    let mut records = Vec::new();
+    for id in entity::scan_ids(&tree)? {
+        records.push(read_record(root, kind, id)?);
+    }
+    Ok(records)
+}
+
+/// Read every record across ALL FOUR trees (cross-kind), in `RecordKind::ALL` order —
+/// the corpus `list` surveys. Mirrors `backlog::read_all`.
+fn read_all(root: &Path) -> anyhow::Result<Vec<KnowledgeRecord>> {
+    let mut records = Vec::new();
+    for kind in RecordKind::ALL {
+        records.extend(read_kind(root, kind)?);
+    }
+    Ok(records)
+}
+
+// ---------------------------------------------------------------------------
+// `knowledge new` — reserve an id + scaffold the seeded record
+// ---------------------------------------------------------------------------
+
+/// `doctrine knowledge new <record_kind> [title] [--slug]` — allocate the next id in
+/// the kind's namespace and scaffold the seeded record (default status, empty
+/// `[facet]`, empty `[evidence]`). Thin shell (mirrors `backlog::run_new`): resolve
+/// the root + title + slug, stamp today, mint above the trunk ids, print the canonical
+/// id + dir.
+pub(crate) fn run_new(
+    path: Option<PathBuf>,
+    record_kind: RecordKind,
+    title: Option<String>,
+    slug: Option<String>,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let title = crate::input::resolve_title(title)?;
+    let slug = crate::input::resolve_slug(&title, slug)?;
+    let date = crate::clock::today();
+    let trunk_ids = crate::git::trunk_entity_ids(&root, record_kind.kind().dir)?;
+    let out = entity::materialise(
+        record_kind.kind(),
+        &LocalFs,
+        &root,
+        &MaterialiseRequest::Fresh,
+        &Inputs {
+            slug: &slug,
+            title: &title,
+            date: &date,
+        },
+        &trunk_ids,
+    )?;
+    let id = out
+        .eid
+        .numeric_id()
+        .context("knowledge kind must yield a numeric id")?;
+    writeln!(
+        io::stdout(),
+        "Created {}: {}",
+        record_kind.canonical_id(id),
+        out.dir.display()
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `knowledge show` — reassemble one record (table | json)
+// ---------------------------------------------------------------------------
+
+/// Render a [`KnowledgeRecord`] for `show` — a PURE fn of the record's OWN local state
+/// ("cannot go stale"), so it reads no other file and surfaces no inbound refs (the
+/// reverse view is the deferred registry surface's, ADR-004). House style: `Vec<String>`
+/// parts each carrying their own newline, joined by `concat()` (the `backlog::format_show`
+/// precedent — avoids the `push_str(&format!)` lint). The `[facet]` block is
+/// kind-dispatched; each axis renders only when populated; the `[evidence]` block
+/// renders only when any axis is non-empty.
+fn format_show(record: &KnowledgeRecord) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(format!(
+        "{} — {}\n",
+        record.record_kind.canonical_id(record.id),
+        record.title
+    ));
+    parts.push(format!(
+        "{} · {} · {}\n",
+        record.slug,
+        record.record_kind.as_str(),
+        record.status,
+    ));
+    parts.push(format!(
+        "created {} · updated {}\n",
+        record.created, record.updated
+    ));
+    if !record.tags.is_empty() {
+        parts.push(format!("tags: {}\n", record.tags.join(", ")));
+    }
+    parts.push(format_facet(&record.facet));
+    parts.push(format_evidence(&record.evidence));
+    parts.concat()
+}
+
+/// One `  key: value` show line for an optional text/enum field — emitted only when
+/// present (absent fields are silent, unlike the round-trip render which seeds `""`).
+fn show_opt_line(key: &str, value: Option<&str>) -> String {
+    match value {
+        Some(v) => format!("  {key}: {v}\n"),
+        None => String::new(),
+    }
+}
+
+/// One `  key: a, b` show line for a list field — emitted only when non-empty.
+fn show_list_line(key: &str, xs: &[String]) -> String {
+    if xs.is_empty() {
+        String::new()
+    } else {
+        format!("  {key}: {}\n", xs.join(", "))
+    }
+}
+
+/// Render the kind-dispatched `[facet]` block for `show` — the populated axes only,
+/// in template field order, under a `\n[facet]\n` header that appears only when the
+/// facet carries at least one populated axis.
+fn format_facet(facet: &RecordFacet) -> String {
+    let body = match facet {
+        RecordFacet::Assumption(f) => [
+            show_opt_line("claim", f.claim.as_deref()),
+            show_opt_line("confidence", f.confidence.map(Confidence::as_str)),
+            show_opt_line("basis", f.basis.map(Basis::as_str)),
+            show_opt_line("validation_plan", f.validation_plan.as_deref()),
+            show_opt_line("validated_by", f.validated_by.as_deref()),
+            show_opt_line("validated_on", f.validated_on.as_deref()),
+            show_opt_line("invalidated_by", f.invalidated_by.as_deref()),
+            show_opt_line("invalidated_on", f.invalidated_on.as_deref()),
+        ]
+        .concat(),
+        RecordFacet::Decision(f) => [
+            show_opt_line("context", f.context.as_deref()),
+            show_opt_line("choice", f.choice.as_deref()),
+            show_list_line("alternatives", &f.alternatives),
+            show_opt_line("rationale", f.rationale.as_deref()),
+            show_list_line("consequences", &f.consequences),
+            show_opt_line("decided_by", f.decided_by.as_deref()),
+            show_opt_line("decided_on", f.decided_on.as_deref()),
+        ]
+        .concat(),
+        RecordFacet::Question(f) => [
+            show_opt_line("question", f.question.as_deref()),
+            show_opt_line("why_matters", f.why_matters.as_deref()),
+            show_opt_line("answer", f.answer.as_deref()),
+            show_opt_line("answered_by", f.answered_by.as_deref()),
+            show_opt_line("answered_on", f.answered_on.as_deref()),
+        ]
+        .concat(),
+        RecordFacet::Constraint(f) => [
+            show_opt_line("statement", f.statement.as_deref()),
+            show_opt_line("source", f.source.map(ConstraintSource::as_str)),
+            show_list_line("applies_to", &f.applies_to),
+            show_opt_line("waiver_reason", f.waiver_reason.as_deref()),
+            show_opt_line("waived_by", f.waived_by.as_deref()),
+            show_opt_line("waived_on", f.waived_on.as_deref()),
+        ]
+        .concat(),
+    };
+    if body.is_empty() {
+        String::new()
+    } else {
+        format!("\n[facet]\n{body}")
+    }
+}
+
+/// Render the shared `[evidence]` block for `show` — the populated axes only, under a
+/// header that appears only when at least one axis is non-empty.
+fn format_evidence(e: &Evidence) -> String {
+    let body = [
+        show_list_line("supports", &e.supports),
+        show_list_line("contradicts", &e.contradicts),
+        show_list_line("notes", &e.notes),
+    ]
+    .concat();
+    if body.is_empty() {
+        String::new()
+    } else {
+        format!("\n[evidence]\n{body}")
+    }
+}
+
+/// Render the `Json` show: the record's faithful state under the shared `{kind, …}`
+/// envelope (the `backlog::show_json` precedent). The validated record's fields are
+/// private and its closed enums render via `as_str`, so the JSON is projected by hand
+/// (not a derive): the flat identity, the kind-dispatched `[facet]`, and the shared
+/// `[evidence]`. Pure over the record's own state (no cross-corpus scan). `serde_json`
+/// sorts object keys.
+fn show_json(record: &KnowledgeRecord) -> anyhow::Result<String> {
+    let value = serde_json::json!({
+        "kind": "knowledge",
+        "knowledge": {
+            "id": record.record_kind.canonical_id(record.id),
+            "record_kind": record.record_kind.as_str(),
+            "slug": record.slug,
+            "title": record.title,
+            "status": record.status,
+            "created": record.created,
+            "updated": record.updated,
+            "tags": record.tags,
+            "facet": facet_json(&record.facet),
+            "evidence": {
+                "supports": record.evidence.supports,
+                "contradicts": record.evidence.contradicts,
+                "notes": record.evidence.notes,
+            },
+        },
+    });
+    serde_json::to_string_pretty(&value).context("failed to serialize knowledge show JSON")
+}
+
+/// The kind-dispatched `[facet]` JSON object — every field present (optional fields as
+/// `null`, lists as arrays), so the shape is stable per kind. Closed enums render via
+/// `as_str`.
+fn facet_json(facet: &RecordFacet) -> serde_json::Value {
+    match facet {
+        RecordFacet::Assumption(f) => serde_json::json!({
+            "claim": f.claim,
+            "confidence": f.confidence.map(Confidence::as_str),
+            "basis": f.basis.map(Basis::as_str),
+            "validation_plan": f.validation_plan,
+            "validated_by": f.validated_by,
+            "validated_on": f.validated_on,
+            "invalidated_by": f.invalidated_by,
+            "invalidated_on": f.invalidated_on,
+        }),
+        RecordFacet::Decision(f) => serde_json::json!({
+            "context": f.context,
+            "choice": f.choice,
+            "alternatives": f.alternatives,
+            "rationale": f.rationale,
+            "consequences": f.consequences,
+            "decided_by": f.decided_by,
+            "decided_on": f.decided_on,
+        }),
+        RecordFacet::Question(f) => serde_json::json!({
+            "question": f.question,
+            "why_matters": f.why_matters,
+            "answer": f.answer,
+            "answered_by": f.answered_by,
+            "answered_on": f.answered_on,
+        }),
+        RecordFacet::Constraint(f) => serde_json::json!({
+            "statement": f.statement,
+            "source": f.source.map(ConstraintSource::as_str),
+            "applies_to": f.applies_to,
+            "waiver_reason": f.waiver_reason,
+            "waived_by": f.waived_by,
+            "waived_on": f.waived_on,
+        }),
+    }
+}
+
+/// `doctrine knowledge show <ID> [--format table|json]` — the inspect verb (design §6).
+/// Thin shell: find the root, `resolve_ref` the id to its kind (prefix auto-detect),
+/// read THAT record's single toml, render it to stdout. READ-ONLY — no mutation, no
+/// cross-corpus scan (only the one record's file is opened).
+pub(crate) fn run_show(
+    path: Option<PathBuf>,
+    reference: &str,
+    format: Format,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (kind, id) = resolve_ref(reference)?;
+    let record = read_record(&root, kind, id)?;
+    let out = match format {
+        Format::Table => format_show(&record),
+        Format::Json => show_json(&record)?,
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `knowledge list` — cross-kind survey on the shared spine
+// ---------------------------------------------------------------------------
+
+/// One record projected to its faithful JSON list row (the `backlog::BacklogRow`
+/// precedent). `id` is the prefixed canonical id; `record_kind`/`status` are the
+/// kebab/vocab strings. The facet + evidence are list-irrelevant (they ride `show`),
+/// so the list row stays flat.
+#[derive(Debug, Serialize)]
+struct RecordRow {
+    id: String,
+    record_kind: &'static str,
+    status: String,
+    slug: String,
+    title: String,
+}
+
+/// The table columns `knowledge list` can show (`--columns` tokens over
+/// `R = KnowledgeRecord` — non-capturing extractors, the prefixed id materialised in
+/// the cell from the record's own kind+id). Declaration order is what the
+/// unknown-column error lists.
+const KN_COLUMNS: [listing::Column<KnowledgeRecord>; 5] = [
+    listing::Column {
+        name: "id",
+        header: "id",
+        cell: |r| r.record_kind.canonical_id(r.id),
+        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
+    },
+    listing::Column {
+        name: "kind",
+        header: "kind",
+        cell: |r| r.record_kind.as_str().to_string(),
+        paint: listing::ColumnPaint::None,
+    },
+    listing::Column {
+        name: "status",
+        header: "status",
+        cell: |r| r.status.clone(),
+        paint: listing::ColumnPaint::ByValue(|r| listing::status_hue(&r.status)),
+    },
+    listing::Column {
+        name: "slug",
+        header: "slug",
+        cell: |r| r.slug.clone(),
+        paint: listing::ColumnPaint::None,
+    },
+    listing::Column {
+        name: "title",
+        header: "title",
+        cell: |r| r.title.clone(),
+        paint: listing::ColumnPaint::None,
+    },
+];
+
+/// The default visible set — slug-free (the SL-037 D4 convention); `--columns …,slug`
+/// reveals it.
+const KN_DEFAULT: &[&str] = &["id", "kind", "status", "title"];
+
+/// Validate a stringly `--status` set against the cross-kind union vocabulary, via the
+/// shared `listing::validate_statuses` (the opt-in surface — each list surface MUST
+/// call it itself, mem.pattern.listing.validate-statuses-is-opt-in).
+fn validate_statuses(given: &[String]) -> anyhow::Result<()> {
+    listing::validate_statuses(given, &union_statuses())
+}
+
+/// Project a record to its [`listing::FilterFields`] for the shared substr/regex/status/
+/// tag axes — the `backlog::key` precedent.
+fn key(r: &KnowledgeRecord) -> listing::FilterFields {
+    listing::FilterFields {
+        canonical: r.record_kind.canonical_id(r.id),
+        slug: r.slug.clone(),
+        title: r.title.clone(),
+        status: r.status.clone(),
+        tags: r.tags.clone(),
+    }
+}
+
+/// Faithful JSON rows (the prefixed id plus the flat list fields).
+fn json_rows(records: &[KnowledgeRecord]) -> Vec<RecordRow> {
+    records
+        .iter()
+        .map(|r| RecordRow {
+            id: r.record_kind.canonical_id(r.id),
+            record_kind: r.record_kind.as_str(),
+            status: r.status.clone(),
+            slug: r.slug.clone(),
+            title: r.title.clone(),
+        })
+        .collect()
+}
+
+/// The `knowledge list` compute half — cross-kind, on the shared spine. `validate_statuses`
+/// guards `--status` against the union vocab; `listing::build` resolves the filter +
+/// format. The hide-set is PER-ITEM (`is_hidden(kind, status)`, design §7), which the
+/// status-keyed `listing::retain` closure cannot express — so the hide drop is applied
+/// here (mirroring retain's reveal rule: `--all` OR any explicit `--status` reveals),
+/// then `retain` runs the shared substr/regex/status/tag axes with a no-op hide closure.
+/// Rows sort by `(kind ordinal, id)` — the cross-kind grouping (no `needs`/`after`
+/// ordering for records). Pure over the read corpus.
+fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
+    validate_statuses(&args.status)?;
+    let render = args.render;
+    let columns = args.columns.take();
+    let reveal_hidden = args.all || !args.status.is_empty();
+    let (filter, format) = listing::build(args)?;
+    let corpus = read_all(root)?;
+    // Per-item hide-set (design §7): drop a settled-state record unless revealed. The
+    // status-keyed `retain` closure cannot see the kind, so this runs first.
+    let visible: Vec<KnowledgeRecord> = corpus
+        .into_iter()
+        .filter(|r| reveal_hidden || !is_hidden(r.record_kind, &r.status))
+        .collect();
+    // `retain` runs the remaining shared axes; hide is already applied, so its closure
+    // is a no-op (`|_| false`).
+    let mut records = listing::retain(visible, &filter, |_| false, key);
+    records.sort_by_key(|r| (kind_ordinal(r.record_kind), r.id));
+    match format {
+        Format::Table => {
+            let sel = listing::select_columns(&KN_COLUMNS, KN_DEFAULT, columns.as_deref())?;
+            Ok(listing::render_columns(&records, &sel, render))
+        }
+        Format::Json => listing::json_envelope("knowledge", &json_rows(&records)),
+    }
+}
+
+/// The cross-kind sort ordinal for a `RecordKind` — `RecordKind::ALL` declaration order
+/// (ASM, DEC, QUE, CON), so `list` groups by kind then id.
+fn kind_ordinal(kind: RecordKind) -> usize {
+    RecordKind::ALL
+        .iter()
+        .position(|&k| k == kind)
+        .unwrap_or(usize::MAX)
+}
+
+/// `doctrine knowledge list [CommonListArgs]` — the cross-kind survey verb (design §6),
+/// on the shared spine. Thin shell: find the root, lower the args, print the rows
+/// verbatim (`render_columns` carries its own trailing newline).
+pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let out = list_rows(&root, args)?;
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `knowledge status` — edit-preserving transition (no resolution coupling)
+// ---------------------------------------------------------------------------
+
+/// Edit-preserving status transition on one authored `record-NNN.toml` — the
+/// `backlog::set_backlog_status` / `adr::set_adr_status` precedent: `toml_edit` mutates
+/// the file in place, so the `[facet]`/`[evidence]` tables, hand-added comments, and
+/// unknown keys all survive (the file is never reserialised). NO resolution coupling
+/// (design §6) — only `status` + `updated` move. Carries the no-op guard (an unchanged
+/// status writes nothing) and the malformed-file refuse (a missing seeded `status`/
+/// `updated` would let a tail-`insert` land inside the trailing `[facet]` subtable —
+/// silent corruption; refuse instead). The date is injected by the shell. A missing
+/// record file errors (read fails) — never an implicit create.
+fn set_record_status(
+    root: &Path,
+    kind: RecordKind,
+    id: u32,
+    status: &str,
+    today: &str,
+) -> anyhow::Result<()> {
+    let name = format!("{id:03}");
+    let path = root
+        .join(kind.kind().dir)
+        .join(&name)
+        .join(format!("{RECORD_STEM}-{name}.toml"));
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("record not found at {}", path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+    // No-op guard: unchanged status → write nothing (mtime holds).
+    if doc.get("status").and_then(toml_edit::Item::as_str) == Some(status) {
+        return Ok(());
+    }
+
+    // Refuse a malformed (hand-edited) record: `status`/`updated` are scaffold-seeded.
+    // Their absence means a tail `insert` would append the key AFTER the trailing
+    // `[facet]`/`[evidence]` header, landing it inside that subtable (silent corruption).
+    let table = doc.as_table_mut();
+    if !table.contains_key("status") || !table.contains_key("updated") {
+        anyhow::bail!(
+            "malformed record {name}: missing seeded `status`/`updated` (regenerate via `knowledge new`)"
+        );
+    }
+    table.insert("status", toml_edit::value(status));
+    table.insert("updated", toml_edit::value(today));
+    std::fs::write(&path, doc.to_string())
+        .with_context(|| format!("Failed to write {}", path.display()))?;
+    Ok(())
+}
+
+/// `doctrine knowledge status <ID> <state>` — transition one record's status in place
+/// (design §6). Thin shell: find the root, `resolve_ref` the id to its kind, validate
+/// `<state>` ∈ `statuses(kind)` and **REFUSE a foreign-kind state** (FR-002: a DEC
+/// state on an ASM is rejected), then `set_record_status` writes `status` + `updated`
+/// (no resolution coupling). Prints the canonical id + the new state.
+pub(crate) fn run_status(
+    path: Option<PathBuf>,
+    reference: &str,
+    state: &str,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (kind, id) = resolve_ref(reference)?;
+    let vocab = statuses(kind);
+    if !vocab.contains(&state) {
+        anyhow::bail!(
+            "`{state}` is not a {} status (known: {})",
+            kind.as_str(),
+            vocab.join(", ")
+        );
+    }
+    let today = crate::clock::today();
+    set_record_status(&root, kind, id, state, &today)?;
+    writeln!(io::stdout(), "{}: {state}", kind.canonical_id(id))?;
+    Ok(())
 }
 
 #[cfg(test)]

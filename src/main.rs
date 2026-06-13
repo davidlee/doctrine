@@ -368,6 +368,13 @@ enum Command {
         command: BacklogCommand,
     },
 
+    /// Capture and survey durable knowledge records (assumption / decision /
+    /// question / constraint).
+    Knowledge {
+        #[command(subcommand)]
+        command: KnowledgeCommand,
+    },
+
     /// Regenerate the cache-friendly governance snapshot, or `boot install` to wire it.
     Boot {
         /// Wire the `@`-import + per-harness session refresh (omit to regenerate).
@@ -924,6 +931,70 @@ enum BacklogCommand {
         /// Per-edge rank (a manual tie-break hint; default 0).
         #[arg(long, default_value_t = 0)]
         rank: i32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum KnowledgeCommand {
+    /// Allocate the next id in the kind's namespace and scaffold a new record
+    /// (seeded default status, empty `[facet]`, empty `[evidence]`).
+    New {
+        /// Record kind: assumption | decision | question | constraint.
+        kind: knowledge::RecordKind,
+
+        /// Record title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Survey records across all four kinds; filters AND together. Hides settled
+    /// states by default — `--all` or an explicit `--status` reveals.
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Reassemble one record by id (`ASM-007`) — kind auto-detected from the prefix.
+    Show {
+        /// Canonical record ref (e.g. ASM-007); the prefix selects the kind.
+        id: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Transition one record's status in place — kind auto-detected from the prefix.
+    /// The `<state>` must be in the kind's vocabulary (a foreign-kind state is refused).
+    Status {
+        /// Canonical record ref (e.g. ASM-007); the prefix selects the kind.
+        id: String,
+
+        /// The target status (in the kind's vocabulary).
+        state: String,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -1719,6 +1790,11 @@ fn write_class(cmd: &Command) -> WriteClass {
             BacklogCommand::After { .. } => Write("backlog after"),
             BacklogCommand::List { .. } | BacklogCommand::Show { .. } => Read,
         },
+        Command::Knowledge { command } => match command {
+            KnowledgeCommand::New { .. } => Write("knowledge new"),
+            KnowledgeCommand::Status { .. } => Write("knowledge status"),
+            KnowledgeCommand::List { .. } | KnowledgeCommand::Show { .. } => Read,
+        },
         Command::Boot { command, .. } => match command {
             None => Write("boot"),
             Some(BootCommand::Install { .. }) => Write("boot install"),
@@ -2271,6 +2347,26 @@ fn main() -> anyhow::Result<()> {
             BacklogCommand::Needs { id, prereqs, path } => backlog::run_needs(path, &id, &prereqs),
             BacklogCommand::After { id, to, rank, path } => {
                 backlog::run_after(path, &id, &to, rank)
+            }
+        },
+        Command::Knowledge { command } => match command {
+            KnowledgeCommand::New {
+                kind,
+                title,
+                slug,
+                path,
+            } => knowledge::run_new(path, kind, title, slug),
+            KnowledgeCommand::List { list, path } => {
+                knowledge::run_list(path, list.into_list_args())
+            }
+            KnowledgeCommand::Show {
+                id,
+                format,
+                json,
+                path,
+            } => knowledge::run_show(path, &id, if json { Format::Json } else { format }),
+            KnowledgeCommand::Status { id, state, path } => {
+                knowledge::run_status(path, &id, &state)
             }
         },
         Command::Boot {
@@ -2907,6 +3003,44 @@ mod write_class_tests {
         );
         assert_eq!(
             w(BacklogCommand::Show {
+                id: String::new(),
+                format: Format::Table,
+                json: false,
+                path: None,
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn knowledge_split() {
+        let w = |c| cls(Command::Knowledge { command: c });
+        assert_eq!(
+            w(KnowledgeCommand::New {
+                kind: knowledge::RecordKind::Assumption,
+                title: None,
+                slug: None,
+                path: None,
+            }),
+            Some("knowledge new")
+        );
+        assert_eq!(
+            w(KnowledgeCommand::Status {
+                id: String::new(),
+                state: String::new(),
+                path: None,
+            }),
+            Some("knowledge status")
+        );
+        assert_eq!(
+            w(KnowledgeCommand::List {
+                list: clist(),
+                path: None,
+            }),
+            None
+        );
+        assert_eq!(
+            w(KnowledgeCommand::Show {
                 id: String::new(),
                 format: Format::Table,
                 json: false,
