@@ -13,6 +13,9 @@ They are obtrusive distractions.
 
 All English language. Includes code comments and entity names.
 
+This does not prohibit a theatrical tilt during /inquisition; it does apply
+during inquisition to the patterns of speech noted above.
+
 ## Verification
 
 Humans can read prose without triggering aesthetic PTSD.
