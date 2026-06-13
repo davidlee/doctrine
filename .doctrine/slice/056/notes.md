@@ -294,3 +294,41 @@ marker-primary + Orchestrator class + `worktree status`/`marker --clear`). Re-re
 **dispatch skill** funnel/escalation contract before the first worker phase; PHASE-05+
 implement the B2/B3 marker-absent fail-closed rule (notes PHASE-10 carry-forward +
 g2-draft §4/§6).
+
+## PHASE-05 — first code phase: dispatched, then BLOCKED on a governance conflict
+
+Ran via `/dispatch`. Drive isolated onto a **coordination worktree** because `main`
+was concurrently dirty + HEAD-moving (SL-057 design in flight): `git worktree add
+.worktrees/sl056-coord -b sl056-coord <B>`, B=`b324547`. The whole dispatch drive
+runs there; `main`'s foreign WIP is untouched. (NB: a coordination *worktree* is
+itself `is_linked` — relevant to the floor decision below; this setup is a niche
+workaround, not normal usage where coordination == primary tree.)
+
+**Worker delta landed clean, then the conflict surfaced.** Worker fork
+`sl056-p05-21784` → single non-merge commit, funnel-imported as **`ec81b5e`** on
+`sl056-coord` (X-1/X-2/R-5 belt all clean; combined-tree verify green except one
+pre-existing red — `governance_corpus_supersession`, un-migrated `adr-011.toml`,
+SL-057 scope, red at B independent of the delta). The worker built `worker_mode =
+(is_linked && marker_present) OR env` — marker-PRESENT→refuse, marker-ABSENT→allow —
+faithful to plan PHASE-05 VT-1c + design §3.
+
+**The conflict (load-bearing):** that's **Option C**, but it contradicts the locked
+**ADR-006 D2a** fail-closed amendment (marker-absent linked worktree → REFUSE). And
+D2a's fail-closed itself contradicts **D6a** ("mode, not location, decides"; solo
+`/execute` direct-writes in its worktree). The G2 review (codex+Opus) closed the
+claude stamp-failure hole via fail-closed but **never recorded the D6a conflict / the
+solo-in-worktree cost.** Edit recency confirms fail-closed is the *later* edit
+(742d839, 21:27) vs plan (c5b0404, 18:53) — but "later wins" is now itself in
+question because the belt may make fail-closed unnecessary. See
+[[mem.pattern.dispatch.verify-governance-freshness-before-distilling-worker]].
+
+**Decision staged:** `worker-mode-floor-decision.md` (committed on main) lays out
+**C** (drop fail-closed, the import R-5 belt is the fence, keep D6a + design §3 + plan
++ delta `ec81b5e`) vs **A→B** (keep fail-closed, additive writer-marker later;
+high-churn: re-amend D6a, rewrite §3/plan, drop `marker --clear`, re-dispatch). Owner
+steer: **C**. The belt-containment claim (an unstamped worker's doctrine writes are
+caught at import / never imported / minting caught by validate) is C's load-bearing
+premise — charge 1 of the adversarial agenda.
+
+**PHASE-05 status = `blocked`** pending the codex adversarial pass on the decision,
+then lock (VH), then resume. Worker fork `sl056-p05-21784` + delta `ec81b5e` parked.
