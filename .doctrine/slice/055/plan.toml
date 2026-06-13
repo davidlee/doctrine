@@ -1,0 +1,78 @@
+# Implementation plan for SL-055 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-055"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Research base"
+objective = "Front-load the corpus reading onto cheap external research + Opus synthesis so the paired session reasons over a lean, verified evidence base, not raw files."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; BRIEF.md + CORPUS.md authored (the research work order + input bundle)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Research-wave output (FINDINGS.md) present, covering all 26 skills across R1-R5." },
+  { id = "EX-2", text = "Synthesis worklist (00-index.md) re-batches findings by skill, each tagged {disposition, severity}." },
+  { id = "EX-3", text = "Every hi-severity staleness flag verified against ground truth (CLI/--help, backlog, governance) before the paired session trusts it." },
+]
+verification = [
+  { id = "VA-1", expects = "00-index.md references every finding id and names a disposition; no skill omitted from R1 census." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Paired improvements"
+objective = "With Fable in /pair, walk 00-index.md batch by batch: adjudicate each finding's disposition and either apply the prose edit, dispatch a subagent for a structural fix, or backlog anything too involved. Lifecycle-hygiene reminders (BATCH 2/5) are the primary deliverable."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete; 00-index.md is the agreed worklist." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every hi/med finding is dispositioned and resolved: applied as a skill-prose edit, dispatched as a code/CLI change, or captured as a backlog item." },
+  { id = "EX-2", text = "Lifecycle-hygiene reminders landed: close->close-originating-backlog-item; each stage skill invokes the ADR-009 `slice status` verb on handoff; dispatch/worktree address fork cleanup (or backlog it)." },
+  { id = "EX-3", text = "CHR-004 resolved (the close-skill staleness fix) and closed; any deferred batch (BATCH 6 / code-review integration) captured against IMP-023 or a new backlog item." },
+]
+verification = [
+  { id = "VA-1", expects = "No skill prose contradicts boot/governance ground truth (no surviving false tooling-gaps claim; no hand-edit-status instruction where the verb applies)." },
+  { id = "VH-1", expects = "Human approves the applied edits in-session." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Re-embed, integrity sweep & close"
+objective = "Make the prose edits live and prove the corpus is still internally consistent, then close the slice."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 edits applied and human-approved." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Re-embed ritual run: touch src/skills.rs + doctrine skills install, clean." },
+  { id = "EX-2", text = "Integrity sweep: every skill named in the routing table + every /skill cross-reference resolves to an existing skill dir; every description: frontmatter is non-empty." },
+  { id = "EX-3", text = "/audit -> /close: rollup agrees, lifecycle status reconciled to done via the verb." },
+]
+verification = [
+  { id = "VT-1", expects = "`doctrine skills install` exits clean; if any code touched via dispatch, `just check` is green." },
+  { id = "VA-1", expects = "grep-level cross-reference sweep finds no dangling /skill or routing-table reference." },
+]
+specs             = []
+requirements      = []
