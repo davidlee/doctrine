@@ -507,3 +507,71 @@ worker_guard green.
 **Next:** PHASE-09 (`gc` verb — idempotent state machine, two-leg `git cherry` landed
 oracle: ancestry leg for a landed `land`, all-`-` patch-id leg for a landed `import`)
 — EN: PHASE-07 + PHASE-08 green ✓ (both landing routes now exist). Base **B = accfc0e**.
+
+## PHASE-09 — `gc` verb (idempotent reaper + two-leg landed oracle) (done · /dispatch · `sl056-coord` 53c53fe)
+
+Driven via `/dispatch` (one worker, batch of one). Base **B = `accfc0e`**; worker
+fork `sl056-p09-gc` returned **S = `f655dac`** (`S^ == B`, single non-merge).
+Funnel clean: precond → S^==B → R-5 belt (src/git.rs + src/main.rs + src/worktree.rs
++ tests/e2e_worktree_gc.rs) → `git apply --3way --index` → verify → branch-point
+stationary → one commit **`53c53fe`**; fork reaped.
+
+**Built (source delta — src/git.rs, src/worktree.rs, src/main.rs, tests/e2e_worktree_gc.rs):**
+- `doctrine worktree gc --fork <branch> [--superseded-head <SHA>] [--force]
+  [--dry-run]` — reaps a spent worktree fork in one idempotent act (design
+  §8/§8.1/§8.2). Forced order: `git worktree remove` → `git branch -D` → reap
+  `wt/<branch>` target dir → stderr-warn on stale `CARGO_MANIFEST_DIR`-baked binaries.
+- Pure `classify_gc(GcState{branch_exists, worktree_present, target_present,
+  landed_verdict: Option<bool>}, force, superseded_match, dry_run) -> GcVerdict`
+  (`Reap(GcPlan{remove_worktree, delete_branch, reap_target})` | `Refuse(GcRefusal)`).
+  Idempotent: a step is planned only when its target is present (skip completed);
+  branch-gone ⇒ already-certified (deletion IS the certificate, `landed_verdict`
+  None), reap only T from the branch NAME; each destructive step appends to a
+  `leftovers` vec and exits non-zero `gc-incomplete` if its target survives; stale
+  admin entry folded via `git worktree prune`.
+- Two-leg landed oracle (shell `gather_landed`): ancestry (`git merge-base
+  --is-ancestor <fork-tip> <coord-HEAD>`) ∪ patch-id (`git cherry <coord-HEAD>
+  <fork>` all `-`). New git.rs reads: `git_cherry` (via `git_text`) + `git_status_ok`
+  (exit-status boolean — `--is-ancestor` prints nothing, so `git_opt`'s `Some("")`
+  is ambiguous; a dedicated boolean-exit helper reads cleanly).
+- `--superseded-head <SHA>` reaps iff SHA == branch's current head (TOCTOU
+  movement-guard, gathered in shell); `--force` bypasses the oracle; `--dry-run`
+  prints the per-fork verdict, destroys nothing.
+- T-reap base: `gc_target_dir` mirrors `project_env_contract` verbatim
+  (`CARGO_TARGET_DIR` env base else `<fork>/target`, joined with pure
+  `target_dir_for_branch` = `wt/<branch>`). Reuses `gather_fork_worktree` (PHASE-08)
+  for `worktree_present`.
+- **Orchestrator**-classed (`write_class` arm `Gc => Orchestrator("gc")`).
+- Goldens `tests/e2e_worktree_gc.rs` (12) + 6 lib unit tests. VT-1 reap + both
+  oracle legs + non-ancestor `+` refuses; VT-2 squash named-refusal + superseded-head
+  honesty + dry-run; VT-3 idempotent rerun (fail-after-each-step, branch-gone+T,
+  W-before-B); **VT-4 the EXHAUSTIVE 4-verb (fork/import/land/gc) Orchestrator-refusal
+  set** from a marked fork AND env-set process (`marker --clear` kept out).
+
+**RATIFIED DESIGN CORRECTION (the crux):** design §8.1 reads as if a squash-merge
+gets its OWN detectable refusal. **Structurally impossible** — a multi-commit
+`git merge --squash` makes `git cherry` list every fork commit `+` and the tip
+non-ancestor, **identical to a never-landed fork** (verified empirically by me +
+the worker). No durable git signal says "squashed". Collapsed to ONE
+`GcRefusal::NotLanded` whose message names BOTH remedies (`--force` /
+`--superseded-head` for the spent-and-abandoned case AND re-land via `worktree land
+--no-ff` for the squash case) — faithful to §8.1's actual text ("trips neither leg
+and gc refuses with a **named message**" — a message, not a distinct token). This
+is the load-bearing reason solo MUST land non-squash (§6). Recorded as
+`mem.pattern.dispatch.gc-squash-indistinguishable-from-unlanded`
+(mem_019ec166d8bf7903a353688035ce38b4).
+
+**Verify:** full `-p doctrine` suite green EXCEPT the one pre-existing **foreign**
+SL-048 relation-migration red in `e2e_relation_migration_storage.rs` (the failing
+test NAME flapped again this session — now `governance_corpus_supersession_…` —
+as SL-048 actively lands; proven foreign by stashing the gc delta → reds identically
+at clean B). clippy zero. gc 12/12, import 8/8, land 9/9, worker_guard 6/6 green.
+Clippy notes: `superseded_head` is `Option<&str>` (not `Option<String>`) to satisfy
+`needless_pass_by_value`; dispatch arm passes `.as_deref()`. The 4-flag `Gc` clap
+variant did NOT trip the bool/arg ceiling (a derive struct variant, not a fn).
+
+**Next:** PHASE-10 (claude `create-fork` WorktreeCreate hook handler +
+`run_stamp_subagent` + `install/agents/claude/dispatch-worker.md`) — EN: PHASE-02
+green ✓ (the O3 spike disposition). Base **B = 53c53fe**. NOTE: the four core verbs
+(fork/import/land/gc) are now COMPLETE; remaining phases (10–13) are the claude
+spawn path + `claude install` + bwrap profile + skill rewrites.
