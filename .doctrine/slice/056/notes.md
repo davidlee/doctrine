@@ -154,15 +154,25 @@ removed after. **Two findings:**
    fail-open window is **NOT a worker-execution race** — the stamp is mechanically
    guaranteed present before any worker command, *when the hook succeeds*.
 
-2. **FAIL-OPEN on hook ERROR — CONFIRMED (new, load-bearing for the ADR).** Third
-   run: hook stamps then exits **nonzero with no stdout**. The worker's turn
-   **still ran** (it produced a full reasoned response) — the harness did **not**
-   abort the subagent. Contrast WorktreeCreate, which is fail-**closed** on
-   no-output (aborts creation). ⇒ SubagentStart-stamp **cannot be made fail-closed
-   via hook exit status.** The "guaranteed-present-before-worker" property holds
-   **only on hook success**; on hook failure the worker proceeds **unstamped**. The
-   residual fail-open window therefore **collapses from a timing race to a
-   hook-failure case** — narrower and differently-shaped than the design assumed.
+2. **FAIL-OPEN on hook FAILURE — CONFIRMED against the correct block code
+   (`exit 2`), load-bearing for the ADR.** Claude Code hooks are **sync by default**
+   (`async: true` opts out); the *only* exit status that blocks the gated action is
+   **`exit 2`** (other nonzero codes are non-blocking errors). The first pass mistook
+   `exit 1` for "hook failure" — re-probed properly:
+   - Hook does **not** stamp, emits a stderr reason, **`exit 2`**. A benign worker
+     (`echo $((17*23))`) still **executed its tool and returned `391`**; the hook
+     fired + exited 2 around it (two HOOK_EXIT2 log rows). ⇒ **`exit 2` at
+     SubagentStart does NOT abort or block the subagent.**
+   - Contrast WorktreeCreate, which **is** fail-closed (a no-output hook aborts
+     *creation*: `WorktreeCreate hook failed: no output`). SubagentStart has no
+     equivalent — the subagent runs regardless of the hook's exit status.
+   ⇒ SubagentStart-stamp **cannot be made fail-closed.** The
+   "guaranteed-present-before-worker" property (finding 1) holds **only when the
+   hook succeeds**; on stamp failure the worker proceeds **unstamped** and **cannot
+   be stopped by the hook**. The residual fail-open window is a **hook-failure case**
+   (stamp errors), not a timing race — narrower than a race but **un-gateable**, so
+   the malice/accident fence is the **import belt + worker-mode guard + prompt**,
+   never the SubagentStart hook's exit status.
 
 **Net for B/ADR:** the achievable claude altitude is **stronger on the race axis**
 than ADR-011 D6 O3-red optimistically claimed (no worker-write race at all), but
