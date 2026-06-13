@@ -128,15 +128,25 @@ taken corpus-wide, recorded in the ADR amendment, deliverable 8):
 
 ```toml
 # BEFORE                          # AFTER
-[relationships]                   [[relation]]
-supersedes    = ["ADR-003"]       label = "supersedes"
-related       = ["ADR-004"]       target = "ADR-003"
-superseded_by = ["ADR-009"]       [[relation]]
-tags          = ["layering"]      label = "related"
+[relationships]                   [relationships]                 # typed leftovers FIRST (F1)
+supersedes    = ["ADR-003"]       superseded_by = ["ADR-009"]     # ADR-004 §5, verb-written only
+related       = ["ADR-004"]       tags          = ["layering"]    # classification, NOT a relation
+superseded_by = ["ADR-009"]
+tags          = ["layering"]      [[relation]]                    # tier-1 array-of-tables, at EOF
+                                  label  = "supersedes"
+                                  target = "ADR-003"
+                                  [[relation]]
+                                  label  = "related"
                                   target = "ADR-004"
-                                  superseded_by = ["ADR-009"]  # ADR-004 §5, typed, verb-written only
-                                  tags          = ["layering"] # classification, NOT a relation
 ```
+
+**F1 — TOML ordering is load-bearing.** Bare keys (`superseded_by`, `tags`) after
+an array-of-tables header bind to the *last `[[relation]]` table*, not top-level —
+silent corruption (the `edit-preserving-status-transition` tail-insert trap).
+Typed leftovers therefore stay in a `[relationships]` **table that precedes** the
+`[[relation]]` arrays; `append_edge` always appends arrays at **EOF**, which is
+unconditionally valid. A migrated kind with no typed leftovers (slice) drops
+`[relationships]` entirely and carries only `[[relation]]`.
 
 `superseded_by` and `tags` are not tier-1 → stay typed beside the block. The
 `[[relation]]` array admits **outbound validated labels only**, so `superseded_by`
@@ -156,22 +166,36 @@ whole corpus before commit. Cleanest final shape, zero permanent migration code.
 One const table in `src/relation.rs` (beside `RelationLabel`):
 
 ```rust
-enum TargetSpec { Kinds(&'static [Kind]), Unvalidated }   // Unvalidated = free-text, no KINDS row
-enum Tier       { One, Typed }                              // One → [[relation]]; Typed → bespoke
-enum LinkPolicy { Writable, LifecycleOnly, TypedVerbOnly }  // does `link` admit it
+enum TargetSpec { Kinds(&'static [Kind]), AnyNumbered, Unvalidated } // F4: AnyNumbered for RV reviews; Unvalidated = free-text
+enum Tier       { One, Typed }                               // One → [[relation]]; Typed → bespoke
+enum LinkPolicy { Writable, LifecycleOnly, TypedVerbOnly }   // does `link` admit it
 
 struct RelationRule {
-  source: Kind,
-  label:  RelationLabel,
-  target: TargetSpec,
-  tier:   Tier,
-  link:   LinkPolicy,
+  sources:      &'static [Kind],   // F2: source-set, not one row per kind
+  label:        RelationLabel,
+  inbound_name: &'static str,      // X5: derived-inbound display ("governed_by" → "governs")
+  target:       TargetSpec,
+  tier:         Tier,
+  link:         LinkPolicy,
 }
-const RELATION_RULES: &[RelationRule] = &[ … ];
+const RELATION_RULES: &[RelationRule] = &[ … ];   // lookup keyed by (source ∈ sources, label)
 ```
 
-Three axes, all from this one table: `target` → forward validation; `tier` →
-storage shape; `link` → whether the verb admits the triple.
+Five axes, all from this one table: `target` → forward validation; `tier` →
+storage shape; `link` → whether the verb admits the triple; `inbound_name` → how
+the derived reciprocal renders on the target (X5 — generalises the `supersedes` →
+"superseded by" special-case in `relation_graph.rs`, which today is the *only*
+inverted label; every other inbound currently renders its raw outbound name,
+which is backwards for asymmetric labels).
+
+**This table is the sole driver of FIVE consumers, asserted by EXACT coverage
+(X3), not subset:** (a) the `read_block` parser's per-kind legality; (b) the
+`link`/`unlink` writer dispatch; (c) forward-edge validation; (d) the SL-046
+reader's emitted edges; (e) **cordage overlay allocation** (today hand-maintained
+at `relation_graph.rs:117` — the drift source X3 names). A test asserts every
+`Writable`/reader-reachable rule has an overlay and a reader path, and that no
+reader emits a label absent from the table. Subset (⊆) is insufficient: it cannot
+catch a rule with no overlay (silent dangler) or a source-legality mismatch.
 
 **Full vocabulary** (★ = new in SL-048):
 
@@ -208,7 +232,7 @@ collapse to **one generic function each** for tier-1:
 ```rust
 relation::append_edge(root, source_kind, id, label, target) -> Result<Wrote|Noop>  // idempotent
 relation::remove_edge(root, source_kind, id, label, target) -> Result<Removed|Absent>
-relation::read_block(toml) -> Vec<RelationEdge>                                      // shared tier-1 parse
+relation::read_block(source_kind, toml) -> (Vec<RelationEdge>, Vec<IllegalRow>)     // X2: source-kind-aware
 ```
 
 Path resolved by kind via `integrity::KINDS`. The SL-046 per-kind `relation_edges`
@@ -216,20 +240,45 @@ accessors **shrink**: tier-1 becomes the shared `read_block`; each kind's access
 keeps only its **tier-2/3** typed edges (lineage, members, interactions, reviews,
 owning_slice). Net: less per-kind code, no per-kind write code for tier-1.
 
+**X2 — `read_block` takes the source kind and enforces legality.** Generic
+storage must not mean a generic *parser that emits anything*. Today a slice
+**cannot** emit `related` and a backlog item **cannot** emit `governed_by` —
+that legality lives in code shape, and hand-edited authored TOML is part of the
+model (read-tolerant). So `read_block(source_kind, …)` checks each row's
+`(source_kind, label)` against `RELATION_RULES`: legal rows → `RelationEdge`s;
+illegal rows → `IllegalRow` **validation findings, never live graph edges**. The
+generic seam must preserve the per-kind legality the hardcoded readers had for
+free.
+
+**X1 — emitted order is axis-major, not storage order.** `read_block` groups and
+emits edges in **canonical label order** (the `RELATION_RULES` order for that
+source kind), *independent of `[[relation]]` row order on disk*. This is
+load-bearing: SL-046's reader contract is axis-major and byte-pinned (slice
+`specs→requirements→supersedes` `slice.rs:1182`; governance `supersedes→related`
+`governance.rs:219`; backlog `slices→specs→drift` `backlog.rs:761`; spec
+`descends_from→parent→members→interactions` `spec.rs:506`; goldens at
+`relation_graph.rs:725`). If emitted order tracked storage order, the first
+`append_edge`-at-EOF would reorder edges and break the goldens. Decoupling emit
+order from storage order also fixes the tier-1/tier-2 **merge order** (F5/R2):
+each accessor concatenates `read_block`'s axis-ordered tier-1 edges, then its
+typed tier-2/3 edges, in the kind's pinned axis sequence.
+
 ### 5.4 The `link` / `unlink` verbs (command layer)
 
 ```
-doctrine link   <SOURCE-ID> <LABEL> <TARGET-ID>     # doctrine link SL-048 governed_by ADR-010
-doctrine unlink <SOURCE-ID> <LABEL> <TARGET-ID>
+doctrine link   <SOURCE-ID> <LABEL> <TARGET>     # doctrine link SL-048 governed_by ADR-010
+doctrine unlink <SOURCE-ID> <LABEL> <TARGET>
 ```
 
-Positional triple mirrors `(source, label, target)`. Dispatch:
+`<TARGET>` (not `<TARGET-ID>`, X8) — canonical ref for `Kinds`/`AnyNumbered`
+labels, free text for `Unvalidated` (`drift`); help text documents both. Positional
+triple mirrors `(source, label, target)`. Dispatch:
 
 1. Parse `<SOURCE-ID>` → `(Kind, id)` via `integrity::parse_canonical_ref`.
 2. Look up `(Kind, label)` in `RELATION_RULES`. Absent → refuse, list legal labels
    for the source. `link ≠ Writable` → refuse, name the owning verb
    (`LifecycleOnly`/`TypedVerbOnly`).
-3. Validate `<TARGET-ID>` (§5.5).
+3. Validate `<TARGET>` (§5.5).
 4. `append_edge` / `remove_edge` — edit-preserving toml_edit, idempotent (no-op if
    present / absent).
 
@@ -241,9 +290,16 @@ Positional triple mirrors `(source, label, target)`. Dispatch:
   `integrity::ensure_ref_resolves`, else hard-refuse (never create a dangler);
   also assert the target's kind is in the legal set. `TargetSpec::Unvalidated`
   (`drift`, `decision_ref`) → accept free-text as-is.
-- **`validate` corpus check:** report `[[relation]]` danglers that arise later
-  (target deleted post-authoring); never rewrite — the reseat precedent. Extend
-  the existing dangling-citation logic over the new block; do not duplicate.
+- **`validate` corpus check:** report (never rewrite — the reseat precedent) both
+  (a) `[[relation]]` danglers that arise later (target deleted post-authoring) and
+  (b) **`read_block` `IllegalRow`s** — hand-edited rows whose `(source,label)` is
+  not in `RELATION_RULES`, or whose target-kind is outside the rule's `TargetSpec`
+  (X2). Extend the existing dangling-citation logic over the new block; do not
+  duplicate.
+- **Inbound rendering** uses the rule's `inbound_name` (X5), not the raw outbound
+  label — so an ADR's derived inbound shows `governs: SL-048`, not the backwards
+  `governed_by: SL-048`. The existing `supersedes`→"superseded by" special-case
+  collapses into this table-driven path.
 
 ### 5.6 The contract doc + ADR amendment
 
@@ -334,5 +390,53 @@ Positional triple mirrors `(source, label, target)`. Dispatch:
 
 ## 11. Adversarial review
 
-Pending — internal self-review then external hostile pass (codex-mcp, GPT-5.5)
-before lock. Findings recorded here.
+### Internal pass (recorded; F1/F2/F4 fixed above)
+
+- **F1 (critical, fixed §5.1)** — TOML ordering: bare carve-out/`tags` keys after
+  `[[relation]]` arrays bind to the last table (corruption). Typed leftovers go in
+  a `[relationships]` table *before* the arrays; writer appends at EOF.
+- **F2 (fixed §5.2)** — `RelationRule.sources: &[Kind]` (source-set), not one row
+  per source kind — avoids `specs`/`slices` row explosion across backlog kinds.
+- **F3 (open, for external)** — is `related` semantically adequate for PRD↔PRD, or
+  do PRDs want a directional `reads`/`refines`/`depends_on`? "PRD-011 reads PRD-009"
+  is dependency-flavoured; `related` flattens it.
+- **F4 (fixed §5.2)** — `TargetSpec::AnyNumbered` for RV `reviews` (was prose "any").
+- **F5 (→ R2)** — merge order: each accessor's `read_block` (tier-1) + typed
+  (tier-2/3) merge must reproduce the SL-046 golden edge order; migration-script
+  row order couples to it. Plan must pin the merge contract.
+
+### External pass — codex-mcp (GPT-5.5), verdict: revision-required
+
+Core critique: *"treating storage uniformity as if it were behaviour uniformity."*
+
+**Adopted (design revised above):**
+- **X1 (CRITICAL→§5.3)** — emit order was mutation-history; now axis-major,
+  storage-independent. Fixes SL-046 golden breakage + tier-1/2 merge order.
+- **X2 (CRITICAL→§5.3/§5.5)** — generic `read_block` lost per-kind legality; now
+  source-kind-aware, illegal rows → validation findings not live edges.
+- **X3 (MAJOR→§5.2)** — ⊆ invariant was fake; now exact coverage, overlay
+  allocation table-driven (was hand-maintained `relation_graph.rs:117`).
+- **X5 (MAJOR→§5.2/§5.5)** — `governed_by` rendered backwards inbound; added
+  `inbound_name` to the rule, generalising the `supersedes` special-case.
+- **X8 (MINOR→§5.4)** — `<TARGET>` (free-text `drift` isn't an id).
+
+**Open — touch confirmed decisions, escalated to user (see §12):**
+- **X4 (MAJOR)** — reusing `related` for PRD↔PRD = semantic/overlay collapse with
+  gov→gov; mint a directional PRD label or fold source-kind into overlay identity.
+- **X6 (MAJOR)** — "out-of-band LLM/script" migration is a weak oracle for a hard
+  cutover over committed TOML; wants a *deterministic* migrator + before/after
+  black-box goldens on `inspect`/`show`/`show --json`.
+- **X7 (MAJOR)** — migrating governance `supersedes` while leaving it
+  `LifecycleOnly` with no owning verb entrenches the IMP-032 integrity hole around
+  a bigger surface; don't migrate governance supersession in SL-048.
+
+## 12. Open decisions after external review (for user + adversarial round 2)
+
+- **OD-1 (X4)** — PRD↔PRD label: keep `related` (overlay-shared with gov) vs mint
+  directional (`reads`/`refines`/`depends_on`) vs make overlay identity =
+  (label, source-family).
+- **OD-2 (X6)** — migration rigor: deterministic in-repo script + before/after
+  goldens (keep unshipped) vs the looser script/LLM pass.
+- **OD-3 (X7)** — governance `supersedes`: exclude from migration (keep
+  `supersedes`+`superseded_by` typed together until IMP-032) vs build the
+  transactional supersede verb in SL-048 vs migrate-anyway.
