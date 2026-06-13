@@ -96,3 +96,39 @@ independent — a custom def changes nothing there.
 - This is **within the locked design** — D6 is explicitly two-valued and named the
   O3-red row; the spike merely *selects* it (and finds it harder-red than the
   optimistic arm). PHASE-03 (VH-1) encodes it into ADR-006 + firms ADR-011 φ.
+
+## PHASE-03 prep — pivot decision + open blocking probe (design-owner steer)
+
+**Decision (design owner):** pivot **#1 — SubagentStart-stamp is the PRIMARY claude
+mechanism**; defer/drop the WorktreeCreate `run_create_fork` verb. **AND fold the
+ADR revisions (ADR-006 G2 amendments + ADR-011 φ firming) into the reviewed design
+surface for coherence, and LOCK them after the probe + scoped review — before
+continuing the drive.**
+
+**Planned sequence A→D (do not start PHASE-04+ until D locks):**
+- **A. Empirical blocking probe (RE-RUN — incomplete).** Crux: does a SubagentStart
+  command hook **block** the worker until it exits (stamp lands before the worker's
+  first write), or run **concurrently** (race → wider fail-open window)? First run:
+  hook fired fine (agent_type + cwd=worktree confirmed, 3s sleep observed, marker
+  stamped) but the **general-purpose worker REFUSED** a bare "run this, nothing else"
+  prompt — so no WORKER_FIRST timestamp. **Re-run with a legitimately-framed worker**
+  (frame as a real harness diagnostic with context; bare command-only prompts trip
+  the agent's skepticism — itself a note for real worker-prompt design: pre-distill
+  *task context*, not bare orders). Probe: SubagentStart hook records HOOK_START/sleep
+  3/stamp+HOOK_DONE timestamps; worker's first action timestamps itself + checks
+  marker presence; compare WORKER_FIRST vs HOOK_DONE. Settings backup→merge→spawn→
+  read→**restore** discipline (as used; always clean up `.claude/`).
+- **B. Draft** the ADR-006 G2 amendments (D5/D9 creation-ladder: claude → SubagentStart-
+  stamp primary + Claude default creation; D2a marker-primary + Orchestrator class) +
+  firm **ADR-011 φ to the O3-red row** + note σ blast-radius becomes **moot** (matcher
+  scopes SubagentStart cleanly — a simplification, confirm not a hidden loss).
+- **C. Scoped adversarial review** (codex GPT-5.5 default; optional Opus pass for
+  variety) over the pivot delta + the B drafts: SubagentStart blocking/race, what
+  WorktreeCreate-primary silently covered, the dropped `run_create_fork` gap, provision-
+  at-SubagentStart timing.
+- **D. Fold findings → present for LOCK (VH-1 design-owner).** Then resume the drive
+  (PHASE-04 G4 SPEC-012, then code phases 05+).
+
+**Empirically reconfirmed this session:** SubagentStart carries `agent_type`
+(general-purpose) + `cwd`=worktree; hook can write the marker into cwd; hook
+duration honoured (3s). Blocking semantics: **OPEN**.
