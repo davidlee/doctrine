@@ -105,12 +105,14 @@ the withheld-tier model.
 
 **Mechanism objectives (carried by the G-decisions):**
 
-- **O2 — Orchestrator-owned fork** (#1 — *ADR-006 compliance, not amendment*).
-  D9 already mandates the orchestrator provision + baseline-verify "before handing
-  the worker its task"; worker-self-fork lives only in the *skills* — that's drift
-  from ADR-006, and the strongest move is compliance. Orchestrator runs
-  `git worktree add <dir> <branch> <B>` + `provision` itself (trusted, worker-mode
-  OFF, knows `B` mechanically) and spawns the worker pointed at a ready fork.
+- **O2 — `doctrine worktree fork` verb** (#1 — *ADR-006 compliance, not
+  amendment*; design DC-1/D1). D9 already mandates the orchestrator provision +
+  baseline-verify "before handing the worker its task"; worker-self-fork lives only
+  in the *skills* — drift from ADR-006, so the strongest move is compliance. The
+  verb does create + provision + marker + **emit env on stdout** atomically; the
+  orchestrator's only harness-specific act is `env $fork_env claude -p …` (the thin
+  prose shell). Seam boundary locked at env-emission (mechanism) vs invocation
+  (concession).
   Eliminates the fork-from-session-HEAD trap class
   (`[[mem.pattern.dispatch.fork-rung3-base-not-session-head]]`) by construction.
   Spawn backend decided in G3.
@@ -164,8 +166,9 @@ the withheld-tier model.
 
 ## Affected surface
 
-- `src/worktree.rs` — new `import`, `gc` verbs; extend `is_linked_worktree`
-  consumers (ADR-001 leaf; preserve pure/imperative split).
+- `src/worktree.rs` — new `fork`, `import`, `gc` verbs + marker helpers + the
+  worker-mode observability surface; third `is_linked_worktree` consumer (ADR-001
+  leaf; preserve pure/imperative split).
 - `src/main.rs` — CLI wiring + read/write classification for the new verbs.
 - `src/git.rs` — any new git reads behind the verbs (the impure seam).
 - **Governance (the G-deliverables):** ADR-008 (G1, revise→accept), ADR-006
