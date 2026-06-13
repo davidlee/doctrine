@@ -21,7 +21,10 @@
 //!   test does not assert the typed keys are *present* (a hand-trimmed file may omit
 //!   one); the positive rendered shape is proven by the scaffold-path guard below.
 //! - **Same-label row order** — within one label, `[[relation]]` rows preserve a
-//!   stable order; across labels the migrator emits in the per-kind axis sequence.
+//!   stable, contiguous run. The bulk one-shot migrator that originally emitted
+//!   per-axis is gone (SL-058 D1); edges now arrive incrementally via `doctrine link`
+//!   append + strip, so the invariant guards the live authoring seam — a careless
+//!   link-then-other-label-then-link CAN interleave a label's rows, and must not.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -42,15 +45,17 @@ fn templates_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("install/templates")
 }
 
-/// The numeric (`NNN`) entity dirs directly under `tree` (skips the `NNN-slug` symlink
-/// alias and any non-numeric entry).
+/// The numeric (`NNN`+) entity dirs directly under `tree` (skips the `NNN-slug` symlink
+/// alias and any non-numeric entry). Accepts ≥3 ascii digits, not exactly 3, so a
+/// 4-digit corpus (entity ≥ 1000) is scanned rather than silently dropped — the
+/// `NNN-slug` alias still falls out on the all-digit guard (it carries a `-`).
 fn numeric_dirs(tree: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Ok(rd) = std::fs::read_dir(tree) {
         for e in rd.flatten() {
             let name = e.file_name();
             let name = name.to_string_lossy();
-            let numeric = name.len() == 3 && name.chars().all(|c| c.is_ascii_digit());
+            let numeric = name.len() >= 3 && name.chars().all(|c| c.is_ascii_digit());
             if numeric && e.path().is_dir() {
                 out.push(e.path());
             }
@@ -100,11 +105,14 @@ fn all_relation_files() -> Vec<PathBuf> {
     v
 }
 
-/// A lightweight line view of one TOML file: the index of the first `[relationships]`
+/// A lightweight line scan of one TOML file: the index of the first `[relationships]`
 /// header, the first `[[relation]]` header, every `[relationships]`-table bare key, and
-/// every `[[relation]]` row's `label`. No TOML parser — we assert TEXTUAL ordering (F1
-/// is a textual-position invariant), and a parser would normalise exactly what we test.
-struct TomlView {
+/// every `[[relation]]` row's `label`. Deliberately NOT a TOML parser — we assert
+/// TEXTUAL ordering (F1 is a textual-position invariant) over the raw `{{slug}}`
+/// template AND the rendered entity, both of which a real parser would either reject
+/// (placeholders) or normalise (exactly the row order we test). The trade is that the
+/// header heuristics below are corpus-safe, not TOML-complete (see `line_view`).
+struct LineView {
     first_relationships: Option<usize>,
     first_relation_array: Option<usize>,
     /// Bare keys of the `[relationships]` table (until the next header).
@@ -113,7 +121,7 @@ struct TomlView {
     relation_labels: Vec<String>,
 }
 
-fn view(text: &str) -> TomlView {
+fn line_view(text: &str) -> LineView {
     let mut first_relationships = None;
     let mut first_relation_array = None;
     let mut relationships_keys = Vec::new();
@@ -131,9 +139,14 @@ fn view(text: &str) -> TomlView {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        // Header detection is comment-stripped + exact (F-C): a trailing `# …`
-        // comment on the header line (e.g. `[relationships]   # outbound-only`) must
-        // not defeat the match, and a sub-table `[relationships.x]` must NOT match.
+        // Header detection strips a trailing comment with a corpus-safe heuristic
+        // (F-C): a trailing `# …` on the header line (e.g. `[relationships]   #
+        // outbound-only`) must not defeat the match, and a sub-table
+        // `[relationships.x]` must NOT match. NOTE: `split('#')` is NOT TOML-aware —
+        // a `#` inside a string value would be mis-cut. Sound here because the only
+        // lines this `head` feeds are header matches (`[...]`), whose table names
+        // never contain a `#`; string-valued lines are handled by the `key`/`label`
+        // paths below, which split on `=` and never on `#`.
         let head = line.split('#').next().unwrap_or("").trim();
         if head == "[relationships]" {
             first_relationships.get_or_insert(i);
@@ -172,7 +185,7 @@ fn view(text: &str) -> TomlView {
             In::Other => {}
         }
     }
-    TomlView {
+    LineView {
         first_relationships,
         first_relation_array,
         relationships_keys,
@@ -183,7 +196,7 @@ fn view(text: &str) -> TomlView {
 /// F1: if both a `[relationships]` table and a `[[relation]]` array exist, the table
 /// header must come first (textually). A migrated kind with no typed leftovers (slice)
 /// has no `[relationships]` table at all — vacuously fine.
-fn assert_f1(path: &Path, v: &TomlView) {
+fn assert_f1(path: &Path, v: &LineView) {
     if let (Some(rel), Some(arr)) = (v.first_relationships, v.first_relation_array) {
         assert!(
             rel < arr,
@@ -195,7 +208,7 @@ fn assert_f1(path: &Path, v: &TomlView) {
 
 /// The tier-1 labels that the migration moves OUT of `[relationships]` for a kind.
 /// None of these may remain as a typed `[relationships]` key post-migration.
-fn assert_no_migrated_key_left(path: &Path, v: &TomlView, migrated: &[&str]) {
+fn assert_no_migrated_key_left(path: &Path, v: &LineView, migrated: &[&str]) {
     for k in &v.relationships_keys {
         assert!(
             !migrated.contains(&k.as_str()),
@@ -205,11 +218,26 @@ fn assert_no_migrated_key_left(path: &Path, v: &TomlView, migrated: &[&str]) {
     }
 }
 
+// --- On the literal label allow-lists below (oracle independence) ---
+// The legal-label and migrated-axis lists in these corpus tests are deliberately
+// written as literals, NOT derived from `RELATION_RULES` (src/relation.rs, ADR-010).
+// This file is the migration ORACLE: `RELATION_RULES` is the production source of
+// truth that DRIVES the migration, so an expectation derived from it would agree with
+// any vocabulary bug the migration itself shipped — the oracle would rubber-stamp the
+// SUT instead of pinning it. (The using-doctrine.md "don't transcribe RELATION_RULES"
+// guidance targets entity AUTHORS choosing edge labels, not oracle tests independently
+// restating expected values.) An in-tree derivation already exists for the coupled
+// view: relation.rs's own unit tests (`sources_match_shipped_accessors` et al.) check
+// the table against the shipped accessors. The "kept typed" axes (needs/after/triggers,
+// supersedes/superseded_by, tags) are not in `RELATION_RULES` at all — they are the
+// typed-tier complement and can only be literals. Pins below say `SSoT: RELATION_RULES`
+// so a vocabulary evolution is greppable from here.
+
 #[test]
 fn slice_corpus_has_no_relationships_table_only_relation_arrays() {
     for f in slice_files() {
         let text = std::fs::read_to_string(&f).unwrap();
-        let v = view(&text);
+        let v = line_view(&text);
         assert_f1(&f, &v);
         // F-E (SL-058 PHASE-02): the post-cut slice shape has NO `[relationships]`
         // table AT ALL — not a typed one, not a comment-only stale one (SL-056), and
@@ -224,6 +252,8 @@ fn slice_corpus_has_no_relationships_table_only_relation_arrays() {
             v.first_relationships
         );
         // Every `[[relation]]` label must be a slice tier-1 label.
+        // SSoT: RELATION_RULES rows whose `sources` include SL (literal by oracle
+        // independence — see the note above slice_corpus_*).
         for label in &v.relation_labels {
             assert!(
                 ["specs", "requirements", "supersedes", "governed_by"].contains(&label.as_str()),
@@ -238,9 +268,11 @@ fn slice_corpus_has_no_relationships_table_only_relation_arrays() {
 fn governance_corpus_supersession_pair_and_tags_stay_typed_relation_is_related_only() {
     for f in governance_files() {
         let text = std::fs::read_to_string(&f).unwrap();
-        let v = view(&text);
+        let v = line_view(&text);
         assert_f1(&f, &v);
         // OD-3 negative: `related` must NOT be a typed key (it migrated).
+        // SSoT: RELATION_RULES `Related` row (ADR/POL/STD sources); literal by oracle
+        // independence — see the note above slice_corpus_*.
         assert_no_migrated_key_left(&f, &v, &["related"]);
         // OD-3 POSITIVE: the supersession pair stays typed, never migrated. We assert
         // this as the array's contents: every `[[relation]]` row is `related` ONLY, so
@@ -265,9 +297,13 @@ fn governance_corpus_supersession_pair_and_tags_stay_typed_relation_is_related_o
 fn backlog_corpus_keeps_dep_seq_typed_migrates_cross_kind_axes() {
     for f in backlog_files() {
         let text = std::fs::read_to_string(&f).unwrap();
-        let v = view(&text);
+        let v = line_view(&text);
         assert_f1(&f, &v);
         // slices/specs/drift migrated OUT of the typed table.
+        // SSoT: RELATION_RULES rows whose `sources` include the backlog kinds
+        // (ISS/IMP/CHR/RSK/IDE); literal by oracle independence — see the note above
+        // slice_corpus_*. needs/after/triggers are NOT in RELATION_RULES (typed-tier
+        // dep/seq complement) and so are necessarily literals.
         assert_no_migrated_key_left(&f, &v, &["slices", "specs", "drift"]);
         // Every `[[relation]]` label is a backlog tier-1 label (NOT needs/after/
         // triggers — those stay typed with their per-edge payloads).
@@ -282,15 +318,17 @@ fn backlog_corpus_keeps_dep_seq_typed_migrates_cross_kind_axes() {
     }
 }
 
-/// Same-label row order: within one label, the migrated rows of any migrated file keep
-/// a contiguous, stable run (the migrator emits per-axis, never interleaving labels of
-/// the same kind). We assert that for each file the rows of a given label are
-/// contiguous (no A,B,A interleave) — the per-label authored order is preserved.
+/// Same-label row order: within one label, the `[[relation]]` rows of any file keep a
+/// contiguous, stable run. Edges arrive via `doctrine link` append (the bulk per-axis
+/// migrator is gone — SL-058 D1), so this guards the append seam: a careless
+/// link-then-other-label-then-link CAN interleave one label's rows. We assert that for
+/// each file the rows of a given label are contiguous (no A,B,A interleave) — the
+/// per-label authored order is preserved.
 #[test]
 fn relation_rows_of_one_label_are_contiguous() {
     for f in all_relation_files() {
         let text = std::fs::read_to_string(&f).unwrap();
-        let labels = view(&text).relation_labels;
+        let labels = line_view(&text).relation_labels;
         // A label is contiguous iff, once we leave its run, we never see it again.
         let mut seen_closed: Vec<String> = Vec::new();
         let mut prev: Option<String> = None;
@@ -321,16 +359,21 @@ fn relation_rows_of_one_label_are_contiguous() {
 //   what `<kind> new` actually renders (catches the RustEmbed false-green and
 //   proves the rendered shape — the embed must be re-snapshotted: `touch
 //   src/install.rs`).
-// Both reuse the same `view()` parser, so the post-cut shape is asserted once per
-// kind. `view()` is comment-skipping and placeholder-tolerant, so it reads the
+// Both reuse the same `line_view()` line scan, so the post-cut shape is asserted once
+// per kind. `line_view()` is comment-skipping and placeholder-tolerant, so it reads the
 // raw `{{slug}}` templates and the rendered entities identically.
 
-/// A migrated key is asserted absent (no typed `[relationships]` slot) AND the
-/// guidance comment is present, for every kind.
+/// The property: the post-cut template steers the author to the validated relation
+/// seam (`doctrine link`) from a COMMENT, not via a stale typed key. Asserting the
+/// `doctrine link` mention lives on a `#` comment line (not merely somewhere in the
+/// bytes) is the strongest cheap proxy here — it rules out the phrase leaking from a
+/// value or a key and confirms it is genuine guidance. The fully-rendered steer is
+/// proven end-to-end by the scaffold-path goldens below.
 fn assert_guidance_comment_present(label: &str, text: &str) {
     assert!(
-        text.contains("doctrine link"),
-        "{label}: post-cut template must carry the `doctrine link` guidance comment:\n{text}"
+        text.lines()
+            .any(|l| l.trim_start().starts_with('#') && l.contains("doctrine link")),
+        "{label}: post-cut template must carry the `doctrine link` guidance on a comment line:\n{text}"
     );
 }
 
@@ -338,7 +381,7 @@ fn assert_guidance_comment_present(label: &str, text: &str) {
 /// (the migrated axes survive only as commented examples, which the bare-key scan
 /// alone would pass; the header-absent assertion is what gives the guard teeth).
 fn assert_slice_shape(label: &str, text: &str) {
-    let v = view(text);
+    let v = line_view(text);
     assert!(
         v.first_relationships.is_none(),
         "{label}: slice template must emit NO `[relationships]` header (whole table cut):\n{text}"
@@ -347,9 +390,12 @@ fn assert_slice_shape(label: &str, text: &str) {
 }
 
 /// Governance kinds (adr/policy/standard): `related` migrated OUT; the supersession
-/// pair + tags stay typed.
+/// pair + tags stay typed. `tags` is free-form classification, NOT a relation axis —
+/// it is asserted here only because it shares the `[relationships]` table the migration
+/// rewrites, so "the cut" must leave it untouched. Its presence is a migration-blast-
+/// radius guard, not a relation-vocabulary claim.
 fn assert_governance_shape(label: &str, text: &str) {
-    let v = view(text);
+    let v = line_view(text);
     assert_no_migrated_key_left(Path::new(label), &v, &["related"]);
     for kept in ["supersedes", "superseded_by", "tags"] {
         assert!(
@@ -363,7 +409,7 @@ fn assert_governance_shape(label: &str, text: &str) {
 /// Backlog kinds (backlog/backlog-risk): slices/specs/drift migrated OUT; the
 /// dep/seq axes needs/after/triggers stay typed with their per-edge payloads.
 fn assert_backlog_shape(label: &str, text: &str) {
-    let v = view(text);
+    let v = line_view(text);
     assert_no_migrated_key_left(Path::new(label), &v, &["slices", "specs", "drift"]);
     for kept in ["needs", "after", "triggers"] {
         assert!(
