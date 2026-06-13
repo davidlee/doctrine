@@ -65,13 +65,13 @@ inversion:
 | Layer | Mechanism | Fails | claude | codex/pi |
 |---|---|---|---|---|
 | CLI — identity | disk marker (orchestrator-stamped) → guard refuses write/Orchestrator verbs | closed | ✓ primary | ✓ |
-| CLI — worker-on-main | orchestrator-set `DOCTRINE_WORKER` env (catches a worker dropped on the coordination root) | closed | ✗ no env seam — residual D2b; mitigated by always-isolate + marker-via-SubagentStart-hook | ✓ |
+| CLI — worker-on-main | orchestrator-set `DOCTRINE_WORKER` env (catches a worker dropped on the coordination root) | closed | ✗ no env seam — residual D2b; mitigated by always-isolate + marker-via-WorktreeCreate-hook | ✓ |
 | OS — confinement | nested bwrap, rw only worktree+target (discharges D2b) | closed | ✗ no subprocess to wrap | ✓ (spike) |
 
 The CLI *identity* rung (the disk marker) is the agnostic floor every harness
 reaches. The worker-on-main env catch and the OS confinement rung are codex/pi
 enhancements; for claude they degrade to the already-deferred ADR-006 D2b residual
-(worker-on-main mitigated by always isolating + marker-via-SubagentStart-hook, not closed).
+(worker-on-main mitigated by always isolating + marker-via-WorktreeCreate-hook, not closed).
 
 ## Scope & Objectives
 
@@ -127,10 +127,10 @@ the withheld-tier model.
   in the *skills* — drift from ADR-006, so the strongest move is compliance. The
   verb does create + provision + marker + **emit the per-wt env contract on stdout**
   atomically (codex/pi path; **claude does not call `fork` — it stamps the marker via a
-  SubagentStart hook keyed on the dispatch-worker `agent_type`**, the empirically-verified
+  WorktreeCreate hook keyed on the dispatch-worker `agent_type`** (it replaces default git creation → fail-closed create+provision+stamp; SubagentStart-stamp is the fallback), the empirically-verified
   mechanism — Charge XIII, [[mem.pattern.dispatch.claude-subagentstart-worker-identity]]).
   The orchestrator's only harness-specific act is the spawn line
-  (`env -C "$D" $fork_env codex exec …` / `Agent`+SubagentStart-hook), selected by the
+  (`env -C "$D" $fork_env codex exec …` / `Agent`+WorktreeCreate-hook), selected by the
   `/dispatch-*` router. Seam boundary locked at env-emission (mechanism) vs invocation
   (concession).
   Eliminates the fork-from-session-HEAD trap class
@@ -146,7 +146,7 @@ the withheld-tier model.
   orchestrator-stamped; retires the C-I prose contortion. **Validated by a
   guard-spike before G2 amends ADR-006** (Charges III/IV/IX); the spike also gates
   the env-propagation claim for the codex/pi optimisation (Charge III). Marker
-  lifecycle owned (written by `fork --worker` (codex/pi) / the SubagentStart hook
+  lifecycle owned (written by `fork --worker` (codex/pi) / the WorktreeCreate hook
   (claude), removed by gc, cleared by a non-Orchestrator verb — Charge II).
 - **O4 — `doctrine worktree import`** (#3). Collapse the funnel's deterministic,
   judgment-free steps (clean+`HEAD==B` precond, `S^==B` assert, single-non-merge
@@ -195,11 +195,11 @@ the withheld-tier model.
   capability profile and hands off to **`/dispatch-subprocess`** (codex/pi:
   fork-verb + subprocess spawn + env-arm + per-wt env + bwrap) or
   **`/dispatch-agent`** (claude: `Agent` tool spawning a `dispatch-worker` subagent +
-  SubagentStart-hook marker, marker identity, **concurrent-safe** — no serial-only
+  WorktreeCreate-hook marker (fail-closed create+provision+stamp; SubagentStart fallback), marker identity, **concurrent-safe** — no serial-only
   constraint, the empirical redesign — no env/bwrap). The agnostic cadence stays in the
   CLI verbs so the sub-skills are thin. (Distinct from SL-055's *audience-homing* split
   — Non-Goals.) Ships the Claude surface via a **renamed `claude install`** (ex-`skills
-  install`): skills + the `dispatch-worker` agent def + the SubagentStart hook entry.
+  install`): skills + the `dispatch-worker` agent def + the WorktreeCreate hook entry.
 
 ## Non-Goals
 
@@ -227,7 +227,7 @@ the withheld-tier model.
 - `src/skills.rs` — **rename `skills install` → `claude install`** + an agents leg
   (symlink `install/agents/claude/*.md` into `.claude/agents/`); update the audit label
   + goldens. The `marker --stamp-subagent` gate verb lives in `src/worktree.rs`.
-- `src/boot.rs` — a **SubagentStart** `HookSpec` reusing the existing merge core, wired
+- `src/boot.rs` — a **WorktreeCreate** `HookSpec` (SubagentStart on the fallback ladder) reusing the existing merge core, wired
   by `claude install`.
 - `install/agents/claude/dispatch-worker.md` — **new** dispatch-worker subagent def
   (name + description + tool allowlist; user-serviceable markdown, not a Rust type).
