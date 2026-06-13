@@ -30,7 +30,7 @@ flowchart TD
     C -->|isolated worktree| C2[land --no-ff → gc]
     B -->|/dispatch| D{harness?}
     D -->|claude · /dispatch-agent| E[Agent tool spawns subagent\nsubagent_type = dispatch-worker]
-    E --> E1[SubagentStart hook stamps marker\nby agent_type + linked-worktree]
+    E --> E1[WorktreeCreate hook OWNS creation\ngit worktree add + provision + stamp marker\nfail-closed · gated on agent_type]
     E1 --> F
     D -->|codex/pi · /dispatch-subprocess| G[fork --worker\ncreates + stamps marker + provisions]
     G --> G1[spawn subprocess\ncwd-bound + DOCTRINE_WORKER=1 + per-wt env]
@@ -72,7 +72,7 @@ guard (in run(), before dispatching a write-classed OR Orchestrator Command):
 - Solo `/execute` (in-place or isolated) sets **neither** signal → writes freely.
   **Mode, not location, decides** (ADR-006 D6a). `is_linked_worktree` is the existing
   predicate (memory squash-warn, RV-verb refusal — now a third consumer).
-- **Lifecycle (owned):** written by `fork --worker` (codex/pi) or the SubagentStart
+- **Lifecycle (owned):** written by `fork --worker` (codex/pi) or the WorktreeCreate
   hook (claude); removed by `gc`; rolled back if `fork` fails; cleared by `marker
   --clear` for a stray marker (below). A tree may become a coordination/direct-writer
   root only after an **assert-marker-absent** check that, on a stray marker, refuses
@@ -150,53 +150,64 @@ silent half-rollback:
 ### 4b. claude — `/dispatch-agent`
 
 No `fork` verb, no env seam. The orchestrator launches the worker via the `Agent` tool
-with `subagent_type: dispatch-worker` and `isolation: worktree`. The harness creates a
-real linked worktree (`.claude/worktrees/agent-<id>`) and fires a **`SubagentStart`
-hook** for that subagent, before it runs, with payload `{agent_type, cwd(=worktree),
-agent_id, …}`. The orchestrator-installed hook (§8) stamps the marker:
+with `subagent_type: dispatch-worker` and `isolation: worktree`. Claude Code fires a
+**`WorktreeCreate` hook** which, per the harness docs, **replaces the default git
+worktree creation**: a command hook **prints the worktree path on stdout**, and **any
+non-zero exit fails creation.** So the orchestrator-installed hook *is* the claude
+analog of `fork` — it owns creation, provisioning, and stamping in one trusted act:
 
 ```
-SubagentStart hook command:  doctrine worktree provision <payload.cwd>      # ADR-006 D9 — see below
-                              doctrine worktree marker --stamp-subagent      # reads payload JSON on stdin
-    both gated:  act iff  payload.agent_type == "dispatch-worker"  AND  payload.cwd is a linked worktree
-    else exit 0   (benign subagents are neither provisioned-as-workers nor branded)
+WorktreeCreate hook command:  doctrine worktree create-fork   (reads payload JSON on stdin → prints worktree path on stdout)
+    if payload.agent_type == "dispatch-worker":
+        git worktree add -b <branch> <dir> <HEAD>   # base = session HEAD (= B under stationary-head, §7c)
+        doctrine worktree provision <dir>           # ADR-006 D9 allowlist (withheld tier excluded)
+        write_marker(<dir>)                          # stamp the disk marker
+        print <dir>                                  # required output
+    else:                                            # --worktree launch / benign isolation:worktree subagent
+        replicate default creation, print path, NO marker
+    any failure → non-zero exit → creation FAILS → no worktree → no worker        (FAIL-CLOSED)
 ```
 
-- **The hook owns provisioning *and* stamping for claude (SR-1).** A claude `Agent`
-  worktree is born by the harness, **not** by `doctrine worktree fork`, so nothing has
-  run ADR-006 D9 provisioning (the gitignored-allowlist copy, withheld tier excluded).
-  The native `WorktreeCreate` hook **cannot** stand in: its payload carries `name`, not
-  `agent_type`, so it cannot discriminate a dispatch worker from a benign isolated
-  subagent. `SubagentStart` is the only agent_type-gated seam that fires before the
-  worker runs (after the worktree exists), so it provisions **then** stamps — gated on
-  `agent_type`, so non-dispatch isolated subagents get neither. (For codex/pi `fork`
-  still does both, §4a.)
-- **`agent_type` is the discriminator** (the orchestrator controls it via
-  `subagent_type`); **`payload.cwd` is the provision + stamp target** — the verb reads
-  cwd from the **payload**, never its own process cwd (the hook runs at the
-  orchestrator root, where `worker_mode` is false, so the minting verb is never
-  self-refused; §5). Each SubagentStart fires for its own subagent independently ⇒
-  **claude dispatch workers can be spawned and executed concurrently** (file-disjoint),
-  not a serial degrade — grounded in a live probe: two simultaneous
-  `isolation:worktree` subagents produced two independent events with distinct
-  `cwd`/`agent_id`, no shared slot
-  ([[mem.pattern.dispatch.claude-subagentstart-worker-identity]]).
-- **Concurrency is in worker *execution*, not the funnel (SR-2).** The marker-stamping
-  apparatus is concurrent-safe; the **funnel-back is still serialized** by `import`'s
-  stationary-head precond (§7c — one orchestrator, `HEAD == B`), exactly as for
-  codex/pi. The redesign removes the *stamping* serialization (the old arm sentinel),
-  not the import serialization. A concurrent batch runs workers in parallel and funnels
-  their deltas one at a time.
-- **No arm sentinel, no lease, no single-slot lock, no `marker --arm/--disarm`, no
-  serial-only constraint, no WorktreeCreate stamp path.** The empirical probe proved
-  that whole apparatus unnecessary (it was an artifact of guessing claude's hooks API).
-- **Identity = the hook-stamped marker (disk).** `DOCTRINE_WORKER` and bwrap are
-  unavailable; the worker shares the jail-wide build target (§8); worker-on-main is the
-  deferred D2b residual.
-- **Spike-gated (§9), version-fragile facts:** that SubagentStart fires *before* the
-  worker's first write (the marker lands in time), the payload shape, and `agent_type`
-  stability. **Named fallback if refuted:** prompt-enforced worker-sole-writer (no
-  marker mechanism) — altitude-table-confessed, symmetric with the D6 bwrap back-out.
+- **Fail-closed by construction (resolves SR-1).** A claude `Agent` worktree is
+  harness-born, **not** `fork`-provisioned — so provisioning (D9) and stamping must come
+  from a hook. Putting them *inside creation* means a worker **cannot exist
+  unprovisioned or unstamped**: a provision/stamp failure fails the worktree, not just
+  the guard. This is strictly stronger than stamping *after* creation (a post-creation
+  stamp that dies leaves an unstamped worker writing freely — fail-open). The claude
+  path now mirrors codex/pi `fork --worker`: one trusted act creates + provisions +
+  marks. ([[mem.pattern.dispatch.claude-agent-worktree-not-fork-provisioned]])
+- **`agent_type` is the discriminator** (orchestrator-controlled via `subagent_type`).
+  Because the hook **replaces default creation for *every* worktree** (incl. `--worktree`
+  launches and benign isolation:worktree subagents), it must **replicate default
+  creation for non-`dispatch-worker` agent_types** (create + return path, no stamp) — it
+  brands only the dispatch worker. (If a WorktreeCreate **matcher** can scope the hook to
+  `dispatch-worker`, the replicate-default path is unnecessary — a spike sub-question.)
+- **Identity = the disk marker.** No env, no arm sentinel, no lease, no serial
+  constraint. Each WorktreeCreate fires independently for its own worktree ⇒
+  **concurrent file-disjoint claude dispatch is first-class.** Concurrency is in worker
+  *execution* (SR-2); the **funnel-back is still serialized** by `import`'s
+  stationary-head precond (§7c — one orchestrator, `HEAD == B`), exactly as for codex/pi.
+  `DOCTRINE_WORKER` and bwrap are unavailable; the worker shares the jail-wide build
+  target (§8); worker-on-main is the deferred D2b residual.
+- **Spike-gated (§9/§12) — the decision hinges on one probe, and it conflicts with our
+  own.** The earlier probe saw `name`, **not `agent_type`**, on WorktreeCreate — **but
+  it spawned an *unnamed* subagent (no custom agent defined)**, so agent_type absence is
+  *expected*, not a refutation; the docs say agent_type is present "when the hook fires
+  inside a subagent." The O3 spike must confirm a **named `dispatch-worker` subagent
+  reliably propagates `agent_type` through WorktreeCreate**, that the hook fires before
+  the worker, the payload shape, and whether a hook **matcher** can scope it. **Fallback
+  ladder if agent_type is absent from WorktreeCreate:** (1) **SubagentStart-stamp** — let
+  Claude create the worktree, provision + stamp at SubagentStart (which the probe *did*
+  confirm carries `agent_type`, `cwd`, race-free per subagent
+  [[mem.pattern.dispatch.claude-subagentstart-worker-identity]]), accepting the
+  **fail-open created-but-unstamped window**; (2) prompt-enforced worker-sole-writer.
+  Named, altitude-table-confessed (§10), symmetric with the D6 bwrap back-out.
+- **Base-pinning unchanged.** No base param reaches the hook, so it forks from session
+  HEAD (= B under stationary-head §7c) — implicit for claude, as before; WorktreeCreate
+  does not make it explicit.
+- **`create-fork` privilege.** The hook runs in the orchestrator's session (process cwd
+  = orchestrator root, `worker_mode` false), reads `payload.cwd`/derives `<dir>`, and
+  **mints** the marker — like `fork --worker`, never self-refused (§5).
 
 ### 4c. claude self-clear residual (confessed, not closed)
 
@@ -222,10 +233,10 @@ classes join the worker-mode guard, one stays open, one is bespoke:
 | **Read** | `provision`, `check-allowlist`, `branch-point-check`, status | No — open to workers |
 | **`marker --clear`** | bespoke 4th class (§3) | **No** — locking the marker's only remover behind the marker is the self-brick. Refused instead by env-set, cwd-not-tree-root, and the `--operator` accident-fence in a linked worktree. |
 
-The `marker --stamp-subagent` entry point (§4b) **mints** the marker; it runs in the
-orchestrator's session at the coordination root (worker_mode false there) targeting the
-payload `cwd`, so it is never self-refused — the same posture as `fork --worker`'s
-marker write.
+The claude `create-fork` hook verb (§4b; and its `marker --stamp-subagent` fallback)
+**mints** the marker; it runs in the orchestrator's session at the coordination root
+(worker_mode false there) targeting the payload-derived worktree dir, so it is never
+self-refused — the same posture as `fork --worker`'s marker write.
 
 ## 6. `land` — solo `/execute`'s coordination merge
 
@@ -410,9 +421,10 @@ for the Claude surface:
 - **agents** — `install/agents/claude/dispatch-worker.md` symlinked into
   `.claude/agents/` (parallel to skills; user-serviceable markdown — name +
   description + tool allowlist — not a Rust type);
-- **the SubagentStart hook** — merged into `.claude/settings.local.json` via the
-  existing `HookSpec` merge core (`src/boot.rs`), the same machinery that wires the
-  `SessionStart` boot/sync hooks. The hook command is the one line in §4b.
+- **the WorktreeCreate hook** (SubagentStart on the fallback ladder) — merged into
+  `.claude/settings.local.json` via the existing `HookSpec` merge core (`src/boot.rs`),
+  the same machinery that wires the `SessionStart` boot/sync hooks. The hook command is
+  the one line in §4b.
 
 > **Scope note.** The rename touches the CLI surface, goldens, and skill docs that say
 > "skills install" — a deliberate SL-056 inclusion, not just the claude mechanism. The
@@ -426,11 +438,14 @@ for the Claude surface:
 > and update the memory. The alias is a plan-level deliverable, called out here so it is
 > not forgotten.
 
-`marker --stamp-subagent` is the verb the hook calls: reads the SubagentStart payload
-JSON on stdin, `classify_stamp(payload) -> Stamp | Skip` (a plain function, one golden
-— no heavy type ceremony), writes the marker on `Stamp`, exits 0 on `Skip`. The gate
-lives in the binary (testable), the hook stays dumb — honoring the §1 thesis without
-over-engineering.
+`doctrine worktree create-fork` is the verb the hook calls: reads the WorktreeCreate
+payload JSON on stdin, `classify_create(payload) -> ForkWorker | PlainCreate` (a plain
+function, one golden — no heavy type ceremony), and on the `dispatch-worker` agent_type
+runs git-add + provision + `write_marker` and **prints the worktree path** (else
+replicates default creation, prints the path, no marker). The gate lives in the binary
+(testable), the hook stays dumb — honoring the §1 thesis without over-engineering. (The
+SubagentStart fallback uses a thinner `marker --stamp-subagent` that only stamps an
+already-created worktree — §4b ladder.)
 
 ## 10. Governance deliverables
 
@@ -440,25 +455,27 @@ amend it validates).
 
 - **G1 — ADR-008 revise→accept** (the gate). Fold §5.1 evidence; record D-B2 (ro
   `~/.cargo/bin` ⇒ no in-jail install race); re-scope D-B3 around the userns question.
-- **G2 — ADR-006 amend.** (a) demote the native WorktreeCreate hook as a *creation*
-  preference (base-pinning + subprocess spawn supersede it for codex/pi); **claude's
-  marker-stamping seam is now the SubagentStart hook, not WorktreeCreate.** (b) replace
-  the `DOCTRINE_WORKER=1` self-arm with the **disk-marker-primary** signal (agnostic),
-  env a codex/pi optimisation, plus the `Orchestrator` verb class. State the
-  per-harness enforcement altitude. **Spike-first:** the guard/privilege model and the
-  claude SubagentStart marker path are validated by the O3 spike *before* G2 amends the
-  accepted ADR.
+- **G2 — ADR-006 amend.** (a) for **codex/pi**, demote the native WorktreeCreate hook as
+  a *creation* preference (base-pinning + subprocess spawn supersede it); for **claude**,
+  **promote a custom WorktreeCreate hook as the create+provision+stamp seam** (it
+  *replaces* default git creation — fail-closed), with SubagentStart-stamp as the named
+  fallback. (b) replace the `DOCTRINE_WORKER=1` self-arm with the **disk-marker-primary**
+  signal (agnostic), env a codex/pi optimisation, plus the `Orchestrator` verb class.
+  State the per-harness enforcement altitude. **Spike-first:** the guard/privilege model
+  and the claude WorktreeCreate marker path (incl. named-subagent `agent_type`
+  propagation) are validated by the O3 spike *before* G2 amends the accepted ADR.
 - **G3 — ADR (new, id via `doctrine adr new` — likely ADR-011).** The spawn-seam
   **contract** (orchestrator owns fork-or-mark + provision + per-wt env emission;
   worker identity is the disk marker) + a **per-harness capability/altitude table**:
   - **codex/pi:** subprocess spawn ⇒ env-arm + per-wt env + bwrap (full mechanism floor
     *under D6*; accident-fenced absent D6).
-  - **claude:** `Agent` tool + SubagentStart-hook marker (a **first-class** backend, not
-    a degraded rung); **concurrent-safe** (no serial constraint — the redesign);
-    marker-only altitude (no env, no per-wt target, no bwrap); **accident-fenced +
-    prompt-enforced, not malice-proof** against a deliberate self-clear (§4c) — deferred
-    to IDE-004 / userns-bwrap. The marker-stamp path is O3-spike-contingent with the
-    prompt-enforced fallback.
+  - **claude:** `Agent` tool + **WorktreeCreate-hook create+provision+stamp** (a
+    **first-class** backend, not a degraded rung; **fail-closed** — no worktree without a
+    marker); **concurrent-safe** (no serial constraint — the redesign); marker-only
+    altitude (no env, no per-wt target, no bwrap); **accident-fenced + prompt-enforced,
+    not malice-proof** against a deliberate self-clear (§4c) — deferred to IDE-004 /
+    userns-bwrap. The marker path is O3-spike-contingent (named-subagent `agent_type`
+    propagation) with the SubagentStart-stamp → prompt-enforced fallback ladder.
   - No harness-specific command (`claude -p`) is a required element. The env/spike
     claims stay `proposed` until the O3 gate is green.
 - **G4 — SPEC-012 rewrite.** Reframe Overview/Concerns (the funnel is now enforced
@@ -473,10 +490,10 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
 | Path | Change |
 |---|---|
-| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_stamp_subagent`** (reads SubagentStart payload, `classify_stamp`, writes marker on match). Pure: `target_dir_for_branch`, `marker_path`, `classify_import`, `classify_land`, `classify_gc`, `classify_stamp`. New `write_marker`/`marker_present`/`remove_marker` (`write_marker` also invoked by `--stamp-subagent`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the SubagentStart mechanism.** |
+| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_create_fork`** (claude WorktreeCreate handler — reads payload, `classify_create`, on `dispatch-worker` does git-add+provision+`write_marker` and prints the worktree path, else replicates default creation; reuses `run_fork`'s core), plus a thinner **`run_stamp_subagent`** for the SubagentStart fallback. Pure: `target_dir_for_branch`, `marker_path`, `classify_import`, `classify_land`, `classify_gc`, `classify_create`/`classify_stamp`. New `write_marker`/`marker_present`/`remove_marker` (`write_marker` invoked by `fork --worker` and `create-fork`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the per-worktree-creation hook.** |
 | `src/main.rs` | `fork`/`import`/`gc`/`land` subcommands + `marker {--clear --operator, --stamp-subagent}` (watch bool/arg clippy ceilings, [[mem.pattern.lint.cli-handler-args-struct]]). Worker-mode guard `worker_mode(root) = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`. `write_class` unchanged. **`fork`/`import`/`gc`/`land` are the new `Orchestrator` class** (refused under `worker_mode`, NOT `Read`). The env-leg refusal on a non-linked tree carries the named dual-cause message for authoring **and** funnel verbs. |
-| `src/skills.rs` → install surface | **Rename `skills install` → `claude install`** (keep `skills install` as a **hidden deprecated alias** → same handler, SR-3); add the **agents** leg (symlink `install/agents/claude/*.md` into `.claude/agents/`) and trigger the SubagentStart hook merge. Update `Write("skills install")` audit label + goldens; sweep docs + the `[[mem.pattern.distribution.skill-refresh-command]]` memory. |
-| `src/boot.rs` | A **SubagentStart** `HookSpec` reusing the existing merge core; wired by `claude install`. The hook command **provisions then stamps** (SR-1), both gated on `agent_type == dispatch-worker` + linked-worktree `payload.cwd`. |
+| `src/skills.rs` → install surface | **Rename `skills install` → `claude install`** (keep `skills install` as a **hidden deprecated alias** → same handler, SR-3); add the **agents** leg (symlink `install/agents/claude/*.md` into `.claude/agents/`) and trigger the WorktreeCreate hook merge. Update `Write("skills install")` audit label + goldens; sweep docs + the `[[mem.pattern.distribution.skill-refresh-command]]` memory. |
+| `src/boot.rs` | A **WorktreeCreate** `HookSpec` (SubagentStart on the fallback ladder) reusing the existing merge core; wired by `claude install`. The hook command **creates + provisions + stamps** (fail-closed, SR-1), gated on `agent_type == dispatch-worker`; non-dispatch agent_types get replicate-default creation, no marker. |
 | `src/git.rs` | new reads behind the verbs: worktree list, **patch-id reachability** (`git cherry`), `B..S` name-only diff. Impure seam only. |
 | `install/agents/claude/dispatch-worker.md` | **New** — the dispatch-worker subagent definition (name, description, tool allowlist). |
 | `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` + new `{dispatch-subprocess,dispatch-agent}/SKILL.md` | Rewrite prose to *call* the verbs. **`/dispatch` becomes a harness router** → `/dispatch-subprocess` (codex/pi) \| `/dispatch-agent` (claude). Router input: the agent's harness self-belief **cross-checked against env-marker detection** (`CLAUDECODE` etc., names resolved in-skill/at spike — see IDE-005 for pushing this into the binary); routes only when detection **agrees**; mismatch/unknown → refuse **naming the cause**, never a blind spawn. The detection signal is itself spike-gated **per harness** (a green for claude does not bless codex/pi). `/dispatch-subprocess` binds the worker cwd (`env -C "$D"` / bwrap `--chdir`); `/dispatch-agent` spawns `subagent_type: dispatch-worker` (cwd is the worktree by construction). One identical cadence, two ~2-line spawn templates. Re-embed ritual [[mem.pattern.distribution.skill-refresh-command]]. |
@@ -505,13 +522,13 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   refused — drive `run()`. `marker --clear` is **kept out** of this class and its
   bespoke refusal rules are tested separately (§3). *(This is the round-7 Charge π fix:
   the list is exhaustive and includes `land`.)*
-- **`marker --stamp-subagent` gate (the claude path):** `classify_stamp` golden —
-  `agent_type == dispatch-worker` + linked-worktree `payload.cwd` → marker written
-  (verb reads cwd from the **payload**, not its process cwd — SR-4); wrong agent_type →
-  exit 0, no marker; non-worktree cwd → exit 0, no marker (a benign subagent is never
-  branded). **Provisioning (SR-1):** the same agent_type gate provisions the
-  Agent-born worktree (D9 allowlist, withheld tier excluded) — assert a dispatch-worker
-  cwd is provisioned, a benign subagent cwd is not.
+- **`create-fork` gate (the claude path):** `classify_create` golden — `agent_type ==
+  dispatch-worker` → git-add + provision + marker written + worktree path printed on
+  stdout (fail-closed: a forced provision/stamp failure → non-zero → no worktree); other
+  agent_type → replicate-default creation, path printed, **no marker** (a benign subagent
+  is never branded). Reads `agent_type`/derives `<dir>` from the **payload**, not the
+  hook's process cwd (SR-4). The thinner `marker --stamp-subagent` fallback verb has its
+  own golden (stamp-only on an already-created worktree).
 - **`marker --clear` (self-brick cure):** a stale marker on a linked-worktree
   coordination root → writes + `gc` refused; `marker --clear --operator` (env unset)
   restores both from within the CLI; refused when `DOCTRINE_WORKER` set or run outside
@@ -523,12 +540,17 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   destructive step, rerun `gc`, assert either full cleanup or a named non-zero leftover.
   Include the **branch-gone / target-present** case (reap T from the branch name alone,
   no live branch) and the gc-own-ordering case (W removed before B).
-- **O3 spike (claude marker-via-SubagentStart):** confirm the hook fires **before** the
-  worker's first write (marker lands in time), the payload shape (`agent_type`, `cwd`),
-  and `agent_type` stability; confirm **two concurrent** dispatch-worker subagents each
-  get their own stamp (no shared slot); exercise the **spike-failure branch**
-  (prompt-enforced fallback, no marker). Per-harness: a green for claude does not bless
-  codex/pi env propagation, which is its own gate.
+- **O3 spike (claude marker-via-WorktreeCreate) — THE gate.** Confirm a **named
+  `dispatch-worker` subagent reliably propagates `agent_type` through the WorktreeCreate
+  payload** (the prior probe saw only `name` — but it used an *unnamed* subagent, so that
+  is expected, not a refutation). Confirm the custom hook **replaces default creation**
+  (path-on-stdout honored, non-zero fails creation), fires before the worker, and the
+  payload shape; probe whether a **matcher** can scope the hook to `dispatch-worker`.
+  Confirm **two concurrent** dispatch-worker creations each get their own
+  create+provision+stamp (no shared slot). Exercise the **fallback ladder**: if
+  WorktreeCreate lacks `agent_type` → SubagentStart-stamp (which the probe confirmed
+  carries `agent_type`, accepting the fail-open window) → prompt-enforced. Per-harness: a
+  green for claude does not bless codex/pi env propagation, which is its own gate.
 - **D5 (codex/pi):** two parallel worktree builds, no cargo-lock contention, each spawns
   its correct `CARGO_BIN_EXE`. (Claude shares the jail-wide target — the §5.1 rituals
   are the proof there, not isolation.)
@@ -564,12 +586,13 @@ Headline dispositions carried into this clean design:
 - **Round-7 ν** (codex/pi cwd not bound to fork) → §4a `env -C "$D"` / bwrap `--chdir`.
 - **Round-7 ξ** (gc no idempotent recovery) → §8.2 idempotent state machine.
 - **Round-7 ο** (arm-lease uses timeout as proof-of-death) → **dissolved**: the
-  SubagentStart redesign removes the arm sentinel entirely (§4b); there is no lease, no
-  race.
+  per-worktree-creation-hook redesign removes the arm sentinel entirely (§4b); there is
+  no lease, no race.
 - **Round-7 π** (Orchestrator-class verification omits `land`) → §12 exhaustive list
   (`fork`/`import`/`land`/`gc`).
 - **Rounds 3–6 (B/C/γ/θ/κ/μ/ζ/η/λ/ι …)** — the marker/sentinel/belt/router lineage; the
-  arm-sentinel charges (γ/θ/κ/ο) are obviated by the empirical SubagentStart finding
-  ([[mem.pattern.dispatch.claude-subagentstart-worker-identity]]); the surviving
+  arm-sentinel charges (γ/θ/κ/ο) are obviated by the empirical hook findings
+  ([[mem.pattern.dispatch.claude-subagentstart-worker-identity]],
+  [[mem.pattern.dispatch.claude-agent-worktree-not-fork-provisioned]]); the surviving
   invariants (belt scope, land guards, router cross-check, altitude honesty) are stated
   in §3–§10.

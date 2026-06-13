@@ -46,18 +46,26 @@ arm sentinel** — each SubagentStart fires for its own subagent independently.
   returns *after* the worker runs, so it's a post-hoc/gc correlation handle, not a
   pre-stamp one).
 - `CLAUDE_CODE_CHILD_SESSION=1` is present on **both** orchestrator and subagent — **not
-  a discriminator**. `WorktreeCreate` hook payload (separate from SubagentStart) carries
-  `name`, not `agent_type`.
+  a discriminator**. `WorktreeCreate` hook payload (separate from SubagentStart) was seen
+  to carry `name`, not `agent_type` — **BUT this probe used an *unnamed* subagent (no
+  custom agent defined), so agent_type absence is expected, NOT a refutation.** The docs
+  say agent_type is present "when the hook fires inside a subagent"; a **named
+  `dispatch-worker` subagent** likely propagates it. **Re-spike with a named subagent
+  before concluding WorktreeCreate cannot discriminate** (see
+  [[mem.pattern.dispatch.claude-agent-worktree-not-fork-provisioned]]).
 
 **Why:** SL-056 was burned across 7 inquisitions partly by *guessing* Claude's
 capabilities. Verify hook behaviour with a live probe (temporary SessionStart/
 SubagentStart logging hook + `CLAUDE_ENV_FILE` injection test + a spawned subagent that
 reports its env), never infer from docs alone — they were silent/ambiguous here.
 
-**How to apply:** For the SL-056 claude path, stamp the marker via a SubagentStart hook
-keyed on `agent_type`; keep the disk marker as the harness-agnostic floor (codex/pi
-still stamp via `fork --worker` + `DOCTRINE_WORKER`). Treat the SubagentStart payload
-shape + its missing `CLAUDE_ENV_FILE` as version-fragile harness facts — spike-gate them
-(cf. [[mem.pattern.parse.toml-error-classification-fragile]]). Relates to
+**How to apply:** For the SL-056 claude path, **prefer a `WorktreeCreate` hook that
+owns create+provision+stamp (fail-closed — it replaces default git creation, so no
+worktree exists without a marker)**; use SubagentStart-stamp only as the fallback if
+WorktreeCreate proves unable to carry `agent_type` for a named subagent (it has a
+fail-open created-but-unstamped window). Keep the disk marker as the harness-agnostic
+floor (codex/pi still stamp via `fork --worker` + `DOCTRINE_WORKER`). Treat the hook
+payload shapes + the missing `CLAUDE_ENV_FILE` as version-fragile harness facts —
+spike-gate them (cf. [[mem.pattern.parse.toml-error-classification-fragile]]). Relates to
 [[mem.pattern.dispatch.spawn-backend-harness-agnostic-no-free-env-seam]] (the agnostic
 floor still cannot rely on a free env seam; claude's is confirmed *absent* for subagents).

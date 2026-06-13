@@ -3,8 +3,8 @@ memory_key = "mem.pattern.dispatch.claude-agent-worktree-not-fork-provisioned"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Claude Agent worktree is harness-born, not fork-provisioned — SubagentStart hook must provision and stamp"
-summary = "Claude Agent isolation:worktree forks are harness-born — not fork-provisioned; the SubagentStart hook must provision AND stamp"
+title = "Claude Agent worktree is harness-born, not fork-provisioned — a worktree-creation hook must provision+stamp (WorktreeCreate preferred, fail-closed)"
+summary = "Claude Agent isolation:worktree forks are harness-born — not fork-provisioned; a hook must provision+stamp. WorktreeCreate (replaces default creation, fail-closed) preferred over SubagentStart (fail-open window); agent_type gate spike-gated"
 created = "2026-06-13"
 updated = "2026-06-13"
 
