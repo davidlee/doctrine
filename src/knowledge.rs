@@ -18,19 +18,12 @@
 //! `""`/`[]` → absent seam), and the per-kind scaffold templates. The kind-
 //! agnostic engine is `crate::entity` (unchanged — four new scaffold callers).
 //!
-//! PHASE-01 stands the module up ALONE: it is NOT yet wired into
-//! `integrity::KINDS` (PHASE-02) or the CLI (PHASE-03), so every `pub(crate)`
-//! symbol is dead in the non-test build until its consumer lands. The module-
-//! level `cfg_attr(not(test), expect(dead_code, …))` below carries exactly that
-//! staging — self-clearing once a real (non-test) consumer arrives
-//! (mem.pattern.lint.dead-code-expect-vs-cfg-test).
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-059 PHASE-01 leaf: consumers land in PHASE-02 (KINDS/partition) and PHASE-03 (CLI); the expect self-clears when a non-test caller arrives"
-    )
-)]
+//! All phases landed — every production symbol has a real consumer. The only
+//! non-production code is the hand-emit render subtree below (VT-1's byte-stable
+//! round-trip check), which is `#[cfg(test)]`-gated at each fn rather than masked
+//! by a blanket module suppression (mem.pattern.lint.dead-code-expect-vs-cfg-test):
+//! production writes go through `render_record_toml_seed` (template) +
+//! `set_record_status` (`toml_edit`).
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -42,7 +35,11 @@ use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
 use crate::listing::{self, Format, ListArgs};
-use crate::tomlfmt::{toml_array_inner, toml_string};
+use crate::tomlfmt::toml_string;
+// `toml_array_inner` is spliced only by the test-only hand-emit render subtree
+// (production list-writes go via the template seed), so its import is `#[cfg(test)]`.
+#[cfg(test)]
+use crate::tomlfmt::toml_array_inner;
 
 /// The toml/md file stem — shared by all four kinds (`record-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`ASM`/`DEC`/…) and from the per-kind tree dirs.
@@ -137,8 +134,10 @@ impl RecordKind {
     }
 
     /// The seeded default status — the FIRST element of the kind's vocabulary (the
-    /// seed convention, §5). The single source the scaffold template literal mirrors
-    /// (the F-A2 seed-status anti-drift guard pins the two together).
+    /// seed convention, §5). The single source the scaffold template literal mirrors;
+    /// the F-A2 seed-status anti-drift guard test pins the two together — its only
+    /// caller (the template bakes the literal at runtime), hence `#[cfg(test)]`.
+    #[cfg(test)]
     pub(crate) fn default_status(self) -> &'static str {
         statuses(self).first().copied().unwrap_or_default()
     }
@@ -230,7 +229,8 @@ impl Confidence {
     }
 
     /// The known-set — the drift-canary authority (VT-3). Lockstep with the
-    /// variants (`confidence_known_set_matches_variants`).
+    /// variants (`confidence_known_set_matches_variants`), its only consumer.
+    #[cfg(test)]
     pub(crate) const KNOWN: &'static [&'static str] = &["low", "medium", "high"];
 }
 
@@ -258,7 +258,8 @@ impl Basis {
         }
     }
 
-    /// The known-set — the drift-canary authority (VT-3).
+    /// The known-set — the drift-canary authority (VT-3), its only consumer.
+    #[cfg(test)]
     pub(crate) const KNOWN: &'static [&'static str] = &[
         "observation",
         "prior-art",
@@ -296,7 +297,8 @@ impl ConstraintSource {
         }
     }
 
-    /// The known-set — the drift-canary authority (VT-3).
+    /// The known-set — the drift-canary authority (VT-3), its only consumer.
+    #[cfg(test)]
     pub(crate) const KNOWN: &'static [&'static str] = &[
         "canon",
         "adr",
@@ -598,6 +600,11 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
 
 // ---------------------------------------------------------------------------
 // Pure: render (the byte-stable round-trip seam, the rec.rs hand-emit precedent)
+//
+// Test-only (`#[cfg(test)]`): this hand-emit backs VT-1's byte-stable round-trip
+// proof and has no production caller — writes go through `render_record_toml_seed`
+// (template) + `set_record_status` (toml_edit). Gated per-fn, not by a blanket
+// module suppression, so a future genuinely-dead symbol still trips the lint.
 // ---------------------------------------------------------------------------
 
 /// Render a populated [`KnowledgeRecord`] to its `record-NNN.toml` text — the
@@ -608,6 +615,7 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
 /// (mem.pattern.render.toml-splice-escape-user-values). A naive `toml::to_string`
 /// would bypass that seam and reorder keys, so the emit is by hand — the same idiom
 /// as `rec::render_rec_toml_populated`.
+#[cfg(test)]
 fn render_record_toml(record: &KnowledgeRecord) -> String {
     [
         String::from("schema = \"doctrine.knowledge\"\nversion = 1\n\n"),
@@ -627,33 +635,32 @@ fn render_record_toml(record: &KnowledgeRecord) -> String {
 
 /// One `key = "value"` text line for an optional field — `""` when absent (the
 /// inverse of the `"" -> None` parse seam, so a round-trip is byte-stable). The
-/// value rides `toml_string` for escaping.
+/// value rides `toml_string` for escaping. Closed enums map through this too —
+/// `kind.map(Enum::as_str)` yields the same `Option<&str>`.
+#[cfg(test)]
 fn opt_text_line(key: &str, value: Option<&str>) -> String {
     format!("{key} = {}\n", toml_string(value.unwrap_or("")))
 }
 
-/// One `key = "value"` text line for an optional closed enum — `""` when absent.
-fn opt_enum_line(key: &str, value: &str) -> String {
-    format!("{key} = {}\n", toml_string(value))
-}
-
 /// One `key = [..]` list line, escaped through `toml_array_inner`.
+#[cfg(test)]
 fn list_line(key: &str, xs: &[String]) -> String {
     format!("{key} = [{}]\n", toml_array_inner(xs))
 }
 
 /// Render the `[facet]` block for the populated round-trip, kind-dispatched in the
 /// template's field order so the emit is byte-stable against the on-disk layout.
+#[cfg(test)]
 fn render_facet(facet: &RecordFacet) -> String {
     let mut out = String::from("\n[facet]\n");
     match facet {
         RecordFacet::Assumption(f) => {
             out.push_str(&opt_text_line("claim", f.claim.as_deref()));
-            out.push_str(&opt_enum_line(
+            out.push_str(&opt_text_line(
                 "confidence",
-                f.confidence.map_or("", Confidence::as_str),
+                f.confidence.map(Confidence::as_str),
             ));
-            out.push_str(&opt_enum_line("basis", f.basis.map_or("", Basis::as_str)));
+            out.push_str(&opt_text_line("basis", f.basis.map(Basis::as_str)));
             out.push_str(&opt_text_line(
                 "validation_plan",
                 f.validation_plan.as_deref(),
@@ -687,9 +694,9 @@ fn render_facet(facet: &RecordFacet) -> String {
         }
         RecordFacet::Constraint(f) => {
             out.push_str(&opt_text_line("statement", f.statement.as_deref()));
-            out.push_str(&opt_enum_line(
+            out.push_str(&opt_text_line(
                 "source",
-                f.source.map_or("", ConstraintSource::as_str),
+                f.source.map(ConstraintSource::as_str),
             ));
             out.push_str(&list_line("applies_to", &f.applies_to));
             out.push_str(&opt_text_line("waiver_reason", f.waiver_reason.as_deref()));
@@ -701,6 +708,7 @@ fn render_facet(facet: &RecordFacet) -> String {
 }
 
 /// Render the shared `[evidence]` block for the populated round-trip.
+#[cfg(test)]
 fn render_evidence(e: &Evidence) -> String {
     [
         String::from("\n[evidence]\n"),
@@ -1216,6 +1224,8 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     validate_statuses(&args.status)?;
     let render = args.render;
     let columns = args.columns.take();
+    // DRIFT: this reveal rule reproduces `listing::retain`'s status-keyed reveal
+    // (`--all` OR any explicit `--status`); if retain's rule changes, change it here too.
     let reveal_hidden = args.all || !args.status.is_empty();
     let (filter, format) = listing::build(args)?;
     let corpus = read_all(root)?;
