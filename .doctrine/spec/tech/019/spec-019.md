@@ -46,9 +46,18 @@ positional on capture and the kebab serde of the stored `record_kind` field.
 
 ```text
 .doctrine/knowledge/<kind>/NNN/
-  record-NNN.toml      # identity, record_kind, status, summary, tags, [facet], [evidence], [relations]
+  record-NNN.toml      # identity, record_kind, status, summary, tags;
+                       #   then TYPED tables — [facet], [evidence], and the typed
+                       #   supersession [relationships] pair;
+                       #   then the tier-1 [[relation]] array rows (artefact links + spawn).
   record-NNN.md        # prose body
 ```
+
+The on-disk order is load-bearing, not cosmetic: the SPEC-018 **F1 storage
+invariant** requires every typed table to *precede* the `[[relation]]` array-of-tables
+(a bare key after an array header binds to the last table — silent corruption). So
+`[facet]`, `[evidence]`, and the typed `[relationships]` supersession pair are all
+authored above the `[[relation]]` rows, and the writer appends edges only at EOF.
 
 This is the **divergence from the backlog**: the backlog's five kinds share one closed
 status vocabulary and only the risk kind carries a `[facet]`; here every kind carries
@@ -119,18 +128,51 @@ prefix→kind resolver is the half PRD-010 §2 explicitly handed to the technica
 
 ### The outbound relation seam
 
-A record's relations follow the **cross-corpus relation contract specified in SPEC-018**
-(governed by ADR-010, composing ADR-004's outbound-only rule) — this spec does not
-re-tell that model. The record's own surface within it: outbound forward links to
-backlog items, risks, slices, specs, ADRs, requirements, and drift records, plus the
-**spawn-work** edge (e.g. `ASM-001 → RSK-004`, `DEC-003 → SL-020`) authored once on the
-record (the side that shows what it affects); the item's inbound origin is **derived** by
-the registry scan, never stored on the item (PRD-010 §6, ADR-004). The seam is always
-present, even empty, so linkage and spawn machinery have a stable attachment point.
-Relating or spawning never mutates the linked or spawned artefact's lifecycle. Admitting
-`knowledge_record` source kinds and their legal targets into `RELATION_RULES`
-(`src/relation.rs`) is the contract-side work this surface depends on; the vocabulary is
-authored there, never transcribed here (storage rule).
+A record is only interesting *in relation to other entities*, so the relation seam is
+the load-bearing surface, not an afterthought. It follows the **cross-corpus relation
+contract** — the model SPEC-018 specifies and SL-046/SL-048 shipped — never a bespoke
+record relation store. This spec does not re-tell that model; it names the concrete
+extension points the family must ride and the one gap it opens.
+
+The contract is realised by two cooperating layers this surface plugs into:
+
+- **The authored-edge layer (SL-048).** `RELATION_RULES` (`src/relation.rs`) is the
+  code-authoritative legal-set table keyed by `(source ∈ sources, label)`, each rule
+  fixing a `TargetSpec`, a `Tier`, and a `LinkPolicy`; the uniform `link`/`unlink`
+  verb over `append_edge`/`remove_edge` is the writer, gated by that table.
+- **The reader layer (SL-046).** `relation_graph::outbound_for` dispatches per
+  canonical prefix to the kind's `relation_edges` accessor and emits
+  `RelationEdge{label,target}`; inbound is **derived** from `in_edges`, never stored
+  (ADR-004). An **exact-coverage invariant test** holds the two in lockstep — per
+  source kind, the reader's emitted labels equal the table's labels.
+
+Plugging the four record kinds in therefore requires, concretely:
+
+1. **`integrity::KINDS` rows** for ASM/DEC/QUE/CON (kind constants + each kind's
+   stateful status set) — the corpus-wide id table the contract and graph both scan.
+2. **A `RECORD` source-group and rules in `RELATION_RULES`** — the records' outbound
+   labels: forward links to backlog items, risks, slices, specs, ADRs, requirements,
+   and drift records, plus the **spawn-work** edge (e.g. `ASM-001 → RSK-004`,
+   `DEC-003 → SL-020`). These are `Tier::One` (`[[relation]]`) and `Writable`; the
+   inbound origin on the spawned/linked artefact is derived, never authored on it.
+3. **An `outbound_for` dispatch arm** (or a shared record accessor, mirroring the
+   five-backlog-kinds-one-accessor pattern) — `outbound_for` `debug_assert!`s that
+   every `KINDS` prefix is routed, so a new kind with no arm is a loud invariant
+   breach, not a silent empty.
+4. **Extending the exact-coverage invariant** to the record source kinds, so the
+   reader and the table cannot drift.
+
+**The gap this opens (a real design question, flagged not closed):** `RelationLabel`
+is a *closed* vocabulary, and PRD-010's link list does not map cleanly onto it. `specs`
+/`slices`/`requirements`/`drift`/`governed_by` exist but are scoped to other source
+sets; **a record→risk link, a record→ADR *relate* (distinct from `governed_by`), and a
+`spawns` edge have no existing label** — so new `RelationLabel` variants are almost
+certainly required, each with a wire name, an `inbound_name`, and a rule row. Which
+labels to mint, and whether spawn reuses `slices`/backlog labels or earns its own
+`spawns`, is per-slice `/design`'s call; what is fixed here is that the seam is an
+*extension of the SL-046/SL-048 vocabulary*, authored in `RELATION_RULES` and never
+transcribed into this spec (storage rule). The seam is always present, even empty, and
+relating or spawning never mutates the linked artefact's lifecycle.
 
 ### Cross-kind supersession
 
@@ -139,15 +181,21 @@ only when the successor becomes the authoritative continuation of the predecesso
 the `supersedes` / `superseded_by` pair — the ADR-004 §5 reverse carve-out, co-written on
 both records, sanctioned because the supersession already moves the predecessor to a
 terminal status and rewrites its file, so the reverse edge adds zero marginal coupling.
-Per SPEC-018 this pair is `LifecycleOnly` in the relation contract — never plain-`link`,
-owned by a **transactional supersede verb**. That verb is the cross-kind lifecycle axis
-the corpus has been deferring as **IMP-006** (cited by SPEC-005 and SPEC-018 as the
-unbuilt owning verb for governance supersession); this surface is its first real
-consumer. The verb co-writes both edges atomically, moves the predecessor to a terminal
-status valid for **its own** kind without changing that kind, and admits a `record_kind`
-crossing only along the **§6 allowed matrix** when the successor is the authoritative
-continuation — refusing a reopening direction (`constraint → assumption`, `decision →
-question`) as a relation, not a supersession.
+In `RELATION_RULES` terms this is the `Supersedes` label at `LinkPolicy::LifecycleOnly`
+— never plain-`link` — and, like governance supersession (SPEC-018 OD-3), it is
+**storage-excluded from the tier-1 `[[relation]]` migration**: the pair stays a typed
+`[relationships]` block (mirroring SPEC-005's ADR seam) because the sanctioned reverse
+`superseded_by` is structurally un-authorable as a `[[relation]]` row — the table admits
+no inverse label. It is owned by a **transactional supersede verb** — the cross-kind
+lifecycle axis the corpus has been deferring as **IMP-006** (cited by SPEC-005 and
+SPEC-018 as the unbuilt owning verb for governance supersession); this surface is its
+first real consumer. The verb co-writes both edges atomically, moves the predecessor to
+a terminal status valid for **its own** kind without changing that kind, and admits a
+`record_kind` crossing only along the **§6 allowed matrix** when the successor is the
+authoritative continuation — refusing a reopening direction (`constraint → assumption`,
+`decision → question`) as a relation, not a supersession. The matrix is a
+predecessor→successor relation `TargetSpec` cannot express (it constrains only the legal
+target *kind set*), so its enforcement lives in the verb, not the contract table.
 
 ## Concerns
 
@@ -168,9 +216,20 @@ question`) as a relation, not a supersession.
   cross-kind crossings are valid; the verb must enforce it, since the relation contract's
   kind-legality check alone cannot distinguish authoritative continuation from mere
   influence.
-- **Behaviour preservation.** This family rides the shared entity scaffold; introducing
-  it must leave the existing slice / ADR / spec / backlog / memory suites green unchanged
-  (PRD-010 NF-002).
+- **Relation lockstep across SL-046/SL-048.** Admitting the record kinds touches four
+  coupled sites — `integrity::KINDS`, `RELATION_RULES`, the `outbound_for` dispatch, and
+  the exact-coverage invariant test. They must move together: a `KINDS` row with no
+  `outbound_for` arm trips the routing `debug_assert!`, and a reader/table label
+  divergence trips the coverage invariant. The storage-ordering F1 invariant (typed
+  tables before `[[relation]]` arrays) is the other on-disk hazard.
+- **Closed-vocabulary coverage gap.** `RelationLabel` is closed; PRD-010's link list
+  exceeds it (record→risk, record→ADR relate, spawn). New variants must be minted with
+  their `inbound_name` and rule row, and the coverage invariant updated — under-minting
+  silently drops a legal link, over-minting leaves an un-routed label.
+- **Behaviour preservation.** This family rides the shared entity scaffold *and* the
+  shipped relation machinery; introducing it must leave the existing slice / ADR / spec /
+  backlog / memory suites — and the relation-contract suites — green unchanged (PRD-010
+  NF-002).
 
 ## Hypotheses
 
@@ -215,6 +274,13 @@ question`) as a relation, not a supersession.
   one `[evidence]` table of typed `supports`/`contradicts`/`notes` citations; it is never
   its own entity kind and never a free-form blob, and graph/search machinery over it is
   out of v1 (PRD-010 §2).
+- **D6 — the relation seam extends the SL-046/SL-048 machinery, never forks it.** Record
+  relations are realised by adding `integrity::KINDS` rows, a `RECORD` source-group and
+  rules in `RELATION_RULES`, an `outbound_for` dispatch arm, and extending the
+  exact-coverage invariant — plus any new `RelationLabel` variants the link list demands.
+  No bespoke per-record relation store, no second reader: one contract, one graph
+  (no parallel implementation). Artefact/spawn links are tier-1 `[[relation]]` `Writable`;
+  the supersession pair is the `LifecycleOnly` typed carve-out owned by the IMP-006 verb.
 
 ## Open Questions
 
