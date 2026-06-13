@@ -18,6 +18,13 @@ use serde::Deserialize;
 #[folder = "install/"]
 struct Assets;
 
+/// Read one embedded `install/`-relative asset's bytes (`None` if absent). The
+/// single accessor over the embed for callers outside this module (the agents
+/// leg of `claude install`, src/skills.rs) — no parallel embed.
+pub(crate) fn embedded_asset(rel: &str) -> Option<std::borrow::Cow<'static, [u8]>> {
+    Assets::get(rel).map(|f| f.data)
+}
+
 /// The `install/manifest.toml` schema.
 #[derive(Debug, Deserialize)]
 struct Manifest {
