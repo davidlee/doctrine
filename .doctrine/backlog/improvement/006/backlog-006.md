@@ -40,3 +40,28 @@ verb could reuse it — the handhold is in place.
   share the claim/seam machinery in `entity.rs`.
 - Reconciles the SL-009 status-vs-rollup divergence surfacing into an actual
   transition that can resolve it.
+
+## Supersession — the transactional carve-out verb (from SL-048 OD-3)
+
+A specific member of this item's lifecycle-transition family, split out of SL-048
+and parked here to avoid a gov-only point solution (parallel implementation):
+
+- **The verb** (e.g. `doctrine <gov> supersede <new> <old>`, ideally uniform
+  across kinds that supersede — gov→gov, slice→slice) performs **one transaction**:
+  write the forward `supersedes` edge on `<new>`, flip `<old>` to terminal
+  `superseded`, and co-write the `superseded_by` carve-out on `<old>` (the only
+  honest place a reader of the dead record finds its successor — ADR-004 §5, the
+  predecessor file is rewritten for the status flip anyway, so zero marginal
+  coupling).
+- **Why it isn't SL-048's:** SL-048 deliberately walls `supersedes` off as
+  `LinkPolicy::LifecycleOnly` — a plain `link` append would be half a transaction.
+  ADR-010 D4 fixes the carve-out as *verb-written, never hand-authored*; that verb
+  is this lifecycle axis, not SL-048's relation-capture axis.
+- **Unblocks the SL-048 OD-3 exclusion:** once this verb exists, governance
+  `supersedes` can migrate to the uniform `[[relation]]` block alongside the rest
+  of tier-1 (SL-048 excluded it precisely because no transactional owner existed).
+- SL-048 ships only the read-side guard: a `validate` cross-check that stored
+  `superseded_by` agrees with the derived `in_edges` reciprocal (see corrected
+  [[IMP-032]]).
+
+Related: [[SL-048]] · [[IMP-032]] · ADR-010 D4 · ADR-004 §5.

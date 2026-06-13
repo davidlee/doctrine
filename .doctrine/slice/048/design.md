@@ -117,26 +117,32 @@ taken corpus-wide, recorded in the ADR amendment, deliverable 8):
 
 | Kind | → `[[relation]]` (tier-1) | stays typed |
 |---|---|---|
-| governance (ADR/POL/STD) | `supersedes`, `related` | `superseded_by` (carve-out), `tags` (classification) |
+| governance (ADR/POL/STD) | `related` | `supersedes` + `superseded_by` (the supersession **pair**, OD-3/X7), `tags` (classification) |
 | slice | `specs`, `requirements`, `supersedes`, **+`governed_by`** | — |
 | backlog | `slices`, `specs`, `drift`¹ | `needs`, `after{to,rank}`, `triggers{globs,note}` (SL-047 owns) |
-| spec | **+`governed_by`**, **+`related`** (PRD↔PRD) | `descends_from`, `parent` (arity≤1), `interactions` (free-text+payload), `members` (members.toml) |
+| spec | **+`governed_by`**, **+`consumes`** (PRD↔PRD) | `descends_from`, `parent` (arity≤1), `interactions` (free-text+payload), `members` (members.toml) |
 
 ¹ `drift` migrates shape; target free-text-unvalidated (no `DRIFT` kind).
+
+**OD-3/X7 — governance supersession excluded from migration.** `supersedes` and
+`superseded_by` stay typed **together**: the forward edge is meaningless to
+migrate while its sanctioned reverse carve-out (`superseded_by`, ADR-004 §5) has
+no transactional owning verb — that verb is IMP-006's cross-kind lifecycle axis,
+not SL-048's (building it gov-only here = parallel implementation). Only
+governance `related` migrates. Slice `supersedes` (no carve-out partner) migrates
+normally.
 
 **Governance worked example** (spans all cases):
 
 ```toml
 # BEFORE                          # AFTER
 [relationships]                   [relationships]                 # typed leftovers FIRST (F1)
-supersedes    = ["ADR-003"]       superseded_by = ["ADR-009"]     # ADR-004 §5, verb-written only
-related       = ["ADR-004"]       tags          = ["layering"]    # classification, NOT a relation
-superseded_by = ["ADR-009"]
-tags          = ["layering"]      [[relation]]                    # tier-1 array-of-tables, at EOF
-                                  label  = "supersedes"
-                                  target = "ADR-003"
-                                  [[relation]]
-                                  label  = "related"
+supersedes    = ["ADR-003"]       supersedes    = ["ADR-003"]     # OD-3: supersession pair NOT migrated
+related       = ["ADR-004"]       superseded_by = ["ADR-009"]     # ADR-004 §5 carve-out (its pair)
+superseded_by = ["ADR-009"]       tags          = ["layering"]    # classification, NOT a relation
+tags          = ["layering"]
+                                  [[relation]]                    # tier-1 array-of-tables, at EOF
+                                  label  = "related"              # only `related` migrates
                                   target = "ADR-004"
 ```
 
@@ -148,10 +154,10 @@ Typed leftovers therefore stay in a `[relationships]` **table that precedes** th
 unconditionally valid. A migrated kind with no typed leftovers (slice) drops
 `[relationships]` entirely and carries only `[[relation]]`.
 
-`superseded_by` and `tags` are not tier-1 → stay typed beside the block. The
-`[[relation]]` array admits **outbound validated labels only**, so `superseded_by`
-is structurally un-authorable there (ADR-010 D4/D5 satisfied by construction).
-spec legitimately carries both idioms — it spans tier-1 (new edges) *and* tier-2
+The supersession pair (`supersedes` + `superseded_by`, OD-3) and `tags` stay typed
+beside the block. The `[[relation]]` array admits **outbound validated labels
+only**, so `superseded_by` is structurally un-authorable there (ADR-010 D4/D5
+satisfied by construction). spec legitimately carries both idioms — it spans tier-1 (new edges) *and* tier-2
 (lineage/interactions); ADR-010-sanctioned, not the bad same-tier mix.
 
 **Migration mechanism — out-of-band, no shipped surface.** doctrine is
@@ -204,10 +210,10 @@ catch a rule with no overlay (silent dangler) or a source-legality mismatch.
 | `specs` | SL, backlog | PRD·SPEC | 1 | Writable |
 | `requirements` | SL | REQ | 1 | Writable |
 | `supersedes` | SL | SL | 1 | Writable |
-| `supersedes` | ADR·POL·STD | same-gov | 1 | LifecycleOnly (carve-out, IMP-032) |
+| `supersedes` | ADR·POL·STD | same-gov | 1* | LifecycleOnly — storage excluded (OD-3); verb → IMP-006 |
 | `governed_by` ★ | SL·PRD·SPEC | ADR·POL·STD | 1 | Writable |
 | `related` | ADR·POL·STD | same-gov | 1 | Writable |
-| `related` ★ | PRD | PRD | 1 | Writable |
+| `consumes` ★ | PRD | PRD | 1 | Writable |
 | `slices` | backlog | SL | 1 | Writable |
 | `drift` | backlog | *free-text* | 1 | Writable (unvalidated) |
 | `descends_from` | SPEC | PRD | 2 (arity≤1) | TypedVerbOnly |
@@ -218,11 +224,19 @@ catch a rule with no overlay (silent dangler) or a source-legality mismatch.
 | `owning_slice` | REC | SL | 2 (arity≤1) | TypedVerbOnly |
 | `decision_ref` | REC | *free-text* | 3 | TypedVerbOnly |
 
+`1*` — tier-1 *by shape*, but **storage excluded** from migration (OD-3): stays
+typed with its `superseded_by` carve-out pair until IMP-006 builds the
+transactional supersede verb. Never `link`-writable (`LifecycleOnly`).
+
 **Label naming.** `governed_by` — one shared label for SL→gov and SPEC/PRD→gov
 (one overlay, as `supersedes` already spans SL+gov); reads right on the source
-("this slice is governed by ADR-010"); reader derives the inbound reciprocal on
-the target. `related` reused for PRD↔PRD — vocab stays tight, the table
-disambiguates by source; the `related` overlay carries gov→gov + PRD→PRD.
+("this slice is governed by ADR-010"); inbound renders via `inbound_name` =
+"governs" (X5). `consumes` (OD-1) for PRD→PRD — **its own** label/overlay (fixes
+X4, no overlay-model change): "PRD-011 **consumes** a seam/contract PRD-009
+exposes" (consumer → provider, directional); inbound on the provider renders
+`consumed_by`. Chosen over `builds_on`/`related` for crispness — it names the
+seam/interface consumption the PRDs actually describe, not vague adjacency, and
+does **not** collide with the work-item `depends_on`/`needs` axis (SL-047).
 
 ### 5.3 The seam — the uniformity dividend
 
@@ -300,6 +314,12 @@ triple mirrors `(source, label, target)`. Dispatch:
   label — so an ADR's derived inbound shows `governs: SL-048`, not the backwards
   `governed_by: SL-048`. The existing `supersedes`→"superseded by" special-case
   collapses into this table-driven path.
+- **Supersession cross-check (OD-3, ADR-010 D4).** `validate` reports where a
+  governance entity's stored `superseded_by` disagrees with the reciprocal derived
+  from `supersedes` `in_edges` — report drift, never rewrite (the reseat
+  precedent). Pure read; independent of the (unbuilt, IMP-006) transactional
+  supersede verb. This is the honest guard ADR-010 D4 named after reclassifying
+  IMP-032 — it may surface pre-existing hand-authored drift, which is the point.
 
 ### 5.6 The contract doc + ADR amendment
 
@@ -349,9 +369,13 @@ triple mirrors `(source, label, target)`. Dispatch:
 - **PHASE-03** — generic `[[relation]]` parser (`read_block`) + writer
   (`append_edge`/`remove_edge`); SL-046 reader accessors rewired to `read_block`
   for tier-1. Behaviour-preservation gate.
-- **PHASE-04** — `link`/`unlink` command + forward-edge validation wiring.
-- **PHASE-05** — one-shot corpus migration (out-of-band script) + whole-corpus
-  round-trip verification; ADR-010 amendment; SPEC-005/006/016 references.
+- **PHASE-04** — `link`/`unlink` command + forward-edge validation wiring; extend
+  `validate` for `IllegalRow`s + the **supersession cross-check** (OD-3).
+- **PHASE-05** — **deterministic** one-shot corpus migrator (unshipped, excludes
+  the governance supersession pair) gated by **before/after black-box goldens** on
+  `inspect`/`show`/`show --json` (OD-2); ADR-010 amendment (D3 corpus-wide +
+  supersession-excluded); SPEC-005/006/016 references; **reclassify IMP-032**,
+  **record the supersede-verb follow-up under IMP-006**.
 
 (Indicative — `/plan` owns the authoritative phase decomposition + EN/EX/VT.)
 
@@ -363,14 +387,15 @@ triple mirrors `(source, label, target)`. Dispatch:
 - **R2 — `read_block` vs tier-2/3 cohabitation.** A kind's accessor must merge
   shared tier-1 edges with its typed tier-2/3 edges without double-counting or
   ordering drift vs the SL-046 golden. Mitigation: behaviour-preservation gate.
-- **R3 — `governed_by` semantics on the inbound side.** Reader must render the
-  derived reciprocal sensibly (ADR "governs" SL). Confirm SL-046's inbound label
-  derivation handles a label whose natural inverse differs from its name.
-- **C1 — does `validate` already walk `[relationships]`?** PHASE-05 must extend,
+- **R3 — `governed_by` inbound — RESOLVED (X5).** `inbound_name` on the rule
+  renders the reciprocal ("governs"); generalises the `supersedes` special-case.
+- **C1 — does `validate` already walk `[relationships]`?** PHASE-04 must extend,
   not duplicate, the existing dangling-citation logic (`integrity.rs`).
-- **C2 — overlay identity for reused `related`.** gov→gov + PRD→PRD share the
-  `related` overlay; confirm SL-047 ranking / graph queries don't conflate them
-  harmfully (label+source is the disambiguator).
+- **C2 — overlay identity — RESOLVED (OD-1).** `consumes` is its own label/overlay,
+  distinct from gov `related`; no conflation.
+- **C3 — supersession cross-check may fire on existing corpus.** Pre-existing
+  hand-authored `superseded_by` may already disagree with `supersedes`; the
+  cross-check will report it (intended — reveals drift, doesn't rewrite).
 
 ## 10. Decisions Log (the thrash)
 
@@ -420,23 +445,25 @@ Core critique: *"treating storage uniformity as if it were behaviour uniformity.
   `inbound_name` to the rule, generalising the `supersedes` special-case.
 - **X8 (MINOR→§5.4)** — `<TARGET>` (free-text `drift` isn't an id).
 
-**Open — touch confirmed decisions, escalated to user (see §12):**
-- **X4 (MAJOR)** — reusing `related` for PRD↔PRD = semantic/overlay collapse with
-  gov→gov; mint a directional PRD label or fold source-kind into overlay identity.
-- **X6 (MAJOR)** — "out-of-band LLM/script" migration is a weak oracle for a hard
-  cutover over committed TOML; wants a *deterministic* migrator + before/after
-  black-box goldens on `inspect`/`show`/`show --json`.
-- **X7 (MAJOR)** — migrating governance `supersedes` while leaving it
-  `LifecycleOnly` with no owning verb entrenches the IMP-032 integrity hole around
-  a bigger surface; don't migrate governance supersession in SL-048.
+**Resolved with the user (round-2 escalations, §12):**
+- **X4 (MAJOR→OD-1)** — *adopted.* Minted `consumes` (PRD→PRD), own label/overlay;
+  inbound `consumed_by`. No overlay-model change; names the seam-consumption the
+  PRDs describe, no collision with the work-`depends_on` axis.
+- **X6 (MAJOR→OD-2)** — *adopted.* Deterministic in-repo one-shot migrator
+  (unshipped) + before/after black-box goldens on `inspect`/`show`/`show --json`
+  across the corpus, asserted byte-identical.
+- **X7 (MAJOR→OD-3)** — *adopted.* Governance supersession pair excluded from
+  migration (stays typed); `related` only migrates; **+ `validate` supersession
+  cross-check** (§5.5); transactional verb → IMP-006; IMP-032 reclassified.
 
-## 12. Open decisions after external review (for user + adversarial round 2)
+## 12. Decisions after external review — RESOLVED
 
-- **OD-1 (X4)** — PRD↔PRD label: keep `related` (overlay-shared with gov) vs mint
-  directional (`reads`/`refines`/`depends_on`) vs make overlay identity =
-  (label, source-family).
-- **OD-2 (X6)** — migration rigor: deterministic in-repo script + before/after
-  goldens (keep unshipped) vs the looser script/LLM pass.
-- **OD-3 (X7)** — governance `supersedes`: exclude from migration (keep
-  `supersedes`+`superseded_by` typed together until IMP-032) vs build the
-  transactional supersede verb in SL-048 vs migrate-anyway.
+- **OD-1 (X4) → `consumes`** for PRD→PRD (own overlay), inbound `consumed_by`.
+  Grounded in PRD-011 "consumes a seam PRD-009 owns"; crisper than `builds_on`,
+  no collision with the work-dependency axis.
+- **OD-2 (X6) → deterministic script + before/after goldens** (unshipped).
+- **OD-3 (X7) → exclude supersession from migration + validate cross-check.**
+  Transactional supersede verb is IMP-006's cross-kind-lifecycle axis (a gov-only
+  build now = parallel implementation). IMP-032's "derive, don't store" framing is
+  stale (rejected by ADR-010 D4) — reclassified to the cross-check, addressed by
+  this slice. **Follow-ups recorded: IMP-006 (verb), IMP-032 (corrected).**

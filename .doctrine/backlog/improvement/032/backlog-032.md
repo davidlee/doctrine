@@ -1,10 +1,35 @@
-# IMP-032: Governance superseded_by is a stored reciprocal — derive it from supersedes, don't store it (ADR-004)
+# IMP-032: Governance superseded_by carve-out — validate cross-check vs derived reciprocal (ADR-010 D4)
 
 <!-- Backlog item body — context, detail, links. The structured, queried fields
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never
      structurally parsed (the storage rule). -->
 
-## What
+## CORRECTION (ADR-010 D4 — 2026-06-13)
+
+**This item's original premise was wrong and is superseded.** It read
+`superseded_by` as an ADR-004 violation to be *removed* ("derive it, don't store
+it"). **ADR-010 D4 reclassified it:** `superseded_by` is the ADR-004 **§5
+sanctioned reverse carve-out** — *kept, not removed*. Supersession flips the
+predecessor to terminal `superseded` (its file is rewritten regardless), so the
+verb co-writing the reverse adds zero marginal coupling and is the only honest
+place a reader of the dead record finds its successor.
+
+The honest remaining work is therefore **not** schema removal but a guard:
+
+1. **A `validate` cross-check** — stored `superseded_by` agrees with the reciprocal
+   derived from `supersedes` `in_edges`; report drift, never rewrite. **SL-048
+   (OD-3) implements this** — closes the integrity half of this item.
+2. **The carve-out becomes verb-written** (not hand-authored) once the
+   transactional supersede verb exists — that verb is **[[IMP-006]]** (uniform
+   lifecycle-transition verbs), not SL-048 (a gov-only build there = parallel
+   implementation).
+
+The stale analysis below is retained for history; do **not** act on its
+"stop storing it / remove the field" conclusion.
+
+---
+
+## What (HISTORICAL — premise corrected above)
 
 Governance kinds (ADR/POL/STD) store `superseded_by` as an authored
 `Vec<String>` field (`src/governance.rs:160`; written on the adr/policy/standard
@@ -38,4 +63,6 @@ children view, and slice `supersedes` already stores outbound-only).
   relation-governance ADR that slice needs. Asymmetric reciprocal only — `related`
   is genuinely symmetric and legitimately appears on both sides.
 
-Related: [[SL-048]] · IMP-016 (cross-corpus relations) · ADR-004 (outbound-only).
+Related: [[SL-048]] (implements the cross-check) · [[IMP-006]] (the supersede
+verb) · ADR-010 D4 (the reclassification) · ADR-004 §5 (the sanctioned carve-out)
+· IMP-016 (cross-corpus relations).

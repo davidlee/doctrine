@@ -3,12 +3,14 @@ version = 1
 
 id = 32
 slug = "governance-superseded-by-is-a-stored-reciprocal-derive-it-from-supersedes-dont-store-it-adr-004"
-title = "Governance superseded_by is a stored reciprocal — derive it from supersedes, don't store it (ADR-004)"
+title = "Governance superseded_by carve-out: validate cross-check vs derived reciprocal (ADR-010 D4)"
+# slug retained (non-authoritative; conventions §reference-form) — predates the
+# ADR-010 D4 reclassification that corrected the title below.
 kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-12"
-updated = "2026-06-12"
+updated = "2026-06-13"
 tags = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
