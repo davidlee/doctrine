@@ -1,0 +1,24 @@
+id = 58
+slug = "relation-surface-tooling"
+title = "Wire the structural relation surface end to end (read, write, scaffold, guidance)"
+status = "proposed"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+# Structural relations — uniform [[relation]] rows (SL-048 "the cut"; read
+# generically by the SL-046 reader / `inspect`). No `link` writer wired yet (this
+# slice wires it — IMP-048), so hand-authored for now (authored tier; corpus
+# `validate` is read-tolerant). These rows double as the ISS-010 render fixture.
+# Prior-art siblings SL-048/SL-046 carry no legal slice→slice label — they stay
+# prose in the scope doc (RELATION_RULES: `related` is governance-source only).
+[[relation]]
+label = "specs"
+target = "SPEC-018"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-010"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-004"
