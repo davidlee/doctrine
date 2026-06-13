@@ -116,11 +116,14 @@ the withheld-tier model.
   Eliminates the fork-from-session-HEAD trap class
   (`[[mem.pattern.dispatch.fork-rung3-base-not-session-head]]`) by construction.
   Spawn backend decided in G3.
-- **O3 — Fail-closed worker write-guard** (#2; mechanism of G2(b)). The marker
-  guard refuses doctrine-mediated authored writes when a fork-resident worker-marker
-  is present, reusing the `is_linked_worktree` precedent (two consumers today:
-  memory squash-warn, RV-verb refusal). Inverts the env contract from
-  self-arm-fail-open to marker-fail-closed; retires the C-I prose contortion.
+- **O3 — Fail-closed worker write-guard** (#2; mechanism of G2(b)). The guard
+  refuses doctrine-mediated authored writes **and** the new `Orchestrator`-class
+  verbs (fork/import/gc) under the **DC-2 dual signal** — orchestrator-set
+  `DOCTRINE_WORKER` env (catches worker-on-main) *or* a fork-resident marker
+  (backstop), reusing the `is_linked_worktree` precedent. Inverts the env contract
+  from prompt-self-arm-fail-open to orchestrator-armed; retires the C-I prose
+  contortion. **Validated by a guard-spike before G2 amends ADR-006** (inquisition
+  Charges III/IV/IX). Marker lifecycle owned (written by fork, removed by gc).
 - **O4 — `doctrine worktree import`** (#3). Collapse the funnel's deterministic,
   judgment-free steps (clean+`HEAD==B` precond, `S^==B` assert, single-non-merge
   check, R-5 name-only belt, `apply --3way` non-committing) into one fail-closed,
@@ -221,10 +224,14 @@ under-delivers to prose+code):
 - **R2 — Behaviour-preservation gate.** The funnel cadence and the existing
   worktree suites are the proof; they must stay green as mechanism migrates.
 - **A1 — IMP-004 precondition met.** IMP-003 resolved ⇒ ADR-008 actionable now.
-- **A2 — `import` interacts with the moved-shared-main patterns** (research §5.4,
+- **A2 — STRUCK (inquisition Charge II).** Originally: "the import verb must encode
+  re-anchor-vs-re-dispatch." Adjudicated to **v1 = stationary-head only**: the verb
+  refuses `head-moved` and the orchestrator re-dispatches; the moved-shared-main
+  3way+disjointness path (research §5.4,
   `[[mem.pattern.dispatch.three-way-import-onto-moved-shared-main]]`,
-  `[[mem.pattern.dispatch.reanchor-base-on-disjoint-head-move]]`). The verb must
-  encode re-anchor-vs-re-dispatch, not just the happy path.
+  `[[mem.pattern.dispatch.reanchor-base-on-disjoint-head-move]]`) is a **named
+  backlog follow-up** (`--allow-reanchor`), not v1 and not fail-open prose. Design
+  D3.
 
 ## Summary
 
@@ -242,6 +249,8 @@ not successor.
 ## Follow-Ups
 
 - Skill structural split → SL-055 (thesis #6).
+- **Moved-HEAD import re-anchor (`--allow-reanchor`) → IMP-043** (A2 struck; v1 is
+  stationary-head only — inquisition Charge II).
 - Remote-worker `format-patch`/`am` cadence → backlog if O-scope confirms need.
 - `/dispatch` routing slot → deferred (research §9).
 - `branch-point-check` naming (HEAD-stationarity, not merge-base — research §9
