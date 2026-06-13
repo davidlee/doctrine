@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebf75e27a76a2af2f13f1d9048e10"
+memory_key = "mem.pattern.dispatch.rtk-git-diff-stat-use-checkout-import"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch import under rtk: git diff is stat-proxied, use git checkout to import"
+summary = "rtk proxies git diff to a stat summary — pipe to git apply fails; import disjoint worker deltas via git checkout S -- files (or rtk proxy git diff for a real patch)"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = []
+globs = []
+commands = ["git diff", "git apply"]
+tags = ["dispatch", "funnel", "rtk", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "30eecc2d61c1f9b6c69ba8f2e474fd5704a2f0f3"
+ref_name = "refs/heads/main"
+checkout_state_id = "4b129293e4c60fa85bef03f32042f899baf44e49633d913315ce21eeed14e7cc"
+base_commit = "b609b57ffd32275b206d344ace757f467dfe00cf"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
