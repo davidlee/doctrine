@@ -322,5 +322,8 @@ not successor.
 - `/dispatch` routing slot → deferred (research §9).
 - **Channels spawn backend for claude (env-seamed, no `-p`) → IDE-004** (Charge
   XIII; optimisation tier, experimental — `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`).
+- **macOS OS-confinement (Seatbelt/`sandbox-exec`, bwrap fallback) → IMP-045** —
+  the cross-platform analog of D6/O7 nested bwrap; the OS floor under §4c's
+  deliberate-self-clear residual on non-Linux hosts.
 - `branch-point-check` naming (HEAD-stationarity, not merge-base — research §9
   C-V) → fold into O4/O8 rename or backlog.
