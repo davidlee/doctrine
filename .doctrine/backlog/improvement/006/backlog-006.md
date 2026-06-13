@@ -60,8 +60,8 @@ and parked here to avoid a gov-only point solution (parallel implementation):
 - **Unblocks the SL-048 OD-3 exclusion:** once this verb exists, governance
   `supersedes` can migrate to the uniform `[[relation]]` block alongside the rest
   of tier-1 (SL-048 excluded it precisely because no transactional owner existed).
-- SL-048 ships only the read-side guard: a `validate` cross-check that stored
-  `superseded_by` agrees with the derived `in_edges` reciprocal (see corrected
-  [[IMP-032]]).
+- SL-048 shipped only the read-side guard (PHASE-05): a `validate` cross-check that
+  stored `superseded_by` agrees with the derived `in_edges` reciprocal (see corrected
+  [[IMP-032]]). The transactional verb above remains this item's to deliver.
 
 Related: [[SL-048]] · [[IMP-032]] · ADR-010 D4 · ADR-004 §5.

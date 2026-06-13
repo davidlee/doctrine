@@ -45,6 +45,14 @@ spec/<subtype>/NNN/
 
 ### The relational spine
 
+A spec's relations sit within the **cross-corpus relation contract (SPEC-018**,
+governed by ADR-010) — this spec does not re-tell that model. Its axes are the
+contract's **tier-2 typed** edges: single-valued, payload-carrying, or
+required-field relations that keep a bespoke shape rather than the uniform tier-1
+`[[relation]]` block (lineage `descends_from`/`parent`, `members`, `interactions`).
+That partition rationale and the outbound-only rule are SPEC-018's; the kind-specific
+mechanism is below.
+
 The spine places a spec in the corpus tree, authored as TOML and gated by `validate`:
 `descends_from` is the single-valued tech→product capability link; `parent` is the
 single acyclic decomposition parent; `c4_level` is the closed C4 set; `[[source]]`
@@ -72,7 +80,8 @@ pass flags hard rather than one the producer silently rolls back.
 Tech specs carry an `interactions.toml` of outbound `[[edge]]` rows — `uses`/`calls`
 peer relations to other tech specs, the relation distinct from `parent` containment.
 Product specs have no interactions file at all (absent, not empty). Edges are
-outbound-only (ADR-004); the reverse direction is derived, never authored twice.
+outbound-only per the SPEC-018 / ADR-004 contract; the reverse direction is derived,
+never authored twice.
 
 ### Reassembly and integrity
 
