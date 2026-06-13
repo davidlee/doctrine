@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebecc07467b009ee5ea3789c170ef"
+memory_key = "mem.pattern.deps.transitive-dep-not-nameable-declare-direct-no-default-features"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Transitive dep is in the graph but not on the extern prelude — declare direct to name it, default-features=false to keep weight zero"
+summary = "A transitive dep is in the lockfile but not nameable; declare it direct to use it — with default-features=false or it pulls NEW crates"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["Cargo.toml"]
+globs = []
+commands = []
+tags = ["dependencies", "cargo", "crossterm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3929b7a09b941bfb78d5f9704da2d0d38dc9c72e"
+ref_name = "refs/heads/main"
+checkout_state_id = "534193d4ca827de3fbe3b13f0ea6b2d22df47110a4b62dc4c7a4093a72ecc867"
+base_commit = "14b93a0f833a4fabd9ca046e6b9bcb6b1111a270"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
