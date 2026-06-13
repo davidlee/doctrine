@@ -64,9 +64,13 @@ invariant (NF-001).
 - **No compat jank** (user directive). Legacy/check-less entries are surfaced as a
   loud backfill signal, never papered over. Conscious test churn (e.g. relocated
   CLI goldens) is preferred to backward-compat shims.
-- **Behaviour-preservation.** SL-042/044 read+drift suites and the conduct suite
-  stay green; the engine invariants (4-tuple key, `drift` matrix, sole-writer) are
-  untouched.
+- **Behaviour-preservation (scoped — F-V).** Two distinct claims, not one. (a) The
+  **engine/fold invariants** — 4-tuple key, `upsert` no-clobber, the `drift` matrix,
+  `composite`, `reconcile`-sole-writer, and `conduct::parse` — stay green
+  **byte-unchanged**; *that* is the preservation gate (CLAUDE.md). (b) The
+  **CLI-surface goldens** churn **consciously** under D4 (bare `coverage` →
+  `coverage show`); they are *not* part of the preservation proof. Do not conflate:
+  a zero-test-edit run is the gate only for (a).
 - **Clippy denies** (repo): `var_os` not `env::var`; `BTreeMap` not `HashMap`; no
   `expect`/`unwrap` in non-test; `Vec`-concat string assembly; `expect`+reason not
   `allow`.
@@ -103,7 +107,8 @@ invariant (NF-001).
   │ coverage_store.rs     impure: load/save ONE slice coverage.toml; record/forget = load→upsert|retain→save
   │                       (NEW — nothing writes coverage.toml today; render + atomic tempfile write, entity.rs precedent)
   │ coverage_verify.rs    impure shell: read doctrine.toml; dedup by argv (GLOBAL over the invocation);
-  │                       ONE run per argv (Command); per-entry matcher eval; derive_status; re-stamp git::head_sha; save
+  │                       ONE run per argv (Command, cwd=root, timeout→Blocked); per-entry matcher eval;
+  │                       derive_status; re-stamp git::head_sha ONLY on a Ran outcome; save
   └───────────────────────────────────────────────────────┘
         │ writes coverage.toml (observed)         × never authored requirement status (NF-001)
 ```
@@ -116,6 +121,7 @@ invariant (NF-001).
 [verification]
 command        = ["cargo", "test"]   # project-default base argv (optional)
 default-source = "stdout"            # default matcher source (optional)
+timeout-secs   = 300                 # per-run wall-clock cap (optional; baked default 300)
 
 [verification.aliases]
 unit = ["cargo", "test"]             # name -> base argv
@@ -123,39 +129,59 @@ e2e  = ["pnpm", "test:e2e"]
 ```
 
 **VT check on a coverage entry** — runnable = `base ++ extra_args`, where `base` =
-`aliases[alias]` | literal `command` | project-default `command`:
+`aliases[alias]` | literal `command` | project-default `command`. The matcher rule
+follows the **D3 recast (A)**: a *shared/derived* base (project-default `command`,
+`alias`) cannot prove *your* case, so it MUST carry a non-empty matcher;
+exit-code-only is permitted ONLY on an entry-local literal `command` (a conscious,
+flagged opt-out):
 
 ```toml
 [[entry]]
 mode    = "VT"
-# (a) default base, matcher REQUIRED:
-matcher = { source = "stdout", pattern = "coverage::upsert .* ok" }
-# (b) explicit literal command, matcher OPTIONAL:
+# (a) default base — matcher REQUIRED (shared base, non-empty pattern).
+#     Default is a LITERAL SUBSTRING (D8) — no regex-escaping of `.`/`(`:
+matcher = { source = "stdout", pattern = "test result: ok. 5 passed" }
+#     opt into regex with `regex = true`:
+# matcher = { source = "stdout", pattern = "coverage::\\w+ .* ok", regex = true }
+# (b) explicit literal command — matcher OPTIONAL (exit-code-only; the verifier
+#     REPORTS this cell as `exit-code-only`, never silently trusts it):
 # command = ["cargo", "test"]
 # extra-args = ["coverage::upsert"]
-# (c) alias, matcher REQUIRED (shared base doesn't prove your case):
+# (c) alias — matcher REQUIRED, non-empty (shared base; the empty-pattern opt-out
+#     is REJECTED here — it lives only with a literal `command`):
 # alias = "unit"
-# matcher = { pattern = "" }   # empty == conscious exit-code-only opt-out
+# matcher = { source = "stdout", pattern = "coverage::upsert ... ok" }
 ```
 
 **Verdict (pure fold over a shell-produced outcome):**
 
 | outcome | status |
 |---|---|
-| couldn't run (unknown alias / no runnable base / spawn fail / unreadable matcher source) | `Blocked` |
+| couldn't run (unknown alias / no runnable base / spawn fail / **timeout** / unreadable-or-unparseable matcher source) | `Blocked` |
 | ran, `exit 0` AND (matcher matches, when present) | `Verified` |
 | ran, otherwise (`exit≠0` or matcher miss) | `Failed` |
 
+A **timeout** (wall-clock > `[verification].timeout-secs`, baked default 300) is a
+*couldn't-run*, not a `Failed` — the command never returned a verdict, so it yields
+`Blocked` (INV-3 holds: never defaulted-green).
+
 **Validity (record-time, fail-fast) — two composed checks (F-1):**
 - `coverage::valid(&VtCheck)` (pure, config-free): `mode ∈ {VT,VA,VH}`; `alias ⊕
-  command` (never both); **matcher mandatory unless explicit `command`**; matcher
-  regex parses.
+  command` (never both); the **D3-recast matcher rule (A)** — a *non-empty* matcher
+  is mandatory unless an entry-local literal `command` is set; an empty/absent
+  matcher on an `alias` or the project-default base is **rejected**, and an empty
+  pattern is legal *only* alongside a literal `command`; **when `regex = true` (D8)
+  the pattern must parse as `regex_lite`** (a substring pattern never fails to parse,
+  so the parse check is regex-mode-only); and the **glob-confinement rule (F-III)** —
+  a `File(glob)` source must be repo-tree
+  relative: absolute paths and any `..` ascent above `root` are rejected here.
 - `verify::resolve(cfg, check)` (needs config): a runnable base actually resolves
   (`alias` exists / a default `command` is present) — else `ResolveError`.
 
 The `record` shell runs both before writing; `valid` alone cannot judge base
-resolution (it has no config). Malformed matcher regex is rejected here, not left
-to surface as a `Failed`/`Blocked` at verify.
+resolution (it has no config). Malformed matcher regex, an empty matcher on a shared
+base, and an escaping `File` glob are all rejected here — never left to surface as a
+`Failed`/`Blocked` at verify.
 
 ### 5.3 Data, State & Ownership
 
@@ -166,18 +192,24 @@ struct VtCheck {                      // additive Option<VtCheck> on CoverageEnt
     alias: Option<String>,            // XOR command
     command: Option<Vec<String>>,     // explicit literal argv
     extra_args: Vec<String>,          // appended onto resolved base
-    matcher: Option<Matcher>,         // required unless `command` set
+    matcher: Option<Matcher>,         // D3/A: required (non-empty) unless literal `command`
 }
 struct Matcher {
     source: Option<MatchSource>,      // None => project default => baked Stdout
-    pattern: String,                  // regex_lite; "" => always matches (opt-out)
+    pattern: String,                  // "" (always-matches) LEGAL only with literal command
+    regex: bool,                      // D8: false (default) => literal substring; true => regex_lite
 }
-enum MatchSource { Stdout, Stderr, File(String /* glob */) }
+enum MatchSource { Stdout, Stderr, File(String /* glob; repo-tree-relative, no abs/.. — F-III */) }
 
 enum RunOutcome { Unobtainable, Ran { exit_ok: bool, matched: Option<bool> } }
 fn derive_status(&RunOutcome) -> CoverageStatus       // the verdict table (pure)
-fn evaluate_matcher(pattern, haystack) -> Option<bool> // None = unparseable pattern; empty => Some(true); else regex_lite
-fn valid(&VtCheck) -> Result<(), …>                   // XOR + matcher rule + regex-parses (pure; NOT base resolution — F-1)
+fn evaluate_matcher(pattern, regex, haystack) -> Option<bool>
+//   substring (regex=false): Some(haystack.contains(pattern)) — empty => Some(true); NEVER None (always parses)
+//   regex (regex=true): None if unparseable; else Some(re.is_match) — empty => Some(true) (regex_lite)
+// matched: None inside Ran => no matcher present => the shell REPORTS the cell as
+// `exit-code-only` (D3/A); derive_status treats it as "matched" for the exit verdict.
+fn valid(&VtCheck) -> Result<(), …>                   // XOR + D3/A matcher rule + glob-confinement
+                                                       // + regex-parses (pure; NOT base resolution — F-1)
 ```
 
 `verify.rs` (leaf): `VerificationConfig { command, default_source, aliases }` +
@@ -188,6 +220,13 @@ pure `resolve(cfg, check) -> Resolved { argv, source } | ResolveError
 mutates, keyed to the owning slice. `verify` changes only `status` + `git_anchor`;
 the 4-tuple key, `touched_paths`, and `check` are preserved through `upsert`.
 Authored requirement status is never read or written here.
+
+**Date seam (F-VI — no hidden clock, ADR-001).** A VA/VH `record` stamps
+`attested_date`; the clock is **injected**, not read in the write path — the
+`record` shell takes `today: Date` (the existing date/uid pattern) with an optional
+`--attested-date` CLI override for backfill. VT `record` leans `Planned` with no
+`attested_date` (OQ-2); `verify` derives the real status and re-stamps `git_anchor`
+(not `attested_date` — that axis is VA/VH attestation, not VT execution).
 
 **Config reader (decision D2 — shared single reader).** Promote a `dtoml.rs`
 owning the outer `DoctrineToml { conduct: ConductConfig, verification:
@@ -205,27 +244,44 @@ No second `doctrine.toml` parser.
    (the resolver `coverage_scan` already uses — `None` on unborn/non-repo HEAD).
 3. **Dedup (global over the invocation — F-2):** group *all* runnable VT entries
    being verified — across every slice swept by `--all` — by resolved `argv`; run
-   each distinct `argv` **once** (`Command::new(argv[0]).args(&argv[1..]).output()`).
-   Per-slice is the *write* unit (§5.3); dedup spans the whole invocation, or a
-   project whose default is `cargo test` would run the full suite once per slice.
+   each distinct `argv` **once**, **with `cwd = root`** (so `cargo test` and a
+   relative `File(glob)` are deterministic — F-VII) and a **wall-clock cap**
+   (`[verification].timeout-secs`, baked default 300): expiry ⇒ kill ⇒ `Unobtainable`
+   ⇒ `Blocked`. Per-slice is the *write* unit (§5.3); dedup spans the whole
+   invocation, or a project whose default is `cargo test` would run the full suite
+   once per slice.
 4. Per entry: build `RunOutcome` — `exit_ok` from `status.success()`; for a matcher,
    `evaluate_matcher(&m.pattern, captured(source))` → `Some(bool)`, or `None` for an
    **unparseable hand-edited pattern** ⇒ `Unobtainable` ⇒ `Blocked` (a config error,
    not a test contradiction — F-3). `source` text is stdout/stderr from the captured
-   `Output`, or a `File(glob)` read from disk (unreadable/no-match ⇒ `Unobtainable`).
-5. `upsert(status = derive_status(outcome), git_anchor = head)`; preserve key /
-   `touched_paths` / `check`.
-6. `coverage_store::save(root, slice, &file)`. Report per entry (`key: old → new`)
-   plus the loud **"N VT entries lack a check — backfill"** line.
+   `Output`, or a `File(glob)` read from disk: the glob is **resolved under `root`**
+   (absolute/`..`-escaping globs were rejected at record-`valid`, F-III), and its
+   matches are **searched as one concatenation — any-match** (OQ-6 resolved); empty
+   match-set or unreadable ⇒ `Unobtainable`.
+5. `upsert(status = derive_status(outcome), git_anchor = …)`; **re-stamp `git_anchor
+   = head` ONLY on a `Ran{..}` outcome — a `Blocked`/`Unobtainable` cell keeps its
+   prior anchor (F-VIII)**, so staleness still bites a never-observed cell. Preserve
+   key / `touched_paths` / `check`.
+6. `coverage_store::save(root, slice, &file)`. Report per entry (`key: old → new`),
+   flagging any **`exit-code-only`** cell (literal `command`, no matcher — D3/A) so
+   it is auditable, plus the loud **"N VT entries lack a check — backfill"** line.
 
-**Re-stamp HEAD on every verify** — "last observed at HEAD"; staleness resets to
-Fresh after a green verify. This *is* the continuous re-derivation.
+**Re-stamp HEAD on every *ran* verify** — "last observed at HEAD"; staleness resets
+to Fresh after a verify that actually executed (`Verified`/`Failed`). A `Blocked`
+cell was *not* observed, so its anchor does not advance (F-VIII). This *is* the
+continuous re-derivation — honest about what was and was not seen.
 
 **Transient-verification resolution map** (so nothing becomes noisy-unresolvable):
 - whole-requirement transient → `Retire`/`Supersede` the requirement → `drift` =
   Coherent (existing).
 - cell-level transient on a live requirement → `coverage forget <key>` (new) — a
   `Failed`/`Blocked` cell otherwise poisons the live req's composite forever.
+  **Accountable (F-IV):** `forget` emits a loud **evidence-withdrawal** line naming
+  the 4-tuple key and the status erased (`withdrew SL-…/REQ-…/…/VT [Failed]`), so a
+  deletion that flips a composite green is never silent. It is the *sanctioned*
+  transient-cell tool, but its use is visible. (Whether closure should additionally
+  gate on a live `Failed` coverage cell — i.e. forbid "delete the red to close" — is
+  out of SL-057 scope; see R5 + RSK-008.)
 - VA/VH transient → decays via the existing staleness seam (stale-verified ⇒
   `Indeterminate`, not `Divergent`); SL-057 does not *run* VA/VH.
 
@@ -238,10 +294,19 @@ Fresh after a green verify. This *is* the continuous re-derivation.
   (no defaulted-green; SPEC-002 failure-mode).
 - **Edge — check-less legacy VT.** Not run; status left untouched; reported as
   backfill-needed (no auto-`Blocked`, which would manufacture noise; no shim).
-- **Edge — empty matcher pattern.** Trivially satisfied ⇒ verdict on exit alone.
-- **Edge — malformed regex.** Rejected at record-time validity (fail-fast); a
-  hand-edited one surviving into `coverage.toml` ⇒ `Blocked` at verify, never a
-  silent `Failed` (F-3).
+- **Edge — empty matcher pattern.** Trivially satisfied ⇒ verdict on exit alone —
+  but **legal only alongside a literal `command`** (D3/A); on an `alias`/default base
+  it is rejected at record-`valid`. Such cells are reported `exit-code-only`.
+- **Edge — malformed regex (regex-mode only, D8).** A `regex = true` pattern is
+  parse-checked at record-time validity (fail-fast); a hand-edited bad one surviving
+  into `coverage.toml` ⇒ `Blocked` at verify, never a silent `Failed` (F-3). A
+  substring pattern (default) has no malformed case.
+- **Edge — escaping `File` glob (F-III).** An absolute or `..`-ascending glob is
+  rejected at record-`valid`; a hand-edited one surviving into `coverage.toml`
+  resolves under `root` and finds nothing outside it ⇒ `Unobtainable` ⇒ `Blocked`.
+  The verifier never reads a host file above the repo tree.
+- **Edge — timeout (F-VII).** A command exceeding `timeout-secs` is killed ⇒
+  `Unobtainable` ⇒ `Blocked` (never a `Failed`, never a hang).
 - **Edge — `record` covers all modes (F-4).** `record`/`forget` are the general
   observed-tier write/withdraw path (VT/VA/VH); the check + `verify` machinery
   applies to **VT only**. A VA/VH record carries `status` + `attested_date`, no
@@ -264,8 +329,10 @@ Fresh after a green verify. This *is* the continuous re-derivation.
 - **OQ-5.** Is `touched_paths` meaningful on a VT check? `verify` re-stamps
   `git_anchor = HEAD` ⇒ staleness is Fresh immediately after, so `touched_paths`
   only bites *between* verifies. Lean optional for VT → `/plan`.
-- **OQ-6.** `File(glob)` matching multiple files — search the concatenation, any-match,
-  or reject ambiguity? → `/plan` / impl.
+- **OQ-6 (RESOLVED — F-VII).** `File(glob)` matching multiple files: search the
+  **concatenation of all matches (any-match)**; empty match-set ⇒ `Unobtainable` ⇒
+  `Blocked`. Resolved in design (verdict-affecting — not deferrable to impl); glob is
+  repo-tree-confined (F-III).
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -277,10 +344,19 @@ Fresh after a green verify. This *is* the continuous re-derivation.
   by their modules.** *Alt rejected:* a second independent parser (the parallel
   reader CLAUDE.md forbids); bolting `verification` onto `conduct`'s struct (poor
   cohesion).
-- **D3 — verdict = `exit 0 ∧ matcher`; matcher mandatory unless explicit `command`.**
-  Kills vacuous satisfaction while keeping single-lang bookkeeping light via a
-  project-default command + default source. *Alt rejected:* unconditional matcher
-  (heavy); exit-code-only (vacuous-pass trap).
+- **D3 (recast A — anti-vacuity, F-I/F-II) — verdict = `exit 0 ∧ matcher`; a
+  non-empty matcher is mandatory on any *shared/derived* base (project-default
+  `command`, `alias`), and exit-code-only is permitted ONLY on an entry-local
+  literal `command`, where the verifier *reports* the cell as `exit-code-only`.**
+  The original "matcher unless explicit `command`" left a hole: a literal
+  `command = ["cargo","test"]` (or an empty matcher on an alias) ran the whole suite
+  and minted `Verified` — the vacuous-pass §4 forbids. The recast enforces structure
+  where the framework *can* prove vacuity (a shared base cannot target your case) and
+  makes the residual (a hand-authored literal command) a conscious, **flagged**,
+  auditable act rather than a silent copy-paste. *Alt rejected:* unconditional matcher
+  on every base (heavy; a bespoke fail-on-absence command must carry redundant
+  bookkeeping — option C); `extra_args`-narrowing as proof (option B — a filter
+  matching zero tests still exits 0, so narrowing ≠ execution).
 - **D4 — `coverage` becomes a subcommand group (`show`/`record`/`verify`/`forget`).**
   clap can't disambiguate a bare positional `<REFERENCE>` from subcommand names.
   Conscious golden/skill churn over a shim.
@@ -289,8 +365,20 @@ Fresh after a green verify. This *is* the continuous re-derivation.
   unit. *Alt rejected:* verify-by-requirement (writes scatter across many files).
 - **D6 — `forget` (removal), not a withdrawn `CoverageStatus`.** Resolves the
   transient-cell case without perturbing the shared `drift`/`composite` folds.
+  **Accountable (F-IV):** `forget` is loud — it prints an evidence-withdrawal line
+  naming the key + erased status — so deleting a red cell is never silent. The
+  stronger guard (closure refusing while a live `Failed` cell exists) is deferred
+  out of scope (R5 + backlog), not adopted, to avoid perturbing the close-gate here.
 - **D7 — no compat jank for legacy entries.** Surface backfill loudly; update
   affected tests consciously. *Per user directive.*
+- **D8 — matcher is a literal substring by default; regex is opt-in (`regex = true`).**
+  A plain `pattern` matches by `haystack.contains(pattern)`, so test output
+  containing regex metacharacters (`.`, `(`, `+`) needs no escaping — the common
+  case. `regex = true` selects `regex_lite` for the power case. *Rationale:* least
+  surprise + least typing for the dominant "this literal line appears" intent; no
+  compat cost (zero production check entries pre-SL-057). *Alt rejected:* regex-only
+  (forces escaping ordinary punctuation — the prior shape); XOR `regex`/`substring`
+  keys (heavier than one bool for a binary mode).
 
 ## 8. Risks & Mitigations
 
@@ -300,33 +388,55 @@ Fresh after a green verify. This *is* the continuous re-derivation.
   non-vacuity guard.
 - **R2 — the shared `dtoml` refactor regresses conduct.** *Mitigation:* `conduct::parse`
   kept as a delegate; conduct suite green unchanged is the proof.
-- **R3 — arbitrary subprocess execution.** The verifier runs project-config commands.
-  *Mitigation:* commands come only from the committed root `doctrine.toml`
-  (`[verification]`), never from per-entry free-text in untrusted corpus data; argv
-  is a list (no shell splitting).
+- **R3 — arbitrary subprocess execution + arbitrary file read.** The verifier runs
+  project-config commands *and* reads `File(glob)` matcher sources. *Mitigation:*
+  **commands** come only from the committed root `doctrine.toml` (`[verification]`),
+  never per-entry; argv is a list (no shell splitting). The **matcher `File` source**
+  *is* per-entry corpus free-text (F-III) — so it is confined: the glob is
+  repo-tree-relative, absolute/`..`-escaping globs rejected at record-`valid`,
+  resolution rooted at `root`. No host file above the repo is ever read.
 - **R4 — clippy ceilings on the many-flag `record` handler.** *Mitigation:* args
   struct, not N params (`cli-handler-args-struct`).
+- **R5 (deferred, F-IV) — `forget` as closure-evasion.** Deleting a `Failed` cell to
+  flip a composite green is *visible* (D6 loud line) but not *prevented*; closure
+  does not yet gate on a live `Failed` coverage cell. *Disposition:* out of SL-057
+  scope (would perturb the close-gate); captured as RSK-008. Accepted
+  residual: an auditor can see the withdrawal, but tooling does not block it.
 
 ## 9. Quality Engineering & Validation
 
 Evidence the slice produces — see also the requirements proposed below (minted +
 wired as `requirements` rows at `/plan`):
 
-- **`coverage.rs` (VT):** `derive_status` truth table; `evaluate_matcher` (empty,
-  match, miss, bad-regex); `valid` reject matrix; `VtCheck`/`Matcher` round-trip +
-  additive parse of a pre-SL-057 entry.
-- **`verify.rs` (VT):** tolerant parse; alias resolution; both-base reject; default
-  fallback; source precedence (entry → default → Stdout).
+- **`coverage.rs` (VT):** `derive_status` truth table (incl. timeout/`Unobtainable`
+  ⇒ `Blocked`, F-VII); `evaluate_matcher` (D8) — substring match/miss, **metachar
+  (`.`/`(`) matched literally in substring mode**, regex match/miss, `regex=true`
+  bad-pattern ⇒ `None`, empty ⇒ `Some(true)` both modes; `valid`
+  reject matrix — incl. **empty/absent matcher on `alias`/default ⇒ reject, empty
+  matcher with literal `command` ⇒ accept (D3/A)**, and **`File` glob absolute /
+  `..`-escaping ⇒ reject (F-III)**; `VtCheck`/`Matcher` round-trip + additive parse
+  of a pre-SL-057 entry.
+- **`verify.rs` (VT):** tolerant parse (incl. `timeout-secs`); alias resolution;
+  both-base reject; default fallback; source precedence (entry → default → Stdout).
 - **`coverage_verify` (VT):** dedup (one argv → one run, N entries); exit/matcher →
-  status; spawn-fail / unknown-alias ⇒ `Blocked`; HEAD re-stamp; key/`touched_paths`
-  preserved; check-less VT reported + untouched.
+  status; spawn-fail / unknown-alias / **timeout** ⇒ `Blocked`; **`git_anchor`
+  re-stamped on `Ran` but NOT on `Blocked` (F-VIII)**; `cwd = root` (F-VII);
+  confined-glob any-match (F-VII/OQ-6); **`exit-code-only` cell flagged in the report
+  (D3/A)**; key/`touched_paths` preserved; check-less VT reported + untouched.
+- **`forget` (F-IV):** removes the keyed cell AND emits the evidence-withdrawal line
+  naming key + erased status; a test asserts the line fires on a `Failed` cell.
+- **Date seam (F-VI):** `record` of a VA/VH stamps the **injected** `today` (and the
+  `--attested-date` override); a test asserts no clock is read in the write path.
 - **NF-001 guard (VA/VH framing, structural):** drive `run()` end-to-end, vary run
   outcomes, assert the requirement entity's authored status on disk is unchanged and
   only `coverage.toml` mutated.
-- **CLI (VT, black-box goldens):** `record` happy-path + each validity reject;
+- **CLI (VT, black-box goldens):** `record` happy-path + each validity reject
+  (empty-matcher-on-shared-base, escaping-glob, bad-regex, both-base);
   `verify`/`forget` surface; relocated `show`.
-- **Behaviour-preservation:** SL-042/044 read+drift + conduct suites green;
-  consciously-updated bare-`coverage` → `coverage show` goldens.
+- **Behaviour-preservation (scoped — F-V):** (a) **the gate** — SL-042/044 read+drift
+  fold suites + the conduct suite stay green **byte-unchanged** (no test edits);
+  (b) **conscious churn** — the bare-`coverage` → `coverage show` CLI goldens are
+  updated by hand (D4), and are explicitly *not* part of (a).
 - **Dogfood closure (optional):** SL-057 records VT checks for its own requirements
   and `verify`s them green at `/close` — replacing the hand-authored backfill.
 
@@ -365,5 +475,30 @@ called from `coverage_scan`); the `not(test)` dead_code expect on `coverage.rs`
 write helpers (this slice retires it); `conduct.rs` private `DoctrineToml`
 (the D2 delegate target); `CoverageStatus` has no withdrawn variant (D6 rationale).
 
-**Pending external pass:** offer `/inquisition` or an external adversarial reviewer
-(codex / Opus sub-agent) before lock — see next step.
+**Adversarial review pass 2 — Inquisition (`inquisition.md`, integrated above).**
+Eight charges, all upheld; dispositions integrated:
+
+- **F-I/F-II (GRAVE) — anti-vacuity guard hollow.** A literal `command=["cargo","test"]`
+  (or an empty matcher on an alias) minted `Verified` over the whole suite. *Fixed
+  §4/§5.2/§5.3/§7-D3 (recast A):* non-empty matcher mandatory on shared/derived bases;
+  exit-code-only only on a literal `command`, reported `exit-code-only`.
+- **F-III (GRAVE, security) — `File(glob)` arbitrary disk read** from per-entry corpus
+  data, contra R3's own trust boundary. *Fixed §5.2-validity/§5.3/§5.5/§8-R3:*
+  repo-tree-confined glob; absolute/`..` rejected at record-`valid`; rooted at `root`.
+- **F-IV (SERIOUS) — `forget` silent evidence erasure.** *Fixed §5.4/§7-D6:* loud
+  evidence-withdrawal line; the stronger closure-gate-on-`Failed` deferred (R5 +
+  backlog), not silently adopted.
+- **F-V (MODERATE) — behaviour-preservation overclaim.** *Fixed §3/§9:* split into
+  (a) engine/fold suites byte-green = the gate vs (b) consciously-churned CLI goldens.
+- **F-VI (MODERATE) — `attested_date` hidden clock.** *Fixed §5.3:* injected `today`
+  + `--attested-date`; no clock in the write path.
+- **F-VII (MODERATE) — cwd/timeout/multi-match deferred.** *Fixed §5.1/§5.4/§6-OQ-6:*
+  `cwd=root`; `timeout-secs`→`Blocked`; OQ-6 resolved (concatenation any-match).
+- **F-VIII (MINOR) — HEAD re-stamp on un-run `Blocked`.** *Fixed §5.4/§5.5:*
+  `git_anchor` advances only on a `Ran` outcome; `Blocked` keeps its prior anchor.
+
+**Verified against source (pass 2):** `CoverageStatus` carries no `Withdrawn` (D6);
+the self-retiring `not(test)` dead_code expect on `coverage.rs`; `git::head_sha`;
+`conduct.rs` private `DoctrineToml` (only `[conduct]`, tolerant — D2 target); no
+production `coverage.toml` writer (F-5); `regex-lite`+`glob` in-tree; the bare
+`Coverage { reference }` positional D4 relocates.
