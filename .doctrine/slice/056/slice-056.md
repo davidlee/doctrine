@@ -62,23 +62,63 @@ Enforcement composes across three altitudes (not competing):
 Consolidated theme: **trust topology + spawn seam, carried by CLI mechanism
 verbs.** In scope:
 
-- **O1 — ADR-008 accept/revise** (first phase gate). Reconcile the parked ADR
-  against SL-050/051 dispatch evidence; accept or revise D-B1/D-B3; record the
-  spawn-backend decision. May also amend ADR-006 D5 (creation moves orchestrator-
-  side) and D2a/D2b (CLI guard as the harness-agnostic D2b layer). Record D-B2 as a
-  standing structural fact (host `~/.cargo/bin/doctrine` ro-bound ⇒ in-jail
-  `cargo install` impossible regardless — no race because no install).
-- **O2 — Orchestrator-owned fork + spawn seam** (#1). Orchestrator runs
+**Governance deliverables (G-group) — design-phase outputs, decisions govern.**
+Produced as *drafts within this slice*, not assumed; ordered first because they
+govern the code (sequencing below). Scope audit (verdicts grounded in ADR-006,
+ADR-008, SPEC-012):
+
+- **G1 — ADR-008 revise → accept** (the gate). Still `proposed`, predates the
+  SL-050/051 dispatch experience. Fold the research §5.1 evidence cluster (it
+  validates D-B1's premise empirically); record D-B2 as a *standing structural
+  fact* (flake already ro-binds `~/.cargo/bin/doctrine` ⇒ in-jail `cargo install`
+  impossible — no race because no install); re-scope D-B3's spike around the
+  nested-userns feasibility question (OQ-2). **Acceptance gates the IMP-004 work**
+  — the natural first phase of SL-056.
+- **G2 — ADR-006 amendments** (accepted; targeted edits, not a rewrite — the
+  withheld-tier model D1/D4/D9 invariants are preserved). Two amendments:
+  (a) **D5/D9 creation-ladder preference** — demote harness-native from "prefer"
+  to opportunistic/never-depended (base-pinning + subprocess-spawn kill it for
+  workers); align the ADR to exercised reality, citing SL-050/051.
+  (b) **D2a mechanism** — replace the `DOCTRINE_WORKER=1` self-arm with a
+  **fork-resident worker-marker** written by the orchestrator at fork creation.
+  This resolves the D6a tension: D6a's principle is "the *mode*, not the location,
+  decides who may write" — a marker the *trusted* orchestrator writes before any
+  worker exists is still mode, just recorded durably in the fork instead of
+  self-armed env. Fail-closed for dispatch; solo forks get no marker; D6a intact.
+- **G3 — ADR-011 (new): the spawn seam.** ADR-006 is silent on *how* workers are
+  spawned; subprocess-with-env-seam vs harness-native sub-agent is a
+  framework-level (harness-agnostic) decision deserving its own context. One
+  coherent decision: orchestrator-owned fork + subprocess spawn + what that buys
+  (worker env-arm, per-worktree `CARGO_TARGET_DIR`, bwrap wrap). ADR-006-references;
+  cleaner than a D10 bolt-on.
+- **G4 — SPEC-012 rewrite** (`draft`; all-pending FRs ⇒ cheap now, expensive
+  later). Its container philosophy — "what ships is exactly the machinery the
+  funnel *cannot* enforce in prose… the funnel is a discipline, not enforced code"
+  — is the exact sentence the thesis attacks. Reframe Overview + Concerns; rewrite
+  D3 (currently "fails open at the env boundary") to the fail-closed marker; add a
+  D for the verb family; add FRs (import verb, gc verb, orchestrator-fork verb,
+  marker guard).
+
+Untouched governance (every proposal preserves exclusion-by-construction):
+ADR-007 (turn-based ledger — orthogonal), ADR-001/003/004 (layering/loop/relations),
+the withheld-tier model.
+
+**Mechanism objectives (carried by the G-decisions):**
+
+- **O2 — Orchestrator-owned fork** (#1 — *ADR-006 compliance, not amendment*).
+  D9 already mandates the orchestrator provision + baseline-verify "before handing
+  the worker its task"; worker-self-fork lives only in the *skills* — that's drift
+  from ADR-006, and the strongest move is compliance. Orchestrator runs
   `git worktree add <dir> <branch> <B>` + `provision` itself (trusted, worker-mode
   OFF, knows `B` mechanically) and spawns the worker pointed at a ready fork.
   Eliminates the fork-from-session-HEAD trap class
-  (`[[mem.pattern.dispatch.fork-rung3-base-not-session-head]]`) by construction
-  rather than guarding against it. Decide the spawn backend (subprocess vs Agent).
-- **O3 — Fail-closed worker write-guard** (#2). Extend the existing
-  `is_linked_worktree` precedent (two consumers today: memory squash-warn,
-  RV-verb refusal) so doctrine-mediated authored writes refuse by default on any
-  linked worktree; orchestrator/solo opt out explicitly. Inverts D2a from
-  self-arm-fail-open to fail-closed; retires the C-I prose contortion.
+  (`[[mem.pattern.dispatch.fork-rung3-base-not-session-head]]`) by construction.
+  Spawn backend decided in G3.
+- **O3 — Fail-closed worker write-guard** (#2; mechanism of G2(b)). The marker
+  guard refuses doctrine-mediated authored writes when a fork-resident worker-marker
+  is present, reusing the `is_linked_worktree` precedent (two consumers today:
+  memory squash-warn, RV-verb refusal). Inverts the env contract from
+  self-arm-fail-open to marker-fail-closed; retires the C-I prose contortion.
 - **O4 — `doctrine worktree import`** (#3). Collapse the funnel's deterministic,
   judgment-free steps (clean+`HEAD==B` precond, `S^==B` assert, single-non-merge
   check, R-5 name-only belt, `apply --3way` non-committing) into one fail-closed,
@@ -128,13 +168,28 @@ verbs.** In scope:
   consumers (ADR-001 leaf; preserve pure/imperative split).
 - `src/main.rs` — CLI wiring + read/write classification for the new verbs.
 - `src/git.rs` — any new git reads behind the verbs (the impure seam).
-- ADR-006 (amend D5/D2 if O1 concludes so), ADR-008 (accept/revise + spawn-backend
-  decision).
+- **Governance (the G-deliverables):** ADR-008 (G1, revise→accept), ADR-006
+  (G2, amend D5/D9 + D2a), **ADR-011 (G3, new — spawn seam)**, SPEC-012 (G4,
+  rewrite Overview/Concerns/D3 + new D + new FRs).
 - Skill prose: `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md`
   (+ re-embed ritual `[[mem.pattern.distribution.skill-refresh-command]]`).
 - `flake.nix` — minimal; per-worktree env is set at spawn, not baked (ADR-008
   D-B5). A `dispatch-worker` bwrap profile only if O7 lands.
 - Backlog: IMP-004 (the spike — this slice exercises it), IMP-041 (O5 answers it).
+
+## Sequencing
+
+Order matters — **decisions govern, so they land first**; the design phase must
+*produce the ADR/spec drafts as deliverables*, not assume them (else the slice
+under-delivers to prose+code):
+
+1. **G1 + G3** — ADR-008 revise/accept (the IMP-004 gate) and ADR-011 spawn-seam.
+2. **G2** — ADR-006 amendments (D5/D9 ladder, D2a marker), once G3 fixes the spawn
+   backend the marker mechanism rides.
+3. **G4** — SPEC-012 rewrite (downstream of the ADR decisions).
+4. **Code** — O2/O3 (fork + marker guard), O4/O5 (import/gc verbs), O6 (build
+   isolation), O7 (bwrap spike), then O8 (skill prose calls the verbs) — last,
+   because the prose carriers describe the now-shipped mechanism.
 
 ## Risks / Assumptions / Open Questions
 
@@ -143,7 +198,7 @@ verbs.** In scope:
   O2/O3/O6/O7 all weaken to prompt-level). Four needs point at subprocess (env-arm,
   per-wt target, bwrap, base-pin); the design question is which backend per harness
   and whether `Agent` survives as a degraded rung at all. Gates the achievable
-  enforcement altitude. Likely an ADR-006/008 amendment.
+  enforcement altitude. Resolved in **ADR-011 (G3)** as a first-class decision.
 - **OQ-2 — bwrap nested-userns feasibility (O7).** Beyond cost: nested bwrap needs
   unprivileged userns creation inside the jail, which the outer bwrap may
   seccomp-block. Empirical, not analysable up front — probe with
@@ -173,9 +228,13 @@ verbs.** In scope:
 Move worktree/dispatch mechanism out of fail-open prose into fail-closed,
 golden-testable CLI verbs, with the orchestrator-owned spawn seam as the keystone
 that simultaneously inverts the trust topology (fail-open → fail-closed), enables
-per-worktree build isolation, and unlocks OS-level confinement. Activates the
-parked ADR-008 and discharges (or formally defers) ADR-006 D2b. Output of the
-SL-055 review; sibling, not successor.
+per-worktree build isolation, and unlocks OS-level confinement. Lands four
+governance deliverables first (ADR-008 accept, ADR-006 amend, new ADR-011 spawn
+seam, SPEC-012 rewrite), then the verbs/guards/isolation, then the prose carriers.
+Activates the parked ADR-008 and discharges (or formally defers) ADR-006 D2b.
+Notably #1 is a *return to ADR-006 D9 compliance*, not an amendment — the
+worker-self-fork pattern is skill drift. Output of the SL-055 review; sibling,
+not successor.
 
 ## Follow-Ups
 
