@@ -1,0 +1,61 @@
+id    = 12
+slug  = "reconciliation-review-of-sl-054"
+title = "reconciliation review of SL-054"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-054"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "End-to-end wrap (the user objective) has no automated coverage — live shell-width→render_table seam is documented-not-driven"
+detail = "tty.rs stdout_terminal_width's live isatty branch and the crossterm::terminal::size() ioctl are unexercised under cargo test (stdout is not a tty ⇒ returns None). render_table's wrap is unit-tested in isolation (wraps_a_wide_cell, grid_floor_falls_back). The CONNECTION — resolved width flowing through RenderOpts.term_width into render_table to produce wrapped bytes on a real terminal — has zero coverage; no pty/integration test proves 'slice list on an 80-col tty wraps'. Three individually-green parts, the interaction unverified (mem.pattern.review.interaction-bugs-hide-between-sound-parts). The risk IS the slice's reason to exist."
+disposition = "tolerated"
+response = "Conscious accept. The live tty seam is design-scoped-out (design §6: 'documented-not-driven, a pty is out of scope') and VH-verified by the user this session (manual narrow-terminal check). The risk is bracketed: None-invariance goldens prove the piped path is byte-frozen, and terminal_width + render_table wrap/floor are pure-unit covered — only the isatty/ioctl plumbing between them is untested. Not a blocker: behaviour is correct, the gap is confidence on a deliberately-unautomatable seam."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "grid_min_width white-box-coupled to comfy-table 7.2.2 accounting; its boundary test pins arithmetic, not sliver-freedom — cannot detect its own breakage"
+detail = "grid_min_width = 4·cols-3 is reverse-engineered from comfy-table 7.2.2 available_content_width/dynamic.rs subtraction (borders+padding+content). The guard test grid_min_width_is_the_derived_comfy_accounting pins grid_min_width(6)==21 — the FORMULA, not comfy's agreement with it; a comfy bump that shifts the real floor leaves the assert green. Worse, render_table_grid_floor_falls_back_below_and_wraps_at_or_above asserts 'at floor wraps to >2 lines', but a 1-char-per-col sliver IS >2 lines — the exact pathology the floor exists to prevent passes the test. The floor's readability purpose (≥1 readable char/col) is never asserted against real comfy."
+disposition = "follow-up"
+response = "Captured as CHR-005. VH-verified this session; comfy-table is workspace-pinned so the coupling only breaks on a deliberate bump. Owed work is an additive test asserting the floor's PURPOSE (≥1 char/col at grid_min_width, no sliver) against real comfy — not a defect in shipped behaviour. Legitimately follow-up."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "MIN_WRAP_WIDTH=16 comment claimed protection the pure grid floor already provides"
+detail = "tty.rs MIN_WRAP_WIDTH doc said the constant stops a junk width 'reaching the pure layer', implying the pure layer needs protection — but render_table's grid_min_width already falls back to Disabled for any width it cannot seat. The constant is a coarse col-blind pre-filter dominated by the grid floor for multi-col tables; it protects nothing the grid floor wouldn't and over-suppresses the rare legitimate few-col wrap below 16. Comment was misleading, not wrong-in-behaviour."
+disposition = "fix-now"
+response = "Reconciled in-slice (aa5a3a2). MIN_WRAP_WIDTH comment reframed as a coarse shell-side pre-filter that protects nothing the grid floor wouldn't; design D3 mirror updated. Comment-only, no behaviour change."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "design.md dep erratum cross-referenced '§6/§8 no new dependency' wording that exists in neither section"
+detail = "The PHASE-03 erratum closed with 'supersedes the §6/§8 no new dependency wording', but §6 (Verification) and §8 (RSK-2: 'honoured') contain no such text — the false claim lived in the §5 line the erratum already replaced inline. Dangling forward-reference: a §6 reader finds nothing, the pointer mis-locates the corrected claim."
+disposition = "fix-now"
+response = "Reconciled in-slice (aa5a3a2). Erratum cross-ref now points at the §5 claim it replaced inline, dropping the dangling §6/§8 pointer."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "RenderOpts bundle half-applied — priority::render + render_table take a bare term_width Option, not the struct"
+detail = "D1 bundled the list-spine render axes into RenderOpts so future axes are a struct field, not a new positional through ~10 sites. But priority::render::{survey_human,next_human} and the lower primitive render_table take a bare term_width: Option<u16> (design carve-out: priority stays monochrome, colour deferred; render_table never carried colour). Consequence: priority wraps but doesn't colour, and 'bundle once' is half-applied — when colour reaches priority those sites re-churn."
+disposition = "follow-up"
+response = "Captured as IMP-044. Design-sanctioned carve-out (SL-054 §7 D1: priority stays monochrome, colour deferred; render_table never carried colour). Current behaviour correct; the seam-uniformity migration is owed when priority gains colour."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

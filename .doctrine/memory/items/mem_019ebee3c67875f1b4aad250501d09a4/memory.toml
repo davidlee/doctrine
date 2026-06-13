@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebee3c67875f1b4aad250501d09a4"
+memory_key = "mem.pattern.review.guard-test-asserts-property-not-proxy"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Guard test must assert the property, not the proxy"
+summary = "A heuristic's guard test must assert the property it guarantees, not the arithmetic that approximates it — else it can't detect its own breakage"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c90d465f0113a2753f2f082850892ddf279eac58"
+ref_name = "refs/heads/main"
+checkout_state_id = "d96cbb43183bb7c151d367acb63248deb3dfff7312141224ce101d596f853b0c"
+base_commit = "91dc52de3c7e60d8c1f626e9c1b24ece7b2f1081"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

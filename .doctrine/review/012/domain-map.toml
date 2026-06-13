@@ -1,0 +1,53 @@
+[[area]]
+name = "pure render layer"
+purpose = "RenderOpts seam, render_columns/render_table arrangement switch, grid_min_width structural floor — the wrap engine and the None-invariance path"
+paths = ["src/listing.rs"]
+
+[[area]]
+name = "impure width shell"
+purpose = "terminal_width pure decision + stdout_terminal_width ioctl shell + MIN_WRAP_WIDTH coarse pre-filter; mirrors stdout_color_enabled"
+paths = ["src/tty.rs"]
+
+[[area]]
+name = "priority human surfaces"
+purpose = "survey_human/next_human gain bare term_width; run_survey/run_next resolve width in the shell — the half-applied bundle (monochrome, colour deferred)"
+paths = ["src/priority/render.rs", "src/priority/mod.rs"]
+
+[[area]]
+name = "list verb call sites"
+purpose = "RenderOpts threaded through ~10 render_columns sites + the single into_list_args resolution point; coverage_view wrapper forwards opts"
+paths = ["src/main.rs", "src/coverage_view.rs", "src/backlog.rs", "src/governance.rs", "src/memory.rs", "src/rec.rs", "src/review.rs", "src/slice.rs", "src/spec.rs"]
+
+[[area]]
+name = "dependency surface"
+purpose = "crossterm declared direct, default-features=false (zero new compiled crate); the erratum-corrected premise"
+paths = ["Cargo.toml", "Cargo.lock"]
+
+[[area]]
+name = "governing artifacts"
+purpose = "canonical design (incl. the dep erratum), authored plan"
+paths = [".doctrine/slice/054/design.md", ".doctrine/slice/054/plan.toml"]
+
+[[invariant]]
+text = "None-invariance: term_width=None ⇒ render_table output byte-identical to the SL-053 Disabled path; piped output is width-free and the deterministic goldens stay frozen unchanged."
+
+[[invariant]]
+text = "Pure/imperative split (ADR-001, slices-spec §Architecture): no tty/ioctl/env in the pure layer; the isatty probe + crossterm::terminal::size() live only in tty.rs and inject plain Option<u16>."
+
+[[invariant]]
+text = "force_no_tty() is UNCONDITIONAL under both arrangement arms (D6, D2) — the styling tty-consult, orthogonal to the Dynamic width budget (spike-proven)."
+
+[[invariant]]
+text = "Zero new compiled crate: crossterm direct dep matches the version already resolved transitively via comfy-table; default-features=false keeps the events feature (mio/signal-hook/derive_more) off."
+
+[[invariant]]
+text = "Behaviour-preservation gate: SL-053 in-crate + black-box suites stay green UNCHANGED (shared list-spine machinery churn)."
+
+[[risk]]
+text = "End-to-end wrap (the user objective) has no pty/integration coverage — the live shell-width→render_table seam is documented-not-driven. VH-checked by the user this session."
+
+[[risk]]
+text = "grid_min_width (4·cols-3) is white-box coupled to comfy-table 7.2.2 available_content_width accounting; the boundary test pins the arithmetic and 'wraps to >2 lines', not 'no 1-char slivers' — it cannot detect the breakage it exists to catch. VH-checked by the user."
+
+[[risk]]
+text = "MIN_WRAP_WIDTH=16 is a coarse col-blind pre-filter dominated by the grid floor for multi-col tables; protects nothing the grid floor wouldn't and over-suppresses rare few-col wraps. Comment corrected post-review (aa5a3a2)."
