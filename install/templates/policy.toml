@@ -13,5 +13,8 @@ updated = "{{date}}"
 # Authored-but-inert: present so the shape is stable when those land.
 supersedes    = []   # POL ids this one replaces (relationship, not a status — design D2)
 superseded_by = []   # reverse link is derived
-related       = []   # non-superseding cross-references
 tags          = []   # free-form classification
+
+# `related` cross-references are uniform `[[relation]]` rows now (SL-048 "the cut"),
+# never a typed key here. Author one with `doctrine link POL-NNN related <target>`;
+# `doctrine inspect POL-NNN` renders it. The supersession pair + tags stay typed.

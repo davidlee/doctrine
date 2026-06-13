@@ -230,7 +230,7 @@ mod tests {
         let body = render_standard_toml(1, "s", "T", "2026-06-04").unwrap();
         // The [relationships] table parses as a whole document …
         let doc: toml::Value = toml::from_str(&body).unwrap();
-        for axis in ["supersedes", "superseded_by", "related", "tags"] {
+        for axis in ["supersedes", "superseded_by", "tags"] {
             assert!(
                 doc["relationships"][axis].as_array().unwrap().is_empty(),
                 "{axis} should seed empty"
