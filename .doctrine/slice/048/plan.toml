@@ -1,0 +1,231 @@
+# Implementation plan for SL-048 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-048"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Relation-contract tech spec (semantics before code)"
+objective = """
+Author the cross-corpus relation-contract technical spec (`/spec-tech`) — re-home
+the design's relation contract (design §5.6 deliverable 1): the model, label
+semantics, the tier-1/2/3 partition rationale, validation policy
+(write-strict/read-tolerant), outbound-only composition (ADR-004), and graph
+composition (SL-046). Authority POINTS at ADR-010 + the `RELATION_RULES` code; the
+spec never mirrors the enumeration (storage rule). `descends_from` the graph
+product spec; cites ADR-004 + ADR-010. Settles semantics before any code is
+written. (SPEC-005/006/016 are only NOTED here for cross-reference — the reference
+rewire itself lands in PHASE-06 once the contract is proven.)
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked at v3 (round-2 hostile pass R2-C1/C2 + M1-M5 + m1-m4 integrated); slice status `plan`; ADR-010 (accepted) governs." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A tech spec describes the relation contract semantically (model, tiers, labels, validation policy, outbound-only, graph composition) and points at ADR-010 + the RELATION_RULES code for the authoritative enumeration — no mirrored vocabulary table." },
+  { id = "EX-2", text = "The spec `descends_from` the graph product spec and cites ADR-004 + ADR-010; SPEC-005/006/016 are identified as the references to rewire in PHASE-06." },
+]
+verification = [
+  { id = "VA-1", expects = "The spec honours the storage rule — no queried/derived enumeration is duplicated from code; the vocabulary is referenced by pointer to RELATION_RULES, not transcribed." },
+  { id = "VA-2", expects = "The contract's claims match the locked design §5 (tiers, labels, write-strict/read-tolerant, outbound-only) with no divergence introduced." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "RELATION_RULES table + RelationLabel variants (pure foundation)"
+objective = """
+Add `RELATION_RULES` (the ADR-010 D2 spine) beside `RelationLabel` in
+src/relation.rs: `RelationRule{sources,label,inbound_name,target,tier,link}` with
+`TargetSpec{Kinds,SameKind,AnyNumbered,Unvalidated}` / `Tier{One,Typed}` /
+`LinkPolicy{Writable,LifecycleOnly,TypedVerbOnly}` (design §5.2). Add the new
+`RelationLabel` variants `GovernedBy` and `Consumes`, declared so the enum `Ord`
+CONTINUES to match `RELATION_RULES` declaration order (R2-C1) — new variants append
+at their source kind's axis-run tail, where no existing `inspect` golden pins a
+successor. Set `inbound_name` per rule: `governed_by`->"governs",
+`consumes`->"consumed_by", `supersedes`->"superseded by"; every PRE-EXISTING label
+pinned `inbound_name == name()` (R2-M3, render-text only). Before fixing the table,
+AUDIT every `sources` cell against the SHIPPED relation_edges accessor — in
+particular `members` is emitted by both PRD and SPEC (spec.rs subtype-blind,
+~spec.rs:508), so its source is PRD·SPEC, not SPEC (R2-M2). Pure: no storage,
+reader, overlay, or render change — existing suites stay green unchanged.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 settled the contract semantics; the design's full vocabulary table (§5.2) and the round-2 corrections (R2-C1/M2/M3) govern." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RELATION_RULES + TargetSpec/Tier/LinkPolicy + the GovernedBy/Consumes variants compile; lookup is keyed by (source in sources, label); no storage/reader/overlay/render behaviour changed — existing per-kind, cordage, backlog_order, and golden suites green unchanged." },
+  { id = "EX-2", text = "ADR-001 layering holds — table + enums are leaf-layer (relation.rs); clippy zero warnings, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "RelationLabel enum `Ord` order == RELATION_RULES label order (R2-C1) — a unit test pins it, so inspect's BTreeMap<RelationLabel> regroup stays canonical and new variants land at their axis-run tail." },
+  { id = "VT-2", expects = "R2-M2 audit: for every PRE-EXISTING tier-1 label, the SHIPPED relation_edges accessor's source set matches the table (members->PRD·SPEC pinned). The table contradicts neither live behaviour nor the downstream exact-coverage test; new labels governed_by/consumes are additive (verified by construction once read_block is live, PHASE-04)." },
+  { id = "VT-3", expects = "inbound_name == name() for every pre-existing label (specs, requirements, slices, members, reviews, owning_slice, descends_from, parent, interactions, related); ONLY governed_by/consumes/supersedes differ (R2-M3)." },
+  { id = "VT-4", expects = "RELATION_RULES admits outbound labels only — no inverse/derived label (e.g. superseded_by) is expressible as a rule, so it is structurally un-authorable in [[relation]] (ADR-010 D4/D5 by construction)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Generic read seam (read_block) + table-driven overlay"
+objective = """
+Build the generic tier-1 READ machinery without touching live readers or the
+corpus, so it is proven in isolation before the risky rewire. `relation::read_block(
+source_kind, toml) -> (Vec<RelationEdge>, Vec<IllegalRow>)` (design §5.3, X2):
+parses `[[relation]]` rows, checks each `(source_kind, label)` against
+RELATION_RULES — legal rows -> RelationEdge emitted in RELATION_RULES order (X1
+canonical), illegal/out-of-table rows -> IllegalRow validation findings, NEVER live
+graph edges (the generic seam must preserve the per-kind legality the hardcoded
+readers had for free). Rewire `OverlayMap::build` (~relation_graph.rs:135) to ITERATE
+RELATION_RULES, allocating one overlay per distinct label whose `TargetSpec !=
+Unvalidated`; DELETE the hardcoded OVERLAY_LABELS const (R2-M4). Unit-test read_block
+against synthetic [[relation]] fixtures. No live accessor / format_show rewire and
+no corpus change — the overlay rewrite is a behaviour-preserving refactor.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 green — RELATION_RULES + variants + enum-order/inbound/source-audit tests in place." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "read_block parses [[relation]], emits legal edges in canonical RELATION_RULES order and IllegalRows for illegal/out-of-table rows; unit-tested against synthetic fixtures; NOT yet called by any live reader." },
+  { id = "EX-2", text = "OverlayMap::build is table-derived and OVERLAY_LABELS is deleted; the allocated overlay set is unchanged from the shipped allocation (behaviour-preserving) — inspect + all *-show goldens byte-identical, cordage + per-kind + backlog_order suites green unchanged." },
+  { id = "EX-3", text = "clippy zero warnings, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "Exact-coverage arm (b) (R2-M4): the overlay-backed label set == the resolvable graph labels (every label EXCEPT the Unvalidated no-overlay pair drift/decision_ref). Now table-driven, not a tautology against a parallel const." },
+  { id = "VT-2", expects = "read_block legality (X2): a slice row carrying `related`, a backlog row carrying `governed_by` -> IllegalRow, not a live edge — the generic parser preserves per-kind legality." },
+  { id = "VT-3", expects = "read_block emits tier-1 edges in RELATION_RULES order for the source kind (X1 canonical order pinned at the seam the accessor/JSON/format_show paths consume before any BTreeMap)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "The cut — live rewire + one-shot corpus migration (behaviour-preservation gate)"
+objective = """
+The atomic transition: rewire the live read path to read_block AND migrate the
+on-disk corpus in ONE green step (the hard cut, no dual-read — design §5.1). Splitting
+these across phases would strand readers expecting [[relation]] over still-typed data
+(a non-green gap the §8 sketch glossed). (a) Each kind's relation_edges accessor reads
+tier-1 via read_block, keeps only its tier-2/3 typed edges (design §5.3 shrink); (b)
+each kind's format_show reads tier-1 via read_block in canonical order and threads the
+new governed_by/consumes axes (R2-C2 — format_show is the SECOND consumer of the
+deleted typed fields; unaddressed, show silently loses its relationships block); (c)
+delete the migrated typed struct fields; (d) run the DETERMINISTIC one-shot corpus
+migrator (out-of-band script/LLM, no shipped surface, no dual-read branch) over this
+repo's TOML, moving tier-1 fields to `[[relation]]` with typed leftovers in a
+`[relationships]` table PRECEDING all arrays (F1 — bare keys after an array-of-tables
+header bind to the last table = silent corruption), excluding the governance
+supersession PAIR (supersedes + superseded_by) and `tags` (OD-3) and migrating only
+governance `related`; slice drops `[relationships]` entirely. Gate the whole phase on
+before/after byte-identical render goldens AND a storage-level post-check.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 green — read_block + table-driven overlay proven in isolation; before-goldens captured on the un-migrated corpus (inspect / *-show / show --json)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every kind's relation_edges + format_show read tier-1 via read_block (canonical order, governed_by/consumes threaded); the migrated typed struct fields are deleted; show/inspect still render the relationships block (R2-C2 — not silently lost)." },
+  { id = "EX-2", text = "The corpus migrator has run: every migrated file carries `[[relation]]` for tier-1 with typed leftovers (gov supersession pair + tags; spec lineage/interactions/members) in a `[relationships]` table preceding all arrays (F1); only governance `related` migrated, the supersession pair untouched (OD-3); slice carries only `[[relation]]`." },
+  { id = "EX-3", text = "backlog order byte-identical (needs/after/triggers untouched); per-kind + cordage + backlog_order suites green unchanged; clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "Before/after render goldens byte-identical across the migration — inspect + every *-show golden (covers the format_show rewire R2-C2 and the inbound_name pinning R2-M3) + show --json (OD-2)." },
+  { id = "VT-2", expects = "Storage-level post-check over every migrated file (R2-m3 — render goldens are necessary but NOT sufficient, since X1 decouples on-disk row order from rendered output): typed leftovers precede all [[relation]] arrays (F1); only tier-1 labels appear in [[relation]]; no migrated label left in a typed slot; same-label row order follows the declared policy." },
+  { id = "VT-3", expects = "Post-migration SL-046 reader emits the SAME edges for already-authored relations (same edges, new on-disk shape) — the anti-double-count/ordering cohabitation gate (R2)." },
+  { id = "VT-4", expects = "Exact-coverage arm (a) (X3, now read_block is live): per source kind, the reader's capable label set == the table's labels for that source — no off-table emission, no rule without a reader path." },
+  { id = "VT-5", expects = "Whole-corpus round-trip `doctrine <kind> show` clean on the migrated corpus (the `validate` teeth land in PHASE-05)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Write verbs (link/unlink) + forward & corpus validation"
+objective = """
+The write path and its teeth. Build `relation::append_edge`/`remove_edge`
+(edit-preserving toml_edit; idempotent Wrote/Noop, Removed/Absent — design §5.3)
+with the EOF-append DEFENCE (R2-m1): before appending, ASSERT all typed tables
+precede all [[relation]] arrays, and re-home or REFUSE (IllegalRow-class) a trailing
+typed table rather than silently re-triggering the F1 tail-insert corruption on a
+hand-edited file. Add `doctrine link`/`unlink <SOURCE-ID> <LABEL> <TARGET>` (§5.4):
+parse source -> (Kind,id), look up (Kind,label) in RELATION_RULES (absent -> refuse +
+list legal labels; != Writable -> refuse + name the owning verb), validate target,
+append/remove. Forward-edge validation (§5.5, R2-M1 — NEW code, not reuse):
+TargetSpec::Kinds/SameKind targets must (a) resolve via ensure_ref_resolves AND (b)
+pass a NEW `parse_canonical_ref(target).kind` assertion (in the Kinds set, or ==
+source.kind for SameKind) — ensure_ref_resolves only parses + dir-probes, it does NOT
+check target kind. Unvalidated (drift/decision_ref) -> accept free-text. Build NEW
+corpus-edge `validate` on the relation_graph all-kind scan + resolve_target (R2-M5 —
+run_validate has no edge walk to extend, only check_kind + prose scan_danglers):
+report [[relation]] danglers + read_block IllegalRows, never rewrite. Supersession
+cross-check (OD-3, ADR-010 D4): report where a governance entity's stored
+superseded_by disagrees with the reciprocal derived from `supersedes` in_edges —
+reading the typed field DIRECTLY via governance read_doc (R2-m2 — read_block/
+outbound_for deliberately exclude superseded_by), pure read, report-never-rewrite.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 green — migrated corpus in [[relation]] form, read_block live in every reader, round-trip show clean." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`link SL-048 governed_by ADR-010` validates, persists one [[relation]] row, is surfaced by show + the SL-046 query, and appears in the target's DERIVED inbound as \"governs\" (X5); `unlink` round-trips (idempotent no-op when the edge is absent)." },
+  { id = "EX-2", text = "`link` refuses an illegal (source,label,target-kind) triple (naming legal labels) and a dangling numbered-kind target; LifecycleOnly (gov supersedes) and TypedVerbOnly labels are refused with their owning verb named (never plain-link-writable)." },
+  { id = "EX-3", text = "`validate` reports [[relation]] danglers, read_block IllegalRows (incl. a mis-ordered hand-edited typed table), and superseded_by/supersedes cross-check drift — all report-only, no rewrite; clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "append_edge EOF-defence (F1/R2-m1): on a hand-edited file with a `[relationships]` table placed AFTER a [[relation]] array, append re-homes or refuses rather than tail-inserting into the last array." },
+  { id = "VT-2", expects = "Forward-edge legal-KIND check (R2-M1): `link SL-048 governed_by SL-003` (target a slice, not ADR·POL·STD) is REFUSED by the new kind assertion even though ensure_ref_resolves passes; SameKind (gov related) refuses a cross-gov target." },
+  { id = "VT-3", expects = "Corpus-edge validate (R2-M5/X2): a deleted target leaves a [[relation]] dangler that validate reports; a hand-edited illegal (source,label) row is reported as an IllegalRow; both report-only, never rewritten (the reseat precedent)." },
+  { id = "VT-4", expects = "Supersession cross-check (R2-m2/OD-3): reads superseded_by via the typed read seam (governance read_doc, not the generic path) and reports disagreement with the supersedes in_edge reciprocal — may surface pre-existing hand-authored drift (intended, C3), never rewrites." },
+  { id = "VT-5", expects = "End-to-end (§7): a governed_by / PRD↔PRD consumes / governance related edge authored via link is validated, persisted as [[relation]], surfaced by show + the SL-046 query, and present in the target's derived inbound." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Governance reconcile + closure (docs only)"
+objective = """
+Docs/governance only — NO product code. Amend ADR-010 (design §5.6 deliverable 8)
+with a one-line note that SL-048 exercised D3's opportunistic tier-1 migration
+CORPUS-WIDE (incl. backlog), with the rationale (final-shape consistency over minimal
+churn; dogfood-only, no client back-compat) and the supersession-pair exclusion
+(OD-3). Rewire SPEC-005/006/016 to REFERENCE the PHASE-01 relation-contract spec for
+the relation story rather than each re-telling it (deliverable 9). Reclassify IMP-032
+(its "derive, don't store" framing is stale — rejected by ADR-010 D4; the honest guard
+is now the validate cross-check). Record the transactional supersede-verb follow-up
+under IMP-006 (the cross-kind-lifecycle axis — a gov-only build now would be parallel
+implementation). No closure surprise: every deferral has a backlog home.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 green — the write/validate path is complete and the slice's capability is demonstrable end-to-end." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ADR-010 amended (D3 corpus-wide + supersession-excluded rationale); SPEC-005/006/016 reference the relation-contract spec; no enumeration duplicated into prose (storage rule)." },
+  { id = "EX-2", text = "IMP-032 reclassified to the validate cross-check; IMP-006 carries the transactional supersede-verb follow-up." },
+  { id = "EX-3", text = "whole-corpus `doctrine validate` clean; final just check / clippy green across the workspace." },
+]
+verification = [
+  { id = "VA-1", expects = "The relation-contract spec + the ADR-010 amendment + the SPEC-005/006/016 references tell ONE consistent story with the shipped RELATION_RULES (no contradiction, no duplicated enumeration)." },
+  { id = "VT-1", expects = "`doctrine validate` is clean corpus-wide after the references and amendment land (the whole-corpus closure gate, §7)." },
+]
+specs        = []
+requirements = []
