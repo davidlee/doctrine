@@ -69,15 +69,23 @@ Two cruxes were adjudicated before drafting:
     marker-only with *no* env even for codex/pi (discards a free worker-on-main
     catch where the seam exists); git-dir marker (lower observability, no real
     gain).
-- **DC-3 (verb privilege — fork/import/gc are orchestrator-only).** `fork`,
-  `import`, and `gc` **mutate git refs and directories** (create/remove worktrees,
-  delete branches, reap target dirs, `--force`). Classifying them `Read` because
-  they spare the *authored TOML corpus* is a category error (inquisition Charge IV):
-  it lets the untrusted worker delete branches, violating ADR-006 D2
-  (workers mutate **source only**). They are a new **`Orchestrator`** class,
-  refused under worker identity (`env OR marker`) exactly as write-classed verbs
-  are. Only the non-mutating helpers (`provision`, `check-allowlist`,
-  `branch-point-check`) stay `Read` and open to workers.
+- **DC-3 (verb privilege — fork/import/gc orchestrator-only; `marker --clear`
+  deliberately not).** `fork`, `import`, and `gc` **mutate git refs and directories**
+  (create/remove worktrees, delete branches, reap target dirs, `--force`).
+  Classifying them `Read` because they spare the *authored TOML corpus* is a category
+  error (inquisition Charge IV): it lets the untrusted worker delete branches,
+  violating ADR-006 D2 (workers mutate **source only**). They are a new
+  **`Orchestrator`** class, refused under worker identity (`marker OR env`) exactly
+  as write-classed verbs are. Only the non-mutating helpers (`provision`,
+  `check-allowlist`, `branch-point-check`) stay `Read` and open to workers.
+  **`marker --clear` (Charge II) is a deliberate fourth class:** it mutates runtime
+  state but is *not* `Orchestrator`-classed — locking the marker's only remover
+  behind the guard the marker trips is the self-brick Charge II names. It is refused
+  only by `DOCTRINE_WORKER`-env-set (a real codex/pi worker cannot self-unmark) and
+  by cwd-is-not-this-tree, **never by the marker conjunct** — so the env-unset
+  orchestrator with a stray coordination-tree marker always escapes. (A claude
+  marker-only worker self-clearing is the accepted D2b residual: the guard fences
+  accidents/misplacement, not malice — that is D6/bwrap.)
 
 ## D1 — `doctrine worktree fork` (codex/pi creation verb) + claude's hook path
 
@@ -195,11 +203,20 @@ guard (in run(), before dispatching a write-classed OR Orchestrator Command):
 - **Lifecycle (owned, not assumed — inquisition Charge V).** Written by
   `fork --worker` (transactionally, D1) for codex/pi, or by the WorktreeCreate hook
   for claude (Charge XIII); **removed by `gc`** (D4); rolled back if `fork` fails;
-  **cleared by a non-Orchestrator path** for a stray coordination-tree marker
-  (Charge II — step 2). A tree may serve as a coordination root only after an
-  **assert-marker-absent** check — so a reused/stale fork dir cannot fail-close a
-  legitimate writer. Marker-absence on the coordination tree is now *guarded*, not
+  **cleared by `doctrine worktree marker --clear`** for a stray marker on a tree the
+  operator wants as coordination root (Charge II — a non-`Orchestrator` verb the
+  guard cannot strangle; DC-3). A tree may serve as a coordination root only after an
+  **assert-marker-absent** check; on a stray marker that check **refuses and names
+  the remedy** (`marker --clear`), so detection now carries a cure, not just a
+  diagnosis (Charge II). Marker-absence on the coordination tree is *guarded*, not
   presumed.
+- **`marker --clear` (Charge II remedy).** `doctrine worktree marker --clear` removes
+  the marker at the cwd tree root and prints a loud receipt of what it cleared.
+  Refused if `DOCTRINE_WORKER` is set (a spawned codex/pi worker cannot self-unmark)
+  or if cwd is not the marker's tree root; **not** refused by the marker conjunct of
+  `worker_mode` — that is the lock Charge II condemned. Restores writes + `gc` to an
+  orchestrator self-bricked by a stale marker, entirely in-CLI (no filesystem
+  surgery).
 - **Observability surface (required, not assumed):** `worker_mode` is surfaced by
   the CLI — minimally a line in `doctrine worktree` / status output ("worker fork:
   yes — writes refused; signal: env|marker") so the mode is discoverable without
@@ -256,9 +273,13 @@ judgment):
    (purging it; it was unreachable under the preconditions — inquisition Charge
    II). The orchestrator commits separately (ADR-006 D7 cadence preserved — import
    ≠ commit).
-5. **Stamp an import receipt** keyed `{base, fork-head}` into the withheld runtime
-   tier on success — the *only* sound landed-oracle for `gc` (D4; inquisition
-   Charge I). Tree-diff inference cannot tell landed from doomed once HEAD moves.
+5. **No runtime receipt is stamped (Charge I, round 2).** The round-1 design stamped
+   an `{base, fork-head}` receipt here, at *apply* time — but a flag born before the
+   separate commit, living in the gitignored runtime tier, survives a
+   crash-before-commit and lies "landed" to `gc`, which then reaps unmerged work (the
+   exact hazard `gc` exists to prevent). Instead `gc` derives landed-ness from
+   **durable git state** after the orchestrator commits (D4 patch-id oracle) — no
+   apply-time flag outlives the commit it would certify.
 
 **Refusal set (v1, exhaustive over permitted states):** `{head-moved,
 multi-commit, doctrine-touch}`. Each is machine-readable on a non-zero exit; the
@@ -276,7 +297,8 @@ must encode re-anchor" (scope A2) and "adjudication stays prose" (OQ-1). v1 clai
 neither — it honestly handles only the stationary case.
 
 Pure core: classification over a diff (`classify_import(diff, base, head) ->
-Result<Apply, Refusal>`); imperative shell drives git + apply + receipt write.
+Result<Apply, Refusal>`); imperative shell drives git + apply (no receipt write —
+Charge I, round 2).
 
 ## D4 — `doctrine worktree gc`
 
@@ -291,15 +313,16 @@ delete branches; inquisition Charge IV). **Target.** `doctrine worktree gc --for
    lifecycle).
 2. delete the fork branch with `git branch -D` (the funnel branch is never a
    git-ancestor, so `-d` would *always* refuse — `-D` is mandatory, which is
-   exactly why the receipt gate below is the real safety, not `-d`'s
+   exactly why the **patch-id gate** below is the real safety, not `-d`'s
    merged-check).
 3. **reap the `wt/<branch>` target dir** (closes the D5 disk loop — IMP-041 and
    D-B1 hygiene are the same verb).
 4. warn (stderr) that `env!(CARGO_MANIFEST_DIR)`-baked test binaries need
    recompile before the next close-time `just check`.
 
-**The "landed" oracle — import receipt, not tree diff (inquisition Charge I).**
-`--merged` is wrong (the apply-funnel branch is never a git-ancestor). The
+**The "landed" oracle — durable patch-id, not a runtime receipt or tree diff
+(Charge I, rounds 1+2).** `--merged` is wrong (the apply-funnel branch is never a
+git-ancestor). The
 *replacement* the self-review reached for — **delta-emptiness** (`git diff
 <B-or-HEAD>..<fork>` empty ⇒ safe) — is **also unsound**, and was rejected under
 cross-examination:
@@ -312,13 +335,27 @@ cross-examination:
   collapses to "delete whatever I point at" — reaping unmerged work, the exact
   hazard gc exists to prevent.
 
-**v1 resolution:** gc deletes **only** on a positive **import receipt** (stamped
-by `import`, D3 step 5, keyed `{base, fork-head}`). Receipt present ⇒ the fork
-provably landed ⇒ safe to reap. No receipt ⇒ refuse unless `--force` (the explicit
-"I know it's spent" override). Receipt-gating is exact, not diff-inferred — it was
-the design's own deferred note (`a future import could stamp an imported record`);
-the inquisition made it the v1 gate, because delta inference cannot work once
-`apply --3way` severs ancestry **and** HEAD legitimately moves.
+**v1 resolution (Charge I, round 2): a durable patch-id reachability check, no
+runtime receipt.** gc deletes **only** when the fork's commit has *provably landed*
+on the coordination branch — tested by **patch-id equivalence against durable git
+state**, not a runtime-tier flag. Concretely `git cherry <coordination-HEAD>
+<fork-branch>` (merge-base computed internally, so no `--base` is needed — this also
+disposes Charge IX): the fork commit marked `-` ⇒ its patch is already present in
+coordination's history ⇒ safe to reap; marked `+` ⇒ not landed ⇒ refuse unless
+`--force` (the explicit "I know it's spent" override). This survives the two failure
+modes that sank the alternatives: it is robust to a sibling moving HEAD (patch-id
+matches the *commit's patch*, not a whole-tree diff — §5.4 no longer false-refuses)
+and to `apply --3way` severing ancestry (patch-id ≠ ancestry, so a non-ancestor
+applied commit still matches). Crucially it is **crash-proof**: a crash between apply
+and commit leaves no commit on the coordination branch, so `git cherry` reports `+`
+(not landed) and gc **refuses** — the round-1 receipt, born at apply-time in the
+gitignored tier, would have lied "landed" and reaped the only copy. No receipt means
+no receipt lifecycle to own (disposing Charge IV) and no receipt key to specify
+(Charge IX).
+
+**Observability (Charge X):** `gc --fork <b>` (and a `--dry-run`) prints the live
+patch-id verdict per fork — "`<b>`: landed ✓ / not-landed — `--force` to reap" —
+computed from git, so the operator never defaults to `--force` blind.
 
 Cleanup ownership becomes trivial: **the caller of `fork` owns `gc`.** `/dispatch`
 concludes with it; solo `/execute` ends with it.
@@ -408,9 +445,9 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
 | Path | Change |
 |---|---|
-| `src/worktree.rs` | `run_fork`, `run_import`, `run_gc` (imperative shells, **transactional fork** rollback); pure: `target_dir_for_branch`, `marker_path`, `classify_import`, gc receipt-check. Reuse `select_copies`/`branch-point` core. New `write_marker`/`marker_present`/`remove_marker` (`write_marker` also invoked by claude's WorktreeCreate hook — Charge XIII), import-receipt read/write. Third `is_linked_worktree` consumer. |
+| `src/worktree.rs` | `run_fork`, `run_import`, `run_gc`, `run_marker_clear` (imperative shells, **transactional fork** rollback); pure: `target_dir_for_branch`, `marker_path`, `classify_import`. gc landed-oracle is a **git patch-id check** (`git cherry`), not a runtime receipt (Charge I). Reuse `select_copies`/`branch-point` core. New `write_marker`/`marker_present`/`remove_marker` (`write_marker` also invoked by claude's WorktreeCreate hook — Charge XIII; `remove_marker` behind `marker --clear` — Charge II). Third `is_linked_worktree` consumer. |
 | `src/main.rs` | `fork`/`import`/`gc` subcommands + arg structs (watch the bool/arg clippy ceilings, `[[mem.pattern.lint.cli-handler-args-struct]]`). Worker-mode guard = `worker_mode(root)` = `(is_linked_worktree && marker_present) OR env DOCTRINE_WORKER set` — **marker primary, env a codex/pi optimisation** (DC-2 / Charge XIII). `write_class` unchanged. **fork/import/gc are a new `Orchestrator` class — refused under `worker_mode`, NOT `Read`** (they mutate git refs/dirs; inquisition Charge IV / DC-3). A marker-stamping entry point (claude WorktreeCreate hook) + a marker-clear path (Charge II) join the verb family. |
-| `src/git.rs` | new reads behind the verbs: worktree list, merged-branch test (gc), `B..S` diff name-only (import). Impure seam only. |
+| `src/git.rs` | new reads behind the verbs: worktree list, **patch-id reachability** (`git cherry`, gc landed-oracle — Charge I), `B..S` diff name-only (import). Impure seam only. |
 | ADR-008 / ADR-006 / **ADR-011 (new)** / SPEC-012 | G1–G4. |
 | `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` + new `{dispatch-subprocess,dispatch-agent}/SKILL.md` | rewrite prose to *call* the verbs (the token/agnostic payoff); **`/dispatch` becomes a harness router** → `/dispatch-subprocess` (codex/pi) \| `/dispatch-agent` (claude), Charge XIII; re-embed ritual `[[mem.pattern.distribution.skill-refresh-command]]`. |
 | `flake.nix` | none for the spike; `dispatch-worker` bwrap profile only if D6 lands. |
@@ -437,9 +474,17 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 - **`fork` git syntax (Charge VI):** black-box golden pins `git worktree add -b …`.
 - **Marker lifecycle (Charge V):** a stale marker in a reused dir does **not**
   fail-close a tree promoted to coordination root (assert-marker-absent gate).
-- **`gc` receipt oracle (Charge I):** sibling moves HEAD between spawn and import;
-  gc still reaps the **receipted** fork and **refuses** an unreceipted one (no
-  `--force`); delta-emptiness is *not* the gate.
+- **`gc` landed-oracle (Charge I):** (a) sibling moves HEAD between spawn and import;
+  gc still reaps the **landed** fork (patch-id `-`) and a moved HEAD does *not*
+  false-refuse it (delta-emptiness would); (b) **crash before commit** → no
+  coordination commit → patch-id `+` → gc **refuses** (no `--force`) — the
+  crash-survives-and-lies hazard is closed; (c) `--dry-run` prints the per-fork
+  verdict.
+- **`marker --clear` (Charge II):** a stale marker on a team-mode linked-worktree
+  coordination root → orchestrator writes + `gc` refused; `worktree marker --clear`
+  (env unset) restores both **from within the CLI**; the same verb is **refused**
+  when `DOCTRINE_WORKER` is set (a worker cannot self-unmark) or run from outside the
+  marker's tree.
 - **Claude marker-via-hook + per-harness altitude (Charge XIII):** the O3 spike
   confirms the WorktreeCreate hook stamps the marker into the Agent-created worktree
   (claude worker → marker present → writes refused) **without** a subprocess or env;
@@ -479,7 +524,7 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
 | # | Finding | Resolution |
 |---|---|---|
-| F-gc | `--merged` is the wrong safe-to-delete oracle — the apply-funnel branch is never a git-ancestor | ~~gc uses delta-emptiness~~ **SUPERSEDED by inquisition Charge I** — delta-emptiness is *also* unsound; gc gates on an **import receipt** (D4) |
+| F-gc | `--merged` is the wrong safe-to-delete oracle — the apply-funnel branch is never a git-ancestor | ~~gc uses delta-emptiness~~ → ~~import receipt~~ → **round-2 Charge I: gc gates on a durable git patch-id check (`git cherry`)**, no runtime receipt (D4) |
 | F-eval | the example spawn prose `eval "$(fork…)"` swallows exit code — fail-open, ironic | capture + check `$?`, never `eval "$(…)"` (D1) |
 | F-preservation | env→marker is a real behaviour change; old guard tests can't stay "green unchanged" | preservation proof scoped to provision/branch-point/select_copies; guard tests rewritten (Verification) |
 | F-belt | R-5 match semantics unpinned | prefix-match on `.doctrine/` over name-only tracked diff; test pins it (D3) |
@@ -500,7 +545,7 @@ External hostile pass — Opus + GPT-5.5 (codex mcp), converged. Adjudicated via
 
 | # | Charge | Sev | Resolution |
 |---|---|---|---|
-| I | gc delta-emptiness oracle unsound (false-negates on moved HEAD; `branch -d` always refuses) | CRIT | **import receipt** `{base, fork-head}`; gc deletes only on receipt; `-D` after receipt (D3.5, D4) |
+| I | gc delta-emptiness oracle unsound (false-negates on moved HEAD; `branch -d` always refuses) | CRIT | ~~import receipt `{base, fork-head}`~~ **⚠ Superseded by round-2 Charge I:** the receipt was itself unsound (certified apply, not commit; crash-survives-and-lies); gc now gates on a durable **patch-id** check (`git cherry`), no runtime receipt (D4). |
 | II | import refuses moved-HEAD; A2 unmet; `apply-conflict` dead code | CRIT | **stationary-only v1**; refusal set `{head-moved, multi-commit, doctrine-touch}`; `apply-conflict` purged; **A2 struck**; moved-head → named follow-up (D3) |
 | III | marker guard fail-opens worker-on-main (`is_linked_worktree &&` blind) | CRIT | **DC-2 dual signal** — orchestrator-set env (catches worker-on-main) *or* marker (backstop). **⚠ Superseded by round-2 Charge XIII:** env-primary collapses on claude (no env seam); marker is now primary+agnostic, env a codex/pi-only optimisation. |
 | IV | fork/import/gc `Read` → untrusted worker deletes refs | CRIT | **DC-3 `Orchestrator` class** — refused under worker identity |
@@ -522,16 +567,16 @@ rest) lands first via `/consult`.
 | # | Charge | Sev | Resolution |
 |---|---|---|---|
 | XIII | keystone `claude -p` API-billed + harness-specific → subprocess seam unusable for claude → DC-2 env leg dead → worker-on-main reopens | **CRIT** | **`/consult`-resolved.** Spawn-subprocess demoted to a **codex/pi enhancement layer**; agnostic keystone = orchestrator-owned fork + **disk-marker-primary** identity (DC-1/DC-2). `claude -p` rejected as required; claude uses `Agent` + WorktreeCreate-hook marker (first-class), env an agnostic→codex/pi optimisation. Per-wt env generalised (CARGO_TARGET_DIR a project-local consumer; D5). bwrap codex/pi-only (D6). Per-harness altitude table in slice scope + G3/ADR-011 + G4/SPEC-012. `/dispatch` → harness router (`/dispatch-subprocess`\|`/dispatch-agent`, O8). Channels follow-up = IDE-004. |
-| I | import receipt certifies *apply* not *commit*; gc trusts crash-surviving runtime-tier flag | CRIT | *pending — step 2* |
-| II | stray coordination-tree marker has no remover; gc (Orchestrator-classed) locked behind the guard it trips | CRIT | *pending — step 2* |
+| I | import receipt certifies *apply* not *commit*; gc trusts crash-surviving runtime-tier flag | CRIT | **Resolved.** Receipt eliminated; gc's landed-oracle is a **durable git patch-id check** (`git cherry <coord-HEAD> <fork>`) run *after* the commit — crash-before-commit ⇒ patch-id `+` ⇒ gc refuses (no false "landed"). D3 step 5 / D4. |
+| II | stray coordination-tree marker has no remover; gc (Orchestrator-classed) locked behind the guard it trips | CRIT | **Resolved.** New **non-`Orchestrator`** `doctrine worktree marker --clear` — refused only by `DOCTRINE_WORKER`-env-set (no worker self-unmark) + cwd-is-this-tree, **never by the marker conjunct**; assert-marker-absent now names the remedy. DC-3 / D2. |
 | III | DC-2 env leg propagation unvalidated; spike scoped to guard logic not propagation | HIGH | *pending — reshaped by XIII (env now codex/pi-only optimisation; propagation gate folds into O3 spike)* |
-| IV | import receipt has no removal owner | HIGH | *pending — step 4* |
+| IV | import receipt has no removal owner | HIGH | **Disposed by Charge I** — no receipt exists, so no lifecycle to own (D4). |
 | V | import refusal set omits `tree-unclean`; `apply-conflict` purge unsound without it | HIGH | *pending — step 3* |
 | VI | assert-marker-absent scoped to coordination root; solo `/execute` direct-writer ungated | MED | *pending — amplified by XIII (marker now primary)* |
 | VII | refused-then-re-dispatched forks need `--force` to gc; reflex returns | MED | *pending — step 4* |
 | VIII | "transactional fork" overclaims; rollback half-fail / dirty `worktree remove` needs `--force` | MED | *pending — step 4* |
-| IX | gc receipt lookup key `{base, fork-head}` underspecified; base unsuppliable | LOW | *pending — step 4* |
-| X | no receipt observability surface | LOW | *pending — step 4* |
+| IX | gc receipt lookup key `{base, fork-head}` underspecified; base unsuppliable | LOW | **Disposed by Charge I** — no receipt key; `git cherry` computes the merge-base internally, so gc needs only `--fork` (D4). |
+| X | no receipt observability surface | LOW | **Resolved (via Charge I).** `gc --fork <b>` / `--dry-run` prints the live patch-id verdict per fork ("landed ✓ / not-landed — `--force` to reap"), computed from git (D4). |
 | XI | env leg location-unqualified → leaked `DOCTRINE_WORKER` bricks main-side authoring + self-aborts dispatch | HIGH | *pending — shrunk by XIII (identity off env; only the orchestrator-own-env-clean hardening remains)* |
 | XII | stationary-only import livelocks vs expected concurrent main-side authoring | HIGH | *pending — step 3 (name the D8 quiescence constraint)* |
 | — | receipt-vs-branch-point independence; orchestrator never env-worker-id'd at call time; pure/imperative wall | **acquitted ×3** | sound — no change |
