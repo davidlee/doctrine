@@ -154,6 +154,16 @@ Typed leftovers therefore stay in a `[relationships]` **table that precedes** th
 unconditionally valid. A migrated kind with no typed leftovers (slice) drops
 `[relationships]` entirely and carries only `[[relation]]`.
 
+**R2-m1 — the EOF-append guarantee is a *migrator* invariant, not an `append_edge`
+one.** "Append at EOF is unconditionally valid" holds only because the migrator
+guarantees `[relationships]` precedes every `[[relation]]` array. On a **hand-edited**
+file where someone placed a `[relationships]` table (or any bare-key table) *after*
+the arrays, a blind EOF-append re-triggers the very tail-insert corruption F1
+avoids. So `append_edge` must **defensively assert** the document shape before
+appending — all typed tables precede all `[[relation]]` arrays — and either
+re-home a trailing typed table or refuse with a clear error (a mis-ordered
+hand-edit is an `IllegalRow`-class finding for `validate`, not a silent splice).
+
 The supersession pair (`supersedes` + `superseded_by`, OD-3) and `tags` stay typed
 beside the block. The `[[relation]]` array admits **outbound validated labels
 only**, so `superseded_by` is structurally un-authorable there (ADR-010 D4/D5
@@ -167,12 +177,22 @@ one-time corpus rewrite is a throwaway script/LLM pass over this repo's TOML,
 run once, verified by round-trip `doctrine <kind> show` + `validate` across the
 whole corpus before commit. Cleanest final shape, zero permanent migration code.
 
+**R2-m3 — render goldens are not a sufficient migration oracle alone.** Because
+X1 decouples on-disk row order from rendered output (`inspect` re-groups by enum
+`Ord`; `format_show` reads canonical-ordered tier-1), before/after `show` /
+`show --json` / `inspect` goldens can all pass while the migrator perturbs the
+authored TOML shape in ways the render normalises away. OD-2's byte-identical
+render goldens are necessary but not complete; PHASE-05 adds a **storage-level
+post-check** over every migrated file: typed leftovers precede all `[[relation]]`
+arrays (F1/R2-m1), only tier-1 labels appear in `[[relation]]`, no migrated label
+is left in a typed slot, and same-label row order follows the declared policy.
+
 ### 5.2 The legal-set vocabulary table (ADR-010 D2 spine)
 
 One const table in `src/relation.rs` (beside `RelationLabel`):
 
 ```rust
-enum TargetSpec { Kinds(&'static [Kind]), AnyNumbered, Unvalidated } // F4: AnyNumbered for RV reviews; Unvalidated = free-text
+enum TargetSpec { Kinds(&'static [Kind]), SameKind, AnyNumbered, Unvalidated } // F4: AnyNumbered for RV reviews; SameKind: target kind == source kind (R2-M1, gov supersedes/related); Unvalidated = free-text
 enum Tier       { One, Typed }                               // One → [[relation]]; Typed → bespoke
 enum LinkPolicy { Writable, LifecycleOnly, TypedVerbOnly }   // does `link` admit it
 
@@ -210,15 +230,15 @@ catch a rule with no overlay (silent dangler) or a source-legality mismatch.
 | `specs` | SL, backlog | PRD·SPEC | 1 | Writable |
 | `requirements` | SL | REQ | 1 | Writable |
 | `supersedes` | SL | SL | 1 | Writable |
-| `supersedes` | ADR·POL·STD | same-gov | 1* | LifecycleOnly — storage excluded (OD-3); verb → IMP-006 |
-| `governed_by` ★ | SL·PRD·SPEC | ADR·POL·STD | 1 | Writable |
-| `related` | ADR·POL·STD | same-gov | 1 | Writable |
+| `supersedes` | ADR·POL·STD | same-gov (`SameKind`) | 1* | LifecycleOnly — storage excluded (OD-3); verb → IMP-006 |
+| `governed_by` ★ | SL·PRD·SPEC | ADR·POL·STD (`Kinds`) | 1 | Writable |
+| `related` | ADR·POL·STD | same-gov (`SameKind`) | 1 | Writable |
 | `consumes` ★ | PRD | PRD | 1 | Writable |
 | `slices` | backlog | SL | 1 | Writable |
 | `drift` | backlog | *free-text* | 1 | Writable (unvalidated) |
 | `descends_from` | SPEC | PRD | 2 (arity≤1) | TypedVerbOnly |
 | `parent` | SPEC | SPEC | 2 (arity≤1) | TypedVerbOnly |
-| `members` | SPEC | REQ | 2 (members.toml) | TypedVerbOnly (`spec req add`) |
+| `members` | PRD·SPEC | REQ | 2 (members.toml) | TypedVerbOnly (`spec req add`) |
 | `interactions` | SPEC | SPEC | 2 (free-text+payload) | TypedVerbOnly |
 | `reviews` | RV | any | 2 (arity1 `[target]`) | TypedVerbOnly (`review`) |
 | `owning_slice` | REC | SL | 2 (arity≤1) | TypedVerbOnly |
@@ -227,6 +247,44 @@ catch a rule with no overlay (silent dangler) or a source-legality mismatch.
 `1*` — tier-1 *by shape*, but **storage excluded** from migration (OD-3): stays
 typed with its `superseded_by` carve-out pair until IMP-006 builds the
 transactional supersede verb. Never `link`-writable (`LifecycleOnly`).
+
+**Table fidelity to the *shipped* SL-046 accessors (R2-M2).** Every `source(s)`
+cell is pinned against what the shipped `relation_edges` accessor actually emits,
+**before** the exact-coverage test (X3) is written — else the test contradicts
+live behaviour. The one correction this surfaced: `members` is emitted by **both**
+PRD and SPEC (`spec::relation_edges` is subtype-blind — `src/spec.rs:531` reads
+`members.toml` regardless of subtype), so its source is `PRD·SPEC`, not `SPEC`.
+The exact-coverage test's per-source "emitted labels == rule labels" arm (X3/§5.2)
+is what would have caught this at lock-time as a contradiction; it is now correct
+by construction.
+
+**`inbound_name` is render-text-only and frozen for legacy labels (R2-M3).**
+`inbound_name` feeds *only* the human `render_inbound` text path
+(`relation_graph.rs:611`); the `--json` inbound surface emits the **raw label
+name** (`tests/e2e_inspect_golden.rs:348`), unaffected. Today `render_inbound`
+flips **only** `Supersedes`→"superseded by"; every other label renders its raw
+`name()` on the inbound side, and that text is byte-pinned in goldens
+(`e2e_inspect_golden.rs:215` `inbound: specs: SL-003`). Generalising X5 therefore
+carries a **behaviour-preservation mandate**: `inbound_name == name()` for **every
+pre-existing label** (`specs`, `requirements`, `slices`, `members`, `reviews`,
+`owning_slice`, `descends_from`, `parent`, `interactions`, `related`) — only
+`Supersedes`→"superseded by" (unchanged), `governed_by`→"governs", and
+`consumes`→"consumed_by" differ from their outbound spelling. A VT asserts the
+shipped inbound goldens are unchanged. X5 "generalises the special-case" — it does
+**not** licence re-wording any legacy label.
+
+**Overlay allocation is *derived* from the table, not a parallel const (R2-M4).**
+The "(e) cordage overlay allocation" consumer is concrete: `OverlayMap::build`
+(today the hardcoded `OVERLAY_LABELS` const, `relation_graph.rs:135`) is rewritten
+to **iterate `RELATION_RULES`**, allocating one overlay per *distinct label* whose
+`TargetSpec ≠ Unvalidated` (the const is deleted). The exact-coverage invariant
+(X3) is then **two** separate exact assertions, not one fuzzy claim: (a) per
+source kind, the set of labels the shipped reader emits **==** the rule labels for
+that source; (b) the set of overlay-backed labels **==** the set of resolvable
+graph labels (all labels except the `Unvalidated` no-overlay pair `drift`/
+`decision_ref`). The earlier "every Writable/reader-reachable rule has an overlay"
+phrasing was wrong — `drift` is `Writable` *and* reader-reachable yet correctly
+has **no** overlay; assertion (b) excludes the `Unvalidated` labels explicitly.
 
 **Label naming.** `governed_by` — one shared label for SL→gov and SPEC/PRD→gov
 (one overlay, as `supersedes` already spans SL+gov); reads right on the source
@@ -254,6 +312,20 @@ accessors **shrink**: tier-1 becomes the shared `read_block`; each kind's access
 keeps only its **tier-2/3** typed edges (lineage, members, interactions, reviews,
 owning_slice). Net: less per-kind code, no per-kind write code for tier-1.
 
+**R2-C2 — `format_show` is the *second* consumer of the deleted typed fields, and
+must be rewired in the same phase.** Each kind's `show` renderer reads the
+relationships block **not** via `relation_edges`/`read_block` but from the typed
+struct fields directly through a hardcoded literal axis array (slice
+`slice.rs:1221` iterates `doc.relationships.{specs,requirements,supersedes}`;
+governance and spec likewise). The tier-1 migration **deletes those typed fields**,
+so post-migration `format_show` has nothing to iterate and `slice show` / `adr
+show` silently lose their relationships block. `format_show` must therefore also
+read tier-1 from `read_block` (and thread the new `governed_by`/`consumes` axes),
+in the canonical label order of X1. This is a third item in the "shrink" list
+above and is added to **PHASE-03** scope (§8). The behaviour-preservation gate
+covers it: the `e2e_adr_cli_golden`/slice-show goldens must stay byte-identical
+across the migration.
+
 **X2 — `read_block` takes the source kind and enforces legality.** Generic
 storage must not mean a generic *parser that emits anything*. Today a slice
 **cannot** emit `related` and a backlog item **cannot** emit `governed_by` —
@@ -264,18 +336,41 @@ illegal rows → `IllegalRow` **validation findings, never live graph edges**. T
 generic seam must preserve the per-kind legality the hardcoded readers had for
 free.
 
-**X1 — emitted order is axis-major, not storage order.** `read_block` groups and
-emits edges in **canonical label order** (the `RELATION_RULES` order for that
-source kind), *independent of `[[relation]]` row order on disk*. This is
-load-bearing: SL-046's reader contract is axis-major and byte-pinned (slice
-`specs→requirements→supersedes` `slice.rs:1182`; governance `supersedes→related`
-`governance.rs:219`; backlog `slices→specs→drift` `backlog.rs:761`; spec
-`descends_from→parent→members→interactions` `spec.rs:506`; goldens at
-`relation_graph.rs:725`). If emitted order tracked storage order, the first
-`append_edge`-at-EOF would reorder edges and break the goldens. Decoupling emit
-order from storage order also fixes the tier-1/tier-2 **merge order** (F5/R2):
-each accessor concatenates `read_block`'s axis-ordered tier-1 edges, then its
-typed tier-2/3 edges, in the kind's pinned axis sequence.
+**X1 (corrected, R2-C1) — two render surfaces, two ordering mechanisms; name the
+right one.** The round-1 X1 claimed the order-fragile surface is the accessor's
+axis sequence. That is **wrong**, and the correction is load-bearing:
+
+- **`inspect`** (`relation_graph.rs:465,475`) re-groups *every* accessor's output
+  into `BTreeMap<RelationLabel, Vec<String>>`, so its byte-pinned goldens
+  (`tests/e2e_inspect_golden.rs`, outbound `specs→requirements→supersedes`) are in
+  **`RelationLabel` enum-discriminant order**, *not* accessor order. They coincide
+  today only because the enum is *declared* in an order that matches. For `inspect`,
+  `read_block`'s emit order is therefore **irrelevant** — storage order is already
+  laundered through the BTreeMap. The real fragility is **where the new enum
+  variants land**: a `Consumes`/`GovernedBy` inserted mid-enum shifts the
+  discriminant order and silently reorders shipped `inspect` output.
+- **`format_show`** (slice `slice.rs:1221`, governance, spec) renders the
+  relationships block from a **hardcoded literal axis array**, *not* re-grouped —
+  byte-pinned independently (`tests/e2e_adr_cli_golden.rs`). **This** is the
+  genuinely accessor-/array-order-fragile surface, and it is a *second* consumer of
+  the typed fields the migration deletes (R2-C2, below).
+
+**Resolution.** Define **one canonical label-order** — the `RELATION_RULES`
+declaration order — and make *both* surfaces derive render order from it, rather
+than relying on the coincidence between enum-declaration order and the literal
+`format_show` arrays:
+1. `read_block` emits in `RELATION_RULES` order for the source kind (still correct
+   to specify — it pins the per-kind tier-1 sequence the *accessor return value*
+   and the JSON/`format_show` paths consume before any BTreeMap).
+2. New `RelationLabel` variants are declared so the enum `Ord` **continues to match
+   `RELATION_RULES` order**; a unit test asserts `RelationLabel` enum order == the
+   table's label order, so `inspect`'s BTreeMap regroup stays in canonical order and
+   the existing `inspect` goldens hold by construction (new labels append at the end
+   of their source kind's axis run, where no existing golden pins a successor).
+3. The tier-1/tier-2 **merge order** (F5/R2) is each accessor concatenating
+   `read_block`'s canonical-ordered tier-1 edges, then its typed tier-2/3 edges, in
+   the kind's pinned axis sequence — unchanged, and now consistent across both
+   render surfaces.
 
 ### 5.4 The `link` / `unlink` verbs (command layer)
 
@@ -300,26 +395,46 @@ triple mirrors `(source, label, target)`. Dispatch:
 
 ### 5.5 Forward-edge validation — write-strict, read-tolerant
 
-- **`link` write:** `TargetSpec::Kinds` → target **must** resolve via
-  `integrity::ensure_ref_resolves`, else hard-refuse (never create a dangler);
-  also assert the target's kind is in the legal set. `TargetSpec::Unvalidated`
-  (`drift`, `decision_ref`) → accept free-text as-is.
-- **`validate` corpus check:** report (never rewrite — the reseat precedent) both
-  (a) `[[relation]]` danglers that arise later (target deleted post-authoring) and
-  (b) **`read_block` `IllegalRow`s** — hand-edited rows whose `(source,label)` is
-  not in `RELATION_RULES`, or whose target-kind is outside the rule's `TargetSpec`
-  (X2). Extend the existing dangling-citation logic over the new block; do not
-  duplicate.
+- **`link` write (R2-M1 — the kind-check is NEW code, not reuse):**
+  `TargetSpec::Kinds`/`SameKind` → target **must** (a) resolve to a real entity via
+  `integrity::ensure_ref_resolves` (else hard-refuse — never create a dangler)
+  **and** (b) pass a *new* legal-kind assertion: `parse_canonical_ref(target).kind`
+  ∈ the rule's `Kinds` set, or `== source.kind` for `SameKind`. `ensure_ref_resolves`
+  (`integrity.rs:325`) only parses the ref and probes the dir — it does **not**
+  check the target kind, so `link SL-048 governed_by SL-003` (target is a slice, not
+  ADR·POL·STD) would pass it and write an illegal edge. The §3 "ride
+  `ensure_ref_resolves`" note covers existence only; the kind gate is added code.
+  `TargetSpec::Unvalidated` (`drift`, `decision_ref`) → accept free-text as-is.
+- **`validate` corpus check (R2-M5 — there is no relation-edge walk to "extend").**
+  `run_validate` (`integrity.rs:285`) today runs only `check_kind` (id/dir/alias
+  integrity) + `scan_danglers` (a **prose-`.md`** citation grep, `integrity.rs:484`)
+  — **neither walks `[relationships]`/`[[relation]]` edges.** So this is **new**
+  corpus-edge validation, built in PHASE-04. The genuine reuse seam is the
+  `relation_graph` all-kind scan + `resolve_target` (`relation_graph.rs:372`), not
+  `integrity.rs`. It reports (never rewrites — the reseat precedent): (a) `[[relation]]`
+  danglers that arise later (target deleted post-authoring) and (b) **`read_block`
+  `IllegalRow`s** — hand-edited rows whose `(source,label)` is not in `RELATION_RULES`,
+  or whose target-kind is outside the rule's `TargetSpec` (X2). (The earlier
+  "extend the existing dangling-citation logic, don't duplicate" framing mis-cited
+  `integrity.rs` — withdrawn.)
 - **Inbound rendering** uses the rule's `inbound_name` (X5), not the raw outbound
   label — so an ADR's derived inbound shows `governs: SL-048`, not the backwards
   `governed_by: SL-048`. The existing `supersedes`→"superseded by" special-case
-  collapses into this table-driven path.
+  collapses into this table-driven path. **Render-text only**, and **legacy labels
+  are pinned `inbound_name == name()`** so shipped inbound goldens are unchanged
+  (R2-M3, §5.2); the `--json` inbound surface keeps the raw label regardless.
 - **Supersession cross-check (OD-3, ADR-010 D4).** `validate` reports where a
   governance entity's stored `superseded_by` disagrees with the reciprocal derived
   from `supersedes` `in_edges` — report drift, never rewrite (the reseat
   precedent). Pure read; independent of the (unbuilt, IMP-006) transactional
   supersede verb. This is the honest guard ADR-010 D4 named after reclassifying
   IMP-032 — it may surface pre-existing hand-authored drift, which is the point.
+  **R2-m2 — the stored side needs its own read seam.** `read_block`/`outbound_for`
+  deliberately exclude `superseded_by` (`governance::relation_edges` emits only
+  `supersedes`+`related`, `governance.rs:236`; the reader never projects the
+  carve-out, `relation_graph.rs:1088`), so the cross-check reads the typed field
+  directly via `governance::read_doc → doc.relationships.superseded_by`. Name that
+  seam in PHASE-04 — the generic path structurally cannot supply it.
 
 ### 5.6 The contract doc + ADR amendment
 
@@ -352,11 +467,17 @@ triple mirrors `(source, label, target)`. Dispatch:
   query, and appears in the target's **derived inbound** view (ADR-004).
 - `link` **refuses** an illegal `(source, label, target-kind)` triple and a
   dangling numbered-kind target; `unlink` round-trips.
-- `RELATION_RULES` rejects every inverse/derived label; a test asserts the SL-046
-  reader's labels ⊆ the table (cannot diverge).
+- `RELATION_RULES` rejects every inverse/derived label; **exact-coverage** (X3,
+  R2-M4) asserts, separately: (a) per source kind, the shipped reader's emitted
+  labels **==** the table's labels for that source; (b) the overlay-backed label set
+  **==** the resolvable graph labels (excluding the `Unvalidated` no-overlay pair).
+  A further test pins `RelationLabel` enum order **==** `RELATION_RULES` label order
+  (R2-C1), so the `inspect` BTreeMap regroup stays canonical.
 - **Behaviour preservation:** `backlog order` byte-identical (`needs`/`after`/
   `triggers` untouched); existing per-kind + cordage + backlog_order suites green;
-  post-migration SL-046 reader emits the same edges for already-authored relations.
+  post-migration SL-046 reader emits the same edges for already-authored relations;
+  **`inspect` and every `*-show` golden byte-identical** across the migration
+  (covers the `format_show` rewire R2-C2 and the `inbound_name` pinning R2-M3).
 - Whole-corpus round-trip `doctrine <kind> show` + `validate` clean after the
   one-shot migration.
 
@@ -367,13 +488,16 @@ triple mirrors `(source, label, target)`. Dispatch:
 - **PHASE-02** — `RELATION_RULES` table + `RelationLabel` new variants + the
   reader-labels-⊆-table invariant test (pure, no storage change yet).
 - **PHASE-03** — generic `[[relation]]` parser (`read_block`) + writer
-  (`append_edge`/`remove_edge`); SL-046 reader accessors rewired to `read_block`
-  for tier-1. Behaviour-preservation gate.
+  (`append_edge`/`remove_edge`); SL-046 reader accessors **and each kind's
+  `format_show`** rewired to `read_block` for tier-1 (R2-C2); `OverlayMap::build`
+  rewired to iterate `RELATION_RULES`, const deleted (R2-M4). Behaviour-preservation
+  gate (`inspect` + `*-show` goldens byte-identical).
 - **PHASE-04** — `link`/`unlink` command + forward-edge validation wiring; extend
   `validate` for `IllegalRow`s + the **supersession cross-check** (OD-3).
 - **PHASE-05** — **deterministic** one-shot corpus migrator (unshipped, excludes
   the governance supersession pair) gated by **before/after black-box goldens** on
-  `inspect`/`show`/`show --json` (OD-2); ADR-010 amendment (D3 corpus-wide +
+  `inspect`/`show`/`show --json` (OD-2) **plus a storage-level post-check** (R2-m3);
+  ADR-010 amendment (D3 corpus-wide +
   supersession-excluded); SPEC-005/006/016 references; **reclassify IMP-032**,
   **record the supersede-verb follow-up under IMP-006**.
 
@@ -455,6 +579,50 @@ Core critique: *"treating storage uniformity as if it were behaviour uniformity.
 - **X7 (MAJOR→OD-3)** — *adopted.* Governance supersession pair excluded from
   migration (stays typed); `related` only migrates; **+ `validate` supersession
   cross-check** (§5.5); transactional verb → IMP-006; IMP-032 reclassified.
+
+### External pass — round 2 (v2; codex-mcp GPT-5.5 + Opus sub-agent, deduped)
+
+Two independent adversaries on the integrated v2; they converged and **overturned
+v2's account of the shipped SL-046 seam** (no decision reversals — OD-1/2/3 hold).
+Each finding verified against source before adoption. All **adopted**:
+
+- **R2-C1 (CRITICAL→§5.3 X1)** — v2's "axis-major emit preserves goldens" named the
+  *wrong* surface. `inspect` re-groups via `BTreeMap<RelationLabel>`
+  (`relation_graph.rs:465,475`) → its goldens are in **enum-discriminant order**,
+  storage/accessor order irrelevant. The order-fragile surface is `format_show`
+  (literal axis arrays, not re-grouped). Fix: one canonical order (`RELATION_RULES`),
+  both surfaces derive from it, a test pins enum order == table order, new variants
+  append at their axis-run tail.
+- **R2-C2 (CRITICAL→§5.3/§8)** — `format_show` is a *second* consumer of the typed
+  `[relationships]` fields the migration deletes (`slice.rs:1221`), unaddressed in
+  v2 → post-migration `show` silently loses its relationships block. Fix: rewire
+  `format_show` to `read_block`, added to PHASE-03.
+- **R2-M1 (MAJOR→§5.5/§5.2)** — the legal-target-**kind** check is *new code*:
+  `ensure_ref_resolves` (`integrity.rs:325`) only parses+dir-probes. And `TargetSpec`
+  couldn't express "same-gov". Fix: add `TargetSpec::SameKind` + an explicit
+  `parse_canonical_ref(target).kind` assertion.
+- **R2-M2 (MAJOR→§5.2)** — table said `members | SPEC`; the shipped accessor is
+  subtype-blind (`spec.rs:531`) → PRD emits `Members`. The exact-coverage test would
+  contradict live behaviour. Fix: `members | PRD·SPEC`; audit every source cell
+  against the shipped accessor before pinning the test.
+- **R2-M3 (MAJOR→§5.2/§5.5)** — generalising `inbound_name` silently re-words every
+  asymmetric legacy label's inbound render (goldens at `e2e_inspect_golden.rs:215`).
+  Fix: mandate `inbound_name == name()` for all legacy labels; only `governed_by`/
+  `consumes`/`supersedes` differ; render-text only (JSON keeps raw label); VT pins
+  the goldens.
+- **R2-M4 (MAJOR→§5.2)** — `OVERLAY_LABELS` const must be *derived* from
+  `RELATION_RULES` or exact-coverage is a tautology; "every Writable rule has an
+  overlay" was already false for `drift`/`decision_ref`. Fix: `OverlayMap::build`
+  iterates the table (overlay-backed = `TargetSpec ≠ Unvalidated`), const deleted;
+  two separate exact assertions specified.
+- **R2-M5 (MAJOR→§5.5)** — `validate` has **no** relation-edge walk to "extend"
+  (`run_validate` = `check_kind` + prose-`md` `scan_danglers`). Fix: PHASE-04 builds
+  new corpus-edge validation on the `relation_graph` scan + `resolve_target`; the
+  `integrity.rs` "don't duplicate" framing withdrawn.
+- **R2-m1/m2/m3/m4 (MINOR)** — append-at-EOF is a migrator invariant, defend it
+  (§5.1); cross-check needs the typed-field read seam (§5.5); render goldens
+  insufficient — add a storage-level migration post-check (§5.1/§8); stale line
+  refs corrected.
 
 ## 12. Decisions after external review — RESOLVED
 
