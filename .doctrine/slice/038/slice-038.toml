@@ -5,11 +5,9 @@ status = "done"
 created = "2026-06-10"
 updated = "2026-06-11"
 
-[relationships]
-# Parent tech spec — SL-038 descends from SPEC-001: it validates the H1
-# performance hypothesis (revised 2026-06-11 to a ~tens-of-thousands target) by
-# measurement. Hand-authored per SL-036's shape; no `slice link` verb yet.
-specs = ["SPEC-001"]
+[[relation]]
+label = "specs"
+target = "SPEC-001"
 # No `requirements` — the spike satisfies no REQ; it tests an H1 claim and reds
 # two known risks. Sibling/risk links are OUTBOUND-derived (ADR-004): RSK-002 and
 # RSK-003 already point at SL-036; the cliffs they name are this spike's subjects,

@@ -12,9 +12,10 @@ updated = "2026-06-10"
 tags = ["testing", "golden", "render", "listing", "risk", "trigger", "deferred"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
-slices = []
-specs  = ["PRD-011"]
-drift  = []
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "specs"
+target = "PRD-011"

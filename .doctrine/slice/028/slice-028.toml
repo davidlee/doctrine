@@ -4,8 +4,6 @@ title = "Enact ADR-003 reconcile seam and lifecycle states"
 status = "done"
 created = "2026-06-08"
 updated = "2026-06-09"
-
-[relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
 # When specs land, this section gains (illustrative, not v1):
 #   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates

@@ -5,8 +5,17 @@ status = "plan"
 created = "2026-06-12"
 updated = "2026-06-13"
 
-[relationships]
-specs = ["SPEC-016", "SPEC-005", "SPEC-006"]
+[[relation]]
+label = "specs"
+target = "SPEC-016"
+
+[[relation]]
+label = "specs"
+target = "SPEC-005"
+
+[[relation]]
+label = "specs"
+target = "SPEC-006"
 # Capture-surface homes for the new structural relations (all draft today):
 #   SPEC-016 governance kinds (the inert [relationships] seam), SPEC-005 ADR
 #   surface, SPEC-006 spec composition. PRD-011/SPEC-001 are downstream consumers.

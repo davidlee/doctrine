@@ -13,5 +13,4 @@ updated = "2026-06-10"
 # Authored-but-inert: present so the shape is stable when those land.
 supersedes    = []   # POL ids this one replaces (relationship, not a status — design D2)
 superseded_by = []   # reverse link is derived
-related       = []   # non-superseding cross-references
 tags          = []   # free-form classification

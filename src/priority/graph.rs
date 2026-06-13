@@ -327,14 +327,68 @@ mod tests {
         tempfile::tempdir().unwrap()
     }
 
-    /// Seed a slice (toml + md) with a `[relationships]` body.
+    /// SL-048 PHASE-04: rewrite a legacy `[relationships]` body (`key = [...]` lines)
+    /// into the migrated on-disk shape for `source` — tier-1 simple-list axes become
+    /// `[[relation]]` rows (canonical order is laundered by `read_block`, so emit
+    /// order here is irrelevant); every other line (the typed `needs`/`after`/
+    /// `triggers` payload axes, or any non-migrated label) stays verbatim in a
+    /// `[relationships]` table emitted FIRST (F1). Keeps these fixtures' inline bodies
+    /// readable while exercising the post-cut storage shape.
+    fn migrate_body(source: &crate::entity::Kind, rels: &str) -> String {
+        use crate::relation::RelationLabel;
+        let mut typed = String::new();
+        let mut rows = String::new();
+        for line in rels.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let key = trimmed.split('=').next().unwrap_or("").trim();
+            let is_simple_list = trimmed.contains('[') && !trimmed.contains('{');
+            let migrated = is_simple_list
+                && RelationLabel::from_name(key)
+                    .and_then(|l| crate::relation::lookup(source, l))
+                    .is_some_and(|r| {
+                        r.tier == crate::relation::Tier::One
+                            && r.link != crate::relation::LinkPolicy::LifecycleOnly
+                    });
+            if migrated {
+                let inner = trimmed
+                    .split_once('[')
+                    .and_then(|(_, rest)| rest.rsplit_once(']'))
+                    .map(|(refs, _)| refs)
+                    .unwrap_or("");
+                for t in inner.split(',') {
+                    let t = t.trim().trim_matches('"');
+                    if !t.is_empty() {
+                        rows.push_str(&format!(
+                            "[[relation]]\nlabel = \"{key}\"\ntarget = \"{t}\"\n"
+                        ));
+                    }
+                }
+            } else {
+                typed.push_str(line);
+                typed.push('\n');
+            }
+        }
+        let typed_table = if typed.trim().is_empty() {
+            String::new()
+        } else {
+            format!("[relationships]\n{typed}")
+        };
+        format!("{typed_table}{rows}")
+    }
+
+    /// Seed a slice (toml + md) with a legacy `[relationships]` body (rewritten to the
+    /// SL-048 migrated shape via [`migrate_body`]).
     fn seed_slice(root: &Path, id: u32, rels: &str) {
         write(
             root,
             &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
             &format!(
                 "id = {id}\nslug = \"s\"\ntitle = \"S\"\nstatus = \"proposed\"\n\
-                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[relationships]\n{rels}"
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{}",
+                migrate_body(&crate::slice::SLICE_KIND, rels)
             ),
         );
         write(
@@ -366,7 +420,8 @@ mod tests {
             &format!(
                 "id = {id}\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"{status}\"\n\
                  resolution = \"{resolution}\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-                 [relationships]\n{rels}"
+                 {}",
+                migrate_body(&crate::backlog::ISSUE_KIND, rels)
             ),
         );
         write(
@@ -384,7 +439,8 @@ mod tests {
             &format!(
                 "id = {id}\nslug = \"k\"\ntitle = \"K\"\nkind = \"risk\"\nstatus = \"{status}\"\n\
                  resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-                 [relationships]\n{rels}"
+                 {}",
+                migrate_body(&crate::backlog::RISK_KIND, rels)
             ),
         );
         write(

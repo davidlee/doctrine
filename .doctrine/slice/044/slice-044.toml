@@ -13,8 +13,6 @@ updated = "2026-06-12"
 # NF-003 reconstructable), so the slice's own closure gate is answerable for them.
 [gate]
 extra_reqs = ["REQ-112", "REQ-113", "REQ-114", "REQ-116"]
-
-[relationships]
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
 # When specs land, this section gains (illustrative, not v1):
 #   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates

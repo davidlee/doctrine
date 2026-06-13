@@ -5,16 +5,41 @@ status = "done"
 created = "2026-06-07"
 updated = "2026-06-08"
 
-[relationships]
-# Parent product spec — SL-020 descends from PRD-009 (Backlog). The design-whole
-# covers the entire PRD; the v1 implement subset satisfies the requirements below.
-# (Hand-authored per SL-019's reserved shape; no `slice link` verb yet.)
-specs = ["PRD-009"]
-# Requirements the v1 subset implements: capture, survey, inspect, status lifecycle,
-# descriptive facets, resolution, atomic edit-preserving, typed storage. The whole PRD
-# is *designed*; prioritise/promote/relations (REQ-054/055/056) are designed-only,
-# built in follow-ups (see Non-Goals).
-requirements = ["REQ-049", "REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-057", "REQ-058", "REQ-059"]
+[[relation]]
+label = "specs"
+target = "PRD-009"
+
+[[relation]]
+label = "requirements"
+target = "REQ-049"
+
+[[relation]]
+label = "requirements"
+target = "REQ-050"
+
+[[relation]]
+label = "requirements"
+target = "REQ-051"
+
+[[relation]]
+label = "requirements"
+target = "REQ-052"
+
+[[relation]]
+label = "requirements"
+target = "REQ-053"
+
+[[relation]]
+label = "requirements"
+target = "REQ-057"
+
+[[relation]]
+label = "requirements"
+target = "REQ-058"
+
+[[relation]]
+label = "requirements"
+target = "REQ-059"
 # Lineage (not edges): rides the same engine seam ADR (SL-006) + spec (SL-015) proved;
 # lands behind its registry gate via the supersede pattern (entity-model.md:147).
 # Canon that also governs (prose links in slice-020.md § Context Bundles):

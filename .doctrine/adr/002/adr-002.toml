@@ -13,5 +13,8 @@ updated = "2026-06-05"
 # Authored-but-inert: present so the shape is stable when those land.
 supersedes    = []   # ADR ids this one replaces (F1 `adr supersede`)
 superseded_by = []   # set on the old ADR by F1; reverse link is derived
-related       = ["ADR-001"]  # non-superseding cross-references (rides ADR-001 layering)
 tags          = []   # free-form classification
+
+[[relation]]
+label = "related"
+target = "ADR-001"
