@@ -207,10 +207,11 @@ fn terminal_width(is_tty: bool, cols: Option<u16>) -> Option<u16> {
     }
 }
 
-/// Coarse shell-side floor: guards only the degenerate `size() == 0` /
-/// unreadably-narrow case (odd/headless environments) so a junk width never even
-/// reaches the pure layer. It is NOT the real fit test — that is grid-dependent and
-/// lives in `render_table` (`grid_min_width`, §4), since the shell has no grid.
+/// Coarse shell-side pre-filter for degenerate sizes (`size() == 0`, headless /
+/// unreadably-narrow terminals): below it, skip wrapping and emit clean overflow.
+/// NOT the authoritative fit test — that is grid-dependent (`render_table`'s
+/// `grid_min_width`, §4); the shell has no grid, so this protects nothing the grid
+/// floor wouldn't and only adds a cheap shell-side cutoff.
 const MIN_WRAP_WIDTH: u16 = 16;
 ```
 
@@ -253,7 +254,8 @@ comfy-table re-exports only `crossterm::style::{Attribute, Color}` (never
 new *compiled crate*", not "no `Cargo.toml` edit": the direct `crossterm = "0.29"`
 matches the version already resolved in the lockfile via comfy-table, so it adds
 **zero new compiled weight** — it only puts the path on the extern prelude.
-(Consulted + approved; supersedes the §6 / §8 "no new dependency" wording.)
+(Consulted + approved; supersedes the original "no new dependency / no `Cargo.toml`
+edit" claim replaced inline above.)
 
 ## 6. Verification
 
