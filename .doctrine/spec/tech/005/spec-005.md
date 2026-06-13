@@ -40,12 +40,14 @@ component only fixes the vocabulary and the hide policy.
 ### Identity TOML and the relationships seam
 
 The ADR identity TOML carries `id`, `slug`, `title`, `status`, and `created` /
-`updated` dates. It additionally holds a reserved `[relationships]` table —
-`supersedes`, `superseded_by`, `related`, `tags` — present from the first record
-and empty by default. The seam is authored-but-inert: its shape is stable so that
-supersession and tagging attach later without reshaping the record, and the
-reverse `superseded_by` link is derived, never authored on both sides
-(outbound-only, ADR-004).
+`updated` dates. Its relations follow the **cross-corpus relation contract
+specified in SPEC-018** (governed by ADR-010, composing ADR-004's outbound-only
+rule) — this spec does not re-tell that model. The ADR's own surface within it: a
+typed `[relationships]` table holding the supersession pair `supersedes` /
+`superseded_by` (the ADR-004 §5 reverse carve-out, verb-written, never hand-authored
+on both sides) and free-text `tags`; the `related` axis is a tier-1 `[[relation]]`
+edge (migrated in SL-048). The supersession pair stays typed pending the
+transactional supersede verb ([[IMP-006]]).
 
 ### Prose render contract
 
@@ -76,6 +78,8 @@ prose headings as a write-once scaffold, never parsing their structure.
 - **D1 — metadata in TOML, prose has no frontmatter.** The ADR body is pure prose;
   identity and lifecycle live in the sister TOML, consistent with the storage rule
   the parent container realises.
-- **D2 — the relationships seam ships inert.** Supersession, related links, and
-  tags occupy a reserved table from the first record, present so the shape is
-  stable, with no verb yet wiring them.
+- **D2 — relations follow the SPEC-018 contract; the supersession seam stays typed
+  and inert.** `related` migrated to the tier-1 `[[relation]]` block (SL-048); the
+  supersession pair + `tags` remain a typed `[relationships]` table, inert until the
+  transactional supersede verb ([[IMP-006]]) wires them. The cross-corpus model,
+  vocabulary, and validation policy live in SPEC-018, not here.

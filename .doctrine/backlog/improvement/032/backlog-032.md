@@ -17,8 +17,10 @@ place a reader of the dead record finds its successor.
 The honest remaining work is therefore **not** schema removal but a guard:
 
 1. **A `validate` cross-check** — stored `superseded_by` agrees with the reciprocal
-   derived from `supersedes` `in_edges`; report drift, never rewrite. **SL-048
-   (OD-3) implements this** — closes the integrity half of this item.
+   derived from `supersedes` `in_edges`; report drift, never rewrite. **SHIPPED in
+   SL-048 PHASE-05** (the `validate` corpus-edge walk + supersession cross-check) —
+   the integrity half of this item is closed; only the verb-written half (below)
+   remains, owned by [[IMP-006]].
 2. **The carve-out becomes verb-written** (not hand-authored) once the
    transactional supersede verb exists — that verb is **[[IMP-006]]** (uniform
    lifecycle-transition verbs), not SL-048 (a gov-only build there = parallel

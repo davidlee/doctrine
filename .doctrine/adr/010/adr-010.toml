@@ -6,7 +6,7 @@ slug = "relation-modelling-unify-contract-and-write-seam-keep-storage-bespoke"
 title = "Relation modelling: unify the contract and write seam, keep storage bespoke"
 status = "accepted"
 created = "2026-06-12"
-updated = "2026-06-12"
+updated = "2026-06-13"
 
 [relationships]
 # Reserved. Empty in v1 — supersession (F1) and tagging are not wired yet.
