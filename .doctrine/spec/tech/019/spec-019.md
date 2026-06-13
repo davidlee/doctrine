@@ -197,6 +197,33 @@ authoritative continuation — refusing a reopening direction (`constraint → a
 predecessor→successor relation `TargetSpec` cannot express (it constrains only the legal
 target *kind set*), so its enforcement lives in the verb, not the contract table.
 
+### Priority-engine posture: graph-present, actionability-inert (SL-047)
+
+Records ride the relation graph (SL-046) but stand outside the **actionable channel**
+(SL-047 / SPEC-001) — *truth is not work*, so a record is never something the worklist
+tells you to do. This is a **positive declaration, not an omission**: admitting the four
+kinds to `integrity::KINDS` forces a `priority::partition` entry, because the partition
+invariant requires `workable ∪ terminal` to cover each kind's whole status vocabulary —
+an unclassified status degrades to `Unrecognised` (a diagnostic). So every record state
+is classed **`Terminal`** (workable set empty), exactly the posture the status-less
+**REC** kind already takes ("context-only, default-excluded"):
+
+- never `eligible` → never in `survey` or `next`;
+- `consequence` stays 0 — record→artefact labels are excluded from the work-lineage set
+  (`counts_toward_consequence`), since a record *shaping* an artefact is not the artefact
+  *depending on it for work*;
+- visible only through `inspect` and the relation views, where it belongs.
+
+The dependency tree still feels a record's influence — **indirectly, by design**. The
+priority engine's `dep` overlay is built from hard-prereq (`needs`-class) edges between
+*workable* nodes; a `Terminal` node neither blocks nor is blocked. When a belief or
+question genuinely gates work, PRD-010 §6 routes it through a **spawned backlog item**:
+that item is workable, joins the `dep` overlay, and blocks the dependent, while the
+record links to it. The belief shapes the graph through its spawned work, never as a
+dep-overlay node itself. **Risks need no special handling here** — a risk is a backlog
+item, not a `knowledge_record` (PRD-010 §2), and already participates via the backlog's
+cordage exposure tiebreak (SPEC-015).
+
 ## Concerns
 
 - **Kind-relative status validation.** The transition vocabulary is selected by
@@ -226,6 +253,11 @@ target *kind set*), so its enforcement lives in the verb, not the contract table
   exceeds it (record→risk, record→ADR relate, spawn). New variants must be minted with
   their `inbound_name` and rule row, and the coverage invariant updated — under-minting
   silently drops a legal link, over-minting leaves an un-routed label.
+- **Forced partition entry.** Adding the record kinds to `integrity::KINDS` obliges a
+  `priority::partition` entry covering every record status, or the partition invariant
+  flags them `Unrecognised`. The correct entry is all-`Terminal` (empty workable set);
+  the hazard is forgetting it, or mis-classing a live state `Workable` and leaking
+  records into `next` as fake work.
 - **Behaviour preservation.** This family rides the shared entity scaffold *and* the
   shipped relation machinery; introducing it must leave the existing slice / ADR / spec /
   backlog / memory suites — and the relation-contract suites — green unchanged (PRD-010
@@ -281,6 +313,12 @@ target *kind set*), so its enforcement lives in the verb, not the contract table
   No bespoke per-record relation store, no second reader: one contract, one graph
   (no parallel implementation). Artefact/spawn links are tier-1 `[[relation]]` `Writable`;
   the supersession pair is the `LifecycleOnly` typed carve-out owned by the IMP-006 verb.
+- **D7 — records are graph-present but actionability-inert.** All record states are
+  `Terminal`-class in `priority::partition` (workable set empty, the REC posture); records
+  never appear in `survey`/`next`, carry 0 consequence, and never block. A belief that
+  gates work blocks the dependent through a *spawned backlog item* (PRD-010 §6), not as a
+  dep-overlay node — *truth is not work*, enforced at the rank layer, not just asserted.
+  This is a declaration the partition invariant forces, not a silent skip of SL-047.
 
 ## Open Questions
 
@@ -294,3 +332,13 @@ target *kind set*), so its enforcement lives in the verb, not the contract table
   this surface) and is not specified here. This spec assumes only that a record is a
   *citable* target; how memory cites or is promoted into one is owned elsewhere when v2
   opens it.
+- OQ-2 — should a record ever be a **first-class blocker** in the priority graph? D7
+  keeps records actionability-inert (`Terminal`-class), so a belief gates work only via a
+  spawned backlog proxy (PRD-010 §6). The limitation is structural: SL-047's status
+  partition is **binary** (`workable | terminal`), and blocking is reserved to
+  non-terminal nodes — which are also, necessarily, `eligible` and thus `next`-actionable.
+  There is no "blocks but is not itself work" class. Letting an open `QUE`/`ASM`/`CON`
+  *directly* block a slice without a proxy would need a **third status-class** in
+  SPEC-001 (decoupling blocking from eligibility) — a priority-engine change, out of this
+  surface's scope. Recorded because it is exactly where the "records in the dependency
+  tree" intuition meets the model's edge.
