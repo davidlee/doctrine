@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec3285f9c77e1a678e1571fd70199"
+memory_key = "mem.pattern.lint.blanket-dead-code-suppression-masks-siblings"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Blanket module dead_code suppression masks sibling dead symbols — gate per-symbol"
+summary = "A module-level cfg_attr(not(test),expect(dead_code)) masks OTHER genuinely-dead symbols — gate per-symbol #[cfg(test)] instead"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["src/knowledge.rs"]
+globs = []
+commands = []
+tags = ["lint", "dead_code", "cfg-test"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f1e77eb75cd3cd5a2a70773a970e5c4add51ef7d"
+ref_name = "refs/heads/main"
+checkout_state_id = "e51e8fb0c334db364f3802edf14e5e5cbbac3e01c560565106fa6be2d5f7c61e"
+base_commit = "991febdc3d712acf7b640ecfe96b4dd5d582e0be"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

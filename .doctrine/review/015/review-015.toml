@@ -1,0 +1,61 @@
+id    = 15
+slug  = "sl-059-closeout-reconciliation-post-code-review-remediation"
+title = "SL-059 closeout reconciliation (post code-review remediation)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-059"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "C1/C5: dead render subtree masked by blanket module dead_code suppression"
+detail = 'render_record_toml + render_facet/render_evidence/opt_text_line/opt_enum_line/list_line had ZERO non-test callers (only mod tests); production writes go via render_record_toml_seed (template) + set_record_status (toml_edit). The module-level cfg_attr(not(test),expect(dead_code,"self-clears when a non-test caller arrives")) was false-for-these AND blanketed the whole module, masking any future real dead symbol. C5: opt_enum_line was a redundant twin of opt_text_line.'
+disposition = "fix-now"
+response = "Fixed (cd0e3c9). Gated the six render fns #[cfg(test)] per-fn and deleted the module-level cfg_attr(not(test),expect(dead_code)). Removing the blanket suppression surfaced four genuinely test-only symbols it had masked (default_status + three facet-enum KNOWN sets) — each now individually #[cfg(test)]-gated, so a future real dead symbol trips the lint. C5: opt_enum_line collapsed into opt_text_line(key, kind.map(Enum::as_str)). clippy clean, --workspace gate green."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "C2: set_record_status malformed-refuse guard untested"
+detail = "The bail at knowledge.rs ~1296-1304 prevents silent corruption (tail-insert landing inside [facet]/[evidence] when seeded status/updated are hand-stripped). adr.rs/standard.rs ship the guard AND its golden (e2e_adr_cli_golden.rs:243, e2e_standard_cli_golden.rs:245); knowledge copied the guard, dropped the test."
+disposition = "fix-now"
+response = "Fixed (f11eada). Added knowledge_status_on_malformed_toml_refuses_and_leaves_file_untouched to e2e_knowledge_cli_golden.rs, mirroring adr_status_on_malformed_toml_refuses_*: strip status/updated, run knowledge status, assert exit-fail + exact error + file byte-untouched. Knowledge golden now 15 tests, green."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "C3: list_rows reveal rule duplicates listing::retain's, drift risk"
+detail = "list_rows reproduces reveal = all || !status.is_empty() (knowledge.rs ~1221) because the kind-aware is_hidden cannot ride listing::retain's status-keyed closure. Both limbs behaviourally pinned; risk is silent divergence if retain's rule changes."
+disposition = "fix-now"
+response = "Reconciled in-slice (cd0e3c9): added a DRIFT comment at list_rows' reveal rule pinning it to listing::retain's status-keyed reveal. The structural fix (kind-aware retain closure so the per-item hide-set is expressed once) is owned future work, captured in IDE-009."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "C4: no hand-edit validation of facet keys (tolerant read swallows typos)"
+detail = "24-field RawFacet superset silently swallows typo'd/foreign facet keys (R2 tolerant-read, accepted). Same gap corpus-wide."
+disposition = "follow-up"
+response = "Deferred to IDE-009 (knowledge read-path validation / lint verb). The tolerant read (R2) is accepted design; a separate read-only lint surface is the correct route to flag typo'd/foreign facet keys, not tightening the read."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "C6: record status unvalidated on read"
+detail = "A hand-edited out-of-vocab record status passes through on read (only the status transition verb validates). Same tolerant-read class as C4."
+disposition = "follow-up"
+response = "Deferred to IDE-009 — same tolerant-read class as F-4; the knowledge lint verb covers out-of-vocab read-status."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
