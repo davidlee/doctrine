@@ -294,17 +294,27 @@ pub(crate) enum ColumnPaint<R> {
 
 /// The single shared status→hue map for every coloured `list` surface (SL-053
 /// PHASE-02) — no per-kind duplication. Greens are settled/accepted/required
-/// states, yellows are in-flight lifecycle states, reds are stopped/adverse states;
-/// any unrecognised token (proposed/open/ready/draft/…) is left uncoloured.
+/// states, yellows are in-flight lifecycle states, reds are stopped/adverse states.
 ///
-/// Covers the union of the painted kinds' live status vocabularies: slice lifecycle
-/// (`proposed→…→done`/`abandoned`), governance (`accepted`/`required`/`active`),
-/// review (`active`/`done`), memory (`active`/…), spec/req (`active`/`draft`/…).
+/// A deliberately conservative SUBSET of the painted kinds' status vocabularies,
+/// NOT their union: only tokens with an unambiguous semantic colour are mapped;
+/// every other live token (`proposed`/`open`/`draft`/`resolved`/`closed`/
+/// `superseded`/…) falls through to `None` (uncoloured) by design. Every mapped
+/// token is one a painted surface can actually emit — slice lifecycle
+/// (`proposed→design→plan→ready→started→audit→reconcile→done`/`abandoned`),
+/// governance (`accepted`/`required`/`active`), review (`active`/`done`), memory
+/// (`active`/…), spec/req (`active`/`draft`/…).
+///
+/// `in_progress` is intentionally absent: it is a *phase* status, rendered in the
+/// `phases` column as a rollup count (`4/6`), never as a painted status cell — so
+/// mapping it would be dead. `ready` is yellow alongside its in-flight lifecycle
+/// siblings (`design`/`plan`/`started`/`audit`/`reconcile`); only the pre-engagement
+/// `proposed` stays grey.
 pub(crate) fn status_hue(s: &str) -> Option<owo_colors::AnsiColors> {
     use owo_colors::AnsiColors::{Green, Red, Yellow};
     match s {
         "done" | "active" | "accepted" | "required" => Some(Green),
-        "in_progress" | "started" | "design" | "plan" | "audit" | "reconcile" => Some(Yellow),
+        "design" | "plan" | "ready" | "started" | "audit" | "reconcile" => Some(Yellow),
         "blocked" | "abandoned" | "contested" => Some(Red),
         _ => None,
     }
@@ -876,12 +886,14 @@ mod tests {
         assert_eq!(render_table(&[]), "");
     }
 
-    // VT-1 (force-no-tty determinism): render_table is terminal-size- and
-    // tty-independent. force_no_tty() makes comfy-table's content formatter
-    // short-circuit before stdout().is_terminal(), so the output never carries an
-    // ANSI escape and is byte-stable across repeated calls regardless of the
-    // process's actual stdout state (SL-053 D6). We assert both observable
-    // properties: no ESC byte, and idempotent output.
+    // VT-1 (no-ANSI + idempotence). `force_no_tty()` is UNCONDITIONAL inside
+    // render_table, so byte-stability terminal-vs-pipe (SL-053 D6) is a structural
+    // property of the code, NOT something this in-process test can toggle or prove —
+    // there is no tty arm to flip, and a pty is out of scope. What this test pins is
+    // the two observable consequences: (a) the output carries no ANSI escape
+    // (force_no_tty + Disabled suppress comfy-table's own styling), and (b) the pure
+    // fn is idempotent. The live terminal-vs-pipe equivalence rests on force_no_tty
+    // being unconditional, asserted by structure rather than exercised here.
     #[test]
     fn render_table_is_deterministic_and_carries_no_ansi() {
         let grid = [
@@ -1161,6 +1173,79 @@ mod tests {
             }
         }
         out
+    }
+
+    // -- status_hue + ByValue paint path ----------------------------------
+    // The one branching decision in the colour seam. Previously unexercised:
+    // CROW_COLUMNS paints only `id: Fixed` + `slug: None`, so no test ever called
+    // a ByValue fn or status_hue. These pin the token→hue table against drift and
+    // the `paint_cell` ByValue dispatch.
+
+    /// Each hue class maps the tokens a painted surface can emit; everything else
+    /// (incl. the deliberately-unmapped phase status `in_progress`) is `None`.
+    #[test]
+    fn status_hue_maps_each_class_and_leaves_the_rest_uncoloured() {
+        use owo_colors::AnsiColors::{Green, Red, Yellow};
+        for green in ["done", "active", "accepted", "required"] {
+            assert_eq!(status_hue(green), Some(Green), "{green} is settled/green");
+        }
+        for yellow in ["design", "plan", "ready", "started", "audit", "reconcile"] {
+            assert_eq!(
+                status_hue(yellow),
+                Some(Yellow),
+                "{yellow} is in-flight/yellow"
+            );
+        }
+        for red in ["blocked", "abandoned", "contested"] {
+            assert_eq!(status_hue(red), Some(Red), "{red} is stopped/red");
+        }
+        // Conservative-subset tail + the pre-engagement state stay uncoloured.
+        for none in [
+            "proposed",
+            "open",
+            "draft",
+            "resolved",
+            "closed",
+            "superseded",
+        ] {
+            assert_eq!(status_hue(none), None, "{none} falls through uncoloured");
+        }
+        // Regression guard: `in_progress` is a phase status (rollup count), never a
+        // painted status cell — it must NOT be mapped (was a dead Yellow key).
+        assert_eq!(
+            status_hue("in_progress"),
+            None,
+            "in_progress is a phase status, not a painted status cell"
+        );
+    }
+
+    /// `paint_cell`'s `ByValue` arm reads the ROW and applies the returned hue;
+    /// `None` from the fn (or `color = false`) leaves the cell byte-for-byte raw.
+    #[test]
+    fn paint_cell_byvalue_reads_row_and_respects_none() {
+        let row = CRow {
+            id: "SL-001",
+            slug: "done",
+        };
+        // ByValue → Some(hue): coloured, but stripping ANSI reproduces the raw cell.
+        let by_status: ColumnPaint<CRow> = ColumnPaint::ByValue(|r| status_hue(r.slug));
+        let painted = paint_cell("done", &by_status, &row, true);
+        assert!(
+            painted.contains('\u{1b}'),
+            "ByValue Some hue emits ANSI: {painted:?}"
+        );
+        assert_eq!(
+            strip_ansi(&painted),
+            "done",
+            "stripped ANSI is the raw cell"
+        );
+
+        // ByValue → None: raw, zero ANSI.
+        let by_none: ColumnPaint<CRow> = ColumnPaint::ByValue(|_| None);
+        assert_eq!(paint_cell("done", &by_none, &row, true), "done");
+
+        // color = false short-circuits before the hue lookup — raw even for Some.
+        assert_eq!(paint_cell("done", &by_status, &row, false), "done");
     }
 
     // -- json_envelope -----------------------------------------------------
