@@ -322,9 +322,19 @@ so post-migration `format_show` has nothing to iterate and `slice show` / `adr
 show` silently lose their relationships block. `format_show` must therefore also
 read tier-1 from `read_block` (and thread the new `governed_by`/`consumes` axes),
 in the canonical label order of X1. This is a third item in the "shrink" list
-above and is added to **PHASE-03** scope (§8). The behaviour-preservation gate
-covers it: the `e2e_adr_cli_golden`/slice-show goldens must stay byte-identical
-across the migration.
+above. The behaviour-preservation gate covers it: the `e2e_adr_cli_golden`/
+slice-show goldens must stay byte-identical across the migration.
+
+**R2-C2′ (plan-review addendum) — `show_json` is the *third* consumer.** Beyond
+the human `format_show`, each kind's `show_json` path also reads the typed fields
+the migration deletes: slice/governance serde the whole doc (`slice.rs` `show_json`,
+`governance.rs` `show_json`), backlog hand-projects `item.relationships`
+(`backlog.rs` `show_json`) — so the deletion changes `show --json` output (backlog
+will not even compile). `show_json` must likewise reconstruct tier-1 relations from
+`read_block` in the **same JSON shape**, so OD-2's byte-identical `show --json`
+gate holds. (The phase home for the C2/C2′ rewires is `/plan`'s call — they land
+with the migration in the cut phase, since deleting the fields and migrating the
+data must co-occur to stay green.)
 
 **X2 — `read_block` takes the source kind and enforces legality.** Generic
 storage must not mean a generic *parser that emits anything*. Today a slice
@@ -528,7 +538,8 @@ triple mirrors `(source, label, target)`. Dispatch:
 - **D2** — migration is **out-of-band** (script/LLM), no shipped migrate verb, no
   dual-read; parsers cut hard to `[[relation]]`.
 - **D3** — `label`/`target` field names; `governed_by` shared SL/SPEC/PRD→gov;
-  `related` reused for PRD↔PRD.
+  PRD↔PRD is **`consumes`** (own label/overlay, superseded the round-1 `related`
+  reuse — OD-1/X4, §5.2/§12).
 - **D4** — `RelationRule` table with `TargetSpec`/`Tier`/`LinkPolicy` as the single
   source driving writer/validator/reader.
 - **D5** — contract lives **inline in this design**, re-homed to a tech spec at
