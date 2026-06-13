@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebe96f1bb7bd1a59c59bab34c2e00"
+memory_key = "mem.pattern.render.force-no-tty-styling-axis-only"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "force_no_tty suppresses only comfy-table's styling tty-consult, not Dynamic wrap"
+summary = "force_no_tty governs the styling axis only; ContentArrangement::Dynamic wrapping works fine under it"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["src/listing.rs"]
+globs = []
+commands = []
+tags = ["comfy-table", "rendering", "tty"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "83332f12a2e18e4c1f1b823906f27752bf7e7592"
+ref_name = "refs/heads/main"
+checkout_state_id = "a77661ec20a44a07c176ebf845bbbab0084ca2ea95595b7a85c1786fa5269b31"
+base_commit = "533070039eab7e646675ffe7b487e22f5a4628f0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

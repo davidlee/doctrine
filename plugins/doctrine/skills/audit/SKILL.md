@@ -102,6 +102,8 @@ Inputs:
    finding is terminal (`verified` or `withdrawn`, D-C9a); `review status RV-NNN`
    reports `done · await=none`. An unresolved `blocker` will be refused at the
    close seam, so resolve it (via `verify` or `withdraw`) before handing off.
+   Record the lifecycle move: `doctrine slice status <id> reconcile` (bare
+   number) — the binary refuses it while a blocker is unresolved (D-C9b).
 
 ## Outcomes
 
