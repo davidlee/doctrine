@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 244
+slug = "own-a-transactional-cross-kind-supersession-verb-co-writing-supersedessuperseded-by-moving-the"
+title = "Own a transactional cross-kind supersession verb co-writing supersedes/superseded_by, moving the predecessor to a terminal status valid for its own kind without changing that kind, admitting a record_kind crossing only along the allowed matrix when the successor is the authoritative continuation"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
