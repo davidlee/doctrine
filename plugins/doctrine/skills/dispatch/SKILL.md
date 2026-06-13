@@ -51,7 +51,13 @@ Dispatch drives the *whole* slice, not one batch. The import funnel below is the
 3. **Funnel.** Run the strict per-batch cadence (below) to land the unit as exactly
    one commit on the coordination branch.
 4. **Repeat** from the new HEAD until the slice's phases are done.
-5. **Hand over on cadence — a quality gate, not an overflow stop.** Your context is
+5. **Conclude the slice.** When the last phase lands: `doctrine slice status
+   <id> audit` (bare number) and run `/audit` from the parent tree, not a fork
+   (the RV verbs refuse on a worktree fork). Then GC the dispatch debris —
+   remove spent worker worktrees (`git worktree remove <dir>`) and delete
+   imported fork branches. (Worktree removal strands test binaries that baked
+   the fork path via `CARGO_MANIFEST_DIR` — recompile before trusting a RED.)
+6. **Hand over on cadence — a quality gate, not an overflow stop.** Your context is
    disposable and rebuildable from the coordination branch (see Crash / overflow
    recovery), so handover is cheap; the **dumb zone is not**. Reasoning quality decays
    long before any capacity limit, so hand over *early*, while you are still sharp —
@@ -254,6 +260,7 @@ crash — recover the same way.
 | Apply conflict on disjoint batch | Changed-path analysis was wrong → **report + halt**, human re-plans |
 | `branch-point-check` exits 1 | External HEAD move → **re-dispatch** the batch, never commit on a moved base |
 | Crash / context overflow | Rebuild from coordination branch + `git worktree list`; no load-bearing state |
+| All phases landed | `doctrine slice status <id> audit` → `/audit` from the parent tree; remove spent worktrees, delete imported fork branches |
 
 ## Red Flags
 
