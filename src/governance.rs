@@ -223,6 +223,26 @@ fn read_doc(g: &GovKind, gov_root: &Path, id: u32) -> anyhow::Result<(Doc, Strin
     Ok((doc, text, body))
 }
 
+/// The TYPED supersession pair of one governance entity — `(supersedes,
+/// superseded_by)` read DIRECTLY from the typed `[relationships]` table (SL-048 §5.5,
+/// R2-m2). The generic `read_block`/`outbound_for` path deliberately EXCLUDES
+/// `superseded_by` (the ADR-004 §5 derived-inbound carve-out — no reader projects it),
+/// so the `validate` supersession cross-check needs this dedicated seam to read the
+/// stored reverse field. Pure read, used only by `validate` to report drift between the
+/// stored `superseded_by` and the reciprocal derived from `supersedes` in-edges — it
+/// NEVER rewrites (the reseat precedent). `g` selects the governance kind (ADR/POL/STD).
+pub(crate) fn supersession_pair(
+    g: &GovKind,
+    root: &Path,
+    id: u32,
+) -> anyhow::Result<(Vec<String>, Vec<String>)> {
+    let (doc, _text, _body) = read_doc(g, &root.join(g.kind.dir), id)?;
+    Ok((
+        doc.relationships.supersedes,
+        doc.relationships.superseded_by,
+    ))
+}
+
 /// A governance entity's authored outbound relations (SL-046 §5.2). Emits
 /// `supersedes` → [`RelationLabel::Supersedes`] and `related` →
 /// [`RelationLabel::Related`] ONLY. NEVER `superseded_by` (ADR-004 §3/§5: a

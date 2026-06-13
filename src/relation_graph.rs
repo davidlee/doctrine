@@ -385,6 +385,152 @@ fn resolve_target(
     })
 }
 
+// ---------------------------------------------------------------------------
+// PHASE-05 — the corpus-edge `validate` walk + supersession cross-check (design
+// §5.5, R2-M5 / R2-m2). Report-only: returns finding strings, NEVER rewrites (the
+// reseat precedent). Consumed by `integrity::run_validate`.
+// ---------------------------------------------------------------------------
+
+/// The `validate` relation-edge walk (design §5.5, R2-M5): scan every entity's
+/// authored `[[relation]]` block and report two finding classes — never rewriting:
+///
+/// 1. **Danglers** — a validated (`Kinds`/`SameKind`/`AnyNumbered`) target that no
+///    longer resolves to an entity (a deleted target). `Unvalidated` labels
+///    (`drift`/`decision_ref`) are EXCLUDED: their free-text targets dangle BY DESIGN
+///    (ADR-010 D2), so they are not findings.
+/// 2. **`IllegalRows`** — hand-edited `[[relation]]` rows whose `(source, label)` is
+///    off-table (an unknown label, or a label illegal for that source). `read_block`
+///    surfaces these; `outbound_for`/`tier1_edges` drop them, so the raw block is
+///    re-read here. A mis-ordered hand-edited typed table is caught by the WRITE
+///    seam's F1 defence (`append_edge`), not this read walk — this walk reports the
+///    row-legality findings the read seam yields.
+///
+/// Rides the established seams: `scan_entities` for the outbound edges (already legal,
+/// resolved-or-not) and `integrity::ensure_ref_resolves` as the dangler oracle (parse +
+/// dir-probe — the same existence check `link` uses forward). The raw block re-read for
+/// `IllegalRows` uses `integrity::KINDS` (dir + stem) — no new path authority.
+pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
+    let mut findings = Vec::new();
+    let scanned = scan_entities(root)?;
+
+    // (1) danglers — a validated target that fails to resolve.
+    for entity in &scanned {
+        for edge in &entity.outbound {
+            // Skip `Unvalidated` labels — their targets dangle by design.
+            let validated = crate::relation::lookup(entity.kind, edge.label)
+                .is_some_and(|r| !matches!(r.target, crate::relation::TargetSpec::Unvalidated));
+            if validated && integrity::ensure_ref_resolves(root, &edge.target).is_err() {
+                findings.push(format!(
+                    "{}: `{}` target `{}` does not resolve (dangling [[relation]] edge)",
+                    entity.key.canonical(),
+                    edge.label.name(),
+                    edge.target
+                ));
+            }
+        }
+    }
+
+    // (2) IllegalRows — hand-edited off-table `(source, label)` rows. Re-read the raw
+    // `[[relation]]` block per entity (scan_entities drops the illegal rows).
+    for kref in integrity::KINDS {
+        let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
+        ids.sort_unstable();
+        for id in ids {
+            let name = format!("{id:03}");
+            let toml_path = root
+                .join(kref.kind.dir)
+                .join(&name)
+                .join(format!("{}-{name}.toml", kref.stem));
+            let text = std::fs::read_to_string(&toml_path)
+                .map_err(|e| anyhow::anyhow!("read {} for validate: {e}", toml_path.display()))?;
+            let doc = crate::relation::RelationDoc::parse(&text)?;
+            let (_edges, illegal) = crate::relation::read_block(kref.kind, &doc);
+            for row in illegal {
+                let why = match row.reason {
+                    crate::relation::IllegalReason::UnknownLabel => "unknown label",
+                    crate::relation::IllegalReason::IllegalForSource => "label illegal for source",
+                };
+                findings.push(format!(
+                    "{}: [[relation]] row `{}` -> `{}` is illegal ({why})",
+                    listing::canonical_id(kref.kind.prefix, id),
+                    row.label,
+                    row.target
+                ));
+            }
+        }
+    }
+
+    findings.extend(validate_supersession(root)?);
+    Ok(findings)
+}
+
+/// The supersession cross-check (design §5.5, R2-m2 / OD-3 / ADR-010 D4): report where
+/// a governance entity's STORED `superseded_by` disagrees with the reciprocal DERIVED
+/// from `supersedes` in-edges. Pure read, report-only — MAY surface pre-existing
+/// hand-authored drift, which is the intended point (C3); NEVER rewrites.
+///
+/// The stored side is read via the typed governance seam
+/// (`governance::supersession_pair` → `doc.relationships.superseded_by`) — the generic
+/// `read_block`/`outbound_for` path deliberately excludes `superseded_by`. The derived
+/// side is built per gov kind: X's derived `superseded_by` = every same-kind Y whose
+/// stored `supersedes` lists X. Disagreement EITHER WAY (stored-not-derived /
+/// derived-not-stored) is a finding.
+fn validate_supersession(root: &Path) -> anyhow::Result<Vec<String>> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    // Per governance kind, drive its own ADR/POL/STD namespace.
+    let gov_kinds: &[&crate::governance::GovKind] = &[
+        &crate::adr::ADR_KIND,
+        &crate::policy::POLICY_KIND,
+        &crate::standard::STANDARD_KIND,
+    ];
+
+    let mut findings = Vec::new();
+    for g in gov_kinds {
+        let prefix = g.kind.prefix;
+        let mut ids = entity::scan_ids(&root.join(g.kind.dir))?;
+        ids.sort_unstable();
+
+        // Read every entity's (supersedes, superseded_by) once.
+        let mut stored: BTreeMap<u32, (Vec<String>, Vec<String>)> = BTreeMap::new();
+        for id in &ids {
+            stored.insert(*id, crate::governance::supersession_pair(g, root, *id)?);
+        }
+
+        // Derived reciprocal: for each Y listing X in `supersedes`, X is superseded_by Y.
+        let mut derived: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for (y, (sup, _)) in &stored {
+            let y_ref = listing::canonical_id(prefix, *y);
+            for x_ref in sup {
+                derived
+                    .entry(x_ref.clone())
+                    .or_default()
+                    .insert(y_ref.clone());
+            }
+        }
+
+        // Compare stored superseded_by against the derived set, both ways.
+        for (x, (_sup, stored_by)) in &stored {
+            let x_ref = listing::canonical_id(prefix, *x);
+            let stored_set: BTreeSet<String> = stored_by.iter().cloned().collect();
+            let derived_set = derived.get(&x_ref).cloned().unwrap_or_default();
+            for missing in derived_set.difference(&stored_set) {
+                findings.push(format!(
+                    "{x_ref}: `{missing}` supersedes it (derived) but `{x_ref}` does not list \
+                     it in `superseded_by` (supersession drift)"
+                ));
+            }
+            for extra in stored_set.difference(&derived_set) {
+                findings.push(format!(
+                    "{x_ref}: lists `{extra}` in `superseded_by` but `{extra}` does not \
+                     `supersede` it (supersession drift)"
+                ));
+            }
+        }
+    }
+    Ok(findings)
+}
+
 /// One entity's direct relation view (design §5.2): its authored outbound relations
 /// grouped by label, the derived inbound relations grouped by label, and its
 /// unresolved/free-text outbound danglers. Direct-only, one-hop, composition-free
@@ -619,11 +765,12 @@ fn render_inbound(parts: &mut Vec<String>, view: &InspectView) {
     }
     parts.push("\ninbound:\n".to_string());
     for (label, srcs) in &view.inbound {
-        let word = if *label == RelationLabel::Supersedes {
-            "superseded by"
-        } else {
-            label.name()
-        };
+        // Table-driven inbound render text (design §5.5 X5 / R2-M3): the `supersedes` →
+        // "superseded by" special-case collapses into `relation::inbound_name`, which
+        // also renders `governed_by` → "governs", `consumes` → "consumed_by". Legacy
+        // labels carry `inbound_name == name()`, so shipped goldens are unchanged. The
+        // `--json` inbound keeps the raw label (`render_json`), per R2-M3.
+        let word = crate::relation::inbound_name(*label);
         parts.push(format!("  {word}: {}\n", srcs.join(", ")));
     }
 }
@@ -1434,6 +1581,116 @@ mod tests {
             emitted_labels(root, "REC", 1),
             table_labels_for("REC"),
             "rec reader emits exactly owning_slice + decision_ref"
+        );
+    }
+
+    // -- PHASE-05: corpus-edge validate + supersession cross-check ------------
+
+    /// VT-3 (R2-M5/X2): a deleted target leaves a `[[relation]]` dangler that
+    /// `validate_relations` reports; a hand-edited illegal `(source, label)` row is
+    /// reported as an `IllegalRow`; a free-text `Unvalidated` target is NOT a finding
+    /// (it dangles by design). Report-only — the corpus is never rewritten.
+    #[test]
+    fn validate_relations_reports_danglers_and_illegal_rows() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001 links requirements to REQ-005, which we DO seed (resolves), and to
+        // REQ-999, which we do NOT (a dangler). The free-text `drift` case rides a
+        // backlog issue below (`drift` is a backlog label, not a slice one).
+        seed_slice(root, 1, &[("requirements", &["REQ-005", "REQ-999"])]);
+        write(
+            root,
+            ".doctrine/requirement/005/requirement-005.toml",
+            "id = 5\nslug = \"r\"\ntitle = \"R\"\nstatus = \"active\"\n",
+        );
+        write(root, ".doctrine/requirement/005/requirement-005.md", "r\n");
+        // A backlog issue with a free-text `drift` (Unvalidated) target — must NOT be a
+        // finding (it dangles by design), plus a resolvable `slices` edge to SL-001.
+        write(
+            root,
+            ".doctrine/backlog/issue/001/backlog-001.toml",
+            "schema = \"doctrine.backlog\"\nversion = 1\n\
+             id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
+             resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
+             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n\
+             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n",
+        );
+        write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
+        // SL-002 carries a HAND-EDITED illegal row: a slice cannot author `related`.
+        write(
+            root,
+            ".doctrine/slice/002/slice-002.toml",
+            "id = 2\nslug = \"s\"\ntitle = \"S\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [[relation]]\nlabel = \"related\"\ntarget = \"SL-001\"\n",
+        );
+        write(root, ".doctrine/slice/002/slice-002.md", "s\n");
+
+        let findings = validate_relations(root).unwrap();
+        let joined = findings.join("\n");
+        assert!(
+            joined.contains("SL-001") && joined.contains("REQ-999") && joined.contains("dangling"),
+            "the deleted REQ-999 target is reported as a dangler: {joined}"
+        );
+        assert!(
+            !joined.contains("REQ-005"),
+            "the resolvable REQ-005 target is NOT a finding: {joined}"
+        );
+        assert!(
+            !joined.contains("loose talk"),
+            "the Unvalidated drift target dangles by design — not a finding: {joined}"
+        );
+        assert!(
+            joined.contains("SL-002") && joined.contains("illegal"),
+            "the hand-edited illegal `related` row is reported: {joined}"
+        );
+        // Report-only: the corpus file is byte-unchanged.
+        let after =
+            std::fs::read_to_string(root.join(".doctrine/slice/002/slice-002.toml")).unwrap();
+        assert!(
+            after.contains("label = \"related\""),
+            "validate never rewrites the corpus"
+        );
+    }
+
+    /// VT-4 (R2-m2/OD-3): the supersession cross-check reads the STORED `superseded_by`
+    /// via the typed governance seam and reports disagreement with the `supersedes`
+    /// in-edge reciprocal — BOTH ways (a derived edge missing from the stored field, and
+    /// a stored entry with no derived backing). A consistent pair yields NO finding.
+    #[test]
+    fn validate_supersession_reports_drift_both_ways() {
+        let dir = tmp();
+        let root = dir.path();
+        // ADR-002 supersedes ADR-001 (derived: ADR-001 superseded_by ADR-002). ADR-001
+        // stores NO superseded_by ⇒ a "derived-not-stored" finding. ADR-003 stores a
+        // bogus superseded_by ADR-009 with no backing ⇒ a "stored-not-derived" finding.
+        seed_adr(root, 1, &[]);
+        seed_adr(root, 2, &[("supersedes", &["ADR-001"])]);
+        seed_adr(root, 3, &[("superseded_by", &["ADR-009"])]);
+
+        let findings = validate_supersession(root).unwrap();
+        let joined = findings.join("\n");
+        assert!(
+            joined.contains("ADR-001") && joined.contains("ADR-002"),
+            "ADR-002 supersedes ADR-001 but ADR-001 omits it from superseded_by: {joined}"
+        );
+        assert!(
+            joined.contains("ADR-003") && joined.contains("ADR-009"),
+            "ADR-003 lists ADR-009 in superseded_by with no backing supersedes: {joined}"
+        );
+    }
+
+    /// A consistent supersession pair (the successor's `supersedes` AND the
+    /// predecessor's `superseded_by` agree) produces no cross-check finding.
+    #[test]
+    fn validate_supersession_clean_on_consistent_pair() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_adr(root, 1, &[("superseded_by", &["ADR-002"])]);
+        seed_adr(root, 2, &[("supersedes", &["ADR-001"])]);
+        assert!(
+            validate_supersession(root).unwrap().is_empty(),
+            "a consistent supersedes/superseded_by pair is clean"
         );
     }
 }
