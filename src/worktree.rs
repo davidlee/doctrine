@@ -596,6 +596,204 @@ pub(crate) fn run_branch_point_check(
 }
 
 // ---------------------------------------------------------------------------
+// fork — orchestrator-owned worktree creation (SL-056 PHASE-06, design §5)
+// ---------------------------------------------------------------------------
+
+/// Pure branch→relative-path mapping for a per-worktree target dir: `wt/<branch>`.
+/// PURE — no I/O, env, clock, or rng (CLAUDE.md pure/imperative split). This is the
+/// GENERALISABLE primitive; doctrine-the-repo's project-local consumer
+/// ([`project_env_contract`]) joins it under the jail target base to build
+/// `CARGO_TARGET_DIR`. The framework never bakes that consumer in here (ADR-008
+/// D-B5: the env contract is project-declared, not flake-baked).
+pub(crate) fn target_dir_for_branch(branch: &str) -> PathBuf {
+    Path::new("wt").join(branch)
+}
+
+/// doctrine-the-repo's PROJECT-LOCAL per-worktree env contract — the one consumer
+/// of the generalisable mechanism (design §5 / ADR-008 D-B5). It declares a single
+/// pair: `CARGO_TARGET_DIR=<jail-target-base>/wt/<branch>`, so each fork compiles
+/// into its own target dir and parallel builds don't collide on a shared jail
+/// target. The jail target base is read from the inherited `CARGO_TARGET_DIR` (the
+/// existing jail redirect); absent, it degrades to `<fork>/target`. The env read is
+/// the ONLY impurity — the path shape comes from the pure [`target_dir_for_branch`].
+///
+/// Kept deliberately separate from [`run_fork`]: the framework primitive emits
+/// whatever `(key, value)` pairs THIS function returns and never names
+/// `CARGO_TARGET_DIR` itself.
+fn project_env_contract(fork: &Path, branch: &str) -> Vec<(String, String)> {
+    let base = match std::env::var_os("CARGO_TARGET_DIR") {
+        Some(v) => PathBuf::from(v),
+        None => fork.join("target"),
+    };
+    let target = base.join(target_dir_for_branch(branch));
+    vec![(
+        "CARGO_TARGET_DIR".to_owned(),
+        target.to_string_lossy().into_owned(),
+    )]
+}
+
+/// Best-effort compensating cleanup for a partially-created fork (design §5 — git
+/// mutations are NOT a transaction, so there is no rollback verb to lean on; we
+/// reverse each leg ourselves). SHARED by [`run_fork`] and PHASE-10's `create-fork`
+/// (one cleanup impl, two callers — a hard reuse requirement).
+///
+/// Each leg is best-effort and independent: a failing leg must not mask the
+/// original cause or abort the others. Removing a never-added worktree / dir / a
+/// non-existent branch is a no-op, not an error. Returns the list of legs that
+/// FAILED to reverse (debris descriptions) so the caller can decide whether the
+/// rollback left leftovers needing a distinct, naming exit.
+fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String> {
+    let mut debris = Vec::new();
+
+    // 1. Remove the linked worktree registration (force: drop dirty/locked).
+    if git::git_text(
+        repo,
+        &["worktree", "remove", "--force", &dir.to_string_lossy()],
+    )
+    .is_err()
+        && dir.exists()
+    {
+        // Only debris if the dir actually survives — a "not a worktree" error on a
+        // never-added dir is the expected no-op.
+        debris.push(format!("worktree dir {}", dir.display()));
+    }
+
+    // 2. Delete the branch (no-op if it was never created).
+    if git::git_opt(repo, &["rev-parse", "--verify", "--quiet", branch])
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        // Best-effort delete; the re-probe below is what decides debris, so a
+        // failed delete here is intentionally not propagated.
+        drop(git::git_text(repo, &["branch", "-D", branch]));
+        if git::git_opt(repo, &["rev-parse", "--verify", "--quiet", branch])
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            debris.push(format!("branch {branch}"));
+        }
+    }
+
+    // 3. Reap any leftover dir the worktree-remove could not (best-effort).
+    if dir.exists() {
+        drop(fs::remove_dir_all(dir));
+        if dir.exists()
+            && !debris
+                .iter()
+                .any(|d| d.contains(&dir.display().to_string()))
+        {
+            debris.push(format!("dir {}", dir.display()));
+        }
+    }
+
+    debris
+}
+
+/// `doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]` —
+/// create an orchestrator-owned worktree fork off `B`, provision it, optionally
+/// stamp the worker marker, and emit the per-worktree env contract (design §5).
+///
+/// Atomic via COMPENSATING ROLLBACK (not a git transaction): any failure AFTER the
+/// `git worktree add` reverses every leg via [`rollback_fork`]. A pre-`add` refusal
+/// (dir/branch exists, `B` not a commit) leaves no fork.
+///
+/// - **stdout**: the env contract (`KEY=value`, one per line).
+/// - **stderr**: human status (what it did).
+pub(crate) fn run_fork(
+    path: Option<PathBuf>,
+    base: &str,
+    branch: &str,
+    dir: &Path,
+    worker: bool,
+) -> anyhow::Result<()> {
+    let repo = root::find(path, &root::default_markers())?;
+
+    // --- Step 1 refusals (pre-`add`: leave NO fork) ---
+    if dir.exists() {
+        bail!("fork-refused: dir {} already exists", dir.display());
+    }
+    if git::git_opt(&repo, &["rev-parse", "--verify", "--quiet", branch])
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        bail!("fork-refused: branch {branch} already exists");
+    }
+    if git::git_opt(
+        &repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{base}^{{commit}}"),
+        ],
+    )?
+    .is_none()
+    {
+        bail!("fork-refused: base {base} is not a commit");
+    }
+
+    // --- Step 1: create the worktree on a NEW branch at B ---
+    git::git_text(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            &dir.to_string_lossy(),
+            base,
+        ],
+    )
+    .with_context(|| format!("git worktree add -b {branch} {} {base}", dir.display()))?;
+
+    // From here on, any failure compensates (rollback every leg).
+    let finish = (|| -> anyhow::Result<()> {
+        // --- Step 2: provision via the sole copier (do NOT reimplement copying) ---
+        run_provision(Some(repo.clone()), dir).context("provision fork")?;
+
+        // --- Step 3: stamp the worker marker BEFORE returning / any spawn window ---
+        if worker {
+            write_marker(dir).context("stamp worker marker")?;
+        }
+        Ok(())
+    })();
+
+    if let Err(cause) = finish {
+        let debris = rollback_fork(&repo, branch, dir);
+        if debris.is_empty() {
+            return Err(cause.context(format!(
+                "fork failed after add; rolled back cleanly (dir {} + branch {branch} removed)",
+                dir.display()
+            )));
+        }
+        // Rollback itself left leftovers — distinct token NAMING the debris.
+        bail!(
+            "fork-rollback-debris: {} (original cause: {cause:#})",
+            debris.join(", ")
+        );
+    }
+
+    // --- Step 4: env contract on stdout; human status on stderr ---
+    for (key, value) in project_env_contract(dir, branch) {
+        writeln!(io::stdout(), "{key}={value}")?;
+    }
+    writeln!(
+        io::stderr(),
+        "forked {branch} at {base} → {}{}",
+        dir.display(),
+        if worker {
+            " (worker: marker stamped)"
+        } else {
+            ""
+        }
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Worker identity — disk marker shell (SL-056 §3)
 // ---------------------------------------------------------------------------
 
@@ -622,13 +820,7 @@ pub(crate) fn env_worker_set() -> bool {
 }
 
 /// Stamp the worker marker at `root` (mkdir-p the dispatch dir). Shell.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the orchestrator's stamp verb lands in a later SL-056 phase (Hook-mint class, deferred D1); the shell is built here beside remove_marker"
-    )
-)]
+/// The non-test consumer is [`run_fork`] under `--worker` (SL-056 PHASE-06).
 pub(crate) fn write_marker(root: &Path) -> anyhow::Result<()> {
     let path = marker_path(root);
     if let Some(dir) = path.parent() {
@@ -767,6 +959,22 @@ mod tests {
         assert!(
             matches("", ""),
             "degenerate equal ⇒ stationary (caller guards emptiness)"
+        );
+    }
+
+    // --- SL-056 PHASE-06: target_dir_for_branch pure mapping (VT-3 unit half) ---
+
+    #[test]
+    fn target_dir_for_branch_maps_under_wt() {
+        assert_eq!(
+            target_dir_for_branch("sl056-p06"),
+            PathBuf::from("wt/sl056-p06"),
+            "branch maps to wt/<branch>"
+        );
+        assert_eq!(
+            target_dir_for_branch("feature/x"),
+            PathBuf::from("wt/feature/x"),
+            "slashes in the branch survive as nested components"
         );
     }
 
