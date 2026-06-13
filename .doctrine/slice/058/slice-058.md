@@ -41,13 +41,15 @@ slots, so every entity scaffolded since SL-048 is born malformed:
 Finish the surface by fixing the source of new malformation and cleaning up the
 entities already malformed.
 
-1. **Templates** — bring `slice.toml`, `adr.toml`, `backlog.toml` to the
-   post-cut shape: migrated tier-1 axes leave the typed `[relationships]` table
-   (slice: table removed entirely; adr: drop `related`; backlog: drop
-   `slices`/`specs`/`drift`), kept typed axes stay (adr:
-   `supersedes`/`superseded_by`/`tags`; backlog: `needs`/`after`/`triggers`).
-   Add a `[[relation]]` guidance comment in place. Re-embed (RustEmbed recompile
-   footgun — touch the embedding crate).
+1. **Templates** — bring the six stale templates to the post-cut shape:
+   `slice.toml` (table removed entirely), `adr.toml` / `policy.toml` /
+   `standard.toml` (drop `related`; keep `supersedes`/`superseded_by`/`tags`),
+   `backlog.toml` / `backlog-risk.toml` (drop `slices`/`specs`/`drift`; keep
+   `needs`/`after`/`triggers`). Add a `[[relation]]` guidance comment in place.
+   Re-embed (RustEmbed recompile footgun — touch the embedding crate). (Governance
+   breadth — policy/standard share adr's `related` migration — surfaced in
+   adversarial review; no policy/standard entity is malformed yet, so their fix is
+   preventive.)
 2. **Entity fallout** — migrate the already-scaffolded malformed entities to the
    correct shape: backlog `ISS-009`/`ISS-010`/`IMP-045..049`/`IDE-005` (drop the
    typed migrated keys; none carry real edges, so no `[[relation]]` rows needed).
@@ -74,8 +76,9 @@ entities already malformed.
 
 ## Affected Surface
 
-- `install/templates/slice.toml`, `install/templates/adr.toml`,
-  `install/templates/backlog.toml` (+ `backlog-risk.toml`? check) — the fix.
+- Six templates: `install/templates/{slice,adr,policy,standard,backlog,
+  backlog-risk}.toml` — the fix. (spec-product/spec-tech/rec/review/requirement
+  templates checked clean — spec's typed axes are tier-2-by-design, not migrated.)
 - The embedding crate (`src/install.rs` / `src/slice.rs` `asset_text`) — touch
   to re-embed (`mem.pattern.embed.rustembed-recompile-and-symlinks`,
   `mem.pattern.build.rust-embed-no-rerun`).

@@ -31,9 +31,13 @@ storage shape, and machinery are fixed (ADR-004, ADR-010, SPEC-018) and correct.
   - `slice.toml` — emits a `[relationships]` table with a reserved comment +
     illustrative `specs`/`requirements`/`supersedes`. For slices the *whole*
     typed table migrated away (test: "slice: the whole table is gone").
-  - `adr.toml` — emits `supersedes`/`superseded_by`/`related`/`tags`. Only
-    `related` migrated (→ `[[relation]]`); the supersession pair + `tags` stay
-    typed (OD-3).
+  - `adr.toml` + `policy.toml` + `standard.toml` — all three governance
+    templates emit `supersedes`/`superseded_by`/`related`/`tags` (policy/standard:
+    `related` confirmed at line 16). Only `related` migrated (→ `[[relation]]`);
+    the supersession pair + `tags` stay typed (OD-3). The governance migration
+    test (`e2e_relation_migration_storage`) scans **adr + policy + standard**, so
+    all three templates are equally stale even though only ADR-011 has so far
+    been born malformed.
   - `backlog.toml` + `backlog-risk.toml` — emit
     `slices`/`specs`/`drift`/`needs`/`after`/`triggers` under `[relationships]`.
     `slices`/`specs`/`drift` migrated (→ `[[relation]]`); `needs`/`after`/
@@ -98,20 +102,24 @@ guidance (memory + using-doctrine.md + authoring skills) ── independent
 
 No new code interfaces. Surfaces touched:
 
-- **Templates** (data): post-cut shapes —
+- **Templates** (data): post-cut shapes — six files:
   - `slice.toml`: remove the `[relationships]` table entirely; replace with a
     comment documenting the `[[relation]]` idiom + `doctrine link` (no typed
     axes remain for slices).
-  - `adr.toml`: drop the `related` line; keep `supersedes`/`superseded_by`/`tags`
-    typed; add a `[[relation]]` guidance comment.
+  - `adr.toml` + `policy.toml` + `standard.toml`: drop the `related` line; keep
+    `supersedes`/`superseded_by`/`tags` typed; add a `[[relation]]` guidance
+    comment. (Identical edit, three files — governance shares the `related`
+    migration.)
   - `backlog.toml` + `backlog-risk.toml`: drop `slices`/`specs`/`drift`; keep
     `needs`/`after`/`triggers` typed; add a `[[relation]]` guidance comment.
 - **`link`/`unlink`** (existing verb, dogfooded): `doctrine link IMP-045 slices
   SL-056` authors IMP-045's row before its typed `slices` key is stripped.
 - **`view()` parser** (test helper): enter `In::Relationships` when the trimmed
-  line *starts with* `[relationships]` (then strips a trailing `#…`), not only on
-  exact equality. Same for `[[relation]]`. Preserves the textual-position F1
-  semantics.
+  line, with any trailing `#…` comment stripped, equals `[relationships]` —
+  i.e. `line.split('#').next().trim() == "[relationships]"`, NOT a loose
+  `starts_with` (which would false-match a sub-table `[relationships.x]`). Same
+  treatment for `[[relation]]`. Preserves the textual-position F1 semantics (the
+  header index is still the line number).
 - **Guidance**: a doctrine memory (pattern), a `using-doctrine.md` section, and
   targeted insertions in the authoring skills.
 
@@ -135,8 +143,11 @@ Execution order (one phase boundary at re-embed):
 1. Edit the four templates → **touch the embedding crate** → rebuild → assert
    `slice new`/`adr new`/`backlog new` emit the new shape (defeats RustEmbed
    false green).
-2. Harden `view()`; add the template-level guard test (every embedded template
-   parses to zero migrated typed keys for its kind).
+2. Harden `view()`; add the template-level guard test — a TEXT scan (reusing the
+   hardened `view()`) over each embedded template asset, asserting zero migrated
+   tier-1 keys for its kind. NB raw templates carry `{{slug}}`/`{{id}}`
+   placeholders and are NOT valid TOML, so the guard must text-scan, never
+   `toml::from_str` (the black-box scaffold test in §9 covers the rendered shape).
 3. Migrate the 10 entities (link IMP-045; strip all 10).
 4. Author guidance: memory + `using-doctrine.md` + authoring-skill insertions.
 
@@ -214,8 +225,10 @@ proof: previously-latent items are now both well-formed AND covered.
 - **Scaffold-output black-box test** (`mem.pattern.testing.black-box-cli-golden`):
   `slice new`/`adr new`/`backlog new` produce no migrated typed key and carry the
   `[[relation]]` guidance comment.
-- **Template-guard unit test**: each embedded template, parsed, yields zero
-  migrated tier-1 keys for its kind (the new root guard).
+- **Template-guard unit test**: a TEXT scan (hardened `view()`) over each embedded
+  template asset yields zero migrated tier-1 keys for its kind — the root guard,
+  independent of the CLI. Text-scan, not `toml::from_str` (placeholders are
+  invalid TOML).
 - **Hardened corpus invariant**: `e2e_relation_migration_storage` passes over the
   full corpus including the now-migrated backlog items, with the inline-comment
   header visible to `view()`.
@@ -226,4 +239,20 @@ proof: previously-latent items are now both well-formed AND covered.
 
 ## 10. Review Notes
 
-(Adversarial pass pending — §Transition.)
+Internal adversarial pass (integrated):
+
+- **F-A — scope hole (governance breadth).** Original draft scoped three
+  templates; `policy.toml` + `standard.toml` also emit stale `related = []` and
+  are scanned by the same governance migration test. Corrected to **six**
+  templates (slice, adr, policy, standard, backlog, backlog-risk); adr/policy/
+  standard take the identical `related`-drop edit. No current policy/standard
+  entity is malformed (grep clean) — template fix is preventive there.
+- **F-B — guard mechanism unbuildable as drafted.** "Parse each template" fails:
+  raw templates carry `{{slug}}`/`{{id}}` placeholders (invalid TOML). Re-specified
+  the template guard as a text scan over embedded assets via the hardened `view()`.
+- **F-C — parser-hardening precision.** Loose `starts_with("[relationships]")`
+  would false-match `[relationships.x]`; specified comment-stripped exact match.
+
+Open for external pass: whether the entity migration should instead ride a
+one-shot migrator if concurrent authoring inflates the fallout list materially
+before execution (currently 10; was 7 at scoping).
