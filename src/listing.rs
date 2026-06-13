@@ -160,9 +160,10 @@ pub(crate) struct RenderOpts {
     /// Whether the table render may emit ANSI colour (SL-053 D3). Resolved ONCE by
     /// the impure shell; `false` keeps piped/in-process output byte-clean.
     pub(crate) color: bool,
-    /// Terminal width for wrapping. `None` ⇒ the unwrapped (`ContentArrangement::
-    /// Disabled`) path; the `Some(w)` wrapping arm is a later SL-054 phase. This
-    /// phase always renders unwrapped regardless of this field.
+    /// Terminal width for wrapping (SL-054 PHASE-02). `None` ⇒ the unwrapped
+    /// (`ContentArrangement::Disabled`) path; `Some(w)` clearing the per-grid
+    /// structural floor ([`grid_min_width`]) ⇒ `Dynamic` wrap to `w` columns; below
+    /// the floor it falls back to `Disabled` (clean overflow beats sliver wrapping).
     pub(crate) term_width: Option<u16>,
 }
 
@@ -452,11 +453,6 @@ const COLUMN_SEPARATOR: char = '│';
 /// is a caller bug and fails loudly under `debug_assert` rather than mis-rendering
 /// (SL-053 F-2) — the old hand-rolled renderer silently tolerated raggedness.
 pub(crate) fn render_table(rows: &[Vec<String>], term_width: Option<u16>) -> String {
-    // SL-054 PHASE-01: the width param is threaded but inert — the body STILL always
-    // selects `ContentArrangement::Disabled` (unwrapped). The `Some(w)` wrapping arm
-    // is a later phase; `None` is the only behaviour now, so existing exact-shape
-    // tests pass unchanged (the None-invariance proof).
-    let _ = term_width;
     if rows.is_empty() {
         return String::new();
     }
@@ -467,9 +463,25 @@ pub(crate) fn render_table(rows: &[Vec<String>], term_width: Option<u16>) -> Str
     );
 
     let mut table = Table::new();
-    // Never measure the terminal, and never let the content formatter consult a tty
-    // at format time — together these make output byte-stable terminal-vs-pipe (D6).
-    table.set_content_arrangement(ContentArrangement::Disabled);
+    // SL-054 PHASE-02: `Some(w)` that clears the structural floor switches to
+    // terminal-width wrapping (`Dynamic` + `set_width(w)`); below the floor, and for
+    // `None`, fall back to `Disabled` (clean overflow beats 1-char Dynamic slivers).
+    // The arrangement is the ONLY wrap-conditional decision — everything below stays
+    // unconditional (`None` renders byte-for-byte as before: the None-invariance proof).
+    let fits = |w: u16| usize::from(w) >= grid_min_width(width);
+    match term_width {
+        Some(w) if fits(w) => {
+            table.set_content_arrangement(ContentArrangement::Dynamic);
+            table.set_width(w);
+        }
+        _ => {
+            table.set_content_arrangement(ContentArrangement::Disabled);
+        }
+    }
+    // Never let the content formatter consult a tty at format time — keeps output
+    // byte-stable terminal-vs-pipe (D6). Orthogonal to the wrap arm above (a recorded
+    // spike): `force_no_tty` governs comfy-table's styling tty-consult only, never the
+    // Dynamic width budget, so it stays UNCONDITIONAL under both arms.
     table.force_no_tty();
 
     // Strip every outer/rule component, then set ONLY the interior vertical. The
@@ -504,6 +516,27 @@ pub(crate) fn render_table(rows: &[Vec<String>], term_width: Option<u16>) -> Str
         out.push('\n');
     }
     out
+}
+
+/// Pure structural minimum (in columns) for a `cols`-wide minimalist `│` grid below
+/// which `Dynamic` wrapping degrades to 1-char slivers, so `Disabled` (clean
+/// overflow) is the better fallback. Derived to AGREE with comfy-table 7.2.2's
+/// `available_content_width` accounting (`dynamic.rs`) for the EXACT style this body
+/// sets — `set_width(w)` is the total table width, from which comfy subtracts:
+///
+/// - **borders** (`count_border_columns`): left + right outer borders are removed by
+///   the component strip → 0; only the interior `VerticalLines` remain → `cols - 1`.
+/// - **padding**: measured at Display time AFTER the outer-edge zeroing loop, so the
+///   first column's left pad and the last column's right pad are already 0; every
+///   other side is 1. Total = `2·cols` sides minus the two zeroed = `2·cols - 2`.
+/// - **content**: ≥1 display char per visible column to render at all → `cols`.
+///
+/// Sum: `(cols - 1) + (2·cols - 2) + cols = 4·cols - 3`. At/above this, the Dynamic
+/// budget seats ≥1 content char per column; below it, comfy saturating-subtracts
+/// toward 0. (`cols == 0` cannot reach here — the `rows.is_empty()` guard returns
+/// first, and a non-empty grid has `cols ≥ 1`.) Pinned by VT-2's boundary test.
+fn grid_min_width(cols: usize) -> usize {
+    (cols * 4).saturating_sub(3)
 }
 
 /// Wrap kind-faithful row values in the shared envelope: `{ "kind": …, "rows":
@@ -989,6 +1022,157 @@ mod tests {
         assert_eq!(
             lines[1],
             "009 │ proposed │ —   │ slice-status-rollup │ Slice status rollup"
+        );
+    }
+
+    // -- SL-054 PHASE-02: terminal-width wrapping -------------------------
+
+    /// VT-2 (the structural floor): `grid_min_width` is the EXACT comfy-table
+    /// accounting — borders (`cols-1`) + zeroed-edge padding (`2·cols-2`) + ≥1
+    /// content char per column (`cols`) = `4·cols - 3`. Pins the closed form against
+    /// drift so the boundary test below rests on a derived value, not a magic number.
+    #[test]
+    fn grid_min_width_is_the_derived_comfy_accounting() {
+        assert_eq!(grid_min_width(1), 1, "1 col: (0 borders)+(0 pad)+(1 char)");
+        assert_eq!(grid_min_width(2), 5, "2 col: 1+2+2");
+        assert_eq!(grid_min_width(4), 13, "4 col: 3+6+4");
+        assert_eq!(grid_min_width(6), 21, "6 col: 5+10+6");
+    }
+
+    /// VT-1: a wide cell under a budget narrower than its content wraps to multiple
+    /// lines; EVERY rendered line still carries the `│` separator, and no line exceeds
+    /// the budget once `trim_end` has run.
+    #[test]
+    fn render_table_some_width_wraps_a_wide_cell_keeping_the_separator() {
+        let budget = 40u16;
+        let out = render_table(
+            &[
+                cells(&["id", "description"]),
+                cells(&[
+                    "SL-001",
+                    "a deliberately long description that cannot fit inside forty columns and must wrap",
+                ]),
+            ],
+            Some(budget),
+        );
+        let lines: Vec<&str> = out.lines().collect();
+        assert!(
+            lines.len() > 2,
+            "the wide cell must wrap to extra lines, got {lines:?}"
+        );
+        for line in &lines {
+            assert!(
+                line.contains('\u{2502}'),
+                "every wrapped line keeps the `│` separator: {line:?}"
+            );
+            assert!(
+                line.chars().count() <= usize::from(budget),
+                "no line exceeds the budget after trim_end: {line:?}"
+            );
+        }
+    }
+
+    /// VT-2 (the boundary): at `Some(w)` BELOW `grid_min_width` the render is exactly
+    /// the `None`/Disabled byte-output (grid-floor fallback, no sliver wrapping); at
+    /// `Some(w)` at/above the floor a too-wide cell DOES wrap (extra lines). Pins the
+    /// structural boundary at the derived value.
+    #[test]
+    fn render_table_grid_floor_falls_back_below_and_wraps_at_or_above() {
+        // A 6-column grid with one over-wide cell. grid_min_width(6) == 21.
+        let grid = [
+            cells(&["a", "b", "c", "d", "e", "f"]),
+            cells(&[
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "a wide trailing cell that would wrap given any real budget",
+            ]),
+        ];
+        let floor = grid_min_width(6);
+        assert_eq!(floor, 21, "the 6-col floor is the derived 4·6-3");
+
+        // Below the floor: identical to None/Disabled, byte-for-byte (no wrapping).
+        let disabled = render_table(&grid, None);
+        let below = render_table(&grid, Some(20));
+        assert_eq!(
+            below, disabled,
+            "Some(w) below the grid floor must equal the Disabled output"
+        );
+        assert!(
+            u16::try_from(floor).is_ok_and(|f| f > 20),
+            "20 is genuinely below the floor"
+        );
+
+        // At the floor: the over-wide cell wraps (more lines than the unwrapped two).
+        let at_floor = render_table(&grid, Some(u16::try_from(floor).expect("floor fits u16")));
+        assert!(
+            at_floor.lines().count() > disabled.lines().count(),
+            "at the floor the wide cell wraps: {at_floor:?}"
+        );
+    }
+
+    /// VT-3 (first ByValue-under-wrap coverage, RSK-3): a coloured `ByValue`-painted
+    /// wide cell rendered through `render_columns` with `term_width: Some(w)` wraps,
+    /// and stripping the ANSI reproduces the EXACT plain wrapped layout — colour
+    /// survives wrapping (trim_end strips spaces after owo resets, not the resets).
+    #[test]
+    fn render_columns_byvalue_wide_cell_wraps_and_colour_strips_to_plain() {
+        struct WRow {
+            status: &'static str,
+            note: &'static str,
+        }
+        let columns: [Column<WRow>; 2] = [
+            Column {
+                name: "status",
+                header: "status",
+                cell: |r| r.status.to_string(),
+                paint: ColumnPaint::ByValue(|r| status_hue(r.status)),
+            },
+            Column {
+                name: "note",
+                header: "note",
+                cell: |r| r.note.to_string(),
+                paint: ColumnPaint::None,
+            },
+        ];
+        let rows = [WRow {
+            status: "blocked",
+            note: "a long trailing note that overflows a narrow budget and must wrap onto several lines",
+        }];
+        let sel = select_columns(&columns, &["status", "note"], None).unwrap();
+        let width = Some(40u16);
+
+        let plain = render_columns(
+            &rows,
+            &sel,
+            RenderOpts {
+                color: false,
+                term_width: width,
+            },
+        );
+        let coloured = render_columns(
+            &rows,
+            &sel,
+            RenderOpts {
+                color: true,
+                term_width: width,
+            },
+        );
+
+        assert!(
+            plain.lines().count() > 2,
+            "the wide note wraps under the budget: {plain:?}"
+        );
+        assert!(
+            coloured.contains('\u{1b}'),
+            "the ByValue-painted status cell carries ANSI under wrapping"
+        );
+        assert_eq!(
+            strip_ansi(&coloured),
+            plain,
+            "stripping ANSI from the wrapped coloured render reproduces the plain layout"
         );
     }
 
