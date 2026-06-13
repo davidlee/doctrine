@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebfd16f8e7d61bcc01d2050c9db1a"
+memory_key = "mem.pattern.dispatch.claude-agent-worktree-not-fork-provisioned"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Claude Agent worktree is harness-born, not fork-provisioned — SubagentStart hook must provision and stamp"
+summary = "Claude Agent isolation:worktree forks are harness-born — not fork-provisioned; the SubagentStart hook must provision AND stamp"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = [".doctrine/slice/056"]
+globs = ["src/worktree.rs", "src/boot.rs"]
+commands = []
+tags = ["dispatch", "hooks", "sl-056"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3db7a9a2b7108aedbfb1f0a1d07aca43c6cd3128"
+ref_name = "refs/heads/main"
+checkout_state_id = "4e270c4241f727d1d2fb933b57f59c9e2f9264c49b3d60db9b1046fac66f2071"
+base_commit = "24e8ed745c0db57c726bb7aa538bb740545e3616"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

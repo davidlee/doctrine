@@ -1,0 +1,41 @@
+memory_uid = "mem_019ebfb61ba870219aafc14f8dc7da3b"
+memory_key = "mem.pattern.dispatch.claude-subagentstart-worker-identity"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Claude Code dispatch worker identity via SubagentStart hook, not a SessionStart env-seam"
+summary = "Claude dispatch worker identity = SubagentStart hook stamps marker into cwd keyed on agent_type; SessionStart/CLAUDE_ENV_FILE env-seam does NOT reach subagents"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = [".doctrine/slice/056"]
+globs = ["src/worktree.rs"]
+commands = []
+tags = ["dispatch", "hooks", "sl-056"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9477cc91f2f6c24a4cddca0392d9e9810a6c0481"
+ref_name = "refs/heads/main"
+checkout_state_id = "295ce130311ef961b38fe7d139ff9cc3e268dac3d41b3542c7d5c9055c29b200"
+base_commit = "adde6af51c9166d0b5f6ed5cb3b36a5141bd9a9f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
