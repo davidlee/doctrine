@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec0f5e7557861b0592451102bf290"
+memory_key = "mem.pattern.entity.dec-prefix-dual-namespaced"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "DEC prefix dual-namespaced — numbered kind (2-part) vs external forgettable cites (3-part)"
+summary = "DEC prefix is dual-namespaced: 2-part DEC-NNN = numbered decision-record kind; 3-part DEC-NNN-XX = external forgettable decision-log citations (free-text prose, never renumbered)"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["src/rec.rs", "src/relation.rs"]
+globs = []
+commands = []
+tags = ["knowledge-record", "relations", "dec"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ee2769e7ea103ffa1010a35b8cb20c99529a2024"
+ref_name = "refs/heads/main"
+checkout_state_id = "65ebc80c9d1c3a618712722e6a12469766168b773dd883edad58b4a41807b577"
+base_commit = "3b8597c8e192812aad4b35e036bfe18135dea70d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
