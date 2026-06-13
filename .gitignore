@@ -22,6 +22,7 @@
 !.doctrine/review/
 !.doctrine/rec/
 !.doctrine/backlog/
+!.doctrine/knowledge/
 !.doctrine/requirement/
 !.doctrine/spec/
 !.doctrine/memory/

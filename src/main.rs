@@ -1606,7 +1606,7 @@ enum RecCommand {
         #[arg(long)]
         owning_slice: Option<String>,
 
-        /// Optional decision ref this act records against, e.g. `DEC-005`.
+        /// Optional decision ref this act records against, e.g. `DEC-005-C`.
         #[arg(long = "decision")]
         decision_ref: Option<String>,
 

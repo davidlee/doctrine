@@ -6,6 +6,7 @@ create = [
   ".doctrine/adr",
   ".doctrine/agents",
   ".doctrine/backlog",
+  ".doctrine/knowledge",
   ".doctrine/memory/items",
   ".doctrine/policy",
   ".doctrine/rec",
