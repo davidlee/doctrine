@@ -5,7 +5,7 @@ description: Use just before executing a specific phase — expand its authored 
 
 # Phase Plan
 
-You are expanding one authored phase into its runtime sheet, immediately before
+You are expanding one authored phase into its runtime phase sheet, immediately before
 executing it. The authored plan (`plan.toml`) says *what* the phase must achieve;
 this skill works out *how*, in the disposable state tree.
 
@@ -16,7 +16,7 @@ Inputs:
 - the phase's `plan.toml` entry — its `objective`, `exit_criteria` (`EX-`), and
   `verification` (`VT-`)
 - `design.md` (canonical design reference) and `slice-nnn.md` (scope)
-- the materialised runtime sheet `state/.../phases/phase-NN.{toml,md}`
+- the materialised runtime phase sheet `state/.../phases/phase-NN.{toml,md}`
 
 ## Process
 
@@ -27,7 +27,7 @@ Inputs:
 3. Run `/retrieve-memory` against the concrete files and subsystems you expect to
    touch, so scope-bound gotchas and patterns surface before you commit to a
    task breakdown.
-4. Fill the runtime sheet `phase-NN.md` (under `.doctrine/state/`, GITIGNORED and
+4. Fill the runtime phase sheet `phase-NN.md` (under `.doctrine/state/`, GITIGNORED and
    disposable) with:
    - a concrete task breakdown — small, coherent units of work
    - assumptions and constraints carried into execution

@@ -92,7 +92,7 @@ Inputs:
 7. Write the audit's reasoning as the review's `## Synthesis` (append it to
    `review-NNN.md`) — the prose that the old `audit.md` carried: the closure
    story, the standing risks, the tradeoffs consciously accepted. Then harvest
-   durable risks, decisions, and gotchas from the disposable phase sheets into
+   durable risks, decisions, and gotchas from the disposable runtime phase sheets into
    `notes.md`, and promote reusable facts via `/record-memory`. Capture durable
    follow-up **work** the audit surfaced — risks, issues, chores — as backlog
    items with `backlog new`, alongside that harvest (the work / knowledge /

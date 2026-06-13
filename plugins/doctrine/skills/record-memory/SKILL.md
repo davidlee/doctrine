@@ -7,7 +7,7 @@ description: Use when you discover or confirm a durable fact, constraint, invari
 
 Conversation context does not persist. When knowledge would save a future agent
 meaningful time, write a memory record immediately. Phase and slice wrap-up are
-mandatory prompts: scan `notes.md`, the active phase sheet, audit findings, and
+mandatory prompts: scan `notes.md`, the active runtime phase sheet, audit findings, and
 fresh gotchas for durable guidance worth keeping.
 
 Promote only durable guidance — repeatable workflows, sharp edges, invariants,

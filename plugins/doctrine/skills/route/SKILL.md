@@ -36,7 +36,7 @@ skill does not restate them. What follows is route-unique.
 - Authoring evergreen specs under `doc/*` → `/spec-product`, `/spec-tech`
   (not in the boot table).
 - "There is a slice" does **not** route to `/execute` — the design, plan, and
-  phase sheet must exist first (the no-code-without-approved-plan gate).
+  runtime phase sheet must exist first (the no-code-without-approved-plan gate).
 - Do not import stricter ceremony than the project has adopted; surface a
   conflict between local doctrine and a routing default rather than improvising.
 

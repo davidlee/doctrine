@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Use when a slice's design is locked and it needs an executable phase plan — refine each phase's objective and entry/exit/verification criteria, author plan.toml + plan.md, and materialise the phase tracking sheets. Routed to from /design.
+description: Use when a slice's design is locked and it needs an executable phase plan — refine each phase's objective and entry/exit/verification criteria, author plan.toml + plan.md, and materialise the runtime phase sheets. Routed to from /design.
 ---
 
 # Plan
@@ -32,8 +32,11 @@ Inputs:
    - `id` is `PHASE-NN` (zero-padded), **immutable** and never reused — edits
      append, they never renumber.
    - `name` and `objective` for the phase.
-   - `entrance_criteria` (`EN-n`), `exit_criteria` (`EX-n`), and `verification`
-     (`VT-n`). These ids are local to the phase and equally immutable.
+   - `entrance_criteria` (`EN-n`), `exit_criteria` (`EX-n`), and `verification`.
+     Verification ids carry their mode: `VT-n` verified by test, `VA-n` by
+     agent, `VH-n` by human — use `VA`/`VH` when a test cannot judge the
+     criterion, so it is still checked downstream rather than silently skipped.
+     These ids are local to the phase and equally immutable.
    - `specs` / `requirements` stay empty in v1 (no registry yet).
 5. Author `plan.md` — the rationale and sequencing prose: why these phases, in
    this order, with these boundaries. Honour the storage rule: **no queried or
@@ -43,14 +46,14 @@ Inputs:
    sheets in the state tree from `plan.toml`. `--prune` removes orphan tracking
    whose plan phase is gone (destructive — only when you meant to drop a phase).
 7. If plan complexity or policy ambiguity emerges, `/consult`.
-8. Hand off to `/phase-plan` to expand the next phase's runtime sheet just before
+8. Hand off to `/phase-plan` to expand the next phase's runtime phase sheet just before
    execution — then `/execute`. Do this only after slice scope, `design.md`, and
    the plan tell the same story. Record the lifecycle move on handoff:
    `doctrine slice status <id> ready` (bare number).
 
 ## Outcomes
 
-- `plan.toml` is execution-ready: every phase has an objective and EN/EX/VT
-  criteria.
+- `plan.toml` is execution-ready: every phase has an objective and EN/EX
+  criteria plus verification in an explicit mode (VT/VA/VH).
 - `plan.md` explains the rationale and sequencing.
-- A concrete tracking sheet exists per phase with clear done criteria.
+- A runtime phase sheet exists per phase with clear done criteria.
