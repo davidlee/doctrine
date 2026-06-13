@@ -2468,9 +2468,9 @@ mod tests {
     // --- SL-056 PHASE-10 T6 / VT-4: agent-def `name` ↔ const drift gate ---
     //
     // Reds if `install/agents/claude/dispatch-worker.md` frontmatter `name:`
-    // diverges from `DISPATCH_WORKER_AGENT_TYPE`. The SubagentStart matcher leg and
-    // the /dispatch-agent skill leg are LATER phases — this covers only the
-    // agent-def ↔ const leg.
+    // diverges from `DISPATCH_WORKER_AGENT_TYPE`. The SubagentStart matcher leg
+    // is covered in `src/boot.rs`; the `/dispatch-agent` skill leg is below
+    // (PHASE-13). Together they pin every replica of the literal to the const.
     #[test]
     fn dispatch_worker_agent_def_name_matches_const() {
         let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -2485,6 +2485,37 @@ mod tests {
         assert_eq!(
             name, DISPATCH_WORKER_AGENT_TYPE,
             "agent-def name must equal DISPATCH_WORKER_AGENT_TYPE"
+        );
+    }
+
+    // --- SL-056 PHASE-13 / VT-1 (τ): `/dispatch-agent` skill `subagent_type` leg ---
+    //
+    // Reds if the `/dispatch-agent` skill's `subagent_type:` literal — the value
+    // the orchestrator passes to the `Agent` tool to spawn a worker — diverges
+    // from `DISPATCH_WORKER_AGENT_TYPE`. A one-character drift fails OPEN (the
+    // SubagentStart matcher never fires ⇒ no stamp ⇒ worker_mode false), so the
+    // literal is PINNED here, not merely documented.
+    #[test]
+    fn dispatch_agent_skill_subagent_type_matches_const() {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let skill = manifest.join("plugins/doctrine/skills/dispatch-agent/SKILL.md");
+        let text =
+            fs::read_to_string(&skill).unwrap_or_else(|e| panic!("read {}: {e}", skill.display()));
+        let pinned = text
+            .lines()
+            .find_map(|l| l.split_once("subagent_type:").map(|(_, rest)| rest))
+            .map(|rest| {
+                rest.trim()
+                    .trim_start_matches('`')
+                    .split([' ', '`', '#'])
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+            })
+            .unwrap_or_else(|| panic!("no `subagent_type:` line in {}", skill.display()));
+        assert_eq!(
+            pinned, DISPATCH_WORKER_AGENT_TYPE,
+            "/dispatch-agent subagent_type must equal DISPATCH_WORKER_AGENT_TYPE"
         );
     }
 }
