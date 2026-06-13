@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec166d8bf7903a353688035ce38b4"
+memory_key = "mem.pattern.dispatch.gc-squash-indistinguishable-from-unlanded"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "gc squash-merge is indistinguishable from a never-landed fork"
+summary = "gc landed-oracle cannot distinguish a multi-commit squash-merge from a never-landed fork — both non-ancestor with git cherry all '+'; collapse to one not-landed refusal naming both remedies"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["src/worktree.rs", "src/git.rs"]
+globs = []
+commands = ["doctrine worktree gc"]
+tags = ["sl-056", "dispatch", "gc", "worktree"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1617d4c2333532d03178517d389dc69521827569"
+ref_name = "refs/heads/main"
+checkout_state_id = "6c27e707473f6d74b8fa08d0b95a95b8144436c942d0850a572c6c7ee97bbc65"
+base_commit = "ff616ad0218cbe74a4abe2824fa25ca15e26209d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
