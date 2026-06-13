@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec0a5bdb274b3a7cc1d5eaf4e34c5"
+memory_key = "mem.pattern.dispatch.subagentstart-blocking-but-not-failclosable"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SubagentStart hook is sync-blocking but un-failclosable; exit 2 does not abort the subagent"
+summary = "SubagentStart command hook blocks the worker (sync) until it exits, but cannot abort it — exit 2 does not fail-close, unlike WorktreeCreate"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = [".doctrine/slice/056"]
+globs = ["src/worktree.rs"]
+commands = []
+tags = ["dispatch", "hooks", "sl-056"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "542e7a3f713e98d7a83d38482fd153bf72a4b427"
+tree = "1f1f9c73db3f4a54264399ce7c8f9a021d6b6a46"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "542e7a3f713e98d7a83d38482fd153bf72a4b427"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
