@@ -1,0 +1,13 @@
+id = 57
+slug = "formal-vt-verification"
+title = "Formal VT verification: executable check + coverage record surface (SPEC-002 test-run surface)"
+status = "proposed"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[relationships]
+# Reserved. Empty in v1 — no spec/requirement registry to point at yet.
+# When specs land, this section gains (illustrative, not v1):
+#   specs        = ["..."]   # primary ∪ collaborators — scope for coverage gates
+#   requirements = ["..."]   # implements / updates / verifies
+#   supersedes   = [2]       # slice-to-slice links
