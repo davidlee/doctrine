@@ -32,7 +32,8 @@ Inputs:
    conventional commits scoped with the slice id, rather than letting them
    accumulate. Code and workflow edits go together or separately, whichever
    commits cleanly first.
-3. **Transition lifecycle:** `doctrine slice status <id> reconcile`, then
+3. **Transition lifecycle:** confirm the slice is in `reconcile` (flip it with
+   `doctrine slice status <id> reconcile` if `/audit` didn't), then
    `doctrine slice status <id> done` (`<id>` is the bare number, e.g. `40`).
    The closure seam enforces the order and refuses while an RV targeting the
    slice carries an unresolved blocker. Re-run `doctrine slice list` and confirm

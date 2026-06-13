@@ -23,7 +23,7 @@ evergreen spec material (that lives under `doc/*`).
    ```
 
    Allocates the next id and scaffolds `slice-nnn.toml` (metadata, relations,
-   lifecycle status) + `slice-nnn.md` (scope document).
+   lifecycle status — starts at `proposed`) + `slice-nnn.md` (scope document).
 
 3. **Make scope explicit** in `slice-nnn.md`:
    - what changes, and why
@@ -42,6 +42,7 @@ evergreen spec material (that lives under `doc/*`).
 
 ## Next
 
-You MUST shape the design before planning: hand off to `/design`. Do not jump to
-`/plan` or `/execute` from a bare slice — `/route`'s gate forbids it. If
-genuine tradeoffs or unknowns surface while scoping, `/consult`.
+You MUST shape the design before planning: record the lifecycle move
+(`doctrine slice status <id> design` — bare number) and hand off to `/design`.
+Do not jump to `/plan` or `/execute` from a bare slice — `/route`'s gate forbids
+it. If genuine tradeoffs or unknowns surface while scoping, `/consult`.
