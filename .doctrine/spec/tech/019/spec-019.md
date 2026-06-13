@@ -235,6 +235,35 @@ directly. **Risks need no special handling either way** — a risk is a backlog 
 `knowledge_record` (PRD-010 §2), already in the graph via the backlog's cordage exposure
 (SPEC-015).
 
+### Command surface
+
+The family is fronted by one command namespace, `doctrine knowledge`, riding the uniform
+`<kind> <verb>` grammar and kind-blind listing spine **SPEC-013** owns — restated nowhere
+here. The verb set is the shared one plus the family's lifecycle verbs:
+
+- **`knowledge new <record_kind> [title]`** — capture; `record_kind` is the
+  `clap::ValueEnum` positional (assumption/decision/question/constraint), reserving an id
+  in that kind's namespace and seeding its default state, typed `[facet]`, and empty
+  evidence/relation seams (mirrors `backlog new <item_kind>`).
+- **`knowledge show <ID>`** — reassemble identity, kind, state, summary, the kind
+  `[facet]`, evidence, and relations; kind auto-detected from the id prefix.
+- **`knowledge list`** — survey, carrying the mandatory `CommonListArgs` spine
+  (`--filter`/`-f`, `-r`, `-i`, `--status`/`-s`, `--tag`/`-t`, `--all`/`-a`, `--format`,
+  `--json`, `--columns`), the status known-set check, the canonical-id form, and the
+  JSON/columns model — all SPEC-013's substrate. Filters AND together; terminal records
+  hidden by default (`--all` / explicit `--status` reveal). The `--status` known-set is
+  **kind-relative** (the union per kind), the one place this surface's `list` diverges
+  from a closed-enum kind.
+- **`knowledge status <ID> <state>`** — the lifecycle transition (the shared transition
+  seam), validating `<state>` against the record's own kind vocabulary and refusing a
+  foreign-kind state.
+
+Relate and supersede do not get bespoke kind verbs: **relate** rides the uniform
+`link`/`unlink` verb once SPEC-018 ships it, and **supersede** is the transactional
+IMP-006 verb (cross-kind, lifecycle-gated) — both cited above, neither restated. The
+surface is pinned the same way every kind's is: the SPEC-013 parse-conformance matrix
+plus per-verb black-box goldens.
+
 ## Concerns
 
 - **Kind-relative status validation.** The transition vocabulary is selected by

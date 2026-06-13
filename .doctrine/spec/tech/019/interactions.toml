@@ -9,3 +9,8 @@
 target = "SPEC-018"
 type = "uses"
 notes = "Outbound record relations and the spawn-work edge are authored over the cross-corpus relation contract (RELATION_RULES); the supersedes/superseded_by pair is the LifecycleOnly carve-out the contract reserves for the transactional supersede verb."
+
+[[edge]]
+target = "SPEC-013"
+type = "uses"
+notes = "The doctrine knowledge command surface (new/show/list/status) rides SPEC-013's uniform <kind> <verb> grammar and kind-blind listing spine (CommonListArgs, status known-set, canonical-id, JSON/columns); the family restates none of it."
