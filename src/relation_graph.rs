@@ -50,6 +50,18 @@ pub(crate) fn outbound_for(
         "SPEC" => crate::spec::relation_edges(crate::spec::SpecSubtype::Tech, root, id),
         // REQUIREMENT authors no outbound relations — it is an edge target only.
         "REQ" => Ok(Vec::new()),
+        // Knowledge records (SL-059, L7/F-A1) author no outbound relations in Slice
+        // A — routing only, no rules/labels/reader. The empty arm keeps the
+        // KINDS-driven dispatch total once a record exists (a KINDS row with no arm
+        // panics every debug-build graph scan); Slice B swaps it for the real
+        // `knowledge::relation_edges` accessor. Kept a SEPARATE arm from `REQ`
+        // (which is empty forever) precisely because its body diverges in Slice B —
+        // merging the identical-today bodies would couple two distinct futures.
+        #[expect(
+            clippy::match_same_arms,
+            reason = "SL-059 L7: distinct from the REQ arm — Slice B replaces this empty body with knowledge::relation_edges; REQ stays empty forever"
+        )]
+        "ASM" | "DEC" | "QUE" | "CON" => Ok(Vec::new()),
         "RV" => crate::review::relation_edges(root, id),
         "REC" => crate::rec::relation_edges(root, id),
         // The five backlog kinds share one accessor, routed by their ItemKind (the
@@ -1047,6 +1059,43 @@ mod tests {
         // REQ is an edge target only; the dispatch returns empty without touching disk.
         let edges = outbound_for(&root, kind_for("REQ"), 1).unwrap();
         assert!(edges.is_empty());
+    }
+
+    // -- SL-059 VT-1: outbound_for total-dispatch for the four knowledge kinds --
+
+    #[test]
+    fn knowledge_kinds_author_no_outbound_never_panic() {
+        let dir = tmp();
+        let root = dir.path();
+        // F-A1: the four-prefix empty arm returns Ok(vec![]) for each ASM/DEC/QUE/CON
+        // and never falls through to the debug_assert!(false) unrouted-prefix panic
+        // (the empty-arm regression guard — a KINDS row with no arm would panic here).
+        for prefix in ["ASM", "DEC", "QUE", "CON"] {
+            let edges = outbound_for(&root, kind_for(prefix), 1).unwrap();
+            assert!(edges.is_empty(), "{prefix} authors no outbound");
+        }
+    }
+
+    // -- SL-059 VT-2: scan-side totality (F-A7, the L7 partner) ---------------
+
+    #[test]
+    fn knowledge_rows_present_but_no_record_tree_leaves_the_graph_unchanged() {
+        let dir = tmp();
+        let root = dir.path();
+        // A fixture with an ordinary entity but NO knowledge trees. The four KINDS
+        // rows are present, so `scan_entities` visits the (absent) record dirs — it
+        // is benign only because `entity::scan_ids` returns Ok(vec![]) on a missing
+        // dir. The scan returns exactly the pre-existing entity; the four record
+        // kinds contribute nothing. Regression tripwire if `scan_ids` is made strict.
+        write(
+            &root,
+            ".doctrine/requirement/001/requirement-001.toml",
+            "id = 1\nslug = \"r\"\ntitle = \"R\"\nstatus = \"active\"\n",
+        );
+        write(&root, ".doctrine/requirement/001/requirement-001.md", "b\n");
+        let scanned = scan_entities(&root).unwrap();
+        let keys: Vec<_> = scanned.iter().map(|e| e.key.canonical()).collect();
+        assert_eq!(keys, vec!["REQ-001"], "no record kind contributes a node");
     }
 
     // -- VT-2 exclusion proof (REC decision_ref carried, not dropped) --------
