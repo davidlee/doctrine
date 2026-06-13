@@ -163,19 +163,16 @@ WorktreeCreate hook command:  doctrine worktree create-fork   (reads payload JSO
         missing agent_type              → refuse missing-agent-type   (NEVER silently "benign")
         missing/empty cwd               → refuse missing-cwd
         <dir> underivable or escapes    → refuse bad-dir              (path-traversal / not under repo)
-    if payload.agent_type == DISPATCH_WORKER_AGENT_TYPE:   # τ: ONE binary const, not a literal
-        git worktree add -b <branch> <dir> <HEAD>    # base = session HEAD (= B under stationary-head, §7c)
-        doctrine worktree provision <dir>            # ADR-006 D9 allowlist (withheld tier excluded)
-        write_marker(<dir>)                          # stamp the disk marker
-        ── on ANY failure after `git worktree add` (ρ): COMPENSATING ROLLBACK before exit ──
-            git worktree remove --force <dir>; git branch -D <branch>; reap <dir>
-            rollback clean      → refuse provision-failed | stamp-failed   (non-zero, NO orphan)
-            rollback half-fails → refuse orphan-leftover  (distinct token, names dir+branch left, non-zero)
-        print <dir>                                  # required output
-    else:                                            # benign isolation:worktree / --worktree launch
-        create a SERVICEABLE default worktree by DOCTRINE's own naming/path conventions,
-        print path, NO marker        # σ: suffice for general isolated-subagent duty;
-                                      #    NOT a byte-for-byte mirror of Claude's native layout
+    is_worker := (payload.agent_type == DISPATCH_WORKER_AGENT_TYPE)   # τ: ONE binary const, not a literal
+    ── shared create+provision core (BOTH branches — DOCTRINE's path, strictly better than Claude default) ──
+    git worktree add -b <branch> <dir> <HEAD>        # base = session HEAD (= B under stationary-head, §7c)
+    doctrine worktree provision <dir>                # ADR-006 D9 allowlist + .worktreeinclude (withheld excluded)
+    if is_worker: write_marker(<dir>)                # σ: the MARKER is the ONLY divergence (dispatch vs benign)
+    ── on ANY failure after `git worktree add` (ρ, EITHER branch): COMPENSATING ROLLBACK before exit ──
+        git worktree remove --force <dir>; git branch -D <branch>; reap <dir>
+        rollback clean      → refuse provision-failed | stamp-failed   (non-zero, NO orphan)
+        rollback half-fails → refuse orphan-leftover  (distinct token, names dir+branch left, non-zero)
+    print <dir>                                      # required output
     any post-add failure rolls back FIRST → non-zero exit → creation FAILS → no worktree → no worker  (FAIL-CLOSED)
 ```
 
@@ -221,21 +218,28 @@ WorktreeCreate hook command:  doctrine worktree create-fork   (reads payload JSO
   reads; the installed agent-def `name` and the skill's `subagent_type` are **pinned**
   to it; a cross-surface **drift test REDS on mismatch** (§12). The const is the gate's
   only key — never a free-floating literal in four files.
-- **Replicate-default else-branch — every worktree, not just dispatch (σ).** Because the
-  hook **replaces default creation for *every* worktree** (incl. `--worktree` launches and
-  benign isolation:worktree subagents), the non-`dispatch-worker` else-branch **must still
-  create a worktree** — the hook now **intermediates creation for ALL isolated subagents**
-  (§10/G3 confesses this blast radius). Two outcomes, **decided by the O3 spike's gating
-  matcher question (§9/§12), not a sub-question**:
+- **Else-branch = doctrine's strictly-better creation, marker the only divergence (σ).**
+  Because the hook **replaces default creation for *every* worktree** (incl. `--worktree`
+  launches and benign isolation:worktree subagents), the non-`dispatch-worker` else-branch
+  **must still create a worktree** — the hook now **intermediates creation for ALL isolated
+  subagents** (§10/G3). It runs the **same create+provision core** as dispatch
+  (`git worktree add` + `doctrine worktree provision`), **omitting only the marker** — so a
+  benign subagent still gets doctrine's `.worktreeinclude` provisioning (ADR-006 D9), which
+  Claude's bare `git worktree add` default **skips**. This is **strictly better than
+  Claude's default, not a degraded replica** — the same reason the existing `/worktree` skill
+  creates+provisions itself rather than leaning on `Agent isolation:worktree` (it owns
+  creation precisely to provision). So σ's "blast radius" is a **net upgrade** turned hazard
+  only by a bug: every isolated subagent gains proper provisioning; a defect in the *shared*
+  core breaks all of them. The else-branch **MUST NOT** mirror Claude's native layout
+  (`worktree-agent-<id>` / `.git/worktrees/agent-<id>` / `.claude/worktrees/agent-<id>`)
+  byte-for-byte — doctrine's own naming suffices; the golden asserts the worktree is **valid +
+  usable + provisioned + bears NO marker**, never byte-equality with Claude. Two outcomes,
+  **decided by the O3 spike's gating matcher question (§9/§12), not a sub-question**:
   - **Matcher available** → scope the hook to `dispatch-worker`; the else-branch is
-    **DELETED** and σ evaporates — no replica to maintain.
-  - **No matcher** → the else-branch creates a **SERVICEABLE default worktree using
-    doctrine's own naming/path conventions**. It **MUST NOT** attempt to mirror Claude's
-    native layout (`worktree-agent-<id>` / `.git/worktrees/agent-<id>` /
-    `.claude/worktrees/agent-<id>`) byte-for-byte — the bar is "**suffice for general
-    isolated-subagent duty**," NOT fidelity to Claude (whose default isn't that great —
-    explicit user steer). The golden asserts the produced worktree is **valid + usable +
-    bears NO marker** — never byte-equality with Claude's native act.
+    **DELETED** (benign worktrees fall back to Claude's default creation) — no shared-core
+    blast radius.
+  - **No matcher** → the else-branch stands as above: strictly-better create+provision, no
+    marker, doctrine's own conventions.
 - **Identity = the disk marker.** No env, no arm sentinel, no lease, no serial
   constraint. Each WorktreeCreate fires independently for its own worktree ⇒
   **concurrent file-disjoint claude dispatch is first-class *in execution* (SR-2).**
@@ -548,11 +552,14 @@ amend it validates).
   worker identity is the disk marker) + a **per-harness capability/altitude table**.
   **Blast-radius confession (σ).** On claude, absent a WorktreeCreate matcher (§4b/§9
   spike), the hook **intermediates creation for ALL `isolation: worktree` subagents** —
-  not only dispatch workers. The contract for the non-dispatch else-branch is small (a
-  serviceable default worktree, no marker), but the **blast radius is real**: a defect in
-  the replicate-default path breaks every benign isolated subagent and `--worktree`
-  launch, not just dispatch. A matcher that scopes the hook to `dispatch-worker` deletes
-  the else-branch and the blast radius alike.
+  not only dispatch workers. The else-branch runs the **same create+provision core** as
+  dispatch (marker omitted), so every benign isolated subagent gains doctrine's
+  `.worktreeinclude` provisioning that Claude's bare default skips — a **net upgrade**, the
+  same rationale by which the `/worktree` skill already owns creation rather than using
+  `Agent isolation:worktree`. The cost is **blast radius**: a defect in the *shared* core
+  breaks every benign isolated subagent and `--worktree` launch, not just dispatch. A
+  matcher that scopes the hook to `dispatch-worker` deletes the else-branch and the blast
+  radius alike (benign worktrees revert to Claude's default).
   - **codex/pi:** subprocess spawn ⇒ env-arm + per-wt env + bwrap (full mechanism floor
     *under D6*; accident-fenced absent D6).
   - **claude:** `Agent` tool + **WorktreeCreate-hook create+provision+stamp**, a
@@ -584,7 +591,7 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
 | Path | Change |
 |---|---|
-| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_create_fork`** (claude WorktreeCreate handler — parses stdin payload with **bad-payload refusals** `bad-payload`/`missing-agent-type`/`missing-cwd`/`bad-dir` (ψ, fail-closed), gates on `DISPATCH_WORKER_AGENT_TYPE` (τ), on a match does git-add+provision+`write_marker` **with §4a's compensating rollback** (ρ — post-`add` failure → `git worktree remove --force`+`branch -D`+reap before non-zero exit; half-failed rollback → distinct `orphan-leftover` token; **reuses `run_fork`'s rollback core**), else creates a serviceable default worktree by doctrine conventions (σ) and prints the path, no marker), plus a thinner **`run_stamp_subagent`** for the SubagentStart fallback. Pure: `target_dir_for_branch`, `marker_path`, `classify_import`, `classify_land`, `classify_gc`, `classify_create` (**three-valued: `ForkWorker | PlainCreate | Refuse`**, ψ)/`classify_stamp`. **`const DISPATCH_WORKER_AGENT_TYPE`** is the single source of truth `classify_create` reads (τ). New `write_marker`/`marker_present`/`remove_marker` (`write_marker` invoked by `fork --worker` and `create-fork`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the per-worktree-creation hook.** |
+| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_create_fork`** (claude WorktreeCreate handler — parses stdin payload with **bad-payload refusals** `bad-payload`/`missing-agent-type`/`missing-cwd`/`bad-dir` (ψ, fail-closed), gates on `DISPATCH_WORKER_AGENT_TYPE` (τ), on a match does git-add+provision+`write_marker` **with §4a's compensating rollback** (ρ — post-`add` failure → `git worktree remove --force`+`branch -D`+reap before non-zero exit; half-failed rollback → distinct `orphan-leftover` token; **reuses `run_fork`'s rollback core**), else **creates+provisions** a worktree by doctrine conventions (σ — same core, marker omitted: a benign subagent still gets `.worktreeinclude` provisioning) and prints the path, no marker), plus a thinner **`run_stamp_subagent`** for the SubagentStart fallback. Pure: `target_dir_for_branch`, `marker_path`, `classify_import`, `classify_land`, `classify_gc`, `classify_create` (**three-valued: `ForkWorker | PlainCreate | Refuse`**, ψ)/`classify_stamp`. **`const DISPATCH_WORKER_AGENT_TYPE`** is the single source of truth `classify_create` reads (τ). New `write_marker`/`marker_present`/`remove_marker` (`write_marker` invoked by `fork --worker` and `create-fork`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the per-worktree-creation hook.** |
 | `src/main.rs` | `fork`/`import`/`gc`/`land` subcommands + `marker {--clear --operator, --stamp-subagent}` (watch bool/arg clippy ceilings, [[mem.pattern.lint.cli-handler-args-struct]]). Worker-mode guard `worker_mode(root) = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`. `write_class` unchanged. **`fork`/`import`/`gc`/`land` are the new `Orchestrator` class** (refused under `worker_mode`, NOT `Read`). The env-leg refusal on a non-linked tree carries the named dual-cause message for authoring **and** funnel verbs. |
 | `src/skills.rs` → install surface | **Rename `skills install` → `claude install`** (keep `skills install` as a **hidden deprecated alias** → same handler, SR-3); add the **agents** leg (symlink `install/agents/claude/*.md` into `.claude/agents/`) and trigger the WorktreeCreate hook merge. Update `Write("skills install")` audit label + goldens; sweep docs + the `[[mem.pattern.distribution.skill-refresh-command]]` memory. **χ: every leg is golden-pinned in §12** — alias→same-handler, agent-def symlink presence, hook merge that preserves pre-existing hooks, idempotent reinstall, rename audit-label. |
 | `src/boot.rs` | A **WorktreeCreate** `HookSpec` (SubagentStart on the fallback ladder) reusing the existing merge core; wired by `claude install`. The hook command **creates + provisions + stamps** with the ρ compensating rollback (fail-closed, SR-1), gated on `agent_type == DISPATCH_WORKER_AGENT_TYPE` (τ const); non-dispatch agent_types get a **serviceable default-creation** branch (σ — doctrine conventions, no marker; deleted if a matcher scopes the hook) or a bad-payload refusal (ψ). |
@@ -618,8 +625,9 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   the list is exhaustive and includes `land`.)*
 - **`create-fork` gate (the claude path):** `classify_create` golden — `agent_type ==
   DISPATCH_WORKER_AGENT_TYPE` → git-add + provision + marker written + worktree path
-  printed on stdout; other agent_type → serviceable default-creation (σ), path printed,
-  **no marker** (a benign subagent is never branded). Reads `agent_type`/derives `<dir>`
+  printed on stdout; other agent_type → **create+provision** (σ — same core, marker
+  omitted), worktree **provisioned + valid + usable**, path printed, **no marker** (a
+  benign subagent is never branded). Reads `agent_type`/derives `<dir>`
   from the **payload**, not the hook's process cwd (SR-4). The thinner `marker
   --stamp-subagent` fallback verb has its own golden (stamp-only on an already-created
   worktree).
