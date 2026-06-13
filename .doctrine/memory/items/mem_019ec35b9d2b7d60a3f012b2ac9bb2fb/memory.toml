@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec35b9d2b7d60a3f012b2ac9bb2fb"
+memory_key = "mem.pattern.distribution.skill-frontmatter-yaml-no-colon-no-quote"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SKILL.md frontmatter description must avoid colon-space and double-quotes (YAML scalar)"
+summary = "SKILL.md frontmatter is YAML — a description with colon-space or embedded double-quotes breaks the embed parse"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["src/skills.rs"]
+globs = ["plugins/**"]
+commands = ["doctrine claude install"]
+tags = ["skills", "distribution", "yaml", "frontmatter"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "6b431b10d30bd23aaf9039d975803535d25da324"
+tree = "ab54fa8a3fe6411d35c63e01032a1361813dba9b"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "6b431b10d30bd23aaf9039d975803535d25da324"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
