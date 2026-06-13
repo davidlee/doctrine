@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec0d9cc547b41bb666bf385b65911"
+memory_key = "mem.pattern.relation.authored-rows-tooling-half-wired"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Structural relations are [[relation]] rows (SL-048 'the cut'); writer and read-side display are unwired as of SL-057"
+summary = "Post-SL-048 relations are [[relation]] rows; link verb + read-side display unwired — hand-author, don't default to prose"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = [".doctrine/slice", "src/relation.rs"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "cbb4d9830ee09d465853eba3eab7f9586d6172fd"
+ref_name = "refs/heads/main"
+checkout_state_id = "a9af093eb7644d75acc618450446235ec6e5756c03010ce180bb07b38c09d340"
+base_commit = "9067a2a749cc30333475e1337311e1199da9594c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
