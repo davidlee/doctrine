@@ -513,6 +513,26 @@ enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
+    /// Import a worker fork's single-commit delta into the coordination index,
+    /// NON-committing (SL-056 PHASE-07, ADR-006 D7: import ≠ commit). Stationary-
+    /// head case only — fails closed with a distinct token on any precond/belt
+    /// violation (`head-moved`/`tree-unclean`/`multi-commit`/`doctrine-touch`/
+    /// `claude-touch`); never auto-merges. Orchestrator-classed — refused under
+    /// worker-mode.
+    Import {
+        /// The orchestrator's pre-spawn captured base commit `B`.
+        #[arg(long)]
+        base: String,
+
+        /// The fork branch carrying the single non-merge commit `S` (`S^ == B`).
+        #[arg(long)]
+        fork: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Print the resolved worker-mode and cause (SL-056 §3). `--assert` derives a
     /// non-zero `stale-marker` exit from the SAME state the human line reads.
     /// Read-classed — open to workers.
@@ -1803,6 +1823,9 @@ fn write_class(cmd: &Command) -> WriteClass {
             // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
             // first Orchestrator-classed verb; refused under worker-mode.
             WorktreeCommand::Fork { .. } => Orchestrator("fork"),
+            // import lands a worker delta into the coordination index (SL-056
+            // PHASE-07) — Orchestrator-classed; refused under worker-mode.
+            WorktreeCommand::Import { .. } => Orchestrator("import"),
             // marker --clear is the bespoke self-brick cure (SL-056 §3) — NOT
             // refused by the worker-mode guard; its own fences live in the handler.
             WorktreeCommand::Marker { .. } => MarkerClear,
@@ -2401,6 +2424,9 @@ fn main() -> anyhow::Result<()> {
                 worker,
                 path,
             } => worktree::run_fork(path, &base, &branch, &dir, worker),
+            WorktreeCommand::Import { base, fork, path } => {
+                worktree::run_import(path, &base, &fork)
+            }
             WorktreeCommand::Status { assert, path } => worktree::run_status(path, assert),
             WorktreeCommand::Marker {
                 clear,
