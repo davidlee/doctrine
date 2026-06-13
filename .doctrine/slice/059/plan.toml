@@ -1,0 +1,155 @@
+# Implementation plan for SL-059 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-059"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Knowledge module — entity, kinds, lifecycle vocab, typed facets, parse, scaffold"
+objective = """
+Stand up src/knowledge.rs as the src/backlog.rs structural twin: the RecordKind \
+discriminator (assumption/decision/question/constraint) over four data-valued engine \
+Kind consts (ASM/DEC/QUE/CON); the per-kind status vocabularies as &[&str] consts \
+(L1, data not enum) with statuses()/is_hidden()/default_status(); the KnowledgeRecord \
+entity with a typed RecordFacet enum-of-structs (L2, confidence assumption-only) + the \
+shared Evidence structure + the three closed value-enums (Confidence/Basis/ \
+ConstraintSource); the three-layer tolerant parse (RawRecordToml + kind-blind superset \
+RawFacet -> validate dispatches on record_kind -> typed RecordFacet, ""/[]->absent); \
+and the per-kind scaffold templates. Independently testable — NOT yet wired into KINDS \
+(that is PHASE-02), so it stands up and goes green alone.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §5/§9 locked for SL-059 (2nd Opus pass clean, 6fc5020); no open design questions remain (§13)." },
+  { id = "EN-2", text = "src/backlog.rs identified as the reuse base — three-layer parse, per-kind Kind consts, edit-preserving transition, is_hidden hide-set." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/knowledge.rs exists: RecordKind (4 variants, clap::ValueEnum + kebab serde) + four Kind consts (dir=.doctrine/knowledge/<kind>, prefix ASM/DEC/QUE/CON, scaffold) + kind()/prefix()/as_str()/from_prefix()/ALL/default_status()." },
+  { id = "EX-2", text = "Per-kind ASSUMPTION/DECISION/QUESTION/CONSTRAINT_STATUSES consts (pub(crate), read by partition canaries) + the distinct *_HIDDEN settled-state sets + statuses()/is_hidden(); seed = each vocab's first element." },
+  { id = "EX-3", text = "KnowledgeRecord (id/slug/title/record_kind/status:String/created/updated/tags/facet/evidence) + RecordFacet (4 variants) + Evidence(supports/contradicts/notes) + Confidence/Basis/ConstraintSource (as_str + known-set)." },
+  { id = "EX-4", text = "Three-layer parse: RawRecordToml (status stays String, [facet] read as one kind-blind superset RawFacet #[serde(default)], [evidence] default empty) -> validate dispatches on record_kind -> the right typed RecordFacet variant, mapping \"\"/[]->absent. One materialiser." },
+  { id = "EX-5", text = "Per-kind scaffold emits record-NNN.toml in F1 order (top-level meta -> [facet] -> [evidence], no [[relation]] / no [relationships]) + record-NNN.md + NNN-slug symlink; the scaffolded status literal == default_status(kind)." },
+]
+verification = [
+  { id = "VT-1", expects = "Round-trip per kind: a fully-populated record-NNN.toml (facet + evidence) survives toml->struct->toml byte-stable." },
+  { id = "VT-2", expects = "Optional seam: \"\"/[] -> absent for every optional facet field (the RawFacet -> validated RecordFacet mapping)." },
+  { id = "VT-3", expects = "Three facet-enum drift canaries (confidence/basis/source): each enum's variant set equals its known-set." },
+  { id = "VT-4", expects = "Per-kind status known-set guard + seed-status anti-drift (F-A2): the scaffolded toml's status == default_status(kind) per kind (seed lives in both the template literal and default_status())." },
+  { id = "VT-5", expects = "Scaffold materialises 2 files + symlink per kind; F1 on-disk ordering pinned (meta -> [facet] -> [evidence])." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Engine wiring — KINDS rows, ordered golden, outbound_for total-dispatch arm, priority partition"
+objective = """
+Admit ASM/DEC/QUE/CON to integrity::KINDS (append after REC, zero churn to other \
+goldens) and update the ordered golden; add the four-prefix EMPTY outbound_for arm \
+("ASM"|"DEC"|"QUE"|"CON" => Ok(vec![]), L7/F-A1 — the only relation-layer touch, \
+routing not relations) so the KINDS-driven dispatch stays total and debug-safe; add \
+four KindPartition entries (workable:&[], terminal:<KIND>_STATUSES) with VT-1 drift \
+canaries so every record status classifies Terminal (NF-003, never Workable). The KINDS \
+rows and the outbound_for arm MUST co-land — a KINDS row with no arm panics every \
+debug-build graph scan. Behaviour preservation (NF-001) is the standing gate.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: src/knowledge.rs Kind consts + pub(crate) *_STATUSES consts exist (the rows and partition reference them)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "integrity::KINDS carries four KindRef { kind, stem=\"record\", state_dir=None } appended after REC; the ordered golden kinds_table_covers_the_numbered_kinds = [...,\"RV\",\"REC\",\"ASM\",\"DEC\",\"QUE\",\"CON\"]; the stateful assertion stays [\"SL\",\"RV\"]." },
+  { id = "EX-2", text = "relation_graph::outbound_for has the arm \"ASM\" | \"DEC\" | \"QUE\" | \"CON\" => Ok(Vec::new()), mirroring the REQ arm; sources_match_shipped_accessors and status_and_title_for are NOT touched (label-keyed / common-arm respectively)." },
+  { id = "EX-3", text = "priority/partition.rs has four KindPartition { prefix, workable:&[], terminal:<KIND>_STATUSES } reading knowledge::*_STATUSES; install/manifest + gitignore deferred to PHASE-04." },
+]
+verification = [
+  { id = "VT-1", expects = "outbound_for total-dispatch (F-A1): returns Ok(vec![]) and never panics for each of ASM/DEC/QUE/CON — the empty-arm regression guard." },
+  { id = "VT-2", expects = "Scan-side totality (F-A7, the L7 partner): build_relation_graph over a fixture with the four KINDS rows present but NO record tree returns the pre-existing graph unchanged (scan_ids tolerates the missing dir, entity.rs:195)." },
+  { id = "VT-3", expects = "Four partition VT-1 canaries: workable ∪ terminal == statuses(kind) per kind; status_class classifies every record status Terminal (never Workable)." },
+  { id = "VT-4", expects = "F-A5 dual assertion: is_hidden(Decision,\"accepted\")==false (list-visible) AND status_class(\"DEC\",\"accepted\")==Terminal (never workable) — the two notions deliberately disagree." },
+  { id = "VT-5", expects = "Disjointness (NF-002, F-A6): ASM/DEC/QUE/CON collide with NO existing corpus prefix (all of SL/ADR/POL/STD/PRD/SPEC/REQ/ISS/IMP/CHR/RSK/IDE/RV/REC); the new KINDS rows overlap no existing partition." },
+  { id = "VT-6", expects = "Behaviour preservation (NF-001): slice/ADR/spec/backlog/memory/relation suites green UNCHANGED (the engine Kind is data — the rows add table entries, not engine changes)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "The doctrine knowledge CLI — new / show / list / status + prefix->kind resolve"
+objective = """
+Wire the knowledge subcommand (main.rs) + thin forwarders in knowledge.rs riding \
+SPEC-013's <kind> <verb> grammar and the kind-blind listing spine: new <record_kind> \
+[title] [--slug] (reserve id, seed default status + empty [facet]/[evidence]); show \
+<ID> [--format] (prefix->kind resolve, reassemble table/json); list [CommonListArgs] \
+(cross-kind over all 4 trees, --status known-set = union of the 4 vocabs via \
+listing::validate_statuses, per-item is_hidden, --all/explicit reveal, canonical-id/ \
+JSON/columns); status <ID> <state> (prefix->kind resolve, validate state ∈ \
+statuses(kind), REFUSE a foreign-kind state, edit-preserving toml_edit writes \
+status+updated, no resolution coupling). Black-box per-verb goldens + the SPEC-013 \
+parse-conformance matrix row.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: the four KINDS rows are live; module + partition wired and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "doctrine knowledge new <record_kind> [title] [--slug] reserves an id in the kind's namespace and seeds default status + empty [facet] + empty [evidence]." },
+  { id = "EX-2", text = "knowledge show <ID> --format table|json resolves record_kind from the id prefix (resolve_ref) and reassembles identity/kind/status/facet/evidence." },
+  { id = "EX-3", text = "knowledge list scans all 4 trees, takes CommonListArgs, sets --status known-set = union of the 4 vocabs (calls listing::validate_statuses), applies per-item is_hidden, honours --all/explicit --status, emits canonical-id/JSON/columns." },
+  { id = "EX-4", text = "knowledge status <ID> <state> resolves prefix->kind, validates state ∈ statuses(kind) and REFUSES a foreign-kind state, then edit-preserving toml_edit writes status + updated (no resolution coupling)." },
+]
+verification = [
+  { id = "VT-1", expects = "Prefix->kind resolution (FR-004): show/status route ASM/DEC/QUE/CON to the right kind; a foreign-kind state on status is refused (FR-002)." },
+  { id = "VT-2", expects = "Black-box per-verb goldens (new/show/list/status), byte-exact (mem.pattern.testing.black-box-cli-golden)." },
+  { id = "VT-3", expects = "The SPEC-013 parse-conformance matrix carries a green row for knowledge (asserts every surface, not just the JSON envelope)." },
+  { id = "VT-4", expects = "Hide-set behaviour: default list hides settled states, held/proposed/open/active stay visible, --all/explicit --status reveal; a cross-kind --status on a SHARED token (obsolete / superseded) returns items across kinds." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "D8 disambiguation + authored-entity install / gitignore wiring"
+objective = """
+Now that DEC is a numbered 2-part kind (PHASE-02), disambiguate the live decision_ref \
+sites the new kind makes misleading to the unmistakable 3-part DEC-NNN-XX external form: \
+the rec.rs:318 comment, the relation.rs:164 Unvalidated doc, the main.rs:1537 \
+--decision example (DEC-005 -> DEC-005-C), and the rec.rs/relation_graph.rs decision_ref \
+test fixtures (DEC-001/DEC-005) with their in-test assertions updated lockstep \
+(DecisionRef is Unvalidated -> the string is opaque to behaviour, NF-001 holds). Run \
+the execute-time DEC-0 sweep across install/templates/, doc/, .claude/. Wire the \
+authored-entity plumbing: .gitignore negation !.doctrine/knowledge/ + install/ \
+manifest.toml [dirs].create .doctrine/knowledge (mem.pattern.install.authored-entity-wiring). \
+This phase touches no engine behaviour — D8 is clarity edits, the wiring is plumbing.\
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: DEC is a numbered kind, so the 2-part DEC-NNN ambiguity is real and the disambiguation is warranted." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "rec.rs:318 comment + relation.rs:164 Unvalidated doc reworded (external 3-part cites are not entities -> still free-text); main.rs:1537 --decision example DEC-005 -> DEC-005-C." },
+  { id = "EX-2", text = "rec.rs / relation_graph.rs decision_ref fixtures (DEC-001/DEC-005) -> 3-part external form, with the matching in-test assertion updated in the same test (lockstep value+assertion edit)." },
+  { id = "EX-3", text = "DEC-0 sweep across install/templates/, doc/, .claude/ — other 2-part DEC-NNN external cites disambiguated to 3-part or explicitly noted (D8 named sites are necessary, not provably exhaustive — F-A4)." },
+  { id = "EX-4", text = ".gitignore gains !.doctrine/knowledge/ (one negation covers all four subtrees); install/manifest.toml [dirs].create gains .doctrine/knowledge." },
+]
+verification = [
+  { id = "VT-1", expects = "Behaviour preservation: the full suite is green; the D8 fixture edits are lockstep value+assertion changes with no engine-behaviour change (DecisionRef stays Unvalidated)." },
+  { id = "VT-2", expects = "Authored-entity wiring asserted (mirroring the backlog precedent): install manifest carries .doctrine/knowledge and .gitignore carries the !.doctrine/knowledge/ negation so a record tree is committable." },
+]
+specs        = []
+requirements = []
