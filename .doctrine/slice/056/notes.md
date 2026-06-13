@@ -332,3 +332,35 @@ premise — charge 1 of the adversarial agenda.
 
 **PHASE-05 status = `blocked`** pending the codex adversarial pass on the decision,
 then lock (VH), then resume. Worker fork `sl056-p05-21784` + delta `ec81b5e` parked.
+
+### PHASE-05 — RESOLVED: locked **Option C + IMP-052 rider** (VH, 2026-06-13)
+
+Codex (GPT-5.5) reviewed `worker-mode-floor-decision.md` §6 adversarially → verdict
+**A→B**. Verified its findings against source:
+
+- **Charge 1 (load-bearing):** codex's *mechanism* was wrong — `worker_guard` resolves
+  the root via `root::find(None,…)` (cwd-walk), **not** the command `--path`
+  (`src/main.rs`, delta `ec81b5e`). But the *conclusion* held: under C a marker-absent
+  linked fork passes the guard, and the write verb's own `--path` can then target the
+  coordination root, escaping the `B..S` import belt. A would close that for free. **But
+  it only bites a worker that targets `-p <coord-root>`** — malice / derailment, which
+  the note scopes out; the in-scope cwd-write accident the belt *does* contain.
+- **Charge 4/6 (verified):** the fail-closed floor was baked into **ADR-011 D6** + the
+  PHASE-03 lock B2/B3 disposition, not just D2a — so C is a multi-clause reversal.
+
+**Lock rationale (owner risk calculus, not sunk cost):** `P(SubagentStart hook failure)
+≈ 0` (hook blocks; a miss needs a crash) **×** *jail-bounded* harm (bubblewrap, no push
+⇒ worst case = lost unpushed progress) ⇒ the security delta between A's floor and C's
+funnel is **negligible**. The jail is the real outer fence. The one real residual under
+C is **silence** (a failing hook quietly normalising), and the floor was the *wrong
+layer* for it — closed instead, behaviour-independent at spawn time, by the
+**orchestrator post-spawn marker check that aborts an unstamped fork (IMP-052)**:
+enforce where the harness *can* abort, not at the CLI write seam. Full reasoning in the
+decision note §7.
+
+**Applied (authored, on `main`):** ADR-006 D2a re-amended (fail-closed → positive
+signal, rationale recorded); ADR-011 D6 + M2 aligned (funnel+jail+IMP-052 posture);
+design §3 belt-as-fence pointer added; plan PHASE-05 unchanged; **IMP-052** minted;
+decision note stamped LOCKED + §7. Worker delta **`ec81b5e` kept** (it implements C).
+**Next:** re-verify `ec81b5e` against the amended ADR, flip PHASE-05 `blocked →
+completed`, continue the drive to PHASE-06.
