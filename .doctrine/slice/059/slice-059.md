@@ -97,7 +97,7 @@ Deliver SPEC-019 **FR-001/002/003/004**, **FR-007** (the four shared verbs only)
 
 ## Risks / Assumptions / Open Questions
 
-- **R1 — behaviour preservation (NF-002).** Riding the shared scaffold must leave
+- **R1 — behaviour preservation (NF-001 / REQ-245).** Riding the shared scaffold must leave
   the slice / ADR / spec / backlog / memory suites green unchanged. The engine
   `Kind` is data, not a trait — the verb seam is not abstracted; variation is the
   kind table.
