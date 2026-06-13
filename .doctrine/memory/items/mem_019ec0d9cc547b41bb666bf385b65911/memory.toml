@@ -3,8 +3,8 @@ memory_key = "mem.pattern.relation.authored-rows-tooling-half-wired"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Structural relations are [[relation]] rows (SL-048 'the cut'); writer and read-side display are unwired as of SL-057"
-summary = "Post-SL-048 relations are [[relation]] rows; link verb + read-side display unwired — hand-author, don't default to prose"
+title = "Relation surface is FULLY wired in source (SL-048): the 'half-wired' symptoms were a STALE installed jail binary; verify against a fresh dev build"
+summary = "Post-SL-048 relations are [[relation]] rows AND read/write are fully wired in source (link/unlink verbs, inspect + slice show render). Empty-relations/no-link symptoms = the read-only ~/.cargo/bin/doctrine predating SL-048 — verify CLI behaviour with the freshly-built dev binary, never the installed one. Only real gap: stale scaffold templates."
 created = "2026-06-13"
 updated = "2026-06-13"
 
