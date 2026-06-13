@@ -164,6 +164,21 @@ silent half-rollback:
 
 ### 4b. claude — `/dispatch-agent`
 
+> **⚠ SUPERSEDED by the SL-056 PHASE-02/03 pivot (O3-red) — see `g2-draft.md` and the
+> locked ADR-006 D9 amendment + ADR-011 D6.** The WorktreeCreate `create-fork`
+> create+provision+stamp-in-one-act path described below is **NOT buildable** on the
+> deployed harness (payload lacks `agent_type`/`worktree_path`/base) and is **deferred**.
+> The live claude mechanism is **SubagentStart-stamp**: Claude does default worktree
+> creation; a **matcher-scoped, sync-blocking `SubagentStart` hook** (`marker
+> --stamp-subagent`) provisions + stamps the marker into `cwd`. It is **not
+> fail-closable** (SubagentStart is read-only); the stamp-failure case is contained by
+> the **marker-absent fail-closed privilege rule** (ADR-006 D2a), and the stamp verb is
+> exempt **by verb identity**. The pre-dispatch baseline-verify guarantee does **not**
+> hold for claude (accepted weaker class — caught late at `import → verify`). The
+> detailed §4b/§5/§11/§12 rewrite onto `run_stamp_subagent` is **PHASE-10 work** (re-scope
+> recorded in `g2-draft.md §4`); the prose below is retained for provenance, not as the
+> build target.
+
 No `fork` verb, no env channel. The orchestrator launches the worker via the `Agent` tool
 with `subagent_type: dispatch-worker` and `isolation: worktree`. Claude Code fires a
 **`WorktreeCreate` hook** which, per the harness docs, **replaces the default git

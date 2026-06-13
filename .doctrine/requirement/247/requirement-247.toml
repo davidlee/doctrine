@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 247
+slug = "declare-every-record-state-terminal-class-in-the-priority-partition-empty-workable-set-so-records"
+title = "Declare every record state Terminal-class in the priority partition (empty workable set), so records are graph-present but actionability-inert — never eligible, never in survey or next, zero consequence, and never a direct blocker; work a record gates is carried by a spawned backlog item, not the record"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
