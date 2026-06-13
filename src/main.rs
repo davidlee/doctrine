@@ -533,6 +533,23 @@ enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
+    /// Land a solo multi-commit isolated-worktree TDD branch onto the coordination
+    /// branch with ancestry PRESERVED via `git merge --no-ff` (NEVER `--squash` —
+    /// the verb cannot express a squash; SL-056 PHASE-08, design §6). Solo
+    /// `/execute`'s analog of `import`. Fails closed with a distinct token on any
+    /// precond/merge violation (`tree-unclean`/`no-such-fork`/`worktree-gone`/
+    /// `dispatch-fork`/`merge-conflict`/`wedged-merge`/`inconsistent-merge-state`).
+    /// Orchestrator-classed — refused under worker-mode.
+    Land {
+        /// The solo fork branch to merge onto the coordination branch.
+        #[arg(long)]
+        fork: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Print the resolved worker-mode and cause (SL-056 §3). `--assert` derives a
     /// non-zero `stale-marker` exit from the SAME state the human line reads.
     /// Read-classed — open to workers.
@@ -1826,6 +1843,9 @@ fn write_class(cmd: &Command) -> WriteClass {
             // import lands a worker delta into the coordination index (SL-056
             // PHASE-07) — Orchestrator-classed; refused under worker-mode.
             WorktreeCommand::Import { .. } => Orchestrator("import"),
+            // land lands a solo fork onto the coordination branch via --no-ff merge
+            // (SL-056 PHASE-08) — Orchestrator-classed; refused under worker-mode.
+            WorktreeCommand::Land { .. } => Orchestrator("land"),
             // marker --clear is the bespoke self-brick cure (SL-056 §3) — NOT
             // refused by the worker-mode guard; its own fences live in the handler.
             WorktreeCommand::Marker { .. } => MarkerClear,
@@ -2427,6 +2447,7 @@ fn main() -> anyhow::Result<()> {
             WorktreeCommand::Import { base, fork, path } => {
                 worktree::run_import(path, &base, &fork)
             }
+            WorktreeCommand::Land { fork, path } => worktree::run_land(path, &fork),
             WorktreeCommand::Status { assert, path } => worktree::run_status(path, assert),
             WorktreeCommand::Marker {
                 clear,
