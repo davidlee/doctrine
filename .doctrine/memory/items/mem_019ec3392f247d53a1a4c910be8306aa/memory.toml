@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec3392f247d53a1a4c910be8306aa"
+memory_key = "mem.pattern.distribution.hookspec-merge-core-generalized-event-matcher"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "boot.rs HookSpec merge core is generalized over event+matcher"
+summary = "boot.rs HookSpec merge core generalized over event+matcher (SL-056 PHASE-11) — one impl wires SessionStart and SubagentStart"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["src/boot.rs"]
+globs = []
+commands = ["doctrine boot install", "doctrine claude install", "doctrine memory sync install"]
+tags = ["boot", "hooks", "claude", "distribution"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "86fa4477f8d98c2f094ff7828a5c5d72a54350dd"
+ref_name = "refs/heads/main"
+checkout_state_id = "e9d8d5736d33b6611b3358ec472163bf36c7e6d2b822fd22add69d62d4047591"
+base_commit = "210b27b31bcc348e5da5da021b0d75bf2b9d2687"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
