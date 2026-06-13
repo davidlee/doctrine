@@ -107,6 +107,39 @@ impl RelationLabel {
             RelationLabel::DecisionRef => "decision_ref",
         }
     }
+
+    /// Parse an authored `[[relation]]` `label = "…"` spelling back to its variant —
+    /// the inverse of [`name`](Self::name). `None` for any string that names no
+    /// vocabulary label (e.g. a typo or an INVERSE spelling like `superseded_by`,
+    /// which is derived render-text, never an authorable outbound label — ADR-010 D5).
+    /// Drives [`read_block`]'s "label not in the table at all" `IllegalRow` arm (X2);
+    /// the exhaustive `match` over `name()` keeps it in lock-step with the enum (a new
+    /// variant fails to compile until it is added here).
+    fn from_name(name: &str) -> Option<RelationLabel> {
+        let label = match name {
+            "specs" => RelationLabel::Specs,
+            "requirements" => RelationLabel::Requirements,
+            "supersedes" => RelationLabel::Supersedes,
+            "descends_from" => RelationLabel::DescendsFrom,
+            "parent" => RelationLabel::Parent,
+            "members" => RelationLabel::Members,
+            "interactions" => RelationLabel::Interactions,
+            "governed_by" => RelationLabel::GovernedBy,
+            "consumes" => RelationLabel::Consumes,
+            "slices" => RelationLabel::Slices,
+            "related" => RelationLabel::Related,
+            "reviews" => RelationLabel::Reviews,
+            "owning_slice" => RelationLabel::OwningSlice,
+            "drift" => RelationLabel::Drift,
+            "decision_ref" => RelationLabel::DecisionRef,
+            _ => return None,
+        };
+        // Defence-in-depth: the spelling must round-trip, so `name()` stays the single
+        // source of every label string (a future drift between the two maps trips this
+        // in the test build, where `from_name` is exercised).
+        debug_assert_eq!(label.name(), name);
+        Some(label)
+    }
 }
 
 use crate::entity::Kind;
@@ -375,6 +408,133 @@ impl RelationEdge {
     pub(crate) fn new(label: RelationLabel, target: String) -> Self {
         Self { label, target }
     }
+}
+
+/// Why a `[[relation]]` row was rejected by [`read_block`] (X2) — the validation
+/// finding's reason. A finding is NEVER a live edge; PHASE-05's `validate` reports
+/// these (the only consumer), so until then they read as dead in the bins/lib build
+/// (covered by the module-level `not(test)` `dead_code` expect).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum IllegalReason {
+    /// The `label` string names no vocabulary label at all (a typo, or an inverse
+    /// spelling like `superseded_by` — derived render text, never authorable).
+    UnknownLabel,
+    /// The label is a real vocabulary label, but this `source_kind` may not author it
+    /// (e.g. a slice carrying `related`, a backlog item carrying `governed_by`). The
+    /// per-kind legality the hardcoded readers enforced for free.
+    IllegalForSource,
+}
+
+/// One `[[relation]]` row [`read_block`] refused (X2): the offending label spelling
+/// **verbatim** (so a typo is reported as authored, even when it maps to no variant),
+/// the target ref, and the [`IllegalReason`]. A validation finding, not a live edge —
+/// see [`read_block`]. Carries the authored spelling rather than a `RelationLabel`
+/// because the `UnknownLabel` case has no variant to name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct IllegalRow {
+    /// The authored `label` string, verbatim (may name no vocabulary label).
+    pub(crate) label: String,
+    /// The authored `target` ref, verbatim.
+    pub(crate) target: String,
+    /// Why the row was rejected.
+    pub(crate) reason: IllegalReason,
+}
+
+/// One generic tier-1 `[[relation]]` row as authored on disk — `label = "…", target =
+/// "…"`. The uniform storage shape the PHASE-04 migration writes and `read_block`
+/// parses. A serde row struct mirrors the established kind-module `toml::from_str`
+/// idiom (`slice::Relationships`, `spec` members/interactions) — no parallel parser.
+#[derive(Debug, Clone, serde::Deserialize)]
+struct RelationRow {
+    label: String,
+    target: String,
+}
+
+/// The document shape `read_block` deserializes: the array of generic `[[relation]]`
+/// rows. `#[serde(default)]` so a file with no `[[relation]]` block (or a hand-trimmed
+/// one) parses to an empty block, matching the read-tolerant convention every kind
+/// module's relationship reader follows.
+#[derive(Debug, Default, serde::Deserialize)]
+pub(crate) struct RelationDoc {
+    #[serde(default)]
+    relation: Vec<RelationRow>,
+}
+
+impl RelationDoc {
+    /// Parse the `[[relation]]` block out of a kind's authored TOML text. Rides the
+    /// `toml::from_str` idiom the show-path readers use; `#[serde(default)]` ignores
+    /// every other key (the kind's own metadata/typed tables), so one parse over the
+    /// whole file yields just the generic rows.
+    pub(crate) fn parse(text: &str) -> anyhow::Result<RelationDoc> {
+        toml::from_str(text).map_err(|e| anyhow::anyhow!("parse [[relation]] block: {e}"))
+    }
+}
+
+/// Parse the generic `[[relation]]` rows of one entity and split them into the legal
+/// outbound edges and the illegal validation findings (design §5.3, X2).
+///
+/// Generic storage must NOT mean a generic parser that emits anything: a slice cannot
+/// author `related`, a backlog item cannot author `governed_by`. That per-kind
+/// legality lived in the hardcoded readers' code shape; `read_block` reproduces it by
+/// checking each row's `(source_kind, label)` against [`RELATION_RULES`] via
+/// [`lookup`]:
+/// - **legal** (`label` resolves to a variant AND `source_kind ∈ rule.sources`) ⇒ a
+///   [`RelationEdge`].
+/// - **illegal** (`label` names no variant, OR the variant is not authorable by
+///   `source_kind`) ⇒ an [`IllegalRow`] finding — NEVER a live edge.
+///
+/// Legal edges are emitted in **`RELATION_RULES` declaration order** for the source
+/// kind (X1 canonical); within one label, authored row order is preserved. This pins
+/// the per-kind tier-1 sequence the accessor return value / JSON / `format_show` paths
+/// consume before any `BTreeMap` regroup. `IllegalRow`s follow authored row order.
+///
+/// NOT yet wired into a live reader (PHASE-04); PHASE-05's `validate` consumes the
+/// findings. Until then both this fn and [`IllegalRow`] read as dead in the bins/lib
+/// build (the module-level `not(test)` `dead_code` expect), exercised by the suite.
+pub(crate) fn read_block(
+    source_kind: &Kind,
+    doc: &RelationDoc,
+) -> (Vec<RelationEdge>, Vec<IllegalRow>) {
+    let mut illegal: Vec<IllegalRow> = Vec::new();
+    // Bucket the legal edges by their canonical label position in RELATION_RULES, so
+    // the emitted order is the table's declaration order for this source (X1) while
+    // same-label rows keep their authored sequence. `Vec<(pos, edge)>` then a stable
+    // sort by pos — stable so within a label the authored order survives.
+    let mut legal: Vec<(usize, RelationEdge)> = Vec::new();
+    for row in &doc.relation {
+        match RelationLabel::from_name(&row.label) {
+            None => illegal.push(IllegalRow {
+                label: row.label.clone(),
+                target: row.target.clone(),
+                reason: IllegalReason::UnknownLabel,
+            }),
+            Some(label) => match canonical_position(source_kind, label) {
+                Some(pos) => {
+                    legal.push((pos, RelationEdge::new(label, row.target.clone())));
+                }
+                None => illegal.push(IllegalRow {
+                    label: row.label.clone(),
+                    target: row.target.clone(),
+                    reason: IllegalReason::IllegalForSource,
+                }),
+            },
+        }
+    }
+    // Stable sort by canonical position: same-label rows keep authored order (X1).
+    legal.sort_by_key(|(pos, _)| *pos);
+    let edges = legal.into_iter().map(|(_, e)| e).collect();
+    (edges, illegal)
+}
+
+/// The index of the FIRST `RELATION_RULES` row that legalises `(source, label)`, or
+/// `None` if the pair is illegal. The index is the canonical-order key `read_block`
+/// sorts by (X1) — and because the table is declared in `RelationLabel` enum-`Ord`
+/// order (VT-1), distinct labels sort into the same order `inspect`'s `BTreeMap`
+/// regroup produces, keeping every render surface canonical.
+fn canonical_position(source: &Kind, label: RelationLabel) -> Option<usize> {
+    RELATION_RULES
+        .iter()
+        .position(|r| r.label == label && r.sources.iter().any(|k| k.prefix == source.prefix))
 }
 
 #[cfg(test)]
@@ -684,6 +844,126 @@ mod tests {
         } else {
             panic!("governed_by → Kinds([ADR,POL,STD])");
         }
+    }
+
+    // -- PHASE-03: read_block legality (VT-2) + canonical order (VT-3) -------
+
+    /// (label, target) pairs for ergonomic edge assertions.
+    fn edge_pairs(edges: &[RelationEdge]) -> Vec<(RelationLabel, &str)> {
+        edges.iter().map(|e| (e.label, e.target.as_str())).collect()
+    }
+
+    /// VT-2 (X2): the generic parser preserves the per-kind legality the hardcoded
+    /// readers had for free. A slice row carrying `related` and a backlog row carrying
+    /// `governed_by` ⇒ `IllegalRow` (IllegalForSource), NEVER a live edge; a legal row
+    /// ⇒ a `RelationEdge`. An unknown label spelling ⇒ `IllegalRow` (UnknownLabel).
+    #[test]
+    fn read_block_rejects_illegal_source_label_pairs() {
+        // A slice authoring `related` (a governance-only label) plus a legal `specs`.
+        let slice_doc = RelationDoc::parse(
+            "[[relation]]\nlabel = \"related\"\ntarget = \"SL-002\"\n\
+             [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n",
+        )
+        .unwrap();
+        let (edges, illegal) = read_block(&SLICE_KIND, &slice_doc);
+        assert_eq!(
+            edge_pairs(&edges),
+            vec![(RelationLabel::Specs, "PRD-010")],
+            "the legal specs row emits an edge"
+        );
+        assert_eq!(
+            illegal,
+            vec![IllegalRow {
+                label: "related".to_string(),
+                target: "SL-002".to_string(),
+                reason: IllegalReason::IllegalForSource,
+            }],
+            "related is illegal for a slice source — a finding, not a live edge"
+        );
+
+        // A backlog item authoring `governed_by` (SL·PRD·SPEC-only) plus a legal `slices`.
+        let backlog_doc = RelationDoc::parse(
+            "[[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-010\"\n\
+             [[relation]]\nlabel = \"slices\"\ntarget = \"SL-020\"\n",
+        )
+        .unwrap();
+        let (edges, illegal) = read_block(&ISSUE_KIND, &backlog_doc);
+        assert_eq!(edge_pairs(&edges), vec![(RelationLabel::Slices, "SL-020")]);
+        assert_eq!(
+            illegal,
+            vec![IllegalRow {
+                label: "governed_by".to_string(),
+                target: "ADR-010".to_string(),
+                reason: IllegalReason::IllegalForSource,
+            }],
+            "governed_by is illegal for a backlog source"
+        );
+
+        // An unknown label spelling (a typo / an inverse spelling) ⇒ UnknownLabel.
+        let bad_doc = RelationDoc::parse(
+            "[[relation]]\nlabel = \"superseded_by\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"nonsense\"\ntarget = \"X\"\n",
+        )
+        .unwrap();
+        let (edges, illegal) = read_block(&SLICE_KIND, &bad_doc);
+        assert!(edges.is_empty(), "no legal edges from unknown labels");
+        assert_eq!(
+            illegal,
+            vec![
+                IllegalRow {
+                    label: "superseded_by".to_string(),
+                    target: "SL-001".to_string(),
+                    reason: IllegalReason::UnknownLabel,
+                },
+                IllegalRow {
+                    label: "nonsense".to_string(),
+                    target: "X".to_string(),
+                    reason: IllegalReason::UnknownLabel,
+                },
+            ],
+            "an inverse spelling and a typo are both UnknownLabel findings, verbatim"
+        );
+    }
+
+    /// VT-3 (X1): rows authored OUT of canonical order emit edges in `RELATION_RULES`
+    /// declaration order for the source kind; within one label, authored row order is
+    /// preserved. The slice canonical run is specs → requirements → supersedes; author
+    /// them reversed and interleave a duplicate-label pair to prove the stable
+    /// same-label order.
+    #[test]
+    fn read_block_emits_in_canonical_order_stable_within_label() {
+        let doc = RelationDoc::parse(
+            // Authored order: supersedes, requirements (R-002 then R-001), specs.
+            "[[relation]]\nlabel = \"supersedes\"\ntarget = \"SL-000\"\n\
+             [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-002\"\n\
+             [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-001\"\n\
+             [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n",
+        )
+        .unwrap();
+        let (edges, illegal) = read_block(&SLICE_KIND, &doc);
+        assert!(illegal.is_empty(), "all rows are legal for a slice");
+        assert_eq!(
+            edge_pairs(&edges),
+            vec![
+                // Canonical RELATION_RULES order — specs, requirements, supersedes …
+                (RelationLabel::Specs, "PRD-010"),
+                // … with the two requirements rows in their AUTHORED order (002, 001).
+                (RelationLabel::Requirements, "REQ-002"),
+                (RelationLabel::Requirements, "REQ-001"),
+                (RelationLabel::Supersedes, "SL-000"),
+            ],
+            "edges land in canonical table order; same-label rows keep authored order"
+        );
+    }
+
+    /// An empty / absent `[[relation]]` block parses to no edges and no findings — the
+    /// read-tolerant convention (a hand-trimmed file is valid input).
+    #[test]
+    fn read_block_empty_block_is_no_edges_no_findings() {
+        let doc = RelationDoc::parse("id = 1\ntitle = \"x\"\n").unwrap();
+        let (edges, illegal) = read_block(&SLICE_KIND, &doc);
+        assert!(edges.is_empty());
+        assert!(illegal.is_empty());
     }
 
     /// `lookup` keys on `(source ∈ sources, label)`: an illegal pairing returns

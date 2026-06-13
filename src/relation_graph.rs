@@ -23,7 +23,7 @@ use crate::entity;
 use crate::integrity;
 use crate::listing::{self, Format};
 use crate::projection::Projection;
-use crate::relation::{RelationEdge, RelationLabel};
+use crate::relation::{RELATION_RULES, RelationEdge, RelationLabel, TargetSpec};
 
 /// Every authored outbound relation of one entity, dispatched to the owning kind's
 /// `relation_edges` accessor by canonical prefix (design §5.2 — one data-driven match
@@ -114,14 +114,16 @@ pub(crate) fn require_minted(
     Ok(())
 }
 
-/// The overlay-identity map: one cordage overlay per OVERLAY-BACKED relation label
-/// (the 11 of design §5.3), keyed both ways. The two target-unvalidated labels —
-/// `Drift` and `DecisionRef` (ADR-010 Decision 2) — get NO overlay (their targets
-/// never resolve to a node), so `overlay_for` returns `None` for them and their
-/// edges always dangle.
+/// The overlay-identity map: one cordage overlay per OVERLAY-BACKED relation label,
+/// keyed both ways. The overlay-backed set is *derived* from [`RELATION_RULES`]
+/// (R2-M4) — every distinct label whose `TargetSpec != Unvalidated`. The two
+/// target-unvalidated labels — `Drift` and `DecisionRef` (ADR-010 Decision 2) — get
+/// NO overlay (their targets never resolve to a node), so `overlay_for` returns
+/// `None` for them and their edges always dangle.
 ///
 /// Label is overlay identity (OQ2-B): the same label authored from different source
-/// kinds (e.g. `Supersedes` from both slice and governance) shares ONE overlay.
+/// kinds (e.g. `Supersedes` from both slice and governance, `GovernedBy` from SL·PRD·
+/// SPEC) shares ONE overlay — the iteration de-dupes on the label key.
 struct OverlayMap {
     by_label: BTreeMap<RelationLabel, OverlayId>,
     by_overlay: BTreeMap<OverlayId, RelationLabel>,
@@ -131,26 +133,29 @@ impl OverlayMap {
     /// Allocate one `Reject`/`Unbounded` overlay per overlay-backed label (I1:
     /// `Reject` removes no edges, `Unbounded` exempts arity eviction — `in_edges`
     /// then enumerates exactly the authored unique inbound set).
+    ///
+    /// Table-derived (R2-M4): iterate [`RELATION_RULES`] and allocate one overlay per
+    /// DISTINCT label whose `TargetSpec != Unvalidated`. The `by_label` `BTreeMap`
+    /// de-dupes a label that appears in several rows (e.g. `Supersedes` from SL and
+    /// gov) to one overlay. NO hardcoded label const — the table is the single source,
+    /// so a new resolvable label gets an overlay automatically (VT-1 pins the set ==
+    /// the resolvable graph labels). Behaviour-preserving: the corpus authors no
+    /// `governed_by`/`consumes` edges yet, so the allocated set grows by those two
+    /// labels but produces byte-identical `inspect` / `*-show` output (EX-2).
     fn build(builder: &mut GraphBuilder) -> Self {
-        const OVERLAY_LABELS: &[RelationLabel] = &[
-            RelationLabel::Specs,
-            RelationLabel::Requirements,
-            RelationLabel::Supersedes,
-            RelationLabel::DescendsFrom,
-            RelationLabel::Parent,
-            RelationLabel::Members,
-            RelationLabel::Interactions,
-            RelationLabel::Slices,
-            RelationLabel::Related,
-            RelationLabel::Reviews,
-            RelationLabel::OwningSlice,
-        ];
         let mut by_label = BTreeMap::new();
         let mut by_overlay = BTreeMap::new();
-        for &label in OVERLAY_LABELS {
+        for rule in RELATION_RULES {
+            if matches!(rule.target, TargetSpec::Unvalidated) {
+                continue;
+            }
+            // De-dupe: a label spanning several source rows shares ONE overlay.
+            if by_label.contains_key(&rule.label) {
+                continue;
+            }
             let ov = builder.overlay(OverlayConfig::new(CyclePolicy::Reject, Arity::Unbounded));
-            by_label.insert(label, ov);
-            by_overlay.insert(ov, label);
+            by_label.insert(rule.label, ov);
+            by_overlay.insert(ov, rule.label);
         }
         Self {
             by_label,
@@ -1191,5 +1196,60 @@ mod tests {
             err.to_string().contains("ZZZ"),
             "unknown prefix surfaces a clean error mentioning the prefix"
         );
+    }
+
+    // -- PHASE-03 VT-1: table-driven overlay coverage (R2-M4) ---------------
+
+    /// VT-1 (R2-M4): the overlay-backed label set, the resolvable-graph label set, and
+    /// the table's distinct non-`Unvalidated` labels are the SAME set. Asserted by the
+    /// PROPERTY — both expectations are derived from `RELATION_RULES` (the single
+    /// source), NOT from a deleted parallel const, so it cannot be a tautology against
+    /// the implementation. A real `GraphBuilder` is driven so the assertion is over the
+    /// actually-allocated overlays (`by_label` keys), not a re-derivation.
+    #[test]
+    fn overlay_set_equals_resolvable_graph_labels_table_driven() {
+        use crate::relation::{RELATION_RULES, TargetSpec};
+        use std::collections::BTreeSet;
+
+        // Side A — every distinct label the table marks resolvable (TargetSpec !=
+        // Unvalidated). Derived from the table, NOT a hardcoded list.
+        let resolvable_from_table: BTreeSet<RelationLabel> = RELATION_RULES
+            .iter()
+            .filter(|r| !matches!(r.target, TargetSpec::Unvalidated))
+            .map(|r| r.label)
+            .collect();
+
+        // Side B — the labels OverlayMap::build actually allocates an overlay for,
+        // read off a real builder (the live allocation, not a re-derivation).
+        let mut builder = GraphBuilder::new();
+        let overlays = OverlayMap::build(&mut builder);
+        let overlay_backed: BTreeSet<RelationLabel> = overlays.by_label.keys().copied().collect();
+
+        assert_eq!(
+            overlay_backed, resolvable_from_table,
+            "the allocated overlay set must equal the table's resolvable (non-Unvalidated) labels"
+        );
+
+        // And the complement is EXACTLY the Unvalidated no-overlay pair — overlay_for
+        // returns None for those and only those.
+        let unvalidated: BTreeSet<RelationLabel> = RELATION_RULES
+            .iter()
+            .filter(|r| matches!(r.target, TargetSpec::Unvalidated))
+            .map(|r| r.label)
+            .collect();
+        assert_eq!(
+            unvalidated,
+            BTreeSet::from([RelationLabel::Drift, RelationLabel::DecisionRef]),
+            "the no-overlay pair is exactly drift + decision_ref"
+        );
+        for label in [RelationLabel::Drift, RelationLabel::DecisionRef] {
+            assert!(
+                overlays.overlay_for(label).is_none(),
+                "{label:?} (Unvalidated) must have no overlay"
+            );
+        }
+        // The 13 = 15 distinct labels minus the 2 Unvalidated. The set, not just the
+        // count, is the real assertion above; the count is a human-readable sanity tag.
+        assert_eq!(overlay_backed.len(), 13, "overlay-backed label count is 13");
     }
 }
