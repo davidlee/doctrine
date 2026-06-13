@@ -23,7 +23,9 @@ Complete in order without deviation. Each depends on the preceding stage:
 5. **Write design.md** — save to the slice `design.md` file and commit
 6. **Adversarial Review** — perform a hostile review of the design doc, probing for imprecision and flawed reasoning
 7. **Integrate Review Feedback** — triage and respond to feedback; integrate into slice / design doc; repeat until design approved
-8. **Transition to planning** — invoke `/plan` skill to create implementation plan
+8. **Transition to planning** — record the lifecycle move (`doctrine slice
+   status <id> plan` — bare number), then invoke `/plan` to create the
+   implementation plan
 
 <Process State Machine>
   <state name="Explore context">
@@ -143,9 +145,10 @@ reflects your current shared understanding before proceeding.
      guesswork.
 3. Integrate the feedback before offering next steps.
    - Occasionally this might require revisiting earlier steps.
-4. After integrating design feedback, reconcile the owning `slice-nnn.md` so scope,
-   risks, acceptance criteria, open questions, and follow-up direction still match
-   the revised design.
+4. After integrating design feedback, reconcile the owning slice — `slice-nnn.md`
+   so scope, risks, acceptance criteria, open questions, and follow-up direction
+   still match the revised design, **and** `slice-nnn.toml` (relations, metadata);
+   lifecycle status moves via `doctrine slice status`, not hand-edits.
 5. After the internal adversarial pass is integrated, you MUST offer the user a
    choice:
    1. run a formal hostile pass via `/inquisition`, or print a prompt for an

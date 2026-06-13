@@ -1,0 +1,104 @@
+# Implementation plan for SL-054 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-054"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "RenderOpts seam — behaviour-preserving widening"
+objective = """
+Replace the `color: bool` render axis with a `RenderOpts { color, term_width }` \
+bundle at the `render_columns` seam (folds F3 from the SL-053 review) and add a \
+bare `term_width: Option<u16>` param to `render_table` — threading every \
+production + test caller. NO behaviour change: every caller passes the default / \
+`None` path, and `render_table`'s body still always selects `Disabled` (the \
+`Some(w)` wrapping arm is deferred to PHASE-02). The existing suites passing \
+unchanged ARE the behaviour-preservation proof.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked — external (codex) review folded at bc9ca0b; SL-053 colour path live on main." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`RenderOpts { color: bool, term_width: Option<u16> }` defined (Debug/Clone/Copy/Default); `RenderOpts::default()` == `{ color: false, term_width: None }`." },
+  { id = "EX-2", text = "`render_columns` takes `RenderOpts`; `render_table` takes `term_width: Option<u16>`; `ListArgs.color: bool` becomes `ListArgs.render: RenderOpts`." },
+  { id = "EX-3", text = "All 10 production `render_columns` sites (incl. the rec.rs:576 empty-branch), the 4 cfg(test) helpers, the `coverage_view::render_table` wrapper, and `priority::{survey_human,next_human}` are threaded; `render_table` body still always `Disabled`." },
+]
+verification = [
+  { id = "VT-1", expects = "The full existing in-crate + black-box suite passes UNCHANGED — byte-identical piped output (the behaviour-preservation gate)." },
+  { id = "VT-2", expects = "`RenderOpts::default()` equals `{ color: false, term_width: None }` (pinned by a test)." },
+  { id = "VT-3", expects = "`cargo clippy` (plain) zero warnings; `just check` green." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "render_table wrapping engine — pure"
+objective = """
+Implement terminal-width wrapping in the pure `render_table`: when `term_width` \
+is `Some(w)` AND `w` fits the grid, switch to `ContentArrangement::Dynamic` + \
+`set_width(w)`; keep `force_no_tty()`, outer-edge padding-zeroing, and per-line \
+`trim_end` UNCONDITIONAL (spike: orthogonal to wrap); fall back to `Disabled` \
+when `w` is below the grid's structural minimum (`grid_min_width(cols)`). Pure \
+layer — driven entirely by passing `Some(w)` in tests; no shell yet.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — `render_table` carries `term_width`, the seam is threaded, suites green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`render_table` `Some(w)` arm: `grid_min_width(cols)` fit test (borders + padding + ≥1 char/col, matching comfy-table `available_content_width`); `fits` ⇒ `Dynamic + set_width(w)`, else `Disabled`." },
+  { id = "EX-2", text = "`force_no_tty()`, outer-edge padding-zero, and per-line `trim_end` remain unconditional across both arms." },
+]
+verification = [
+  { id = "VT-1", expects = "`render_table(wide_grid, Some(40))` yields multi-line rows; every wrapped line carries the `│` separator; no line exceeds the budget after `trim_end`." },
+  { id = "VT-2", expects = "`render_table(wide_6_7_col_grid, Some(20))` returns the `Disabled` byte-output (grid-floor fallback, `20 < grid_min_width`); a `w` just at/above the minimum wraps." },
+  { id = "VT-3", expects = "A `ByValue`-painted wide cell with `RenderOpts { color: true, term_width: Some(w) }` wraps, and ANSI-stripping reproduces the plain wrapped layout (RSK-3; first `ByValue`-under-wrap coverage)." },
+  { id = "VT-4", expects = "The existing SL-053 exact-shape `None`/`Disabled` tests pass UNCHANGED (None-invariance)." },
+  { id = "VT-5", expects = "`cargo clippy` (plain) zero warnings; `just check` green." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Shell width resolution — wire it live"
+objective = """
+Resolve terminal width in the impure shell (`tty.rs`: pure `terminal_width(is_tty, \
+cols)` split + crossterm `stdout_terminal_width` probe, coarse `MIN_WRAP_WIDTH=16` \
+degenerate floor) and wire it into the 3 shell resolution points so TTY surfaces \
+wrap while piped output stays width-free and goldens stay frozen.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — `render_table` wraps on `Some(w)` and floors on grid fit." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`tty.rs` gains `stdout_terminal_width() -> Option<u16>` (crossterm `terminal::size`, isatty-gated) + pure `terminal_width(is_tty, cols)` floored at `MIN_WRAP_WIDTH = 16` (0/narrow ⇒ None), mirroring `stdout_color_enabled`/`color_enabled`." },
+  { id = "EX-2", text = "`term_width` resolved at the 3 shell points: `CommonListArgs::into_list_args` (→ `ListArgs.render.term_width`), `coverage_view::run`, and `priority::mod` run (→ `survey_human`/`next_human`)." },
+]
+verification = [
+  { id = "VT-1", expects = "`terminal_width(false, _) == None`; `(true, Some(80)) == Some(80)`; `(true, Some(0)) == None`; `(true, Some(8)) == None` (below floor). Live isatty branch documented-not-driven." },
+  { id = "VT-2", expects = "Goldens stay green UNCHANGED — piped ⇒ `None` ⇒ width-free output (determinism; a moved golden signals width leaking into a pipe)." },
+  { id = "VT-3", expects = "No new `Cargo.toml` dependency — crossterm already transitive via comfy-table `custom_styling`; `cargo tree` confirms." },
+  { id = "VT-4", expects = "`just check` green; `cargo clippy` (plain) zero warnings." },
+]
+specs        = []
+requirements = []
