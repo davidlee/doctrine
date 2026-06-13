@@ -759,3 +759,69 @@ template + a memory.
 
 **Next:** PHASE-13 — embed the validated bwrap profile into `/dispatch-subprocess`,
 the skill-prose rewrite (call-the-verbs), and the `/dispatch` harness router split.
+
+## PHASE-13 — O8 skill prose calls verbs + `/dispatch-*` harness router (done · inline · `sl056-coord` 0feb672)
+
+Last phase. **Inline authoring** (skills are not dispatchable), landed on
+`sl056-coord` (needs the verbs + re-embed). Base = `e87c522`.
+
+**Five prose carriers + one test:**
+- `worktree/SKILL.md` 346→**274** (−21%): the manual `git worktree add` / provision /
+  rollback ritual collapses into one `doctrine worktree fork` call; `provision`,
+  `branch-point-check`, `status --assert` cited as verbs. Kept all correctness notes
+  (base-pinning, Claude `isolation:worktree` trap, honest invariant framing F7,
+  worker constrained loop, squash-orphan).
+- `execute/SKILL.md` 85→**107** (+22 by design): solo isolated path now calls
+  `worktree status --assert` at the solo→direct-writer transition (EX-3 §3 chokepoint
+  — the gate PHASE-05 shipped is now actually CALLED), then `land` then `gc` (execute
+  is the **sole** `land` caller).
+- `dispatch/SKILL.md` 311→**247** (−21%): thin router. Keeps the harness-identical
+  half (drive loop, funnel cadence, batching, pre-distilled prompt, remit). Adds the
+  routing head: detect harness on **self-belief ↔ env-marker AGREEMENT** (`CLAUDECODE`
+  etc.); mismatch/unknown ⇒ **refuse NAMING the cause**, never a blind spawn.
+- **new** `dispatch-subprocess/SKILL.md` (codex/pi arm): `fork --worker` + cwd-bound
+  subprocess spawn — `env -C "$D"` (portable `( cd … )` fallback) / the **embedded
+  PHASE-12 bwrap `--chdir` OS-floor profile** (marker ro-overlay AFTER `--bind "$D"`;
+  NEVER ro-bind `.claude/settings.local.json`; no flake change). Capture+check `$?`,
+  never `eval`.
+- **new** `dispatch-agent/SKILL.md` (claude arm): `Agent` `subagent_type:
+  dispatch-worker` (pinned to `DISPATCH_WORKER_AGENT_TYPE`), SubagentStart stamp,
+  not-fail-closable / fail-open + IMP-052, base-pinning + self-clear residuals,
+  parallel EXECUTION not LANDING (υ — one landing per base).
+
+**τ drift gate extended (red→green).** New `src/worktree.rs` test
+`dispatch_agent_skill_subagent_type_matches_const` reds if the `/dispatch-agent`
+`subagent_type:` literal diverges from `DISPATCH_WORKER_AGENT_TYPE` (drift fails OPEN
+— matcher never fires ⇒ no stamp). Confirmed RED with the skill absent, GREEN after.
+Updated the sibling agent-def test's stale "LATER phase" comment.
+
+**Surprises / adaptations:**
+- **Frontmatter is YAML (serde_yaml).** A `description:` containing `: ` (colon-space)
+  or embedded `"` breaks the plain scalar — `subagent_type: dispatch-worker` and
+  `env -C "$D"` in descriptions both failed the embed. Reworded to prose
+  ("the dispatch-worker subagent type", "via `env -C`"). Memory-worthy.
+- **Coord baseline `e87c522` is fmt-DIRTY.** `cargo fmt --check` reports 31 hunks on
+  the pristine stash (boot.rs/git.rs/tests/*) — the gate's `fmt` recipe runs `cargo
+  fmt` (mutate, exit 0), never `--check`, so drift was committed. NOT PHASE-13's. Only
+  formatted + committed `src/worktree.rs` (the file I edited); left the foreign drift
+  untouched to keep the commit clean.
+- **`just` is broken in the coord worktree** — `mod doctrine '.doctrine/doctrine.just'`
+  references a gitignored file not provisioned into the fork, so every `just` invocation
+  errors. Ran the gate's raw expansion (`cargo fmt` / `clippy` / `test --workspace` /
+  `build`) directly.
+- **`claude install` can't auto-target in the coord worktree** (no `.claude/`,
+  coordination tier excluded by provision). The embed-into-binary (touch `src/skills.rs`
+  + build) is what matters for shipping; verified the new skills are discoverable via
+  `claude install --agent claude --dry-run` (both dirs appear refresh+link). Real relink
+  happens in the live `.claude/`, not this build fork.
+
+**Verify:** clippy zero (root, no `--all-targets`); `cargo build` ok; `cargo test
+--workspace --no-fail-fast` green EXCEPT the named-foreign **SL-048**
+`e2e_relation_migration_storage::scaffolded_entities_are_post_cut_shape_all_six_paths`
+(slice template still emits `[relationships]` — red at the coord baseline, do-not-chase
+per handover; the failing test name drifts on shared main but it's the same file). Both
+drift tests pass. Re-embedded (`touch src/skills.rs` + build + dry-run install).
+`DOCTRINE_WORKER` UNSET for the run.
+
+**STOP — all phases (01–13) complete. /handover prior to /audit** (user wants the
+code-review + audit run as a possibly-orchestrated fresh effort; do NOT start it here).
