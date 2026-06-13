@@ -579,6 +579,25 @@ pub(crate) fn git_apply_index(root: &Path, patch: &str) -> Result<(), CaptureErr
     }
 }
 
+/// Run `git cherry <upstream> <head>` and return its `± <sha>` lines verbatim
+/// (SL-056 PHASE-09 gc oracle, design §8.1 patch-id leg). Each line is `- <sha>`
+/// (an equivalent patch is already upstream) or `+ <sha>` (a commit whose patch is
+/// NOT upstream). Errors on non-zero exit (e.g. an unresolvable ref). Impure shell;
+/// the gc classifier reads the prefixes as facts, never the other way round.
+pub(crate) fn git_cherry(root: &Path, upstream: &str, head: &str) -> Result<Vec<String>, CaptureError> {
+    let text = git_text(root, &["cherry", upstream, head])?;
+    Ok(text.lines().map(str::to_owned).collect())
+}
+
+/// True iff `git <args>` exits 0 (the exit-status-only seam — SL-056 PHASE-09 gc
+/// oracle ancestry leg, `merge-base --is-ancestor <a> <b>`, which prints nothing
+/// and signals purely via exit code). [`git_opt`] cannot distinguish exit-0-empty
+/// from a real failure cleanly here, so this returns the boolean exit directly. A
+/// spawn failure still errors (a missing git binary is not "false"). Impure shell.
+pub(crate) fn git_status_ok(root: &Path, args: &[&str]) -> Result<bool, CaptureError> {
+    Ok(run_git(root, args)?.status.success())
+}
+
 /// Resolve trunk's commit-ish via the peeled ladder (ADR-006 D3): an explicit
 /// `DOCTRINE_TRUNK_REF`, else `origin/HEAD`, `main`, `master` in turn. Each
 /// candidate is peeled with `rev-parse --verify --quiet <ref>^{commit}`; the

@@ -550,6 +550,38 @@ enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
+    /// Reap a spent worktree fork in ONE idempotent act (SL-056 PHASE-09, design
+    /// §8) — deletes ONLY when the fork has provably landed via the two-leg
+    /// (ancestry ∪ patch-id) durable-git oracle (§8.1). Fails closed with a distinct
+    /// token (`not-landed`/`squash-uncertifiable`); `--superseded-head <SHA>` reaps
+    /// iff the SHA equals the branch's current head (a movement-guard, not a landing
+    /// proof); `--force` bypasses the oracle; `--dry-run` prints the verdict and
+    /// destroys nothing. A crash-interrupted gc completes (or names the leftover) on
+    /// rerun (§8.2). Orchestrator-classed — refused under worker-mode.
+    Gc {
+        /// The fork branch to reap.
+        #[arg(long)]
+        fork: String,
+
+        /// Reap iff this SHA equals the branch's current head (the moved-HEAD
+        /// re-dispatch case: a spent-yet-never-landed fork). A movement-guard, not a
+        /// landing proof.
+        #[arg(long)]
+        superseded_head: Option<String>,
+
+        /// Bypass the landed oracle and reap knowingly.
+        #[arg(long)]
+        force: bool,
+
+        /// Compute and print the per-fork verdict, destroying nothing.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Print the resolved worker-mode and cause (SL-056 §3). `--assert` derives a
     /// non-zero `stale-marker` exit from the SAME state the human line reads.
     /// Read-classed — open to workers.
@@ -1846,6 +1878,9 @@ fn write_class(cmd: &Command) -> WriteClass {
             // land lands a solo fork onto the coordination branch via --no-ff merge
             // (SL-056 PHASE-08) — Orchestrator-classed; refused under worker-mode.
             WorktreeCommand::Land { .. } => Orchestrator("land"),
+            // gc reaps a spent worktree fork once provably landed (SL-056 PHASE-09)
+            // — Orchestrator-classed; refused under worker-mode.
+            WorktreeCommand::Gc { .. } => Orchestrator("gc"),
             // marker --clear is the bespoke self-brick cure (SL-056 §3) — NOT
             // refused by the worker-mode guard; its own fences live in the handler.
             WorktreeCommand::Marker { .. } => MarkerClear,
@@ -2448,6 +2483,13 @@ fn main() -> anyhow::Result<()> {
                 worktree::run_import(path, &base, &fork)
             }
             WorktreeCommand::Land { fork, path } => worktree::run_land(path, &fork),
+            WorktreeCommand::Gc {
+                fork,
+                superseded_head,
+                force,
+                dry_run,
+                path,
+            } => worktree::run_gc(path, &fork, superseded_head.as_deref(), force, dry_run),
             WorktreeCommand::Status { assert, path } => worktree::run_status(path, assert),
             WorktreeCommand::Marker {
                 clear,
