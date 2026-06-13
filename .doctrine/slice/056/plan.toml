@@ -1,0 +1,538 @@
+# Implementation plan for SL-056 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-056"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ── Governance first (decisions govern): G1+G3 → O3 spike → G2 → G4 ──
+# (design §10; slice §Sequencing). Then the agnostic code core, the verbs, the
+# claude spawn path, the install surface, the bwrap spike, and finally the prose
+# carriers that *call* the shipped mechanism.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "G1+G3 — ADR-008 accept + the new spawn-interface ADR"
+objective = """
+The governance gate (design §10). Two authored deliverables, no code.
+**G1 — ADR-008 revise → accept:** fold the research §5.1 false-green/false-red
+evidence cluster (it validates D-B1 empirically); record **D-B2 as a standing
+structural fact** (the flake ro-binds `~/.cargo/bin/doctrine` ⇒ in-jail `cargo
+install` is impossible ⇒ no install race); **re-scope D-B3's spike around the
+nested-userns feasibility question (OQ-2)**, not cost. Acceptance is the IMP-004
+gate (A1: IMP-003 resolved ⇒ actionable now).
+**G3 — the spawn-interface ADR (new — id allocated by `doctrine adr new`; cite
+that canonical id once minted, do NOT pre-guess "ADR-011"):** the harness-agnostic
+**contract** (orchestrator owns fork-or-mark + provision + per-wt env *emission*;
+worker identity is the disk marker) + a **per-harness capability / altitude
+table**. The fail-closed claude cell is **two-valued and O3-spike-contingent (φ)**
+— it stays `proposed` until PHASE-02 greens; the σ all-isolated-subagent
+intermediation blast radius is confessed. References ADR-006; does not yet amend
+it (that is G2, post-spike).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (9 adversarial passes; §10 governance sequence is the build target); slice §Sequencing orders G1+G3 first." },
+  { id = "EN-2", text = "ADR-008 is `proposed` (absent from the boot accepted list) and IMP-004's precondition (IMP-003) is resolved (A1)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ADR-008 is `accepted`: it folds the §5.1 evidence, records D-B2 (no in-jail install race), and re-scopes D-B3 around the OQ-2 userns question; its toml status reflects acceptance." },
+  { id = "EX-2", text = "the new spawn-interface ADR exists (id via `doctrine adr new`), stating the agnostic contract + the per-harness altitude table; the φ fail-closed claude cell and the env/spike claims are marked `proposed` (not asserted) pending the O3 gate." },
+  { id = "EX-3", text = "the per-harness table shows codex/pi (env-arm + per-wt env + bwrap under D6) vs claude (Agent + WorktreeCreate-hook, marker-only, base-pinning a confessed residual); no harness-specific command (`claude -p`) is a required element." },
+]
+verification = [
+  { id = "VA-1", expects = "ADR-008 reads as accepted with the §5.1 fold, the D-B2 standing fact, and the D-B3 re-scope around OQ-2 — confirmed against design §10/G1." },
+  { id = "VA-2", expects = "the spawn-interface ADR states the contract + altitude table with the φ two-valued claude cell `proposed` and the σ blast-radius confession (design §10/G3); cited by its minted canonical id, not a guessed number." },
+  { id = "VH-1", expects = "design owner accepts the ADR-008 transition and the new ADR's draft (governance acceptance gate)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "O3 spike — claude marker-via-WorktreeCreate (THE gate)"
+objective = """
+The empirical gate the claude path and G2 turn on (design §4b/§9/§12, OQ-1).
+Probe, with a **named `dispatch-worker` subagent** (the earlier probe used an
+*unnamed* one, so its `agent_type` absence was expected, not a refutation):
+(1) does `agent_type` **reliably propagate** through the WorktreeCreate payload;
+(2) does a **custom WorktreeCreate hook replace default creation** (path-on-stdout
+honoured, non-zero exit fails creation) and fire **before** the worker;
+(3) the **payload shape** — crucially whether it exposes any **base/parent-commit
+field** (charge-2: if yes, a hook-time `base-moved` pre-refusal becomes possible;
+if no, the session-HEAD residual stands);
+(4) **HARD GATING (σ):** can a WorktreeCreate **matcher** scope the hook to
+`dispatch-worker`? — matcher GREEN deletes the replicate-default else-branch and
+its blast radius; matcher RED mandates the serviceable-default else-branch;
+(5) **two concurrent** dispatch-worker creations each get their own
+create+provision+stamp (no shared slot);
+(6) exercise the **fallback ladder** if `agent_type` is absent from WorktreeCreate
+→ SubagentStart-stamp (probe-confirmed to carry `agent_type`, accepting the
+fail-open created-but-unstamped window) → prompt-enforced. Record every answer as
+a **spike result** that feeds G2 (PHASE-03), the φ ADR cell, and `create-fork`
+(PHASE-10). Per-harness: a claude green does **not** bless codex/pi env propagation.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green: the spawn-interface ADR names the φ two-valued altitude and the σ matcher question this spike resolves." },
+  { id = "EN-2", text = "the spike runs under a claude harness able to spawn an Agent (isolation: worktree) with a custom dispatch-worker subagent_type and a temporary WorktreeCreate hook." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "recorded gate result: whether a NAMED dispatch-worker subagent propagates `agent_type` through WorktreeCreate, whether the custom hook replaces default creation (path-on-stdout + non-zero-fails-creation) and fires before the worker, and the observed payload shape." },
+  { id = "EX-2", text = "recorded σ matcher answer (matcher available → else-branch DELETED; no matcher → serviceable-default else-branch kept) and the charge-2 base/parent-field answer (present → hook-time base-moved check possible; absent → session-HEAD residual stands)." },
+  { id = "EX-3", text = "recorded concurrency result (two file-disjoint creations each stamped independently) and, if agent_type is absent, the chosen fallback rung (SubagentStart-stamp / prompt-enforced) with its altitude confessed." },
+]
+verification = [
+  { id = "VA-1", expects = "the spike result is durable (recorded to memory + notes) and answers all of: agent_type propagation, hook-replaces-creation, payload shape, base/parent field (charge-2), matcher availability (σ), concurrency, fallback rung." },
+  { id = "VA-2", expects = "the result is wired forward: it firms the φ cell in the spawn-interface ADR and selects the create-fork else-branch disposition (delete vs serviceable-default) for PHASE-10." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "G2 — ADR-006 amendments (post-spike) + firm the φ ADR cell"
+objective = """
+Amend the **accepted** ADR-006, now that the O3 spike validates the claude path
+(design §10/G2 — spike-first by construction). Targeted edits, not a rewrite; the
+withheld-tier D1/D4/D9 invariants are preserved.
+(a) **D5/D9 creation-ladder:** for **codex/pi** demote harness-native creation to
+opportunistic/never-depended (base-pinning + subprocess spawn supersede it, citing
+SL-050/051); for **claude** **promote a custom WorktreeCreate hook** as the
+create+provision+stamp handler (it *replaces* default git creation → fail-closed),
+with SubagentStart-stamp as the named fallback (per the PHASE-02 outcome).
+(b) **D2a mechanism:** replace the `DOCTRINE_WORKER=1` self-arm with the
+**disk-marker-primary** signal (agnostic); env is a codex/pi *optimisation* that
+additionally catches worker-on-main; introduce the **`Orchestrator` verb class**.
+State the per-harness enforcement altitude (marker floor everywhere; env + bwrap
+codex/pi-only; claude worker-on-main = deferred D2b residual).
+Also **firm the spawn-interface ADR's φ cells** to the spike outcome (fail-closed
+if O3 green, else the SubagentStart fail-open row shown, not hidden).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 green: the O3 spike result fixes the claude WorktreeCreate path (agent_type propagation, matcher disposition, fallback rung) that this amendment encodes." },
+  { id = "EN-2", text = "ADR-006 is accepted and the spawn-interface ADR (PHASE-01) carries the φ cells this phase firms." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ADR-006 D5/D9 amended: codex/pi native creation demoted; claude custom WorktreeCreate hook promoted as the fail-closed create+provision+stamp handler with SubagentStart fallback named." },
+  { id = "EX-2", text = "ADR-006 D2a amended: disk-marker-primary signal (agnostic), env demoted to a codex/pi optimisation, the Orchestrator verb class introduced, the per-harness altitude stated; the withheld-tier D1/D4/D9 invariants are textually preserved." },
+  { id = "EX-3", text = "the spawn-interface ADR's φ cells are firmed to the PHASE-02 outcome (fail-closed cell promoted from `proposed` iff O3 greened; otherwise the SubagentStart fail-open row is the shown altitude)." },
+]
+verification = [
+  { id = "VA-1", expects = "ADR-006's amendments are scoped to D5/D9 + D2a + the Orchestrator class; a diff shows the withheld-tier invariants untouched (behaviour-preserving governance)." },
+  { id = "VA-2", expects = "the marker is primary and env is an optimisation everywhere the amended ADR speaks of worker identity (no residual self-arm-as-identity language)." },
+  { id = "VH-1", expects = "design owner accepts the ADR-006 amendments and the firmed φ cells." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "G4 — SPEC-012 rewrite"
+objective = """
+Rewrite SPEC-012 (`draft`; all-pending FRs ⇒ cheap now), downstream of every ADR
+decision (design §10/G4). Its container philosophy — "the funnel is a discipline,
+not enforced code" — is the exact sentence the thesis attacks.
+Reframe **Overview + Concerns** (the funnel is now enforced CLI mechanism);
+**rewrite D3** from "fails open at the env boundary" to the **fail-closed
+marker-primary guard**; add a **D for the verb family**; add **FRs** (fork verb,
+import verb, land verb, gc verb, marker guard, per-wt env contract). State the
+**achievable altitude per harness**, the **quiescence constraint** (§7c), the
+**solo non-squash-land constraint** (§6/§8.1), and the **belt's honest scope**
+(§7b — `.claude/` leg contains only force-add injection).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 green: ADR-006 and the spawn-interface ADR are settled — SPEC-012 is downstream of those decisions (design §10 sequence)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SPEC-012 Overview/Concerns are reframed (funnel = enforced code) and D3 is rewritten to the fail-closed marker-primary guard (no fail-open env-boundary language remains)." },
+  { id = "EX-2", text = "SPEC-012 adds a verb-family D and FRs for fork/import/land/gc/marker-guard/per-wt-env-contract; it states the per-harness altitude, the quiescence constraint, the solo non-squash-land constraint, and the belt's honest scope." },
+]
+verification = [
+  { id = "VA-1", expects = "SPEC-012 reads fail-closed end-to-end: no surviving 'funnel is a discipline, not enforced code' / 'fails open at the env boundary' framing (design §10/G4)." },
+  { id = "VA-2", expects = "every shipped verb (fork/import/land/gc) and the marker guard + per-wt env contract has a backing FR; the three honest-scope constraints (quiescence, non-squash-land, belt) are stated." },
+]
+specs        = []
+requirements = []
+
+# ── Code: the agnostic trust core first, then each Orchestrator verb, then the
+# claude-specific spawn path, then the install surface, then the bwrap spike,
+# then the prose carriers. write_class is EXHAUSTIVE (no wildcard) — each new
+# verb-Command is classified in the phase that introduces it; PHASE-05 lands the
+# WriteClass enum + guard + classifies the marker/status verbs and the existing
+# surface (behaviour-preserving), later phases classify their own new verbs. ──
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Trust core — disk marker, worker-mode guard, status verb"
+objective = """
+The harness-agnostic keystone all the verbs ride (design §3/§5/§11; O3 mechanism).
+Pure leaf + thin shell, ADR-001 layering, pure/imperative split.
+**Pure:** `marker_path`, `marker_present`, `describe_mode(is_linked,
+marker_present, env_set) -> StatusLine` — the **single** source for both the human
+status line and the `--assert` exit (no `classify_writable` twin).
+**Shell:** `write_marker`/`remove_marker`; `worker_mode(root) =
+(is_linked_worktree && marker_present) OR env DOCTRINE_WORKER` (third
+`is_linked_worktree` consumer). **Guard in `run()`** before dispatching a
+write-classed OR Orchestrator/Hook-mint Command. Grow `write_class` (exhaustive,
+no wildcard) with the **WriteClass enum** gaining `Orchestrator`/`Hook-mint`
+discrimination; classify the **existing** surface behaviour-preservingly and the
+**new** `marker --clear` (bespoke 5th class — never refused by the marker
+conjunct) and **`worktree status [--assert]`** (`Read`-classed: charge-4
+observability + charge-3 stale-marker gate in one verb). The env-leg refusal on a
+non-linked tree carries the **named dual-cause** message (§3). **Delete vs
+history:** `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot
+apparatus (obviated by the per-worktree-creation hook).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 green: ADR-006 D2a (marker-primary) + the Orchestrator class are accepted governance — this phase mechanises them (the trust core depends on the ADR-006 amendment, NOT on the SPEC-012 rewrite/PHASE-04)." },
+  { id = "EN-2", text = "`is_linked_worktree` exists (memory squash-warn + RV-verb refusal are the prior two consumers); the marker tier `.doctrine/state/dispatch/worker` inherits the withheld-tier exclusions (confirm in the is_withheld test)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`worker_mode` resolves the marker as PRIMARY (linked worktree + marker ⇒ refuse) with env as the codex/pi worker-on-main catch; a marked linked worktree refuses authoring + status-transition writes via run() (the Orchestrator/Hook-mint verbs are classified and refusal-tested in their introducing phases — they do not exist yet here); solo (neither signal) writes freely (D6a)." },
+  { id = "EX-2", text = "`worktree status` prints the resolved mode + cause for all four signal states; `worktree status --assert` derives its `stale-marker` non-zero exit from the SAME describe_mode (no parallel implementation), naming the `marker --clear --operator` remedy; clean direct-writer entry → exit 0." },
+  { id = "EX-3", text = "`marker --clear --operator` removes the marker with a loud receipt; refused if DOCTRINE_WORKER set, if cwd is not the marker's tree root, and (in a linked worktree) without `--operator` — NEVER refused by the marker conjunct itself (self-brick rejected)." },
+  { id = "EX-4", text = "`write_class` stays exhaustive (no wildcard — a future unclassified verb is a compile error); the arm/disarm/lease apparatus is deleted; clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "worker-mode guard invariant test DRIVES run() (not a pure helper): (a) linked worktree + marker → authoring/status-transition refused (PRIMARY); (b) DOCTRINE_WORKER on the coordination root → refused (env optim); (c) worktree without marker, no env (solo) → allowed; (d) non-worktree tempdir, no env → allowed. Tests unset DOCTRINE_WORKER and run outside a marked worktree." },
+  { id = "VT-2", expects = "`worktree status` four-state golden (force_no_tty): no-signal → writes allowed; marker-only → refused signal: marker; env-only → refused signal: env; both → refused signal: both." },
+  { id = "VT-3", expects = "`status --assert` gate: clean linked-worktree entry → exit 0; stale marker in a linked worktree → non-zero `stale-marker` naming the remedy; exit 0 after `marker --clear --operator`; the human line and the --assert exit read one describe_mode and never disagree." },
+  { id = "VT-4", expects = "`marker --clear` self-brick cure: a stale marker → writes + Orchestrator verbs refused; `marker --clear --operator` (env unset) restores from within the CLI; refused when DOCTRINE_WORKER set / outside the marker's tree / bare in a linked worktree (accident-fence)." },
+  { id = "VT-5", expects = "the env-leg refusal on a NON-linked tree carries the named dual-cause message (worker-on-main OR leak), for authoring AND funnel verbs — never a bare 'worker refused'." },
+  { id = "VT-6", expects = "behaviour-preservation: the old DOCTRINE_WORKER-only guard tests are REWRITTEN to the marker (the migration legitimately changes the trigger); select_copies/provision, branch-point-check, is_withheld/allowlist, git.rs born-frame capture stay green UNCHANGED." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "`fork` verb + per-worktree env contract (O2 + O6)"
+objective = """
+The codex/pi orchestrator-owned fork, ADR-006 D9 compliance (not amendment) — and
+the per-worktree env framework primitive it carries (design §4a/§8/§11; O2+O6).
+`run_fork --base <B> --branch <name> --dir <path> [--worker]` does, atomically per
+a **compensating-cleanup rollback (NOT a transaction — git mutations are not
+atomic):** (1) `git worktree add -b <branch> <dir> <B>` (refuse if dir/branch
+exist or B is not a commit; dir unique-per-branch, outside repo or gitignored
+in-repo); (2) `doctrine worktree provision <dir>` (sole copier, withheld
+excluded); (3) if `--worker`: `write_marker` **before** any spawn window (solo
+omits it); (4) emit the **per-worktree env contract** on stdout (`KEY=value`/line;
+human status to stderr). The contract is *generalisable* — the project declares
+its per-wt env; doctrine-the-repo's project-local consumer is
+`CARGO_TARGET_DIR=<jail-root>/wt/<branch>` via pure `target_dir_for_branch` (NOT a
+framework primitive). Any failure after step 1 → best-effort rollback (`git
+worktree remove --force` + `git branch -D` + reap dir); a rollback that itself
+fails **names the leftover and exits non-zero**. `fork` is **Orchestrator**-classed
+(refused under worker_mode). The rollback core is reused by `create-fork`
+(PHASE-10).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 green: `write_marker` + the worker-mode guard exist; fork --worker is the marker's codex/pi writer and `fork` joins the Orchestrator class." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`fork` creates the worktree (`git worktree add -b` syntax pinned), provisions it, writes the marker before any spawn window under `--worker` (omitted for solo), and emits the per-wt env contract on stdout with human status on stderr." },
+  { id = "EX-2", text = "compensating cleanup: a post-`add` provision/marker failure rolls back (worktree+branch reaped — assert no leftover, not merely 'unspawned') and exits non-zero; a half-failed rollback exits non-zero with a distinct token NAMING the dir+branch left; a pre-`add` failure leaves no fork." },
+  { id = "EX-3", text = "`target_dir_for_branch` is pure (branch name → `wt/<branch>` path); the env contract is project-declared, not baked in the flake (ADR-008 D-B5); `fork` is refused under worker_mode (Orchestrator); clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "fork goldens (force_no_tty): env contract on stdout, status on stderr, marker written under --worker, `git worktree add -b <branch> <dir> <B>` syntax pinned; dir/branch-exists and B-not-a-commit refusals." },
+  { id = "VT-2", expects = "compensating cleanup: forced provision failure → non-zero AND `git worktree list`/`git branch` show NO leftover; a half-failed rollback → distinct non-zero token naming the dir+branch; a pre-marker failure leaves no unmarked fork." },
+  { id = "VT-3", expects = "D5 (codex/pi): two parallel worktree builds incur no cargo-lock contention and each spawns its correct CARGO_BIN_EXE under its per-wt CARGO_TARGET_DIR (claude shares the jail-wide target — §5.1 rituals are the proof there, not isolation)." },
+  { id = "VT-4", expects = "`fork` Orchestrator-class refusal DRIVES run(): from a marked fork AND from an env-set process, `fork` is refused (the first member of the exhaustive Orchestrator set proven in its introducing phase — §12; PHASE-09 VT-4 asserts the full set once all four verbs exist)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "`import` verb + the governance/config belt (O4)"
+objective = """
+Collapse the dispatch funnel's deterministic, judgment-free steps into one
+fail-closed, golden-testable verb (design §7a/§7b/§11; O4, R1 load-bearing belt).
+`run_import --base <B> --fork <branch>` at the coordination root, **v1
+stationary-head only**, each step a hard refusal (no auto-merge):
+(1) precond — `HEAD == B` (`branch-point-check` ref-equality) **and** tree clean
+(`git status --porcelain --untracked-files=no`-empty — untracked excluded
+deliberately); `HEAD != B` → `head-moved`, dirty → `tree-unclean`;
+(2) `S^ == B` single-non-merge else `multi-commit`;
+(3) **belt** — reject if the `B..S` **name-only, tracked-files-only** diff touches
+`.doctrine/` (→ `doctrine-touch`) or `.claude/` (→ `claude-touch`; honest scope —
+`.claude/` is gitignored, so this leg catches only a force-added path, parity with
+the `.doctrine/` leg);
+(4) `git apply --3way --index` **non-committing** (orchestrator commits separately,
+ADR-006 D7; under both preconds the patch cannot conflict ⇒ `apply-conflict` is
+not a v1 refusal). **No runtime receipt** — gc derives landed-ness from durable git
+(§8.1). Pure `classify_import(diff, base, head) -> Result<Apply, Refusal>`;
+imperative shell drives git+apply. **Orchestrator**-classed.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 green: the worker-mode guard + Orchestrator class exist; `branch-point-check` (HEAD==B ref-equality) is the existing precond reused, not reimplemented." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`import` happy path applies a single non-merge fork commit via `git apply --3way --index` non-committing under HEAD==B + clean tree; the orchestrator commits separately (no receipt stamped)." },
+  { id = "EX-2", text = "the v1 refusal set is exhaustive and each fails closed: {head-moved, tree-unclean, multi-commit, doctrine-touch, claude-touch}; the belt diff is name-only + tracked-files-only; untracked files do not false-`tree-unclean`." },
+  { id = "EX-3", text = "`classify_import` is pure (no git/disk); the belt is shared prefix-matching over both tiers; `import` is refused under worker_mode (Orchestrator); clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "import invariant test DRIVES the write seam (run(), not classify_import alone — the belt is the load-bearing protection, R1): happy apply leaves the coordination tree with the delta staged, un-committed." },
+  { id = "VT-2", expects = "each refusal golden (force_no_tty): head-moved (HEAD != B), tree-unclean (dirty tracked), multi-commit (S^ != B), doctrine-touch (a `.doctrine/` path in B..S), claude-touch (a FORCE-ADDED `.claude/` path in B..S, charge-5)." },
+  { id = "VT-3", expects = "untracked scratch/memory/withheld sheets do NOT trip tree-unclean (the deliberate --untracked-files=no scoping)." },
+  { id = "VT-4", expects = "`import` Orchestrator-class refusal DRIVES run(): from a marked fork AND from an env-set process, `import` is refused (§12 exhaustive-set member; full set asserted at PHASE-09 VT-4)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "`land` verb — solo's non-squash coordination merge (O5b)"
+objective = """
+Solo `/execute`'s analog of `import` (design §6/§11; O5b, round-4 Charge α).
+`run_land --fork <branch>` at the coordination root, **solo-only**, lands a
+multi-commit isolated-worktree TDD branch with ancestry preserved:
+(1) precond — tree clean (same scoping as import) else `tree-unclean`; HEAD is the
+coordination branch; `<branch>` exists else `no-such-fork`; its **live linked
+worktree** does NOT bear the worker marker else `dispatch-fork` (a marker-bearing
+fork must funnel through the belted `import`); **and `<branch>` must HAVE a live
+linked worktree** (the marker is uncommitted/unreachable once the worktree is gone)
+else `worktree-gone` (the marker guard is an honest live-worktree accident-fence,
+not a universal provenance proof);
+(2) `git merge --no-ff <branch>` — **never `--squash`** (the verb cannot express
+one; squash is structurally uncertifiable by gc, §8.1);
+(3) on conflict → **`git merge --abort` FIRST** (restore the clean tree), then
+refuse `merge-conflict`; the abort is mid-merge-guarded (MERGE_HEAD present) —
+reached with no merge in progress → `inconsistent-merge-state`; abort failure →
+distinct `wedged-merge` naming MERGE_HEAD + unmerged paths + that the tree is not
+clean. Pure `classify_land(tree_status, head, fork_state) -> Result<Merge,
+Refusal>`; reuses the tree-clean check shared with `import` (no parallel impl).
+**Orchestrator**-classed.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-07 green: the tree-clean precond helper exists in `import` and is shared by `land` (no parallel implementation); the worker-marker predicate from PHASE-05 backs the `dispatch-fork` guard." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`land` happy path runs `git merge --no-ff` (never --squash) leaving fork commits reachable from the coordination HEAD (so gc's ancestry leg reaps); the in-place solo path needs no land." },
+  { id = "EX-2", text = "the refusal set is exhaustive: {tree-unclean, no-such-fork, dispatch-fork, worktree-gone, merge-conflict, wedged-merge, inconsistent-merge-state}; a marker-bearing fork is refused `dispatch-fork`; a worktree-less branch is refused `worktree-gone`." },
+  { id = "EX-3", text = "on conflict the half-merge is aborted before refusal (tree restored clean); the abort fires only mid-merge; clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "land happy golden: `--no-ff` merge commit, fork commits reachable from coordination HEAD; an attempt to express a squash is structurally impossible (no --squash path in the verb)." },
+  { id = "VT-2", expects = "refusal goldens: tree-unclean, no-such-fork, dispatch-fork (marker-bearing live worktree), worktree-gone (branch without a live worktree)." },
+  { id = "VT-3", expects = "merge-conflict path: `git merge --abort` runs FIRST and the tree is verified clean after; reaching step 3 with no merge in progress → inconsistent-merge-state; an abort that fails → wedged-merge naming MERGE_HEAD + unmerged paths." },
+  { id = "VT-4", expects = "`land` Orchestrator-class refusal DRIVES run(): from a marked fork AND from an env-set process, `land` is refused (§12's round-7 Charge π names `land` explicitly as the member that was once omitted; full set asserted at PHASE-09 VT-4)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-09"
+name      = "`gc` verb — idempotent reaper + two-leg landed oracle (O5)"
+objective = """
+Reap spent worktrees in one idempotent act (design §8/§8.1/§8.2/§11; O5, answers
+IMP-041 + D-B1 disk hygiene). `run_gc --fork <branch> [--superseded-head <SHA>]
+[--force] [--dry-run]`, **Orchestrator**-classed, forced ordering (worktree before
+branch — `git branch -D` refuses a checked-out branch): (1) `git worktree remove`
+(removes the marker); (2) `git branch -D`; (3) reap the `wt/<branch>` target dir
+(closes the §8 disk loop); (4) stderr-warn that `env!(CARGO_MANIFEST_DIR)`-baked
+test binaries need recompile.
+**The landed oracle — durable patch-id, NO receipt:** delete only when provably
+landed via `git cherry <coordination-HEAD> <fork-branch>`, **two legs union** —
+ancestry (`land` route, fork tip is an ancestor) OR every listed commit is `-`
+(`import` route, ancestry severed but patches landed). A squash-merge is
+structurally uncertifiable → **named refusal** ("re-land via `worktree land`
+(--no-ff), or `--force`"). `--superseded-head <SHA>` reaps iff SHA == current head
+(a TOCTOU movement-guard, not a landing proof) — kills the `--force` reflex for the
+common re-dispatch case. **Idempotent state machine:** pure `classify_gc(state) ->
+GcPlan` over `{branch_exists, worktree_present, target_present, landed_verdict?}`;
+branch-gone ⇒ already-certified (deletion is the certificate); skip absent steps;
+every destructive step honest on failure (`git worktree prune` folds a stale admin
+entry).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-07 + PHASE-08 green: both landing routes exist — `import` (ancestry severed, patch-id leg) and `land` (ancestry preserved, ancestor leg) — so the two-leg oracle has both customers to certify." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`gc` reaps worktree+branch+target in the forced order (worktree first), warns about stale baked test binaries, and deletes ONLY on a positive two-leg `git cherry` verdict (ancestry OR all-`-` patch-id)." },
+  { id = "EX-2", text = "a squash-merged fork trips neither leg → named refusal pointing at `worktree land --no-ff` / `--force`; `--superseded-head <SHA>` reaps iff SHA == current head; `--dry-run`/bare `gc` prints the per-fork verdict so the operator never `--force`s blind." },
+  { id = "EX-3", text = "`classify_gc` is pure + idempotent: a rerun after a crash between any two destructive steps completes or names its leftover; branch-gone ⇒ already-certified, the only residue is the target dir reaped from the branch NAME alone; clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "gc goldens: worktree+branch+target reaped; two-leg oracle (ancestor leg for a landed `land`, all-`-` patch-id leg for a landed `import`); a non-ancestor tip with any `+` refuses unless --superseded-head/--force." },
+  { id = "VT-2", expects = "squash-merge → named refusal (re-land via `worktree land`/--force); `--superseded-head` honesty (reaps iff SHA == current head; a wrong/lost SHA only costs a --force, the safe side); `--dry-run` prints the verdict." },
+  { id = "VT-3", expects = "idempotent rerun (round-7 Charge ξ): inject/simulate failure after EACH destructive step → rerun completes or names a non-zero leftover; include branch-gone/target-present (reap T from the branch name alone) and the gc-own-ordering case (W removed before B)." },
+  { id = "VT-4", expects = "EXHAUSTIVE Orchestrator-class refusal (round-7 Charge π — the slice's load-bearing trust guarantee, now that all four verbs exist): from a marked fork AND from an env-set process, EACH of `fork`/`import`/`land`/`gc` is refused — drive run(). `marker --clear` is kept OUT of this class (its bespoke refusal rules are PHASE-05 VT-4). This is the single phase that owns the complete set." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-10"
+name      = "claude spawn path — `create-fork` hook handler + stamp-subagent + agent def"
+objective = """
+The claude WorktreeCreate handler that mirrors codex/pi `fork --worker` on
+create+provision+mark — one trusted act, fail-closed (design §4b/§5/§9/§11; SR-1).
+Disposition the σ else-branch per the PHASE-02 matcher result.
+`run_create_fork` reads the WorktreeCreate payload JSON on **stdin** (a TRUST
+BOUNDARY) and `classify_create(payload) -> ForkWorker | PlainCreate | Refuse`
+(**three-valued, never two** — a malformed/missing payload classifies to `Refuse`,
+NEVER silently to `PlainCreate`, ψ), gated on `payload.agent_type ==
+DISPATCH_WORKER_AGENT_TYPE` (a **single binary const**, τ — not a literal in four
+files). On the match: git-add + provision + `write_marker` with **§4a's
+compensating rollback** (ρ — reuses `run_fork`'s rollback core; half-failed
+rollback → distinct `orphan-leftover` naming dir+branch) then prints the worktree
+path. Else (no matcher): **create+provision a serviceable default** by doctrine's
+own conventions (σ — same core, marker omitted; a benign subagent still gets
+`.worktreeinclude` provisioning) and print the path — **DELETED if PHASE-02's
+matcher greened**. Bad-payload refusals fail creation fail-closed (ψ):
+`bad-payload`/`missing-agent-type`/`missing-cwd`/`bad-dir`. Plus a thinner
+`run_stamp_subagent` (`marker --stamp-subagent`, SubagentStart fallback — stamps an
+already-created worktree). **`create-fork` + `marker --stamp-subagent` =
+Hook-mint** class (refused under worker_mode; the legit hook runs at the
+coordination root where worker_mode is false — same rule, not a carve-out). New
+**`install/agents/claude/dispatch-worker.md`** (name pinned to the const, τ).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 green: the O3 spike fixes whether agent_type propagates (else the SubagentStart fallback is primary) and whether a matcher deletes the σ else-branch — this phase implements that disposition." },
+  { id = "EN-2", text = "PHASE-06 green: `run_fork`'s compensating-rollback core exists and is reused by `create-fork` (one cleanup implementation, two callers); `write_marker` from PHASE-05 mints the marker." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`create-fork` on `agent_type == DISPATCH_WORKER_AGENT_TYPE` does git-add+provision+write_marker (with the ρ rollback) and prints the worktree path; classify_create is three-valued (a malformed/missing payload → Refuse, NEVER PlainCreate, ψ)." },
+  { id = "EX-2", text = "the else-branch disposition matches PHASE-02: matcher-green → branch DELETED (benign worktrees fall back to Claude default); no-matcher → serviceable-default create+provision (marker omitted), worktree valid+usable+provisioned, no byte-equality with Claude's native layout." },
+  { id = "EX-3", text = "bad-payload refusals fail creation (ψ): bad-payload / missing-agent-type (REFUSES, never silently benign) / missing-cwd / bad-dir, each a distinct non-zero exit; `marker --stamp-subagent` stamps an already-created worktree; both verbs are Hook-mint (refused under worker_mode, exempt for the legit coordination-root hook); clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "classify_create gate golden: dispatch agent_type → git-add+provision+marker+path-on-stdout; other agent_type → create+provision (σ same core, marker omitted), worktree provisioned+valid+usable, path printed, NO marker; reads agent_type/derives <dir> from the PAYLOAD, not the hook's process cwd (SR-4)." },
+  { id = "VT-2", expects = "create-fork orphan cleanup (ρ — the orphan must be GONE): a forced provision/marker failure after `git worktree add` → non-zero AND worktree+branch reaped (assert `git worktree list`/`git branch` show no leftover); a half-failed rollback → distinct `orphan-leftover` naming dir+branch; a pre-`add` failure leaves no fork." },
+  { id = "VT-3", expects = "bad-payload refusals (ψ, fail-closed): malformed JSON → bad-payload; missing agent_type → missing-agent-type (assert it does NOT silently replicate-default); missing/empty cwd → missing-cwd; underivable/escaping <dir> → bad-dir; each fails creation (no worktree born)." },
+  { id = "VT-4", expects = "dispatch-worker drift test (τ — REDS on mismatch): the installed agent-def `name` and the /dispatch-agent skill's subagent_type both resolve to DISPATCH_WORKER_AGENT_TYPE; a divergent literal reds the test." },
+  { id = "VT-5", expects = "Hook-mint refusal: from a marked fork AND an env-set process, create-fork and marker --stamp-subagent are each refused (drive run()); invoked at the coordination root (worker_mode false) they run — the legit-hook exemption is the same rule, proven." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-11"
+name      = "Install surface — `claude install` rename + agents leg + hook wiring"
+objective = """
+Consolidate the Claude-surface installer (design §9/§11; O8 install leg, SR-3, χ).
+**Rename `skills install` → `claude install`** keeping `skills install` as a
+**hidden deprecated alias** dispatching the same handler (no flag-day break);
+extend it to install, for the Claude surface: **skills** (unchanged), **agents**
+(symlink `install/agents/claude/*.md` into `.claude/agents/`), and the
+**WorktreeCreate hook** (SubagentStart on the fallback ladder) — a `HookSpec`
+(`src/boot.rs`) merged into `.claude/settings.local.json` via the **existing merge
+core** (same machinery as the SessionStart boot/sync hooks), command = the §4b one
+line (`doctrine worktree create-fork`). The merge **preserves pre-existing entries
+and writes only the hooks key** — must not collide with Claude's own
+permission-grant persistence (the `permissions` key). Update the `Write(...)` audit
+label + goldens; **sweep docs** that say "skills install" and update the
+`[[mem.pattern.distribution.skill-refresh-command]]` memory. `claude install` (+
+the hidden alias) joins the **`write`** class (charge-5 — a worker must not
+reconfigure its own harness; ADR-006 D2 uniformly, NOT ride-back).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-10 green: `doctrine worktree create-fork` exists — it is the command the WorktreeCreate HookSpec wires; the dispatch-worker agent def exists to symlink." },
+  { id = "EN-2", text = "the existing `HookSpec` merge core (src/boot.rs, SessionStart wiring) is the reused machinery — no parallel merge implementation." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`claude install` installs skills + symlinks `install/agents/claude/dispatch-worker.md` into `.claude/agents/` + merges the WorktreeCreate HookSpec; the hidden `skills install` alias dispatches the identical handler (SR-3)." },
+  { id = "EX-2", text = "the hook merge preserves pre-existing hooks and writes only the hooks key (no collision with Claude's `permissions` persistence); reinstall is idempotent (no duplicate symlinks/hook entries); the audit label + goldens reflect `claude install`." },
+  { id = "EX-3", text = "docs saying 'skills install' are swept to 'claude install' and the skill-refresh-command memory is updated; `claude install` (+ alias) is refused under worker_mode (write class, charge-5); re-embed ritual applied; clippy zero, just check green." },
+]
+verification = [
+  { id = "VT-1", expects = "χ alias→same-handler: `skills install` (hidden alias) and `claude install` dispatch the identical handler and produce the same effect (SR-3, no flag-day break)." },
+  { id = "VT-2", expects = "χ agents leg: after `claude install`, `install/agents/claude/dispatch-worker.md` is present as a symlink under `.claude/agents/` that resolves." },
+  { id = "VT-3", expects = "χ hook merge: merging the WorktreeCreate HookSpec into a settings.local.json already carrying unrelated hooks leaves those intact (cite the boot HookSpec merge tests, same core); a reinstall yields no duplicate symlinks/hook entries (idempotent)." },
+  { id = "VT-4", expects = "χ rename audit-label: the `Write(...)` audit label + goldens read `claude install`, not the stale `skills install`." },
+  { id = "VT-5", expects = "charge-5 worker-mode refusal: from a marked fork AND an env-set process, `claude install` AND its hidden `skills install` alias are both refused (a worker cannot mutate `.claude/` skills/agents/hooks) — both spellings, both signals, drive run()." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-12"
+name      = "O7 — D6 nested-bwrap spike (codex/pi-only, timeboxed)"
+objective = """
+Spike OS-level worker confinement (design §4c/§10/§11, ADR-008 D-B3; O7, OQ-2) —
+**codex/pi-only** (needs a subprocess to wrap; claude's `Agent` tool is not one).
+Feasibility gate is **unprivileged userns creation inside the jail** — the outer
+bwrap may seccomp-block `clone(CLONE_NEWUSER)`. The one-liner empirical probe is
+`bwrap --unshare-user --ro-bind / / true` run **in-jail**. If it works → a
+`dispatch-worker` bwrap profile (rw only worktree+target; `bubblewrap` is
+pre-staged in `jailPkgs`) that discharges ADR-006 D2b at the OS floor and
+**ro-binds the marker only — NEVER `.claude/settings.local.json`** (which must stay
+writable for the harness's permission-grant persistence, §9). If too costly →
+**back out** to D-B1 + the D2a CLI guard (PHASE-05) and leave D2b formally
+deferred. Symmetric with the SubagentStart fail-open back-out. No flake change for
+the probe itself; the bwrap profile lands only if the spike greens. macOS analog
+is IMP-045 (out of scope).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 green: the per-worktree env contract (O6) exists — the bwrap profile confines rw to the worktree + its per-wt target dir, so O7 depends on O6." },
+  { id = "EN-2", text = "`bubblewrap` is pre-staged in `jailPkgs`; the feasibility question (OQ-2) is empirical, probed at spike time, not analysable up front." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "the in-jail userns probe (`bwrap --unshare-user --ro-bind / / true`) result is recorded — a clear land/back-out decision, not left ambiguous." },
+  { id = "EX-2", text = "LAND: a `dispatch-worker` bwrap profile confines rw to worktree+target, ro-binds the marker only (never settings.local.json), and discharges D2b at the OS floor — OR BACK-OUT: D2b is formally deferred to D-B1 + the D2a CLI guard, recorded symmetrically with the SubagentStart back-out." },
+]
+verification = [
+  { id = "VA-1", expects = "the OQ-2 probe result is durable (memory + notes); the land/back-out decision is explicit and, on back-out, D2b's deferral is recorded — never silently dropped." },
+  { id = "VT-1", expects = "IF LANDED: an out-of-tree write from the worker process is OS-denied and the confined worker cannot `rm` its ro-bound marker (D6 conformance). (Skipped, recorded as N/A, if the spike backs out.)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-13"
+name      = "O8 — skill prose calls the verbs + `/dispatch-*` harness router"
+objective = """
+Last, because the prose carriers describe the now-shipped mechanism (design
+§11/slice §Sequencing; O8). Rewrite `plugins/doctrine/skills/{worktree,dispatch,
+execute}/SKILL.md` to **call** the verbs, not restate the rituals (the token +
+agnostic payoff — worktree 347 / dispatch 312 lines shrink). Add the
+**harness-routing split:** `/dispatch` becomes a thin **router** that detects the
+harness capability profile and hands off to **`/dispatch-subprocess`** (codex/pi:
+`fork` verb + subprocess spawn binding worker cwd via `env -C "$D"` / bwrap
+`--chdir` + env-arm + per-wt env + bwrap if PHASE-12 landed) or
+**`/dispatch-agent`** (claude: `Agent` tool spawning `subagent_type:
+dispatch-worker` — the literal **pinned to `DISPATCH_WORKER_AGENT_TYPE`**, τ +
+WorktreeCreate-hook marker, **concurrent-safe**, no env/bwrap). Router input: the
+agent's harness self-belief **cross-checked against env-marker detection**; routes
+only when detection **agrees**, else refuses **naming the cause** (never a blind
+spawn). One identical CLI cadence, two ~2-line spawn templates. Distinct from
+SL-055's audience-homing split (Non-Goals). Re-embed ritual
+[[mem.pattern.distribution.skill-refresh-command]].
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05..PHASE-11 green: every verb the prose calls (fork/import/land/gc/marker/status + the claude create-fork path + claude install) is shipped and tested — the prose describes shipped mechanism, not a wish." },
+  { id = "EN-2", text = "PHASE-12 resolved (landed or backed out): the /dispatch-subprocess prose reflects whether bwrap confinement is real." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "worktree/dispatch/execute SKILL.md call the verbs instead of restating the rituals (measurable line reduction on the two fattest skills, worktree/dispatch); `execute` specifically calls `land` then `gc` for the solo isolated-worktree path (it is the sole caller of `land`); the funnel cadence (ADR-006 D7) is preserved, only its mechanism relocated." },
+  { id = "EX-2", text = "`/dispatch` routes to `/dispatch-subprocess` (codex/pi) or `/dispatch-agent` (claude) on a self-belief↔env-marker AGREEMENT; a mismatch/unknown refuses NAMING the cause; /dispatch-agent's subagent_type is the literal pinned to DISPATCH_WORKER_AGENT_TYPE (τ, drift test reds on divergence). The /dispatch-agent prose states concurrency honestly per υ: concurrent file-disjoint EXECUTION is first-class but v1 funnels ONE landing per base (NOT parallel landing) — the headline must not outrun the §7c footnote." },
+  { id = "EX-3", text = "the §3 direct-writer-transition chokepoint is WIRED, not just shipped: the `execute` prose calls `worktree status --assert` at the isolated-worktree / solo→direct-writer entry (clearing a stale marker BEFORE a mid-work refusal can confuse a direct-writer) — the gate PHASE-05 ships is now actually called." },
+  { id = "EX-4", text = "skills are re-embedded (`claude install` + touch the embedding crate); the full `just gate` (--workspace) is green and clippy is zero across the slice." },
+]
+verification = [
+  { id = "VA-1", expects = "the rewritten prose CALLS the verbs (no restated git-command rituals); the two fattest skills measurably shrink; the cadence order is preserved (ADR-006 D7)." },
+  { id = "VA-2", expects = "the router cross-checks self-belief against env-marker detection, routes on agreement, and refuses naming the cause on mismatch/unknown — never a blind spawn (per-harness detection is itself spike-gated)." },
+  { id = "VA-3", expects = "the `execute` prose actually calls `worktree status --assert` at the direct-writer transition (§3 chokepoint wired, not stranded); the /dispatch-agent concurrency wording carries the υ one-landing-per-base qualifier." },
+  { id = "VT-1", expects = "re-embed ritual applied (skill source re-embedded); the /dispatch-agent subagent_type literal is pinned to DISPATCH_WORKER_AGENT_TYPE (τ drift test green); the full `just gate` --workspace passes, clippy zero — the slice's final conventions gate." },
+]
+specs        = []
+requirements = []
