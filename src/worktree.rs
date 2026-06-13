@@ -36,6 +36,8 @@ pub(crate) enum Tier {
     Handover,
     /// `.doctrine/slice/*/inquisition.md` — disposable adversarial-review scratch.
     Inquisition,
+    /// `.doctrine/slice/*/research/**` — disposable per-slice research scratch.
+    Research,
     /// `.doctrine/memory/{index,embeddings,state,shipped}` — regenerable caches.
     MemoryCache,
 }
@@ -47,6 +49,7 @@ impl std::fmt::Display for Tier {
             Tier::PhaseLink => "phase-link",
             Tier::Handover => "handover",
             Tier::Inquisition => "inquisition",
+            Tier::Research => "research",
             Tier::MemoryCache => "memory-cache",
         };
         f.write_str(name)
@@ -73,6 +76,7 @@ pub(crate) const WITHHELD: &[Withhold] = &[
     w(Tier::PhaseLink, ".doctrine/slice/*/phases"),
     w(Tier::Handover, "**/handover.md"),
     w(Tier::Inquisition, ".doctrine/slice/*/inquisition.md"),
+    w(Tier::Research, ".doctrine/slice/*/research/**"),
     w(Tier::MemoryCache, ".doctrine/memory/index/**"),
     w(Tier::MemoryCache, ".doctrine/memory/embeddings/**"),
     w(Tier::MemoryCache, ".doctrine/memory/state/**"),
