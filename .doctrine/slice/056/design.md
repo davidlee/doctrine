@@ -73,6 +73,12 @@ guard (in run(), before dispatching a write-classed OR Orchestrator Command):
 - Solo `/execute` (in-place or isolated) sets **neither** signal → writes freely.
   **Mode, not location, decides** (ADR-006 D6a). `is_linked_worktree` is the existing
   predicate (memory squash-warn, RV-verb refusal — now a third consumer).
+- **Unstamped claude worker (hook-failure fail-open) — fenced by the funnel + jail, not
+  the write seam.** Marker-absent is *not* worker-mode (above), so a stamp-failed worker
+  is **not** CLI-refused; its blast radius is bounded by the `import` belt + the
+  bubblewrap jail (no push), and stamp-failure is kept non-silent by the orchestrator
+  post-spawn marker abort (IMP-052). The re-amendment rationale + the `P×harm`/jail
+  weighing live in ADR-006 D2a and `worker-mode-floor-decision.md` §6 (owner-locked VH).
 - **Lifecycle (owned):** written by `fork --worker` (codex/pi) or the WorktreeCreate
   hook (claude); removed by `gc`; rolled back if `fork` fails; cleared by `marker
   --clear` for a stray marker (below). A tree may become a coordination/direct-writer

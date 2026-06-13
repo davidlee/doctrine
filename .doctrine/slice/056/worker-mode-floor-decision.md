@@ -1,8 +1,9 @@
 # SL-056 — worker-mode floor decision (C vs A→B)
 
-**Status:** OPEN — staged for adversarial review (codex GPT-5.5) before lock.
-**Owner steer:** lean **C** (preserve solo-in-worktree + implementation simplicity);
-test it adversarially vs the A→B alternative before committing.
+**Status:** LOCKED (VH, 2026-06-13) — **Option C + observability rider (IMP-052)**.
+Codex (GPT-5.5) reviewed adversarially; lock record in §7.
+**Owner steer (pre-lock):** lean **C** (preserve solo-in-worktree + implementation
+simplicity); test it adversarially vs the A→B alternative before committing.
 **Surfaced by:** PHASE-05 dispatch — the worker built to the plan/design §3, which
 conflicts with the locked ADR-006 D2a fail-closed amendment. See `notes.md`
 PHASE-03 lock + this slice's design §3.
@@ -166,3 +167,44 @@ Recommended: **C.** Test it before lock.
 7. **codex/pi path.** C leans on the env catch for worker-on-main. Does dropping
    fail-closed change anything for the codex/pi subprocess path (which *does* have a
    reliable env seam), or is the whole question claude-specific?
+
+## 7. Lock record (VH, 2026-06-13) — Option C + IMP-052 rider
+
+**Codex (GPT-5.5) verdict: A→B** — it argued charge 1 was broken. Verified empirically
+and partly corrected:
+
+- **Charge 1 (belt-containment).** Codex's *mechanism* claim was wrong — `worker_guard`
+  resolves the root via `root::find(None, …)` (the cwd-walk), **not** the command's
+  `--path` (`src/main.rs` in delta `ec81b5e`), so the guard reads the worker's
+  *location*, not its write target. But the *conclusion* held: under C a marker-absent
+  linked fork passes the guard, and the write verb's own `--path` can then target the
+  coordination root, escaping the `B..S` import belt. **A would close that channel for
+  free** (location gate). Caveat: it only bites a worker that *targets* `-p <coord-root>`
+  — malice / serious derailment, which the note scopes out. For the in-scope accident
+  (write to own cwd) the belt contains it.
+- **Charge 4/6 (verified).** The floor was baked into **ADR-011 D6** + the PHASE-03 lock
+  B2/B3 disposition, not just ADR-006 D2a — so C is a multi-clause governance reversal,
+  and G2 had substantive security reasons, not merely a D6a contradiction.
+
+**Why C was nonetheless locked (owner risk calculus, not sunk cost):**
+
+- `P(SubagentStart hook failure) ≈ 0` — the hook blocks; a miss needs a crash / broken
+  binary / disk error mid-stamp.
+- **Harm is jail-bounded** — bubblewrap, **no push**; worst case is *lost unpushed
+  progress*. The jail is the real outer fence; marker/belt/floor are inner theatre
+  relative to "can't push."
+- ⇒ near-zero `P` × jail-bounded harm ⇒ the security delta between A's floor and C's
+  funnel is **negligible**. Security stops deciding; the design axis (D6a coherence,
+  simplicity, original model) decides → **C**.
+- The fail-closed floor was the *wrong layer* for the one real residual — **silence**
+  (a failing hook quietly becoming the status quo). That is closed behaviour-independent
+  at **spawn time** by the **orchestrator post-spawn marker check that aborts an
+  unstamped fork** (**IMP-052**) — enforcing at the one layer that *can* abort, where
+  the read-only SubagentStart hook cannot. Observability + fail-closed **without** the
+  D6a contradiction or the A→B churn.
+
+**Applied (all on `main`):** ADR-006 D2a re-amended (fail-closed clause reverted →
+positive signal; rationale recorded); ADR-011 D6 + M2 aligned to the funnel+jail+IMP-052
+posture; design §3 belt-as-fence pointer added; plan PHASE-05 unchanged; **IMP-052**
+minted (the rider); worker delta `ec81b5e` **kept** (it implements C). Resume the funnel:
+flip PHASE-05 → completed, continue to PHASE-06.
