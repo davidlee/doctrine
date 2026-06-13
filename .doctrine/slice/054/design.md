@@ -242,9 +242,18 @@ passes it to `survey_human`/`next_human` → `render_table`).
 
 **Purity.** `crossterm::terminal::size()` is an `ioctl`/syscall — impure, lives in
 `tty.rs` (the shell), injected as `Option<u16>`. The pure layer never reads it
-(RSK-2 honoured). `terminal::size` is reachable because `crossterm` is already a
-transitive dep via comfy-table's `custom_styling → tty` (no new dependency, no new
-`Cargo.toml` edit — confirm with `cargo tree`).
+(RSK-2 honoured).
+
+**Erratum (PHASE-03 dispatch).** The pre-implementation claim that `terminal::size`
+needed *no `Cargo.toml` edit* because `crossterm` is "already transitive via
+comfy-table" was **wrong** — it conflated *graph-presence* with *nameability*.
+comfy-table re-exports only `crossterm::style::{Attribute, Color}` (never
+`terminal::size`), so naming `crossterm::terminal::size()` requires declaring
+`crossterm` as a **direct** dependency. The achievable invariant is therefore "no
+new *compiled crate*", not "no `Cargo.toml` edit": the direct `crossterm = "0.29"`
+matches the version already resolved in the lockfile via comfy-table, so it adds
+**zero new compiled weight** — it only puts the path on the extern prelude.
+(Consulted + approved; supersedes the §6 / §8 "no new dependency" wording.)
 
 ## 6. Verification
 

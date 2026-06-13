@@ -97,7 +97,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "`terminal_width(false, _) == None`; `(true, Some(80)) == Some(80)`; `(true, Some(0)) == None`; `(true, Some(8)) == None` (below floor). Live isatty branch documented-not-driven." },
   { id = "VT-2", expects = "Goldens stay green UNCHANGED — piped ⇒ `None` ⇒ width-free output (determinism; a moved golden signals width leaking into a pipe)." },
-  { id = "VT-3", expects = "No new `Cargo.toml` dependency — crossterm already transitive via comfy-table `custom_styling`; `cargo tree` confirms." },
+  { id = "VT-3", expects = "No new *compiled crate* — `crossterm = \"0.29\"` is declared direct (required for nameability: comfy-table re-exports only `style::*`, not `terminal::size`) but matches the version already resolved transitively via comfy-table, so `cargo tree` shows no new crate weight. (Erratum, design §5: the original 'no Cargo.toml edit' premise was false.)" },
   { id = "VT-4", expects = "`just check` green; `cargo clippy` (plain) zero warnings." },
 ]
 specs        = []
