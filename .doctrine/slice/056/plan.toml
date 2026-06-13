@@ -518,7 +518,9 @@ harness capability profile and hands off to **`/dispatch-subprocess`** (codex/pi
 `--chdir` + env-arm + per-wt env + bwrap if PHASE-12 landed) or
 **`/dispatch-agent`** (claude: `Agent` tool spawning `subagent_type:
 dispatch-worker` — the literal **pinned to `DISPATCH_WORKER_AGENT_TYPE`**, τ +
-WorktreeCreate-hook marker, **concurrent-safe**, no env/bwrap). Router input: the
+SubagentStart-stamp marker (the SubagentStart hook, matcher `dispatch-worker`,
+calls `marker --stamp-subagent`; the WorktreeCreate `create-fork` path is
+deferred, O3-RED), **concurrent-safe**, no env/bwrap). Router input: the
 agent's harness self-belief **cross-checked against env-marker detection**; routes
 only when detection **agrees**, else refuses **naming the cause** (never a blind
 spawn). One identical CLI cadence, two ~2-line spawn templates. Distinct from
@@ -526,7 +528,7 @@ SL-055's audience-homing split (Non-Goals). Re-embed ritual
 [[mem.pattern.distribution.skill-refresh-command]].
 """
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-05..PHASE-11 green: every verb the prose calls (fork/import/land/gc/marker/status + the claude create-fork path + claude install) is shipped and tested — the prose describes shipped mechanism, not a wish." },
+  { id = "EN-1", text = "PHASE-05..PHASE-11 green: every verb the prose calls (fork/import/land/gc/marker/status + the claude `marker --stamp-subagent` SubagentStart path, the `create-fork` path deferred O3-RED + claude install) is shipped and tested — the prose describes shipped mechanism, not a wish." },
   { id = "EN-2", text = "PHASE-12 resolved (landed or backed out): the /dispatch-subprocess prose reflects whether bwrap confinement is real." },
 ]
 exit_criteria = [
