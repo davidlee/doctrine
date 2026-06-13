@@ -704,3 +704,58 @@ outside the worker belt; captured to backlog rather than swept silently mid-disp
 **Next:** PHASE-12 (`dispatch-worker` bwrap profile — LAND the OS-floor D2b confinement
 OR formal BACK-OUT to D-B1 + the D2a CLI guard, recorded symmetrically). Then PHASE-13
 (the router/skill-rewrite prose leg). Base for PHASE-12 = `e87c522`.
+
+## PHASE-12 — O7 nested-bwrap spike (codex/pi-only) — empirically GREEN → **LAND**
+
+Inline spike (codex/pi-only, no worker dispatch — claude's `Agent` is not a
+subprocess to wrap). Feasibility gate = **unprivileged userns creation inside the
+jail**; probed empirically per the standing note, not inferred.
+
+**Probe (EX-1, the feasibility gate) — GREEN:**
+- `bwrap --unshare-user --ro-bind / / true` run **in-jail** → **exit 0**. The outer
+  bubblewrap does **not** seccomp-block `clone(CLONE_NEWUSER)`; nested unprivileged
+  userns creation is permitted. (`bubblewrap 0.11.2`, pre-staged in `jailPkgs`.)
+- Userns is genuine, not a harness false-green: `id` inside the nested bwrap reports
+  `uid=1000(david) gid=100(users)` — a real user-namespace mapping.
+
+**D6 conformance (VT-1) — empirically demonstrated with the canonical profile:**
+canonical arg-vector
+`bwrap --ro-bind / / --bind "$D" "$D" --bind "$TARGET" "$TARGET" --ro-bind "$MARKER" "$MARKER" --dev /dev --proc /proc --unshare-user --chdir "$D" env DOCTRINE_WORKER=1 $fork_env <spawn>`.
+The marker ro-bind **overlays** the rw worktree bind (bwrap applies binds in order,
+so `--ro-bind $MARKER` AFTER `--bind $D` wins for that path):
+- out-of-tree write (`touch /tmp/…`) → **DENIED** `Read-only file system` (`--ro-bind / /`);
+  host `/tmp` file never created → no escape.
+- in-tree source write → **OK** (worktree is rw).
+- **`.claude/settings.local.json` write → OK** — it is inside the rw worktree and is
+  NOT overlaid, so the harness permission-grant persistence keeps working under
+  confinement (§9 constraint honoured: ro-bind the marker ONLY).
+- marker `rm` → **DENIED** `Device or resource busy`; marker overwrite → **DENIED**
+  `Read-only file system`. A confined worker cannot clear its own marker to escape
+  worker-mode — D6's load-bearing invariant holds at the OS floor.
+
+**Verdict → LAND (EX-2):** the `dispatch-worker` bwrap profile discharges ADR-006
+**D2b** (worker-on-main / self-clear) at the OS floor for the codex/pi subprocess
+arm. This is the **codex/pi-only** floor — claude's marker-only altitude (§10/G3)
+is unchanged; D2b stays the deferred residual there (no subprocess to wrap).
+
+**Landing form (no flake wrapper):** the profile is the **confined spawn template**,
+not a packaged binary — design §11 line 152/637 places `bwrap … --chdir "$D"` inline
+as the confined equivalent of the `env -C "$D"` spawn, and line 639 makes the
+`flake.nix` change *conditional*. Since `bubblewrap` is already in `jailPkgs` and the
+inline arg-vector is validated, **no flake.nix change is taken.** The profile is
+recorded here (durable) and **embedded into `/dispatch-subprocess` prose in PHASE-13**
+(its sole consumer) — avoiding a parallel home. [Phase-boundary judgment: PHASE-12
+owns the validated profile + verdict; PHASE-13 owns its prose embedding. Flagged for
+audit — consistent with the design's existing inline-template framing, not novel.]
+
+**Symmetry note:** the LAND mirrors the SubagentStart fail-open back-out's recording
+discipline — both spike outcomes recorded explicitly with their altitude confessed.
+Here the spike greened, so VT-1 is **demonstrated** (not N/A).
+
+**Verify:** probe + conformance run live in-jail (`bubblewrap 0.11.2`); no source/test
+change in PHASE-12 (the spike is empirical + the profile is PHASE-13 prose). The VT-1
+conformance becomes a durable assertion in the `/dispatch-subprocess` prose's spawn
+template + a memory.
+
+**Next:** PHASE-13 — embed the validated bwrap profile into `/dispatch-subprocess`,
+the skill-prose rewrite (call-the-verbs), and the `/dispatch` harness router split.

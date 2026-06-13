@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec345c2d879f3bab52aa1dad7a401"
+memory_key = "mem.pattern.dispatch.nested-bwrap-userns-confines-worker-at-os-floor"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Nested bwrap userns confines the dispatch worker at the OS floor (D6 LAND)"
+summary = "Nested unprivileged userns IS permitted in the doctrine jail; dispatch-worker bwrap profile confines codex/pi worker at the OS floor (D6) — ro-bind / / + rw worktree/target + ro-overlay marker, settings.local.json stays writable"
+created = "2026-06-13"
+updated = "2026-06-13"
+
+[scope]
+paths = ["plugins/doctrine/skills/dispatch-subprocess"]
+globs = []
+commands = []
+tags = ["dispatch", "bwrap", "confinement", "sl-056"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5fc8146d0de329f0f20feb972b43db75220f6b59"
+ref_name = "refs/heads/main"
+checkout_state_id = "6803cdcd140c800b96fe990e2988b204ab2bff3ca6b633199421155e3e5c846a"
+base_commit = "7c95fed11484bb484ca33e414960ad3bbfbf41d7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

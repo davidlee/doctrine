@@ -8,12 +8,15 @@ schema  = "doctrine.plan.overview"
 version = 1
 slice   = "SL-057"
 
-[specs]                          # empty in v1 — no spec/requirement registry yet
-primary       = []
-collaborators = []
+# Spec/requirement relations are authored as tier-1 [[relation]] rows on the
+# slice via `doctrine link` (SL-048) — see slice-057.toml. These header tables
+# mirror the realised SPEC-002 deltas for plan-local traceability.
+[specs]
+primary       = ["SPEC-002"]
+collaborators = ["PRD-013"]
 
 [requirements]
-targets      = []
+targets      = ["REQ-254", "REQ-255", "REQ-256", "REQ-257", "REQ-114"]
 dependencies = []
 
 # One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
@@ -21,12 +24,142 @@ dependencies = []
 # are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
 # reference forms): EN-1 entry, EX-1 exit, and verification by mode —
 # VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ── PHASE-01 ─ pure leaf: the VT-check model + verdict folds ──────────────────
 [[phase]]
 id        = "PHASE-01"
-name      = ""
-objective = ""
-entrance_criteria = []           # [{ id = "EN-1", text = "…" }]
-exit_criteria     = []           # [{ id = "EX-1", text = "…" }]
-verification      = []           # [{ id = "VT-1", expects = "…" }] — VT/VA/VH by mode
-specs             = []           # per-phase narrowing of the plan's specs
-requirements      = []
+name      = "VT check model + pure verdict (coverage.rs)"
+objective = """
+Add the pure VT-check model and verdict folds to coverage.rs — VtCheck / Matcher /
+MatchSource / RunOutcome, derive_status, evaluate_matcher, valid — plus additive
+parse/render, with no clock, git, disk, or process in the layer (ADR-001). This is
+the irreducible value: a testable verdict provable without a subprocess (§4)."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (inquisition pass 2 integrated, 8 charges upheld); coverage.rs read; the SL-042 coverage fold suite is green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "VtCheck / Matcher / MatchSource / RunOutcome added; an additive Option<VtCheck> hangs off CoverageEntry; the check round-trips through parse/render and a pre-SL-057 entry without a check still parses (tolerant/additive, the touched_paths precedent)." },
+  { id = "EX-2", text = "derive_status implements the §5.2 verdict table — Unobtainable => Blocked; Ran{exit0 ∧ matcher} => Verified; else => Failed — and INV-3 holds (never Verified for an Unobtainable run)." },
+  { id = "EX-3", text = "evaluate_matcher: substring is the default (metachars literal, empty pattern => Some(true), NEVER None); regex_lite is opt-in via regex=true (unparseable => None, empty => Some(true)) — D8." },
+  { id = "EX-4", text = "valid enforces XOR(alias,command) + the D3/A matcher rule (non-empty matcher mandatory on any shared/derived base; an empty pattern is legal ONLY alongside a literal command) + glob-confinement (absolute / `..`-ascending File globs rejected, F-III) + regex-parses (regex-mode only, F-3)." },
+  { id = "EX-5", text = "the module's not(test) dead_code suppression stays as a blanket this phase (the new fns are test-consumed only until PHASE-03/04); per-symbol narrowing is deferred to where consumers land (mem: blanket module suppression masks sibling dead symbols)." },
+]
+verification = [
+  { id = "VT-1", expects = "derive_status truth table, incl. timeout/Unobtainable => Blocked (F-VII) and the no-defaulted-green INV-3 case." },
+  { id = "VT-2", expects = "evaluate_matcher: substring match/miss, a metachar (`.`/`(`) matched LITERALLY in substring mode, regex match/miss, regex=true bad-pattern => None, empty => Some(true) in both modes." },
+  { id = "VT-3", expects = "valid reject matrix: empty/absent matcher on alias-or-default => reject; empty matcher WITH a literal command => accept; File glob absolute / `..`-escaping => reject; both alias+command => reject; unparseable regex => reject." },
+  { id = "VT-4", expects = "VtCheck/Matcher render→parse round-trip + additive parse of a pre-SL-057 (check-less) entry." },
+]
+specs        = ["SPEC-002"]
+requirements = ["REQ-254"]
+
+# ── PHASE-02 ─ pure leaf: one config reader + base resolution ─────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Shared doctrine.toml reader + base resolution (dtoml.rs + verify.rs)"
+objective = """
+Promote a single doctrine.toml reader (dtoml.rs owning DoctrineToml { conduct,
+verification } + one parse) with conduct::parse re-expressed as a thin delegate,
+and add verify.rs (VerificationConfig + the pure resolve(cfg,check)). One reader,
+not two (D2 / no parallel implementation)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (VtCheck exists to resolve against); conduct.rs DoctrineToml/parse read; the conduct suite is green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dtoml::parse owns the outer DoctrineToml { conduct, verification }; conduct::parse becomes Ok(dtoml::parse(t)?.conduct) so every existing conduct caller/test is untouched (R2)." },
+  { id = "EX-2", text = "[verification] parses tolerantly — command, default-source, timeout-secs (baked default 300), [verification.aliases]; an absent table resolves to defaults." },
+  { id = "EX-3", text = "resolve(cfg,check) -> Resolved { argv, source } with base = aliases[alias] | literal command | project-default command, and ResolveError { BothAliasAndCommand, UnknownAlias, NoRunnable }; matcher source precedence is entry → default-source → baked Stdout." },
+]
+verification = [
+  { id = "VT-1", expects = "dtoml tolerant parse incl. timeout-secs + aliases; an absent [verification] yields defaults." },
+  { id = "VT-2", expects = "resolve: alias resolution, both-base reject, project-default fallback, no-runnable reject, source precedence." },
+  { id = "VT-3", expects = "the conduct suite is green BYTE-UNCHANGED through the delegate — behaviour-preservation gate (a) for the dtoml refactor (R2)." },
+]
+specs        = ["SPEC-002"]
+requirements = ["REQ-257"]
+
+# ── PHASE-03 ─ impure shell: the observed-tier write path ─────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Observed-tier write path (coverage_store.rs) + record/forget"
+objective = """
+Add coverage_store.rs (impure: load/save ONE slice's coverage.toml via render +
+atomic tempfile, the entity.rs::write_fileset precedent) and the record/forget
+folds. record composes valid+resolve before writing with an INJECTED date; forget
+withdraws a cell and emits a loud evidence-withdrawal line. Writes only the
+observed tier — never authored requirement status (NF-001)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 + PHASE-02 complete (VtCheck, coverage::valid, verify::resolve all exist)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "coverage_store load/save round-trips one slice's coverage.toml; save = render + atomic tempfile write; the observed tier is the ONLY file mutated." },
+  { id = "EX-2", text = "record = load→upsert→save and runs coverage::valid AND verify::resolve before any write (F-1); a VT leans Planned with no attested_date (OQ-2); a VA/VH stamps the INJECTED today (F-VI) with an optional --attested-date override — no clock is read in the write path." },
+  { id = "EX-3", text = "forget = load→retain→save and emits the evidence-withdrawal line naming the 4-tuple key + the erased status (F-IV) so a deletion that flips a composite green is never silent." },
+  { id = "EX-4", text = "coverage.rs dead_code suppression narrowed — the blanket is retired now that the store consumes upsert/parse/render; a per-symbol expect is retained ONLY on the still-unconsumed verdict fns (derive_status/evaluate_matcher, wired at PHASE-04) — mem: blanket masks siblings." },
+]
+verification = [
+  { id = "VT-1", expects = "store load/save round-trip + atomic write; assert only coverage.toml mutates." },
+  { id = "VT-2", expects = "record: VT happy path (Planned, no attested_date); VA/VH stamps the injected today; --attested-date override; a valid/resolve failure blocks the write." },
+  { id = "VT-3", expects = "the record write path reads no clock — date is injected (F-VI guard)." },
+  { id = "VT-4", expects = "forget removes the keyed cell AND emits the withdrawal line naming key + status on a Failed cell (F-IV)." },
+]
+specs        = ["SPEC-002"]
+requirements = ["REQ-256"]
+
+# ── PHASE-04 ─ impure shell: the verifier (the test-run surface) ──────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "The verifier (coverage_verify.rs)"
+objective = """
+Add coverage_verify::run(root,slice) — the impure shell that resolves checks,
+dedups by argv GLOBALLY over the invocation, runs each distinct argv once under
+cwd=root with a wall-clock cap, evaluates matchers (incl. confined File globs),
+derives observed status from the real outcome, re-stamps the anchor only on a Ran
+outcome, saves, and reports. This is continuous re-derivation: VT becomes checked
+against reality, not minted (§4)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01..03 complete (derive_status, verify::resolve, coverage_store, dtoml all exist)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "run reads the [verification] cfg, loads the slice file, resolves head via git::head_sha; an absent cfg makes alias/default-base checks resolve to Blocked (never defaulted-green)." },
+  { id = "EX-2", text = "dedup is GLOBAL over the invocation (F-2) — each distinct argv runs exactly once regardless of entry/slice count (INV-2); every run has cwd=root (F-VII); a run exceeding timeout-secs is killed => Unobtainable => Blocked (F-VII)." },
+  { id = "EX-3", text = "per entry: RunOutcome → derive_status; matcher source is stdout/stderr or a File(glob) resolved UNDER root, any-match over the concatenation of matches, empty-set/unreadable => Unobtainable (F-III/OQ-6); an unparseable hand-edited pattern => Unobtainable => Blocked, never a silent Failed (F-3)." },
+  { id = "EX-4", text = "git_anchor is re-stamped to head ONLY on a Ran outcome; a Blocked/Unobtainable cell keeps its prior anchor (F-VIII) so staleness still bites a never-observed cell; key / touched_paths / check are preserved through upsert." },
+  { id = "EX-5", text = "the report prints per entry (key: old → new), flags every exit-code-only cell (literal command, no matcher — D3/A), and emits the loud \"N VT entries lack a check — backfill\" line; a check-less legacy VT is reported and left untouched (no auto-Blocked)." },
+  { id = "EX-6", text = "coverage.rs dead_code suppression fully retired — every verdict fn is now production-consumed." },
+]
+verification = [
+  { id = "VT-1", expects = "dedup: one argv → one run across N entries (INV-2)." },
+  { id = "VT-2", expects = "exit/matcher → status; spawn-fail / unknown-alias / timeout => Blocked (INV-3, never defaulted-green)." },
+  { id = "VT-3", expects = "git_anchor re-stamped on a Ran outcome but NOT on Blocked (F-VIII); cwd=root (F-VII); confined-glob any-match (OQ-6); an absolute/`..` glob finds nothing => Blocked." },
+  { id = "VT-4", expects = "an exit-code-only cell is flagged in the report (D3/A); a check-less VT is reported + its status untouched; key/touched_paths preserved." },
+  { id = "VT-5", expects = "NF-001 (INV-1): drive run() end-to-end varying run outcomes; assert the requirement entity's authored status ON DISK is unchanged and only coverage.toml mutated — the guard knocks on the write seam, not a pure helper." },
+]
+specs        = ["SPEC-002"]
+requirements = ["REQ-255", "REQ-114"]
+
+# ── PHASE-05 ─ CLI surface: the coverage subcommand group ─────────────────────
+[[phase]]
+id        = "PHASE-05"
+name      = "CLI surface — coverage subcommand group (show/record/verify/forget)"
+objective = """
+Restructure `coverage` into a subcommand group (D4) — relocate the bare read view
+to `coverage show`, wire record/verify/forget onto the new write path and verifier
+behind an args-struct handler — and update the consciously-churned goldens. End on
+a green workspace gate with zero clippy warnings."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 + PHASE-04 complete (coverage_store + the verifier exist and are tested)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`coverage` is a subcommand group — the bare `coverage <ref>` positional is relocated to `coverage show <ref>` (D4, clap can't disambiguate a bare positional from subcommand names); record / verify / forget are added." },
+  { id = "EX-2", text = "the record handler takes an args struct (R4 clippy ceiling) exposing the 4-tuple key + check fields (OQ-1 ergonomics) + --attested-date; verify exposes <slice> [--all]; forget exposes the key." },
+  { id = "EX-3", text = "behaviour-preservation gate (a): the SL-042/044 read+drift fold suites + the conduct suite stay green BYTE-UNCHANGED (no test edits)." },
+  { id = "EX-4", text = "conscious churn (b): the bare-`coverage` → `coverage show` CLI goldens and any skill/doc references are updated by hand (D4) — explicitly NOT part of gate (a)." },
+]
+verification = [
+  { id = "VT-1", expects = "record black-box golden: happy path + each validity reject — empty-matcher-on-shared-base, escaping-glob, bad-regex, both-base." },
+  { id = "VT-2", expects = "verify + forget CLI-surface goldens; the relocated `show` golden." },
+  { id = "VT-3", expects = "the SL-042/044 + conduct fold suites are green unchanged (gate a); full `just gate` workspace is green and clippy is zero-warning." },
+]
+specs        = ["SPEC-002"]
+requirements = ["REQ-256", "REQ-255"]
