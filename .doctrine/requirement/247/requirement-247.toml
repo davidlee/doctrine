@@ -2,8 +2,8 @@ schema = "doctrine.requirement"
 version = 1
 
 id = 247
-slug = "declare-every-record-state-terminal-class-in-the-priority-partition-empty-workable-set-so-records"
-title = "Declare every record state Terminal-class in the priority partition (empty workable set), so records are graph-present but actionability-inert — never eligible, never in survey or next, zero consequence, and never a direct blocker; work a record gates is carried by a spawned backlog item, not the record"
+slug = "no-record-state-is-ever-workable-records-never-eligible-never-in-survey-or-next-zero-work-consequence"
+title = "No record state is ever Workable-class: a record is never eligible, never appears in survey or next, and carries zero work-lineage consequence — actionability stays decoupled from gating (records gate dependents via the IMP-047 trinary class; under today's binary partition they are Terminal-inert)"
 status = "pending"
 kind = "quality"
 
