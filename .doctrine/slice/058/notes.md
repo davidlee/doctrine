@@ -53,3 +53,38 @@ in `inspect`; `doctrine validate` corpus clean. backlog-048/010 carry rode-along
 status closures (IMP-048 done, ISS-010 obsolete) from concurrent work. `just gate`
 green; behaviour-preservation (4 original storage invariants + e2e_link_unlink)
 unchanged.
+
+## PHASE-03 — Agent guidance (commit 8698007)
+
+D4 landed agent guidance so relate-intent stops drifting into hand-authored
+`[relationships]` rows. **Pointer, not copy** is the whole point — every surface
+points at `RELATION_RULES` (`src/relation.rs`) / the `link` verb, none restates
+the `(source,label)→target` table:
+- **EX-1 memory** `mem.pattern.relation.relate-via-link-not-hand-authored-rows`
+  (mem_019ec14b…): when/how to relate, the RELATION_RULES pointer, link/unlink,
+  the link-vs-typed-spine split, and the stale-installed-binary trap.
+- **EX-2** `install/using-doctrine.md` § Relating entities (+ verb-table row).
+  Edited the SOURCE; installed copy + embed refreshed.
+- **EX-3** pointers in `/slice` (step 4 — the drift point), `/design` (reconcile),
+  `/plan` (specs-empty bullet). Skills re-embedded (`skills install` + touch
+  `src/skills.rs`).
+
+**Spec skills evaluated, NOT edited** (D4 "peers"): their relational spine
+(`descends_from`/`parent`/`members`/`interactions`) is TypedVerbOnly in
+RELATION_RULES — written by typed flows, not generic `link`; their existing
+hand-edited-spine prose is already correct. No `/adr` skill exists; ADR
+relate-intent is covered by the memory + using-doctrine.
+
+**VA-1 PASS** (sub-agent). It flagged the one real risk: memory + using-doctrine
+both enumerated the `LinkPolicy` enum variants (Writable/TypedVerbOnly/
+LifecycleOnly) and had already diverged (using-doctrine dropped LifecycleOnly) —
+the early signature of D4's drift. Tightened both to drop the taxonomy, keep the
+behavioural link-vs-typed signal. Re-verified zero transcription.
+
+**False-RED gotcha (durable):** full parallel `cargo test --workspace` reddened
+`scaffolded_entities_are_post_cut_shape_all_six_paths` (scaffolded slice carried a
+stale `[relationships]`) while the isolated/filtered test stayed green — a stale
+embed baked into the jail-target `doctrine` binary, NOT a regression (my edits
+touch no templates; on-disk templates correct + committed). `touch src/install.rs
+&& cargo build -p doctrine` cleared it. RustEmbed recompile + shared-target
+false-green: force the re-embed, rebuild the bin, re-run. `just gate` then green.
