@@ -31,7 +31,7 @@ flowchart TD
     C -->|isolated worktree| C2[land --no-ff → gc]
     B -->|/dispatch| D{harness?}
     D -->|claude · /dispatch-agent| E[Agent tool spawns subagent\nsubagent_type = dispatch-worker]
-    E --> E1[WorktreeCreate hook OWNS creation\ngit worktree add + provision + stamp marker\nfail-closed · gated on DISPATCH_WORKER_AGENT_TYPE\npost-add failure → rollback → no orphan]
+    E --> E1[Claude creates the worktree\nSubagentStart hook · matcher=dispatch-worker\nprovision + stamp marker into cwd\nread-only · not fail-closable · unstamped→IMP-052]
     E1 --> F
     D -->|codex/pi · /dispatch-subprocess| G[fork --worker\ncreates + stamps marker + provisions]
     G --> G1[spawn subprocess\ncwd-bound + DOCTRINE_WORKER=1 + per-wt env]
@@ -79,8 +79,9 @@ guard (in run(), before dispatching a write-classed OR Orchestrator Command):
   bubblewrap jail (no push), and stamp-failure is kept non-silent by the orchestrator
   post-spawn marker abort (IMP-052). The re-amendment rationale + the `P×harm`/jail
   weighing live in ADR-006 D2a and `worker-mode-floor-decision.md` §6 (owner-locked VH).
-- **Lifecycle (owned):** written by `fork --worker` (codex/pi) or the WorktreeCreate
-  hook (claude); removed by `gc`; rolled back if `fork` fails; cleared by `marker
+- **Lifecycle (owned):** written by `fork --worker` (codex/pi) or the SubagentStart
+  `marker --stamp-subagent` hook (claude); removed by `gc`; rolled back if `fork` fails;
+  cleared by `marker
   --clear` for a stray marker (below). A tree may become a coordination/direct-writer
   root only after the **`doctrine worktree status --assert`** check (the named owner of
   the assert-marker-absent gate, charge-3 — `Read`-classed, no mutation) that, on a stray
@@ -170,163 +171,110 @@ silent half-rollback:
 
 ### 4b. claude — `/dispatch-agent`
 
-> **⚠ SUPERSEDED by the SL-056 PHASE-02/03 pivot (O3-red) — see `g2-draft.md` and the
-> locked ADR-006 D9 amendment + ADR-011 D6.** The WorktreeCreate `create-fork`
-> create+provision+stamp-in-one-act path described below is **NOT buildable** on the
-> deployed harness (payload lacks `agent_type`/`worktree_path`/base) and is **deferred**.
-> The live claude mechanism is **SubagentStart-stamp**: Claude does default worktree
-> creation; a **matcher-scoped, sync-blocking `SubagentStart` hook** (`marker
-> --stamp-subagent`) provisions + stamps the marker into `cwd`. It is **not
-> fail-closable** (SubagentStart is read-only); the stamp-failure case is contained by
-> the **marker-absent fail-closed privilege rule** (ADR-006 D2a), and the stamp verb is
-> exempt **by verb identity**. The pre-dispatch baseline-verify guarantee does **not**
-> hold for claude (accepted weaker class — caught late at `import → verify`). The
-> detailed §4b/§5/§11/§12 rewrite onto `run_stamp_subagent` is **PHASE-10 work** (re-scope
-> recorded in `g2-draft.md §4`); the prose below is retained for provenance, not as the
-> build target.
+> **Pivot history (SL-056 PHASE-02/03, locked — `g2-draft.md`, ADR-006 D9 amendment,
+> ADR-011 D6).** The original draft put create+provision+stamp inside a **WorktreeCreate
+> `create-fork`** hook. The O3 spike (PHASE-02) found the deployed WorktreeCreate payload
+> carries **no `agent_type`, no target path, no base** — so `create-fork` is **not
+> buildable** and is **deferred** (until the payload grows type+path, or an IDE-004
+> channel lands). The live claude mechanism is **SubagentStart-stamp**, locked at PHASE-03;
+> build target `g2-draft.md §4`. The prose below is the live design.
 
 No `fork` verb, no env channel. The orchestrator launches the worker via the `Agent` tool
-with `subagent_type: dispatch-worker` and `isolation: worktree`. Claude Code fires a
-**`WorktreeCreate` hook** which, per the harness docs, **replaces the default git
-worktree creation**: a command hook **prints the worktree path on stdout**, and **any
-non-zero exit fails creation.** So the orchestrator-installed hook *is* the claude
-analog of `fork` — it owns creation, provisioning, and stamping in one trusted act:
+with `subagent_type: dispatch-worker` and `isolation: worktree`. **Claude default-creates
+the worktree** — doctrine does not intermediate creation (the WorktreeCreate path is
+deferred). A **matcher-scoped, sync-blocking `SubagentStart` hook** then runs the claude
+analog of `fork --worker`'s mark step — `doctrine worktree marker --stamp-subagent` —
+reading the payload `{cwd, agent_type, …}` JSON on stdin:
 
 ```
-WorktreeCreate hook command:  doctrine worktree create-fork   (reads payload JSON on stdin → prints worktree path on stdout)
+SubagentStart hook command:  doctrine worktree marker --stamp-subagent   (reads payload JSON on stdin)
+    matcher: dispatch-worker                         # the gate — scopes the hook to dispatch workers (σ)
     parse stdin JSON                                 # TRUST BOUNDARY — harness-facing untrusted input
-        malformed JSON                  → refuse bad-payload          (non-zero, creation FAILS)
-        missing agent_type              → refuse missing-agent-type   (NEVER silently "benign")
         missing/empty cwd               → refuse missing-cwd
-        <dir> underivable or escapes    → refuse bad-dir              (path-traversal / not under repo)
-    is_worker := (payload.agent_type == DISPATCH_WORKER_AGENT_TYPE)   # τ: ONE binary const, not a literal
-    ── shared create+provision core (BOTH branches — DOCTRINE's path, strictly better than Claude default) ──
-    git worktree add -b <branch> <dir> <HEAD>        # base = session HEAD (= B under stationary-head, §7c)
-    doctrine worktree provision <dir>                # ADR-006 D9 allowlist + .worktreeinclude (withheld excluded)
-    if is_worker: write_marker(<dir>)                # σ: the MARKER is the ONLY divergence (dispatch vs benign)
-    ── on ANY failure after `git worktree add` (ρ, EITHER branch): COMPENSATING ROLLBACK before exit ──
-        git worktree remove --force <dir>; git branch -D <branch>; reap <dir>
-        rollback clean      → refuse provision-failed | stamp-failed   (non-zero, NO orphan)
-        rollback half-fails → refuse orphan-leftover  (distinct token, names dir+branch left, non-zero)
-    print <dir>                                      # required output
-    any post-add failure rolls back FIRST → non-zero exit → creation FAILS → no worktree → no worker  (FAIL-CLOSED)
+        cwd not under repo / not linked → refuse bad-dir
+        missing agent_type              → refuse missing-agent-type
+    doctrine worktree provision <cwd>                # ADR-006 D9 allowlist + .worktreeinclude (withheld excluded)
+    write_marker(<cwd>)                              # the marker = worker identity
+    # NO `git worktree add` (Claude already created it); NO compensating worktree rollback (it owns no worktree).
+    # Read-only event: a non-zero exit does NOT abort the worker — a refusal means an UNSTAMPED worker.
 ```
 
-- **Fail-closed by construction (resolves SR-1).** A claude `Agent` worktree is
-  harness-born, **not** `fork`-provisioned — so provisioning (D9) and stamping must come
-  from a hook. Putting them *inside creation* means a worker **cannot exist
-  unprovisioned or unstamped**: a provision/stamp failure fails the worktree, not just
-  the guard. This is strictly stronger than stamping *after* creation (a post-creation
-  stamp that dies leaves an unstamped worker writing freely — fail-open). The claude
-  path mirrors codex/pi `fork --worker` on **create + provision + mark** — one trusted
-  act — but **not on base-pinning** (`fork --base <B>` is explicit; the hook forks from
-  session HEAD — the confessed charge-2 residual below).
-  ([[mem.pattern.dispatch.claude-agent-worktree-not-fork-provisioned]])
-- **Compensating cleanup, not a transaction (ρ — mirrors §4a `fork`).** The hook
-  *itself* runs `git worktree add`, so it is the creator and therefore the rollback
-  owner — "any failure → no worktree" is honest only if `create-fork` reaps what it
-  made. git mutations are not atomic, so **any failure after `git worktree add`
-  succeeds** (a `provision` or `write_marker` death) triggers a best-effort rollback —
-  `git worktree remove --force` (a provisioned fork is dirty; plain `remove` refuses),
-  `git branch -D`, reap the dir — **before** the non-zero exit, so Claude's honoured
-  "creation failed" leaves **no orphan worktree+branch** behind. The rollback is itself
-  fallible: a clean rollback refuses `provision-failed`/`stamp-failed`; a rollback that
-  half-fails refuses with a **distinct `orphan-leftover`** token that **names** the dir
-  and branch left on disk and exits non-zero — never a silent half-rollback. Without
-  this, a post-`add` failure is fail-**closed against spawning** (Claude honours the
-  exit) but fail-**open against disk hygiene** — exactly the orphan that later seeds
-  `land`'s `worktree-gone` and `gc`'s idempotence with debris no verb owns. `create-fork`
-  reuses `run_fork`'s rollback core (§11) — one cleanup implementation, two callers.
-- **Bad-payload refusals (ψ — the stdin JSON is a trust boundary).** `create-fork`
-  parses harness-supplied JSON and **derives `<dir>` from `payload.cwd`** — untrusted
-  input — so the bad path is **fail-closed**: malformed JSON → `bad-payload`; missing
-  `agent_type` → **`missing-agent-type`** (it **REFUSES** — it must NEVER silently fall
-  to the else-branch and mean "benign/replicate-default": that is τ/σ's fail-open by
-  another road); missing-or-empty `cwd` → `missing-cwd`; a `<dir>` that fails to derive
-  or escapes the repo → `bad-dir`. Each is a distinct non-zero exit that **fails
-  creation** — a worker the hook cannot classify must not be born. Goldens in §12.
-- **`agent_type` is the discriminator — one source of truth (τ).** The literal
-  `"dispatch-worker"` is replicated across the `Agent` `subagent_type`, the hook gate,
-  `install/agents/claude/dispatch-worker.md`, and the `/dispatch-agent` skill — and
-  **drift fails OPEN**: a one-character mismatch sends `create-fork` to the else-branch,
-  which writes **no marker**, so the worker is born with `marker_present == false` ⇒
-  `worker_mode == false` ⇒ writes **not** refused — an unbranded free-writer on the one
-  harness with no env leg and no bwrap (§4c). So a single **`const
-  DISPATCH_WORKER_AGENT_TYPE`** in the binary is the source of truth `classify_create`
-  reads; the installed agent-def `name` and the skill's `subagent_type` are **pinned**
-  to it; a cross-surface **drift test REDS on mismatch** (§12). The const is the gate's
-  only key — never a free-floating literal in four files.
-- **Else-branch = doctrine's strictly-better creation, marker the only divergence (σ).**
-  Because the hook **replaces default creation for *every* worktree** (incl. `--worktree`
-  launches and benign isolation:worktree subagents), the non-`dispatch-worker` else-branch
-  **must still create a worktree** — the hook now **intermediates creation for ALL isolated
-  subagents** (§10/G3). It runs the **same create+provision core** as dispatch
-  (`git worktree add` + `doctrine worktree provision`), **omitting only the marker** — so a
-  benign subagent still gets doctrine's `.worktreeinclude` provisioning (ADR-006 D9), which
-  Claude's bare `git worktree add` default **skips**. This is **strictly better than
-  Claude's default, not a degraded replica** — the same reason the existing `/worktree` skill
-  creates+provisions itself rather than leaning on `Agent isolation:worktree` (it owns
-  creation precisely to provision). So σ's "blast radius" is a **net upgrade** turned hazard
-  only by a bug: every isolated subagent gains proper provisioning; a defect in the *shared*
-  core breaks all of them. The else-branch **MUST NOT** mirror Claude's native layout
-  (`worktree-agent-<id>` / `.git/worktrees/agent-<id>` / `.claude/worktrees/agent-<id>`)
-  byte-for-byte — doctrine's own naming suffices; the golden asserts the worktree is **valid +
-  usable + provisioned + bears NO marker**, never byte-equality with Claude. Two outcomes,
-  **decided by the O3 spike's gating matcher question (§9/§12), not a sub-question**:
-  - **Matcher available** → scope the hook to `dispatch-worker`; the else-branch is
-    **DELETED** (benign worktrees fall back to Claude's default creation) — no shared-core
-    blast radius.
-  - **No matcher** → the else-branch stands as above: strictly-better create+provision, no
-    marker, doctrine's own conventions.
-- **Identity = the disk marker.** No env, no arm sentinel, no lease, no serial
-  constraint. Each WorktreeCreate fires independently for its own worktree ⇒
-  **concurrent file-disjoint claude dispatch is first-class *in execution* (SR-2).**
-  **v1 buys parallel EXECUTION, not parallel LANDING (υ).** The funnel-back is serialized
-  by `import`'s stationary-head precond (§7c — one orchestrator, `HEAD == B`): the
-  orchestrator's own sequential imports bump HEAD `B→B+1` after each landing, so the next
-  sibling (forked at B) then hits `head-moved` (§7a) and must **re-dispatch onto the
-  bumped base** — in-verb re-anchor is deferred (§13, IMP-043). So a concurrent batch of
-  N workers lands the **first**, and the N−1 siblings re-dispatch — **one landing per
-  base**, not an orderly N-drain. "Serialized" here is first-wins-rest-reanchor, NOT a
-  batch serialized to completion (§7c extends the head-moved framing to the
-  orchestrator's own batch-imports, not only external committers).
-  `DOCTRINE_WORKER` and bwrap are unavailable; the worker shares the jail-wide build
-  target (§8); worker-on-main is the deferred D2b residual.
-- **Spike-gated (§9/§12) — the decision hinges on one probe, and it conflicts with our
-  own.** The earlier probe saw `name`, **not `agent_type`**, on WorktreeCreate — **but
-  it spawned an *unnamed* subagent (no custom agent defined)**, so agent_type absence is
-  *expected*, not a refutation; the docs say agent_type is present "when the hook fires
-  inside a subagent." The O3 spike must confirm a **named `dispatch-worker` subagent
-  reliably propagates `agent_type` through WorktreeCreate**, that the hook fires before
-  the worker, the payload shape, and — as a **hard gating outcome (σ)** — whether a hook
-  **matcher** can scope it to `dispatch-worker` (matcher-green deletes the
-  replicate-default else-branch). **Fallback
-  ladder if agent_type is absent from WorktreeCreate:** (1) **SubagentStart-stamp** — let
-  Claude create the worktree, provision + stamp at SubagentStart (which the probe *did*
-  confirm carries `agent_type`, `cwd`, race-free per subagent
-  [[mem.pattern.dispatch.claude-subagentstart-worker-identity]]), accepting the
-  **fail-open created-but-unstamped window**; (2) prompt-enforced worker-sole-writer.
-  Named, altitude-table-confessed (§10), symmetric with the D6 bwrap back-out.
-- **Base-pinning — confessed residual, NOT parity with `fork --base` (charge-2).** No
-  base param reaches the hook (the harness gives WorktreeCreate no orchestrator-supplied
-  base), so it forks from **session HEAD**. Under the §7c stationary-head quiescence
-  constraint session HEAD **is** B, so the common case is correct — but the design does
-  **not** claim hook-time base parity with codex/pi's explicit `fork --base <B>`. **The
-  residual:** if session HEAD moves between the orchestrator's base capture and
-  WorktreeCreate (an external committer, or the orchestrator's own prior batch-import
-  bumping `B→B+1`, §7c/υ), Claude forks the worker from `B+1` while the worker prompt and
-  the eventual `import` still reason about `B`. This is **caught — late — not silently**:
-  `import` refuses `head-moved` (§7a) and the worker re-dispatches onto the bumped base,
-  the **same** invalidation path as the codex/pi own-batch case (one landing per base, not
-  an N-drain). The cost is a **wasted worker run**, not a base-integrity violation. There
-  is no hook-time `base-moved` pre-refusal in v1 (the hook cannot see B); narrowing the
-  capture→creation window is deferred with the in-verb re-anchor (§13, IMP-043). The O3
-  spike records whether WorktreeCreate exposes any base/parent field that could make a
-  hook-time check possible; absent one, this residual stands and is named in the §10
-  altitude table.
-- **`create-fork` privilege.** The hook runs in the orchestrator's session (process cwd
-  = orchestrator root, `worker_mode` false), reads `payload.cwd`/derives `<dir>`, and
-  **mints** the marker — like `fork --worker`, never self-refused (§5).
+- **Not fail-closable — the stamp is best-effort (ADR-011 D6, O3-red).** SubagentStart
+  is a **read-only** hook event (official `hooks.md`): a non-zero exit only shows stderr;
+  the subagent runs **regardless**. So unlike WorktreeCreate (which *does* fail creation
+  on non-zero), the stamp hook **cannot abort the worker**. Two empirical findings fix the
+  altitude (PHASE-02/03-A, `notes.md`):
+  - **Blocking ⇒ no write race (finding 1).** The command hook **gates worker execution
+    until it exits** (WORKER_FIRST tracks the hook's sleep 1:1, strictly after HOOK_DONE).
+    So **on hook success** the marker + provisioning are mechanically present before the
+    worker's first action — not a timing race.
+  - **Fail-OPEN on hook failure (finding 2).** On a stamp failure the worker proceeds
+    **unstamped and un-gateable by any hook** (no exit-status gate exists). The fence
+    against an unstamped worker is therefore **not** a hook exit code but the layered
+    funnel: the `import` `.doctrine/`/`.claude/` belt (§7) + the worker-mode guard (§3) +
+    the pre-distilled worker prompt + the **orchestrator post-spawn marker check that
+    aborts an unstamped fork (IMP-052)** — enforced where the harness *can* abort.
+- **Worker-mode floor = positive signal (Option C, locked PHASE-05).** `worker_mode =
+  (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER` — **marker present ⇒
+  refuse; marker absent ⇒ allow.** The marker-absent **fail-closed** floor (the original
+  B2/B3 disposition) was **reversed**: `P(SubagentStart hook failure) ≈ 0` (it blocks; a
+  miss needs a crash) × *jail-bounded* harm (bubblewrap, no push ⇒ worst case = lost
+  unpushed progress) ⇒ the security delta vs a fail-closed floor is negligible, and the
+  one real residual — a failing hook *silently* normalising — is closed at the
+  **orchestrator** layer (IMP-052 post-spawn abort), the layer that *can* abort, not the
+  CLI seam (`worker-mode-floor-decision.md §7`).
+- **Failure posture — un-rollback-able (M3).** Because `provision` + `write_marker` run
+  inside the read-only hook on a worktree **Claude created and owns**, a mid-`provision`
+  failure leaves a **half-provisioned worktree with a worker already cleared to run** —
+  the stamp verb cannot `git worktree remove` it (it never added it) nor abort the worker
+  (read-only event). So the verb does **not** attempt a compensating worktree rollback (ρ
+  does **not** apply — there is no `git worktree add` it owns); on any failure it
+  **reports loudly on stderr and exits non-zero**, surfacing the broken fork to the
+  orchestrator's post-spawn check (IMP-052) rather than silently half-stamping.
+- **`agent_type` is the discriminator — one source of truth (τ).** The matcher
+  (`matcher: dispatch-worker`) is now the gate (not a WorktreeCreate body branch); the
+  literal is replicated across the `Agent` `subagent_type`, the SubagentStart matcher,
+  `install/agents/claude/dispatch-worker.md`'s `name`, and the `/dispatch-agent` skill. A
+  one-character **drift fails OPEN**: the matcher never fires ⇒ no stamp ⇒ `marker_present
+  == false` ⇒ `worker_mode == false` ⇒ the worker writes unrefused (contained by the same
+  belt+IMP-052 fence as any unstamped worker). So a single **`const
+  DISPATCH_WORKER_AGENT_TYPE`** in the binary is the source of truth; the agent-def `name`
+  and the skill's `subagent_type` are **pinned** to it; a cross-surface **drift test REDS
+  on mismatch** (§12). ([[mem.pattern.dispatch.claude-subagentstart-worker-identity]])
+- **σ moot — no else-branch, no blast radius.** The matcher scopes the stamp to
+  `dispatch-worker` cleanly, so **benign isolated subagents never hit the hook** and keep
+  Claude's default worktree creation untouched. There is **no replicate-default
+  else-branch** and no shared-core blast radius — the WorktreeCreate σ question is dead
+  (there is no usable WorktreeCreate gating at all; PHASE-02 RED).
+  ([[mem.pattern.dispatch.claude-worktreecreate-payload-minimal-no-type-no-path]])
+- **Identity = the disk marker; concurrency first-class in EXECUTION (SR-2, υ).** No env,
+  no arm sentinel, no lease, no serial constraint. Each SubagentStart fires independently
+  for its own worktree ⇒ **concurrent file-disjoint claude dispatch is first-class *in
+  execution*.** **v1 buys parallel EXECUTION, not parallel LANDING (υ):** the funnel-back
+  is serialized by `import`'s stationary-head precond (§7c — one orchestrator, `HEAD ==
+  B`): the orchestrator's own sequential imports bump HEAD `B→B+1` after each landing, so
+  the next sibling (forked at B) then hits `head-moved` (§7a) and must **re-dispatch onto
+  the bumped base** — one landing per base, not an orderly N-drain (in-verb re-anchor
+  deferred, §13/IMP-043). `DOCTRINE_WORKER` and bwrap are unavailable; the worker shares
+  the jail-wide build target (§8); worker-on-main is the deferred D2b residual.
+- **Base-pinning — confessed residual, sharper than assumed (charge-2 / M1).** The
+  SubagentStart payload carries **no base/parent field** (like WorktreeCreate), so the
+  worker forks from **session HEAD** — and the spike found the default-created worktree's
+  base is **opaque and not orchestrator-controlled**, *sharper* than the original residual.
+  Under the §7c stationary-head constraint session HEAD **is** B in the common case; a move
+  between base capture and spawn is **caught — late, not silently** — at `import`
+  `head-moved` (§7a), the worker re-dispatching onto the bumped base (same invalidation
+  path as the codex/pi own-batch case; the cost is a **wasted worker run**, not a
+  base-integrity violation). No hook-time `base-moved` pre-refusal in v1 (the hook sees no
+  B); in-verb re-anchor + an import-time content-base assertion are deferred (§13,
+  IMP-043). Named in the §10 altitude table.
+- **Stamp privilege (§5).** `marker --stamp-subagent` is **Hook-mint**-classed (refused
+  under `worker_mode`). The legitimate first-stamp is allowed because at stamp time the
+  target worktree **bears no marker yet** ⇒ `worker_mode == false` (Option C's positive
+  signal) — so the exemption **falls out of the floor**, not a verb-identity carve-out
+  (which the *reversed* fail-closed rule had required). The class still bites a re-entrant
+  caller in an **already-marked** worktree (a worker minting a sub-marker) ⇒ refused. See
+  the §5 ⚠ reconciliation note.
 
 ### 4c. claude self-clear residual (confessed, not closed)
 
@@ -348,17 +296,25 @@ classes join the worker-mode guard, one stays open, one is bespoke:
 | Class | Members | Refused under `worker_mode`? |
 |---|---|---|
 | **Orchestrator** | `fork`, `import`, `land`, `gc` | **Yes** — they mutate git refs/dirs (create/remove worktrees, delete branches, merge commits, reap dirs). Classifying them `Read` because they spare the authored TOML corpus is a category error (a worker could delete branches, violating ADR-006 D2). |
-| **Hook-mint** | `create-fork`, `marker --stamp-subagent` | **Yes** — they mint a worktree+marker (and `create-fork` runs `git worktree add`). A *worker* invoking them is a privilege bypass on the newest path. The **legitimate** caller is exempt by construction, not by carve-out: the hook fires in the orchestrator's session at the coordination root, where `worker_mode` is **false** (no marker, not a linked worktree) — so refused-under-`worker_mode` and "never self-refused for the legit hook" are the *same* rule, not a contradiction. |
+| **Hook-mint** | `marker --stamp-subagent` | **Yes** — it mints the worker marker (and provisions the worktree). A *worker* invoking it is a privilege bypass on the claude path. The **legitimate first-stamp is exempt by the floor, not a carve-out:** the SubagentStart hook targets the payload `cwd` worktree, which at stamp time **bears no marker yet** ⇒ `worker_mode == false` (Option C positive signal) ⇒ allowed; a re-entrant call in an already-marked worktree is refused. (`create-fork` is **deferred** — §4b — so it leaves this class.) |
 | **write** | authoring writes (`slice new`/`design`/`plan`/`memory record`/status-transition) **and `claude install`** (+ its hidden `skills install` alias, §9 — installs skills/agents/hooks into `.claude/`) | Yes. `claude install` is new to the guard (charge-5); the rest unchanged. **Justification (corrected): ADR-006 D2 applied uniformly — a worker performs no doctrine-mediated writes, and must not reconfigure its own harness (hooks/agents) mid-run. NOT a ride-back defense** — `.claude/` is gitignored, so a worker's installer output can never funnel back through `import` and is torn down at `gc` regardless. |
 | **Read** | `provision`, `check-allowlist`, `branch-point-check`, `status` | No — open to workers |
 | **`marker --clear`** | bespoke 5th class (§3) | **No** — locking the marker's only remover behind the marker is the self-brick. Refused instead by env-set, cwd-not-tree-root, and the `--operator` accident-fence in a linked worktree. |
 
-The claude `create-fork` hook verb (§4b; and its `marker --stamp-subagent` fallback)
-**mints** the marker. It is **Hook-mint-classed → refused under `worker_mode`** so a
-worker process cannot call it; the legitimate hook is exempt because it runs at the
-coordination root (worker_mode false there) targeting the payload-derived worktree dir —
-the same posture as `fork --worker`'s marker write. Refused-when-a-worker, allowed-for-
-the-orchestrator is one classification, not two.
+The claude `marker --stamp-subagent` hook verb (§4b) **mints** the marker. It is
+**Hook-mint-classed → refused under `worker_mode`**, so a worker process in a marked
+worktree cannot call it; the legitimate first-stamp is allowed because its target worktree
+bears no marker yet (`worker_mode` false). Refused-when-already-a-worker,
+allowed-for-the-first-stamp is one classification, not two.
+
+> **⚠ PHASE-10-prep reconciliation (for the VH lock).** The PHASE-03 D ruling specified an
+> *explicit verb-identity* exemption for `marker --stamp-subagent`, predicated on the
+> B2/B3 **fail-closed** marker-absent floor. PHASE-05's **Option C reversed** that floor to
+> a positive signal (marker-absent → allow), which makes the legit first-stamp allowed
+> *automatically* (no marker yet ⇒ `worker_mode` false) — so **no verb-identity carve-out
+> is implemented**. The alternative — keep an explicit identity exemption as
+> defense-in-depth, should a future change re-introduce a fail-closed floor — is noted, not
+> taken. Confirm at PHASE-10 lock.
 
 ## 6. `land` — solo `/execute`'s coordination merge
 
@@ -571,10 +527,10 @@ for the Claude surface:
 - **agents** — `install/agents/claude/dispatch-worker.md` symlinked into
   `.claude/agents/` (parallel to skills; user-serviceable markdown — name +
   description + tool allowlist — not a Rust type);
-- **the WorktreeCreate hook** (SubagentStart on the fallback ladder) — merged into
+- **the SubagentStart hook** (matcher-scoped to `dispatch-worker`) — merged into
   `.claude/settings.local.json` via the existing `HookSpec` merge core (`src/boot.rs`),
   the same machinery that wires the `SessionStart` boot/sync hooks. The hook command is
-  the one line in §4b.
+  the one line in §4b (`doctrine worktree marker --stamp-subagent`).
 
 > **Scope note.** The rename touches the CLI surface, goldens, and skill docs that say
 > "skills install" — a deliberate SL-056 inclusion, not just the claude mechanism. The
@@ -601,19 +557,16 @@ for the Claude surface:
 > must keep writing its (ephemeral, gitignored) permission state, else interactive
 > permission flow breaks under confinement.
 
-`doctrine worktree create-fork` is the verb the hook calls: reads the WorktreeCreate
-payload JSON on stdin, `classify_create(payload) -> ForkWorker | PlainCreate | Refuse`
-(a plain function — but the type is **three-valued, never two**: a malformed/missing
-payload must classify to `Refuse`, never silently to `PlainCreate`, ψ), gated on
-`payload.agent_type == DISPATCH_WORKER_AGENT_TYPE` (the single binary const, τ). On the
-match it runs git-add + provision + `write_marker` with §4b's compensating rollback (ρ)
-and **prints the worktree path**; otherwise it creates a **serviceable default worktree**
-by doctrine's own conventions and prints the path, no marker (σ — unless a matcher
-deletes this branch). The bad-payload refusals (`bad-payload`, `missing-agent-type`,
-`missing-cwd`, `bad-dir`) fail creation fail-closed (ψ). The gate lives in the binary
-(testable), the hook stays dumb — honoring the §1 thesis without over-engineering. (The
-SubagentStart fallback uses a thinner `marker --stamp-subagent` that only stamps an
-already-created worktree — §4b ladder.)
+`doctrine worktree marker --stamp-subagent` is the verb the hook calls: reads the
+SubagentStart payload JSON on stdin, validates `cwd` (present, under repo, a **linked**
+worktree) and `agent_type`, then **provisions** (D9) + `write_marker`s into `cwd`. There
+is **no `classify_create` / `ForkWorker | PlainCreate | Refuse`** three-way and **no
+else-branch** (σ moot — the matcher gates; benign subagents never hit the hook). The
+bad-payload refusals (`missing-cwd`, `bad-dir`, `missing-agent-type`) fail the **stamp**,
+not creation — the worker runs regardless (SubagentStart is read-only, §4b), so a refusal
+means an **unstamped worker** fenced by the belt+guard+prompt+IMP-052. The validation
+lives in the binary (testable), the hook stays dumb — honoring the §1 thesis. The
+`create-fork` WorktreeCreate verb is **deferred** (§4b — payload lacks type+path+base).
 
 ## 10. Governance deliverables
 
@@ -636,33 +589,28 @@ amend it validates).
   that canonical id once it exists; do not pre-guess).** The spawn-interface
   **contract** (orchestrator owns fork-or-mark + provision + per-wt env emission;
   worker identity is the disk marker) + a **per-harness capability/altitude table**.
-  **Blast-radius confession (σ).** On claude, absent a WorktreeCreate matcher (§4b/§9
-  spike), the hook **intermediates creation for ALL `isolation: worktree` subagents** —
-  not only dispatch workers. The else-branch runs the **same create+provision core** as
-  dispatch (marker omitted), so every benign isolated subagent gains doctrine's
-  `.worktreeinclude` provisioning that Claude's bare default skips — a **net upgrade**, the
-  same rationale by which the `/worktree` skill already owns creation rather than using
-  `Agent isolation:worktree`. The cost is **blast radius**: a defect in the *shared* core
-  breaks every benign isolated subagent and `--worktree` launch, not just dispatch. A
-  matcher that scopes the hook to `dispatch-worker` deletes the else-branch and the blast
-  radius alike (benign worktrees revert to Claude's default).
+  **Blast-radius confession (σ) — RESOLVED MOOT (§4b).** This confession applied only to a
+  WorktreeCreate hook that intermediates creation for ALL `isolation: worktree` subagents.
+  The O3 spike (PHASE-02) dropped that path: the live **SubagentStart** hook is
+  **matcher-scoped to `dispatch-worker`**, so benign isolated subagents never hit it and
+  keep Claude's default creation — **no else-branch, no shared-core blast radius**. The σ
+  confession is retained here as provenance of the gate's design, not as a live residual.
   - **codex/pi:** subprocess spawn ⇒ env-arm + per-wt env + bwrap (full mechanism floor
     *under D6*; accident-fenced absent D6).
-  - **claude:** `Agent` tool + **WorktreeCreate-hook create+provision+stamp**, a
-    **first-class** backend (not a degraded rung), marker-only altitude (no env, no per-wt
-    target, no bwrap); **accident-fenced + prompt-enforced, not malice-proof** against a
-    deliberate self-clear (§4c) — deferred to IDE-004 / userns-bwrap. **Base-pinning is a
-    confessed residual, not parity (charge-2):** the hook forks from session HEAD, not an
+  - **claude:** `Agent` tool + **SubagentStart-stamp** (Claude default-creates; the
+    matcher-scoped hook provisions+stamps), marker-only altitude (no env, no per-wt target,
+    no bwrap); **accident-fenced + prompt-enforced, not malice-proof** against a deliberate
+    self-clear (§4c) — deferred to IDE-004 / userns-bwrap. **Base-pinning is a confessed
+    residual, not parity (charge-2):** the hook forks from session HEAD (opaque base), not an
     explicit `--base <B>`; correct under §7c quiescence, a moved HEAD is caught late by
-    `import`'s `head-moved` (cost: a wasted worker run, not a base-integrity breach). The fail-closed
-    altitude is **TWO-VALUED and O3-spike-contingent (φ) — the headline must not outrun the
-    footnote:**
-    - **O3 green** (named-subagent `agent_type` propagates through WorktreeCreate) →
-      **fail-closed** via WorktreeCreate: no worktree without a marker. *(cell: `proposed`
-      until the O3 gate greens.)*
-    - **O3 red** → fail-open **SubagentStart-stamp** window (created-but-unstamped) →
-      **prompt-enforced** worker-sole-writer. This row is the achievable altitude if the
-      spike reds — it must be shown, not hidden behind the fail-closed headline.
+    `import`'s `head-moved` (cost: a wasted worker run, not a base-integrity breach). The φ
+    altitude is **RESOLVED to the O3-red row** (PHASE-02/03, ADR-011 D6 `accepted`):
+    - **O3 RED (the outcome).** WorktreeCreate carries no `agent_type`/path/base ⇒
+      fail-closed-via-WorktreeCreate is **not achievable**; `create-fork` deferred. The
+      live altitude is the **SubagentStart-stamp** path: blocking ⇒ stamp-before-worker on
+      hook success, **fail-OPEN on hook failure** (read-only event, no exit gate), the
+      unstamped-worker case fenced by the import belt + worker-mode guard +
+      prompt-enforcement + the orchestrator IMP-052 post-spawn abort.
     - **Concurrency** is execution-only in both arms: concurrent file-disjoint *execution*
       is first-class, but v1 funnels **one landing per base** (υ, §7c) — no serial
       *execution* constraint, but **not** parallel landing.
@@ -680,10 +628,10 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
 | Path | Change |
 |---|---|
-| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_create_fork`** (claude WorktreeCreate handler — parses stdin payload with **bad-payload refusals** `bad-payload`/`missing-agent-type`/`missing-cwd`/`bad-dir` (ψ, fail-closed), gates on `DISPATCH_WORKER_AGENT_TYPE` (τ), on a match does git-add+provision+`write_marker` **with §4a's compensating rollback** (ρ — post-`add` failure → `git worktree remove --force`+`branch -D`+reap before non-zero exit; half-failed rollback → distinct `orphan-leftover` token; **reuses `run_fork`'s rollback core**), else **creates+provisions** a worktree by doctrine conventions (σ — same core, marker omitted: a benign subagent still gets `.worktreeinclude` provisioning) and prints the path, no marker), plus a thinner **`run_stamp_subagent`** for the SubagentStart fallback. New **`run_status`** verb (charge-4 observability + charge-3 gate; `--assert` derives a non-zero `stale-marker` exit from the same state as the human line — **no separate gate verb or `classify_writable` twin**). `run_import`'s belt now rejects **`.claude/`** as well as `.doctrine/` (charge-5 — distinct `claude-touch` token). Pure: `target_dir_for_branch`, `marker_path`, `classify_import` (belt over both `.doctrine/`+`.claude/`), `classify_land`, `classify_gc`, `classify_create` (**three-valued: `ForkWorker | PlainCreate | Refuse`**, ψ)/`classify_stamp`, and **`describe_mode(is_linked, marker_present, env_set)`** (the single source for both the status line and the `--assert` exit). **`const DISPATCH_WORKER_AGENT_TYPE`** is the single source of truth `classify_create` reads (τ). New `write_marker`/`marker_present`/`remove_marker` (`write_marker` invoked by `fork --worker` and `create-fork`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the per-worktree-creation hook.** |
-| `src/main.rs` | `fork`/`import`/`gc`/`land`/**`status [--assert]`** (charge-4 observability + charge-3 gate — one `Read`-classed verb, `--assert` swaps the human line for a `stale-marker` non-zero exit; no second verb) subcommands + `marker {--clear --operator, --stamp-subagent}` (watch bool/arg clippy ceilings, [[mem.pattern.lint.cli-handler-args-struct]]). Worker-mode guard `worker_mode(root) = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`. The exhaustive `write_class` mapping is **behaviour-preserving for existing members**; the worker-mode *refusal set* gains three entries: **`fork`/`import`/`gc`/`land` = `Orchestrator`** (refused, NOT `Read`); **`create-fork`/`marker --stamp-subagent` = `Hook-mint`** (charge-1 — refused under `worker_mode`, exempt for the legit hook because it runs at worker_mode=false); **`claude install` (+ hidden `skills install` alias) = `write`** (charge-5 — refused under `worker_mode`). The env-leg refusal on a non-linked tree carries the named dual-cause message for authoring **and** funnel verbs. |
+| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_stamp_subagent`** (claude **SubagentStart** handler — parses stdin payload with **bad-payload refusals** `missing-cwd`/`bad-dir`/`missing-agent-type` (ψ — fail the **stamp**, not creation: the worker runs regardless, §4b), validates `cwd` is a **linked** worktree + `agent_type == DISPATCH_WORKER_AGENT_TYPE` (τ), then **provisions** + `write_marker`s into `cwd`. **No `git worktree add`** (Claude owns the worktree) and **no compensating worktree rollback** (ρ N/A — owns no worktree); on any `provision`/`write_marker` failure it reports loudly + exits non-zero (M3 — surfaced to the orchestrator IMP-052 post-spawn check, never silently half-stamped). `create-fork` is **deferred** — §4b). New **`run_status`** verb (charge-4 observability + charge-3 gate; `--assert` derives a non-zero `stale-marker` exit from the same state as the human line — **no separate gate verb or `classify_writable` twin**). `run_import`'s belt now rejects **`.claude/`** as well as `.doctrine/` (charge-5 — distinct `claude-touch` token). Pure: `target_dir_for_branch`, `marker_path`, `classify_import` (belt over both `.doctrine/`+`.claude/`), `classify_land`, `classify_gc`, **`classify_stamp`** (two-valued: `Stamp | Refuse` — no `PlainCreate` else-branch, σ moot), and **`describe_mode(is_linked, marker_present, env_set)`** (the single source for both the status line and the `--assert` exit). **`const DISPATCH_WORKER_AGENT_TYPE`** is the single source of truth `classify_stamp` reads (τ). New `write_marker`/`marker_present`/`remove_marker` (`write_marker` invoked by `fork --worker` and `marker --stamp-subagent`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the per-worktree-creation hook.** |
+| `src/main.rs` | `fork`/`import`/`gc`/`land`/**`status [--assert]`** (charge-4 observability + charge-3 gate — one `Read`-classed verb, `--assert` swaps the human line for a `stale-marker` non-zero exit; no second verb) subcommands + `marker {--clear --operator, --stamp-subagent}` (watch bool/arg clippy ceilings, [[mem.pattern.lint.cli-handler-args-struct]]). Worker-mode guard `worker_mode(root) = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`. The exhaustive `write_class` mapping is **behaviour-preserving for existing members**; the worker-mode *refusal set* gains three entries: **`fork`/`import`/`gc`/`land` = `Orchestrator`** (refused, NOT `Read`); **`marker --stamp-subagent` = `Hook-mint`** (charge-1 — refused under `worker_mode`; the legit first-stamp targets a worktree with no marker yet ⇒ worker_mode false ⇒ allowed, exemption falls out of Option C's positive signal, §4b/§5; `create-fork` deferred); **`claude install` (+ hidden `skills install` alias) = `write`** (charge-5 — refused under `worker_mode`). The env-leg refusal on a non-linked tree carries the named dual-cause message for authoring **and** funnel verbs. |
 | `src/skills.rs` → install surface | **Rename `skills install` → `claude install`** (keep `skills install` as a **hidden deprecated alias** → same handler, SR-3); add the **agents** leg (symlink `install/agents/claude/*.md` into `.claude/agents/`) and trigger the WorktreeCreate hook merge. Update `Write("skills install")` audit label + goldens; sweep docs + the `[[mem.pattern.distribution.skill-refresh-command]]` memory. **χ: every leg is golden-pinned in §12** — alias→same-handler, agent-def symlink presence, hook merge that preserves pre-existing hooks, idempotent reinstall, rename audit-label. |
-| `src/boot.rs` | A **WorktreeCreate** `HookSpec` (SubagentStart on the fallback ladder) reusing the existing merge core; wired by `claude install`. The hook command **creates + provisions + stamps** with the ρ compensating rollback (fail-closed, SR-1), gated on `agent_type == DISPATCH_WORKER_AGENT_TYPE` (τ const); non-dispatch agent_types get a **serviceable default-creation** branch (σ — doctrine conventions, no marker; deleted if a matcher scopes the hook) or a bad-payload refusal (ψ). |
+| `src/boot.rs` | A **`SubagentStart`** `HookSpec` **matcher-scoped to `dispatch-worker`** reusing the existing merge core; wired by `claude install`. The hook command **provisions + stamps** the marker into the payload `cwd` (no `git worktree add` — Claude owns the worktree); **not fail-closable** (read-only event, SR-1 met at the orchestrator/IMP-052 layer instead, §4b). No σ else-branch (matcher gates); bad-payload → stamp refusal (ψ). The `HookSpec` may land here or with the install leg (PHASE-11) — the *handler* (`run_stamp_subagent`) is PHASE-10. |
 | `src/git.rs` | new reads behind the verbs: worktree list, **patch-id reachability** (`git cherry`), `B..S` name-only diff. Impure boundary only. |
 | `install/agents/claude/dispatch-worker.md` | **New** — the dispatch-worker subagent definition (name, description, tool allowlist). Its `name` is **pinned to `DISPATCH_WORKER_AGENT_TYPE`** (τ); the drift test reds if it diverges. |
 | `plugins/doctrine/skills/{worktree,dispatch,execute}/SKILL.md` + new `{dispatch-subprocess,dispatch-agent}/SKILL.md` | Rewrite prose to *call* the verbs. **`/dispatch` becomes a harness router** → `/dispatch-subprocess` (codex/pi) \| `/dispatch-agent` (claude). Router input: the agent's harness self-belief **cross-checked against env-marker detection** (`CLAUDECODE` etc., names resolved in-skill/at spike — see IDE-005 for pushing this into the binary); routes only when detection **agrees**; mismatch/unknown → refuse **naming the cause**, never a blind spawn. The detection signal is itself spike-gated **per harness** (a green for claude does not bless codex/pi). `/dispatch-subprocess` binds the worker cwd (`env -C "$D"` / bwrap `--chdir`); `/dispatch-agent` spawns `subagent_type: dispatch-worker` — **the literal pinned to `DISPATCH_WORKER_AGENT_TYPE`** (τ; drift test reds on mismatch). One identical cadence, two ~2-line spawn templates. Re-embed ritual [[mem.pattern.distribution.skill-refresh-command]]. |
@@ -714,42 +662,37 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   bespoke refusal rules are tested separately (§3). *(This is the round-7 Charge π fix:
   the list is exhaustive and includes `land`.)*
 - **`Hook-mint`-class refusal (charge-1) — drive `run()`:** from a marked fork **and**
-  from an env-set process, **`create-fork` and `marker --stamp-subagent`** are each
-  refused (a worker cannot mint a worktree/marker). Paired positive: invoked at the
-  coordination root (worker_mode false) they run normally — the legit-hook exemption is
-  the *same* rule, proven, not a carve-out.
+  from an env-set process, **`marker --stamp-subagent`** is refused (a worker cannot mint
+  a marker). Paired positive: invoked against a worktree with **no marker yet**
+  (`worker_mode` false — the legit first-stamp) it runs normally — the exemption falls out
+  of Option C's positive signal (§4b/§5), not a carve-out. (`create-fork` is deferred — no
+  test.)
 - **`claude install` worker-mode refusal (charge-5) — drive `run()`:** from a marked
   fork **and** from an env-set process, **`claude install`** *and its hidden `skills
   install` alias* are both refused (a worker cannot mutate `.claude/` skills/agents/hooks).
   Both spellings, both signals.
-- **`create-fork` gate (the claude path):** `classify_create` golden — `agent_type ==
-  DISPATCH_WORKER_AGENT_TYPE` → git-add + provision + marker written + worktree path
-  printed on stdout; other agent_type → **create+provision** (σ — same core, marker
-  omitted), worktree **provisioned + valid + usable**, path printed, **no marker** (a
-  benign subagent is never branded). Reads `agent_type`/derives `<dir>`
-  from the **payload**, not the hook's process cwd (SR-4). The thinner `marker
-  --stamp-subagent` fallback verb has its own golden (stamp-only on an already-created
-  worktree).
-- **`create-fork` orphan cleanup (ρ — the orphan must be GONE, not merely unspawned):**
-  a forced `provision`/`write_marker` failure **after** `git worktree add` succeeds →
-  non-zero exit **AND** the worktree+branch are reaped (assert `git worktree list` /
-  `git branch` show no leftover — not merely that the worker did not spawn). A rollback
-  that itself half-fails → distinct **`orphan-leftover`** exit that **names** the dir+branch
-  left on disk. A pre-`add` failure leaves no fork at all.
-- **`create-fork` bad-payload refusals (ψ — fail-closed):** goldens for malformed JSON →
-  `bad-payload`; **missing `agent_type` → `missing-agent-type`** (it REFUSES — assert it
-  does NOT silently replicate-default and write no worker); missing/empty `cwd` →
-  `missing-cwd`; underivable/escaping `<dir>` → `bad-dir`. Each a distinct non-zero exit
-  that **fails creation** (no worktree born).
+- **`marker --stamp-subagent` gate (the claude path):** `classify_stamp` golden — a valid
+  payload (`cwd` a **linked** worktree + `agent_type == DISPATCH_WORKER_AGENT_TYPE`) →
+  **provision + marker written** into `cwd`; reads `cwd`/`agent_type` from the **payload**,
+  not the hook's process cwd (SR-4). There is **no else-branch / no `PlainCreate`** (σ moot
+  — the matcher gates) and **no worktree-path printed** (it stamps an existing worktree, it
+  does not create one).
+- **`marker --stamp-subagent` failure posture (M3 — un-rollback-able, surfaced not
+  silenced):** a forced `provision`/`write_marker` failure → **non-zero exit + loud
+  stderr**; assert the verb does **NOT** attempt to `git worktree remove` the worktree
+  (Claude owns it — there is nothing to roll back) and leaves the half-stamped fork for the
+  orchestrator's IMP-052 post-spawn check. (No `orphan-leftover`/`ρ` rollback case — the
+  verb adds no worktree.)
+- **`marker --stamp-subagent` bad-payload refusals (ψ — fail the stamp, not creation):**
+  goldens for missing/empty `cwd` → `missing-cwd`; `cwd` not under repo / not a linked
+  worktree → `bad-dir`; **missing `agent_type` → `missing-agent-type`**. Each a distinct
+  non-zero exit; the worker still runs (read-only event) ⇒ an unstamped worker, fenced by
+  the belt+guard+prompt+IMP-052.
 - **`dispatch-worker` drift test (τ — reds on mismatch):** assert the installed agent-def
-  `name` and the `/dispatch-agent` skill's `subagent_type` **both resolve to
-  `DISPATCH_WORKER_AGENT_TYPE`**; a divergent literal **REDS** the test. The const is the
-  gate's only key — a typo cannot silently send `create-fork` to the else-branch.
-- **σ serviceable default (no-matcher arm):** the non-dispatch else-branch produces a
-  worktree that is **valid + usable + bears NO marker** — assert validity/usability, NOT
-  byte-equality with Claude's native `worktree-agent-<id>` layout (the bar is "suffice for
-  general isolated-subagent duty," not Claude fidelity). If the O3 matcher greens, this
-  branch is deleted and the test retires with it.
+  `name`, the `/dispatch-agent` skill's `subagent_type`, **and the SubagentStart matcher**
+  all resolve to `DISPATCH_WORKER_AGENT_TYPE`; a divergent literal **REDS** the test. The
+  const is the gate's only key — a typo cannot silently miss the matcher (which would leave
+  the worker unstamped).
 - **`marker --clear` (self-brick cure):** a stale marker on a linked-worktree
   coordination root → writes + `gc` refused; `marker --clear --operator` (env unset)
   restores both from within the CLI; refused when `DOCTRINE_WORKER` set or run outside
@@ -785,24 +728,21 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
     and no duplicate hook entries.
   - **rename audit-label/golden:** the `Write(...)` audit label and goldens reflect
     `claude install` (the renamed surface), not the stale `skills install` string.
-- **O3 spike (claude marker-via-WorktreeCreate) — THE gate.** Confirm a **named
-  `dispatch-worker` subagent reliably propagates `agent_type` through the WorktreeCreate
-  payload** (the prior probe saw only `name` — but it used an *unnamed* subagent, so that
-  is expected, not a refutation). Confirm the custom hook **replaces default creation**
-  (path-on-stdout honored, non-zero fails creation), fires before the worker, and the
-  payload shape — **including whether the payload exposes any base/parent-commit field**
-  (charge-2): if it does, a hook-time `base-moved` pre-refusal becomes possible and the
-  §4b residual narrows; if not, the residual stands (worker forks from session HEAD,
-  caught late by `import`'s `head-moved`). Record this as a spike result. **HARD GATING
-  OUTCOME (σ, not a sub-question): can a WorktreeCreate
-  matcher scope the hook to `dispatch-worker`?** — matcher GREEN deletes the
-  replicate-default else-branch (and the σ blast radius) entirely; matcher RED mandates the
-  serviceable-default else-branch + its golden. Record the answer as a gate result, not a
-  footnote. Confirm **two concurrent** dispatch-worker creations each get their own
-  create+provision+stamp (no shared slot). Exercise the **fallback ladder**: if
-  WorktreeCreate lacks `agent_type` → SubagentStart-stamp (which the probe confirmed
-  carries `agent_type`, accepting the fail-open window) → prompt-enforced. Per-harness: a
-  green for claude does not bless codex/pi env propagation, which is its own gate.
+- **O3 spike (claude marker path) — THE gate, RESOLVED RED (PHASE-02/03-A, `notes.md`).**
+  The deployed WorktreeCreate payload carries **`{session_id, transcript_path, cwd,
+  hook_event_name, name}`** — **no `agent_type`, no target path, no base/parent field** (and
+  the official docs diverge from the deployed shape) ⇒ `create-fork` **cannot gate-on-type,
+  cannot target, cannot base-pin** ⇒ **not buildable**, deferred. WorktreeCreate *is*
+  fail-closed (non-zero fails creation), but that capability is unusable without a type
+  gate. The σ matcher question is therefore **moot**. The selected path is
+  **SubagentStart-stamp**, empirically confirmed: payload carries **`agent_type` + `cwd` =
+  worktree**, **matcher-scopable** to `dispatch-worker` (doc-supported), the command hook
+  **blocks** worker execution until exit (marker present before the worker's first action
+  on success), but SubagentStart is **read-only** (not fail-closable — exit 2 does not abort
+  the worker). So the claude altitude is *stronger on the race axis* (no write race) but
+  carries a **hook-failure fail-open** fenced at the orchestrator/IMP-052 layer, not the
+  hook exit. This record feeds ADR-011 D6 (φ→O3-red) and the PHASE-10 stamp verb; the
+  remaining live test is the **drift test** above (the matcher↔const↔agent-def↔skill gate).
 - **D5 (codex/pi):** two parallel worktree builds, no cargo-lock contention, each spawns
   its correct `CARGO_BIN_EXE`. (Claude shares the jail-wide target — the §5.1 rituals
   are the proof there, not isolation.)

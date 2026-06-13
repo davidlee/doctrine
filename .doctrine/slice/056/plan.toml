@@ -384,43 +384,50 @@ requirements = []
 id        = "PHASE-10"
 name      = "claude spawn path — `create-fork` hook handler + stamp-subagent + agent def"
 objective = """
-The claude WorktreeCreate handler that mirrors codex/pi `fork --worker` on
-create+provision+mark — one trusted act, fail-closed (design §4b/§5/§9/§11; SR-1).
-Disposition the σ else-branch per the PHASE-02 matcher result.
-`run_create_fork` reads the WorktreeCreate payload JSON on **stdin** (a TRUST
-BOUNDARY) and `classify_create(payload) -> ForkWorker | PlainCreate | Refuse`
-(**three-valued, never two** — a malformed/missing payload classifies to `Refuse`,
-NEVER silently to `PlainCreate`, ψ), gated on `payload.agent_type ==
-DISPATCH_WORKER_AGENT_TYPE` (a **single binary const**, τ — not a literal in four
-files). On the match: git-add + provision + `write_marker` with **§4a's
-compensating rollback** (ρ — reuses `run_fork`'s rollback core; half-failed
-rollback → distinct `orphan-leftover` naming dir+branch) then prints the worktree
-path. Else (no matcher): **create+provision a serviceable default** by doctrine's
-own conventions (σ — same core, marker omitted; a benign subagent still gets
-`.worktreeinclude` provisioning) and print the path — **DELETED if PHASE-02's
-matcher greened**. Bad-payload refusals fail creation fail-closed (ψ):
-`bad-payload`/`missing-agent-type`/`missing-cwd`/`bad-dir`. Plus a thinner
-`run_stamp_subagent` (`marker --stamp-subagent`, SubagentStart fallback — stamps an
-already-created worktree). **`create-fork` + `marker --stamp-subagent` =
-Hook-mint** class (refused under worker_mode; the legit hook runs at the
-coordination root where worker_mode is false — same rule, not a carve-out). New
-**`install/agents/claude/dispatch-worker.md`** (name pinned to the const, τ).
+RE-SCOPED per the locked PHASE-02/03 pivot (O3-red) + PHASE-05 Option C — see
+`g2-draft.md §4`, ADR-006 D9/D2a, ADR-011 D6, design §4b/§5/§9/§11/§12 (rewritten).
+The WorktreeCreate `create-fork` path is **NOT buildable** (deployed payload carries
+no `agent_type`/path/base) and is **deferred**; the live claude mechanism is
+**SubagentStart-stamp**.
+`run_stamp_subagent` (`marker --stamp-subagent`) is the claude analog of `fork
+--worker`'s **mark step only** — Claude default-creates the worktree, so the verb
+does **no `git worktree add`**. It reads the SubagentStart payload JSON on **stdin**
+(a TRUST BOUNDARY), validates `cwd` (present, under repo, a **linked** worktree) and
+`agent_type == DISPATCH_WORKER_AGENT_TYPE` (a **single binary const**, τ — not a
+literal in four files; the SubagentStart **matcher** is the gate), then
+**provisions** (reuse `run_provision`) + `write_marker`s into `cwd`. Pure
+`classify_stamp -> Stamp | Refuse` (**two-valued — no `PlainCreate` else-branch, σ
+moot**: the matcher scopes the hook to dispatch workers; benign subagents keep
+Claude's default creation). Bad-payload refusals (`missing-cwd`/`bad-dir`/
+`missing-agent-type`, ψ) fail the **stamp, not creation** — SubagentStart is
+read-only, the worker runs regardless, so a refusal means an **unstamped worker**
+fenced by the import belt + worker-mode guard + prompt + the orchestrator IMP-052
+post-spawn abort. **Failure posture (M3 — un-rollback-able):** `provision`/marker
+run inside the read-only hook on a worktree Claude owns, so a mid-`provision`
+failure cannot `git worktree remove` (no ρ rollback — nothing was added) nor abort
+the worker; the verb **reports loudly + exits non-zero**, surfacing the broken fork
+to IMP-052. **`marker --stamp-subagent` = Hook-mint** class (refused under
+worker_mode; the legit first-stamp targets a worktree with **no marker yet** ⇒
+worker_mode false ⇒ allowed — exemption falls out of Option C's positive signal, NOT
+a verb-identity carve-out; see design §5 ⚠ reconciliation). `create-fork` leaves
+this class (deferred). New **`install/agents/claude/dispatch-worker.md`** (name
+pinned to the const, τ).
 """
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-02 green: the O3 spike fixes whether agent_type propagates (else the SubagentStart fallback is primary) and whether a matcher deletes the σ else-branch — this phase implements that disposition." },
-  { id = "EN-2", text = "PHASE-06 green: `run_fork`'s compensating-rollback core exists and is reused by `create-fork` (one cleanup implementation, two callers); `write_marker` from PHASE-05 mints the marker." },
+  { id = "EN-1", text = "PHASE-02 RESOLVED RED: the O3 spike found WorktreeCreate carries no agent_type/path/base (create-fork not buildable, deferred) and selected the matcher-scoped SubagentStart-stamp path — this phase implements that locked disposition (g2-draft §4)." },
+  { id = "EN-2", text = "PHASE-05 green: `write_marker` + the worker-mode guard (Option C positive signal — marker-absent ⇒ allow) exist. PHASE-06 green: `run_provision` (the sole copier) exists and is reused by the stamp verb. No `run_fork` rollback-core reuse (the stamp verb does no `git worktree add`)." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "`create-fork` on `agent_type == DISPATCH_WORKER_AGENT_TYPE` does git-add+provision+write_marker (with the ρ rollback) and prints the worktree path; classify_create is three-valued (a malformed/missing payload → Refuse, NEVER PlainCreate, ψ)." },
-  { id = "EX-2", text = "the else-branch disposition matches PHASE-02: matcher-green → branch DELETED (benign worktrees fall back to Claude default); no-matcher → serviceable-default create+provision (marker omitted), worktree valid+usable+provisioned, no byte-equality with Claude's native layout." },
-  { id = "EX-3", text = "bad-payload refusals fail creation (ψ): bad-payload / missing-agent-type (REFUSES, never silently benign) / missing-cwd / bad-dir, each a distinct non-zero exit; `marker --stamp-subagent` stamps an already-created worktree; both verbs are Hook-mint (refused under worker_mode, exempt for the legit coordination-root hook); clippy zero, just check green." },
+  { id = "EX-1", text = "`marker --stamp-subagent` on a valid payload (cwd a linked worktree + `agent_type == DISPATCH_WORKER_AGENT_TYPE`) provisions + write_markers into cwd; NO `git worktree add`, NO worktree-path printed (it stamps an existing worktree). `classify_stamp` is two-valued (Stamp | Refuse — no PlainCreate, σ moot)." },
+  { id = "EX-2", text = "σ moot — no else-branch: the SubagentStart matcher scopes the hook to dispatch-worker, so benign isolated subagents never hit it and keep Claude's default worktree creation (the serviceable-default replicate path is DELETED)." },
+  { id = "EX-3", text = "bad-payload refusals fail the STAMP, not creation (ψ): missing-cwd / bad-dir (cwd not under repo / not a linked worktree) / missing-agent-type, each a distinct non-zero exit; the worker still runs (read-only event) ⇒ unstamped, fenced by belt+guard+prompt+IMP-052. `marker --stamp-subagent` is Hook-mint (refused under worker_mode; legit first-stamp allowed — no marker yet); clippy zero, just check green." },
 ]
 verification = [
-  { id = "VT-1", expects = "classify_create gate golden: dispatch agent_type → git-add+provision+marker+path-on-stdout; other agent_type → create+provision (σ same core, marker omitted), worktree provisioned+valid+usable, path printed, NO marker; reads agent_type/derives <dir> from the PAYLOAD, not the hook's process cwd (SR-4)." },
-  { id = "VT-2", expects = "create-fork orphan cleanup (ρ — the orphan must be GONE): a forced provision/marker failure after `git worktree add` → non-zero AND worktree+branch reaped (assert `git worktree list`/`git branch` show no leftover); a half-failed rollback → distinct `orphan-leftover` naming dir+branch; a pre-`add` failure leaves no fork." },
-  { id = "VT-3", expects = "bad-payload refusals (ψ, fail-closed): malformed JSON → bad-payload; missing agent_type → missing-agent-type (assert it does NOT silently replicate-default); missing/empty cwd → missing-cwd; underivable/escaping <dir> → bad-dir; each fails creation (no worktree born)." },
-  { id = "VT-4", expects = "dispatch-worker drift test (τ — REDS on mismatch): the installed agent-def `name` and the /dispatch-agent skill's subagent_type both resolve to DISPATCH_WORKER_AGENT_TYPE; a divergent literal reds the test." },
-  { id = "VT-5", expects = "Hook-mint refusal: from a marked fork AND an env-set process, create-fork and marker --stamp-subagent are each refused (drive run()); invoked at the coordination root (worker_mode false) they run — the legit-hook exemption is the same rule, proven." },
+  { id = "VT-1", expects = "`classify_stamp` gate golden: valid payload (cwd linked worktree + dispatch agent_type) → provision + marker written into cwd, NO worktree-path printed; reads cwd/agent_type from the PAYLOAD, not the hook's process cwd (SR-4); no else-branch (σ moot)." },
+  { id = "VT-2", expects = "stamp failure posture (M3 — un-rollback-able): a forced provision/write_marker failure → non-zero exit + loud stderr; assert the verb does NOT `git worktree remove` (Claude owns the worktree — nothing to roll back) and leaves the half-stamped fork for the orchestrator IMP-052 check (no orphan-leftover/ρ case — the verb adds no worktree)." },
+  { id = "VT-3", expects = "bad-payload refusals (ψ — fail the stamp, not creation): missing/empty cwd → missing-cwd; cwd not under repo / not a linked worktree → bad-dir; missing agent_type → missing-agent-type; each a distinct non-zero exit; the worker still runs (unstamped, fenced)." },
+  { id = "VT-4", expects = "dispatch-worker drift test (τ — REDS on mismatch): the installed agent-def `name`, the /dispatch-agent skill's subagent_type, AND the SubagentStart matcher all resolve to DISPATCH_WORKER_AGENT_TYPE; a divergent literal reds the test (a typo silently misses the matcher → unstamped worker)." },
+  { id = "VT-5", expects = "Hook-mint refusal (drive run()): from a marked fork AND an env-set process, `marker --stamp-subagent` is refused; paired positive — invoked against a worktree with NO marker yet (worker_mode false, the legit first-stamp) it runs. The exemption falls out of Option C's positive signal, not a carve-out. (create-fork deferred — no test.)" },
 ]
 specs        = []
 requirements = []
