@@ -96,7 +96,7 @@ pub(crate) const WITHHELD: &[Withhold] = &[
         reason = "classification authority; only the .gitignore parity test reads it so far (SL-029)"
     )
 )]
-pub(crate) const DERIVED_RUNTIME: &[&str] = &[".doctrine/skills/*"];
+pub(crate) const DERIVED_RUNTIME: &[&str] = &[".doctrine/skills/*", ".doctrine/agents/*"];
 
 /// Match options shared by every glob comparison: `**` is the *only* way to cross
 /// a path separator, so a single `*` matches one component (gitignore-ish, and
