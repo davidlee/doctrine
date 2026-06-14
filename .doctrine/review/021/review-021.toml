@@ -1,0 +1,61 @@
+id    = 21
+slug  = "sl-063-reconciliation-inode-gated-codex-auto-detect-vs-design-35"
+title = "SL-063 reconciliation: inode-gated codex auto-detect vs design §3/§5"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-063"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "§3.1 discriminator: expected inode-gated alias-suppression; observed implemented verbatim"
+detail = "resolve_harnesses (boot.rs:391-420) matches design §3.1 exactly: claude detected on .claude/; agents_is_claude_alias = claude && agents.exists() && resolve_target(agents)==resolve_target(CLAUDE.md); codex on .codex/ OR (agents.exists() && !alias). Alias-suppression is gated on claude, so the lone CLAUDE↔AGENTS symlink pair (no .claude/) still wires codex (the adversarial edge, §3.1 'why gated'). Reuses resolve_target — no new helper, no signature change (§4 satisfied)."
+disposition = "aligned"
+response = "Verified against design §3.1/§4: resolve_harnesses (boot.rs:391-420) implements the inode-gated alias-suppression verbatim, gated on claude (preserves the lone-symlink-pair edge), reuses resolve_target, no signature change, no new helper. Aligned."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "§5 + behaviour-preservation: expected six cases green + write seam unchanged; observed all green"
+detail = "resolve_harnesses_auto_detects_by_marker (boot.rs:1684) carries all 5 in-function cases with REAL std::os::unix::fs::symlink fixtures (cases 1-5); case 6 (none→error) is resolve_harnesses_errors_when_none (1744). EX-3/VT-5 behaviour-preservation: import_targets_is_one_file_per_harness (1664) + ensure_boot_import_dedups_same_inode_to_one_write (1805) pass UNCHANGED — proves §3.3 no-double-wire (union [CLAUDE.md,AGENTS.md] dedups by resolved inode to one write) and the one-file rule untouched. Targeted run: 5 passed; just check exit 0; clippy no issues."
+disposition = "aligned"
+response = "All six §5 cases present (5 in resolve_harnesses_auto_detects_by_marker with real symlinks + resolve_harnesses_errors_when_none); behaviour-preservation tests import_targets_is_one_file_per_harness + ensure_boot_import_dedups_same_inode_to_one_write pass unchanged (EX-3/VT-5, §3.3 no-double-wire). 5 passed, just check exit 0, clippy clean. Aligned."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "§3.4 hook wiring: expected codex import-only no SessionStart; observed install_refresh→None"
+detail = "install_refresh (boot.rs:785-789) returns RefreshOutcome::None for Harness::Codex; only Claude installs the SessionStart hook. Additionally detecting codex in a separate-file repo adds an AGENTS.md import write but never reaches hook merge. In THIS repo codex is not detected (symlink alias-suppression), so hook behaviour is provably unchanged. §3.4 reconciled."
+disposition = "aligned"
+response = "install_refresh returns None for Codex (boot.rs:786); codex contributes no SessionStart hook. Detecting codex adds only an AGENTS.md import write, never perturbs hook merge; this repo doesn't detect codex at all. §3.4 reconciled. Aligned."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "doc comment de-stale: expected comment matches §3.1; observed updated"
+detail = "The doc comment above resolve_harnesses (boot.rs:385-390) describes inode-alias detection and the both-wired/symlink-stays-claude split — matches §3.1, not the old coarse !claude rule. import_targets comment (375-377) still correctly states one-file-per-harness. De-staled."
+disposition = "aligned"
+response = "Doc comment above resolve_harnesses (boot.rs:385-390) matches §3.1 inode-alias detection; import_targets comment correct. De-staled. Aligned."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "R-1 mirror: expected skills::resolve_agents shares the latent bug; observed a related-but-distinct gap"
+detail = "skills::resolve_agents (skills.rs:512-522) does NOT carry the identical inode-alias bug — it has no AGENTS.md auto-detect branch at all: explicit --agent wins, else .claude/→[Claude], else error. So the SL-063 separate-file-suppression bug cannot occur there. But it mirrors the detection SHAPE and carries a related gap: a codex-only repo (AGENTS.md, no .claude/) cannot auto-detect under the skills install path and would error. Out of scope by design §7 — disposition follow-up, file backlog, do not widen."
+disposition = "follow-up"
+response = "Confirmed: skills::resolve_agents does not carry the identical bug (no AGENTS.md branch) but diverges — codex-only repo can't auto-detect under the skills path. Out of scope by design §7. Filed ISS-013. Do not widen SL-063."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
