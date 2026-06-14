@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec3c9970372a198d38d0cce68902f"
+memory_key = "mem.pattern.design.product-not-compromised-by-project-local-ops"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Don't compromise doctrine-as-product for project-local operational concerns"
+summary = "Keep shipped doctrine strict/clean; fix transient project-local state out-of-band, never bake leniency into the product"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "42d2b8771f59ab968218e0c2cd27a19624fa3d85"
+ref_name = "refs/heads/main"
+checkout_state_id = "165243e59513b666b67c59b175afbed5787e805115ab3d776dfb6a7ac3d21e4e"
+base_commit = "24663e72784b48da096829738c6328f9dadb060a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
