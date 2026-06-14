@@ -1,0 +1,179 @@
+# Implementation plan for SL-064 - the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) - never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-064"
+
+[specs]                          # empty in v1 - no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Governance amendments and OQ-D fence"
+objective = "Amend ADR-006 for the SL-064 placement and identity refinements, and pin the transitional OQ-D safety fence before new dispatch-sync mechanics are added."
+entrance_criteria = [
+  { id = "EN-1", text = "ADR-012 is accepted and remains the owner of topology, projection, routing, audit ordering, and the D1 tightening." },
+  { id = "EN-2", text = "SL-064 design is locked and identifies OQ-D as a plan-gate, not an ADR-acceptance blocker." },
+  { id = "EN-3", text = "Existing worker-mode guard behavior for fork, import, land, and gc is understood from current code and tests." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ADR-006 carries SL-064 amendments for D2a, D7, D8, and D9 without duplicating ADR-012 topology ownership." },
+  { id = "EX-2", text = "The plan-gate language states that marker absence is a transitional assumption, not positive identity, and that IMP-065 is the real positive-marker close." },
+  { id = "EX-3", text = "The OQ-D fence is expressed as implementation obligations: Orchestrator verbs remain restricted to the trusted orchestrator path, and impersonation tests are mandatory for the new sync surface." },
+]
+verification = [
+  { id = "VA-1", expects = "Compare ADR-006, ADR-012, and SL-064 design: placement and identity refinements are in ADR-006; topology and projection remain in ADR-012." },
+  { id = "VA-2", expects = "Confirm the prose does not claim the D2b fence proves coverage of gc or sync impersonation." },
+  { id = "VT-1", expects = "Existing worker-mode guard tests for fork, import, land, and gc still pass unchanged." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Coordination worktree creation"
+objective = "Add the explicit markerless coordination-worktree creation path that reuses the SL-056 fork/provision machinery while making coordination placement and same-slice collision behavior first-class."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 amendments and OQ-D fence language are complete." },
+  { id = "EN-2", text = "The existing worktree fork, provision, marker, rollback, and worker guard tests are green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine worktree fork` has an explicit coordination mode or equivalent named surface that creates a linked worktree without stamping the worker marker." },
+  { id = "EX-2", text = "Coordination creation provisions through the sole copier, regenerates runtime phase sheets from committed `plan.toml`, and does not copy the coordination/runtime tier." },
+  { id = "EX-3", text = "Concurrent same-slice dispatch creation is refused by branch/ref collision on `dispatch/<slice>` and never silently creates a second coordination branch." },
+  { id = "EX-4", text = "`DOCTRINE_WORKER` leakage and marker-present linked worktrees refuse coordination creation through the same Orchestrator-verb guard." },
+]
+verification = [
+  { id = "VT-1", expects = "E2E worktree tests cover markerless coordination creation, no marker file, provisioned allowlist behavior, and rollback on post-add failure." },
+  { id = "VT-2", expects = "Worker-mode impersonation tests cover marker-present and `DOCTRINE_WORKER=1` attempts to invoke coordination creation." },
+  { id = "VT-3", expects = "A repeated same-slice `dispatch/<slice>` creation attempt refuses before mutating refs or dirs." },
+  { id = "VA-1", expects = "Review the command help and skill prose for no implication that marker absence proves identity." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Projection plumbing and run ledger"
+objective = "Build the working-tree-free git plumbing and committed run-ledger data model that prepare-review and integrate will share."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 establishes a durable `dispatch/<slice>` coordination branch target." },
+  { id = "EN-2", text = "No sync command has yet mutated external refs; this phase stays below the CLI projection surface." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/git.rs` exposes tree-filter, commit-tree, and update-ref CAS primitives through the normative git runner." },
+  { id = "EX-2", text = "The tree-filter primitive uses a throwaway `GIT_INDEX_FILE` and never mutates the live coordination index or working tree." },
+  { id = "EX-3", text = "Ledger structures parse and write `.doctrine/dispatch/<slice>/{journal,boundaries,orthogonal}.toml` with stable TOML field names from the design." },
+  { id = "EX-4", text = "Journal rows carry source OID, target ref, expected old OID, planned new OID, applied new OID, and status." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit or e2e git-plumbing tests prove filter-tree excludes requested paths and leaves the live index byte-for-byte unchanged." },
+  { id = "VT-2", expects = "Commit-tree tests prove a filtered tree can be committed against a supplied parent without checkout." },
+  { id = "VT-3", expects = "CAS tests prove `update-ref <ref> <new> <old>` succeeds only at the expected old OID and reports moved-target refusal data otherwise." },
+  { id = "VT-4", expects = "Ledger round-trip tests cover journal, boundaries, and orthogonal manifests, including absent-file defaults." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Prepare-review sync"
+objective = "Introduce stage-1 `doctrine dispatch sync --prepare-review` to materialize reviewable refs from `dispatch/<slice>` without writing trunk."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 plumbing and ledger structures are available." },
+  { id = "EN-2", text = "The CLI command shape for `dispatch sync` is settled before implementation starts." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine dispatch sync --prepare-review` is an Orchestrator-classed command and is refused under worker-mode signals." },
+  { id = "EX-2", text = "Prepare-review writes journal intent to `dispatch/<slice>` before any external ref mutation." },
+  { id = "EX-3", text = "`review/<slice>` is a squashed filtered projection of the dispatch tip, parented to the trunk base, excluding the run ledger and only journal-verified orthogonal paths." },
+  { id = "EX-4", text = "Claude-arm `phase/<slice>-NN` refs are synthesized from `boundaries.toml`, strip `.doctrine/`, skip empty-code phases, and use CAS creation with old equal to the zero OID." },
+  { id = "EX-5", text = "Prepare-review never writes trunk or `edge`; stale existing `review/*` or `phase/*` refs are reported, never clobbered." },
+]
+verification = [
+  { id = "VT-1", expects = "Black-box e2e test proves default prepare-review creates `review/<slice>` and leaves trunk unchanged." },
+  { id = "VT-2", expects = "Golden diff test proves `review/<slice>` contains the impl bundle, excludes `.doctrine/dispatch/<slice>/**`, and retains impl-bundle authored entities." },
+  { id = "VT-3", expects = "Boundary tests prove synthesized phase refs contain exactly each phase code delta and no `.doctrine/` paths." },
+  { id = "VT-4", expects = "Impersonation tests prove marker-present and `DOCTRINE_WORKER=1` callers cannot run `dispatch sync --prepare-review`." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Integrate and replay sync"
+objective = "Implement stage-2 integration and crash-safe replay against the prepared refs, with CAS guarded target updates and no automatic conflict resolution."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 prepare-review produces journaled review and phase refs." },
+  { id = "EN-2", text = "Audit remains outside the sync verb; this phase assumes an audited prepared-ref set as input." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine dispatch sync --integrate` replays journaled steps from `dispatch/<slice>` using CAS and can run from the parent/root without the coordination worktree present." },
+  { id = "EX-2", text = "A target already equal to `planned_new_oid` is recorded as a verified no-op; a target diverged from both expected and planned OIDs refuses and reports moved target." },
+  { id = "EX-3", text = "Trunk projection is opt-in, fast-forward-only, and expected-tip guarded; default integration leaves trunk untouched." },
+  { id = "EX-4", text = "Optional `edge` projection is isolated to the sync point and never becomes a per-batch re-anchor concern." },
+  { id = "EX-5", text = "Journal status updates after integration are committed back onto `dispatch/<slice>` by plumbing, without checking out or mutating a working tree." },
+]
+verification = [
+  { id = "VT-1", expects = "Crash-matrix tests cover crash after journal planning, crash after ref update before verified status, moved target between plan and apply, replay no-op, and replay refusal on divergence." },
+  { id = "VT-2", expects = "Policy tests prove default config does not write trunk and explicit trunk mode refuses non-fast-forward or moved trunk." },
+  { id = "VT-3", expects = "Parent/root execution test removes the coordination worktree before `--integrate` and proves plumbing-only replay still works." },
+  { id = "VT-4", expects = "Existing dispatch funnel suites remain green unchanged." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Dispatch and worktree skill alignment"
+objective = "Update the source skill corpus so `/dispatch`, its harness arms, and `/worktree` drive the new coordination-worktree and two-stage sync lifecycle."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 and PHASE-05 command behavior is implemented enough for skills to cite real surfaces." },
+  { id = "EN-2", text = "Skill edits are made in `plugins/doctrine/skills/`, not the installed gitignored copies." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`/dispatch` creates or resumes `dispatch/<slice>` in a dedicated coordination worktree before spawning workers, and no longer treats the session `main` tree as the funnel target." },
+  { id = "EX-2", text = "The funnel cadence runs on the coordination worktree; branch-point/re-anchor concern is demoted from per-batch hot path to sync-time target movement handling." },
+  { id = "EX-3", text = "The conclude path runs prepare-review, removes the coordination worktree directory, preserves `dispatch/<slice>`, `review/<slice>`, and `phase/<slice>-NN` refs, and sends audit to the parent/root against prepared refs." },
+  { id = "EX-4", text = "`/dispatch-subprocess` and `/dispatch-agent` describe their arm-specific behavior against `dispatch/<slice>` and the boundary recording needed for stage-1 projection." },
+  { id = "EX-5", text = "`/worktree` documents the coordination creation mode separately from worker and solo modes." },
+]
+verification = [
+  { id = "VA-1", expects = "Read the edited skill sources and confirm every old instruction to audit from or deliver the coordination branch directly is replaced by the ADR-012 two-stage path." },
+  { id = "VA-2", expects = "Confirm source-only edits are under `plugins/doctrine/skills/` and any generated installed copies are left alone unless the install process owns them." },
+  { id = "VT-1", expects = "Skill/asset tests pass, including any embedded asset drift tests for dispatch-worker and installed skill sources." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "End-to-end proof and closure prep"
+objective = "Prove the full SL-064 lifecycle in integration tests and prepare the slice for audit with behavior-preservation evidence."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 through PHASE-06 are complete and individually green." },
+  { id = "EN-2", text = "No unresolved blocker finding remains in the SL-064 or ADR-012 review ledgers." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "An end-to-end dispatch-sync fixture proves the orchestrator writes the dedicated coordination worktree, not the session `main` working tree, during the run." },
+  { id = "EX-2", text = "The fixture leaves reviewable refs for audit, removes the coordination worktree directory at conclude, and preserves branch deliverables until integration." },
+  { id = "EX-3", text = "IMP-041 cleanup ownership is resolved by the new lifecycle; IMP-043 per-batch re-anchor is either closed or explicitly demoted to sync-time target movement." },
+  { id = "EX-4", text = "SL-064 notes capture durable implementation evidence, residual risks, and the IMP-065 positive-marker follow-up." },
+]
+verification = [
+  { id = "VT-1", expects = "Run focused e2e dispatch/worktree/sync tests covering the full prepare-review -> audit gate -> integrate lifecycle." },
+  { id = "VT-2", expects = "Run existing worktree and dispatch-related suites unchanged as the behavior-preservation gate." },
+  { id = "VT-3", expects = "Run `cargo clippy` with the repo's normal lint profile and `just gate` before closure." },
+  { id = "VA-1", expects = "Confirm the final evidence packet is ready for `/audit` and that slice status can advance from ready/started to audit after execution." },
+]
+specs             = []
+requirements      = []
