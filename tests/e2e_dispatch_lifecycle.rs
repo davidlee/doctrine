@@ -253,7 +253,10 @@ fn full_lifecycle_coordinate_to_integrate_preserves_main_and_deliverables() {
         root,
         &["worktree", "remove", "--force", coord.to_str().unwrap()],
     );
-    assert!(!coord.exists(), "coordination worktree directory removed at conclude");
+    assert!(
+        !coord.exists(),
+        "coordination worktree directory removed at conclude"
+    );
     assert!(
         ref_exists(root, COORD_BRANCH),
         "dispatch/064 deliverable preserved past worktree removal"
