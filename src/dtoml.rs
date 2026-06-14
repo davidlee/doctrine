@@ -20,18 +20,9 @@ pub(crate) struct DoctrineToml {
     /// The `[conduct]` table — LIVE (consumed by [`crate::conduct::parse`]).
     #[serde(default)]
     pub(crate) conduct: crate::conduct::ConductConfig,
-    /// The `[verification]` table — consumed only by the PHASE-04 verifier, so
-    /// dead in the bins/lib build until then (the sibling fields/module are live,
-    /// so this is a per-field expect, not a blanket module suppression).
+    /// The `[verification]` table — consumed by the verifier + the record handler
+    /// (SL-057 PHASE-05) through the shared `coverage_store::load_config` reader.
     #[serde(default)]
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "verification config (SL-057 PHASE-02) is read here but \
-                      consumed only at PHASE-04 — dead in the bins/lib build until then"
-        )
-    )]
     pub(crate) verification: crate::verify::VerificationConfig,
 }
 

@@ -28,13 +28,6 @@ use crate::requirement::{CoverageStatus, ReqStatus};
 /// **agent** (`VA`), or by **human** (`VH`). Membership is validated at the coverage
 /// layer (see [`mode_is_valid`]), not by the key's type — `mode` stays a `String`
 /// so the `rec` ledger keeps round-tripping arbitrary mode tokens verbatim.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by mode_is_valid, dead in bins/lib until PHASE-05 wires the CLI (SL-057)"
-    )
-)]
 const MODES: &[&str] = &["VT", "VA", "VH"];
 
 /// The stable 4-tuple identity/citation key of a coverage entry (design §5.3 F3):
@@ -116,26 +109,12 @@ pub(crate) fn parse(s: &str) -> Result<CoverageFile> {
 /// Render a [`CoverageFile`] to its `coverage.toml` body. Serde auto-escapes; no
 /// hand-splicing (`crate::tomlfmt::toml_string` exists for the hand-splice case,
 /// unneeded here).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "coverage_store::save consumer is dead in bins/lib until PHASE-05 wires the CLI (SL-057)"
-    )
-)]
 pub(crate) fn render(f: &CoverageFile) -> Result<String> {
     Ok(toml::to_string(f)?)
 }
 
 /// Whether `mode ∈ {VT, VA, VH}` — the coverage-layer membership rule that the
 /// `String`-typed [`CoverageKey::mode`] does not enforce structurally.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "mode-membership validator dead in bins/lib until PHASE-05 wires the CLI (SL-057)"
-    )
-)]
 pub(crate) fn mode_is_valid(mode: &str) -> bool {
     MODES.contains(&mode)
 }
@@ -143,13 +122,6 @@ pub(crate) fn mode_is_valid(mode: &str) -> bool {
 /// The within-file no-clobber fold: if an entry with the same 4-tuple
 /// [`CoverageKey`] already exists, REPLACE it in place (latest payload wins);
 /// otherwise APPEND. Pure over the in-memory file — no disk.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "coverage_store::record consumer is dead in bins/lib until PHASE-05 wires the CLI (SL-057)"
-    )
-)]
 pub(crate) fn upsert(file: &mut CoverageFile, entry: CoverageEntry) {
     if let Some(existing) = file.entry.iter_mut().find(|e| e.key == entry.key) {
         *existing = entry;
@@ -450,13 +422,6 @@ impl TryFrom<String> for MatchSource {
 /// The outcome of (attempting to) run a VT-check — produced by the shell, fed to
 /// [`derive_status`]. In-memory only (NOT persisted): NO serde derive.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "wired at PHASE-04 verifier (SL-057) — the shell that runs a check and folds its RunOutcome"
-    )
-)]
 pub(crate) enum RunOutcome {
     /// The check could not be obtained/run at all (unresolved alias, spawn
     /// failure, timeout — the F-VII framing). Yields [`CoverageStatus::Blocked`].
@@ -474,13 +439,6 @@ pub(crate) enum RunOutcome {
 /// satisfied matcher (`Some(true)`) ⇒ `Verified`; a non-zero exit OR a failed
 /// matcher (`Some(false)`) ⇒ `Failed`. INV-3: `Unobtainable` NEVER yields
 /// `Verified`.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "wired at PHASE-04 verifier (SL-057) — classifies a RunOutcome into observed status"
-    )
-)]
 pub(crate) fn derive_status(outcome: &RunOutcome) -> CoverageStatus {
     match outcome {
         RunOutcome::Unobtainable => CoverageStatus::Blocked,
@@ -501,13 +459,6 @@ pub(crate) fn derive_status(outcome: &RunOutcome) -> CoverageStatus {
 /// match LITERALLY and the empty pattern is `Some(true)`, NEVER `None`. Regex
 /// mode (`regex == true`) compiles under `regex_lite`: a parse error ⇒ `None`,
 /// otherwise `Some(re.is_match(haystack))` (the empty pattern matches anything).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "wired at PHASE-04 verifier (SL-057) — evaluates a matcher over a run's output"
-    )
-)]
 pub(crate) fn evaluate_matcher(pattern: &str, regex: bool, haystack: &str) -> Option<bool> {
     if regex {
         match regex_lite::Regex::new(pattern) {
@@ -522,13 +473,6 @@ pub(crate) fn evaluate_matcher(pattern: &str, regex: bool, haystack: &str) -> Op
 /// Why [`valid`] rejected a [`VtCheck`] — one variant per reject reason so callers
 /// assert the REASON, not merely `is_err()`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "valid's reject type — consumer (record) dead in bins/lib until PHASE-05 wires the CLI (SL-057)"
-    )
-)]
 pub(crate) enum ValidError {
     /// (a) Both `alias` and `command` are set — they are mutually exclusive.
     AliasCommandConflict,
@@ -549,13 +493,6 @@ pub(crate) enum ValidError {
 /// (c), and regex parseability (d). Does NOT resolve the base (does the alias
 /// exist? is a default command present?) — that is `verify::resolve`'s job in
 /// PHASE-02 (design F-1); this fold never reaches for config.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "coverage_store::record consumer is dead in bins/lib until PHASE-05 wires the CLI (SL-057)"
-    )
-)]
 pub(crate) fn valid(check: &VtCheck) -> Result<(), ValidError> {
     // (a) alias/command XOR.
     if check.alias.is_some() && check.command.is_some() {
