@@ -529,7 +529,9 @@ pub(crate) fn git_text(root: &Path, args: &[&str]) -> Result<String, CaptureErro
 }
 
 /// Run a git command that may legitimately fail; `None` on non-zero exit.
-fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, CaptureError> {
+/// `pub(crate)` for the worktree fork verb's "is `<B>` a commit?" probe
+/// (`rev-parse --verify --quiet <B>^{commit}`, SL-056 PHASE-06).
+pub(crate) fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, CaptureError> {
     let output = run_git(root, args)?;
     if !output.status.success() {
         return Ok(None);
@@ -537,6 +539,67 @@ fn git_opt(root: &Path, args: &[&str]) -> Result<Option<String>, CaptureError> {
     let text = String::from_utf8(output.stdout)
         .map_err(|_ignored| CaptureError::Git(format!("non-utf8 output: {}", args.join(" "))))?;
     Ok(Some(text.trim().to_string()))
+}
+
+/// Apply a unified-diff `patch` into the index via `git apply --3way --index`,
+/// NON-committing (SL-056 PHASE-07 import: the orchestrator commits separately,
+/// ADR-006 D7). The patch is streamed on stdin; a non-zero exit (a real conflict
+/// or malformed patch) errors. Invoked from the coordination root so the index it
+/// writes is the coordination index. Impure shell only.
+pub(crate) fn git_apply_index(root: &Path, patch: &str) -> Result<(), CaptureError> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(NORMATIVE_FLAGS)
+        .args(["apply", "--3way", "--index"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| CaptureError::Git(format!("spawn git apply: {e}")))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| CaptureError::Git("git apply: no stdin pipe".to_owned()))?
+        .write_all(patch.as_bytes())
+        .map_err(|e| CaptureError::Git(format!("git apply: write stdin: {e}")))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| CaptureError::Git(format!("git apply: wait: {e}")))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(CaptureError::Git(format!(
+            "apply --3way --index: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// Run `git cherry <upstream> <head>` and return its `± <sha>` lines verbatim
+/// (SL-056 PHASE-09 gc oracle, design §8.1 patch-id leg). Each line is `- <sha>`
+/// (an equivalent patch is already upstream) or `+ <sha>` (a commit whose patch is
+/// NOT upstream). Errors on non-zero exit (e.g. an unresolvable ref). Impure shell;
+/// the gc classifier reads the prefixes as facts, never the other way round.
+pub(crate) fn git_cherry(
+    root: &Path,
+    upstream: &str,
+    head: &str,
+) -> Result<Vec<String>, CaptureError> {
+    let text = git_text(root, &["cherry", upstream, head])?;
+    Ok(text.lines().map(str::to_owned).collect())
+}
+
+/// True iff `git <args>` exits 0 (the exit-status-only seam — SL-056 PHASE-09 gc
+/// oracle ancestry leg, `merge-base --is-ancestor <a> <b>`, which prints nothing
+/// and signals purely via exit code). [`git_opt`] cannot distinguish exit-0-empty
+/// from a real failure cleanly here, so this returns the boolean exit directly. A
+/// spawn failure still errors (a missing git binary is not "false"). Impure shell.
+pub(crate) fn git_status_ok(root: &Path, args: &[&str]) -> Result<bool, CaptureError> {
+    Ok(run_git(root, args)?.status.success())
 }
 
 /// Resolve trunk's commit-ish via the peeled ladder (ADR-006 D3): an explicit

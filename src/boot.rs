@@ -524,11 +524,13 @@ fn boot_command(exec: &Path) -> String {
     format!("{} boot", exec.display())
 }
 
-/// The canonical `SessionStart` entry doctrine writes.
-fn desired_entry(command: &str) -> Value {
+/// The canonical hook entry doctrine writes for `spec` — the matcher is the
+/// spec's own (not hardcoded), so a `SubagentStart` spec emits its agent-type
+/// matcher while a `SessionStart` spec emits `startup|clear`.
+fn desired_entry(spec: &HookSpec) -> Value {
     serde_json::json!({
-        "matcher": SESSION_MATCHER,
-        "hooks": [ { "type": "command", "command": command } ],
+        "matcher": spec.matcher,
+        "hooks": [ { "type": "command", "command": spec.command } ],
     })
 }
 
@@ -567,6 +569,25 @@ fn is_doctrine_sync_command(cmd: &str) -> bool {
     Path::new(program.trim_end()).file_name() == Some(OsStr::new("doctrine"))
 }
 
+/// The `SubagentStart` stamp hook command for `exec`:
+/// `<exec> worktree marker --stamp-subagent` (SL-056 PHASE-10). Multi-arg, so
+/// ownership matches by suffix-strip (see `is_doctrine_stamp_command`).
+fn stamp_subagent_command(exec: &Path) -> String {
+    format!("{} worktree marker --stamp-subagent", exec.display())
+}
+
+/// Whether `cmd` is doctrine's own `worktree marker --stamp-subagent` hook.
+/// Strip the fixed ` worktree marker --stamp-subagent` suffix and check the
+/// remaining program's file name is `doctrine`. Disjoint from the boot/sync
+/// predicates (neither owns the other's command), so the `SubagentStart` entry
+/// never clobbers the `SessionStart` ones.
+fn is_doctrine_stamp_command(cmd: &str) -> bool {
+    let Some(program) = cmd.trim().strip_suffix(" worktree marker --stamp-subagent") else {
+        return false;
+    };
+    Path::new(program.trim_end()).file_name() == Some(OsStr::new("doctrine"))
+}
+
 /// A `SessionStart` hook doctrine owns: its canonical `command` plus the predicate
 /// that recognizes a prior (possibly stale) copy in foreign settings JSON. The
 /// merge core (`plan_hook`/`find_owned`/`fallback_for`/`install_claude_hook`) is
@@ -575,14 +596,20 @@ fn is_doctrine_sync_command(cmd: &str) -> bool {
 pub(crate) struct HookSpec {
     command: String,
     is_ours: fn(&str) -> bool,
+    /// The Claude hooks event this spec wires under (`hooks.<event>`).
+    event: &'static str,
+    /// The matcher token for this spec's entry.
+    matcher: &'static str,
 }
 
 impl HookSpec {
-    /// The `<exec> boot` hook (SL-011).
+    /// The `<exec> boot` hook (SL-011) — a `SessionStart` entry.
     fn boot(exec: &Path) -> Self {
         Self {
             command: boot_command(exec),
             is_ours: is_doctrine_boot_command,
+            event: "SessionStart",
+            matcher: SESSION_MATCHER,
         }
     }
 
@@ -591,6 +618,21 @@ impl HookSpec {
         Self {
             command: sync_command(exec),
             is_ours: is_doctrine_sync_command,
+            event: "SessionStart",
+            matcher: SESSION_MATCHER,
+        }
+    }
+
+    /// The `<exec> worktree marker --stamp-subagent` hook (SL-056 PHASE-11) — a
+    /// `SubagentStart` entry, matcher-scoped to the dispatch-worker agent type.
+    /// The matcher is sourced from `crate::worktree::DISPATCH_WORKER_AGENT_TYPE`,
+    /// never re-spelled (a drift test pins the equality).
+    pub(crate) fn stamp_subagent(exec: &Path) -> Self {
+        Self {
+            command: stamp_subagent_command(exec),
+            is_ours: is_doctrine_stamp_command,
+            event: "SubagentStart",
+            matcher: crate::worktree::DISPATCH_WORKER_AGENT_TYPE,
         }
     }
 }
@@ -626,20 +668,21 @@ fn find_owned(arr: &[Value], desired_cmd: &str, is_ours: fn(&str) -> bool) -> Ow
     Owned::Absent
 }
 
-/// Navigate (creating as needed) to the `hooks.SessionStart` array. Returns
-/// `None` — caller treats as `PrintedFallback` — when `hooks` or `SessionStart`
-/// exists but is the wrong JSON type, so a malformed-but-valid structure is never
-/// clobbered.
-fn session_start_array_mut(value: &mut Value) -> Option<&mut Vec<Value>> {
+/// Navigate (creating as needed) to the `hooks.<event>` array. Returns `None` —
+/// caller treats as `PrintedFallback` — when `hooks` or `<event>` exists but is
+/// the wrong JSON type, so a malformed-but-valid structure is never clobbered.
+/// Generic over the event so the same merge core wires `SessionStart` (boot/sync)
+/// and `SubagentStart` (stamp) without branching.
+fn hook_array_mut<'a>(value: &'a mut Value, event: &str) -> Option<&'a mut Vec<Value>> {
     let obj = value.as_object_mut()?;
     let hooks = obj
         .entry("hooks")
         .or_insert_with(|| Value::Object(Map::new()));
-    let sessions = hooks
+    let entries = hooks
         .as_object_mut()?
-        .entry("SessionStart")
+        .entry(event)
         .or_insert_with(|| Value::Array(Vec::new()));
-    sessions.as_array_mut()
+    entries.as_array_mut()
 }
 
 fn set_command(arr: &mut [Value], ei: usize, hi: usize, command: &str) -> Option<()> {
@@ -676,7 +719,7 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
             Err(_) => return printed_fallback(),
         },
     };
-    let Some(arr) = session_start_array_mut(&mut value) else {
+    let Some(arr) = hook_array_mut(&mut value, spec.event) else {
         return printed_fallback();
     };
     let outcome = match find_owned(arr, &command, spec.is_ours) {
@@ -693,7 +736,7 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
             RefreshOutcome::Refreshed(command.clone())
         }
         Owned::Absent => {
-            arr.push(desired_entry(&command));
+            arr.push(desired_entry(spec));
             RefreshOutcome::Wired(command.clone())
         }
     };
@@ -709,7 +752,7 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
 /// The snippet printed when the settings file can't be merged automatically —
 /// generic over a `HookSpec`.
 pub(crate) fn fallback_for(spec: &HookSpec) -> String {
-    let entry = desired_entry(&spec.command);
+    let entry = desired_entry(spec);
     serde_json::to_string_pretty(&entry).unwrap_or_else(|_| spec.command.clone())
 }
 
@@ -1912,6 +1955,127 @@ mod tests {
             !root.join(SETTINGS_REL).exists(),
             "dry-run must not write settings"
         );
+    }
+
+    /// Entries under an arbitrary `hooks.<event>` key (`None` if absent).
+    fn event_entries(json: &str, event: &str) -> Option<Vec<Value>> {
+        let value: Value = serde_json::from_str(json).expect("valid JSON");
+        value
+            .get("hooks")
+            .and_then(|h| h.get(event))
+            .and_then(Value::as_array)
+            .cloned()
+    }
+
+    // VT-3: the stamp hook merges into a settings file that already carries
+    // unrelated SessionStart hooks — the SessionStart entries are untouched and a
+    // NEW SubagentStart array with the matcher-scoped entry is appended.
+    // Reinstall is idempotent (no dup).
+    #[test]
+    fn install_claude_stamp_hook_appends_subagentstart_leaves_sessionstart_intact() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+
+        // Pre-existing SessionStart hooks (boot + a foreign hook).
+        install_claude_hook(root, &HookSpec::boot(exec), false).unwrap();
+        let settings_path = root.join(SETTINGS_REL);
+        let seeded = fs::read_to_string(&settings_path).unwrap();
+        let mut value: Value = serde_json::from_str(&seeded).unwrap();
+        hook_array_mut(&mut value, "SessionStart")
+            .unwrap()
+            .push(serde_json::json!({
+                "matcher": "startup",
+                "hooks": [ { "type": "command", "command": "/usr/bin/foreign hook" } ],
+            }));
+        fs::write(
+            &settings_path,
+            serde_json::to_string_pretty(&value).unwrap(),
+        )
+        .unwrap();
+
+        // Wire the stamp hook.
+        let out = install_claude_hook(root, &HookSpec::stamp_subagent(exec), false).unwrap();
+        assert!(matches!(out, RefreshOutcome::Wired(_)), "stamp wired");
+
+        let json = fs::read_to_string(&settings_path).unwrap();
+
+        // SessionStart entries untouched: boot + the foreign hook still present.
+        let session = event_entries(&json, "SessionStart").expect("SessionStart kept");
+        let session_cmds: Vec<String> = session
+            .iter()
+            .filter_map(|e| e.get("hooks").and_then(Value::as_array))
+            .flatten()
+            .filter_map(|h| h.get("command").and_then(Value::as_str))
+            .map(str::to_string)
+            .collect();
+        assert_eq!(
+            session_cmds,
+            vec![
+                "/abs/doctrine boot".to_string(),
+                "/usr/bin/foreign hook".to_string(),
+            ],
+            "SessionStart untouched"
+        );
+
+        // A new SubagentStart array carries the matcher-scoped stamp entry.
+        let sub = event_entries(&json, "SubagentStart").expect("SubagentStart created");
+        assert_eq!(sub.len(), 1, "one SubagentStart entry");
+        assert_eq!(
+            sub[0].get("matcher").and_then(Value::as_str),
+            Some(crate::worktree::DISPATCH_WORKER_AGENT_TYPE),
+            "matcher-scoped to the dispatch-worker agent type"
+        );
+        let sub_cmd = sub[0]
+            .get("hooks")
+            .and_then(Value::as_array)
+            .and_then(|a| a.first())
+            .and_then(|h| h.get("command"))
+            .and_then(Value::as_str);
+        assert_eq!(
+            sub_cmd,
+            Some("/abs/doctrine worktree marker --stamp-subagent")
+        );
+
+        // Reinstall is idempotent — no duplicate SubagentStart entry.
+        let again = install_claude_hook(root, &HookSpec::stamp_subagent(exec), false).unwrap();
+        assert!(matches!(again, RefreshOutcome::None), "reinstall no-op");
+        let json = fs::read_to_string(&settings_path).unwrap();
+        assert_eq!(
+            event_entries(&json, "SubagentStart").unwrap().len(),
+            1,
+            "no duplicate on reinstall"
+        );
+    }
+
+    // Drift pin: the stamp matcher is the worktree dispatch-worker agent type,
+    // not a re-spelled literal — if the const moves, this fails loudly.
+    #[test]
+    fn stamp_subagent_matcher_tracks_worktree_const() {
+        let spec = HookSpec::stamp_subagent(Path::new("/abs/doctrine"));
+        assert_eq!(spec.matcher, crate::worktree::DISPATCH_WORKER_AGENT_TYPE);
+        assert_eq!(spec.event, "SubagentStart");
+    }
+
+    // The three ownership predicates are mutually disjoint — none owns another's
+    // command, so the three entries never clobber one another.
+    #[test]
+    fn stamp_ownership_is_disjoint_from_boot_and_sync() {
+        assert!(is_doctrine_stamp_command(
+            "/abs/doctrine worktree marker --stamp-subagent"
+        ));
+        assert!(!is_doctrine_stamp_command("/abs/doctrine boot"));
+        assert!(!is_doctrine_stamp_command("/abs/doctrine memory sync"));
+        assert!(!is_doctrine_boot_command(
+            "/abs/doctrine worktree marker --stamp-subagent"
+        ));
+        assert!(!is_doctrine_sync_command(
+            "/abs/doctrine worktree marker --stamp-subagent"
+        ));
+        // a foreign stamp-shaped command is not ours.
+        assert!(!is_doctrine_stamp_command(
+            "/usr/bin/tool worktree marker --stamp-subagent"
+        ));
     }
 
     // --- T4: `wire` orchestration (integration, tempdir). Exec is injected with

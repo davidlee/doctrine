@@ -271,6 +271,94 @@ pub(crate) fn matches(base: &str, head: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Worker identity — disk marker primary (SL-056 §3, pure core)
+// ---------------------------------------------------------------------------
+
+/// Which signal(s) put the process in worker mode, if any. The single source for
+/// BOTH the `worktree status` human line AND the `--assert` exit — no
+/// `classify_writable` twin (design §3, anti-parallel-implementation).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Cause {
+    /// Neither signal — writes allowed (direct/solo writer).
+    None,
+    /// Marker present in a linked worktree (the PRIMARY, harness-agnostic signal).
+    Marker,
+    /// `DOCTRINE_WORKER` env set (the codex/pi worker-on-main optimisation).
+    Env,
+    /// Both legs trip at once.
+    Both,
+}
+
+impl Cause {
+    /// The `signal: <token>` word for the human status line / refusals.
+    fn token(self) -> &'static str {
+        match self {
+            Cause::None => "none",
+            Cause::Marker => "marker",
+            Cause::Env => "env",
+            Cause::Both => "both",
+        }
+    }
+}
+
+/// The resolved worker-mode verdict: whether writes are refused, the cause, and
+/// the `is_linked` context the dual-cause message needs. Minimal pure data —
+/// derived by [`describe_mode`] and consumed by both the human line and the
+/// `--assert` exit so the two can never disagree (design §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct StatusLine {
+    /// True iff a write-classed verb would be refused.
+    pub(crate) refused: bool,
+    /// Which signal(s) caused the refusal (`None` when allowed).
+    pub(crate) cause: Cause,
+    /// Whether the resolved root is a linked worktree (for the dual-cause split).
+    pub(crate) is_linked: bool,
+}
+
+impl StatusLine {
+    /// A stale/stray marker: the env leg is NOT involved, the marker is present,
+    /// but it sits in a linked worktree without env — the `--assert` stale-marker
+    /// case the operator must clear. Derived from the SAME state the human line
+    /// reads (design §3): `cause == Marker` already encodes "marker-only, linked".
+    pub(crate) fn is_stale_marker(self) -> bool {
+        self.cause == Cause::Marker
+    }
+
+    /// The env leg tripped on a tree that is NOT a linked worktree — the
+    /// dual-cause hazard (a worker dropped on the coordination root, or a leaked
+    /// env). Distinct from a marker fork; carries the named dual-cause message.
+    pub(crate) fn is_env_on_nonlinked(self) -> bool {
+        matches!(self.cause, Cause::Env | Cause::Both) && !self.is_linked
+    }
+
+    /// The `signal: <token>` word for the human status line and refusals.
+    pub(crate) fn cause_token(self) -> &'static str {
+        self.cause.token()
+    }
+}
+
+/// Resolve worker mode from the three primitive signals (design §3 truth table).
+/// PURE — the caller's shell supplies `is_linked` (git), `marker_present` (disk),
+/// and `env_set` (env). The marker leg trips ONLY in a linked worktree (a marker
+/// on the primary tree is inert — mode, not location, decides, but the marker's
+/// reach is the linked fork). The env leg trips anywhere (the worker-on-main
+/// catch).
+pub(crate) fn describe_mode(is_linked: bool, marker_present: bool, env_set: bool) -> StatusLine {
+    let marker_leg = is_linked && marker_present;
+    let cause = match (marker_leg, env_set) {
+        (true, true) => Cause::Both,
+        (true, false) => Cause::Marker,
+        (false, true) => Cause::Env,
+        (false, false) => Cause::None,
+    };
+    StatusLine {
+        refused: marker_leg || env_set,
+        cause,
+        is_linked,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Impure shell — provision / check-allowlist
 // ---------------------------------------------------------------------------
 
@@ -508,6 +596,1384 @@ pub(crate) fn run_branch_point_check(
 }
 
 // ---------------------------------------------------------------------------
+// import — orchestrator-owned delta import (SL-056 PHASE-07, design §5)
+// ---------------------------------------------------------------------------
+
+/// The two coordination/runtime tier prefixes the import belt rejects. The
+/// `.claude/` tier is wholly gitignored, so its leg only ever catches a
+/// *force-added* path — parity with `.doctrine/`, not a special case (PHASE-07).
+const DOCTRINE_PREFIX: &str = ".doctrine/";
+const CLAUDE_PREFIX: &str = ".claude/";
+
+/// Verdict of the PURE import classifier: apply the delta, or fail closed with a
+/// distinct named refusal token. The shell ([`run_import`]) gathers the FACTS and
+/// acts on this verdict — never the other way round (ADR-001 leaf, gather →
+/// pure-classify → act).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Apply {
+    /// All preconds + the belt hold ⇒ the orchestrator may `git apply` the delta.
+    Ok,
+}
+
+/// The exhaustive v1 import refusal set (stationary-head case only). Each fails
+/// closed with a distinct token; never auto-merge / auto-resolve.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Refusal {
+    /// Coordination `HEAD != B` — the orchestrator's base moved (re-dispatch).
+    HeadMoved,
+    /// Tracked tree dirty (`git status --porcelain --untracked-files=no` nonempty).
+    TreeUnclean,
+    /// `<fork>` carries more than one non-merge commit (`S^ != B`).
+    MultiCommit,
+    /// The `B..<fork>` delta touches a `.doctrine/` (coordination/runtime) path.
+    DoctrineTouch,
+    /// The `B..<fork>` delta force-touches a `.claude/` path.
+    ClaudeTouch,
+}
+
+impl Refusal {
+    /// The distinct named token each refusal fails closed with (the property the
+    /// VT-2 goldens assert, not a proxy).
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            Refusal::HeadMoved => "head-moved",
+            Refusal::TreeUnclean => "tree-unclean",
+            Refusal::MultiCommit => "multi-commit",
+            Refusal::DoctrineTouch => "doctrine-touch",
+            Refusal::ClaudeTouch => "claude-touch",
+        }
+    }
+}
+
+/// PURE import classifier (no git / disk / env — ADR-001 leaf, CLAUDE.md
+/// pure/imperative split). Takes the gathered FACTS and returns the verdict:
+///
+/// * `head_at_base` — coordination `HEAD == B` (ref-equality, resolved in the shell)
+/// * `tree_clean`   — tracked tree clean (`--untracked-files=no` porcelain empty)
+/// * `single_commit`— `<fork>^ == B` (exactly one non-merge commit S on the fork)
+/// * `delta_paths`  — the `B..<fork>` name-only, TRACKED-files-only diff paths
+///
+/// Precond order matches the funnel: HEAD → tree → single-commit → belt. The belt
+/// prefix-matching lives HERE (pure) — `.doctrine/` then `.claude/`, prefix-match
+/// both tiers with no special-casing.
+pub(crate) fn classify_import(
+    head_at_base: bool,
+    tree_clean: bool,
+    single_commit: bool,
+    delta_paths: &[String],
+) -> Result<Apply, Refusal> {
+    if !head_at_base {
+        return Err(Refusal::HeadMoved);
+    }
+    if !tree_clean {
+        return Err(Refusal::TreeUnclean);
+    }
+    if !single_commit {
+        return Err(Refusal::MultiCommit);
+    }
+    for path in delta_paths {
+        if path.starts_with(DOCTRINE_PREFIX) {
+            return Err(Refusal::DoctrineTouch);
+        }
+        if path.starts_with(CLAUDE_PREFIX) {
+            return Err(Refusal::ClaudeTouch);
+        }
+    }
+    Ok(Apply::Ok)
+}
+
+/// `doctrine worktree import --base <B> --fork <branch>` — mechanizes the dispatch
+/// funnel's deterministic stationary-head import as ONE fail-closed verb (design
+/// §5, ADR-006 D7: import ≠ commit). Runs at the coordination root.
+///
+/// Gather → pure-classify → act, patterned after [`run_branch_point_check`]:
+/// 1. gather the FACTS (HEAD==B via [`resolve_commit`]/[`matches`]; tracked-tree
+///    cleanliness; `<fork>^ == B`; the `B..<fork>` name-only tracked diff),
+/// 2. [`classify_import`] returns the verdict (the belt lives in the pure core),
+/// 3. on `Ok`, `git apply --3way --index` the SAME name-only diff NON-committing —
+///    the orchestrator commits separately. Under both preconds the patch applies
+///    onto the exact tree it was cut from ⇒ cannot conflict (apply-conflict is NOT
+///    a v1 refusal). NO runtime receipt is stamped — landed-ness is derived from
+///    durable git later, never a pre-commit gitignored flag that would survive a
+///    crash and lie "landed".
+///
+/// Gather the tracked-tree cleanliness fact: `git status --porcelain
+/// --untracked-files=no` empty ⇒ clean. The SINGLE tree-clean gather shared by
+/// both [`run_import`] and [`run_land`] — untracked scratch is deliberately
+/// excluded (the `--untracked-files=no` scoping), so neither verb trips on
+/// ephemeral files (SL-056, no parallel impl / EN-1). Impure (the git read).
+fn gather_tree_clean(root: &Path) -> anyhow::Result<bool> {
+    let status = git::git_text(root, &["status", "--porcelain", "--untracked-files=no"])?;
+    Ok(status.is_empty())
+}
+
+/// Orchestrator-classed; refused under worker-mode by `worker_guard` (the verb is
+/// the orchestrator's, never a worker's).
+pub(crate) fn run_import(path: Option<PathBuf>, base: &str, fork: &str) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+
+    // --- gather: precond 1 — HEAD == B (ref-equality on resolved shas) ---
+    let base_sha = resolve_commit(&root, base)?;
+    let head_sha = resolve_commit(&root, "HEAD")?;
+    let head_at_base = matches(&base_sha, &head_sha);
+
+    // --- gather: precond 1b — tracked tree clean (untracked deliberately excluded) ---
+    let tree_clean = gather_tree_clean(&root)?;
+
+    // --- gather: precond 2 — S^ == B (exactly one non-merge commit on the fork) ---
+    // `<fork>^` = S's first parent, peeled to a commit. A merge or multi-commit
+    // history (or a fork that does not resolve) ⇒ parent != B ⇒ not single-commit,
+    // never a panic — `git_opt` yields None on a non-resolving ref.
+    let fork_parent = git::git_opt(
+        &root,
+        &["rev-parse", "--verify", &format!("{fork}^^{{commit}}")],
+    )?;
+    let single_commit = fork_parent
+        .as_deref()
+        .is_some_and(|p| matches(p, &base_sha));
+
+    // --- gather: belt input — B..<fork> name-only, TRACKED-files-only diff ---
+    // Two hardening flags, both gating the belt's malice-containment (SL-056 §7):
+    //   * `-c core.quotePath=false` — git's default quotePath=true C-quotes any
+    //     path with a non-ASCII byte (".doctrine/\303\251…"), so the pure
+    //     prefix-match `starts_with(".doctrine/")` would MISS and the governance
+    //     file would ride back. Pin it off so the real path is emitted verbatim.
+    //   * `--no-renames` — default rename detection collapses a governance
+    //     DELETION paired with a same-content add elsewhere into a single
+    //     destination line, hiding the `.doctrine/` SOURCE from the belt. Off ⇒
+    //     both legs (delete + add) appear as themselves.
+    let diff = git::git_text(
+        &root,
+        &[
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "--name-only",
+            "--no-renames",
+            &format!("{base}..{fork}"),
+        ],
+    )?;
+    let delta_paths: Vec<String> = diff.lines().map(str::to_owned).collect();
+
+    // --- pure classify ---
+    match classify_import(head_at_base, tree_clean, single_commit, &delta_paths) {
+        Err(refusal) => bail!("import-refused: {}", refusal.token()),
+        Ok(Apply::Ok) => {}
+    }
+
+    // --- act: apply the SAME diff into the index, NON-committing (ADR-006 D7) ---
+    // `git apply --3way --index` writes the index from the coordination root; under
+    // both preconds the patch applies onto the exact tree it was cut from.
+    // `--no-renames` keeps the apply view consistent with the belt's: a rename
+    // is two real legs (delete + add), which `git apply` handles directly (a
+    // pure-rename header carries no hunk for apply to act on).
+    let patch = git::git_text(&root, &["diff", "--no-renames", &format!("{base}..{fork}")])?;
+    git::git_apply_index(&root, &patch)
+        .with_context(|| format!("git apply --3way --index {base}..{fork}"))?;
+
+    writeln!(
+        io::stdout(),
+        "imported {base}..{fork}: delta staged (uncommitted)"
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// land — solo non-squash coordination merge (SL-056 PHASE-08, design §6)
+// ---------------------------------------------------------------------------
+
+/// Verdict of the PURE land classifier: the preconds hold ⇒ the shell may run the
+/// `--no-ff` merge. Mirror of [`Apply`] for the import verb.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Merge {
+    /// All four preconds hold ⇒ the shell drives `git merge --no-ff <fork>`.
+    Ok,
+}
+
+/// The exhaustive `land` refusal set (design §6) — EXACTLY these 7, each a
+/// distinct named token. The 4 PRECOND refusals are returned by the pure
+/// [`classify_land`]; the 3 merge-time refusals are determined in the shell from
+/// the `git merge` outcome + a `MERGE_HEAD` probe, but the enum carries all 7
+/// variants so the shell can name them with one [`token`](LandRefusal::token)
+/// table. Deliberately SEPARATE from [`Refusal`] — `land`'s beltless `--no-ff`
+/// merge is a different verb from `import`'s belted apply; do NOT widen `Refusal`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LandRefusal {
+    /// Tracked tree dirty (`git status --porcelain --untracked-files=no` nonempty).
+    TreeUnclean,
+    /// `<fork>` branch does not exist.
+    NoSuchFork,
+    /// `<fork>` exists but has NO live linked worktree — its marker would be
+    /// uncommitted/unreachable, so the dispatch-fork check would pass vacuously.
+    WorktreeGone,
+    /// `<fork>`'s live linked worktree bears the worker marker ⇒ it is a dispatch
+    /// worker; its delta must funnel through the belted `import`, never `land`.
+    DispatchFork,
+    /// `git merge --no-ff <fork>` conflicted; the merge was aborted FIRST (tree
+    /// restored clean), THEN refused.
+    MergeConflict,
+    /// `git merge --abort` itself FAILED — the tree is NOT clean; names `MERGE_HEAD`,
+    /// the unmerged paths, and the manual remedy.
+    WedgedMerge,
+    /// Step 3 reached with NO merge in progress (`MERGE_HEAD` absent) — never a
+    /// silent abort masquerading as a clean conflict.
+    InconsistentMergeState,
+}
+
+impl LandRefusal {
+    /// The distinct named token each refusal fails closed with (the property the
+    /// VT goldens assert, not a proxy).
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            LandRefusal::TreeUnclean => "tree-unclean",
+            LandRefusal::NoSuchFork => "no-such-fork",
+            LandRefusal::WorktreeGone => "worktree-gone",
+            LandRefusal::DispatchFork => "dispatch-fork",
+            LandRefusal::MergeConflict => "merge-conflict",
+            LandRefusal::WedgedMerge => "wedged-merge",
+            LandRefusal::InconsistentMergeState => "inconsistent-merge-state",
+        }
+    }
+}
+
+/// The gathered state of the `<fork>` branch the precond logic classifies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ForkState {
+    /// `<fork>` resolves to a commit (the branch exists).
+    pub(crate) exists: bool,
+    /// `<fork>` has a live linked worktree checked out (per `git worktree list`).
+    pub(crate) has_live_worktree: bool,
+    /// That live linked worktree bears the worker marker.
+    pub(crate) bears_marker: bool,
+}
+
+/// PURE land classifier (no git / disk / env — ADR-001 leaf, CLAUDE.md
+/// pure/imperative split). Mirror of [`classify_import`]: it takes the gathered
+/// FACTS and returns the verdict or one of the 4 PRECOND refusals only.
+///
+/// * `tree_status_clean` — tracked tree clean (the SAME `--untracked-files=no`
+///   scoping `import` uses, via [`gather_tree_clean`]).
+/// * `_head` — documents the contextual "HEAD is the coordination branch" precond.
+///   It is intentionally UNUSED by the 7-token logic (design §6: that precond
+///   carries NO refusal token; the verb runs at the coordination root by contract).
+///   Kept in the signature to preserve the design's `classify_land` shape.
+/// * `fork_state` — `{exists, has_live_worktree, bears_marker}`.
+///
+/// Precond precedence (design §6): tree-unclean → no-such-fork → worktree-gone →
+/// dispatch-fork. `worktree-gone` gates `dispatch-fork` — refuse the worktree-less
+/// branch BEFORE the marker check can pass vacuously.
+pub(crate) fn classify_land(
+    tree_status_clean: bool,
+    _head: &str,
+    fork_state: ForkState,
+) -> Result<Merge, LandRefusal> {
+    if !tree_status_clean {
+        return Err(LandRefusal::TreeUnclean);
+    }
+    if !fork_state.exists {
+        return Err(LandRefusal::NoSuchFork);
+    }
+    if !fork_state.has_live_worktree {
+        return Err(LandRefusal::WorktreeGone);
+    }
+    if fork_state.bears_marker {
+        return Err(LandRefusal::DispatchFork);
+    }
+    Ok(Merge::Ok)
+}
+
+/// Gather the `<fork>` branch's live-linked-worktree path, if any, by parsing
+/// `git worktree list --porcelain` (NEW shell gather — there is no existing
+/// branch→worktree-path helper to reuse). Blocks are separated by blank lines;
+/// each block has a `worktree <path>` line and, when a branch is checked out, a
+/// `branch refs/heads/<name>` line. Returns the `worktree` path of the block whose
+/// `branch` == `refs/heads/<fork>`. Found ⇒ the branch has a live linked worktree.
+fn gather_fork_worktree(root: &Path, fork: &str) -> anyhow::Result<Option<PathBuf>> {
+    let listing = git::git_text(root, &["worktree", "list", "--porcelain"])?;
+    let wanted = format!("refs/heads/{fork}");
+    let mut current_path: Option<PathBuf> = None;
+    for line in listing.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            current_path = Some(PathBuf::from(path));
+        } else if let Some(branch) = line.strip_prefix("branch ") {
+            if branch == wanted {
+                return Ok(current_path);
+            }
+        } else if line.is_empty() {
+            current_path = None;
+        }
+    }
+    Ok(None)
+}
+
+/// `doctrine worktree land --fork <branch>` — solo `/execute`'s analog of
+/// `import` (design §6, ADR-006). Lands a solo multi-commit isolated-worktree TDD
+/// branch onto the coordination branch with ancestry PRESERVED via `git merge
+/// --no-ff` (NEVER `--squash` — the verb cannot express a squash). Ancestry
+/// preserved ⇒ fork commits reachable ⇒ gc's ancestry leg can later reap them;
+/// squash is structurally uncertifiable by gc, so it is forbidden here.
+///
+/// Gather → pure-classify → act, patterned after [`run_import`]:
+/// 1. gather the precond FACTS (tracked-tree cleanliness via the SHARED
+///    [`gather_tree_clean`]; `<fork>` existence; its live-linked-worktree path via
+///    [`gather_fork_worktree`]; the marker on that path via [`marker_present`]),
+/// 2. [`classify_land`] returns `Ok(Merge)` or one of the 4 PRECOND refusals,
+/// 3. on `Ok`, drive `git merge --no-ff <fork>`. On conflict → `git merge --abort`
+///    FIRST (restore the clean tree), THEN refuse `merge-conflict`. The abort is
+///    guarded to fire ONLY mid-merge (`MERGE_HEAD` present); step 3 with no merge
+///    in progress → `inconsistent-merge-state`. Abort FAILURE → `wedged-merge`.
+///
+/// Orchestrator-classed; refused under worker-mode by `worker_guard`.
+pub(crate) fn run_land(path: Option<PathBuf>, fork: &str) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+
+    // --- gather: precond — tracked tree clean (the SHARED gather, untracked excluded) ---
+    let tree_clean = gather_tree_clean(&root)?;
+
+    // --- gather: precond — <fork> exists (resolves to a commit) ---
+    let exists = git::git_opt(
+        &root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{fork}^{{commit}}"),
+        ],
+    )?
+    .is_some();
+
+    // --- gather: precond — <fork>'s live linked worktree (path) + its marker ---
+    let fork_wt = gather_fork_worktree(&root, fork)?;
+    let has_live_worktree = fork_wt.is_some();
+    let bears_marker = fork_wt.as_deref().is_some_and(marker_present);
+
+    // --- gather: contextual — HEAD branch (documents the coordination-root precond) ---
+    let head = git::git_text(&root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+
+    // --- pure classify (the 4 PRECOND refusals) ---
+    let fork_state = ForkState {
+        exists,
+        has_live_worktree,
+        bears_marker,
+    };
+    match classify_land(tree_clean, &head, fork_state) {
+        Err(refusal) => bail!("land-refused: {}", refusal.token()),
+        Ok(Merge::Ok) => {}
+    }
+
+    // --- act: git merge --no-ff <fork> (NEVER --squash) ---
+    let merged = git::git_opt(&root, &["merge", "--no-ff", "--no-edit", fork])?;
+    if merged.is_some() {
+        writeln!(
+            io::stdout(),
+            "landed {fork}: --no-ff merge onto coordination HEAD"
+        )?;
+        return Ok(());
+    }
+
+    // --- merge failed: classify the merge-time refusal from MERGE_HEAD + abort ---
+    // Guard the abort to fire ONLY mid-merge: a failed merge with no MERGE_HEAD is
+    // an inconsistent state, never a silent abort masquerading as a clean conflict.
+    let mid_merge =
+        git::git_opt(&root, &["rev-parse", "--verify", "--quiet", "MERGE_HEAD"])?.is_some();
+    if !mid_merge {
+        bail!(
+            "land-refused: {}",
+            LandRefusal::InconsistentMergeState.token()
+        );
+    }
+
+    // Mid-merge: capture the unmerged paths, then abort FIRST to restore the tree.
+    let unmerged = git::git_text(&root, &["diff", "--name-only", "--diff-filter=U"])?;
+    let aborted = git::git_opt(&root, &["merge", "--abort"])?;
+    if aborted.is_some() {
+        // Abort SUCCESS ⇒ ordinary merge-conflict; the tree is guaranteed clean.
+        bail!("land-refused: {}", LandRefusal::MergeConflict.token());
+    }
+
+    // Abort FAILURE ⇒ wedged: the tree is NOT clean. Name MERGE_HEAD, the unmerged
+    // paths, and the manual remedy.
+    bail!(
+        "land-refused: {token} — `git merge --abort` failed; MERGE_HEAD is present and the tree is NOT clean. Unmerged paths:\n{unmerged}\nManual remedy: resolve in place and `git commit`, or `git merge --abort` / `git reset --hard {head}` from the coordination root.",
+        token = LandRefusal::WedgedMerge.token(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// gc — idempotent spent-fork reaper + two-leg landed oracle (SL-056 PHASE-09,
+// design §8/§8.1/§8.2)
+// ---------------------------------------------------------------------------
+
+/// The gathered, impure-read state of a `<fork>` the gc classifier reasons over
+/// (design §8.2). Every field is a FACT gathered in the shell — the pure
+/// [`classify_gc`] never reads git/disk/env.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct GcState {
+    /// `<fork>` branch resolves to a commit (the branch exists).
+    pub(crate) branch_exists: bool,
+    /// `<fork>` has a live linked worktree checked out.
+    pub(crate) worktree_present: bool,
+    /// The `wt/<branch>` target dir exists on disk.
+    pub(crate) target_present: bool,
+    /// The landed-oracle verdict, computed in the shell ONLY while the branch
+    /// lives (`None` when the branch is gone — the gate is skipped because the
+    /// deletion of a fork branch IS the landing certificate, design §8.2).
+    pub(crate) landed_verdict: Option<bool>,
+}
+
+/// The destructive steps a positive-verdict gc will take, in the design §8 forced
+/// order (worktree before branch, because `git branch -D` refuses a checked-out
+/// branch). A step is only set when its target is actually present — reaping an
+/// absent thing is a no-op, so completed steps are simply skipped on a rerun
+/// (design §8.2 idempotence).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct GcPlan {
+    /// `git worktree remove` the fork's live linked worktree (removes its marker).
+    pub(crate) remove_worktree: bool,
+    /// `git branch -D` the fork branch (never a git-ancestor on the import route).
+    pub(crate) delete_branch: bool,
+    /// Reap the `wt/<branch>` target dir (closes the disk loop).
+    pub(crate) reap_target: bool,
+}
+
+/// Why a gc refuses to reap (design §8.1). Fails closed with a named token.
+/// SEPARATE from [`Refusal`]/[`LandRefusal`] — gc's reap-vs-refuse decision is its
+/// own verb; do NOT widen the import/land enums.
+///
+/// **One refusal, not two (design-faithful collapse — orchestrator to confirm).**
+/// The design names a "squash-uncertifiable" case, but a manually squash-merged
+/// fork is STRUCTURALLY INDISTINGUISHABLE from a never-landed fork: a multi-commit
+/// `git merge --squash` yields `git cherry HEAD <fork>` = `+` lines, exactly like a
+/// never-landed fork (verified empirically; a *single*-commit squash yields `-` and
+/// is correctly certified as landed). There is no empty-`cherry` squash signal, so
+/// the oracle cannot split the two states. The design's "named message" is therefore
+/// realised as the `not-landed` refusal message NAMING the squash remedy — the user
+/// gets the `worktree land --no-ff` / `--force` guidance whether they squashed or
+/// never landed, which is the right action either way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GcRefusal {
+    /// The fork has NOT provably landed (non-ancestor tip with a `+` in `git
+    /// cherry` — a never-landed fork OR a manual squash-merge) and neither
+    /// `--superseded-head <head>` nor `--force` was given.
+    NotLanded,
+}
+
+impl GcRefusal {
+    /// The distinct named token each refusal fails closed with (the property the
+    /// VT goldens assert, not a proxy).
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            GcRefusal::NotLanded => "not-landed",
+        }
+    }
+}
+
+/// The verdict of the pure gc classifier: a [`GcPlan`] of steps to take, or a named
+/// [`GcRefusal`]. `--dry-run` short-circuits to a plan-less verdict in the shell
+/// (it never reaches the destructive plan), so the classifier only ever describes
+/// what WOULD happen — the shell decides whether to execute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GcVerdict {
+    /// Reap per this plan (the operator authorised it: positive oracle / matching
+    /// `--superseded-head` / `--force`).
+    Reap(GcPlan),
+    /// Fail closed with this named refusal — destroy nothing.
+    Refuse(GcRefusal),
+}
+
+/// PURE gc classifier (no git / disk / env — ADR-001 leaf, CLAUDE.md
+/// pure/imperative split). Mirror of [`classify_import`]/[`classify_land`]: it
+/// takes the gathered FACTS plus the operator's `force` / `superseded_match` /
+/// `dry_run` intents and returns the verdict (design §8.2).
+///
+/// The reap GATE (whether deletion is authorised) is decided here from:
+/// * a positive `state.landed_verdict` (the oracle passed — only ever `Some` while
+///   the branch lives, since the gate requires the branch),
+/// * OR `superseded_match` (the operator asserted `--superseded-head` == the live
+///   head: a TOCTOU movement-guard, not a landing proof),
+/// * OR `force` (the operator knowingly bypassed the oracle),
+/// * OR **branch-gone**: a fork branch is deleted only via `branch -D` AFTER the
+///   gate passed, so a gone branch is ALREADY certified — the only residue is the
+///   `wt/<branch>` target dir, reaped from the branch NAME alone (design §8.2).
+///
+/// `force`/`superseded_match` authorise the reap and skip the refusal (the operator
+/// chose to). `dry_run` does NOT change the verdict — it is honoured in the shell
+/// (compute + print, act on nothing); the classifier still reports the would-be
+/// plan/refusal so the dry-run print is the SAME verdict a real run would act on.
+pub(crate) fn classify_gc(
+    state: GcState,
+    force: bool,
+    superseded_match: bool,
+    _dry_run: bool,
+) -> GcVerdict {
+    // Branch-gone ⇒ already-certified ⇒ the ONLY residue is the target dir.
+    // (A live linked worktree on a gone branch is git-impossible — `branch -D`
+    // refuses a checked-out branch — so worktree_present is moot here.)
+    if !state.branch_exists {
+        return GcVerdict::Reap(GcPlan {
+            remove_worktree: false,
+            delete_branch: false,
+            reap_target: state.target_present,
+        });
+    }
+
+    // Branch alive: decide the reap gate. Operator overrides skip the oracle.
+    let authorised = force || superseded_match || state.landed_verdict == Some(true);
+    if !authorised {
+        // Not provably landed (a `+` in `git cherry` — never-landed OR a manual
+        // squash-merge; the two are indistinguishable). The message names the
+        // squash remedy regardless, so the operator gets the right guidance.
+        return GcVerdict::Refuse(GcRefusal::NotLanded);
+    }
+
+    // Authorised: reap the present things in the forced order (skip absent ones).
+    GcVerdict::Reap(GcPlan {
+        remove_worktree: state.worktree_present,
+        delete_branch: true,
+        reap_target: state.target_present,
+    })
+}
+
+/// Resolve the same target base [`project_env_contract`] computes, joined with the
+/// pure `wt/<branch>` shape — the path the T-reap closes (design §8). Mirrors the
+/// fork-creation base resolution EXACTLY (`CARGO_TARGET_DIR` env base, else
+/// `<fork>/target`); do NOT diverge. `fork` is the fork worktree dir (used only for
+/// the env-absent `<fork>/target` fallback). Impure (the env read).
+fn gc_target_dir(fork: &Path, branch: &str) -> PathBuf {
+    let base = match std::env::var_os("CARGO_TARGET_DIR") {
+        Some(v) => PathBuf::from(v),
+        None => fork.join("target"),
+    };
+    base.join(target_dir_for_branch(branch))
+}
+
+/// The reap set a [`GcPlan`] would act on, as a `/`-joined token list for the
+/// dry-run print — the ACTUAL legs, never a blanket `worktree/branch/target`
+/// (a branch-gone plan reaps the target only, F-5).
+fn reap_targets(plan: GcPlan) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    if plan.remove_worktree {
+        parts.push("worktree");
+    }
+    if plan.delete_branch {
+        parts.push("branch");
+    }
+    if plan.reap_target {
+        parts.push("target");
+    }
+    if parts.is_empty() {
+        "nothing".to_owned()
+    } else {
+        parts.join("/")
+    }
+}
+
+/// The landed-oracle (design §8.1), gathered in the shell: true ONLY when the
+/// fork's commit has provably landed, tested against durable git state — TWO LEGS,
+/// UNION:
+/// * **ancestry leg** — `<fork-tip>` is an ancestor of coordination HEAD (the
+///   `land` route, `merge-base --is-ancestor` exit 0) ⇒ landed;
+/// * **patch-id leg** — `git cherry <coord-HEAD> <fork>` lists at least one commit
+///   and EVERY listed commit is `-` prefixed (the `import` route: ancestry severed,
+///   but each patch landed) ⇒ landed. A `+` prefix = a commit whose patch is NOT
+///   upstream ⇒ not landed.
+///
+/// **Crash-proof:** a crash between apply and commit leaves no commit ⇒ `git
+/// cherry` reports `+` ⇒ NOT landed ⇒ gc refuses (a receipt would have lied
+/// "landed" and reaped the only copy).
+///
+/// **Squash:** a multi-commit `git merge --squash` yields `+` lines (each fork
+/// commit's patch-id is unmatched by the combined squash commit) — STRUCTURALLY
+/// INDISTINGUISHABLE from a never-landed fork (a *single*-commit squash yields `-`
+/// and IS correctly certified — its content is in HEAD). There is no empty-`cherry`
+/// squash signal, so the oracle returns plain `not-landed`; the refusal message
+/// names the squash remedy. (See [`GcRefusal`] — design-faithful collapse.)
+///
+/// An EMPTY `git cherry` with a non-ancestor tip means no fork commit's patch is
+/// reachable AND none is unmatched — i.e. nothing to certify ⇒ NOT landed (conservative:
+/// never reap on a vacuous true). Impure (the two git reads).
+fn gather_landed(root: &Path, fork: &str) -> anyhow::Result<bool> {
+    // ancestry leg: <fork> is an ancestor of HEAD.
+    if git::git_status_ok(root, &["merge-base", "--is-ancestor", fork, "HEAD"])? {
+        return Ok(true);
+    }
+    // patch-id leg: a non-empty `git cherry HEAD <fork>` whose every line is `-`.
+    let cherry = git::git_cherry(root, "HEAD", fork)?;
+    Ok(!cherry.is_empty() && cherry.iter().all(|line| line.starts_with('-')))
+}
+
+/// `doctrine worktree gc --fork <branch> [--superseded-head <SHA>] [--force]
+/// [--dry-run]` — reap a spent worktree fork in ONE idempotent act (design §8),
+/// deleting ONLY when the fork has provably landed (design §8.1) and completing /
+/// naming any leftover on a crash-rerun (design §8.2). Runs at the coordination
+/// root. Orchestrator-classed; refused under worker-mode by `worker_guard`.
+///
+/// Gather → pure-classify → act, patterned after [`run_land`]:
+/// 1. gather the FACTS — `<fork>` existence; its live linked worktree (via the
+///    SHARED [`gather_fork_worktree`]); the `wt/<branch>` target dir presence; the
+///    landed oracle (via [`gather_landed`], ONLY while the branch lives); and the
+///    `--superseded-head == current-head` movement-guard match,
+/// 2. [`classify_gc`] returns `Reap(plan)` or `Refuse(token)`,
+/// 3. on `--dry-run`, PRINT the verdict and destroy NOTHING; otherwise execute the
+///    plan in the forced order (worktree → branch → target), each destructive step
+///    honest on failure (names its leftover, exits non-zero), folding a stale admin
+///    worktree entry via `git worktree prune`. Finally stderr-WARN the
+///    `CARGO_MANIFEST_DIR`-baked-test-binary recompile.
+pub(crate) fn run_gc(
+    path: Option<PathBuf>,
+    fork: &str,
+    superseded_head: Option<&str>,
+    force: bool,
+    dry_run: bool,
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let root =
+        fs::canonicalize(&root).with_context(|| format!("canonicalize root {}", root.display()))?;
+
+    // --- gather: branch existence (resolves to a commit) ---
+    let branch_ref = format!("refs/heads/{fork}");
+    let branch_head = git::git_opt(
+        &root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{branch_ref}^{{commit}}"),
+        ],
+    )?;
+    let branch_exists = branch_head.is_some();
+
+    // --- gather: the fork's live linked worktree (shared gather) ---
+    let fork_wt = gather_fork_worktree(&root, fork)?;
+    let worktree_present = fork_wt.is_some();
+
+    // --- gather: the wt/<branch> target dir (mirrors fork-creation base) ---
+    // Under the env-absent fallback the base is `<fork-dir>/target` (NOT
+    // `<root>/target`) — fork creation derives the per-wt target from the FORK
+    // dir, so gc must too or it reaps the wrong path (F-7). Use the live linked
+    // worktree dir when present; a gone worktree took its in-tree target with it
+    // (target_present would be false), so &root is a harmless last resort there.
+    let fork_dir = fork_wt.as_deref().unwrap_or(&root);
+    let target = gc_target_dir(fork_dir, fork);
+    let target_present = target.exists();
+
+    // --- gather: the landed oracle (ONLY while the branch lives — design §8.2) ---
+    let landed_verdict = if branch_exists {
+        Some(gather_landed(&root, fork)?)
+    } else {
+        None
+    };
+
+    // --- gather: --superseded-head movement-guard match (SHA == CURRENT head) ---
+    // A movement-guard, not a landing proof: reaps iff the asserted SHA equals the
+    // branch's current head (TOCTOU guard — a stale SHA cannot match a live head).
+    let superseded_match = match (superseded_head, &branch_head) {
+        (Some(sha), Some(head)) => {
+            // Resolve the operator's SHA to a commit before comparing (never trust a
+            // symbolic ref verbatim); an unresolvable SHA simply cannot match.
+            match git::git_opt(
+                &root,
+                &[
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    &format!("{sha}^{{commit}}"),
+                ],
+            )? {
+                Some(resolved) => matches(&resolved, head),
+                None => false,
+            }
+        }
+        _ => false,
+    };
+
+    let state = GcState {
+        branch_exists,
+        worktree_present,
+        target_present,
+        landed_verdict,
+    };
+
+    // --- pure classify ---
+    let verdict = classify_gc(state, force, superseded_match, dry_run);
+
+    // --- dry-run: PRINT the verdict, destroy NOTHING (the operator never --forces blind) ---
+    if dry_run {
+        match verdict {
+            GcVerdict::Reap(plan) => {
+                // Report the TRUTH the operator needs before a real run: the actual
+                // landed verdict + whether the reap is oracle- or override-authorised,
+                // and the ACTUAL reap set — never a blanket `landed ✓ (worktree/
+                // branch/target)` that lies on a forced or branch-gone reap (F-5).
+                let basis = if !branch_exists {
+                    "already-certified (branch gone)".to_owned()
+                } else if landed_verdict == Some(true) {
+                    "landed ✓ (oracle)".to_owned()
+                } else {
+                    let how = if force {
+                        "--force"
+                    } else {
+                        "--superseded-head"
+                    };
+                    format!("NOT landed — reap authorised by {how} (oracle override)")
+                };
+                writeln!(
+                    io::stdout(),
+                    "{fork}: {basis} — would reap ({})",
+                    reap_targets(plan)
+                )?;
+            }
+            GcVerdict::Refuse(GcRefusal::NotLanded) => {
+                writeln!(
+                    io::stdout(),
+                    "{fork}: not-landed — `--force` to reap, or `--superseded-head <SHA>` if spent-and-abandoned. If you squash-merged, re-land via `worktree land` (--no-ff)."
+                )?;
+            }
+        }
+        return Ok(());
+    }
+
+    // --- act ---
+    // The lone refusal NAMES the squash remedy too (a squash-merge is
+    // indistinguishable from a never-landed fork — see `GcRefusal`).
+    let plan = match verdict {
+        GcVerdict::Refuse(GcRefusal::NotLanded) => bail!(
+            "gc-refused: {} — fork {fork} has not provably landed; `--force` to reap, or `--superseded-head <SHA>` to assert it is spent-and-abandoned. Cannot certify a squash-merge — re-land via `worktree land` (--no-ff), or `--force` knowingly.",
+            GcRefusal::NotLanded.token()
+        ),
+        GcVerdict::Reap(plan) => plan,
+    };
+
+    let mut leftovers: Vec<String> = Vec::new();
+
+    // Step 1: remove the live linked worktree FIRST (it holds the marker, and
+    // `branch -D` would refuse a checked-out branch). Fold a stale administrative
+    // entry via `git worktree prune` before believing a removal failed.
+    if let (true, Some(wt)) = (plan.remove_worktree, fork_wt.as_deref()) {
+        let removed = git::git_opt(
+            &root,
+            &["worktree", "remove", "--force", &wt.to_string_lossy()],
+        )?;
+        if removed.is_none() {
+            // Fold a stale admin entry, then re-check whether the dir survives.
+            drop(git::git_opt(&root, &["worktree", "prune"]));
+            if wt.exists() {
+                leftovers.push(format!("worktree {}", wt.display()));
+            }
+        }
+    }
+
+    // Step 2: delete the branch (never a git-ancestor on the import route, so `-d`
+    // always refuses — the patch-id gate, not `-d`, is the safety; use `-D`).
+    if plan.delete_branch {
+        let deleted = git::git_opt(&root, &["branch", "-D", fork])?;
+        if deleted.is_none()
+            && git::git_opt(&root, &["rev-parse", "--verify", "--quiet", &branch_ref])?.is_some()
+        {
+            leftovers.push(format!("branch {fork}"));
+        }
+    }
+
+    // Step 3: reap the wt/<branch> target dir (closes the disk loop, derived cache).
+    if plan.reap_target
+        && target.exists()
+        && let Err(e) = fs::remove_dir_all(&target)
+        && target.exists()
+    {
+        leftovers.push(format!("target {} ({e})", target.display()));
+    }
+
+    if !leftovers.is_empty() {
+        bail!(
+            "gc-incomplete: leftover(s) need manual cleanup: {}",
+            leftovers.join(", ")
+        );
+    }
+
+    // Step 4: WARN that env!(CARGO_MANIFEST_DIR)-baked test binaries now point at a
+    // deleted fork path and must be recompiled (mem.pattern.dispatch.worktree-
+    // removal-stale-manifest-dir-false-red).
+    writeln!(
+        io::stderr(),
+        "warning: test binaries baked with the reaped fork's CARGO_MANIFEST_DIR are now stale — recompile before trusting a RED"
+    )?;
+    writeln!(
+        io::stdout(),
+        "gc {fork}: reaped (worktree/branch/target as present)"
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// fork — orchestrator-owned worktree creation (SL-056 PHASE-06, design §5)
+// ---------------------------------------------------------------------------
+
+/// Pure branch→relative-path mapping for a per-worktree target dir: `wt/<branch>`.
+/// PURE — no I/O, env, clock, or rng (CLAUDE.md pure/imperative split). This is the
+/// GENERALISABLE primitive; doctrine-the-repo's project-local consumer
+/// ([`project_env_contract`]) joins it under the jail target base to build
+/// `CARGO_TARGET_DIR`. The framework never bakes that consumer in here (ADR-008
+/// D-B5: the env contract is project-declared, not flake-baked).
+pub(crate) fn target_dir_for_branch(branch: &str) -> PathBuf {
+    Path::new("wt").join(branch)
+}
+
+/// doctrine-the-repo's PROJECT-LOCAL per-worktree env contract — the one consumer
+/// of the generalisable mechanism (design §5 / ADR-008 D-B5). It declares a single
+/// pair: `CARGO_TARGET_DIR=<jail-target-base>/wt/<branch>`, so each fork compiles
+/// into its own target dir and parallel builds don't collide on a shared jail
+/// target. The jail target base is read from the inherited `CARGO_TARGET_DIR` (the
+/// existing jail redirect); absent, it degrades to `<fork>/target`. The env read is
+/// the ONLY impurity — the path shape comes from the pure [`target_dir_for_branch`].
+///
+/// Kept deliberately separate from [`run_fork`]: the framework primitive emits
+/// whatever `(key, value)` pairs THIS function returns and never names
+/// `CARGO_TARGET_DIR` itself.
+fn project_env_contract(fork: &Path, branch: &str) -> Vec<(String, String)> {
+    let base = match std::env::var_os("CARGO_TARGET_DIR") {
+        Some(v) => PathBuf::from(v),
+        None => fork.join("target"),
+    };
+    let target = base.join(target_dir_for_branch(branch));
+    vec![(
+        "CARGO_TARGET_DIR".to_owned(),
+        target.to_string_lossy().into_owned(),
+    )]
+}
+
+/// Best-effort compensating cleanup for a partially-created fork (design §5 — git
+/// mutations are NOT a transaction, so there is no rollback verb to lean on; we
+/// reverse each leg ourselves). SHARED by [`run_fork`] and PHASE-10's `create-fork`
+/// (one cleanup impl, two callers — a hard reuse requirement).
+///
+/// Each leg is best-effort and independent: a failing leg must not mask the
+/// original cause or abort the others. Removing a never-added worktree / dir / a
+/// non-existent branch is a no-op, not an error. Returns the list of legs that
+/// FAILED to reverse (debris descriptions) so the caller can decide whether the
+/// rollback left leftovers needing a distinct, naming exit.
+fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String> {
+    let mut debris = Vec::new();
+
+    // 1. Remove the linked worktree registration (force: drop dirty/locked).
+    if git::git_text(
+        repo,
+        &["worktree", "remove", "--force", &dir.to_string_lossy()],
+    )
+    .is_err()
+        && dir.exists()
+    {
+        // Only debris if the dir actually survives — a "not a worktree" error on a
+        // never-added dir is the expected no-op.
+        debris.push(format!("worktree dir {}", dir.display()));
+    }
+
+    // 2. Delete the branch (no-op if it was never created).
+    if git::git_opt(repo, &["rev-parse", "--verify", "--quiet", branch])
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        // Best-effort delete; the re-probe below is what decides debris, so a
+        // failed delete here is intentionally not propagated.
+        drop(git::git_text(repo, &["branch", "-D", branch]));
+        if git::git_opt(repo, &["rev-parse", "--verify", "--quiet", branch])
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            debris.push(format!("branch {branch}"));
+        }
+    }
+
+    // 3. Reap any leftover dir the worktree-remove could not (best-effort). On a
+    //    SUCCESSFUL reap, RETRACT any stale step-1 `worktree dir {dir}` entry —
+    //    the dir is gone, so a fully-cleaned rollback must report empty debris,
+    //    never false-bail `fork-rollback-debris` over a tree it did clean (F-8).
+    if dir.exists() {
+        drop(fs::remove_dir_all(dir));
+        let dir_str = dir.display().to_string();
+        if dir.exists() {
+            if !debris.iter().any(|d| d.contains(&dir_str)) {
+                debris.push(format!("dir {dir_str}"));
+            }
+        } else {
+            debris.retain(|d| !d.contains(&dir_str));
+        }
+    }
+
+    debris
+}
+
+/// `doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]` —
+/// create an orchestrator-owned worktree fork off `B`, provision it, optionally
+/// stamp the worker marker, and emit the per-worktree env contract (design §5).
+///
+/// Atomic via COMPENSATING ROLLBACK (not a git transaction): any failure AFTER the
+/// `git worktree add` reverses every leg via [`rollback_fork`]. A pre-`add` refusal
+/// (dir/branch exists, `B` not a commit) leaves no fork.
+///
+/// - **stdout**: the env contract (`KEY=value`, one per line).
+/// - **stderr**: human status (what it did).
+pub(crate) fn run_fork(
+    path: Option<PathBuf>,
+    base: &str,
+    branch: &str,
+    dir: &Path,
+    worker: bool,
+) -> anyhow::Result<()> {
+    let repo = root::find(path, &root::default_markers())?;
+
+    // --- Step 1 refusals (pre-`add`: leave NO fork) ---
+    if dir.exists() {
+        bail!("fork-refused: dir {} already exists", dir.display());
+    }
+    if git::git_opt(&repo, &["rev-parse", "--verify", "--quiet", branch])
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        bail!("fork-refused: branch {branch} already exists");
+    }
+    if git::git_opt(
+        &repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{base}^{{commit}}"),
+        ],
+    )?
+    .is_none()
+    {
+        bail!("fork-refused: base {base} is not a commit");
+    }
+
+    // --- Step 1: create the worktree on a NEW branch at B ---
+    git::git_text(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            &dir.to_string_lossy(),
+            base,
+        ],
+    )
+    .with_context(|| format!("git worktree add -b {branch} {} {base}", dir.display()))?;
+
+    // From here on, any failure compensates (rollback every leg).
+    let finish = (|| -> anyhow::Result<()> {
+        // --- Step 2: provision via the sole copier (do NOT reimplement copying) ---
+        run_provision(Some(repo.clone()), dir).context("provision fork")?;
+
+        // --- Step 3: stamp the worker marker BEFORE returning / any spawn window ---
+        if worker {
+            write_marker(dir).context("stamp worker marker")?;
+        }
+        Ok(())
+    })();
+
+    if let Err(cause) = finish {
+        let debris = rollback_fork(&repo, branch, dir);
+        if debris.is_empty() {
+            return Err(cause.context(format!(
+                "fork failed after add; rolled back cleanly (dir {} + branch {branch} removed)",
+                dir.display()
+            )));
+        }
+        // Rollback itself left leftovers — distinct token NAMING the debris.
+        bail!(
+            "fork-rollback-debris: {} (original cause: {cause:#})",
+            debris.join(", ")
+        );
+    }
+
+    // --- Step 4: env contract on stdout; human status on stderr ---
+    for (key, value) in project_env_contract(dir, branch) {
+        writeln!(io::stdout(), "{key}={value}")?;
+    }
+    writeln!(
+        io::stderr(),
+        "forked {branch} at {base} → {}{}",
+        dir.display(),
+        if worker {
+            " (worker: marker stamped)"
+        } else {
+            ""
+        }
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Worker identity — disk marker shell (SL-056 §3)
+// ---------------------------------------------------------------------------
+
+/// The Claude Code `agent_type` discriminator a dispatch worker carries — the
+/// SINGLE source of truth for the literal (SL-056 PHASE-10). The `SubagentStart`
+/// matcher scopes the stamp hook to this agent type, and the agent definition
+/// `install/agents/claude/dispatch-worker.md` MUST declare `name:` equal to it
+/// (the T6 drift test pins that). Never a free-floating string literal.
+pub(crate) const DISPATCH_WORKER_AGENT_TYPE: &str = "dispatch-worker";
+
+/// The withheld-tier marker the trusted orchestrator stamps before a worker runs.
+/// Presence-only (no contents). Sits under `.doctrine/state/**`, so it inherits
+/// every gitignore / provision-drop / import-exclude rule with zero new tier
+/// logic (design §3; the `is_withheld` test pins it to [`Tier::State`]).
+pub(crate) fn marker_path(root: &Path) -> PathBuf {
+    root.join(".doctrine/state/dispatch/worker")
+}
+
+/// True iff the worker marker file exists at `root`. Disk read (shell).
+pub(crate) fn marker_present(root: &Path) -> bool {
+    marker_path(root).exists()
+}
+
+/// True iff `DOCTRINE_WORKER` is set to `1` — the codex/pi worker-on-main
+/// OPTIMISATION (design §3), not the identity. Cheap (env only), evaluated before
+/// the marker leg so a Read verb in a non-doctrine cwd never gains a git/disk
+/// failure path. `pub(crate)` so the rootless-cwd guard fallback can consult the
+/// env leg alone when `root::find` errors (no marker leg without a root).
+pub(crate) fn env_worker_set() -> bool {
+    std::env::var_os("DOCTRINE_WORKER").as_deref() == Some(std::ffi::OsStr::new("1"))
+}
+
+/// Stamp the worker marker at `root` (mkdir-p the dispatch dir). Shell.
+/// The non-test consumer is [`run_fork`] under `--worker` (SL-056 PHASE-06).
+pub(crate) fn write_marker(root: &Path) -> anyhow::Result<()> {
+    let path = marker_path(root);
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)
+            .with_context(|| format!("create dispatch marker dir {}", dir.display()))?;
+    }
+    fs::write(&path, b"").with_context(|| format!("write worker marker {}", path.display()))?;
+    Ok(())
+}
+
+/// Remove the worker marker at `root` (idempotent — absent ⇒ Ok). Shell.
+pub(crate) fn remove_marker(root: &Path) -> anyhow::Result<()> {
+    let path = marker_path(root);
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e).with_context(|| format!("remove worker marker {}", path.display())),
+    }
+}
+
+/// Resolve the full worker-mode verdict at `root` through the single pure
+/// [`describe_mode`] — the design's `worker_mode(root) = (is_linked_worktree(root)
+/// && marker_present(root)) OR env` predicate (its `.refused` field). The env leg
+/// is checked first (cheap); the marker leg (`is_linked_worktree` +
+/// [`marker_present`]) only matters in a linked worktree, and a git failure there
+/// is treated as not-linked (the verdict degrades to the env leg, never a new
+/// error path — design §3 lazy-marker note).
+pub(crate) fn resolve_mode(root: &Path) -> StatusLine {
+    let env_set = env_worker_set();
+    let is_linked = is_linked_worktree(root).unwrap_or(false);
+    let marker = is_linked && marker_present(root);
+    describe_mode(is_linked, marker, env_set)
+}
+
+/// The named dual-cause refusal substance for the env leg on a NON-linked tree
+/// (design §3). Stable tokens — goldens assert this. Never a bare "worker
+/// refused"; the caller also names the verb.
+pub(crate) const DUAL_CAUSE: &str = "`DOCTRINE_WORKER` set outside a worker worktree: a worker was dropped on the coordination root → re-dispatch isolated; or the env leaked into this process → unset it";
+
+// ---------------------------------------------------------------------------
+// worktree status / marker --clear (SL-056 §3, the observability + cure verbs)
+// ---------------------------------------------------------------------------
+
+/// `doctrine worktree status [--assert]` (Read-classed). Prints the resolved
+/// mode and cause from the SINGLE [`describe_mode`] verdict; `--assert` derives a
+/// non-zero `stale-marker` exit from the SAME state (design §3 — the human line
+/// and the `--assert` exit can never disagree).
+pub(crate) fn run_status(path: Option<PathBuf>, assert: bool) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let mode = resolve_mode(&root);
+
+    if mode.refused {
+        writeln!(
+            io::stdout(),
+            "worker fork: yes — writes refused; signal: {}",
+            mode.cause_token()
+        )?;
+    } else {
+        writeln!(io::stdout(), "worker fork: no — writes allowed")?;
+    }
+
+    if assert && mode.is_stale_marker() {
+        bail!(
+            "stale-marker: a worker marker is present in this linked worktree but no dispatch is active — clear it with `doctrine worktree marker --clear --operator`"
+        );
+    }
+    Ok(())
+}
+
+/// `doctrine worktree marker --clear [--operator]` (bespoke `MarkerClear` class —
+/// never refused by the marker conjunct itself; design §3 §5). Removes the marker
+/// at the cwd tree root with a loud receipt. Bespoke refusals:
+/// - `DOCTRINE_WORKER` set (clear it from a process without the env leg);
+/// - cwd is NOT the marker's own tree root (refuse a remote clear);
+/// - cwd tree is a LINKED worktree and `--operator` is absent (the accident-fence).
+pub(crate) fn run_marker_clear(path: Option<PathBuf>, operator: bool) -> anyhow::Result<()> {
+    if env_worker_set() {
+        bail!(
+            "refusing `marker --clear` while `DOCTRINE_WORKER` is set — run it from a process without the env leg (unset DOCTRINE_WORKER)"
+        );
+    }
+
+    let root = root::find(path, &root::default_markers())?;
+    let root =
+        fs::canonicalize(&root).with_context(|| format!("canonicalize root {}", root.display()))?;
+    let cwd = std::env::current_dir().context("current dir")?;
+    let cwd =
+        fs::canonicalize(&cwd).with_context(|| format!("canonicalize cwd {}", cwd.display()))?;
+    if cwd != root {
+        bail!(
+            "refusing `marker --clear`: cwd {} is not the marker's tree root {} — run it from the tree root",
+            cwd.display(),
+            root.display()
+        );
+    }
+
+    if is_linked_worktree(&root).unwrap_or(false) && !operator {
+        bail!(
+            "refusing `marker --clear` in a linked worktree without `--operator` — this is the accident-fence; pass `--operator` to confirm you are the trusted orchestrator"
+        );
+    }
+
+    let existed = marker_present(&root);
+    remove_marker(&root)?;
+    if existed {
+        writeln!(
+            io::stdout(),
+            "CLEARED worker marker at {} — writes restored",
+            marker_path(&root).display()
+        )?;
+    } else {
+        writeln!(
+            io::stdout(),
+            "no worker marker at {} — nothing to clear",
+            marker_path(&root).display()
+        )?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// stamp-subagent — Claude harness SubagentStart provision+mark (SL-056 PHASE-10)
+// ---------------------------------------------------------------------------
+
+/// Verdict of the PURE stamp classifier: the resolved inputs hold ⇒ the shell may
+/// provision + mark the already-created worktree. Mirror of [`Apply`]/[`Merge`] —
+/// the pure core decides, the shell ([`run_stamp_subagent`]) acts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stamp {
+    /// All preconds hold ⇒ the shell runs `run_provision` then `write_marker`.
+    Ok,
+}
+
+/// Why a `marker --stamp-subagent` refuses (SL-056 PHASE-10, design — the claude
+/// spawn path's mark step). Two-valued classifier (Stamp vs Refuse): there is NO
+/// `PlainCreate` / else-branch — the `SubagentStart` matcher scopes the hook to
+/// dispatch workers, so a benign subagent never reaches this verb. Each variant
+/// fails closed with a distinct named token (the property the goldens assert).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StampRefusal {
+    /// The payload `cwd` is absent/empty (also the malformed-JSON fold target).
+    MissingCwd,
+    /// `cwd` is not under the repo, OR is not a linked worktree.
+    BadDir,
+    /// `agent_type` is absent, OR present but != [`DISPATCH_WORKER_AGENT_TYPE`].
+    MissingAgentType,
+    /// The payload worktree ALREADY bears the worker marker — a re-entrant stamp
+    /// (design §5 Hook-mint: only the first, marker-absent stamp is exempt).
+    /// Re-provisioning would overwrite live worker state on a resume.
+    AlreadyMarked,
+}
+
+impl StampRefusal {
+    /// The distinct named token each refusal fails closed with.
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            StampRefusal::MissingCwd => "missing-cwd",
+            StampRefusal::BadDir => "bad-dir",
+            StampRefusal::MissingAgentType => "missing-agent-type",
+            StampRefusal::AlreadyMarked => "already-marked",
+        }
+    }
+}
+
+/// PURE stamp classifier (no git / disk / env / clock — ADR-001 leaf, CLAUDE.md
+/// pure/imperative split). Mirror of [`classify_import`]/[`classify_land`]/
+/// [`classify_gc`]: it takes the gathered, already-resolved FACTS and returns the
+/// verdict. The shell resolves cwd-presence and the under-repo + linked-worktree
+/// probes (impure git/disk), then calls this.
+///
+/// * `agent_type` — the payload `agent_type` ("" if absent); must equal
+///   [`DISPATCH_WORKER_AGENT_TYPE`].
+/// * `cwd_present` — the payload carried a non-empty `cwd`.
+/// * `cwd_is_under_repo_linked_worktree` — the resolved cwd is under the repo AND
+///   a live linked worktree (both probes folded by the shell into one bool).
+///
+/// * `already_marked` — the resolved payload worktree already bears the worker
+///   marker (a prior stamp). Only the FIRST, marker-absent stamp is exempt.
+///
+/// Precond order: cwd-presence → dir-validity → agent-type → already-marked.
+/// (Agent-type before the marker so a wrong agent-type names itself first; the
+/// marker check is LAST — it only matters once the dir is a valid worker worktree.)
+pub(crate) fn classify_stamp(
+    agent_type: &str,
+    cwd_present: bool,
+    cwd_is_under_repo_linked_worktree: bool,
+    already_marked: bool,
+) -> Result<Stamp, StampRefusal> {
+    if !cwd_present {
+        return Err(StampRefusal::MissingCwd);
+    }
+    if !cwd_is_under_repo_linked_worktree {
+        return Err(StampRefusal::BadDir);
+    }
+    if agent_type != DISPATCH_WORKER_AGENT_TYPE {
+        return Err(StampRefusal::MissingAgentType);
+    }
+    if already_marked {
+        return Err(StampRefusal::AlreadyMarked);
+    }
+    Ok(Stamp::Ok)
+}
+
+/// The `SubagentStart` payload subset we read (tolerate extra fields). JSON on
+/// stdin: `{ "cwd": "<worktree path>", "agent_type": "<e.g. dispatch-worker>" }`.
+#[derive(Debug, Default, serde::Deserialize)]
+struct SubagentPayload {
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    agent_type: Option<String>,
+}
+
+/// True iff `cwd` belongs to the SAME repo as `repo` — they resolve to the same
+/// `git-common-dir`. This is the worktree notion of "under the repo": a linked
+/// worktree lives in a SEPARATE directory (a sibling, not a path-prefix child of
+/// the source), so a path-`starts_with` test would wrongly reject every real fork.
+/// Shared-common-dir membership is exactly what [`verify_sibling_worktree`] (inside
+/// [`run_provision`]) re-checks before copying. A git failure on either side ⇒ not
+/// the same repo (fail-closed). Impure (the git reads).
+fn cwd_shares_repo(repo: &Path, cwd: &Path) -> bool {
+    let repo_common = git::git_text(repo, &["rev-parse", "--git-common-dir"])
+        .ok()
+        .and_then(|c| resolve_common_dir(repo, &c).ok());
+    let cwd_common = git::git_text(cwd, &["rev-parse", "--git-common-dir"])
+        .ok()
+        .and_then(|c| resolve_common_dir(cwd, &c).ok());
+    match (repo_common, cwd_common) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// `doctrine worktree marker --stamp-subagent` — the claude harness spawn path's
+/// mark step (SL-056 PHASE-10). Claude itself creates the worker's worktree (the
+/// `WorktreeCreate` payload carries no `agent_type`/path, so `create-fork` is
+/// DROPPED); this verb runs from the matcher-scoped `SubagentStart` hook to
+/// **provision + stamp** the already-created worktree named by the payload `cwd`.
+///
+/// `SubagentStart` is a READ-ONLY hook event — a non-zero exit does NOT abort the
+/// subagent. So this verb only stamps-or-refuses and exits honestly; it cannot and
+/// must not try to block an unstamped worker (fenced elsewhere: the import belt,
+/// the worker-mode guard, and the orchestrator's post-spawn check).
+///
+/// Shell flow (gather → pure-classify → act):
+/// 1. read stdin → parse JSON (malformed ⇒ empty payload ⇒ `missing-cwd`);
+/// 2. resolve cwd: a [`is_linked_worktree`] of the SAME repo as the source (shared
+///    git-common-dir — [`cwd_shares_repo`], the worktree notion of "under the repo");
+/// 3. [`classify_stamp`]; on Refuse print the token to stderr + exit non-zero;
+/// 4. on Stamp: [`run_provision`] (the SOLE copier, source = the orchestrator tree,
+///    destination = the worker worktree `cwd`) THEN [`write_marker`].
+///
+/// M3 failure posture: if provision/mark fails, print a LOUD stderr diagnostic and
+/// exit non-zero — and do NOT `git worktree remove` (we added no worktree; Claude
+/// owns it, the worker is already cleared to run). There is NO compensating
+/// rollback here (that was the dropped create-fork's behaviour); the half-stamped
+/// fork is left for the orchestrator's post-spawn check.
+///
+/// NOTE: the `SubagentStart`-matcher wiring and the `/dispatch-agent` skill leg are
+/// LATER phases (out of scope here).
+pub(crate) fn run_stamp_subagent(path: Option<PathBuf>) -> anyhow::Result<()> {
+    let mut raw = String::new();
+    io::Read::read_to_string(&mut io::stdin(), &mut raw).context("read SubagentStart payload")?;
+    // Malformed JSON folds to an empty payload ⇒ classified as `missing-cwd`
+    // (fail-closed on the stamp decision; we never block the worker either way).
+    let payload: SubagentPayload = serde_json::from_str(&raw).unwrap_or_default();
+
+    let agent_type = payload.agent_type.unwrap_or_default();
+    let cwd_str = payload.cwd.unwrap_or_default();
+    let cwd_present = !cwd_str.is_empty();
+
+    // Resolve the SOURCE repo (the orchestrator's tree) from the PROCESS cwd — the
+    // SubagentStart hook fires inside it. This is the copy SOURCE for `run_provision`
+    // (the worker worktree is the destination), mirroring how `run_fork --worker`
+    // passes `Some(repo)`/`dir` — never `Some(fork)`/`fork` (that would make source
+    // == fork and trip the sibling-worktree guard). `None` ⇒ no doctrine root above
+    // the process cwd ⇒ the cwd cannot be validated against a repo ⇒ bad-dir.
+    let repo = root::find(path, &root::default_markers())
+        .ok()
+        .and_then(|r| fs::canonicalize(&r).ok());
+    let cwd_canon = if cwd_present {
+        fs::canonicalize(&cwd_str).ok()
+    } else {
+        None
+    };
+    // Valid iff the payload cwd is a linked worktree of the SAME repo as the source
+    // (shared git-common-dir) — the worktree notion of "under the repo". A path
+    // prefix-check is WRONG: a linked worktree is a sibling dir, not a child.
+    let cwd_valid = match (repo.as_deref(), cwd_canon.as_deref()) {
+        (Some(repo), Some(cwd)) => {
+            is_linked_worktree(cwd).unwrap_or(false) && cwd_shares_repo(repo, cwd)
+        }
+        _ => false,
+    };
+    // Re-entrant guard: a payload worktree already bearing the marker must NOT be
+    // re-provisioned (it would overwrite live worker state on a resume) — only the
+    // first, marker-absent stamp is exempt (design §5 Hook-mint, F-9).
+    let already_marked = cwd_canon.as_deref().is_some_and(marker_present);
+
+    match classify_stamp(&agent_type, cwd_present, cwd_valid, already_marked) {
+        Ok(Stamp::Ok) => {}
+        Err(refusal) => {
+            writeln!(io::stderr(), "stamp-refused: {}", refusal.token())?;
+            bail!("stamp-refused: {}", refusal.token());
+        }
+    }
+    // Stamp passed ⇒ both the source repo and the canonical cwd resolved (cwd_valid
+    // required Some of each). Source = the orchestrator tree (provision copies FROM
+    // it); the worker worktree `cwd` is the destination. Fail closed if either is
+    // somehow absent — never panic on a hook input.
+    let (Some(source), Some(cwd)) = (repo, cwd_canon) else {
+        let token = StampRefusal::BadDir.token();
+        writeln!(io::stderr(), "stamp-refused: {token}")?;
+        bail!("stamp-refused: {token}");
+    };
+
+    // --- act: provision (SOLE copier) THEN mark. M3: NO rollback on failure. ---
+    if let Err(cause) = run_provision(Some(source), &cwd).and_then(|()| write_marker(&cwd)) {
+        // LOUD diagnostic; the worktree is LEFT in place (Claude owns it). No
+        // `git worktree remove` — there is no compensating rollback for a stamp.
+        writeln!(
+            io::stderr(),
+            "STAMP FAILED for {} — worktree LEFT in place (not removed); orchestrator post-spawn check will catch the unstamped worker: {cause:#}",
+            cwd.display()
+        )?;
+        return Err(cause.context(format!("stamp worker worktree {}", cwd.display())));
+    }
+
+    writeln!(io::stderr(), "stamped worker worktree {}", cwd.display())?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -526,6 +1992,278 @@ mod tests {
             matches("", ""),
             "degenerate equal ⇒ stationary (caller guards emptiness)"
         );
+    }
+
+    // --- SL-056 PHASE-08: land pure classifier + refusal-token table (design §6) ---
+
+    fn fork_state(exists: bool, has_live_worktree: bool, bears_marker: bool) -> ForkState {
+        ForkState {
+            exists,
+            has_live_worktree,
+            bears_marker,
+        }
+    }
+
+    #[test]
+    fn classify_land_precedence_and_ok() {
+        // Happy: clean tree, fork exists, live worktree, no marker ⇒ Ok(Merge).
+        assert_eq!(
+            classify_land(true, "main", fork_state(true, true, false)),
+            Ok(Merge::Ok)
+        );
+        // Precedence tree-unclean → no-such-fork → worktree-gone → dispatch-fork.
+        // Dirty tree wins over every later fault.
+        assert_eq!(
+            classify_land(false, "main", fork_state(false, false, true)),
+            Err(LandRefusal::TreeUnclean)
+        );
+        // Clean tree, missing fork wins over the worktree/marker checks.
+        assert_eq!(
+            classify_land(true, "main", fork_state(false, false, true)),
+            Err(LandRefusal::NoSuchFork)
+        );
+        // worktree-gone GATES dispatch-fork: a worktree-less branch refuses
+        // worktree-gone BEFORE the marker check can pass vacuously.
+        assert_eq!(
+            classify_land(true, "main", fork_state(true, false, false)),
+            Err(LandRefusal::WorktreeGone)
+        );
+        // Live worktree that bears the marker ⇒ dispatch-fork.
+        assert_eq!(
+            classify_land(true, "main", fork_state(true, true, true)),
+            Err(LandRefusal::DispatchFork)
+        );
+    }
+
+    #[test]
+    fn classify_land_ignores_head() {
+        // `head` documents the contextual coordination-root precond; it gates NO
+        // token, so the verdict is invariant under any HEAD value.
+        let st = fork_state(true, true, false);
+        assert_eq!(
+            classify_land(true, "main", st),
+            classify_land(true, "detached-xyz", st)
+        );
+    }
+
+    #[test]
+    fn land_refusal_tokens_are_distinct_and_exhaustive() {
+        // The exhaustive 7-token set (design §6). wedged-merge's live abort-failure
+        // path is not deterministically black-box reproducible (it needs `git merge
+        // --abort` itself to fail); its token is pinned HERE per the worker
+        // contract's fallback, alongside the other six.
+        let all = [
+            LandRefusal::TreeUnclean,
+            LandRefusal::NoSuchFork,
+            LandRefusal::WorktreeGone,
+            LandRefusal::DispatchFork,
+            LandRefusal::MergeConflict,
+            LandRefusal::WedgedMerge,
+            LandRefusal::InconsistentMergeState,
+        ];
+        let tokens: Vec<&str> = all.iter().map(|r| r.token()).collect();
+        assert_eq!(tokens.len(), 7, "exactly seven refusal tokens");
+        let unique: std::collections::BTreeSet<&str> = tokens.iter().copied().collect();
+        assert_eq!(unique.len(), 7, "every token is distinct");
+        assert_eq!(LandRefusal::WedgedMerge.token(), "wedged-merge");
+        assert_eq!(LandRefusal::MergeConflict.token(), "merge-conflict");
+        assert_eq!(
+            LandRefusal::InconsistentMergeState.token(),
+            "inconsistent-merge-state"
+        );
+    }
+
+    // --- SL-056 PHASE-09: classify_gc pure verdict (design §8.2) ---
+
+    fn gc_state(
+        branch_exists: bool,
+        worktree_present: bool,
+        target_present: bool,
+        landed_verdict: Option<bool>,
+    ) -> GcState {
+        GcState {
+            branch_exists,
+            worktree_present,
+            target_present,
+            landed_verdict,
+        }
+    }
+
+    #[test]
+    fn classify_gc_landed_reaps_present_things_in_order() {
+        // Branch + worktree + target present, oracle positive ⇒ reap all three.
+        let v = classify_gc(gc_state(true, true, true, Some(true)), false, false, false);
+        assert_eq!(
+            v,
+            GcVerdict::Reap(GcPlan {
+                remove_worktree: true,
+                delete_branch: true,
+                reap_target: true,
+            })
+        );
+    }
+
+    #[test]
+    fn classify_gc_skips_absent_steps() {
+        // Worktree already gone (crash mid-gc), target gone too ⇒ only branch -D.
+        let v = classify_gc(
+            gc_state(true, false, false, Some(true)),
+            false,
+            false,
+            false,
+        );
+        assert_eq!(
+            v,
+            GcVerdict::Reap(GcPlan {
+                remove_worktree: false,
+                delete_branch: true,
+                reap_target: false,
+            })
+        );
+    }
+
+    #[test]
+    fn classify_gc_branch_gone_reaps_only_the_target() {
+        // Branch-gone ⇒ already-certified; the ONLY residue is the target dir,
+        // reaped from the branch NAME alone (landed_verdict is None — gate skipped).
+        let v = classify_gc(gc_state(false, false, true, None), false, false, false);
+        assert_eq!(
+            v,
+            GcVerdict::Reap(GcPlan {
+                remove_worktree: false,
+                delete_branch: false,
+                reap_target: true,
+            })
+        );
+        // Branch gone AND target gone ⇒ a fully-reaped no-op (idempotent rerun).
+        let done = classify_gc(gc_state(false, false, false, None), false, false, false);
+        assert_eq!(
+            done,
+            GcVerdict::Reap(GcPlan {
+                remove_worktree: false,
+                delete_branch: false,
+                reap_target: false,
+            })
+        );
+    }
+
+    #[test]
+    fn classify_gc_not_landed_refuses_unless_overridden() {
+        // Non-ancestor tip with a `+` (oracle false; also the squash case — the two
+        // are indistinguishable), no override ⇒ not-landed.
+        let st = gc_state(true, true, true, Some(false));
+        assert_eq!(
+            classify_gc(st, false, false, false),
+            GcVerdict::Refuse(GcRefusal::NotLanded)
+        );
+        // --force bypasses the oracle ⇒ reap.
+        assert!(matches!(
+            classify_gc(st, true, false, false),
+            GcVerdict::Reap(_)
+        ));
+        // --superseded-head match (head == asserted SHA) ⇒ reap.
+        assert!(matches!(
+            classify_gc(st, false, true, false),
+            GcVerdict::Reap(_)
+        ));
+    }
+
+    #[test]
+    fn classify_gc_dry_run_does_not_change_the_verdict() {
+        // dry_run is honoured in the shell; the classifier returns the SAME verdict
+        // a real run would act on (so the dry-run print is truthful).
+        let landed = gc_state(true, true, true, Some(true));
+        assert_eq!(
+            classify_gc(landed, false, false, true),
+            classify_gc(landed, false, false, false)
+        );
+        let refused = gc_state(true, true, true, Some(false));
+        assert_eq!(
+            classify_gc(refused, false, false, true),
+            classify_gc(refused, false, false, false)
+        );
+    }
+
+    #[test]
+    fn gc_refusal_token_is_not_landed() {
+        assert_eq!(GcRefusal::NotLanded.token(), "not-landed");
+    }
+
+    // --- SL-056 PHASE-06: target_dir_for_branch pure mapping (VT-3 unit half) ---
+
+    #[test]
+    fn target_dir_for_branch_maps_under_wt() {
+        assert_eq!(
+            target_dir_for_branch("sl056-p06"),
+            PathBuf::from("wt/sl056-p06"),
+            "branch maps to wt/<branch>"
+        );
+        assert_eq!(
+            target_dir_for_branch("feature/x"),
+            PathBuf::from("wt/feature/x"),
+            "slashes in the branch survive as nested components"
+        );
+    }
+
+    // --- SL-056 PHASE-05 T1: describe_mode truth table (the single source) ---
+
+    #[test]
+    fn describe_mode_truth_table() {
+        // Solo: neither signal, in or out of a linked worktree ⇒ allowed.
+        let solo_plain = describe_mode(false, false, false);
+        assert!(!solo_plain.refused, "no signal ⇒ writes allowed");
+        assert_eq!(solo_plain.cause, Cause::None);
+
+        // A marker on the PRIMARY tree is inert (mode needs a linked fork).
+        let marker_on_main = describe_mode(false, true, false);
+        assert!(
+            !marker_on_main.refused,
+            "marker without a linked worktree is inert ⇒ allowed"
+        );
+        assert_eq!(marker_on_main.cause, Cause::None);
+
+        // A linked worktree WITHOUT a marker (the clean direct-writer entry).
+        let linked_no_marker = describe_mode(true, false, false);
+        assert!(!linked_no_marker.refused, "linked, no marker ⇒ allowed");
+        assert_eq!(linked_no_marker.cause, Cause::None);
+
+        // PRIMARY signal: marker in a linked worktree, no env ⇒ refused: marker.
+        let marker = describe_mode(true, true, false);
+        assert!(marker.refused);
+        assert_eq!(marker.cause, Cause::Marker);
+        assert!(
+            marker.is_stale_marker(),
+            "marker-only in a fork is the stale-marker case"
+        );
+        assert!(!marker.is_env_on_nonlinked());
+
+        // Env on a NON-linked tree ⇒ refused: env, dual-cause hazard.
+        let env_main = describe_mode(false, false, true);
+        assert!(env_main.refused);
+        assert_eq!(env_main.cause, Cause::Env);
+        assert!(env_main.is_env_on_nonlinked(), "env on main ⇒ dual-cause");
+        assert!(!env_main.is_stale_marker());
+
+        // Env inside a linked worktree (no marker) ⇒ env, but NOT the dual-cause
+        // (it is genuinely a worker fork via the env optimisation).
+        let env_linked = describe_mode(true, false, true);
+        assert!(env_linked.refused);
+        assert_eq!(env_linked.cause, Cause::Env);
+        assert!(!env_linked.is_env_on_nonlinked());
+
+        // Both legs ⇒ signal: both.
+        let both = describe_mode(true, true, true);
+        assert!(both.refused);
+        assert_eq!(both.cause, Cause::Both);
+        assert!(
+            !both.is_stale_marker(),
+            "both is not the marker-only stale case"
+        );
+
+        assert_eq!(solo_plain.cause_token(), "none");
+        assert_eq!(marker.cause_token(), "marker");
+        assert_eq!(env_main.cause_token(), "env");
+        assert_eq!(both.cause_token(), "both");
     }
 
     // --- T1: WITHHELD authority + .gitignore parity (VT-4) ---
@@ -631,6 +2369,42 @@ mod tests {
         assert_eq!(is_withheld(".doctrine/skills/code-review/SKILL.md"), None);
     }
 
+    // SL-056 §3 T2: write_marker / remove_marker / marker_present round-trip.
+    #[test]
+    fn marker_write_present_remove_round_trip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        assert!(!marker_present(root), "no marker initially");
+        write_marker(root).unwrap();
+        assert!(marker_present(root), "marker present after write");
+        assert!(
+            marker_path(root).exists(),
+            "marker file exists under .doctrine/state/dispatch/worker"
+        );
+        remove_marker(root).unwrap();
+        assert!(!marker_present(root), "marker gone after remove");
+        // Idempotent: removing an absent marker is Ok.
+        remove_marker(root).unwrap();
+    }
+
+    // SL-056 §3: the worker marker inherits the State tier with ZERO new tier
+    // logic — it lives under `.doctrine/state/**`, already withheld/gitignored/
+    // import-excluded. Pin the marker path to [`Tier::State`].
+    #[test]
+    fn worker_marker_classifies_as_state_tier() {
+        let rel = marker_path(Path::new("")).to_string_lossy().into_owned();
+        let rel = rel.trim_start_matches('/');
+        assert_eq!(
+            is_withheld(rel),
+            Some(Tier::State),
+            "marker {rel} must classify as the withheld State tier"
+        );
+        assert_eq!(
+            is_withheld(".doctrine/state/dispatch/worker"),
+            Some(Tier::State)
+        );
+    }
+
     #[test]
     fn select_copies_withholds_tier_files_under_a_broad_glob() {
         let allow = parse_allowlist("**").unwrap();
@@ -727,5 +2501,143 @@ mod tests {
 
         assert!(is_linked_worktree(&fork).unwrap(), "a linked worktree");
         assert!(!is_linked_worktree(&primary).unwrap(), "the primary tree");
+    }
+
+    #[test]
+    fn rollback_fork_retracts_stale_worktree_entry_after_fs_reap() {
+        // F-8: when step-1 `git worktree remove` FAILS (the dir is not a
+        // registered worktree) but step-3 fs-reaps the dir, the stale step-1
+        // debris entry must be retracted so a fully-cleaned rollback reports NO
+        // debris — else run_fork false-bails `fork-rollback-debris` over a tree
+        // that was, in fact, fully cleaned.
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("src"));
+        // A plain dir that is NOT a git worktree ⇒ `worktree remove --force`
+        // errors, but `fs::remove_dir_all` reaps it.
+        let dir = tmp.path().join("orphan");
+        fs::create_dir_all(&dir).unwrap();
+
+        let debris = rollback_fork(&repo, "no-such-branch", &dir);
+
+        assert!(
+            debris.is_empty(),
+            "a fully fs-reaped rollback reports no debris; got: {debris:?}"
+        );
+        assert!(!dir.exists(), "the orphan dir was reaped");
+    }
+
+    // --- SL-056 PHASE-10: classify_stamp pure arms (T2) ---
+
+    #[test]
+    fn classify_stamp_ok_when_all_inputs_hold() {
+        // Valid dir + agent-type + marker ABSENT (the first stamp) ⇒ Ok.
+        assert_eq!(
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, true, false),
+            Ok(Stamp::Ok)
+        );
+    }
+
+    #[test]
+    fn classify_stamp_missing_cwd_refuses() {
+        // cwd absent ⇒ missing-cwd, regardless of the other inputs.
+        assert_eq!(
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, false, false, false),
+            Err(StampRefusal::MissingCwd)
+        );
+        assert_eq!(StampRefusal::MissingCwd.token(), "missing-cwd");
+    }
+
+    #[test]
+    fn classify_stamp_bad_dir_refuses_when_cwd_present_but_invalid() {
+        // cwd present but not under-repo-and-linked ⇒ bad-dir (checked before
+        // agent-type, so even a wrong agent_type still names the dir problem).
+        assert_eq!(
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, false, false),
+            Err(StampRefusal::BadDir)
+        );
+        assert_eq!(
+            classify_stamp("anything", true, false, false),
+            Err(StampRefusal::BadDir)
+        );
+        assert_eq!(StampRefusal::BadDir.token(), "bad-dir");
+    }
+
+    #[test]
+    fn classify_stamp_missing_agent_type_refuses() {
+        // agent_type absent ("") OR present-but-wrong ⇒ missing-agent-type.
+        assert_eq!(
+            classify_stamp("", true, true, false),
+            Err(StampRefusal::MissingAgentType)
+        );
+        assert_eq!(
+            classify_stamp("some-other-agent", true, true, false),
+            Err(StampRefusal::MissingAgentType)
+        );
+        assert_eq!(StampRefusal::MissingAgentType.token(), "missing-agent-type");
+    }
+
+    #[test]
+    fn classify_stamp_already_marked_refuses() {
+        // Valid dir + agent-type but the worktree ALREADY bears the marker ⇒ a
+        // re-entrant stamp ⇒ already-marked (the marker check is LAST, F-9).
+        assert_eq!(
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, true, true),
+            Err(StampRefusal::AlreadyMarked)
+        );
+        assert_eq!(StampRefusal::AlreadyMarked.token(), "already-marked");
+    }
+
+    // --- SL-056 PHASE-10 T6 / VT-4: agent-def `name` ↔ const drift gate ---
+    //
+    // Reds if `install/agents/claude/dispatch-worker.md` frontmatter `name:`
+    // diverges from `DISPATCH_WORKER_AGENT_TYPE`. The SubagentStart matcher leg
+    // is covered in `src/boot.rs`; the `/dispatch-agent` skill leg is below
+    // (PHASE-13). Together they pin every replica of the literal to the const.
+    #[test]
+    fn dispatch_worker_agent_def_name_matches_const() {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let def = manifest.join("install/agents/claude/dispatch-worker.md");
+        let text =
+            fs::read_to_string(&def).unwrap_or_else(|e| panic!("read {}: {e}", def.display()));
+        let name = text
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("name:"))
+            .map(str::trim)
+            .unwrap_or_else(|| panic!("no `name:` frontmatter in {}", def.display()));
+        assert_eq!(
+            name, DISPATCH_WORKER_AGENT_TYPE,
+            "agent-def name must equal DISPATCH_WORKER_AGENT_TYPE"
+        );
+    }
+
+    // --- SL-056 PHASE-13 / VT-1 (τ): `/dispatch-agent` skill `subagent_type` leg ---
+    //
+    // Reds if the `/dispatch-agent` skill's `subagent_type:` literal — the value
+    // the orchestrator passes to the `Agent` tool to spawn a worker — diverges
+    // from `DISPATCH_WORKER_AGENT_TYPE`. A one-character drift fails OPEN (the
+    // SubagentStart matcher never fires ⇒ no stamp ⇒ worker_mode false), so the
+    // literal is PINNED here, not merely documented.
+    #[test]
+    fn dispatch_agent_skill_subagent_type_matches_const() {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let skill = manifest.join("plugins/doctrine/skills/dispatch-agent/SKILL.md");
+        let text =
+            fs::read_to_string(&skill).unwrap_or_else(|e| panic!("read {}: {e}", skill.display()));
+        let pinned = text
+            .lines()
+            .find_map(|l| l.split_once("subagent_type:").map(|(_, rest)| rest))
+            .map(|rest| {
+                rest.trim()
+                    .trim_start_matches('`')
+                    .split([' ', '`', '#'])
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+            })
+            .unwrap_or_else(|| panic!("no `subagent_type:` line in {}", skill.display()));
+        assert_eq!(
+            pinned, DISPATCH_WORKER_AGENT_TYPE,
+            "/dispatch-agent subagent_type must equal DISPATCH_WORKER_AGENT_TYPE"
+        );
     }
 }
