@@ -30,6 +30,11 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::backlog_order::{BacklogOrder, ItemId, OrderInput, Override, OverrideReason};
+// SL-060 PHASE-02: the dep/sequence schema + the strict edit-preserving append now
+// live in the shared `dep_seq` leaf. Backlog uses the leaf TYPE (`AfterEdge`) and the
+// leaf `RelEdit`/`append` write seam; its own `read_item`/`dep_seq_for` (the one-parse
+// `promoted` projection) stay backlog-local.
+use crate::dep_seq::{self, AfterEdge, RelEdit};
 
 use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
@@ -375,16 +380,6 @@ pub(crate) struct RiskFacet {
     impact: Option<RiskLevel>,
     origin: Option<String>,
     controls: Vec<String>,
-}
-
-/// A soft-sequence edge (PRD-009): this item runs `after` the predecessor `to`,
-/// with an optional per-edge `rank` (default `0` — a plain soft edge; a non-zero
-/// rank is a manual tie-break hint). A bare `{ to = "X" }` is rank 0.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct AfterEdge {
-    to: String,
-    #[serde(default)]
-    rank: i32,
 }
 
 /// A `triggers` rider (PRD-009 §5.7): the source `globs` this item watches, with
@@ -1375,29 +1370,13 @@ fn set_backlog_status(
     Ok(resolution)
 }
 
-/// One outbound item→item relationship-axis append (PHASE-03 set verbs). `Needs`
-/// carries the prereq refs (a string array); `After` carries one soft-sequence edge
-/// `{ to, rank }` (the array-of-inline-tables axis, one `to` per invocation — OQ-C).
-/// The refs are pre-validated by the shell before this is called.
-enum RelEdit<'a> {
-    /// Append these prereq refs to `[relationships].needs`.
-    Needs(&'a [String]),
-    /// Append one `{ to, rank }` edge to `[relationships].after`.
-    After { to: &'a str, rank: i32 },
-}
-
-/// Edit-preserving append into one `[relationships]` array — the `set_backlog_status`
-/// `toml_edit` precedent (mem.pattern.entity.edit-preserving-status-transition): mutate
-/// the file in place so comments, inert tables, and unknown keys survive verbatim (the
-/// file is never reserialised). Navigates `[relationships]` → the target array, pushes
-/// each new entry, and writes once.
-///
-/// **F-1 refuse** (the `set_backlog_status` corruption hazard): if `[relationships]`
-/// or the seeded target array is absent, this is a malformed (hand-edited) item — a
-/// tail `insert` would land the array inside a trailing subtable. Refuse instead,
-/// touching nothing. **Idempotent**: an entry already present (a `needs` ref already
-/// listed, or an identical `{ to, rank }` edge) is not duplicated; if every entry is
-/// already present the file is left byte-identical (no write, mtime holds).
+/// One outbound item→item relationship-axis append (PHASE-03 set verbs). Resolves
+/// the item's `backlog-NNN.toml` path and delegates to the shared `dep_seq::append`
+/// write seam (SL-060 PHASE-02 lift) — the strict edit-preserving `toml_edit` append
+/// that refuses (F-1, non-destructively) on a missing seeded array. Backlog keeps
+/// this thin wrapper so its callers stay path-blind (root + kind + id), while the
+/// schema + write body are shared with the future slice consumer. The `RelEdit`
+/// variants are the leaf's, re-imported above.
 fn append_relationship(
     root: &Path,
     item_kind: ItemKind,
@@ -1409,66 +1388,7 @@ fn append_relationship(
         .join(item_kind.kind().dir)
         .join(&name)
         .join(format!("{BACKLOG_STEM}-{name}.toml"));
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("backlog item not found at {}", path.display()))?;
-    let mut doc = text
-        .parse::<toml_edit::DocumentMut>()
-        .with_context(|| format!("Failed to parse {}", path.display()))?;
-
-    // F-1: `[relationships]` and the target axis array are scaffold-seeded; their
-    // absence means a malformed item (a tail insert would corrupt a trailing subtable).
-    let axis = match edit {
-        RelEdit::Needs(_) => "needs",
-        RelEdit::After { .. } => "after",
-    };
-    let array = doc
-        .get_mut("relationships")
-        .and_then(toml_edit::Item::as_table_mut)
-        .and_then(|t| t.get_mut(axis))
-        .and_then(toml_edit::Item::as_array_mut)
-        .with_context(|| {
-            format!(
-                "malformed backlog item {name}: missing seeded `[relationships].{axis}` (regenerate via `backlog new`)"
-            )
-        })?;
-
-    let mut changed = false;
-    match edit {
-        RelEdit::Needs(refs) => {
-            for r in *refs {
-                // idempotent: skip a ref already in the array.
-                if array.iter().any(|v| v.as_str() == Some(r.as_str())) {
-                    continue;
-                }
-                array.push(r.as_str());
-                changed = true;
-            }
-        }
-        RelEdit::After { to, rank } => {
-            // idempotent: skip an identical `{ to, rank }` edge.
-            let present = array.iter().any(|v| {
-                v.as_inline_table().is_some_and(|t| {
-                    t.get("to").and_then(toml_edit::Value::as_str) == Some(to)
-                        && t.get("rank").and_then(toml_edit::Value::as_integer)
-                            == Some(i64::from(*rank))
-                })
-            });
-            if !present {
-                let mut edge = toml_edit::InlineTable::new();
-                edge.insert("to", (*to).into());
-                edge.insert("rank", i64::from(*rank).into());
-                array.push(edge);
-                changed = true;
-            }
-        }
-    }
-
-    if !changed {
-        return Ok(()); // every entry already present — write nothing (mtime holds).
-    }
-    std::fs::write(&path, doc.to_string())
-        .with_context(|| format!("Failed to write {}", path.display()))?;
-    Ok(())
+    dep_seq::append(&path, edit)
 }
 
 /// `doctrine backlog edit <ID> --status <s> [--resolution <r>]` — the transition
