@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec48053ff74f0b039e44ceaa026dc"
+memory_key = "mem.pattern.detection.share-write-seam-identity-notion"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Detection identity must agree with the write seam's identity"
+summary = "Auto-detection identity must reuse the write seam's same-file notion (resolved inode), not a parallel is-symlink test"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["src/boot.rs"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7e0219548b87c0a002e11473284cf931973f358a"
+ref_name = "refs/heads/main"
+checkout_state_id = "3d4d55e3b352e3abd0d0e6e1f55ecb534706a473d17afd19ad02273a6dfdbc02"
+base_commit = "cade6cb50bbadaf8feeecd9e3a3e1e5b25fba53c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

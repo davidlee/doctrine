@@ -1,0 +1,45 @@
+[[area]]
+name = "auto-detect discriminator"
+purpose = "resolve_harnesses inode-gated alias-suppression (design §3.1): codex detected on .codex/ OR AGENTS.md present and not Claude's inode-alias; alias-suppression gated on Claude-detected so a lone CLAUDE↔AGENTS symlink pair (no .claude/) still wires codex"
+paths = ["src/boot.rs"]
+
+[[area]]
+name = "write seam (untouched)"
+purpose = "import_targets one-file-per-harness + ensure_boot_import resolved-inode dedup + resolve_target — the behaviour-preservation surface; reused by detection, not modified (design §3.3, §4)"
+paths = ["src/boot.rs"]
+
+[[area]]
+name = "hook wiring (untouched)"
+purpose = "install_refresh returns None for codex — codex is import-only, no SessionStart hook; detecting codex adds an AGENTS.md import write, never perturbs hook merge (design §3.4)"
+paths = ["src/boot.rs"]
+
+[[area]]
+name = "detection unit tests"
+purpose = "resolve_harnesses_auto_detects_by_marker six-case rewrite (real symlinks) + resolve_harnesses_errors_when_none + the two preservation tests proving the write seam unchanged (design §5)"
+paths = ["src/boot.rs"]
+
+[[area]]
+name = "sibling detector (out of scope)"
+purpose = "skills::resolve_agents — the mirror R-1 references; cross-check only, no change (design §7)"
+paths = ["src/skills.rs"]
+
+[[invariant]]
+text = "§5 case set: bare AGENTS.md→[Codex]; .claude/+separate-inode→[Claude,Codex]; .claude/+symlink→[Claude]; .codex/+.claude/→[Claude,Codex]; lone symlink pair no .claude/→[Codex]; none→error"
+
+[[invariant]]
+text = "behaviour-preservation: import_targets_is_one_file_per_harness + ensure_boot_import_dedups_same_inode_to_one_write pass UNCHANGED (write seam + one-file rule untouched)"
+
+[[invariant]]
+text = "no double-wire: both-detected unions [CLAUDE.md, AGENTS.md], ensure_boot_import dedups by resolved inode → one write per inode (§3.3)"
+
+[[invariant]]
+text = "this repo unchanged: symlinked AGENTS.md → agents_is_claude_alias true → Claude-only → byte-identical install output"
+
+[[invariant]]
+text = "no signature change, no new helper: reuses resolve_target for the inode compare (§4)"
+
+[[risk]]
+text = "R-1: skills::resolve_agents mirrors the detection shape — must disposition as follow-up, not widen (design §7)"
+
+[[risk]]
+text = "doc comment above resolve_harnesses must match §3.1, not the de-staled coarse rule"
