@@ -29,23 +29,13 @@
 //! current `HEAD`; an `Unobtainable` (`Blocked`) cell KEEPS its prior anchor, so a
 //! never-observed cell still goes stale against later commits.
 
-// The verifier shell is wholly dead in the bins/lib build until PHASE-05 wires the
-// CLI: nothing yet calls `run`. Its transitive references to `derive_status` /
-// `evaluate_matcher` / the `verify` config are therefore dead-from-dead (the EX-6
-// transitive-dead chain — exactly like PHASE-03's `coverage_store`), so the
-// per-symbol expects on those items in `coverage.rs` / `dtoml.rs` stay fulfilled.
-// This module carries its own self-clearing `not(test)` blanket; the VTs below
-// exercise `run` under `cfg(test)` where `dead_code` does not fire, and the gate
-// runs plain `cargo clippy` (bins/lib, no test cfg) where every item here is dead.
-// The expectation retires itself the moment PHASE-05 wires the CLI.
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "verifier shell wired at PHASE-05 CLI (SL-057)")
-)]
+// PHASE-05 wires the CLI (`coverage verify`) onto `run`, so the verifier shell and
+// its transitive references now have a live bins/lib consumer — the PHASE-04
+// leaf-ahead-of-consumer dead_code blanket is retired.
 
 use std::collections::BTreeMap;
-use std::io::Read;
-use std::path::Path;
+use std::io::{Read, Write as _};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -140,7 +130,7 @@ enum RunResult {
 ///   `Ran` outcome; `upsert` + [`coverage_store::save`] each changed slice.
 /// - Check-less `VT` entries are reported in the backfill list and LEFT UNTOUCHED.
 pub(crate) fn run(root: &Path, slice_ids: &[u32]) -> Result<Report> {
-    let cfg = load_config(root)?;
+    let cfg = coverage_store::load_config(root)?;
     let head = git::head_sha(root);
 
     // Load every slice's file up front (held by slice for per-slice write-back).
@@ -207,16 +197,99 @@ pub(crate) fn run(root: &Path, slice_ids: &[u32]) -> Result<Report> {
     Ok(report)
 }
 
-/// Read `<root>/doctrine.toml` into the [`VerificationConfig`]. An ABSENT file
-/// (`NotFound`) ⇒ the default config; any other read error or a parse error
-/// propagates (the `coverage_store::load` absent-file precedent).
-fn load_config(root: &Path) -> Result<VerificationConfig> {
-    let path = root.join("doctrine.toml");
-    match std::fs::read_to_string(&path) {
-        Ok(text) => Ok(crate::dtoml::parse(&text)?.verification),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(VerificationConfig::default()),
-        Err(e) => Err(anyhow::anyhow!("failed to read {}: {e}", path.display())),
+/// The slice-tree dir under `<root>` enumerated for `coverage verify --all`.
+const SLICE_DIR: &str = ".doctrine/slice";
+
+/// Enumerate every slice id in `<root>/.doctrine/slice` — the `--all` set. Skips
+/// the `NNN-slug` alias symlinks (ISS-006) and any non-numeric dir; an absent tree
+/// is the empty set. Sorted ascending for a deterministic invocation order.
+fn all_slice_ids(root: &Path) -> Result<Vec<u32>> {
+    let mut ids = Vec::new();
+    let dir = root.join(SLICE_DIR);
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(ids),
+        Err(e) => return Err(anyhow::anyhow!("failed to read {}: {e}", dir.display())),
+    };
+    for entry in entries.flatten() {
+        // Skip the slug-alias symlink — it re-points at a numeric dir already seen.
+        if entry.file_type().is_ok_and(|t| t.is_symlink()) {
+            continue;
+        }
+        if let Some(id) = entry
+            .file_name()
+            .to_str()
+            .and_then(|n| n.parse::<u32>().ok())
+        {
+            ids.push(id);
+        }
     }
+    ids.sort_unstable();
+    Ok(ids)
+}
+
+/// `doctrine coverage verify <slice>|--all` — the verifier CLI shell: resolve the
+/// root + slice set, [`run`] the re-derivation, and PRINT the [`Report`] (per-entry
+/// `key: old→new`, exit-code-only flags, and the loud backfill line). Exactly one
+/// of `slice` / `--all` is required.
+pub(crate) fn run_cli(path: Option<PathBuf>, slice: Option<&str>, all: bool) -> Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_ids = match (slice, all) {
+        (Some(_), true) => anyhow::bail!("pass a single <slice> OR --all, not both"),
+        (None, false) => anyhow::bail!("pass a single <slice> or --all"),
+        (Some(s), false) => vec![crate::slice::parse_ref(s)?],
+        (None, true) => all_slice_ids(&root)?,
+    };
+
+    let report = run(&root, &slice_ids)?;
+    print_report(&report)
+}
+
+/// The terse display token for a [`CoverageStatus`] in the report (the Debug name,
+/// matching `coverage_store::withdrawal_line`'s `[Failed]` register). Routed through
+/// a single `format!` so the report's status rendering has one source.
+fn status_label(status: CoverageStatus) -> String {
+    format!("{status:?}")
+}
+
+/// Print a verifier [`Report`]: one `key: old→new` line per re-derived entry (with
+/// an `[exit-code-only]` flag where applicable), then the loud backfill line naming
+/// how many `VT` entries still lack a check.
+fn print_report(report: &Report) -> Result<()> {
+    let mut out = std::io::stdout();
+    for e in &report.verified {
+        let flag = if e.exit_code_only {
+            " [exit-code-only]"
+        } else {
+            ""
+        };
+        let (old, new) = (status_label(e.old_status), status_label(e.new_status));
+        writeln!(
+            out,
+            "{}/{}/{}/{}: {old}→{new}{flag}",
+            e.key.slice, e.key.requirement, e.key.contributing_change, e.key.mode,
+        )?;
+    }
+    for b in &report.backfill {
+        writeln!(
+            out,
+            "{}/{}/{}/{}: no check — backfill",
+            b.key.slice, b.key.requirement, b.key.contributing_change, b.key.mode,
+        )?;
+    }
+    writeln!(
+        out,
+        "{} VT entries lack a check — backfill",
+        report.backfill_count(),
+    )?;
+    if report.exit_code_only_count() > 0 {
+        writeln!(
+            out,
+            "{} exit-code-only cells (no matcher) — audit",
+            report.exit_code_only_count(),
+        )?;
+    }
+    Ok(())
 }
 
 /// Fold the cached [`RunResult`] of an entry's resolved argv into a [`RunOutcome`].

@@ -193,7 +193,10 @@ fn req_status_cell_is_fixed_while_verdict_moves() {
         }
 
         // The wall: status cell, isolated, must be exactly "status\npending\n".
-        let cell = run(root, &["coverage", "REQ-001", "--columns", "status"]);
+        let cell = run(
+            root,
+            &["coverage", "show", "REQ-001", "--columns", "status"],
+        );
         assert!(cell.status.success(), "stderr: {}", stderr(&cell));
         assert_eq!(
             stdout(&cell),
@@ -207,6 +210,7 @@ fn req_status_cell_is_fixed_while_verdict_moves() {
             root,
             &[
                 "coverage",
+                "show",
                 "REQ-001",
                 "--columns",
                 "status,observed,verdict",
@@ -242,7 +246,7 @@ fn coverage_req_table_is_byte_exact_no_label_column() {
     seed_requirement(root, 1, "alpha", "Alpha", "pending", "functional");
     // No coverage.toml ⇒ observed `none`, verdict `Coherent` — deterministic.
 
-    let out = run(root, &["coverage", "REQ-001"]);
+    let out = run(root, &["coverage", "show", "REQ-001"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
@@ -269,7 +273,7 @@ fn coverage_spec_table_member_fan_in_order_with_label_column() {
          [[member]]\nrequirement = \"REQ-001\"\nlabel = \"FR-001\"\norder = 1\n",
     );
 
-    let out = run(root, &["coverage", "SPEC-070"]);
+    let out = run(root, &["coverage", "show", "SPEC-070"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
@@ -287,7 +291,7 @@ fn coverage_req_json_healthy_row_keys() {
     let root = dir.path();
     seed_requirement(root, 1, "alpha", "Alpha", "pending", "functional");
 
-    let out = run(root, &["coverage", "REQ-001", "--json"]);
+    let out = run(root, &["coverage", "show", "REQ-001", "--json"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let v = json(&out);
     assert_eq!(v["kind"], "coverage");
@@ -336,7 +340,7 @@ fn coverage_spec_json_dangling_member_omits_typed_keys() {
          [[member]]\nrequirement = \"REQ-999\"\nlabel = \"FR-002\"\norder = 2\n",
     );
 
-    let out = run(root, &["coverage", "PRD-050", "--json"]);
+    let out = run(root, &["coverage", "show", "PRD-050", "--json"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let v = json(&out);
     assert_eq!(v["kind"], "coverage");
@@ -402,7 +406,7 @@ fn coverage_spec_table_dangling_member_inline_error_fan_continues() {
          [[member]]\nrequirement = \"REQ-999\"\nlabel = \"FR-002\"\norder = 2\n",
     );
 
-    let out = run(root, &["coverage", "PRD-050"]);
+    let out = run(root, &["coverage", "show", "PRD-050"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     let body = stdout(&out);
     let lines: Vec<&str> = body.lines().collect();
@@ -444,7 +448,10 @@ fn coverage_columns_selects_and_orders() {
     let root = dir.path();
     seed_requirement(root, 1, "alpha", "Alpha", "pending", "functional");
 
-    let out = run(root, &["coverage", "REQ-001", "--columns", "id,verdict"]);
+    let out = run(
+        root,
+        &["coverage", "show", "REQ-001", "--columns", "id,verdict"],
+    );
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
@@ -460,7 +467,7 @@ fn coverage_columns_unknown_errors() {
     let root = dir.path();
     seed_requirement(root, 1, "alpha", "Alpha", "pending", "functional");
 
-    let out = run(root, &["coverage", "REQ-001", "--columns", "bogus"]);
+    let out = run(root, &["coverage", "show", "REQ-001", "--columns", "bogus"]);
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
@@ -472,7 +479,7 @@ fn coverage_columns_unknown_errors() {
 #[test]
 fn coverage_bad_ref_errors() {
     let dir = tmp();
-    let out = run(dir.path(), &["coverage", "NOPE-1"]);
+    let out = run(dir.path(), &["coverage", "show", "NOPE-1"]);
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),

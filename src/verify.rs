@@ -14,24 +14,9 @@
 //! resolved argv is the verifier's job. [`resolve`] takes owned/borrowed data
 //! only and is total over its inputs.
 
-// `VerificationConfig`, `resolve`, `Resolved`, `ResolveError`, and `timeout_secs`
-// are a base-resolution leaf built ahead of their consumer: PHASE-02 lands the
-// config + the pure fold; the PHASE-04 verifier that reads the file and runs the
-// resolved argv is the dependent consumer. Until then every item here is dead in
-// the bins/lib build, so the module carries a self-clearing `not(test)` dead_code
-// expect (the `coverage.rs` precedent). It scopes to `not(test)` because the VTs
-// below exercise every item under `cfg(test)`, where `dead_code` would not fire;
-// the gate runs plain `cargo clippy` (bins/lib, no test cfg) where the items are
-// genuinely dead. The expectation is fulfilled exactly where the lint applies, and
-// retires itself the moment PHASE-04 wires the verifier.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "verify base-resolution leaf (SL-057 PHASE-02) is built ahead of \
-                  its PHASE-04 verifier consumer"
-    )
-)]
+// The base-resolution config + fold are now consumed by the PHASE-04 verifier and
+// the PHASE-05 record handler (through `coverage_store::load_config` + `resolve`),
+// so the PHASE-02 leaf-ahead-of-consumer dead_code blanket is retired.
 
 use std::collections::BTreeMap;
 

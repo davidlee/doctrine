@@ -16,30 +16,19 @@
 //!   [`crate::fsutil::write_atomic`] (atomic, overwrite-safe — no torn write);
 //! - the within-file no-clobber fold is [`crate::coverage::upsert`].
 
-// This whole write-path shell is a leaf built ahead of its consumer: PHASE-03
-// lands `load`/`save`/`record`/`forget`; the CLI surface that drives them is the
-// dependent PHASE-05. Until then every item here is dead in the bins/lib build, so
-// the module carries a self-clearing `not(test)` dead_code expect (the `verify.rs`
-// / `coverage.rs` leaf-ahead-of-consumer precedent). It scopes to `not(test)`
-// because the VTs below exercise every item under `cfg(test)`, where `dead_code`
-// would not fire; the gate runs plain `cargo clippy` (bins/lib, no test cfg) where
-// the items are genuinely dead. The expectation is fulfilled exactly where the lint
-// applies, and retires itself the moment PHASE-05 wires the CLI.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "coverage_store write-path shell (SL-057 PHASE-03) is built ahead \
-                  of its PHASE-05 CLI consumer"
-    )
-)]
+// PHASE-05 wires the CLI (`coverage record`/`verify`/`forget`) onto this shell, so
+// every item here now has a live bins/lib consumer — the PHASE-03 leaf-ahead-of-
+// consumer dead_code blanket is retired.
 
 use std::fs;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::coverage::{self, CoverageEntry, CoverageFile, CoverageKey, VtCheck};
+use crate::coverage::{
+    self, CoverageEntry, CoverageFile, CoverageKey, MatchSource, Matcher, VtCheck,
+};
 use crate::fsutil;
 use crate::git;
 use crate::requirement::CoverageStatus;
@@ -191,6 +180,203 @@ pub(crate) fn withdrawal_line(key: &CoverageKey, status: CoverageStatus) -> Stri
         "withdrew {}/{}/{}/{} [{status:?}]",
         key.slice, key.requirement, key.contributing_change, key.mode,
     )
+}
+
+// ---------------------------------------------------------------------------
+// SL-057 PHASE-05 — CLI shell over the write path.
+//
+// The clock is read HERE (`crate::clock::today`) and injected into `record` as
+// `today` (F-VI — the store never reads a clock). The shared `doctrine.toml`
+// reader [`load_config`] lives in this lower module so the verifier (PHASE-04)
+// and the record handler reuse ONE reader without a module cycle (ADR-001 — the
+// verifier already depends down onto this store).
+// ---------------------------------------------------------------------------
+
+/// Read `<root>/doctrine.toml` into the [`VerificationConfig`]. An ABSENT file
+/// (`NotFound`) ⇒ the default config; any other read error or a parse error
+/// propagates (the [`load`] absent-file precedent). The ONE `doctrine.toml`
+/// reader shared by the verifier and the record handler (T6 DRY).
+pub(crate) fn load_config(root: &Path) -> Result<VerificationConfig> {
+    let path = root.join("doctrine.toml");
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(crate::dtoml::parse(&text)?.verification),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(VerificationConfig::default()),
+        Err(e) => Err(anyhow::anyhow!("failed to read {}: {e}", path.display())),
+    }
+}
+
+/// Canonicalize a slice reference (`SL-NNN` or a bare number) to the zero-padded
+/// `SL-NNN` form the 4-tuple key stores. The key fields are canonical id strings
+/// (`slice = "SL-057"`), distinct from the numeric `slice_id` used for the file
+/// path — so a bare `--slice 57` still keys the same cell as `--slice SL-057`.
+fn canonical_slice_ref(reference: &str) -> Result<String> {
+    let id = crate::slice::parse_ref(reference)?;
+    Ok(format!("SL-{id:03}"))
+}
+
+/// Parse a `--status` token into a [`CoverageStatus`] (kebab-case, matching the
+/// serde rename). The clap `value_parser` for the `coverage record --status` flag.
+pub(crate) fn parse_status(s: &str) -> Result<CoverageStatus, String> {
+    match s {
+        "planned" => Ok(CoverageStatus::Planned),
+        "in-progress" => Ok(CoverageStatus::InProgress),
+        "verified" => Ok(CoverageStatus::Verified),
+        "failed" => Ok(CoverageStatus::Failed),
+        "blocked" => Ok(CoverageStatus::Blocked),
+        other => Err(format!(
+            "unknown status `{other}` (expected planned|in-progress|verified|failed|blocked)"
+        )),
+    }
+}
+
+/// The flattened CLI inputs of `coverage record` — an args struct (the house
+/// pattern: `memory::RecordArgs`) to stay under the clippy param/bool ceilings.
+pub(crate) struct CoverageRecordArgs<'a> {
+    pub(crate) slice: &'a str,
+    pub(crate) requirement: &'a str,
+    pub(crate) change: &'a str,
+    pub(crate) mode: &'a str,
+    pub(crate) status: Option<CoverageStatus>,
+    pub(crate) alias: Option<&'a str>,
+    pub(crate) command: &'a [String],
+    pub(crate) extra_args: &'a [String],
+    pub(crate) matcher_source: Option<&'a str>,
+    pub(crate) matcher_pattern: Option<&'a str>,
+    pub(crate) regex: bool,
+    pub(crate) attested_date: Option<&'a str>,
+}
+
+impl CoverageRecordArgs<'_> {
+    /// Whether any VT-check field was supplied — the model boundary (D4): a check
+    /// is present (⇒ `VT` record) ONLY when at least one check field is given;
+    /// otherwise the record is a `VA`/`VH` attestation.
+    fn has_check(&self) -> bool {
+        self.alias.is_some()
+            || !self.command.is_empty()
+            || !self.extra_args.is_empty()
+            || self.matcher_source.is_some()
+            || self.matcher_pattern.is_some()
+            || self.regex
+    }
+
+    /// Build the optional [`Matcher`] from `--matcher-source`/`--matcher-pattern`/
+    /// `--regex`. `None` when no matcher field is set (an alias/default-base check
+    /// with no matcher is rejected downstream by [`coverage::valid`]). The source
+    /// parses through the existing [`MatchSource`] `TryFrom<String>`.
+    fn matcher(&self) -> Result<Option<Matcher>> {
+        if self.matcher_source.is_none() && self.matcher_pattern.is_none() && !self.regex {
+            return Ok(None);
+        }
+        let source = match self.matcher_source {
+            Some(s) => Some(
+                MatchSource::try_from(s.to_owned())
+                    .map_err(|e| anyhow::anyhow!("invalid --matcher-source: {e}"))?,
+            ),
+            None => None,
+        };
+        Ok(Some(Matcher {
+            source,
+            pattern: self.matcher_pattern.unwrap_or_default().to_owned(),
+            regex: self.regex,
+        }))
+    }
+
+    /// Assemble the [`VtCheck`] recipe (only called when [`has_check`] is true).
+    fn check(&self) -> Result<VtCheck> {
+        Ok(VtCheck {
+            alias: self.alias.map(str::to_owned),
+            command: if self.command.is_empty() {
+                None
+            } else {
+                Some(self.command.to_vec())
+            },
+            extra_args: self.extra_args.to_vec(),
+            matcher: self.matcher()?,
+        })
+    }
+}
+
+/// `doctrine coverage record …` — the write shell (resolve root, read the clock,
+/// build the cell, [`record`] it, print a confirmation). Reads the clock HERE and
+/// injects it (F-VI). A `VT` record's status leans Planned in [`record`]; a
+/// `VA`/`VH` attestation takes the supplied `--status` (default `Verified`).
+pub(crate) fn run_record(path: Option<PathBuf>, args: &CoverageRecordArgs<'_>) -> Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_id = crate::slice::parse_ref(args.slice)?;
+
+    if !crate::coverage::mode_is_valid(args.mode) {
+        anyhow::bail!("invalid --mode `{}` (expected VT|VA|VH)", args.mode);
+    }
+
+    let key = CoverageKey {
+        slice: canonical_slice_ref(args.slice)?,
+        requirement: args.requirement.to_owned(),
+        contributing_change: canonical_slice_ref(args.change)?,
+        mode: args.mode.to_owned(),
+    };
+    let check = if args.has_check() {
+        Some(args.check()?)
+    } else {
+        None
+    };
+    // VA/VH attestation status defaults to Verified; ignored for VT (record leans
+    // it to Planned itself).
+    let status = args.status.unwrap_or(CoverageStatus::Verified);
+
+    let cfg = load_config(&root)?;
+    let today = crate::clock::today();
+    record(
+        &root,
+        slice_id,
+        RecordInput {
+            key: key.clone(),
+            status,
+            check,
+            touched_paths: Vec::new(),
+        },
+        &cfg,
+        &today,
+        args.attested_date,
+    )?;
+
+    writeln!(
+        std::io::stdout(),
+        "recorded {}/{}/{}/{}",
+        key.slice,
+        key.requirement,
+        key.contributing_change,
+        key.mode,
+    )?;
+    Ok(())
+}
+
+/// `doctrine coverage forget …` — erase one cell, printing the [`withdrawal_line`]
+/// on a hit (the F-IV loudness) or a terse not-found line on a miss.
+pub(crate) fn run_forget(
+    path: Option<PathBuf>,
+    slice: &str,
+    requirement: &str,
+    change: &str,
+    mode: &str,
+) -> Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_id = crate::slice::parse_ref(slice)?;
+    let key = CoverageKey {
+        slice: canonical_slice_ref(slice)?,
+        requirement: requirement.to_owned(),
+        contributing_change: canonical_slice_ref(change)?,
+        mode: mode.to_owned(),
+    };
+    let mut out = std::io::stdout();
+    match forget(&root, slice_id, &key)? {
+        Some((k, status)) => writeln!(out, "{}", withdrawal_line(&k, status))?,
+        None => writeln!(
+            out,
+            "no coverage cell {}/{}/{}/{}",
+            key.slice, key.requirement, key.contributing_change, key.mode,
+        )?,
+    }
+    Ok(())
 }
 
 #[cfg(test)]

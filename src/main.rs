@@ -222,28 +222,11 @@ enum Command {
         path: Option<PathBuf>,
     },
 
-    /// Read-only requirement coverage / drift view. `<reference>` is REQ-NNN (one
-    /// row) or PRD-/SPEC-NNN (a member fan). Derived observed coverage + the drift
-    /// verdict against authored status — never writes, never derives status.
+    /// Requirement coverage: the read-only drift view (`show`) plus the
+    /// observed-tier write path (`record`/`verify`/`forget`, SL-057).
     Coverage {
-        /// Canonical ref: REQ-NNN | PRD-NNN | SPEC-NNN.
-        reference: String,
-
-        /// Select/order visible table columns (e.g. `--columns id,status,verdict`).
-        #[arg(long, value_delimiter = ',')]
-        columns: Option<Vec<String>>,
-
-        /// Output format (table | json).
-        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
-        format: Format,
-
-        /// Shorthand for `--format json`.
-        #[arg(long)]
-        json: bool,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
+        #[command(subcommand)]
+        command: CoverageCommand,
     },
 
     /// Read-only cross-kind relation view of one entity (`<ID>` = SL-NNN, ADR-NNN,
@@ -1147,6 +1130,135 @@ enum KnowledgeCommand {
     },
 }
 
+/// The `coverage` subcommand group (SL-057 D4): the read-only `show` view plus
+/// the observed-tier write path (`record`/`verify`/`forget`). `show` carries the
+/// former bare-`coverage <ref>` surface verbatim (behaviour preserved).
+#[derive(Subcommand)]
+enum CoverageCommand {
+    /// Read-only requirement coverage / drift view. `<reference>` is REQ-NNN (one
+    /// row) or PRD-/SPEC-NNN (a member fan). Derived observed coverage + the drift
+    /// verdict against authored status — never writes, never derives status.
+    Show {
+        /// Canonical ref: REQ-NNN | PRD-NNN | SPEC-NNN.
+        reference: String,
+
+        /// Select/order visible table columns (e.g. `--columns id,status,verdict`).
+        #[arg(long, value_delimiter = ',')]
+        columns: Option<Vec<String>>,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Record one observed coverage cell into a slice's `coverage.toml`. With any
+    /// check field (`--alias`/`--command`/`--matcher-*`/`--extra-args`/`--regex`)
+    /// the cell is a `VT` recipe (leans Planned until verified); with none it is a
+    /// `VA`/`VH` attestation stamped with today (or `--attested-date`).
+    Record {
+        /// Slice the cell is recorded under — `SL-NNN` or the bare number.
+        #[arg(long)]
+        slice: String,
+
+        /// The requirement this evidence covers — `REQ-NNN`.
+        #[arg(long)]
+        requirement: String,
+
+        /// The contributing change — `SL-NNN` (often the same as `--slice`).
+        #[arg(long)]
+        change: String,
+
+        /// Verification mode: `VT` | `VA` | `VH`.
+        #[arg(long)]
+        mode: String,
+
+        /// Observed status for a `VA`/`VH` attestation (default: verified). Ignored
+        /// for a `VT` record (the verifier derives it; it leans Planned at record).
+        #[arg(long, value_parser = coverage_store::parse_status)]
+        status: Option<requirement::CoverageStatus>,
+
+        /// VT-check alias into `[verification.aliases]` (XOR `--command`).
+        #[arg(long)]
+        alias: Option<String>,
+
+        /// VT-check literal command argv, repeatable (XOR `--alias`).
+        #[arg(long = "command")]
+        command: Vec<String>,
+
+        /// Extra args appended to the resolved base argv, repeatable.
+        #[arg(long = "extra-args")]
+        extra_args: Vec<String>,
+
+        /// Matcher source: `stdout` | `stderr` | `file:<glob>`.
+        #[arg(long = "matcher-source")]
+        matcher_source: Option<String>,
+
+        /// Matcher pattern (substring, or regex with `--regex`).
+        #[arg(long = "matcher-pattern")]
+        matcher_pattern: Option<String>,
+
+        /// Treat `--matcher-pattern` as a `regex_lite` pattern.
+        #[arg(long)]
+        regex: bool,
+
+        /// Attestation date override (`YYYY-MM-DD`) for `VA`/`VH` (default: today).
+        #[arg(long = "attested-date")]
+        attested_date: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Re-derive `VT` coverage status by re-running each entry's check. A single
+    /// `<slice>` re-derives that slice; `--all` re-derives every slice (the
+    /// global-dedup set — a shared check runs once across the invocation).
+    Verify {
+        /// The slice to verify — `SL-NNN` or the bare number (omit with `--all`).
+        slice: Option<String>,
+
+        /// Verify every slice in the corpus.
+        #[arg(long)]
+        all: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Erase one coverage cell (the 4-tuple key) from a slice's store. Prints the
+    /// withdrawn cell — a deletion that flips a composite green is never silent.
+    Forget {
+        /// Slice the cell lives under — `SL-NNN` or the bare number.
+        #[arg(long)]
+        slice: String,
+
+        /// The requirement the cell covers — `REQ-NNN`.
+        #[arg(long)]
+        requirement: String,
+
+        /// The contributing change — `SL-NNN`.
+        #[arg(long)]
+        change: String,
+
+        /// Verification mode: `VT` | `VA` | `VH`.
+        #[arg(long)]
+        mode: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
 #[derive(Subcommand)]
 enum MemoryCommand {
     /// Mint a uid and scaffold a new memory under `.doctrine/memory/items`.
@@ -2041,13 +2153,20 @@ fn write_class(cmd: &Command) -> WriteClass {
             } => Hookmint("marker --stamp-subagent"),
             WorktreeCommand::Marker { .. } => MarkerClear,
         },
-        // Read-only: the coverage/drift view (never writes / derives status, §5.3),
-        // the corpus integrity scan (INV-3), and the cross-kind relation view
-        // (SL-046 — reads only, never mints/derives status).
+        // The coverage group splits per inner verb (SL-057 D2a): `show` is the
+        // read-only drift view; `record`/`forget` mutate the observed store, and
+        // `verify` re-derives + saves per slice — all authored writes.
+        Command::Coverage { command } => match command {
+            CoverageCommand::Show { .. } => Read,
+            CoverageCommand::Record { .. } => Write("coverage record"),
+            CoverageCommand::Verify { .. } => Write("coverage verify"),
+            CoverageCommand::Forget { .. } => Write("coverage forget"),
+        },
+        // Read-only: the corpus integrity scan (INV-3), and the cross-kind relation
+        // view (SL-046 — reads only, never mints/derives status).
         // Read-only priority surfaces (SL-047 — derive per query, never write /
         // mint / derive status; ADR-004 stores no reverse field).
-        Command::Coverage { .. }
-        | Command::Validate { .. }
+        Command::Validate { .. }
         | Command::Inspect { .. }
         | Command::Survey { .. }
         | Command::Next { .. }
@@ -2490,13 +2609,56 @@ fn main() -> anyhow::Result<()> {
                 note,
             },
         ),
-        Command::Coverage {
-            reference,
-            columns,
-            format,
-            json,
-            path,
-        } => coverage_view::run(path, &reference, columns.as_deref(), format, json),
+        Command::Coverage { command } => match command {
+            CoverageCommand::Show {
+                reference,
+                columns,
+                format,
+                json,
+                path,
+            } => coverage_view::run(path, &reference, columns.as_deref(), format, json),
+            CoverageCommand::Record {
+                slice,
+                requirement,
+                change,
+                mode,
+                status,
+                alias,
+                command,
+                extra_args,
+                matcher_source,
+                matcher_pattern,
+                regex,
+                attested_date,
+                path,
+            } => coverage_store::run_record(
+                path,
+                &coverage_store::CoverageRecordArgs {
+                    slice: &slice,
+                    requirement: &requirement,
+                    change: &change,
+                    mode: &mode,
+                    status,
+                    alias: alias.as_deref(),
+                    command: &command,
+                    extra_args: &extra_args,
+                    matcher_source: matcher_source.as_deref(),
+                    matcher_pattern: matcher_pattern.as_deref(),
+                    regex,
+                    attested_date: attested_date.as_deref(),
+                },
+            ),
+            CoverageCommand::Verify { slice, all, path } => {
+                coverage_verify::run_cli(path, slice.as_deref(), all)
+            }
+            CoverageCommand::Forget {
+                slice,
+                requirement,
+                change,
+                mode,
+                path,
+            } => coverage_store::run_forget(path, &slice, &requirement, &change, &mode),
+        },
         Command::Inspect {
             id,
             format,
