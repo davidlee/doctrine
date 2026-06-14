@@ -73,7 +73,14 @@ fn verify_worker(base: &str, wt: &Path) -> Output {
 fn add_worktree(root: &Path, path: &Path, at: &str) {
     git(
         root,
-        &["worktree", "add", "-q", "--detach", path.to_str().unwrap(), at],
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            path.to_str().unwrap(),
+            at,
+        ],
     );
 }
 
