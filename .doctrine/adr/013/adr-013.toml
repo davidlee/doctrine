@@ -1,0 +1,20 @@
+schema = "doctrine.adr"
+version = 1
+
+id = 13
+slug = "revision-as-a-first-class-change-axis-kind-governance-dependency-routes-through-a-revision"
+title = "Revision as a first-class change-axis kind; governance dependency routes through a Revision"
+status = "accepted"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[relationships]
+# Reserved. Empty in v1 — supersession (F1) and tagging are not wired yet.
+# Authored-but-inert: present so the shape is stable when those land.
+supersedes    = []   # ADR ids this one replaces (F1 `adr supersede`)
+superseded_by = []   # set on the old ADR by F1; reverse link is derived
+tags          = []   # free-form classification
+
+# `related` cross-references are uniform `[[relation]]` rows now (SL-048 "the cut"),
+# never a typed key here. Author one with `doctrine link ADR-NNN related <target>`;
+# `doctrine inspect ADR-NNN` renders it. The supersession pair + tags stay typed.

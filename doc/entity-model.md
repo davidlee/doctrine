@@ -67,7 +67,7 @@ The [glossary](glossary.md) groups already prefigure this. Target consolidation 
 
 | Durable entity | Subsumes | Facets / notes |
 |---|---|---|
-| `spec` family | product / tech (revision later) | one model, **per-subtype folders + facet sets** (spec-entity-spec § Spec identity). A requirement is a **peer entity** (`REQ-NNN`), membered via `members.toml`; capabilities/coverage are deferred facets. |
+| `spec` family | product / tech | one model, **per-subtype folders + facet sets** (spec-entity-spec § Spec identity). A requirement is a **peer entity** (`REQ-NNN`), membered via `members.toml`; capabilities/coverage are deferred facets. (Revision is **not** a spec subtype — ADR-013 makes it a standalone change-axis kind; see § Adjudication.) |
 | `slice` | delta, most of design-revision, parts of plan | the change contract (slices-spec). Design/IP/phase land as siblings/facets (slice-003, IP+phases slice). |
 | `phase` / run | executable phase sheet only | keep only if resumable multi-agent execution needs it; else a slice facet. Carries mutable runtime state — different treatment (spec-entity-spec § Design-data vs runtime-state). |
 | `audit` | audit + findings + coverage result | findings are rows; evidence stays prose/files. |
@@ -160,11 +160,16 @@ expanding scope.
   latent across the per-entity notes; this note names it.
 - **Reject `status` → `state` rename:** pure churn against shipped slice code and
   template; the word carries no semantics the rename adds. Keep `status`.
-- **Push back — `revision` as a spec subtype:** spec-driver's `RE-` is a single
-  change-record file, semantically closer to the *change* side (slice/audit) than
-  to a spec's identity. Kept under the spec family for now (user: separate folder,
-  own facets), but its home is **open** — it may resolve to a spec facet or a
-  slice outcome (spec-entity-spec § Open questions).
+- **Resolved — `revision` is a standalone change-axis kind (ADR-013):**
+  spec-driver's `RE-` is a single change-record file, semantically on the *change*
+  side (slice/audit), not a spec's identity. The home question is **closed**:
+  `REV-NNN` is a first-class work-lifecycle kind peer to slice and REC — **not** a
+  spec subtype and **not** a slice facet. Two forces decide it (ADR-013): the
+  SL-060 gradient-inversion invariant (governance→work dependency needs a
+  work-lifecycle anchor to route through, not the evergreen doc) and ADR-009's
+  "approval is not lifecycle" (a Revision stages truth-writes and gates them on an
+  orthogonal approval field — neither a status-less spec subtype nor a single
+  slice's FSM can carry that). Mechanism: SL-066 `design.md`.
 - **Open — per-subtype facet sets:** product vs tech carry different facet
   combinations (user-confirmed); the exact PRD/REV sets are pinned when those
   subtypes are designed (spec-entity-spec § Open questions 4).
