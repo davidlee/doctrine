@@ -43,3 +43,37 @@ observation — confirm on PHASE-02 before recording as durable doctrine memory.
   `lifecycle::is_transition_terminal`.
 - Behaviour-preservation gate held: slice FSM suite assertion text unchanged, only
   import paths shifted (F-E). Commit `7e4e071`.
+
+## PHASE-02 — one authored-TOML mutation seam (DONE, verified green)
+
+Commit `1ea07b3` (parent == B, linear, R-5 clean, `just gate` green verified by
+orchestrator). OQ-3 resolved: grew `src/dep_seq.rs` into the authored-TOML mutation
+leaf (no new module) — it already hosts the `append` core + the non-destructive F-1
+idiom.
+
+- Pure cores on `&mut DocumentMut`: `apply_status(doc, managed, hint)->bool`,
+  `apply_string_append(doc, field, value)->bool`. IO wrappers `set_authored_status`
+  / `append_string_array` (read→parse→core→write-once).
+- DRY: extracted `push_str_if_absent(&mut Array, &str)->bool` — ONE string-membership
+  body, called by both `dep_seq::append`'s `Needs` arm and `apply_string_append`. The
+  `After {to,rank}` struct path is byte-untouched (R3; SL-060 needs/after suites green).
+- Four setters retired onto `set_authored_status`, each keeping its gate in the shell
+  (slice classify+RV; backlog validate_transition coupling + D9 res-clear, still
+  returns resolution `&str`; gov flat; requirement flat status-only no `updated`).
+- EX-4: gov + requirement F-1 hints reworded non-destructive; slice/backlog preserved.
+
+**Load-bearing subtlety — no-op excludes `updated`.** The unified `apply_status`
+no-op guard compares all managed keys EXCEPT `updated` (`.filter(|(k,_)| *k !=
+"updated")`). The four donors keyed their no-op on `status` (gov/slice/req) or
+`status`+`resolution` (backlog), NEVER on `updated` (a derived stamp). Comparing
+`updated` would spuriously write on every status-unchanged-but-today-differs call.
+Behaviour-preserving by construction; two no-op tests pin it.
+
+**For PHASE-03:** `apply_string_append`/`append_string_array` are gated
+`#[cfg_attr(not(test), expect(dead_code, reason=...))]` (staged for the supersede
+consumer). PHASE-03 wires `apply_string_append` → it MUST DROP that `expect`, else
+the now-fulfilled lint makes the `expect` unfulfilled = compile error.
+
+**Follow-up captured:** IMP-061 — a fifth byte-identical setter
+`knowledge::set_record_status` (`src/knowledge.rs:1283`) is out of SL-062 scope; fold
+it onto `set_authored_status` to complete the DRY collapse.
