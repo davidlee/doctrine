@@ -1787,6 +1787,10 @@ pub(crate) enum StampRefusal {
     BadDir,
     /// `agent_type` is absent, OR present but != [`DISPATCH_WORKER_AGENT_TYPE`].
     MissingAgentType,
+    /// The payload worktree ALREADY bears the worker marker — a re-entrant stamp
+    /// (design §5 Hook-mint: only the first, marker-absent stamp is exempt).
+    /// Re-provisioning would overwrite live worker state on a resume.
+    AlreadyMarked,
 }
 
 impl StampRefusal {
@@ -1796,6 +1800,7 @@ impl StampRefusal {
             StampRefusal::MissingCwd => "missing-cwd",
             StampRefusal::BadDir => "bad-dir",
             StampRefusal::MissingAgentType => "missing-agent-type",
+            StampRefusal::AlreadyMarked => "already-marked",
         }
     }
 }
@@ -1812,12 +1817,17 @@ impl StampRefusal {
 /// * `cwd_is_under_repo_linked_worktree` — the resolved cwd is under the repo AND
 ///   a live linked worktree (both probes folded by the shell into one bool).
 ///
-/// Precond order: cwd-presence → dir-validity → agent-type. (Agent-type LAST so a
-/// missing/wrong cwd names the dir problem first.)
+/// * `already_marked` — the resolved payload worktree already bears the worker
+///   marker (a prior stamp). Only the FIRST, marker-absent stamp is exempt.
+///
+/// Precond order: cwd-presence → dir-validity → agent-type → already-marked.
+/// (Agent-type before the marker so a wrong agent-type names itself first; the
+/// marker check is LAST — it only matters once the dir is a valid worker worktree.)
 pub(crate) fn classify_stamp(
     agent_type: &str,
     cwd_present: bool,
     cwd_is_under_repo_linked_worktree: bool,
+    already_marked: bool,
 ) -> Result<Stamp, StampRefusal> {
     if !cwd_present {
         return Err(StampRefusal::MissingCwd);
@@ -1827,6 +1837,9 @@ pub(crate) fn classify_stamp(
     }
     if agent_type != DISPATCH_WORKER_AGENT_TYPE {
         return Err(StampRefusal::MissingAgentType);
+    }
+    if already_marked {
+        return Err(StampRefusal::AlreadyMarked);
     }
     Ok(Stamp::Ok)
 }
@@ -1922,8 +1935,12 @@ pub(crate) fn run_stamp_subagent(path: Option<PathBuf>) -> anyhow::Result<()> {
         }
         _ => false,
     };
+    // Re-entrant guard: a payload worktree already bearing the marker must NOT be
+    // re-provisioned (it would overwrite live worker state on a resume) — only the
+    // first, marker-absent stamp is exempt (design §5 Hook-mint, F-9).
+    let already_marked = cwd_canon.as_deref().is_some_and(marker_present);
 
-    match classify_stamp(&agent_type, cwd_present, cwd_valid) {
+    match classify_stamp(&agent_type, cwd_present, cwd_valid, already_marked) {
         Ok(Stamp::Ok) => {}
         Err(refusal) => {
             writeln!(io::stderr(), "stamp-refused: {}", refusal.token())?;
@@ -2513,8 +2530,9 @@ mod tests {
 
     #[test]
     fn classify_stamp_ok_when_all_inputs_hold() {
+        // Valid dir + agent-type + marker ABSENT (the first stamp) ⇒ Ok.
         assert_eq!(
-            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, true),
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, true, false),
             Ok(Stamp::Ok)
         );
     }
@@ -2523,7 +2541,7 @@ mod tests {
     fn classify_stamp_missing_cwd_refuses() {
         // cwd absent ⇒ missing-cwd, regardless of the other inputs.
         assert_eq!(
-            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, false, false),
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, false, false, false),
             Err(StampRefusal::MissingCwd)
         );
         assert_eq!(StampRefusal::MissingCwd.token(), "missing-cwd");
@@ -2534,11 +2552,11 @@ mod tests {
         // cwd present but not under-repo-and-linked ⇒ bad-dir (checked before
         // agent-type, so even a wrong agent_type still names the dir problem).
         assert_eq!(
-            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, false),
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, false, false),
             Err(StampRefusal::BadDir)
         );
         assert_eq!(
-            classify_stamp("anything", true, false),
+            classify_stamp("anything", true, false, false),
             Err(StampRefusal::BadDir)
         );
         assert_eq!(StampRefusal::BadDir.token(), "bad-dir");
@@ -2548,14 +2566,25 @@ mod tests {
     fn classify_stamp_missing_agent_type_refuses() {
         // agent_type absent ("") OR present-but-wrong ⇒ missing-agent-type.
         assert_eq!(
-            classify_stamp("", true, true),
+            classify_stamp("", true, true, false),
             Err(StampRefusal::MissingAgentType)
         );
         assert_eq!(
-            classify_stamp("some-other-agent", true, true),
+            classify_stamp("some-other-agent", true, true, false),
             Err(StampRefusal::MissingAgentType)
         );
         assert_eq!(StampRefusal::MissingAgentType.token(), "missing-agent-type");
+    }
+
+    #[test]
+    fn classify_stamp_already_marked_refuses() {
+        // Valid dir + agent-type but the worktree ALREADY bears the marker ⇒ a
+        // re-entrant stamp ⇒ already-marked (the marker check is LAST, F-9).
+        assert_eq!(
+            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, true, true),
+            Err(StampRefusal::AlreadyMarked)
+        );
+        assert_eq!(StampRefusal::AlreadyMarked.token(), "already-marked");
     }
 
     // --- SL-056 PHASE-10 T6 / VT-4: agent-def `name` ↔ const drift gate ---

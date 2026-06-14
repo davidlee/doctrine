@@ -369,6 +369,29 @@ fn stamp_refused_under_worker_env() {
 }
 
 #[test]
+fn stamp_refused_when_payload_worktree_already_marked() {
+    // F-9: a re-entrant stamp of an ALREADY-marked PAYLOAD worktree must be
+    // refused — re-provisioning could overwrite live worker state on a resume.
+    // The PROCESS cwd (source) is unmarked, so the worker-mode guard does NOT
+    // fire; the new gate is the payload-cwd marker, which only this verb sees
+    // (design §5 Hook-mint: only the first stamp, marker-absent, is exempt).
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let holder = tempfile::tempdir().unwrap();
+    let fork = add_linked_fork(src.path(), holder.path(), "wkr");
+    let fork = std::fs::canonicalize(&fork).unwrap();
+    // The payload worktree already bears the worker marker (a prior stamp).
+    stamp_marker(&fork);
+
+    let payload = format!(
+        "{{\"cwd\": \"{}\", \"agent_type\": \"dispatch-worker\"}}",
+        fork.display()
+    );
+    let out = run(src.path(), None, &payload, STAMP);
+    assert_refusal(&out, "already-marked");
+}
+
+#[test]
 fn stamp_runs_against_a_marker_absent_worktree() {
     // The positive control for VT-5: worker_mode false (env unset, target bears no
     // marker) ⇒ the legit first stamp passes the guard and runs.
