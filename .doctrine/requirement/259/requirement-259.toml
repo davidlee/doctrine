@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 259
+slug = "label-a-product-spec-with-its-product-level"
+title = "Label a product spec with its product level"
+status = "pending"
+kind = "functional"
+
+description = "A product spec can record a single product level from the closed set domain|capability|feature|story."
+tags = []
+acceptance_criteria = [
+  "A product spec records a single product level from the closed set domain|capability|feature|story.",
+  "The level is optional; an unlabelled product spec is valid.",
+  "The level is shown in the spec's rendered identity.",
+]
