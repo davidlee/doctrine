@@ -1,0 +1,88 @@
+id    = 25
+slug  = "inquisition-adr-012-topology-decision-four-oq-closures"
+title = "Inquisition: ADR-012 topology decision + four OQ closures"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "ADR-012"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "OQ-A/C: no named review target + audit gates the wrong object; expected audit of the escaping refs, observed audit of dispatch/<slice> after publication"
+detail = "adr-012.md Decision 4/5 project 'review-pending refs ... toward the configured trunk-tracking target' then audit 'against the kept dispatch/<slice>'. But the refs that ESCAPE for review are phase/<slice>-NN + the impl-bundle, not the coordination branch — so audit gates an upstream source, not the actual review units (misroute/omit/mutate unproven). There is no named home for 'intent for review' (roles are only dispatch/phase/edge), and 'intent toward trunk' biases the never-auto-trunk policy. (codex C3 / webGPT W2+W4)"
+disposition = "fix-now"
+response = "Two-stage projection introduced (ADR-012 Decision 4): stage-1 prepare-review materialises review/<slice> (impl bundle) + phase/<slice>-NN (code) + journal, NO trunk write; stage-2 integrate only after audit. New review/<slice> target role (Decision 3 + design §1). Audit now targets the prepared review refs, not dispatch/<slice> (Decision 5). 'Intent toward trunk' replaced with 'review/<slice> by default, never trunk-by-default'."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "OQ-A journal not normative; expected a compare-and-swap + replay contract in the ADR, observed 'journal + idempotent replay' as a deferred impl detail"
+detail = "adr-012.md Decision 4 names a journal (target ref, precondition tip, planned op, completion marker) + patch-id replay but leaves the contract to SL-064 impl. For an ADR the minimum contract must be normative: source_oid; per-step target_ref/expected_old_oid/planned_new_oid/applied_new_oid/status; every ref update a CAS on expected_old_oid; replay recomputes from source_oid, no-op if target==planned, refuse+report if target diverged from both. Without CAS the 'report-not-resolve on moved target' claim is unproven. (webGPT W2 journal)"
+disposition = "fix-now"
+response = "Journal contract made normative in ADR-012 Decision 4: committed to dispatch/<slice> BEFORE any ref mutation; per-step target_ref/expected_old_oid/planned_new_oid/applied_new_oid/status; every ref update a CAS on expected_old_oid; replay no-ops if target==planned, refuses+reports if diverged from both. §Verification carries the (a)-(e) crash matrix."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "OQ-D fence overclaims Orchestrator-verb coverage; expected a proven guard for fork/import/gc/sync, observed F-2 marker-absence residual resurrected behind a fence that does not prove it"
+detail = "adr-012.md §Verification asserts the D2b fence 'covers Orchestrator-verb impersonation (an unstamped worker invoking fork/import/gc/sync ... is caught)'. But ADR-006/ADR-011 fences only prove the R-5 import belt + IMP-052 post-spawn abort (authored-write/import path), NOT arbitrary gc/sync; and bwrap-no-push is ADR-008 repo-local (codex/pi-only, ADR-011 confirms), not framework-uniform. So 'absence is safe because fences catch verb abuse' is the recanted RV-023 F-2 in a new costume. (codex C1)"
+disposition = "fix-now"
+response = "Overclaim recanted. §Verification no longer asserts the fence 'covers' fork/import/gc/sync; it is reframed as defence-in-depth, NOT proof (Consequences/Negative + design §6). The genuine close moves to the OQ-D plan-gate (restrict Orchestrator-verb invocation to the trusted orchestrator path + impersonation tests) and IMP-065. bwrap noted ADR-008 repo-local, not framework-uniform."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "OQ-D left 'in between'; expected a clean gate classification, observed an unresolved ADR-acceptance blocker that would strand the slice"
+detail = "adr-012.md §Open says OQ-D 'must close before acceptance' yet the ADR is being accepted with it deferred. Pick one: close now (positive marker) OR move OQ-D out of ADR-acceptance and make it an explicit SL-064 plan-gate with accepted residual risk. User ruled (a) = defer-with-fence, so reclassify cleanly: NOT an ADR-acceptance blocker; a plan-gate requiring (i) Orchestrator-verb invocation restricted to the trusted orchestrator path until a positive marker lands, and (ii) impersonation tests. Positive marker = IMP-065. (webGPT W5)"
+disposition = "fix-now"
+response = "OQ-D reclassified (ADR §Decisions-formerly-open + design §7): NOT an ADR-acceptance blocker; an SL-064 plan-gate with consciously-accepted residual risk (User ruled (a)). Plan MUST restrict Orchestrator-verb invocation to the trusted orchestrator path until a positive marker lands + carry impersonation tests. Positive marker = IMP-065. The 'must close before acceptance' wording is removed."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "OQ-B no runtime classifier; expected an exhaustive deterministic rule, observed three policy buckets that let slice-coupled intent be misclassified as orthogonal and leak ahead of code"
+detail = "adr-012.md Decision 2 names prior-gate/impl-bundle/slice-orthogonal but gives no rule for an ambiguous impl-time write that is both slice-prompted and reusable. Needs: a default-hold rule ('an impl-time write holds with the impl bundle unless explicitly marked slice-orthogonal by a separate deliberate act') and a fourth 'runtime coordination' bucket (phase sheets / transient dispatch state stay on dispatch/<slice>, never trunk material). (codex C4 / webGPT W3)"
+disposition = "fix-now"
+response = "ADR-012 Decision 2 now carries a four-bucket table (prior-governance / impl-bundle / slice-orthogonal / runtime-coordination) + an explicit default-hold classifier: an impl-time write holds with the impl bundle unless explicitly marked orthogonal by a deliberate act; runtime coordination never leaves dispatch/<slice>. design §4 mirrors it."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "phase/<slice>-NN assumed universal; expected a deliverable realizable on every arm, observed the Claude arm produces no per-worker fork branch"
+detail = "adr-012.md Decision 3 makes phase/<slice>-NN a universal preserved deliverable + projects it. But ADR-011's accepted Claude altitude (Agent tool, no fork/base pinning) and SL-064 design §3 (L208-225) say the Claude worker delta lands directly ONTO dispatch/<slice> — 'no fork branch to import'. The core topology assumes an artifact one supported harness does not produce. Specify the synthesis rule: on fork-less arms, the per-phase deliverable branch is CUT from dispatch/<slice> at sync time. (codex C2)"
+disposition = "fix-now"
+response = "Harness synthesis rule added (ADR-012 Decision 3 + design §1): on fork-less arms (claude Agent, ADR-011), the per-phase deliverable branch is CUT from dispatch/<slice> at sync time, so phase/<slice>-NN is universal across arms. §Verification carries the fixture."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "D1 recanted claim relapse; expected 'D1 tightened' everywhere, observed 'D1 preserved via config' still literally in design.md §1"
+detail = "RV-023 F-4 forced recanting 'D1 preserved via config'. ADR-012 Decision 6 correctly says 'consciously tightened, not preserved', but design.md §1 (the '✏️ D1 preserved via config' invariant bullet, ~L78) and the '✏️ D1 preserved via config' decision-log echo still carry the recanted wording; §1 also still says 'intent reaches trunk immediately'. Normalize all design text to the ADR position (tightened; repo flexibility via configurable refs) and to the review-target default. (webGPT W1 + design edits)"
+disposition = "fix-now"
+response = "Recanted RV-023 F-4 wording purged from design.md: §1 '✏️ D1 preserved via config' → 'consciously tightened, not preserved'; 'intent reaches trunk immediately' → 'reaches a visible review target (review/<slice>) at conclude'; decision-log DD-2 normalised. ADR Decision 6 already carried the correct framing."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Review surfaces multiply; expected the topology's UX cost owned, observed no consequence for dispatch/* + phase/* + review/* + edge proliferation"
+detail = "The topology can leave a slice with dispatch/<slice>, phase/<slice>-NN, review/<slice>, and optional edge refs. adr-012.md §Consequences does not own the lifecycle/cleanup UX cost: branch purpose + integration state must be obvious. Add a negative/neutral consequence. (webGPT W6)"
+disposition = "fix-now"
+response = "ADR-012 §Consequences/Negative now owns it: review surfaces multiply (dispatch/<slice>, phase/<slice>-NN, review/<slice>, optional edge); lifecycle + cleanup UX must make each branch's purpose + integration state obvious — designed-for in SL-064."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

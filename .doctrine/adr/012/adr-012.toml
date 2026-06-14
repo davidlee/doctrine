@@ -4,7 +4,7 @@ version = 1
 id = 12
 slug = "dispatch-integration-topology"
 title = "Dispatch integration topology: isolated coordination worktree, class-routed projection, preserved code branches"
-status = "proposed"
+status = "accepted"
 created = "2026-06-14"
 updated = "2026-06-14"
 
