@@ -188,3 +188,31 @@ verification = [
 ]
 specs             = []
 requirements      = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "Claude-arm base correctness (base==B by placement + verify belt)"
+objective = "Make the claude `/dispatch` arm's worker base == B correct-by-default and fail-loud, per design §8 / option Y (DD-11..15): install `worktree.baseRef='head'`, add the post-spawn `verify-worker` verb (pure classifier + impure shell), and amend ADR-011 in place to reflect that the claude isolated-worker base IS orchestrator-controlled by placement (no `WorktreeCreate` base-control need). This is the §8 thread, independent of the §1–§7 integration-sync thread (PHASE-01..07)."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-064 design §8 is locked and CONFIRMED 2026-06-14 (option Y, controlled marker-commit test): under `baseRef='head'` the claude worker forks the spawning orchestrator session's local HEAD; base is controlled by orchestrator placement (cwd==coordination tree, HEAD==B), not a ref-redirect. DD-11..15 are settled." },
+  { id = "EN-2", text = "The existing seams are understood from current code: the SubagentStart stamp lands the worker marker at `<root>/.doctrine/state/dispatch/worker` (worktree.rs); `install_refresh`/`install_claude_hook` merge HookSpec entries into `.claude/settings.local.json` (boot.rs SETTINGS_REL); and the pure/impure split pattern of `classify_stamp`/`classify_import` + their shells is the template for `classify_worker_verify`/`run_verify_worker`." },
+  { id = "EN-3", text = "The baseRef harness behaviour (VH-1) is already verified (2026-06-14) and MUST NOT be re-probed; the remaining criteria are doctrine-unit-testable (VT)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ADR-011 is amended IN PLACE (D-ids immutable; edits append, never renumber): D3 table claude base-pinning cell updated from `opaque residual (charge-2, D5)` to `local-HEAD via baseRef='head'; orchestrator-controlled by placement (cwd==coord tree, HEAD==B); post-spawn base==B verify-verb`; D5 marked falsified (base is local-HEAD-pinned + placement-controlled; the clean-applying-semantically-wrong import worst case closed by the verb, was IMP-043); D6 premise corrected (the WorktreeCreate deferral rests on no agent_type/matcher ⇒ global fire ⇒ σ blast-radius, NOT on payload lacking path/base); D7 σ-withdrawal HOLDS for v1 (no WorktreeCreate installed)." },
+  { id = "EX-2", text = "`install_refresh` on the Claude arm ensures `worktree.baseRef == \"head\"` in the same `.claude/settings.local.json` it already merges HookSpec entries into (per-operator / gitignored, not team-committed — the §8.3 layer-wall property; the design's 'home' framing is satisfied by the file being the local non-committed settings, not by an absolute home path): absent → write `\"head\"`; present and `\"head\"` → no-op; present and other → report, do not clobber (PrintedFallback posture). Atomic, write-only-on-change, dry_run-aware; coexists with the boot + stamp_subagent entries untouched." },
+  { id = "EX-3", text = "Pure `classify_worker_verify(head_resolved: bool, marker_present: bool, base_is_ancestor: bool) -> Result<WorkerVerify, WorkerVerifyRefusal>` exists with distinct refusal tokens `NoWorkerHead` / `Unstamped` / `WrongBase`, precond order head-resolves → marker → base (unstamped names itself before base), and no clock/git/disk in the pure layer (ADR-001 / pure-imperative split)." },
+  { id = "EX-4", text = "`doctrine worktree verify-worker --base <BASE> --dir <DIR>` (house flag convention, mirrors fork/coordinate) is the impure shell `run_verify_worker`: it gathers head-resolution + reads the marker from the worker worktree withheld tier (`<DIR>/.doctrine/state/dispatch/worker`) + computes base==B via `git merge-base --is-ancestor <BASE> <worker-HEAD>` through `src/git.rs` `run_git` (rtk-bypassing), then classifies; on refusal prints the token to stderr and exits non-zero with the fork PRESERVED (funnel halts); on `Ok` exits 0 to proceed to import. Post-worker, pre-import (§8.1 altitude)." },
+  { id = "EX-5", text = "The `/dispatch-agent` skill source (plugins/, not the installed copy) calls `verify-worker` after the worker returns and before `import`, replacing the prose IMP-052 post-spawn marker check with mechanism; IMP-052 is recorded as promoted prose→verb and IMP-043 content-base assertion as closed by the verb." },
+]
+verification = [
+  { id = "VT-1", expects = "Install writer golden: `worktree.baseRef=\"head\"` is written when absent; idempotent no-op when already `\"head\"`; conflict-report (no clobber) when present and not `\"head\"`; the boot + stamp_subagent HookSpec entries in the same settings file are left intact across the write." },
+  { id = "VT-2", expects = "Pure `classify_worker_verify` unit tests: one per verdict (`NoWorkerHead` / `Unstamped` / `WrongBase` / `Ok`) and the precond ordering pinned (head-resolves before marker before base)." },
+  { id = "VT-3", expects = "`verify-worker` e2e: a stale-base fork ⇒ `WrongBase` token + non-zero exit + fork preserved; an unstamped worktree ⇒ `Unstamped`; a B-based stamped worktree ⇒ `Ok` and exit 0 (proceeds)." },
+  { id = "VT-4", expects = "Matcher-drift regression: the existing `DISPATCH_WORKER_AGENT_TYPE` drift test stays green — SubagentStart stamping is untouched by this phase." },
+  { id = "VT-5", expects = "Behaviour-preservation gate: existing boot/`install_claude_hook` suites and worktree worker-mode suites stay green unchanged after the settings writer and the new verb land." },
+  { id = "VH-1", expects = "baseRef harness behaviour — that Claude forks the spawning orchestrator session's local HEAD under `baseRef='head'` — is harness behaviour, not doctrine-unit-testable. ALREADY SATISFIED 2026-06-14 by a controlled marker-commit test (worker forked the orchestrator's unique marker `d58ce62`). Do not re-probe; record as carried evidence." },
+  { id = "VA-1", expects = "The ADR-011 in-place amendment is carried to adversarial acceptance (an inquisition pass or /audit), not left at self-comparison — mirroring PHASE-01's governance-amendment acceptance discipline." },
+]
+specs             = []
+requirements      = []
