@@ -79,8 +79,11 @@ promotion.
 
 **Drafted + internally and externally hardened** in `design.md` (2026-06-14, scope
 **C** — full structured delta payload; SL-044 done). Status stays `design` — awaiting
-final lock. All nine design questions resolved (design.md §8); internal pass
-integrated (§11, F1–F8); external codex pass integrated (§12, B1–B4/M1–M3). Headlines:
+final lock. All nine design questions resolved (design.md §8); **three** adversarial
+passes integrated: internal (§11, F1–F8), external codex (§12, B1–B4/M1–M3), external
+Opus (§13, G1–G7 — G1 a blocker on the corpus-walk KINDS-consumer wiring:
+`priority::partition` + `dep_seq_for` REV arms, else `needs REV-N` never unblocks).
+Headlines:
 one change-axis kind `REV-NNN`; multi-target `[[change]]` payload rows (rows are
 edges, `TypedVerbOnly`) + `primary` display-hint; reciprocity derived via
 `relation_graph`, surfaced on `inspect` (ADR-004 §3 — not `show`); backlog-style
