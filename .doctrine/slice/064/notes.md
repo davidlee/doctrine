@@ -94,3 +94,52 @@ residual) and the import precond never gets a clean window (continuous foreign
 tracked-dirty + HEAD moves) → livelock. Worked around by solo `/execute` in an
 isolated coordination worktree off a pinned base. Keep driving every remaining
 SL-064 phase this way.
+
+## PHASE-03 — projection plumbing + run ledger (completed)
+
+Commits `7c94b19` (plumbing T1-T4), `b4f4bff` (ledger T5-T6). Gate `just check`
+green since last edit; `cargo clippy --bin doctrine` clean.
+
+**Git plumbing (`src/git.rs`).** `run_git` now delegates to a private
+`run_git_env(root, args, envs)` — the single `NORMATIVE_FLAGS` chokepoint is
+preserved (EX-1, no second runner), every born-frame `capture` caller is
+byte-unchanged so **VT-6 behaviour-preservation stayed green unchanged** (all 59
+`git::tests` pass incl. the `forget.remote.v1`/`forget.checkout.v1` suite).
+Three primitives:
+- `filter_tree(root, source_tree, exclude)` — `read-tree`/`rm --cached -r -f
+  --ignore-unmatch`/`write-tree` through a throwaway `GIT_INDEX_FILE`; VT-1
+  asserts the live `.git/index` is **byte-for-byte unchanged**.
+- `commit_tree(root, tree, parent, msg)` — `commit-tree`, no checkout (VT-2).
+- `update_ref_cas(root, ref, new, old) -> RefCas::{Updated, Moved{actual}}` —
+  native 3-arg `update-ref`; zero-oid `old` = creation; reports moved-target,
+  never forces (VT-3).
+
+**Throwaway index without `tempfile`.** `tempfile` is a **dev-dependency only** —
+unusable in production `filter_tree`. Solved with `ScratchIndex`: a pid-named
+file inside the repo's git dir (`rev-parse --absolute-git-dir`), `Drop`-removed,
+absent-cleared up front. Avoided promoting `tempfile` to a runtime dep (a
+dep-surface change). `/record-memory` candidate.
+
+**Run ledger (`src/ledger.rs`, new module).** Pure read model (serde + `toml`,
+mirrors `crate::plan`) + impure recording shell in one file (git.rs-style split).
+Three manifests under `.doctrine/dispatch/<slice>/`: `journal.toml` (`[[row]]`),
+`boundaries.toml` (`[[boundary]]`), `orthogonal.toml` (`[[mark]]`). Serialize via
+`toml::to_string` ⇒ serde-escaped, no raw splicing. `record_boundary`/
+`record_orthogonal` append; `read_*` default-empty on absent file (VT-4/VT-5).
+
+**Decisions worth carrying:**
+- `orthogonal.toml` row = `{ entity, path, status }` (design §4.2 underspecified
+  it; ADR-012 silent). B's "journal-verified" exclusion resolves to
+  `status == verified` — self-contained, no journal join key. **PHASE-04 watch:**
+  if prepare-review's read-back needs to cross-reference the journal row instead,
+  that's an additive field, not a rewrite.
+- Table-header names (`row`/`boundary`/`mark`) are a PHASE-03 choice — design
+  pins the *field* names, not the array-table names. Pinned by round-trip tests.
+- Leaf-ahead-of-consumer dead_code: `#![cfg_attr(not(test), expect(dead_code,
+  reason=…))]` — scoped to non-test because the `cfg(test)` round-trip tests name
+  every symbol (mem.pattern.lint.dead-code-expect-vs-cfg-test). Self-clears when
+  the PHASE-04 sync verb wires the first non-test caller.
+
+PHASE-03 stayed BELOW the CLI projection surface (EN-2) — no `dispatch sync`
+command, no external-ref mutation. Next = PHASE-04 (prepare-review: the
+Orchestrator-classed `dispatch sync --prepare-review`, B + C consuming these).
