@@ -17,10 +17,12 @@ one value that rots the moment the graph around it moves.
 
 This capability adds a small, native, **graph-derived** priority and actionability layer
 over doctrine's existing entity graph, spanning **every admitted kind** rather than
-backlog alone. It keeps authored priority intentionally small (PRD-009 owns the backlog
-priority seam), derives richer ordering and actionability from the typed relations and
+backlog alone. It keeps authored *priority* intentionally small (PRD-009 owns the backlog
+priority rank/band seam) and owns the **cross-kind dependency/sequence capture surface** —
+the hard `needs` and soft `after` edges a work-like entity authors as deliberate operator
+intent. It derives richer ordering and actionability from those authored edges and the
 lifecycle state already in the corpus, and produces **inspectable explanations** without
-ever storing derived judgement as authored truth. **Actionability is a synthesis** — an
+ever storing *derived judgement* as authored truth. **Actionability is a synthesis** — an
 item is actionable when its own lifecycle status is in a workable, non-terminal state
 *and* its admitted graph relations leave it unblocked; neither half alone decides it. Its
 value is that prioritisation becomes *defensible without becoming heavy*: capture and
@@ -37,6 +39,14 @@ In scope:
 
 - A derived priority and actionability **view** over doctrine's registry graph —
   recomputed from authored state, never authored back into it.
+- The **cross-kind dependency/sequence capture surface** — a work-like entity (a slice or
+  any of the five backlog kinds) authors its own hard `needs` (prerequisite, payload-free)
+  and soft `after` (sequence, per-edge `rank`) edges onto another work-like entity, as the
+  authored input the derived view consumes. The backlog item→item instance of this surface
+  is PRD-009's (REQ-097); this capability owns its **generalisation to work-like kinds**.
+  Targets are restricted to work-like kinds — governance, spec, requirement, and knowledge
+  kinds are refused at author time, so this surface never silently becomes a
+  governance-gates-work mechanism.
 - A typed graph abstraction over doctrine entities and relations, populated from backlog
   items, slices, specs, requirements, ADRs, knowledge records, and drift records.
 - The generic dependency-resolution behaviours doctrine needs: reverse-edge indexes,
@@ -53,10 +63,11 @@ In scope:
 
 Out of scope:
 
-- The **authored** priority seam itself — its on-disk shape and the verb that records
-  operator rank/band are PRD-009's (FR-006, "order the backlog by priority"). This
-  capability *reads* that seam and contextualises it; it does not redefine or duplicate
-  it.
+- The **authored priority rank/band scalar** itself — its on-disk shape and the verb that
+  records operator rank/band are PRD-009's (FR-006, "order the backlog by priority"). This
+  capability *reads* that scalar and contextualises it; it does not redefine or duplicate
+  it. (This disclaim is the priority rank/band scalar only; the cross-kind
+  dependency/sequence *capture* surface above is in scope.)
 - A full scheduling or task-management engine.
 - Time-pressure semantics — deadlines, best-before, scheduled-for, lateness cost,
   remaining-work estimates, commitment pressure — and sequential/parallel project,
@@ -71,17 +82,22 @@ Out of scope:
 
 Boundary: this capability owns **derived graph interpretation for cross-kind
 priority-and-actionability surfaces** — the read-side context computed over the existing
-corpus. It does not own work capture, item kind membership, any kind's lifecycle, slice
-execution, scheduling, or product-specific urgency philosophy. Each authored entity
+corpus, plus the cross-kind dependency/sequence edge-capture surface that feeds it. It
+does not own work capture (the creation of the work items themselves), item kind
+membership, any kind's lifecycle, slice execution, scheduling, or product-specific urgency
+philosophy. Each authored entity
 remains the source of its own intent and lifecycle; the technical shape of the graph
 crate, its module boundary, and the v1 policy's channel, per-kind status-class, and
 relation-kind layout are downstream `/spec-tech` concerns, not product intent.
 
 ## 3. Principles
 
-- **Authored priority is small.** Doctrine stores only deliberate operator intent — an
-  optional rank, band, or pin (PRD-009's seam). It never stores computed urgency,
-  pressure, blocker state, or "next" judgement as backlog truth.
+- **Authored priority is small; authored dep/seq is operator intent.** Doctrine stores only
+  deliberate operator intent — an optional rank, band, or pin (PRD-009's seam), and the hard
+  `needs` / soft `after` dependency-sequence edges a work-like entity authors. It never
+  stores computed urgency, pressure, blocker state, or "next" judgement as authored truth:
+  authored dep/seq edges are operator-stated *input*, never the engine's *derived judgement*
+  written back.
 - **Derived priority is a view.** Derived actionability, blockers, inbound references,
   and graph priority are recomputed from the registry graph. They may be cached, but a
   cache is disposable and never authoritative — correctness is recomputation from
