@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec602fe877003ba49f92fabe63a23"
+memory_key = "mem.pattern.dispatch.claude-isolation-worktree-base-session-root-opaque"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Claude Agent isolation:worktree base is session-root main, opaque — not the coordination-tree tip"
+summary = "Claude Agent isolation:worktree forks session-root main HEAD (opaque), NOT the orchestrator's coordination-worktree tip; baseRef cannot redirect it; serial-dependent phases are not claude-dispatchable — parallel dispatch belongs on the subprocess (codex/pi→DeepSeek) arm where fork --base B pins any base"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = ["src/worktree.rs", "plugins/doctrine/skills/dispatch-agent/SKILL.md", "src/boot.rs"]
+commands = []
+tags = ["dispatch", "worktree", "claude-arm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1b27f7dcbbdce6037e7b265c9dc6bcaf97dd7ea4"
+ref_name = "refs/heads/main"
+checkout_state_id = "de8e65d0906ed2231d054b9715a5c15f89d9263c904f7a640eea794234ea250d"
+base_commit = "9be8ea77d480d3099ca8626c8359c7f6445b37b4"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
