@@ -127,6 +127,13 @@ decomposition chains are within-family.
 `descent_findings` (descends_from) is **untouched** — descends_from stays tech-only
 (deferred, §8 OQ-2).
 
+**Level fields are advisory tags, not FK-validated (D5).** Only `parent` (an FK)
+gets integrity validation. `c4_level` on a product spec is already
+tolerated-but-unrendered today (no invalid-kind check); for parity `product_level`
+on a tech spec is equally tolerated-but-unrendered. No new level-field kind check —
+levels are closed-enum tags whose only invariant (a valid variant) is enforced at
+parse by serde. Mirrors `c4_level` exactly.
+
 ## 5. Render — `src/spec.rs::show`
 
 Today render is: `…category` → `c4 level:` (Some) → tech-gated spine
@@ -141,6 +148,17 @@ Example strings: `product level: capability`, `parent: PRD-003`. Children are
 **never** rendered — reciprocal "decomposes into" is derived (ADR-004 §3,
 outbound-only). `responsibilities`/`sources` blocks are unchanged (empty on a
 product spec, so no output).
+
+Precision (review F1): tech `show` is unchanged. The only render delta beyond the
+new product lines is that a product spec which *illegitimately* hand-carries
+`c4_level` stops rendering it (it falls outside the tech branch) — arguably more
+correct, matching the existing parent-suppression rationale, and not a tech
+regression. Goldens to pin: tech `show` byte-identical; product `show` gains the
+two lines.
+
+Out of scope (review F3): no `spec list` column for `product_level`; `parent` is a
+bespoke spec field, not a tier-1 `link` edge, so `inspect PRD-NNN` does not surface
+it — consistent with the tech side. Both deliberate.
 
 ## 6. Spec-product authoring — two requirements on PRD-002
 
@@ -178,6 +196,10 @@ REQ-082/083 (PRD-012, tech-only) are **not** touched — they are correct as-is.
 - **D4 — requirements home PRD-002, two FRs** (§6). No parallel "Product
   Specifications" PRD — the product-only surface (two fields) does not justify one;
   PRD-002 already holds cross-cutting spec requirements. Reversible.
+- **D5 — level fields are advisory tags, not FK-validated** (§4). Only `parent`
+  gets integrity validation; a cross-subtype level field is tolerated-but-unrendered
+  (mirrors `c4_level`). Serde enforces the only level invariant (valid variant) at
+  parse.
 
 ## 8. Open questions / deferred
 
@@ -199,3 +221,8 @@ REQ-082/083 (PRD-012, tech-only) are **not** touched — they are correct as-is.
   (`self_parent`) and product `A→B→A` cycle (`parent_cycle`) caught.
 - existing spec + registry suites stay green unchanged (behaviour-preservation gate
   on the shared engine).
+
+Plan-time notes: validate behaviour is asserted through the `spec validate` CLI
+seam, not `parent_findings`/`parent_cycle` in isolation (memory: an invariant test
+must drive the write seam). The `on_product` doc-comments that read "tech-only" are
+rewritten to "selects the required parent subtype."
