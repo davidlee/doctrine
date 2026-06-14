@@ -550,6 +550,69 @@ fn integrate_trunk_refuses_non_fast_forward() {
     );
 }
 
+/// RV-030 F-1: a foreign commit landing on trunk BETWEEN coordinate and
+/// prepare-review must NOT reparent the projection. Stage-1 projects off the
+/// pinned fork-point `merge-base(dispatch/064, trunk)`, not the live trunk tip —
+/// the coordination worktree isolates the working tree, not the trunk ref. So the
+/// per-phase cut stays an exact code delta (no foreign leak), and the §3/IMP-043
+/// moved-trunk net fires: a subsequent `integrate --trunk` refuses the non-ff
+/// instead of silently absorbing the pre-stage-1 movement.
+#[test]
+fn prepare_review_projects_off_pinned_fork_point_not_moved_trunk() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let fixture = build_fixture(dir);
+
+    // A foreign writer advances trunk after dispatch/064 forked from `base`.
+    let foreign = commit(dir, "foreign.txt", "foreign", "foreign trunk advance");
+    assert_eq!(git(dir, &["rev-parse", "main"]), foreign);
+    assert_ne!(foreign, fixture.base, "trunk genuinely moved off the fork-point");
+
+    let out = prepare_review(dir);
+    assert!(
+        out.status.success(),
+        "prepare-review ok despite moved trunk; stderr: {}",
+        stderr(&out)
+    );
+
+    // The phase cut is parented on the FORK-POINT, not the moved trunk tip — so
+    // its diff is exactly the phase code, with no foreign trunk delta leaking in.
+    assert_eq!(
+        git(dir, &["rev-parse", "phase/064-01^"]),
+        fixture.base,
+        "phase parented on the pinned fork-point, not the moved trunk tip"
+    );
+    assert_eq!(
+        git(dir, &["diff", "--name-only", &fixture.base, "phase/064-01"]),
+        "src1.txt",
+        "phase diff is the exact code delta — foreign trunk file excluded"
+    );
+    assert!(
+        !git(dir, &["ls-tree", "-r", "--name-only", "phase/064-02"]).contains("foreign.txt"),
+        "the foreign trunk file never leaks into the phase bundle"
+    );
+
+    // The moved-trunk net now fires: the phase chain descends from the fork-point,
+    // not the moved tip, so integrate --trunk refuses the non-ff (was silently
+    // absorbed when stage-1 parented on the live trunk tip).
+    let out = integrate(dir, &["--trunk", "refs/heads/main"]);
+    assert!(
+        !out.status.success(),
+        "integrate --trunk refuses the moved trunk; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("fast-forward") || stderr(&out).contains("trunk moved"),
+        "refusal names the non-ff cause: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "main"]),
+        foreign,
+        "trunk left untouched on refusal"
+    );
+}
+
 /// VT-1 (replay refusal on divergence): a prepared ref clobbered after
 /// prepare-review diverges from both its journaled `expected_old` and `planned`
 /// ⇒ integrate refuses and leaves it untouched.
