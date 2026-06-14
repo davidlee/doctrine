@@ -39,14 +39,19 @@ In scope:
 
 - A derived priority and actionability **view** over doctrine's registry graph —
   recomputed from authored state, never authored back into it.
-- The **cross-kind dependency/sequence capture surface** — a work-like entity (a slice or
-  any of the five backlog kinds) authors its own hard `needs` (prerequisite, payload-free)
+- The **cross-kind dependency/sequence capture surface** — a work-like entity (a slice, or
+  any backlog kind in PRD-009's set) authors its own hard `needs` (prerequisite, payload-free)
   and soft `after` (sequence, per-edge `rank`) edges onto another work-like entity, as the
   authored input the derived view consumes. The backlog item→item instance of this surface
   is PRD-009's (REQ-097); this capability owns its **generalisation to work-like kinds**.
-  Targets are restricted to work-like kinds — governance, spec, requirement, and knowledge
-  kinds are refused at author time, so this surface never silently becomes a
-  governance-gates-work mechanism.
+  The valid endpoints are a closed allowlist — slice and the backlog kinds only; **every
+  other admitted kind** (governance, spec, requirement, knowledge, drift, and
+  review/reconciliation records) is refused at author time. That refusal is scoped to
+  *this* symmetric work↔work `needs`/`after` surface, so it never silently becomes a
+  governance-gates-work mechanism — but it is not a blanket prohibition: a non-work entity
+  gating downstream work is a **distinct, deliberately separate surface** (a non-actionable
+  gating edge with its own status-class, so the gating entity blocks without becoming
+  pickup-able work), which this boundary anticipates rather than precludes.
 - A typed graph abstraction over doctrine entities and relations, populated from backlog
   items, slices, specs, requirements, ADRs, knowledge records, and drift records.
 - The generic dependency-resolution behaviours doctrine needs: reverse-edge indexes,
