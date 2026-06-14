@@ -4,6 +4,10 @@ title = "Requirement status visibility: spec req roster + standalone drift read"
 status = "done"
 created = "2026-06-12"
 updated = "2026-06-12"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 # Closure-gate req set (authored; set & peer-reviewed at /plan). This slice
 # discharges the user-facing read-surface half of REQ-110 (composite view) and

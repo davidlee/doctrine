@@ -4,6 +4,10 @@ title = "Knowledge records: standalone four-kind entity surface"
 status = "done"
 created = "2026-06-13"
 updated = "2026-06-13"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 # Structural relations — uniform [[relation]] rows (SL-048 idiom; read by the
 # SL-046 graph reader / `inspect`). The `link` writer (IMP-048) is unbuilt in the

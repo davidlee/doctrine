@@ -4,6 +4,10 @@ title = "Table cell wrapping for terminal-width-constrained output"
 status = "done"
 created = "2026-06-13"
 updated = "2026-06-13"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 # SL-054 builds on SL-053 (terminal output polish — comfy-table + owo_colors),
 # extending its render_table with terminal-width-aware wrapping. There is no legal

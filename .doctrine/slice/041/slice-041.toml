@@ -4,6 +4,10 @@ title = "Resolve branch-point-check --base in the impure shell"
 status = "done"
 created = "2026-06-11"
 updated = "2026-06-11"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 # Drives: ISS-002 (this slice resolves it). The edge is OUTBOUND-derived
 # (ADR-004) and lives on the backlog item, set at close via `backlog edit
 # ISS-002`; not duplicated here. Origin: SL-031 §5.2 (C-V) re-audit finding.
