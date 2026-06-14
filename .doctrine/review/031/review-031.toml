@@ -40,5 +40,28 @@ detail = 'The dynamic column visibility logic (D2, any_tagged -> effective_defau
 disposition = "follow-up"
 response = "The dynamic column logic is simple and correct — the any_tagged flag keys on visible rows (post-retain, post---kind) and the effective_default splice is clean. Adding an explicit table-header assertion would be good hardening but is not required for closure. Capture as a backlog item."
 
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "strip_ansi is copy-pasted between backlog.rs and listing.rs — DRY violation"
+detail = "The same 12-line SGR-stripping helper exists in both src/backlog.rs (line ~2436, added for SL-067 PHASE-01 tests) and src/listing.rs (pre-existing in the column painting tests). The backlog.rs copy was added so the PHASE-01 idempotency/round-trip tests could strip ANSI output from list_rows under color=true. The helper should live in listing.rs as pub(crate) and be imported by backlog.rs tests. Two divergent copies risk drift when someone fixes one and not the other."
+disposition = "fix-now"
+response = "The strip_ansi helper is duplicated in backlog.rs and listing.rs. Hoist the listing.rs copy to pub(crate) and import it in backlog.rs tests. One-line refactor, no risk."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "paint_tag capacity hint is misleading; segment_hue unwrap_or silently swallows overflow"
+detail = """
+Two small issues in src/listing.rs:
+
+1. paint_tag (line ~402): String::with_capacity(tag.len()) underestimates by ~3x since owo ANSI escapes multiply the byte count. Not wrong (just reallocation), but the hint is deceptive. Either remove it or give a real estimate.
+
+2. segment_hue (lines ~390-392): unwrap_or(1) and unwrap_or(0) silently collapse every segment to palette index 0 if TAG_PALETTE.len() exceeds u32::MAX or the hash modulo exceeds usize::MAX. Both are dead paths today (10-entry const palette). A const assert + plain expect would be honest about what is guaranteed vs worked-around."""
+disposition = "tolerated"
+response = "Both issues are cosmetic: the capacity hint is a minor underestimate (just causes one realloc), and the unwrap_or fallbacks are dead paths for the current 10-entry const palette. Not worth fixing in this slice — the code is correct."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
