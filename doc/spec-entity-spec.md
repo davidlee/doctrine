@@ -14,9 +14,10 @@ interactions** (the rest deferred). Where the old draft said `SPEC-110.FR-001`
 spec-side membership row with a mobile `FR-`/`NF-` *label*.
 
 Scope as shipped: the **spec family** — product requirements (`PRD-`) and
-technical spec (`SPEC-`). Revision (`REV-`) is **deferred** (no subtype in v1).
-The technical spec is the worked example because it carries the most (the only
-subtype with `interactions`).
+technical spec (`SPEC-`). Revision (`REV-`) is **not a spec subtype** — ADR-013
+resolves it to a standalone change-axis kind (peer to slice/REC), so it leaves the
+spec family entirely (SL-066). The technical spec is the worked example because it
+carries the most (the only subtype with `interactions`).
 
 ## The pathology
 
@@ -172,7 +173,7 @@ no relation.
 `.doctrine/spec/{product,tech}/<n>/`, each its own monotonic numbering
 (`spec/product/id/<n>`, `spec/tech/id/<n>`). The canonical key is `(subtype, n)`,
 rendered `PRD-110` / `SPEC-110`; numeric ids are unique only **within** a subtype.
-(`REV-` revision is deferred — not a v1 subtype.)
+(`REV-` is not a spec subtype at all — it is a standalone change-axis kind, ADR-013.)
 
 **Decision: the facet set is per-subtype, not shared.** They share the entity
 *model* (the storage rule — identity TOML + prose body + facet edge files — and
@@ -382,8 +383,9 @@ every agent tick is a different problem, in a different tier.**
   `collaborators` arm). An additive mirror of `spec req add`'s membership step.
 - **Capabilities, coverage, concerns/hypotheses/decisions facets** — deferred until
   a consumer forces each; not v1.
-- **Revision (`REV-`) subtype**, **PRD-specific fields** beyond the shared shape —
-  folded in when those are designed.
+- **PRD-specific fields** beyond the shared shape — folded in when designed.
+  (**Revision (`REV-`) is no longer deferred here** — ADR-013 relocates it off the
+  spec family to a standalone change-axis kind, built in SL-066. Not a spec subtype.)
 - **Materialised `*.rendered.md`** (derived-tier), **code↔spec sync adapters**,
   **coverage computation** — all deferred.
 
@@ -415,8 +417,10 @@ every agent tick is a different problem, in a different tier.**
 3. **`spec req link` mechanics** (cross-spec requirement reuse) — the membership
    model already admits it (a second `members.toml` row); the verb + any
    relabelling policy are pinned when first needed.
-4. **PRD / REV facet sets** — product ships identity + members; the richer PRD set
-   and the REV change-record facet are pinned when those subtypes are designed.
+4. **PRD facet set** — product ships identity + members; the richer PRD set is
+   pinned when designed. (REV is **out of this question** — ADR-013 makes it a
+   standalone change-axis kind, not a spec subtype; its facets are designed in
+   SL-066, not here.)
 
 ## Follow-ups
 
