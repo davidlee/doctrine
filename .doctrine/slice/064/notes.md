@@ -337,3 +337,33 @@ is WIP, not SL-064), then `review verify` F-1/F-4/F-5/F-8/F-9 as raiser, and `/c
 **Out of scope.** `just check` red on `e2e_backlog_list_order_golden` = foreign
 WIP (SL-059 `tags` JSON field vs stale SL-053 golden); SL-064 touches no backlog
 code; its own suites green.
+
+---
+
+## Remediation landed (RV-030 close pass) — commit `ec44501`
+
+All four answered fix-now findings + the F-1 blocker applied and verified as
+raiser; RV-030 → `done · await=none`.
+
+- **F-1 (blocker):** stage-1 `prepare_review` projects off
+  `git::merge_base(dispatch/<slice>, trunk)` — the pinned fork-point — not
+  `trunk_commit()` (live tip). New `git::merge_base` seam (explicit exit-code
+  match like `is_ancestor`; `Ok(None)` = unrelated histories), unit-tested. New
+  e2e `prepare_review_projects_off_pinned_fork_point_not_moved_trunk`
+  (trunk-moved-during-run; RED-proven against live-tip projection). Lesson →
+  `mem.pattern.dispatch.project-off-pinned-fork-base-not-live-trunk-tip`.
+- **F-4:** `commit_journal` takes a stage-distinct `msg`; the always-identical
+  `parent`/`expected_old` params collapsed to one (branch tip == commit parent
+  == CAS expected-old) — also clears the resulting `too_many_arguments`.
+- **F-5:** `ScratchIndex::new` sweeps cross-PID `doctrine-filter-index.*` crash
+  debris; doc corrected (was true same-pid only).
+- **F-8:** `phase_chain_tip` filters to `status == Verified`.
+- **F-9:** `read_path_at` git::tests unit case (present→Some, absent→None).
+- **F-10:** `projection_row` doc note — source==planned intentional for
+  direct-projection rows (doc-only, was already tolerated/verified).
+- **F-3:** runtime phase-02..07 sheets flipped `planned → completed`; rollup now
+  8/8, the `slice list ⚠` divergence resolved at the lifecycle move.
+
+Gate: `just check` green. The `e2e_relation_migration_storage` red seen mid-pass
+was a stale-`CARGO_MANIFEST_DIR` false-RED from a removed concurrent SL-067
+dispatch worktree — defeated by touch + recompile, not a regression.
