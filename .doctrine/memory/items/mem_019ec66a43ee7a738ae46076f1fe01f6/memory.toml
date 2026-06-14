@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec66a43ee7a738ae46076f1fe01f6"
+memory_key = "mem.pattern.dispatch.project-off-pinned-fork-base-not-live-trunk-tip"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch projection parents on the pinned fork-base, not the live trunk tip"
+summary = "Dispatch stage-1 projection must parent on merge-base(dispatch,trunk), not the live trunk tip"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["src/dispatch.rs"]
+globs = []
+commands = []
+tags = ["dispatch", "projection", "sync"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "fbd4aa12315232b0d66220ae92cd73ec8b83ec16"
+ref_name = "refs/heads/main"
+checkout_state_id = "b724e752edbd69301d313b47fce76b6da2137c1c4d6603471b456827236dd666"
+base_commit = "504b3c4adccf909b30cde69fcab9c9098a2b323f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
