@@ -61,24 +61,25 @@ promotion.
   workflow integration is downstream once the kind exists (#7 of the parcel).
 - **No supersession machinery** — a Revision is *pending* intent; the completed
   lifecycle flip is a different thing.
+- **No optimistic locking** — version-stamping change targets + approval-retraction
+  on drift. Anti-grain (doctrine surfaces drift, never hard-rejects); the narrow
+  pre-flight `from`-guard covers the one real silent-clobber (design.md §9).
+- **No `move`-apply automation** — requirement membership move has no existing seam
+  (`spec req link`/move is the deferred SL-015 follow-on); `move` rows stage but are
+  surfaced-for-manual at apply, not auto-applied (design.md §4.5, F4).
+- **No per-repo conduct config for Revision** — v1 bakes the `gate` default;
+  extending ADR-009's slice-state `[conduct]` table to Revision is deferred.
 
-## Open Design Questions (carry into /design)
+## Design
 
-Both upstream gates are settled (one kind; standalone `REV-NNN`, change axis,
-optional payload). Remaining, design-internal:
-
-1. **REC composition** — applied Revision `produces`/`recorded_by` a REC, or REC
-   references Revision, or independent. (Lean: loose edge, REC untouched.)
-2. **Reconcile-writer path** — does `revise` route through Revision (draft→
-   approve→apply) or sit beside the direct path as higher-ceremony opt-in?
-3. **Storage shape of the delta payload** — TOML table schema for
-   requirement-flow / lifecycle / text-changes; reuse existing edges vs a
-   Revision-specific vocabulary.
-4. **Conduct-axis defaults** — gated vs solo self-approve by default (lean: solo
-   self-approve, gating opt-in).
-5. **Altitude** — does the taxonomy-home call (Revision as a change-axis kind,
-   off the spec family) warrant an ADR amendment, or is the slice + entity-model
-   edit sufficient?
+**LOCKED** in `design.md` (2026-06-14, scope **C** — full structured delta
+payload; SL-044 done). All nine design questions resolved (design.md §8); internal
+adversarial pass integrated (§11, F1–F8). Headlines: one change-axis kind
+`REV-NNN`; multi-target `[[change]]` payload rows (rows are edges, `TypedVerbOnly`)
++ `primary` display-hint; reciprocity derived uniformly; backlog-style lifecycle +
+separate `approval` field (default `gate`, enforced only at apply); atomic apply
+orchestrating existing seams with a pre-flight `from`-guard; REC untouched; ADR-013
++ work-like-predicate `+= REV` as PHASE-01.
 
 ## Summary
 
@@ -89,6 +90,8 @@ reconcile path (SPEC-002 / SL-044).
 
 ## Follow-Ups
 
-- Wire `needs`/`after` to accept `REV-` targets (the SL-060 enabler).
-- `/revise` skill + `reconcile --draft` workflow integration (IDE-003 tail).
+- `/revise` skill + workflow integration (IDE-003 tail; PHASE-06 or follow-up).
+- `spec req link`/move membership-mutation verb → unlocks `move`-apply automation.
+- Extend ADR-009 `[conduct]` to address Revision (per-repo approval config).
+- IDE-002 durable region primitive → structured prose-body anchors (`after IDE-002`).
 - Close IDE-003 and IDE-010 on land.
