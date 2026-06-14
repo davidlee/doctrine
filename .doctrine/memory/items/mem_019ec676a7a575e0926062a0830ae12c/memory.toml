@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec676a7a575e0926062a0830ae12c"
+memory_key = "mem.pattern.dispatch.filter-review-branch-per-file-checkout-vs-handapply"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Filter a dispatch review branch per-file, not by cherry-pick"
+summary = "Integrate a contaminated dispatch review branch per-file: checkout clean files, hand-apply only the additive hunks to files the reverted work also touches"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["src/main.rs", "src/backlog.rs"]
+globs = []
+commands = []
+tags = ["dispatch", "integration", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "b4a0adff53dfdff8f0c0bef5149d6d545d4315d0"
+tree = "058d1786546397adc8b2a6f544b9f9a08d7c1f69"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "b4a0adff53dfdff8f0c0bef5149d6d545d4315d0"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
