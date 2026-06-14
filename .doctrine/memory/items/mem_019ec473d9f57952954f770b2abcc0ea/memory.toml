@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec473d9f57952954f770b2abcc0ea"
+memory_key = "mem.system.dispatch.orchestrator-on-shared-main-contention-cost"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "Dispatch orchestrator on shared main pays the concurrency cost; workers stay isolated. Review whether the coordination branch should run on its own worktree"
+summary = "Serial dispatch held under heavy shared-main concurrency, but the orchestrator (not workers) paid real contention cost — review running coordination on its own worktree"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = []
+commands = ["git commit", "git add"]
+tags = ["dispatch", "funnel", "coordination", "worktree", "retrospective"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d4efd86c528dbacdd548dcfc1a8ce084225741f2"
+ref_name = "refs/heads/main"
+checkout_state_id = "762f7a6b7e034df417854883760a858dbbe23885184294ac82bdbbee67065e91"
+base_commit = "8c1b8efca36e1bda8c41a5bd6037af5f9abaaa16"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
