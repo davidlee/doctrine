@@ -2158,6 +2158,135 @@ pub(crate) fn run_stamp_subagent(path: Option<PathBuf>) -> anyhow::Result<()> {
     Ok(())
 }
 
+// --- SL-064 PHASE-08: claude-arm post-spawn base==B verify (design §8, option Y) ---
+
+/// Verdict of the PURE worker-verify classifier: the spawned claude worker is a
+/// stamped fork whose HEAD descends from the orchestrator's base `B`. The shell
+/// ([`run_verify_worker`]) gathers the FACTS and acts on this verdict (ADR-001
+/// leaf, gather → pure-classify → act).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WorkerVerify {
+    /// HEAD resolves, the worker marker is present, and `B` is an ancestor of the
+    /// worker HEAD ⇒ base==B by placement holds (design §8.4).
+    Ok,
+}
+
+/// Why a post-spawn `verify-worker` refuses (design §8.4 / DD-12). Each variant
+/// fails closed with a distinct named token (the property the goldens assert, not
+/// a proxy). The verb is fail-LOUD and diagnostic only: it never removes the fork.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WorkerVerifyRefusal {
+    /// The worker worktree HEAD does not resolve (`git -C <dir> rev-parse HEAD`
+    /// failed) — no fork to verify. The explicit unresolved-HEAD verdict.
+    NoWorkerHead,
+    /// HEAD resolves but the worker marker is absent — the `SubagentStart` stamp
+    /// never landed (a non-fail-closable hook), so this is not a trusted worker.
+    Unstamped,
+    /// Stamped fork, but `B` is NOT an ancestor of the worker HEAD — the worker
+    /// forked off the wrong base (`baseRef` misconfigured or placement wrong).
+    WrongBase,
+}
+
+impl WorkerVerifyRefusal {
+    /// The distinct named token each refusal fails closed with.
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            WorkerVerifyRefusal::NoWorkerHead => "no-worker-head",
+            WorkerVerifyRefusal::Unstamped => "unstamped",
+            WorkerVerifyRefusal::WrongBase => "wrong-base",
+        }
+    }
+}
+
+/// PURE worker-verify classifier (no git / disk / env / clock — ADR-001 leaf,
+/// CLAUDE.md pure/imperative split). Mirror of [`classify_stamp`]/
+/// [`classify_import`]: it takes the gathered, already-resolved FACTS and returns
+/// the verdict. The shell resolves the worker HEAD, the marker presence, and the
+/// is-ancestor probe (impure git/disk), then calls this.
+///
+/// * `head_resolved`     — `git -C <dir> rev-parse --verify HEAD` succeeded.
+/// * `marker_present`    — the worker worktree bears the withheld worker marker.
+/// * `base_is_ancestor`  — `merge-base --is-ancestor <B> HEAD` (run -C the worker
+///   dir) succeeded ⇒ the worker HEAD descends from `B`.
+///
+/// Precond order: head-resolves → marker → base (an unstamped worker names itself
+/// before the base check; the base check only matters once we know it is a stamped
+/// fork with a resolvable HEAD).
+pub(crate) fn classify_worker_verify(
+    head_resolved: bool,
+    marker_present: bool,
+    base_is_ancestor: bool,
+) -> Result<WorkerVerify, WorkerVerifyRefusal> {
+    if !head_resolved {
+        return Err(WorkerVerifyRefusal::NoWorkerHead);
+    }
+    if !marker_present {
+        return Err(WorkerVerifyRefusal::Unstamped);
+    }
+    if !base_is_ancestor {
+        return Err(WorkerVerifyRefusal::WrongBase);
+    }
+    Ok(WorkerVerify::Ok)
+}
+
+/// `doctrine worktree verify-worker --base <B> --dir <worktree>` — the claude
+/// `/dispatch` arm's post-spawn base==B check (design §8.4 / DD-12). After a
+/// claude worker returns, the orchestrator runs this against the worker worktree
+/// to PROVE its HEAD descends from the base `B` it was meant to fork off (option
+/// Y: base is orchestrator-controlled by placement, verified here rather than
+/// ref-redirected). Fail-LOUD and diagnostic only — it NEVER removes the fork;
+/// the orchestrator decides what to do with a refused worker.
+///
+/// `--dir` fully locates the worker worktree (it is the git `-C` root for every
+/// probe), so no `-p` root override is needed — unlike the funnel verbs that run
+/// at the coordination root, this verb's operand IS the subject worktree.
+///
+/// Read-classed (no writes; mirrors `branch-point-check`/`status`) — harmless
+/// under worker-mode, and design §8.6 lists no impersonation test for it.
+///
+/// Gather → pure-classify → act:
+/// 1. gather the FACTS — worker HEAD resolves (`rev-parse --verify HEAD`, run -C
+///    the worker dir); the worker marker is present at `<dir>`; `B` is an ancestor
+///    of the worker HEAD (`merge-base --is-ancestor <B> HEAD`, the SHARED
+///    [`git::git_status_ok`] is-ancestor primitive — NO new git.rs plumbing);
+/// 2. [`classify_worker_verify`] returns the verdict;
+/// 3. on Refuse print the distinct token to stderr + exit non-zero, fork PRESERVED;
+///    on Ok exit 0.
+pub(crate) fn run_verify_worker(base: &str, dir: &Path) -> anyhow::Result<()> {
+    // --- gather (all impure git/disk reads, fail-closed) ---
+    // Worker HEAD must resolve in the worker WORKTREE (-C <dir>), not the
+    // orchestrator root — a non-resolving HEAD ⇒ `no-worker-head`.
+    let head_resolved = git::git_opt(dir, &["rev-parse", "--verify", "HEAD"])?.is_some();
+    let marker = marker_present(dir);
+    // is-ancestor signals purely via exit code; unresolvable refs ⇒ Ok(false)
+    // (fail-closed, never a panic). `git_status_ok` errors only on a spawn failure.
+    let base_is_ancestor =
+        git::git_status_ok(dir, &["merge-base", "--is-ancestor", base, "HEAD"])?;
+
+    // --- pure classify ---
+    match classify_worker_verify(head_resolved, marker, base_is_ancestor) {
+        Ok(WorkerVerify::Ok) => {
+            writeln!(
+                io::stderr(),
+                "verify-worker: base==B holds for {}",
+                dir.display()
+            )?;
+            Ok(())
+        }
+        Err(refusal) => {
+            // Fail-loud; the fork is LEFT in place (the orchestrator owns the
+            // disposition of a refused worker — this verb never removes a worktree).
+            writeln!(
+                io::stderr(),
+                "verify-worker-refused: {} ({})",
+                refusal.token(),
+                dir.display()
+            )?;
+            bail!("verify-worker-refused: {}", refusal.token());
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -2791,6 +2920,54 @@ mod tests {
             Err(StampRefusal::AlreadyMarked)
         );
         assert_eq!(StampRefusal::AlreadyMarked.token(), "already-marked");
+    }
+
+    // --- SL-064 PHASE-08: worker-verify pure classifier + token table (design §8.4) ---
+
+    #[test]
+    fn classify_worker_verify_ok_when_all_preconds_hold() {
+        // HEAD resolves, marker present, B is an ancestor ⇒ base==B holds.
+        assert_eq!(
+            classify_worker_verify(true, true, true),
+            Ok(WorkerVerify::Ok)
+        );
+    }
+
+    #[test]
+    fn classify_worker_verify_no_worker_head_refuses_first() {
+        // HEAD unresolved ⇒ no-worker-head, regardless of the other inputs (the
+        // first precond — nothing to verify without a HEAD).
+        assert_eq!(
+            classify_worker_verify(false, true, true),
+            Err(WorkerVerifyRefusal::NoWorkerHead)
+        );
+        assert_eq!(
+            classify_worker_verify(false, false, false),
+            Err(WorkerVerifyRefusal::NoWorkerHead)
+        );
+        assert_eq!(WorkerVerifyRefusal::NoWorkerHead.token(), "no-worker-head");
+    }
+
+    #[test]
+    fn classify_worker_verify_unstamped_names_itself_before_base() {
+        // HEAD resolves but marker absent ⇒ unstamped, EVEN WHEN the base is also
+        // wrong — the marker check precedes the base check (precond order).
+        assert_eq!(
+            classify_worker_verify(true, false, false),
+            Err(WorkerVerifyRefusal::Unstamped)
+        );
+        assert_eq!(WorkerVerifyRefusal::Unstamped.token(), "unstamped");
+    }
+
+    #[test]
+    fn classify_worker_verify_wrong_base_refuses_last() {
+        // Resolvable, stamped fork, but B is NOT an ancestor of the worker HEAD ⇒
+        // wrong-base (the base check is LAST — only meaningful once stamped).
+        assert_eq!(
+            classify_worker_verify(true, true, false),
+            Err(WorkerVerifyRefusal::WrongBase)
+        );
+        assert_eq!(WorkerVerifyRefusal::WrongBase.token(), "wrong-base");
     }
 
     // --- SL-056 PHASE-10 T6 / VT-4: agent-def `name` ↔ const drift gate ---
