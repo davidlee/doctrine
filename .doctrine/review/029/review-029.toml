@@ -1,0 +1,106 @@
+id    = 29
+slug  = "sl-066-reconciliation-revision-rev-change-axis-kind-phases-02-05-adr-013"
+title = "SL-066 reconciliation: Revision (REV) change-axis kind — phases 02-05 + ADR-013"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-066"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "ChangeRow.allocated has no automated writer/reader/test"
+detail = "External code-review F1. The [[change]].allocated field is parsed via serde (always None on the surfaced-for-manual path) and never emitted by append_change_row or read by run_apply. design.md:228 intends it as an operator-HAND-FILLED anchor for a manually-applied introduce row (creation-apply automation is deferred — B2 follow-up, design §5), so it is design-intended-inert, not stray. Reviewer's concern (no writer/reader/test today) is valid and rides the disposition."
+disposition = "tolerated"
+response = "Design-intended-inert: design.md:228 specifies allocated as the operator-hand-filled record for a surfaced-for-manual introduce row; the automated writer arrives with the deferred creation-apply seam (spec::add_requirement/create_spec, design §5 / external B2). Removing it now would contradict the locked design (would be design-wrong), so it is tolerated as the forward anchor. The untested/no-reader concern is captured: when B2 lands, the producer + its test land with it."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Five e2e_revision*.rs files copy-paste a ~40-line Repo harness (DRY)"
+detail = "External code-review F2. e2e_revision{,_apply,_change,_dep_seq,_install_commit}.rs each define a near-identical Repo/RevRepo (git/run/ok/BIN/seed_adr|req|spec/write/read/*_status/rec_count) — ~150 lines of duplication; a change to the git-init convention or BIN path touches all five. Extract one shared tests/common_revision.rs."
+disposition = "follow-up"
+response = "Valid DRY violation; deferred to IMP-073 (SL-066 REV quality hardening). Owned future work, not dodged for size: the deliverable is a verified-green sealed dispatch bundle (review/066) and the user elected to keep it sealed rather than perturb it + re-exercise the ISS-015 funnel for a test-only refactor. Highest-ROI item in IMP-073."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "read_change_rows parses the whole REV toml — unrelated parse error blocks change-add/apply with a generic message"
+detail = "External code-review F3. read_change_rows toml::from_str's the entire revision-NNN.toml; a syntax error in any non-[[change]] section makes change add/apply bail 'Failed to parse' without naming [[change]]. #[serde(default)] tolerates unknown keys, so this only bites a hand-broken file. Same coupling REC has (precedent-aligned); higher exposure here because the REV is expected to be hand-edited between change-add calls."
+disposition = "tolerated"
+response = "Precedent-aligned with REC's whole-file parse; #[serde(default)] means it only bites a hand-broken non-[[change]] section, which the operator caused and the generic parse error still localizes to the file. Low practical risk; not worth a targeted toml_edit walk in this slice. If IMP-073's decomposition touches read_change_rows, improving the message is a free ride-along."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "settle_disposition silently no-ops on a non-Started/Done target (trapdoor)"
+detail = "External code-review F4. The match target { Started=>..; Done=>..; _ => &[] } arm returns Ok(()) without advancing if a future caller passes Proposed/Abandoned, while run_apply still prints 'REV-N -> <target>' — a lie. No live trigger (only Started/Done are passed today; the type does not constrain it). Harden the _ arm to unreachable!/bail!."
+disposition = "follow-up"
+response = "Real latent trapdoor, but no live trigger — the only two callers pass Started/Done, so today it cannot fire. Hardening the _ arm to unreachable!/bail! is deferred to IMP-073 (keep the sealed bundle untouched per the elected close strategy). One-line change; bundled with the decomposition that touches settle_disposition anyway."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "src/revision.rs is 1478 lines — decomposition deferred against an already-overgrown REC precedent"
+detail = "External code-review F5. Four clean seams (kind spine / [[change]] payload / apply / tests) live in one file, justified by 'rides the REC eager-materialise seam verbatim' — but REC (~1178 lines) was itself a known size concern at SL-042. Extract src/revision/change.rs + src/revision/apply.rs (dispatch/ subdir precedent, SL-064); no public-API change. Opportunity to also split REC."
+disposition = "follow-up"
+response = "Legitimate decomposition; deferred to IMP-073. Not dodged for size — the rationale is sealed-bundle preservation, and IMP-073 explicitly scopes the extract (revision/change.rs + revision/apply.rs, dispatch/ subdir precedent) plus the chance to split the REC module this finding cites as the over-grown precedent. A focused refactor slice is the right home, not an at-close edit to a green bundle."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "Row-build validation (~200 lines) is covered only through e2e binary goldens"
+detail = "External code-review F6. build_creation_row/build_existing_target_row (E4 frozen new_label, shape routing, OQ-1 dedup, from auto-capture, target-kind validation, member_of-must-be-SPEC) are exercised only by full-binary e2e (spawn + temp git + seed + exit-code) — pure logic that could be unit-tested in ms over a mock root. Compounds with F2."
+disposition = "follow-up"
+response = "Agreed — pure row-build validation deserves ms-level unit coverage; deferred to IMP-073, where it compounds naturally with F2 (shared harness) and F5 (the change.rs extract that surfaces build_row as a unit-testable seam). The e2e goldens already pin the behaviour, so coverage is additive, not a gap that blocks close."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "compose_apply_rec uses an undocumented magic placeholder id 0"
+detail = "External code-review F7. RecDoc.id = 0 (engine assigns the real id at materialise_populated). Works, precedent-aligned with rec::run_new, but the '0 == unassigned' contract is implicit. A const REC_PLACEHOLDER_ID: u32 = 0 or a doc-comment on RecDoc.id in rec.rs would make it explicit."
+disposition = "follow-up"
+response = "Precedent-aligned (rec::run_new uses the same id=0 sentinel), so not a defect — but making the contract explicit (REC_PLACEHOLDER_ID const or a RecDoc.id doc-comment in rec.rs) is a fair clarity nit, deferred to IMP-073."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "nit"
+title = "run_apply from-guard->write window is a by-design TOCTOU, but undocumented in code"
+detail = "External code-review F8. The pre-flight from-guard sweep then per-row writes leave a gap a concurrent process could exploit. By design — single-operator, drift-surface posture (ADR-009), same as reconcile.rs/SL-044; the guard catches drift BEFORE the sweep. Not a bug, but the subtle correctness property should carry a code comment."
+disposition = "follow-up"
+response = "Confirmed by-design (single-operator drift-surface posture, ADR-009; identical to reconcile.rs/SL-044) — not a correctness bug. The only action is a documenting code comment recording the intended property; deferred to IMP-073 alongside the apply.rs extract."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = "Review-base artifact: branch diffed against newer main shows unrelated reverse-noise"
+detail = "External code-review F9 ('branch lags ~20 commits; worktree.rs/skills.rs changes are not SL-066'). Confirmed a diff-base artifact: review/066 (15 files) was cut from base 6062e28; diffing main...review/066 renders main's later SL-064/ISS-012/SL-067 commits as reverse-removals. The bundle itself touches none of worktree.rs/skills.rs. merge-tree of review/066 onto CURRENT main is 0-conflict — the 'rebase before merge' is exactly /close --integrate's 3-way."
+disposition = "aligned"
+response = "No action: a review-base artifact, not a bundle defect. review/066 touches 15 files (none worktree.rs/skills.rs); the reverse-noise comes from diffing against a newer main. merge-tree of review/066 onto current main is 0-conflict (verified) — the 'rebase before merge' is performed by /close --integrate's 3-way net-diff at integration time."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "nit"
+title = "revision new performs no duplicate-slug check (symlink-collision UX footgun)"
+detail = "External code-review F10. Two REVs may share a slug, producing NNN-slug symlinks that the materialise machinery resolves last-write-wins. Same posture as slice/REC/ADR (precedent-aligned, consistent across all numbered kinds), so not a REV-specific defect."
+disposition = "tolerated"
+response = "Precedent-aligned and intentional: slice/REC/ADR all mint on the next numeric id with no slug-uniqueness check (identity is the id, not the slug — project convention). Adding a REV-only dup-slug guard would diverge from every other kind. The symlink last-write-wins is the consistent corpus-wide posture; not a REV-specific footgun to fix here."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
