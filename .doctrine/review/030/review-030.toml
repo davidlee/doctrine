@@ -14,7 +14,7 @@ ref   = "SL-064"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "stage-1 prepare-review projects review/* + phase/* onto LIVE trunk tip, not the run's pinned base B"
 detail = "design.md §4.2/§4.3 specify parent = trunk_base_B (the run's integration base); dispatch.rs:115 resolves git::trunk_commit(root) = LIVE trunk tip at sync time and parents both B (review/<slice>) and C (phase/<slice>-NN) on it. The ledger (journal/boundaries/orthogonal) records no run-base, so projection cannot use the pinned fork-point even in principle. Consequence (codex blocker, confirmed): if trunk advances between 'coordinate' and 'sync' (foreign writer on main — the coordination worktree isolates the working tree, NOT the trunk ref), the per-phase cut and review bundle are reparented onto the moved trunk → 'git diff parent...phase-NN' is no longer exactly phase NN's code delta (foreign trunk deltas leak in). The design's moved-trunk safety net ('integrate --trunk reports non-ff and refuses', §3 / IMP-043) does NOT cover this: it only fires for a move AFTER stage-1; a move before stage-1 is silently absorbed, and integrate's ff-check then passes spuriously because the projected tip already descends from the moved trunk. Candidate fixes: project off git merge-base(dispatch/<slice>, trunk) [pinned fork-point, no new state] OR record base B at coordinate-time and project off it, and refuse stage-1 when the recorded base != current trunk unless an explicit re-anchor is invoked. Disposition deferred to user — bears on closeability."
@@ -41,7 +41,7 @@ response = "Reconcile the root runtime phase sheets (phase-02..07 → completed)
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "[user-F1] commit_journal hardcodes 'journal: prepare-review' for BOTH stages — integrate writes a misleading recovery-artefact message"
 detail = "dispatch.rs:489 commit_journal() always passes 'journal: prepare-review' to commit_tree; called from prepare_review (139,170) AND integrate (241,281). An integrate-only run stamps 'journal: prepare-review' onto dispatch/<slice> — the coordination branch is the durable recovery artefact (ADR-012 D4), so the stage is no longer distinguishable from the branch log alone. Fix: thread a &str msg param; pass 'journal: prepare-review' stage-1, 'journal: integrate' stage-2."
@@ -50,7 +50,7 @@ response = "Thread a &str message param through commit_journal; pass 'journal: p
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "[user-F2] ScratchIndex leaves cross-PID crash debris in .git/; doc overclaims 'cleared up front'"
 detail = "git.rs ScratchIndex::new only remove_file()s the SAME-pid path (fresh anyway); a crashed prior run's doctrine-filter-index.<other-pid> is never swept and accumulates in the git dir. The doc comment claims 'a leftover from a crashed run is cleared up front' — true only same-pid, so the comment overclaims and 'throwaway GIT_INDEX_FILE' is a lie across crashes. Fix: read_dir(git_dir) sweep of doctrine-filter-index.* on new() (cheap, no new dep — tempfile is dev-only, unusable in prod), and correct the doc comment."
@@ -77,7 +77,7 @@ response = "Maintainability, not correctness — explicitly v1-out by the review
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "[user-F5] phase_chain_tip returns highest-NN phase ref regardless of journal status — failed projection yields a confusing 'no code units' error"
 detail = "phase_chain_tip max_by_key over NN ignores LedgerStatus; if PHASE-NN's projection Failed, plan_trunk_row resolve_commit's a non-existent ref and surfaces 'integrate --trunk: no phase/064-NN code units to integrate' — conflating 'no phases at all' with 'phase projection failed'. Fix: filter to status==Verified, or distinguish the two error conditions in plan_trunk_row's context."
@@ -86,7 +86,7 @@ response = "phase_chain_tip should filter to status==Verified (a failed phase pr
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "[user-F6] read_path_at — the load-bearing object-db ledger-read seam — has no dedicated unit test"
 detail = "git.rs read_path_at (cat-file -p <ref>:<path>) is the fix for the PHASE-04 std::fs::read red-state and is the sole new git primitive without a git::tests unit test (filter_tree/tree_with_file/commit_tree/update_ref_cas/replay_ref/is_ancestor all have one). Exercised by every e2e, but a unit test (present path → Some, absent → None) would match the established discipline."
