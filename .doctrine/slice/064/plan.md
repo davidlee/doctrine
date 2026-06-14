@@ -76,6 +76,39 @@ worktree, leaves reviewable refs, keeps unreviewed code off trunk by default,
 removes only the worktree directory at conclude, and preserves behavior of the
 existing funnel suites.
 
+PHASE-08 is the **§8 claude-arm base-correctness thread** — appended after the
+§1–§7 integration-sync thread and deliberately independent of it. It exists
+because the claude `/dispatch` arm first shipped unusable: a worker forked off
+`origin/HEAD` (behind local trunk) developed against a stale tree, caught only
+late at `import`. The mid-session `babd656` detour wrongly concluded the claude
+isolated-worker base was opaque/uncontrollable (option X). A controlled
+marker-commit test (2026-06-14) disproved that and locked **option Y**: under
+`baseRef='head'` the worker forks the spawning orchestrator session's local HEAD,
+so the base is controlled by **orchestrator placement** (run the session inside the
+`dispatch/<slice>` coordination tree), not a ref-redirect — no `WorktreeCreate`
+hook needed for base control.
+
+The phase ships two legs (DD-11) plus their governance correction. Leg 1 is
+correctness-by-default: the installer writes `worktree.baseRef='head'` into the
+same gitignored `.claude/settings.local.json` the HookSpec merge already owns, so
+the imposition is per-operator, never team-committed (the §8.3 layer wall). Leg 2
+is the fail-loud belt: a post-spawn `verify-worker` verb that refuses+reports a
+residual wrong base **before** `import`, never a silent wrong-base landing. It
+keeps the established pure/impure split — a `classify_worker_verify` classifier
+(ADR-001 leaf, no git/disk) behind a `run_verify_worker` shell that reads the
+marker from the worker worktree's withheld tier and computes base==B via
+`merge-base --is-ancestor` through the rtk-bypassing `src/git.rs` runner. Because
+the orchestrator only regains control when the `Agent` tool returns (§8.1), the
+verb is honestly post-worker: it prevents a wrong *import*, not the wasted worker
+run — pre-worker fail-closed remains the deferred `WorktreeCreate` nicety (IMP-072),
+no longer justified as a base-control need under Y.
+
+The ADR-011 amendment is in place (D3/D5/D6/D7) because ADR-011 owns the
+base-pinning cell and altitude table — a correction-with-authority, consistent
+with SL-064 amending ADR-006 and authoring ADR-012. The VH harness criterion is
+already satisfied and is carried as evidence, not re-probed; every other criterion
+is doctrine-unit-testable.
+
 ## Notes
 
 - `IMP-065` is not implemented here. SL-064 ships the transitional markerless
@@ -84,5 +117,12 @@ existing funnel suites.
 - `IMP-041` is resolved by the new lifecycle: worker/coordination worktree
   directories are cleanup targets, while `dispatch/*`, `review/*`, and `phase/*`
   refs survive until their integration lifecycle says otherwise.
-- `IMP-043` is no longer a per-batch import concern. Moved-target handling lives
-  at sync time through CAS refusal and replay.
+- `IMP-043` has two distinct closures, one per thread, not a contradiction: the
+  per-batch *re-anchor* demotes to sync time (§1–§7, PHASE-05/07) via CAS refusal
+  and replay; the deferred *content-base assertion* (the D5 worst case) closes in
+  PHASE-08 via the `verify-worker` `merge-base --is-ancestor` check.
+- `IMP-052` (orchestrator post-spawn marker check) is promoted prose → verb in
+  PHASE-08, folded into `verify-worker`.
+- `IMP-072` (`WorktreeCreate` pre-worker fail-closed arm) stays deferred and is
+  reframed by option Y: it is a fail-closability nicety only, no longer a
+  base-control mechanism, and carries the σ blast-radius cost explicitly.
