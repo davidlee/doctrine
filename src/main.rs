@@ -565,6 +565,29 @@ enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
+    /// Create OR resume the dispatch coordination worktree for a slice on branch
+    /// `dispatch/<slice>` off the resolved trunk (SL-064 §2). MARKERLESS — the
+    /// coordination tree IS the orchestrator, so no worker marker is stamped;
+    /// provisions via the sole copier and regenerates the runtime phase sheets
+    /// from committed `plan.toml`. A live worktree already on `dispatch/<slice>`
+    /// is refused (`coordination-live`); a branch with no live worktree resumes
+    /// (reattach, never a second branch). Orchestrator-classed — refused under
+    /// worker-mode.
+    Coordinate {
+        /// The slice id (bare number, e.g. `64`) whose `dispatch/<slice>`
+        /// coordination worktree to create or resume.
+        #[arg(long)]
+        slice: u32,
+
+        /// The coordination worktree directory (must not already exist).
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Import a worker fork's single-commit delta into the coordination index,
     /// NON-committing (SL-056 PHASE-07, ADR-006 D7: import ≠ commit). Stationary-
     /// head case only — fails closed with a distinct token on any precond/belt
@@ -2182,6 +2205,10 @@ fn write_class(cmd: &Command) -> WriteClass {
             // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
             // first Orchestrator-classed verb; refused under worker-mode.
             WorktreeCommand::Fork { .. } => Orchestrator("fork"),
+            // coordinate creates/resumes the orchestrator's OWN coordination
+            // worktree (SL-064 §2) — markerless, but still an orchestrator funnel
+            // operation; refused under worker-mode via the SAME guard as fork (EX-4).
+            WorktreeCommand::Coordinate { .. } => Orchestrator("coordinate"),
             // import lands a worker delta into the coordination index (SL-056
             // PHASE-07) — Orchestrator-classed; refused under worker-mode.
             WorktreeCommand::Import { .. } => Orchestrator("import"),
@@ -2898,6 +2925,9 @@ fn main() -> anyhow::Result<()> {
                 worker,
                 path,
             } => worktree::run_fork(path, &base, &branch, &dir, worker),
+            WorktreeCommand::Coordinate { slice, dir, path } => {
+                worktree::run_coordinate(path, slice, &dir)
+            }
             WorktreeCommand::Import { base, fork, path } => {
                 worktree::run_import(path, &base, &fork)
             }

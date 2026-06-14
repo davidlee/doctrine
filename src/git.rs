@@ -642,6 +642,13 @@ fn trunk_ladder(root: &Path, explicit: Option<&std::ffi::OsStr>) -> anyhow::Resu
     Ok(None)
 }
 
+/// Resolve trunk's commit sha via the peeled ladder (ADR-006 D3) — public
+/// wrapper over [`trunk_tree_ish`] for callers needing the integration base
+/// (SL-064 `worktree coordinate`). `Ok(None)` when no trunk ref resolves.
+pub(crate) fn trunk_commit(root: &Path) -> anyhow::Result<Option<String>> {
+    trunk_tree_ish(root)
+}
+
 /// Numeric entity ids present under `kind_dir` on trunk's tree (ADR-006 D3).
 /// `kind_dir` is ALREADY repo-relative including the `.doctrine/` prefix (X1) —
 /// do NOT re-prepend. Lists trunk's tree with
