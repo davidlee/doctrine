@@ -851,13 +851,16 @@ struct BacklogRow {
     resolution: Option<&'static str>,
     slug: String,
     title: String,
+    /// The item's own tags — projected UNCONDITIONALLY (flat, never visibility-gated);
+    /// an untagged item emits `[]` (SL-067 PHASE-01, EX-4).
+    tags: Vec<String>,
 }
 
 /// The table columns `backlog list` can show (`--columns` tokens over
 /// `R = BacklogItem` — extractors are non-capturing, SL-037 D5; the prefixed id
 /// is materialised in the cell from the item's own kind+id). Declaration order is
 /// what the unknown-column error lists.
-const BL_COLUMNS: [listing::Column<BacklogItem>; 5] = [
+const BL_COLUMNS: [listing::Column<BacklogItem>; 6] = [
     listing::Column {
         name: "id",
         header: "id",
@@ -881,6 +884,17 @@ const BL_COLUMNS: [listing::Column<BacklogItem>; 5] = [
         header: "slug",
         cell: |i| i.slug.clone(),
         paint: listing::ColumnPaint::None,
+    },
+    listing::Column {
+        name: "tags",
+        header: "tags",
+        // `cell` (plain) and `split` (coloured) MUST agree byte-for-byte stripped of
+        // ANSI: both project the item's tags joined by `", "`.
+        cell: |i| i.tags.join(", "),
+        paint: listing::ColumnPaint::PerToken {
+            split: |i| i.tags.clone(),
+            render: listing::paint_tag,
+        },
     },
     listing::Column {
         name: "title",
@@ -985,6 +999,11 @@ fn list_rows(
     validate_statuses(&args.status, BACKLOG_STATUSES)?;
     let render = args.render;
     let columns = args.columns.take();
+    // Fold the `-t/--tag` filter inputs through the lenient `fold_filter_tag` so a
+    // mixed-case input round-trips the lowercased store (`-t Security` → `security`),
+    // WITHOUT the write-path charset reject (a filter matching nothing succeeds
+    // silently — SL-067 PHASE-01, EX-5/§5). `tags_admit`'s exact-match is unchanged.
+    args.tags = args.tags.iter().map(|t| fold_filter_tag(t)).collect();
     let (filter, format) = listing::build(args)?;
     let corpus = read_all(root)?;
     let ordering = match by {
@@ -993,6 +1012,10 @@ fn list_rows(
     };
     let mut items = listing::retain(corpus, &filter, is_hidden, key);
     items.retain(|i| kind.is_none_or(|k| i.kind == k));
+    // Dynamic tags-column visibility (D2): the column shows iff the FINAL displayed set
+    // (post-retain ∩ post-`--kind`) carries at least one tagged row. Computed once, on
+    // the visible rows, and reused across any `--by id` layout (uniform).
+    let any_tagged = items.iter().any(|i| !i.tags.is_empty());
     // Only a clean `Composed` sorts by sequence; a `Degraded` cycle and `--by id`
     // both fall to the classic `(kind.ordinal, id)`. Off-sequence rows tail via the
     // `usize::MAX` sentinel.
@@ -1015,7 +1038,25 @@ fn list_rows(
     };
     match format {
         Format::Table => {
-            let sel = listing::select_columns(&BL_COLUMNS, BL_DEFAULT, columns.as_deref())?;
+            // Build the effective default LOCALLY (never mutate the `BL_DEFAULT` const):
+            // splice `"tags"` before `"title"` IFF a visible row is tagged. With
+            // `--columns` given, `select_columns` ignores `default` entirely (the user's
+            // order wins verbatim — tags shown iff requested, even all-empty).
+            let effective_default: Vec<&str> = if any_tagged {
+                BL_DEFAULT
+                    .iter()
+                    .flat_map(|&c| {
+                        if c == "title" {
+                            vec!["tags", "title"]
+                        } else {
+                            vec![c]
+                        }
+                    })
+                    .collect()
+            } else {
+                BL_DEFAULT.to_vec()
+            };
+            let sel = listing::select_columns(&BL_COLUMNS, &effective_default, columns.as_deref())?;
             let table = listing::render_columns(&items, &sel, render);
             // Table: rows + footer to stdout; the cycle warning to stderr.
             Ok(ListOutput {
@@ -1047,6 +1088,7 @@ fn json_rows(items: &[BacklogItem]) -> Vec<BacklogRow> {
             resolution: i.resolution.map(Resolution::as_str),
             slug: i.slug.clone(),
             title: i.title.clone(),
+            tags: i.tags.clone(),
         })
         .collect()
 }
@@ -1520,6 +1562,181 @@ pub(crate) fn run_after(
         io::stdout(),
         "{} after {to}{suffix}",
         target.0.canonical_id(target.1),
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// SL-067 PHASE-01: the `backlog tag` verb — tag normalisation + the
+// edit-preserving set-replace write, plus the two divergent folds
+// ---------------------------------------------------------------------------
+
+/// Normalise ONE tag on the WRITE path — the single chokepoint that decides what
+/// lands in the store (cf. `resolve_slug` for authored slugs). Trim, lowercase,
+/// then validate every char is `[a-z0-9_:-]` (colon allowed for namespacing, e.g.
+/// `area:backlog`); empty after trim, or any other char, is a HARD user error
+/// (`bail!`) NAMING the offending token so the author can fix it (EX-2). DISTINCT
+/// from [`fold_filter_tag`] — the filter fold is lenient by design (§4.2).
+fn normalize_tag(raw: &str) -> anyhow::Result<String> {
+    let tag = raw.trim().to_lowercase();
+    if tag.is_empty() {
+        anyhow::bail!("empty tag `{raw}` — tags must be non-empty `[a-z0-9_:-]`");
+    }
+    if !tag
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | ':' | '-'))
+    {
+        anyhow::bail!(
+            "invalid tag `{raw}` — tags must be `[a-z0-9_:-]` (lowercased, e.g. `area:backlog`)"
+        );
+    }
+    Ok(tag)
+}
+
+/// Normalise a `-t/--tag` FILTER input — the lenient, SEPARATE fold (§4.2): trim +
+/// lowercase, with NO charset reject. A filter matching nothing must succeed
+/// silently (never `bail!`), so this MUST NOT route through [`normalize_tag`]; the
+/// two folds diverge by design. `tags_admit` keeps its exact-match semantics — only
+/// the input is folded so `-t Security` round-trips the stored `security`.
+fn fold_filter_tag(raw: &str) -> String {
+    raw.trim().to_lowercase()
+}
+
+/// Pure write core: apply a tag add/remove SET edit to a held `&mut DocumentMut`,
+/// edit-preserving. No disk, no clock — the shell injects `today`.
+///
+/// - **F-1 strict refuse**: the `tags` key absent from the top-level table → the
+///   entity is malformed/hand-edited (a well-formed file seeds `tags = []`); a
+///   tail-insert would land the array inside a trailing subtable (silent corruption).
+///   `bail!`, NEVER create — the file is left untouched.
+/// - **The set algebra**: `new = (current ∪ normalize(adds)) ∖ normalize(removes)`,
+///   stored SORTED. The current set is read off the existing array verbatim (a
+///   hand-authored store may be unsorted — that is fine, the no-op guard compares as
+///   SETS).
+/// - **No-op guard (set-compare)**: if `set(new) == set(current)`, return `Ok(false)`
+///   with NO mutation (content + mtime hold). Set-compare (not ordered-vec) is
+///   REQUIRED so an idempotent re-add against an UNSORTED hand-authored store does
+///   not spuriously write + stamp `updated`.
+/// - Else replace `tags` with the fresh SORTED array and stamp `updated = today`,
+///   returning `Ok(true)`. Everything OUTSIDE the array (comments, inert tables,
+///   unknown keys) is preserved by `toml_edit`.
+fn apply_tags(
+    doc: &mut toml_edit::DocumentMut,
+    adds: &std::collections::BTreeSet<String>,
+    removes: &std::collections::BTreeSet<String>,
+    today: &str,
+) -> anyhow::Result<bool> {
+    let array = doc
+        .as_table()
+        .get("tags")
+        .and_then(toml_edit::Item::as_array)
+        .with_context(|| {
+            "malformed backlog item: missing seeded `tags` array (a well-formed item \
+             seeds `tags = []`); restore it before tagging — the file is left untouched"
+                .to_string()
+        })?;
+    let current: std::collections::BTreeSet<String> = array
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+
+    let mut new: std::collections::BTreeSet<String> = current.clone();
+    new.extend(adds.iter().cloned());
+    for r in removes {
+        new.remove(r);
+    }
+
+    // Set-compare no-op guard: an idempotent re-add / absent-remove (or an UNSORTED
+    // hand store whose set is already correct) writes nothing — mtime + content hold.
+    if new == current {
+        return Ok(false);
+    }
+
+    // Full sorted-array replace, preserving the doc outside the array. `BTreeSet`
+    // iterates sorted, so the stored array is sorted.
+    let mut fresh = toml_edit::Array::new();
+    for tag in &new {
+        fresh.push(tag.as_str());
+    }
+    let table = doc.as_table_mut();
+    table.insert("tags", toml_edit::value(fresh));
+    // Stamp `updated` — F-1 already proved `tags` present; `updated` is a sibling
+    // seeded key, so a plain insert edits it in place (no tail-subtable risk).
+    table.insert("updated", toml_edit::value(today));
+    Ok(true)
+}
+
+/// `doctrine backlog tag <ID> [TAGS]… [--remove/-d <TAGS>…]` — the tag-edit verb
+/// (SL-067 PHASE-01, §4.1/§4.3). Thin impure shell: find the root, `parse_ref` +
+/// `require_item` (a missing id hard-errors, never an implicit create), normalise
+/// the adds/removes through the WRITE chokepoint [`normalize_tag`], reject an
+/// add∩remove overlap (a user error), then apply the edit-preserving set-replace
+/// in place (clock injected) and print the post-state. At least one add OR remove is
+/// required (clap enforces neither alone, so the shell does — EX-1).
+pub(crate) fn run_tag(
+    path: Option<PathBuf>,
+    reference: &str,
+    adds: &[String],
+    removes: &[String],
+) -> anyhow::Result<()> {
+    if adds.is_empty() && removes.is_empty() {
+        anyhow::bail!("`backlog tag` needs at least one tag to add or remove (--remove/-d)");
+    }
+    let add_set: std::collections::BTreeSet<String> = adds
+        .iter()
+        .map(|t| normalize_tag(t))
+        .collect::<anyhow::Result<_>>()?;
+    let remove_set: std::collections::BTreeSet<String> = removes
+        .iter()
+        .map(|t| normalize_tag(t))
+        .collect::<anyhow::Result<_>>()?;
+    // A tag in BOTH add and remove (after normalisation) is contradictory — reject
+    // rather than silently letting the remove win (user error, §4.1).
+    let overlap: Vec<&String> = add_set.intersection(&remove_set).collect();
+    if let Some(first) = overlap.first() {
+        anyhow::bail!("tag `{first}` is in both add and remove (pick one)");
+    }
+
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (item_kind, id) = require_item(&root, reference)?;
+    let name = format!("{id:03}");
+    let item_path = root
+        .join(item_kind.kind().dir)
+        .join(&name)
+        .join(format!("{BACKLOG_STEM}-{name}.toml"));
+
+    let text = std::fs::read_to_string(&item_path)
+        .with_context(|| format!("backlog item not found at {}", item_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", item_path.display()))?;
+    let changed = apply_tags(&mut doc, &add_set, &remove_set, &crate::clock::today())?;
+    if changed {
+        std::fs::write(&item_path, doc.to_string())
+            .with_context(|| format!("Failed to write {}", item_path.display()))?;
+    }
+
+    // Print the post-state (the resulting tag set, sorted) — re-derived from the doc
+    // so it is faithful whether or not a write occurred.
+    let final_tags: Vec<String> = doc
+        .as_table()
+        .get("tags")
+        .and_then(toml_edit::Item::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let listed = if final_tags.is_empty() {
+        "(none)".to_string()
+    } else {
+        final_tags.join(", ")
+    };
+    writeln!(
+        io::stdout(),
+        "Tagged {}: {listed}",
+        item_kind.canonical_id(id),
     )?;
     Ok(())
 }
@@ -2336,6 +2553,143 @@ tags = []
         assert!(
             err.contains("id") && err.contains("slug"),
             "lists available set: {err}"
+        );
+    }
+
+    // --- SL-067 PHASE-02: the dynamic `tags` column (D2) ---
+
+    /// VT-4: an UNTAGGED corpus shows NO `tags` column (the golden-corpus invariant —
+    /// untagged lists stay byte-identical to pre-SL-067).
+    #[test]
+    fn backlog_list_untagged_corpus_hides_tags_column() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+
+        let out = list_id(root, None, list_args()).unwrap();
+        let header = out.lines().next().unwrap();
+        assert!(
+            !header.contains("tags"),
+            "untagged corpus omits the tags column: {header:?}"
+        );
+    }
+
+    /// VT-4: ≥1 tagged row → the `tags` column appears, spliced before `title`.
+    #[test]
+    fn backlog_list_tagged_corpus_shows_tags_before_title() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &["cli"]);
+
+        let out = list_id(root, None, list_args()).unwrap();
+        let header = out.lines().next().unwrap();
+        assert_eq!(
+            header.split_whitespace().collect::<Vec<_>>(),
+            vec!["id", "│", "kind", "│", "status", "│", "tags", "│", "title"],
+            "tags spliced before title: {header:?}"
+        );
+        assert!(out.contains("cli"), "the tag value renders: {out}");
+    }
+
+    /// VT-4: `--columns id,tags` FORCES the tags column even when every row is empty
+    /// (the explicit request honoured verbatim — the dynamic default is bypassed).
+    #[test]
+    fn backlog_list_columns_forces_tags_even_when_all_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]);
+
+        let out = list_id(root, None, columns_args(&["id", "tags"])).unwrap();
+        let header = out.lines().next().unwrap();
+        assert_eq!(
+            header.split_whitespace().collect::<Vec<_>>(),
+            vec!["id", "│", "tags"],
+            "explicit --columns shows tags despite all-empty: {header:?}"
+        );
+    }
+
+    /// VT-4: `--columns` omitting tags HIDES it despite tagged rows (the explicit set
+    /// wins; the dynamic default never overrides an explicit request).
+    #[test]
+    fn backlog_list_columns_omitting_tags_hides_it_despite_tagged_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &["cli"]);
+
+        let out = list_id(root, None, columns_args(&["id", "title"])).unwrap();
+        let header = out.lines().next().unwrap();
+        assert!(
+            !header.contains("tags"),
+            "explicit columns omitting tags hides it: {header:?}"
+        );
+    }
+
+    /// VT-4: a tagged item FILTERED OUT by `--kind` leaves no tagged row in the visible
+    /// set → no tags column (the visibility keys on the FINAL displayed set, post-kind).
+    #[test]
+    fn backlog_list_tagged_row_filtered_by_kind_hides_tags_column() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // The only tagged item is an Issue; we list Improvements → it is filtered out.
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &["cli"]);
+        write_item(
+            root,
+            ItemKind::Improvement,
+            1,
+            "open",
+            "",
+            "b",
+            "Bravo",
+            &[],
+        );
+
+        let out = list_id(root, Some(ItemKind::Improvement), list_args()).unwrap();
+        let header = out.lines().next().unwrap();
+        assert!(
+            !header.contains("tags"),
+            "no visible tagged row after --kind → no tags column: {header:?}"
+        );
+    }
+
+    /// VT-1 (backlog wiring smoke): under colour the tagged cell carries ANSI and
+    /// stripping it reproduces the plain render — the PerToken column is wired and
+    /// byte-clean-coupled end to end.
+    #[test]
+    fn backlog_list_tags_column_colour_strips_to_plain() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            "",
+            "a",
+            "Alpha",
+            &["cli:command", "security"],
+        );
+
+        let plain = list_id(root, None, list_args()).unwrap();
+        let coloured = list_id(
+            root,
+            None,
+            ListArgs {
+                render: listing::RenderOpts {
+                    color: true,
+                    term_width: None,
+                },
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            coloured.contains('\u{1b}'),
+            "the tagged cell carries ANSI under colour"
+        );
+        assert_eq!(
+            crate::listing::strip_ansi(&coloured),
+            plain,
+            "stripping the coloured backlog render reproduces the plain layout"
         );
     }
 
@@ -3582,6 +3936,294 @@ tags = []
                 to: "ISS-001".to_string(),
                 rank: 5,
             }]
+        );
+    }
+
+    // --- SL-067 PHASE-01: the `backlog tag` verb + the normalise/filter folds ---
+
+    fn item_path(root: &Path, kind: ItemKind, id: u32) -> PathBuf {
+        let name = format!("{id:03}");
+        root.join(kind.kind().dir)
+            .join(&name)
+            .join(format!("backlog-{name}.toml"))
+    }
+
+    fn s(xs: &[&str]) -> Vec<String> {
+        xs.iter().map(|x| (*x).to_string()).collect()
+    }
+
+    /// VT-1: round-trip e2e — add surfaces via the (folded) `-t` filter, remove drops it.
+    #[test]
+    fn run_tag_round_trips_add_filter_remove() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth"); // ISS-001, tags = []
+
+        run_tag(Some(root.to_path_buf()), "ISS-001", &s(&["a", "b"]), &[]).unwrap();
+        assert_eq!(
+            read_item(root, ItemKind::Issue, 1).unwrap().tags,
+            s(&["a", "b"])
+        );
+
+        // surfaces under the tag filter (input folded → exact-match the store).
+        let json = list_id(
+            root,
+            None,
+            ListArgs {
+                json: true,
+                tags: s(&["a"]),
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            v["rows"].as_array().unwrap().len(),
+            1,
+            "tag filter matches: {json}"
+        );
+
+        run_tag(Some(root.to_path_buf()), "ISS-001", &[], &s(&["a"])).unwrap();
+        assert_eq!(read_item(root, ItemKind::Issue, 1).unwrap().tags, s(&["b"]));
+    }
+
+    /// VT-2: normalisation — case-fold, charset reject naming the token, colon accepted.
+    #[test]
+    fn run_tag_normalises_and_rejects_bad_charset() {
+        assert_eq!(normalize_tag("Security").unwrap(), "security");
+        assert_eq!(normalize_tag("  Area:Backlog ").unwrap(), "area:backlog");
+        // colon namespacing accepted; underscore/hyphen/digits accepted.
+        assert_eq!(normalize_tag("a_b-1:c").unwrap(), "a_b-1:c");
+
+        for bad in ["a b", "a@b"] {
+            let err = normalize_tag(bad).unwrap_err().to_string();
+            assert!(
+                err.contains(bad),
+                "the reject names the offending token: {err}"
+            );
+        }
+        assert!(
+            normalize_tag("   ").is_err(),
+            "empty-after-trim is rejected"
+        );
+
+        // The verb routes adds through the chokepoint — a bad add hard-errors.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth");
+        let path = item_path(root, ItemKind::Issue, 1);
+        let before = fs::read_to_string(&path).unwrap();
+        assert!(run_tag(Some(root.to_path_buf()), "ISS-001", &s(&["a@b"]), &[]).is_err());
+        assert_eq!(
+            before,
+            fs::read_to_string(&path).unwrap(),
+            "rejected before any write"
+        );
+
+        // A `Security` add lands lowercased.
+        run_tag(Some(root.to_path_buf()), "ISS-001", &s(&["Security"]), &[]).unwrap();
+        assert_eq!(
+            read_item(root, ItemKind::Issue, 1).unwrap().tags,
+            s(&["security"])
+        );
+    }
+
+    /// VT-3: idempotency — re-add present / remove absent are no-ops (mtime unchanged,
+    /// proven against an UNSORTED hand store); add∩remove overlap is rejected.
+    #[test]
+    fn run_tag_idempotent_no_op_holds_mtime_on_unsorted_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // Hand-author an UNSORTED store: tags = ["b", "a"]. The set is already {a,b}.
+        fs::create_dir_all(item_path(root, ItemKind::Issue, 1).parent().unwrap()).unwrap();
+        let toml = "id = 1\nslug = \"a\"\ntitle = \"A\"\nkind = \"issue\"\n\
+             status = \"open\"\nresolution = \"\"\ncreated = \"2026-06-08\"\n\
+             updated = \"2026-06-08\"\ntags = [\"b\", \"a\"]\n";
+        let path = item_path(root, ItemKind::Issue, 1);
+        fs::write(&path, toml).unwrap();
+        let before = fs::read_to_string(&path).unwrap();
+        let mtime0 = fs::metadata(&path).unwrap().modified().unwrap();
+
+        // Re-add a present tag (set already {a,b}) — set-compare no-op, NO write+stamp.
+        run_tag(Some(root.to_path_buf()), "ISS-001", &s(&["a"]), &[]).unwrap();
+        assert_eq!(
+            before,
+            fs::read_to_string(&path).unwrap(),
+            "no-op: content held"
+        );
+        assert_eq!(
+            mtime0,
+            fs::metadata(&path).unwrap().modified().unwrap(),
+            "mtime held"
+        );
+
+        // Remove an absent tag — also a no-op.
+        run_tag(Some(root.to_path_buf()), "ISS-001", &[], &s(&["zzz"])).unwrap();
+        assert_eq!(
+            before,
+            fs::read_to_string(&path).unwrap(),
+            "remove-absent no-op"
+        );
+
+        // add∩remove overlap (after normalisation) is rejected, nothing written.
+        let err = run_tag(Some(root.to_path_buf()), "ISS-001", &s(&["X"]), &s(&["x"]));
+        assert!(err.is_err(), "an add∩remove overlap is rejected");
+        assert_eq!(
+            before,
+            fs::read_to_string(&path).unwrap(),
+            "nothing written on reject"
+        );
+    }
+
+    /// VT-3 (no-input): neither an add nor a remove is a hard error.
+    #[test]
+    fn run_tag_requires_at_least_one_edit() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Auth");
+        assert!(run_tag(Some(root.to_path_buf()), "ISS-001", &[], &[]).is_err());
+    }
+
+    /// VT-4: `list --json` — untagged emits `[]`, tagged emits its array unconditionally.
+    #[test]
+    fn run_tag_json_projects_tags_unconditionally() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(root, ItemKind::Issue, 1, "open", "", "a", "Alpha", &[]); // untagged
+        write_item(
+            root,
+            ItemKind::Issue,
+            2,
+            "open",
+            "",
+            "b",
+            "Bravo",
+            &["security"],
+        );
+
+        let json = list_id(
+            root,
+            None,
+            ListArgs {
+                json: true,
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let rows = v["rows"].as_array().unwrap();
+        let by_id = |id: &str| {
+            rows.iter()
+                .find(|r| r["id"] == id)
+                .unwrap_or_else(|| panic!("row {id}"))
+        };
+        // untagged → empty array (present, not omitted, never gated).
+        assert_eq!(by_id("ISS-001")["tags"], serde_json::json!([]));
+        assert_eq!(by_id("ISS-002")["tags"], serde_json::json!(["security"]));
+    }
+
+    /// VT-5: edit-preserving — a comment / inert table / unknown key survive; `updated`
+    /// stamped; unrelated keys untouched. And an F-1 missing-`tags` file is refused
+    /// byte-unchanged.
+    #[test]
+    fn run_tag_is_edit_preserving_and_refuses_missing_tags() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(item_path(root, ItemKind::Issue, 1).parent().unwrap()).unwrap();
+        let path = item_path(root, ItemKind::Issue, 1);
+        // A hand comment, an inert `[relationships]` table, an unknown key.
+        let toml = "# keep me\nid = 1\nslug = \"a\"\ntitle = \"A\"\nkind = \"issue\"\n\
+             status = \"open\"\nresolution = \"\"\ncreated = \"2026-06-08\"\n\
+             updated = \"2026-06-08\"\ntags = []\nunknown = \"survives\"\n\
+             \n[relationships]\nneeds = []\n";
+        fs::write(&path, toml).unwrap();
+
+        run_tag(Some(root.to_path_buf()), "ISS-001", &s(&["security"]), &[]).unwrap();
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(after.contains("# keep me"), "comment survives: {after}");
+        assert!(
+            after.contains("unknown = \"survives\""),
+            "unknown key survives"
+        );
+        assert!(after.contains("[relationships]"), "inert table survives");
+        assert!(
+            after.contains("tags = [\"security\"]"),
+            "tag written: {after}"
+        );
+        assert!(
+            !after.contains("updated = \"2026-06-08\""),
+            "updated stamped"
+        );
+
+        // F-1: a file with NO `tags` key is refused byte-unchanged.
+        fs::create_dir_all(item_path(root, ItemKind::Issue, 2).parent().unwrap()).unwrap();
+        let path2 = item_path(root, ItemKind::Issue, 2);
+        let no_tags = "id = 2\nslug = \"b\"\ntitle = \"B\"\nkind = \"issue\"\n\
+             status = \"open\"\nresolution = \"\"\ncreated = \"2026-06-08\"\n\
+             updated = \"2026-06-08\"\n";
+        fs::write(&path2, no_tags).unwrap();
+        let err = run_tag(Some(root.to_path_buf()), "ISS-002", &s(&["x"]), &[]);
+        assert!(err.is_err(), "a missing seeded `tags` array is refused");
+        assert_eq!(
+            no_tags,
+            fs::read_to_string(&path2).unwrap(),
+            "refused byte-unchanged"
+        );
+    }
+
+    /// EX-5: the filter fold is LENIENT — a mixed-case / surrounding-space input never
+    /// errors and round-trips the store; a no-match input succeeds silently.
+    #[test]
+    fn filter_fold_is_lenient_and_distinct_from_write_normalise() {
+        assert_eq!(fold_filter_tag("  Security "), "security");
+        // The lenient fold accepts what the write chokepoint rejects (no bail).
+        assert_eq!(fold_filter_tag("a b"), "a b");
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_item(
+            root,
+            ItemKind::Issue,
+            1,
+            "open",
+            "",
+            "a",
+            "Alpha",
+            &["security"],
+        );
+        // `-t Security` (mixed case) folds to `security` and matches the store.
+        let hit = list_id(
+            root,
+            None,
+            ListArgs {
+                json: true,
+                tags: s(&["Security"]),
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&hit).unwrap();
+        assert_eq!(
+            v["rows"].as_array().unwrap().len(),
+            1,
+            "case-folded filter hits"
+        );
+        // A no-match input succeeds silently (zero rows, no error).
+        let miss = list_id(
+            root,
+            None,
+            ListArgs {
+                json: true,
+                tags: s(&["nomatch at all"]),
+                ..ListArgs::default()
+            },
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&miss).unwrap();
+        assert_eq!(
+            v["rows"].as_array().unwrap().len(),
+            0,
+            "no-match filter is silent"
         );
     }
 
