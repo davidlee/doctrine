@@ -60,7 +60,7 @@ pub(crate) struct Entry {
     id: String,
     description: String,
     /// Embedded file paths comprising the skill, e.g.
-    /// `review/skills/code-review/SKILL.md`.
+    /// `doctrine/skills/code-review/SKILL.md`.
     files: Vec<String>,
 }
 
@@ -1002,7 +1002,7 @@ mod tests {
     fn discover_finds_embedded_sample_skill() {
         let cat = discover().unwrap();
         let cr = cat.iter().find(|e| e.id == "code-review").unwrap();
-        assert_eq!(cr.domain, "review");
+        assert_eq!(cr.domain, "doctrine");
         assert!(!cr.description.is_empty());
         assert!(cr.files.iter().any(|f| f.ends_with("SKILL.md")));
     }
@@ -1207,7 +1207,7 @@ mod tests {
 
         // Stale file gone; the embed's SKILL.md present and byte-equal.
         assert!(!id_dir.join("STALE.md").exists(), "stale file must be gone");
-        let embed = PluginAssets::get("review/skills/code-review/SKILL.md").unwrap();
+        let embed = PluginAssets::get("doctrine/skills/code-review/SKILL.md").unwrap();
         let got = fs::read(id_dir.join("SKILL.md")).unwrap();
         assert_eq!(got, embed.data.as_ref());
         // No temp left behind.
@@ -1233,7 +1233,7 @@ mod tests {
         // Temp cleared; canonical coherent (embed content, no junk leaked in).
         assert!(!tmp.exists(), "leftover temp must be cleared");
         assert!(!id_dir.join("JUNK.md").exists());
-        let embed = PluginAssets::get("review/skills/code-review/SKILL.md").unwrap();
+        let embed = PluginAssets::get("doctrine/skills/code-review/SKILL.md").unwrap();
         assert_eq!(
             fs::read(id_dir.join("SKILL.md")).unwrap(),
             embed.data.as_ref()
@@ -1493,7 +1493,7 @@ mod tests {
     }
 
     fn embed_skill_md() -> Vec<u8> {
-        PluginAssets::get("review/skills/code-review/SKILL.md")
+        PluginAssets::get("doctrine/skills/code-review/SKILL.md")
             .unwrap()
             .data
             .to_vec()
