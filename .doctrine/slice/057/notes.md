@@ -111,3 +111,32 @@ SL-057's own requirements at /close (design §9): `coverage record` VT checks fo
 REQ-254/255/256/257/114 then `coverage verify` them green, replacing hand-authored
 backfill. Out-of-scope follow-ons (historical backfill, RSK-008 close-gate-on-Failed)
 captured for close.
+
+## Close (2026-06-14)
+- **`/audit` → RV-017** (reconciliation, targets SL-057). Reviewed the PURE PHASE-05
+  delta `eff3ca4` (fork `sl057-phase05`, parent `0846800`), NOT `e3f28c0` (SL-056
+  merge noise). Two passes: `/code-review` + codex GPT-5.5. 4 findings, all terminal:
+  - **F-1 (major, FIXED)** — `record`/`forget` stored `--requirement` verbatim while
+    the read view canonicalizes (`coverage_view.rs:180` `requirement::canonicalize_fk`):
+    `record --requirement REQ-1` keyed `"REQ-1"`, `show REQ-001` never saw it. Fix:
+    route requirement through the same `canonicalize_fk`; share one `slice_key(u32)`
+    for the SL-NNN spelling. Golden `coverage_record_canonicalizes_requirement_ref`.
+    Durable lesson → `mem.pattern.entity.write-seam-canonicalizes-every-id-axis-the-read-view-does`.
+  - **F-2 (major, FIXED)** — `all_slice_ids` `entries.flatten()` swallowed per-entry
+    `read_dir` errors on the MUTATING `verify --all`. Fix: explicit `Result` iteration,
+    errors propagated with path context.
+  - **F-3 (minor, DEFERRED → IMP-056)** — Debug-rendered CLI status (`InProgress` out
+    vs `in-progress` in); a fix re-pins PHASE-03 goldens, out of in-slice scope.
+  - **F-4 (nit, FIXED)** — double slice-ref parse; folded into the F-1 `slice_key` refactor.
+  - Remediation committed `9629bcf`; `just check` green (clippy zero, 12 record goldens).
+- **Emergent decisions confirmed sound**: `load_config` relocation into `coverage_store`
+  (byte-identical, breaks store↔verify cycle, ADR-001 clean); `canonical_slice_ref`
+  correct + both ref forms tested. Gate (a) byte-unchanged; only the sanctioned view-
+  golden argv churn (b). Reject goldens assert real `ValidError`, not proxies.
+- **§9 VT dogfood DEFERRED → CHR-007** (user-confirmed): no root `doctrine.toml` ⇒
+  meaningful checks need literal `cargo test` subprocesses ⇒ nested-cargo false-RED
+  footgun at close; machinery already proven green by the e2e verify goldens.
+- Memory `mem_019ec3b9c5` recorded + committed but left UNVERIFIED — a concurrent
+  untracked `slice/061-*` symlink (another session's, IMP-023 rewire) keeps doctrine's
+  born-frame dirty, blocking attestation. Re-verify once the tree is clean.
+- Lifecycle `audit → reconcile → done`.
