@@ -2529,7 +2529,11 @@ mod tests {
     #[test]
     fn read_path_at_present_some_absent_none() {
         let repo = ScratchRepo::new();
-        let head = repo.commit(".doctrine/dispatch/064/journal.toml", "rows = []\n", "ledger");
+        let head = repo.commit(
+            ".doctrine/dispatch/064/journal.toml",
+            "rows = []\n",
+            "ledger",
+        );
 
         assert_eq!(
             super::read_path_at(repo.path(), &head, ".doctrine/dispatch/064/journal.toml")
