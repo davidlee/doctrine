@@ -77,19 +77,42 @@ coordination tree has no foreign writers).
 
 ## Risks, assumptions, open questions
 
-- **OQ-1 (carry to /design): integration-sync mechanism + cadence.** ff/push trunk
-  vs leave-branch-for-PR; sync per-batch vs once at end. The team driver biases
-  toward leave-a-branch as the default.
-- **OQ-2: solo-vs-team applicability.** The SL-060 trigger was *serial* dispatch
-  contended by *unrelated* agents — i.e. the trigger is "shared trunk has live
-  foreign writers", not "parallel workers". Does the dedicated coordination worktree
-  apply always, or only when foreign-writer contention / a PR posture is requested?
-- **OQ-3: progress visibility.** Coordination on its own tree means `main` lags
-  until sync — humans watching trunk see nothing mid-run. Acceptable cadence?
-- **A-1:** the SL-056 fork/provision machinery generalises to a tier-carrying
-  coordination tree without a new primitive (to be confirmed at design).
-- **Cost:** an extra worktree + an integration-sync step; non-delegable `.doctrine/`
-  writes move to the clean coordination tree (strictly better than contended main).
+Design (`design.md`) is canon for design intent. Status: structural spine locked
+(§1–§3), integration-sync routing policy deliberately OQ-bearing (multi-pass).
+
+**Scope grew at design** (user-approved): from "isolate the coordination branch +
+a sync step" to a **delta-class-routed integration topology** — `dispatch/<slice>`
+(isolated per-run SSoT) / `phase/<slice>-NN` (preserved code deliverables) /
+`edge` (optional standing aggregate), with code vs intent routed to different
+targets. ADR-006 amendments expanded to **D1/D2a/D7/D8 + D9 addendum** (was D8
+only).
+
+**Resolved at design:**
+- ~~OQ-2 (applicability)~~ → **always-on** (DD-1): the opt-out path would *be* the
+  hazardous in-place funnel; one robust path, contention unreachable by
+  construction.
+- ~~OQ-3 (visibility)~~ → **dissolved**: intent projects to trunk
+  contemporaneously (visible); only unreviewed code lags (correct).
+- ~~OQ-1 (sync mechanism)~~ → **architecture locked** (projection-from-coordination
+  branch, a sync *verb*, configurable role→ref targets, never-auto-trunk); the
+  remaining *policy* is OQ-A.
+
+**Open (deferred to later passes / fresh agent):**
+- **OQ-A:** intent → trunk push vs leave-for-review, and timing.
+- **OQ-B:** delta-class boundary — what ships together vs projects ahead (temporal
+  seam: design = prior review gate; impl-time code + intent-drift ship together).
+- **OQ-C:** audit ordering vs sync timing (RV verbs refuse on a worktree fork).
+
+**Assumptions / risks:**
+- **A-1 (confirmed):** the coordination tree provisions on the SL-056
+  fork/regenerate axis with **no** coordination-tier copy (it regenerates phase
+  sheets from committed `plan.toml`); the one new primitive is **markerless
+  creation** (orchestrator = mode OFF, must write).
+- **R-1:** `env DOCTRINE_WORKER` must not leak into the coordination tree (would
+  false-flag worker-mode and refuse the orchestrator) — D2a positive-signal
+  interaction.
+- **Cost:** one cold provision build per run (per-worktree target), amortised;
+  stings only a quiet-solo-small-slice. Accepted (DD-1).
 
 ## Verification / closure intent
 
