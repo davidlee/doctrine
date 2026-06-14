@@ -115,10 +115,22 @@ filtered at integration time.
   no segment text. Charset permits colon positionally; revisit only if proven
   confusing.
 
+### Corrigendum
+
+F-2 ("VT-4 dynamic column visibility lacks a dedicated table-header assertion")
+was raised in error. The code review revealed 5 dedicated VT-4 tests at
+`src/backlog.rs:~2593-2668` covering: untagged corpus hides column, tagged
+corpus shows it before title, `--columns` forces when empty, `--columns`
+omitting hides despite tagged rows, and tagged row filtered by `--kind` hides
+the column. F-2 is terminal (`verified`) per ledger rules and cannot be
+withdrawn, but its premise was incorrect. IMP-076 should also be closed.
+
 ### Follow-up captured
 
-- F-2: add an explicit table-header assertion for the dynamic column logic
-  (backlog item).
+- F-3: hoist `strip_ansi` from listing.rs tests to `pub(crate)`, remove
+  backlog.rs copy — one-line refactor during integration.
+- F-4: `paint_tag` capacity hint and `segment_hue` unwrap_or — tolerated
+  (cosmetic, dead paths today).
 
 ### Phase criteria — all green
 
@@ -144,6 +156,11 @@ filtering out the extraneous dispatch worktree deletions:
 4. `test(SL-067): update golden tests for unconditional tags projection` —
    `tests/e2e_backlog_list_order_golden.rs`,
    `tests/e2e_list_columns_golden.rs`
+
+Also apply during integration, per F-3:
+
+5. `chore(SL-067): hoist strip_ansi to pub(crate) in listing.rs` — remove the
+   backlog.rs copy, import from listing.rs in backlog.rs tests.
 
 The integration is `/close`'s act; this audit hands off with all findings
 terminal and the review done.
