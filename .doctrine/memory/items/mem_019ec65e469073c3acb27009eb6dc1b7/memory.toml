@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec65e469073c3acb27009eb6dc1b7"
+memory_key = "mem.pattern.dispatch.worktree-import-corrupt-patch-use-checkout"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "doctrine worktree import corrupts the patch under rtk; use the checkout-import substitute"
+summary = "doctrine worktree import fails 'corrupt patch at <stdin>:N' in the rtk env; checkout-import the net diff after manual belt checks"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = ["src/worktree.rs"]
+commands = ["doctrine worktree import"]
+tags = ["dispatch", "worktree", "rtk"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "46c389d77b58429c3853f879aece2d07c41fdcf8"
+tree = "455b70af93ee7585bbb0618ed0042867d5f521c1"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "46c389d77b58429c3853f879aece2d07c41fdcf8"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
