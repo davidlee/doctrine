@@ -102,14 +102,7 @@ fn make_fork_branch(src: &Path, holder: &Path, branch: &str, files: &[(&str, &st
     let wt = holder.join(branch);
     git(
         src,
-        &[
-            "worktree",
-            "add",
-            "-b",
-            branch,
-            wt.to_str().unwrap(),
-            &base,
-        ],
+        &["worktree", "add", "-b", branch, wt.to_str().unwrap(), &base],
     );
     for (rel, body) in files {
         let p = wt.join(rel);
@@ -133,7 +126,12 @@ fn import_happy_stages_delta_uncommitted() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
-    let base = make_fork_branch(src.path(), holder.path(), "wkr-1", &[("feature.rs", "fn f() {}")]);
+    let base = make_fork_branch(
+        src.path(),
+        holder.path(),
+        "wkr-1",
+        &[("feature.rs", "fn f() {}")],
+    );
 
     let out = run(
         src.path(),
@@ -160,7 +158,10 @@ fn import_happy_stages_delta_uncommitted() {
         "delta staged in the index; got: {staged:?}"
     );
     // And it is genuinely UNcommitted: the file is not present in the B tree.
-    let (ok, _) = git_try(src.path(), &["cat-file", "-e", &format!("{base}:feature.rs")]);
+    let (ok, _) = git_try(
+        src.path(),
+        &["cat-file", "-e", &format!("{base}:feature.rs")],
+    );
     assert!(!ok, "feature.rs must not exist in the B commit");
 }
 
@@ -226,7 +227,14 @@ fn import_refuses_multi_commit() {
     let wt = holder.path().join("wkr-mc");
     git(
         src.path(),
-        &["worktree", "add", "-b", "wkr-mc", wt.to_str().unwrap(), &base],
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "wkr-mc",
+            wt.to_str().unwrap(),
+            &base,
+        ],
     );
     std::fs::write(wt.join("one.rs"), "1").unwrap();
     git(&wt, &["add", "one.rs"]);
@@ -284,6 +292,78 @@ fn import_refuses_claude_touch() {
     assert_refusal(&out, "claude-touch");
 }
 
+// --- belt hardening: the prefix-match must see the REAL governance path ---
+
+// F-3: a governance path carrying a non-ASCII byte + space is C-quoted by git's
+// default core.quotePath=true (".doctrine/\303\251 vil.toml"), so the belt's
+// `starts_with(".doctrine/")` misses unless the belt diff pins quotePath=false.
+#[test]
+fn import_refuses_doctrine_touch_quoted_path() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let holder = tempfile::tempdir().unwrap();
+    let base = make_fork_branch(
+        src.path(),
+        holder.path(),
+        "wkr-qp",
+        &[(".doctrine/é vil.toml", "nope")],
+    );
+
+    let out = run(
+        src.path(),
+        None,
+        &["worktree", "import", "--base", &base, "--fork", "wkr-qp"],
+    );
+    assert_refusal(&out, "doctrine-touch");
+}
+
+// F-4: a governance DELETION paired by git's default rename detection with a
+// same-content add elsewhere is emitted by `--name-only` as the destination
+// only; the `.doctrine/` SOURCE never appears unless the belt diff pins
+// --no-renames.
+#[test]
+fn import_refuses_rename_disguised_doctrine_deletion() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    // Commit a substantial governance file into B so a 100% rename is detected.
+    let gov_body = "GOVERNANCE\n".repeat(40);
+    std::fs::create_dir_all(src.path().join(".doctrine/state")).unwrap();
+    std::fs::write(src.path().join(".doctrine/state/gov.txt"), &gov_body).unwrap();
+    git(src.path(), &["add", "-f", ".doctrine/state/gov.txt"]);
+    git(src.path(), &["commit", "-q", "-m", "seed governance file"]);
+    let base = git(src.path(), &["rev-parse", "HEAD"]);
+
+    // Fork: delete the governance file, re-add identical content elsewhere.
+    let holder = tempfile::tempdir().unwrap();
+    let wt = holder.path().join("wkr-rn");
+    git(
+        src.path(),
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "wkr-rn",
+            wt.to_str().unwrap(),
+            &base,
+        ],
+    );
+    std::fs::remove_file(wt.join(".doctrine/state/gov.txt")).unwrap();
+    std::fs::create_dir_all(wt.join("moved")).unwrap();
+    std::fs::write(wt.join("moved/gov.txt"), &gov_body).unwrap();
+    git(&wt, &["add", "-A"]);
+    git(
+        &wt,
+        &["commit", "-q", "-m", "S: rename-disguised gov deletion"],
+    );
+
+    let out = run(
+        src.path(),
+        None,
+        &["worktree", "import", "--base", &base, "--fork", "wkr-rn"],
+    );
+    assert_refusal(&out, "doctrine-touch");
+}
+
 // --- VT-3: untracked scratch files do NOT trip tree-unclean ---
 
 #[test]
@@ -321,7 +401,14 @@ fn add_linked_fork(src: &Path, holder: &Path, branch: &str) -> PathBuf {
     let fork = holder.join("linked");
     git(
         src,
-        &["worktree", "add", "-b", branch, fork.to_str().unwrap(), &base],
+        &[
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            fork.to_str().unwrap(),
+            &base,
+        ],
     );
     fork
 }

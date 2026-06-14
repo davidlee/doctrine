@@ -733,7 +733,26 @@ pub(crate) fn run_import(path: Option<PathBuf>, base: &str, fork: &str) -> anyho
         .is_some_and(|p| matches(p, &base_sha));
 
     // --- gather: belt input — B..<fork> name-only, TRACKED-files-only diff ---
-    let diff = git::git_text(&root, &["diff", "--name-only", &format!("{base}..{fork}")])?;
+    // Two hardening flags, both gating the belt's malice-containment (SL-056 §7):
+    //   * `-c core.quotePath=false` — git's default quotePath=true C-quotes any
+    //     path with a non-ASCII byte (".doctrine/\303\251…"), so the pure
+    //     prefix-match `starts_with(".doctrine/")` would MISS and the governance
+    //     file would ride back. Pin it off so the real path is emitted verbatim.
+    //   * `--no-renames` — default rename detection collapses a governance
+    //     DELETION paired with a same-content add elsewhere into a single
+    //     destination line, hiding the `.doctrine/` SOURCE from the belt. Off ⇒
+    //     both legs (delete + add) appear as themselves.
+    let diff = git::git_text(
+        &root,
+        &[
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "--name-only",
+            "--no-renames",
+            &format!("{base}..{fork}"),
+        ],
+    )?;
     let delta_paths: Vec<String> = diff.lines().map(str::to_owned).collect();
 
     // --- pure classify ---
@@ -745,7 +764,10 @@ pub(crate) fn run_import(path: Option<PathBuf>, base: &str, fork: &str) -> anyho
     // --- act: apply the SAME diff into the index, NON-committing (ADR-006 D7) ---
     // `git apply --3way --index` writes the index from the coordination root; under
     // both preconds the patch applies onto the exact tree it was cut from.
-    let patch = git::git_text(&root, &["diff", &format!("{base}..{fork}")])?;
+    // `--no-renames` keeps the apply view consistent with the belt's: a rename
+    // is two real legs (delete + add), which `git apply` handles directly (a
+    // pure-rename header carries no hunk for apply to act on).
+    let patch = git::git_text(&root, &["diff", "--no-renames", &format!("{base}..{fork}")])?;
     git::git_apply_index(&root, &patch)
         .with_context(|| format!("git apply --3way --index {base}..{fork}"))?;
 
