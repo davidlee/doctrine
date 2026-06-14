@@ -1240,6 +1240,25 @@ enum BacklogCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Add and/or remove tags on an item — kind auto-detected from the prefix. Tags
+    /// are lowercased and validated `[a-z0-9_:-]` (colon namespacing, e.g.
+    /// `area:backlog`); the stored set is sorted. At least one add or remove required.
+    Tag {
+        /// Canonical item ref (e.g. ISS-007); the prefix selects the kind.
+        id: String,
+
+        /// Tags to add (positional, repeatable).
+        tags: Vec<String>,
+
+        /// Tags to remove, repeatable (`-d security -d area:backlog`).
+        #[arg(long = "remove", short = 'd')]
+        remove: Vec<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2425,6 +2444,7 @@ fn write_class(cmd: &Command) -> WriteClass {
             BacklogCommand::Edit { .. } => Write("backlog edit"),
             BacklogCommand::Needs { .. } => Write("backlog needs"),
             BacklogCommand::After { .. } => Write("backlog after"),
+            BacklogCommand::Tag { .. } => Write("backlog tag"),
             BacklogCommand::List { .. } | BacklogCommand::Show { .. } => Read,
         },
         Command::Knowledge { command } => match command {
@@ -3173,6 +3193,12 @@ fn main() -> anyhow::Result<()> {
             BacklogCommand::After { id, to, rank, path } => {
                 backlog::run_after(path, &id, &to, rank)
             }
+            BacklogCommand::Tag {
+                id,
+                tags,
+                remove,
+                path,
+            } => backlog::run_tag(path, &id, &tags, &remove),
         },
         Command::Knowledge { command } => match command {
             KnowledgeCommand::New {
