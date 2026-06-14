@@ -5,10 +5,10 @@ id = 3
 slug = "revision-vehicle-staged-delta-approval"
 title = "Revision vehicle: staged draft/approve of requirement+spec-prose deltas, distinct from REC"
 kind = "idea"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-11"
-updated = "2026-06-11"
+updated = "2026-06-14"
 tags = []
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
