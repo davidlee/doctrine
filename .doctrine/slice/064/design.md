@@ -1,9 +1,10 @@
 # SL-064 Design — Coordination-branch isolation: dedicated worktree + integration-sync seam
 
-> Status: **in-progress, multi-pass.** The structural spine (§1–§3) is locked.
-> The integration-sync *routing policy* (§4) is deliberately OQ-bearing — to be
-> settled in later passes, possibly by a fresh agent. Do not advance to `/plan`
-> until OQ-A/B/C are resolved or consciously accepted as plan-time assumptions.
+> Status: **spine + routing policy locked.** The structural spine (§1–§3) and the
+> integration-sync routing policy (§4) are settled: OQ-A/B/C **resolved** and OQ-D
+> **deferred-with-fence** (User ruled (a)), all formalised in **ADR-012**
+> (acceptance gates this slice's `/plan`). Ready for `/plan` once ADR-012 is
+> accepted.
 
 ## Design principle: framework vs repo-local (the layer wall)
 
@@ -63,15 +64,15 @@ it). Conclude then *projects* outward (§4).
 
 **Invariants:**
 - ✅ Untouched: D2 worker-sole-writer, D4 tier-merge-safety, D9 withheld-tier.
-- ⚠️ D7 single-branch recovery **preserved only for the funnel ONTO
+- ⚠️ D7 single-branch recovery **preserved for the funnel ONTO
   `dispatch/<slice>`** — the coordination branch stays the singular SSoT for the
-  *inner* loop. The **outward projection step does NOT yet have a recovery
-  contract**: a crash mid-sync (intent escaped to trunk, code not yet integrated)
-  leaves target state the coordination branch does not record as projected-vs-
-  pending. Idempotent replay + a **projection journal** (target-tip preconditions
-  + completed steps, recorded on `dispatch/<slice>`) is **required and unproven** —
-  it **binds OQ-A**. Until designed, this design makes **no D7-recovery claim
-  across projection** (RV-023 F-1).
+  *inner* loop. The **outward projection step now has a defined recovery
+  contract** (RV-023 F-1 closed via OQ-A): a **projection journal committed to
+  `dispatch/<slice>`** (target-tip preconditions + completed-step markers, intent
+  written before the op) + **idempotent patch-id replay** (`git cherry`), which
+  reports — never auto-resolves — on a moved target. See **ADR-012 Decision 4**.
+  This restores a D7-analog recovery property *across* projection; the contract is
+  locked, its implementation + proof land in this slice's plan/execute.
 - ✏️ D7 amended (§5): knowledge trails code *on the coordination branch*;
   integration-sync may project knowledge to trunk ahead of code integration.
 - ✏️ D8 amended (§5): dedicated coordination worktree + defined projection.
@@ -224,7 +225,12 @@ must be designed-for:
   The sync verb (§4) and guards must accept a worker delta that arrives
   pre-landed, not only as a fork to import.
 
-## §4 — Integration-sync seam (OQ-BEARING)
+## §4 — Integration-sync seam (OQs CLOSED — see ADR-012)
+
+> **Status update:** OQ-A/B/C are **resolved** and OQ-D is **deferred-with-fence**
+> (ruled (a)); the resolutions are formalised in **ADR-012** (Decisions 2/4/5,
+> §Decisions formerly open). The markers below are kept for provenance, each
+> annotated with its closure. The architecture was already locked.
 
 **LOCKED architecture (policy-independent):**
 - **Projection, not a funnel change.** The sync step reads the completed
@@ -244,24 +250,23 @@ must be designed-for:
 - **Code units are deliverables:** `phase/<slice>-NN` integrate to trunk
   individually, possibly LLM-assisted 3-way.
 
-**OQ markers (deferred — the next passes):**
-- **OQ-A — intent → trunk: push vs leave-for-review, and *when*** (contemporaneous
-  per-batch vs at-conclude). The one autonomous-trunk-write hinge ("to main, *or
-  at least* proactively pushed for review").
-- **OQ-B — delta-class boundary: what ships together vs projects ahead.** Seed
-  principle: the real seam is **temporal, not just code-vs-intent**. Scope +
-  design = a **prior, separate review gate** (reviewed and landed *before*
-  implementation — "code + a wall of markdown = a shitty PR"). The
-  **implementation-time bundle = code + intent-drift that arose *during*
-  implementation** (notes, memory, plan adjustments, design amendments) ships
-  **together** for the implementation review. §1's clean two-class table is
-  therefore *directional*; "intent → trunk contemporaneously" holds only for
-  genuinely slice-orthogonal knowledge (e.g. durable cross-cutting memory) — TBD.
-- **OQ-C — audit ordering vs sync timing.** `/audit`'s RV verbs **refuse on a
-  worktree fork** ([[mem.pattern.dispatch.rv-verbs-refuse-on-worktree-fork]]); the
-  coordination tree *is* a worktree and the run's code lives on `dispatch/<slice>`
-  there ⇒ audit runs from the parent tree *after* projection (or a parent checkout
-  of `dispatch/<slice>`). Couples `/audit` placement to sync timing.
+**OQ markers (now CLOSED — formalised in ADR-012):**
+- **OQ-A — RESOLVED (ADR-012 Decision 4).** Routing: **never auto-land on trunk**;
+  projection pushes **review-pending refs at conclude** (not per-batch). Recovery:
+  **projection journal on `dispatch/<slice>` + idempotent patch-id replay**,
+  report-not-resolve on a moved target (closes RV-023 F-1).
+- **OQ-B — RESOLVED (ADR-012 Decision 2).** The seam is **temporal**, three
+  buckets: (1) **prior gate** = scope+design, reviewed and landed *before* impl,
+  not projected; (2) **impl-time bundle** = code + intent-drift-during-impl
+  (notes, slice-coupled memory, plan adjustments, design amendments, AC evidence)
+  ships **together** as one review unit; (3) **slice-orthogonal knowledge** =
+  durable cross-cutting memory, the only intent that projects to trunk
+  contemporaneously. §1's two-class table is therefore *directional*.
+- **OQ-C — RESOLVED (ADR-012 Decision 5).** `/audit`'s RV verbs **refuse on a
+  worktree fork** ([[mem.pattern.dispatch.rv-verbs-refuse-on-worktree-fork]]) and
+  the coordination worktree is removed at conclude ⇒ **conclude → projection →
+  audit from the parent tree against the kept `dispatch/<slice>` → reconcile →
+  gated final landing.** Audit is never driven from inside the coordination tree.
 
 ## §5 — Governance split (RV-023 F-5, ruled (a): own ADR)
 
@@ -313,10 +318,12 @@ SL-064's plan** (cf. SL-056 G1 / ADR-008). The split:
 
 ## §7 — OQ / risk register
 
-- **OQ-A / OQ-B / OQ-C** — carried (see §4). **OQ-A now also OWNS the projection
-  journal + idempotent-replay recovery contract (RV-023 F-1).**
-- **OQ-D (new, RV-023 F-2)** — positive coordination-tree marker vs absence
-  (touches owner-locked D2a; consult/plan-time, defined §2).
+- **OQ-A / OQ-B / OQ-C — CLOSED** (see §4; formalised in ADR-012 Decisions 4/2/5).
+  OQ-A delivered the projection journal + idempotent-replay recovery contract
+  (RV-023 F-1 closed).
+- **OQ-D (RV-023 F-2) — DEFERRED with fence** (User ruled (a)). v1 inherits the
+  ADR-006 D2b residual fence; the positive coordination-tree marker (touches
+  owner-locked D2a) is split to **IMP-065**. Acceptance does not redesign D2a.
 - Topology-as-own-ADR — **RULED (a): ADR-012 created (proposed); its acceptance
   gates SL-064 plan** (§5).
 - Cold provision build on a quiet-solo-small-slice — accepted cost (DD-1).
@@ -331,7 +338,10 @@ SL-064's plan** (cf. SL-056 G1 / ADR-008). The split:
 
 - DD-1 always-on dedicated coordination worktree — **locked.**
 - DD-2 integration-sync = downstream projection, a verb, configurable targets,
-  never-auto-trunk — **architecture locked; routing policy → OQ-A/B/C.**
+  never-auto-trunk — **architecture locked; routing policy CLOSED** (OQ-A/B/C
+  resolved, ADR-012 Decisions 4/2/5): review-pending refs at conclude, temporal
+  three-bucket class boundary, audit-from-parent-after-projection, journal+replay
+  recovery.
 - Branch names `dispatch/<slice>` / `phase/<slice>-NN` / `edge` — **locked.**
 - DD-3 markerless coordination-tree creation; regenerate-not-copy provisioning —
   **locked.**
