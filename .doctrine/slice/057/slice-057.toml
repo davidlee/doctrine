@@ -4,6 +4,10 @@ title = "Formal VT verification: executable check + coverage record surface (SPE
 status = "done"
 created = "2026-06-13"
 updated = "2026-06-14"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 # Structural relations — uniform [[relation]] rows (SL-048 PHASE-04 "the cut";
 # read generically by the SL-046 reader / `inspect`). No `link` writer wired yet,

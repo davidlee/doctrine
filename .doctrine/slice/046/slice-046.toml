@@ -4,6 +4,10 @@ title = "Cross-kind relation graph spine: all-entity adapter + related/inbound q
 status = "done"
 created = "2026-06-12"
 updated = "2026-06-12"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 [[relation]]
 label = "specs"

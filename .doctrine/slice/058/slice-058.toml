@@ -4,6 +4,10 @@ title = "Finish the relation surface: fix stale scaffold templates, migrate thei
 status = "done"
 created = "2026-06-13"
 updated = "2026-06-13"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 # Structural relations — uniform [[relation]] rows (SL-048 "the cut"; read
 # generically by the SL-046 reader / `inspect`). No `link` writer wired yet (this

@@ -4,6 +4,10 @@ title = "Reconcile writer + closure gate (SPEC-002 B)"
 status = "done"
 created = "2026-06-12"
 updated = "2026-06-12"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 # D-B5 — closure-gate drift scope (authored, additive; set & peer-reviewed at /plan).
 # The closure gate's req set is `covered ∪ declared ∪ reconciled`; `extra_reqs` is the

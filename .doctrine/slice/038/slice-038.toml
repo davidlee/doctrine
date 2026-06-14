@@ -4,6 +4,10 @@ title = "cordage scale harness — durable red tests + findings for the confirme
 status = "done"
 created = "2026-06-10"
 updated = "2026-06-11"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 [[relation]]
 label = "specs"

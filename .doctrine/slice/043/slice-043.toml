@@ -4,6 +4,10 @@ title = "cordage scale & robustness hardening"
 status = "done"
 created = "2026-06-11"
 updated = "2026-06-11"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 [[relation]]
 label = "specs"

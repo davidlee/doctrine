@@ -4,6 +4,10 @@ title = "Structural cross-corpus relation edges: governance seam + spec-ADR + pr
 status = "done"
 created = "2026-06-12"
 updated = "2026-06-13"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 [[relation]]
 label = "specs"

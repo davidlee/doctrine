@@ -4,6 +4,10 @@ title = "Implement slices: doctrine slice new/list"
 status = "done"
 created = "2026-06-03"
 updated = "2026-06-03"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 # Reserved. Empty in v1 — no spec/requirement registry to point at yet.
 # Design specs for this slice live in doc/ (see the prose body), but doc/ specs
 # are not the relationship registry; this stays empty until that registry exists.

@@ -4,6 +4,10 @@ title = "Backlog entity v1: work-intake items (one kind + item_kind facet)"
 status = "done"
 created = "2026-06-07"
 updated = "2026-06-08"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 [[relation]]
 label = "specs"
