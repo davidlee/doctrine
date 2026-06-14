@@ -13,6 +13,7 @@ mod coverage_store;
 mod coverage_verify;
 mod coverage_view;
 mod dep_seq;
+mod dispatch;
 mod dtoml;
 mod entity;
 mod fsutil;
@@ -396,6 +397,14 @@ enum Command {
         command: WorktreeCommand,
     },
 
+    /// Dispatch coordination-branch projection (SL-064 / ADR-012): the
+    /// integration-sync seam that materialises reviewable refs from
+    /// `dispatch/<slice>`. Orchestrator-classed — refused under worker-mode.
+    Dispatch {
+        #[command(subcommand)]
+        command: DispatchCommand,
+    },
+
     /// Scan every numbered entity kind for id-integrity violations (ADR-006 D3
     /// detect-half): dir basename == toml id, no intra-kind duplicate id, and
     /// alias target equality. Exits non-zero on any violation.
@@ -689,6 +698,30 @@ enum WorktreeCommand {
         /// the claude harness spawn path's mark step.
         #[arg(long)]
         stamp_subagent: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DispatchCommand {
+    /// Materialise reviewable refs from `dispatch/<slice>` (SL-064 / ADR-012
+    /// §4). The stage selector is required and single-choice; PHASE-04 ships
+    /// `--prepare-review` (stage-1: create `review/<slice>` + `phase/<slice>-NN`
+    /// under a CAS journal, never writing trunk). Orchestrator-classed — refused
+    /// under worker-mode.
+    Sync {
+        /// The slice id (bare number, e.g. `64`) whose `dispatch/<slice>`
+        /// coordination branch to project.
+        #[arg(long)]
+        slice: u32,
+
+        /// Stage-1: create the reviewable `review/<slice>` and `phase/<slice>-NN`
+        /// refs from the dispatch tip; never writes trunk.
+        #[arg(long, group = "stage", required = true)]
+        prepare_review: bool,
 
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
@@ -2230,6 +2263,12 @@ fn write_class(cmd: &Command) -> WriteClass {
             } => Hookmint("marker --stamp-subagent"),
             WorktreeCommand::Marker { .. } => MarkerClear,
         },
+        // dispatch sync projects coordination refs (SL-064 PHASE-04 / ADR-012
+        // §4) — Orchestrator-classed across the whole verb class; refused under
+        // worker-mode via the SAME guard as coordinate/fork (EX-1).
+        Command::Dispatch { command } => match command {
+            DispatchCommand::Sync { .. } => Orchestrator("dispatch-sync"),
+        },
         // The coverage group splits per inner verb (SL-057 D2a): `show` is the
         // read-only drift view; `record`/`forget` mutate the observed store, and
         // `verify` re-derives + saves per slice — all authored writes.
@@ -2955,6 +2994,13 @@ fn main() -> anyhow::Result<()> {
                     anyhow::bail!("`worktree marker` requires `--clear` or `--stamp-subagent`")
                 }
             }
+        },
+        Command::Dispatch { command } => match command {
+            DispatchCommand::Sync {
+                slice,
+                prepare_review: _,
+                path,
+            } => dispatch::run_prepare_review(path, slice),
         },
         Command::Validate { path } => run_validate(path),
         Command::Reseat {
@@ -4079,6 +4125,24 @@ mod write_class_tests {
         );
         // The guard treats it like a Write: cls surfaces the verb label.
         assert_eq!(cls(c), Some("fork"));
+    }
+
+    // SL-064 PHASE-04: `dispatch sync --prepare-review` is Orchestrator-classed —
+    // refused under worker-mode, carries the "dispatch-sync" verb label (EX-1).
+    #[test]
+    fn dispatch_sync_is_orchestrator() {
+        let c = Command::Dispatch {
+            command: DispatchCommand::Sync {
+                slice: 64,
+                prepare_review: true,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("dispatch-sync")),
+            "dispatch sync must be Orchestrator(\"dispatch-sync\")"
+        );
+        assert_eq!(cls(c), Some("dispatch-sync"));
     }
 
     #[test]

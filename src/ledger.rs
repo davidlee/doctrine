@@ -22,20 +22,6 @@
 //! the manifest paths; it is the tested "recording surface" of EX-5 — a verb,
 //! not hand-authored prose.
 
-// Leaf built ahead of its consumer: the `cfg(test)` round-trip/recording tests
-// exercise every symbol, but no *non-test* caller exists until the PHASE-04
-// `dispatch sync` verb wires it. Scope the suppression to the non-test build so
-// the test build (where the symbols are live) does not see an unfulfilled
-// expect; self-clears when the sync verb lands (mem.pattern.lint.dead-code-
-// expect-vs-cfg-test).
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-064 run-ledger model; first non-test consumer is the PHASE-04 dispatch sync verb"
-    )
-)]
-
 use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
@@ -125,9 +111,24 @@ pub(crate) struct OrthogonalMark {
     pub status: LedgerStatus,
 }
 
+// Symbols below are test-live but have no *non-test* caller yet: the round-trip
+// `parse`/`to_toml` surface, `read_journal` (stage-2 integrate, PHASE-05), and the
+// funnel-time recording shell (`record_*`/`store`, wired by the dispatch funnel
+// rewiring, PHASE-06). Each carries a per-symbol `cfg_attr(not(test))` expect so
+// the test build — where they ARE called — sees no unfulfilled expect
+// (mem.pattern.lint.dead-code-expect-vs-cfg-test); per-symbol, not a module
+// blanket, so a regression in a now-live sibling still surfaces
+// (mem.pattern.lint.blanket-dead-code-suppression-masks-siblings).
 impl Journal {
     /// Parse a `journal.toml` body. An absent file is the caller's concern
     /// ([`read_journal`]); this parses a present body.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "stage-2 integrate is the first non-test reader (PHASE-05)"
+        )
+    )]
     pub(crate) fn parse(text: &str) -> anyhow::Result<Journal> {
         Ok(toml::from_str(text)?)
     }
@@ -140,11 +141,25 @@ impl Journal {
 
 impl Boundaries {
     /// Parse a `boundaries.toml` body.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "stage-2 integrate / funnel are the first non-test callers"
+        )
+    )]
     pub(crate) fn parse(text: &str) -> anyhow::Result<Boundaries> {
         Ok(toml::from_str(text)?)
     }
 
     /// Serialize to a `boundaries.toml` body.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "funnel-time recording is the first non-test writer (PHASE-06)"
+        )
+    )]
     pub(crate) fn to_toml(&self) -> anyhow::Result<String> {
         Ok(toml::to_string(self)?)
     }
@@ -152,11 +167,25 @@ impl Boundaries {
 
 impl Orthogonal {
     /// Parse an `orthogonal.toml` body.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "stage-2 integrate / funnel are the first non-test callers"
+        )
+    )]
     pub(crate) fn parse(text: &str) -> anyhow::Result<Orthogonal> {
         Ok(toml::from_str(text)?)
     }
 
     /// Serialize to an `orthogonal.toml` body.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "funnel-time recording is the first non-test writer (PHASE-06)"
+        )
+    )]
     pub(crate) fn to_toml(&self) -> anyhow::Result<String> {
         Ok(toml::to_string(self)?)
     }
@@ -183,6 +212,13 @@ fn load<T: DeserializeOwned + Default>(path: &Path) -> anyhow::Result<T> {
 }
 
 /// Write a manifest to `path`, creating the coordination dir on first write.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "funnel-time recording is the first non-test writer (PHASE-06)"
+    )
+)]
 fn store<T: Serialize>(path: &Path, manifest: &T) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -192,22 +228,50 @@ fn store<T: Serialize>(path: &Path, manifest: &T) -> anyhow::Result<()> {
 }
 
 /// Read `journal.toml` for `slice` (empty when absent).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "stage-2 integrate is the first non-test reader (PHASE-05)"
+    )
+)]
 pub(crate) fn read_journal(root: &Path, slice: u32) -> anyhow::Result<Journal> {
     load(&dispatch_dir(root, slice).join("journal.toml"))
 }
 
 /// Read `boundaries.toml` for `slice` (empty when absent).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "funnel-time read-modify-write side; the sync verb tree-reads instead (read_path_at)"
+    )
+)]
 pub(crate) fn read_boundaries(root: &Path, slice: u32) -> anyhow::Result<Boundaries> {
     load(&dispatch_dir(root, slice).join("boundaries.toml"))
 }
 
 /// Read `orthogonal.toml` for `slice` (empty when absent).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "funnel-time read-modify-write side; the sync verb tree-reads instead (read_path_at)"
+    )
+)]
 pub(crate) fn read_orthogonal(root: &Path, slice: u32) -> anyhow::Result<Orthogonal> {
     load(&dispatch_dir(root, slice).join("orthogonal.toml"))
 }
 
 /// Append a per-phase code boundary to `boundaries.toml` (EX-5). Read-modify-
 /// write — the dir/file are created on first write.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "funnel-time recording is the first non-test writer (PHASE-06)"
+    )
+)]
 pub(crate) fn record_boundary(root: &Path, slice: u32, row: BoundaryRow) -> anyhow::Result<()> {
     let path = dispatch_dir(root, slice).join("boundaries.toml");
     let mut manifest: Boundaries = load(&path)?;
@@ -216,6 +280,13 @@ pub(crate) fn record_boundary(root: &Path, slice: u32, row: BoundaryRow) -> anyh
 }
 
 /// Append an orthogonal-projection mark to `orthogonal.toml` (EX-5).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "funnel-time recording is the first non-test writer (PHASE-06)"
+    )
+)]
 pub(crate) fn record_orthogonal(
     root: &Path,
     slice: u32,

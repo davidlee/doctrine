@@ -695,6 +695,83 @@ pub(crate) fn filter_tree(
     git_env_text(root, &["write-tree"], &env)
 }
 
+/// Hash `content` into a blob object via `git hash-object -w --stdin`, returning
+/// the blob oid. Streams the bytes on stdin (no temp file); writes the object to
+/// the db without touching any index or working tree. The journal-commit
+/// primitive's blob source ([`tree_with_file`]).
+fn hash_object_stdin(root: &Path, content: &str) -> Result<String, CaptureError> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(NORMATIVE_FLAGS)
+        .args(["hash-object", "-w", "--stdin"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| CaptureError::Git(format!("spawn git hash-object: {e}")))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| CaptureError::Git("git hash-object: no stdin pipe".to_owned()))?
+        .write_all(content.as_bytes())
+        .map_err(|e| CaptureError::Git(format!("git hash-object: write stdin: {e}")))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| CaptureError::Git(format!("git hash-object: wait: {e}")))?;
+    if output.status.success() {
+        let text = String::from_utf8(output.stdout)
+            .map_err(|_ignored| CaptureError::Git("hash-object: non-utf8 oid".to_owned()))?;
+        Ok(text.trim().to_string())
+    } else {
+        Err(CaptureError::Git(format!(
+            "hash-object: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// Splice `content` into `base_tree` at `path`, returning the new tree oid. Stages
+/// through a throwaway `GIT_INDEX_FILE` (never the live index, like
+/// [`filter_tree`]): `read-tree <base_tree>`, hash the blob, `update-index --add
+/// --cacheinfo` at `path`, `write-tree`. No checkout — the journal-commit
+/// primitive (design §4.3: journal appends commit onto `dispatch/<slice>` via
+/// `commit_tree`, no working tree). `path` is repo-relative.
+pub(crate) fn tree_with_file(
+    root: &Path,
+    base_tree: &str,
+    path: &str,
+    content: &str,
+) -> Result<String, CaptureError> {
+    let scratch = ScratchIndex::new(root)?;
+    let env: [(&str, &std::ffi::OsStr); 1] = [("GIT_INDEX_FILE", scratch.path.as_os_str())];
+    git_env_text(root, &["read-tree", base_tree], &env)?;
+    let blob = hash_object_stdin(root, content)?;
+    let cacheinfo = format!("100644,{blob},{path}");
+    git_env_text(
+        root,
+        &["update-index", "--add", "--cacheinfo", &cacheinfo],
+        &env,
+    )?;
+    git_env_text(root, &["write-tree"], &env)
+}
+
+/// Read the blob at `path` from `refish`'s committed tree (`git cat-file -p
+/// <refish>:<path>`), `None` when the path is absent from that tree. Working-tree-
+/// free — reads the object db, so the sync verb sources the run ledger from the
+/// `dispatch/<slice>` tip identically in stage-1 (worktree present) and stage-2
+/// (worktree removed, no checkout — design §4.1).
+pub(crate) fn read_path_at(
+    root: &Path,
+    refish: &str,
+    path: &str,
+) -> Result<Option<String>, CaptureError> {
+    git_opt(root, &["cat-file", "-p", &format!("{refish}:{path}")])
+}
+
 /// Commit `tree` against `parent` with no working-tree touch (design §4.1) — the
 /// B/C compose step's commit primitive. Returns the new commit oid.
 pub(crate) fn commit_tree(
@@ -2212,5 +2289,43 @@ mod tests {
             super::RefCas::Updated
         ));
         assert_eq!(repo.git(&["rev-parse", refname]), c2);
+    }
+
+    /// PHASE-04 journal-commit primitive: splice a file into a base tree without
+    /// touching the live index; the new tree carries the content at the path and
+    /// retains the base's other paths.
+    #[test]
+    fn tree_with_file_splices_blob_without_touching_index() {
+        let repo = ScratchRepo::new();
+        repo.commit("keep.txt", "k", "init");
+        let base = repo.git(&["rev-parse", "HEAD^{tree}"]);
+        let index_before = std::fs::read(repo.path().join(".git/index")).expect("read index");
+
+        let tree = super::tree_with_file(
+            repo.path(),
+            &base,
+            ".doctrine/dispatch/064/journal.toml",
+            "rows = []\n",
+        )
+        .expect("splice");
+
+        let listing = repo.git(&["ls-tree", "-r", "--name-only", &tree]);
+        assert!(
+            listing.contains("keep.txt"),
+            "base path retained: {listing}"
+        );
+        assert!(
+            listing.contains(".doctrine/dispatch/064/journal.toml"),
+            "spliced path present: {listing}"
+        );
+        let blob = repo.git(&[
+            "cat-file",
+            "-p",
+            &format!("{tree}:.doctrine/dispatch/064/journal.toml"),
+        ]);
+        assert_eq!(blob, "rows = []", "spliced content readable at path");
+
+        let index_after = std::fs::read(repo.path().join(".git/index")).expect("read index");
+        assert_eq!(index_before, index_after, "live index untouched");
     }
 }
