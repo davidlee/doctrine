@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec5bdca9c76219f4e18f37a2ae0b7"
+memory_key = "mem.pattern.testing.corpus-walk-test-baked-manifest-reads-worktree-branch-corpus"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Corpus-walk invariant test compiled in a worktree validates the wrong branch corpus (false green)"
+summary = "Corpus-walk tests use env!(CARGO_MANIFEST_DIR); a worktree-compiled binary on a divergent branch reads that branch's corpus, false-greening a violation on the target branch"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["tests/e2e_relation_migration_storage.rs"]
+globs = ["tests/e2e_*.rs"]
+commands = []
+tags = ["testing", "worktree", "false-green"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "967da7bff735407e1c7e14641a8d3efd3ed1b74d"
+ref_name = "refs/heads/main"
+checkout_state_id = "a96be28e7e2a9ac7f44bb9cf6cb84e20dd1b313ae50df5271b69f2a9d568bd54"
+base_commit = "8e69c47b2e05fcb29ef84df7b52d8763336444e7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
