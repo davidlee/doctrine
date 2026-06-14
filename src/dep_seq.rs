@@ -247,14 +247,10 @@ pub(crate) fn apply_status(
 /// `append`'s `Needs` arm uses. `Ok(false)` if `value` is already present (no
 /// mutation); F-1 refuse (bail) if `[relationships].<field>` array is absent (never
 /// create — a tail insert would corrupt a trailing subtable).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "pure string-append core staged for the slice relate consumer; \
-                  append_string_array exercises it under test"
-    )
-)]
+//
+// Consumed in non-test builds by the `supersede` verb (SL-062 PHASE-03), which
+// composes this core over both held docs — so the prior `dead_code` expectation is
+// retired. `append_string_array` (the IO wrapper) stays staged/unused for now.
 pub(crate) fn apply_string_append(
     doc: &mut toml_edit::DocumentMut,
     field: &str,

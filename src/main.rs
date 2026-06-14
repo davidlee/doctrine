@@ -481,6 +481,22 @@ enum Command {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Record that NEW supersedes OLD: `supersede ADR-012 ADR-004` (SL-062 §5.4).
+    /// ADR-first — one parse-once / hold-both / write-once transaction writes
+    /// `NEW.supersedes += OLD`, `OLD.superseded_by += NEW` (the single sanctioned
+    /// reverse carve-out, ADR-004 §5), and flips `OLD.status → superseded`. Refuses
+    /// a self-edge, cross-kind refs, a non-ADR kind, and an OLD already superseded by
+    /// a different ADR. Idempotent — a re-run with all three surfaces present is a no-op.
+    Supersede {
+        /// The superseding entity's canonical ref, e.g. `ADR-012`.
+        new: String,
+        /// The superseded entity's canonical ref, e.g. `ADR-004`.
+        old: String,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2213,6 +2229,9 @@ fn write_class(cmd: &Command) -> WriteClass {
         // Author a dep/seq edge into `[relationships]` — authored writes (SL-060 §5.4).
         Command::Needs { .. } => Write("needs"),
         Command::After { .. } => Write("after"),
+        // Record a supersession — writes NEW.supersedes, OLD.superseded_by, OLD.status
+        // in one transaction (SL-062 §5.4).
+        Command::Supersede { .. } => Write("supersede"),
     }
 }
 
@@ -2935,6 +2954,7 @@ fn main() -> anyhow::Result<()> {
             rank,
             path,
         } => run_after_edge(path, &source, &target, rank),
+        Command::Supersede { new, old, path } => run_supersede(path, &new, &old),
     }
 }
 
@@ -3103,6 +3123,185 @@ fn run_after_edge(
     };
     writeln!(std::io::stdout(), "{source} after {target}{suffix}")?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Supersession verb: `doctrine supersede` (SL-062 §5.4)
+// ---------------------------------------------------------------------------
+
+/// Resolve a supersession ref to its `<stem>-NNN.toml` path plus the canonical ref
+/// string. Mirrors `resolve_link_path` (the same `KindRef` `(dir, stem)` path map),
+/// but returns the normalised canonical id (`ADR-004`) — the exact string form the
+/// `supersedes`/`superseded_by` arrays store (matching `validate`'s derived side,
+/// which keys on `listing::canonical_id`).
+fn resolve_supersede_path(
+    root: &std::path::Path,
+    kref: &integrity::KindRef,
+    id: u32,
+) -> (PathBuf, String) {
+    let name = format!("{id:03}");
+    let toml_path = root
+        .join(kref.kind.dir)
+        .join(&name)
+        .join(format!("{}-{name}.toml", kref.stem));
+    (toml_path, listing::canonical_id(kref.kind.prefix, id))
+}
+
+/// `doctrine supersede <NEW> <OLD>` (SL-062 §5.4) — the transactional, ADR-first
+/// supersession verb. One parse-once / hold-both / write-once transaction composing
+/// the PHASE-02 pure cores (`dep_seq::apply_string_append` + `dep_seq::apply_status`)
+/// over docs parsed once and held in scope: `NEW.supersedes += OLD`,
+/// `OLD.superseded_by += NEW` (the single sanctioned reverse carve-out, ADR-004 §5),
+/// and flips `OLD.status → superseded`.
+///
+/// Pre-flight (NO write): refuse a self-edge, cross-kind refs, a non-ADR (no
+/// `supersede_policy`) NEW; then parse BOTH docs and verify every touched key/array
+/// is scaffold-present (F-1, non-destructive). The not-already-superseded guard (F-D)
+/// allows ONLY the idempotent re-run (BOTH files already reciprocal); a different
+/// supersessor or hand-drifted carve-out is refused. Writes NEW then OLD — the order
+/// that makes a torn state (`NEW.supersedes∋OLD` without the reciprocal) detectable
+/// by `doctrine validate`.
+fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    // Pre-flight resolution + capability gate (NO write).
+    let (new_kref, new_id) = integrity::parse_canonical_ref(new)?;
+    let (old_kref, old_id) = integrity::parse_canonical_ref(old)?;
+    anyhow::ensure!(
+        !(new_kref.kind.prefix == old_kref.kind.prefix && new_id == old_id),
+        "`{new}` cannot supersede itself — a self-supersession is not a decision change"
+    );
+    anyhow::ensure!(
+        new_kref.kind.prefix == old_kref.kind.prefix,
+        "cross-kind supersession is refused: `{new}` is a {} but `{old}` is a {} — supersession is within one kind",
+        new_kref.kind.prefix,
+        old_kref.kind.prefix
+    );
+    let policy = adr::supersede_policy(new_kref.kind).with_context(|| {
+        format!(
+            "supersession not yet supported for {} (follow-up F2)",
+            new_kref.kind.prefix
+        )
+    })?;
+
+    let (new_path, new_ref) = resolve_supersede_path(&root, new_kref, new_id);
+    let (old_path, old_ref) = resolve_supersede_path(&root, old_kref, old_id);
+
+    // Parse BOTH docs ONCE and HOLD them in scope (parse-once / hold-both).
+    let new_text = std::fs::read_to_string(&new_path)
+        .with_context(|| format!("supersede: {new} not found at {}", new_path.display()))?;
+    let mut new_doc = new_text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", new_path.display()))?;
+    let old_text = std::fs::read_to_string(&old_path)
+        .with_context(|| format!("supersede: {old} not found at {}", old_path.display()))?;
+    let mut old_doc = old_text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", old_path.display()))?;
+
+    // F-1 pre-flight (before any write, P2): every key/array the transaction touches
+    // must be scaffold-present. A missing one → non-destructive bail (restore seeded
+    // keys; never regenerate). Because steps below mutate+write THESE held docs with no
+    // re-read, F-1 cannot re-fire mid-transaction.
+    let new_sup = rel_array(&new_doc, policy.supersedes_field);
+    anyhow::ensure!(
+        new_sup.is_some(),
+        "malformed `{new}` at {}: missing seeded `[relationships].{}` array — restore the seeded `[relationships]` arrays before superseding; the file is left untouched",
+        new_path.display(),
+        policy.supersedes_field
+    );
+    let old_carveout = rel_array(&old_doc, policy.carveout_field);
+    anyhow::ensure!(
+        old_carveout.is_some(),
+        "malformed `{old}` at {}: missing seeded `[relationships].{}` array — restore the seeded `[relationships]` arrays before superseding; the file is left untouched",
+        old_path.display(),
+        policy.carveout_field
+    );
+    anyhow::ensure!(
+        old_doc
+            .get("status")
+            .and_then(toml_edit::Item::as_str)
+            .is_some(),
+        "malformed `{old}` at {}: missing seeded top-level `status` — restore the seeded keys before superseding; the file is left untouched",
+        old_path.display()
+    );
+    anyhow::ensure!(
+        old_doc
+            .get("updated")
+            .and_then(toml_edit::Item::as_str)
+            .is_some(),
+        "malformed `{old}` at {}: missing seeded top-level `updated` — restore the seeded keys before superseding; the file is left untouched",
+        old_path.display()
+    );
+
+    // F-D not-already-superseded guard. If OLD is already `superseded`, allow ONLY the
+    // idempotent re-run — BOTH OLD.superseded_by == [NEW] AND NEW.supersedes ∋ OLD
+    // (check BOTH files, codex C4). Else refuse.
+    let old_status = old_doc
+        .get("status")
+        .and_then(toml_edit::Item::as_str)
+        .unwrap_or_default();
+    if old_status == policy.superseded_status {
+        let carveout = old_carveout.unwrap_or_default();
+        let new_lists_old = new_sup.unwrap_or_default().contains(&old_ref);
+        let single_self = carveout.len() == 1 && carveout.first() == Some(&new_ref);
+        if single_self && new_lists_old {
+            // Idempotent re-run: all three surfaces already hold — no-op.
+            writeln!(
+                std::io::stdout(),
+                "already recorded: {new} supersedes {old}"
+            )?;
+            return Ok(());
+        }
+        // A DIFFERENT supersessor named in the carve-out → FromTerminal analog.
+        if let Some(other) = carveout.iter().find(|x| **x != new_ref) {
+            anyhow::bail!("{old} already superseded by {other}; reopening is deferred");
+        }
+        // Empty/inconsistent carve-out while status==superseded → hand-drift; refuse as
+        // DRIFT (no <X> to name, P5 — do NOT self-heal).
+        anyhow::bail!(
+            "{old} status is superseded but its superseded_by carve-out is empty/inconsistent — run `doctrine validate`"
+        );
+    }
+
+    // Mutate the held docs (no IO) — compose the PHASE-02 pure cores.
+    let today = clock::today();
+    let status_hint = format!(
+        "malformed `{old}`: missing seeded top-level `status`/`updated` — restore the seeded keys; the file is left untouched"
+    );
+    dep_seq::apply_string_append(&mut new_doc, policy.supersedes_field, &old_ref)?;
+    dep_seq::apply_string_append(&mut old_doc, policy.carveout_field, &new_ref)?;
+    dep_seq::apply_status(
+        &mut old_doc,
+        &[("status", policy.superseded_status), ("updated", &today)],
+        &status_hint,
+    )?;
+
+    // Write each file ONCE, NEW then OLD (the order that makes a torn state
+    // detectable by `validate`). No re-read, no re-parse.
+    std::fs::write(&new_path, new_doc.to_string())
+        .with_context(|| format!("Failed to write {}", new_path.display()))?;
+    std::fs::write(&old_path, old_doc.to_string())
+        .with_context(|| format!("Failed to write {}", old_path.display()))?;
+
+    writeln!(std::io::stdout(), "{new} supersedes {old}")?;
+    Ok(())
+}
+
+/// Read a `[relationships].<field>` array's string elements off a held doc (pre-flight
+/// presence probe + membership reads). `None` iff the seeded array is absent (F-1).
+fn rel_array(doc: &toml_edit::DocumentMut, field: &str) -> Option<Vec<String>> {
+    doc.get("relationships")
+        .and_then(toml_edit::Item::as_table)
+        .and_then(|t| t.get(field))
+        .and_then(toml_edit::Item::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
 }
 
 /// `doctrine validate` — the corpus integrity scan. The COMMAND-LAYER composition
