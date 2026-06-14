@@ -1,22 +1,33 @@
-# doctrine claude install self-enforces a too-broad .doctrine/agents/* gitignore that breaks the worktree classifier and swallows authored AGENTS.md
+# The .doctrine/agents ignore is a whitelist pair (ignore derived, re-include authored AGENTS.md), classified in DERIVED_RUNTIME — ISS-012 fixed
 
-doctrine claude install appends an unclassified, too-broad .doctrine/agents/* gitignore — don't commit it
+Never blanket-ignore an authored tree. `.doctrine/agents/` holds the **authored,
+tracked** `AGENTS.md` alongside *derived* installed agents (`dispatch-worker.md`).
+The ignore is a whitelist pair, in order (the `*` exclude before its negation, so
+the re-include takes):
 
-Running `doctrine claude install` (e.g. a re-embed/skill refresh) calls
-`ensure_gitignored(".doctrine/agents/*")`. That glob is wrong twice over:
+```
+.doctrine/agents/*
+!.doctrine/agents/AGENTS.md
+```
 
-- It blanket-ignores the whole `.doctrine/agents/` dir, which holds the
-  **authored, tracked** `AGENTS.md` — the never-blanket-ignore-an-authored-tree
-  hazard (same lesson the install manifest documents for `memory/items/`). Only
-  the *derived* installed agents (e.g. `dispatch-worker.md`) should be ignored.
-- It is not registered in the worktree provision classifier
-  (`WITHHELD`/`DERIVED_RUNTIME` in `src/worktree.rs`), so the invariant test
-  `every_runtime_gitignore_glob_is_classified` (which enumerates every
-  `.doctrine/`-prefixed gitignore glob) goes RED the moment the entry is committed.
+and the non-negated `.doctrine/agents/*` glob MUST be registered in the worktree
+provision classifier `DERIVED_RUNTIME` (`src/worktree.rs`), or the invariant test
+`every_runtime_gitignore_glob_is_classified` (which enumerates every
+`.doctrine/`-prefixed, non-negated gitignore glob) goes RED. The `!`-prefixed
+negation is skipped by that test (starts with `!`, not `.doctrine/`).
 
-Symptom: after a re-embed, `git status` shows `M .gitignore` (+`.doctrine/agents/*`)
-and `just check` fails `every_runtime_gitignore_glob_is_classified`.
+## History (ISS-012, fixed)
 
-Do NOT commit that `.gitignore` line. The proper fix (narrow the install ignore to
-derived agent outputs only, and add it to `DERIVED_RUNTIME`, in one change) is the
-SL-056 agent-install surface's job — tracked as ISS-012. Surfaced auditing SL-061.
+Originally `doctrine claude install` appended the bare, too-broad
+`.doctrine/agents/*` via `ensure_gitignored` — it swallowed the authored
+`AGENTS.md` AND was unclassified, so every re-embed/skill-refresh re-RED'd the
+classifier (symptom: `M .gitignore` (+`.doctrine/agents/*`), `just check` fails).
+Fixed across both seams:
+
+- `.gitignore` whitelist pair + `DERIVED_RUNTIME += ".doctrine/agents/*"`.
+- `src/skills.rs` agents-install leg now emits the **pair** (two ordered
+  `ensure_gitignored` calls), so re-install no longer reverts it.
+
+Same lesson the install manifest documents for `memory/items/` — see
+[[mem.pattern.install.authored-entity-wiring]] and the install gitignore
+classification under [[mem.concept.dispatch.gitignored-tier-partition]].
