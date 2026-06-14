@@ -235,3 +235,63 @@ anchor demoted to sync-time. Both arms describe behavior against `dispatch/<slic
 cut). worktree — `coordinate` documented as a third creation path (markerless,
 create-or-resume, regenerates phase sheets). Re-embedded via touch `src/skills.rs`;
 VT-1 (e2e_claude_install/e2e_skills_symlink/e2e_worktree_stamp) + gate green.
+
+## PHASE-07 — end-to-end proof + closure prep
+
+**No production code** — test + closure-prep only. The verbs all shipped
+(PHASE-02..06); PHASE-07 proves the *seam* and readies the audit packet.
+
+**T1 — cohesive lifecycle test (`tests/e2e_dispatch_lifecycle.rs`, VT-1).** The
+per-stage suites (`e2e_worktree_coordinate`, `e2e_dispatch_sync`) each verify one
+verb in isolation; none threads the whole run nor asserts the load-bearing
+*session-main-untouched* invariant. The new test threads it from one fixture:
+`coordinate` (markerless coord worktree off trunk) → commit phase code + `dispatch
+record-boundary` + commit the ledger ON the coord tree → `sync --prepare-review`
+(asserts `review/064` + `phase/064-01` resolve from the **shared common dir**, i.e.
+visible to an audit run at root) → **INVARIANT (EX-1):** `main` ref unmoved AND
+`git -C <root> status --porcelain` byte-empty across the run (orchestrator wrote
+the *linked* tree, never session `main`; design §6 contention #1/#2 unreachable) →
+`sync --integrate --trunk` (controlled trunk fast-forward, idempotent re-run) →
+**conclude (EX-2):** `git worktree remove --force` the coord dir; `dispatch/064`
++ `phase/064-01` + `review/064` refs **survive** removal (deliverables live in the
+common dir, not the worktree — the bug §2 fixes vs today's GC).
+
+- Harness note: the e2e fixtures are **non-cargo** temp repos, so `coordinate`'s
+  provision = checkout + regenerate sheets (no `cargo build`) — the cohesive test
+  is cheap. Reuses the `init_repo`/`run`(DOCTRINE_WORKER-removed) patterns; helpers
+  duplicated per the established one-crate-per-integration-test convention.
+- Watch (R1, held): the invariant asserts the **source root** tree + root `HEAD`,
+  distinct from the coord worktree — testing the coord dir would pass vacuously.
+
+**T2 — behaviour-preservation gate (VT-2).** All worktree + dispatch + memory-sync
+suites green **unchanged** (89 tests: e2e_worktree_* 67, e2e_dispatch_sync 14,
+e2e_memory_sync 5, e2e_memory_record_worktree 2, + lifecycle 1). Cadence untouched.
+Touch+re-run applied to defeat a shared-`CARGO_TARGET_DIR` false-green.
+
+**T4 — backlog dispositions (EX-3).**
+- **IMP-041 → resolved/done.** Cleanup ownership is answered by the §2 lifecycle
+  (worktree-life < branch-life): conclude removes the dir, `dispatch/`+`phase/`
+  branches are KEPT until integration, `gc` reaps post-integration. Proven by T1.
+- **IMP-043 → demoted, kept OPEN (not closed).** The per-batch import re-anchor is
+  relocated to **sync-time target movement**: `integrate --trunk` **reports** a
+  moved/non-ff trunk and refuses — it never auto-3-way-re-anchors (the
+  `--allow-reanchor` capability stays unbuilt future work, now scoped to sync).
+  EX-3 sanctions "closed OR demoted"; demoted = open with new scope (title still
+  says "import verb" — id is identity, slug is not authoritative).
+- **IMP-065 (positive coordination marker, OQ-D) + IMP-071 (record-orthogonal
+  wiring) remain OPEN** as the carried follow-ups (defer-needs-backlog-before-close).
+
+**Residual risks carried to audit (EX-4).**
+- **OQ-D / D2b — marker-absence is inherited, not closed.** v1 ships markerless
+  coordination creation; the orchestrator's write permission rests on
+  marker-*absence*, indistinguishable-by-absence from an unstamped worker (ADR-011
+  D6/M2). The D2b fence (R-5 import belt / IMP-052 post-spawn check / env-worker
+  catch / bwrap-no-push) is **defence-in-depth, NOT a coverage proof** (RV-025 B3):
+  it does not prove the full Orchestrator verb class (`gc`/sync) is covered. The
+  real close is the `/plan` Orchestrator-verb-restriction gate + the positive
+  marker (**IMP-065**), not the fence.
+
+**Audit handoff.** `/audit` must run from the **root** tree, not this worktree —
+RV review verbs refuse on a worktree fork (mem.pattern.review.rv-verbs-refuse-on-
+worktree-fork). After integrate lands `dispatch/064` onto trunk, drive the RV from
+root.
