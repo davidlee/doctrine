@@ -44,8 +44,9 @@ In scope:
   `[[relation]]` rows); slice arm in the engine dep/seq dispatch.
 - Generalise `priority/graph.rs` §3b read-gate from backlog-prefix to
   kind-dispatch (non-authoring kinds short-circuit, no disk read).
-- Forward-edge target validation against `integrity::KINDS` (resolvability only);
-  self-edge refused.
+- Forward-edge target validation: target resolves against `integrity::KINDS` AND is
+  a **work-like kind** (slice + 5 backlog); non-work kinds (governance/spec/req/
+  knowledge) and self-edge refused at author time.
 - **Canon moves first:** PRD-011 amendment claiming the cross-kind dep/seq
   *capture* intent (PRD-009 keeps the backlog instance; SPEC-001 already
   mechanises kind-agnostically).
@@ -58,9 +59,12 @@ In scope:
   third `Gating` status-class and the `gates` label are **IMP-047's**. SL-060
   leaves the `dep_overlay` open for IMP-047's second (labelled) producer; it does
   not unify the two producers.
-- **Not specs/ADRs as dep/seq sources** — depending on governance is *pending
-  revise-intent*, the role of a future **Revision** kind (**IDE-010**), not a
-  `needs` edge. Slices only.
+- **Not specs/ADRs as dep/seq sources OR targets** — depending on governance is
+  *pending revise-intent*, the role of a future **Revision** kind (**IDE-010**), not
+  a `needs` edge. Slices only as source; targets are work-like only (slice +
+  backlog). A non-work target is refused at author time — not "inert" (it would
+  block while in a workable status). Cross-tier gating (governance→work) is IMP-047's
+  labelled `gates`.
 - **Not a backlog regression** — backlog `needs`/`after` + `priority` +
   `backlog order` goldens stay byte-identical (behaviour-preservation gate).
 - **No shipped migration / create-on-absent leniency** — durable code stays
@@ -72,8 +76,8 @@ In scope:
 - `src/dep_seq.rs` (new leaf) — schema + append + read.
 - `src/backlog.rs` — `needs`/`after`/`append_relationship`/`dep_seq_for` re-point
   to the leaf type; backlog arm keeps single `read_item` (for `promoted`).
-- `src/slice.rs` + `templates/slice.toml` — seeded `[relationships]`; slice dep/seq
-  read arm.
+- `src/slice.rs` + `install/templates/slice.toml` — seeded `[relationships]` (both
+  empty arrays, before `[[relation]]` rows); slice dep/seq read arm.
 - `src/relation_graph.rs` (or beside) — `dep_seq_for(root, kind, id) -> (DepSeq,
   promoted)` engine dispatch, mirroring `outbound_for`.
 - `src/priority/graph.rs` — §3b read-gate generalised; emission unchanged.
@@ -100,8 +104,11 @@ In scope:
 
 - **OQ-1 — DISSOLVED.** Consumer already cross-kind (DD-2); `backlog_order.rs`
   untouched.
-- **OQ-2 — RESOLVED.** No kind-pair gate; resolvability only. Gradient inversion is
-  the Revision kind's concern (IDE-010), not enforced here.
+- **OQ-2 — RESOLVED (revised).** Targets restricted to work-like kinds (slice + 5
+  backlog); non-work refused at author time. The "resolvability-only / inert" stance
+  was refuted (a non-terminal non-work predecessor blocks via `channels::blocked_by`).
+  Gradient inversion is IMP-047's `gates` / the Revision kind (IDE-010), not enforced
+  here.
 - **OQ-3 — RESOLVED.** Generic top-level verbs; backlog delegates.
 - **OQ-4 — `triggers` cross-kind** — held out; revisit if a later slice wants it.
 - **PARKED (forelobe) — semantic edge labels.** Whether dep edges carry a
@@ -116,7 +123,7 @@ In scope:
 - backlog + `priority` + `backlog order` goldens byte-identical (incl. verb
   message text through the delegate).
 - validation refusals tested (unresolvable / free-text / self-edge / non-authoring
-  SRC kind).
+  SRC kind / non-work-like TGT kind).
 - out-of-band backfill: storage post-check + round-trip `show`/`validate` clean.
 - `just gate` clean; clippy zero warnings.
 
