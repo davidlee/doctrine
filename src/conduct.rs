@@ -113,15 +113,6 @@ pub(crate) struct ConductConfig {
     states: BTreeMap<String, StateOverride>,
 }
 
-/// The outer `doctrine.toml` shape we parse — only the `[conduct]` table is read;
-/// every other top-level key is ignored (tolerant, F9). Absent `[conduct]` →
-/// the default `ConductConfig`.
-#[derive(Debug, Clone, Default, Deserialize)]
-struct DoctrineToml {
-    #[serde(default)]
-    conduct: ConductConfig,
-}
-
 /// The baked actor default when neither the file nor a state override speaks:
 /// `self` everywhere (F9 / design §5.3). Invoker-blind config, not attribution.
 const DEFAULT_ACTOR: Actor = Actor::Author;
@@ -144,8 +135,7 @@ fn baked_autonomy(state: &str) -> Autonomy {
 /// all parse to the defaults. Unknown top-level keys and unknown-state subtables
 /// are accepted and ignored by [`resolve`].
 pub(crate) fn parse(text: &str) -> anyhow::Result<ConductConfig> {
-    let doc: DoctrineToml = toml::from_str(text)?;
-    Ok(doc.conduct)
+    Ok(crate::dtoml::parse(text)?.conduct)
 }
 
 /// Resolve the effective [`Conduct`] for one lifecycle `state`. Pure, total over
