@@ -49,6 +49,24 @@ agent's **harness self-belief cross-checked against env-marker detection**:
 The arms own the spawn template, worker-identity mechanism, and arm-specific
 residuals (base-pinning, self-clear, concurrency floor). Everything below is shared.
 
+## Set up once — the coordination worktree (SL-064 / ADR-012)
+
+Before batch 1, create or resume the slice's **dedicated coordination worktree**:
+
+```sh
+doctrine worktree coordinate --slice <N> --dir <path>
+```
+
+This creates (or reattaches to) `dispatch/<slice>` **in its own isolated worktree**
+off the resolved trunk — the funnel's **sole write target**. The session `main`
+working tree is **never** the funnel target; driving the funnel on `main` is the
+SL-060 contention bug this topology fixes. The verb is **markerless** (the
+coordination tree *is* the orchestrator — worker-mode OFF) and **resume-stable**: a
+live worktree already on `dispatch/<slice>` is refused (`coordination-live`); a
+branch with no live worktree **resumes** (reattach, never a second branch), so a
+fresh orchestrator after `/handover` picks up the same branch. Drive the loop below
+from that worktree; capture `B` as a ref on `dispatch/<slice>`, not on `main`.
+
 ## The drive loop — phase by phase to slice-done
 
 Dispatch drives the *whole* slice. The import funnel is the **inner** loop (land one
@@ -63,11 +81,28 @@ unit); this is the **outer** loop (drive to completion):
 3. **Funnel.** Run the strict per-batch cadence (below) to land the unit as exactly
    one commit on the coordination branch.
 4. **Repeat** from the new HEAD until the slice's phases are done.
-5. **Conclude.** When the last phase lands: `doctrine slice status <id> audit`
-   (bare number), run `/audit` from the parent tree (not a fork — RV verbs refuse
-   on a worktree fork), then `doctrine worktree gc --fork <branch>` each spent fork.
-   (Worktree removal strands test binaries that baked the fork path via
-   `CARGO_MANIFEST_DIR` — recompile before trusting a RED.)
+5. **Conclude — stage-1 only, never integrate (ADR-012 D4/D5).** When the last
+   phase lands, the orchestrator's job is to leave **reviewable refs**, not to land
+   code:
+   - **Project for review:** `doctrine dispatch sync --slice <N> --prepare-review`
+     — materialises `review/<slice>` (the impl-bundle diff) + `phase/<slice>-NN`
+     (the per-phase code units) + the CAS journal, **without writing trunk**.
+   - **Remove the coordination worktree directory**, but **KEEP** the
+     `dispatch/<slice>`, `review/<slice>`, and `phase/<slice>-NN` refs — they are
+     the deliverables, preserved until integration. (Codex/pi only: `doctrine
+     worktree gc --fork <branch>` each spent **worker** fork; worktree removal
+     strands test binaries that baked the fork path via `CARGO_MANIFEST_DIR` —
+     recompile before trusting a RED. The claude arm has no worker forks.)
+   - **Send to audit:** `doctrine slice status <id> audit` (bare number), then
+     `/audit` from the **parent/root** tree against the prepared `review/<slice>` +
+     `phase/*` refs — never from inside the coordination tree (RV verbs refuse on a
+     worktree fork, and the tree is now gone).
+
+   **Stage-2 integrate is NOT yours and NOT now.** Conclude stops here. Only after
+   audit passes does **`/close`** (not `/dispatch`) run `doctrine dispatch sync
+   --slice <N> --integrate [--trunk <ref>] [--edge <ref>]` — the post-audit replay
+   that projects the audited units. Integrating pre-audit is the gate this lifecycle
+   exists to enforce.
 6. **Hand over on cadence — a quality gate, not an overflow stop.** Reasoning
    quality decays long before any capacity limit, so hand over *early*, while
    sharp. You cannot read your own token count in-loop, so trip on what you **can**
@@ -161,8 +196,15 @@ git mechanics are the shipped `import` verb (see [worktree skill](../worktree/SK
    coordination HEAD still `B`? A mismatch means an **external** mover ⇒
    **re-dispatch from the new HEAD**, never commit against a moved base.
 7. **commit — one batch commit.** ONE commit on the coordination branch ⇒ `B+1`.
+7a. **record the code boundary (claude arm).** Capture the code tip *before* the
+   knowledge commit and run `doctrine dispatch record-boundary --slice <N> --phase
+   PHASE-NN --code-start <B> --code-end <B+1>`. This is the input stage-1
+   `prepare-review` tree-reads to **cut `phase/<slice>-NN`** on the fork-less claude
+   arm (design §4.3). On codex/pi the worker fork branch **is** the native phase
+   deliverable — skip this step (see [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md)).
 8. **record — knowledge trails the commit.** Memory / AC evidence / notes, *after*
-   the confirmed commit.
+   the confirmed commit (and after 7a, so `boundaries.toml` rides the knowledge
+   commit onto `dispatch/<slice>`).
 
 The next batch forks from `B+1`. **Report-and-halt, never auto-merge** — conflict,
 moved HEAD, or a `.doctrine/`/`.claude/`-touch all stop the funnel and surface to a
@@ -184,13 +226,17 @@ just a crash — recover the same way.
 - **A routing slot.** `/dispatch` is not yet a `/route` destination.
 - **Parallel landing (υ).** v1 funnels **one landing per base** — concurrent
   EXECUTION is first-class, but the orchestrator's sequential imports bump HEAD, so
-  siblings re-dispatch onto the bumped base. In-verb re-anchor deferred (IMP-043).
+  siblings re-dispatch onto the bumped base. Per-batch re-anchor (IMP-043) is
+  **demoted, not on the hot path**: branch-point movement is now handled once, at
+  **sync time**, as target-movement under the CAS journal (moved target ⇒ report,
+  never auto-resolve) — not re-anchored per batch.
 
 ## Quick Reference
 
 | Situation | Action |
 |---|---|
 | No phase parallelizes | **Serial — one worker per phase, batch of one, same funnel.** Never bail to inline |
+| Set up the run | `doctrine worktree coordinate --slice <N> --dir <path>` — funnel on the dedicated `dispatch/<slice>` worktree, never session `main` |
 | Drive the slice | Loop: `/phase-plan` → route+spawn → funnel → repeat from new HEAD until done |
 | Pick the arm | codex/pi → `/dispatch-subprocess`; claude → `/dispatch-agent`; route only on self-belief↔env agreement |
 | Harness mismatch / unknown | **Refuse, NAMING the cause** — never a blind spawn |
@@ -198,13 +244,14 @@ just a crash — recover the same way.
 | Worker reports a fork / can't finish clean | It halted by contract → **you `/consult`**; never auto-adapt plan or design |
 | Phase can't be delegated (spec / authoring) | Execute inline yourself, then resume the loop |
 | Two tasks share a file | **Separate serial batches** — file-disjoint required to parallelize |
-| Batch returned | `import` (precond → `S^==B` → R-5 reject → apply non-committing) → verify → branch-point → one commit → record |
+| Batch returned | `import` (precond → `S^==B` → R-5 reject → apply non-committing) → verify → branch-point → one commit → **record-boundary (claude arm)** → record knowledge |
 | Delta touches `.doctrine/` / `.claude/` | **Report + halt** (R-5 belt — the real protection; `DOCTRINE_WORKER=1` fails open) |
 | Worker fork `>1` / merge / rebased commit | **Reject** before import (the unit is net diff `B..S`) |
 | Combined verify RED | Re-verify each delta alone to NAME the offender → report + halt |
 | `branch-point-check` exits 1 | External HEAD move → **re-dispatch**, never commit on a moved base |
 | Crash / context overflow | Rebuild from coordination branch + `git worktree list`; no load-bearing state |
-| All phases landed | `doctrine slice status <id> audit` → `/audit` from the parent tree; `gc` each spent fork |
+| All phases landed (conclude) | `dispatch sync --prepare-review` → remove coordination worktree (KEEP `dispatch`/`review`/`phase` refs) → `slice status <id> audit` → `/audit` from parent/root. **Never** `--integrate` — that is `/close`, post-audit |
+| Codex/pi worker forks spent | `doctrine worktree gc --fork <branch>` each (claude arm has none) |
 
 ## Red Flags
 
@@ -222,6 +269,12 @@ just a crash — recover the same way.
   **report and halt**.
 - Auto-adapt the plan or design to keep the drive moving — an emergent architectural
   decision is the **semantic** report-and-halt: `/consult` it, never decide solo.
+- Drive the funnel on the session `main` tree — always the dedicated
+  `dispatch/<slice>` coordination worktree (`worktree coordinate`).
+- Integrate at conclude. Conclude is **stage-1 `--prepare-review` only**; stage-2
+  `--integrate` is `/close`'s job, **post-audit**. Never land code pre-audit.
+- Delete the `dispatch`/`review`/`phase` refs at conclude — only the worktree
+  *directory* is removed; the refs are the preserved deliverables.
 - Record knowledge before the confirmed commit.
 - Bail to serial **inline** execution because no phase parallelizes — serial still
   means spawn a worker in a worktree (batch of one).
@@ -242,6 +295,9 @@ just a crash — recover the same way.
 
 Driven phase by phase, the slice reaches completion unattended. Each batch — usually
 a single serial worker, occasionally a file-disjoint concurrent set — lands as
-exactly one commit on the coordination branch, every imported delta policy-checked
-and verified before it lands, with conflicts surfaced to a human rather than merged.
-The coordination branch is the deliverable.
+exactly one commit on the dedicated `dispatch/<slice>` coordination worktree, every
+imported delta policy-checked and verified before it lands, with conflicts surfaced
+to a human rather than merged. Conclude projects the reviewable refs
+(`review/<slice>` + `phase/<slice>-NN`) and stops for audit; integration to trunk is
+`/close`'s post-audit act. The reviewable refs — not the session `main` tree — are
+the deliverable.
