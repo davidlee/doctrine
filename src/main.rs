@@ -681,6 +681,22 @@ enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
+    /// Post-spawn base==B check for the claude `/dispatch` arm (SL-064 §8): prove
+    /// the spawned worker worktree's HEAD descends from the base `B` it was meant
+    /// to fork off. Diagnostic only — fail-loud, NEVER removes the fork. Read-classed
+    /// (callable under worker-mode). Distinct token per refusal
+    /// (`no-worker-head`/`unstamped`/`wrong-base`).
+    VerifyWorker {
+        /// The base commit `B` the worker was meant to fork off (the
+        /// orchestrator's coordination HEAD at spawn).
+        #[arg(long)]
+        base: String,
+
+        /// The worker worktree to verify — the git `-C` root for every probe.
+        #[arg(long)]
+        dir: PathBuf,
+    },
+
     /// Manage the worker-mode disk marker (SL-056 §3). `--clear` removes it at the
     /// cwd tree root with a loud receipt — the self-brick cure; never refused by
     /// the marker conjunct itself.
@@ -2279,9 +2295,13 @@ fn write_class(cmd: &Command) -> WriteClass {
             // branch-point-check is a HEAD read + ref compare — no authored write,
             // callable under worker-mode by construction (§5.2, C-V).
             // status reads the resolved mode (SL-056 §3) — open to workers.
+            // verify-worker is a HEAD read + marker probe + is-ancestor compare on
+            // the worker dir — no authored write, diagnostic only; harmless under
+            // worker-mode (design §8.4/§8.6 lists no impersonation test for it).
             WorktreeCommand::Provision { .. }
             | WorktreeCommand::CheckAllowlist { .. }
             | WorktreeCommand::BranchPointCheck { .. }
+            | WorktreeCommand::VerifyWorker { .. }
             | WorktreeCommand::Status { .. } => Read,
             // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
             // first Orchestrator-classed verb; refused under worker-mode.
@@ -3028,6 +3048,9 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => worktree::run_gc(path, &fork, superseded_head.as_deref(), force, dry_run),
             WorktreeCommand::Status { assert, path } => worktree::run_status(path, assert),
+            WorktreeCommand::VerifyWorker { base, dir } => {
+                worktree::run_verify_worker(&base, &dir)
+            }
             WorktreeCommand::Marker {
                 clear,
                 operator,
