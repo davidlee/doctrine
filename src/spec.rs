@@ -3189,17 +3189,20 @@ parent = \"SPEC-002\"
     }
 
     #[test]
-    fn sweep_parent_on_product_subject() {
+    fn sweep_parent_product_to_tech_is_invalid_kind() {
+        // SL-065 §4: parent is now symmetric same-subtype. A product subject whose
+        // parent resolves to a TECH spec is invalid-kind (mirror of the tech→product
+        // case), no longer rejected as a "tech-only field".
         assert_validate_flags(
             |root| {
                 fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
                 fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
                 append_spec_fields(
                     &spec_toml(root, SpecSubtype::Product, 1),
-                    "parent = \"SPEC-001\"", // tech-only field on a product
+                    "parent = \"SPEC-001\"", // a tech spec, must be product
                 );
             },
-            "invalid parent: parent on product",
+            "is a tech spec (must be product)",
         );
     }
 
@@ -3230,6 +3233,79 @@ parent = \"SPEC-002\"
                 append_spec_fields(
                     &spec_toml(root, SpecSubtype::Tech, 2),
                     "parent = \"SPEC-001\"",
+                );
+            },
+            "parent cycle:",
+        );
+    }
+
+    #[test]
+    fn sweep_parent_product_to_product_is_clean() {
+        // SL-065 §4: a product spec may now decompose into another product spec.
+        // The well-formed PRD→PRD spine produces no finding and exits zero.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+        fresh(root, SpecSubtype::Product, "accounts", "Accounts"); // PRD-002 (root)
+        append_spec_fields(
+            &spec_toml(root, SpecSubtype::Product, 1),
+            "parent = \"PRD-002\"",
+        );
+        assert!(
+            build_registry(root).unwrap().validate(None).is_empty(),
+            "a well-formed product spine produces no findings"
+        );
+        assert!(
+            run_validate(Some(root.to_path_buf()), None).is_ok(),
+            "run_validate exits zero on a clean product spine"
+        );
+    }
+
+    #[test]
+    fn sweep_parent_product_dangling() {
+        // SL-065 §4: a product parent that resolves to no product spec is dangling.
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Product, 1),
+                    "parent = \"PRD-099\"", // no such product spec
+                );
+            },
+            "dangling parent:",
+        );
+    }
+
+    #[test]
+    fn sweep_self_parent_product() {
+        // SL-065 §4: acyclicity is subtype-blind — a product naming itself is caught.
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Product, 1),
+                    "parent = \"PRD-001\"", // A → A
+                );
+            },
+            "names itself as parent",
+        );
+    }
+
+    #[test]
+    fn sweep_parent_cycle_product() {
+        // SL-065 §4: a multi-hop product cycle (PRD-001 → PRD-002 → PRD-001) is caught
+        // by the now subtype-blind parent_cycle walk.
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+                fresh(root, SpecSubtype::Product, "accounts", "Accounts"); // PRD-002
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Product, 1),
+                    "parent = \"PRD-002\"",
+                );
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Product, 2),
+                    "parent = \"PRD-001\"",
                 );
             },
             "parent cycle:",
