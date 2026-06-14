@@ -7,12 +7,12 @@ title = "Author cross-kind dependency and sequence edges feeding the derived vie
 status = "pending"
 kind = "functional"
 
-description = "A work-like entity (a slice or any of the five backlog kinds) can author its own hard `needs` (prerequisite, payload-free) and soft `after` (sequence, per-edge `rank`) edges onto another work-like entity, as the cross-kind capture surface the derived priority/actionability view consumes. The backlog item→item instance stays PRD-009's (REQ-097); this generalises capture to work-like kinds. Targets are restricted to work-like kinds — governance, spec, requirement, and knowledge kinds are refused at author time."
+description = "A work-like entity (a slice, or any backlog kind in PRD-009's set) can author its own hard `needs` (prerequisite, payload-free) and soft `after` (sequence, per-edge `rank`) edges onto another work-like entity, as the cross-kind capture surface the derived priority/actionability view consumes. The backlog item→item instance stays PRD-009's (REQ-097); this generalises capture to work-like kinds. The valid endpoints are a closed allowlist — slice and the backlog kinds only; every other admitted kind (governance, spec, requirement, knowledge, drift, and review/reconciliation records) is refused at author time. The refusal is scoped to this symmetric work↔work `needs`/`after` surface, not a blanket bar on non-work participating in the dep overlay (a distinct non-actionable gating surface is anticipated; tracked as IMP-047)."
 tags = []
 acceptance_criteria = [
-  "A work-like entity (slice or one of the five backlog kinds) can author a hard `needs` and a soft `after` edge onto another work-like entity; the edges round-trip the entity's read view.",
+  "A work-like entity (slice or any backlog kind) can author a hard `needs` and a soft `after` edge onto another work-like entity; the edges round-trip the entity's read view.",
   "An authored cross-kind `needs` edge surfaces as a blocker in the derived blockers/next view, and an `after` edge contributes to sequence ordering, identically to the backlog item→item instance.",
-  "Targets are restricted to work-like kinds (slice + the five backlog kinds); a governance, spec, requirement, or knowledge target, a free-text (unresolvable) target, or a self-edge is refused at author time with a clear message.",
+  "Endpoints are a closed allowlist (slice + the backlog kinds); every other admitted kind — governance, spec, requirement, knowledge, drift, review, and reconciliation — is refused as a target at author time, as is a free-text (unresolvable) target or a self-edge, each with a clear message.",
   "The authored edge names (`needs`/`after`) stay decoupled from the engine's dep/seq overlay species — no graph-engine vocabulary leaks into the authored entity.",
   "The PRD-009 backlog item→item capture instance (REQ-097) is unchanged.",
 ]
