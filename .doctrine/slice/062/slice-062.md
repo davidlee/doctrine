@@ -19,10 +19,14 @@ moves status carries a bespoke implementation or none. The "no slice lifecycle
 transition" known-gap (now SHIPPED for slice via SL-040) was the slice-shaped
 face of this broader absence.
 
-This slice extracts the lifecycle FSM into a shared engine module (sibling to
-`conduct.rs`, completing the ADR-009 pairing) and exposes uniform
-status-transition and destructive verbs that every kind consumes as data — the
-GovKind data-not-trait pattern (SL-033), not per-kind copies.
+This slice extracts the **pure FSM primitives** (`classify`/predicates/edge table)
+into a shared leaf (sibling to `conduct.rs`, completing the ADR-009 pairing) and
+the **edit-preserving write-core** into one shared IO seam every status setter
+delegates to — NOT a single uniform cross-kind transition engine (codex C8:
+slice's `run_status` still composes classify with its RV close-gate, drift, and
+conduct posture in the shell; those stay per-kind). Plus the transactional
+supersession verb. The reuse pattern is GovKind data-not-trait (SL-033) for the
+write seam, not per-kind copies. Destructive verbs are carved out (F1).
 
 ## Scope & Objectives
 
@@ -76,7 +80,7 @@ GovKind data-not-trait pattern (SL-033), not per-kind copies.
   (it would nuke an authored entity) — pinned as a `set_authored_status` test.
 - SL-060 reinstates a typed `[relationships].needs/after` table on slices,
   ordered **before** the `[[relation]]` rows (F-1 hazard). This slice's
-  shared `set_authored_status` + `append_relationship_array` touch the same
+  shared `set_authored_status` + `append_string_array` touch the same
   files and must preserve **both** blocks. The supersession verb writes the
   typed `supersedes`/`superseded_by` fields (not `[[relation]]`), so SL-060's
   capture seam and this slice are storage-orthogonal — no overlap.
@@ -85,13 +89,16 @@ GovKind data-not-trait pattern (SL-033), not per-kind copies.
 
 - `src/lifecycle.rs` (NEW, pure leaf, beside `conduct.rs`) — the re-homed FSM
   (`classify`/`Transition`/predicates/edge table). Completes the ADR-009 pairing.
-- the authored-TOML-mutation seam (generalize `dep_seq.rs`, OQ-3) — shared
-  `set_authored_status` (scalar) + `append_relationship_array` (generalizes
-  `dep_seq::append`). The IO half; kept OUT of the pure `lifecycle.rs` (D1).
+- the authored-TOML-mutation seam (grow `dep_seq.rs`, OQ-3) — shared
+  `set_authored_status` (scalar) + `append_string_array` (reuses `dep_seq::append`'s
+  string-array path, parametrized by field — NOT the `after` struct path; codex C2).
+  The IO half; kept OUT of the pure `lifecycle.rs` (D1).
 - `src/slice.rs` — FSM donor; `run_status` keeps the gate + RV close-gate,
   delegates the write. `SLICE_STATUSES`/`SliceStatus` stay (read-filter + CLI vocab).
-- `src/governance.rs`, `src/spec.rs`, `src/backlog.rs` — bespoke setters retired
-  onto the shared `set_authored_status`, each keeping its own gate.
+- `src/governance.rs`, `src/backlog.rs`, `src/requirement.rs` — bespoke setters
+  retired onto the shared `set_authored_status`, each keeping its own gate.
+  (`requirement::set_status` is status-**only**, no `updated`; there is **no** spec
+  status setter — `spec req status` delegates to requirement. Design §1/§2, codex C1.)
 - `src/adr.rs` / the new top-level `supersede` handler — the supersession verb +
   `supersede_policy` (ADR `Some`, others `None`).
 - CLI command wiring for `doctrine supersede`.
@@ -99,9 +106,11 @@ GovKind data-not-trait pattern (SL-033), not per-kind copies.
 ## Risks / Assumptions / Open Questions
 
 - **R1** — behaviour-preservation: the FSM extraction + setter rewire must not
-  perturb slice/gov/spec/backlog transition output. Existing suites are the proof
-  (assertions unchanged; import paths shift on the module move).
-- **R3** — generalizing `dep_seq::append` must not regress SL-060's needs/after
+  perturb slice/gov/requirement/backlog transition output (no spec setter exists —
+  codex C1). Existing suites are the proof (assertions unchanged; import paths shift
+  on the module move).
+- **R3** — reusing `dep_seq::append`'s string-array path must not regress SL-060's
+  needs/after
   suites (they stay green unchanged).
 - **R-atomicity** — the supersession verb writes two files non-atomically;
   mitigated by pre-flight + not-already-superseded guard + idempotent re-run +
