@@ -36,18 +36,9 @@ pub(crate) struct AfterEdge {
 /// reads to an empty `DepSeq`. (NB: no `promoted` field — that is a backlog-only
 /// projection, read separately backlog-side.)
 //
-// PHASE-02 lifts the schema ahead of its non-backlog `read` consumer (the slice
-// path lands a later phase); `read`/`DepSeq` are exercised by the leaf tests but
-// dead in the lib build until then. `cfg_attr(not(test), …)` so the dead-code
-// expectation applies ONLY where the symbol is genuinely unused, never fighting the
-// cfg(test) round-trip (mem.pattern.lint.dead-code-expect-vs-cfg-test).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "lifted ahead of the slice `read` consumer (later phase); tests exercise it"
-    )
-)]
+// PHASE-03 wired the slice read path onto `read`/`DepSeq` (`slice show` surfaces the
+// dep/seq axes), so the schema is now live in the lib build — the PHASE-02 dead-code
+// expectations are retired.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct DepSeq {
     pub(crate) needs: Vec<String>,
@@ -57,13 +48,6 @@ pub(crate) struct DepSeq {
 /// The tolerant read layer for [`read`] — `[relationships]` with the two dep/seq
 /// arrays, each `#[serde(default)]` so a table omitting one (or an entirely absent
 /// table) still parses to the empty axis.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "[`read`] support type, lifted ahead of its slice consumer (later phase)"
-    )
-)]
 #[derive(Debug, Default, serde::Deserialize)]
 struct RawRelationships {
     #[serde(default)]
@@ -72,13 +56,6 @@ struct RawRelationships {
     after: Vec<AfterEdge>,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "[`read`] support type, lifted ahead of its slice consumer (later phase)"
-    )
-)]
 #[derive(Debug, Default, serde::Deserialize)]
 struct RawDepSeqToml {
     #[serde(default)]
@@ -98,13 +75,6 @@ pub(crate) enum RelEdit<'a> {
 /// Read the typed `[relationships]` dep/seq block from an entity's TOML. An absent
 /// `[relationships]` table (or absent axis) reads to an empty `DepSeq` — a kind
 /// that does not author dep/seq. Pure over the file's own text.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the slice dep/seq reader lands a later phase; exercised by the leaf tests"
-    )
-)]
 pub(crate) fn read(toml_path: &Path) -> anyhow::Result<DepSeq> {
     let text = std::fs::read_to_string(toml_path)
         .with_context(|| format!("dep/seq entity not found at {}", toml_path.display()))?;

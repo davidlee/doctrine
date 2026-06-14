@@ -449,6 +449,37 @@ enum Command {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Append a hard prerequisite to a source entity's `needs` axis: `needs SL-060
+    /// SL-047` (SL-060 §5.4). Generic cross-kind: SRC and TGT resolve via the same
+    /// canonical-ref seam as `link`. SRC must be a dep/seq-authoring kind (slice or a
+    /// backlog kind); TGT must resolve AND be work-like (slice or backlog) — a
+    /// free-text or non-work-like target is refused at author time. Idempotent.
+    Needs {
+        /// The source entity's canonical ref, e.g. `SL-060`.
+        source: String,
+        /// The prerequisite target's canonical ref, e.g. `SL-047`.
+        target: String,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Append a soft-sequence edge to a source entity's `after` axis: `after SL-060
+    /// SL-047 [--rank N]` (SL-060 §5.4). Generic cross-kind with the same author-time
+    /// target gate as `needs`. Records `{ to, rank }` (rank default 0). Idempotent.
+    After {
+        /// The source entity's canonical ref, e.g. `SL-060`.
+        source: String,
+        /// The predecessor target's canonical ref, e.g. `SL-047`.
+        target: String,
+        /// Per-edge manual tie-break rank (default 0 — a plain soft edge).
+        #[arg(long, default_value_t = 0)]
+        rank: i32,
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2178,6 +2209,9 @@ fn write_class(cmd: &Command) -> WriteClass {
         // Author / remove a tier-1 `[[relation]]` edge — authored writes (SL-048 §5.4).
         Command::Link { .. } => Write("link"),
         Command::Unlink { .. } => Write("unlink"),
+        // Author a dep/seq edge into `[relationships]` — authored writes (SL-060 §5.4).
+        Command::Needs { .. } => Write("needs"),
+        Command::After { .. } => Write("after"),
     }
 }
 
@@ -2889,6 +2923,17 @@ fn main() -> anyhow::Result<()> {
             target,
             path,
         } => run_unlink(path, &source, &label, &target),
+        Command::Needs {
+            source,
+            target,
+            path,
+        } => run_needs_edge(path, &source, &target),
+        Command::After {
+            source,
+            target,
+            rank,
+            path,
+        } => run_after_edge(path, &source, &target, rank),
     }
 }
 
@@ -2970,6 +3015,95 @@ fn run_unlink(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Generic dep/seq verbs: `doctrine needs` / `doctrine after` (SL-060 §5.4)
+// ---------------------------------------------------------------------------
+
+/// The work-like membership predicate (SL-060 §5.4) — the ONE widen-later guard.
+/// Work-like = { slice } ∪ { the 5 backlog kinds }. Both the dep/seq-authoring SRC
+/// set and the admissible TGT set are this same membership (a slice or a backlog
+/// item may author dep/seq, and may only depend/sequence on another piece of work).
+/// A future phase that allows cross-tier dep/seq deletes just this predicate (and
+/// its refusal tests) — every other admitted kind (governance / spec / requirement /
+/// knowledge / review / reconciliation) is refused at author time until then.
+fn is_work_like(kind: &'static entity::Kind) -> bool {
+    matches!(kind.prefix, "SL" | "ISS" | "IMP" | "CHR" | "RSK" | "IDE")
+}
+
+/// Resolve a generic dep/seq `(SRC, TGT)` pair against the author-time gate (§5.4),
+/// returning SRC's `slice-NNN.toml`-shaped path ready for the leaf write. Rides the
+/// SAME cross-kind canonical-ref seam as `link` (`integrity::parse_canonical_ref` +
+/// the `KindRef` `(dir, stem)` path map) — no new resolver. The three refusals, each
+/// a clear, specific message:
+///   1. SRC must resolve AND be a dep/seq-authoring (work-like) kind.
+///   2. TGT must resolve on disk (free-text / dangling refused) AND be work-like.
+///   3. self-edge (SRC == TGT) refused.
+fn resolve_dep_seq_src(
+    root: &std::path::Path,
+    source: &str,
+    target: &str,
+) -> anyhow::Result<PathBuf> {
+    let (skref, sid) = integrity::parse_canonical_ref(source)?;
+    anyhow::ensure!(
+        is_work_like(skref.kind),
+        "`{source}` is a {} entity, which cannot author needs/after — only a slice or a backlog item (issue/improvement/chore/risk/idea) carries dep/seq",
+        skref.kind.prefix
+    );
+    // TGT must resolve on disk — a free-text or dangling target is refused here
+    // (never write an edge to a non-entity). `parse_canonical_ref` first so a
+    // free-text target surfaces the canonical-ref shape error, then a dir probe.
+    let (tkref, tid) = integrity::parse_canonical_ref(target)?;
+    integrity::ensure_ref_resolves(root, target)?;
+    anyhow::ensure!(
+        is_work_like(tkref.kind),
+        "`{target}` is a {} entity — needs/after may only target work (a slice or a backlog item); cross-tier dep/seq is not yet allowed",
+        tkref.kind.prefix
+    );
+    anyhow::ensure!(
+        !(skref.kind.prefix == tkref.kind.prefix && sid == tid),
+        "a {source} edge to itself is not a dependency — self-edges are refused"
+    );
+    let name = format!("{sid:03}");
+    Ok(root
+        .join(skref.kind.dir)
+        .join(&name)
+        .join(format!("{}-{name}.toml", skref.stem)))
+}
+
+/// `doctrine needs <SRC> <TGT>` (SL-060 §5.4) — append TGT to SRC's `needs` axis.
+/// Generic cross-kind: the author-time work-like gate ([`resolve_dep_seq_src`]) then
+/// the shared leaf `dep_seq::append`. NO author-time cycle check (deferred to read
+/// time by design — the cross-kind cycle oracle is a later phase).
+fn run_needs_edge(path: Option<PathBuf>, source: &str, target: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let toml_path = resolve_dep_seq_src(&root, source, target)?;
+    dep_seq::append(&toml_path, &dep_seq::RelEdit::Needs(&[target.to_string()]))?;
+    writeln!(std::io::stdout(), "{source} needs {target}")?;
+    Ok(())
+}
+
+/// `doctrine after <SRC> <TGT> [--rank N]` (SL-060 §5.4) — append `{ to, rank }` to
+/// SRC's `after` axis through the same gate + leaf. Rank default 0.
+fn run_after_edge(
+    path: Option<PathBuf>,
+    source: &str,
+    target: &str,
+    rank: i32,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let toml_path = resolve_dep_seq_src(&root, source, target)?;
+    dep_seq::append(&toml_path, &dep_seq::RelEdit::After { to: target, rank })?;
+    let suffix = if rank == 0 {
+        String::new()
+    } else {
+        format!(" (rank {rank})")
+    };
+    writeln!(std::io::stdout(), "{source} after {target}{suffix}")?;
+    Ok(())
+}
+
 /// `doctrine validate` — the corpus integrity scan. The COMMAND-LAYER composition
 /// (mirrors `run_inspect`, ADR-001): the one layer allowed to depend on BOTH the
 /// `integrity` id-scan AND the `relation_graph` relation-edge walk (which depends back
@@ -3003,6 +3137,32 @@ fn run_validate(path: Option<PathBuf>) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // SL-060: the work-like membership predicate is the ONE widen-later guard —
+    // exactly { slice } ∪ { the 5 backlog kinds }, every other admitted kind refused.
+    #[test]
+    fn is_work_like_is_exactly_slice_plus_backlog() {
+        // The work-like set: slice + the five backlog kinds.
+        assert!(is_work_like(&slice::SLICE_KIND));
+        for k in integrity::KINDS
+            .iter()
+            .filter(|k| matches!(k.kind.prefix, "ISS" | "IMP" | "CHR" | "RSK" | "IDE"))
+        {
+            assert!(is_work_like(k.kind), "{} is work-like", k.kind.prefix);
+        }
+        // Every OTHER admitted kind in the corpus table is refused (gov / spec / req /
+        // review / reconciliation / knowledge) — the closed allowlist.
+        for k in integrity::KINDS
+            .iter()
+            .filter(|k| !matches!(k.kind.prefix, "SL" | "ISS" | "IMP" | "CHR" | "RSK" | "IDE"))
+        {
+            assert!(
+                !is_work_like(k.kind),
+                "{} must NOT be work-like (off the allowlist)",
+                k.kind.prefix
+            );
+        }
+    }
 
     // VT-4: `--only-memory` is declared `conflicts_with_all = ["skill", "domain"]`,
     // so clap rejects it at parse time alongside an explicit selector. `try_parse_from`

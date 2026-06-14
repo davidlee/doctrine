@@ -378,13 +378,37 @@ fn assert_guidance_comment_present(label: &str, text: &str) {
 }
 
 /// Slice kind (F-D): the whole `[relationships]` table is gone — NO header at all
-/// (the migrated axes survive only as commented examples, which the bare-key scan
-/// alone would pass; the header-absent assertion is what gives the guard teeth).
+/// (the STRUCTURAL axes survive only as commented examples).
+///
+/// SL-060 (D4/INV-1): the slice template now RE-CARRIES a `[relationships]` table —
+/// but ONLY for the dep/seq payload axes (`needs`/`after`), the same typed shape
+/// backlog carries. The SL-048 cut still holds for every STRUCTURAL axis (specs/
+/// requirements/supersedes/governed_by → `[[relation]]` via `doctrine link`), so the
+/// guidance comment must still steer to `doctrine link`, and no migrated structural
+/// key may leak back as a typed key.
 fn assert_slice_shape(label: &str, text: &str) {
     let v = line_view(text);
     assert!(
-        v.first_relationships.is_none(),
-        "{label}: slice template must emit NO `[relationships]` header (whole table cut):\n{text}"
+        v.first_relationships.is_some(),
+        "{label}: SL-060 slice template carries a `[relationships]` table for the dep/seq axes:\n{text}"
+    );
+    for kept in ["needs", "after"] {
+        assert!(
+            v.relationships_keys.iter().any(|k| k == kept),
+            "{label}: slice template must carry `{kept}` typed in [relationships] (SL-060):\n{text}"
+        );
+    }
+    // The structural axes stay CUT — none may reappear as a typed `[relationships]` key.
+    assert_no_migrated_key_left(
+        Path::new(label),
+        &v,
+        &[
+            "specs",
+            "requirements",
+            "supersedes",
+            "governed_by",
+            "related",
+        ],
     );
     assert_guidance_comment_present(label, text);
 }

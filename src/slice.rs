@@ -1144,18 +1144,29 @@ pub(crate) fn run_show(
     let (doc, toml_text, body) = read_slice(&root.join(SLICE_DIR), id)?;
     // Tier-1 relations now live in `[[relation]]`, read generically (SL-048 PHASE-04).
     let tier1 = crate::relation::tier1_edges(&SLICE_KIND, &toml_text)?;
+    // The dep/seq payload axes (`needs`/`after`) live in the typed `[relationships]`
+    // table (SL-060), read via the shared leaf off the same `slice-NNN.toml` path. An
+    // absent table reads to an empty `DepSeq` (a slice that authors no dep/seq).
+    let dep_seq = crate::dep_seq::read(&slice_toml_path(&root.join(SLICE_DIR), id))?;
     let out = match format {
         Format::Table => {
             // Advisory posture (F19): the displayed (current) state's exit posture.
             let cfg = load_conduct(&root)?;
             let posture = crate::conduct::resolve(&cfg, &doc.status);
-            format_show(&doc, &tier1, &body, posture)
+            format_show(&doc, &tier1, &dep_seq, &body, posture)
         }
         // JSON stays byte-stable — posture is a Table-line addition only (design §5.2).
-        Format::Json => show_json(&doc, &tier1, &body)?,
+        Format::Json => show_json(&doc, &tier1, &dep_seq, &body)?,
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
+}
+
+/// The on-disk `slice-NNN.toml` metadata path for a slice id under `slice_root`.
+/// The single chokepoint the show path and the dep/seq leaf read both key on (DRY).
+fn slice_toml_path(slice_root: &Path, id: u32) -> PathBuf {
+    let name = format!("{id:03}");
+    slice_root.join(&name).join(format!("slice-{name}.toml"))
 }
 
 /// Read one slice's `slice-NNN.toml` (as data) and `slice-NNN.md` (scope body)
@@ -1165,7 +1176,7 @@ pub(crate) fn run_show(
 fn read_slice(slice_root: &Path, id: u32) -> anyhow::Result<(SliceDoc, String, String)> {
     let name = format!("{id:03}");
     let dir = slice_root.join(&name);
-    let toml_path = dir.join(format!("slice-{name}.toml"));
+    let toml_path = slice_toml_path(slice_root, id);
     let text = fs::read_to_string(&toml_path)
         .with_context(|| format!("slice {name} not found at {}", toml_path.display()))?;
     let doc: SliceDoc = toml::from_str(&text)
@@ -1201,6 +1212,7 @@ pub(crate) fn relation_edges(
 fn format_show(
     doc: &SliceDoc,
     tier1: &[crate::relation::RelationEdge],
+    dep_seq: &crate::dep_seq::DepSeq,
     body: &str,
     posture: crate::conduct::Conduct,
 ) -> String {
@@ -1226,12 +1238,35 @@ fn format_show(
         ("supersedes", targets_for(tier1, RelationLabel::Supersedes)),
         ("governed_by", targets_for(tier1, RelationLabel::GovernedBy)),
     ];
-    if axes.iter().any(|(_, refs)| !refs.is_empty()) {
+    // The dep/seq payload axes (SL-060) render under the SAME `relationships:` block,
+    // after the structural tier-1 axes. `after` edges render `to (rank N)` (rank
+    // suffix omitted at the default 0). Each axis (and the whole block) renders only
+    // when populated — an unauthored slice's output stays byte-identical (additive).
+    let after_line = dep_seq
+        .after
+        .iter()
+        .map(|e| {
+            if e.rank == 0 {
+                e.to.clone()
+            } else {
+                format!("{} (rank {})", e.to, e.rank)
+            }
+        })
+        .collect::<Vec<_>>();
+    let any_tier1 = axes.iter().any(|(_, refs)| !refs.is_empty());
+    let any_dep_seq = !dep_seq.needs.is_empty() || !after_line.is_empty();
+    if any_tier1 || any_dep_seq {
         parts.push("\nrelationships:\n".to_string());
         for (label, refs) in &axes {
             if !refs.is_empty() {
                 parts.push(format!("  {label}: {}\n", refs.join(", ")));
             }
+        }
+        if !dep_seq.needs.is_empty() {
+            parts.push(format!("  needs: {}\n", dep_seq.needs.join(", ")));
+        }
+        if !after_line.is_empty() {
+            parts.push(format!("  after: {}\n", after_line.join(", ")));
         }
     }
 
@@ -1254,6 +1289,7 @@ fn format_show(
 fn show_json(
     doc: &SliceDoc,
     tier1: &[crate::relation::RelationEdge],
+    dep_seq: &crate::dep_seq::DepSeq,
     body: &str,
 ) -> anyhow::Result<String> {
     use crate::relation::{RelationLabel, targets_for};
@@ -1273,6 +1309,15 @@ fn show_json(
     let governed_by = targets_for(tier1, RelationLabel::GovernedBy);
     if !governed_by.is_empty() {
         relationships.insert("governed_by".to_string(), serde_json::json!(governed_by));
+    }
+    // The dep/seq payload axes (SL-060). Additive — emitted only when populated, so an
+    // unauthored slice's JSON object stays byte-identical to the pre-SL-060 shape.
+    // `after` serializes as `[{ to, rank }, …]` (the `AfterEdge` derive).
+    if !dep_seq.needs.is_empty() {
+        relationships.insert("needs".to_string(), serde_json::json!(dep_seq.needs));
+    }
+    if !dep_seq.after.is_empty() {
+        relationships.insert("after".to_string(), serde_json::json!(dep_seq.after));
     }
     let mut slice = serde_json::to_value(doc).context("failed to serialize slice doc")?;
     if let Some(obj) = slice.as_object_mut() {
@@ -2209,7 +2254,13 @@ mod tests {
         // `started` defaults to self/auto (no plan/reconcile gate) — VT-3 show side.
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
-        let out = format_show(&doc, &tier1, "# Scope\n\nthe scope body.\n", posture);
+        let out = format_show(
+            &doc,
+            &tier1,
+            &crate::dep_seq::DepSeq::default(),
+            "# Scope\n\nthe scope body.\n",
+            posture,
+        );
         assert!(out.contains("SL-025 — Uniform CLI"), "identity: {out}");
         assert!(out.contains("uniform-cli · started"), "flat fields: {out}");
         assert!(out.contains("conduct: self/auto"), "conduct posture: {out}");
@@ -2237,8 +2288,9 @@ mod tests {
         let tier1 = crate::relation::tier1_edges(&SLICE_KIND, &toml_text).unwrap();
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
-        let table = format_show(&doc, &tier1, &body, posture);
-        let json = show_json(&doc, &tier1, &body).unwrap();
+        let ds = crate::dep_seq::DepSeq::default();
+        let table = format_show(&doc, &tier1, &ds, &body, posture);
+        let json = show_json(&doc, &tier1, &ds, &body).unwrap();
         for needle in ["DESIGN_SECRET", "PLAN_SECRET", "NOTES_SECRET"] {
             assert!(!table.contains(needle), "table leaked {needle}: {table}");
             assert!(!json.contains(needle), "json leaked {needle}: {json}");
@@ -2253,7 +2305,7 @@ mod tests {
         let (doc, toml_text, body) = read_slice(&slice_root(root), 1).unwrap();
         let tier1 = crate::relation::tier1_edges(&SLICE_KIND, &toml_text).unwrap();
 
-        let out = show_json(&doc, &tier1, &body).unwrap();
+        let out = show_json(&doc, &tier1, &crate::dep_seq::DepSeq::default(), &body).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(parsed["kind"], "slice");
         assert_eq!(parsed["slice"]["id"], 1);
@@ -2265,6 +2317,80 @@ mod tests {
         assert!(parsed["slice"]["relationships"]["requirements"].is_array());
         assert!(parsed["slice"]["relationships"]["supersedes"].is_array());
         assert!(parsed["body"].as_str().unwrap().contains("My Title"));
+    }
+
+    #[test]
+    fn show_surfaces_dep_seq_axes_in_table_and_json() {
+        // SL-060: `needs`/`after` render under the same `relationships:` block (Table)
+        // and the same `relationships` object (JSON), after the structural tier-1 axes.
+        use crate::dep_seq::{AfterEdge, DepSeq};
+        let doc = SliceDoc {
+            id: 60,
+            slug: "dep-seq".into(),
+            title: "Dep Seq".into(),
+            status: "proposed".into(),
+            created: "2026-06-01".into(),
+            updated: "2026-06-01".into(),
+            gate: Gate::default(),
+        };
+        let tier1 = Vec::new();
+        let ds = DepSeq {
+            needs: vec!["SL-047".into()],
+            after: vec![
+                AfterEdge {
+                    to: "SL-002".into(),
+                    rank: 0,
+                },
+                AfterEdge {
+                    to: "SL-003".into(),
+                    rank: 5,
+                },
+            ],
+        };
+        let posture =
+            crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
+        let table = format_show(&doc, &tier1, &ds, "# body\n", posture);
+        assert!(table.contains("relationships:"), "block renders: {table}");
+        assert!(table.contains("needs: SL-047"), "needs axis: {table}");
+        // rank 0 omits the suffix; a non-zero rank renders `(rank N)`.
+        assert!(
+            table.contains("after: SL-002, SL-003 (rank 5)"),
+            "after axis with rank suffix: {table}"
+        );
+
+        let json = show_json(&doc, &tier1, &ds, "# body\n").unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            v["slice"]["relationships"]["needs"],
+            serde_json::json!(["SL-047"])
+        );
+        assert_eq!(
+            v["slice"]["relationships"]["after"],
+            serde_json::json!([
+                { "to": "SL-002", "rank": 0 },
+                { "to": "SL-003", "rank": 5 },
+            ])
+        );
+    }
+
+    #[test]
+    fn show_omits_dep_seq_keys_when_unauthored() {
+        // Additive: an unauthored slice's relationships object carries NO `needs`/
+        // `after` keys (byte-stable with the pre-SL-060 shape).
+        let doc = SliceDoc {
+            id: 1,
+            slug: "v".into(),
+            title: "V".into(),
+            status: "proposed".into(),
+            created: "2026-06-01".into(),
+            updated: "2026-06-01".into(),
+            gate: Gate::default(),
+        };
+        let json = show_json(&doc, &[], &crate::dep_seq::DepSeq::default(), "# body\n").unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let rel = &v["slice"]["relationships"];
+        assert!(rel.get("needs").is_none(), "no needs key when unauthored");
+        assert!(rel.get("after").is_none(), "no after key when unauthored");
     }
 
     // --- SL-028 PHASE-02: conduct shell seam (T5/T6) ---
