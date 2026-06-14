@@ -31,27 +31,28 @@ warnings; 1286 tests pass.
 
 Pattern recorded: `mem.pattern.dispatch.review-branch-extraneous-deletions`.
 
-### Integration path (for /close)
+### Integration path — LANDED
 
-Apply the SL-067 additions from `review/067` onto main as 5 conventional commits,
-FILTERING OUT the extraneous dispatch worktree deletions. Do NOT merge the
-review/067 branch whole.
+The SL-067 additions were integrated onto main as 4 clean conventional commits,
+filtering OUT the extraneous dispatch-worktree deletions (the `review/067` branch
+forked a pre-revision base, so a whole-branch diff/merge would have reverted the
+REV kind, `is_work_like`'s SL-066 REV widening, and all pre-067 entities). main.rs
+took only its 3 SL-067 hunks by hand (Tag variant / write_class / dispatch),
+NEVER the 190 revision-command deletions; backlog.rs / listing.rs / the goldens
+were clean (`git checkout review/067 -- <file>` = main + SL-067) and taken whole.
 
-1. `feat(SL-067): add BacklogCommand::Tag CLI wiring` — `src/main.rs`
-   (clap variant + write_class + dispatch)
-2. `feat(SL-067): producer — tag verb, normalisation, JSON projection` —
-   `src/backlog.rs` (normalize_tag, fold_filter_tag, apply_tags, run_tag,
-   BacklogRow.tags, json_rows, filter input fold, any_tagged/effective_default,
-   PHASE-01 tests). **NB: remove the local `strip_ansi` copy; use
-   `crate::listing::strip_ansi` (made pub(crate) in 6352b01).**
-3. `feat(SL-067): reader/render — PerToken paint, tag chips, dynamic column` —
-   `src/listing.rs` (ColumnPaint::PerToken, TAG_PALETTE, stable_hash,
-   segment_hue, paint_tag, paint_cell PerToken arm, PHASE-02 tests)
-4. `test(SL-067): update golden tests for unconditional tags projection` —
-   `tests/e2e_backlog_list_order_golden.rs`,
-   `tests/e2e_list_columns_golden.rs`
-5. `chore(SL-067): hoist strip_ansi to pub(crate) in listing.rs` — already
-   done (6352b01 on main); step 2 must import it instead of copying.
+- `31b3fc0 feat(SL-067): reader/render — PerToken paint, tag chips, dynamic column`
+- `83dad91 feat(SL-067): producer — tag verb, normalisation, JSON projection`
+- `7843921 feat(SL-067): add BacklogCommand::Tag CLI wiring`
+- `93ef823 test(SL-067): update golden tests for unconditional tags projection`
+
+Prior `61a843e` (F-3) made listing's `strip_ansi` pub(crate). At integration it
+was moved OUT of `mod tests` to a `#[cfg(test)] pub(crate)` module-level helper so
+the backlog tags-colour proof reaches it as `crate::listing::strip_ansi` (a
+private `mod tests` blocks the nested path); backlog's local copy removed.
+
+Gate at close: `cargo build` + `cargo clippy` clean; 1310 bin tests pass
+(SL-067 tag/paint_tag/strip_ansi-coupling suites green); both e2e goldens green.
 
 ## Risks carried forward
 
