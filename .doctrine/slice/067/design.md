@@ -237,3 +237,29 @@ the verb; P2 then renders them.)
 - **A4** Palette size N and exact hues are an implementation choice at P2; the
   only hard constraints are determinism, Red-exclusion, and ≥ ~8 distinguishable
   hues to keep collisions rare.
+
+## 10. Internal adversarial pass — integrated findings
+
+- **F1 — implicit cell/split coupling (P2 guard test).** The byte-clean invariant
+  (§2.2) is enforced only by `cell` and `split` both reading `tags`; nothing in
+  the type system couples them. P2 MUST carry a guard test: for the tags column,
+  `strip_ansi(paint_cell(color=true)) == paint_cell(color=false) == cell(r)` over
+  a fixture with multi-tag, colon-namespaced, and empty-segment rows. This is the
+  property, not a proxy ([[mem.pattern.review.guard-test-asserts-property-not-proxy]]).
+- **F2 — dynamic logic is table-only, pre-grouping.** The `any_tagged` probe and
+  `effective_default` splice run ONLY on the table render branch (never `--json`,
+  whose `tags` field is unconditional) and are computed once on the **retained**
+  set *before* any `--by id` grouping, so the column set is uniform across blocks.
+- **F3 — overlap reject is post-normalisation.** `add ∩ remove` is checked after
+  `normalize_tag` folds both sides (`tag X A -d a` collides as `a`), then rejected.
+- **F4 — unconditional colour + multi-SGR alignment.** `paint_tag` uses owo's
+  unconditional `.color()` gated solely on the injected `color` bool (D3, never
+  `if_supports_color`) — see [[mem.pattern.render.force-no-tty-styling-axis-only]].
+  A tags cell emits multiple SGR sequences (per segment + white colons); P2's
+  render test MUST assert column alignment holds for multi-sequence cells (comfy
+  -table `custom_styling` width measurement is ANSI-aware, but the existing
+  precedent only stresses single-wrap `ByValue`/`Fixed` cells).
+- **F5 — `backlog show` stays plain (scope boundary).** `show` uses a separate
+  `parts.push` renderer and keeps tags as a plain `tags: a, b` line. The coloured
+  chip surface is `list` only; colouring `show` is out of scope (a follow-up if
+  wanted).
