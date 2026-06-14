@@ -1,0 +1,90 @@
+# Implementation plan for SL-062 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-062"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Re-home the pure FSM into src/lifecycle.rs"
+objective = "Lift the slice-trapped lifecycle FSM into a NEW pure leaf src/lifecycle.rs beside conduct.rs, completing the ADR-009 pairing as two pure leaves (D1). Behaviour-preserving move — slice's run_status keeps its gate but calls lifecycle::classify; existing slice suites stay green unchanged (the behaviour-preservation gate, R2). No new behaviour, no IO in the leaf."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-062 design locked (status=plan); FSM donor set verified pure in src/slice.rs (~580-710): classify (edge-table, not index arithmetic), enum Transition, is_transition_terminal ({done,abandoned} reopen-refusal), crosses_closure_seam (audit→reconcile, reconcile→done), edge table — all &str-in, no SLICE_STATUSES / slice-type reference (R2)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/lifecycle.rs exists as a PURE leaf (beside conduct.rs): enum Transition, fn classify(from,to)→Transition, is_transition_terminal, crosses_closure_seam, edge table. Primitive inputs only (&str edges); no disk, no clock, no kind-module dependency (ADR-001 leaf ← engine ← command, no cycle)." },
+  { id = "EX-2", text = "is_terminal_status and transition_label are NOT moved — they stay in src/slice.rs (P3 divergence semantics beside is_divergent; P4 slice-CLI presentation feeding status_line). The leaf exports Transition (data); each consumer renders its own label." },
+  { id = "EX-3", text = "SLICE_STATUSES const + SliceStatus ValueEnum + the lockstep drift canary stay in src/slice.rs (read-filter + CLI-arg vocab, not FSM logic). run_status gates via lifecycle::classify + fires its RV close-gate on crosses_closure_seam — gate/RV/drift/conduct ordering in the shell unchanged (R2)." },
+]
+verification = [
+  { id = "VT-1", expects = "Slice FSM suites green UNCHANGED in assertion text (import paths shift on the module move — F-E): classify edge cases, closure-seam, FromTerminal/SeamBreach refuse, RV close-gate driven through run_status." },
+  { id = "VT-2", expects = "OQ-1 resolved by smallest green diff: FSM tests move to lifecycle.rs or stay in slice.rs driving through the re-export — whichever is the smaller diff; recorded in the phase sheet." },
+  { id = "VT-3", expects = "just gate clean; clippy zero warnings; ADR-001 no-cycle holds (lifecycle.rs imports no kind module)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "One authored-TOML mutation seam — pure cores + IO wrappers; retire the four setters"
+objective = "Lift the byte-duplicated edit-preserving write-core into ONE seam: pure mutation cores on a held &mut DocumentMut (apply_status, apply_string_append) + thin single-file IO wrappers (set_authored_status, append_string_array). apply_string_append reuses dep_seq::append's string-membership (needs) path parametrized by field — NOT the after {to,rank} struct path (codex C2). Retire gov/slice/backlog/requirement setters onto set_authored_status; each keeps its own distinct GATE, delegates only the WRITE (D3). No parallel implementation, no second write seam (P1)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — slice run_status gates via lifecycle::classify. Donor write-cores verified: governance::set_status (governance.rs:372, flat), slice setter path (slice.rs ~497, FSM-gated), backlog::set_backlog_status (closed-enum + resolution coupling), requirement::set_status (requirement.rs:339, status-ONLY, no updated)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Pure cores on &mut DocumentMut (no disk): apply_status(doc, managed:&[(&str,&str)], hint)→Result<bool> (no-op all-match→false; F-1 any managed key absent→bail!(hint), NEVER insert a missing scaffold key; else insert each pair). apply_string_append(doc, field, value:&str)→Result<bool> (idempotent by string membership; F-1 field array absent→bail, never create). Both reuse dep_seq::append's needs (string-membership) path — not re-rolled (R3)." },
+  { id = "EX-2", text = "Thin single-file IO wrappers: set_authored_status(path, managed, hint) and append_string_array(path, field, value) = read → parse DocumentMut → core → write-once. Seam home/name resolved (OQ-3): grow dep_seq.rs into an authored-TOML-mutation leaf OR a sibling leaf reusing its append core — binding constraint: ONE mutation core. Lives in the IO/engine tier, NOT in the pure lifecycle.rs (D1/F-A)." },
+  { id = "EX-3", text = "gov/slice/backlog/requirement setters retire onto set_authored_status, each keeping its gate in the shell: slice (classify + RV close-gate), backlog (resolution coupling + D9 reopen-clear via validate_transition, res=\"\" before no-op/F-1), gov (flat), requirement (flat, single-key managed [(\"status\",to)] — no updated). Per-kind managed key-sets: slice/gov status+updated; backlog +resolution; requirement status only." },
+  { id = "EX-4", text = "gov + requirement F-1 refuse messages reworded NON-DESTRUCTIVE — drop \"regenerate via the scaffold\" / \"regenerate via <kind> new\" (SL-060 lesson); point at the seeded keys, never regeneration. Refuse BEHAVIOUR preserved (assertion text changes only — §7 footnote / P5 Nit)." },
+]
+verification = [
+  { id = "VT-1", expects = "Behaviour-preservation: gov/slice/backlog/requirement setter suites green — assertions identical except the reworded F-1 hint text in the gov/requirement malformed-refuse tests (refuse behaviour preserved, F-E)." },
+  { id = "VT-2", expects = "R3: SL-060 needs/after suites green UNCHANGED — the string-array reuse does not perturb the after {to,rank} struct-eq path." },
+  { id = "VT-3", expects = "New set_authored_status suite driven through run()/the shell (NOT the pure helper — invariant-test-must-drive-the-write-seam): no-op guard (all-match→false, mtime/content hold); F-1 missing managed key→bail AND assert the message does NOT say \"regenerate via new\" (SL-060 lesson pinned as a test); multi-key path (backlog status+updated+resolution) round-trips with [relationships]/[[relation]]/comments preserved; status-only path (requirement, single managed key, no updated) round-trips — proves the variable-length managed slice serves both shapes (codex C1)." },
+  { id = "VT-4", expects = "just gate clean; clippy zero warnings." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Transactional ADR-first supersede verb"
+objective = "Add the top-level doctrine supersede <NEW> <OLD> verb (sibling of link/needs/after) — one parse-once/hold-both/write-once transaction (§5.4) composing the PHASE-02 pure cores. ADR-first via supersede_policy(kind)→Option<SupersedePolicy> (Some ADR only — D4); POL/STD/slice refused (F2 follow-up). Writes the forward supersedes edge on NEW, the superseded_by carve-out on OLD (ADR-004 §5 verb-written), and flips OLD.status→superseded — unblocking SL-048 OD-3 (F3)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — pure cores apply_status/apply_string_append available to compose over held docs. ADR seeds supersedes=[] + superseded_by=[] (adr.toml verified, F-B); superseded already in ADR_STATUSES, ADR flat any→any so no FSM gate needed (A2)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "struct SupersedePolicy{supersedes_field, carveout_field, superseded_status} + fn supersede_policy(&entity::Kind)→Option<SupersedePolicy> (Some for ADR: supersedes/superseded_by/superseded; None for POL/STD/slice). Capability boundary is a kind-match, not GovKind data (D4/codex C7). Top-level supersede verb wired in main.rs." },
+  { id = "EX-2", text = "Pre-flight (no write): resolve NEW+OLD; refuse if NEW==OLD, cross-kind, or supersede_policy None (ADR-first message). Parse BOTH docs into DocumentMut ONCE and HOLD them; verify every touched key/array is scaffold-present (NEW.supersedes, OLD.superseded_by, OLD.status, OLD.updated) — missing→F-1 bail (non-destructive hint) before ANY write (P2 — no later re-parse)." },
+  { id = "EX-3", text = "Not-already-superseded guard (F-D): if OLD.status==superseded, allow ONLY the idempotent re-run — no-op requires BOTH OLD.superseded_by==[NEW] AND NEW.supersedes∋OLD (codex C4, both files). A different supersessor <X> → refuse (FromTerminal analog, name <X>); superseded_by empty/malformed while status==superseded → refuse as DRIFT pointing at doctrine validate (P5, no self-heal)." },
+  { id = "EX-4", text = "Mutate the held docs (no IO): apply_string_append(new_doc,\"supersedes\",OLD); then apply_string_append(old_doc,\"superseded_by\",NEW) + apply_status(old_doc,[(\"status\",\"superseded\"),(\"updated\",today)],hint). today injected by the shell (clock::today()). Write each file ONCE, NEW then OLD (the ordering that makes the F-D one-sided no-op sound, codex C4). No re-read/re-parse (P2)." },
+]
+verification = [
+  { id = "VT-1", expects = "Happy path (ADR refs) driven through run(): NEW.supersedes∋OLD, OLD.superseded_by∋NEW, OLD.status==superseded — assert ALL THREE surfaces (conformance-asserts-surface-not-just-envelope); both [relationships] blocks + comments preserved." },
+  { id = "VT-2", expects = "Idempotent re-run: a second supersede NEW OLD is a no-op (all three already hold)." },
+  { id = "VT-3", expects = "F-D guard: supersede NEW2 OLD where OLD already superseded by NEW1 → refused with the \"already superseded by NEW1\" message. Drift refuse (P5): OLD status==superseded but superseded_by==[] → refused \"carve-out empty/inconsistent — run doctrine validate\" (no <X> to name; not self-healed)." },
+  { id = "VT-4", expects = "Refusals: POL/STD/slice refs (ADR-first message); cross-kind refs; NEW==OLD — each a clear message." },
+  { id = "VT-5", expects = "Pre-flight malformed refuse (codex C3/P2): an OLD missing a seeded array/key (e.g. superseded_by absent) is refused in pre-flight with NO write to NEW — assert NEW.supersedes is untouched (parse-and-verify on the held docs precedes any write)." },
+  { id = "VT-6", expects = "Partial-write detectability (F-F): a hand-induced NEW-without-OLD state is flagged by a subsequent top-level doctrine validate (relation_graph::validate_relations, SL-048 PHASE-05), NOT by the verb itself (codex C5)." },
+  { id = "VT-7", expects = "just gate clean; clippy zero warnings." },
+]
+specs        = []
+requirements = []
