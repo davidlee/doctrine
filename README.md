@@ -219,4 +219,6 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-009 — Slice lifecycle state machine and conduct axis](.doctrine/adr/009/adr-009.md) — `accepted`
 - [ADR-010 — Relation modelling: unify the contract and write seam, keep storage bespoke](.doctrine/adr/010/adr-010.md) — `accepted`
 - [ADR-011 — Harness-agnostic orchestrator spawn interface and per-harness capability altitude](.doctrine/adr/011/adr-011.md) — `accepted`
+- [ADR-012 — Dispatch integration topology: isolated coordination worktree, class-routed projection, preserved code branches](.doctrine/adr/012/adr-012.md) — `accepted`
+- [ADR-013 — Revision as a first-class change-axis kind; governance dependency routes through a Revision](.doctrine/adr/013/adr-013.md) — `accepted`
 <!-- END:readme-index -->
