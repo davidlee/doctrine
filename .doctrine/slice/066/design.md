@@ -88,79 +88,124 @@ from birth).
 
 **Approval is a separate field** (hard canon: entity-model "approval is not
 lifecycle"; ADR-009): `approval = none | requested | approved | rejected`,
-orthogonal to `status`, gated by the ADR-009 conduct axis. **Default `gate`** — a
-Revision writes authored governance/spec truth at `reconcile`'s altitude, which
-ADR-009 already defaults to `gate`; consistency follows. Advisory in v1 (surfaced,
-not enforced); a solo dev sets `actor=self` and self-approves.
+orthogonal to `status`. Two enforcement tiers (resolving the advisory-vs-enforced
+tension):
+- **Lifecycle transitions are approval-blind** (advisory, surfaced not enforced —
+  ADR-009 posture). A Revision can sit `started` at `approval=none`.
+- **Apply hard-gates on `approval=approved`** (§4.5) — apply is the irreversible
+  truth-write, so it is the one place approval is *enforced*, not merely surfaced.
+
+**Default `gate`** — a Revision writes authored governance/spec truth at
+`reconcile`'s altitude, which ADR-009 already defaults to `gate`. **Home (v1):** a
+**baked default**, not per-repo conduct config — ADR-009's `[conduct]` table is
+*slice-FSM-state-keyed* and does not address Revision; extending it to address
+Revision is deferred. A solo dev self-approves (`revision approve REV-N`).
 
 ### 4.3 Cardinality — multi-target payload rows + `primary` flag
 
 The touched-entity set lives in a typed payload table (§4.4); **the rows ARE the
-edges** (members.toml precedent). Exactly one row carries `primary = true` — the
-**dep anchor** a `needs REV-NNN` resolves against and the headline intent. The
-relation-index derives inbound `revises` reciprocity from these rows, **uniform
-over primary + non-primary** — so `doctrine adr show ADR-X` lists *every* REV that
-touches it. `primary` governs the dep anchor only, never visibility.
+edges** (members.toml precedent). The relation-index derives inbound `revises`
+reciprocity from these rows, **uniform over all rows** — so `doctrine adr show
+ADR-X` lists *every* REV that touches it.
 
-This merges IDE-010 (crisp single anchor) and IDE-003/spec-driver (multi-entity
-batch) at each's strength.
+**`primary` is a display/headline hint, not a functional dep anchor** (F1
+correction). `needs`/`after` target *entity ids*, never rows — `needs REV-NNN`
+blocks on the **whole** Revision reaching terminal, regardless of which row (if
+any) is primary. So `primary` is **at most one, optional** (a pure-prose ADR
+revision nobody depends on yet carries none); it names the Revision's headline
+subject for display/discovery only, never visibility or blocking.
+
+This merges IDE-010 (the Revision *is* the crisp single anchor a slice depends on)
+and IDE-003/spec-driver (multi-entity batch payload) at each's strength.
 
 ### 4.4 The `revises` payload (TOML, doctrine-native translation)
 
 `revises` is a **Tier-2 typed** `RelationLabel`; source `REV`; targets `{SPEC,
-PRD, REQ, ADR, POL, STD}`. The payload table in `revision-NNN.toml`:
+PRD, REQ, ADR, POL, STD}`. **`LinkPolicy = TypedVerbOnly`** (F2) — authored by a
+`revision change add` verb that writes the payload row (the members.toml
+precedent), **never** by `doctrine link`. The `RELATION_RULES` row exists for
+target validation + inbound-reciprocity naming, not a writable Tier-1 edge.
 
+The `[[change]]` table has **two row shapes** (F3 — creation ops can't key on a
+durable FK that does not exist yet):
+
+**Existing-target ops** — `modify | retire | move | status` — key on a live FK:
 ```toml
 [[change]]
-target  = "SPEC-018"     # durable peer id (the FK / anchor)
-action  = "updated"      # spec: created|updated|retired
-primary = true           # exactly one row corpus-per-revision
-# spec-family targets carry optional rich detail:
-requirement_flow = { introduce = ["REQ-201"], retire = ["REQ-090"], move_in = [], move_out = [] }
-section_note = "tighten §3 invariants"   # free-text, prose-body region (excerpt in .md)
-
-[[change]]
-target  = "REQ-201"
-action  = "introduce"    # requirement: introduce|modify|move|retire
-primary = false
-to_status = "pending"    # for retire/lifecycle moves → drives spec req status
-member_of = "SPEC-018"   # for introduce/move → drives spec req add / re-member
+target    = "REQ-201"    # durable peer id (the FK / anchor)
+action    = "status"     # requirement status/lifecycle move
+primary   = false
+from      = "active"      # AUTO-captured at `change add` (current status then); see §4.5 from-guard
+to_status = "retired"    # drives the SL-044 `spec req status` setter at apply
 
 [[change]]
 target  = "ADR-006"
-action  = "updated"      # ADR/POL/STD: prose-only — no rich detail
-primary = false
+action  = "modify"       # ADR/POL/STD: prose-only — no structured detail
+primary = true
 # prose diff carried as a free-text excerpt in revision-NNN.md
 ```
 
-The `[[change]]` table is **uniform over all targets**; detail columns
-(`requirement_flow`, `to_status`, `member_of`, `section_note`) are optional,
-populated only where the target kind warrants. ADR/POL/STD rows are just
-`{target, action, primary}` + prose excerpt in MD. **No intra-file structured
-anchor in v1** — peer-entity FKs (`REQ`/`SPEC`/`PRD` ids) anchor the structured
-bulk; prose-body regions carry free-text excerpts. IDE-002 (durable region
-primitive) is the future structured-anchor upgrade — `after IDE-002` (soft seq),
-**not** a hard `needs`.
+**Creation ops** — `introduce | create` — carry no pre-existing target; apply
+allocates the id and back-fills:
+```toml
+[[change]]
+action       = "introduce"          # new requirement
+member_of    = "SPEC-018"           # destination spec → drives `spec req add`
+new_statement = "The writer MUST …" # the requirement's statement line
+new_label    = "FR-007"             # optional; else auto-assigned
+primary      = false
+# apply allocates REQ-NNN, members it, and back-fills `allocated = "REQ-201"`
+```
+
+Detail columns are optional, populated only where the target/action warrants.
+ADR/POL/STD rows are just `{target, action, primary}` + prose excerpt in MD —
+short structured *labels* only in TOML (e.g. a `section_note` pointer); real prose
+lives in `revision-NNN.md` (storage rule). **No intra-file structured anchor in
+v1** — peer-entity FKs anchor the structured bulk; prose-body regions carry
+free-text excerpts. IDE-002 (durable region primitive) is the future
+structured-anchor upgrade — `after IDE-002` (soft seq), **not** a hard `needs`.
 
 ### 4.5 Apply path — `doctrine revision apply REV-N`
 
 Walks the approved `[[change]]` rows; drives **existing** seams (orchestrates,
 never reimplements):
 
-| change kind | seam reused |
+| change action | seam reused |
 |---|---|
-| requirement status (retire / lifecycle) | SL-044 B·P1 `spec req status` setter + compose a `RecDoc` |
-| requirement introduce | `spec req add` (reserve REQ + member) |
-| requirement move | membership re-link (`members.toml` rows) |
-| spec/req statement/prose edit | applied to `.md` (or flagged for human hand-edit) |
-| spec create/retire | `spec new` / spec status |
+| `status` (retire / lifecycle) | SL-044 B·P1 `spec req status` setter + compose a `RecDoc` |
+| `introduce` | `spec req add` (reserve REQ + member); back-fill `allocated` id |
+| `modify` (statement / prose) | applied to `.md` (or flagged for human hand-edit) |
+| `create` (spec) | `spec new`; back-fill `allocated` id |
+| `move` | **flagged for manual handling** — no existing seam (F4): `spec req` is add-only, the `spec req link`/move verb is the deferred SL-015 follow-on; building it is out of scope for C. `move` rows stage fine; apply surfaces them for the operator |
 | ADR/POL/STD prose | flagged for human hand-edit (prose-only) |
+
+**Apply is atomic — one act, one commit (F7).** A `revision apply` runs a
+**pre-flight sweep** of all rows, then writes; any pre-flight refusal aborts the
+*whole* apply (no partial writes). On clean apply → `status = done`, dependents
+unblock; one commit carries the status edits, membership edits, and **N `RecDoc`s**
+(one per status row — D-B8 forces one move per REC; the grain differs from SL-044's
+one-act-one-commit, intentionally: a Revision apply is N acts in one commit, each
+REC self-describing for NF-003 reconstructability).
 
 **No drift re-prompt at apply** — the Revision already captured + approved the
 decision; SL-044's interactive drift scan is a reconcile-time aid, redundant here.
-Reuse SL-044's `RecDoc` *composition* (atomic write), not its interactive CLI loop.
-Apply refuses unless `approval = approved` when conduct = `gate`. On full apply →
-`status = done`, dependents unblock.
+Reuse SL-044's `RecDoc` *composition*, not its interactive CLI loop. Apply
+**hard-refuses** unless `approval = approved` (§4.2 — the one enforced gate).
+
+**`from`-guard on `status` rows (the only staleness check), run pre-flight.**
+Dropping the drift re-prompt opens a silent-clobber: a status row applies via
+SL-044's **free any→any** setter, so if the target moved between draft and apply
+(e.g. `reconcile` already changed `REQ-201`), blind apply silently reverts it — no
+git conflict (an edit-preserving TOML field set that "succeeds"). Closed cheaply:
+a `status` row records `from` (auto-captured at `change add`, §4.4); the pre-flight
+sweep **reads current `ReqStatus` for every status row and refuses the whole apply
+if any `current != row.from`**, surfacing the stale set ("REQ-201 moved to `active`
+since draft — re-draft"). Compare-and-set scoped to the one place it bites, keyed
+off data already stored, **surfaced not silently-overridden** (drift-surface
+posture, ADR-009; `mem.pattern.safety.resolve-every-ref-before-pure-compare`).
+Prose / `move` / `introduce` / `create` rows carry **no** guard — human-in-loop +
+git. This is *not* optimistic locking (no version stamps, no approval-retraction
+FSM — see §9 Non-Goals).
 
 ### 4.6 REC composition
 
@@ -186,25 +231,32 @@ itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
 | `.doctrine/adr/013/` | **ADR-013** (PHASE-01): Revision as first-class change-axis kind; gov→work dep via Revision |
 | `doc/entity-model.md` | close §Adjudication open question (home = change axis); cite ADR-013 |
 | `doc/spec-entity-spec.md` | relocate `REV-` off the deferred spec-subtype; cite ADR-013 |
-| `src/revision.rs` (new) | `REV_KIND`, `RevDoc` (id/slug/title/status/approval/`[[change]]`), scaffold, `run_new`/`run_show`/`run_status`/`run_apply` |
+| `src/revision.rs` (new) | `REV_KIND`, `RevDoc` (id/slug/title/status/approval/`[[change]]`), scaffold, `run_new`/`run_show`/`run_status`/`run_change_add`/`run_approve`/`run_apply` |
 | `src/integrity.rs` | `KINDS` row (REV, stem `revision`, `state_dir: None`) |
-| `src/relation.rs` | `RelationLabel::Revises` + `RELATION_RULES` row (sources `[REV]`, targets `{SPEC,PRD,REQ,ADR,POL,STD}`, Tier Typed) |
+| `src/relation.rs` | `RelationLabel::Revises` + `RELATION_RULES` row (sources `[REV]`, targets `{SPEC,PRD,REQ,ADR,POL,STD}`, Tier Typed, **`LinkPolicy::TypedVerbOnly`**) |
 | `src/registry.rs` (or relation-index) | derive inbound `revises` reciprocity from `[[change]]` rows (members.toml precedent) |
-| `src/main.rs` | `Revision { command }` dispatch; work-like predicate += REV |
+| `src/spec.rs` (F8) | expose `spec req status` / `spec req add` as **engine-callable fns** (apply calls them programmatically; refactor if currently CLI-handler-bound — ADR-001 command→engine) |
+| `src/main.rs` | `Revision { command }` dispatch (`new`/`show`/`status`/`change add`/`approve`/`apply`); work-like predicate += REV |
 | `install/manifest.toml` + `.gitignore` | `.doctrine/revision` dir + negation |
 
 ## 6. Verification Alignment
 
 - **Lifecycle/approval** — `revision status` FSM tests (advance/abandon; approval
   orthogonal to status; default `gate`). Behaviour, not trivial impl.
-- **Cardinality/reciprocity** — golden: 3-target Revision (1 primary), assert
-  `adr show`/`spec show` inbound lists **all** touching REVs; `primary` selects the
-  dep anchor only. Pins the user's "find all REVs that changed ADR-X" requirement.
+- **Cardinality/reciprocity** — golden: 3-target Revision, assert `adr show`/`spec
+  show` inbound lists **all** touching REVs (uniform, not just primary). Pins the
+  user's "find all REVs that changed ADR-X" requirement. Separately: `primary` is
+  display-only — `needs REV-N` blocks on the whole Revision regardless of `primary`
+  (and with zero `primary` rows).
 - **Dep/seq** — `slice needs REV-NNN` accepted; governance-doc target still
-  refused (SL-060 invariant intact).
-- **Apply** — each `[[change]]` kind routes to the right existing seam; status
-  moves emit one `RecDoc` each; REC schema unchanged; idempotent/edit-preserving.
-  `apply` refused when `approval≠approved` under `gate`.
+  refused (SL-060 invariant intact); `needs REV-N` blocks until REV-N terminal.
+- **Apply (atomic)** — clean apply routes every row to the right seam, emits N
+  `RecDoc`s in one commit, REC schema unchanged; **a single pre-flight refusal
+  aborts the whole apply (no partial writes)**; `apply` hard-refused when
+  `approval≠approved`. `move` rows surfaced-for-manual, not auto-applied (F4).
+- **`from`-guard (pre-flight)** — any `status` row whose `from` ≠ the target's
+  current `ReqStatus` aborts the whole apply + surfaces the stale set; never
+  clobbers an intervening `reconcile` move. Non-status rows carry no guard.
 - **Behaviour-preservation gate** — existing entity-engine / relation / dep_seq /
   reconcile suites stay green unchanged (shared-machinery gate).
 - **Wiring** — fresh-install scaffolds `.doctrine/revision`; a REV is committable
@@ -238,10 +290,39 @@ itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
    loose `produces` edge, `owning_slice = None` for standalone (§4.5–4.6).
 9. **ADR altitude?** ADR-013 (A), authored as PHASE-01 (§5, §7).
 
-## 9. Open Questions
+## 9. Non-Goals
+
+- **Optimistic locking** — declaring an expected version per change target and
+  refusing apply / retracting approval on drift. Gold-plating, and anti-grain:
+  doctrine *surfaces* drift, never hard-rejects on it (ADR-009). The narrow
+  `from`-guard (§4.5) covers the one real silent-clobber hazard; prose drift is
+  caught by the human-in-loop + git. Full version-stamping + an approval-retraction
+  FSM is disproportionate to an advisory (`gate`) approval. Recorded as rejected.
+
+## 10. Open Questions
 
 None blocking. Carried for plan/execute:
 - OQ-1: `[[change]]` detail column names + soft-enum action vocab — finalize against
   the apply-path seams in PHASE-03/05 (the table shape in §4.4 is provisional).
-- OQ-2: whether `revision apply` is all-or-nothing or per-row resumable (lean:
-  atomic per invocation, mirroring SL-044's one-act-one-commit).
+- OQ-2 (**resolved**, F7): `revision apply` is **atomic** — pre-flight sweep, then
+  all-or-nothing write, one commit, N RecDocs. Mirrors SL-044's one-act grain at
+  the per-row level.
+
+## 11. Adversarial Pass (internal, 2026-06-14)
+
+Eight findings, all integrated:
+- **F1** — `primary` demoted to a display/headline hint (at-most-one, optional);
+  `needs` blocks on the whole Revision, not a row (§4.3).
+- **F2** — `revises` is `TypedVerbOnly` (authored by `revision change add`, not
+  `doctrine link`); RELATION_RULES row is for validation + reciprocity naming (§4.4).
+- **F3** — `[[change]]` has two row shapes: existing-target ops vs creation ops
+  (which carry no FK; apply allocates + back-fills) (§4.4).
+- **F4** — `move`-apply deferred to manual-flag — no existing membership-mutation
+  seam (`spec req link`/move is the unbuilt SL-015 follow-on) (§4.5).
+- **F5** — approval is advisory for lifecycle, hard-enforced at apply (§4.2/§4.5).
+- **F6** — conduct config for Revision is a baked default in v1; ADR-009's
+  slice-state-keyed `[conduct]` table doesn't address Revision (deferred) (§4.2).
+- **F7** — apply is atomic with a pre-flight guard sweep (resolves OQ-2) (§4.5).
+- **F8** — apply needs `spec req status`/`add` exposed as engine-callable fns;
+  refactor if handler-bound (§5).
+- **F-minor** — `from` auto-captured at `change add`, not hand-typed (§4.4).
