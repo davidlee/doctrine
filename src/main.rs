@@ -10,6 +10,7 @@ mod corpus;
 mod coverage;
 mod coverage_scan;
 mod coverage_store;
+mod coverage_verify;
 mod coverage_view;
 mod dtoml;
 mod entity;
