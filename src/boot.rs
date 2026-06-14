@@ -383,10 +383,11 @@ fn import_targets(h: &Harness, root: &Path) -> Vec<PathBuf> {
 }
 
 /// Resolve target harnesses: explicit `--agent` wins; else auto-detect by marker
-/// (`.claude/` → Claude; `.codex/`, or an `AGENTS.md` without a `.claude/` →
-/// Codex); ≥1 required (mirrors `skills::resolve_agents`). The `!.claude`
-/// guard keeps this repo (both markers present) Claude-only — its `AGENTS.md` is
-/// Claude's import target via the symlink, not a separate codex surface.
+/// (`.claude/` → Claude; `.codex/`, or an `AGENTS.md` that is not merely Claude's
+/// inode-alias → Codex); ≥1 required (mirrors `skills::resolve_agents`). A repo
+/// with `.claude/` and a separate-inode `AGENTS.md` wires both; this repo's
+/// `AGENTS.md` symlink onto `CLAUDE.md` is Claude's import target via one inode,
+/// not a codex surface, so it stays Claude-only (SL-063 §3.1).
 fn resolve_harnesses(explicit: &[String], root: &Path) -> anyhow::Result<Vec<Harness>> {
     if !explicit.is_empty() {
         return explicit.iter().map(|s| parse_harness(s)).collect();
@@ -396,7 +397,17 @@ fn resolve_harnesses(explicit: &[String], root: &Path) -> anyhow::Result<Vec<Har
     if claude {
         found.push(Harness::Claude);
     }
-    if root.join(".codex").exists() || (root.join("AGENTS.md").exists() && !claude) {
+    // AGENTS.md is "merely Claude's alias" only when Claude is detected AND
+    // AGENTS.md resolves to CLAUDE.md's inode (this repo's symlink) — then it is
+    // Claude's import target, not a codex surface, so it does not trigger codex.
+    // Otherwise a present AGENTS.md is a real codex surface — including a lone
+    // symlinked pair with no `.claude/`, where alias-suppression is off because
+    // Claude is not detected (SL-063 §3.1).
+    let agents = root.join("AGENTS.md");
+    let agents_is_claude_alias = claude
+        && agents.exists()
+        && resolve_target(&agents) == resolve_target(&root.join("CLAUDE.md"));
+    if root.join(".codex").exists() || (agents.exists() && !agents_is_claude_alias) {
         found.push(Harness::Codex);
     }
     if found.is_empty() {
@@ -1671,19 +1682,60 @@ mod tests {
 
     #[test]
     fn resolve_harnesses_auto_detects_by_marker() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-
-        // .claude present → Claude only (its AGENTS.md is Claude's target, not codex).
-        fs::create_dir(root.join(".claude")).unwrap();
-        fs::write(root.join("AGENTS.md"), "x").unwrap();
-        assert_eq!(resolve_harnesses(&[], root).unwrap(), vec![Harness::Claude]);
-
-        // a bare AGENTS.md without .claude → codex.
-        let codex_dir = tempfile::tempdir().unwrap();
-        fs::write(codex_dir.path().join("AGENTS.md"), "x").unwrap();
+        // Case 1 — bare AGENTS.md, no .claude → codex (a lone codex surface).
+        let bare = tempfile::tempdir().unwrap();
+        fs::write(bare.path().join("AGENTS.md"), "x").unwrap();
         assert_eq!(
-            resolve_harnesses(&[], codex_dir.path()).unwrap(),
+            resolve_harnesses(&[], bare.path()).unwrap(),
+            vec![Harness::Codex]
+        );
+
+        // Case 2 — .claude/ + separate-inode AGENTS.md → both. The SL-063 fix: a
+        // genuine codex surface beside Claude must be wired, not suppressed.
+        let split = tempfile::tempdir().unwrap();
+        fs::create_dir(split.path().join(".claude")).unwrap();
+        fs::write(split.path().join("AGENTS.md"), "real codex surface").unwrap();
+        assert_eq!(
+            resolve_harnesses(&[], split.path()).unwrap(),
+            vec![Harness::Claude, Harness::Codex]
+        );
+
+        // Case 3 — .claude/ + AGENTS.md symlink→CLAUDE.md → Claude only. This repo's
+        // pattern: AGENTS.md is merely Claude's inode-alias, not a codex surface.
+        let alias = tempfile::tempdir().unwrap();
+        fs::create_dir(alias.path().join(".claude")).unwrap();
+        fs::write(alias.path().join("CLAUDE.md"), "real").unwrap();
+        std::os::unix::fs::symlink(
+            alias.path().join("CLAUDE.md"),
+            alias.path().join("AGENTS.md"),
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_harnesses(&[], alias.path()).unwrap(),
+            vec![Harness::Claude]
+        );
+
+        // Case 4 — .codex/ + .claude/ → both (the explicit codex marker path).
+        let codex_marker = tempfile::tempdir().unwrap();
+        fs::create_dir(codex_marker.path().join(".claude")).unwrap();
+        fs::create_dir(codex_marker.path().join(".codex")).unwrap();
+        assert_eq!(
+            resolve_harnesses(&[], codex_marker.path()).unwrap(),
+            vec![Harness::Claude, Harness::Codex]
+        );
+
+        // Case 5 — CLAUDE↔AGENTS symlink pair, NO .claude/ → codex. The adversarial
+        // edge: alias-suppression is gated on Claude-detected, so a lone symlinked
+        // pair (no .claude/ for Claude to claim) still wires the present AGENTS.md.
+        let lone_pair = tempfile::tempdir().unwrap();
+        fs::write(lone_pair.path().join("CLAUDE.md"), "real").unwrap();
+        std::os::unix::fs::symlink(
+            lone_pair.path().join("CLAUDE.md"),
+            lone_pair.path().join("AGENTS.md"),
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_harnesses(&[], lone_pair.path()).unwrap(),
             vec![Harness::Codex]
         );
     }
