@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec450712d7e13bc7e932607d4e9ec"
+memory_key = "mem.pattern.distribution.claude-install-agents-gitignore-too-broad"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "doctrine claude install self-enforces a too-broad .doctrine/agents/* gitignore that breaks the worktree classifier and swallows authored AGENTS.md"
+summary = "doctrine claude install appends an unclassified, too-broad .doctrine/agents/* gitignore — don't commit it"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["src/worktree.rs", "src/install.rs"]
+globs = [".gitignore"]
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "14ba2fda34a7b54e533a5a7fa41cfb8b039ffdd3"
+ref_name = "refs/heads/main"
+checkout_state_id = "e6e0ee99954ffba62ce36fb6e6bff77d7a2697292939520a24485eb3fffa2219"
+base_commit = "67a87e9dbe1892e9c2b23ba52096a7c7f0b864c8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

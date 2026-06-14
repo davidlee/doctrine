@@ -1,0 +1,43 @@
+id    = 18
+slug  = "sl-061-reconciliation-review-skills-rewiring-onto-the-rv-ledger"
+title = "SL-061 reconciliation: review-skills rewiring onto the RV ledger"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-061"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "P04 install collateral: committed .doctrine/agents/* gitignore broke the worktree classifier test and would swallow authored AGENTS.md"
+detail = "The P04 re-embed ran 'doctrine claude install', whose ensure_gitignored appended '.doctrine/agents/*'. I committed it (1c446cc) as install hygiene. Observed: every_runtime_gitignore_glob_is_classified (src/worktree.rs:2311) RED — the glob is in neither WITHHELD nor DERIVED_RUNTIME; and the glob blanket-ignores the authored, tracked .doctrine/agents/AGENTS.md (the never-blanket-ignore-an-authored-tree hazard). Out of SL-061 scope (review-skills rewiring). Gate must be green to close."
+disposition = "fix-now"
+response = "Reverted the chore (1037154 reverts 1c446cc) — backed the .doctrine/agents/* glob out of SL-061; removed the derived dispatch-worker.md; AGENTS.md stays authored/tracked. just check now green (worktree classifier test passes). SL-061 'zero production src' invariant preserved."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Upstream root cause: doctrine claude install self-enforces a too-broad, unclassified .doctrine/agents/* gitignore (SL-056 gap)"
+detail = "install's ensure_gitignored('.doctrine/agents/*') ignores the whole agents dir (incl. authored AGENTS.md) and the worktree DERIVED_RUNTIME classifier never learned it, so any repo that runs claude install then commits .gitignore fails the classifier test. The narrow fix (ignore only derived agent outputs + classify them) belongs to the SL-056 agent-install surface, not SL-061."
+disposition = "follow-up"
+response = "Root cause is the SL-056 agent-install surface, not review-skills rewiring. Filed ISS-012: narrow the install gitignore to derived agent outputs only (spare authored AGENTS.md) and add it to the worktree DERIVED_RUNTIME classifier in one change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Scope wording 'zero production src except src/skills.rs tests' undercounts the P01 src/install.rs belt test"
+detail = "design D5/VA-2 says zero production src except src/skills.rs tests/fixtures; P01 EX-3 also added review_ledger_is_shipped to src/install.rs. Both are test-tier (no production behaviour change), so the substantive invariant holds — but the literal 'src/skills.rs only' wording undercounts. Cosmetic."
+disposition = "aligned"
+response = "Test-tier only; the design invariant that matters — no production behaviour change — holds. src/install.rs gained only a shipped-asset assertion (mirrors glossary_is_shipped). Wording is cosmetically loose; not worth a doc churn. Aligned."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
