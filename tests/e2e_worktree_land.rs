@@ -102,12 +102,7 @@ fn stderr(out: &Output) -> String {
 /// `holder/<branch>`, off `<src>` HEAD. Each entry in `commits` is `(rel, body)`
 /// committed as its own commit (≥2 ⇒ genuine multi-commit ancestry). The source
 /// tree is left at its current HEAD. Returns the live linked worktree path.
-fn make_solo_fork(
-    src: &Path,
-    holder: &Path,
-    branch: &str,
-    commits: &[(&str, &str)],
-) -> PathBuf {
+fn make_solo_fork(src: &Path, holder: &Path, branch: &str, commits: &[(&str, &str)]) -> PathBuf {
     let base = git(src, &["rev-parse", "HEAD"]);
     let wt = holder.join(branch);
     git(
@@ -130,7 +125,10 @@ fn make_solo_fork(
 /// its worktree so only the branch ref survives.
 fn make_worktreeless_branch(src: &Path, holder: &Path, branch: &str) {
     let wt = make_solo_fork(src, holder, branch, &[("only.rs", "x")]);
-    git(src, &["worktree", "remove", "--force", wt.to_str().unwrap()]);
+    git(
+        src,
+        &["worktree", "remove", "--force", wt.to_str().unwrap()],
+    );
 }
 
 fn assert_refusal(out: &Output, token: &str) {
@@ -179,7 +177,10 @@ fn land_happy_no_ff_merge_preserves_ancestry() {
     );
     let parent_lines = git(src.path(), &["cat-file", "-p", "HEAD"]);
     assert_eq!(
-        parent_lines.lines().filter(|l| l.starts_with("parent ")).count(),
+        parent_lines
+            .lines()
+            .filter(|l| l.starts_with("parent "))
+            .count(),
         2,
         "merge commit has two parent lines; got: {parent_lines}"
     );
@@ -277,7 +278,12 @@ fn land_merge_conflict_aborts_first_then_refuses() {
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
     // Fork changes a.txt one way (live linked worktree, no marker).
-    make_solo_fork(src.path(), holder.path(), "solo-cf", &[("a.txt", "fork-side")]);
+    make_solo_fork(
+        src.path(),
+        holder.path(),
+        "solo-cf",
+        &[("a.txt", "fork-side")],
+    );
     // Coordination side changes the SAME file the other way ⇒ guaranteed conflict.
     std::fs::write(src.path().join("a.txt"), "coord-side").unwrap();
     git(src.path(), &["add", "a.txt"]);
@@ -288,8 +294,14 @@ fn land_merge_conflict_aborts_first_then_refuses() {
 
     // The abort ran FIRST: the coordination tree is CLEAN and no MERGE_HEAD remains.
     let status = git(src.path(), &["status", "--porcelain"]);
-    assert!(status.is_empty(), "tree must be clean after abort; got: {status:?}");
-    let (mh, _) = git_try(src.path(), &["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]);
+    assert!(
+        status.is_empty(),
+        "tree must be clean after abort; got: {status:?}"
+    );
+    let (mh, _) = git_try(
+        src.path(),
+        &["rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
+    );
     assert!(!mh, "no MERGE_HEAD must remain after the abort");
 }
 
@@ -312,11 +324,18 @@ fn land_inconsistent_merge_state_on_unrelated_histories() {
     git(&wt, &["add", "other.rs"]);
     git(&wt, &["commit", "-q", "-m", "orphan root"]);
 
-    let out = run(src.path(), None, &["worktree", "land", "--fork", "solo-ums"]);
+    let out = run(
+        src.path(),
+        None,
+        &["worktree", "land", "--fork", "solo-ums"],
+    );
     assert_refusal(&out, "inconsistent-merge-state");
     // And the tree is left clean — no MERGE_HEAD, nothing half-applied.
     let status = git(src.path(), &["status", "--porcelain"]);
-    assert!(status.is_empty(), "tree clean after inconsistent-merge-state; got: {status:?}");
+    assert!(
+        status.is_empty(),
+        "tree clean after inconsistent-merge-state; got: {status:?}"
+    );
 }
 
 // VT-3 (wedged-merge): the wedged-merge refusal fires ONLY when `git merge
@@ -337,7 +356,14 @@ fn add_linked_fork(src: &Path, holder: &Path, branch: &str) -> PathBuf {
     let fork = holder.join("linked");
     git(
         src,
-        &["worktree", "add", "-b", branch, fork.to_str().unwrap(), &base],
+        &[
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            fork.to_str().unwrap(),
+            &base,
+        ],
     );
     fork
 }
