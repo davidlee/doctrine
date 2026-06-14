@@ -307,6 +307,12 @@ pub(crate) enum ColumnPaint<R> {
     /// list` emits `open (await …)`; matching the cell would drop colour on exactly
     /// those surfaces). `None` ⇒ that row's cell is left uncoloured.
     ByValue(fn(&R) -> Option<owo_colors::AnsiColors>),
+    /// Multi-valued cell: `split` yields the row's tokens; `render` paints ONE token
+    /// (ANSI). Invoked ONLY under `color = true`; tokens joined by `", "`.
+    PerToken {
+        split: fn(&R) -> Vec<String>,
+        render: fn(&str) -> String,
+    },
 }
 
 /// The single shared status→hue map for every coloured `list` surface (SL-053
@@ -335,6 +341,75 @@ pub(crate) fn status_hue(s: &str) -> Option<owo_colors::AnsiColors> {
         "blocked" | "abandoned" | "contested" => Some(Red),
         _ => None,
     }
+}
+
+/// The tag-chip segment palette: a fixed set of distinguishable hues indexed by a
+/// stable byte-fold of the segment. EXCLUDES `Red` AND `BrightRed` (`Red` is reserved
+/// for adverse status in [`status_hue`]) and `Black`/`White` (terminal bg / the colon
+/// separator). Deterministic — no RNG, no clock.
+const TAG_PALETTE: [owo_colors::AnsiColors; 10] = {
+    use owo_colors::AnsiColors::{
+        Blue, BrightBlue, BrightCyan, BrightGreen, BrightMagenta, BrightYellow, Cyan, Green,
+        Magenta, Yellow,
+    };
+    [
+        Cyan,
+        Green,
+        Yellow,
+        Blue,
+        Magenta,
+        BrightCyan,
+        BrightGreen,
+        BrightYellow,
+        BrightBlue,
+        BrightMagenta,
+    ]
+};
+
+/// A pure byte fold (FNV-1a, 32-bit) over a segment's bytes. No RNG, no clock —
+/// deterministic across runs. Wrapping arithmetic keeps it cast-free (repo clippy
+/// bans `as`).
+fn stable_hash(seg: &str) -> u32 {
+    let mut hash: u32 = 0x811c_9dc5;
+    for byte in seg.bytes() {
+        hash ^= u32::from(byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash
+}
+
+/// Stable, pure hue for a colon-segment: byte-fold hash → fixed palette index. No
+/// RNG, no clock — deterministic. Empty segment → `None` (no text, no colour).
+fn segment_hue(seg: &str) -> Option<owo_colors::AnsiColors> {
+    if seg.is_empty() {
+        return None;
+    }
+    // Reduce in u32 space (the const palette length fits a u32, never 0), then narrow
+    // the small remainder — keeps the fold cast-free and panic-free (repo clippy bans
+    // `as` and `expect`).
+    let len = u32::try_from(TAG_PALETTE.len()).unwrap_or(1);
+    let index = usize::try_from(stable_hash(seg) % len).unwrap_or(0);
+    TAG_PALETTE.get(index).copied()
+}
+
+/// Render one tag as a colon-segment chip: segments hued by [`segment_hue`], colons
+/// painted white. ANSI unconditional — only ever called under colour (the
+/// [`ColumnPaint::PerToken`] gate). `cli:command` → hue(cli) + white `:` +
+/// hue(command); `security` → one hue; empty segments (`:x`, `a::b`) contribute no
+/// text but the white colon still renders.
+pub(crate) fn paint_tag(tag: &str) -> String {
+    use owo_colors::{AnsiColors::White, OwoColorize};
+    let mut out = String::with_capacity(tag.len());
+    for (index, seg) in tag.split(':').enumerate() {
+        if index != 0 {
+            out.push_str(&":".color(White).to_string());
+        }
+        match segment_hue(seg) {
+            Some(hue) => out.push_str(&seg.color(hue).to_string()),
+            None => out.push_str(seg),
+        }
+    }
+    out
 }
 
 /// Resolve the visible, ordered selection. `requested` = parsed `--columns`
@@ -406,10 +481,22 @@ fn paint_cell<R>(cell: &str, paint: &ColumnPaint<R>, row: &R, color: bool) -> St
     if !color {
         return cell.to_string();
     }
+    // Multi-valued cell: paint each token via `render`, join by `", "`. Returns BEFORE
+    // the hue match (whose return type is `String`, not `Option<AnsiColors>` — folding
+    // this arm in would clash). Reached ONLY under `color == true`.
+    if let ColumnPaint::PerToken { split, render } = paint {
+        return split(row)
+            .iter()
+            .map(|t| render(t.as_str()))
+            .collect::<Vec<_>>()
+            .join(", ");
+    }
     let hue = match paint {
-        ColumnPaint::None => None,
         ColumnPaint::Fixed(c) => Some(*c),
         ColumnPaint::ByValue(f) => f(row),
+        // `PerToken` is handled by the early return above; folding it in beside `None`
+        // keeps the match exhaustive without a duplicate-body arm.
+        ColumnPaint::None | ColumnPaint::PerToken { .. } => None,
     };
     match hue {
         Some(c) => cell.color(c).to_string(),
@@ -545,6 +632,28 @@ fn grid_min_width(cols: usize) -> usize {
 pub(crate) fn json_envelope<T: Serialize>(kind: &str, rows: &[T]) -> anyhow::Result<String> {
     let envelope = serde_json::json!({ "kind": kind, "rows": rows });
     serde_json::to_string_pretty(&envelope).context("failed to serialize list JSON envelope")
+}
+
+/// Strip SGR escape sequences (`ESC [ … m`) for the VT-2 alignment proof. Pure
+/// test helper, crate-visible so the backlog tags-colour proof shares it — not a
+/// render-path concern.
+#[cfg(test)]
+pub(crate) fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            // Consume up to and including the final `m` of an SGR sequence.
+            for inner in chars.by_ref() {
+                if inner == 'm' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -1395,26 +1504,6 @@ mod tests {
         );
     }
 
-    /// Strip SGR escape sequences (`ESC [ … m`) for the VT-2 alignment proof. Pure
-    /// test helper — not a render-path concern.
-    pub(crate) fn strip_ansi(s: &str) -> String {
-        let mut out = String::with_capacity(s.len());
-        let mut chars = s.chars();
-        while let Some(c) = chars.next() {
-            if c == '\u{1b}' {
-                // Consume up to and including the final `m` of an SGR sequence.
-                for inner in chars.by_ref() {
-                    if inner == 'm' {
-                        break;
-                    }
-                }
-            } else {
-                out.push(c);
-            }
-        }
-        out
-    }
-
     // -- status_hue + ByValue paint path ----------------------------------
     // The one branching decision in the colour seam. Previously unexercised:
     // CROW_COLUMNS paints only `id: Fixed` + `slug: None`, so no test ever called
@@ -1486,6 +1575,199 @@ mod tests {
 
         // color = false short-circuits before the hue lookup — raw even for Some.
         assert_eq!(paint_cell("done", &by_status, &row, false), "done");
+    }
+
+    // -- PerToken paint + tag chips (SL-067 PHASE-02) ---------------------
+
+    /// A row carrying a tag vector, for the PerToken paint path.
+    struct TRow {
+        tags: Vec<&'static str>,
+    }
+
+    fn trow(tags: &[&'static str]) -> TRow {
+        TRow {
+            tags: tags.iter().copied().collect(),
+        }
+    }
+
+    /// The tags column wired exactly as `backlog list` wires it: plain `cell` joins by
+    /// `", "`, the PerToken paint splits the same tokens and paints each via `paint_tag`.
+    fn tags_column() -> Column<TRow> {
+        Column {
+            name: "tags",
+            header: "tags",
+            cell: |r| r.tags.join(", "),
+            paint: ColumnPaint::PerToken {
+                split: |r| r.tags.iter().map(|t| (*t).to_string()).collect(),
+                render: paint_tag,
+            },
+        }
+    }
+
+    /// VT-5: `segment_hue` is deterministic and the palette excludes Red/BrightRed and
+    /// Black/White — Red is reserved for adverse status, Black is the bg, White is the
+    /// colon separator.
+    #[test]
+    fn segment_hue_is_deterministic_and_palette_excludes_reserved() {
+        use owo_colors::AnsiColors::{Black, BrightRed, BrightWhite, Red, White};
+        // Determinism: same segment → same hue across calls.
+        for seg in ["cli", "command", "security", "a", "longer-segment"] {
+            assert_eq!(segment_hue(seg), segment_hue(seg), "{seg} is deterministic");
+        }
+        // Empty segment → no colour (no text either).
+        assert_eq!(segment_hue(""), None, "empty segment is uncoloured");
+        // No palette entry is a reserved colour.
+        for reserved in [Red, BrightRed, Black, White, BrightWhite] {
+            assert!(
+                !TAG_PALETTE.contains(&reserved),
+                "palette must exclude {reserved:?}"
+            );
+        }
+        // Every non-empty segment lands on a palette hue.
+        for seg in ["x", "alpha", "cli", "命"] {
+            let hue = segment_hue(seg).expect("non-empty segment is coloured");
+            assert!(TAG_PALETTE.contains(&hue), "{seg} hue is in the palette");
+        }
+        assert!(TAG_PALETTE.len() >= 8, "palette is sufficiently large");
+    }
+
+    /// VT-5 / VT-1: `paint_tag` paints each colon-segment with its hue and the `:`
+    /// separators WHITE. `cli:command` → two DISTINCT segment hues with a white colon;
+    /// `security` → one hue, no colon.
+    #[test]
+    fn paint_tag_colon_segments_hued_separators_white() {
+        let white_colon = {
+            use owo_colors::{AnsiColors::White, OwoColorize};
+            ":".color(White).to_string()
+        };
+
+        // Single segment: a hue, no colon.
+        let single = paint_tag("security");
+        assert!(single.contains('\u{1b}'), "single segment is coloured");
+        assert!(
+            !single.contains(&white_colon),
+            "no colon in a single segment"
+        );
+        assert_eq!(strip_ansi(&single), "security", "stripped is the raw tag");
+
+        // Colon-namespaced: white colon present, two DISTINCT segment hues (cli vs
+        // command land on different palette indices — guarded below).
+        let chip = paint_tag("cli:command");
+        assert_eq!(strip_ansi(&chip), "cli:command", "stripped is the raw tag");
+        assert!(chip.contains(&white_colon), "the colon is painted white");
+        assert_ne!(
+            segment_hue("cli"),
+            segment_hue("command"),
+            "the fixture's two segments differ in hue (distinct chips)"
+        );
+    }
+
+    /// VT-1: chip rendering is STABLE across two calls (no RNG, no clock).
+    #[test]
+    fn paint_tag_is_stable_across_runs() {
+        for tag in ["cli:command", "security", "a::b", ":leading"] {
+            assert_eq!(paint_tag(tag), paint_tag(tag), "{tag} renders identically");
+        }
+    }
+
+    /// VT-1: empty segments (`:x`, `a::b`) contribute no text but the white colon still
+    /// renders — stripped output is the raw tag including the literal colons.
+    #[test]
+    fn paint_tag_empty_segments_keep_the_colon() {
+        for tag in [":x", "a::b", "trailing:"] {
+            assert_eq!(strip_ansi(&paint_tag(tag)), tag, "{tag} stripped is raw");
+        }
+        // `a::b`: the middle empty segment is no text, but BOTH colons render.
+        let chip = paint_tag("a::b");
+        let colons = chip.matches('b').count(); // sanity the segment survives
+        assert_eq!(colons, 1, "the painted segment text survives: {chip:?}");
+    }
+
+    /// VT-2 (the coupling guard — the property, not a proxy): for the tags column over
+    /// a fixture with multi-tag, colon-namespaced AND empty-segment rows,
+    /// `strip_ansi(paint_cell(color=true)) == paint_cell(color=false) == cell(r)`.
+    #[test]
+    fn pertoken_byte_clean_coupling_strip_equals_plain_equals_cell() {
+        let col = tags_column();
+        let rows = [
+            trow(&["cli:command", "security"]),
+            trow(&["a::b", ":lead", "trail:"]),
+            trow(&[]),
+            trow(&["solo"]),
+        ];
+        for r in &rows {
+            let plain = paint_cell(&(col.cell)(r), &col.paint, r, false);
+            let coloured = paint_cell(&(col.cell)(r), &col.paint, r, true);
+            let raw_cell = (col.cell)(r);
+            assert_eq!(plain, raw_cell, "color=false is the raw cell extractor");
+            assert_eq!(
+                strip_ansi(&coloured),
+                plain,
+                "stripping the coloured PerToken cell reproduces the plain cell"
+            );
+        }
+    }
+
+    /// VT-1: under `color = false` the PerToken arm emits ZERO ANSI and never calls
+    /// `render` — the SL-053 plain-path invariant.
+    #[test]
+    fn pertoken_color_false_emits_zero_ansi() {
+        let col = tags_column();
+        let r = trow(&["cli:command", "security"]);
+        let out = paint_cell(&(col.cell)(&r), &col.paint, &r, false);
+        assert!(
+            !out.contains('\u{1b}'),
+            "color=false PerToken is byte-clean: {out:?}"
+        );
+        assert_eq!(out, "cli:command, security", "joined by `, ` unchanged");
+    }
+
+    /// VT-3: a tags cell emitting MULTIPLE SGR sequences keeps column alignment, and
+    /// with the tags column LAST the `render_table` trailing-fill `trim_end` strips only
+    /// comfy-table padding, never a chip's trailing `\x1b[0m`. Strip-equals-plain proves
+    /// alignment; the reset-survives assertion proves trim_end spared the SGR.
+    #[test]
+    fn pertoken_multi_sgr_keeps_alignment_and_spares_the_reset() {
+        let columns: [Column<TRow>; 2] = [
+            Column {
+                name: "id",
+                header: "id",
+                cell: |_| "ITEM".to_string(),
+                paint: ColumnPaint::None,
+            },
+            tags_column(),
+        ];
+        // tags LAST; the longer-tagged row sets the column width, a shorter cell gets
+        // comfy-table trailing fill that trim_end must strip without touching the reset.
+        let rows = [trow(&["cli:command", "security"]), trow(&["x"])];
+        let sel = select_columns(&columns, &["id", "tags"], None).unwrap();
+        let plain = render_columns(&rows, &sel, RenderOpts::default());
+        let coloured = render_columns(
+            &rows,
+            &sel,
+            RenderOpts {
+                color: true,
+                ..Default::default()
+            },
+        );
+        assert!(
+            coloured.matches('\u{1b}').count() > 2,
+            "the tags cell emits multiple SGR sequences"
+        );
+        assert_eq!(
+            strip_ansi(&coloured),
+            plain,
+            "multi-SGR tags cell stays column-aligned (display-width measured)"
+        );
+        // The last cell's chip resets survive trim_end (no trailing whitespace, but the
+        // owo reset `\x1b[...m` after the final token is preserved).
+        assert!(
+            coloured.contains('\u{1b}'),
+            "the chip ANSI survives the last-column trim_end"
+        );
+        for line in coloured.lines() {
+            assert_eq!(line.trim_end(), line, "no trailing whitespace: {line:?}");
+        }
     }
 
     // -- json_envelope -----------------------------------------------------
