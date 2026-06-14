@@ -1,4 +1,4 @@
-# Dispatch projection parents on a stale base → non-integrable deliverables
+# Dispatch candidates for safe audit interaction
 
 > Slug `wire-dispatch-stage-2-sync-integrate-into-close` is stale (original
 > mis-scope); slug is non-authoritative. Title/scope below are current.
@@ -6,9 +6,9 @@
 > **Repro done 2026-06-15 — see `notes.md` for the verified verdict.** It
 > corrected this framing: the projection-base defect (live-tip parenting) is
 > **already fixed by RV-030** (post-dated SL-067's dispatch); the live gap is
-> *no re-anchor recovery when trunk advances past the fork-point* + the
-> integration UX burying ~8 real deletions under ~2309 by-design `.doctrine`
-> strips. The "stale base" language below is superseded by notes.md F1–F4.
+> *no safe ordinary branch/worktree surface for audit-time review, fixes, and
+> experiments after dispatch output is prepared*. The "stale base" language from
+> the original title is superseded by notes.md F1-F6.
 
 ## Context
 
@@ -42,35 +42,60 @@ nightmare). The run's deliverables are dead either way.
 
 The **original SL-068 premise was wrong twice**: wiring `--integrate` into
 `/close` would not have landed SL-067 (it refuses), and the missing wiring was
-not the bug. The bug is upstream in projection-base resolution.
+not the bug. RV-030 fixed the projection-base defect for fresh runs. The
+remaining defect is workflow shape: exact dispatch outputs look like ordinary
+branches, but are audit artifacts. Humans and external reviewers naturally treat
+them as normal work branches, which turns audit-time review/fix interaction into
+a trap.
+
+The instructive failure mode: a reviewer interpreted a dispatch worktree as a
+dangerous branch, raised findings into an RV, dispositioned them, then applied
+"fix-now" changes in-place on the branch. Doctrine needs to support that kind of
+audit interaction deliberately, not by leaving special refs to masquerade as
+mergeable branches.
 
 ## Scope & Objectives
 
-1. **Reproduce + pin the entry point (experimental, first).** The `26a3125` vs
-   `91b05c4` discrepancy must be reproduced and the exact source isolated:
-   `prepare_review` `trunk_base = merge_base(tip, trunk_tip)` resolution,
-   `plan_phases` parent chaining, or claude-arm `record-boundary` base capture.
-   Forensics point at projection-base, **not** the worker fork — but this is a
-   hypothesis requiring experimental verification, not git archaeology alone.
-2. **Make deliverables integrable when trunk advances mid-run.** Projection base
-   must track the live mergeable base (3-way re-anchor), or deliverables rebase
-   before projection, or a guarded recovery verb — approach decided in design.
-3. **Preserve fail-closed.** Never silently wipe trunk; report + recover, never
-   auto-resolve (ADR-006).
+1. **Preserve exact dispatch evidence.** `dispatch/<slice>`, `review/<slice>`,
+   and `phase/<slice>-NN` remain immutable audit/evidence refs. They are not
+   redefined into normal feature branches.
+2. **Add a safe interaction surface.** Dispatch must materialise an explicit
+   candidate/topic branch on a chosen base for audit-time review, local testing,
+   "fix-now" edits, and experiments against other features.
+3. **Admit audit-time changes deliberately.** If review fixes are made during
+   audit, the outcome must be recorded as the slice's admitted candidate, not left
+   stranded on an ambiguous worktree branch.
+4. **Keep trunk protected.** Candidate creation may use an explicit 3-way merge
+   onto a chosen base; final trunk integration remains opt-in, post-audit,
+   expected-tip guarded, and refuses moved trunk.
+5. **Make outputs self-describing.** Commands and status views must distinguish
+   evidence refs from candidate branches and point users/reviewers to the safe
+   interaction path.
 
 ## Non-Goals
 
-- Wiring `--integrate` into `/close` (the original mis-scope) — secondary, and
-  only meaningful once projection is sound. Captured as a follow-up.
+- Retrofitting old SL-067 refs. Those refs were cut before RV-030 and remain sunk
+  evidence.
+- Making `review/<slice>` or `phase/<slice>-NN` themselves ordinary merge
+  branches. They stay exact projections for audit.
+- Auto-landing to trunk during dispatch conclude. Close remains post-audit.
 - Codex/pi worker-fork-base mechanics, unless the repro implicates them.
-- Overturning ADR-012's pinned-fork-base decision without `/consult` — design
-  surfaces the tradeoff (pinned base vs live re-anchor) explicitly.
+- Solving every branch-policy style. The design admits multiple workflows through
+  candidates; repo-specific policy still decides which candidate, if any, lands.
 
 ## Summary
 
-_(pending design)_
+Design direction: add a dispatch candidate/admission layer. Stage-1 sync still
+emits exact evidence refs. A new candidate workflow creates normal branches from
+those refs on an explicit base, optionally with a worktree. Reviewers and humans
+interact with candidates, not raw dispatch refs. Audit fixes are admitted by
+recording the candidate tip against the dispatch run; close integrates the
+admitted candidate under the existing post-audit guard.
 
 ## Follow-Ups
 
-- `/close` stage-2 `sync --integrate` wiring gap is real but secondary — restore
-  as its own slice/backlog item once projection soundness lands.
+- `/close` stage-2 integration wiring remains secondary and should target the
+  admitted candidate, not the raw phase tip.
+- ADR-006/ADR-012 need a narrow amendment: explicit candidate materialisation may
+  3-way merge onto a chosen base, while exact refs and trunk integration remain
+  fail-closed.

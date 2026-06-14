@@ -135,3 +135,23 @@ stealth edit.
 
 Cross-ref: IMP-043 (backlog), RV-030 / SL-064, ADR-006, ADR-012, dispatch
 SKILL.md:115-121 (pinned-base rationale) + :229-232 (demoted re-anchor).
+
+## Design pivot (2026-06-15)
+
+User consultation resolved the governance question: yes, dispatch may add an
+explicit normal candidate/topic interaction surface while preserving exact
+`review/*` and `phase/*` refs as immutable evidence. The authored design now
+targets a candidate/admission workflow:
+
+- stage-1 sync still emits exact evidence refs;
+- `dispatch candidate create` materialises normal branches/worktrees on an
+  explicit base for audit review, "fix-now" changes, and experiments;
+- `dispatch candidate admit` records the accepted candidate tip on
+  `dispatch/<slice>`;
+- close should integrate the admitted candidate under the existing post-audit
+  expected-tip guard.
+
+Verification for the design write: `just gate` passed after the design/scope
+edits. The only observed noise was the existing user git hook warning about a
+read-only `/home/david/.local/state/behaviour/...` path inside memory anchoring
+tests; the gate exited cleanly.
