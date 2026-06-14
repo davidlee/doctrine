@@ -205,6 +205,25 @@ The remaining guards keep the rtk-safe forms (`checkout`-import not `diff|apply`
 `ls-tree` not `cat-file -e`). The structural retirement is §4's *verb* (in-process
 git via `src/git.rs` is not rtk-hooked) — not an rtk config change.
 
+**Claude-arm interaction — worker-isolation gap is OUT OF SCOPE, but SL-064
+shrinks its blast radius (note, not goal).** The claude `Agent isolation:worktree`
+does **not** return a separate fork branch — it **collapses the worker's commit
+onto the *parent* branch** ([[mem.pattern.dispatch.claude-agent-worktree-integrates-commit-onto-parent]]).
+*Fixing* true worker isolation (a real fork / bwrap confinement, codex/pi model)
+is **IMP-004 / IMP-045, not this slice.** But two SL-064 interactions follow and
+must be designed-for:
+- **Blast radius shrinks.** Pre-SL-064 the parent is shared `main`, so a straying
+  claude worker's bad commit lands on shared main (disruptive revert). Post-SL-064
+  the parent is the **isolated `dispatch/<slice>`** tree → a straying worker
+  corrupts only the **disposable coordination tree, never shared main.** A net
+  safety gain even though worker-isolation itself is unfixed.
+- **Funnel degrades cleanly on the claude arm:** no fork branch to `import` — the
+  worker's delta is *already on* `dispatch/<slice>`, so the R-5 belt + combined
+  verify run **post-landing on the coordination branch** (not pre-commit). The
+  funnel's correctness *goals* hold; only the import *mechanism* differs by arm.
+  The sync verb (§4) and guards must accept a worker delta that arrives
+  pre-landed, not only as a fork to import.
+
 ## §4 — Integration-sync seam (OQ-BEARING)
 
 **LOCKED architecture (policy-independent):**
