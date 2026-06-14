@@ -28,8 +28,15 @@ prompt: <pre-distilled worker prompt> # policy digest, design excerpts, memories
 ```
 
 **Claude owns worktree creation.** doctrine does not run `git worktree add` here —
-the `WorktreeCreate` `create-fork` path is **deferred** (its payload carries no
-type/path/base — O3-RED). Identity is conferred *after* creation by a hook.
+the `WorktreeCreate` `create-fork` path is **deferred** on the **σ blast-radius**
+(its payload carries no `agent_type`/matcher ⇒ it would fire for *every* worktree
+creation, ADR-011 D6/D7 as amended by SL-064 §8), **not** on base control.
+**Base == B by placement.** The boot installer sets `worktree.baseRef='head'`
+(per-operator, `settings.local.json`, SL-064 §8.3), so Claude's default-created
+worktree forks the **orchestrator session's local HEAD** — which the orchestrator
+parks at `B` by running from the `dispatch/<slice>` coordination tree (cwd ==
+coord tree, HEAD == B). Identity is conferred *after* creation by a hook; base
+correctness is **verified** after the worker returns (`verify-worker`, below).
 
 ### Identity — the SubagentStart stamp (best-effort, fail-open)
 
@@ -54,8 +61,29 @@ SubagentStart hook:  doctrine worktree marker --stamp-subagent   (matcher: dispa
   **unstamped and un-gateable by any hook**. The fence is therefore the layered
   funnel, not a hook exit code: the `import` `.doctrine/`/`.claude/` belt + the
   worker-mode guard + the pre-distilled prompt + the **orchestrator post-spawn
-  marker check that aborts an unstamped fork (IMP-052)** — enforced where the
+  `verify-worker` belt that aborts an unstamped fork** — enforced where the
   harness *can* abort.
+
+### Post-spawn — `verify-worker` (base==B belt, replaces prose IMP-052)
+
+After the worker returns and **before `import`**, the orchestrator verifies the
+fork on the trusted side:
+
+```
+doctrine worktree verify-worker --base <B> --dir <worker-worktree>
+    rev-parse --verify HEAD   → resolves?           else  no-worker-head
+    marker present at <dir>?                          else  unstamped
+    merge-base --is-ancestor <B> HEAD                 else  wrong-base
+    → Ok (exit 0): proceed to import
+```
+
+Fail-LOUD: on any refusal it prints the token to stderr, exits non-zero, and
+**leaves the fork in place** (diagnostic only — the orchestrator decides; the
+funnel halts, never auto-merges). This **one verb** closes two prior residuals:
+the prose **IMP-052** post-spawn marker check is now the `unstamped` verdict, and
+**IMP-043**'s deferred content-base assertion is now the `wrong-base` verdict
+(`merge-base --is-ancestor B HEAD` — the base==B proof, SL-064 §8.4). Read-classed
+(no writes; harmless under worker-mode).
 
 ### One source of truth for the literal (τ)
 
@@ -96,13 +124,15 @@ The headline (parallel execution) must not outrun this footnote.
 
 ## Confessed residuals (claude arm only)
 
-- **Base-pinning (charge-2/M1).** The SubagentStart payload carries **no
-  base/parent field**, so the worker forks from **session HEAD**, and the
-  default-created worktree's base is **opaque and not orchestrator-controlled**.
-  Under the §7c stationary-head constraint session HEAD **is** `B` in the common
-  case; a move between base capture and spawn is caught **late, not silently** at
-  `import` `head-moved` (cost = a wasted worker run, not a base-integrity
-  violation). No hook-time pre-refusal in v1 (the hook sees no `B`).
+- **Base-pinning (charge-2/M1) — CLOSED (SL-064 §8).** No longer a residual: with
+  `worktree.baseRef='head'` the worker forks the **orchestrator session's local
+  HEAD**, which the orchestrator parks at `B` by placement (cwd == coord tree) — so
+  the base **is** orchestrator-controlled, not opaque (ADR-011 D5 falsified). The
+  post-spawn `verify-worker` belt **proves** base==B (`merge-base --is-ancestor B
+  HEAD`) before import and halts loud on `wrong-base`, closing the former
+  clean-applying-semantically-wrong import worst case (was IMP-043). A pre-worker
+  fail-closable arm (`WorktreeCreate`, IMP-072) stays deferred — but on the σ
+  blast-radius now, not on base control.
 - **Self-clear (§4c).** No env-lock, no bwrap on this arm: a non-compliant worker
   can `rm` its marker or `env -u DOCTRINE_WORKER`. claude worker-sole-writer is
   **accident-fenced + prompt-enforced, not malice-proof** until a free env channel
@@ -117,7 +147,7 @@ The headline (parallel execution) must not outrun this footnote.
 - Spawn with any `subagent_type` other than the pinned `dispatch-worker`, or hand
   the worker a base — Claude owns creation; the hook stamps identity.
 - Treat a non-zero SubagentStart exit as having aborted the worker (read-only
-  event — it did not). Rely on IMP-052, not the hook code.
+  event — it did not). Rely on `verify-worker`, not the hook code.
 - Oversell concurrency: claim parallel **landing**. v1 lands one worker per base.
 - Run the `fork` verb or a bwrap profile here (that is the codex/pi arm,
   `/dispatch-subprocess`).
@@ -126,6 +156,7 @@ The headline (parallel execution) must not outrun this footnote.
 
 **Always:**
 - Pin `subagent_type` to `DISPATCH_WORKER_AGENT_TYPE`; let the drift test guard it.
-- Run the IMP-052 post-spawn marker check; abort an unstamped fork.
+- Run `verify-worker --base <B> --dir <worktree>` after the worker returns and
+  before `import`; abort the funnel on any refusal (the fork is left in place).
 - Return to the router for the funnel cadence — import, verify, branch-point, one
   commit, record.
