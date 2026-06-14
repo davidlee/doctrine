@@ -1,0 +1,164 @@
+# Implementation plan for SL-068 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-068"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Candidate ledger data model"
+objective = "Add the structured candidate ledger (candidates.toml) to the dispatch coordination directory: the per-candidate row and the current-admission record, with read/write helpers that journal mutable status while keeping identity/OID fields immutable. Foundation for the create/status/admit verbs; no git mutation, no CLI surface yet."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-068 design is locked and accepted (2026-06-15, constraints D8/D9)." },
+  { id = "EN-2", text = "The D9 governance precondition is met: ADR-006 D10 (candidate interaction worktrees) and ADR-012 candidate clauses (branch role, provenance/admission, admitted-OID close, no-close-time-merge, v1 code default) are authored and accepted — confirmed in adr show." },
+  { id = "EN-3", text = "The existing ledger.rs manifest pattern (Journal/Boundaries/Orthogonal: serde struct + parse/to_toml + dispatch_dir read/write, absent-file-defaults) is understood." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ledger.rs carries a Candidates manifest with a CandidateRow ([[candidate]]) and a CurrentAdmission record ([current_admission.close_target] / review_surface), serde-modelled per design §5.3 — id, label, kind, role, payload, target_ref, source_ref/oid, base_ref/oid, merge_oid, status, supersedes, reason, created_by/at; admission carries candidate_id/ref, expected_ref_oid, admitted_oid, review, supersedes, admitted_at." },
+  { id = "EX-2", text = "candidates.toml round-trips via parse/to_toml with serde-escaped values (no raw splicing), reading from .doctrine/dispatch/<slice>/candidates.toml on the coordination tree, defaulting to empty when absent." },
+  { id = "EX-3", text = "Status is the only mutable field on a recorded row (created→conflicted|abandoned|superseded); identity/OID fields are write-once. Admission supersession is represented explicitly as history, not by rewriting a prior admission's OIDs." },
+  { id = "EX-4", text = "Role (review_surface|close_target|scratch), kind (audit|experiment), and payload (impl_bundle|code) are typed (enums or validated tokens), not free strings, so a malformed role is a parse refusal." },
+]
+verification = [
+  { id = "VT-1", expects = "Round-trip test: a Candidates manifest with a created row, a conflicted row, and a close_target admission serialises and re-parses byte-stable." },
+  { id = "VT-2", expects = "Absent candidates.toml reads as an empty manifest (matches the Journal/Boundaries absent-file-defaults contract)." },
+  { id = "VT-3", expects = "An unknown role/kind/payload token fails to parse rather than round-tripping verbatim." },
+  { id = "VA-1", expects = "Confirm against adr show ADR-006 / ADR-012 that the candidate governance clauses are accepted before any candidate code lands (D9 satisfied at the data-model boundary)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "candidate create — provenance, 3-way merge, conflict, guards"
+objective = "Implement `doctrine dispatch candidate create`: validate prepare-review provenance, create a normal branch from --base under zero-OID CAS, perform an explicit no-ff 3-way merge of the evidence source, record source/base/merge OIDs, and handle conflict and worker/raw-ref guards. This is the only place the topology permits a 3-way auto-resolution (ADR-012 amendment)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 candidate ledger model is green and read/write-able from the coordination tree." },
+  { id = "EN-2", text = "The git seam (git.rs git_text/_opt/_status_ok, filter_tree, worktree provisioning in worktree.rs) and the prepare-review journal/boundaries verification rows are understood as the create preconditions." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`dispatch candidate create` requires the requested source ref to correspond to a verified prepare-review journal row: a default review_surface requires verified review/<slice>; a code close_target requires the selected phase row verified with no earlier non-empty phase-chain row failed. Refuses before any verified evidence exists." },
+  { id = "EX-2", text = "Creation makes a normal branch under refs/heads/candidate/<slice>/<label> from --base with zero-OID CAS (refuses an existing target ref); supersession creates a fresh row + ref linked by `supersedes`, never rewriting an old branch." },
+  { id = "EX-3", text = "Creation performs an explicit no-ff 3-way merge of --source into the branch so merge_oid has base_oid and source_oid as parents; on clean merge it commits and records the row with merge_oid. A clean trunk-advanced case yields a candidate whose diff vs live trunk shows no phantom stripped-.doctrine deletions." },
+  { id = "EX-4", text = "Conflict without explicit --worktree aborts and writes no durable candidate row; conflict with explicit --worktree leaves a clearly named conflicted worktree and records status = conflicted. review_surface requires an explicit --worktree in v1." },
+  { id = "EX-5", text = "Create never writes trunk, edge, review/*, or phase/*; review/* and phase/* OIDs are unchanged after create (I1). The verb is Orchestrator-classed (refused under worker-mode) and refuses when the current worktree is checked out on a raw evidence ref (I9), unless explicitly operating by ref from a safe context." },
+  { id = "EX-6", text = "`DispatchCommand::Candidate { Create … }` is wired in main.rs with flags matched to CLI style (--slice, --role, --payload, --base, --target/--label, --source, --worktree, --kind) and dispatched to dispatch.rs." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e_dispatch_candidate_clean_merge_from_review and e2e_dispatch_candidate_clean_merge_from_phase_chain: clean 3-way creates a candidate, records source/base/merge OIDs, no phantom .doctrine deletions vs live trunk." },
+  { id = "VT-2", expects = "e2e_dispatch_candidate_unverified_source_refuses: create refuses before/without a verified prepare-review row for the requested source." },
+  { id = "VT-3", expects = "e2e_dispatch_candidate_create_zero_oid_cas_refuses_existing: an existing target ref refuses; supersede creates a new row+ref." },
+  { id = "VT-4", expects = "e2e_dispatch_candidate_conflict_records_or_aborts: conflict without --worktree leaves no durable row; with --worktree records conflicted and displays the path." },
+  { id = "VT-5", expects = "review/* and phase/* OIDs assert unchanged after create; a distinct payload fixture proves review_surface (impl_bundle) vs close_target (code) differ." },
+  { id = "VT-6", expects = "dispatch_candidate_is_orchestrator_classed (worker-mode refusal) and e2e_dispatch_raw_evidence_worktree_write_refuses (raw review/* or phase/* worktree write refused with candidate guidance)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "candidate status — self-describing surface"
+objective = "Implement read-only `doctrine dispatch candidate status --slice`: list evidence refs and candidate refs separately, report each candidate's base/source/tip/status and admitted/superseded state, surface ref drift, and print the safe next commands instead of pointing users at raw refs."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 ledger read is green; PHASE-02 create populates candidate rows to display." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`candidate status` lists evidence refs (dispatch/review/phase) and candidate refs in visibly separate groups, never conflating an evidence ref with an interaction branch." },
+  { id = "EX-2", text = "Each candidate row reports base, source, current tip, status, and admitted/superseded state; ref drift (live tip ≠ recorded/admitted OID) is reported, not hidden (I4)." },
+  { id = "EX-3", text = "Output prints the safe next command(s) (e.g. create/admit/close guidance) rather than instructing the user to inspect raw refs. Read-only: status never mutates refs or the ledger and may warn but not refuse from a raw-ref worktree." },
+]
+verification = [
+  { id = "VT-1", expects = "Status output groups evidence vs candidate refs and renders base/source/tip/status/admission for a created and an admitted candidate (black-box CLI golden over force-no-tty render)." },
+  { id = "VT-2", expects = "After moving a candidate ref past its recorded OID, status reports drift while the admitted OID is unchanged." },
+  { id = "VA-1", expects = "Confirm status names exact refs as evidence and the candidate as the interaction branch (R2 mitigation) and points to the next safe action." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "candidate admit — OID binding and provenance validation"
+objective = "Implement `doctrine dispatch candidate admit`: read-validate-re-read the candidate ref (moved-ref refusal), validate merge_oid provenance and merge-ancestry, record an immutable admitted_oid, handle close_target supersession, and optionally link an RV. Close consumes the admitted OID, never the mutable ref."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 create records merge_oid/source_oid/base_oid provenance; PHASE-03 status surfaces admission state." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Admit requires the candidate branch to resolve to a committed, clean tip; it reads the ref, validates provenance, then re-reads before recording — a ref that moved during admission refuses with a moved-ref diagnostic." },
+  { id = "EX-2", text = "Admit records an immutable admitted_oid and requires merge_oid to be the Doctrine-created candidate merge (base_oid + source_oid as parents) and an ancestor of admitted_oid; a tip not descending from merge_oid is rejected (I3, R7)." },
+  { id = "EX-3", text = "For role = close_target, admit replaces the current close admission with the new admitted_oid and records which prior admission it supersedes (at most one current close admission, I5). It may link an RV that justified the audit repair." },
+  { id = "EX-4", text = "Admit is Orchestrator-classed, refused under worker-mode and from raw evidence worktrees (I9); it never mutates trunk, edge, review/*, or phase/* (review/* and phase/* OIDs unchanged after admit)." },
+  { id = "EX-5", text = "`DispatchCommand::Candidate { Admit … }` wired in main.rs (--slice, --role, --candidate, --review) and dispatched to dispatch.rs." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e_dispatch_candidate_admit_rejects_unproven_tip: a tip not descending from recorded merge_oid is refused." },
+  { id = "VT-2", expects = "Moved-ref-during-admit refuses with the moved-ref diagnostic; a clean committed tip records an immutable admitted_oid." },
+  { id = "VT-3", expects = "e2e_dispatch_candidate_supersede_records_history: a second close_target admission records supersedes and leaves exactly one current admission." },
+  { id = "VT-4", expects = "review/* and phase/* OIDs assert unchanged after admit; admit refused under worker-mode." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "candidate-aware integrate — admitted-OID close, no close-time merge"
+objective = "Extend `dispatch sync --integrate` so post-audit trunk/edge projection targets the current admission OID: close writes a normal ADR-012 CAS journal row with planned_new_oid = admitted_oid, refuses (no close-time merge) when trunk moved past it, and consumes a review_surface admission for --edge — never silently falling back to a raw ref."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 records a current close_target admission OID; the existing integrate journal/CAS replay (dispatch.rs integrate, plan_trunk_row, plan_edge_row) is understood." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "When a candidate workflow is active, `integrate --trunk` sources the current close_target admitted_oid and appends a CAS journal row { source_oid = admitted_oid, target_ref = trunk, expected_old_oid = current trunk oid, planned_new_oid = admitted_oid }; it never performs a close-time 3-way merge (I6)." },
+  { id = "EX-2", text = "If planned_new_oid does not fast-forward the trunk target, integrate refuses with a named moved-target reason instructing a superseding close-target candidate on the new base — no auto-reanchor (R4, D6)." },
+  { id = "EX-3", text = "`integrate --edge` consumes a review_surface admission the same way; candidate-aware integrate refuses rather than silently falling back to a raw ref when the needed admission is absent." },
+  { id = "EX-4", text = "Close/integrate never creates, updates, rebases, merges, or repairs a candidate; it only appends/replays journal rows. Targeting is by admitted OID, so moving the candidate ref after admission does not change what close targets (I4). Integrate stays Orchestrator-classed and worker/raw-ref guarded." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e_dispatch_candidate_admit_then_integrate_ff: admit a close_target, integrate fast-forwards trunk to admitted_oid via a CAS row with planned_new_oid = admitted_oid." },
+  { id = "VT-2", expects = "e2e_dispatch_candidate_ref_moves_after_admit_close_uses_oid: moving the candidate ref after admit does not change the integrated OID." },
+  { id = "VT-3", expects = "e2e_dispatch_candidate_trunk_moved_after_admit_refuses: trunk advanced past admitted_oid refuses with the moved-target reason and no merge." },
+  { id = "VT-4", expects = "integrate --edge without a review_surface admission refuses (no silent raw-ref fallback); existing stage-1/stage-2 integrate tests stay green (behaviour-preservation)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Ambient discoverability — skills, boot/canon, memory, hooks"
+objective = "Make the candidate workflow ambiently discoverable so a cold agent routes to it without reading source. Land the OQ-1 minimum across the whole discoverability surface — the core skills that bracket it (dispatch, audit, close), the boot routing snapshot + CLAUDE.md known-gaps, the canon/governance projection (refreshed for the accepted ADR amendments), and durable memory — wired so the SessionStart/boot hook re-surfaces it each session. Full /audit and /code-review rewiring stays deferred (IMP-023/IMP-042)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02..05 candidate verbs exist and are exercised, so guidance can reference real command shapes." },
+  { id = "EN-2", text = "The discoverability surfaces are inventoried: dispatch/audit/close SKILL.md, boot.md routing table + CLAUDE.md known-CLI-gaps, the governance/canon snapshot (doctrine boot), and the dispatch-cli-command-map + dispatch-pattern memory signposts." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dispatch SKILL.md describes the candidate create→audit→admit→close path, names review/* and phase/* as evidence refs (not branches to edit/land, R2), and conclude/status output routes reviewers/humans to the candidate interaction branch. Skill content re-embeds (doctrine claude install + touch src/skills.rs)." },
+  { id = "EX-2", text = "The bracketing core skills carry the handoff: /audit states it reviews the candidate interaction surface (and records which surface it reviewed, F-2); /close states it integrates the admitted close_target OID under the post-audit guard, never a raw phase tip or mutable ref. Edits are minimal — pointers, not a rewire." },
+  { id = "EX-3", text = "The ambient routing layer reflects the shipped surface: CLAUDE.md known-CLI-gaps documents the candidate/admission workflow as shipped (matching the SL-009/SL-040 entries' style), and the boot snapshot is regenerated (doctrine boot) so the SessionStart hook re-surfaces fresh governance — the accepted ADR-006 D10 / ADR-012 candidate clauses and the new condoned workflow — to a cold agent." },
+  { id = "EX-4", text = "Durable memory is recorded so retrieve-memory surfaces the workflow without source reading: at minimum the dispatch-cli-command-map signpost gains the candidate verbs, plus pattern/concept memories for the candidate/admission workflow, admission-by-OID, and the evidence-ref-is-not-a-branch footgun (the SL-067 trap)." },
+  { id = "EX-5", text = "Scope is the OQ-1 minimum across these surfaces (discoverability + status output + memory); full /audit and /code-review rewiring is recorded as deferred backlog follow-up (IMP-023/IMP-042), not silently dropped." },
+]
+verification = [
+  { id = "VA-1", expects = "Cold-start trace: from boot.md routing + the dispatch/audit/close skills alone, an agent can find and follow the candidate workflow end to end; no instruction to merge/land a raw review/* or phase/* ref survives." },
+  { id = "VT-1", expects = "Skill-shipped/embedded test (install.rs asset embedding) stays green after the SKILL.md edits and re-embed." },
+  { id = "VA-2", expects = "doctrine boot --check is clean after regenerate; the snapshot's governance + known-workflow sections reflect the accepted amendments and the candidate path (mem.pattern.distribution.shipped-not-reachable — a shipped surface is invisible unless boot/skill points at it)." },
+  { id = "VA-3", expects = "doctrine memory find surfaces the candidate workflow and admission-by-OID for a scope-relevant query; the cli-command-map signpost lists the candidate verbs." },
+  { id = "VA-4", expects = "Confirm the deferred /audit + /code-review rewire is captured in backlog (IMP-023/IMP-042) before close, per mem.system.lifecycle.defer-needs-backlog-before-close." },
+]
+specs             = []
+requirements      = []
