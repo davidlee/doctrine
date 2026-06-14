@@ -67,19 +67,28 @@ promotion.
 - **No `move`-apply automation** — requirement membership move has no existing seam
   (`spec req link`/move is the deferred SL-015 follow-on); `move` rows stage but are
   surfaced-for-manual at apply, not auto-applied (design.md §4.5, F4).
+- **No `introduce`/`create`-apply automation in v1** — `spec req add`/`spec new` are
+  non-transactional CLI handlers (orphan risk against one-commit apply); these rows
+  stage but are surfaced-for-manual at apply. Auto-apply returns once transactional
+  `spec::add_requirement`/`spec::create_spec` engine helpers exist (design.md §4.5,
+  external B1/B2).
 - **No per-repo conduct config for Revision** — v1 bakes the `gate` default;
   extending ADR-009's slice-state `[conduct]` table to Revision is deferred.
 
 ## Design
 
-**LOCKED** in `design.md` (2026-06-14, scope **C** — full structured delta
-payload; SL-044 done). All nine design questions resolved (design.md §8); internal
-adversarial pass integrated (§11, F1–F8). Headlines: one change-axis kind
-`REV-NNN`; multi-target `[[change]]` payload rows (rows are edges, `TypedVerbOnly`)
-+ `primary` display-hint; reciprocity derived uniformly; backlog-style lifecycle +
-separate `approval` field (default `gate`, enforced only at apply); atomic apply
-orchestrating existing seams with a pre-flight `from`-guard; REC untouched; ADR-013
-+ work-like-predicate `+= REV` as PHASE-01.
+**Drafted + internally and externally hardened** in `design.md` (2026-06-14, scope
+**C** — full structured delta payload; SL-044 done). Status stays `design` — awaiting
+final lock. All nine design questions resolved (design.md §8); internal pass
+integrated (§11, F1–F8); external codex pass integrated (§12, B1–B4/M1–M3). Headlines:
+one change-axis kind `REV-NNN`; multi-target `[[change]]` payload rows (rows are
+edges, `TypedVerbOnly`) + `primary` display-hint; reciprocity derived via
+`relation_graph`, surfaced on `inspect` (ADR-004 §3 — not `show`); backlog-style
+lifecycle + separate `approval` field (apply-time checkpoint, invoker-blind);
+**v1 apply auto-lands `status` rows only** (rides engine-callable
+`requirement::set_status`, all-or-nothing pre-flight `from`-guard);
+introduce/create/move/prose surfaced-for-manual; `done` ⇒ every row landed; REC
+untouched; ADR-013 + work-like-predicate `+= REV` as PHASE-01.
 
 ## Summary
 
@@ -91,6 +100,10 @@ reconcile path (SPEC-002 / SL-044).
 ## Follow-Ups
 
 - `/revise` skill + workflow integration (IDE-003 tail; PHASE-06 or follow-up).
+- Transactional `spec::add_requirement`/`spec::create_spec` engine helpers →
+  unlocks `introduce`/`create`-apply automation (external B2; design.md §4.5).
+- First-class REV↔REC relation label (governed ADR-010 addition) if a query demand
+  appears — v1 links them implicitly (external B4; design.md §4.6).
 - `spec req link`/move membership-mutation verb → unlocks `move`-apply automation.
 - Extend ADR-009 `[conduct]` to address Revision (per-repo approval config).
 - IDE-002 durable region primitive → structured prose-body anchors (`after IDE-002`).
