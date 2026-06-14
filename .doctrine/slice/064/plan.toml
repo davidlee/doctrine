@@ -26,7 +26,7 @@ entrance_criteria = [
   { id = "EN-3", text = "Existing worker-mode guard behavior for fork, import, land, and gc is understood from current code and tests." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "ADR-006 carries SL-064 amendments for D2a, D7, D8, and D9 without duplicating ADR-012 topology ownership." },
+  { id = "EX-1", text = "ADR-006 carries SL-064 amendments for D2a, D8, and D9 (D7 unchanged: its funnel discipline is preserved, and the D7 projection-semantics extension is owned by ADR-012, not duplicated here) without duplicating ADR-012 topology ownership." },
   { id = "EX-2", text = "The plan-gate language states that marker absence is a transitional assumption, not positive identity, and that IMP-065 is the real positive-marker close." },
   { id = "EX-3", text = "The OQ-D fence is expressed as implementation obligations: Orchestrator verbs remain restricted to the trusted orchestrator path, and impersonation tests are mandatory for the new sync surface." },
 ]
@@ -34,6 +34,7 @@ verification = [
   { id = "VA-1", expects = "Compare ADR-006, ADR-012, and SL-064 design: placement and identity refinements are in ADR-006; topology and projection remain in ADR-012." },
   { id = "VA-2", expects = "Confirm the prose does not claim the D2b fence proves coverage of gc or sync impersonation." },
   { id = "VT-1", expects = "Existing worker-mode guard tests for fork, import, land, and gc still pass unchanged." },
+  { id = "VA-3", expects = "The ADR-006 amendment is carried to adversarial acceptance (an inquisition pass or /audit) per the slice closure intent, not left at self-comparison only." },
 ]
 specs             = []
 requirements      = []
@@ -49,13 +50,16 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "`doctrine worktree fork` has an explicit coordination mode or equivalent named surface that creates a linked worktree without stamping the worker marker." },
   { id = "EX-2", text = "Coordination creation provisions through the sole copier, regenerates runtime phase sheets from committed `plan.toml`, and does not copy the coordination/runtime tier." },
-  { id = "EX-3", text = "Concurrent same-slice dispatch creation is refused by branch/ref collision on `dispatch/<slice>` and never silently creates a second coordination branch." },
+  { id = "EX-3", text = "Concurrent same-slice dispatch creation is refused when a live worktree is already checked out on `dispatch/<slice>` (the native `git worktree add` collision), never silently creating a second coordination branch." },
   { id = "EX-4", text = "`DOCTRINE_WORKER` leakage and marker-present linked worktrees refuse coordination creation through the same Orchestrator-verb guard." },
+  { id = "EX-5", text = "Handover-resume is distinguished from concurrency: when `dispatch/<slice>` exists with no live worktree, creation reattaches/reuses the same branch (resume stability, design §1) rather than refusing — the discriminator is a live worktree, not mere branch existence." },
 ]
 verification = [
   { id = "VT-1", expects = "E2E worktree tests cover markerless coordination creation, no marker file, provisioned allowlist behavior, and rollback on post-add failure." },
   { id = "VT-2", expects = "Worker-mode impersonation tests cover marker-present and `DOCTRINE_WORKER=1` attempts to invoke coordination creation." },
-  { id = "VT-3", expects = "A repeated same-slice `dispatch/<slice>` creation attempt refuses before mutating refs or dirs." },
+  { id = "VT-3", expects = "A repeated same-slice `dispatch/<slice>` creation attempt with a live worktree refuses before mutating refs or dirs." },
+  { id = "VT-4", expects = "A resume attempt (branch `dispatch/<slice>` exists, no live worktree) reattaches the same branch and does not refuse or fork a second coordination branch." },
+  { id = "VT-5", expects = "Id minting (D3) resolves the configured trunk ref correctly when invoked from the linked coordination worktree, not the repo root." },
   { id = "VA-1", expects = "Review the command help and skill prose for no implication that marker absence proves identity." },
 ]
 specs             = []
@@ -74,12 +78,15 @@ exit_criteria = [
   { id = "EX-2", text = "The tree-filter primitive uses a throwaway `GIT_INDEX_FILE` and never mutates the live coordination index or working tree." },
   { id = "EX-3", text = "Ledger structures parse and write `.doctrine/dispatch/<slice>/{journal,boundaries,orthogonal}.toml` with stable TOML field names from the design." },
   { id = "EX-4", text = "Journal rows carry source OID, target ref, expected old OID, planned new OID, applied new OID, and status." },
+  { id = "EX-5", text = "A tested recording surface appends per-phase code boundaries to `boundaries.toml` and orthogonal-projection marks to `orthogonal.toml` during the funnel (a verb, not hand-authored prose), so stage-1 synthesis consumes machine-written OIDs — honouring the mechanism-out-of-prose thesis the sync verb rests on." },
 ]
 verification = [
   { id = "VT-1", expects = "Unit or e2e git-plumbing tests prove filter-tree excludes requested paths and leaves the live index byte-for-byte unchanged." },
   { id = "VT-2", expects = "Commit-tree tests prove a filtered tree can be committed against a supplied parent without checkout." },
   { id = "VT-3", expects = "CAS tests prove `update-ref <ref> <new> <old>` succeeds only at the expected old OID and reports moved-target refusal data otherwise." },
   { id = "VT-4", expects = "Ledger round-trip tests cover journal, boundaries, and orthogonal manifests, including absent-file defaults." },
+  { id = "VT-5", expects = "Tests prove the boundary/orthogonal recording surface writes well-formed rows that the prepare-review stage reads back, including the empty and absent-file paths." },
+  { id = "VT-6", expects = "Behaviour-preservation on shared machinery: the `src/git.rs` born-frame capture behaviour (forget.remote.v1 / forget.checkout.v1 byte-for-byte reproduction) stays green unchanged after the new tree-filter / commit-tree / CAS primitives are added." },
 ]
 specs             = []
 requirements      = []
@@ -122,12 +129,14 @@ exit_criteria = [
   { id = "EX-3", text = "Trunk projection is opt-in, fast-forward-only, and expected-tip guarded; default integration leaves trunk untouched." },
   { id = "EX-4", text = "Optional `edge` projection is isolated to the sync point and never becomes a per-batch re-anchor concern." },
   { id = "EX-5", text = "Journal status updates after integration are committed back onto `dispatch/<slice>` by plumbing, without checking out or mutating a working tree." },
+  { id = "EX-6", text = "`doctrine dispatch sync --integrate` is an Orchestrator-classed command refused under worker-mode signals — the same OQ-D restriction applied across the full verb class, on the highest-privilege (trunk-writing) verb." },
 ]
 verification = [
   { id = "VT-1", expects = "Crash-matrix tests cover crash after journal planning, crash after ref update before verified status, moved target between plan and apply, replay no-op, and replay refusal on divergence." },
   { id = "VT-2", expects = "Policy tests prove default config does not write trunk and explicit trunk mode refuses non-fast-forward or moved trunk." },
   { id = "VT-3", expects = "Parent/root execution test removes the coordination worktree before `--integrate` and proves plumbing-only replay still works." },
   { id = "VT-4", expects = "Existing dispatch funnel suites remain green unchanged." },
+  { id = "VT-5", expects = "Impersonation tests prove marker-present and `DOCTRINE_WORKER=1` callers cannot run `dispatch sync --integrate` (closing the OQ-D verb-class gate on the trunk-writing verb)." },
 ]
 specs             = []
 requirements      = []
@@ -146,6 +155,7 @@ exit_criteria = [
   { id = "EX-3", text = "The conclude path runs prepare-review, removes the coordination worktree directory, preserves `dispatch/<slice>`, `review/<slice>`, and `phase/<slice>-NN` refs, and sends audit to the parent/root against prepared refs." },
   { id = "EX-4", text = "`/dispatch-subprocess` and `/dispatch-agent` describe their arm-specific behavior against `dispatch/<slice>` and the boundary recording needed for stage-1 projection." },
   { id = "EX-5", text = "`/worktree` documents the coordination creation mode separately from worker and solo modes." },
+  { id = "EX-6", text = "The post-audit operating loop is pinned: conclude stops at prepare-review + worktree removal and never integrates pre-audit; after audit passes, `/close` (not `/dispatch`) invokes `dispatch sync --integrate`." },
 ]
 verification = [
   { id = "VA-1", expects = "Read the edited skill sources and confirm every old instruction to audit from or deliver the coordination branch directly is replaced by the ADR-012 two-stage path." },

@@ -24,20 +24,33 @@ skills cite real behavior rather than aspirational shell recipes.
 ## Sequencing & Rationale
 
 PHASE-01 is first because SL-064 has two governance owners. ADR-006 owns the
-placement and identity refinement; ADR-012 owns topology, routing, projection,
-and the D1 tightening. The plan-gate for OQ-D also belongs up front: the slice
-must not accidentally turn marker absence into a claimed identity proof while it
-adds a markerless coordination tree.
+placement and identity refinement (D2a/D8/D9); ADR-012 owns topology, routing,
+projection, audit ordering, the D1 tightening, **and the D7 projection-semantics**
+— so ADR-006's D7 is left unchanged (funnel discipline preserved), not re-amended
+here, to avoid double-owning what ADR-012 already carries. The plan-gate for OQ-D
+also belongs up front: the slice must not accidentally turn marker absence into a
+claimed identity proof while it adds a markerless coordination tree. OQ-D
+restriction + impersonation tests therefore span the **whole** Orchestrator verb
+class — creation (PHASE-02), prepare-review (PHASE-04), and integrate (PHASE-05,
+the trunk-writing verb) — not just creation.
 
 PHASE-02 isolates the coordination branch before projection exists. The
 coordination worktree is the inner-loop foundation: once the funnel writes
 `dispatch/<slice>` instead of the session tree, the shared-main contention
-surfaces are structurally out of the per-batch path.
+surfaces are structurally out of the per-batch path. Creation distinguishes two
+branch-exists cases: a **live worktree** on `dispatch/<slice>` means a concurrent
+same-slice run and is refused; the branch existing **without** a live worktree is
+a handover-resume and reattaches the same branch (design §1 resume stability).
 
 PHASE-03 builds the reusable primitives: filtered tree composition, commit-tree,
 CAS ref update, and the committed run ledger. This keeps the most delicate git
 work out of command-flow code and gives prepare-review and integrate the same
-tested substrate.
+tested substrate. It also owns the **funnel-time recording surface** that writes
+`boundaries.toml`/`orthogonal.toml` — a tested verb, not skill-prose appends, so
+stage-1 synthesis (C's phase cut, B's orthogonal exclusion) consumes
+machine-written OIDs rather than hand-authored ones. Because the primitives extend
+`src/git.rs` — the born-frame capture seam — the phase carries an explicit
+behaviour-preservation gate on the `forget.*.v1` byte-reproduction.
 
 PHASE-04 implements stage-1 prepare-review. It materializes the exact objects
 audit will inspect, without writing trunk. This is the first externally visible
@@ -52,7 +65,10 @@ partial application.
 PHASE-06 updates the source skills after the commands are real. This rewrites
 the human/agent operating loop from "the coordination branch is the deliverable"
 to "coordination is the SSoT, review/phase refs are the deliverables, audit gates
-those refs, and integration is explicit."
+those refs, and integration is explicit." The post-audit trigger is pinned to
+`/close` (not `/dispatch`): conclude stops at prepare-review + worktree removal,
+audit runs from parent/root against the prepared refs, and only then does `/close`
+invoke `dispatch sync --integrate`.
 
 PHASE-07 is the system proof. The earlier phases cover pieces; this phase proves
 the user-visible claim of SL-064: dispatch runs in a dedicated coordination
