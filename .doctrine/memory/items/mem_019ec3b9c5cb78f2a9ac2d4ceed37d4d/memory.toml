@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec3b9c5cb78f2a9ac2d4ceed37d4d"
+memory_key = "mem.pattern.entity.write-seam-canonicalizes-every-id-axis-the-read-view-does"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Write seam must canonicalize every id axis the read view does"
+summary = "A write seam must canonicalize every id axis the read view canonicalizes, or keys silently diverge"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["src/coverage_store.rs", "src/coverage_view.rs"]
+globs = []
+commands = []
+tags = ["coverage", "canonicalization", "keying"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "4fd4c20a81e1313106f9af8b52a0e434329bb675"
+ref_name = "refs/heads/main"
+checkout_state_id = "a8c180e651b55f4d7406236326ca2874c24c0c7f85c6e2e6ef948d9261a46300"
+base_commit = "a0b4bb350ac342c9b5a8217bf2974edc2ddae5e2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
