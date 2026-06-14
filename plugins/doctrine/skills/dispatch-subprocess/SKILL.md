@@ -81,6 +81,21 @@ channel) and bwrap are available, so the worker-mode floor is firmer than the
 claude arm — the confined profile makes it an **OS floor**, not just a prompt
 contract.
 
+## Against `dispatch/<slice>` — the fork branch is the native phase unit (EX-4)
+
+The orchestrator drives from the `dispatch/<slice>` coordination worktree
+(SL-064 / ADR-012). On this arm the worker forks from the explicit base `B` — **a
+ref on `dispatch/<slice>`**, never session HEAD (`fork --base "$B"` pins it). The
+worker's single-commit fork branch **is** the native `phase/<slice>-NN` code unit
+(ADR-012 D3): stage-2 `dispatch sync --integrate` consumes native and synthesized
+phase branches uniformly.
+
+**No funnel-time boundary recording on this arm.** `boundaries.toml` (and the
+`dispatch record-boundary` verb) feed the **fork-less claude arm's** per-phase cut
+(design §4.3) — where there is no fork branch to stand in. Here the fork branch
+already is the deliverable, so the orchestrator **skips** record-boundary. Don't add
+it; it is consumed only where the cut needs it.
+
 ## Red Flags
 
 **Never:**
