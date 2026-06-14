@@ -60,14 +60,15 @@ mergeable branches.
    and `phase/<slice>-NN` remain immutable audit/evidence refs. They are not
    redefined into normal feature branches.
 2. **Add a safe interaction surface.** Dispatch must materialise an explicit
-   candidate/topic branch on a chosen base for audit-time review, local testing,
-   "fix-now" edits, and experiments against other features.
+   candidate branch/worktree on a chosen base for audit-time review, local
+   testing, "fix-now" edits, and experiments against other features.
 3. **Admit audit-time changes deliberately.** If review fixes are made during
-   audit, the outcome must be recorded as the slice's admitted candidate, not left
-   stranded on an ambiguous worktree branch.
+   audit, the accepted OID must be recorded as an admitted review-surface or
+   close-target candidate, not left stranded on an ambiguous worktree branch.
 4. **Keep trunk protected.** Candidate creation may use an explicit 3-way merge
    onto a chosen base; final trunk integration remains opt-in, post-audit,
-   expected-tip guarded, and refuses moved trunk.
+   expected-tip guarded, and refuses moved trunk. Close never recreates, updates,
+   rebases, or merges a candidate.
 5. **Make outputs self-describing.** Commands and status views must distinguish
    evidence refs from candidate branches and point users/reviewers to the safe
    interaction path.
@@ -87,15 +88,16 @@ mergeable branches.
 
 Design direction: add a dispatch candidate/admission layer. Stage-1 sync still
 emits exact evidence refs. A new candidate workflow creates normal branches from
-those refs on an explicit base, optionally with a worktree. Reviewers and humans
-interact with candidates, not raw dispatch refs. Audit fixes are admitted by
-recording the candidate tip against the dispatch run; close integrates the
-admitted candidate under the existing post-audit guard.
+those refs on an explicit base, with review-surface and close-target roles kept
+distinct. Reviewers and humans interact with candidates, not raw dispatch refs.
+Audit fixes are admitted by recording immutable OIDs against the dispatch run;
+close integrates only the admitted close-target OID under the existing post-audit
+guard.
 
 ## Follow-Ups
 
 - `/close` stage-2 integration wiring remains secondary and should target the
-  admitted candidate, not the raw phase tip.
+  admitted close-target OID, not the raw phase tip or a mutable candidate ref.
 - ADR-006/ADR-012 need a narrow amendment: explicit candidate materialisation may
   3-way merge onto a chosen base, while exact refs and trunk integration remain
   fail-closed.

@@ -139,19 +139,34 @@ SKILL.md:115-121 (pinned-base rationale) + :229-232 (demoted re-anchor).
 ## Design pivot (2026-06-15)
 
 User consultation resolved the governance question: yes, dispatch may add an
-explicit normal candidate/topic interaction surface while preserving exact
+explicit normal candidate interaction surface while preserving exact
 `review/*` and `phase/*` refs as immutable evidence. The authored design now
 targets a candidate/admission workflow:
 
 - stage-1 sync still emits exact evidence refs;
 - `dispatch candidate create` materialises normal branches/worktrees on an
   explicit base for audit review, "fix-now" changes, and experiments;
-- `dispatch candidate admit` records the accepted candidate tip on
-  `dispatch/<slice>`;
-- close should integrate the admitted candidate under the existing post-audit
-  expected-tip guard.
+- `dispatch candidate admit` records accepted OIDs on `dispatch/<slice>`;
+- close should integrate the admitted close-target OID under the existing
+  post-audit expected-tip guard.
 
 Verification for the design write: `just gate` passed after the design/scope
 edits. The only observed noise was the existing user git hook warning about a
 read-only `/home/david/.local/state/behaviour/...` path inside memory anchoring
 tests; the gate exited cleanly.
+
+## External design review integrated (2026-06-15)
+
+A web GPT review accepted the concept but blocked design lock on the
+admission/close contract. Integrated changes:
+
+- close never creates, updates, rebases, merges, or repairs candidates;
+- review-surface candidates and close-target candidates are distinct roles;
+- admission binds immutable OIDs, not mutable candidate refs;
+- candidates record `source_oid`, `base_oid`, and `merge_oid`; admission validates
+  `merge_oid` ancestry before accepting an `admitted_oid`;
+- candidate ledger wording now permits journaled status mutation instead of
+  claiming append-only status fields;
+- close appends a normal ADR-012 CAS journal row with
+  `planned_new_oid = admitted_oid`;
+- conflict and raw-ref/worktree guardrails are now normative in the design.
