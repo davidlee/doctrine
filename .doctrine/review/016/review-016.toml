@@ -1,0 +1,156 @@
+id    = 16
+slug  = "reconciliation-review-of-sl-056"
+title = "reconciliation review of SL-056"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-056"
+
+[[finding]]
+id = "F-1"
+status = "withdrawn"
+severity = "major"
+title = "e2e_worker_guard::write_verbs_refuse_under_worker is deterministically RED — alias 'skills install' refusal names canonical 'claude install', test asserts 'skills install'"
+detail = """On sl056-coord 0feb672, run in isolation (env -u DOCTRINE_WORKER cargo test -p doctrine --test e2e_worker_guard): 2 passed, 1 FAILED. The test (e2e_worker_guard.rs:100) iterates write-classed verbs under DOCTRINE_WORKER and asserts each refusal names the typed verb; for the hidden deprecated alias ["skills","install"] the handler resolves to canonical and emits: 'refusing authored write claude install'. Test expects the message to name 'skills install'. Design §9/SR-3 keeps 'skills install' as a hidden deprecated alias dispatching the same handler. Reconciliation question: should the worker-mode refusal name the typed alias ('skills install') or the canonical ('claude install')? Either the message should echo the typed verb (code fix) or the test+SR-3 intent should accept canonical naming (test fix). Contradicts the handover's 'green at 0feb672' claim."""
+
+[[finding]]
+id = "F-2"
+status = "withdrawn"
+severity = "major"
+title = "cargo test --workspace (= just gate) is flaky-RED for SL-056 e2e worktree suites — green in isolation, varying failing subset under full-workspace parallelism"
+detail = "On sl056-coord 0feb672 (env -u DOCTRINE_WORKER): all 7 new e2e suites (worktree_fork/gc/import/land/stamp/status_marker, claude_install) PASS individually and PASS when run together as a focused group (single multi---test invocation). Under full 'cargo test --workspace' they FAIL flakily: run 1 failed all 7 worktree suites (instant 0.01s, assertion out.status.success() false → spawned doctrine exited non-zero); run 2 failed only e2e_claude_install x2 (lines 45,141). Failing subset varies per run ⇒ non-deterministic cross-test/resource interference, not a logic defect (binary sound — individual tests green). Likely shared on-disk state across test binaries (git worktree registration / fixed temp path / root::find CWD-walk per mem.pattern.testing.no-root-find-walk) OR resource contention (97MB binary, high concurrent spawn count + foreign e2e_relation_migration_storage red + cordage member). Effect: the slice's own gate is unreliable, undermining the 'green' closure claim. Root-cause classification is follow-up; the gate-flakiness symptom is the finding."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "import belt bypassed for any .doctrine/ or .claude/ path with a non-ASCII/space/control char (git core.quotePath default-true)"
+detail = '''src/worktree.rs:736 gathers the belt input via git::git_text(&root, [diff, --name-only, B..fork]). git_text applies NORMATIVE_FLAGS (src/git.rs:451: autocrlf/eol/fileMode) but NOT core.quotePath=false. Git defaults core.quotePath=true, so any path with a non-ASCII byte/space/control char is emitted C-quoted with a leading double-quote (e.g. ".doctrine/\303\251vil.toml"). classify_import's belt prefix-match path.starts_with(".doctrine/")/.".claude/" (worktree.rs:~674) then does NOT match → no doctrine-touch/claude-touch refusal → the verb proceeds to git apply --3way --index (worktree.rs:748) using the FULL diff B..fork which carries the REAL path, staging the governance/config file into the coordination index. End-to-end reproduced by the workflow verifier. This defeats the §7a/§7b governance ride-back containment — the slice's thesis. Fix: gather the belt diff (and keep the apply consistent) with -c core.quotePath=false, OR decode the C-quoting before prefix-match. Coverage gap: tests/e2e_worktree_import.rs has no non-ASCII/quoted-path belt test (codex finding [3]).'''
+disposition = "fixed"
+response = "Belt diff now pins -c core.quotePath=false so non-ASCII/space paths are emitted verbatim and the .doctrine/.claude prefix-match fires. sl056-coord b33a3b4; test import_refuses_doctrine_touch_quoted_path."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "blocker"
+title = "import belt evades governance-tier deletion via git rename detection — --name-only hides the .doctrine/ source path"
+detail = "src/worktree.rs:736 belt diff uses git diff --name-only B..fork with git's DEFAULT rename detection on. A worker that deletes a governance file (.doctrine/...) while a similar-content add appears elsewhere is paired by git as a rename old->new; --name-only emits only the destination, so the .doctrine/ SOURCE path never appears in delta_paths → belt prefix-match misses → no doctrine-touch refusal. The apply (worktree.rs:748, full diff B..fork) then carries the governance deletion into the coordination index. Distinct from W1 (quoting) — same diff invocation, different git default. Fix: add --no-renames to the belt name-only diff (and ensure the classify sees both legs of any rename). Both W1+W2 are facets of an unhardened belt diff; both gate close because the belt is the slice's malice-containment mechanism."
+disposition = "fixed"
+response = "Belt diff now pins --no-renames (and the apply patch too) so a rename-disguised governance deletion shows both legs and the .doctrine/ source hits doctrine-touch. sl056-coord b33a3b4; test import_refuses_rename_disguised_doctrine_deletion."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "gc --dry-run prints 'landed ✓' for a --force/--superseded reap of a NOT-landed fork (lies to the operator)"
+detail = "src/worktree.rs:1252-1259 dry-run branch prints '{fork}: landed ✓ — would reap (worktree/branch/target)' for ANY GcVerdict::Reap. classify_gc (worktree.rs:1099) authorises Reap via force || superseded_match || landed_verdict==Some(true). So 'gc --fork X --force --dry-run' (or --superseded-head <matching-sha> --dry-run) on a fork whose oracle verdict is Some(false) prints 'landed ✓' though NOT landed — authorised by override, not the oracle. Contradicts design §8.1 (design.md:531): dry-run 'prints the per-fork verdict ... so the operator never --forces blind' — yet the forcing operator is told it landed. Fix: report the actual landed_verdict + whether reap is oracle- vs override-authorised. Secondary: message hardcodes 'worktree/branch/target' even for the branch-gone target-only Reap (1091) which only reaps the target. Untested: e2e_worktree_gc.rs:385-428 lacks the --force/--superseded + --dry-run case."
+disposition = "fixed"
+response = "Dry-run now reports the actual landed verdict + oracle-vs-override basis via reap_targets(GcPlan); no more blanket 'landed ✓ (worktree/branch/target)'. sl056-coord ed8a74f; tests gc_dry_run_force_over_unlanded_reports_override_not_landed + gc_dry_run_branch_gone_reports_target_only."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "execute SKILL.md stale-marker remedy omits --operator; the verb refuses without it in a linked worktree"
+detail = "plugins/doctrine/skills/execute/SKILL.md:87-88 prints the stale-marker remedy as 'marker --clear' without --operator. run_marker_clear refuses a bare --clear in a linked worktree (design §3 accident-fence: requires --operator). So a worker/operator following the skill prose at the direct-writer transition gets a refusal. The verb's own --assert message names the correct remedy (marker --clear --operator); the SKILL prose diverges. Fix: SKILL.md must say 'marker --clear --operator'. Prose-vs-verb divergence — exactly the fail-mode this slice's thesis targets."
+disposition = "fixed"
+response = "execute/SKILL.md stale-marker remedy now reads 'marker --clear --operator' (bare --clear is refused in a linked worktree). sl056-coord 98c1452."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "gc_target_dir base resolution does not mirror fork creation — passes coordination root, not fork dir (diverges from its own doc)"
+detail = "src/worktree.rs:1208 calls gc_target_dir(&root, ...) passing the coordination root as the 'fork' param, while fork creation / project_env_contract (worktree.rs:~1366/1523) derive the per-wt CARGO_TARGET_DIR from the FORK dir (wt/<branch>). The gc_target_dir doc (1120-1126) describes mirroring the fork-creation base; the caller's &root contradicts it. Under the env-unset fallback the target dir gc computes to reap can diverge from where the fork actually built ⇒ gc fails to reap the real wt/<branch> build cache (orphan disk) or targets the wrong path. Codex [13]+conformance [6]. Fix: pass the fork dir (or recompute target_dir_for_branch from the branch name consistently with fork creation)."
+disposition = "fixed"
+response = "gc_target_dir now receives the live linked-worktree dir (not the coordination root), mirroring fork-creation's per-wt base. sl056-coord ed8a74f."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "rollback_fork can report false debris when worktree-remove fails but the fs reap succeeds"
+detail = "src/worktree.rs:1391-1432: step 1 (1397-1401) pushes 'worktree dir {dir}' to debris when 'git worktree remove --force' errors and dir.exists(). Step 3 (1423) fs::remove_dir_all(dir) then succeeds, but the stale step-1 entry is never retracted (the 1426 guard only dedups a fresh push). run_fork (1509) gates on debris.is_empty() → bails with fork-rollback-debris + 'original cause' though the fs was fully reaped: wrong exit token, misleading guidance. Narrow reachability (post-worktree-add the remove normally succeeds). Fix: step 3 drops the stale step-1 entry on successful dir removal. Untested."
+disposition = "fixed"
+response = "rollback_fork step-3 retracts the stale step-1 'worktree dir' debris entry on a successful fs reap, so a fully-cleaned rollback reports empty debris. sl056-coord 72501c3; test rollback_fork_retracts_stale_worktree_entry_after_fs_reap."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "re-entrant marker --stamp-subagent in an already-marked worktree is not refused; re-provision can overwrite worker state on resume"
+detail = "src/worktree.rs:~1747 run_stamp_subagent. Design §5 Hook-mint class says a re-entrant stamp in an ALREADY-marked worktree must be refused (worker_mode true ⇒ Hook-mint refused); only the first stamp (marker absent) is exempt. Workflow security [4] reports the code does not refuse the re-entrant case and re-provisions, which can overwrite worker state on a resume. Conformance gap vs §5. Verify whether the stamp verb actually consults worker_mode/marker_present before provisioning; if not, add the refusal. (Lower bound: the SubagentStart matcher fires once per worktree creation, so re-entry is not the common path — hence minor.)"
+disposition = "fixed"
+response = "run_stamp_subagent now gathers marker_present on the payload cwd and classify_stamp refuses StampRefusal::AlreadyMarked (token already-marked) on a re-entrant stamp; only the first marker-absent stamp is exempt. sl056-coord 961b68b; tests classify_stamp_already_marked_refuses + stamp_refused_when_payload_worktree_already_marked."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "design.md §5/§9/§11/§12 still specify the DROPPED create-fork/classify_create mechanism as the build target — design now lies about the code"
+detail = "PHASE-02 O3 spike deferred create-fork (WorktreeCreate payload lacks type/path/base); the live mechanism is SubagentStart-stamp. But design.md still names create-fork/classify_create as build targets in: §5 Hook-mint table row, §9 ¶ 'doctrine worktree create-fork is the verb', §11 run_create_fork row, §12 bullets (create-fork gate / orphan cleanup / bad-payload refusals / σ serviceable default). The code has no run_create_fork. design-wrong: reconcile design.md to match the shipped SubagentStart path (mark create-fork deferred consistently, as §4b already does). Conformance [5]."
+disposition = "design-wrong"
+response = "design.md reconciled to the shipped SubagentStart-stamp path: §5/§9/§11/§12 now mark create-fork/classify_create/run_create_fork DEFERRED (provenance) and name marker --stamp-subagent / run_stamp_subagent / classify_stamp as shipped. The design, not the code, was the defect. sl056-coord 013c904."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "Orchestrator env-leg exhaustive test asserts only the dual-cause token, not that the correct verb is named (proxy weakness)"
+detail = "tests/e2e_worktree_gc.rs:602 — the exhaustive Orchestrator env-set refusal test checks the dual-cause message token but does NOT assert the refused verb is named (fork/import/land/gc). Per mem.pattern.review.guard-test-asserts-property-not-proxy the test should assert the PROPERTY (this specific verb refused + named), not the shared token proxy. A regression that names the wrong verb would pass. Coverage [9]. Fix: assert the backtick-delimited verb name per member."
+disposition = "follow-up"
+response = "Captured as IMP-054 (test proxy: gc orchestrator env-leg asserts dual-cause token, not the named verb). main 1e39224. Not fixed in this slice by owner decision; tracked for a later test-hardening pass."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "per-verb worker-mode VT-4 tests assert verb with bare contains('land')/contains('import') substrings, not backtick-delimited — non-distinctive proxy"
+detail = '''tests/e2e_worktree_land.rs:361 (and import peer) assert the refusal with bare substring contains("land")/contains("import"), which match incidental occurrences (e.g. 'island', 'important', path fragments) rather than the backtick-delimited verb token. Proxy weakness (mem.pattern.review.guard-test-asserts-property-not-proxy). Fix: assert the \/\ backtick-delimited form. Coverage [10].'''
+disposition = "follow-up"
+response = "Captured as IMP-055 (test proxy: land/import worker-mode bare contains() substrings, not backtick-delimited verb). main 1e39224. Tracked for a later test-hardening pass."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "minor"
+title = "SubagentStart hook merge keys ownership on command only — a stale/wrong matcher is never healed on reinstall"
+detail = "src/boot.rs:658-663 the Current-decision merge compares/owns on the hook COMMAND; 688-696 set_command rewrites only the command. So if a .claude/settings.local.json already carries a SubagentStart hook with the right command but a STALE/WRONG matcher (e.g. an old agent-type literal), 'claude install' reinstall does not heal the matcher → the stamp hook silently never fires for dispatch-worker (fail-open: unstamped worker). mem.pattern.distribution.hookspec-merge-core-generalized-event-matcher notes the merge is over event+matcher; the ownership key should include the matcher. Codex [14]. Fix: key merge identity on (event, matcher, command) or reconcile the matcher on reinstall."
+disposition = "follow-up"
+response = "Captured as ISS-011 (SubagentStart hook merge keys on command only → stale matcher never healed on reinstall, fail-open). main 1e39224. Tracked as a follow-up issue; the live install wires the correct matcher, so no shipped regression."
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "nit"
+title = "README doctrine claude install --memory-only names a non-existent flag (should be --only-memory)"
+detail = "README.md:96 documents 'doctrine claude install --memory-only'; the actual flag is --only-memory. Conformance [7]. Fix: correct the README flag name."
+disposition = "fixed"
+response = "README flag corrected --memory-only → --only-memory. sl056-coord 98c1452."
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "minor"
+title = "CONFORMS (carried flag a): §5 Hook-mint first-stamp exemption falls out of Option C positive signal, NOT an explicit verb-identity carve-out — code has no carve-out"
+detail = "Handover carried-forward flag for owner VH confirm at close (design §5 PHASE-10 lock). Conformance review found the code implements no explicit verb-identity exemption for marker --stamp-subagent: the legit first-stamp is allowed automatically because at stamp time the target worktree bears no marker ⇒ worker_mode false (Option C positive signal); a re-entrant stamp is the §5 concern tracked separately in F-9. No design-vs-code divergence on the carve-out question. Raised as aligned for the ledger record + owner VH sign-off at /close."
+disposition = "aligned"
+response = "Confirmed: the §5 first-stamp exemption falls out of Option C (marker-absent ⇒ worker_mode false), no explicit verb-identity carve-out in code — no design-vs-code divergence. Surfaced for owner VH sign-off at /close (design §5 PHASE-10 lock)."
+
+[[finding]]
+id = "F-16"
+status = "verified"
+severity = "minor"
+title = "CONFORMS (carried flag c): PHASE-12 OS floor is codex/pi-only; claude arm remains marker-only altitude, D2b worker-on-main stays the deferred residual — unchanged"
+detail = "Handover carried-forward flag. Security/conformance review found no code change raising the claude arm's enforcement altitude above marker-only (§10): no env-lock, no bwrap on the claude path; the §4c deliberate-self-clear residual and the D2b worker-on-main residual remain deferred as the design states. The bwrap OS-floor (D6) is codex/pi-only per §4a/§11. No divergence. Ledger record."
+disposition = "aligned"
+response = "Confirmed: PHASE-12 OS floor remains codex/pi-only; the claude arm stays marker-only altitude and the D2b worker-on-main residual stays deferred as the design states. No divergence."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
