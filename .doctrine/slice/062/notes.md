@@ -77,3 +77,35 @@ the now-fulfilled lint makes the `expect` unfulfilled = compile error.
 **Follow-up captured:** IMP-061 — a fifth byte-identical setter
 `knowledge::set_record_status` (`src/knowledge.rs:1283`) is out of SL-062 scope; fold
 it onto `set_authored_status` to complete the DRY collapse.
+
+## PHASE-03 — transactional ADR-first supersede verb (DONE, verified green)
+
+Commit `a6ed379` (parent == B, linear, R-5 clean, `just gate` green verified by
+orchestrator). Top-level `doctrine supersede <NEW> <OLD>`, sibling of link/needs/after.
+
+- `SupersedePolicy` + `supersede_policy(kind)->Option` live in `src/adr.rs` (the kind
+  that owns the `supersedes`/`superseded_by`/`superseded` vocab); hardcoded ADR-only
+  match (D4 — not GovKind data). POL/STD/slice → None → ADR-first refuse (F2 follow-up).
+- `run_supersede` in main.rs: parse-once/hold-both/write-once (§5.4). Composes the
+  PHASE-02 cores (`apply_string_append` ×2, `apply_status` ×1) over docs parsed once;
+  writes NEW then OLD (ordering makes a torn state detectable, not the verb's job).
+  No third write body; `append_string_array` wrapper unused (its dead_code expect kept).
+- Guards: pre-flight F-1 (non-destructive) before any write; F-D not-already-superseded
+  (both-files no-op require `OLD.superseded_by==[NEW]` AND `NEW.supersedes∋OLD`);
+  different-supersessor `<X>` refuse; drift refuse → `doctrine validate` (P5, no self-heal);
+  self-edge / cross-kind refuse.
+- Refs stored prefixed (`ADR-001`) via `parse_canonical_ref`→`listing::canonical_id`,
+  matching `validate`'s derived side. VT-6 partial-write detected by
+  `relation_graph::validate_relations` ("supersession drift"), NOT the verb (F-F/codex C5).
+- Dropped the `#[cfg_attr(not(test),expect(dead_code))]` on `apply_string_append` (now
+  consumed). NEW black-box suite `tests/e2e_supersede.rs` (7 tests, all through run()).
+- Unblocks SL-048 OD-3 (F3). F1/F2/F3 minted at CLOSE.
+
+## Dispatch isolation — confirmed across all three phases
+
+All 3 workers ran in the shared `main` working tree (each saw foreign untracked files)
+and integrated their single commit directly onto `main` — `isolation: worktree` did not
+hold the orchestrator-sole-writer split. Every delta was nonetheless clean (exact
+declared files, R-5 clean, parent==B linear) and orchestrator-verified green
+post-landing. SL-064 (foreign, in-flight) is scoped to fix this coordination-branch
+isolation gap. The funnel's GOALS held; its sole-writer MECHANISM was bypassed.
