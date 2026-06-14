@@ -7,7 +7,7 @@ updated = "2026-06-14"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = [{ to = "SL-068", rank = 0 }]   # soft sequence: curate corpus after SL-068 PHASE-06 lands
+after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
 label = "governed_by"
