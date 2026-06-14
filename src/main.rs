@@ -23,6 +23,7 @@ mod install;
 mod integrity;
 mod knowledge;
 mod lexical;
+mod lifecycle;
 mod listing;
 mod memory;
 mod meta;
