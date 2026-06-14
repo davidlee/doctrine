@@ -477,3 +477,65 @@ fn coverage_show_relocated_view_byte_exact() {
          REQ-001 \u{2502} pending \u{2502} none     \u{2502} Coherent\n"
     );
 }
+
+// =========================================================================
+// VT-1 (record): requirement-ref canonicalization — every id axis the read view
+// canonicalizes is canonicalized at the write seam too (RV-017 F-1).
+// =========================================================================
+
+/// A non-canonical `--requirement REQ-1` keys the SAME canonical `REQ-001` cell
+/// the read view resolves: the stored key is `REQ-001`, and a `forget` spelled
+/// with the canonical `REQ-001` erases the cell the non-canonical `record` wrote.
+#[test]
+fn coverage_record_canonicalizes_requirement_ref() {
+    let dir = tmp();
+    let root = dir.path();
+
+    let rec = run(
+        root,
+        &[
+            "coverage",
+            "record",
+            "--slice",
+            "57",
+            "--requirement",
+            "REQ-1",
+            "--change",
+            "57",
+            "--mode",
+            "VT",
+            "--command",
+            "true",
+        ],
+    );
+    assert!(rec.status.success(), "stderr: {}", stderr(&rec));
+    // Confirmation + stored key both carry the canonical `REQ-001`.
+    assert_eq!(stdout(&rec), "recorded SL-057/REQ-001/SL-057/VT\n");
+    assert!(
+        coverage_body(root, 57).contains("requirement = \"REQ-001\""),
+        "stored key must be canonical: {}",
+        coverage_body(root, 57)
+    );
+
+    // A canonical-spelling forget erases the cell the non-canonical record wrote.
+    let hit = run(
+        root,
+        &[
+            "coverage",
+            "forget",
+            "--slice",
+            "57",
+            "--requirement",
+            "REQ-001",
+            "--change",
+            "57",
+            "--mode",
+            "VT",
+        ],
+    );
+    assert!(hit.status.success(), "stderr: {}", stderr(&hit));
+    assert_eq!(
+        stdout(&hit),
+        "withdrew SL-057/REQ-001/SL-057/VT [Planned]\n"
+    );
+}

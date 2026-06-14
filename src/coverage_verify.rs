@@ -211,9 +211,18 @@ fn all_slice_ids(root: &Path) -> Result<Vec<u32>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(ids),
         Err(e) => return Err(anyhow::anyhow!("failed to read {}: {e}", dir.display())),
     };
-    for entry in entries.flatten() {
+    // PROPAGATE per-entry read/stat errors — this set feeds the MUTATING
+    // `verify --all`; silently dropping an unreadable entry (`flatten()`) would
+    // leave a whole slice's `Failed`/`Blocked` cells un-re-derived with no
+    // diagnostic (RV-017 F-2).
+    for entry in entries {
+        let entry = entry
+            .map_err(|e| anyhow::anyhow!("failed to read an entry in {}: {e}", dir.display()))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|e| anyhow::anyhow!("failed to stat {}: {e}", entry.path().display()))?;
         // Skip the slug-alias symlink — it re-points at a numeric dir already seen.
-        if entry.file_type().is_ok_and(|t| t.is_symlink()) {
+        if file_type.is_symlink() {
             continue;
         }
         if let Some(id) = entry

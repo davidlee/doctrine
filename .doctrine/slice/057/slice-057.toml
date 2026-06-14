@@ -1,9 +1,9 @@
 id = 57
 slug = "formal-vt-verification"
 title = "Formal VT verification: executable check + coverage record surface (SPEC-002 test-run surface)"
-status = "ready"
+status = "audit"
 created = "2026-06-13"
-updated = "2026-06-13"
+updated = "2026-06-14"
 
 # Structural relations — uniform [[relation]] rows (SL-048 PHASE-04 "the cut";
 # read generically by the SL-046 reader / `inspect`). No `link` writer wired yet,

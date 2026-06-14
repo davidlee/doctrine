@@ -1,0 +1,52 @@
+id    = 17
+slug  = "reconciliation-review-of-sl-057"
+title = "reconciliation review of SL-057"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-057"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "record/forget store --requirement verbatim; read view canonicalizes — silent key divergence"
+detail = """run_record (coverage_store.rs:324) and run_forget (:376) build CoverageKey.requirement from args verbatim, while --slice/--change go through canonical_slice_ref. The read view canonicalizes the ref (coverage_view.rs:180 requirement::canonicalize_fk), so 'coverage record --requirement REQ-1' keys "REQ-1" and 'coverage show REQ-001' (keys "REQ-001") never matches it. forget shares the trap. The emergent canonical_slice_ref normalization was applied to slice+change but not the requirement axis. Design §5.3 says key fields are canonical id strings. Fix: route requirement through requirement::canonicalize_fk at both write seams; add a golden proving REQ-1 and REQ-001 hit one cell."""
+disposition = "fixed"
+response = "Fixed in-slice: run_record/run_forget now canonicalize the requirement axis via requirement::canonicalize_fk (the same best-effort normalizer the read view applies at coverage_view.rs:180), so a cell keyed --requirement REQ-1 stores REQ-001 and is the same cell coverage show REQ-001 reads. New golden coverage_record_canonicalizes_requirement_ref asserts the canonical stored key + a cross-spelling forget hit. coverage_store.rs."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "all_slice_ids uses entries.flatten() — verify --all silently drops read_dir errors on a mutating path"
+detail = "coverage_verify.rs:466 'for entry in entries.flatten()' discards per-entry read_dir Err items silently. all_slice_ids feeds the mutating 'coverage verify --all' set; a DirEntry error means a whole slice is never re-derived — its Failed/Blocked VT cells stay stale with no diagnostic. The dir-open error IS handled (NotFound->empty, other->Err); only the per-entry iteration swallows. Fix: iterate the Result items explicitly, propagate Err with path context, keep the symlink skip after a successful DirEntry."
+disposition = "fixed"
+response = "Fixed in-slice: all_slice_ids now iterates the ReadDir Results explicitly and propagates per-entry read + file_type errors with path context, instead of entries.flatten() silently dropping them. A mutating verify --all no longer skips a slice's cells on an unreadable entry without a diagnostic. coverage_verify.rs."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "status rendered via Debug ({:?}) into CLI output — leaks Rust spelling, partially unpinned"
+detail = "status_label (coverage_verify.rs:503) and withdrawal_line (coverage_store.rs:180) format CoverageStatus via Debug, emitting InProgress where the input vocabulary is in-progress, leaking the internal spelling into the surface. Goldens pin Planned/Verified/Failed; Blocked and InProgress rendering are unpinned. Fix: one stable kebab-case formatter (the serde rename token) shared by report + withdrawal output, with goldens for every rendered status."
+disposition = "deferred"
+response = "Deferred to IMP-056 (improvement). Minor surface-vocabulary nit (Debug-rendered status vs kebab input), no soundness impact; a fix re-pins PHASE-03 withdrawal_line goldens, widening churn beyond PHASE-05. Out of the audit's in-slice remediation scope; the two majors were fixed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "run_record/run_forget parse the slice ref twice"
+detail = "run_record (coverage_store.rs:317) parses args.slice for slice_id then again inside canonical_slice_ref(args.slice); run_forget (:375) repeats it. Redundant double validation from the new helper. Fix: derive the SL-NNN string from the already-parsed u32, or a helper returning (u32, String) in one pass."
+disposition = "fixed"
+response = "Fixed in-slice: introduced slice_key(u32) as the single SL-NNN spelling source; run_record/run_forget now derive the slice key from the already-parsed slice_id instead of re-parsing via canonical_slice_ref. Slice ref parsed once per handler. coverage_store.rs."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

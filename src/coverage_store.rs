@@ -205,13 +205,19 @@ pub(crate) fn load_config(root: &Path) -> Result<VerificationConfig> {
     }
 }
 
+/// The canonical `SL-NNN` key string for an already-parsed slice id — the single
+/// source of the slice key's spelling, shared by the slice and change axes (and by
+/// callers that have already parsed the id, so the ref is not re-parsed).
+fn slice_key(id: u32) -> String {
+    format!("SL-{id:03}")
+}
+
 /// Canonicalize a slice reference (`SL-NNN` or a bare number) to the zero-padded
 /// `SL-NNN` form the 4-tuple key stores. The key fields are canonical id strings
 /// (`slice = "SL-057"`), distinct from the numeric `slice_id` used for the file
 /// path — so a bare `--slice 57` still keys the same cell as `--slice SL-057`.
 fn canonical_slice_ref(reference: &str) -> Result<String> {
-    let id = crate::slice::parse_ref(reference)?;
-    Ok(format!("SL-{id:03}"))
+    Ok(slice_key(crate::slice::parse_ref(reference)?))
 }
 
 /// Parse a `--status` token into a [`CoverageStatus`] (kebab-case, matching the
@@ -308,9 +314,14 @@ pub(crate) fn run_record(path: Option<PathBuf>, args: &CoverageRecordArgs<'_>) -
         anyhow::bail!("invalid --mode `{}` (expected VT|VA|VH)", args.mode);
     }
 
+    // Canonicalize EVERY id axis the read view canonicalizes (slice/change via
+    // `slice_key`, requirement via `requirement::canonicalize_fk`) so a cell keyed
+    // by `--requirement REQ-1` is the same cell `coverage show REQ-001` reads —
+    // the view normalizes its ref the same way (RV-017 F-1). `slice_id` is already
+    // parsed above; do not re-parse the slice ref (F-4).
     let key = CoverageKey {
-        slice: canonical_slice_ref(args.slice)?,
-        requirement: args.requirement.to_owned(),
+        slice: slice_key(slice_id),
+        requirement: crate::requirement::canonicalize_fk(args.requirement),
         contributing_change: canonical_slice_ref(args.change)?,
         mode: args.mode.to_owned(),
     };
@@ -361,9 +372,11 @@ pub(crate) fn run_forget(
 ) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let slice_id = crate::slice::parse_ref(slice)?;
+    // Same canonicalization as `run_record` (RV-017 F-1/F-4) so `forget` erases the
+    // cell `record` wrote regardless of ref spelling.
     let key = CoverageKey {
-        slice: canonical_slice_ref(slice)?,
-        requirement: requirement.to_owned(),
+        slice: slice_key(slice_id),
+        requirement: crate::requirement::canonicalize_fk(requirement),
         contributing_change: canonical_slice_ref(change)?,
         mode: mode.to_owned(),
     };
