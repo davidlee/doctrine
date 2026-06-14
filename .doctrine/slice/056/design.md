@@ -296,7 +296,7 @@ classes join the worker-mode guard, one stays open, one is bespoke:
 | Class | Members | Refused under `worker_mode`? |
 |---|---|---|
 | **Orchestrator** | `fork`, `import`, `land`, `gc` | **Yes** — they mutate git refs/dirs (create/remove worktrees, delete branches, merge commits, reap dirs). Classifying them `Read` because they spare the authored TOML corpus is a category error (a worker could delete branches, violating ADR-006 D2). |
-| **Hook-mint** | `marker --stamp-subagent` | **Yes** — it mints the worker marker (and provisions the worktree). A *worker* invoking it is a privilege bypass on the claude path. The **legitimate first-stamp is exempt by the floor, not a carve-out:** the SubagentStart hook targets the payload `cwd` worktree, which at stamp time **bears no marker yet** ⇒ `worker_mode == false` (Option C positive signal) ⇒ allowed; a re-entrant call in an already-marked worktree is refused. (`create-fork` is **deferred** — §4b — so it leaves this class.) |
+| **Hook-mint** | `marker --stamp-subagent` | **Yes** — it mints the worker marker (and provisions the worktree). A *worker* invoking it is a privilege bypass on the claude path. The **legitimate first-stamp is exempt by the floor, not a carve-out:** the SubagentStart hook targets the payload `cwd` worktree, which at stamp time **bears no marker yet** ⇒ `worker_mode == false` (Option C positive signal) ⇒ allowed; a re-entrant call in an already-marked worktree is refused (`already-marked`, F-9). (`create-fork` is **deferred** — §4b — so it leaves this class.) |
 | **write** | authoring writes (`slice new`/`design`/`plan`/`memory record`/status-transition) **and `claude install`** (+ its hidden `skills install` alias, §9 — installs skills/agents/hooks into `.claude/`) | Yes. `claude install` is new to the guard (charge-5); the rest unchanged. **Justification (corrected): ADR-006 D2 applied uniformly — a worker performs no doctrine-mediated writes, and must not reconfigure its own harness (hooks/agents) mid-run. NOT a ride-back defense** — `.claude/` is gitignored, so a worker's installer output can never funnel back through `import` and is torn down at `gc` regardless. |
 | **Read** | `provision`, `check-allowlist`, `branch-point-check`, `status` | No — open to workers |
 | **`marker --clear`** | bespoke 5th class (§3) | **No** — locking the marker's only remover behind the marker is the self-brick. Refused instead by env-set, cwd-not-tree-root, and the `--operator` accident-fence in a linked worktree. |
@@ -307,14 +307,15 @@ worktree cannot call it; the legitimate first-stamp is allowed because its targe
 bears no marker yet (`worker_mode` false). Refused-when-already-a-worker,
 allowed-for-the-first-stamp is one classification, not two.
 
-> **⚠ PHASE-10-prep reconciliation (for the VH lock).** The PHASE-03 D ruling specified an
-> *explicit verb-identity* exemption for `marker --stamp-subagent`, predicated on the
-> B2/B3 **fail-closed** marker-absent floor. PHASE-05's **Option C reversed** that floor to
-> a positive signal (marker-absent → allow), which makes the legit first-stamp allowed
-> *automatically* (no marker yet ⇒ `worker_mode` false) — so **no verb-identity carve-out
-> is implemented**. The alternative — keep an explicit identity exemption as
+> **✅ PHASE-10 lock CONFIRMED (owner VH sign-off, RV-016/F-15).** The PHASE-03 D ruling
+> specified an *explicit verb-identity* exemption for `marker --stamp-subagent`, predicated
+> on the B2/B3 **fail-closed** marker-absent floor. PHASE-05's **Option C reversed** that
+> floor to a positive signal (marker-absent → allow), which makes the legit first-stamp
+> allowed *automatically* (no marker yet ⇒ `worker_mode` false) — so **no verb-identity
+> carve-out is implemented**. The alternative — keep an explicit identity exemption as
 > defense-in-depth, should a future change re-introduce a fail-closed floor — is noted, not
-> taken. Confirm at PHASE-10 lock.
+> taken. **Confirmed acceptable at PHASE-10 lock; the re-entrant case is fenced separately
+> by the `already-marked` refusal (F-9).**
 
 ## 6. `land` — solo `/execute`'s coordination merge
 
@@ -557,16 +558,19 @@ for the Claude surface:
 > must keep writing its (ephemeral, gitignored) permission state, else interactive
 > permission flow breaks under confinement.
 
-`doctrine worktree marker --stamp-subagent` is the verb the hook calls: reads the
-SubagentStart payload JSON on stdin, validates `cwd` (present, under repo, a **linked**
-worktree) and `agent_type`, then **provisions** (D9) + `write_marker`s into `cwd`. There
-is **no `classify_create` / `ForkWorker | PlainCreate | Refuse`** three-way and **no
-else-branch** (σ moot — the matcher gates; benign subagents never hit the hook). The
-bad-payload refusals (`missing-cwd`, `bad-dir`, `missing-agent-type`) fail the **stamp**,
-not creation — the worker runs regardless (SubagentStart is read-only, §4b), so a refusal
-means an **unstamped worker** fenced by the belt+guard+prompt+IMP-052. The validation
-lives in the binary (testable), the hook stays dumb — honoring the §1 thesis. The
-`create-fork` WorktreeCreate verb is **deferred** (§4b — payload lacks type+path+base).
+`doctrine worktree marker --stamp-subagent` is the verb the hook calls:
+`classify_stamp(agent_type, cwd_present, cwd_valid, already_marked) -> Stamp | Refuse`
+reads the SubagentStart payload JSON on stdin, validates `cwd` (present, under repo, a
+**linked** worktree) and `agent_type`, gates on `agent_type == DISPATCH_WORKER_AGENT_TYPE`
+(τ), then **provisions** (D9) + `write_marker`s into `cwd`. There is **no `classify_create`
+/ `ForkWorker | PlainCreate | Refuse`** three-way and **no else-branch** (σ moot — the
+matcher gates; benign subagents never hit the hook). The refusals (`missing-cwd`,
+`bad-dir`, `missing-agent-type`, and `already-marked` — a re-entrant stamp of an
+already-marked worktree, F-9) fail the **stamp**, not creation — the worker runs regardless
+(SubagentStart is read-only, §4b), so a refusal means an **unstamped worker** fenced by the
+belt+guard+prompt+IMP-052. The validation lives in the binary (testable), the hook stays
+dumb — honoring the §1 thesis. The `create-fork` WorktreeCreate verb is **deferred** (§4b —
+payload lacks type+path+base).
 
 ## 10. Governance deliverables
 
@@ -628,7 +632,7 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
 
 | Path | Change |
 |---|---|
-| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_stamp_subagent`** (claude **SubagentStart** handler — parses stdin payload with **bad-payload refusals** `missing-cwd`/`bad-dir`/`missing-agent-type` (ψ — fail the **stamp**, not creation: the worker runs regardless, §4b), validates `cwd` is a **linked** worktree + `agent_type == DISPATCH_WORKER_AGENT_TYPE` (τ), then **provisions** + `write_marker`s into `cwd`. **No `git worktree add`** (Claude owns the worktree) and **no compensating worktree rollback** (ρ N/A — owns no worktree); on any `provision`/`write_marker` failure it reports loudly + exits non-zero (M3 — surfaced to the orchestrator IMP-052 post-spawn check, never silently half-stamped). `create-fork` is **deferred** — §4b). New **`run_status`** verb (charge-4 observability + charge-3 gate; `--assert` derives a non-zero `stale-marker` exit from the same state as the human line — **no separate gate verb or `classify_writable` twin**). `run_import`'s belt now rejects **`.claude/`** as well as `.doctrine/` (charge-5 — distinct `claude-touch` token). Pure: `target_dir_for_branch`, `marker_path`, `classify_import` (belt over both `.doctrine/`+`.claude/`), `classify_land`, `classify_gc`, **`classify_stamp`** (two-valued: `Stamp | Refuse` — no `PlainCreate` else-branch, σ moot), and **`describe_mode(is_linked, marker_present, env_set)`** (the single source for both the status line and the `--assert` exit). **`const DISPATCH_WORKER_AGENT_TYPE`** is the single source of truth `classify_stamp` reads (τ). New `write_marker`/`marker_present`/`remove_marker` (`write_marker` invoked by `fork --worker` and `marker --stamp-subagent`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the per-worktree-creation hook.** |
+| `src/worktree.rs` | `run_fork` (compensating-cleanup rollback, honest non-zero), `run_import` (`classify_import`), `run_land` (`classify_land`; `git merge --abort` mid-merge-guarded → `wedged-merge`/`inconsistent-merge-state`; `worktree-gone`), `run_gc` (**idempotent state machine** — `classify_gc(state) -> GcPlan`; two-leg oracle `--is-ancestor` OR `git cherry` patch-id; `--superseded-head`; squash → named refusal), `run_marker_clear` (`--operator`), **`run_stamp_subagent`** (claude **SubagentStart** handler — parses stdin payload with **bad-payload refusals** `missing-cwd`/`bad-dir`/`missing-agent-type`/`already-marked` (ψ — fail the **stamp**, not creation: the worker runs regardless, §4b; `already-marked` refuses a re-entrant stamp of an already-marked worktree, F-9), validates `cwd` is a **linked** worktree + `agent_type == DISPATCH_WORKER_AGENT_TYPE` (τ) + `cwd` marker-absent, then **provisions** + `write_marker`s into `cwd`. **No `git worktree add`** (Claude owns the worktree) and **no compensating worktree rollback** (ρ N/A — owns no worktree); on any `provision`/`write_marker` failure it reports loudly + exits non-zero (M3 — surfaced to the orchestrator IMP-052 post-spawn check, never silently half-stamped). `create-fork` is **deferred** — §4b). New **`run_status`** verb (charge-4 observability + charge-3 gate; `--assert` derives a non-zero `stale-marker` exit from the same state as the human line — **no separate gate verb or `classify_writable` twin**). `run_import`'s belt now rejects **`.claude/`** as well as `.doctrine/` (charge-5 — distinct `claude-touch` token) and pins `-c core.quotePath=false` + `--no-renames` so a quoted/rename-disguised governance path cannot evade it (F-3/F-4). Pure: `target_dir_for_branch`, `marker_path`, `classify_import` (belt over both `.doctrine/`+`.claude/`), `classify_land`, `classify_gc`, **`classify_stamp(agent_type, cwd_present, cwd_valid, already_marked)`** (two-valued: `Stamp | Refuse` — no `PlainCreate` else-branch, σ moot; the `already_marked` arm is F-9), and **`describe_mode(is_linked, marker_present, env_set)`** (the single source for both the status line and the `--assert` exit). **`const DISPATCH_WORKER_AGENT_TYPE`** is the single source of truth `classify_stamp` reads (τ). New `write_marker`/`marker_present`/`remove_marker` (`write_marker` invoked by `fork --worker` and `marker --stamp-subagent`). Third `is_linked_worktree` consumer. **Deleted vs history: `run_marker_arm`/`run_marker_disarm`, `arm_path`, the lease/single-slot apparatus — obviated by the per-worktree-creation hook.** |
 | `src/main.rs` | `fork`/`import`/`gc`/`land`/**`status [--assert]`** (charge-4 observability + charge-3 gate — one `Read`-classed verb, `--assert` swaps the human line for a `stale-marker` non-zero exit; no second verb) subcommands + `marker {--clear --operator, --stamp-subagent}` (watch bool/arg clippy ceilings, [[mem.pattern.lint.cli-handler-args-struct]]). Worker-mode guard `worker_mode(root) = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`. The exhaustive `write_class` mapping is **behaviour-preserving for existing members**; the worker-mode *refusal set* gains three entries: **`fork`/`import`/`gc`/`land` = `Orchestrator`** (refused, NOT `Read`); **`marker --stamp-subagent` = `Hook-mint`** (charge-1 — refused under `worker_mode`; the legit first-stamp targets a worktree with no marker yet ⇒ worker_mode false ⇒ allowed, exemption falls out of Option C's positive signal, §4b/§5; `create-fork` deferred); **`claude install` (+ hidden `skills install` alias) = `write`** (charge-5 — refused under `worker_mode`). The env-leg refusal on a non-linked tree carries the named dual-cause message for authoring **and** funnel verbs. |
 | `src/skills.rs` → install surface | **Rename `skills install` → `claude install`** (keep `skills install` as a **hidden deprecated alias** → same handler, SR-3); add the **agents** leg (symlink `install/agents/claude/*.md` into `.claude/agents/`) and trigger the WorktreeCreate hook merge. Update `Write("skills install")` audit label + goldens; sweep docs + the `[[mem.pattern.distribution.skill-refresh-command]]` memory. **χ: every leg is golden-pinned in §12** — alias→same-handler, agent-def symlink presence, hook merge that preserves pre-existing hooks, idempotent reinstall, rename audit-label. |
 | `src/boot.rs` | A **`SubagentStart`** `HookSpec` **matcher-scoped to `dispatch-worker`** reusing the existing merge core; wired by `claude install`. The hook command **provisions + stamps** the marker into the payload `cwd` (no `git worktree add` — Claude owns the worktree); **not fail-closable** (read-only event, SR-1 met at the orchestrator/IMP-052 layer instead, §4b). No σ else-branch (matcher gates); bad-payload → stamp refusal (ψ). The `HookSpec` may land here or with the install leg (PHASE-11) — the *handler* (`run_stamp_subagent`) is PHASE-10. |
@@ -672,11 +676,12 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   install` alias* are both refused (a worker cannot mutate `.claude/` skills/agents/hooks).
   Both spellings, both signals.
 - **`marker --stamp-subagent` gate (the claude path):** `classify_stamp` golden — a valid
-  payload (`cwd` a **linked** worktree + `agent_type == DISPATCH_WORKER_AGENT_TYPE`) →
-  **provision + marker written** into `cwd`; reads `cwd`/`agent_type` from the **payload**,
-  not the hook's process cwd (SR-4). There is **no else-branch / no `PlainCreate`** (σ moot
-  — the matcher gates) and **no worktree-path printed** (it stamps an existing worktree, it
-  does not create one).
+  payload (`cwd` a **linked** worktree + `agent_type == DISPATCH_WORKER_AGENT_TYPE` + `cwd`
+  marker-absent) → **provision + marker written** into `cwd`; reads `cwd`/`agent_type` from
+  the **payload**, not the hook's process cwd (SR-4). There is **no else-branch / no
+  `PlainCreate`** (σ moot — the matcher gates) and **no worktree-path printed** (it stamps
+  an existing worktree, it does not create one). A re-entrant stamp of an **already-marked**
+  `cwd` → `already-marked` refusal (F-9 — no re-provision over live worker state).
 - **`marker --stamp-subagent` failure posture (M3 — un-rollback-able, surfaced not
   silenced):** a forced `provision`/`write_marker` failure → **non-zero exit + loud
   stderr**; assert the verb does **NOT** attempt to `git worktree remove` the worktree
@@ -685,9 +690,15 @@ Untouched: ADR-007, ADR-001/003/004, the withheld-tier model.
   verb adds no worktree.)
 - **`marker --stamp-subagent` bad-payload refusals (ψ — fail the stamp, not creation):**
   goldens for missing/empty `cwd` → `missing-cwd`; `cwd` not under repo / not a linked
-  worktree → `bad-dir`; **missing `agent_type` → `missing-agent-type`**. Each a distinct
-  non-zero exit; the worker still runs (read-only event) ⇒ an unstamped worker, fenced by
-  the belt+guard+prompt+IMP-052.
+  worktree → `bad-dir`; **missing `agent_type` → `missing-agent-type`**; an already-marked
+  `cwd` → **`already-marked`** (F-9). Each a distinct non-zero exit; the worker still runs
+  (read-only event) ⇒ an unstamped worker, fenced by the belt+guard+prompt+IMP-052.
+
+> **DEFERRED create-fork goldens (provenance, F-10).** The dropped create+provision+stamp
+> path's goldens (`create-fork` gate / orphan cleanup / bad-payload / σ-default) are **not
+> shipped tests** (§4b/§9 — the WorktreeCreate payload is too thin). The shipped claude-path
+> goldens are the `marker --stamp-subagent` ones above + the `dispatch-worker` drift test
+> below. The deferred goldens' provenance text is preserved in git history (sl056-coord §12).
 - **`dispatch-worker` drift test (τ — reds on mismatch):** assert the installed agent-def
   `name`, the `/dispatch-agent` skill's `subagent_type`, **and the SubagentStart matcher**
   all resolve to `DISPATCH_WORKER_AGENT_TYPE`; a divergent literal **REDS** the test. The

@@ -155,7 +155,15 @@ enum Command {
         yes: bool,
     },
 
-    /// Manage agent skills.
+    /// Manage the Claude harness surface (skills, agents, hooks).
+    Claude {
+        #[command(subcommand)]
+        command: ClaudeCommand,
+    },
+
+    /// Deprecated alias for `claude` (skills install). Hidden — kept so existing
+    /// `skills install` invocations do not flag-day break (SR-3).
+    #[command(hide = true)]
     Skills {
         #[command(subcommand)]
         command: SkillsCommand,
@@ -492,6 +500,139 @@ enum WorktreeCommand {
         /// HEAD to compare against (default: `git rev-parse HEAD`).
         #[arg(long)]
         head: Option<String>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Create an orchestrator-owned worktree fork off `<base>` on a NEW branch,
+    /// provision it (the sole copier), optionally stamp the worker marker, and emit
+    /// the per-worktree env contract on stdout (SL-056 PHASE-06). Orchestrator-classed
+    /// — refused under worker-mode. Atomic via compensating rollback.
+    Fork {
+        /// The base commit `B` the fork is created from (the orchestrator's
+        /// captured coordination HEAD).
+        #[arg(long)]
+        base: String,
+
+        /// The NEW branch to create at `<base>` for the fork.
+        #[arg(long)]
+        branch: String,
+
+        /// The fork worktree directory (must not already exist; unique per branch).
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// Stamp the worker-mode marker so the fork resolves to worker mode.
+        #[arg(long)]
+        worker: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Import a worker fork's single-commit delta into the coordination index,
+    /// NON-committing (SL-056 PHASE-07, ADR-006 D7: import ≠ commit). Stationary-
+    /// head case only — fails closed with a distinct token on any precond/belt
+    /// violation (`head-moved`/`tree-unclean`/`multi-commit`/`doctrine-touch`/
+    /// `claude-touch`); never auto-merges. Orchestrator-classed — refused under
+    /// worker-mode.
+    Import {
+        /// The orchestrator's pre-spawn captured base commit `B`.
+        #[arg(long)]
+        base: String,
+
+        /// The fork branch carrying the single non-merge commit `S` (`S^ == B`).
+        #[arg(long)]
+        fork: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Land a solo multi-commit isolated-worktree TDD branch onto the coordination
+    /// branch with ancestry PRESERVED via `git merge --no-ff` (NEVER `--squash` —
+    /// the verb cannot express a squash; SL-056 PHASE-08, design §6). Solo
+    /// `/execute`'s analog of `import`. Fails closed with a distinct token on any
+    /// precond/merge violation (`tree-unclean`/`no-such-fork`/`worktree-gone`/
+    /// `dispatch-fork`/`merge-conflict`/`wedged-merge`/`inconsistent-merge-state`).
+    /// Orchestrator-classed — refused under worker-mode.
+    Land {
+        /// The solo fork branch to merge onto the coordination branch.
+        #[arg(long)]
+        fork: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Reap a spent worktree fork in ONE idempotent act (SL-056 PHASE-09, design
+    /// §8) — deletes ONLY when the fork has provably landed via the two-leg
+    /// (ancestry ∪ patch-id) durable-git oracle (§8.1). Fails closed with a distinct
+    /// token (`not-landed`/`squash-uncertifiable`); `--superseded-head <SHA>` reaps
+    /// iff the SHA equals the branch's current head (a movement-guard, not a landing
+    /// proof); `--force` bypasses the oracle; `--dry-run` prints the verdict and
+    /// destroys nothing. A crash-interrupted gc completes (or names the leftover) on
+    /// rerun (§8.2). Orchestrator-classed — refused under worker-mode.
+    Gc {
+        /// The fork branch to reap.
+        #[arg(long)]
+        fork: String,
+
+        /// Reap iff this SHA equals the branch's current head (the moved-HEAD
+        /// re-dispatch case: a spent-yet-never-landed fork). A movement-guard, not a
+        /// landing proof.
+        #[arg(long)]
+        superseded_head: Option<String>,
+
+        /// Bypass the landed oracle and reap knowingly.
+        #[arg(long)]
+        force: bool,
+
+        /// Compute and print the per-fork verdict, destroying nothing.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Print the resolved worker-mode and cause (SL-056 §3). `--assert` derives a
+    /// non-zero `stale-marker` exit from the SAME state the human line reads.
+    /// Read-classed — open to workers.
+    Status {
+        /// Gate exit: non-zero with a `stale-marker` token if a stray marker sits
+        /// in this linked worktree (clean direct-writer entry ⇒ exit 0).
+        #[arg(long)]
+        assert: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Manage the worker-mode disk marker (SL-056 §3). `--clear` removes it at the
+    /// cwd tree root with a loud receipt — the self-brick cure; never refused by
+    /// the marker conjunct itself.
+    Marker {
+        /// Remove the marker at the cwd tree root.
+        #[arg(long)]
+        clear: bool,
+
+        /// Confirm a clear inside a linked worktree (the accident-fence).
+        #[arg(long)]
+        operator: bool,
+
+        /// Provision + stamp the worker marker into the `SubagentStart` payload's
+        /// worktree (SL-056 PHASE-10). Reads `{cwd, agent_type}` JSON on stdin;
+        /// the claude harness spawn path's mark step.
+        #[arg(long)]
+        stamp_subagent: bool,
 
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
@@ -1702,6 +1843,47 @@ enum SkillsCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum ClaudeCommand {
+    /// Install the doctrine Claude surface: skills, the dispatch-worker agent,
+    /// and the `SubagentStart` hook (SL-056). The same handler as the deprecated
+    /// `skills install` alias.
+    Install {
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+
+        /// Target agent(s); repeatable. Default: auto-detect claude.
+        #[arg(short = 'a', long)]
+        agent: Vec<String>,
+
+        /// Skill id(s) to install; repeatable. Default: all.
+        #[arg(short = 's', long)]
+        skill: Vec<String>,
+
+        /// Domain(s) to install; repeatable. Default: all.
+        #[arg(short = 'd', long)]
+        domain: Vec<String>,
+
+        /// Install only the memory skills (record-memory + retrieve-memory).
+        /// Mutually exclusive with --skill / --domain.
+        #[arg(long, conflicts_with_all = ["skill", "domain"])]
+        only_memory: bool,
+
+        /// Install to the user directory instead of the project.
+        #[arg(short = 'g', long)]
+        global: bool,
+
+        /// Print the plan and exit without making changes.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+}
+
 /// Mutation classification for the worker-mode guard (ADR-006 D2a). `Write`
 /// carries the verb label named in the refusal. EXHAUSTIVE by design (§7-D6):
 /// no wildcard arm, so a future `Command` variant is a compile error — never a
@@ -1709,15 +1891,38 @@ enum SkillsCommand {
 enum WriteClass {
     Read,
     Write(&'static str),
+    /// Orchestrator-only privileged verbs (SL-056 PHASE-06): `fork` is the FIRST
+    /// member; later phases add `import`/`land`/`gc`. Carries the verb label like
+    /// `Write`. REFUSED under worker-mode — these are the orchestrator's funnel
+    /// operations, never a worker's.
+    Orchestrator(&'static str),
+    /// `worktree marker --clear` (SL-056 §3, §5): a bespoke class that the
+    /// worker-mode guard does NOT refuse (locking the marker's only remover behind
+    /// the marker is a self-brick we reject). Its own bespoke refusals live in
+    /// `run_marker_clear`.
+    MarkerClear,
+    /// `worktree marker --stamp-subagent` (SL-056 PHASE-10): the claude harness
+    /// spawn path's provision+mark step. REFUSED under worker-mode via the SAME
+    /// branch as `Orchestrator`/`Write` — NO verb-identity carve-out. The legit
+    /// first stamp passes automatically: the target worktree bears no marker yet,
+    /// so `worker_mode == false` (marker-absent ⇒ allow). Carries the verb label.
+    Hookmint(&'static str),
 }
 
 fn write_class(cmd: &Command) -> WriteClass {
-    use WriteClass::{Read, Write};
+    use WriteClass::{Hookmint, MarkerClear, Orchestrator, Read, Write};
     match cmd {
         Command::Install { .. } => Write("install"),
+        Command::Claude { command } => match command {
+            // Reconfigures this harness's skills/agents/hooks — a worker must not
+            // (charge-5; ADR-006 D2 applied uniformly, not a verb carve-out).
+            ClaudeCommand::Install { .. } => Write("claude install"),
+        },
         Command::Skills { command } => match command {
             SkillsCommand::List { .. } => Read,
-            SkillsCommand::Install { .. } => Write("skills install"),
+            // The hidden deprecated alias dispatches the SAME handler as
+            // `claude install`, so it carries the SAME refusal label.
+            SkillsCommand::Install { .. } => Write("claude install"),
         },
         Command::Slice { command } => match command {
             SliceCommand::New { .. } => Write("slice new"),
@@ -1804,13 +2009,37 @@ fn write_class(cmd: &Command) -> WriteClass {
             Some(BootCommand::Install { .. }) => Write("boot install"),
         },
         Command::Worktree { command } => match command {
-            // Both write *fork* files, not the doctrine state the guard protects,
-            // and never run in worker context (§5.2) — Read on purpose.
+            // Provision/check-allowlist write *fork* files, not the doctrine state
+            // the guard protects, and never run in worker context (§5.2) — Read.
             // branch-point-check is a HEAD read + ref compare — no authored write,
             // callable under worker-mode by construction (§5.2, C-V).
+            // status reads the resolved mode (SL-056 §3) — open to workers.
             WorktreeCommand::Provision { .. }
             | WorktreeCommand::CheckAllowlist { .. }
-            | WorktreeCommand::BranchPointCheck { .. } => Read,
+            | WorktreeCommand::BranchPointCheck { .. }
+            | WorktreeCommand::Status { .. } => Read,
+            // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
+            // first Orchestrator-classed verb; refused under worker-mode.
+            WorktreeCommand::Fork { .. } => Orchestrator("fork"),
+            // import lands a worker delta into the coordination index (SL-056
+            // PHASE-07) — Orchestrator-classed; refused under worker-mode.
+            WorktreeCommand::Import { .. } => Orchestrator("import"),
+            // land lands a solo fork onto the coordination branch via --no-ff merge
+            // (SL-056 PHASE-08) — Orchestrator-classed; refused under worker-mode.
+            WorktreeCommand::Land { .. } => Orchestrator("land"),
+            // gc reaps a spent worktree fork once provably landed (SL-056 PHASE-09)
+            // — Orchestrator-classed; refused under worker-mode.
+            WorktreeCommand::Gc { .. } => Orchestrator("gc"),
+            // marker --stamp-subagent is the claude spawn path's provision+mark
+            // step (SL-056 PHASE-10) — Hookmint, refused under worker-mode (the
+            // legit first stamp lands on a marker-absent worktree ⇒ allowed). All
+            // other marker forms (--clear, bare) are the bespoke self-brick cure —
+            // NOT refused by the worker-mode guard; their fences live in the handler.
+            WorktreeCommand::Marker {
+                stamp_subagent: true,
+                ..
+            } => Hookmint("marker --stamp-subagent"),
+            WorktreeCommand::Marker { .. } => MarkerClear,
         },
         // Read-only: the coverage/drift view (never writes / derives status, §5.3),
         // the corpus integrity scan (INV-3), and the cross-kind relation view
@@ -1884,29 +2113,81 @@ fn run_inspect(path: Option<PathBuf>, id: &str, format: Format, json: bool) -> a
     Ok(())
 }
 
-/// Worker context (ADR-006 D2a): a dispatched worker sets `DOCTRINE_WORKER=1`
-/// and may read freely but must mint/anchor nothing — it returns a source delta.
-fn worker_mode() -> bool {
-    std::env::var_os("DOCTRINE_WORKER").as_deref() == Some(std::ffi::OsStr::new("1"))
+/// Worker-mode guard (ADR-006 D2a / SL-056 §3): refuse a Write-classed verb when
+/// the cwd tree resolves to worker mode (marker in a linked worktree OR the
+/// `DOCTRINE_WORKER` env optimisation). Read / `MarkerClear` pass through. The
+/// marker leg is evaluated LAZILY — only a Write verb resolves the root, so a Read
+/// verb in a non-doctrine cwd never gains a new failure path (design §3).
+fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
+    // Write and Orchestrator are both refused under worker-mode with the SAME
+    // branches; Read and the bespoke MarkerClear pass through (SL-056 PHASE-06).
+    let verb = match write_class(cmd) {
+        WriteClass::Write(verb) | WriteClass::Orchestrator(verb) | WriteClass::Hookmint(verb) => {
+            verb
+        }
+        WriteClass::Read | WriteClass::MarkerClear => return Ok(()),
+    };
+    // No doctrine/project root above the cwd: the marker leg cannot apply. Fall
+    // back to the env leg alone (a leaked env on a rootless cwd), never a new error.
+    let Ok(root) = root::find(None, &root::default_markers()) else {
+        if worktree::env_worker_set() {
+            anyhow::bail!("{}: refusing authored write `{verb}`", worktree::DUAL_CAUSE);
+        }
+        return Ok(());
+    };
+    let mode = worktree::resolve_mode(&root);
+    if !mode.refused {
+        return Ok(());
+    }
+    // The env leg on a NON-linked tree carries the NAMED dual-cause message (never
+    // a bare "worker refused"); the marker / linked-fork legs name the verb plainly.
+    if mode.is_env_on_nonlinked() {
+        anyhow::bail!("{}: refusing authored write `{verb}`", worktree::DUAL_CAUSE);
+    }
+    anyhow::bail!(
+        "worker fork (signal: {}): refusing authored write `{verb}` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator.",
+        mode.cause_token()
+    );
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // ADR-006 D2a worker-mode guard: a dispatched worker mints/anchors nothing.
-    // Bail before dispatch on any Write-classed verb; Read paths stay open (INV-3).
-    if let (true, WriteClass::Write(verb)) = (worker_mode(), write_class(&cli.command)) {
-        anyhow::bail!(
-            "DOCTRINE_WORKER=1: refusing authored write `{verb}` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator."
-        );
-    }
+    // ADR-006 D2a / SL-056 §3 worker-mode guard: a dispatched worker mints/anchors
+    // nothing. Bail before dispatch on any Write-classed verb; Read / MarkerClear
+    // paths stay open (INV-3 / the self-brick carve-out).
+    worker_guard(&cli.command)?;
 
     match cli.command {
         Command::Install { path, dry_run, yes } => install::run(path, dry_run, yes),
+        Command::Claude { command } => match command {
+            ClaudeCommand::Install {
+                path,
+                agent,
+                skill,
+                domain,
+                only_memory,
+                global,
+                dry_run,
+                yes,
+            } => skills::run_install(
+                path,
+                &skills::InstallArgs {
+                    agents: &agent,
+                    skills: &skill,
+                    domains: &domain,
+                    only_memory,
+                    global,
+                    dry_run,
+                    yes,
+                },
+            ),
+        },
         Command::Skills { command } => match command {
             SkillsCommand::List { agent, installed } => {
                 skills::run_list(agent.as_deref(), installed)
             }
+            // The deprecated alias routes into the SAME handler as `claude install`.
             SkillsCommand::Install {
                 path,
                 agent,
@@ -2393,6 +2674,39 @@ fn main() -> anyhow::Result<()> {
             WorktreeCommand::BranchPointCheck { base, head, path } => {
                 worktree::run_branch_point_check(path, &base, head)
             }
+            WorktreeCommand::Fork {
+                base,
+                branch,
+                dir,
+                worker,
+                path,
+            } => worktree::run_fork(path, &base, &branch, &dir, worker),
+            WorktreeCommand::Import { base, fork, path } => {
+                worktree::run_import(path, &base, &fork)
+            }
+            WorktreeCommand::Land { fork, path } => worktree::run_land(path, &fork),
+            WorktreeCommand::Gc {
+                fork,
+                superseded_head,
+                force,
+                dry_run,
+                path,
+            } => worktree::run_gc(path, &fork, superseded_head.as_deref(), force, dry_run),
+            WorktreeCommand::Status { assert, path } => worktree::run_status(path, assert),
+            WorktreeCommand::Marker {
+                clear,
+                operator,
+                stamp_subagent,
+                path,
+            } => {
+                if stamp_subagent {
+                    worktree::run_stamp_subagent(path)
+                } else if clear {
+                    worktree::run_marker_clear(path, operator)
+                } else {
+                    anyhow::bail!("`worktree marker` requires `--clear` or `--stamp-subagent`")
+                }
+            }
         },
         Command::Validate { path } => run_validate(path),
         Command::Reseat {
@@ -2573,7 +2887,11 @@ mod write_class_tests {
     fn cls(cmd: Command) -> Option<&'static str> {
         match write_class(&cmd) {
             WriteClass::Read => None,
-            WriteClass::Write(v) => Some(v),
+            // All refused classes carry a verb label; the guard refuses each.
+            WriteClass::Write(v) | WriteClass::Orchestrator(v) | WriteClass::Hookmint(v) => Some(v),
+            // The bespoke MarkerClear class is neither Read nor a guarded Write;
+            // the dedicated `worktree_marker_is_bespoke_class` test pins it.
+            WriteClass::MarkerClear => None,
         }
     }
 
@@ -2616,6 +2934,8 @@ mod write_class_tests {
             }),
             None
         );
+        // The hidden `skills install` alias carries the SAME label as the
+        // canonical `claude install` (SR-3 — one handler, one refusal label).
         assert_eq!(
             cls(Command::Skills {
                 command: SkillsCommand::Install {
@@ -2629,7 +2949,26 @@ mod write_class_tests {
                     yes: false,
                 }
             }),
-            Some("skills install")
+            Some("claude install")
+        );
+    }
+
+    #[test]
+    fn claude_install_is_write() {
+        assert_eq!(
+            cls(Command::Claude {
+                command: ClaudeCommand::Install {
+                    path: None,
+                    agent: Vec::new(),
+                    skill: Vec::new(),
+                    domain: Vec::new(),
+                    only_memory: false,
+                    global: false,
+                    dry_run: false,
+                    yes: false,
+                }
+            }),
+            Some("claude install")
         );
     }
 
@@ -3109,6 +3448,83 @@ mod write_class_tests {
             }),
             None
         );
+        // SL-056 §3: `worktree status` reads the resolved mode — Read (open to
+        // workers), so it survives the guard.
+        assert_eq!(
+            cls(Command::Worktree {
+                command: WorktreeCommand::Status {
+                    assert: false,
+                    path: None,
+                }
+            }),
+            None
+        );
+    }
+
+    // SL-056 §3/§5: `worktree marker --clear` is the bespoke MarkerClear class —
+    // NOT a guarded Write (locking the marker's remover behind the marker is a
+    // self-brick). The guard must not refuse it; its own fences live in the handler.
+    #[test]
+    fn worktree_marker_is_bespoke_class() {
+        let c = Command::Worktree {
+            command: WorktreeCommand::Marker {
+                clear: true,
+                operator: false,
+                stamp_subagent: false,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(write_class(&c), WriteClass::MarkerClear),
+            "marker --clear must be the bespoke MarkerClear class"
+        );
+        // And therefore not seen as a guarded Write by `cls`.
+        assert_eq!(cls(c), None);
+    }
+
+    // SL-056 PHASE-10: `worktree marker --stamp-subagent` is the Hookmint class —
+    // refused under worker-mode via the SAME branch as Orchestrator/Write (NO
+    // verb-identity carve-out), carries the "marker --stamp-subagent" verb label.
+    #[test]
+    fn worktree_marker_stamp_subagent_is_hookmint() {
+        let c = Command::Worktree {
+            command: WorktreeCommand::Marker {
+                clear: false,
+                operator: false,
+                stamp_subagent: true,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(
+                write_class(&c),
+                WriteClass::Hookmint("marker --stamp-subagent")
+            ),
+            "marker --stamp-subagent must be the Hookmint class"
+        );
+        // A guarded Write to `cls` — the worker-mode guard refuses it.
+        assert_eq!(cls(c), Some("marker --stamp-subagent"));
+    }
+
+    // SL-056 PHASE-06: `worktree fork` is the FIRST Orchestrator-classed verb —
+    // refused under worker-mode, carries the "fork" verb label.
+    #[test]
+    fn worktree_fork_is_orchestrator() {
+        let c = Command::Worktree {
+            command: WorktreeCommand::Fork {
+                base: "B".to_string(),
+                branch: "wkr".to_string(),
+                dir: PathBuf::from("x"),
+                worker: false,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("fork")),
+            "fork must be Orchestrator(\"fork\")"
+        );
+        // The guard treats it like a Write: cls surfaces the verb label.
+        assert_eq!(cls(c), Some("fork"));
     }
 
     #[test]

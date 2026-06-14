@@ -70,13 +70,36 @@ When isolation is requested, before implementing (i.e. before step 5) invoke
   `slice/SL-029-dispatch-worktree-creation`), worktree dir keyed by the durable id
   (`.worktrees/SL-029`).
 
-`/worktree` handles detection, the creation ladder, provisioning, the spawn guards,
-and the green baseline; the **fork branch it returns is the deliverable**. Carry
-out the TDD loop (steps 5–12) inside that fork, then hand off the branch.
+`/worktree` handles detection, the creation ladder (`doctrine worktree fork`),
+provisioning, the spawn guards, and the green baseline; the **fork branch it
+returns is the deliverable**.
 
-`/execute` is its own orchestrator — it writes doctrine state directly, so
-**worker mode is never used here** (that is the future `/dispatch` funnel's path,
-left untouched).
+**Assert a clean direct-writer entry.** Solo `/execute` is its own orchestrator —
+worker mode is **never** used here (that is `/dispatch`'s path). Before the TDD
+loop, at the solo→direct-writer transition, run:
+
+```bash
+doctrine worktree status --assert   # non-zero `stale-marker` if a stray marker sits here
+```
+
+A stray worker marker in this worktree would make doctrine-mediated writes refuse
+mid-work and confuse a direct writer. `--assert` is exit 0 on a clean entry and
+non-zero (`stale-marker`) otherwise — clear it with `doctrine worktree marker
+--clear --operator` before proceeding (bare `--clear` is refused in a linked
+worktree — the §3 accident-fence). (This is the §3 chokepoint the gate PHASE-05 shipped,
+now actually called.)
+
+Carry out the TDD loop (steps 5–12) inside the fork. When green, **land the fork
+onto the coordination branch** — `/execute` is the sole caller of `land`:
+
+```bash
+doctrine worktree land --fork slice/SL-NNN-slug   # merge --no-ff, ancestry preserved (NEVER squash)
+doctrine worktree gc   --fork slice/SL-NNN-slug   # reap the spent fork once the oracle proves it landed
+```
+
+`land` preserves the multi-commit TDD history via `git merge --no-ff` (it cannot
+express a squash); `gc` deletes only after the two-leg landed oracle certifies the
+fork (§8.1) — both fail closed with a distinct token, never auto-merge.
 
 ## Outcomes
 
