@@ -1,0 +1,223 @@
+# Implementation plan for SL-066 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-066"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Governance moves first — ADR-013 + doc relocation"
+objective = """
+Author the canon before the code (ADR-003 / §1 authoring ethos, G7 — NOT IMP-047,
+which is the unbuilt trinary-actionability improvement). ADR-013 establishes Revision
+as a first-class change-axis kind (peer to slice/REC, NOT a spec subtype, NOT a slice
+facet) and the governance→work dependency rule: a slice `needs` a Revision, never the
+evergreen governance doc it revises (the SL-060 gradient-inversion invariant, the
+IDE-010 payoff). Then relocate the deferred `REV-`: close doc/entity-model.md
+§Adjudication's open home question (home = change axis; cite ADR-013) and move `REV-`
+off doc/spec-entity-spec.md's deferred spec-subtype family (cite ADR-013). Doc-only —
+no code. ADR-013 is new (max accepted is ADR-012), so no supersession.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked — three adversarial passes integrated (internal F1-F8, codex B1-B4/M1-M3, Opus G1-G7); nine design questions resolved (§8); G1 blocker dispositioned; handover line 79 lock gate cleared" },
+  { id = "EN-2", text = "doc/entity-model.md §Adjudication leaves REV home open; doc/spec-entity-spec.md carries REV- as a deferred spec subtype; max accepted ADR is ADR-012" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ADR-013 authored + accepted: Revision a first-class change-axis kind; governance→work dependency routes through a Revision (SL-060 invariant rationale recorded)" },
+  { id = "EX-2", text = "doc/entity-model.md §Adjudication open question closed (home = change axis), cites ADR-013" },
+  { id = "EX-3", text = "doc/spec-entity-spec.md relocates REV- off the deferred spec-subtype family, cites ADR-013" },
+]
+verification = [
+  { id = "VA-1", expects = "ADR-013 coherent with the accepted ADR set — no contradiction with ADR-003 (authorship), ADR-009 (conduct/approval-not-lifecycle), ADR-010 (relation modelling), ADR-004 (outbound-only); agent review (doc-only, no test oracle)" },
+  { id = "VH-1", expects = "User accepts the ADR-013 framing before code phases begin" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Kind + spine — REV kind, lifecycle/approval, three corpus-walk arms"
+objective = """
+Introduce the REV kind and its work-lifecycle spine. New src/revision.rs: REV_KIND,
+RevDoc (id/slug/title/status/approval/[[change]]), scaffold, run_new/run_show/
+run_status. KINDS row in integrity.rs (REV, stem `revision`, state_dir None);
+install/manifest.toml [dirs].create + .gitignore negation (the `adr` trap — authored
+entities need the negation or they are silently uncommittable). main.rs Revision
+dispatch (new/show/status). Lifecycle: borrow backlog's proposed→started→done
+(+abandoned from any non-terminal) — NOT slice's 9-state. Approval is a SEPARATE field
+(none|requested|approved|rejected), orthogonal to status (entity-model "approval is not
+lifecycle", ADR-009); lifecycle transitions are approval-blind (a REV may sit started at
+approval=none). Default `gate` posture is a baked v1 default (ADR-009's [conduct] table
+is slice-FSM-state-keyed and does not address Revision — extending it is deferred).
+CRITICAL (G1/G2/G3): a new KINDS row is consumed by THREE corpus-walk tables — all
+three arms land in THIS phase, with the row, or the debug-build corpus scan panics /
+mis-classifies the moment a REV is minted: (a) priority::partition.rs dedicated REV
+KindPartition (workable ["proposed","started"], terminal ["done","abandoned"]) +
+REV_STATUSES const for the VT canary — its OWN row (REV vocab ≠ backlog's), else a
+done REV classifies Unrecognised != Terminal and never unblocks a dependent
+(partition.rs:191-193, channels.rs:67); (b) relation_graph::dep_seq_for REV arm
+mirroring the SL arm (G2 — else REV-as-source edges short-circuit to empty, never read);
+(c) relation_graph::outbound_for REV arm (G3 — the fallthrough is debug_assert!(false);
+the revision::relation_edges accessor may be empty now, filled in PHASE-03, but the arm
+must exist). Dispatch only new/show/status here; change add / approve / apply land later.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 done — ADR-013 accepted, REV home is change axis" },
+  { id = "EN-2", text = "authored-entity-wiring seam known (mem.pattern.install.authored-entity-wiring): KINDS row + manifest dir + gitignore negation + render/show; backlog.rs (work-lifecycle) + rec.rs are the kind templates" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "doctrine revision new/show/status mint + render a REV — revision-NNN.toml/.md + NNN-slug symlink scaffold per the authored-entity seam" },
+  { id = "EX-2", text = "Backlog-style FSM (proposed→started→done; abandoned from any non-terminal); approval field orthogonal, lifecycle transitions approval-blind (started at approval=none accepted)" },
+  { id = "EX-3", text = "KINDS row + ALL THREE corpus-walk arms land together (G1 partition REV row + REV_STATUSES; G2 dep_seq_for REV arm; G3 outbound_for REV arm, accessor may be empty) — minting a REV neither panics the debug corpus scan nor mis-classifies" },
+  { id = "EX-4", text = "Fresh-install scaffolds .doctrine/revision; a committed REV survives (gitignore negation)" },
+  { id = "EX-5", text = "clippy zero-warning (bins/lib), just check green; existing entity-engine / relation / dep_seq suites green unchanged (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "revision new/show/status round-trip — FSM advance + abandon; approval orthogonal (a started REV at approval=none accepted)" },
+  { id = "VT-2", expects = "G1 canary — REV_STATUSES matches the KindPartition vocab; a done/abandoned REV classifies Terminal (not Unrecognised), the precondition for a dependent to unblock" },
+  { id = "VT-3", expects = "G3 corpus-scan safety — minting a REV does not trip outbound_for's debug_assert!(false) fallthrough nor a missing-partition mis-class" },
+  { id = "VT-4", expects = "Wiring — fresh-install scaffolds .doctrine/revision; a committed REV survives the gitignore negation (the adr trap)" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Relations payload — [[change]] rows + revises reciprocity"
+objective = """
+The typed [[change]] payload and its derived reciprocity. relation.rs:
+RelationLabel::Revises + a RELATION_RULES row (sources [REV]; targets {SPEC,PRD,REQ,
+ADR,POL,STD}; Tier Typed; LinkPolicy::TypedVerbOnly — F2: authored by a `revision change
+add` verb that writes the payload row, NEVER by `doctrine link`; the rule row exists for
+target validation + inbound-reciprocity naming, not a writable Tier-1 edge). The
+[[change]] table has TWO row shapes (F3 — creation ops cannot key on an FK that does not
+exist yet): existing-target ops (modify|retire|move|status) key on a live FK with `from`
+AUTO-captured at change add (§4.5 from-guard input); creation ops (introduce|create)
+carry new_label REQUIRED + frozen at change add (E4 — else membership churn between draft
+and apply silently changes what lands, external M2) and member_of naming a live SPEC-NNN
+(no cross-row creation deps in v1). Fill revision::relation_edges accessor + the
+outbound_for REV arm to read the [[change]] rows (E2); inbound `revises` derived via the
+indexed in_edges reverse-adjacency over the prebuilt graph (O(1), NOT a per-query scan;
+the one walk is upstream in scan_entities, once per inspect, G6), surfaced on `doctrine
+inspect ADR-X / inspect REQ-N` — every REV touching the target, uniform over all rows —
+NOT on `show` (ADR-004 §3 reserves inbound completeness to the scan-backed surface).
+`primary` is a display/headline hint only (F1): at-most-one, optional; never anchors
+visibility or blocking. OQ-1 (detail column names + action vocab; the two-status-rows-
+same-target change-add dedup) finalized here against the table shape.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 done — REV kind present with an empty outbound_for REV arm + the relation_edges accessor stub to fill" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RelationLabel::Revises + RELATION_RULES row; LinkPolicy::TypedVerbOnly — `doctrine link … revises …` refused; `revision change add` writes the payload row" },
+  { id = "EX-2", text = "[[change]] two row shapes: existing-target ops key on a live FK with `from` auto-captured at change add; creation ops carry new_label (required, frozen) + member_of (live SPEC); detail columns optional" },
+  { id = "EX-3", text = "revision::relation_edges accessor + outbound_for REV arm read the rows; inbound `revises` surfaces on `inspect ADR-X` / `inspect REQ-N` (all touching REVs, uniform), NOT on `show` (ADR-004 §3)" },
+  { id = "EX-4", text = "`primary` is display-only, at-most-one optional; nothing functional keys on it" },
+  { id = "EX-5", text = "clippy/just check green; relation + registry + entity suites green unchanged (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "Golden — a 3-target Revision; `inspect ADR-X` / `inspect REQ-N` inbound-list ALL touching REVs uniformly (not just primary); `show` does NOT list them (ADR-004 §3)" },
+  { id = "VT-2", expects = "revises target validation — {SPEC,PRD,REQ,ADR,POL,STD} accepted, off-target refused; TypedVerbOnly — `doctrine link` revises refused, `revision change add` accepted" },
+  { id = "VT-3", expects = "E4 — a creation row with new_label omitted is refused; a status row auto-captures `from` (current ReqStatus) at change add" },
+  { id = "VT-4", expects = "`primary` — at-most-one enforced at change add; a zero-primary Revision is valid; blocking/apply ignore it" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Dep/seq surface — REV as needs/after source + target"
+objective = """
+Wire REV into the dep/seq overlay end-to-end (the IDE-010 payoff). Add REV to the
+work-like predicate (main.rs:3050) as BOTH source and target: SL/ISS/IMP/CHR/RSK/IDE can
+`needs`/`after` REV-NNN, and a REV can itself `needs` a spike. The partition (G1) and
+dep_seq_for (G2) arms already exist from PHASE-02 — this phase adds the predicate edit and
+exercises the full path: a `needs REV-NNN` blocks the dependent until REV-NNN reaches
+terminal (done/abandoned), then unblocks. Governance docs (spec/ADR/POL/STD) remain
+EXCLUDED as dep/seq targets (the SL-060 invariant — depending on governance routes
+through the Revision, never the evergreen doc directly).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 done (partition + dep_seq_for REV arms present) and PHASE-03 done ([[change]] payload + reciprocity)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`slice needs REV-NNN` accepted; a REV `needs`/`after` a work item accepted (REV as both source and target)" },
+  { id = "EX-2", text = "`needs REV-N` blocks the dependent until REV-N reaches terminal (done/abandoned), then unblocks — the G1 partition payoff realised end-to-end" },
+  { id = "EX-3", text = "governance-doc dep/seq target still refused (SL-060 invariant intact — needs ADR-X / SPEC-X rejected)" },
+  { id = "EX-4", text = "clippy/just check green; dep_seq + relation_graph suites green unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "`slice needs REV-NNN` accepted; blocks while REV-N non-terminal, unblocks once REV-N terminal" },
+  { id = "VT-2", expects = "G2 — a REV-as-source `needs`/`after` edge reaches the blocker/next view (dep_seq_for REV arm read back, not silently dropped)" },
+  { id = "VT-3", expects = "SL-060 regression — `needs ADR-X` / `needs SPEC-X` still refused (governance excluded as dep/seq target)" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Apply — status-row auto-land, approval checkpoint, from-guard"
+objective = """
+doctrine revision apply REV-N. v1 AUTO-lands `status` rows ONLY (E1/E5): the full
+payload stages (scope C), but apply auto-lands only rows with a genuine engine seam.
+Status rides the engine-callable requirement::set_status (DEFINED requirement.rs:339; G4
+— spec.rs:897 is only the existing CLI call site, so NO refactor, no ADR-001 violation) +
+composes one RecDoc per status row (REC untouched — its status_delta/evidence_ref model
+is requirement-status-specific; owning_slice = None for a standalone non-slice-close
+change, the field is already Option). One commit carries the status edits + N RecDocs
+(grain differs from SL-044's one-act-one-commit deliberately — N status acts, each REC
+self-describing for NF-003). introduce/create/modify/move/ADR-POL-STD-prose rows are
+SURFACED-FOR-MANUAL (external B1+B2: spec req add / spec new are non-transactional CLI
+handlers — auto-applying risks orphaned half-writes one commit cannot undo); listed at
+apply, landed by operator hand-edit. Apply REFUSES unless approval=approved — the
+apply-time forcing-function CHECKPOINT (E3 — NOT actor-attributed authz; ADR-009 §113
+invoker-blind, a solo dev self-approves via `revision approve`). All-or-nothing over
+status rows (F7→E1): a pre-flight sweep reads current ReqStatus for every status row
+(existence + from-guard: refuse the WHOLE apply if any current != row.from, surfacing the
+stale set — the one silent-clobber the dropped drift re-prompt opens; drift-surface
+posture, ADR-009), THEN writes; any pre-flight refusal aborts before the first write.
+done = every row landed (§4.2): a status-only REV → done (dependents unblock); a REV also
+carrying surfaced-for-manual rows stays `started` post-apply (status landed, manual list
+printed) until the operator completes them and marks done (M1 — done never lies). NO
+produces/recorded_by edge (E6 — those labels don't exist; inventing them is a governed
+ADR-010 addition; REC↔REV linked implicitly via the shared REQ + apply commit). No drift
+re-prompt (the Revision already captured+approved the decision).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 ([[change]] payload + from auto-capture) and PHASE-04 (dep/seq) done; requirement::set_status engine-callable (requirement.rs:339); SL-044 RecDoc composition present to reuse (not its interactive CLI loop)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "apply auto-lands every `status` row via requirement::set_status + emits N RecDocs in one commit; REC schema unchanged; owning_slice=None for a standalone status change" },
+  { id = "EX-2", text = "introduce/create/modify/move/prose rows surfaced-for-manual — listed at apply, NOT auto-applied" },
+  { id = "EX-3", text = "apply refused unless approval=approved (the invoker-blind checkpoint); `revision approve REV-N` sets the field" },
+  { id = "EX-4", text = "pre-flight all-or-nothing from-guard: any status row whose `from` != current ReqStatus aborts the WHOLE apply + surfaces the stale set; no partial writes; never clobbers an intervening reconcile move; non-status rows carry no guard" },
+  { id = "EX-5", text = "terminal disposition — status-only REV → done (dependents unblock); a REV with surfaced-for-manual rows stays `started` post-apply until the operator marks done (done = every row landed, M1)" },
+  { id = "EX-6", text = "clippy/just check green; reconcile / REC / rec suites green unchanged (REC untouched — no schema change)" },
+]
+verification = [
+  { id = "VT-1", expects = "clean status-only apply lands every row via set_status, N RecDocs in one commit, REC schema unchanged, REV→done; dependents unblock" },
+  { id = "VT-2", expects = "checkpoint — apply refused when approval≠approved; after `revision approve`, apply proceeds" },
+  { id = "VT-3", expects = "from-guard — a status row whose `from` != current ReqStatus (target moved since draft) aborts the WHOLE apply, surfaces the stale set, writes nothing" },
+  { id = "VT-4", expects = "M1 — a Revision carrying surfaced-for-manual rows stays `started` post-apply (status landed, manual list printed); a status-only Revision reaches done" },
+  { id = "VT-5", expects = "introduce/create/modify/move/prose rows are NOT auto-applied — surfaced-for-manual only" },
+]
+specs             = []
+requirements      = []
