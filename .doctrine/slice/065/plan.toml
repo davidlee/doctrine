@@ -1,0 +1,81 @@
+# Implementation plan for SL-065 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-065"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Author product intent — FR-005 product_level, FR-006 product decomposition on PRD-002"
+objective = "Product intent precedes the mechanism (design §6): author two functional requirements on PRD-002 (Specifications) via `doctrine spec req add PRD-002 --kind functional`. FR-005 names the product_level taxonomy; FR-006 mirrors REQ-083 for the product decomposition. No code, no source change — pure entity authoring. REQ-082/083 (PRD-012, tech-only) are NOT touched."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-065 design locked (status=plan). PRD-002 exists with members REQ-007..012 (FR-001..004, NF-001..002). The next free functional label is FR-005." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "FR-005 'Label a product spec with its product level' exists as a PRD-002 member (new REQ-NNN). Acceptance criteria: (a) a product spec records a single level from the closed set domain|capability|feature|story; (b) the level is optional — an unlabelled product spec is valid; (c) the level is shown in the rendered identity." },
+  { id = "EX-2", text = "FR-006 'Decompose a product spec into a single-parent acyclic hierarchy' exists as a PRD-002 member (new REQ-NNN), mirroring REQ-083. Acceptance criteria: (a) a product spec records a single parent product spec, marking it a child; (b) containment stored once outbound on the child, children derived never stored (ADR-004); (c) at most one parent, no parent-chain cycle; (d) a parent must be a product spec — a tech parent is invalid." },
+  { id = "EX-3", text = "Both requirements authored via `spec req add` (reserve + append edit-preservingly) — NOT hand-authored rows. `spec req list PRD-002` shows FR-005/FR-006." },
+]
+verification = [
+  { id = "VA-1", expects = "`doctrine spec req list PRD-002` lists FR-005 + FR-006 with the two new REQ ids; `doctrine requirement show <REQ>` renders the design's acceptance criteria for each (agent confirms — entity authoring, no automated test)." },
+  { id = "VA-2", expects = "`doctrine spec validate PRD-002` clean (no dangling member FK introduced); REQ-082/083 unchanged (git diff touches no requirement/082, requirement/083)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Data model + render — ProductLevel enum, Spec.product_level, product show branch"
+objective = "Add the ProductLevel closed enum (domain|capability|feature|story, kebab serde, as_str) as a structural mirror of C4Level, and the optional flat field Spec.product_level (#[serde(default)], after c4_level) in src/spec.rs. Restructure `spec show`'s post-category block to branch on subtype: tech keeps c4 level/descends from/parent byte-identical; product gains `product level:` + `parent:` lines. Children never rendered (ADR-004 outbound-only). Two enums, not a generic Level (D1)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — FR-005/FR-006 author the product intent this phase realises. C4Level shape confirmed in src/spec.rs (closed enum, #[serde(rename_all=kebab-case)], as_str); Spec.c4_level is Option<C4Level> #[serde(default)]; show renders `c4 level:` Some-gated then a Tech-gated spine." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "enum ProductLevel { Domain, Capability, Feature, Story } with the same derives + kebab serde as C4Level, and const as_str → domain|capability|feature|story. Field Spec.product_level: Option<ProductLevel> with #[serde(default)], placed immediately after c4_level." },
+  { id = "EX-2", text = "`spec show` post-category block branches on subtype. Tech subject: `c4 level:` (Some) → `descends from:` (Some) → `parent:` (Some) — same lines/order as today. Product subject: `product level:` (Some) → `parent:` (Some). A product spec that illegitimately carries c4_level no longer renders it (review F1 — falls outside the tech branch; acceptable, more correct)." },
+  { id = "EX-3", text = "No `spec list` column added; product_level is hand-authored (no `spec new` flag), mirroring c4_level. Level fields are advisory tags — no invalid-kind validation added (D5)." },
+]
+verification = [
+  { id = "VT-1", expects = "ProductLevel kebab round-trips the identity toml (domain↔Domain etc.); an unknown variant is rejected at toml parse. A Spec with product_level absent parses (serde default None)." },
+  { id = "VT-2", expects = "Product `spec show` golden gains `product level: <level>` and `parent: PRD-NNN` in deterministic order (level before parent). Tech `spec show` goldens BYTE-IDENTICAL (behaviour-preservation gate)." },
+  { id = "VT-3", expects = "just gate clean; clippy zero warnings (expect+reason for any dead_code bridge until PHASE-03 consumes; no bare allow)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Validate — symmetric same-subtype parent + subtype-blind acyclicity"
+objective = "Replace the three tech-only special-cases in src/registry.rs with one symmetric rule: `parent` must resolve to a spec of the SAME subtype as the subject (parent_findings). Drop the on_product exclusion from self_parent AND parent_cycle so acyclicity is subtype-blind — product decomposition gets the full single-parent-acyclic guarantee tech has, by deletion. descent_findings (descends_from) untouched. Reword the on_product doc-comments from 'tech-only' to 'selects the required parent subtype'."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — product_level + product parent render. parent_findings currently rejects product parent as invalid-kind; self_parent filters `&& !e.on_product`; parent_cycle guards `e.on_product ||`. ParentEdge carries spec/parent (canonical refs, prefix-unique across the PRD/SPEC namespaces) + on_product." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "parent_findings: parent must be same subtype as subject. Product subject → parent in product_specs ok; in tech_specs → 'invalid parent: … is a tech spec (must be product)'; absent → dangling. Tech branch unchanged (tech parent ok; product parent invalid-kind; absent dangling). on_product selects which subtype set to match. Self-edge still excluded here (self_parent's)." },
+  { id = "EX-2", text = "self_parent: drop `&& !e.on_product` — reports A→A for BOTH subtypes. parent_cycle: drop the `e.on_product ||` guard so the ephemeral child→parent map (never persisted — storage rule) spans both subtypes; multi-hop cycles caught for product. Cross-subtype edges (already invalid-kind) in the map are harmless (cannot manufacture a spurious additional cycle that matters)." },
+  { id = "EX-3", text = "descent_findings (descends_from) UNCHANGED — descends_from stays tech-only (OQ-1 deferred). on_product doc-comments reworded: no longer 'tech-only field', now 'selects the required parent subtype'." },
+]
+verification = [
+  { id = "VT-1", expects = "Driven through the `spec validate` CLI seam (NOT parent_findings/parent_cycle in isolation — invariant test drives the write seam): product→product parent accepted; product→tech parent rejected (invalid-kind, 'must be product'); dangling product parent flagged; product self-loop (self_parent) caught; product A→B→A cycle (parent_cycle) caught." },
+  { id = "VT-2", expects = "Tech-side regression: existing tech parent/descends_from/self_parent/parent_cycle suites green UNCHANGED (assertion text identical). descends_from on a product still invalid-kind (untouched)." },
+  { id = "VT-3", expects = "just gate clean; clippy zero warnings. ADR-004 outbound-only holds (no reciprocal children stored/rendered)." },
+]
+specs             = []
+requirements      = []
