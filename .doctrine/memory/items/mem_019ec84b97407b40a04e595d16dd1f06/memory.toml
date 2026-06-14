@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec84b97407b40a04e595d16dd1f06"
+memory_key = "mem.pattern.dispatch.subagentstart-hook-silent-no-fire-nested-session"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SubagentStart stamp hook silently no-fires for nested-session dispatch workers"
+summary = "SubagentStart marker hook silently does not fire for dispatch workers spawned from a nested Claude session; orchestrator must stamp post-spawn"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine worktree marker --stamp-subagent", "doctrine worktree verify-worker"]
+tags = ["dispatch", "claude-arm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "cf50bcfb388d0db779cb847e4ddf02c6eb9f78ff"
+ref_name = "refs/heads/main"
+checkout_state_id = "3570d94581029f19e9b4477c8ab086752355c5ee199ef03a6a14a2456120e176"
+base_commit = "b55d32cff1bc92ce32219499f74bb47bbf418c73"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
