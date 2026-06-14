@@ -10,6 +10,7 @@ mod corpus;
 mod coverage;
 mod coverage_scan;
 mod coverage_view;
+mod dtoml;
 mod entity;
 mod fsutil;
 mod git;
@@ -42,6 +43,7 @@ mod standard;
 mod state;
 mod tomlfmt;
 mod tty;
+mod verify;
 mod worktree;
 
 use std::path::PathBuf;
