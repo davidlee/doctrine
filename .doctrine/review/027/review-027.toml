@@ -1,0 +1,43 @@
+id    = 27
+slug  = "code-review-review-of-sl-060"
+title = "code-review review of SL-060"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "embittered-staff"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-060"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Expected: the read dispatch mirrors outbound_for (owning module holds path knowledge). Observed: dep_seq_for's SL arm reconstructs the slice toml path inline in the engine tier"
+detail = """src/relation_graph.rs dep_seq_for() doc says 'The shape mirrors outbound_for' — but outbound_for's SL arm DELEGATES (crate::slice::relation_edges(root, id)), keeping slice path-shape knowledge inside the slice module. dep_seq_for's SL arm instead hardcodes root.join(kind.dir).join(NNN).join(format!("slice-{name}.toml")) right in relation_graph. So the slice-NNN.toml path shape is now built in three independent places: slice::slice_toml_path (src/slice.rs, introduced THIS slice and documented 'the single chokepoint ... (DRY)'), the inline build in dep_seq_for, and main.rs resolve_dep_seq_src (which at least derives the stem generically via skref.stem rather than hardcoding 'slice-'). The engine tier now owns slice filesystem-layout knowledge that ADR-001 layering + the cited mirror both say belongs to the slice module; the new slice_toml_path helper is private so the engine could not reuse it even if it wanted to. Sibling to RV-024 F-4 (resolve_supersede_path path re-derivation, tolerated rule-of-three) but with the extra layering/mirror-fidelity dimension. Fix: expose a slice-module accessor (e.g. slice::dep_seq_for(root,id) or a pub(crate) slice_toml_path) and delegate, exactly as outbound_for does."""
+disposition = "follow-up"
+response = "Real minor DRY/layering point: the engine tier owns slice fs-layout knowledge the cited mirror (outbound_for) keeps in the slice module. Not a size-dodge (the fix is small) — deferred because the subject (SL-060) is closed and this is a cross-module cleanup worth tracking, not a drive-by on closed code amid concurrent shared-main churn. Captured as IMP-067."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Expected: one parse per entity on the read paths (the F3 single-parse ethos). Observed: slice show reads+parses slice-NNN.toml twice"
+detail = "src/slice.rs run_show now calls read_slice (fs::read_to_string + toml::from_str into SliceDoc) AND crate::dep_seq::read (a second fs::read_to_string + toml::from_str of the SAME slice-NNN.toml into DepSeq). The design fought hard to avoid a double parse on the backlog hot path (F3: backlog arm keeps its single read_item because it must also read resolution for promoted). The slice show path does the opposite — two full reads+parses of one file. Cost is negligible (show is a single-entity interactive command, not the corpus walk), so this is hygiene not a defect, but it sits against the slice's own stated one-parse value. A SliceDoc that carried the typed [relationships] block (or a combined read) would fold the two. Note the priority hot path also reads each slice twice (scan_entities + dep_seq_for) but that split is design-sanctioned (root RETAINED comment); this show-path double-read is incidental."
+disposition = "tolerated"
+response = "Negligible: slice show is a single-entity interactive command, not the corpus walk; the double read+parse costs nothing measurable. Folding requires SliceDoc to carry the typed [relationships] block or a combined read — not worth the coupling for a non-hot path. Consciously tolerated."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Expected: the write seam canonicalizes every id axis the read view canonicalizes. Observed: needs/after store and dedup the raw target string verbatim"
+detail = "run_needs_edge/run_after_edge (src/main.rs) append target.to_string() — the raw user ref — into [relationships].needs/after. The read consumer (src/priority/graph.rs:168/267) re-parses each stored ref via integrity::parse_canonical_ref into an EntityKey{prefix,id}, and parse_canonical_ref does num.parse::<u32>() so 'SL-47' and 'SL-047' collapse to the same id. So resolution is SAFE (read canonicalizes both sides) — no functional bug. Two residues remain: (1) slice show renders the stored string verbatim, so a user who typed a non-canonical ref sees a non-padded 'needs: SL-47' where the rest of doctrine renders padded canonical ids; (2) idempotency is raw-string membership, so 'needs SL-60 SL-47' then 'needs SL-60 SL-047' stores TWO distinct needs entries (collapsing to one edge at read). This is exactly mem.pattern.entity.write-seam-canonicalizes-every-id-axis-the-read-view-does. It is INHERITED from backlog run_needs (which also stores raw prereqs), so INV-2 is preserved and this is not introduced by SL-060 — but the new generic verb propagates it. Belongs on the ledger as a known latent footgun."
+disposition = "tolerated"
+response = "No resolution bug: the read view re-parses every stored ref via parse_canonical_ref (numeric id parse), so SL-47 and SL-047 resolve identically. Residue is cosmetic (verbatim render) + a raw-string idempotency hole, both INHERITED from backlog run_needs — canonicalizing only the slice verb would break INV-2 byte-identity with backlog. Already captured as mem.pattern.entity.write-seam-canonicalizes-every-id-axis-the-read-view-does. Tolerated; the right fix is corpus-wide (canonicalize at the shared append shell), not SL-060-local."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
