@@ -170,3 +170,16 @@ admission/close contract. Integrated changes:
 - close appends a normal ADR-012 CAS journal row with
   `planned_new_oid = admitted_oid`;
 - conflict and raw-ref/worktree guardrails are now normative in the design.
+
+## Design accepted (2026-06-15)
+
+User accepted SL-068 design for planning with constraints:
+
+- phase 1 must amend ADR-006/ADR-012 narrowly before or alongside
+  implementation;
+- the implementation plan must preserve admission-by-OID, no-close-time-merge,
+  provenance-validation, and raw-ref guard invariants;
+- `/audit` and `/code-review` rewiring remains non-blocking minimum guidance
+  scope for SL-068;
+- v1 close-target payload is code; impl-bundle close-target support is
+  explicit/later.
