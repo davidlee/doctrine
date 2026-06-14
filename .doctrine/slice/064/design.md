@@ -521,6 +521,161 @@ SL-064's plan** (cf. SL-056 G1 / ADR-008). The split:
 - Dependency: reuses SL-056 `fork` / `provision`; markerless creation extends
   them. ADR-011 spawn seam untouched (references ADR-006, does not amend).
 
+## §8 — Claude-arm base correctness (extension; SL-066-blocker remediation)
+
+> ⚠️ **SUPERSEDED-PENDING-REWRITE (empirical disproof, [[mem.pattern.dispatch.claude-isolation-worktree-base-session-root-opaque]]).**
+> The body below assumed `baseRef='head'` ⇒ worker base==B because "orchestrator cwd ≡
+> coordination HEAD." **A live SL-066 dispatch disproved it:** the claude `Agent
+> isolation:worktree` forks **session-root main HEAD** (opaque) — NOT the isolated
+> `dispatch/<slice>` tip — so `baseRef` can fix only **P1 (origin staleness)**, never
+> **P2 (dependent-phase base on the isolated branch)**. Corrected decision (User-ruled,
+> 2026-06-14):
+> - **Parallel dispatch lives on the subprocess arm** (codex/pi → DeepSeek via pi.dev,
+>   ~$1/hr): `fork --base B --worker` pins any base incl. the `dispatch/<slice>` tip →
+>   handles **P1 + P2** already. No new mechanism. `claude -p` is OUT (API ~$1000/hr).
+> - **Claude arm (subscription Agent) = premium solo `/execute`** in the coordination
+>   worktree; serial-dependent / parallel work routes to the subprocess arm. v1 abandons
+>   claude isolated workers for dispatch ("option X").
+> - **`baseRef='head'` (already set in `settings.local.json`) + the post-spawn verify-verb
+>   still ship** — cheap, arm-agnostic belts (verify-verb catches a wrong base loudly,
+>   pre-import; it *enforces* the boundary, P2 → `WrongBase` refuse).
+> - **`WorktreeCreate` hook = deferred escape hatch ("option Y")** — the only way to keep
+>   parallel *claude-quality* isolated workers on subscription; costs the σ blast-radius
+>   (no `agent_type`/matcher ⇒ fires for every worktree subagent). Backlog, not built.
+>
+> **A fresh agent must rewrite §8 around option X + the subprocess-arm-is-the-parallel-path
+> framing.** The §8.4 verify-verb design and §8.3 installer wiring below remain valid; the
+> §8.0/§8.1/§8.2 "baseRef ⇒ base==B" claims are the falsified part.
+
+> Added after the spine locked: the claude `/dispatch` arm shipped **unusable** —
+> a worker forked off `origin/HEAD` (32 commits behind local trunk) lacked authored
+> state and developed against a stale tree. Root cause: Claude's default worktree
+> creation forks `origin/HEAD` (`baseRef` default `fresh`), and ADR-011 D5 framed
+> the base as "opaque, not orchestrator-controlled." This section makes the worker
+> base **== B**. **Mechanism v1 = `baseRef='head'` + matcher-scoped SubagentStart +
+> a post-spawn verify-verb** (User-ruled; WorktreeCreate carried as a deferred
+> follow-up — option 3).
+
+### §8.0 — Current vs target
+
+**Current.** No `WorktreeCreate` hook; default creation forks `origin/HEAD`. Local
+trunk ahead of `origin` ⇒ worker base ≠ B; caught only **late** at `import`
+(semantically-wrong clean apply, D5/M1) or outright refused.
+
+**Target — base == B by two legs:**
+1. **`worktree.baseRef='head'`** (setting) ⇒ default creation forks **local HEAD**.
+   Post-SL-064 the orchestrator runs *inside the isolated `dispatch/<slice>` tree*,
+   so its local HEAD **is B**; under §7c stationary-head (already required) worker
+   base == B **by construction**. Correctness by default.
+2. **Post-spawn base==B verify-verb** (§8.4) — the belt that leg 1 is in force;
+   refuse+report a residual wrong base **before `import`**, never a silent wrong-base
+   landing. Retires the IMP-043 content-base deferral.
+
+### §8.1 — Honest altitude (the residual, named)
+
+On the claude `Agent` arm the orchestrator regains control **only when the Agent
+tool returns** (worker already ran) — there is **no orchestrator moment between
+`WorktreeCreate` and the worker's first command**. So the verify-verb is
+**post-worker**: it prevents a semantically-wrong *import*, but **cannot prevent the
+wasted worker run**. Pre-worker fail-closed needs `WorktreeCreate` (deferred). Net:
+leg 1 makes wrong-base *not happen* in the stationary case; leg 2 makes any residual
+(setting stripped / HEAD moved mid-spawn) **loud and pre-import** instead of
+silent-and-late. Same not-fail-closable class ADR-011 D6 already accepted — strictly
+above today's "opaque, caught late."
+
+### §8.2 — D5 falsified
+
+D5's "base opaque and **not** orchestrator-controlled" no longer holds: base is
+**local-HEAD-pinned via `baseRef='head'`** and **orchestrator-controlled by
+placement** (orchestrator cwd == coordination tree, HEAD==B), verified by leg 2.
+
+### §8.3 — Installer wiring: `baseRef='head'` into `settings.local.json`
+
+A settings-write step on the Claude refresh arm (`install_refresh`), beside the
+HookSpec merge, ensuring `worktree.baseRef == "head"`:
+- **absent** → write `"head"` (atomic, write-only-on-change, `dry_run`-aware —
+  mirrors `install_claude_hook`);
+- **present and `"head"`** → no-op;
+- **present and other** → **report, do not clobber** (conflict notice; matches the
+  `PrintedFallback` posture).
+
+**Home `settings.local.json`** (the installer-owned file) ⇒ the imposition is
+**per-operator-machine, not team-committed**. **Framework-level** (every claude
+client needs base==B), not a repo-local op — the layer wall holds.
+
+### §8.4 — Post-spawn worker-verify verb (consolidates prose IMP-052 + closes IMP-043)
+
+New `worktree` subcommand the `/dispatch-agent` funnel calls **after the worker
+returns, before `import`**, replacing the prose IMP-052 step with mechanism.
+Provisional surface: `doctrine worktree verify-worker --base <B> [--dir <worktree>]`.
+
+Pure/impure split (ADR-001; mirrors `classify_stamp`/`classify_import`):
+
+```rust
+enum WorkerVerify { Ok }
+enum WorkerVerifyRefusal { NoWorkerHead, Unstamped, WrongBase }  // distinct named tokens
+fn classify_worker_verify(
+    head_resolved: bool,     // worker worktree HEAD resolves
+    marker_present: bool,    // IMP-052: the stamp landed
+    base_is_ancestor: bool,  // B is an ancestor of the worker HEAD  ⟺  built on B
+) -> Result<WorkerVerify, WorkerVerifyRefusal>
+```
+
+**base==B test = `git merge-base --is-ancestor B <worker-HEAD>`** — the IMP-043
+content-base assertion. Forked at B ⇒ B is-ancestor of S ⇒ pass; forked at stale
+`origin/HEAD` ⇒ S descends from origin/HEAD not B ⇒ false ⇒ `WrongBase`. Precond
+order: head-resolves → marker → base (unstamped names itself first).
+
+Shell `run_verify_worker`: gather (read marker from the worktree withheld tier;
+`merge-base --is-ancestor` via `src/git.rs run_git`, rtk-bypassing) → classify → on
+refuse print token + non-zero (funnel **halts, preserves the fork**); on `Ok`
+proceed to `import`. Post-worker (§8.1).
+
+### §8.5 — Governance: ADR-011 amendment (in place)
+
+ADR-011 owns the base-pinning cell + altitude table ⇒ **amend in place** (not a new
+ADR; correction-with-authority, consistent with SL-064 amending ADR-006 / authoring
+ADR-012):
+- **D3 table, claude base-pinning cell:** `opaque residual (charge-2, D5)` →
+  `local-HEAD via baseRef='head'; orchestrator-controlled by placement (cwd==coord
+  tree, HEAD==B); post-spawn base==B verify-verb`.
+- **D5:** "opaque and not orchestrator-controlled" → **falsified** (§8.2); the
+  clean-applying-semantically-wrong import worst case **closed** by the verb (was
+  IMP-043).
+- **D6:** correct the premise — the `WorktreeCreate` deferral rested on "payload
+  carries no path/base," **wrong about why**: the hook *creates*, so it supplies
+  path+base; the real blocker is **no `agent_type`/matcher ⇒ global fire ⇒ σ
+  blast-radius**. v1 altitude = `baseRef='head'` + matcher-scoped SubagentStart +
+  post-spawn verify-verb. Still not pre-worker fail-closable (same accepted class).
+- **D7 (σ blast-radius):** withdrawal **holds for v1** (no `WorktreeCreate`
+  installed); the deferred follow-up would **re-open** it (global creation-replace,
+  benign pass-through + discriminator race).
+
+**Tracker moves.** IMP-052 promoted **prose → verb** (folded into `verify-worker`).
+IMP-043 content-base assertion **closed** by the verb. **New deferred IMP** —
+`WorktreeCreate` pre-worker fail-closed arm (option 3), gated on a demonstrated need
+for arbitrary-B base control or true pre-worker fail-closability; carries the σ
+blast-radius cost explicitly. Capture via `backlog new`.
+
+### §8.6 — Verification impact
+
+- **Install writer (VT):** golden — `worktree.baseRef="head"` written when absent;
+  idempotent no-op when `"head"`; conflict-report (no clobber) when present≠head;
+  coexists with boot+stamp entries untouched.
+- **Pure `classify_worker_verify` (VT):** unit per verdict (`NoWorkerHead` /
+  `Unstamped` / `WrongBase` / `Ok`); precond ordering pinned.
+- **`verify-worker` e2e (VT):** stale-base fork ⇒ `WrongBase` + non-zero + fork
+  preserved; unstamped ⇒ `Unstamped`; B-based stamped worktree ⇒ `Ok` → proceeds.
+- **baseRef harness behaviour (VH):** that Claude forks local HEAD under
+  `baseRef='head'` is harness behaviour, **not doctrine-unit-testable** — verified
+  **empirically on the next real claude-arm dispatch**, not a VT.
+- **Matcher drift (VT, regression):** existing `DISPATCH_WORKER_AGENT_TYPE` drift
+  test stays green (SubagentStart untouched).
+- **Memory corrections (harvest at close):** `mem_019ec093…` (WorktreeCreate payload)
+  + `mem_019ebfd1…` ("WorktreeCreate preferred") superseded by the σ-blast-radius
+  finding; `notes.md` "forks off session HEAD" misdiagnosis corrected (it is
+  `origin/HEAD`).
+
 ## Decision log (this pass)
 
 - DD-1 always-on dedicated coordination worktree — **locked.**
@@ -548,3 +703,14 @@ SL-064's plan** (cf. SL-056 G1 / ADR-008). The split:
   phase branch, from `boundaries.toml`; claude-arm only — **locked.**
 - Delta-class temporal boundary, intent-routing, audit ordering — **OQ (closed; see
   §4 / ADR-012).**
+- DD-11 claude-arm base correctness = **two legs**: `worktree.baseRef='head'`
+  (correct-by-default, base==B in the isolated coord tree under §7c) + a post-spawn
+  base==B verify-verb (fail-loud belt, pre-import) — **locked (§8).**
+- DD-12 installer writes `worktree.baseRef='head'` to `settings.local.json`
+  (per-operator, not team-committed); absent→write, head→no-op, other→report-no-clobber
+  — **locked (§8.3).**
+- DD-13 `verify-worker` verb consolidates prose IMP-052 (marker) + closes IMP-043
+  (base==B via `merge-base --is-ancestor B HEAD`); pure classifier + impure shell
+  (ADR-001) — **locked (§8.4).**
+- DD-14 ADR-011 amended in place (D3/D5/D6/D7); WorktreeCreate option-3 deferred on
+  the σ blast-radius (no agent_type/matcher), NOT on payload fields — **locked (§8.5).**
