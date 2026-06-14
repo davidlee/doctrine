@@ -1,7 +1,7 @@
 id = 60
 slug = "cross-kind-depseq-capture"
 title = "Cross-kind dep/seq capture: extend needs/after authoring beyond backlog"
-status = "reconcile"
+status = "done"
 created = "2026-06-14"
 updated = "2026-06-14"
 [relationships]
