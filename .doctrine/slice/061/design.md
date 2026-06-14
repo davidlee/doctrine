@@ -109,8 +109,8 @@ already reference `using-doctrine.md`.
 | Verb sequence | `review new --facet F --target REF [--phase P] [--raiser L]` → `prime --seed` → curate `domain_map` → `prime` → seed `## Brief` → `raise` → `dispose --as responder` → `verify`/`contest`/`withdraw --as raiser`. |
 | Severity vocab | `blocker\|major\|minor\|nit`; raiser-owned, append-only; only `blocker` gates *target* close. |
 | Disposition vocab | aligned / fix-now / design-wrong / follow-up / tolerated. |
-| Caveats | `--note` is ephemeral baton chatter, not durable rationale; self-review drives both roles via `--as`; loose notes are insufficient — findings live in the ledger. |
-| Synthesis + harvest | append `## Synthesis`; then a thin harvest pointer → `using-doctrine.md` work/knowledge/decision boundary (notes/memory/backlog). |
+| Caveats | `--note` is ephemeral baton chatter, not durable rationale; self-review drives both roles via `--as`; loose notes are insufficient — findings live in the ledger. Do not choose `follow-up` because the fix feels large, do not choose `tolerated` without a real rationale, and do not downgrade a true `blocker` to dodge the close-gate; unresolved ambiguity routes to `/consult`. |
+| Synthesis + harvest | append `## Synthesis`; then a judgment-gated harvest pointer → `using-doctrine.md` work/knowledge/decision boundary (notes/memory/backlog). Generic review harvest is thin; skill-specific harvest tails stay in the skill when needed. `/audit` retains the phase-sheet harvest into `notes.md`, memory, and backlog. |
 | Done + guards | review-done = every finding terminal (D-C9a); blocker gates target close (D-C9b); drive from the parent tree (C7). |
 
 **Each skill owns (divergent):** persona/voice · review lens (what to hunt) ·
@@ -124,12 +124,16 @@ close-gate.
 **The ledger-vs-prose trigger (A1 — the doc's §1 must state this crisply).** Drive
 the ledger when the review is **closure-grade**: it gates a lifecycle move, runs
 adversarially across more than one round, hands off between agents, or its findings
-must outlive the conversation. Use prose only for a genuinely throwaway one-shot
-read with no durable subject. The cost asymmetry is the test — opening an RV +
-`raise`/`dispose` per finding earns its keep exactly when finding identity,
-turn-graph dispositioning, or the close-gate matter; for a quick eyeball it is pure
+must outlive the conversation. Existing doctrine subjects make that presumption
+strong: reviewing a slice, phase, backlog item, implementation diff tied to a
+slice, or design/plan artifact opens an RV. Durable diff-only work creates or uses
+a backlog target. Prose is only for an explicitly throwaway one-shot with no
+durable subject, no lifecycle gate, no handoff, and no finding that should survive
+the conversation. The cost asymmetry is the test — opening an RV + `raise`/
+`dispose` per finding earns its keep exactly when finding identity, turn-graph
+dispositioning, or the close-gate matter; for a truly quick eyeball it is pure
 ceremony. Each skill restates this trigger in its own voice; the doc owns the
-definition.
+definition and examples.
 
 **Harvest is judgment-gated (A2).** §5 promotes durable findings to
 notes/memory/backlog *when they exist* — not a mandatory step. A clean review
@@ -153,8 +157,11 @@ manifest's gitignore of `inquisition.md` remains as harmless legacy.
 - **`/audit` (refactor, behaviour-preserving).** Keep: reconciliation persona,
   audit modes (conformance/discovery), reconciliation-scope caveat, evidence
   gathering (run tests + `just check`), closure tail (`slice status reconcile` →
-  `/close`), `--as` self-audit framing. Remove (now in doc): the inline verb
-  mechanics, disposition vocab, prime flow, close-gate prose.
+  `/close`), `--as` self-audit framing, the anti-escape guardrails (no lazy
+  `follow-up`, no unreasoned `tolerated`, no blocker downgrade), and the
+  audit-specific phase-sheet harvest into `notes.md`, memory, and backlog. Remove
+  (now in doc): the inline verb mechanics, disposition vocab, prime flow,
+  close-gate prose.
 - **`/code-review` (relocate + rewrite).** Move `plugins/review/skills/code-review/`
   → `plugins/doctrine/skills/code-review/`; **retire the standalone `review`
   plugin** (drop from `marketplace.json`, delete dir) — the rewired skill
@@ -171,8 +178,9 @@ manifest's gitignore of `inquisition.md` remains as harmless legacy.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **INV-1** — every finding is a `raise`; every narrative is `## Synthesis`. No
-  skill writes findings to prose or a side file.
+- **INV-1** — every closure-grade finding is a `raise`; every ledger narrative is
+  `## Synthesis`. No skill writes durable findings to prose or a side file. The
+  prose rung is last-resort throwaway review only, per §5.2.
 - **INV-2** — facet always names a lifecycle aspect, never a posture.
 - **INV-3** — `/audit` observable behaviour is unchanged by the extraction.
 - **ASM-1** — the existing `review` verb family suffices for all three skills'
@@ -251,7 +259,13 @@ are IMP-029).
 - **VA (by agent) — per-skill smoke** — each skill opens its RV (code-review→
   `code-review` facet; inquisition→facet-by-target+`--raiser`; audit→
   `reconciliation`), raises + disposes + resolves a finding, renders `## Synthesis`.
-- **VA — `/audit` parity** — the smoke audit exercises every migrated mechanic.
+- **VA — trigger matrix** — examples prove the ledger/prose boundary: existing
+  slice/phase/backlog/design/plan/code-review subject → RV; durable diff-only
+  review → create/use a backlog target; explicitly throwaway one-shot with no
+  durable subject/findings → prose allowed. `/audit` has no prose rung.
+- **VA — `/audit` parity** — the smoke audit exercises every migrated mechanic,
+  including anti-escape disposition pressure and phase-sheet harvest into
+  `notes.md`/memory/backlog.
 - **VA — marketplace integrity** — `review` removed; code-review discoverable under
   doctrine; no dangling plugin reference.
 - **Closure** — IMP-023 updated (drift→IMP-022, reconcile→IMP-008 reassignment
@@ -293,4 +307,17 @@ parallelizable; serial is acceptable for a slice this small (a `/plan` call).
   `--raiser` posture is a recorded authored field though not filterable — D2
   consciously traded queryability away.
 
-_(external adversarial pass / `/inquisition` — offered to the user; pending.)_
+### External adversarial pass (integrated)
+
+- **E1 — `/audit` extraction was under-specified.** Risk: `review-ledger.md`
+  absorbed the happy-path verbs but dropped `/audit`'s anti-escape pressure and
+  phase-sheet harvest. *Integrated:* §5.2 now makes the anti-escape rule shared
+  mechanics and names `/audit`'s specific harvest tail; §5.4 keeps those mechanics
+  in `/audit`; §9 adds parity verification for both.
+- **E2 — ledger-vs-prose trigger needed an operational test.** Risk: `/code-review`
+  could route around RV and make the rewire theatrical. *Integrated:* §5.2 now
+  states the RV presumption for existing doctrine subjects and durable diff work,
+  and §9 adds a trigger-matrix validation gate.
+- **E3 — reconciled scope carried stale OQ language.** Risk: `/plan` re-opens a
+  facet enum change already rejected by D2/D5. *Integrated in `slice-061.md`:*
+  the scope now states facet-by-target as settled and removes the new-facet escape.

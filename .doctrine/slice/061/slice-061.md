@@ -19,16 +19,17 @@ envisaged.
 ## Scope & Objectives
 
 - **`/code-review` → RV.** The `code-review` facet already exists in the review
-  kind's facet enum. Rewrite the skill (in the `review` plugin) to open a
-  `code-review`-facet RV against the subject, raise each finding as a structured
-  ledger entry with the existing severity vocabulary, and render its synthesis +
-  haiku into the review's `## Synthesis`. Preserve the skill's voice and the
-  existing severity-label mapping (`🔴 blocking → blocker`, etc.).
+  kind's facet enum. Relocate the skill from the standalone `review` plugin into
+  doctrine core, then rewrite it to open a `code-review`-facet RV against the
+  subject, raise each finding as a structured ledger entry with the existing
+  severity vocabulary, and render its synthesis + haiku into the review's
+  `## Synthesis`. Preserve the skill's voice and the existing severity-label
+  mapping (`🔴 blocking → blocker`, etc.).
 - **`/inquisition` → RV.** Rewire the heresy-hunt onto the ledger so charges
-  become append-only findings and sentencing becomes dispositioning. The
-  inquisition's facet binding is an **open question** (see below) — it may reuse
-  an existing facet, or motivate a new one. Preserve the skill's adversarial
-  posture and output voice.
+  become append-only findings and sentencing becomes dispositioning. Facet binding
+  is settled as **facet-by-target**: choose the lifecycle aspect being interrogated
+  and carry the posture with `--raiser inquisitor`, not a new facet. Preserve the
+  skill's adversarial posture and output voice.
 - Keep the rewiring **DRY** against the `/audit` pilot — the RV-driving prose
   (open → prime → raise → dispose/verify → synthesis) is shared shape; lift the
   common pattern rather than copy-paste three divergent variants.
@@ -57,8 +58,8 @@ envisaged.
 - **Fork-invoked / parallel-raiser review** (IMP-024) and **RV verb e2e golden
   coverage** (IMP-029) — adjacent, separately owned. This slice rides the existing
   single-tree, parent-locus verb surface as-is.
-- No new RV verbs or coordination mechanics. If `/inquisition` needs a new facet,
-  that is a bounded enum + validation change, not a protocol change.
+- No new RV verbs, coordination mechanics, or facets. A future posture facet would
+  be a separate ADR/enum-change slice, not this one.
 
 ## Affected Surface
 
@@ -94,7 +95,11 @@ All three OQs **resolved in `/design`** (see `design.md` §6/§7):
 
 - All three SKILL.md files drive the `doctrine review` ledger end-to-end (open →
   raise → dispose/verify → synthesis) via the shared `review-ledger.md`, with their
-  distinct voices intact. `/audit` observable behaviour is unchanged (refactor).
+  distinct voices intact. `/audit` observable behaviour is unchanged (refactor),
+  including anti-escape disposition pressure and phase-sheet harvest.
+- The ledger/prose trigger is operational: existing doctrine subjects and durable
+  diff reviews use or create an RV target; prose is only for explicitly throwaway
+  one-shots with no durable subject/findings. `/audit` has no prose rung.
 - The severity vocabulary each skill uses maps onto the RV `blocker|major|minor|nit`
   axis (and the close-gate teeth) coherently.
 - No facet enum change (OQ-1 = facet-by-target). `src/skills.rs` test suite stays
