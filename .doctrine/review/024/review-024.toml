@@ -1,0 +1,61 @@
+id    = 24
+slug  = "code-review-sl-062-uniform-lifecycle-supersede"
+title = "code-review: SL-062 uniform lifecycle + supersede"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-062"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Expected: zero byte-duplicate status setters after unification. Observed: a fifth (knowledge::set_record_status) still duplicates the write-core"
+detail = "The slice's objective is 'eliminate the byte-duplicated write body.' src/dep_seq.rs:275 set_authored_status now serves four setters (governance/slice/backlog/requirement). But src/knowledge.rs:868-1312 set_record_status is the SAME read->parse->no-op-guard->F-1->insert->write body byte-for-byte, unmigrated. The named scope was four kinds and knowledge wasn't among them, so this isn't a size-dodge deferral — but a known standing parallel implementation of the very seam the slice exists to remove is exactly what CLAUDE.md's 'no parallel implementation' forbids, and the fold is the trivial 5-line shape requirement.rs already took. Captured as IMP-061."
+disposition = "follow-up"
+response = "Out of the slice's named scope (four kinds: gov/slice/backlog/requirement; knowledge was never enumerated), not a size-dodge — the fold is the trivial requirement.rs shape. Already captured as IMP-061 before this review. Legitimate follow-up."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected: one seam, one F-1 refuse contract. Observed: the shared seam emits contradictory malformed-entity guidance across its callers"
+detail = "The SL-060 lesson (encoded as EX-4 and tested in dep_seq's set_authored_status_f1_refuses_*) is that a malformed-entity refuse must NOT instruct regeneration — it must say 'restore the seeded keys.' governance.rs and requirement.rs were reworded to honour this. But the same unified seam is handed destructive hints by the other callers: slice.rs:526 ('regenerate via slice new'), backlog.rs:1346 ('regenerate via backlog new'), and the unmigrated knowledge.rs:1312 ('regenerate via knowledge new'). So one write-core now refuses with two opposing philosophies depending on caller. The divergence is conscious (the inline comment scopes the reword to gov+requirement to keep the slice/backlog suites green under the behaviour-preservation gate) — but it leaves the destructive guidance SL-060 flagged as harmful live for three of five kinds, and it will drift further. No backlog item tracks finishing the reword."
+disposition = "follow-up"
+response = "Real divergence, consciously scoped: the slice/backlog hint reword is held back by the behaviour-preservation gate (their suites assert the old string). Knowledge inherits the old hint via IMP-061. No item tracks finishing the gov/requirement reword across slice/backlog/knowledge — minting one. Not size-dodge: the work is a deliberate second step."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Expected: no surface shipped ahead of its consumer (YAGNI). Observed: append_string_array is dead code carried on a dead_code expect"
+detail = "src/dep_seq.rs:293-313 append_string_array is the IO wrapper for apply_string_append, but has NO production caller — run_supersede composes the pure core (apply_string_append) directly over its held docs, never the wrapper. It survives only via #[cfg_attr(not(test), expect(dead_code, reason='staged for the slice relate consumer'))]. The pure core is genuinely shared; the wrapper is speculative generality for a future slice. CLAUDE.md 'write less code' / 'as simple as possible' — ship the wrapper with its consumer, not before. The expect(dead_code) is the sanctioned self-clearing pattern, so this is hygiene, not a defect."
+disposition = "tolerated"
+response = "Conscious staging behind the sanctioned self-clearing expect(dead_code) (mem.pattern.lint.dead-code-self-clearing-leaf); the not(test) cfg keeps it covered. Cost is one suppressed fn for a near-term relate consumer. Tolerated, with the standing note that if that consumer slips the wrapper should be deleted, not kept indefinitely."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Expected: a single entity-toml-path resolver. Observed: resolve_supersede_path re-derives the path layout resolve_link_path already builds"
+detail = "src/main.rs:3137 resolve_supersede_path constructs root/kref.kind.dir/NNN/{stem}-NNN.toml — the identical four-line map in resolve_link_path (main.rs:2967) and the per-id path build inside run_supersede. The doc comment openly says 'Mirrors resolve_link_path.' They differ only in the second tuple element (RelationRule vs canonical_id). A shared entity_toml_path(root, kref, id) -> PathBuf would absorb both callers and any future one. Trivial (4 lines), but it's the 'find duplication before writing' rule at micro scale."
+disposition = "tolerated"
+response = "Two callers, four lines each; extracting entity_toml_path now is marginal and risks premature abstraction. Tolerated until a third caller makes the helper earn its name — at which point the rule-of-three triggers the extraction."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "Expected: the recoverable torn-state path is tested, not just detected. Observed: e2e covers validate-detection but not re-run recovery"
+detail = "run_supersede writes NEW then OLD non-atomically; the design's safety claim is that a torn state (NEW.supersedes contains OLD, OLD not yet flipped) is BOTH detectable by validate AND recoverable by re-running the verb (which falls into the not-yet-superseded branch and completes OLD idempotently). tests/e2e_supersede.rs covers detection (validate_flags_a_torn_supersession_state) and the all-consistent idempotent re-run, but no test injects a NEW-only partial state and asserts a re-run completes OLD. The recovery path is the actual safety guarantee and is the one branch left unproven by black-box test."
+disposition = "follow-up"
+response = "Genuine black-box gap: the recovery branch is the actual safety guarantee and is only proven by inspection. A test that writes a NEW-only partial state and asserts a re-run completes OLD is worth adding. Capturing as follow-up (folds with the supersede hardening)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
