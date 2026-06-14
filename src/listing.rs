@@ -1397,7 +1397,7 @@ mod tests {
 
     /// Strip SGR escape sequences (`ESC [ … m`) for the VT-2 alignment proof. Pure
     /// test helper — not a render-path concern.
-    fn strip_ansi(s: &str) -> String {
+    pub(crate) fn strip_ansi(s: &str) -> String {
         let mut out = String::with_capacity(s.len());
         let mut chars = s.chars();
         while let Some(c) = chars.next() {
