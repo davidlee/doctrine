@@ -1,0 +1,105 @@
+# Implementation plan for SL-061 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-061"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Shared review-ledger protocol and /audit extraction"
+objective = "Author the shared review-ledger.md protocol and refactor /audit onto it without losing the IMP-001 pilot mechanics. This is the keystone phase: P2/P3 depend on the shared doc and INV-3 audit parity."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-061 design is locked at plan; /audit is the existing RV pilot and install/review-ledger.md does not yet exist." },
+  { id = "EN-2", text = "The external inquisition findings E1/E2 are integrated: anti-escape disposition pressure, phase-sheet harvest, and trigger-matrix verification are part of the design." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/review-ledger.md exists and owns the invariant protocol: closure-grade target ladder, facet selection, open/prime/brief/raise/dispose/verify/contest/withdraw sequence, severity/disposition vocab, anti-escape guardrails, synthesis/harvest, done/close-gate, and parent-tree caveat." },
+  { id = "EX-2", text = "plugins/doctrine/skills/audit/SKILL.md points to review-ledger.md for shared mechanics while retaining its audit-specific lens: conformance/discovery modes, reconciliation-scope caveat, evidence gathering, self-audit --as framing, closure tail, and phase-sheet harvest into notes.md/memory/backlog." },
+  { id = "EX-3", text = "The install/shipping path for review-ledger.md is confirmed; add a focused install asset test if the implicit top-level install copy is not already protected enough." },
+]
+verification = [
+  { id = "VA-1", expects = "Line-by-line /audit parity check against the pre-refactor skill: every old audit mechanic is either in review-ledger.md or retained in /audit." },
+  { id = "VA-2", expects = "Smoke audit flow opens a reconciliation RV, primes it, raises/disposes/verifies a finding, writes ## Synthesis, and exercises anti-escape + phase-sheet-harvest instructions." },
+  { id = "VT-1", expects = "Relevant install/skill tests pass; just gate remains clean for any touched Rust embed/install tests." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Relocate and rewrite /code-review"
+objective = "Move code-review from the standalone review plugin into doctrine core and rewrite it as a doctrine-native RV-driving skill using the shared review-ledger.md protocol."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: review-ledger.md is authored and /audit proves the shared mechanics are sufficient." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "plugins/doctrine/skills/code-review/SKILL.md exists; plugins/review/ is deleted; .claude-plugin/marketplace.json no longer advertises the standalone review plugin." },
+  { id = "EX-2", text = "The rewritten code-review skill always uses facet code-review for closure-grade reviews, walks the target ladder, maps 🔴/🟠/🟡/🔵 to blocker/major/minor/nit, writes Overall/Synopsis/Haiku into ## Synthesis, and drops the non-doctrine branch." },
+  { id = "EX-3", text = "src/skills.rs changes are test/fixture updates only: code-review domain assertion moves review→doctrine and embedded-path fixtures follow the relocation; no production skill-discovery logic change." },
+]
+verification = [
+  { id = "VT-1", expects = "src/skills.rs discover/embed/claude_links tests pass with code-review under the doctrine domain; just gate clean." },
+  { id = "VA-1", expects = "Code-review smoke opens a code-review RV against a durable target, raises/disposes/verifies at least one finding, and writes ## Synthesis including the haiku tail." },
+  { id = "VA-2", expects = "Trigger matrix for /code-review holds: existing slice/phase/backlog subject -> RV; durable diff-only review -> create/use backlog target; explicitly throwaway one-shot only -> prose allowed." },
+  { id = "VA-3", expects = "Marketplace integrity check finds no dangling plugins/review or review-plugin references outside historical design/scope text." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Rewrite /inquisition onto RV"
+objective = "Rewire /inquisition from inquisition.md prose into RV findings while preserving its adversarial posture and voice, using facet-by-target and --raiser inquisitor."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: review-ledger.md is authored and supplies the shared ledger mechanics." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "plugins/doctrine/skills/inquisition/SKILL.md uses review-ledger.md for shared mechanics and no longer authors inquisition.md for new closure-grade inquisitions." },
+  { id = "EX-2", text = "Charges become review raise entries; Questions seed Brief/Synthesis as appropriate; Judgement/Sentencing become ## Synthesis; severity follows sentencing gravity on blocker|major|minor|nit." },
+  { id = "EX-3", text = "Facet selection is facet-by-target with --raiser inquisitor; no new RV facet or production src/review.rs enum change is introduced." },
+]
+verification = [
+  { id = "VA-1", expects = "Inquisition smoke opens an RV with the target-aspect facet and --raiser inquisitor, raises/disposes/verifies at least one charge, and writes Judgement/Sentencing into ## Synthesis." },
+  { id = "VA-2", expects = "Trigger matrix for /inquisition holds: existing doctrine subject -> RV; durable no-slice target -> create/use backlog target; explicitly throwaway one-shot only -> prose allowed." },
+  { id = "VT-1", expects = "just gate clean; no production src/review.rs facet enum diff." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Re-embed, backlog closure, and final smoke"
+objective = "Refresh installed skill assets, close the owning backlog item, mint the planned follow-up backlog, and run the whole-slice verification pass before audit handoff."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01, PHASE-02, and PHASE-03 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "doctrine claude install has refreshed embedded skill assets; the embed crate is touched/rebuilt as needed so installed skills are not stale." },
+  { id = "EX-2", text = "IMP-023 is updated to reflect drift→IMP-022 and reconcile→IMP-008 reassignment, then closed when the in-scope skills land." },
+  { id = "EX-3", text = "Backlog items are minted for cross-corpus harvest-DRY and handover relocation, as named by the design follow-ups." },
+  { id = "EX-4", text = "No dangling review plugin references remain in marketplace/install/skill discovery surfaces except historical slice prose." },
+]
+verification = [
+  { id = "VT-1", expects = "just gate clean after re-embed and relocation." },
+  { id = "VA-1", expects = "Final smoke covers all three consumers of review-ledger.md: audit, code-review, and inquisition each open/raise/dispose/resolve/synthesize through RV." },
+  { id = "VA-2", expects = "SL-061 is ready for /audit: scope, design, plan, and implemented files agree on zero production src changes except src/skills.rs tests/fixture updates." },
+]
+specs        = []
+requirements = []
