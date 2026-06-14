@@ -36,14 +36,18 @@ Design intent: `domain` decomposes into `capability` → `feature` → `story`.
 3. **`spec show` render** — emit `product level: <level>` for product specs, and
    the outbound `parent: PRD-NNN` decomposition edge (product `show` currently
    renders neither). Keep tech render unchanged.
-4. **Flip product `parent` validate rule** (`registry.rs::parent_findings`,
-   REQ-083): on a *product* subject, `parent` is now VALID and must resolve to a
-   *product* spec — a tech parent is invalid-kind, an absent target is dangling,
-   the self case is excluded (mirror the tech rule, inverted kind). Reciprocal
-   "decomposes into" view stays derived (ADR-004), never stored.
-5. **Product self-parent / cycle guard** — extend the `self_parent` 1-cycle
-   finding (SL-022 PHASE-03) to product subjects so `PRD-A parent PRD-A` is
-   caught.
+4. **Symmetric same-subtype `parent` validate rule** (`registry.rs::
+   parent_findings`): replace the three tech-only special-cases with one rule —
+   `parent` must resolve to a spec of the SAME subtype as the subject. Product→
+   product valid; product→tech invalid-kind; missing dangling. Tech branch
+   unchanged. Reciprocal "decomposes into" stays derived (ADR-004), never stored.
+5. **Subtype-blind acyclicity** — drop the `on_product` exclusion from
+   `self_parent` AND `parent_cycle` (REQ-087) so product decomposition gets the
+   full single-parent-acyclic guarantee tech has (self-loop AND multi-hop cycle),
+   by deletion not a parallel pass.
+6. **Author two product requirements on PRD-002** — FR-005 (product_level
+   taxonomy) and FR-006 (product decomposition, mirror of REQ-083). Product intent
+   precedes the mechanism.
 
 ## Non-Goals
 
@@ -56,32 +60,29 @@ Design intent: `domain` decomposes into `capability` → `feature` → `story`.
   `descends_from` to point specifically at a `capability`-level PRD. Couples two
   axes; not needed to ship the level. Stays tech-only, unchanged → Follow-Ups.
 - **`spec new` flag for `product_level`** — hand-authored, mirroring `c4_level`.
-- **Multi-hop product decomposition cycle detection** beyond the self-loop, if
-  the tech side has none — match tech's depth, no more.
+- **Level-adjacency on `parent`** (a `feature`'s parent must be a `capability`).
+  Advisory v1; deferred tightening (tech enforces no c4-adjacency).
 
 ## Affected surface
 
 - `src/spec.rs` — `ProductLevel` enum; `Spec.product_level` field; product
   `show` render branch (level + parent).
-- `src/registry.rs` — `parent_findings` product branch (REQ-083 flip);
-  `self_parent` product extension; possibly `ParentEdge.on_product` consumers.
-- `install/templates/spec-product.toml` — optional commented `product_level`
-  hint (decide in design; `c4_level` is not templated, so likely none).
-- Requirement touch: **REQ-083** currently states `parent` is tech-only. Flipping
-  the product rule changes its normative content — design must decide whether
-  this is a requirement revision (IDE-003 revision-vehicle territory) or a
-  scoped amendment.
+- `src/registry.rs` — `parent_findings` symmetric same-subtype rule; drop the
+  `on_product` exclusion from `self_parent` + `parent_cycle` (subtype-blind).
+- PRD-002 — two new functional requirements (FR-005 product_level, FR-006 product
+  decomposition) via `doctrine spec req add`.
+- `install/templates/spec-product.toml` — no change (c4_level isn't templated
+  either; hand-authored).
 
 ## Risks / Open Questions
 
-- **OQ-1** REQ-083 semantics change — is product-parent a revision of REQ-083 or
-  a new sibling requirement? (storage-rule / spec-product call in `/design`.)
-- **OQ-2** `descends_from` once product has levels: the natural target is a
-  `capability` PRD. Defer (Non-Goal) but record the intended future constraint.
-- **OQ-3** Should `validate` warn (not reject) when a non-`story` PRD has no
-  children, or a `story` has children? Advisory hygiene — likely defer.
-- **ASM-1** Tech `parent` cycle protection is self-loop-only; product mirrors
-  that depth. Verify in design.
+- **OQ-1** (deferred → Follow-Up) `descends_from` once product has levels: natural
+  target is a `capability` PRD. Record the intended future constraint.
+- **OQ-2** (deferred → Follow-Up) level-adjacency: parent exactly one rank above
+  child. Advisory-only v1.
+- **ASM-1 (corrected)** Tech `parent` has FULL acyclicity (`self_parent` +
+  `parent_cycle`, REQ-087), not self-loop-only. Product parity = subtype-blind
+  reuse of both, by deletion. REQ-082/083 untouched (tech-only, correct).
 
 ## Verification / closure intent
 
