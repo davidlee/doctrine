@@ -627,8 +627,9 @@ fn git_env_text(
 ) -> Result<String, CaptureError> {
     let output = run_git_env(root, args, envs)?;
     if output.status.success() {
-        let text = String::from_utf8(output.stdout)
-            .map_err(|_ignored| CaptureError::Git(format!("non-utf8 output: {}", args.join(" "))))?;
+        let text = String::from_utf8(output.stdout).map_err(|_ignored| {
+            CaptureError::Git(format!("non-utf8 output: {}", args.join(" ")))
+        })?;
         Ok(text.trim().to_string())
     } else {
         Err(CaptureError::Git(format!(
@@ -679,7 +680,15 @@ pub(crate) fn filter_tree(
     let env: [(&str, &std::ffi::OsStr); 1] = [("GIT_INDEX_FILE", scratch.path.as_os_str())];
     git_env_text(root, &["read-tree", source_tree], &env)?;
     if !exclude.is_empty() {
-        let mut args = vec!["rm", "--cached", "-r", "-f", "--ignore-unmatch", "--quiet", "--"];
+        let mut args = vec![
+            "rm",
+            "--cached",
+            "-r",
+            "-f",
+            "--ignore-unmatch",
+            "--quiet",
+            "--",
+        ];
         args.extend_from_slice(exclude);
         git_env_text(root, &args, &env)?;
     }
@@ -2111,7 +2120,10 @@ mod tests {
             super::filter_tree(repo.path(), &tree, &[".doctrine/dispatch/64"]).expect("filter");
 
         let listing = repo.git(&["ls-tree", "-r", "--name-only", &filtered]);
-        assert!(listing.contains("keep.txt"), "kept path survives: {listing}");
+        assert!(
+            listing.contains("keep.txt"),
+            "kept path survives: {listing}"
+        );
         assert!(
             !listing.contains("journal.toml"),
             "excluded path dropped: {listing}"
@@ -2158,7 +2170,11 @@ mod tests {
             "b.txt",
             "diff parent..commit is exactly the second-commit delta"
         );
-        assert_eq!(repo.git(&["rev-parse", "HEAD"]), head_before, "HEAD unmoved");
+        assert_eq!(
+            repo.git(&["rev-parse", "HEAD"]),
+            head_before,
+            "HEAD unmoved"
+        );
         assert_eq!(
             std::fs::read_to_string(repo.path().join("a.txt")).expect("read a"),
             a_before,
