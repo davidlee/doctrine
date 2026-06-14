@@ -20,3 +20,30 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
   run yet; no production code has been modified in this unit.
 - Uncommitted work remains in SL-061 authored docs/plan/status/notes. Unrelated
   dirty workspace entries existed during the pass and were left untouched.
+
+## 2026-06-14 - dispatch execution + reconciliation audit (RV-018)
+
+- Drove all 4 phases via `/dispatch` (sole-writer funnel): P01 keystone alone,
+  P02+P03 file-disjoint concurrent batch, P04 inline (authoring/smoke). Commits:
+  `bc5e76f` (P01), `1b73a65` (P02+P03), `fcdfa60` (P04). Each batch re-anchored
+  onto a moved coordination HEAD on a disjointness proof — heavy concurrent
+  `main` (SL-057 close, SL-060 dep/seq, SL-062 authoring) never commingled.
+- Funnel note: `git diff` is rtk-stat-proxied even under `RTK_DISABLE=1` in the
+  Bash-hook context — imported deltas via `git checkout <fork> -- <paths>` (+ `git
+  rm` for P02's `plugins/review` deletion), staged only own paths, committed
+  without `-a`.
+- INV-3 confirmed by dogfood: this audit ran on the refactored `/audit` + shipped
+  `review-ledger.md`. Verb surface backs all three consumers; facet enum /
+  `src/review.rs` untouched (INV-2); marketplace integrity clean.
+- RV-018 (reconciliation) — 3 findings, all terminal:
+  - F-1 (blocker/fix-now): P04 `doctrine claude install` self-appended a too-broad
+    `.doctrine/agents/*` gitignore; wrongly committed, RED-ing the worktree
+    classifier test + swallowing authored `AGENTS.md`. Reverted (`1037154`),
+    derived `dispatch-worker.md` removed, gate green. Close-gate teeth worked.
+  - F-2 (minor/follow-up): upstream SL-056 install-gitignore gap -> **ISS-012**
+    (narrow ignore + classify in `DERIVED_RUNTIME`). Memory:
+    `mem.pattern.distribution.claude-install-agents-gitignore-too-broad`.
+  - F-3 (nit/aligned): "zero production src except src/skills.rs" wording
+    undercounts the P01 `src/install.rs` belt test; both test-tier, invariant holds.
+- Follow-ups minted: IMP-059 (cross-corpus harvest DRY, D6), IMP-060 (`/handover`
+  relocation), ISS-012 (install-gitignore fix). Ready for `/close`.
