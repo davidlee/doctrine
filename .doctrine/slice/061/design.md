@@ -121,6 +121,25 @@ lands in `## Synthesis`, with findings `raise`d) · stage-specific tail.
 §3 Raise findings · §4 Dispose + resolve · §5 Synthesis + harvest · §6 Done +
 close-gate.
 
+**The ledger-vs-prose trigger (A1 — the doc's §1 must state this crisply).** Drive
+the ledger when the review is **closure-grade**: it gates a lifecycle move, runs
+adversarially across more than one round, hands off between agents, or its findings
+must outlive the conversation. Use prose only for a genuinely throwaway one-shot
+read with no durable subject. The cost asymmetry is the test — opening an RV +
+`raise`/`dispose` per finding earns its keep exactly when finding identity,
+turn-graph dispositioning, or the close-gate matter; for a quick eyeball it is pure
+ceremony. Each skill restates this trigger in its own voice; the doc owns the
+definition.
+
+**Harvest is judgment-gated (A2).** §5 promotes durable findings to
+notes/memory/backlog *when they exist* — not a mandatory step. A clean review
+harvests nothing.
+
+**The ladder is narrowed per skill (A3).** The doc presents the full ladder; each
+skill's lens pins which rungs apply. `/audit` always targets its slice (rung 1) —
+it never degrades to prose. `/code-review` and `/inquisition` walk the whole ladder.
+This is what keeps INV-3 (audit-unchanged) true.
+
 ### 5.3 Data, State & Ownership
 
 No new data shapes. RV `review-NNN.{toml,md}` is unchanged. The skills produce
@@ -165,6 +184,12 @@ manifest's gitignore of `inquisition.md` remains as harmless legacy.
   single-subject thesis true).
 - **Edge — code-review in a non-doctrine repo.** Out of scope by D8: the skill is
   doctrine-native; generalist code-review skills exist elsewhere.
+- **Edge — backlog item as a code-review/inquisition subject (A4).** Coherent but
+  thin: a backlog item is intent, not code. The RV `[target]` is the *locus*; the
+  actual code evidence lives in each finding's `detail`. The diff is reviewed; the
+  item is what the review is filed against.
+- **Edge — the ledger-vs-prose trigger is judgment, not a flag.** A skill never
+  branches on CLI presence; it decides closure-grade vs throwaway per §5.2's trigger.
 
 ## 6. Open Questions & Unknowns
 
@@ -247,4 +272,25 @@ parallelizable; serial is acceptable for a slice this small (a `/plan` call).
 
 ## 10. Review Notes
 
-_(internal adversarial pass to follow)_
+### Internal adversarial pass (integrated)
+
+- **A1 — ledger-vs-prose threshold was hand-waved.** Risk: every code-review
+  becomes ceremony, or all degrade to prose (rewiring = theatre). *Integrated:*
+  §5.2 now defines the **closure-grade trigger** (gates a lifecycle move / multi-round
+  / agent-handoff / findings must outlive the conversation); the doc owns it, each
+  skill restates it in voice.
+- **A2 — harvest framed as always-on.** Risk: ceremony on quick reviews.
+  *Integrated:* §5.2 — harvest is judgment-gated (promote durable findings *when
+  present*).
+- **A3 — target ladder not uniform across skills.** Risk: doc implies `/audit`
+  could drop to prose, breaking INV-3. *Integrated:* §5.2 — the doc presents the
+  full ladder; each skill's lens pins applicable rungs (`/audit` = rung 1 always).
+- **A4 — backlog item as a thin code-review subject.** *Integrated:* §5.5 edge —
+  the item is the locus, code evidence lives in finding `detail`.
+- **Dismissed (verified):** installed agent symlink is by skill-id
+  (`.doctrine/skills/code-review`), unchanged by source relocation — existing
+  installs survive D7. The `review` plugin's "security review" skill never existed.
+  `--raiser` posture is a recorded authored field though not filterable — D2
+  consciously traded queryability away.
+
+_(external adversarial pass / `/inquisition` — offered to the user; pending.)_
