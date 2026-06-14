@@ -1671,17 +1671,18 @@ pub(crate) fn run_fork(
 /// never on a positive coordination marker (that is OQ-D / IMP-065, deferred).
 ///
 /// Gather → pure-classify → act, patterned after [`run_fork`]:
-/// 1. gather: does `dispatch/<slice>` exist; does it have a live linked worktree.
-/// 2. [`classify_coordinate`] → Create | Resume | Err(LiveWorktree) (EX-3/EX-5).
-/// 3a. Create: `git worktree add -b dispatch/<slice> <dir> <trunk>` (off the
-///     resolved integration base).
-/// 3b. Resume: `git worktree add <dir> dispatch/<slice>` — reattach the SAME
-///     branch (never a second coordination branch).
-///     Then BOTH: provision via the sole copier (EX-2) and regenerate the runtime
-///     phase sheets from committed `plan.toml` via [`crate::slice::run_phases`].
-///     The coordination/runtime tier is NOT copied — provision withholds it and
-///     the orchestrator regenerates it. Post-add failure compensates: Create
-///     rolls back the branch too, Resume keeps the pre-existing branch.
+/// - gather: does `dispatch/<slice>` exist; does it have a live linked worktree.
+/// - [`classify_coordinate`] → Create | Resume | Err(LiveWorktree) (EX-3/EX-5).
+/// - Create: `git worktree add -b dispatch/<slice> <dir> <trunk>` (off the
+///   resolved integration base).
+/// - Resume: `git worktree add <dir> dispatch/<slice>` — reattach the SAME
+///   branch (never a second coordination branch).
+///
+/// Then BOTH paths provision via the sole copier (EX-2) and regenerate the
+/// runtime phase sheets from committed `plan.toml` via [`crate::slice::run_phases`].
+/// The coordination/runtime tier is NOT copied — provision withholds it and the
+/// orchestrator regenerates it. Post-add failure compensates: Create rolls back
+/// the branch too, Resume keeps the pre-existing branch.
 ///
 /// Orchestrator-classed; refused under worker-mode by `worker_guard` (EX-4) — the
 /// marker-present / `DOCTRINE_WORKER` refusals ride the SAME guard as `fork`.
