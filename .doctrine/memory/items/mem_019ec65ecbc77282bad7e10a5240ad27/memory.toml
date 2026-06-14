@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec65ecbc77282bad7e10a5240ad27"
+memory_key = "mem.pattern.dispatch.agent-worktree-forks-bash-cwd-head"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "claude Agent isolation worktree forks the Bash-tool cwd HEAD; cd into the coord tree to place workers at B"
+summary = "In a main-rooted Claude Code session, Agent isolation:worktree forks the Bash tool persistent cwd HEAD; cd into dispatch/<slice> to base workers at B and advance per phase"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = ["src/worktree.rs"]
+commands = []
+tags = ["dispatch", "worktree", "claude-arm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "455b70af93ee7585bbb0618ed0042867d5f521c1"
+ref_name = "refs/heads/main"
+checkout_state_id = "dfe1c1a932dfe99dbeb982425f90ec1e208833208f027a36d17f915c28e1f344"
+base_commit = "46c389d77b58429c3853f879aece2d07c41fdcf8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
