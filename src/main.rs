@@ -723,6 +723,23 @@ enum DispatchCommand {
         #[arg(long, group = "stage", required = true)]
         prepare_review: bool,
 
+        /// Stage-2: replay the prepared journal idempotently and project the
+        /// audited code units (opt-in `--trunk`/`--edge`); runs from parent/root
+        /// after the coordination worktree is removed. Never auto-resolves.
+        #[arg(long, group = "stage", required = true)]
+        integrate: bool,
+
+        /// Stage-2 only: project the cumulative code units onto this trunk ref,
+        /// fast-forward-only + expected-tip CAS (e.g. `refs/heads/main`). Absent ⇒
+        /// trunk is left untouched.
+        #[arg(long, requires = "integrate")]
+        trunk: Option<String>,
+
+        /// Stage-2 only: advance this standing aggregate ref to the `review/<slice>`
+        /// bundle (e.g. `refs/heads/edge`). Absent ⇒ no aggregate written.
+        #[arg(long, requires = "integrate")]
+        edge: Option<String>,
+
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -2998,9 +3015,21 @@ fn main() -> anyhow::Result<()> {
         Command::Dispatch { command } => match command {
             DispatchCommand::Sync {
                 slice,
-                prepare_review: _,
+                integrate,
+                trunk,
+                edge,
                 path,
-            } => dispatch::run_prepare_review(path, slice),
+                ..
+            } => {
+                // The `stage` group is `required = true` single-choice: exactly one
+                // of `--prepare-review` / `--integrate` is set, so `integrate`
+                // alone selects the stage (no unreachable arm needed).
+                if integrate {
+                    dispatch::run_integrate(path, slice, trunk.as_deref(), edge.as_deref())
+                } else {
+                    dispatch::run_prepare_review(path, slice)
+                }
+            }
         },
         Command::Validate { path } => run_validate(path),
         Command::Reseat {
@@ -4135,12 +4164,36 @@ mod write_class_tests {
             command: DispatchCommand::Sync {
                 slice: 64,
                 prepare_review: true,
+                integrate: false,
+                trunk: None,
+                edge: None,
                 path: None,
             },
         };
         assert!(
             matches!(write_class(&c), WriteClass::Orchestrator("dispatch-sync")),
             "dispatch sync must be Orchestrator(\"dispatch-sync\")"
+        );
+        assert_eq!(cls(c), Some("dispatch-sync"));
+    }
+
+    // SL-064 PHASE-05: `dispatch sync --integrate` is the same Orchestrator verb
+    // class (EX-6) — the trunk-writing stage inherits the worker-mode refusal.
+    #[test]
+    fn dispatch_sync_integrate_is_orchestrator() {
+        let c = Command::Dispatch {
+            command: DispatchCommand::Sync {
+                slice: 64,
+                prepare_review: false,
+                integrate: true,
+                trunk: None,
+                edge: None,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("dispatch-sync")),
+            "dispatch sync --integrate must be Orchestrator(\"dispatch-sync\")"
         );
         assert_eq!(cls(c), Some("dispatch-sync"));
     }

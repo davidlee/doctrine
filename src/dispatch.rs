@@ -21,13 +21,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, bail};
 
-use crate::git::{self, RefCas};
+use crate::git::{self, RefCas, ReplayOutcome, ZERO_OID};
 use crate::ledger::{Boundaries, Journal, JournalRow, LedgerStatus, Orthogonal};
 use crate::root;
-
-/// The all-zero oid — the CAS `expected_old` for a ref *creation* (`update-ref`
-/// refuses if the ref already exists).
-const ZERO_OID: &str = "0000000000000000000000000000000000000000";
 
 /// One planned projection: a target ref and the commit it should be created at.
 /// `source_oid` is the object the projection was computed from (the journal's
@@ -42,6 +38,19 @@ struct Planned {
 pub(crate) fn run_prepare_review(path: Option<PathBuf>, slice: u32) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     prepare_review(&root, slice)
+}
+
+/// CLI entry — resolve the root and run stage-2 integrate for `slice`. `trunk`
+/// names the ref the code units project onto (ff-only); `edge` names an optional
+/// aggregate ref. Both default off ⇒ a pure idempotent journal replay (EX-1).
+pub(crate) fn run_integrate(
+    path: Option<PathBuf>,
+    slice: u32,
+    trunk: Option<&str>,
+    edge: Option<&str>,
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    integrate(&root, slice, trunk, edge)
 }
 
 /// Resolve a commit-ish ref to its commit oid, or `None` when it does not exist.
@@ -152,6 +161,185 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
             stale.len(),
             stale.join(", ")
         )
+    }
+}
+
+/// Stage-2 integrate (design §4 / §4.3). Sources the prepared journal from the
+/// `dispatch/<slice>` tip tree (object db — works after the coordination worktree
+/// is removed, EX-1), then **replays every row idempotently** under the 3-way CAS
+/// ([`git::replay_ref`]): an intact prepared ref is a verified no-op, a clobbered
+/// one is refused. When opted in, it appends and replays projection rows that
+/// advance the audited code units onto `trunk` (ff-only, EX-3) and an aggregate
+/// `edge` ref (EX-4). Plumbing-only — no checkout; the journal intent commits onto
+/// the branch BEFORE any external ref mutation and the applied status commits back
+/// after (EX-5). A moved target is reported, never clobbered (no auto-resolve).
+fn integrate(
+    root: &Path,
+    slice: u32,
+    trunk: Option<&str>,
+    edge: Option<&str>,
+) -> anyhow::Result<()> {
+    let slice3 = format!("{slice:03}");
+    let coord_ref = format!("refs/heads/dispatch/{slice3}");
+    let journal_path = format!(".doctrine/dispatch/{slice3}/journal.toml");
+
+    let tip = resolve_commit(root, &coord_ref)?
+        .with_context(|| format!("integrate: dispatch/{slice3} does not exist"))?;
+    let tip_tree = tree_of(root, &tip)?;
+
+    // Stage-1 must have prepared the journal (tree-read, never the filesystem —
+    // it would silently empty from the parent/root, see the sync-tree-reads-ledger
+    // memory). An empty journal ⇒ prepare-review never ran.
+    let mut journal = read_ledger::<Journal>(root, &coord_ref, &slice3, "journal.toml")?;
+    if journal.rows.is_empty() {
+        bail!("integrate: no prepared journal on dispatch/{slice3} — run prepare-review first");
+    }
+
+    // --- plan opt-in projection rows (idempotent: skip a target already
+    //     journaled by a prior/crashed run — its recorded intent is replayed) ---
+    let fresh = |j: &Journal, target: &str| !j.rows.iter().any(|r| r.target_ref == target);
+    if let Some(trunk_ref) = trunk.filter(|t| fresh(&journal, t)) {
+        journal
+            .rows
+            .push(plan_trunk_row(root, &slice3, &journal, trunk_ref)?);
+    }
+    if let Some(edge_ref) = edge.filter(|e| fresh(&journal, e)) {
+        journal.rows.push(plan_edge_row(root, &slice3, edge_ref)?);
+    }
+
+    // --- journal the (possibly extended) intent onto the branch BEFORE any
+    //     external ref mutation (EX-5, ADR-012 D4) ------------------------------
+    let journal_commit = commit_journal(
+        root,
+        &tip_tree,
+        &tip,
+        &journal_path,
+        &coord_ref,
+        &journal,
+        &tip,
+    )?;
+
+    // --- replay every row idempotently under the 3-way CAS (EX-1/EX-2) --------
+    let mut moved: Vec<String> = Vec::new();
+    for row in &mut journal.rows {
+        match git::replay_ref(
+            root,
+            &row.target_ref,
+            &row.expected_old_oid,
+            &row.planned_new_oid,
+        )? {
+            ReplayOutcome::NoOp => {
+                row.status = LedgerStatus::Verified;
+                row.applied_new_oid = row.planned_new_oid.clone();
+            }
+            ReplayOutcome::Applied => {
+                row.status = LedgerStatus::Verified;
+                row.applied_new_oid = row.planned_new_oid.clone();
+                writeln!(io::stdout(), "{}", row.target_ref)?;
+            }
+            ReplayOutcome::Moved { actual } => {
+                row.status = LedgerStatus::Failed;
+                moved.push(format!(
+                    "{} (target at {})",
+                    row.target_ref,
+                    actual.as_deref().unwrap_or("?")
+                ));
+            }
+        }
+    }
+
+    // --- record applied status back onto the branch (recoverability) ----------
+    commit_journal(
+        root,
+        &tip_tree,
+        &journal_commit,
+        &journal_path,
+        &coord_ref,
+        &journal,
+        &journal_commit,
+    )?;
+
+    if moved.is_empty() {
+        writeln!(
+            io::stderr(),
+            "integrate: {} ref(s) replayed",
+            journal.rows.len()
+        )?;
+        Ok(())
+    } else {
+        bail!(
+            "integrate: {} moved target(s), not clobbered: {}",
+            moved.len(),
+            moved.join(", ")
+        )
+    }
+}
+
+/// The highest-numbered `refs/heads/phase/<slice>-NN` target in the journal — the
+/// cumulative code tip (phase branches are chained off the trunk base, so the max
+/// NN holds all prior phases' code). `None` when no phase row was projected.
+fn phase_chain_tip(journal: &Journal, slice3: &str) -> Option<String> {
+    let prefix = format!("refs/heads/phase/{slice3}-");
+    journal
+        .rows
+        .iter()
+        .filter_map(|r| {
+            r.target_ref
+                .strip_prefix(&prefix)
+                .and_then(|nn| nn.parse::<u32>().ok())
+                .map(|n| (n, r.target_ref.clone()))
+        })
+        .max_by_key(|(n, _)| *n)
+        .map(|(_, refname)| refname)
+}
+
+/// Plan the trunk projection row (EX-3): the cumulative code tip advances
+/// `trunk_ref` **fast-forward-only**. `expected_old` is the trunk tip (zero if the
+/// ref is absent); a planned commit that does not descend from it ⇒ the trunk
+/// moved ⇒ refuse (re-anchor is reported, never auto-resolved).
+fn plan_trunk_row(
+    root: &Path,
+    slice3: &str,
+    journal: &Journal,
+    trunk_ref: &str,
+) -> anyhow::Result<JournalRow> {
+    let phase_ref = phase_chain_tip(journal, slice3).with_context(|| {
+        format!("integrate --trunk: no phase/{slice3}-NN code units to integrate")
+    })?;
+    let planned = resolve_commit(root, &phase_ref)?
+        .with_context(|| format!("integrate --trunk: {phase_ref} does not resolve"))?;
+    let expected_old = resolve_commit(root, trunk_ref)?;
+    if let Some(tip) = &expected_old {
+        anyhow::ensure!(
+            git::is_ancestor(root, tip, &planned)?,
+            "integrate --trunk: {planned} does not fast-forward {trunk_ref} (at {tip}) — \
+             trunk moved; re-anchor required, not auto-resolved"
+        );
+    }
+    Ok(projection_row(trunk_ref, planned, expected_old))
+}
+
+/// Plan the edge aggregate row (EX-4): the `review/<slice>` impl bundle advances
+/// the standing `edge_ref`. Not ff-gated (a standing aggregate of local work); the
+/// CAS still refuses a concurrently-moved edge — isolated to this sync point.
+fn plan_edge_row(root: &Path, slice3: &str, edge_ref: &str) -> anyhow::Result<JournalRow> {
+    let review_ref = format!("refs/heads/review/{slice3}");
+    let planned = resolve_commit(root, &review_ref)?
+        .with_context(|| format!("integrate --edge: {review_ref} does not resolve"))?;
+    let expected_old = resolve_commit(root, edge_ref)?;
+    Ok(projection_row(edge_ref, planned, expected_old))
+}
+
+/// A pending CAS journal row advancing `target_ref` to `planned` from its current
+/// tip (`expected_old`, zero-oid for a ref creation).
+fn projection_row(target_ref: &str, planned: String, expected_old: Option<String>) -> JournalRow {
+    JournalRow {
+        source_oid: planned.clone(),
+        target_ref: target_ref.to_owned(),
+        expected_old_oid: expected_old.unwrap_or_else(|| ZERO_OID.to_owned()),
+        planned_new_oid: planned,
+        applied_new_oid: String::new(),
+        status: LedgerStatus::Pending,
     }
 }
 
