@@ -40,7 +40,11 @@ envisaged.
   IMP-023 title predates the D-C11 carve-out. Out of scope here.
 - **`reconciliation`** — already rewired (the IMP-001 `/audit` pilot). Untangling
   reconciliation into its own skill / the audit-reconcile seam is **IMP-008**. No
-  reconciliation work here.
+  reconciliation work here. IMP-008 is **not a sequencing prerequisite** for this
+  slice: different axis (reconcile *writer* seam + new reconcile artefact +
+  `slice reconcile` CLI, with deferred spec-machinery upstreams per ADR-003 §11),
+  no technical dependency either direction. SL-061 only *reads* the `/audit` pilot
+  as prior-art shape; it does not touch `/audit`. Ship independently.
 - **Fork-invoked / parallel-raiser review** (IMP-024) and **RV verb e2e golden
   coverage** (IMP-029) — adjacent, separately owned. This slice rides the existing
   single-tree, parent-locus verb surface as-is.
