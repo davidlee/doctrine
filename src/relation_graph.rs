@@ -36,7 +36,8 @@ use crate::relation::{RELATION_RULES, RelationEdge, RelationLabel, TargetSpec};
 /// Grouping by `kind.prefix` (the corpus-wide discriminant used everywhere, e.g.
 /// `integrity::kind_by_prefix`): SLICE→slice; ADR/POL/STD→governance (parameterised
 /// by the kind's `GovKind`); PRD/SPEC→spec (by subtype); ISS/IMP/CHR/RSK/IDE→backlog
-/// (by `ItemKind`); RV→review; REC→rec.
+/// (by `ItemKind`); RV→review; REC→rec; REV→revision (SL-066 G3, empty stub this
+/// phase — PHASE-03 reads the `[[change]]` rows).
 pub(crate) fn outbound_for(
     root: &Path,
     kind: &entity::Kind,
@@ -65,6 +66,11 @@ pub(crate) fn outbound_for(
         "ASM" | "DEC" | "QUE" | "CON" => Ok(Vec::new()),
         "RV" => crate::review::relation_edges(root, id),
         "REC" => crate::rec::relation_edges(root, id),
+        // REV (SL-066, G3) — the arm MUST land WITH the `KINDS` row or the
+        // fallthrough `debug_assert!(false)` panics every debug-build corpus scan the
+        // moment a REV is minted. The accessor returns an empty stub this phase
+        // (PHASE-03 fills it with the `[[change]]`-row `revises` reader).
+        "REV" => crate::revision::relation_edges(root, id),
         // The five backlog kinds share one accessor, routed by their ItemKind (the
         // prefix↔kind map is backlog's single source — no second copy here).
         other => {
@@ -112,6 +118,19 @@ pub(crate) fn dep_seq_for(
                 .join(kind.dir)
                 .join(&name)
                 .join(format!("slice-{name}.toml"));
+            Ok((dep_seq::read(&path)?, false))
+        }
+        // REV (SL-066, G2) — mirrors the SL arm: a Revision authors its own
+        // `needs`/`after` (the IDE-010 payoff — a REV may `needs` a spike), so the
+        // leaf reads its `revision-NNN.toml` directly. Without this arm REV-as-source
+        // edges short-circuit to the empty fallthrough and never reach the blocker/
+        // `next` view. `promoted` is always `false` (a backlog-only projection).
+        "REV" => {
+            let name = format!("{id:03}");
+            let path = root
+                .join(kind.dir)
+                .join(&name)
+                .join(format!("revision-{name}.toml"));
             Ok((dep_seq::read(&path)?, false))
         }
         // The five backlog kinds route to backlog's own one-parse reader, which carries
@@ -1120,6 +1139,58 @@ mod tests {
         assert!(edges.is_empty());
     }
 
+    // -- SL-066 G3/G2: the REV arms land WITH the KINDS row -------------------
+
+    #[test]
+    fn revision_outbound_arm_reads_change_rows() {
+        // G3: a REV row in KINDS routes to `revision::relation_edges` BEFORE the
+        // `debug_assert!(false)` fallthrough. The accessor reads the `[[change]]`
+        // payload (PHASE-03), projecting each row to one `Revises` edge — a REV with
+        // no rows authors none.
+        let dir = tmp();
+        let root = dir.path();
+        // No `[[change]]` rows → no outbound edges.
+        write(
+            &root,
+            ".doctrine/revision/001/revision-001.toml",
+            "id = 1\nslug = \"r\"\ntitle = \"R\"\nstatus = \"proposed\"\napproval = \"none\"\n",
+        );
+        let empty = outbound_for(&root, kind_for("REV"), 1).unwrap();
+        assert!(
+            empty.is_empty(),
+            "a REV with no change rows authors no outbound"
+        );
+
+        // A `[[change]]` row projects to one `revises` edge to its target.
+        write(
+            &root,
+            ".doctrine/revision/002/revision-002.toml",
+            "id = 2\nslug = \"r\"\ntitle = \"R\"\nstatus = \"proposed\"\napproval = \"none\"\n\
+             [[change]]\ntarget = \"ADR-006\"\naction = \"modify\"\nprimary = true\n",
+        );
+        let edges = outbound_for(&root, kind_for("REV"), 2).unwrap();
+        assert_eq!(edges.len(), 1, "one change row → one revises edge");
+        assert_eq!(edges[0].label, RelationLabel::Revises);
+        assert_eq!(edges[0].target, "ADR-006");
+    }
+
+    #[test]
+    fn revision_dep_seq_arm_reads_its_own_toml() {
+        // G2: REV-as-source `needs`/`after` route to the leaf `dep_seq::read` over
+        // `revision-NNN.toml` (mirrors the SL arm), not the empty short-circuit.
+        let dir = tmp();
+        let root = dir.path();
+        write(
+            &root,
+            ".doctrine/revision/001/revision-001.toml",
+            "id = 1\nslug = \"r\"\ntitle = \"R\"\nstatus = \"proposed\"\napproval = \"none\"\n\
+             [relationships]\nneeds = [\"SL-046\"]\nafter = []\n",
+        );
+        let (ds, promoted) = dep_seq_for(&root, kind_for("REV"), 1).unwrap();
+        assert_eq!(ds.needs, vec!["SL-046"], "REV needs reach the blocker view");
+        assert!(!promoted, "REV carries no backlog-only promoted projection");
+    }
+
     // -- SL-059 VT-1: outbound_for total-dispatch for the four knowledge kinds --
 
     #[test]
@@ -1619,9 +1690,9 @@ mod tests {
                 "{label:?} (Unvalidated) must have no overlay"
             );
         }
-        // The 13 = 15 distinct labels minus the 2 Unvalidated. The set, not just the
+        // The 14 = 16 distinct labels minus the 2 Unvalidated. The set, not just the
         // count, is the real assertion above; the count is a human-readable sanity tag.
-        assert_eq!(overlay_backed.len(), 13, "overlay-backed label count is 13");
+        assert_eq!(overlay_backed.len(), 14, "overlay-backed label count is 14");
     }
 
     // -- PHASE-04 VT-4 / X3 arm (a): exact reader coverage (read_block live) ---

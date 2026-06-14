@@ -136,6 +136,17 @@ const PARTITION: &[KindPartition] = &[
         workable: &["active"],
         terminal: &["done"],
     },
+    // REV (revision, SL-066/ADR-013) — its OWN row: REV vocab ≠ backlog's, so it
+    // cannot ride the backlog arm. Without this row a `done`/`abandoned` REV
+    // classifies `Unrecognised != Terminal` and `blocked_by` (channels.rs:67, which
+    // excuses only `class == Terminal`) blocks its dependent FOREVER — the inverse of
+    // the IDE-010 payoff. The terminal set reads REV's real vocab via the
+    // `crate::revision::REV_STATUSES`-bound canary (`revision_partition_covers_the_real_vocabulary`).
+    KindPartition {
+        prefix: "REV",
+        workable: &["proposed", "started"],
+        terminal: &["done", "abandoned"],
+    },
     // Knowledge records (SL-059, NF-003 / D7) — NEVER `Workable`: each kind's entry
     // is `workable: &[]`, `terminal: <KIND>_STATUSES` (the FULL vocab), so every
     // record status classifies `Terminal` (the positive all-`Terminal` declaration,
@@ -204,7 +215,9 @@ pub(crate) fn status_class(kind: &entity::Kind, status: Option<&str>) -> StatusC
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{adr, backlog, knowledge, policy, requirement, review, slice, spec, standard};
+    use crate::{
+        adr, backlog, knowledge, policy, requirement, review, revision, slice, spec, standard,
+    };
     use std::collections::BTreeSet;
 
     /// Look up a partition entry by prefix (test helper).
@@ -280,6 +293,38 @@ mod tests {
     #[test]
     fn review_partition_covers_the_real_vocabulary() {
         assert_eq!(vocab("RV"), set(review::REVIEW_STATUSES));
+    }
+
+    // -- SL-066 VT-2: the REV partition's G1 canary (its own vocab, not backlog's) --
+
+    #[test]
+    fn revision_partition_covers_the_real_vocabulary() {
+        // REV gets its OWN row + own const — the table vocab must equal the real
+        // `revision::REV_STATUSES` (NOT backlog's), or a status drifts unnoticed.
+        assert_eq!(vocab("REV"), set(revision::REV_STATUSES));
+    }
+
+    #[test]
+    fn revision_done_and_abandoned_classify_terminal() {
+        // The precondition for `needs REV-N` to unblock its dependent: a terminal
+        // REV must classify `Terminal` (not `Unrecognised`), so `blocked_by` excuses
+        // it (channels.rs:67). proposed/started stay `Workable`.
+        assert_eq!(
+            status_class(&revision::REV_KIND, Some("done")),
+            StatusClass::Terminal
+        );
+        assert_eq!(
+            status_class(&revision::REV_KIND, Some("abandoned")),
+            StatusClass::Terminal
+        );
+        assert_eq!(
+            status_class(&revision::REV_KIND, Some("proposed")),
+            StatusClass::Workable
+        );
+        assert_eq!(
+            status_class(&revision::REV_KIND, Some("started")),
+            StatusClass::Workable
+        );
     }
 
     // -- SL-059 VT-3: the four knowledge partitions cover their real vocabulary --

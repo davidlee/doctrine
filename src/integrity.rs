@@ -23,6 +23,7 @@ use crate::policy::POLICY_KIND;
 use crate::rec::REC_KIND;
 use crate::requirement::REQUIREMENT_KIND;
 use crate::review::REVIEW_KIND;
+use crate::revision::REV_KIND;
 use crate::slice::SLICE_KIND;
 use crate::spec::{PRODUCT_SPEC_KIND, TECH_SPEC_KIND};
 use crate::standard::STANDARD_KIND;
@@ -146,6 +147,17 @@ pub(crate) const KINDS: &[KindRef] = &[
     KindRef {
         kind: &CONSTRAINT_KIND,
         stem: "record",
+        state_dir: None,
+    },
+    // Revision (SL-066, ADR-013) — the REV change-axis kind. Status-ful (scanned via
+    // the standard id-only reader; its `revision-NNN.toml` carries `status`), stem
+    // `revision`, no runtime state tree (state_dir None). Its THREE corpus-walk arms
+    // (G1 `priority::partition` REV row, G2 `relation_graph::dep_seq_for` REV arm,
+    // G3 `relation_graph::outbound_for` REV arm) co-land with this row, or the
+    // debug-build corpus scan panics/mis-classifies the moment a REV is minted.
+    KindRef {
+        kind: &REV_KIND,
+        stem: "revision",
         state_dir: None,
     },
 ];
@@ -748,7 +760,7 @@ mod tests {
             prefixes,
             [
                 "SL", "ADR", "POL", "STD", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE",
-                "RV", "REC", "ASM", "DEC", "QUE", "CON"
+                "RV", "REC", "ASM", "DEC", "QUE", "CON", "REV"
             ]
         );
         // Slice and review (SL-040) own a runtime state tree (F3 guard surface).
