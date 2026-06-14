@@ -2173,7 +2173,10 @@ mod tests {
     fn plan_baseref_malformed_left_untouched() {
         let plan = plan_baseref(Some("{ not json"));
         assert!(matches!(plan.outcome, BaseRefOutcome::PrintedFallback));
-        assert!(plan.new_json.is_none(), "malformed file must not be clobbered");
+        assert!(
+            plan.new_json.is_none(),
+            "malformed file must not be clobbered"
+        );
     }
 
     // --- T6 (SL-018): the generalized seam carries a SEPARATE `memory sync` hook.
