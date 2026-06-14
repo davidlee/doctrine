@@ -773,19 +773,151 @@ fn fallback_snippet(exec: &Path) -> String {
 }
 
 /// Imperative per-harness refresh. Claude merges the `SessionStart` hook into
-/// `.claude/settings.local.json` (writes only on change, `!dry_run`); codex is
-/// import-only → `None` (its `AGENTS.md` ref is the shared `ensure_boot_import`
-/// work, no hook). A malformed settings file is left untouched (`PrintedFallback`).
+/// `.claude/settings.local.json` (writes only on change, `!dry_run`) AND sets
+/// `worktree.baseRef="head"` (SL-064 §8 — so the claude `/dispatch` arm's isolated
+/// worker forks the orchestrator session HEAD, base==B by placement); codex is
+/// import-only → no hook, no baseRef (its `AGENTS.md` ref is the shared
+/// `ensure_boot_import` work). A malformed settings file is left untouched
+/// (`PrintedFallback`).
 fn install_refresh(
     h: &Harness,
     root: &Path,
     exec: &Path,
     dry_run: bool,
-) -> anyhow::Result<RefreshOutcome> {
+) -> anyhow::Result<RefreshReport> {
     match h {
-        Harness::Codex => Ok(RefreshOutcome::None),
-        Harness::Claude => install_claude_hook(root, &HookSpec::boot(exec), dry_run),
+        Harness::Codex => Ok(RefreshReport {
+            hook: RefreshOutcome::None,
+            baseref: BaseRefOutcome::NotApplicable,
+        }),
+        Harness::Claude => {
+            // The hook merge writes first; the baseRef step reads the SAME settings
+            // file AFTER, so its plan merges onto the just-written content (two
+            // ordered atomic writes — design §8.3 risk note). The baseRef write
+            // rides BESIDE the owner-locked HookSpec merge core, never through it.
+            let hook = install_claude_hook(root, &HookSpec::boot(exec), dry_run)?;
+            let baseref = install_baseref(root, dry_run)?;
+            Ok(RefreshReport { hook, baseref })
+        }
     }
+}
+
+/// The combined Claude refresh outcome: the `SessionStart` hook merge plus the
+/// `worktree.baseRef` set (SL-064 §8). Codex carries `None`/`NotApplicable`.
+struct RefreshReport {
+    hook: RefreshOutcome,
+    baseref: BaseRefOutcome,
+}
+
+/// What the `worktree.baseRef="head"` install did, for reporting (SL-064 §8.3).
+/// Mirrors `RefreshOutcome` but for the distinct baseRef concern.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum BaseRefOutcome {
+    /// `worktree.baseRef` was absent; `"head"` was written.
+    Set,
+    /// Already `"head"` — no write (idempotent).
+    AlreadyHead,
+    /// Present with a NON-`head` value; left untouched, reported (no clobber —
+    /// a per-operator deliberate override is respected, §8.3).
+    Conflict(String),
+    /// The settings file (or its `worktree` key) is malformed — left untouched.
+    /// The hook leg flags the malformed file loudly, so this stays silent.
+    PrintedFallback,
+    /// Codex — no worktree baseRef concern.
+    NotApplicable,
+}
+
+/// A planned baseRef set: the outcome plus the new settings JSON (`None` when no
+/// write is needed). Mirrors `HookPlan`.
+struct BaseRefPlan {
+    outcome: BaseRefOutcome,
+    new_json: Option<String>,
+}
+
+/// PURE planner for `worktree.baseRef="head"` in settings `JSON` (SL-064 §8.3).
+/// Sets the nested `worktree.baseRef` key WITHOUT disturbing `hooks` or any other
+/// `worktree` key (mutates a `serde_json::Value` at the narrow path). Absent ⇒
+/// write `"head"`; already `"head"` ⇒ no-op; a non-`head` value or a malformed
+/// file/`worktree` type ⇒ leave untouched (no clobber). Rides BESIDE the hook
+/// merge core — it never touches `plan_hook`.
+fn plan_baseref(existing_json: Option<&str>) -> BaseRefPlan {
+    let mut value: Value = match existing_json.map(str::trim) {
+        None | Some("") => Value::Object(Map::new()),
+        Some(text) => match serde_json::from_str(text) {
+            Ok(parsed) => parsed,
+            Err(_) => {
+                return BaseRefPlan {
+                    outcome: BaseRefOutcome::PrintedFallback,
+                    new_json: None,
+                };
+            }
+        },
+    };
+    let Some(obj) = value.as_object_mut() else {
+        return BaseRefPlan {
+            outcome: BaseRefOutcome::PrintedFallback,
+            new_json: None,
+        };
+    };
+    let worktree = obj
+        .entry("worktree")
+        .or_insert_with(|| Value::Object(Map::new()));
+    let Some(wt) = worktree.as_object_mut() else {
+        // `worktree` present but not an object ⇒ malformed; never clobber.
+        return BaseRefPlan {
+            outcome: BaseRefOutcome::PrintedFallback,
+            new_json: None,
+        };
+    };
+    match wt.get("baseRef") {
+        Some(Value::String(s)) if s == "head" => {
+            return BaseRefPlan {
+                outcome: BaseRefOutcome::AlreadyHead,
+                new_json: None,
+            };
+        }
+        Some(Value::String(s)) => {
+            return BaseRefPlan {
+                outcome: BaseRefOutcome::Conflict(s.clone()),
+                new_json: None,
+            };
+        }
+        Some(_non_string) => {
+            return BaseRefPlan {
+                outcome: BaseRefOutcome::Conflict("(non-string)".to_string()),
+                new_json: None,
+            };
+        }
+        None => {}
+    }
+    wt.insert("baseRef".to_string(), Value::String("head".to_string()));
+    match serde_json::to_string_pretty(&value) {
+        Ok(json) => BaseRefPlan {
+            outcome: BaseRefOutcome::Set,
+            new_json: Some(json),
+        },
+        Err(_) => BaseRefPlan {
+            outcome: BaseRefOutcome::PrintedFallback,
+            new_json: None,
+        },
+    }
+}
+
+/// Set `worktree.baseRef="head"` in `.claude/settings.local.json`, writing only on
+/// change (unless `dry_run`). Reads → [`plan_baseref`] → atomic write, mirroring
+/// [`install_claude_hook`]. Rides beside the hook installer in the Claude arm.
+fn install_baseref(root: &Path, dry_run: bool) -> anyhow::Result<BaseRefOutcome> {
+    let path = root.join(SETTINGS_REL);
+    let existing = fs::read_to_string(&path).ok();
+    let plan = plan_baseref(existing.as_deref());
+    if let (Some(json), false) = (&plan.new_json, dry_run) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        fsutil::write_atomic(&path, json.as_bytes())?;
+    }
+    Ok(plan.outcome)
 }
 
 /// Merge a `HookSpec`'s `SessionStart` hook into `.claude/settings.local.json`,
@@ -866,21 +998,47 @@ fn wire(root: &Path, exec: &Path, harnesses: &[Harness], dry_run: bool) -> anyho
 
     for h in harnesses {
         match install_refresh(h, root, exec, dry_run) {
-            Ok(RefreshOutcome::Wired(cmd)) => {
-                writeln!(stdout, "  {tag}{}: wired hook: {cmd}", harness_label(h))?;
+            Ok(report) => {
+                match report.hook {
+                    RefreshOutcome::Wired(cmd) => {
+                        writeln!(stdout, "  {tag}{}: wired hook: {cmd}", harness_label(h))?;
+                    }
+                    RefreshOutcome::Refreshed(cmd) => {
+                        writeln!(stdout, "  {tag}{}: refreshed hook: {cmd}", harness_label(h))?;
+                    }
+                    RefreshOutcome::PrintedFallback => {
+                        writeln!(
+                            stdout,
+                            "  {}: {SETTINGS_REL} is malformed — add this hook manually:",
+                            harness_label(h)
+                        )?;
+                        writeln!(stdout, "{}", fallback_snippet(exec))?;
+                    }
+                    RefreshOutcome::None => {}
+                }
+                // baseRef leg (SL-064 §8): report a fresh set or a respected
+                // non-head override. AlreadyHead / PrintedFallback / NotApplicable
+                // stay silent (no-op, or the hook leg already flagged a bad file).
+                match report.baseref {
+                    BaseRefOutcome::Set => {
+                        writeln!(
+                            stdout,
+                            "  {tag}{}: set worktree.baseRef=head",
+                            harness_label(h)
+                        )?;
+                    }
+                    BaseRefOutcome::Conflict(value) => {
+                        writeln!(
+                            stdout,
+                            "  {}: worktree.baseRef is '{value}', not 'head' — left as-is (claude isolated-worker base==B needs 'head'; set it manually if intended)",
+                            harness_label(h)
+                        )?;
+                    }
+                    BaseRefOutcome::AlreadyHead
+                    | BaseRefOutcome::PrintedFallback
+                    | BaseRefOutcome::NotApplicable => {}
+                }
             }
-            Ok(RefreshOutcome::Refreshed(cmd)) => {
-                writeln!(stdout, "  {tag}{}: refreshed hook: {cmd}", harness_label(h))?;
-            }
-            Ok(RefreshOutcome::PrintedFallback) => {
-                writeln!(
-                    stdout,
-                    "  {}: {SETTINGS_REL} is malformed — add this hook manually:",
-                    harness_label(h)
-                )?;
-                writeln!(stdout, "{}", fallback_snippet(exec))?;
-            }
-            Ok(RefreshOutcome::None) => {}
             Err(e) => writeln!(stdout, "  {}: refresh failed: {e:#}", harness_label(h))?,
         }
     }
@@ -1927,18 +2085,95 @@ mod tests {
 
         // dry-run plans a wire but writes nothing.
         let out = install_refresh(&Harness::Claude, root, exec, true).unwrap();
-        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        assert!(matches!(out.hook, RefreshOutcome::Wired(_)));
+        assert!(matches!(out.baseref, BaseRefOutcome::Set));
         assert!(!settings.exists(), "dry-run must not write settings");
 
-        // real run creates the file with the hook.
+        // real run creates the file with the hook AND the baseRef key.
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
-        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        assert!(matches!(out.hook, RefreshOutcome::Wired(_)));
+        assert!(matches!(out.baseref, BaseRefOutcome::Set));
         let json = fs::read_to_string(&settings).unwrap();
         assert_eq!(commands(&json), vec!["/abs/doctrine boot".to_string()]);
+        let parsed: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
 
-        // codex is import-only — no hook, no file.
+        // codex is import-only — no hook, no file, no baseRef.
         let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
-        assert!(matches!(out, RefreshOutcome::None));
+        assert!(matches!(out.hook, RefreshOutcome::None));
+        assert!(matches!(out.baseref, BaseRefOutcome::NotApplicable));
+    }
+
+    // --- SL-064 PHASE-08 T4 / VT-1: worktree.baseRef="head" installer ---
+
+    #[test]
+    fn plan_baseref_writes_head_when_absent() {
+        // Empty/absent settings ⇒ Set, with the nested key written.
+        let plan = plan_baseref(None);
+        assert!(matches!(plan.outcome, BaseRefOutcome::Set));
+        let json = plan.new_json.expect("a write is planned");
+        let parsed: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
+    }
+
+    #[test]
+    fn plan_baseref_idempotent_when_already_head() {
+        let existing = r#"{"worktree":{"baseRef":"head"}}"#;
+        let plan = plan_baseref(Some(existing));
+        assert!(matches!(plan.outcome, BaseRefOutcome::AlreadyHead));
+        assert!(plan.new_json.is_none(), "no write when already head");
+    }
+
+    #[test]
+    fn plan_baseref_conflict_reports_no_clobber() {
+        // A deliberate non-head override is respected — reported, never clobbered.
+        let existing = r#"{"worktree":{"baseRef":"trunk"}}"#;
+        let plan = plan_baseref(Some(existing));
+        match plan.outcome {
+            BaseRefOutcome::Conflict(v) => assert_eq!(v, "trunk"),
+            other => panic!("expected Conflict, got {other:?}"),
+        }
+        assert!(plan.new_json.is_none(), "conflict must not write");
+    }
+
+    #[test]
+    fn plan_baseref_preserves_hooks_and_other_worktree_keys() {
+        // A realistic settings file: boot+stamp hooks plus an unrelated worktree
+        // key. The baseRef set must leave ALL of them intact.
+        let existing = r#"{
+          "hooks": {
+            "SessionStart": [
+              {"matcher":"startup|clear","hooks":[{"type":"command","command":"/abs/doctrine boot"}]}
+            ],
+            "SubagentStart": [
+              {"matcher":"dispatch-worker","hooks":[{"type":"command","command":"/abs/doctrine worktree marker --stamp-subagent"}]}
+            ]
+          },
+          "worktree": {"autoFetch": true}
+        }"#;
+        let plan = plan_baseref(Some(existing));
+        assert!(matches!(plan.outcome, BaseRefOutcome::Set));
+        let parsed: Value = serde_json::from_str(&plan.new_json.unwrap()).unwrap();
+        // baseRef added...
+        assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
+        // ...the sibling worktree key survives...
+        assert_eq!(parsed["worktree"]["autoFetch"], Value::Bool(true));
+        // ...and BOTH hook entries are intact.
+        assert_eq!(
+            parsed["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+            Value::String("/abs/doctrine boot".into())
+        );
+        assert_eq!(
+            parsed["hooks"]["SubagentStart"][0]["hooks"][0]["command"],
+            Value::String("/abs/doctrine worktree marker --stamp-subagent".into())
+        );
+    }
+
+    #[test]
+    fn plan_baseref_malformed_left_untouched() {
+        let plan = plan_baseref(Some("{ not json"));
+        assert!(matches!(plan.outcome, BaseRefOutcome::PrintedFallback));
+        assert!(plan.new_json.is_none(), "malformed file must not be clobbered");
     }
 
     // --- T6 (SL-018): the generalized seam carries a SEPARATE `memory sync` hook.
