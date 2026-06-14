@@ -199,3 +199,39 @@ Three manifests under `.doctrine/dispatch/<slice>/`: `journal.toml` (`[[row]]`),
 PHASE-03 stayed BELOW the CLI projection surface (EN-2) — no `dispatch sync`
 command, no external-ref mutation. Next = PHASE-04 (prepare-review: the
 Orchestrator-classed `dispatch sync --prepare-review`, B + C consuming these).
+
+## PHASE-06 — skill alignment + the funnel-time recording verb
+
+Authored as prose-only, but phase-planning (probing residual-risk #2) found the
+funnel-time recording surface had **no callable verb**: `ledger::record_boundary`/
+`record_orthogonal` shipped (PHASE-03) as tested `pub(crate)` dead code, and
+`dispatch` exposed only `sync`. An LLM orchestrator can't call a `pub(crate)` fn, so
+the claude-arm `phase/<slice>-NN` cut had no way to get `boundaries.toml` populated.
+EN-1 ("skills cite real surfaces") was unmet for that surface. **/consult → user
+ruled option A:** wire the verb in PHASE-06 (appended VT-2), don't defer.
+
+**Wired:** `doctrine dispatch record-boundary --slice --phase --code-start
+--code-end` (Orchestrator-classed; resolves the oids; appends a `[[boundary]]` row).
+`run_record_boundary` in `dispatch.rs` reuses `resolve_commit`. Removed the now-
+unfulfilled `expect(dead_code)` on `store`/`record_boundary`.
+
+**F-1 (latent bug, fixed):** `ledger::dispatch_dir` wrote **unpadded**
+`.doctrine/dispatch/64/`, but `dispatch sync` (dispatch.rs) tree-reads **padded**
+`…/064/` — the funnel writer and the sync reader disagreed. Masked because the
+recording surface had no production caller until now; round-trip tests stayed green
+(intra-ledger, writer==reader). Padded `dispatch_dir` to the canonical 3-digit
+`<slice>` (matches the `dispatch/064` branch + the sync reader). Carry to audit.
+
+**Scope held:** `record-orthogonal` left unexposed (still dead, reason updated) —
+its driver is the deferred OQ-B classifier; empty `orthogonal.toml` is the correct
+conservative EXCLUDE fallback ("reviewed once, never lost"). Captured as **IMP-071**.
+
+**Skills (EX-1..6):** dispatch router — `worktree coordinate` before batch 1 (never
+the session `main` tree); funnel step 7a `record-boundary` (claude arm); conclude is
+stage-1 `--prepare-review` only (project refs, remove worktree dir, keep refs, audit
+from parent/root); stage-2 `--integrate` is `/close`'s post-audit act; IMP-043 re-
+anchor demoted to sync-time. Both arms describe behavior against `dispatch/<slice>`
+(codex/pi: native fork = phase unit, no recording; claude: fork-less, synthesized
+cut). worktree — `coordinate` documented as a third creation path (markerless,
+create-or-resume, regenerates phase sheets). Re-embedded via touch `src/skills.rs`;
+VT-1 (e2e_claude_install/e2e_skills_symlink/e2e_worktree_stamp) + gate green.
