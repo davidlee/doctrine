@@ -884,10 +884,12 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     // Agents leg + SubagentStart hook are Claude-surface-only: install them iff
     // Claude is a resolved target (skip a codex-only / global-npx install).
     if agents.iter().any(|a| matches!(a, Agent::Claude)) {
-        crate::install::ensure_gitignored(
-            &install_base(&root, args.global)?,
-            ".doctrine/agents/*",
-        )?;
+        // Ignore the derived agents (e.g. dispatch-worker.md) but re-include the
+        // authored, tracked AGENTS.md — emit the whitelist pair in order (the
+        // `*` exclude before its negation, so the re-include takes). ISS-012.
+        let base = install_base(&root, args.global)?;
+        crate::install::ensure_gitignored(&base, ".doctrine/agents/*")?;
+        crate::install::ensure_gitignored(&base, "!.doctrine/agents/AGENTS.md")?;
         install_agents(&root, args.global, args.dry_run, &mut out)?;
 
         // Wire the dispatch-worker SubagentStart hook into the project's
@@ -1692,6 +1694,17 @@ mod tests {
             gi.contains(".doctrine/skills/*"),
             "skills install must self-enforce the derived-tree ignore"
         );
+        // The agents leg ignores derived agents but must NOT swallow the
+        // authored, tracked AGENTS.md — emit the whitelist pair, in order
+        // (the `*` exclude before its negation), so re-include actually takes.
+        let star = gi.find(".doctrine/agents/*");
+        let keep = gi.find("!.doctrine/agents/AGENTS.md");
+        assert!(star.is_some(), "agents install must ignore derived agents");
+        assert!(
+            keep.is_some(),
+            "agents install must re-include the authored AGENTS.md"
+        );
+        assert!(star < keep, "the `*` exclude must precede its negation");
     }
 
     #[test]
