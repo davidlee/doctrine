@@ -138,10 +138,20 @@ pub(crate) fn append(toml_path: &Path, edit: &RelEdit<'_>) -> anyhow::Result<()>
 **Engine dispatch (mirrors `outbound_for`), in `relation_graph.rs` or beside it:**
 
 ```rust
-/// Map (kind, id) → its TOML path and read its DepSeq via the leaf. Authoring
-/// kinds: backlog (5) + slice. Every other kind returns the empty DepSeq.
-pub(crate) fn dep_seq_for(root, kind: &entity::Kind, id: u32) -> anyhow::Result<DepSeq>;
+/// Map (kind, id) → its DepSeq + the backlog-only `promoted` flag. Authoring
+/// kinds: backlog (5) + slice. A non-authoring kind SHORT-CIRCUITS to empty with
+/// NO disk read (F5) — the dispatch tests the kind before touching the TOML.
+pub(crate) fn dep_seq_for(root, kind: &entity::Kind, id: u32)
+    -> anyhow::Result<(DepSeq, bool /* promoted */)>;
 ```
+
+- **backlog arm** keeps its single `read_item` parse (it already must read
+  `resolution` for `promoted`), constructing the shared `DepSeq` type +
+  `promoted` — ONE parse, no regression (F3). The leaf's path-based `read` is NOT
+  used for backlog; only the `DepSeq` type + the `append` write seam are shared
+  there. The shared write seam is the bulk of the duplication risk; the read
+  divergence is justified solely by the `promoted` coupling.
+- **slice arm** uses the leaf `read(path)`; `promoted` is always `false`.
 
 **Command (`doctrine needs` / `doctrine after`, top-level, sibling to `link`):**
 
@@ -170,7 +180,10 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
   1. SRC resolves and is a dep/seq-authoring kind (else refuse).
   2. TGT resolves against `integrity::KINDS` (forward-edge resolvability; **no
      kind-pair gate** — OQ-2 / D2). Free-text targets rejected (unlike backlog
-     `drift`).
+     `drift`). A non-work-kind TGT (e.g. a slice → a spec/ADR) is **allowed but
+     inert**: the priority partition treats it as terminal, so it never blocks
+     (F2). The honest cross-tier model is the Revision kind (IDE-010), not a
+     `needs` edge — convention, not enforced here.
   3. Self-edge (SRC == TGT) refused.
 - No author-time cycle check — cordage diagnoses cycles at read (`dep` Reject /
   `seq` Evict), matching backlog today.
@@ -193,6 +206,13 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
   partition (terminal predecessor does not block); SL-060 changes no partition
   semantics (that is IMP-047).
 - **Assumption** `promoted` has no slice analogue; slices are never `promoted`.
+- **ASM-1 (load-bearing, F1)** — D5's no-migration stance rests on *no
+  upgrade-in-place clients with pre-existing slices*. TRUE today: doctrine `install`
+  deploys into fresh projects (scaffold seeds the table); only this dogfood repo
+  has pre-existing table-less slices, fixed by the one-off backfill. If doctrine
+  later gains upgrade-in-place users, those repos' existing slices hit the strict
+  refuse until backfilled → a backfill/lazy-seed story becomes needed (follow-up,
+  §below). Stated explicitly, not silently inherited from SL-048.
 
 ## 6. Open Questions & Unknowns
 
@@ -253,7 +273,8 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
 ## 9. Quality Engineering & Validation
 
 - **Behaviour preservation:** backlog `needs`/`after`, `priority` (survey/next/
-  blockers/explain), `backlog order` goldens byte-identical.
+  blockers/explain), `backlog order` goldens byte-identical — **including the
+  backlog verb success-message text** through the new delegate path (F4).
 - **New behaviour:**
   - slice→slice `needs`/`after` authorable via `doctrine needs`/`after`;
     round-trips `slice show` / `show --json` (black-box golden).
@@ -267,6 +288,49 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
   `validate` clean across every backfilled slice.
 - `just gate` clean; clippy zero warnings.
 
+**Phasing note (F6) — two non-code deliverables are real, not vapor:**
+- the **PRD-011 amendment** (D6) is a distinct `/spec-product` phase/commit, canon
+  moving first — not bundled silently into a code phase;
+- the **out-of-band backfill** (D5) is an execution deliverable: a phase that runs
+  the one-off script (empty `[relationships]` into existing slices) AND the
+  SL-048-style storage post-check, committed as a data-only diff.
+
 ## 10. Review Notes
 
-(adversarial pass pending — §6 PARKED + R1 are the prime targets.)
+### Internal adversarial pass (integrated)
+
+- **F1 — dogfood-only assumption load-bearing (ASM-1).** D5's no-migration stance
+  silently imported SL-048's "no client back-compat" rationale; doctrine `install`
+  ships to other repos. Verified true *today* (fresh installs scaffold the table);
+  surfaced as explicit ASM-1 + a follow-up. No design change — the principle
+  (`mem.pattern.design.product-not-compromised-by-project-local-ops`) holds; the
+  assumption is now honest. **Disposition: integrated (§5.5 ASM-1, follow-up).**
+- **F2 — D2/D3 target inconsistency.** D2 allows any resolvable TGT; D3 says
+  governance dependency is the wrong model. A slice → spec `needs` would be
+  allowed. Resolved: allowed-but-inert (non-work TGT never blocks), gradient is
+  convention; the modelled path is Revision (IDE-010). **Disposition: integrated
+  (§5.4 step 2).**
+- **F3 — `promoted` double-parse.** Lifting the read to the leaf would make backlog
+  parse twice (needs/after + resolution). Resolved: dispatch returns
+  `(DepSeq, promoted)`; backlog arm keeps its single `read_item`, only the type +
+  `append` are shared. **Disposition: integrated (§5.2).**
+- **F4 — backlog verb message byte-identity** through the delegate. **Disposition:
+  integrated (§9).**
+- **F5 — non-authoring kinds must short-circuit with no disk read** (the read loop
+  now visits all kinds, not 5). **Disposition: integrated (§5.2 dispatch).**
+- **F6 — PRD-011 amendment + backfill are real deliverables**, distinct phases.
+  **Disposition: integrated (§9 phasing note).**
+- **F7 — INV-1 rationale.** Table-before-arrays is corpus consistency + the
+  F-1-guard alignment (SL-048 R2-m1), verified by round-trip; it is not strictly
+  parse-required for a `[header]` insert, but the leaf never creates the table at
+  runtime (strict), so positioning is wholly a scaffold/backfill concern. **Minor;
+  wording stands.**
+
+### Open for external adversarial review
+
+- **PARKED — semantic edge labels (§6).** The collapse of `needs`/`gates`/`blocks`
+  into one unlabelled `dep_overlay`. Forced by IMP-047; not decided here.
+- **R1** — toml_edit positioning of the seeded table (the one impl risk).
+- **ASM-1** — the dogfood-only / no-upgrade-in-place assumption.
+- **D2 vs D3** — whether allowed-but-inert non-work targets are acceptable, or
+  should be refused outright.
