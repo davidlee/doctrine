@@ -85,7 +85,8 @@ doctrine worktree status --assert   # non-zero `stale-marker` if a stray marker 
 A stray worker marker in this worktree would make doctrine-mediated writes refuse
 mid-work and confuse a direct writer. `--assert` is exit 0 on a clean entry and
 non-zero (`stale-marker`) otherwise — clear it with `doctrine worktree marker
---clear` before proceeding. (This is the §3 chokepoint the gate PHASE-05 shipped,
+--clear --operator` before proceeding (bare `--clear` is refused in a linked
+worktree — the §3 accident-fence). (This is the §3 chokepoint the gate PHASE-05 shipped,
 now actually called.)
 
 Carry out the TDD loop (steps 5–12) inside the fork. When green, **land the fork

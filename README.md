@@ -93,7 +93,7 @@ Use Doctrine's memory system with your preferred tooling for the rest:
 
 ```zsh
 cd my-project
-doctrine claude install --memory-only -y 
+doctrine claude install --only-memory -y 
 
 # doctrine memory help
 # doctrine memory record --type pattern "red/green/refactor TDD" --glob "src/lib/**/*" --summary "..."
