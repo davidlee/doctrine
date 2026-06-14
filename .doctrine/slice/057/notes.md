@@ -1,8 +1,8 @@
 # SL-057 implementation notes (durable)
 
 Dispatch drive of SL-057 via the dispatch skill (serial, one worker per phase,
-orchestrator sole-writer funnel). PHASES 01–04 LANDED on `main` (coordination).
-PHASE-05 + conclusion (`/audit` → reconcile → `/close`) REMAIN.
+orchestrator sole-writer funnel). PHASES 01–05 LANDED on `main` (coordination).
+Conclusion (`doctrine slice status 57 audit` → `/audit` → reconcile → `/close`) REMAINS.
 
 ## Landed phase chain (coordination commits)
 - **PHASE-01** `d005879` — coverage.rs pure VT model: `VtCheck/Matcher/MatchSource/
@@ -23,6 +23,35 @@ PHASE-05 + conclusion (`/audit` → reconcile → `/close`) REMAIN.
   matcher eval incl. canonical-contained File-glob any-match, `derive_status`, re-stamp
   `git_anchor` only on Ran F-VIII, per-slice save). `Report{verified,backfill}` +
   `exit_code_only_count()`/`backfill_count()`. NF-001 e2e guard drives `run()`.
+
+- **PHASE-05** `e3f28c0` — CLI `coverage` subcommand group (D4): `Command::Coverage{
+  #[command(subcommand)] CoverageCommand{Show,Record,Verify,Forget}}` (mirror `MemoryCommand`).
+  `show` = relocated bare view (`coverage_view::run` unchanged). `record` = args-struct
+  `CoverageRecordArgs`/`run_record` → `coverage_store::record` (clock read in shell, injected
+  `today` F-VI). `verify <slice>|--all` → `coverage_verify::run` + `print_report` (transition /
+  exit-code-only / backfill lines). `forget` → `coverage_store::forget` + `withdrawal_line`.
+  Per-verb access classifier (main.rs:1820): Show=Read, Record/Verify/Forget=Write. **DRY cfg
+  reader**: `load_config` hosted in `coverage_store` (LOWER module than coverage_verify → no
+  cycle, ADR-001), verifier calls down. New `canonical_slice_ref` so `--slice 57` ≡ `--slice
+  SL-057` (keying fix). Goldens: bare `coverage` → `coverage show` churn (gate b) + 11 new
+  record/verify/forget/show black-box goldens. Removed 9+ now-fulfilled dead_code expects.
+
+**Funnel re-anchor incident (PHASE-05 import)**: worker forked from B=0846800; during the long
+worker run a concurrent session merged+closed SL-056 (and a version bump), moving coordination
+HEAD to 00cef94 — caught the tree mid-merge (`.git/MERGE_HEAD`, `UU` on slice-056/design.md)
+on first funnel attempt → HALTED, did NOT commit. After the merge finished, re-anchored B'=
+00cef94. External move touched `src/main.rs` (shared with my delta) — NOT file-disjoint, so a
+blind checkout-import would clobber SL-056's main.rs. Imported via `git cherry-pick --no-commit
+S` (3-way merge, old-B as base): 7 disjoint files applied trivially, main.rs auto-merged CLEAN
+(no conflict). Verified combined tree green (clippy zero, 25 coverage goldens), branch-point
+stationary, committed staging only the delta. Lesson: on a moved HEAD mid-funnel, cherry-pick
+--no-commit of the single S is the clean 3-way tool (S^==B makes it == net-diff-B..S apply).
+
+**For audit scrutiny (emergent worker decisions, not pre-planned)**: (1) `load_config` RELOCATED
+to coverage_store rather than promoted-in-place at coverage_verify — sound (avoids cycle) but
+verify it reads identically. (2) `canonical_slice_ref` normalization is NEW behaviour the worker
+added on its own initiative (claimed a real keying bug) — confirm it's correct + covered, not
+silent scope creep.
 
 All current dead_code `#[expect(not(test))]` annotations across coverage.rs /
 coverage_store.rs / coverage_verify.rs / verify.rs / dtoml.rs are ahead-of-consumer;
