@@ -730,7 +730,12 @@ fn print_plan(plan: &Plan, out: &mut dyn Write) -> io::Result<()> {
 /// link that is missing or proven ours, never clobbering a foreign one. A no-op
 /// under `dry_run` (the plan line is printed by the caller). Reuses
 /// `classify_link`/`write_link`/`relative_target` — no parallel symlink impl.
-fn install_agents(root: &Path, global: bool, dry_run: bool, out: &mut dyn Write) -> anyhow::Result<()> {
+fn install_agents(
+    root: &Path,
+    global: bool,
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
     let canon_dir = agent_canonical_dir(root, global)?;
     let link_dir = claude_agents_dir(root, global)?;
     let canon = canon_dir.join(DISPATCH_WORKER_AGENT_FILE);
@@ -738,15 +743,18 @@ fn install_agents(root: &Path, global: bool, dry_run: bool, out: &mut dyn Write)
     let target = relative_target(&link_dir, &canon_dir, DISPATCH_WORKER_AGENT_FILE);
 
     writeln!(out, "agent claude (dispatch-worker):")?;
-    writeln!(out, "  agent     {DISPATCH_WORKER_AGENT_FILE} → {}", dest.display())?;
+    writeln!(
+        out,
+        "  agent     {DISPATCH_WORKER_AGENT_FILE} → {}",
+        dest.display()
+    )?;
     if dry_run {
         return Ok(());
     }
 
     // 1. Refresh the canonical copy from the embed (always overwrite — derived).
-    let data = crate::install::embedded_asset(DISPATCH_WORKER_AGENT_ASSET).with_context(|| {
-        format!("Embedded agent def '{DISPATCH_WORKER_AGENT_ASSET}' not found")
-    })?;
+    let data = crate::install::embedded_asset(DISPATCH_WORKER_AGENT_ASSET)
+        .with_context(|| format!("Embedded agent def '{DISPATCH_WORKER_AGENT_ASSET}' not found"))?;
     fs::create_dir_all(&canon_dir)
         .with_context(|| format!("Failed to create {}", canon_dir.display()))?;
     crate::fsutil::write_atomic(&canon, &data)?;
@@ -763,7 +771,11 @@ fn install_agents(root: &Path, global: bool, dry_run: bool, out: &mut dyn Write)
             writeln!(out, "  relinked  {DISPATCH_WORKER_AGENT_FILE}")?;
         }
         Link::KeepForeign { reason, .. } => {
-            writeln!(out, "  kept      {DISPATCH_WORKER_AGENT_FILE} ({})", foreign_reason(&reason))?;
+            writeln!(
+                out,
+                "  kept      {DISPATCH_WORKER_AGENT_FILE} ({})",
+                foreign_reason(&reason)
+            )?;
         }
     }
     Ok(())

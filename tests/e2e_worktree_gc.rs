@@ -517,7 +517,11 @@ fn gc_dry_run_branch_gone_reports_target_only() {
         Some(tbase.path()),
         &["worktree", "gc", "--fork", "bgd", "--dry-run"],
     );
-    assert!(out.status.success(), "dry-run exits 0; stderr: {}", stderr(&out));
+    assert!(
+        out.status.success(),
+        "dry-run exits 0; stderr: {}",
+        stderr(&out)
+    );
     let so = stdout(&out);
     assert!(so.contains("target"), "names the target reap; stdout: {so}");
     assert!(

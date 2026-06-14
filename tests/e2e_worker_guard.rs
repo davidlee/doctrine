@@ -249,7 +249,10 @@ fn claude_install_and_skills_alias_refuse_in_worker_mode() {
     std::fs::write(marker_dir.join("worker"), b"").unwrap();
 
     let env_cwd = tmp();
-    for entry in [["claude", "install"].as_slice(), ["skills", "install"].as_slice()] {
+    for entry in [
+        ["claude", "install"].as_slice(),
+        ["skills", "install"].as_slice(),
+    ] {
         // Marker leg (env UNSET, in the linked fork).
         let out = run_no_env(&fork_dir, entry);
         let err = stderr(&out);

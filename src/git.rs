@@ -584,7 +584,11 @@ pub(crate) fn git_apply_index(root: &Path, patch: &str) -> Result<(), CaptureErr
 /// (an equivalent patch is already upstream) or `+ <sha>` (a commit whose patch is
 /// NOT upstream). Errors on non-zero exit (e.g. an unresolvable ref). Impure shell;
 /// the gc classifier reads the prefixes as facts, never the other way round.
-pub(crate) fn git_cherry(root: &Path, upstream: &str, head: &str) -> Result<Vec<String>, CaptureError> {
+pub(crate) fn git_cherry(
+    root: &Path,
+    upstream: &str,
+    head: &str,
+) -> Result<Vec<String>, CaptureError> {
     let text = git_text(root, &["cherry", upstream, head])?;
     Ok(text.lines().map(str::to_owned).collect())
 }

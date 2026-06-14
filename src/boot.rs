@@ -1988,7 +1988,11 @@ mod tests {
                 "matcher": "startup",
                 "hooks": [ { "type": "command", "command": "/usr/bin/foreign hook" } ],
             }));
-        fs::write(&settings_path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+        fs::write(
+            &settings_path,
+            serde_json::to_string_pretty(&value).unwrap(),
+        )
+        .unwrap();
 
         // Wire the stamp hook.
         let out = install_claude_hook(root, &HookSpec::stamp_subagent(exec), false).unwrap();
