@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 260
+slug = "decompose-a-product-spec-into-a-single-parent-acyclic-hierarchy"
+title = "Decompose a product spec into a single-parent acyclic hierarchy"
+status = "pending"
+kind = "functional"
+
+description = "A product spec can record a single parent product spec, marking it a child in a single-parent acyclic decomposition."
+tags = []
+acceptance_criteria = [
+  "A product spec records a single parent product spec, marking it a child in the decomposition.",
+  "Containment is stored once, outbound on the child; the parent's children are derived, never stored.",
+  "A product spec has at most one parent, and no chain of parents forms a cycle.",
+  "A parent must be a product spec; a tech parent is invalid.",
+]
