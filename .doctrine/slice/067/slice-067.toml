@@ -1,7 +1,7 @@
 id = 67
 slug = "tags-backlog-beachhead"
 title = "Tags command surface: backlog beachhead (add/remove, list column, colour)"
-status = "reconcile"
+status = "done"
 created = "2026-06-14"
 updated = "2026-06-14"
 
