@@ -5,9 +5,10 @@
 //! ([`crate::relation_graph::scan_entities`]) to build a cordage `Graph` carrying:
 //! - the `needs` **dep overlay** (hard prerequisite, `Reject`) and the `after`
 //!   **seq overlay** (soft sequence, `Evict`) — the `backlog_order` template,
-//!   emitted KIND-AGNOSTICALLY (DD-2: today only backlog authors `needs`/`after`, so
-//!   they connect only backlog nodes; non-backlog nodes carry none and that is
-//!   correct);
+//!   emitted KIND-AGNOSTICALLY (DD-2). SL-060 generalised the dep/seq READ gate
+//!   ([`relation_graph::dep_seq_for`]) so SLICE (and any future authoring kind) edges
+//!   reach these overlays too — backlog is no longer the only source; a kind that
+//!   authors no dep/seq simply carries empty axes and contributes no edge;
 //! - the SL-046 **reference/lineage overlays** (one per [`REF_LABELS`] entry) — the
 //!   consequence inputs;
 //! - per-node [`NodeAttr`] (kind, RAW authored status, `promoted`);
@@ -38,7 +39,7 @@ use cordage::{
 use crate::projection::Projection;
 use crate::relation::RelationLabel;
 use crate::relation_graph::{self, EntityKey};
-use crate::{backlog, entity, integrity};
+use crate::{dep_seq, entity, integrity};
 
 /// One node's authored attributes (design §5.2). `kind` is the `&'static entity::Kind`
 /// descriptor (data, not `Ord` — carries a fn-ptr `scaffold`; stored by reference like
@@ -137,11 +138,11 @@ pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
 ///    unresolved target contributes no edge). `needs` → `dep_overlay` (`Reject`,
 ///    oriented prereq→src i.e. B→A flip,
 ///    `EdgeAttrs::new(0, 0)`). `after` → `seq_overlay` (`Evict`, `EdgeAttrs::new(rank,
-///    age)`). The dep/seq edges read kind-agnostically (DD-2) — today only backlog
-///    authors them.
+///    age)`). The dep/seq edges read kind-agnostically (DD-2) via the SL-060 cross-kind
+///    [`relation_graph::dep_seq_for`] gate — backlog AND slice author them.
 /// 5. `OrderSpec::new([dep Along, seq Along])`, then `builder.build()`.
 ///
-/// `root` is RETAINED: the per-backlog `dep_seq_for` reads (step 3b) are per-item reads
+/// `root` is RETAINED: the per-entity `dep_seq_for` reads (step 3b) are per-item reads
 /// NOT part of `scan_entities`, so the body still needs disk access. The mint/edge order
 /// is unchanged (the scan order the caller supplies), preserving byte-identical output.
 ///
@@ -207,17 +208,18 @@ pub(crate) fn build_from(
         projection.intern(&mut builder, key);
     }
 
-    // 3b. Read each backlog entity's dep/seq + promoted ONCE (kind-agnostically,
-    //     DD-2 — the per-kind dispatch finds nothing for non-backlog kinds), so the
-    //     attrs pass and the edge pass share one read per item (no double parse).
-    let mut dep_seq: BTreeMap<EntityKey, backlog::DepSeq> = BTreeMap::new();
+    // 3b. Read each entity's dep/seq + promoted ONCE through the cross-kind dispatch
+    //     (SL-060 §5.2 — `relation_graph::dep_seq_for` replaces the former backlog-prefix
+    //     gate: it routes backlog AND slice to their readers and short-circuits every
+    //     non-authoring kind with NO disk read, F5). The attrs pass and the edge pass
+    //     share one read per entity (no double parse). `promoted` is carried alongside —
+    //     backlog-only by construction (every other kind yields `false`).
+    let mut dep_seq: BTreeMap<EntityKey, (dep_seq::DepSeq, bool)> = BTreeMap::new();
     for entity in scanned {
-        if let Some(item_kind) = backlog::kind_from_prefix(entity.key.prefix) {
-            dep_seq.insert(
-                entity.key,
-                backlog::dep_seq_for(root, item_kind, entity.key.id)?,
-            );
-        }
+        dep_seq.insert(
+            entity.key,
+            relation_graph::dep_seq_for(root, entity.kind, entity.key.id)?,
+        );
     }
 
     // 3c. Per-node attributes — RAW authored status verbatim, kind, promoted. Only a
@@ -229,7 +231,9 @@ pub(crate) fn build_from(
             NodeAttr {
                 kind: entity.kind,
                 status: entity.status.clone(),
-                promoted: dep_seq.get(&entity.key).is_some_and(|ds| ds.promoted),
+                promoted: dep_seq
+                    .get(&entity.key)
+                    .is_some_and(|(_ds, promoted)| *promoted),
                 title: entity.title.clone(),
             },
         );
@@ -254,8 +258,10 @@ pub(crate) fn build_from(
             }
         }
 
-        // dep/seq edges — kind-agnostic (DD-2): present only for backlog entities.
-        if let Some(ds) = dep_seq.get(&entity.key) {
+        // dep/seq edges — kind-agnostic (DD-2): emission is byte-identical and kind-blind;
+        // a kind that authors no dep/seq simply carries empty axes (every non-authoring
+        // kind, and any authoring entity with no edges).
+        if let Some((ds, _promoted)) = dep_seq.get(&entity.key) {
             // `A.needs = [B]` ⇒ B must precede A: edge B→A (the flip), hard, never
             // evicts. An unresolved prereq contributes no edge (no node to edge from).
             for prereq_ref in &ds.needs {
@@ -266,12 +272,12 @@ pub(crate) fn build_from(
             // `A.after = [{to=B, rank}]` ⇒ B before A: edge B→A carrying the genuine
             // `(rank, age)` eviction key; `age` is the entry's index in this item's
             // `after` array (the `backlog_order` discipline).
-            for (idx, (to_ref, rank)) in ds.after.iter().enumerate() {
-                if let Some(prereq) = resolve(&projection, to_ref) {
+            for (idx, edge) in ds.after.iter().enumerate() {
+                if let Some(prereq) = resolve(&projection, &edge.to) {
                     let age = u64::try_from(idx).map_err(|e| {
                         anyhow::anyhow!("priority::graph: after-edge index overflows u64: {e}")
                     })?;
-                    builder.edge(seq_overlay, prereq, src, EdgeAttrs::new(*rank, age));
+                    builder.edge(seq_overlay, prereq, src, EdgeAttrs::new(edge.rank, age));
                 }
             }
         }
@@ -708,14 +714,15 @@ mod tests {
     }
 
     #[test]
-    fn non_backlog_nodes_carry_no_dep_seq_edges() {
+    fn nodes_authoring_no_dep_seq_carry_no_edges() {
         let dir = tmp();
         let root = dir.path();
-        // Slices author no needs/after — the kind-agnostic read finds nothing; no
-        // panic, no dep/seq edge. (DD-2: dormant for non-backlog.) SL-001 references
-        // REQ-005 via the `requirements` consequence label, so resolution is
-        // observable through the consequence tally (the dangling-record is gone; a
-        // resolvable ref still produces its edge, witnessed as a consequence increment).
+        // These slices author NO needs/after — the cross-kind `dep_seq_for` reads their
+        // empty axes; no panic, no dep/seq edge. (SL-060: slices CAN author dep/seq now,
+        // but an entity that authors none contributes none.) SL-001 references REQ-005 via
+        // the `requirements` consequence label, so resolution is observable through the
+        // consequence tally (a resolvable ref still produces its edge, witnessed as a
+        // consequence increment).
         seed_requirement(root, 5);
         seed_slice(root, 1, "requirements = [\"REQ-005\"]\n");
         seed_slice(root, 2, "");
@@ -728,6 +735,68 @@ mod tests {
             pg.consequence.get(&key("REQ", 5)).copied().unwrap_or(0),
             1,
             "resolvable consequence ref produces its edge (no phantom dangle)"
+        );
+    }
+
+    // -- SL-060 VT-1/VT-2: cross-kind slice dep/seq reaches the same overlays ---
+
+    #[test]
+    fn slice_needs_lands_on_dep_overlay_cross_kind() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001 needs SL-002 — a slice→slice hard prerequisite. The cross-kind
+        // `dep_seq_for` slice arm reads it; emission is kind-blind, so it lands on the
+        // SAME dep overlay the backlog `needs` does, oriented prereq→dependent (B→A).
+        seed_slice(root, 1, "needs = [\"SL-002\"]\n");
+        seed_slice(root, 2, "");
+        let pg = build(root).unwrap();
+        let sl1 = pg.projection.resolve(key("SL", 1)).unwrap();
+        let sl2 = pg.projection.resolve(key("SL", 2)).unwrap();
+        let dep_preds: Vec<_> = pg
+            .graph
+            .in_edges(pg.dep_overlay, sl1)
+            .map(|(s, _)| s)
+            .collect();
+        assert_eq!(
+            dep_preds,
+            vec![sl2],
+            "slice→slice needs lands on the dep overlay (B→A flip), like backlog"
+        );
+    }
+
+    #[test]
+    fn slice_after_lands_on_seq_overlay_with_rank_and_array_index_age() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001 after SL-002 (rank 7, array index 0) then SL-003 (rank 0, index 1).
+        // The slice seq overlay must carry the SAME (rank, age=array index) eviction key
+        // the backlog seq overlay does (INV-2 parity, kind-blind emission).
+        seed_slice(
+            root,
+            1,
+            "after = [{ to = \"SL-002\", rank = 7 }, { to = \"SL-003\" }]\n",
+        );
+        seed_slice(root, 2, "");
+        seed_slice(root, 3, "");
+        let pg = build(root).unwrap();
+        let sl1 = pg.projection.resolve(key("SL", 1)).unwrap();
+        let sl2 = pg.projection.resolve(key("SL", 2)).unwrap();
+        let sl3 = pg.projection.resolve(key("SL", 3)).unwrap();
+        // Collect (predecessor, rank, age) off the seq overlay's in-edges of SL-001.
+        let seq: BTreeMap<_, _> = pg
+            .graph
+            .in_edges(pg.seq_overlay, sl1)
+            .map(|(s, a)| (s, (a.rank(), a.age())))
+            .collect();
+        assert_eq!(
+            seq.get(&sl2).copied(),
+            Some((7, 0)),
+            "first after edge: authored rank 7, age = array index 0"
+        );
+        assert_eq!(
+            seq.get(&sl3).copied(),
+            Some((0, 1)),
+            "second after edge: default rank 0, age = array index 1"
         );
     }
 

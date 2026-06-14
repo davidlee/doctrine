@@ -19,6 +19,7 @@ use std::path::Path;
 
 use cordage::{Arity, CyclePolicy, EdgeAttrs, Graph, GraphBuilder, OverlayConfig, OverlayId};
 
+use crate::dep_seq;
 use crate::entity;
 use crate::integrity;
 use crate::listing::{self, Format};
@@ -76,6 +77,64 @@ pub(crate) fn outbound_for(
                 // benign empty in release (dispatch stays total, never a panic).
                 debug_assert!(false, "outbound_for: unrouted KINDS prefix `{other}`");
                 Ok(Vec::new())
+            }
+        }
+    }
+}
+
+/// One entity's `needs`/`after` dep/seq edges plus its `promoted` flag, dispatched to
+/// the owning kind's reader by canonical prefix — the kind-agnostic READ gate that lets
+/// slice (and any future authoring kind) dep/seq edges reach the priority blocker/next
+/// view (design D7/§5.2/§5.4). The shape mirrors [`outbound_for`]: one data-driven match
+/// over the corpus-wide `kind.prefix` discriminant, each arm reading only its own kind's
+/// dep/seq via that kind's existing path — never a second parse.
+///
+/// - **backlog** — routed through backlog's single `dep_seq_for` reader (ONE parse: it
+///   already reads `resolution` for `promoted`), its `Vec<(String, i32)>` `after`
+///   adapted into the leaf [`dep_seq::AfterEdge`] shape (design F3).
+/// - **slice** — the leaf [`dep_seq::read`] over the slice's own toml; `promoted` is
+///   always `false` (only a backlog item carries the typed promoted projection).
+/// - **every non-authoring kind** — SHORT-CIRCUITS to an empty [`dep_seq::DepSeq`] with
+///   `false`, BEFORE any path construction or disk touch (design F5). This is
+///   load-bearing: the priority read loop now visits ALL kinds, not just the five
+///   backlog ones, so a non-authoring kind must contribute zero edges with NO read.
+pub(crate) fn dep_seq_for(
+    root: &Path,
+    kind: &entity::Kind,
+    id: u32,
+) -> anyhow::Result<(dep_seq::DepSeq, bool)> {
+    match kind.prefix {
+        // Slice authors dep/seq directly (PHASE-03); the leaf reads its own toml. Stem
+        // is `"slice"` (the same id-path shape `integrity::KINDS` carries for SL).
+        "SL" => {
+            let name = format!("{id:03}");
+            let path = root
+                .join(kind.dir)
+                .join(&name)
+                .join(format!("slice-{name}.toml"));
+            Ok((dep_seq::read(&path)?, false))
+        }
+        // The five backlog kinds route to backlog's own one-parse reader, which carries
+        // the `promoted` projection. Adapt its `(to, rank)` pairs to the leaf AfterEdge.
+        other => {
+            if let Some(item_kind) = crate::backlog::kind_from_prefix(other) {
+                let bl = crate::backlog::dep_seq_for(root, item_kind, id)?;
+                let after = bl
+                    .after
+                    .into_iter()
+                    .map(|(to, rank)| dep_seq::AfterEdge { to, rank })
+                    .collect();
+                Ok((
+                    dep_seq::DepSeq {
+                        needs: bl.needs,
+                        after,
+                    },
+                    bl.promoted,
+                ))
+            } else {
+                // Every non-authoring kind: zero dep/seq, no disk read. The kind is
+                // tested HERE — before any path is built or any toml is touched (F5).
+                Ok((dep_seq::DepSeq::default(), false))
             }
         }
     }
@@ -1115,6 +1174,97 @@ mod tests {
         assert_eq!(
             pairs(&edges),
             vec![(RelationLabel::DecisionRef, "DEC-001-A")]
+        );
+    }
+
+    // -- SL-060 PHASE-04: dep_seq_for cross-kind dispatch --------------------
+
+    #[test]
+    fn dep_seq_for_slice_arm_reads_needs_after_promoted_false() {
+        let dir = tmp();
+        let root = dir.path();
+        // A slice authoring both dep/seq axes — the slice arm reads its own toml via the
+        // leaf; `promoted` is always false (only a backlog item carries that projection).
+        write(
+            &root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"a\"\ntitle = \"A\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nneeds = [\"SL-002\"]\n\
+             after = [{ to = \"SL-003\", rank = 4 }]\n",
+        );
+        write(&root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        let (ds, promoted) = dep_seq_for(&root, kind_for("SL"), 1).unwrap();
+        assert_eq!(ds.needs, vec!["SL-002"]);
+        assert_eq!(
+            ds.after,
+            vec![dep_seq::AfterEdge {
+                to: "SL-003".to_string(),
+                rank: 4,
+            }]
+        );
+        assert!(!promoted, "a slice is never promoted");
+    }
+
+    #[test]
+    fn dep_seq_for_backlog_arm_one_parse_carries_promoted() {
+        let dir = tmp();
+        let root = dir.path();
+        // A promoted backlog issue authoring dep/seq — the backlog arm routes to backlog's
+        // single `dep_seq_for` (ONE parse), adapting its `(to, rank)` pairs to AfterEdge
+        // and carrying `resolution == promoted` through.
+        write(
+            &root,
+            ".doctrine/backlog/issue/001/backlog-001.toml",
+            "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"resolved\"\n\
+             resolution = \"promoted\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nneeds = [\"ISS-002\"]\n\
+             after = [{ to = \"RSK-001\", rank = 2 }]\n",
+        );
+        write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "b\n");
+        let (ds, promoted) = dep_seq_for(&root, kind_for("ISS"), 1).unwrap();
+        assert_eq!(ds.needs, vec!["ISS-002"]);
+        assert_eq!(
+            ds.after,
+            vec![dep_seq::AfterEdge {
+                to: "RSK-001".to_string(),
+                rank: 2,
+            }]
+        );
+        assert!(
+            promoted,
+            "resolution=promoted carried through the backlog arm"
+        );
+    }
+
+    #[test]
+    fn dep_seq_for_non_authoring_kind_short_circuits_before_any_read() {
+        let dir = tmp();
+        let root = dir.path();
+        // VT-4 no-read probe (design F5): a non-authoring kind (ADR) whose on-disk toml is
+        // ABSENT. The dispatch must return an empty DepSeq WITHOUT error — proving the kind
+        // is tested BEFORE any path is built or any toml is touched. (If the arm read disk
+        // first it would fail to open the missing ADR-001 toml.) `promoted` is false.
+        let (ds, promoted) = dep_seq_for(&root, kind_for("ADR"), 1).unwrap();
+        assert_eq!(
+            ds,
+            dep_seq::DepSeq::default(),
+            "non-authoring kind yields empty dep/seq with no disk read"
+        );
+        assert!(!promoted);
+
+        // Stronger probe: a GARBAGE toml on disk for a non-authoring kind is never opened —
+        // a read arm would choke on the malformed TOML; the short-circuit ignores it.
+        write(
+            &root,
+            ".doctrine/requirement/001/requirement-001.toml",
+            "this is not valid toml at all = = =\n",
+        );
+        let (ds2, _promoted2) = dep_seq_for(&root, kind_for("REQ"), 1).unwrap();
+        assert_eq!(
+            ds2,
+            dep_seq::DepSeq::default(),
+            "garbage toml for a non-authoring kind is never read → still empty"
         );
     }
 
