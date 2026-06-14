@@ -183,3 +183,14 @@ User accepted SL-068 design for planning with constraints:
   scope for SL-068;
 - v1 close-target payload is code; impl-bundle close-target support is
   explicit/later.
+
+## ADR amendments authored (2026-06-15)
+
+Governance updates were authored before implementation planning:
+
+- ADR-006 now legitimises candidate interaction worktrees as unstamped ordinary
+  operator worktrees while keeping candidate/admit/close writes out of worker-mode
+  and raw evidence worktrees;
+- ADR-012 now owns the candidate branch role, candidate provenance/admission
+  contract, admitted-OID close semantics, no-close-time-merge rule, and v1 code
+  close-target default.
