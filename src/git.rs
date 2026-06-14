@@ -492,12 +492,25 @@ pub(crate) enum CaptureError {
 /// Run `git -C <root> <normative-flags> <args>`, capturing output. The single
 /// chokepoint that applies [`NORMATIVE_FLAGS`] (EX-1).
 fn run_git(root: &Path, args: &[&str]) -> Result<std::process::Output, CaptureError> {
-    Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(NORMATIVE_FLAGS)
-        .args(args)
-        .output()
+    run_git_env(root, args, &[])
+}
+
+/// [`run_git`] with extra environment threaded onto the child — the seam for
+/// plumbing that redirects `GIT_INDEX_FILE` to a throwaway index (`filter_tree`,
+/// EX-2) so the live coordination index is never touched. The single
+/// [`NORMATIVE_FLAGS`] chokepoint is preserved (EX-1 — no second runner; the
+/// born-frame callers route through here unchanged via `run_git`).
+fn run_git_env(
+    root: &Path,
+    args: &[&str],
+    envs: &[(&str, &std::ffi::OsStr)],
+) -> Result<std::process::Output, CaptureError> {
+    let mut cmd = Command::new("git");
+    cmd.arg("-C").arg(root).args(NORMATIVE_FLAGS).args(args);
+    for (key, val) in envs {
+        cmd.env(key, val);
+    }
+    cmd.output()
         .map_err(|e| CaptureError::Git(format!("spawn git {}: {e}", args.join(" "))))
 }
 
@@ -602,6 +615,271 @@ pub(crate) fn git_status_ok(root: &Path, args: &[&str]) -> Result<bool, CaptureE
     Ok(run_git(root, args)?.status.success())
 }
 
+// --- SL-064 PHASE-03: projection plumbing (working-tree-free) ----------------
+
+/// Run a git command with extra env, erroring on non-zero exit; trimmed UTF-8
+/// stdout. The env-aware sibling of [`git_text`] — used by the tree-filter
+/// primitive which must thread a throwaway `GIT_INDEX_FILE`.
+fn git_env_text(
+    root: &Path,
+    args: &[&str],
+    envs: &[(&str, &std::ffi::OsStr)],
+) -> Result<String, CaptureError> {
+    let output = run_git_env(root, args, envs)?;
+    if output.status.success() {
+        let text = String::from_utf8(output.stdout).map_err(|_ignored| {
+            CaptureError::Git(format!("non-utf8 output: {}", args.join(" ")))
+        })?;
+        Ok(text.trim().to_string())
+    } else {
+        Err(CaptureError::Git(format!(
+            "{}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// A throwaway `GIT_INDEX_FILE` inside the repo's git dir, removed on drop. Lets
+/// [`filter_tree`] stage into a scratch index that is **never** the live
+/// coordination index (EX-2). Single-writer orchestrator ⇒ the pid-suffixed name
+/// is collision-free; an absent file is an empty index to git, so a leftover from
+/// a crashed run is cleared up front.
+struct ScratchIndex {
+    path: std::path::PathBuf,
+}
+
+impl ScratchIndex {
+    fn new(root: &Path) -> Result<Self, CaptureError> {
+        let git_dir = git_text(root, &["rev-parse", "--absolute-git-dir"])?;
+        let name = format!("doctrine-filter-index.{}", std::process::id());
+        let path = Path::new(&git_dir).join(name);
+        drop(std::fs::remove_file(&path));
+        Ok(Self { path })
+    }
+}
+
+impl Drop for ScratchIndex {
+    fn drop(&mut self) {
+        drop(std::fs::remove_file(&self.path));
+    }
+}
+
+/// Build a filtered tree from `source_tree` with `exclude` pathspecs dropped,
+/// staging through a throwaway `GIT_INDEX_FILE` so the live coordination index
+/// and working tree are never touched (EX-2, design §4.1). Pure ref/object
+/// plumbing — `read-tree` loads the scratch index, `rm --cached` drops the
+/// excluded pathspecs, `write-tree` emits the new tree oid. No checkout. Returns
+/// the filtered tree oid.
+pub(crate) fn filter_tree(
+    root: &Path,
+    source_tree: &str,
+    exclude: &[&str],
+) -> Result<String, CaptureError> {
+    let scratch = ScratchIndex::new(root)?;
+    let env: [(&str, &std::ffi::OsStr); 1] = [("GIT_INDEX_FILE", scratch.path.as_os_str())];
+    git_env_text(root, &["read-tree", source_tree], &env)?;
+    if !exclude.is_empty() {
+        let mut args = vec![
+            "rm",
+            "--cached",
+            "-r",
+            "-f",
+            "--ignore-unmatch",
+            "--quiet",
+            "--",
+        ];
+        args.extend_from_slice(exclude);
+        git_env_text(root, &args, &env)?;
+    }
+    git_env_text(root, &["write-tree"], &env)
+}
+
+/// Hash `content` into a blob object via `git hash-object -w --stdin`, returning
+/// the blob oid. Streams the bytes on stdin (no temp file); writes the object to
+/// the db without touching any index or working tree. The journal-commit
+/// primitive's blob source ([`tree_with_file`]).
+fn hash_object_stdin(root: &Path, content: &str) -> Result<String, CaptureError> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(NORMATIVE_FLAGS)
+        .args(["hash-object", "-w", "--stdin"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| CaptureError::Git(format!("spawn git hash-object: {e}")))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| CaptureError::Git("git hash-object: no stdin pipe".to_owned()))?
+        .write_all(content.as_bytes())
+        .map_err(|e| CaptureError::Git(format!("git hash-object: write stdin: {e}")))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| CaptureError::Git(format!("git hash-object: wait: {e}")))?;
+    if output.status.success() {
+        let text = String::from_utf8(output.stdout)
+            .map_err(|_ignored| CaptureError::Git("hash-object: non-utf8 oid".to_owned()))?;
+        Ok(text.trim().to_string())
+    } else {
+        Err(CaptureError::Git(format!(
+            "hash-object: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// Splice `content` into `base_tree` at `path`, returning the new tree oid. Stages
+/// through a throwaway `GIT_INDEX_FILE` (never the live index, like
+/// [`filter_tree`]): `read-tree <base_tree>`, hash the blob, `update-index --add
+/// --cacheinfo` at `path`, `write-tree`. No checkout — the journal-commit
+/// primitive (design §4.3: journal appends commit onto `dispatch/<slice>` via
+/// `commit_tree`, no working tree). `path` is repo-relative.
+pub(crate) fn tree_with_file(
+    root: &Path,
+    base_tree: &str,
+    path: &str,
+    content: &str,
+) -> Result<String, CaptureError> {
+    let scratch = ScratchIndex::new(root)?;
+    let env: [(&str, &std::ffi::OsStr); 1] = [("GIT_INDEX_FILE", scratch.path.as_os_str())];
+    git_env_text(root, &["read-tree", base_tree], &env)?;
+    let blob = hash_object_stdin(root, content)?;
+    let cacheinfo = format!("100644,{blob},{path}");
+    git_env_text(
+        root,
+        &["update-index", "--add", "--cacheinfo", &cacheinfo],
+        &env,
+    )?;
+    git_env_text(root, &["write-tree"], &env)
+}
+
+/// Read the blob at `path` from `refish`'s committed tree (`git cat-file -p
+/// <refish>:<path>`), `None` when the path is absent from that tree. Working-tree-
+/// free — reads the object db, so the sync verb sources the run ledger from the
+/// `dispatch/<slice>` tip identically in stage-1 (worktree present) and stage-2
+/// (worktree removed, no checkout — design §4.1).
+pub(crate) fn read_path_at(
+    root: &Path,
+    refish: &str,
+    path: &str,
+) -> Result<Option<String>, CaptureError> {
+    git_opt(root, &["cat-file", "-p", &format!("{refish}:{path}")])
+}
+
+/// Commit `tree` against `parent` with no working-tree touch (design §4.1) — the
+/// B/C compose step's commit primitive. Returns the new commit oid.
+pub(crate) fn commit_tree(
+    root: &Path,
+    tree: &str,
+    parent: &str,
+    msg: &str,
+) -> Result<String, CaptureError> {
+    git_text(root, &["commit-tree", tree, "-p", parent, "-m", msg])
+}
+
+/// Outcome of a compare-and-swap ref update ([`update_ref_cas`]).
+pub(crate) enum RefCas {
+    /// The ref equalled `expected_old` and was advanced to the new oid.
+    Updated,
+    /// The ref did **not** equal `expected_old`; nothing was written. `actual`
+    /// is the ref's current value, or `None` if it does not exist.
+    Moved { actual: Option<String> },
+}
+
+/// Compare-and-swap a ref via the native 3-arg `update-ref <ref> <new> <old>`
+/// (design §4.1, ADR-012 D4): git advances the ref only if it currently equals
+/// `expected_old`, otherwise refuses. For ref *creation*, pass the zero oid as
+/// `expected_old` (git refuses if the ref already exists). On refusal the ref is
+/// left untouched and the moved-target's actual value is reported — never forced,
+/// never auto-resolved.
+pub(crate) fn update_ref_cas(
+    root: &Path,
+    refname: &str,
+    new_oid: &str,
+    expected_old: &str,
+) -> Result<RefCas, CaptureError> {
+    let output = run_git(root, &["update-ref", refname, new_oid, expected_old])?;
+    if output.status.success() {
+        Ok(RefCas::Updated)
+    } else {
+        let actual = git_opt(root, &["rev-parse", "--verify", "--quiet", refname])?;
+        Ok(RefCas::Moved { actual })
+    }
+}
+
+/// The all-zero oid — the CAS `expected_old` sentinel for a ref *creation* (git's
+/// `update-ref` refuses to create if the ref already exists). Shared by the
+/// projection journal (stage-1 rows) and the replay (absent ref ↔ zero).
+pub(crate) const ZERO_OID: &str = "0000000000000000000000000000000000000000";
+
+/// Outcome of an idempotent 3-way replay ([`replay_ref`]).
+#[derive(Debug)]
+pub(crate) enum ReplayOutcome {
+    /// `current == planned` already — the step is a verified no-op (the ref was
+    /// applied on a prior run, or stage-1 created it). Nothing written.
+    NoOp,
+    /// `current == expected_old` — the CAS advanced the ref to `planned`.
+    Applied,
+    /// `current` matched neither `expected_old` nor `planned` — a moved target.
+    /// Nothing written; `actual` is the ref's current value (`None` if absent).
+    Moved { actual: Option<String> },
+}
+
+/// Idempotent compare-and-swap replay of one journal step (design §4.1, ADR-012
+/// D4, EX-2). Resolves the ref's current oid (absent ↔ [`ZERO_OID`]) and:
+/// `current == planned` ⇒ [`ReplayOutcome::NoOp`] (already applied — crash-safe
+/// re-run); `current == expected_old` ⇒ [`update_ref_cas`] to `planned`
+/// ([`ReplayOutcome::Applied`], or `Moved` on a TOCTOU race); divergence from
+/// **both** ⇒ [`ReplayOutcome::Moved`] without writing. Never forces, never
+/// auto-resolves — a moved target is reported, not clobbered.
+pub(crate) fn replay_ref(
+    root: &Path,
+    refname: &str,
+    expected_old: &str,
+    planned: &str,
+) -> Result<ReplayOutcome, CaptureError> {
+    let actual = git_opt(root, &["rev-parse", "--verify", "--quiet", refname])?;
+    let current = actual.as_deref().unwrap_or(ZERO_OID);
+    if current == planned {
+        Ok(ReplayOutcome::NoOp)
+    } else if current == expected_old {
+        match update_ref_cas(root, refname, planned, expected_old)? {
+            RefCas::Updated => Ok(ReplayOutcome::Applied),
+            // A concurrent writer raced between our resolve and the CAS.
+            RefCas::Moved { actual: raced } => Ok(ReplayOutcome::Moved { actual: raced }),
+        }
+    } else {
+        Ok(ReplayOutcome::Moved { actual })
+    }
+}
+
+/// True iff `ancestor` is an ancestor of (or equal to) `descendant`, via
+/// `git merge-base --is-ancestor` (exit 0 ⇒ yes, exit 1 ⇒ no, anything else ⇒
+/// error). Reads the raw exit code rather than [`git_opt`]'s success/None fold so
+/// a legitimate "not an ancestor" is a clean `false`, never confused with a git
+/// failure (the ff-only gate, EX-3; cousin of the masked-`cat-file -e` gotcha).
+pub(crate) fn is_ancestor(
+    root: &Path,
+    ancestor: &str,
+    descendant: &str,
+) -> Result<bool, CaptureError> {
+    let output = run_git(root, &["merge-base", "--is-ancestor", ancestor, descendant])?;
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(CaptureError::Git(format!(
+            "merge-base --is-ancestor {ancestor} {descendant}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
 /// Resolve trunk's commit-ish via the peeled ladder (ADR-006 D3): an explicit
 /// `DOCTRINE_TRUNK_REF`, else `origin/HEAD`, `main`, `master` in turn. Each
 /// candidate is peeled with `rev-parse --verify --quiet <ref>^{commit}`; the
@@ -640,6 +918,13 @@ fn trunk_ladder(root: &Path, explicit: Option<&std::ffi::OsStr>) -> anyhow::Resu
         }
     }
     Ok(None)
+}
+
+/// Resolve trunk's commit sha via the peeled ladder (ADR-006 D3) — public
+/// wrapper over [`trunk_tree_ish`] for callers needing the integration base
+/// (SL-064 `worktree coordinate`). `Ok(None)` when no trunk ref resolves.
+pub(crate) fn trunk_commit(root: &Path) -> anyhow::Result<Option<String>> {
+    trunk_tree_ish(root)
 }
 
 /// Numeric entity ids present under `kind_dir` on trunk's tree (ADR-006 D3).
@@ -1958,5 +2243,213 @@ mod tests {
         let head = repo.commit("a.txt", "hello", "init");
         let sha = super::trunk_ladder(repo.path(), Some(OsStr::new("main"))).unwrap();
         assert_eq!(sha, Some(head));
+    }
+
+    // --- SL-064 PHASE-03: projection plumbing (VT-1/VT-2/VT-3) --------------
+
+    /// VT-1: filter-tree drops the excluded pathspecs and leaves the live index
+    /// byte-for-byte unchanged (the throwaway-`GIT_INDEX_FILE` guarantee).
+    #[test]
+    fn filter_tree_excludes_paths_and_leaves_live_index_untouched() {
+        let repo = ScratchRepo::new();
+        repo.commit("keep.txt", "k", "init");
+        repo.write(".doctrine/dispatch/64/journal.toml", "rows");
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "-m", "add ledger"]);
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+
+        let index_before = std::fs::read(repo.path().join(".git/index")).expect("read index");
+
+        let filtered =
+            super::filter_tree(repo.path(), &tree, &[".doctrine/dispatch/64"]).expect("filter");
+
+        let listing = repo.git(&["ls-tree", "-r", "--name-only", &filtered]);
+        assert!(
+            listing.contains("keep.txt"),
+            "kept path survives: {listing}"
+        );
+        assert!(
+            !listing.contains("journal.toml"),
+            "excluded path dropped: {listing}"
+        );
+
+        let index_after = std::fs::read(repo.path().join(".git/index")).expect("read index");
+        assert_eq!(
+            index_before, index_after,
+            "live index byte-for-byte unchanged"
+        );
+    }
+
+    /// VT-1 (degenerate): an empty exclude set is the identity filter — the tree
+    /// is re-emitted unchanged, still without touching the live index.
+    #[test]
+    fn filter_tree_empty_exclude_is_identity() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "1", "init");
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+        let filtered = super::filter_tree(repo.path(), &tree, &[]).expect("filter");
+        assert_eq!(filtered, tree, "identity filter re-emits the same tree");
+    }
+
+    /// VT-2: a filtered tree commits against a supplied parent with no checkout —
+    /// HEAD and the working tree are untouched.
+    #[test]
+    fn commit_tree_against_parent_without_checkout() {
+        let repo = ScratchRepo::new();
+        let parent = repo.commit("a.txt", "1", "first");
+        repo.commit("b.txt", "2", "second");
+        let tip_tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+        let head_before = repo.git(&["rev-parse", "HEAD"]);
+        let a_before = std::fs::read_to_string(repo.path().join("a.txt")).expect("read a");
+
+        let commit = super::commit_tree(repo.path(), &tip_tree, &parent, "synth").expect("commit");
+
+        assert_eq!(
+            repo.git(&["rev-parse", &format!("{commit}^")]),
+            parent,
+            "parent is as supplied"
+        );
+        assert_eq!(
+            repo.git(&["diff", "--name-only", &parent, &commit]),
+            "b.txt",
+            "diff parent..commit is exactly the second-commit delta"
+        );
+        assert_eq!(
+            repo.git(&["rev-parse", "HEAD"]),
+            head_before,
+            "HEAD unmoved"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repo.path().join("a.txt")).expect("read a"),
+            a_before,
+            "working tree untouched"
+        );
+    }
+
+    /// VT-3: CAS succeeds only at the expected old oid; a mismatch reports the
+    /// moved target's actual value and never clobbers the ref.
+    #[test]
+    fn update_ref_cas_succeeds_only_at_expected_old() {
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "first");
+        let c2 = repo.commit("b.txt", "2", "second");
+        let zero = "0".repeat(40);
+        let refname = "refs/review/x";
+
+        // Create via zero-oid CAS (must-not-exist).
+        assert!(matches!(
+            super::update_ref_cas(repo.path(), refname, &c1, &zero).expect("create"),
+            super::RefCas::Updated
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c1);
+
+        // Wrong expected-old → Moved{actual: c1}, ref unchanged.
+        match super::update_ref_cas(repo.path(), refname, &c2, &zero).expect("cas") {
+            super::RefCas::Moved { actual } => assert_eq!(actual.as_deref(), Some(c1.as_str())),
+            super::RefCas::Updated => panic!("expected Moved at wrong expected-old"),
+        }
+        assert_eq!(repo.git(&["rev-parse", refname]), c1, "ref not clobbered");
+
+        // Correct expected-old → Updated to c2.
+        assert!(matches!(
+            super::update_ref_cas(repo.path(), refname, &c2, &c1).expect("cas2"),
+            super::RefCas::Updated
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c2);
+    }
+
+    /// PHASE-04 journal-commit primitive: splice a file into a base tree without
+    /// touching the live index; the new tree carries the content at the path and
+    /// retains the base's other paths.
+    #[test]
+    fn tree_with_file_splices_blob_without_touching_index() {
+        let repo = ScratchRepo::new();
+        repo.commit("keep.txt", "k", "init");
+        let base = repo.git(&["rev-parse", "HEAD^{tree}"]);
+        let index_before = std::fs::read(repo.path().join(".git/index")).expect("read index");
+
+        let tree = super::tree_with_file(
+            repo.path(),
+            &base,
+            ".doctrine/dispatch/064/journal.toml",
+            "rows = []\n",
+        )
+        .expect("splice");
+
+        let listing = repo.git(&["ls-tree", "-r", "--name-only", &tree]);
+        assert!(
+            listing.contains("keep.txt"),
+            "base path retained: {listing}"
+        );
+        assert!(
+            listing.contains(".doctrine/dispatch/064/journal.toml"),
+            "spliced path present: {listing}"
+        );
+        let blob = repo.git(&[
+            "cat-file",
+            "-p",
+            &format!("{tree}:.doctrine/dispatch/064/journal.toml"),
+        ]);
+        assert_eq!(blob, "rows = []", "spliced content readable at path");
+
+        let index_after = std::fs::read(repo.path().join(".git/index")).expect("read index");
+        assert_eq!(index_before, index_after, "live index untouched");
+    }
+
+    /// PHASE-05 T2: the 3-way replay CAS (design §4.1, EX-2). `current==planned`
+    /// is an idempotent no-op; `current==expected_old` (incl. absent↔zero for a
+    /// creation) applies; divergence from BOTH refuses and reports the actual,
+    /// never clobbering.
+    #[test]
+    fn replay_ref_no_op_apply_refuse() {
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "first");
+        let c2 = repo.commit("b.txt", "2", "second");
+        let c3 = repo.commit("c.txt", "3", "third");
+        let zero = "0".repeat(40);
+        let refname = "refs/heads/trunk-x";
+
+        // Creation: ref absent ↔ expected zero, planned c1 → Applied.
+        assert!(matches!(
+            super::replay_ref(repo.path(), refname, &zero, &c1).expect("create"),
+            super::ReplayOutcome::Applied
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c1);
+
+        // Idempotent: current==planned → NoOp, ref untouched (crash-after-apply).
+        assert!(matches!(
+            super::replay_ref(repo.path(), refname, &zero, &c1).expect("replay"),
+            super::ReplayOutcome::NoOp
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c1);
+
+        // Diverged: current c1 ∉ {expected c2, planned c3} → Moved, not clobbered.
+        match super::replay_ref(repo.path(), refname, &c2, &c3).expect("diverge") {
+            super::ReplayOutcome::Moved { actual } => {
+                assert_eq!(actual.as_deref(), Some(c1.as_str()));
+            }
+            other => panic!("expected Moved, got {other:?}"),
+        }
+        assert_eq!(repo.git(&["rev-parse", refname]), c1, "not clobbered");
+
+        // Apply at the correct expected: c1 → c2.
+        assert!(matches!(
+            super::replay_ref(repo.path(), refname, &c1, &c2).expect("apply"),
+            super::ReplayOutcome::Applied
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c2);
+    }
+
+    /// PHASE-05 T3: ff-only ancestry reads the `merge-base --is-ancestor` exit code
+    /// (exit 1 is a clean `false`, not an error). Reflexive on equality.
+    #[test]
+    fn is_ancestor_reads_exit_code() {
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "first");
+        let c2 = repo.commit("b.txt", "2", "second");
+
+        assert!(super::is_ancestor(repo.path(), &c1, &c2).expect("c1<c2"));
+        assert!(!super::is_ancestor(repo.path(), &c2, &c1).expect("c2!<c1"));
+        assert!(super::is_ancestor(repo.path(), &c1, &c1).expect("reflexive"));
     }
 }

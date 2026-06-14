@@ -161,6 +161,7 @@ verification = [
   { id = "VA-1", expects = "Read the edited skill sources and confirm every old instruction to audit from or deliver the coordination branch directly is replaced by the ADR-012 two-stage path." },
   { id = "VA-2", expects = "Confirm source-only edits are under `plugins/doctrine/skills/` and any generated installed copies are left alone unless the install process owns them." },
   { id = "VT-1", expects = "Skill/asset tests pass, including any embedded asset drift tests for dispatch-worker and installed skill sources." },
+  { id = "VT-2", expects = "Black-box test proves the funnel-time `dispatch record-boundary` verb appends a `[[boundary]]` row to `.doctrine/dispatch/<slice>/boundaries.toml` (the surface the skills cite for the claude-arm phase cut) and is Orchestrator-classed (refused under worker-mode). Appended per /consult option-A ruling: skills cannot cite a recording surface that did not yet exist." },
 ]
 specs             = []
 requirements      = []

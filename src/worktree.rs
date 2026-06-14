@@ -882,6 +882,53 @@ pub(crate) fn classify_land(
     Ok(Merge::Ok)
 }
 
+/// The coordination-create action the pure classifier selects (SL-064 §2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CoordAction {
+    /// `dispatch/<slice>` does not exist ⇒ create it fresh on a new branch off
+    /// the integration base (trunk).
+    Create,
+    /// `dispatch/<slice>` exists with NO live linked worktree ⇒ a handover
+    /// resume: reattach a worktree to the SAME branch (design §1 resume
+    /// stability), never fork a second coordination branch.
+    Resume,
+}
+
+/// The coordination-create refusal set. Distinct token; fails closed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CoordRefusal {
+    /// `dispatch/<slice>` already has a LIVE linked worktree ⇒ a concurrent
+    /// same-slice dispatch is live; refuse before mutating refs/dirs (never
+    /// silently create a second coordination branch — EX-3).
+    LiveWorktree,
+}
+
+impl CoordRefusal {
+    /// The distinct named token this refusal fails closed with.
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            CoordRefusal::LiveWorktree => "coordination-live",
+        }
+    }
+}
+
+/// PURE coordination-create classifier (no git/disk/env — ADR-001 leaf, CLAUDE.md
+/// pure/imperative split). The branch-existence vs live-worktree discriminator
+/// (design §1/§2): a mere branch is a resumable handover; a LIVE worktree is a
+/// concurrent run. The worker marker is irrelevant HERE — a coordination tree
+/// never bears it, and the worker-mode refusal (EX-4) is the Orchestrator-class
+/// guard at the invocation site, not this classifier.
+pub(crate) fn classify_coordinate(
+    exists: bool,
+    has_live_worktree: bool,
+) -> Result<CoordAction, CoordRefusal> {
+    match (exists, has_live_worktree) {
+        (false, _) => Ok(CoordAction::Create),
+        (true, true) => Err(CoordRefusal::LiveWorktree),
+        (true, false) => Ok(CoordAction::Resume),
+    }
+}
+
 /// Gather the `<fork>` branch's live-linked-worktree path, if any, by parsing
 /// `git worktree list --porcelain` (NEW shell gather — there is no existing
 /// branch→worktree-path helper to reuse). Blocks are separated by blank lines;
@@ -1451,10 +1498,14 @@ fn project_env_contract(fork: &Path, branch: &str) -> Vec<(String, String)> {
 /// non-existent branch is a no-op, not an error. Returns the list of legs that
 /// FAILED to reverse (debris descriptions) so the caller can decide whether the
 /// rollback left leftovers needing a distinct, naming exit.
-fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String> {
+/// Remove a linked worktree registration and reap any leftover dir (best-effort).
+/// The branch-agnostic half of [`rollback_fork`], shared with the SL-064
+/// coordinate Resume rollback (which must KEEP the pre-existing branch). Returns
+/// surviving debris.
+fn remove_worktree_dir(repo: &Path, dir: &Path) -> Vec<String> {
     let mut debris = Vec::new();
 
-    // 1. Remove the linked worktree registration (force: drop dirty/locked).
+    // Remove the linked worktree registration (force: drop dirty/locked).
     if git::git_text(
         repo,
         &["worktree", "remove", "--force", &dir.to_string_lossy()],
@@ -1466,6 +1517,29 @@ fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String> {
         // never-added dir is the expected no-op.
         debris.push(format!("worktree dir {}", dir.display()));
     }
+
+    // Reap any leftover dir the worktree-remove could not (best-effort). On a
+    // SUCCESSFUL reap, RETRACT any stale `worktree dir {dir}` entry — the dir is
+    // gone, so a fully-cleaned rollback must report empty debris, never false-bail
+    // over a tree it did clean (F-8).
+    if dir.exists() {
+        drop(fs::remove_dir_all(dir));
+        let dir_str = dir.display().to_string();
+        if dir.exists() {
+            if !debris.iter().any(|d| d.contains(&dir_str)) {
+                debris.push(format!("dir {dir_str}"));
+            }
+        } else {
+            debris.retain(|d| !d.contains(&dir_str));
+        }
+    }
+
+    debris
+}
+
+fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String> {
+    // 1+3. Remove the worktree registration + reap the dir (shared half).
+    let mut debris = remove_worktree_dir(repo, dir);
 
     // 2. Delete the branch (no-op if it was never created).
     if git::git_opt(repo, &["rev-parse", "--verify", "--quiet", branch])
@@ -1482,22 +1556,6 @@ fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String> {
             .is_some()
         {
             debris.push(format!("branch {branch}"));
-        }
-    }
-
-    // 3. Reap any leftover dir the worktree-remove could not (best-effort). On a
-    //    SUCCESSFUL reap, RETRACT any stale step-1 `worktree dir {dir}` entry —
-    //    the dir is gone, so a fully-cleaned rollback must report empty debris,
-    //    never false-bail `fork-rollback-debris` over a tree it did clean (F-8).
-    if dir.exists() {
-        drop(fs::remove_dir_all(dir));
-        let dir_str = dir.display().to_string();
-        if dir.exists() {
-            if !debris.iter().any(|d| d.contains(&dir_str)) {
-                debris.push(format!("dir {dir_str}"));
-            }
-        } else {
-            debris.retain(|d| !d.contains(&dir_str));
         }
     }
 
@@ -1602,6 +1660,133 @@ pub(crate) fn run_fork(
         } else {
             ""
         }
+    )?;
+    Ok(())
+}
+
+/// `doctrine worktree coordinate --slice <n> --dir <path>` — create or resume the
+/// dispatch coordination worktree for a slice (SL-064 §2). MARKERLESS: the
+/// coordination tree IS the orchestrator (worker-mode OFF, must write), so it
+/// stamps NO worker marker — its write permission rests on marker-absence (D2a),
+/// never on a positive coordination marker (that is OQ-D / IMP-065, deferred).
+///
+/// Gather → pure-classify → act, patterned after [`run_fork`]:
+/// - gather: does `dispatch/<slice>` exist; does it have a live linked worktree.
+/// - [`classify_coordinate`] → Create | Resume | Err(LiveWorktree) (EX-3/EX-5).
+/// - Create: `git worktree add -b dispatch/<slice> <dir> <trunk>` (off the
+///   resolved integration base).
+/// - Resume: `git worktree add <dir> dispatch/<slice>` — reattach the SAME
+///   branch (never a second coordination branch).
+///
+/// Then BOTH paths provision via the sole copier (EX-2) and regenerate the
+/// runtime phase sheets from committed `plan.toml` via [`crate::slice::run_phases`].
+/// The coordination/runtime tier is NOT copied — provision withholds it and the
+/// orchestrator regenerates it. Post-add failure compensates: Create rolls back
+/// the branch too, Resume keeps the pre-existing branch.
+///
+/// Orchestrator-classed; refused under worker-mode by `worker_guard` (EX-4) — the
+/// marker-present / `DOCTRINE_WORKER` refusals ride the SAME guard as `fork`.
+pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> anyhow::Result<()> {
+    let repo = root::find(path, &root::default_markers())?;
+    let branch = format!("dispatch/{slice:03}");
+
+    // --- Step 1 refusal (pre-add: leave NO worktree) ---
+    if dir.exists() {
+        bail!("coordinate-refused: dir {} already exists", dir.display());
+    }
+
+    // --- gather: branch existence + its live linked worktree (if any) ---
+    let exists = git::git_opt(
+        &repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}^{{commit}}"),
+        ],
+    )?
+    .is_some();
+    let live_worktree = gather_fork_worktree(&repo, &branch)?;
+
+    // --- pure classify (create / resume / refuse) ---
+    let action = match classify_coordinate(exists, live_worktree.is_some()) {
+        Ok(action) => action,
+        Err(refusal) => {
+            let at = live_worktree
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            bail!(
+                "coordinate-refused: {} — {branch} has a live worktree at {at}",
+                refusal.token()
+            );
+        }
+    };
+
+    // --- act: add the worktree (create off trunk vs resume the same branch) ---
+    match action {
+        CoordAction::Create => {
+            let trunk = git::trunk_commit(&repo)?.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "coordinate-refused: no trunk ref resolves (set DOCTRINE_TRUNK_REF)"
+                )
+            })?;
+            git::git_text(
+                &repo,
+                &[
+                    "worktree",
+                    "add",
+                    "-b",
+                    &branch,
+                    &dir.to_string_lossy(),
+                    &trunk,
+                ],
+            )
+            .with_context(|| format!("git worktree add -b {branch} {} {trunk}", dir.display()))?;
+        }
+        CoordAction::Resume => {
+            git::git_text(&repo, &["worktree", "add", &dir.to_string_lossy(), &branch])
+                .with_context(|| format!("git worktree add {} {branch}", dir.display()))?;
+        }
+    }
+
+    // From here on, any failure compensates. Create rolls back the branch it
+    // minted; Resume KEEPS the pre-existing branch (only its worktree is removed).
+    let finish = (|| -> anyhow::Result<()> {
+        run_provision(Some(repo.clone()), dir).context("provision coordination worktree")?;
+        crate::slice::run_phases(Some(dir.to_path_buf()), slice, false)
+            .context("regenerate runtime phase sheets")?;
+        Ok(())
+    })();
+
+    if let Err(cause) = finish {
+        let debris = match action {
+            CoordAction::Create => rollback_fork(&repo, &branch, dir),
+            CoordAction::Resume => remove_worktree_dir(&repo, dir),
+        };
+        if debris.is_empty() {
+            return Err(cause.context(format!(
+                "coordinate failed after add; rolled back cleanly (worktree {} removed)",
+                dir.display()
+            )));
+        }
+        bail!(
+            "coordinate-rollback-debris: {} (original cause: {cause:#})",
+            debris.join(", ")
+        );
+    }
+
+    // --- env contract on stdout; human status on stderr (mirrors `fork`) ---
+    for (key, value) in project_env_contract(dir, &branch) {
+        writeln!(io::stdout(), "{key}={value}")?;
+    }
+    let verb = match action {
+        CoordAction::Create => "created",
+        CoordAction::Resume => "resumed",
+    };
+    writeln!(
+        io::stderr(),
+        "coordination worktree {verb}: {branch} → {} (markerless)",
+        dir.display()
     )?;
     Ok(())
 }
@@ -2087,6 +2272,27 @@ mod tests {
             target_present,
             landed_verdict,
         }
+    }
+
+    // --- SL-064 PHASE-02: coordination-create classifier (design §1/§2) ---
+
+    #[test]
+    fn classify_coordinate_create_resume_collide() {
+        // Branch absent ⇒ create fresh (live-worktree fact is irrelevant).
+        assert_eq!(classify_coordinate(false, false), Ok(CoordAction::Create));
+        assert_eq!(classify_coordinate(false, true), Ok(CoordAction::Create));
+        // Branch exists, NO live worktree ⇒ handover resume (reattach same branch).
+        assert_eq!(classify_coordinate(true, false), Ok(CoordAction::Resume));
+        // Branch exists WITH a live worktree ⇒ concurrent run; refuse.
+        assert_eq!(
+            classify_coordinate(true, true),
+            Err(CoordRefusal::LiveWorktree)
+        );
+    }
+
+    #[test]
+    fn coord_refusal_token_distinct() {
+        assert_eq!(CoordRefusal::LiveWorktree.token(), "coordination-live");
     }
 
     #[test]

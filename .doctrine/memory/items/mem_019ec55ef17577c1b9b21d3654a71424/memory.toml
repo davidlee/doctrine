@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec55ef17577c1b9b21d3654a71424"
+memory_key = "mem.pattern.dispatch.sync-tree-reads-ledger-not-worktree"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatch sync sources the run ledger from the branch tip tree, not the working filesystem"
+summary = "Dispatch sync must read the run ledger from the dispatch/<slice> tip tree (git cat-file), never the working filesystem — stage-2 has no checkout"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["src/dispatch.rs", "src/ledger.rs", "src/git.rs"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a55cd1348ec7de378a3819e5c3cbd27d1d950f8c"
+ref_name = "refs/heads/dispatch/064"
+checkout_state_id = "b105f8f3b965ba08a74ec136a00d5b531c4525bedfcfbd64ac813d143d15caf8"
+base_commit = "25540786621c1ee3ea84c0957b17ebb62058140d"
+verified_sha = "14c11bcfb9e7221e77d122d540034cd5f98cf5b7"
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "verified"
+reviewed = "2026-06-14"
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
