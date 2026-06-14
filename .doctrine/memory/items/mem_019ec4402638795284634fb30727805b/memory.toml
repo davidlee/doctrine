@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec4402638795284634fb30727805b"
+memory_key = "mem.pattern.tooling.git-cat-file-e-exit-masked-use-ls-tree"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "git cat-file -e exit code can false-positive under the rtk hook; use ls-tree for existence"
+summary = "git cat-file -e exit code unreliable under rtk hook — use git ls-tree --name-only for existence checks"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = []
+commands = ["git cat-file", "git ls-tree"]
+tags = ["dispatch", "funnel", "rtk", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f98e34c13050c61c9f1c4f9d988498782a20a808"
+ref_name = "refs/heads/main"
+checkout_state_id = "4b5d4cbf3ee0b1625745644b27349f693892c325666435263c2257a3fab43c8f"
+base_commit = "b0d3e3d2e279f9f0873d8bcb05fa036bacc75385"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
