@@ -95,6 +95,62 @@ tracked-dirty + HEAD moves) → livelock. Worked around by solo `/execute` in an
 isolated coordination worktree off a pinned base. Keep driving every remaining
 SL-064 phase this way.
 
+## PHASE-04 — prepare-review sync verb (completed)
+
+The stage-1 projection verb `doctrine dispatch sync --prepare-review --slice N`.
+New module `src/dispatch.rs`; e2e `tests/e2e_dispatch_sync.rs` (VT-1/2/3/4 + EX-5).
+Gate `just check` green; clippy clean; per-branch target.
+
+**EN-2 command shape (settled at phase-plan).** `dispatch` is a NEW top-level
+verb class (NOT under `worktree` — provisioning vs projection are distinct seams,
+ADR-012). `DispatchCommand::Sync { slice, prepare_review, path }`. Stage selector
+is a clap `#[group(required, single)]` carrying one flag now (`--prepare-review`);
+PHASE-05 adds `--integrate` to the SAME group — forward-compatible, no rework.
+`write_class` → `Orchestrator("dispatch-sync")`, rides the existing worker-mode
+fence (EX-1, pinned by `dispatch_sync_is_orchestrator` + VT-4).
+
+**The sync sources the ledger from the BRANCH TIP TREE, not the working
+filesystem.** First-cut used `ledger::read_boundaries/read_orthogonal` (which
+`std::fs::read` the working tree) — RED: the e2e runs from `main`, where the
+committed `.doctrine/dispatch/064/*.toml` are absent, so phases/orthogonal-exclude
+came back empty. Fix: new `git::read_path_at(root, refish, path)` (`cat-file -p
+<ref>:<path>`) + a generic `read_ledger::<T: DeserializeOwned + Default>` over the
+dispatch tip. This is strictly more correct — single source (the branch the verb
+projects), and it works in stage-2 where there is NO checkout (design §4.1's
+working-tree-free thesis). The filesystem `read_*` are the funnel's
+read-modify-write side, not the sync's read side — now `cfg_attr(not(test))`
+dead-in-prod until the funnel rewires (PHASE-06). **PHASE-05 must likewise
+tree-read, never assume a checkout.**
+
+**Journal committed onto the branch via plumbing (EX-2), no checkout.** New
+`git::tree_with_file(base_tree, path, content)` (scratch-index `read-tree` →
+`hash-object -w --stdin` → `update-index --cacheinfo` → `write-tree`, mirrors
+`filter_tree`) splices `journal.toml` into the tip tree; `commit_tree` + zero-CAS
+advance `dispatch/<slice>`. Pending-intent journal commits BEFORE any external
+ref CAS (ADR-012 D4 ordering); a second commit records applied/verified status
+(recoverability). Symmetric with stage-2 (no worktree) by construction.
+
+**B/C composition.** B = `filter_tree(tip_tree, [.doctrine/dispatch/<slice>] ++
+verified-orthogonal paths)` → `commit_tree(parent = trunk_base)`. C = per
+`boundaries.toml` row in order, `filter_tree(tree_of(code_end), [.doctrine])`,
+parent-chained off the previous PLANNED commit (trunk_base for the first), skip
+`code_start==code_end`. External refs created via zero-oid CAS ⇒ a stale prior
+`review/*`/`phase/*` is reported + journalled `failed`, NEVER clobbered (EX-5);
+trunk/`edge` never touched.
+
+**Dead-code discipline.** Deleted PHASE-03's module-blanket
+`#![cfg_attr(not(test), expect(dead_code))]`; replaced with per-symbol expects on
+the still-ahead-of-consumer symbols (`parse`, funnel `record_*`/`store`,
+`read_journal`, the filesystem `read_boundaries/read_orthogonal`) — per
+mem.pattern.lint.blanket-dead-code-suppression-masks-siblings, so a regression in
+a now-live sibling (e.g. `Boundaries::parse`, now wired) still surfaces.
+
+**Open / hand-forward.** PHASE-05 integrate (trunk/`edge` push, journal replay)
++ PHASE-06 skill alignment (wires the funnel `record_*` + claude-arm boundary
+capture, clearing the remaining ledger expects). PHASE-01 ADR-006 amendment still
+needs adversarial acceptance before close (F-PH01-1). `/audit` RV verbs refuse on
+a worktree fork — audit from the parent tree or after integrating.
+
 ## PHASE-03 — projection plumbing + run ledger (completed)
 
 Commits `7c94b19` (plumbing T1-T4), `b4f4bff` (ledger T5-T6). Gate `just check`
