@@ -1,0 +1,70 @@
+id    = 23
+slug  = "inquisition-sl-064-design-spine-coordination-branch-isolation-integration-sync"
+title = "Inquisition: SL-064 design spine (coordination-branch isolation + integration-sync)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-064"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "D7 recovery claimed 'preserved/re-derivable' for projection; expected proven idempotent replay, observed an asserted claim with no journal"
+detail = "design.md §1 (L54-67), §4 (L170-185), §5 (L211-213) assert single-branch crash-recovery survives because projection is 'downstream and re-derivable'. But §1 table + §4 allow code→phase/* and intent→trunk to project independently and ahead of code. A crash mid-sync (intent already escaped to trunk, code not yet integrated) leaves externally-visible state the coordination branch does NOT record as projected-vs-pending. No projection journal, no target-tip preconditions, no replay contract named. ADR-006 D7 recovery = rebuild-from-coordination-branch; that only holds for the funnel ONTO dispatch/<slice>, not for the outward projection. The claim is overreach until OQ-A designs the replay/journal contract. (codex F2)"
+disposition = "fix-now"
+response = "Claim corrected this pass: §1 invariant downgraded from 'D7 preserved' to 'preserved only for the funnel onto dispatch/<slice>; projection has NO recovery contract yet'. The projection journal + idempotent-replay requirement now BINDS OQ-A (§7). Heresy (false claim) destroyed now; the mechanism is OQ-deferred by design, not shipping this pass."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Markerless coordination tree authorizes by marker-ABSENCE; expected positive coordination identity, observed an unstamped worker can impersonate the coordination tree + Orchestrator verb class"
+detail = "design.md §2 (L110-124), §5 (L216-222): orchestrator write-permission in a LINKED worktree rests on marker-absence (worker_mode=(is_linked_worktree&&marker_present) OR env). ADR-011 D6/M2 confesses a Claude SubagentStart stamp-failure/matcher-drift yields exactly that state — a real worker, linked, marker_present=false, NOT refused. ADR-006 D2a's guard gates not just authored writes but the Orchestrator verb class (fork/import/gc). SL-064 BROADENS the blast radius of the confessed false-clear: marker-absence no longer merely 'looks like solo /execute' — it now looks like the coordination tree that owns the funnel + sync verb. Design's only mitigation is 'env must not leak' (a verify item), not a positive signal distinguishing legit-coordination-tree from unstamped-worker. (codex F3)"
+disposition = "fix-now"
+response = "§2 reframed: marker-absence is NO LONGER sold as positive coordination identity. The broadened reliance is an ADR-006 D2b CONFESSED RESIDUAL, now explicitly inherited with its fence (R-5 belt + IMP-052 post-spawn check + env-on-main catch + bwrap-no-push). New §6 verify-item asserts the fence covers Orchestrator-verb impersonation. The strictly-safer positive-coordination-marker redesign touches the owner-locked D2a VH model → carried as OQ-D for /consult, not improvised here."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Branch names carry no run identity; expected per-run-unique recovery roots, observed dispatch/<slice> + phase/<slice>-NN alias across runs"
+detail = "design.md §1 (L41-52), §2 (L130-135) call dispatch/<slice> a 'per-run' recovery root and claims 'concurrent runs never share it', yet the ref contains only slice-id (+phase NN), no run identity. Two dispatches on the SAME slice collide on dispatch/064, destroying the first run's SSoT. NOTE: handover-resume DELIBERATELY reuses dispatch/<slice> (resume-from-branch is intended), so a run discriminator would break that — the correct fix is to FORBID concurrent same-slice dispatch at creation, not to discriminate. The 'concurrent runs isolated' driver applies to DIFFERENT slices; the design overclaims it for same-slice. (codex F1)"
+disposition = "fix-now"
+response = "§1 corrected: dispatch/<slice> is slice-scoped and STABLE across handover-resume (intended — a discriminator would break resume). Concurrent same-slice dispatch REFUSED at creation (a guard); the 'concurrent isolated' driver applies across distinct slices only. Overclaim removed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "D1 claimed 'preserved via config'; expected role-level agnosticism, observed a prescribed two-class branch topology — configurable refs are a fig-leaf"
+detail = "design.md §1 (L31-67), §4 (L178-185), §5 (L214-215) hard-code three framework branch ROLES (dispatch/<slice> SSoT, phase/<slice>-NN preserved code deliverables, edge aggregate) and a two-class routing topology (code→phase/*→trunk deliberate; intent→trunk contemporaneous). ADR-006 D1 says doctrine DETECTS isolation, does not prescribe branch policy, 'no configuration Rube Goldberg'. Renaming refs configurable does not make a preserved-per-phase-branch + aggregate + two-class-routing model policy-agnostic — that IS branch-flow doctrine. The honest framing is that D1 is being TIGHTENED, not preserved. Couples to the own-ADR charge. (codex F4)"
+disposition = "design-wrong"
+response = "RULED (a): the D1 'tightening' is real and is promoted to its own ADR-012, where it is owned honestly as a framework decision (opinionated integration topology). ADR-006 D1 stays at role-level / detection. The design stops claiming 'D1 preserved via config'."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Framework topology smuggled under a 'D8 placement amendment'; expected narrow placement fix, observed an ADR-worth of new ontology+projection (ADR-011 precedent)"
+detail = "slice-064.md (L83-88) confesses scope growth from 'isolate the coordination branch + a sync step' into a delta-class-routed topology amending D1/D2a/D7/D8 + D9 addendum. design.md changes branch ontology (§1), provisioning (§2), funnel guard placement (§3), a new sync verb + projection contract (§4), and §5 (L225-226) itself defers 'own ADR?'. ADR-011 was split out precisely because the spawn seam was too framework-significant for an ADR-006 bolt-on. This is the same shape. Penance: promote the topology to its own ADR (ADR-012) before plan, OR cut back to the narrow D8 placement. USER RATIFICATION REQUIRED. (codex F5)"
+disposition = "design-wrong"
+response = "RULED (a) by the User: promote the branch ontology + class-routed projection + integration-sync verb to a new ADR-012; SL-064 becomes its implementing slice. ADR-006 retains only the pure-placement amendments (D8 worktree placement, D2a linked-orchestrator, D9 markerless-creation addendum). ADR-011 precedent honoured. ADR-012 acceptance GATES SL-064 plan (cf. SL-056 G1/ADR-008 gate)."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "§2 'existing provision already correct'; expected the full D9 contract, observed the non-doctrine allowlist copy axis unaddressed"
+detail = "design.md §2 (L89-100) concludes the coordination tree provisions 'on the same regenerate axis as a worker fork' and existing 'doctrine worktree provision is already correct', having argued only that the coordination/runtime TIER need not be copied. ADR-006 D9 (L151-170) has TWO axes: regenerate AND allowlisted-copy of irreducible gitignored prerequisites (secrets/local config), plus baseline-verify. §2 never states whether the coordination tree still runs the non-doctrine allowlist copy axis (its verify build may need it). Gap, not necessarily a defect. (codex F6)"
+disposition = "fix-now"
+response = "§2 corrected: coordination tree runs the FULL D9 provision — both regenerate AND non-doctrine allowlist copy axes + baseline-verify; only the coordination/runtime TIER is excluded (already withheld by the worker allowlist + regenerated by the orchestrator). 'Already correct' no longer rests on copy-axis absence."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
