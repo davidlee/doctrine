@@ -1,9 +1,9 @@
 id = 68
 slug = "wire-dispatch-stage-2-sync-integrate-into-close"
-title = "Dispatch projection parents on a stale base — non-integrable deliverables"
+title = "Dispatch candidates for safe audit interaction"
 status = "design"
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-06-15"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
@@ -12,6 +12,10 @@ after = []                      # slice→work soft sequence: { to, rank }
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-006"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
