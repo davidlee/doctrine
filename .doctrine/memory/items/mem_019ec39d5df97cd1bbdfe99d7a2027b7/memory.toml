@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec39d5df97cd1bbdfe99d7a2027b7"
+memory_key = "mem.pattern.testing.shared-cargo-target-false-red-in-worktree-audit"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Shared CARGO_TARGET_DIR makes a worktree audit false-RED; touch+per-suite to defeat"
+summary = "Worktree audit false-RED: coord worktree shares CARGO_TARGET_DIR with main via the jail redirect, so test binaries built from main's source shadow the fork's — touch the test file + run suites individually (not --workspace), env -u DOCTRINE_WORKER"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = ["tests/**", "src/**"]
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5d2549466112ddc213aeaffc2265f55d10c1af69"
+ref_name = "refs/heads/main"
+checkout_state_id = "3556a2c637f0b656b0fbef16ed973c8d23c0081f485515b04036d6d6833c193d"
+base_commit = "72e4bfc97567ba1fec9a0c25bd4099453a9fd10f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
