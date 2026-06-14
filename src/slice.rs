@@ -25,6 +25,7 @@ use serde::Serialize;
 use crate::entity::{
     self, Artifact, Fileset, Inputs, Kind, LocalFs, MaterialiseRequest, ScaffoldCtx,
 };
+use crate::lifecycle::{Transition, classify, crosses_closure_seam};
 use crate::listing::{self, Format, ListArgs};
 use crate::meta::{self, Meta};
 use crate::plan::Plan;
@@ -595,97 +596,6 @@ fn is_drifted(status: &str) -> bool {
 /// adding `abandoned` here would false-flag `⚠` on abandoned-incomplete slices.
 fn is_terminal_status(authored: &str) -> bool {
     authored == "done"
-}
-
-/// Whether leaving this status is refused by the transition verb — the
-/// *reopening-refusal* set (`{done, abandoned}`), F13. A **third**, distinct
-/// slice-status predicate: it is NOT [`is_terminal_status`] (divergence,
-/// `{done}` — adding `abandoned` there false-flags `⚠`) nor [`is_hidden`]
-/// (presentation, semantically unrelated). Reopening a closed/abandoned slice is
-/// deliberately deferred, so `set_slice_status` refuses a move out of either
-/// (`FromTerminal`); the three predicates diverge by design (design §5.2/§5.3).
-fn is_transition_terminal(status: &str) -> bool {
-    matches!(status, "done" | "abandoned")
-}
-
-/// Whether a `from → to` move crosses the **closure seam** (design §7, D8): the
-/// two legitimate terminal advances `audit → reconcile` and `reconcile → done`.
-/// Pure — the reverse close-gate ([`run_status`]) fires the RV-blocker scan ONLY
-/// on these edges, never on any other transition (VT-4). These are exactly the
-/// `to`-targets the `SeamBreach` guard protects (§5.5), taken from their one legal
-/// source: structurally, `set_slice_status` is the sole writer of these moves, so
-/// this shell is the sole seam-crosser (VT-5).
-fn crosses_closure_seam(from: &str, to: &str) -> bool {
-    matches!((from, to), ("audit", "reconcile") | ("reconcile", "done"))
-}
-
-/// How a `from → to` slice-status move classifies under the lifecycle FSM
-/// (design §5.4). Pure data over the edge table — no clock/disk; the verb stamps
-/// the shell-injected date. `classify` is total over its `&str` inputs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Transition {
-    /// A forward step along the chain, or the legitimate seam edges.
-    Advance,
-    /// A correction edge that walks back to re-do an invalidated stage.
-    BackEdge,
-    /// A move neither forward nor a named back-edge — written and surfaced.
-    Skip,
-    /// `* → abandoned` from any non-terminal source.
-    Abandon,
-    /// `from == to`; the writer no-ops.
-    Noop,
-    /// Leaving a terminal source (`{done, abandoned}`) — refused (reopening
-    /// deferred).
-    FromTerminal,
-    /// A closure-seam breach (F12): `→ reconcile` from a non-`audit` source, or
-    /// `→ done` from a non-`reconcile` source — refused structurally.
-    SeamBreach,
-}
-
-/// Classify a `from → to` slice-status move against the FSM (design §5.4),
-/// edge-table driven (NOT index arithmetic — `abandoned` is last in the const but
-/// is not "after `done`" in the FSM). `to` is assumed in-vocab (the verb boundary
-/// guards an out-of-vocab target); `from` may be drifted (out-of-vocab), in which
-/// case a non-seam, non-terminal move falls through to `Skip` — but the seam still
-/// binds by *target* edge (`→ reconcile`/`→ done` from a drifted source is a
-/// `SeamBreach`, §5.5). Precedence: no-op → from-terminal → closure-seam (by
-/// target) → abandon → forward/back edges → skip.
-pub(crate) fn classify(from: &str, to: &str) -> Transition {
-    if from == to {
-        return Transition::Noop;
-    }
-    if is_transition_terminal(from) {
-        return Transition::FromTerminal;
-    }
-    // Closure seam (F12), gated by the *target* edge — binds even from a drifted
-    // `from`. The legitimate seam entries are the only way in.
-    if to == "reconcile" {
-        return if from == "audit" {
-            Transition::Advance
-        } else {
-            Transition::SeamBreach
-        };
-    }
-    if to == "done" {
-        return if from == "reconcile" {
-            Transition::Advance
-        } else {
-            Transition::SeamBreach
-        };
-    }
-    if to == "abandoned" {
-        return Transition::Abandon;
-    }
-    // Forward chain (the non-seam advances) and the named back-edges.
-    match (from, to) {
-        ("proposed", "design")
-        | ("design", "plan")
-        | ("plan", "ready")
-        | ("ready", "started")
-        | ("started", "audit") => Transition::Advance,
-        ("audit", "started" | "design") | ("reconcile", "audit" | "design") => Transition::BackEdge,
-        _ => Transition::Skip,
-    }
 }
 
 /// The slice lifecycle status as a clap `ValueEnum` — the `slice status <state>`
@@ -1337,6 +1247,7 @@ fn show_json(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lifecycle::is_transition_terminal;
     use crate::meta::Meta;
 
     fn meta(id: u32, status: &str, slug: &str, title: &str) -> Meta {
