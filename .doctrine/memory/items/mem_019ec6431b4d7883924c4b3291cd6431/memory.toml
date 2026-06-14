@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec6431b4d7883924c4b3291cd6431"
+memory_key = "mem.pattern.dispatch.rtk-masks-git-plumbing-during-funnel-reanchor"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "rtk masks git plumbing — funnel re-anchor proofs must bypass via rtk proxy git, checkout-import unsafe under real overlap"
+summary = "rtk hook masks git diff/log/rev-parse/ls-tree outputs; funnel re-anchor disjointness proofs must use rtk proxy git, and checkout-import is unsafe under overlap"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = []
+commands = ["git diff", "git log", "git rev-parse", "git ls-tree"]
+tags = ["dispatch", "funnel", "rtk", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "a543c90bcc04b06d0e4a7bdead409fd3a81bcca4"
+tree = "3b9012d34b2cfa640f6a921bdb3d06fa75e0c418"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "a543c90bcc04b06d0e4a7bdead409fd3a81bcca4"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
