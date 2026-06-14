@@ -1,0 +1,86 @@
+# Implementation plan for SL-067 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-067"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Producer: write verb, normalisation, JSON projection"
+objective = """
+Light up the dead `tags` axis with its write surface and producer-side reads.
+Add the `backlog tag <ID> [TAGS]... [--remove/-d <TAGS>...]` verb as a single
+edit-preserving sorted-array replace; the strict `normalize_tag` write chokepoint
+and the lenient `fold_filter_tag` filter fold; carry tags on the `list --json`
+projection. P1 is the producer: its verb seeds the tags that P2's render consumes.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (design.md, D1-D4 + R1-R9 integrated); slice status = design/plan." },
+  { id = "EN-2", text = "Model already carries `tags: Vec<String>` seeded `[]` (backlog.rs:365); `set_backlog_status`/`needs`/`after` edit-preserving recipe and `require_item` shell exist as precedent." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine backlog tag <ID> [TAGS]... [--remove/-d <TAGS>...]` exists (clap variant + dispatch alongside Needs/After); at least one add or remove required else hard error; add∩remove overlap rejected post-normalisation." },
+  { id = "EX-2", text = "`normalize_tag` is the single write chokepoint: trim → lowercase → charset `[a-z0-9_:-]`, non-empty, else bail naming the offending token. `fold_filter_tag` is a separate lenient fold (trim + lowercase, NO charset reject)." },
+  { id = "EX-3", text = "Write is edit-preserving: F-1 refuse on absent `tags` key (never insert); apply set `new = (current ∪ adds) ∖ removes` stored sorted; set-compare no-op guard (content + mtime hold); stamp `updated` from injected clock; doc outside the array (comments/inert tables/unknown keys) untouched." },
+  { id = "EX-4", text = "`BacklogRow` gains `tags: Vec<String>`; `json_rows` projects `tags: i.tags.clone()` unconditionally (flat, never visibility-gated). `show`/`show --json` unchanged." },
+  { id = "EX-5", text = "Filter input fold: `args.tags` routed through `fold_filter_tag` before `listing::build` so `-t Security` round-trips stored `security`." },
+]
+verification = [
+  { id = "VT-1", expects = "Round-trip e2e: `tag ISS add a b` → `list -t a` surfaces it → `tag ISS --remove a` drops it from `-t a`." },
+  { id = "VT-2", expects = "Normalisation: `tag X Security` stores `security`; bad charset (`a b`, `a@b`) rejected naming the token; colon accepted (`area:backlog`)." },
+  { id = "VT-3", expects = "Idempotency: re-add present / remove absent → no write, asserted via unchanged mtime; fixture seeds an UNSORTED store (e.g. `[\"b\",\"a\"]`) to prove the set-compare guard (not ordered-vec) does not write+stamp on a logical no-op; add∩remove overlap rejected." },
+  { id = "VT-4", expects = "`list --json`: untagged item emits `\"tags\": []`; tagged item emits its tags array unconditionally (no visibility gate on the JSON path)." },
+  { id = "VT-5", expects = "Edit-preserving: a hand comment / inert `[relationships]` table / unknown key survives a `tag` write; `updated` stamped; unrelated keys untouched; an F-1 missing-`tags` file is refused BYTE-UNCHANGED." },
+  { id = "VT-6", expects = "`just gate` green; `cargo clippy` (plain, not --all-targets) zero warnings; SL-053 VT-2 plain-path and existing list/show goldens green unchanged." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Reader/render: PerToken paint, tag chips, dynamic tags column"
+objective = """
+Render the tags axis on `backlog list`. Add the shared `ColumnPaint::PerToken`
+variant + `paint_tag`/`segment_hue`/palette in `listing.rs` (generic, reusable by
+any future tags column); wire the `tags` column into `BL_COLUMNS` with dynamic
+default visibility keyed on a visible tagged row. The colour and column machinery
+lives on the shared lower layer (beachhead generalizes), not bespoke to backlog.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the `backlog tag` verb seeds tags that P2 render tests consume; `BacklogRow` carries `tags`." },
+  { id = "EN-2", text = "SL-053 colour machinery present: `ColumnPaint::{None,Fixed,ByValue}`, `paint_cell` colour gate, `status_hue` palette precedent + Red reservation." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ColumnPaint::PerToken { split, render }` added (listing.rs); `paint_cell` handles it via early-return BEFORE the hue match, reached only under `color == true`, tokens joined by `\", \"`. Under `color == false` the plain `cell(r)` is returned unchanged (zero ANSI)." },
+  { id = "EX-2", text = "`paint_tag` (colon-segment chip: segments hued, colons white) + `segment_hue` (pure stable byte-fold hash → palette index) + palette `const` live beside `status_hue`. Palette excludes Red AND BrightRed (status reservation) and Black/White (bg/colon); ≥ ~8 distinguishable hues." },
+  { id = "EX-3", text = "`tags` column added to `BL_COLUMNS` (5→6) using PerToken; `BL_DEFAULT` const unchanged; default order when shown is `id,kind,status,tags,title` via a locally-built `effective_default`." },
+  { id = "EX-4", text = "Dynamic default visibility (D2): `any_tagged` computed on the FINAL displayed set (after both `retain` AND the `--kind` filter), once, reused across `--by id` blocks. `--columns` given → honoured verbatim; absent → tags spliced before title iff `any_tagged`." },
+]
+verification = [
+  { id = "VT-1", expects = "Colour: `color = true` → per-segment hues + white colons, stable across two runs; `cli:command` yields two distinct hues with white `:`; single-segment `security` one hue." },
+  { id = "VT-2", expects = "Byte-clean coupling guard (the property, not a proxy): for the tags column over a fixture with multi-tag, colon-namespaced, and empty-segment rows, `strip_ansi(paint_cell(color=true)) == paint_cell(color=false) == cell(r)`." },
+  { id = "VT-3", expects = "Multi-SGR alignment: a tags cell emitting multiple SGR sequences keeps column alignment; with `--columns id,tags` (tags LAST) the `render_table` trailing-fill `trim_end` (listing.rs:505-515) strips only comfy-table padding, never the chip's trailing `\\x1b[0m`." },
+  { id = "VT-4", expects = "Dynamic column: untagged corpus → no `tags` column; ≥1 tagged → column present; `--columns id,tags` forces it even when empty; `--columns` omitting tags hides it despite tagged rows; a tagged item filtered out by `--kind` → no column (D2 keys on a visible row)." },
+  { id = "VT-5", expects = "Unit: `segment_hue` determinism + palette excludes Red and BrightRed (and Black/White); `paint_tag` colon/white structure." },
+  { id = "VT-6", expects = "`just gate` green; `cargo clippy` zero warnings; SL-053 VT-2 plain-path holds; existing list/show goldens green unchanged." },
+]
+specs             = []
+requirements      = []
