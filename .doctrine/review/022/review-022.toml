@@ -1,0 +1,43 @@
+id    = 22
+slug  = "reconciliation-review-of-sl-062"
+title = "reconciliation review of SL-062"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-062"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Dispatch workers integrated onto shared main — orchestrator-sole-writer bypassed (expected: isolated fork + orchestrator import; observed: worker commit lands on main)"
+detail = "All 3 /dispatch-agent workers (isolation:worktree) committed their single delta directly onto main; no registered worktree remained. Each delta was nonetheless clean: exact declared files only, R-5 clean (no .doctrine/.claude touch), parent==B linear, and orchestrator-verified green (just gate) POST-landing. The funnel's correctness GOALS held; its sole-writer MECHANISM was bypassed, so R-5+verify ran after the commit landed rather than before. SL-064 (foreign, in-flight) is scoped to fix the coordination-branch isolation gap."
+disposition = "tolerated"
+response = "Accepted drift, not a code defect. The deliverable conforms: every worker delta was exact-files-only, R-5 clean, linear on B, and orchestrator-verified green before the phase was marked complete. The bypass is in the drive MECHANISM (Claude isolation:worktree integrates the worker commit onto the parent branch), not the result. Systemic fix is owned by SL-064; recorded in notes.md. No SL-062 artifact is compromised."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Fifth byte-identical status setter knowledge::set_record_status not retired onto set_authored_status (expected: all duplicated setters collapsed; observed: four of five)"
+detail = "PHASE-02 retired gov/slice/backlog/requirement onto the shared set_authored_status seam. A fifth byte-identical setter, knowledge::set_record_status (src/knowledge.rs:1283), is outside SL-062's declared scope and was left untouched, so the DRY collapse is incomplete. Captured as IMP-061 with the fold recipe (status-only managed key-set, gate kept in the shell, EX-4 hint-parity for its golden)."
+disposition = "follow-up"
+response = "Owned future work, captured as IMP-061 (improvement). Out of SL-062's declared scope; folding it in here would have widened the phase file-set beyond the plan. The fold recipe is recorded on the backlog item."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Supersede atomicity: a torn mid-write is detectable only by doctrine validate, not the verb (expected per R1/F-F vs observed)"
+detail = "Two files, no FS transaction. Parse-once/hold-both + pre-flight verify + the F-D guard reduce the remaining failure class to a mid-write I/O error. Write ordering NEW-then-OLD means a torn state is NEW.supersedes∋OLD without the reciprocal OLD.superseded_by — detectable by a subsequent doctrine validate (relation_graph::validate_relations, VT-6 green), NOT auto-run by the verb (codex C5). Re-run is idempotent."
+disposition = "aligned"
+response = "Behaviour matches the locked design. Design §5.4 R1 consciously accepts the two-file non-atomicity; the NEW-then-OLD ordering is what makes the F-D one-sided no-op sound, and VT-6 proves the torn state is flagged by doctrine validate. No reconciliation needed — code and design agree."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

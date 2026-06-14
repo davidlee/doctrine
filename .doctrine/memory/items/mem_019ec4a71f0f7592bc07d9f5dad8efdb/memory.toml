@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec4a71f0f7592bc07d9f5dad8efdb"
+memory_key = "mem.pattern.dispatch.claude-agent-worktree-integrates-commit-onto-parent"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Claude dispatch-agent worker commit integrates onto the parent branch, not an isolated fork"
+summary = "Claude /dispatch-agent worker (isolation:worktree) integrates its commit onto the parent branch — orchestrator verifies R-5 + green POST-landing, not before"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = [".claude/skills/dispatch-agent/SKILL.md"]
+globs = []
+commands = []
+tags = ["dispatch", "worktree", "funnel", "claude"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e44daf28e1c77202d094fc4389241687cca6fbbb"
+ref_name = "refs/heads/main"
+checkout_state_id = "26a277ac79e272d27ba2507b27be5bc4a884ff7ad48b6f949095ca74a2d99204"
+base_commit = "083907eca7c87c1c05baac9c7506f6a005eb8f87"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
