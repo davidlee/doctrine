@@ -34,15 +34,15 @@ pub(crate) struct InteractionEdge {
     pub(crate) target: String,
 }
 
-/// One spec→parent decomposition edge: a tech spec's `parent` field (SL-022 §5.2).
-/// `on_product` carries the subject's kind so the check can flag a tech-only field
-/// authored on a product as an invalid-kind finding (codex F5b), not drop it.
+/// One spec→parent decomposition edge: a spec's `parent` field (SL-022 §5.2,
+/// SL-065 §4). `on_product` selects the required parent subtype — a product
+/// subject's parent must be a product spec, a tech subject's a tech spec.
 pub(crate) struct ParentEdge {
     /// Canonical ref of the spec the `parent` field lives on.
     pub(crate) spec: String,
-    /// Canonical parent ref — expected to be a tech spec.
+    /// Canonical parent ref — expected to be the same subtype as the subject.
     pub(crate) parent: String,
-    /// True when the subject is a product spec (`parent` is tech-only).
+    /// True when the subject is a product spec (selects the required parent subtype).
     pub(crate) on_product: bool,
 }
 
@@ -175,11 +175,12 @@ impl Registry {
         out
     }
 
-    /// HARD — `parent` integrity (REQ-083, SL-022 §5.2). `parent` is a tech-only
-    /// field, so on a product subject it is *invalid kind* (codex F5b). On a tech
-    /// subject the parent must be a tech spec: a product parent is *invalid kind*,
-    /// an absent parent is *dangling*. The self case (`parent == spec`) is excluded
-    /// — it is `self_parent`'s to report (PHASE-03). Scoped when `scope` is `Some`.
+    /// HARD — `parent` integrity (REQ-083, SL-065 §4). `parent` must resolve to a
+    /// spec of the **same subtype** as the subject: `on_product` selects which set
+    /// (`product_specs` vs `tech_specs`) the parent must land in. A cross-subtype
+    /// parent is *invalid kind*, an absent parent is *dangling*. The self case
+    /// (`parent == spec`) is excluded — it is `self_parent`'s to report. Scoped when
+    /// `scope` is `Some`.
     pub(crate) fn parent_findings(&self, scope: Option<&str>) -> Vec<String> {
         let mut out = Vec::new();
         for e in self
@@ -187,27 +188,25 @@ impl Registry {
             .iter()
             .filter(|e| scope.is_none_or(|s| e.spec == s))
         {
-            if e.on_product {
-                out.push(format!(
-                    "invalid parent: parent on product {} (tech-only field)",
-                    e.spec
-                ));
-                continue;
-            }
             if e.spec == e.parent {
-                continue; // self-loop — owned by self_parent (PHASE-03)
+                continue; // self-loop — owned by self_parent
             }
-            if self.tech_specs.contains(&e.parent) {
-                continue; // clean: tech parent
+            let (own_set, other_set, own_kind, other_kind) = if e.on_product {
+                (&self.product_specs, &self.tech_specs, "product", "tech")
+            } else {
+                (&self.tech_specs, &self.product_specs, "tech", "product")
+            };
+            if own_set.contains(&e.parent) {
+                continue; // clean: same-subtype parent
             }
-            let msg = if self.product_specs.contains(&e.parent) {
+            let msg = if other_set.contains(&e.parent) {
                 format!(
-                    "invalid parent: {} parent {} is a product spec (must be tech)",
+                    "invalid parent: {} parent {} is a {other_kind} spec (must be {own_kind})",
                     e.spec, e.parent
                 )
             } else {
                 format!(
-                    "dangling parent: {} in {} resolves to no tech spec",
+                    "dangling parent: {} in {} resolves to no {own_kind} spec",
                     e.parent, e.spec
                 )
             };
@@ -216,33 +215,35 @@ impl Registry {
         out
     }
 
-    /// HARD — a tech spec naming itself as `parent` (the 1-cycle A→A). The **sole**
+    /// HARD — a spec naming itself as `parent` (the 1-cycle A→A). The **sole**
     /// reporter of the self case (REQ-087, §5.2): `parent_cycle` skips self-loops, so
-    /// A→A yields exactly one finding total. Tech subject only (a product `parent` is
-    /// `parent_findings`' invalid-kind case). Scoped when `scope` is `Some`.
+    /// A→A yields exactly one finding total. Subtype-blind (SL-065 §4) — acyclicity
+    /// is a property of the chain, not the family. Scoped when `scope` is `Some`.
     pub(crate) fn self_parent(&self, scope: Option<&str>) -> Vec<String> {
         self.parents
             .iter()
             .filter(|e| scope.is_none_or(|s| e.spec == s))
-            .filter(|e| !e.on_product && e.spec == e.parent)
+            .filter(|e| e.spec == e.parent)
             .map(|e| format!("self parent: {} names itself as parent", e.spec))
             .collect()
     }
 
     /// HARD — a cycle in the `parent` decomposition chain (REQ-087, §5.2). Walks the
-    /// child→parent map from each tech node keeping an **ordered path** plus a
+    /// child→parent map from each node keeping an **ordered path** plus a
     /// first-seen index, recovers the cycle SLICE on revisit (`path[first_idx..]` —
     /// the ring only, not a tail that fed it), and emits **one** finding per cycle —
     /// only when the start node is the slice's least id (codex F3, correct dedup even
     /// for a tail feeding a ring). Self-loops are skipped (owned by `self_parent`);
-    /// the walk terminates at a root (no parent edge) or a dangling parent. When
-    /// `scope` is `Some`, only cycles whose slice contains that node are kept.
+    /// the walk terminates at a root (no parent edge) or a dangling parent.
+    /// Subtype-blind (SL-065 §4): the chain spans both families. When `scope` is
+    /// `Some`, only cycles whose slice contains that node are kept.
     pub(crate) fn parent_cycle(&self, scope: Option<&str>) -> Vec<String> {
         // Ephemeral child→parent inversion — built here, never persisted (storage
-        // rule). Skip self-loops (self_parent's) and product subjects (invalid-kind).
+        // rule). Skip self-loops (self_parent's). Subtype-blind: spans both families
+        // (cross-subtype edges are already invalid-kind and cannot forge a cycle).
         let mut parent_of: BTreeMap<&str, &str> = BTreeMap::new();
         for e in &self.parents {
-            if e.on_product || e.spec == e.parent {
+            if e.spec == e.parent {
                 continue;
             }
             parent_of.insert(&e.spec, &e.parent);
@@ -517,14 +518,56 @@ mod tests {
     }
 
     #[test]
-    fn parent_on_product_subject_is_invalid_kind() {
-        // codex F5b: parent is tech-only; on a product subject it is invalid.
+    fn parent_product_to_tech_is_invalid_kind() {
+        // SL-065 §4: parent is symmetric same-subtype. A product subject whose parent
+        // is a TECH spec is invalid-kind ("must be product") — the mirror of the
+        // tech→product case, replacing the old "tech-only field" reject.
         let mut r = clean();
-        r.product_specs = ids(&["PRD-001", "PRD-002"]);
+        r.product_specs = ids(&["PRD-001"]);
         r.parents.push(parent_edge("PRD-001", "SPEC-001", true));
         let found = r.parent_findings(None);
         assert_eq!(found.len(), 1);
-        assert!(found[0].contains("invalid") && found[0].contains("PRD-001"));
+        assert!(found[0].contains("invalid") && found[0].contains("must be product"));
+    }
+
+    #[test]
+    fn parent_clean_product_to_product_yields_no_finding() {
+        // SL-065 §4: product → product decomposition is now valid.
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001", "PRD-002"]);
+        r.parents.push(parent_edge("PRD-001", "PRD-002", true));
+        assert!(r.parent_findings(None).is_empty());
+    }
+
+    #[test]
+    fn parent_product_dangling_target_is_flagged() {
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001"]);
+        r.parents.push(parent_edge("PRD-001", "PRD-404", true));
+        let found = r.parent_findings(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("dangling") && found[0].contains("PRD-404"));
+    }
+
+    #[test]
+    fn self_parent_reports_product_a_to_a_once() {
+        // SL-065 §4: acyclicity is subtype-blind — self_parent reports a product A→A.
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001"]);
+        r.parents.push(parent_edge("PRD-001", "PRD-001", true));
+        let found = r.self_parent(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].contains("PRD-001"));
+    }
+
+    #[test]
+    fn parent_cycle_product_two_node_reports_once() {
+        // SL-065 §4: subtype-blind parent_cycle catches a product ring.
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001", "PRD-002"]);
+        r.parents.push(parent_edge("PRD-001", "PRD-002", true));
+        r.parents.push(parent_edge("PRD-002", "PRD-001", true));
+        assert_eq!(r.parent_cycle(None).len(), 1);
     }
 
     #[test]
