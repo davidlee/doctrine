@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec88a6b43746395017bd7869e38e9"
+memory_key = "mem.pattern.dispatch.prepare-review-plumbing-desync-reverts-journal"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "prepare-review advances dispatch/<slice> via plumbing (no checkout) — a later working-tree commit on the coord branch reverts journal.toml"
+summary = ""
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3e723ab2d3d8e5a8d4a0a6644044268fd4b17036"
+ref_name = "refs/heads/main"
+checkout_state_id = "671cd352b6b42222bf29f3d1cb180726fa55ad9397a6d2ec317fdbef300ac643"
+base_commit = "635919b41251e787a7cd4e5ca745adbeabde7399"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
