@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec470c29c79b393e7817f241c5fb7"
+memory_key = "mem.pattern.dispatch.glob-add-sweeps-foreign-untracked-on-shared-main"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "glob git add on .doctrine entity dirs sweeps foreign untracked files on shared main; stage exact paths"
+summary = "On shared main, glob git-add of authored-entity dirs sweeps concurrent agents' untracked files into your commit — stage the exact file set"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = []
+commands = ["git add"]
+tags = ["dispatch", "funnel", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3c2448c386ea49c6368cc3c2c29765df02da3373"
+ref_name = "refs/heads/main"
+checkout_state_id = "c6e294299b243dace4bad4f761b9b01b5c9cb3068f844024d8fc782b393e121b"
+base_commit = "6aa1e0e5ed3ce6ffbd8c96a4f17d5c122ca2350b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
