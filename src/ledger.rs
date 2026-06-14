@@ -111,10 +111,12 @@ pub(crate) struct OrthogonalMark {
     pub status: LedgerStatus,
 }
 
-// Symbols below are test-live but have no *non-test* caller yet: the round-trip
-// `parse`/`to_toml` surface, `read_journal` (stage-2 integrate, PHASE-05), and the
-// funnel-time recording shell (`record_*`/`store`, wired by the dispatch funnel
-// rewiring, PHASE-06). Each carries a per-symbol `cfg_attr(not(test))` expect so
+// Some symbols below are test-live but have no *non-test* caller yet: the
+// round-trip `parse`/`to_toml` surface, the filesystem `read_*` (the sync verb
+// tree-reads via `read_path_at` instead), and `record_orthogonal` (its driver is
+// the deferred OQ-B classifier). `record_boundary`/`store` ARE now live — wired to
+// `dispatch record-boundary` (PHASE-06). Each still-dead symbol carries a
+// per-symbol `cfg_attr(not(test))` expect so
 // the test build — where they ARE called — sees no unfulfilled expect
 // (mem.pattern.lint.dead-code-expect-vs-cfg-test); per-symbol, not a module
 // blanket, so a regression in a now-live sibling still surfaces
@@ -194,10 +196,14 @@ impl Orthogonal {
 // --- impure recording shell (the EX-5 recording surface) ---------------------
 
 /// The `.doctrine/dispatch/<slice>/` coordination directory (design §4.1).
+/// `<slice>` is the canonical 3-digit zero-padded form (`064`) — the SAME path
+/// the `dispatch sync` reader tree-reads (`dispatch.rs`) and the `dispatch/064`
+/// branch name; an unpadded dir here would make the funnel writer and the sync
+/// reader disagree.
 fn dispatch_dir(root: &Path, slice: u32) -> PathBuf {
     root.join(".doctrine")
         .join("dispatch")
-        .join(slice.to_string())
+        .join(format!("{slice:03}"))
 }
 
 /// Load a manifest from `<dispatch_dir>/<file>`, defaulting to empty when the
@@ -212,13 +218,6 @@ fn load<T: DeserializeOwned + Default>(path: &Path) -> anyhow::Result<T> {
 }
 
 /// Write a manifest to `path`, creating the coordination dir on first write.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "funnel-time recording is the first non-test writer (PHASE-06)"
-    )
-)]
 fn store<T: Serialize>(path: &Path, manifest: &T) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -264,14 +263,8 @@ pub(crate) fn read_orthogonal(root: &Path, slice: u32) -> anyhow::Result<Orthogo
 }
 
 /// Append a per-phase code boundary to `boundaries.toml` (EX-5). Read-modify-
-/// write — the dir/file are created on first write.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "funnel-time recording is the first non-test writer (PHASE-06)"
-    )
-)]
+/// write — the dir/file are created on first write. Wired to the
+/// `dispatch record-boundary` funnel verb (PHASE-06).
 pub(crate) fn record_boundary(root: &Path, slice: u32, row: BoundaryRow) -> anyhow::Result<()> {
     let path = dispatch_dir(root, slice).join("boundaries.toml");
     let mut manifest: Boundaries = load(&path)?;
@@ -284,7 +277,7 @@ pub(crate) fn record_boundary(root: &Path, slice: u32, row: BoundaryRow) -> anyh
     not(test),
     expect(
         dead_code,
-        reason = "funnel-time recording is the first non-test writer (PHASE-06)"
+        reason = "no funnel verb yet — its driver is the OQ-B orthogonal classifier (deferred plan-gate); empty orthogonal.toml is the conservative EXCLUDE fallback (IMP backlog)"
     )
 )]
 pub(crate) fn record_orthogonal(
@@ -416,8 +409,9 @@ mod tests {
         )
         .expect("record mark");
 
-        // The recording surface created the dir at the design path.
-        assert!(root.join(".doctrine/dispatch/64/boundaries.toml").exists());
+        // The recording surface created the dir at the canonical padded path
+        // (the same `<slice>` form the sync reader and `dispatch/064` use).
+        assert!(root.join(".doctrine/dispatch/064/boundaries.toml").exists());
 
         // prepare-review's read-back contract: appended rows, in order.
         let boundaries = read_boundaries(root, slice).unwrap();

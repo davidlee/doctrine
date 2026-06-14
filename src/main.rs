@@ -744,6 +744,36 @@ enum DispatchCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Funnel-time recording: append a per-phase code boundary to
+    /// `.doctrine/dispatch/<slice>/boundaries.toml` (design §4.3). The
+    /// orchestrator runs this between the funnel's code commit and its knowledge
+    /// commit; stage-1 `sync --prepare-review` tree-reads the committed file to
+    /// cut the claude-arm `phase/<slice>-NN` deliverables. Orchestrator-classed —
+    /// refused under worker-mode.
+    RecordBoundary {
+        /// The slice id (bare number, e.g. `64`) whose ledger to append.
+        #[arg(long)]
+        slice: u32,
+
+        /// The `PHASE-NN` id this code boundary belongs to.
+        #[arg(long)]
+        phase: String,
+
+        /// Commit-ish for HEAD before the phase's code landed (resolved to a
+        /// full oid; the empty-phase test compares it to `--code-end`).
+        #[arg(long)]
+        code_start: String,
+
+        /// Commit-ish for the phase's cumulative code tip, *before* the knowledge
+        /// record commit (resolved to a full oid — the tree the cut snapshots).
+        #[arg(long)]
+        code_end: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2285,6 +2315,7 @@ fn write_class(cmd: &Command) -> WriteClass {
         // worker-mode via the SAME guard as coordinate/fork (EX-1).
         Command::Dispatch { command } => match command {
             DispatchCommand::Sync { .. } => Orchestrator("dispatch-sync"),
+            DispatchCommand::RecordBoundary { .. } => Orchestrator("dispatch-record-boundary"),
         },
         // The coverage group splits per inner verb (SL-057 D2a): `show` is the
         // read-only drift view; `record`/`forget` mutate the observed store, and
@@ -3030,6 +3061,13 @@ fn main() -> anyhow::Result<()> {
                     dispatch::run_prepare_review(path, slice)
                 }
             }
+            DispatchCommand::RecordBoundary {
+                slice,
+                phase,
+                code_start,
+                code_end,
+                path,
+            } => dispatch::run_record_boundary(path, slice, &phase, &code_start, &code_end),
         },
         Command::Validate { path } => run_validate(path),
         Command::Reseat {

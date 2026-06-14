@@ -699,3 +699,127 @@ fn integrate_refused_under_worker_mode() {
         "still no trunk write"
     );
 }
+
+// --- PHASE-06 VT-2: the funnel-time `record-boundary` recording verb ----------
+//
+// The claude-arm phase cut (§4.3) consumes `boundaries.toml`; the orchestrator
+// populates it during the funnel via this verb (the surface the skills cite).
+// Pins: (a) it appends a `[[boundary]]` row at the CANONICAL padded ledger path
+// `.doctrine/dispatch/064/` (the path `dispatch sync` tree-reads — writer↔reader
+// agreement), and (b) it is Orchestrator-classed (refused under worker-mode).
+
+fn record_boundary(cwd: &Path, root: &Path, phase: &str, start: &str, end: &str) -> Output {
+    run(
+        cwd,
+        None,
+        &[
+            "dispatch",
+            "record-boundary",
+            "--slice",
+            "64",
+            "--phase",
+            phase,
+            "--code-start",
+            start,
+            "--code-end",
+            end,
+            "-p",
+            root.to_str().unwrap(),
+        ],
+    )
+}
+
+#[test]
+fn record_boundary_appends_row_at_canonical_padded_ledger_path() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let fx = build_fixture(dir);
+    let ledger = dir.join(".doctrine/dispatch/064/boundaries.toml");
+
+    let out = record_boundary(dir, dir, "PHASE-09", &fx.base, &fx.code_end_1);
+    assert!(
+        out.status.success(),
+        "record-boundary ok; stderr: {}",
+        stderr(&out)
+    );
+    let body = std::fs::read_to_string(&ledger).expect("ledger written at padded path");
+    assert!(body.contains("[[boundary]]"), "row header: {body}");
+    assert!(body.contains("phase = \"PHASE-09\""), "phase row: {body}");
+    // Stores the resolved code tip (full oid) the phase cut snapshots.
+    assert!(body.contains(&fx.code_end_1), "code_end oid: {body}");
+
+    // Append-only: a second record adds a second row, keeps the first.
+    let out = record_boundary(dir, dir, "PHASE-10", &fx.code_end_1, &fx.code_end_2);
+    assert!(out.status.success(), "second record ok: {}", stderr(&out));
+    let body = std::fs::read_to_string(&ledger).unwrap();
+    assert!(
+        body.contains("PHASE-09") && body.contains("PHASE-10"),
+        "both rows present: {body}"
+    );
+}
+
+#[test]
+fn record_boundary_refused_under_worker_mode() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let fx = build_fixture(dir);
+    let ledger = dir.join(".doctrine/dispatch/064/boundaries.toml");
+
+    // (1) Marker-present linked worktree, env unset ⇒ refused, names the verb.
+    let holder = tempfile::tempdir().unwrap();
+    let base = git(dir, &["rev-parse", "HEAD"]);
+    let linked = holder.path().join("fork");
+    git(
+        dir,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "wkr-guard-rb",
+            linked.to_str().unwrap(),
+            &base,
+        ],
+    );
+    let marker_dir = linked.join(".doctrine/state/dispatch");
+    std::fs::create_dir_all(&marker_dir).unwrap();
+    std::fs::write(marker_dir.join("worker"), b"").unwrap();
+
+    let out = record_boundary(&linked, dir, "PHASE-09", &fx.base, &fx.code_end_1);
+    assert!(
+        !out.status.success(),
+        "refused from a marked linked worktree"
+    );
+    assert!(
+        stderr(&out).contains("dispatch-record-boundary"),
+        "refusal names the verb: {}",
+        stderr(&out)
+    );
+    assert!(!ledger.exists(), "refused run records nothing");
+
+    // (2) DOCTRINE_WORKER set ⇒ refused, dual-cause token.
+    let out = run(
+        dir,
+        Some(true),
+        &[
+            "dispatch",
+            "record-boundary",
+            "--slice",
+            "64",
+            "--phase",
+            "PHASE-09",
+            "--code-start",
+            &fx.base,
+            "--code-end",
+            &fx.code_end_1,
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    );
+    assert!(!out.status.success(), "refused when DOCTRINE_WORKER set");
+    assert!(
+        stderr(&out).contains("DOCTRINE_WORKER"),
+        "carries the dual-cause: {}",
+        stderr(&out)
+    );
+    assert!(!ledger.exists(), "still records nothing");
+}
