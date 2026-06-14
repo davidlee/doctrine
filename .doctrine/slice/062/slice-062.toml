@@ -1,0 +1,22 @@
+id = 62
+slug = "uniform-lifecycle-destructive-verbs"
+title = "Uniform lifecycle-transition + destructive verbs across kinds"
+status = "design"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-009"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-010"
+
+# Structural relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` table (SL-048 "the cut"). Slices carry no typed relation axes.
+# Author an edge with the `doctrine link` verb — it validates the (source, label)
+# pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
