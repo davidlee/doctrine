@@ -1,10 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Pure dep/sequence schema + edit-preserving write leaf (SL-060 PHASE-02). The
-//! shared substrate for an entity's `[relationships].{needs,after}` axes — the
-//! `needs` hard-prerequisite list and the `after` soft-sequence edges (each with a
-//! per-edge `rank`). Lifted verbatim from `backlog.rs` (the SL-047 origin) so a
-//! later phase can reuse the SAME typed schema and the SAME strict edit-preserving
-//! append for slices (design D1/§5.2), without a parallel implementation.
+//! Authored-TOML edit-preserving mutation leaf (SL-060 PHASE-02 dep/seq origin;
+//! SL-062 PHASE-02 the unified status seam). Two families of strict, in-place
+//! `toml_edit` mutations over an authored entity's `<stem>-NNN.toml`:
+//!
+//! - **dep/sequence** ([`read`]/[`append`]): the `[relationships].{needs,after}`
+//!   axes — the `needs` hard-prerequisite list and the `after` soft-sequence edges
+//!   (each with a per-edge `rank`). Lifted verbatim from `backlog.rs` (the SL-047
+//!   origin) so slices reuse the SAME typed schema + the SAME strict append (D1/§5.2).
+//! - **top-level status** ([`apply_status`]/[`set_authored_status`]): the ONE
+//!   edit-preserving write-core for the four status setters (governance, slice,
+//!   backlog, requirement). Each kind keeps its own gate/coupling in its shell and
+//!   delegates only the WRITE here, eliminating the byte-duplicated write body.
+//!
+//! Both families share the same invariants — the no-op guard (an unchanged value
+//! writes nothing, mtime holds), the F-1 strict refuse (a missing scaffold-seeded
+//! key is malformed; a tail `insert` would land it inside a trailing subtable =
+//! silent corruption, so refuse non-destructively, NEVER recreate), and write-once.
+//!
+//! Pure cores ([`apply_status`]/[`apply_string_append`]) take a held
+//! `&mut DocumentMut` and do NO disk/clock (the date is injected by the shell). The
+//! IO wrappers ([`set_authored_status`]/[`append_string_array`]/[`append`]) do
+//! read→parse→core→write-once.
 //!
 //! Leaf layering (ADR-001): imports only `toml_edit`/`anyhow`/`std`. It does NOT
 //! depend on `backlog`, the priority engine, or any command module — the engine
@@ -132,12 +148,9 @@ pub(crate) fn append(toml_path: &Path, edit: &RelEdit<'_>) -> anyhow::Result<()>
     match edit {
         RelEdit::Needs(refs) => {
             for r in *refs {
-                // idempotent: skip a ref already in the array.
-                if array.iter().any(|v| v.as_str() == Some(r.as_str())) {
-                    continue;
-                }
-                array.push(r.as_str());
-                changed = true;
+                // idempotent string-membership push — the SAME body as
+                // `apply_string_append`'s inner helper (no parallel impl).
+                changed |= push_str_if_absent(array, r.as_str());
             }
         }
         RelEdit::After { to, rank } => {
@@ -165,6 +178,142 @@ pub(crate) fn append(toml_path: &Path, edit: &RelEdit<'_>) -> anyhow::Result<()>
     std::fs::write(toml_path, doc.to_string())
         .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     Ok(())
+}
+
+/// Idempotent string-membership push into a `toml_edit` array — the shared inner
+/// core for BOTH `append`'s `Needs` arm and [`apply_string_append`]. Pushes
+/// `value` only if no existing string element already equals it; returns whether
+/// the array changed. No parallel implementation: one body, two callers.
+fn push_str_if_absent(array: &mut toml_edit::Array, value: &str) -> bool {
+    if array.iter().any(|v| v.as_str() == Some(value)) {
+        return false;
+    }
+    array.push(value);
+    true
+}
+
+// ---------------------------------------------------------------------------
+// top-level status — the unified edit-preserving write seam (SL-062 PHASE-02)
+// ---------------------------------------------------------------------------
+
+/// Pure core for the four status setters: set each top-level `(key, value)` pair in
+/// `managed` on a held `&mut DocumentMut`, edit-preserving. No disk, no clock — the
+/// shell injects `today` into `managed`.
+///
+/// The variable-length `managed` slice is what lets ONE core serve every shape:
+/// `[status, updated]` (slice/gov), `[status, resolution, updated]` (backlog), and
+/// the lone `[status]` (requirement — no `updated`).
+///
+/// - **No-op** (I5): every managed *identity* pair already equals the current
+///   top-level value → `Ok(false)`, no mutation (mtime/content hold). The `updated`
+///   stamp is EXCLUDED from this comparison — it is a derived stamp (today), never an
+///   identity, so it must not by itself force a write nor block the no-op. This
+///   matches every donor: gov/slice keyed the no-op on `status` alone, backlog on
+///   `status`+`resolution`; none compared `updated`.
+/// - **F-1 strict refuse**: ANY managed key absent from the top-level table → the
+///   entity is malformed (hand-edited); a tail `insert` would land the key inside a
+///   trailing `[relationships]`/`[facet]` subtable (silent corruption). `bail!(hint)`,
+///   NEVER insert a missing key.
+/// - Else: insert each pair → `Ok(true)`.
+pub(crate) fn apply_status(
+    doc: &mut toml_edit::DocumentMut,
+    managed: &[(&str, &str)],
+    hint: &str,
+) -> anyhow::Result<bool> {
+    // No-op guard (before the malformed check): every managed *identity* pair already
+    // current. The `updated` stamp is excluded — it is derived, not an identity.
+    let unchanged = managed
+        .iter()
+        .filter(|(k, _)| *k != "updated")
+        .all(|(k, v)| doc.get(k).and_then(toml_edit::Item::as_str) == Some(*v));
+    if unchanged {
+        return Ok(false);
+    }
+
+    let table = doc.as_table_mut();
+    // F-1: the managed keys are scaffold-seeded — edit in place, never create. A
+    // missing key means a malformed entity; refuse rather than tail-insert.
+    if managed.iter().any(|(k, _)| !table.contains_key(k)) {
+        anyhow::bail!("{hint}");
+    }
+    for (k, v) in managed {
+        table.insert(k, toml_edit::value(*v));
+    }
+    Ok(true)
+}
+
+/// Pure core: idempotent string-append into `[relationships].<field>` on a held
+/// `&mut DocumentMut`. REUSES [`push_str_if_absent`] — the SAME membership logic
+/// `append`'s `Needs` arm uses. `Ok(false)` if `value` is already present (no
+/// mutation); F-1 refuse (bail) if `[relationships].<field>` array is absent (never
+/// create — a tail insert would corrupt a trailing subtable).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "pure string-append core staged for the slice relate consumer; \
+                  append_string_array exercises it under test"
+    )
+)]
+pub(crate) fn apply_string_append(
+    doc: &mut toml_edit::DocumentMut,
+    field: &str,
+    value: &str,
+) -> anyhow::Result<bool> {
+    let array = doc
+        .get_mut("relationships")
+        .and_then(toml_edit::Item::as_table_mut)
+        .and_then(|t| t.get_mut(field))
+        .and_then(toml_edit::Item::as_array_mut)
+        .with_context(|| {
+            format!(
+                "malformed entity: missing seeded `[relationships].{field}` array — restore the seeded `[relationships]` arrays (e.g. via the backfill) before adding edges; the file is left untouched"
+            )
+        })?;
+    Ok(push_str_if_absent(array, value))
+}
+
+/// IO wrapper for [`apply_status`]: read→parse→core→write-once. Plain
+/// `read_to_string`, parse a `DocumentMut`, call the core; if it returned `true`,
+/// `fs::write` ONCE. Returns the core's changed-bool (so callers can branch).
+pub(crate) fn set_authored_status(
+    path: &Path,
+    managed: &[(&str, &str)],
+    hint: &str,
+) -> anyhow::Result<bool> {
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("entity not found at {}", path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+    let changed = apply_status(&mut doc, managed, hint)?;
+    if changed {
+        std::fs::write(path, doc.to_string())
+            .with_context(|| format!("Failed to write {}", path.display()))?;
+    }
+    Ok(changed)
+}
+
+/// IO wrapper for [`apply_string_append`]: read→parse→core→write-once.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "string-append IO wrapper staged for the slice relate consumer"
+    )
+)]
+pub(crate) fn append_string_array(path: &Path, field: &str, value: &str) -> anyhow::Result<bool> {
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("entity not found at {}", path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+    let changed = apply_string_append(&mut doc, field, value)?;
+    if changed {
+        std::fs::write(path, doc.to_string())
+            .with_context(|| format!("Failed to write {}", path.display()))?;
+    }
+    Ok(changed)
 }
 
 #[cfg(test)]
@@ -327,5 +476,152 @@ mod tests {
             rel < custom,
             "[relationships] stays before later content:\n{written}"
         );
+    }
+
+    // --- VT-3: the unified status seam, driven through the IO wrapper -------------
+
+    /// A seeded authored entity carrying the full managed-key set (status,
+    /// resolution, updated) plus a comment, an inline `[relationships]` and an
+    /// array-of-tables `[[relation]]` — the edit-preservation witnesses.
+    fn seeded_status_entity() -> String {
+        "id = 1\nslug = \"a\"\ntitle = \"A\"\n\
+         status = \"pending\"\nresolution = \"\"\nupdated = \"2020-01-01\"\n\
+         # hand note — keep me\n\
+         [relationships]\nneeds = [\"ISS-002\"]\nafter = []\n\
+         [[relation]]\nkind = \"refines\"\nto = \"SL-001\"\n"
+            .to_string()
+    }
+
+    const HINT: &str = "malformed: missing seeded `status` — restore the seeded keys; untouched";
+
+    #[test]
+    fn set_authored_status_no_op_holds_content_and_mtime() {
+        let (_dir, path) = write_tmp(&seeded_status_entity());
+        let before = std::fs::read_to_string(&path).unwrap();
+        let before_mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
+        // every managed value already current → no write.
+        let changed = set_authored_status(
+            &path,
+            &[
+                ("status", "pending"),
+                ("resolution", ""),
+                ("updated", "2020-01-01"),
+            ],
+            HINT,
+        )
+        .unwrap();
+        assert!(!changed, "no-op returns false");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            before,
+            "content held"
+        );
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().modified().unwrap(),
+            before_mtime,
+            "mtime held"
+        );
+    }
+
+    #[test]
+    fn set_authored_status_f1_refuses_non_destructively_and_touches_nothing() {
+        // a file missing the `updated` managed key → bail; SL-060 lesson: the message
+        // must NOT instruct regeneration ("regenerate"/"new"/"scaffold").
+        let (_dir, path) =
+            write_tmp("id = 1\nstatus = \"pending\"\n\n[relationships]\nneeds = []\nafter = []\n");
+        let before = std::fs::read_to_string(&path).unwrap();
+        let err = set_authored_status(
+            &path,
+            &[("status", "active"), ("updated", "2099-01-01")],
+            "malformed: restore the seeded `status`/`updated` keys; the file is left untouched",
+        )
+        .expect_err("missing managed key refuses");
+        let msg = format!("{err:#}").to_lowercase();
+        assert!(
+            !msg.contains("regenerate") && !msg.contains(" new`") && !msg.contains("scaffold"),
+            "F-1 refuse must be non-destructive: {msg}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            before,
+            "untouched on refuse"
+        );
+    }
+
+    #[test]
+    fn set_authored_status_multi_key_round_trips_preserving_structure() {
+        // backlog shape: status + resolution + updated; [relationships], [[relation]],
+        // and the comment all survive verbatim.
+        let (_dir, path) = write_tmp(&seeded_status_entity());
+        let changed = set_authored_status(
+            &path,
+            &[
+                ("status", "done"),
+                ("resolution", "completed"),
+                ("updated", "2099-12-31"),
+            ],
+            HINT,
+        )
+        .unwrap();
+        assert!(changed, "a real move returns true");
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(written.contains("status = \"done\""));
+        assert!(written.contains("resolution = \"completed\""));
+        assert!(written.contains("updated = \"2099-12-31\""));
+        assert!(
+            written.contains("# hand note — keep me"),
+            "comment survives"
+        );
+        assert!(written.contains("[relationships]"), "inline table survives");
+        assert!(
+            written.contains("needs = [\"ISS-002\"]"),
+            "relationships content survives"
+        );
+        assert!(written.contains("[[relation]]"), "array-of-tables survives");
+    }
+
+    #[test]
+    fn set_authored_status_single_key_round_trips_no_updated() {
+        // requirement shape: a lone managed key (no `updated`) — proves the
+        // variable-length `managed` slice serves both shapes. No `updated` appears.
+        let (_dir, path) = write_tmp(&seeded_status_entity());
+        let changed = set_authored_status(&path, &[("status", "active")], HINT).unwrap();
+        assert!(changed);
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(written.contains("status = \"active\""));
+        // the lone-key path touches only `status`: the prior `updated` stamp is
+        // unchanged (no new stamp introduced by this shape).
+        assert!(
+            written.contains("updated = \"2020-01-01\""),
+            "updated untouched"
+        );
+        assert!(written.contains("[relationships]"), "structure preserved");
+    }
+
+    #[test]
+    fn append_string_array_idempotent_and_f1_refuse() {
+        // the string-append IO wrapper shares push_str_if_absent with append's Needs.
+        let (_dir, path) = write_tmp(&seeded_status_entity());
+        // ISS-002 already present → no change.
+        assert!(
+            !append_string_array(&path, "needs", "ISS-002").unwrap(),
+            "idempotent"
+        );
+        // a fresh ref appends.
+        assert!(
+            append_string_array(&path, "needs", "RSK-001").unwrap(),
+            "appends new"
+        );
+        assert_eq!(read(&path).unwrap().needs, vec!["ISS-002", "RSK-001"]);
+        // F-1: an absent array refuses, non-destructively.
+        let (_dir2, bare) = write_tmp("id = 1\nstatus = \"a\"\n");
+        let before = std::fs::read_to_string(&bare).unwrap();
+        let err = append_string_array(&bare, "needs", "X").expect_err("absent array refuses");
+        let msg = format!("{err:#}").to_lowercase();
+        assert!(
+            !msg.contains("regenerate") && !msg.contains("recreate"),
+            "non-destructive: {msg}"
+        );
+        assert_eq!(std::fs::read_to_string(&bare).unwrap(), before, "untouched");
     }
 }

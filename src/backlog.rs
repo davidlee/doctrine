@@ -1330,43 +1330,30 @@ fn set_backlog_status(
     resolution: Option<Resolution>,
     today: &str,
 ) -> anyhow::Result<&'static str> {
+    // Gate in the shell: the status⟺resolution coupling + D9 reopen clear. Keep it
+    // here, BEFORE the delegated write; the resolution string is still returned to the
+    // caller's confirm line.
     let resolution = validate_transition(status, resolution)?;
     let name = format!("{id:03}");
     let path = root
         .join(item_kind.kind().dir)
         .join(&name)
         .join(format!("{BACKLOG_STEM}-{name}.toml"));
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("backlog item not found at {}", path.display()))?;
-    let mut doc = text
-        .parse::<toml_edit::DocumentMut>()
-        .with_context(|| format!("Failed to parse {}", path.display()))?;
-
-    // I5 no-op guard: unchanged status AND resolution → write nothing (mtime holds).
-    let unchanged = doc.get("status").and_then(toml_edit::Item::as_str) == Some(status.as_str())
-        && doc.get("resolution").and_then(toml_edit::Item::as_str) == Some(resolution);
-    if unchanged {
-        return Ok(resolution);
-    }
-
-    // F-1: `status`/`resolution`/`updated` are scaffold-seeded — this verb edits in
-    // place, never creates. Their absence means a malformed (hand-edited) item; a tail
-    // `insert` would append the key *after* the trailing `[facet]`/`[relationships]`
-    // header, landing it inside that subtable (silent corruption). Refuse instead.
-    let table = doc.as_table_mut();
-    if !table.contains_key("status")
-        || !table.contains_key("resolution")
-        || !table.contains_key("updated")
-    {
-        anyhow::bail!(
-            "malformed backlog item {name}: missing seeded `status`/`resolution`/`updated` (regenerate via `backlog new`)"
-        );
-    }
-    table.insert("status", toml_edit::value(status.as_str()));
-    table.insert("resolution", toml_edit::value(resolution));
-    table.insert("updated", toml_edit::value(today));
-    std::fs::write(&path, doc.to_string())
-        .with_context(|| format!("Failed to write {}", path.display()))?;
+    // Delegate the write-core (no-op guard + F-1 refuse + edit-preserving insert) to
+    // the shared authored-TOML seam. The three managed pairs prove the longest shape.
+    // Hint preserved verbatim (EX-4 rewording is scoped to gov + requirement).
+    let hint = format!(
+        "malformed backlog item {name}: missing seeded `status`/`resolution`/`updated` (regenerate via `backlog new`)"
+    );
+    dep_seq::set_authored_status(
+        &path,
+        &[
+            ("status", status.as_str()),
+            ("resolution", resolution),
+            ("updated", today),
+        ],
+        &hint,
+    )?;
     Ok(resolution)
 }
 

@@ -262,7 +262,7 @@ fn adr_status_on_malformed_toml_refuses_and_leaves_file_untouched() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: malformed adr 050: missing `status`/`updated` (regenerate via `adr new`)\n"
+        "Error: malformed adr 050: missing seeded `status`/`updated` — restore the seeded keys before the transition; the file is left untouched\n"
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), toml, "file untouched");
 }

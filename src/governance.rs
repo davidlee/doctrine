@@ -378,31 +378,15 @@ pub(crate) fn set_status(
 ) -> anyhow::Result<()> {
     let name = format!("{id:03}");
     let path = gov_root.join(&name).join(format!("{}-{name}.toml", g.stem));
-    let text = fs::read_to_string(&path)
-        .with_context(|| format!("{} {name} not found at {}", g.stem, path.display()))?;
-    let mut doc = text
-        .parse::<toml_edit::DocumentMut>()
-        .with_context(|| format!("Failed to parse {}", path.display()))?;
-
-    // I5 no-op guard: an unchanged status writes nothing, so mtime/content hold.
-    if doc.get("status").and_then(toml_edit::Item::as_str) == Some(status) {
-        return Ok(());
-    }
-
-    let table = doc.as_table_mut();
-    // F-1: `status`/`updated` are scaffold-seeded — this verb edits in place, never
-    // creates. Their absence means a malformed (hand-edited) entity; a tail `insert`
-    // would append the key *after* the trailing `[relationships]` header, landing it
-    // inside that subtable (silent corruption). Refuse instead.
-    if !table.contains_key("status") || !table.contains_key("updated") {
-        anyhow::bail!(
-            "malformed {stem} {name}: missing `status`/`updated` (regenerate via `{stem} new`)",
-            stem = g.stem
-        );
-    }
-    table.insert("status", toml_edit::value(status));
-    table.insert("updated", toml_edit::value(today));
-    fs::write(&path, doc.to_string()).with_context(|| format!("Failed to write {}", path.display()))
+    // Delegate the write-core (no-op guard + F-1 refuse + edit-preserving insert) to
+    // the shared authored-TOML seam; this flat kind carries no gate of its own. The
+    // F-1 hint is non-destructive (EX-4): restore the seeded keys, never regenerate.
+    let hint = format!(
+        "malformed {stem} {name}: missing seeded `status`/`updated` — restore the seeded keys before the transition; the file is left untouched",
+        stem = g.stem
+    );
+    crate::dep_seq::set_authored_status(&path, &[("status", status), ("updated", today)], &hint)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1264,6 +1248,12 @@ mod tests {
             "2099-01-01",
         )
         .unwrap_err();
-        assert!(err.to_string().contains("malformed"));
+        let msg = err.to_string().to_lowercase();
+        assert!(msg.contains("malformed"), "{msg}");
+        // EX-4: the refuse is non-destructive — never instructs regeneration.
+        assert!(
+            !msg.contains("regenerate") && !msg.contains(" new`") && !msg.contains("scaffold"),
+            "F-1 refuse must be non-destructive: {msg}"
+        );
     }
 }

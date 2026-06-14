@@ -517,30 +517,15 @@ fn set_slice_status(
         _ => {}
     }
 
+    // Gate passed; delegate the write-core (no-op guard + F-1 refuse + edit-
+    // preserving insert) to the shared authored-TOML seam. The classification above
+    // stays in this shell — only the WRITE is shared. Hint preserved verbatim (the
+    // behaviour-preservation gate scopes the EX-4 rewording to gov + requirement).
     let path = slice_root.join(&name).join(format!("slice-{name}.toml"));
-    let text = fs::read_to_string(&path)
-        .with_context(|| format!("slice {name} not found at {}", path.display()))?;
-    let mut doc = text
-        .parse::<toml_edit::DocumentMut>()
-        .with_context(|| format!("Failed to parse {}", path.display()))?;
-
-    // No-op guard: an unchanged status writes nothing, so mtime/content hold.
-    if doc.get("status").and_then(toml_edit::Item::as_str) == Some(to) {
-        return Ok(());
-    }
-
-    let table = doc.as_table_mut();
-    // F-1: `status`/`updated` are scaffold-seeded — edit in place, never create. A
-    // tail `insert` on a malformed file would land the key inside the trailing
-    // `[relationships]` subtable (silent corruption). Refuse instead.
-    if !table.contains_key("status") || !table.contains_key("updated") {
-        anyhow::bail!(
-            "malformed slice {name}: missing `status`/`updated` (regenerate via `slice new`)"
-        );
-    }
-    table.insert("status", toml_edit::value(to));
-    table.insert("updated", toml_edit::value(today));
-    fs::write(&path, doc.to_string()).with_context(|| format!("Failed to write {}", path.display()))
+    let hint =
+        format!("malformed slice {name}: missing `status`/`updated` (regenerate via `slice new`)");
+    crate::dep_seq::set_authored_status(&path, &[("status", to), ("updated", today)], &hint)?;
+    Ok(())
 }
 
 /// The slice status vocabulary — the authority `validate_statuses` checks
