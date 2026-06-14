@@ -35,3 +35,29 @@
   helper; all others use `..tech_spec(n)` spread.
 - `just gate` clean. Solo fork `sl-065-p02`; landed `--no-ff` (6399fa8) onto main
   (merge 65228ca), fork gc'd.
+
+## PHASE-03 — validate (src/registry.rs) symmetric same-subtype + subtype-blind
+
+- `parent_findings` (EX-1): the three tech-only special-cases collapse to ONE
+  symmetric rule. `on_product` no longer rejects — it *selects* the required parent
+  subtype set: product→`product_specs`, tech→`tech_specs`. Cross-subtype = invalid
+  kind ("is a {other} spec (must be {own})"); absent = dangling ("no {own} spec").
+  Net deletion: one `(own,other,own_kind,other_kind)` tuple drives both arms.
+- Tech byte-identical (behaviour-preservation): templating `own_kind` into the
+  dangling/invalid strings reproduces tech's exact "must be tech" / "no tech spec"
+  text — VT-2 tech suites green UNCHANGED. The own-subtype templating is the one
+  subtlety; the registry/spec tech sweeps are the proof.
+- `self_parent` (EX-2): dropped `!e.on_product &&` → subtype-blind A→A.
+- `parent_cycle` (EX-2): dropped `e.on_product ||` from the skip → the ephemeral
+  child→parent map (still never persisted, storage rule) spans both families.
+  Cross-subtype edges in the map are harmless — already invalid-kind, cannot forge
+  a cycle (design §4, confirmed: no spurious findings in the product cycle test).
+- `descent_findings` UNCHANGED (descends_from stays tech-only, OQ-2). `ParentEdge`
+  doc-comments reworded "tech-only field" → "selects the required parent subtype".
+- VT-1 proven through the write seam (`assert_validate_flags` → build_registry +
+  validate + run_validate, mem_019eba7e), not the helpers in isolation: product→
+  product clean, product→tech "must be product", dangling product parent, product
+  self-loop, product A→B→A cycle. Registry helper mirrors added for symmetry.
+- `parent_on_product_subject_is_invalid_kind` (old "tech-only reject") reworked →
+  `parent_product_to_tech_is_invalid_kind` asserting "must be product".
+- Full gate clean: 1241 passed, clippy zero, fmt ok, ADR-004 outbound-only holds.
