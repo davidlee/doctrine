@@ -12,6 +12,16 @@
 //! * VT-4: impersonation — a marker-present linked worktree AND `DOCTRINE_WORKER=1`
 //!   each refuse the verb, creating no external ref.
 //! * EX-5: a stale pre-existing `review/064` is reported, never clobbered.
+//!
+//! PHASE-05 — stage-2 `--integrate` (appended below):
+//! * EX-1/VT-3: integrate replays from a checkout with `dispatch/064` not checked
+//!   out (plumbing-only, no coordination worktree).
+//! * VT-1: the 3-way replay matrix — no-op on intact refs, idempotent re-run
+//!   (crash-after-apply), refusal on a clobbered/diverged target. (The four CAS
+//!   arms are exhaustively unit-pinned in `git::tests::replay_ref_no_op_apply_refuse`.)
+//! * VT-2: trunk projection opt-in + fast-forward-only; refuses non-ff/moved trunk.
+//! * EX-4: optional `edge` aggregate, default off.
+//! * VT-5: `--integrate` refused under worker-mode (marker / `DOCTRINE_WORKER`).
 
 #![allow(
     clippy::expect_used,
@@ -413,5 +423,279 @@ fn stale_review_ref_is_reported_not_clobbered() {
         git(dir, &["rev-parse", "review/064"]),
         bogus,
         "the stale review/064 is left untouched"
+    );
+}
+
+// ====================================================================
+// PHASE-05 — stage-2 `dispatch sync --integrate` (design §4 / ADR-012 D4/D5)
+// ====================================================================
+
+/// Run `dispatch sync --integrate --slice 64` in `cwd` with `extra` flags.
+fn integrate(cwd: &Path, extra: &[&str]) -> Output {
+    let mut args = vec![
+        "dispatch",
+        "sync",
+        "--integrate",
+        "--slice",
+        "64",
+        "-p",
+        cwd.to_str().unwrap(),
+    ];
+    args.extend_from_slice(extra);
+    run(cwd, None, &args)
+}
+
+/// EX-1 / VT-3 + VT-1(no-op): integrate runs from a checkout where `dispatch/064`
+/// is NOT checked out (plumbing-only, no coordination worktree). Default
+/// integration replays the prepared journal as verified no-ops and leaves trunk
+/// untouched (EX-3).
+#[test]
+fn integrate_default_replays_prepared_refs_no_checkout_no_trunk_write() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+
+    let trunk_before = git(dir, &["rev-parse", "main"]);
+    let review_before = git(dir, &["rev-parse", "review/064"]);
+    let phase_before = git(dir, &["rev-parse", "phase/064-02"]);
+    // The working tree is on `main`; dispatch/064 is a branch with no worktree.
+    assert_eq!(git(dir, &["rev-parse", "--abbrev-ref", "HEAD"]), "main");
+
+    let out = integrate(dir, &[]);
+    assert!(
+        out.status.success(),
+        "default integrate replays cleanly; stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "main"]),
+        trunk_before,
+        "trunk untouched"
+    );
+    assert_eq!(git(dir, &["rev-parse", "review/064"]), review_before);
+    assert_eq!(git(dir, &["rev-parse", "phase/064-02"]), phase_before);
+
+    let journal = git(
+        dir,
+        &["show", "dispatch/064:.doctrine/dispatch/064/journal.toml"],
+    );
+    assert!(
+        !journal.contains("pending"),
+        "no pending rows after replay: {journal}"
+    );
+}
+
+/// VT-2: trunk projection is opt-in, fast-forward-only. `--trunk` advances the
+/// trunk ref to the cumulative code tip; a second run is an idempotent no-op
+/// (VT-1: crash-after-apply recovery).
+#[test]
+fn integrate_trunk_fast_forwards_then_is_idempotent() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let phase_tip = git(dir, &["rev-parse", "phase/064-02"]);
+
+    let out = integrate(dir, &["--trunk", "refs/heads/main"]);
+    assert!(
+        out.status.success(),
+        "ff trunk integrate; stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "main"]),
+        phase_tip,
+        "trunk fast-forwarded to the cumulative code tip"
+    );
+
+    // Re-run: current == planned ⇒ verified no-op, trunk unchanged.
+    let out2 = integrate(dir, &["--trunk", "refs/heads/main"]);
+    assert!(
+        out2.status.success(),
+        "idempotent re-run; stderr: {}",
+        stderr(&out2)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "main"]),
+        phase_tip,
+        "no second advance"
+    );
+}
+
+/// VT-2: explicit trunk mode refuses a non-fast-forward / moved trunk and writes
+/// nothing (IMP-043 re-anchor is reported, never auto-resolved).
+#[test]
+fn integrate_trunk_refuses_non_fast_forward() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+
+    // Move trunk onto a divergent commit — not an ancestor of the phase chain.
+    let moved = commit(dir, "trunk2.txt", "moved", "trunk advanced divergently");
+    assert_eq!(git(dir, &["rev-parse", "main"]), moved);
+
+    let out = integrate(dir, &["--trunk", "refs/heads/main"]);
+    assert!(!out.status.success(), "non-ff trunk is refused");
+    assert!(
+        stderr(&out).contains("fast-forward") || stderr(&out).contains("trunk moved"),
+        "refusal names the non-ff/moved-trunk cause: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "main"]),
+        moved,
+        "trunk left untouched"
+    );
+}
+
+/// VT-1 (replay refusal on divergence): a prepared ref clobbered after
+/// prepare-review diverges from both its journaled `expected_old` and `planned`
+/// ⇒ integrate refuses and leaves it untouched.
+#[test]
+fn integrate_refuses_clobbered_prepared_ref() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+
+    // A foreign writer moved review/064 to the trunk base (≠ ZERO, ≠ planned).
+    let bogus = git(dir, &["rev-parse", "main"]);
+    git(dir, &["update-ref", "refs/heads/review/064", &bogus]);
+
+    let out = integrate(dir, &[]);
+    assert!(
+        !out.status.success(),
+        "diverged prepared ref refuses replay"
+    );
+    assert!(
+        stderr(&out).contains("moved target") || stderr(&out).contains("not clobbered"),
+        "divergence is reported: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "review/064"]),
+        bogus,
+        "the clobbered ref is left untouched, never force-resolved"
+    );
+}
+
+/// EX-4: the optional `edge` aggregate advances to the `review/<slice>` bundle,
+/// isolated to this sync point; default integration writes no edge ref.
+#[test]
+fn integrate_edge_is_opt_in_and_aggregates_the_review_bundle() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let review_tip = git(dir, &["rev-parse", "review/064"]);
+
+    // Default integrate writes no edge ref.
+    assert!(integrate(dir, &[]).status.success());
+    assert!(
+        !ref_exists(dir, "refs/heads/edge"),
+        "edge is opt-in, default off"
+    );
+
+    // Opt-in: edge is created at the review bundle.
+    let out = integrate(dir, &["--edge", "refs/heads/edge"]);
+    assert!(
+        out.status.success(),
+        "edge projection; stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "edge"]),
+        review_tip,
+        "edge aggregates the review/<slice> bundle"
+    );
+}
+
+/// VT-5: `--integrate` is the same Orchestrator verb class — a marker-present
+/// linked worktree AND `DOCTRINE_WORKER=1` each refuse it, writing no trunk.
+#[test]
+fn integrate_refused_under_worker_mode() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    let trunk_before = git(dir, &["rev-parse", "main"]);
+
+    // (1) Marker-present linked worktree, env unset ⇒ refused, names the verb.
+    let holder = tempfile::tempdir().unwrap();
+    let base = git(dir, &["rev-parse", "HEAD"]);
+    let linked = holder.path().join("fork");
+    git(
+        dir,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "wkr-int",
+            linked.to_str().unwrap(),
+            &base,
+        ],
+    );
+    let marker_dir = linked.join(".doctrine/state/dispatch");
+    std::fs::create_dir_all(&marker_dir).unwrap();
+    std::fs::write(marker_dir.join("worker"), b"").unwrap();
+
+    let out = run(
+        &linked,
+        None,
+        &[
+            "dispatch",
+            "sync",
+            "--integrate",
+            "--trunk",
+            "refs/heads/main",
+            "--slice",
+            "64",
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "refused from a marked linked worktree"
+    );
+    assert!(
+        stderr(&out).contains("dispatch-sync"),
+        "refusal names the verb: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "main"]),
+        trunk_before,
+        "no trunk write"
+    );
+
+    // (2) DOCTRINE_WORKER set ⇒ dual-cause refusal, still no trunk write.
+    let out = run(
+        dir,
+        Some(true),
+        &[
+            "dispatch",
+            "sync",
+            "--integrate",
+            "--trunk",
+            "refs/heads/main",
+            "--slice",
+            "64",
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    );
+    assert!(!out.status.success(), "refused when DOCTRINE_WORKER set");
+    assert!(
+        stderr(&out).contains("DOCTRINE_WORKER"),
+        "carries the dual-cause: {}",
+        stderr(&out)
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "main"]),
+        trunk_before,
+        "still no trunk write"
     );
 }

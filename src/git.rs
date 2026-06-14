@@ -813,6 +813,73 @@ pub(crate) fn update_ref_cas(
     }
 }
 
+/// The all-zero oid — the CAS `expected_old` sentinel for a ref *creation* (git's
+/// `update-ref` refuses to create if the ref already exists). Shared by the
+/// projection journal (stage-1 rows) and the replay (absent ref ↔ zero).
+pub(crate) const ZERO_OID: &str = "0000000000000000000000000000000000000000";
+
+/// Outcome of an idempotent 3-way replay ([`replay_ref`]).
+#[derive(Debug)]
+pub(crate) enum ReplayOutcome {
+    /// `current == planned` already — the step is a verified no-op (the ref was
+    /// applied on a prior run, or stage-1 created it). Nothing written.
+    NoOp,
+    /// `current == expected_old` — the CAS advanced the ref to `planned`.
+    Applied,
+    /// `current` matched neither `expected_old` nor `planned` — a moved target.
+    /// Nothing written; `actual` is the ref's current value (`None` if absent).
+    Moved { actual: Option<String> },
+}
+
+/// Idempotent compare-and-swap replay of one journal step (design §4.1, ADR-012
+/// D4, EX-2). Resolves the ref's current oid (absent ↔ [`ZERO_OID`]) and:
+/// `current == planned` ⇒ [`ReplayOutcome::NoOp`] (already applied — crash-safe
+/// re-run); `current == expected_old` ⇒ [`update_ref_cas`] to `planned`
+/// ([`ReplayOutcome::Applied`], or `Moved` on a TOCTOU race); divergence from
+/// **both** ⇒ [`ReplayOutcome::Moved`] without writing. Never forces, never
+/// auto-resolves — a moved target is reported, not clobbered.
+pub(crate) fn replay_ref(
+    root: &Path,
+    refname: &str,
+    expected_old: &str,
+    planned: &str,
+) -> Result<ReplayOutcome, CaptureError> {
+    let actual = git_opt(root, &["rev-parse", "--verify", "--quiet", refname])?;
+    let current = actual.as_deref().unwrap_or(ZERO_OID);
+    if current == planned {
+        Ok(ReplayOutcome::NoOp)
+    } else if current == expected_old {
+        match update_ref_cas(root, refname, planned, expected_old)? {
+            RefCas::Updated => Ok(ReplayOutcome::Applied),
+            // A concurrent writer raced between our resolve and the CAS.
+            RefCas::Moved { actual: raced } => Ok(ReplayOutcome::Moved { actual: raced }),
+        }
+    } else {
+        Ok(ReplayOutcome::Moved { actual })
+    }
+}
+
+/// True iff `ancestor` is an ancestor of (or equal to) `descendant`, via
+/// `git merge-base --is-ancestor` (exit 0 ⇒ yes, exit 1 ⇒ no, anything else ⇒
+/// error). Reads the raw exit code rather than [`git_opt`]'s success/None fold so
+/// a legitimate "not an ancestor" is a clean `false`, never confused with a git
+/// failure (the ff-only gate, EX-3; cousin of the masked-`cat-file -e` gotcha).
+pub(crate) fn is_ancestor(
+    root: &Path,
+    ancestor: &str,
+    descendant: &str,
+) -> Result<bool, CaptureError> {
+    let output = run_git(root, &["merge-base", "--is-ancestor", ancestor, descendant])?;
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(CaptureError::Git(format!(
+            "merge-base --is-ancestor {ancestor} {descendant}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
 /// Resolve trunk's commit-ish via the peeled ladder (ADR-006 D3): an explicit
 /// `DOCTRINE_TRUNK_REF`, else `origin/HEAD`, `main`, `master` in turn. Each
 /// candidate is peeled with `rev-parse --verify --quiet <ref>^{commit}`; the
@@ -2327,5 +2394,62 @@ mod tests {
 
         let index_after = std::fs::read(repo.path().join(".git/index")).expect("read index");
         assert_eq!(index_before, index_after, "live index untouched");
+    }
+
+    /// PHASE-05 T2: the 3-way replay CAS (design §4.1, EX-2). `current==planned`
+    /// is an idempotent no-op; `current==expected_old` (incl. absent↔zero for a
+    /// creation) applies; divergence from BOTH refuses and reports the actual,
+    /// never clobbering.
+    #[test]
+    fn replay_ref_no_op_apply_refuse() {
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "first");
+        let c2 = repo.commit("b.txt", "2", "second");
+        let c3 = repo.commit("c.txt", "3", "third");
+        let zero = "0".repeat(40);
+        let refname = "refs/heads/trunk-x";
+
+        // Creation: ref absent ↔ expected zero, planned c1 → Applied.
+        assert!(matches!(
+            super::replay_ref(repo.path(), refname, &zero, &c1).expect("create"),
+            super::ReplayOutcome::Applied
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c1);
+
+        // Idempotent: current==planned → NoOp, ref untouched (crash-after-apply).
+        assert!(matches!(
+            super::replay_ref(repo.path(), refname, &zero, &c1).expect("replay"),
+            super::ReplayOutcome::NoOp
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c1);
+
+        // Diverged: current c1 ∉ {expected c2, planned c3} → Moved, not clobbered.
+        match super::replay_ref(repo.path(), refname, &c2, &c3).expect("diverge") {
+            super::ReplayOutcome::Moved { actual } => {
+                assert_eq!(actual.as_deref(), Some(c1.as_str()));
+            }
+            other => panic!("expected Moved, got {other:?}"),
+        }
+        assert_eq!(repo.git(&["rev-parse", refname]), c1, "not clobbered");
+
+        // Apply at the correct expected: c1 → c2.
+        assert!(matches!(
+            super::replay_ref(repo.path(), refname, &c1, &c2).expect("apply"),
+            super::ReplayOutcome::Applied
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c2);
+    }
+
+    /// PHASE-05 T3: ff-only ancestry reads the `merge-base --is-ancestor` exit code
+    /// (exit 1 is a clean `false`, not an error). Reflexive on equality.
+    #[test]
+    fn is_ancestor_reads_exit_code() {
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "first");
+        let c2 = repo.commit("b.txt", "2", "second");
+
+        assert!(super::is_ancestor(repo.path(), &c1, &c2).expect("c1<c2"));
+        assert!(!super::is_ancestor(repo.path(), &c2, &c1).expect("c2!<c1"));
+        assert!(super::is_ancestor(repo.path(), &c1, &c1).expect("reflexive"));
     }
 }
