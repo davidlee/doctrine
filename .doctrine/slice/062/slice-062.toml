@@ -1,7 +1,7 @@
 id = 62
 slug = "uniform-lifecycle-destructive-verbs"
 title = "Uniform lifecycle-transition + destructive verbs across kinds"
-status = "audit"
+status = "done"
 created = "2026-06-14"
 updated = "2026-06-14"
 [relationships]
