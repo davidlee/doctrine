@@ -173,6 +173,30 @@ impl C4Level {
     }
 }
 
+/// The product altitude of a product spec. Closed set, kebab serde; product-only,
+/// optional. Mirror of `C4Level` (domain≈context, capability≈container,
+/// feature≈component, story≈code). Advisory — no rank-adjacency enforced (SL-065 D2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ProductLevel {
+    Domain,
+    Capability,
+    Feature,
+    Story,
+}
+
+impl ProductLevel {
+    /// The kebab string for `spec show` render (matches the serde rename). Pure.
+    const fn as_str(self) -> &'static str {
+        match self {
+            ProductLevel::Domain => "domain",
+            ProductLevel::Capability => "capability",
+            ProductLevel::Feature => "feature",
+            ProductLevel::Story => "story",
+        }
+    }
+}
+
 /// The spec identity parse layer. `title` keys the shared-`Meta` convention (C2).
 /// `category` is deliberately OPEN vocabulary (`Option<String>`, C6); the tech flat
 /// fields default to absent/empty for a product spec. Read by `spec show` render.
@@ -189,6 +213,11 @@ pub(crate) struct Spec {
     pub(crate) category: Option<String>,
     #[serde(default)]
     pub(crate) c4_level: Option<C4Level>,
+    /// Product altitude (`domain|capability|feature|story`). Product-only,
+    /// optional; absent on a tech or unlabelled product spec. Advisory tag — only
+    /// `parent` is FK-validated (SL-065 D5). Mirror of `c4_level`.
+    #[serde(default)]
+    pub(crate) product_level: Option<ProductLevel>,
     #[serde(default)]
     pub(crate) responsibilities: Vec<String>,
     #[serde(default, rename = "source")]
@@ -362,19 +391,30 @@ fn render(
     if let Some(category) = &spec.category {
         parts.push(format!("category: {category}\n"));
     }
-    if let Some(level) = spec.c4_level {
-        parts.push(format!("c4 level: {}\n", level.as_str()));
-    }
-    // Outbound spine (SL-022 §5.2): tech-only, Some-gated. The kind gate keeps a
-    // (now hard-invalid) field on a product spec from being legitimised by render;
-    // the Some gate keeps existing render output byte-identical. Children are
-    // derived, never rendered (ADR-004 §3 — outbound-only).
-    if spec.kind == SpecSubtype::Tech {
-        if let Some(d) = &spec.descends_from {
-            parts.push(format!("descends from: {d}\n"));
+    // Post-category altitude + outbound spine (SL-022 §5.2, SL-065 §5): branch on
+    // subtype so each family renders only its own axes, Some-gated. Tech output is
+    // byte-identical to pre-SL-065. A product spec's `c4_level` (and a tech spec's
+    // `product_level`) is an at-rest tag that falls outside its branch and is not
+    // rendered (SL-065 D5/F1). Children are derived, never rendered (ADR-004 §3).
+    match spec.kind {
+        SpecSubtype::Tech => {
+            if let Some(level) = spec.c4_level {
+                parts.push(format!("c4 level: {}\n", level.as_str()));
+            }
+            if let Some(d) = &spec.descends_from {
+                parts.push(format!("descends from: {d}\n"));
+            }
+            if let Some(p) = &spec.parent {
+                parts.push(format!("parent: {p}\n"));
+            }
         }
-        if let Some(p) = &spec.parent {
-            parts.push(format!("parent: {p}\n"));
+        SpecSubtype::Product => {
+            if let Some(level) = spec.product_level {
+                parts.push(format!("product level: {}\n", level.as_str()));
+            }
+            if let Some(p) = &spec.parent {
+                parts.push(format!("parent: {p}\n"));
+            }
         }
     }
     if !spec.responsibilities.is_empty() {
@@ -2280,6 +2320,41 @@ module = \"doctrine::cli\"
         assert_eq!(m.title, "CLI");
     }
 
+    // --- SL-065 PHASE-02 / VT-1: ProductLevel parse round-trip ---
+
+    #[test]
+    fn product_level_kebab_round_trips_every_variant() {
+        // each variant ↔ its kebab string, both directions (as_str + serde parse).
+        for (variant, kebab) in [
+            (ProductLevel::Domain, "domain"),
+            (ProductLevel::Capability, "capability"),
+            (ProductLevel::Feature, "feature"),
+            (ProductLevel::Story, "story"),
+        ] {
+            assert_eq!(variant.as_str(), kebab);
+            let body = format!(
+                "id = 1\nslug = \"x\"\ntitle = \"X\"\nstatus = \"draft\"\nkind = \"product\"\nproduct_level = \"{kebab}\"\n"
+            );
+            let spec: Spec = toml::from_str(&body).unwrap();
+            assert_eq!(spec.product_level, Some(variant));
+        }
+    }
+
+    #[test]
+    fn product_level_rejects_unknown_variant_at_parse() {
+        // an out-of-set value is a parse error (closed enum, serde-enforced).
+        let body = "id = 1\nslug = \"x\"\ntitle = \"X\"\nstatus = \"draft\"\nkind = \"product\"\nproduct_level = \"epic\"\n";
+        assert!(toml::from_str::<Spec>(body).is_err());
+    }
+
+    #[test]
+    fn product_level_absent_defaults_to_none() {
+        // #[serde(default)]: an unlabelled product spec parses with product_level None.
+        let body = "id = 1\nslug = \"x\"\ntitle = \"X\"\nstatus = \"draft\"\nkind = \"product\"\n";
+        let spec: Spec = toml::from_str(body).unwrap();
+        assert_eq!(spec.product_level, None);
+    }
+
     // --- PHASE-03 (SL-022) T6: pin the second_parent error classifier (R2) ---
     // The match rides `toml::de::Error::{span,message}` (toml 0.8) and is version-
     // fragile by construction; these tests are the canary if a toml bump shifts it.
@@ -2600,6 +2675,7 @@ parent = \"SPEC-002\"
             tags: Vec::new(),
             category: None,
             c4_level: None,
+            product_level: None,
             responsibilities: Vec::new(),
             sources: Vec::new(),
             descends_from: None,
@@ -2753,16 +2829,49 @@ parent = \"SPEC-002\"
         assert!(!out.contains("descends from:"));
         assert!(!out.contains("\nparent:"));
 
-        // product subject carrying the (invalid, but at-rest) fields → kind-gate omits.
+        // product subject carrying an (invalid, at-rest) descends_from → the product
+        // arm never renders descends_from; parent absent → no parent line either.
         let product = Spec {
             kind: SpecSubtype::Product,
             descends_from: Some("PRD-001".to_string()),
-            parent: Some("SPEC-002".to_string()),
+            parent: None,
             ..tech_spec(1)
         };
         let pout = render(&product, "p\n", &[], &[]);
         assert!(!pout.contains("descends from:"));
         assert!(!pout.contains("parent:"));
+    }
+
+    #[test]
+    fn render_emits_product_level_and_parent_for_product_in_order() {
+        // VT-2: product subject emits `product level:` then `parent:`, in that order.
+        let spec = Spec {
+            kind: SpecSubtype::Product,
+            product_level: Some(ProductLevel::Capability),
+            parent: Some("PRD-003".to_string()),
+            ..tech_spec(1)
+        };
+        let out = render(&spec, "p\n", &[], &[]);
+        assert!(out.contains("product level: capability\n"));
+        assert!(out.contains("parent: PRD-003\n"));
+        // reciprocal children are derived, never rendered (ADR-004 §3).
+        assert!(!out.contains("children"));
+        let level = out.find("product level:").unwrap();
+        let parent = out.find("parent:").unwrap();
+        assert!(level < parent);
+    }
+
+    #[test]
+    fn render_omits_c4_level_on_a_product_spec() {
+        // design §5 F1: a product spec illegitimately carrying c4_level no longer
+        // renders `c4 level:` — it falls outside the tech branch.
+        let spec = Spec {
+            kind: SpecSubtype::Product,
+            c4_level: Some(C4Level::Container),
+            ..tech_spec(1)
+        };
+        let out = render(&spec, "p\n", &[], &[]);
+        assert!(!out.contains("c4 level:"));
     }
 
     // --- FIX 2: build_registry canonicalizes non-canonical author-supplied FKs ---
