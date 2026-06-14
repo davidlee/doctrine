@@ -295,3 +295,45 @@ Touch+re-run applied to defeat a shared-`CARGO_TARGET_DIR` false-green.
 RV review verbs refuse on a worktree fork (mem.pattern.review.rv-verbs-refuse-on-
 worktree-fork). After integrate lands `dispatch/064` onto trunk, drive the RV from
 root.
+
+## Audit (RV-030) — reconciliation, code-review hold
+
+2026-06-14: Reconciliation audit on **RV-030** (facet=reconciliation, target
+SL-064), driven from root. Two external review passes folded in: codex (GPT-5.5)
+adversarial invariant-attack + a human/Opus full-file read. 10 findings raised,
+all dispositioned. Audit found the implementation high-quality and design-faithful
+(6/8 codex-attacked invariants held outright; 89 suites green; behaviour-
+preservation gate held).
+
+**Close-gate held by one OPEN blocker — F-1.** Stage-1 `prepare_review`
+(`dispatch.rs:115`) parents `review/<slice>` + `phase/<slice>-NN` on the **live**
+trunk tip (`git::trunk_commit()`), where design §4.2/§4.3 specify the pinned
+`trunk_base_B`. A foreign commit to `main` between `coordinate` and `sync`
+(coordination worktree isolates the working tree, NOT the trunk ref) silently
+reparents the projection → per-phase diffs stop being exact; the §3/IMP-043
+"integrate refuses moved trunk" net does not fire (it only covers post-stage-1
+movement). Latent — no e2e moves trunk mid-run. **Disposition fix-now (User-ruled):
+project off `merge-base(refs/heads/dispatch/<slice>, trunk)`** (pinned fork-point,
+no new ledger state); keep `trunk_commit()` only at integrate's trunk push; add a
+trunk-moved-during-run e2e. → memory candidate AFTER the fix proves out.
+
+**Dispositions:**
+- F-1 (blocker, live-trunk projection) — fix-now (merge-base); **OPEN/answered**, holds close.
+- F-2 (major, OQ-D marker-absence fence) — **tolerated**, verified. Documented D2b residual; real close IMP-065. (codex wrongly thought impersonation tests missing — they exist: e2e_dispatch_sync VT-4, e2e_worktree_coordinate VT-2.)
+- F-3 (minor, runtime rollup 2/8 vs notes 8/8) — fix-now, verified; reconcile sheets at the lifecycle move.
+- F-4 (major, commit_journal hardcodes 'journal: prepare-review' both stages) — fix-now; answered/pending. Thread a &str msg param.
+- F-5 (minor, ScratchIndex cross-PID crash debris + overclaiming doc) — fix-now; answered/pending. read_dir sweep of doctrine-filter-index.* + fix comment.
+- F-6 (minor, settings.local.json full parse-serialize normalize) — **tolerated**, verified. Low risk, machine-written.
+- F-7 (minor, integrate/prepare_review journal-cycle duplication) — follow-up → **IMP-075**, verified.
+- F-8 (minor, phase_chain_tip ignores journal status → confusing 'no code units' error) — fix-now; answered/pending. Filter status==Verified / distinguish error.
+- F-9 (minor, read_path_at no dedicated unit test) — fix-now; answered/pending. Add git::tests case.
+- F-10 (nit, projection_row source_oid==planned_new_oid wart) — **tolerated**, verified. Doc the intentional equality.
+
+**Remediation route (User-ruled): /handover → fix → /close.** Outstanding before
+close: apply F-1 (merge-base) + the fix-now batch (F-4/F-5/F-8/F-9 + F-10 doc +
+F-3 rollup reconcile), re-gate (`just check` — note the foreign backlog-golden red
+is WIP, not SL-064), then `review verify` F-1/F-4/F-5/F-8/F-9 as raiser, and `/close`.
+
+**Out of scope.** `just check` red on `e2e_backlog_list_order_golden` = foreign
+WIP (SL-059 `tags` JSON field vs stale SL-053 golden); SL-064 touches no backlog
+code; its own suites green.
