@@ -342,30 +342,16 @@ pub(crate) fn set_status(root: &Path, id: u32, status: ReqStatus) -> anyhow::Res
         .join(REQUIREMENT_DIR)
         .join(&name)
         .join(format!("requirement-{name}.toml"));
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("requirement {name} not found at {}", path.display()))?;
-    let mut doc = text
-        .parse::<toml_edit::DocumentMut>()
-        .with_context(|| format!("Failed to parse {}", path.display()))?;
-
-    // No-op guard (before the malformed check): an unchanged status writes nothing.
-    if doc.get("status").and_then(toml_edit::Item::as_str) == Some(status.as_str()) {
-        return Ok(());
-    }
-
-    let table = doc.as_table_mut();
-    // F-1: `status` is scaffold-seeded — this verb edits in place, never creates.
-    // Its absence means a malformed (hand-edited) file; a tail `insert` would land
-    // the key after the trailing `[relationships]` header, inside that subtable
-    // (silent corruption). Refuse instead.
-    if !table.contains_key("status") {
-        anyhow::bail!(
-            "malformed requirement {name}: missing `status` (regenerate via the scaffold)"
-        );
-    }
-    table.insert("status", toml_edit::value(status.as_str()));
-    std::fs::write(&path, doc.to_string())
-        .with_context(|| format!("Failed to write {}", path.display()))
+    // STATUS-ONLY: one managed key, NO `updated` stamp (the requirement carries no
+    // updated field — §5.1/§5.3, git is the trail). Delegate the write-core to the
+    // shared seam; the single-element `managed` slice proves the variable-length
+    // shape. The F-1 hint is non-destructive (EX-4): restore the seeded key, never
+    // regenerate.
+    let hint = format!(
+        "malformed requirement {name}: missing seeded `status` — restore the seeded key before the transition; the file is left untouched"
+    );
+    crate::dep_seq::set_authored_status(&path, &[("status", status.as_str())], &hint)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -735,7 +721,14 @@ kind = \"functional\"
             .collect::<Vec<_>>()
             .join("\n");
         fs::write(&toml, stripped).unwrap();
-        assert!(set_status(root, 1, ReqStatus::Active).is_err());
+        let err = set_status(root, 1, ReqStatus::Active).unwrap_err();
+        let msg = err.to_string().to_lowercase();
+        assert!(msg.contains("malformed"), "{msg}");
+        // EX-4: the refuse is non-destructive — never instructs regeneration.
+        assert!(
+            !msg.contains("regenerate") && !msg.contains("scaffold") && !msg.contains(" new`"),
+            "F-1 refuse must be non-destructive: {msg}"
+        );
     }
 
     #[test]
