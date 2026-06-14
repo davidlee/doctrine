@@ -111,6 +111,189 @@ pub(crate) struct OrthogonalMark {
     pub status: LedgerStatus,
 }
 
+// --- candidate ledger (SL-068 PHASE-01, design §5.3) -------------------------
+
+/// A candidate's flavour: an `audit` review surface vs an `experiment` scratch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CandidateKind {
+    /// A review/audit surface candidate.
+    Audit,
+    /// An exploratory experiment candidate.
+    Experiment,
+}
+
+/// What role a candidate plays in the funnel: a review surface, the close
+/// target close will land, or a throwaway scratch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CandidateRole {
+    /// The surface an adversarial review reads.
+    ReviewSurface,
+    /// The immutable target close lands onto.
+    CloseTarget,
+    /// A throwaway exploration.
+    Scratch,
+}
+
+/// What a candidate's merge carries: the full impl bundle vs raw code only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CandidatePayload {
+    /// The full impl bundle (code + knowledge).
+    ImplBundle,
+    /// Code only.
+    Code,
+}
+
+/// Lifecycle status of a candidate row — the ONLY mutable field on a recorded
+/// row (EX-3). Supersession is explicit history (`supersedes` + a fresh row),
+/// never an in-place OID rewrite.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CandidateStatus {
+    /// The candidate ref + merge commit were created.
+    Created,
+    /// The Doctrine-created merge hit a conflict.
+    Conflicted,
+    /// The candidate was abandoned.
+    Abandoned,
+    /// The candidate was superseded by a fresher one.
+    Superseded,
+}
+
+/// `candidates.toml` — the candidate ledger (design §5.3). Carries the
+/// recorded candidate rows plus the current role-keyed admission record.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub(crate) struct Candidates {
+    #[serde(default, rename = "candidate")]
+    pub rows: Vec<CandidateRow>,
+    #[serde(default)]
+    pub current_admission: CurrentAdmission,
+}
+
+/// One candidate row. Every field but `status` is immutable once recorded
+/// (EX-3): supersession appends a fresh row, never an in-place OID rewrite.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct CandidateRow {
+    /// The candidate id (e.g. `cand-068-review-001`).
+    pub id: String,
+    /// The human-facing label (e.g. `review-001`).
+    pub label: String,
+    /// Audit vs experiment.
+    pub kind: CandidateKind,
+    /// Review surface / close target / scratch.
+    pub role: CandidateRole,
+    /// Impl bundle vs code-only.
+    pub payload: CandidatePayload,
+    /// The ref this candidate is published at.
+    pub target_ref: String,
+    /// The source ref the candidate was built from.
+    pub source_ref: String,
+    /// The source ref's oid at build time.
+    pub source_oid: String,
+    /// The base ref the merge was computed against.
+    pub base_ref: String,
+    /// The base ref's oid at build time.
+    pub base_oid: String,
+    /// The Doctrine-created no-ff merge commit.
+    pub merge_oid: String,
+    /// Lifecycle status — the only mutable field (EX-3).
+    pub status: CandidateStatus,
+    /// Optional candidate id this row supersedes.
+    #[serde(default)]
+    pub supersedes: String,
+    /// Free-text reason (e.g. for abandonment).
+    #[serde(default)]
+    pub reason: String,
+    /// The verb that created this row.
+    pub created_by: String,
+    /// Creation timestamp.
+    pub created_at: String,
+}
+
+/// The current admission record, keyed by role. The design shows only
+/// `close_target`; the lifecycle admits a `review_surface` too — both modelled,
+/// each optional and skipped on serialize when empty.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub(crate) struct CurrentAdmission {
+    /// The admitted close-target candidate, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_target: Option<Admission>,
+    /// The admitted review-surface candidate, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_surface: Option<Admission>,
+}
+
+/// One role's admission: pins the candidate ref + the immutable oid the
+/// downstream verb (close / review) targets. Re-admission appends a fresh
+/// record (with `supersedes`), never rewrites a prior admission's oids (EX-3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Admission {
+    /// The admitted candidate id.
+    pub candidate_id: String,
+    /// The candidate ref at admission.
+    pub candidate_ref: String,
+    /// The candidate ref's oid observed at admission.
+    pub expected_ref_oid: String,
+    /// The immutable oid the downstream verb targets.
+    pub admitted_oid: String,
+    /// The governing review (e.g. `RV-007`).
+    pub review: String,
+    /// Optional prior admission id this supersedes.
+    #[serde(default)]
+    pub supersedes: String,
+    /// Admission timestamp.
+    pub admitted_at: String,
+}
+
+impl Candidates {
+    /// Parse a `candidates.toml` body. An absent file is the caller's concern
+    /// ([`read_candidates`]); this parses a present body.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "candidate create/status/admit are the first non-test callers (PHASE-02+)"
+        )
+    )]
+    pub(crate) fn parse(text: &str) -> anyhow::Result<Candidates> {
+        Ok(toml::from_str(text)?)
+    }
+
+    /// Serialize to a `candidates.toml` body (serde-escaped — no raw splicing).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "candidate create/status/admit are the first non-test callers (PHASE-02+)"
+        )
+    )]
+    pub(crate) fn to_toml(&self) -> anyhow::Result<String> {
+        Ok(toml::to_string(self)?)
+    }
+
+    /// Transition a recorded row's `status` — the ONLY mutable field (EX-3).
+    /// No identity/OID setter exists; supersession is a fresh row, not an
+    /// in-place rewrite. Returns `true` when a matching row was updated.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "candidate create/status/admit are the first non-test callers (PHASE-02+)"
+        )
+    )]
+    pub(crate) fn set_candidate_status(&mut self, id: &str, status: CandidateStatus) -> bool {
+        match self.rows.iter_mut().find(|r| r.id == id) {
+            Some(row) => {
+                row.status = status;
+                true
+            }
+            None => false,
+        }
+    }
+}
+
 // Some symbols below are test-live but have no *non-test* caller yet: the
 // round-trip `parse`/`to_toml` surface, the filesystem `read_*` (the sync verb
 // tree-reads via `read_path_at` instead), and `record_orthogonal` (its driver is
@@ -291,6 +474,27 @@ pub(crate) fn record_orthogonal(
     store(&path, &manifest)
 }
 
+/// Read `candidates.toml` for `slice` (empty when absent — VT-2). The
+/// create/status/admit verbs (PHASE-02+) are the first non-test callers.
+pub(crate) fn read_candidates(root: &Path, slice: u32) -> anyhow::Result<Candidates> {
+    load(&dispatch_dir(root, slice).join("candidates.toml"))
+}
+
+/// Write the whole candidate ledger for `slice` to `candidates.toml`
+/// (read-modify-write at the create/supersede/status verbs). The dir/file are
+/// created on first write. Pairs with [`read_candidates`]; serde escapes all
+/// free-text, so no value is hand-spliced into the TOML.
+pub(crate) fn write_candidates(
+    root: &Path,
+    slice: u32,
+    candidates: &Candidates,
+) -> anyhow::Result<()> {
+    store(
+        &dispatch_dir(root, slice).join("candidates.toml"),
+        candidates,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,5 +627,165 @@ mod tests {
         assert_eq!(orthogonal.rows[0].status, LedgerStatus::Verified);
         // The untouched journal manifest is still an absent-file empty default.
         assert_eq!(read_journal(root, slice).unwrap(), Journal::default());
+    }
+
+    // --- candidate ledger (SL-068 PHASE-01) --------------------------------
+
+    fn sample_candidate(id: &str, label: &str, status: CandidateStatus) -> CandidateRow {
+        CandidateRow {
+            id: id.into(),
+            label: label.into(),
+            kind: CandidateKind::Audit,
+            role: CandidateRole::ReviewSurface,
+            payload: CandidatePayload::ImplBundle,
+            target_ref: format!("refs/heads/candidate/068/{label}"),
+            source_ref: "refs/heads/review/068".into(),
+            source_oid: "src-oid".into(),
+            base_ref: "refs/heads/main".into(),
+            base_oid: "base-oid".into(),
+            merge_oid: "merge-oid".into(),
+            status,
+            supersedes: String::new(),
+            reason: String::new(),
+            created_by: "dispatch candidate create".into(),
+            created_at: "2026-06-15".into(),
+        }
+    }
+
+    // VT-1: round-trip + on-disk vocab pinning.
+    #[test]
+    fn candidates_round_trip_and_pin_field_names() {
+        let manifest = Candidates {
+            rows: vec![
+                sample_candidate(
+                    "cand-068-review-001",
+                    "review-001",
+                    CandidateStatus::Created,
+                ),
+                sample_candidate(
+                    "cand-068-review-002",
+                    "review-002",
+                    CandidateStatus::Conflicted,
+                ),
+            ],
+            current_admission: CurrentAdmission {
+                close_target: Some(Admission {
+                    candidate_id: "cand-068-close-001".into(),
+                    candidate_ref: "refs/heads/candidate/068/close-001".into(),
+                    expected_ref_oid: "ref-oid".into(),
+                    admitted_oid: "admitted-oid".into(),
+                    review: "RV-007".into(),
+                    supersedes: String::new(),
+                    admitted_at: "2026-06-15".into(),
+                }),
+                review_surface: None,
+            },
+        };
+        let text = manifest.to_toml().expect("serialize");
+        assert!(text.contains("[[candidate]]"), "table header: {text}");
+        assert!(text.contains("id ="), "{text}");
+        assert!(text.contains("label ="), "{text}");
+        assert!(text.contains("target_ref ="), "{text}");
+        assert!(text.contains("source_oid ="), "{text}");
+        assert!(text.contains("base_oid ="), "{text}");
+        assert!(text.contains("merge_oid ="), "{text}");
+        assert!(text.contains("created_by ="), "{text}");
+        assert!(text.contains("created_at ="), "{text}");
+        assert!(text.contains("status = \"created\""), "{text}");
+        assert!(text.contains("role = \"review_surface\""), "{text}");
+        assert!(text.contains("kind = \"audit\""), "{text}");
+        assert!(text.contains("payload = \"impl_bundle\""), "{text}");
+        assert!(
+            text.contains("[current_admission.close_target]"),
+            "admission table: {text}"
+        );
+        assert_eq!(Candidates::parse(&text).expect("parse"), manifest);
+    }
+
+    // VT-2: absent / empty defaults, incl. read_candidates absent-file.
+    #[test]
+    fn candidates_empty_and_absent_default() {
+        assert_eq!(Candidates::parse("").unwrap(), Candidates::default());
+        let text = Candidates::default().to_toml().unwrap();
+        assert_eq!(Candidates::parse(&text).unwrap(), Candidates::default());
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert_eq!(
+            read_candidates(dir.path(), 68).unwrap(),
+            Candidates::default()
+        );
+    }
+
+    // VT-3: an unknown enum token fails to parse, never round-trips.
+    #[test]
+    fn candidates_reject_unknown_tokens() {
+        let bad_role = r#"
+[[candidate]]
+id = "x"
+label = "x"
+kind = "audit"
+role = "bogus"
+payload = "impl_bundle"
+target_ref = "r"
+source_ref = "r"
+source_oid = "o"
+base_ref = "r"
+base_oid = "o"
+merge_oid = "o"
+status = "created"
+created_by = "v"
+created_at = "d"
+"#;
+        assert!(Candidates::parse(bad_role).is_err(), "bogus role must fail");
+
+        let bad_kind = bad_role
+            .replace("role = \"bogus\"", "role = \"review_surface\"")
+            .replace("kind = \"audit\"", "kind = \"bogus\"");
+        assert!(
+            Candidates::parse(&bad_kind).is_err(),
+            "bogus kind must fail"
+        );
+
+        let bad_payload = bad_role
+            .replace("role = \"bogus\"", "role = \"review_surface\"")
+            .replace("payload = \"impl_bundle\"", "payload = \"bogus\"");
+        assert!(
+            Candidates::parse(&bad_payload).is_err(),
+            "bogus payload must fail"
+        );
+    }
+
+    // EX-3: set_candidate_status mutates only status; identity/OID untouched.
+    #[test]
+    fn set_candidate_status_mutates_only_status() {
+        let mut manifest = Candidates {
+            rows: vec![sample_candidate(
+                "cand-068-review-001",
+                "review-001",
+                CandidateStatus::Created,
+            )],
+            current_admission: CurrentAdmission::default(),
+        };
+        let before = manifest.rows[0].clone();
+
+        assert!(manifest.set_candidate_status("cand-068-review-001", CandidateStatus::Abandoned));
+        assert!(!manifest.set_candidate_status("nope", CandidateStatus::Abandoned));
+
+        let after = &manifest.rows[0];
+        assert_eq!(after.status, CandidateStatus::Abandoned);
+        // Every identity/OID field is byte-identical to before the transition.
+        assert_eq!(after.id, before.id);
+        assert_eq!(after.label, before.label);
+        assert_eq!(after.kind, before.kind);
+        assert_eq!(after.role, before.role);
+        assert_eq!(after.payload, before.payload);
+        assert_eq!(after.target_ref, before.target_ref);
+        assert_eq!(after.source_ref, before.source_ref);
+        assert_eq!(after.source_oid, before.source_oid);
+        assert_eq!(after.base_ref, before.base_ref);
+        assert_eq!(after.base_oid, before.base_oid);
+        assert_eq!(after.merge_oid, before.merge_oid);
+        assert_eq!(after.created_by, before.created_by);
+        assert_eq!(after.created_at, before.created_at);
     }
 }
