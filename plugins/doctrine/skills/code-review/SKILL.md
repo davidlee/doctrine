@@ -144,11 +144,3 @@ Then **harvest** (judgment-gated) per `review-ledger.md` §5 — durable
 facts/patterns/gotchas → `/record-memory`; durable follow-up **work** → `backlog
 new`; notes that belong with the subject → its `notes.md`. A clean review harvests
 nothing, and that is a valid outcome.
-
-## severity labels
-
-👍 - good
-🔴 - blocking
-🟠 - important
-🟡 - minor
-🔵 - optional suggestion
