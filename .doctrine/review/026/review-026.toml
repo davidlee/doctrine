@@ -1,0 +1,102 @@
+id    = 26
+slug  = "sl-040-code-review-rv-review-ledger-kind-and-review-verb-family"
+title = "SL-040 code-review: RV review-ledger kind and review verb family"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "code-review agent (claude)"
+responder = "SL-040 author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-040"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "F-1: DRY loss — ten sha256 call sites across review.rs vs one sha256_hex in contentset.rs"
+detail = "The design (D3) says sha2 duplication is trivial and accepted at two call sites. In practice there are ten sha256 calls in review.rs via `crate::git::sha256` plus `contentset::sha256_hex`. These are not the same function. `git.rs` is an impure seam; `contentset.rs` is a pure leaf. The duplication means: (a) altering the hash algorithm would require touching ten call sites across three files, (b) the pure leaf and the impure shell each own a hasher for the same algorithm, (c) the naming is inconsistent (`sha256` vs `sha256_hex`). Recommend hoisting a `pub(crate) fn sha256(bytes: &[u8]) -> String` into a crate-internal one-liner (or exposing `contentset::sha256_hex` as `pub(crate)` under a better name) and having `git.rs` delegate to it."
+disposition = "aligned"
+response = "Blocker grade overcounts. Two hash impls exist, not ten: git::sha256 (impure seam) and contentset::sha256_hex. The second is a DELIBERATE D3/ADR-001 decision — comment at contentset.rs:154-155: 'Owned directly (D3) so the leaf does not depend on the impure git.rs seam.' Hoisting a shared sha256 into git.rs and having the pure leaf delegate would invert ADR-001 layering (pure leaf → impure shell), the exact coupling D3 avoided. review.rs has 4 production call sites (1219/1264/1275/1863), all delegating to the single git::sha256 — DRY-correct; the 'ten' figure counted comments + test sites. Residual naming unification (sha256 vs sha256_hex) and any genuine consolidation tracked by IMP-025 (promote content-hashed-path-set to a shared primitive). Not a gating defect; SL-040 is done."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "F-3: parse_finding_status defaults unknown values to Open — silent data loss"
+detail = """`parse_finding_status` treats any unrecognized status string (e.g. `"verfied"` — a typo) as `Open`. This is used by `ReviewDoc::finding_states()` (show/list/status), `finding_status_of` (the verb gate), and `doc_unresolved_blockers` (close-gate). A hand-edited toml with a typo produces zero diagnostics: the review stays Active forever with no indication something is wrong. The write path can never produce garbage (controlled by `apply_transition`), but the read path silently accepts it. Recommend: either hard-error on unknown status with a clear diagnostic, or at minimum emit a stderr warning. The conservative-read stance is correct in intent (don't silently close the review) but wrong in execution (erase evidence of corruption)."""
+disposition = "follow-up"
+response = "Real but minor; routed to CHR-001 (extended). Unreachable from the write path — apply_transition only emits vocab statuses; only a hand-edited toml typo reaches the _ => Open arm. The default-Open is the SAFE direction: a corrupted review stays Active, never silently closes (the close-gate errs toward not-done). The missing diagnostic is the actual gap. Same unknown-enum-read fail-safe class as CHR-001's F-4 (close-gate unknown severity), different site (the general read path). CHR-001 now carries this as the read-path sibling — fix alongside: warn/hard-error on out-of-vocab status."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "F-5: Baton counters (rounds, contests) have no upper bound, silently wrap at u32::MAX"
+detail = "`rounds` is `prior.rounds + 1` on every turn, `contests` increments per contest verb, both u32. They wrap silently. At review scale this is academic, but it's worth noting: a review with 4 billion turns has bigger problems. More importantly, `contests` counts ALL contest turns across ALL findings — you can't tell which finding was contested how many times. That data lives only in the lossy handoff log. Recommend: cap at u32::MAX (saturating) or note that these are observability-only and wrapping is acceptable. Consider a per-finding contest counter if durable tracking is ever needed."
+disposition = "tolerated"
+response = "Observability-only, wrap accepted (as the finding itself offers). rounds/contests are u32 baton telemetry; wrapping needs ~4e9 turns. contests aggregates across findings by design (per-finding durable tracking is not a requirement of the baton model, D10 — handoff chatter is ephemeral). No per-finding counter warranted. Conscious tolerate."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "F-2: with_turn closures receive raw FindingRow strings, then re-parse to enums (double scan)"
+detail = "Every verb closure receives `existing: &[FindingRow]` (raw strings for status/severity). The closure calls `finding_status_of(existing, id)` which does a linear scan + `parse_finding_status`. The per-turn baton reconciliation also calls `finding_states_of(&doc)` for the same parse. Both are O(n). The pure core already has `FindingState` — closures should receive the pre-parsed form, not raw strings. Additionally, `doc_unresolved_blockers` calls `Severity::parse` — a third redundant string→enum conversion. Recommend: `with_turn` pre-parses status+severity into `Vec<FindingState>` (or richer struct) and passes that to the closure. The per-finding gate becomes a hash-lookup or index-access, not a linear scan."
+disposition = "follow-up"
+response = "Real design improvement; tracked as IMP-068. with_turn closures take raw FindingRow strings and re-parse via finding_status_of (linear scan + parse_finding_status), the baton reconcile re-parses via finding_states_of, and doc_unresolved_blockers does a third string->enum via Severity::parse. Pre-parsing status+severity into Vec<FindingState> once inside with_turn and passing that down kills all three re-scans. Not fix-now: at single-digit finding counts the O(n) re-scan is invisible, and SL-040 is shipped — owned cleanup, not a correctness gate."
+
+[[finding]]
+id = "F-5"
+status = "withdrawn"
+severity = "minor"
+title = "F-5: Baton counters (rounds, contests) have no upper bound, silently wrap at u32::MAX"
+detail = "`rounds` is `prior.rounds + 1` on every turn, `contests` increments per contest verb, both u32. They wrap silently. At review scale this is academic, but it is worth noting: `contests` counts ALL contest turns across ALL findings — you cannot tell which finding was contested how many times. That data lives only in the lossy handoff log. Recommend: cap at u32::MAX (saturating) or note that these are observability-only and wrapping is acceptable. Consider a per-finding contest counter if durable tracking is ever needed."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "F-7: review.rs is 3498 lines housing three distinct subsystems"
+detail = "The file houses: (1) pure core enums + `can()` + `derived_status` + render (~200 lines), (2) authored readers + `new`/`show`/`list` (~200 lines), (3) verb family + `with_turn` + lock/CAS + baton (~500 lines), (4) warm-cache + `prime` + staleness (~400 lines), (5) ~1000 lines of tests. The warm-cache subsystem (D9, D-C10) is conceptually separate from the verb family — they share only `state_dir` and `LockGuard`. The design notes mention a possible `review_state.rs` split. Recommend extracting `review_cache.rs` for the warm-cache subsystem. Defer to post-SL-040 follow-up; IMP-025 touches this area."
+disposition = "follow-up"
+response = "Agreed; tracked as IMP-068 (and the finding itself defers post-SL-040). 3498-line file; the warm-cache subsystem (D9/D-C10) shares only state_dir + LockGuard with the verb family — clean extraction seam to review_cache.rs. Overlaps the IMP-025 area. Defer to the next pass touching this file."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "F-6: run_raiser_transition writes handoff note to baton OUTSIDE the lock (race)"
+detail = "`run_raiser_transition` calls `with_turn` (the lock is released at scope end), then reads the baton, appends the handoff note, and writes it — all outside the lock. Between `with_turn` returning and this write, another invocation could acquire the lock, write a new baton, and release. Then this handoff write overwrites that baton, losing the other invocation's handoff note and potentially its counters. The design (D10) says handoff chatter is ephemeral and lossy, so this is arguably by design. But it is an unguarded race on the baton file. Recommend folding the handoff note into the `with_turn` closure (pass it through and append to baton inside step 7, under the lock)."
+disposition = "follow-up"
+response = "Confirmed; exact match to CHR-001 F-1 (baton-note lock scope), already owned. run_raiser_transition appends the handoff note via read_baton/write_baton after with_turn drops the lock — an unlocked RMW outside the lock+CAS. Self-heals via the next entry-CAS (baton regenerable, D-C2), so impact is cosmetic, but it breaks the every-baton-write-under-the-lock invariant. CHR-001 fix: fold the note write into the with_turn closure."
+
+[[finding]]
+id = "F-8"
+status = "withdrawn"
+severity = "minor"
+title = "F-7: review.rs is 3498 lines housing three distinct subsystems"
+detail = "The file houses: (1) pure core enums + `can()` + `derived_status` + render (~200 lines), (2) authored readers + `new`/`show`/`list` (~200 lines), (3) verb family + `with_turn` + lock/CAS + baton (~500 lines), (4) warm-cache + `prime` + staleness (~400 lines), (5) ~1000 lines of tests. The warm-cache subsystem (D9, D-C10) is conceptually separate from the verb family — they share only `state_dir` and `LockGuard`. The design notes mention a possible `review_state.rs` split. Recommend extracting `review_cache.rs` for the warm-cache subsystem. Defer to post-SL-040 follow-up; IMP-025 touches this area."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = "F-8: cache_staleness calls dedup on three disjoint, already-sorted vecs"
+detail = "`cache_staleness` concatenates `drift.changed`, `drift.removed`, `drift.added`, then calls `sort()` then `dedup()`. The three vecs from `ContentSet::diff` are already individually path-sorted (BTreeMap walk) and disjoint by construction (every path lands in exactly one drift class). `dedup` is dead code for this consumer — no path can appear in two classes. Recommend: remove `dedup` and replace with an assertion that the three classes are disjoint (documents the invariant). Or keep `dedup` but add a comment explaining why it is there."
+disposition = "follow-up"
+response = "Confirmed dead; tracked as IMP-068. The three drift classes from ContentSet::diff (changed/removed/added) are disjoint by construction — every path lands in exactly one class — so dedup after sort can never fire. Harmless (one extra pass over a tiny vec), hence not fix-now on shipped code, but worth removing + asserting disjointness when the area is next touched."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "F-4: derived_status scans findings up to three times"
+detail = "`derived_status` does: (1) empty check, (2) `.any()` for Open|Contested, (3) `.any()` for Answered, (4) fallthrough to Done. In the worst case (all terminal), the vec is walked twice before falling through. A single-pass fold would be simpler and faster. Micro-optimisation for findings that rarely exceed single digits, but the triple-scan pattern suggests the author was not thinking in single-pass terms — a habit that could propagate to more expensive callers. Recommend a single-pass fold."
+disposition = "follow-up"
+response = "Tracked as IMP-068 (low priority). derived_status does two .any() passes + fallthrough; a single-pass fold is marginally faster. At single-digit finding counts the perf delta is nil, and the early-return form is arguably more readable than a fold — so this is hygiene, not a fix. Bundled with the other review.rs micro-cleanups."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
