@@ -72,13 +72,17 @@ coordination tree has no foreign writers).
 - `.doctrine/adr/006/` — D8 amendment (append; D-ids immutable).
 - `/dispatch`, `/dispatch-subprocess`, `/dispatch-agent`, `/worktree` skills
   (source under `plugins/`, not the installed `.doctrine/skills` copy).
-- Possibly `src/` worktree verb surface if the coordination tree needs a distinct
-  provision path from the worker fork (TBD at design).
+- `src/` — markerless coordination-tree creation (worktree verb); the **sync verb**
+  (net-new; no `dispatch.rs` today) + a working-tree-free **tree-filter primitive**
+  in `src/git.rs` (`filter_tree`/`commit_tree`) and `git update-ref` CAS for the
+  projection journal (design §4.1–§4.3).
 
 ## Risks, assumptions, open questions
 
 Design (`design.md`) is canon for design intent. Status: structural spine locked
-(§1–§3), integration-sync routing policy deliberately OQ-bearing (multi-pass).
+(§1–§3); integration-sync routing policy locked in **ADR-012 (ACCEPTED)**; the three
+post-acceptance projection gaps **mechanized** (design §4.1–§4.3). **Ready for
+`/plan`.**
 
 **Scope grew at design** (user-approved): from "isolate the coordination branch +
 a sync step" to a **delta-class-routed integration topology** — `dispatch/<slice>`
@@ -97,11 +101,20 @@ only).
   branch, a sync *verb*, configurable role→ref targets, never-auto-trunk); the
   remaining *policy* is OQ-A.
 
-**Open (deferred to later passes / fresh agent):**
-- **OQ-A:** intent → trunk push vs leave-for-review, and timing.
-- **OQ-B:** delta-class boundary — what ships together vs projects ahead (temporal
-  seam: design = prior review gate; impl-time code + intent-drift ship together).
-- **OQ-C:** audit ordering vs sync timing (RV verbs refuse on a worktree fork).
+**Closed (ADR-012 Decisions 4/2/5; mechanized §4.1–§4.3):**
+- ~~OQ-A~~ → two-stage projection, intent → `review/<slice>` by default (trunk
+  opt-in ff-only + CAS), at conclude; CAS journal recovery. Mechanism: run ledger at
+  `.doctrine/dispatch/<slice>/` + `git update-ref` CAS.
+- ~~OQ-B~~ → four-bucket temporal/dependency boundary, default-hold classifier.
+  Mechanism: `review/<slice>` = squashed filtered tip-tree, excluding the ledger dir
+  + journal-verified orthogonal entities.
+- ~~OQ-C~~ → audit between stages, from parent/root, against the prepared refs.
+  Harness synthesis (claude arm): `phase/<slice>-NN` cut from recorded boundaries.
+
+**Open — `/plan` scope (not this design pass):**
+- **OQ-D:** positive coordination marker is deferred (IMP-065); the **plan-gate**
+  must restrict Orchestrator-verb invocation to the trusted path + carry
+  impersonation tests (ADR-012 §Decisions formerly open).
 
 **Assumptions / risks:**
 - **A-1 (confirmed):** the coordination tree provisions on the SL-056

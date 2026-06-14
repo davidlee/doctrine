@@ -1,10 +1,13 @@
 # SL-064 Design — Coordination-branch isolation: dedicated worktree + integration-sync seam
 
-> Status: **spine + routing policy locked.** The structural spine (§1–§3) and the
-> integration-sync routing policy (§4) are settled: OQ-A/B/C **resolved** and OQ-D
-> **deferred-with-fence** (User ruled (a)), all formalised in **ADR-012**
-> (acceptance gates this slice's `/plan`). Ready for `/plan` once ADR-012 is
-> accepted.
+> Status: **spine + routing policy locked; projection mechanism designed.** The
+> structural spine (§1–§3) and the integration-sync routing policy (§4) are settled
+> in **ADR-012 (ACCEPTED)**: OQ-A/B/C **resolved**, OQ-D **deferred-with-fence**
+> (User ruled (a), now an SL-064 plan-gate). The three post-acceptance projection
+> gaps — A journal placement, B `review/<slice>` composition, C harness synthesis —
+> are now **mechanized in §4.1–§4.3** (the committed run ledger + the in-process
+> tree-filter primitive), within the locked contracts (no ADR change). **Ready for
+> `/plan`.**
 
 ## Design principle: framework vs repo-local (the layer wall)
 
@@ -282,6 +285,150 @@ must be designed-for:
   review units before integration**, never from inside the coordination tree;
   failure blocks integration, preserves branches (RV-025 B1).
 
+## §4.1 — Projection mechanism (A/B/C): the run ledger + the tree-filter primitive
+
+> Mechanizes the three gaps left after ADR-012 acceptance (A journal placement, B
+> `review/<slice>` composition, C harness synthesis). Mechanism *within* the locked
+> ADR-012 contracts — no contract change. All three are projection-side and collapse
+> onto **two primitives**: a committed run ledger (A; also the inputs B/C consume)
+> and an in-process tree-filter (B/C compose with it).
+
+**The run ledger — committed coordination state on `dispatch/<slice>` (A).**
+ADR-012 D4 mandates the CAS journal "committed to `dispatch/<slice>` before any ref
+mutation." It lives at a dedicated, **non-gitignored** coordination path that only
+ever carries content on `dispatch/<slice>` branches:
+
+```
+.doctrine/dispatch/<slice>/
+  journal.toml      A — CAS projection rows; written at sync (stage-1/2)
+  boundaries.toml   C — per-phase code-commit OIDs; written per phase, funnel-time
+  orthogonal.toml   B — entities projected ahead independently; written per projection
+```
+
+Three files, not one: they write on different events (boundaries/orthogonal during
+the funnel; journal at conclude) and the orthogonal manifest can grow, so separate
+files keep each append's whole-file rewrite small and give each a single
+responsibility. Co-located under one prefix so B excludes exactly one path.
+
+*Tier carve-out (named honestly).* This is **runtime-coordination tier that is
+git-committed** — the storage rule normally makes that tier gitignored/disposable
+(`.doctrine/state/`). ADR-012 D4 already requires committing it for crash-durability,
+so this is a blessed exception, not a violation of the rule. It is kept *off*
+`.doctrine/state/` precisely because that path is gitignored — committing there would
+mean a force-add fighting the ignore on every commit. The carve-out is bounded: the
+dir exists only on `dispatch/<slice>`, never reaches trunk (B strips it; the branch
+never ff's to trunk), and dies with the branch at integration.
+
+*A's recovery primitive needs no invention.* Each `journal.toml` row is
+`{ target_ref, expected_old_oid, planned_new_oid, applied_new_oid, status }`
+(ADR-012 D4). The compare-and-swap is the native `git update-ref <ref>
+<planned_new_oid> <expected_old_oid>` 3-arg form — git refuses the update unless the
+ref currently equals `expected_old_oid`. Replay: recompute the planned output from
+the recorded source OID; if `target == planned_new_oid` ⇒ verified no-op; if
+`target` differs from **both** `expected_old_oid` and `planned_new_oid` ⇒ refuse +
+report a moved target (never force, never auto-resolve). The journal commit precedes
+the `update-ref`, so a crash between journal-commit and ref-update is recoverable
+from the branch. This *implements* the ADR-012 D4 contract (RV-023 F-1); it does not
+restate a recovery property the spine had to disclaim.
+
+**The tree-filter primitive — new `src/git.rs` plumbing (B + C).** `src/git.rs`
+shells the `git` binary directly via `run_git` + `NORMATIVE_FLAGS` (bypassing the rtk
+hook — the §4 "verb, not skill-prose git" thesis), *not* libgit2. The compose step
+adds a filtered-tree builder over `read-tree` / `rm --cached` / `write-tree` /
+`commit-tree`:
+
+```
+filter_tree(source_tree, exclude_globs) -> tree_oid    # read-tree source; rm --cached exclude_globs; write-tree
+commit_tree(tree_oid, parent_oid, msg)  -> commit_oid   # commit-tree; no working-tree touch
+```
+
+Pure ref/object plumbing — no checkout, no working tree mutation, golden-pinnable.
+Both B and C are call sites; the primitive is arm-agnostic. **`filter_tree` reads/
+writes a throwaway `GIT_INDEX_FILE`, never the live coordination index** — the
+compose step must not disturb the orchestrator's index. This matters because stage-2
+runs **after the worktree is removed** (§2 lifecycle; ADR-012 D5 ordering): all of
+B/C/CAS are plumbing against refs + objects in the common git dir, reachable from the
+parent/root with no checkout — so the primitive being working-tree-free is load-
+bearing, not a nicety.
+
+### §4.2 — `review/<slice>` composition (B)
+
+`review/<slice>` is a **filtered projection of the `dispatch/<slice>` tip**. v1 = a
+**single squashed commit** (reversible: `review/<slice>` is regenerable from the
+SSoT, so a later history-preserving variant is a sync-verb change with no migration):
+
+```
+review/<slice> = commit_tree(
+  tree   = filter_tree(tip_tree, EXCLUDE),
+  parent = trunk_base_B,
+  msg    = "review(<slice>): impl bundle")
+```
+
+`git diff trunk_base_B...review/<slice>` is then exactly the net impl bundle — one
+clean reviewable diff. `EXCLUDE` is **small because most of the runtime tier is never
+in the committed tree**: runtime phase sheets are gitignored ⇒ already absent from
+`dispatch/<slice>`. The committed tree carries only code + authored `.doctrine/` +
+the run ledger, so `EXCLUDE` =
+- `.doctrine/dispatch/<slice>/**` — the run-ledger dir (runtime-coordination tier);
+- the paths of every entity in `orthogonal.toml` **whose ahead-projection is
+  journal-verified** — slice-orthogonal knowledge that already projected ahead
+  independently, excluded so the review unit does not re-ship it. **Verified, not
+  merely listed:** if an ahead-projection failed/crashed (journal status ≠ verified)
+  the entity is *not* excluded and falls back into the review bundle — reviewed once,
+  never lost.
+
+Everything else stays = the impl bundle (code + AC evidence + phase notes + design
+amendments + impl-caused status), per ADR-012 D2's default-hold classifier. The
+classifier *enforcement* (what marks an entity orthogonal) is the OQ-B **plan-gate**;
+B's mechanism here only *consumes* its output (`orthogonal.toml`) and excludes those
+paths — it does not decide classification.
+
+### §4.3 — Harness synthesis: the per-phase cut (C)
+
+ADR-012 D3: on the fork-less claude arm the worker delta lands directly on
+`dispatch/<slice>`, so `phase/<slice>-NN` must be **cut from `dispatch/<slice>` at
+sync**. The funnel interleaves `B → [code₁] → [knowledge₁] → [code₂] → …`; the
+orchestrator owns steps 7 (code) and 8 (record), so it captures HEAD **between** them
+and records the phase's code boundary:
+
+`boundaries.toml` row = `{ phase = "PHASE-NN", code_start_oid, code_end_oid }`
+(`code_end_oid` = the worker code commit, *before* the knowledge record commit).
+
+At sync stage-1, in phase order, each phase branch reuses the B primitive:
+
+```
+phase/<slice>-NN = commit_tree(
+  tree   = filter_tree(tree_of(code_end_oid), keep code paths / strip .doctrine/),
+  parent = phase/<slice>-(NN-1),   # trunk_base_B for NN=1
+  msg    = "phase(<slice>-NN): <phase code>")
+```
+
+`phase-(NN-1)` already holds cumulative code through NN-1, so the diff is precisely
+phase NN's code delta. Snapshotting `tree_of(code_end_oid)` (cumulative) rather than
+replaying commits makes the cut **agnostic to intra-phase commit count** — multiple
+worker batches in one phase collapse correctly; `code_start_oid` is used only for the
+empty-phase test. Scope:
+- **Claude-arm only.** On codex/pi the worker fork *is* `phase/<slice>-NN` natively
+  (ADR-012 D3); the cut is the fork-less synthesis. `boundaries.toml` is populated
+  only where the cut consumes it. Stage-2 integrate accepts native and synthesized
+  branches uniformly — same ref shape by construction.
+- **Empty-code phase** (`code_start_oid == code_end_oid`) ⇒ no branch cut.
+- Workers write source-only (R-5), so the code-path filter is a safety belt on the
+  claude arm; it keeps C's primitive byte-identical to B's.
+
+**Ordering / composition with §4's two-stage projection.** B and C run at **stage-1
+prepare-review** (ADR-012 D4/D5): materialise `review/<slice>` (B) +
+`phase/<slice>-NN` (C) and write `journal.toml` rows under CAS — **no trunk write**.
+These are ref *creations*, so the CAS uses `old = zero-oid` (`update-ref` refuses if
+the ref already exists) — a crashed prior run's stale `review/<slice>` is **detected
+and reported, never clobbered** (consistent with the moved-target rule). Audit runs
+against those exact refs (D5). **Stage-2 integrate runs after the worktree is
+removed**, plumbing-only from parent/root: it replays the journal to push the audited
+refs to trunk/`edge` under CAS, and its own journal appends (`applied_new_oid`/
+`status`) commit onto `dispatch/<slice>` via `commit_tree` (no checkout). The ledger's
+three files are present on `dispatch/<slice>` before stage-1 (boundaries/orthogonal
+accumulated through the funnel; journal rows written as each stage mutates refs).
+
 ## §5 — Governance split (RV-023 F-5, ruled (a): own ADR)
 
 The topology is framework-significant (ADR-011 precedent) → promoted to **ADR-012
@@ -329,13 +476,35 @@ SL-064's plan** (cf. SL-056 G1 / ADR-008). The split:
 - Re-anchor at sync onto a moved trunk (IMP-043 relocated).
 - **Behaviour-preservation (the gate):** existing dispatch funnel suites stay
   green unchanged — cadence is untouched.
-- OQ-gated tests (A/B/C) deferred to their passes.
+- **Projection mechanism (§4.1–§4.3) — now in-scope evidence (was deferred):**
+  - **A — ledger placement / CAS.** `journal.toml` committed to `dispatch/<slice>`
+    *before* the `update-ref`; ref updates are CAS (`update-ref <ref> <new> <old>`)
+    and refuse a moved target; replay no-ops when `target==planned`, refuses+reports
+    when diverged from both (ADR-012 §Verification crash matrix a–e). The ledger dir
+    is **absent from `review/<slice>`** and never reaches trunk.
+  - **B — composition.** `review/<slice>` diff vs trunk-base = the impl bundle;
+    `.doctrine/dispatch/<slice>/**` and every `orthogonal.toml` path are **excluded**;
+    impl-bundle authored entities (AC evidence/notes/design amendments/status) are
+    **retained**. Golden-pin the filtered tree.
+  - **C — per-phase cut.** On the claude arm, `phase/<slice>-NN` cut from
+    `boundaries.toml` diffs exactly phase NN's code delta; `.doctrine/` stripped;
+    empty-code phase yields no branch; stage-2 integrate treats native (codex/pi
+    fork) and synthesized (claude cut) branches identically.
+- OQ-D plan-gate tests (Orchestrator-verb restriction + impersonation) remain a
+  `/plan` concern (out of this design pass).
 
 ## §7 — OQ / risk register
 
 - **OQ-A / OQ-B / OQ-C — CLOSED** (see §4; formalised in ADR-012 Decisions 4/2/5).
   OQ-A delivered the projection journal + idempotent-replay recovery contract
-  (RV-023 F-1 closed).
+  (RV-023 F-1 closed). **Mechanized post-acceptance in §4.1–§4.3** (run ledger +
+  tree-filter); the contracts are unchanged — mechanism only.
+- **Projection mechanism (A/B/C) — DESIGNED** (§4.1–§4.3). A: run ledger at
+  `.doctrine/dispatch/<slice>/{journal,boundaries,orthogonal}.toml` (committed,
+  runtime-coordination carve-out, CAS via `git update-ref`). B: `review/<slice>` =
+  squashed filtered tip-tree (v1, reversible). C: per-phase cut from recorded
+  boundaries, claude-arm only, reusing B's tree-filter. New code surface: a
+  filtered-tree builder in `src/git.rs` + the sync verb's compose step.
 - **OQ-D (RV-023 F-2) — RECLASSIFIED to an SL-064 plan-gate** (User ruled (a);
   RV-025 F-3/F-4). **Not an ADR-acceptance blocker.** v1 ships markerless creation
   as a transitional assumption with the D2b fence as defence-in-depth; the **plan
@@ -367,4 +536,15 @@ SL-064's plan** (cf. SL-056 G1 / ADR-008). The split:
   **locked.**
 - DD-5 branch-point/re-anchor demote to sync point — **locked.**
 - DD-6 worktree-life < branch-life (resolves IMP-041) — **locked.**
-- Delta-class temporal boundary, intent-routing, audit ordering — **OQ.**
+- DD-7 run ledger = three co-located committed files at `.doctrine/dispatch/<slice>/`
+  (journal/boundaries/orthogonal); split for per-event append efficiency + SRP,
+  co-located so B excludes one prefix; runtime-coordination tier git-committed as a
+  bounded carve-out — **locked.**
+- DD-8 tree-filter primitive (`filter_tree`+`commit_tree` in `src/git.rs`) shared by
+  B and C; CAS via native `git update-ref` 3-arg — **locked.**
+- DD-9 `review/<slice>` v1 = single squashed filtered tip-tree, parent trunk-base;
+  reversible (regenerable from SSoT) — **locked.**
+- DD-10 per-phase cut (C) = code-only filtered tree of `code_end_oid` onto prior
+  phase branch, from `boundaries.toml`; claude-arm only — **locked.**
+- Delta-class temporal boundary, intent-routing, audit ordering — **OQ (closed; see
+  §4 / ADR-012).**
