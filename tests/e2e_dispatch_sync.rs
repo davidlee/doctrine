@@ -566,7 +566,10 @@ fn prepare_review_projects_off_pinned_fork_point_not_moved_trunk() {
     // A foreign writer advances trunk after dispatch/064 forked from `base`.
     let foreign = commit(dir, "foreign.txt", "foreign", "foreign trunk advance");
     assert_eq!(git(dir, &["rev-parse", "main"]), foreign);
-    assert_ne!(foreign, fixture.base, "trunk genuinely moved off the fork-point");
+    assert_ne!(
+        foreign, fixture.base,
+        "trunk genuinely moved off the fork-point"
+    );
 
     let out = prepare_review(dir);
     assert!(

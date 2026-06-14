@@ -122,7 +122,9 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
     let trunk_tip = git::trunk_commit(root)?
         .context("prepare-review: no trunk ref resolves — a trunk base is required")?;
     let trunk_base = git::merge_base(root, &tip, &trunk_tip)?.with_context(|| {
-        format!("prepare-review: dispatch/{slice3} and trunk ({trunk_tip}) share no common ancestor")
+        format!(
+            "prepare-review: dispatch/{slice3} and trunk ({trunk_tip}) share no common ancestor"
+        )
     })?;
 
     // --- source the run ledger from the dispatch tip (object db, not the
