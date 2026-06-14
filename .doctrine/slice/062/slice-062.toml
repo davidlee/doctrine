@@ -1,9 +1,13 @@
 id = 62
 slug = "uniform-lifecycle-destructive-verbs"
 title = "Uniform lifecycle-transition + destructive verbs across kinds"
-status = "design"
+status = "plan"
 created = "2026-06-14"
 updated = "2026-06-14"
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
 
 [[relation]]
 label = "governed_by"
