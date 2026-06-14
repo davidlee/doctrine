@@ -1,0 +1,18 @@
+id = 61
+slug = "rewire-review-skills-rv"
+title = "Rewire /code-review and /inquisition onto the RV review ledger"
+status = "design"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-007"
+
+# Structural relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` table (SL-048 "the cut"). Slices carry no typed relation axes.
+# Author an edge with the `doctrine link` verb — it validates the (source, label)
+# pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
