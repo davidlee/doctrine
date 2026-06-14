@@ -112,8 +112,18 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
     let tip = resolve_commit(root, &coord_ref)?
         .with_context(|| format!("prepare-review: dispatch/{slice3} does not exist"))?;
     let tip_tree = tree_of(root, &tip)?;
-    let trunk_base = git::trunk_commit(root)?
+    // Project off the PINNED FORK-POINT — merge-base(dispatch/<slice>, trunk) —
+    // not the live trunk tip (RV-030 F-1, design §4.2/§4.3 trunk_base_B). The
+    // coordination worktree isolates the working tree, NOT the trunk ref: a
+    // foreign commit landing on trunk between `coordinate` and `sync` must not
+    // reparent the per-phase cuts, else their diffs stop being exact and the
+    // §3/IMP-043 "integrate refuses non-ff" net is silently bypassed. The live
+    // tip resurfaces only at integrate's actual trunk push, under CAS.
+    let trunk_tip = git::trunk_commit(root)?
         .context("prepare-review: no trunk ref resolves — a trunk base is required")?;
+    let trunk_base = git::merge_base(root, &tip, &trunk_tip)?.with_context(|| {
+        format!("prepare-review: dispatch/{slice3} and trunk ({trunk_tip}) share no common ancestor")
+    })?;
 
     // --- source the run ledger from the dispatch tip (object db, not the
     //     working tree — works stage-1 and stage-2; design §4.1) --------------
@@ -143,7 +153,7 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
         &journal_path,
         &coord_ref,
         &journal,
-        &tip,
+        "journal: prepare-review",
     )?;
 
     // --- apply the external ref creations under zero-oid CAS (EX-5) ----------
@@ -174,7 +184,7 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
         &journal_path,
         &coord_ref,
         &journal,
-        &journal_commit,
+        "journal: prepare-review",
     )?;
 
     if stale.is_empty() {
@@ -245,7 +255,7 @@ fn integrate(
         &journal_path,
         &coord_ref,
         &journal,
-        &tip,
+        "journal: integrate",
     )?;
 
     // --- replay every row idempotently under the 3-way CAS (EX-1/EX-2) --------
@@ -285,7 +295,7 @@ fn integrate(
         &journal_path,
         &coord_ref,
         &journal,
-        &journal_commit,
+        "journal: integrate",
     )?;
 
     if moved.is_empty() {
@@ -306,12 +316,16 @@ fn integrate(
 
 /// The highest-numbered `refs/heads/phase/<slice>-NN` target in the journal — the
 /// cumulative code tip (phase branches are chained off the trunk base, so the max
-/// NN holds all prior phases' code). `None` when no phase row was projected.
+/// NN holds all prior phases' code). Only **verified** rows count: a failed phase
+/// projection must not be mistaken for the chain tip (RV-030 F-8), else integrate
+/// would parent the trunk advance on an unresolved ref. `None` when no verified
+/// phase row was projected.
 fn phase_chain_tip(journal: &Journal, slice3: &str) -> Option<String> {
     let prefix = format!("refs/heads/phase/{slice3}-");
     journal
         .rows
         .iter()
+        .filter(|r| r.status == LedgerStatus::Verified)
         .filter_map(|r| {
             r.target_ref
                 .strip_prefix(&prefix)
@@ -360,7 +374,11 @@ fn plan_edge_row(root: &Path, slice3: &str, edge_ref: &str) -> anyhow::Result<Jo
 }
 
 /// A pending CAS journal row advancing `target_ref` to `planned` from its current
-/// tip (`expected_old`, zero-oid for a ref creation).
+/// tip (`expected_old`, zero-oid for a ref creation). `source_oid == planned_new_oid`
+/// is **intentional** for these direct-projection (trunk/edge) rows — the source
+/// IS the planned ref, so replay recomputes identity and converges to a no-op
+/// (RV-030 F-10); unlike prepare-review rows where source (dispatch tip) and the
+/// synthesised commit differ.
 fn projection_row(target_ref: &str, planned: String, expected_old: Option<String>) -> JournalRow {
     JournalRow {
         source_oid: planned.clone(),
@@ -473,8 +491,10 @@ fn pending_journal(planned: &[Planned]) -> Journal {
 
 /// Commit `journal` onto `dispatch/<slice>` by splicing `journal.toml` into the
 /// tip tree and advancing the branch under CAS (no checkout). `base_tree` is the
-/// impl tip tree; `parent`/`expected_old` are the branch's current tip. Returns
-/// the new branch commit oid.
+/// impl tip tree; `parent` is the branch's current tip — by construction both the
+/// new commit's parent AND the CAS expected-old (always identical). `msg` is the
+/// stage-distinct commit message (`journal: prepare-review` / `journal: integrate`,
+/// RV-030 F-4). Returns the new branch commit oid.
 fn commit_journal(
     root: &Path,
     base_tree: &str,
@@ -482,15 +502,15 @@ fn commit_journal(
     journal_path: &str,
     coord_ref: &str,
     journal: &Journal,
-    expected_old: &str,
+    msg: &str,
 ) -> anyhow::Result<String> {
     let body = journal.to_toml()?;
     let tree = git::tree_with_file(root, base_tree, journal_path, &body)?;
-    let commit = git::commit_tree(root, &tree, parent, "journal: prepare-review")?;
-    match git::update_ref_cas(root, coord_ref, &commit, expected_old)? {
+    let commit = git::commit_tree(root, &tree, parent, msg)?;
+    match git::update_ref_cas(root, coord_ref, &commit, parent)? {
         RefCas::Updated => Ok(commit),
         RefCas::Moved { actual } => bail!(
-            "prepare-review: dispatch branch moved under us (expected {expected_old}, found {})",
+            "journal-commit: dispatch branch moved under us (expected {parent}, found {})",
             actual.as_deref().unwrap_or("?")
         ),
     }

@@ -643,8 +643,10 @@ fn git_env_text(
 /// A throwaway `GIT_INDEX_FILE` inside the repo's git dir, removed on drop. Lets
 /// [`filter_tree`] stage into a scratch index that is **never** the live
 /// coordination index (EX-2). Single-writer orchestrator ⇒ the pid-suffixed name
-/// is collision-free; an absent file is an empty index to git, so a leftover from
-/// a crashed run is cleared up front.
+/// is collision-free. `new` sweeps **every** `doctrine-filter-index.*` sibling up
+/// front, reclaiming the crash debris a hard-killed prior run leaves behind (its
+/// `Drop` never fired, RV-030 F-5) — not just our same-pid path (which is fresh
+/// anyway). An absent index file is an empty index to git.
 struct ScratchIndex {
     path: std::path::PathBuf,
 }
@@ -652,9 +654,24 @@ struct ScratchIndex {
 impl ScratchIndex {
     fn new(root: &Path) -> Result<Self, CaptureError> {
         let git_dir = git_text(root, &["rev-parse", "--absolute-git-dir"])?;
+        let git_dir = Path::new(&git_dir);
+        // Sweep cross-PID crash debris: the single-writer orchestrator owns the
+        // `doctrine-filter-index.*` namespace, so every sibling is a leftover from
+        // a prior run whose Drop never ran. Reclaim them all (our own same-pid
+        // path included — remove_file's ENOENT is ignored).
+        if let Ok(entries) = std::fs::read_dir(git_dir) {
+            for entry in entries.flatten() {
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("doctrine-filter-index.")
+                {
+                    drop(std::fs::remove_file(entry.path()));
+                }
+            }
+        }
         let name = format!("doctrine-filter-index.{}", std::process::id());
-        let path = Path::new(&git_dir).join(name);
-        drop(std::fs::remove_file(&path));
+        let path = git_dir.join(name);
         Ok(Self { path })
     }
 }
@@ -875,6 +892,31 @@ pub(crate) fn is_ancestor(
         Some(1) => Ok(false),
         _ => Err(CaptureError::Git(format!(
             "merge-base --is-ancestor {ancestor} {descendant}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
+/// The merge-base (best common ancestor) of `a` and `b` via `git merge-base <a>
+/// <b>`. `Ok(None)` when the two share no common ancestor (exit 1 — unrelated
+/// histories), kept distinct from a usage/spawn failure (anything else ⇒ error,
+/// like [`is_ancestor`]). The dispatch projection's **pinned fork-point**:
+/// stage-1 parents `review/<slice>` + `phase/<slice>-NN` on
+/// merge-base(`dispatch/<slice>`, trunk), NOT the live trunk tip — so a foreign
+/// commit landing on trunk mid-run cannot reparent the projection (design
+/// §4.2/§4.3 `trunk_base_B`, RV-030 F-1). The live tip is used only at
+/// integrate's trunk push under CAS.
+pub(crate) fn merge_base(root: &Path, a: &str, b: &str) -> Result<Option<String>, CaptureError> {
+    let output = run_git(root, &["merge-base", a, b])?;
+    match output.status.code() {
+        Some(0) => {
+            let text = String::from_utf8(output.stdout)
+                .map_err(|_ignored| CaptureError::Git("merge-base: non-utf8 oid".to_owned()))?;
+            Ok(Some(text.trim().to_string()))
+        }
+        Some(1) => Ok(None),
+        _ => Err(CaptureError::Git(format!(
+            "merge-base {a} {b}: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         ))),
     }
@@ -2451,5 +2493,55 @@ mod tests {
         assert!(super::is_ancestor(repo.path(), &c1, &c2).expect("c1<c2"));
         assert!(!super::is_ancestor(repo.path(), &c2, &c1).expect("c2!<c1"));
         assert!(super::is_ancestor(repo.path(), &c1, &c1).expect("reflexive"));
+    }
+
+    /// RV-030 F-1: the pinned fork-point. `merge_base` returns the common ancestor
+    /// of two divergent branches; `Ok(None)` for unrelated histories (exit 1).
+    #[test]
+    fn merge_base_returns_fork_point_or_none() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "1", "base");
+        // Diverge: a feature branch off `base`, then advance `main` past it.
+        repo.git(&["branch", "feature"]);
+        repo.commit("main.txt", "m", "main advances"); // main moves on
+        repo.git(&["checkout", "feature"]);
+        let feat = repo.commit("feat.txt", "f", "feature commit");
+
+        assert_eq!(
+            super::merge_base(repo.path(), &feat, "main").expect("merge-base"),
+            Some(base.clone()),
+            "fork-point is the shared base, not either tip"
+        );
+
+        // An orphan branch shares no history with `base` → no common ancestor.
+        repo.git(&["checkout", "--orphan", "island"]);
+        let island = repo.commit("island.txt", "i", "unrelated root");
+        assert_eq!(
+            super::merge_base(repo.path(), &island, &base).expect("merge-base unrelated"),
+            None,
+            "unrelated histories share no merge-base"
+        );
+    }
+
+    /// RV-030 F-9: `read_path_at` reads a blob from a refish's committed tree
+    /// (object db, no working tree) — `Some` when the path is present, `None` when
+    /// absent — matching the discipline of every other new projection primitive.
+    #[test]
+    fn read_path_at_present_some_absent_none() {
+        let repo = ScratchRepo::new();
+        let head = repo.commit(".doctrine/dispatch/064/journal.toml", "rows = []\n", "ledger");
+
+        assert_eq!(
+            super::read_path_at(repo.path(), &head, ".doctrine/dispatch/064/journal.toml")
+                .expect("present"),
+            Some("rows = []".to_owned()),
+            "present path yields its blob content"
+        );
+        assert_eq!(
+            super::read_path_at(repo.path(), &head, ".doctrine/dispatch/064/absent.toml")
+                .expect("absent"),
+            None,
+            "absent path yields None, not an error"
+        );
     }
 }
