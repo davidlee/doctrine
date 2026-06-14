@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec47bbd4e7b22aa412cd465cdbe47"
+memory_key = "mem.pattern.testing.data-only-phase-must-regate-corpus-walk-oracles"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Data-only phase that mutates corpus contents must re-run corpus-walk oracles / full gate"
+summary = "A data-only backfill phase must re-run the full gate; per-phase funnel verify before the data lands misses corpus-walk oracle drift"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["tests/e2e_relation_migration_storage.rs"]
+globs = []
+commands = []
+tags = ["audit", "dispatch", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "56db0a32c76e955cdb8b5a892ca4ced6cb0b52f5"
+ref_name = "refs/heads/main"
+checkout_state_id = "e3a87d7211cdcb21f9325c69de9a4311a1056de75a96e463efa7f1ca4bfd6045"
+base_commit = "18df43133b6e4943f99fb134269cfeaf3127afad"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

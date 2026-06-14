@@ -1,0 +1,37 @@
+[[area]]
+name = "dep/seq shared leaf"
+purpose = "lifted typed needs/after schema + strict edit-preserving write (D1); backlog re-points type+write, keeps its read for promoted"
+paths = ["src/dep_seq.rs"]
+
+[[area]]
+name = "capture verbs + validation"
+purpose = "generic doctrine needs/after (D4), author-time work-like target gate (D2), slice scaffold seed + slice read arm (INV-1)"
+paths = ["src/main.rs", "src/slice.rs", "install/templates/slice.toml"]
+
+[[area]]
+name = "cross-kind consumer dispatch"
+purpose = "engine dep_seq_for dispatch (F5 no-read short-circuit) + priority read-gate generalised from backlog-prefix to kind dispatch; emission kind-blind (DD-2)"
+paths = ["src/relation_graph.rs", "src/priority/graph.rs"]
+
+[[area]]
+name = "reconciliation oracles"
+purpose = "behaviour-preservation + new-behaviour + storage-shape proofs; the corpus migration oracle that drifted from the SL-060 slice shape"
+paths = ["tests/e2e_dep_seq_verbs.rs", "tests/e2e_priority_cross_kind.rs", "tests/e2e_relation_migration_storage.rs"]
+
+[[invariant]]
+text = "INV-1: seeded [relationships] (both needs/after arrays) precedes every [[relation]] array in authored TOML (F-1)"
+
+[[invariant]]
+text = "INV-2: the lift is byte-identical for backlog — same reads/writes/dep_seq_for/goldens"
+
+[[invariant]]
+text = "INV-3: outbound-only — the verb writes only on SRC, never touches TGT (ADR-004)"
+
+[[invariant]]
+text = "D2 closed allowlist: needs/after endpoints = slice + 5 backlog kinds; every other admitted kind refused at author time (REQ-258 #3)"
+
+[[risk]]
+text = "test-vs-data drift: a corpus oracle pinning the pre-SL-060 slice shape survives the design reversal and goes RED only after PHASE-05 backfills corpus data"
+
+[[risk]]
+text = "data-only phase (PHASE-05) lands without re-running the full gate, so corpus-dependent oracle drift escapes the per-phase funnel verify"

@@ -12,5 +12,23 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-060"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Gate RED: SL-058 corpus oracle pins the pre-SL-060 slice shape, contradicting PHASE-05's [relationships] backfill + locked design §5.3/E9"
+detail = "just check / just gate RED at HEAD, independent of concurrent SL-063. Failing: tests/e2e_relation_migration_storage.rs:248 slice_corpus_has_no_relationships_table_only_relation_arrays — asserts v.first_relationships.is_none() ('slices are table-absent post-cut', the SL-058 PHASE-02 invariant). SL-060 §5.3/E9 deliberately RE-CARRIES a [relationships] table on slices for the dep/seq payload axis (needs/after), and PHASE-05 (b5d14f7) backfilled it into every slice — so the data and the locked design contradict this stale oracle. The sibling template oracle assert_slice_shape (:389) was correctly amended in PHASE-03 to assert the table IS present; the corpus oracle in the same file was left pinning the old shape — the two oracles disagree. Root cause: PHASE-03's funnel verified before PHASE-05 changed corpus contents; the data-only PHASE-05 was not re-gated, so the drift escaped (handover claimed 'gate green at HEAD'). Gate must be green to close."
+disposition = "fix-now"
+response = "Fixed in-audit. Updated the corpus oracle to the SL-060 slice shape (renamed slice_corpus_relationships_table_holds_only_dep_seq_keys): dropped the obsolete whole-table-absence assertion; now asserts every typed [relationships] key is a dep/seq key (⊆ {needs, after}) — which subsumes the old structural-leak guard (specs/requirements/supersedes/governed_by/related can never appear). Kept assert_f1 (table precedes [[relation]]) and the [[relation]] label allowlist. Mirrors assert_backlog_shape. just check + just gate green; cargo clippy zero. Design-sanctioned per §5.3/E9 — the template oracle already encoded this shape; the corpus oracle was the stale side."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Process: data-only PHASE-05 landed without a full-gate re-run, so corpus-oracle drift escaped the per-phase dispatch funnel"
+detail = "The dispatch funnel verifies each phase before commit, but PHASE-05 was a pure-data backfill whose effect (corpus contents) is what a corpus-walk oracle reads. Because the code phases were verified before the backfill landed, and the backfill phase itself was treated as 'data-only, no gate', the slice_corpus oracle drift was invisible until a fresh full-gate run at audit. The data is correct (validate clean, all 63 slices carry the seeded block, SL-061 included); only the unrun gate hid the test-side staleness."
+disposition = "tolerated"
+response = "Data is correct; only the test-side oracle was stale and the gap was an unrun gate, not a logic defect. No code guard filed (forcing a full gate on every data-only phase is over-process for a one-off backfill). Captured as durable process learning via /record-memory: a data-only phase that mutates corpus contents must re-run the corpus-walk oracles / full gate before the slice is treated as gate-green — per-phase funnel verification taken before the data lands does not cover it."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
