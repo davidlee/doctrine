@@ -97,12 +97,29 @@ unit); this is the **outer** loop (drive to completion):
      `/audit` from the **parent/root** tree against the prepared `review/<slice>` +
      `phase/*` refs — never from inside the coordination tree (RV verbs refuse on a
      worktree fork, and the tree is now gone).
+   - **`review/*` and `phase/*` are EVIDENCE refs, not branches to edit or land
+     (R2).** Audit/repair never rewrites them in place. Instead, publish a
+     **candidate interaction branch** with `doctrine dispatch candidate create
+     --slice <N> --role review_surface|close_target --base <trunk> [--source
+     <review/phase ref>] [--worktree]` — a Doctrine no-ff 3-way merge of the
+     evidence onto the trunk base, recorded with immutable source/base/merge OIDs.
+     `doctrine dispatch candidate status --slice <N>` lists the evidence refs and
+     candidate branches separately and prints the safe next verb — route reviewers
+     and humans to the **candidate** branch for review/fix, never the raw evidence
+     ref. The create→audit→admit→close path: create a candidate → audit it →
+     `doctrine dispatch candidate admit --slice <N> --role close_target --candidate
+     <ref> [--review RV-NNN]` pins an immutable `admitted_oid` (validates provenance
+     + merge-ancestry, refuses a moved ref) → `/close` integrates that OID.
 
    **Stage-2 integrate is NOT yours and NOT now.** Conclude stops here. Only after
    audit passes does **`/close`** (not `/dispatch`) run `doctrine dispatch sync
    --slice <N> --integrate [--trunk <ref>] [--edge <ref>]` — the post-audit replay
-   that projects the audited units. Integrating pre-audit is the gate this lifecycle
-   exists to enforce.
+   that projects the audited units. When a candidate workflow is active, integrate
+   targets the **admitted `close_target` OID** (and `--edge` the admitted
+   `review_surface` OID) via a fast-forward-only CAS row — never a close-time merge;
+   a moved target refuses (re-admit a superseding candidate on the new base), and a
+   missing admission refuses rather than falling back to a raw ref. Integrating
+   pre-audit is the gate this lifecycle exists to enforce.
 6. **Hand over on cadence — a quality gate, not an overflow stop.** Reasoning
    quality decays long before any capacity limit, so hand over *early*, while
    sharp. You cannot read your own token count in-loop, so trip on what you **can**
@@ -252,6 +269,7 @@ just a crash — recover the same way.
 | Crash / context overflow | Rebuild from coordination branch + `git worktree list`; no load-bearing state |
 | All phases landed (conclude) | `dispatch sync --prepare-review` → remove coordination worktree (KEEP `dispatch`/`review`/`phase` refs) → `slice status <id> audit` → `/audit` from parent/root. **Never** `--integrate` — that is `/close`, post-audit |
 | Codex/pi worker forks spent | `doctrine worktree gc --fork <branch>` each (claude arm has none) |
+| Review/repair the evidence | **Never edit `review/*`/`phase/*` in place (R2)** — `dispatch candidate create` a candidate interaction branch; `candidate status` routes to it; `candidate admit` pins the immutable OID `/close` integrates |
 
 ## Red Flags
 

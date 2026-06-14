@@ -23,6 +23,17 @@ exact shapes, flags, ids, and subcommands, ask the CLI: `doctrine <verb>
 - **boot** — regenerate the governance snapshot (`.doctrine/state/boot.md`);
   `boot install` wires the `@`-import + session hook; `boot --check` is the disk
   sentry.
+- **worktree** — isolated forks for `/execute`/`/dispatch`:
+  `fork · coordinate · import · land · gc · branch-point-check · verify-worker ·
+  marker`. The orchestrator-sole-writer dispatch seam.
+- **dispatch** — drive a slice's phases through worktree workers and project the
+  result: `sync` (stage-1 `--prepare-review`, stage-2 `--integrate`) ·
+  `record-boundary` · `candidate {create · status · admit}`. The candidate verbs
+  are the review/repair/land surface over the immutable `review/*`/`phase/*`
+  evidence refs (admission pins an immutable OID `/close` integrates).
+- **review** — the adversarial review ledger (RV kind, ADR-007):
+  `new · raise · dispose · verify · contest · withdraw · prime · show · list`.
+  The structured audit substrate `/audit` runs on.
 
 These verbs are what the skills wrap ([[signpost.doctrine.skill-map]]); the
 files they read and write are mapped in [[signpost.doctrine.file-map]].

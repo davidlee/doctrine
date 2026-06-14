@@ -797,6 +797,108 @@ enum DispatchCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Candidate lifecycle (SL-068 / design §5.3). `create` publishes a
+    /// reviewable/landable candidate at `candidate/<slice>/<label>` by computing
+    /// the no-ff 3-way merge of a verified source ref onto a base, under zero-oid
+    /// CAS. Orchestrator-classed — refused under worker-mode.
+    Candidate {
+        #[command(subcommand)]
+        command: CandidateCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum CandidateCommand {
+    /// Create a candidate (the happy path: provenance gate → no-ff 3-way merge →
+    /// zero-oid CAS branch → recorded row). A content conflict aborts cleanly,
+    /// writing no row/ref/worktree.
+    Create {
+        /// The slice id (bare number, e.g. `68`).
+        #[arg(long)]
+        slice: u32,
+
+        /// The human label (e.g. `review-001`); the ref is
+        /// `candidate/<slice>/<label>` and the id `cand-<slice>-<label>`.
+        #[arg(long, visible_alias = "target")]
+        label: String,
+
+        /// Flavour: `audit` | `experiment`.
+        #[arg(long, default_value = "audit")]
+        kind: String,
+
+        /// Role: `review_surface` | `close_target` | `scratch`.
+        #[arg(long)]
+        role: String,
+
+        /// Payload: `impl_bundle` | `code`.
+        #[arg(long)]
+        payload: String,
+
+        /// The base ref the merge is computed against (e.g. `refs/heads/main`).
+        #[arg(long)]
+        base: String,
+
+        /// The source ref merged in. Defaults to `review/<slice>` for a
+        /// `review_surface`; required otherwise (e.g. a `phase/<slice>-NN`).
+        #[arg(long)]
+        source: Option<String>,
+
+        /// An optional prior candidate id this fresh row supersedes (EX-2).
+        #[arg(long)]
+        supersedes: Option<String>,
+
+        /// Also materialise a linked worktree at the candidate branch (opt-in
+        /// here; mandatory-for-review is PHASE-03).
+        #[arg(long)]
+        worktree: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Status (SL-068 PHASE-04): a read-only self-describing surface — lists the
+    /// evidence refs and the candidate interaction branches in separate groups,
+    /// reports each candidate's base/source/tip/status/admission, surfaces ref
+    /// drift, and prints the safe next command(s). Read-classed — never mutates a
+    /// ref or the ledger, so it works under worker-mode.
+    Status {
+        /// The slice id (bare number, e.g. `68`).
+        #[arg(long)]
+        slice: u32,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Admit (SL-068 PHASE-05): pin a recorded candidate's committed tip as the
+    /// immutable OID a downstream verb (close/review) targets, after validating
+    /// provenance (the recorded merge is the Doctrine candidate merge and an
+    /// ancestor of the admitted tip) and re-reading the ref. Writes ONLY
+    /// `candidates.toml` — never an evidence/candidate ref. Orchestrator-classed.
+    Admit {
+        /// The slice id (bare number, e.g. `68`).
+        #[arg(long)]
+        slice: u32,
+
+        /// Role: `review_surface` | `close_target` (scratch is not admissible).
+        #[arg(long)]
+        role: String,
+
+        /// The candidate ref to admit (e.g. `refs/heads/candidate/064/close-001`).
+        #[arg(long)]
+        candidate: String,
+
+        /// The governing review (e.g. `RV-007`).
+        #[arg(long)]
+        review: Option<String>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2503,6 +2605,20 @@ fn write_class(cmd: &Command) -> WriteClass {
         Command::Dispatch { command } => match command {
             DispatchCommand::Sync { .. } => Orchestrator("dispatch-sync"),
             DispatchCommand::RecordBoundary { .. } => Orchestrator("dispatch-record-boundary"),
+            // candidate create publishes coordination refs + ledger rows (SL-068
+            // §5.3) — Orchestrator-classed like sync/record-boundary; refused
+            // under worker-mode.
+            DispatchCommand::Candidate { command } => match command {
+                CandidateCommand::Create { .. } => Orchestrator("dispatch-candidate-create"),
+                // candidate status is a read-only self-describing surface (SL-068
+                // PHASE-04) — Read-classed so it works under worker-mode; it
+                // mutates no ref and no ledger row.
+                CandidateCommand::Status { .. } => Read,
+                // candidate admit pins an immutable OID into candidates.toml
+                // (SL-068 PHASE-05) — Orchestrator-classed like create; refused
+                // under worker-mode.
+                CandidateCommand::Admit { .. } => Orchestrator("dispatch-candidate-admit"),
+            },
         },
         // The coverage group splits per inner verb (SL-057 D2a): `show` is the
         // read-only drift view; `record`/`forget` mutate the observed store, and
@@ -3303,6 +3419,53 @@ fn main() -> anyhow::Result<()> {
                 code_end,
                 path,
             } => dispatch::run_record_boundary(path, slice, &phase, &code_start, &code_end),
+            DispatchCommand::Candidate { command } => match command {
+                CandidateCommand::Create {
+                    slice,
+                    label,
+                    kind,
+                    role,
+                    payload,
+                    base,
+                    source,
+                    supersedes,
+                    worktree,
+                    path,
+                } => {
+                    let req = dispatch::CreateRequest {
+                        slice,
+                        label,
+                        kind: dispatch::parse_kind(&kind)?,
+                        role: dispatch::parse_role(&role)?,
+                        payload: dispatch::parse_payload(&payload)?,
+                        base,
+                        source,
+                        supersedes,
+                        worktree,
+                        created_at: clock::today(),
+                    };
+                    dispatch::run_candidate_create(path, &req)
+                }
+                CandidateCommand::Status { slice, path } => {
+                    dispatch::run_candidate_status(path, slice)
+                }
+                CandidateCommand::Admit {
+                    slice,
+                    role,
+                    candidate,
+                    review,
+                    path,
+                } => {
+                    let req = dispatch::AdmitRequest {
+                        slice,
+                        role: dispatch::parse_role(&role)?,
+                        candidate,
+                        review,
+                        admitted_at: clock::today(),
+                    };
+                    dispatch::run_candidate_admit(path, &req)
+                }
+            },
         },
         Command::Validate { path } => run_validate(path),
         Command::Reseat {
