@@ -1,0 +1,44 @@
+id    = 31
+slug  = "reconciliation-review-of-sl-067"
+title = "reconciliation review of SL-067"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-067"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "review/067 is a dispatch worktree amalgam — extraneous deletions must be filtered at integation"
+detail = """
+The review/067 branch (74ba9a1) was built on a dispatch worktree partial tree (merge-base 91b05c4, not main HEAD 46c389d). The diff against main deletes:
+- src/revision.rs (1478 lines — the entire REV change-axis kind, SL-066)
+- src/relation.rs Revises label + REV kind constant
+- src/main.rs Revision command variants (~215 lines)
+- 5 revision e2e test files (e2e_revision.rs, e2e_revision_apply.rs, e2e_revision_change.rs, e2e_revision_dep_seq.rs, e2e_revision_install_commit.rs)
+- All pre-067 slices (001–066), specs, reviews, requirements, ADRs, backlog items, memory items
+- install/templates/revision.{md,toml}
+The SL-067 additions themselves (+1017 lines in src/backlog.rs, src/listing.rs, src/main.rs, golden updates) are correct and matching the design. But the branch as-is would destroy the project if merged.
+
+Resolution: at /close, integrate ONLY the SL-067 additions —  tag verb + tests,  PerToken paint,  Tag CLI wiring, and the two golden test updates. Land as conventional commits on main, one per concern. The integration is /close's act."""
+disposition = "fix-now"
+response = "The review/067 branch is a dispatch worktree amalgam — its code additions for SL-067 are correct, but the partial tree carries extraneous deletions of revision.rs, relation.rs Revises label, main.rs Revision command variants, all pre-067 slices/specs/reviews, and 5 revision e2e tests. At /close, integrate only the SL-067 additions as conventional commits on main: (1) src/main.rs Tag CLI wiring, (2) src/backlog.rs tag verb + column + tests + json projection, (3) src/listing.rs PerToken paint model + tests, (4) golden test updates. The integration is /close's act."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "VT-4 dynamic column visibility lacks a dedicated table-header assertion"
+detail = 'The dynamic column visibility logic (D2, any_tagged -> effective_default splice) is correctly implemented in list_rows but lacks a dedicated assertion that the table output header includes/excludes the "tags" column. The unit tests cover the PerToken paint path and golden e2e tests pass, but the dynamic-column surface is tested only implicitly. Not a blocker.'
+disposition = "follow-up"
+response = "The dynamic column logic is simple and correct — the any_tagged flag keys on visible rows (post-retain, post---kind) and the effective_default splice is clean. Adding an explicit table-header assertion would be good hardening but is not required for closure. Capture as a backlog item."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
