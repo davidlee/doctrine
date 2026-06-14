@@ -22,6 +22,7 @@ mod input;
 mod install;
 mod integrity;
 mod knowledge;
+mod ledger;
 mod lexical;
 mod lifecycle;
 mod listing;
