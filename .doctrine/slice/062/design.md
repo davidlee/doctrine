@@ -104,14 +104,24 @@ Two coupled absences:
 
 ### 5.1 System Model
 
+Two homes, split by purity (D1, revised post-review — F-A):
+
 ```
-NEW MODULE  src/lifecycle.rs  (beside conduct.rs — the ADR-009 pairing)
-  ├─ FSM (moved verbatim from slice.rs):
-  │    enum Transition · fn classify(from,to) · is_transition_terminal
-  │    crosses_closure_seam · is_terminal_status · transition_label · edge table
-  └─ shared write-core:
+NEW MODULE  src/lifecycle.rs  (PURE leaf, beside the pure conduct.rs)
+  └─ FSM (moved from slice.rs — the ADR-009 pairing, now TWO pure leaves):
+       enum Transition · fn classify(from,to) · is_transition_terminal
+       crosses_closure_seam · is_terminal_status · transition_label · edge table
+     NO disk/clock — classify takes &str, total over its inputs.
+
+SHARED IO SEAM  the edit-preserving authored-TOML mutators (IO — engine tier).
+  Generalize the EXISTING dep_seq::append (SL-060), do NOT re-roll it (no
+  parallel implementation). One home for "edit-preserving authored-TOML mutation":
        fn set_authored_status(path, managed: &[(&str,&str)], hint) -> Result<bool>
-       fn supersede_old(path, new_ref, status, today) -> Result<()>   (§5.4)
+       fn append_relationship_array(path, field, value) -> Result<bool>   (generalizes
+            dep_seq::append from {needs,after} to any seeded [relationships] array)
+  Exact module name/placement = execution detail (OQ-3): fold into the dep_seq
+  leaf (rename to an authored-TOML-mutation seam) or a sibling leaf; the binding
+  constraint is ONE seam, reused.
 
 CONSUMERS (command tier — keep their distinct GATE, delegate the WRITE):
   slice::run_status      gate: lifecycle::classify + RV close-gate → set_authored_status
@@ -120,12 +130,14 @@ CONSUMERS (command tier — keep their distinct GATE, delegate the WRITE):
   backlog::set_*_status  gate: resolution coupling (validate)      → set_authored_status
 
 NEW VERB  doctrine supersede <NEW> <OLD>   (top-level, sibling of link/needs/after)
-  resolve both · assert same-kind · assert SupersedePolicy Some · run transaction
+  resolve both · same-kind · supersede_policy Some (ADR only today) · not-already-
+  superseded guard · run transaction (set_authored_status + append_relationship_array)
 ```
 
 ### 5.2 Interfaces & Contracts
 
-**`lifecycle::set_authored_status` — the shared write-core (gate-free):**
+**`set_authored_status` — the shared write-core (gate-free; lives in the IO seam,
+NOT in the pure `lifecycle.rs` — F-A):**
 
 ```rust
 /// Edit-preserving authored-TOML status write. NO classification — the caller's
@@ -163,11 +175,13 @@ lifecycle::set_authored_status(                   // WRITE (gate-free)
 ```
 
 **Per-kind managed key-sets:** slice/gov/spec → `[("status", to), ("updated", today)]`;
-backlog → `[("status", to), ("updated", today), ("resolution", res)]` (the resolution
-coupling validated in backlog's shell before the call; backlog composes its own
-post-transition print string from its own logic, not the setter's return).
+backlog → `[("status", to), ("updated", today), ("resolution", res)]`. **All coupling
+decided in the caller** (F-G): backlog's shell validates the resolution coupling AND
+the D9-clear (a back-edge passes `res=""` to clear — `resolution` is scaffold-seeded
+`""`, so F-1 passes and the empty value writes), then composes its own post-transition
+print string from its own logic — the setter only returns `wrote: bool`.
 
-**`SupersedePolicy` — per-kind data (the gov-first boundary):**
+**`SupersedePolicy` — per-kind data (the ADR-first boundary — F-C):**
 
 ```rust
 struct SupersedePolicy {
@@ -175,7 +189,10 @@ struct SupersedePolicy {
     carveout_field:    &'static str,   // "superseded_by"  typed array on OLD
     superseded_status: &'static str,   // "superseded"     OLD flips to this
 }
-/// Some(..) for gov kinds; None for slice (no `superseded` state yet — §9 F2).
+/// Some(..) ONLY for ADR today. POL/STD lack a `superseded` status
+/// (POLICY_STATUSES/STANDARD_STATUSES verified — §9 F2); slice lacks it too.
+/// All three join via the F2 vocab-addition follow-up. ADR seeds both
+/// `supersedes=[]` and `superseded_by=[]` (adr.toml verified — F-B).
 fn supersede_policy(kind: &entity::Kind) -> Option<SupersedePolicy>;
 ```
 
@@ -195,25 +212,33 @@ fn supersede_policy(kind: &entity::Kind) -> Option<SupersedePolicy>;
 
 ### 5.4 Lifecycle, Operations & Dynamics — the supersession transaction
 
-`doctrine supersede <NEW> <OLD>` (top-level), gov-first:
+`doctrine supersede <NEW> <OLD>` (top-level), ADR-first:
 
 1. **Pre-flight, no writes** — resolve `<NEW>` and `<OLD>`; assert both resolve, are
-   the **same kind**, and `supersede_policy(kind)` is `Some` (else refuse: slice →
-   "supersession not yet supported (follow-up)"; cross-kind → refuse). Read both docs.
+   the **same kind**, and `supersede_policy(kind)` is `Some` (else refuse: POL/STD/slice
+   → "supersession not yet supported for <kind> (follow-up F2)"; cross-kind → refuse;
+   `NEW == OLD` → refuse). **Not-already-superseded guard (F-D):** read `<OLD>` — if its
+   status is already `superseded`, allow only the idempotent re-run (`superseded_by ==
+   [NEW]` → no-op); a different supersessor (`superseded_by` holds someone else) → refuse
+   "<OLD> already superseded by <X>; reopening is deferred" (the FromTerminal analog).
    (`resolve-every-ref-before-pure-compare` — shrink the write window.)
-2. **Write `<NEW>`** — array-append `<OLD>` to `[relationships].supersedes`
-   (idempotent; reuse the typed-append seam). One `fs::write`.
-3. **Write `<OLD>`** — `lifecycle::supersede_old`: load `<OLD>`'s `DocumentMut`
-   **once**, array-append `<NEW>` to `[relationships].superseded_by` **and** scalar-set
+2. **Write `<NEW>`** — `append_relationship_array(NEW_path, "supersedes", OLD)` —
+   the generalized dep_seq append (idempotent, F-1-guarded: the array is scaffold-seeded
+   `[]`). One `fs::write`.
+3. **Write `<OLD>`** — one `DocumentMut` load: `append_relationship_array`-style append
+   of `<NEW>` to `superseded_by` **and** `set_authored_status`-style scalar-set
    `status=superseded` + `updated`, one `fs::write`. (Option I — two file writes total,
-   one per file; NOT three writes — `<OLD>` is touched once.)
+   one per file; `<OLD>` is touched once. A thin transaction helper composes the two
+   mutators over the single loaded doc so the file is written once.)
 
-**Atomicity caveat (R1, accepted).** Two files, no FS transaction. Pre-flight removes
-every failure except a mid-write I/O error. A partial (`<NEW>` written, `<OLD>` not)
-leaves `supersedes` without its reciprocal `superseded_by` — **exactly the state
-IMP-032's `validate` cross-check detects**. The verb surfaces a precise error naming
-both refs + recovery; re-run is **idempotent** (no-op guard + idempotent array-append).
-Documented edge, not a silent hazard.
+**Atomicity caveat (R1, accepted).** Two files, no FS transaction. Pre-flight + the
+not-already-superseded guard remove every failure except a mid-write I/O error. A
+partial (`<NEW>` written, `<OLD>` not) leaves `supersedes` without its reciprocal
+`superseded_by` — **exactly the state the SHIPPED SL-048 PHASE-05 `validate` cross-check
+detects** (stored `superseded_by` vs the derived `supersedes` in-edge reciprocal;
+IMP-032 is that check's correction, not its origin). The verb surfaces a precise error
+naming both refs + recovery; re-run is **idempotent** (no-op guard + idempotent
+array-append). Documented edge, not a silent hazard.
 
 ### 5.5 CLI surface
 
@@ -222,15 +247,20 @@ doctrine supersede <NEW> <OLD>      one transaction: NEW supersedes OLD,
                                     OLD.superseded_by += NEW, OLD.status = superseded
 ```
 
-Top-level sibling of `link`/`needs`/`after`. Gov refs today; slice refs refused with
-the gov-first message. (`backlog edit`, `slice status`, `<gov>` status verbs are
+Top-level sibling of `link`/`needs`/`after`. ADR refs today; POL/STD/slice refs refused
+with the ADR-first message. (`backlog edit`, `slice status`, `<gov>` status verbs are
 unchanged — they delegate their write to the shared setter; their CLI is untouched.)
 
 ## 6. Design Decisions
 
-- **D1 — new module `lifecycle.rs` hosts BOTH the FSM and the setter.** They are the
-  two halves of "move an authored status": classify (decide) + set (write). Even flat
-  kinds use the setter (degenerate classify). Cohesive, beside `conduct.rs`.
+- **D1 (REVISED post-review, F-A) — split by purity.** `lifecycle.rs` is a **pure
+  leaf** hosting ONLY the FSM (classify/Transition/predicates/edge table) — the ADR-009
+  pairing becomes two pure leaves beside `conduct.rs`. The edit-preserving IO mutators
+  (`set_authored_status` scalar-set + `append_relationship_array`) live in the
+  authored-TOML-mutation seam, **generalizing the existing `dep_seq::append`** (SL-060)
+  rather than re-rolling it. Rationale: pure/imperative split + ADR-001 — keep IO out of
+  the pure FSM module; one home for authored-TOML edit-preserving mutation. (Superseded
+  the original "both in lifecycle.rs" cohesion framing.)
 - **D2 — altitude C, not B.** Reject a unified `StatusPolicy`-as-data: gov/spec are
   flat (no edges to model — "all legal" is degenerate) and backlog's resolution
   coupling is a second-field invariant, not a transition edge. One type wearing three
@@ -238,8 +268,10 @@ unchanged — they delegate their write to the shared setter; their CLI is untou
 - **D3 — the gate leaves the setter.** Today `set_slice_status` classifies inside;
   after, the shell classifies then calls the gate-free setter. Single responsibility;
   matches gov's already-gate-free setter.
-- **D4 — gov-first as data (`SupersedePolicy: Option`).** Not a hardcode — slice
-  returns `None`; the follow-up that grows slice vocab flips it on, zero shell change.
+- **D4 — ADR-first as data (`SupersedePolicy: Option`) — F-C.** Not a hardcode — only
+  ADR has a `superseded` status today, so `supersede_policy` returns `Some` for ADR
+  only; POL/STD/slice return `None`. The F2 follow-up grows their vocab and flips them
+  on with zero shell change.
 - **D5 — typed-field write target (Q3 (i)).** The verb writes the current canonical
   typed fields; the `[[relation]]` migration is downstream (§9 F3). Transaction shape
   is storage-agnostic — the migration repoints `supersedes_field`, contained.
@@ -248,41 +280,49 @@ unchanged — they delegate their write to the shared setter; their CLI is untou
 
 ## 7. Verification Alignment
 
-**Behaviour-preservation (the gate) — existing suites green UNCHANGED:** slice FSM
-(classify edges, closure-seam, FromTerminal/SeamBreach refuse, RV close-gate),
-gov/spec/backlog setter suites. FSM tests move to `lifecycle.rs` or stay in `slice.rs`
-driving through the re-export (OQ-1) — either way they assert the same outcomes.
+**Behaviour-preservation (the gate) — existing suites green, ASSERTIONS unchanged**
+(import paths update when the FSM moves modules; "behaviour-preserving" is about
+outcomes, not byte-identical test text — F-E): slice FSM (classify edges, closure-seam,
+FromTerminal/SeamBreach refuse, RV close-gate), gov/spec/backlog setter suites. FSM
+tests move to `lifecycle.rs` or stay in `slice.rs` driving through the re-export (OQ-1).
 
-**New — `lifecycle::set_authored_status` (VT, driven through `run()`/shell, NOT the
-pure helper — `invariant-test-must-drive-the-write-seam`):**
+**New — `set_authored_status` (VT, driven through `run()`/shell, NOT the pure
+helper — `invariant-test-must-drive-the-write-seam`):**
 - no-op guard: all-match → `false`, mtime/content hold.
 - F-1 refuse: missing managed key → `bail!`; assert the message does **not** say
   "regenerate via new" (the SL-060 non-destructive lesson, pinned as a test).
 - multi-key path (backlog status+updated+resolution) round-trips; `[relationships]`/
   `[[relation]]`/comments preserved.
 
-**New — `supersede` verb (VT):**
+**New — `supersede` verb (VT), ADR refs:**
 - happy path: NEW.supersedes ∋ OLD, OLD.superseded_by ∋ NEW, OLD.status == superseded
   — assert **all three** surfaces (`conformance-asserts-surface-not-just-envelope`).
-- idempotent re-run: second `supersede NEW OLD` is a no-op.
-- slice refs refused (gov-first message); cross-kind refs refused.
+- idempotent re-run: second `supersede NEW OLD` is a no-op (all three already hold).
+- not-already-superseded guard (F-D): `supersede NEW2 OLD` where OLD already superseded
+  by NEW1 → refused with the "already superseded by NEW1" message.
+- POL/STD/slice refs refused (ADR-first message); cross-kind refs refused; `NEW==OLD`
+  refused.
 - both blocks + comments preserved.
-- partial-write detectability: a hand-induced NEW-without-OLD state is flagged by
-  IMP-032's `validate` (links the two slices' invariants).
+- partial-write detectability: a hand-induced NEW-without-OLD state is flagged by the
+  SHIPPED SL-048 PHASE-05 `validate` cross-check (F-F).
 
 **Gate:** `just gate` green, zero clippy warnings.
 
 ## 8. Risks & Assumptions
 
 - **R1 — supersession non-atomicity** (accepted, §5.4): two-file write, pre-flight +
-  idempotent re-run + IMP-032 `validate` detectability mitigate; documented edge.
+  not-already-superseded guard + idempotent re-run + the SHIPPED SL-048 PHASE-05
+  `validate` detectability mitigate; documented edge.
 - **R2 — FSM re-home must stay behaviour-preserving.** One consumer, but the move
-  touches a well-tested core. Mitigation: the gate is the existing suite, green
-  unchanged; move tests with the code or re-export.
+  touches a well-tested core. Mitigation: existing suites green (assertions unchanged,
+  imports update — F-E); move tests with the code or re-export.
+- **R3 — `dep_seq::append` generalization must not regress SL-060** (F-A/F-B). Widening
+  it from `{needs,after}` to any seeded `[relationships]` array touches SL-060's seam:
+  its needs/after suites are the behaviour-preservation proof and stay green unchanged.
 - **A1 — `is_terminal_status` was left at module scope precisely for this reuse**
   (slice.rs comment) — the extraction handhold is in place.
-- **A2 — gov is flat any→any** — the supersession status flip needs no FSM gate;
-  `superseded` is already in `ADR_STATUSES`. Confirmed code-side.
+- **A2 — ADR is flat any→any** — the supersession status flip needs no FSM gate;
+  `superseded` is already in `ADR_STATUSES`. POL/STD/slice vocabs lack it (verified — F-C).
 
 ## 9. Open Questions & Follow-Ups
 
@@ -290,13 +330,42 @@ pure helper — `invariant-test-must-drive-the-write-seam`):**
 - **OQ-1** — FSM tests move to `lifecycle.rs` or stay in `slice.rs` (re-export)?
   Decide at execution by smallest green diff.
 - **OQ-2** — exact `hint` wording per kind. Trivial; pinned at execution.
+- **OQ-3 (F-A)** — home + name of the shared IO mutation seam: grow `dep_seq.rs` into
+  an authored-TOML-mutation leaf, or a sibling leaf reusing its append core. Binding
+  constraint: ONE seam, `dep_seq::append` reused not re-rolled. Decide at execution.
 
 **Follow-ups (mint at close):**
 - **F1 — destructive verbs (delete/archive).** The carved-out IMP-006 axis (b):
   file-level destruction semantics for committed authored entities (archive-status vs
   git-rm vs tombstone — the R2 of the slice scope); shares the `entity.rs` claim seam.
-- **F2 — slice→slice supersession.** Grow slice vocab: add `superseded` to
-  `SLICE_STATUSES`+enum+`classify`, add the `superseded_by` carve-out field, flip the
-  slice `supersedes` rule to `LifecycleOnly`; `supersede_policy(SLICE)` returns `Some`.
+- **F2 — supersession for POL / STD / slice.** Each lacks a `superseded` status (F-C).
+  Grow vocab: add `superseded` to the kind's status const+enum (+`classify` for slice's
+  ordered FSM), ensure a `superseded_by` carve-out field (POL/STD already seed it; slice
+  needs it added + flip the slice `supersedes` rule to `LifecycleOnly`); then
+  `supersede_policy(KIND)` returns `Some` — zero verb-shell change.
 - **F3 — SL-048 OD-3 storage migration.** Gov `supersedes` typed→`[[relation]]`
   (the reserved `LifecycleOnly` slot); repoint the verb's `supersedes_field`.
+
+## 10. Adversarial Review (internal pass — integrated)
+
+Self-hostile pass on the v1 draft; findings integrated above. Codex external pass
+pending (handover).
+
+- **F-A (significant, integrated)** — D1 put the IO setter in the pure `lifecycle.rs`,
+  violating the pure/imperative split and muddying the ADR-009 pairing. Revised: split
+  by purity — FSM → pure `lifecycle.rs`; IO mutators → the authored-TOML seam,
+  generalizing `dep_seq::append` (no parallel impl). See D1 (revised), §5.1, OQ-3, R3.
+- **F-B (verified, integrated)** — typed-array append was hand-wavy ("reuse the seam")
+  and depended on a seeded array. Verified `adr.toml` seeds `supersedes=[]` +
+  `superseded_by=[]`; concretized `append_relationship_array` (F-1-guarded). §5.2/§5.4.
+- **F-C (significant, integrated)** — "gov-first" was wrong: `POLICY_STATUSES` /
+  `STANDARD_STATUSES` lack `superseded`; only ADR has it. Re-scoped to **ADR-first**;
+  POL/STD folded into the F2 vocab follow-up. D4, §5.2/§5.4/§5.5, A2.
+- **F-D (medium, integrated)** — no guard against re-superseding an already-superseded
+  record. Added the not-already-superseded guard (FromTerminal analog) + a VT. §5.4/§7.
+- **F-E (minor, integrated)** — "tests unchanged" overclaimed; assertions unchanged but
+  import paths shift on the module move. Reworded §7/R2.
+- **F-F (minor, integrated)** — detectability cited IMP-032 (open, a correction); the
+  cross-check actually SHIPPED in SL-048 PHASE-05. Re-cited. §5.4/§7/R1.
+- **F-G (minor, integrated)** — backlog resolution-clear path under the shared setter
+  left implicit. Made explicit: all coupling decided in the caller; `res=""` clears. §5.2.
