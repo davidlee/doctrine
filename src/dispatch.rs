@@ -53,6 +53,35 @@ pub(crate) fn run_integrate(
     integrate(&root, slice, trunk, edge)
 }
 
+/// CLI entry — funnel-time recording: append a per-phase code boundary to
+/// `boundaries.toml` (design §4.3; the claude-arm phase-cut input the orchestrator
+/// records between funnel steps 7 (code) and 8 (knowledge)). `code_start`/
+/// `code_end` are resolved to full commit oids so the ledger holds stable shas,
+/// not mobile refs. The orchestrator commits the file onto `dispatch/<slice>`;
+/// stage-1 prepare-review tree-reads it (`mem.pattern.dispatch.sync-tree-reads`).
+pub(crate) fn run_record_boundary(
+    path: Option<PathBuf>,
+    slice: u32,
+    phase: &str,
+    code_start: &str,
+    code_end: &str,
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let resolve = |refish: &str| -> anyhow::Result<String> {
+        resolve_commit(&root, refish)?
+            .with_context(|| format!("record-boundary: {refish} does not resolve to a commit"))
+    };
+    crate::ledger::record_boundary(
+        &root,
+        slice,
+        crate::ledger::BoundaryRow {
+            phase: phase.to_string(),
+            code_start_oid: resolve(code_start)?,
+            code_end_oid: resolve(code_end)?,
+        },
+    )
+}
+
 /// Resolve a commit-ish ref to its commit oid, or `None` when it does not exist.
 fn resolve_commit(root: &Path, refish: &str) -> anyhow::Result<Option<String>> {
     Ok(git::git_opt(
