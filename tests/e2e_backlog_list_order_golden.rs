@@ -461,8 +461,9 @@ fn vt7_backlog_order_is_an_unknown_subcommand() {
 
 /// `backlog list --json` over the chain corpus: the array order EQUALS the composed
 /// sequence (`ISS-003, ISS-002, ISS-001, IMP-005`), and the `{kind, rows}` envelope
-/// SHAPE is unchanged from PHASE-00 — every row carries `id/kind/resolution/slug/
-/// status/title`, keys alpha-sorted, NO trailing newline, and NO `overrides` key
+/// SHAPE is unchanged from PHASE-00 except the SL-067 `tags` projection — every row
+/// carries `id/kind/resolution/slug/status/tags/title`, keys alpha-sorted (untagged
+/// rows emit `"tags": []`), NO trailing newline, and NO `overrides` key
 /// (the diagnostic stays OUT of the envelope). Clean survey ⇒ empty stderr.
 #[test]
 fn vt8_json_array_order_is_the_composed_sequence_envelope_unchanged() {
@@ -475,16 +476,16 @@ fn vt8_json_array_order_is_the_composed_sequence_envelope_unchanged() {
         "{\n  \"kind\": \"backlog\",\n  \"rows\": [\n    \
          {\n      \"id\": \"ISS-003\",\n      \"kind\": \"issue\",\n      \
          \"resolution\": null,\n      \"slug\": \"c\",\n      \"status\": \"open\",\n      \
-         \"title\": \"Cee\"\n    },\n    \
+         \"tags\": [],\n      \"title\": \"Cee\"\n    },\n    \
          {\n      \"id\": \"ISS-002\",\n      \"kind\": \"issue\",\n      \
          \"resolution\": null,\n      \"slug\": \"b\",\n      \"status\": \"open\",\n      \
-         \"title\": \"Bee\"\n    },\n    \
+         \"tags\": [],\n      \"title\": \"Bee\"\n    },\n    \
          {\n      \"id\": \"ISS-001\",\n      \"kind\": \"issue\",\n      \
          \"resolution\": null,\n      \"slug\": \"a\",\n      \"status\": \"open\",\n      \
-         \"title\": \"Aye\"\n    },\n    \
+         \"tags\": [],\n      \"title\": \"Aye\"\n    },\n    \
          {\n      \"id\": \"IMP-005\",\n      \"kind\": \"improvement\",\n      \
          \"resolution\": null,\n      \"slug\": \"e\",\n      \"status\": \"open\",\n      \
-         \"title\": \"Eee\"\n    }\n  ]\n}"
+         \"tags\": [],\n      \"title\": \"Eee\"\n    }\n  ]\n}"
     );
     assert!(
         !stdout(&out).contains("overrides"),

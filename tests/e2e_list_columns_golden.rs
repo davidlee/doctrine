@@ -451,7 +451,7 @@ fn backlog_list_json_is_byte_exact() {
     ok(&out);
     assert_eq!(
         stdout(&out),
-        "{\n  \"kind\": \"backlog\",\n  \"rows\": [\n    {\n      \"id\": \"IMP-009\",\n      \"kind\": \"improvement\",\n      \"resolution\": null,\n      \"slug\": \"shared-cols\",\n      \"status\": \"open\",\n      \"title\": \"Shared columns\"\n    },\n    {\n      \"id\": \"ISS-002\",\n      \"kind\": \"issue\",\n      \"resolution\": null,\n      \"slug\": \"flaky-test\",\n      \"status\": \"triaged\",\n      \"title\": \"Flaky test\"\n    }\n  ]\n}"
+        "{\n  \"kind\": \"backlog\",\n  \"rows\": [\n    {\n      \"id\": \"IMP-009\",\n      \"kind\": \"improvement\",\n      \"resolution\": null,\n      \"slug\": \"shared-cols\",\n      \"status\": \"open\",\n      \"tags\": [],\n      \"title\": \"Shared columns\"\n    },\n    {\n      \"id\": \"ISS-002\",\n      \"kind\": \"issue\",\n      \"resolution\": null,\n      \"slug\": \"flaky-test\",\n      \"status\": \"triaged\",\n      \"tags\": [],\n      \"title\": \"Flaky test\"\n    }\n  ]\n}"
     );
 }
 
