@@ -1485,15 +1485,19 @@ fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String> {
         }
     }
 
-    // 3. Reap any leftover dir the worktree-remove could not (best-effort).
+    // 3. Reap any leftover dir the worktree-remove could not (best-effort). On a
+    //    SUCCESSFUL reap, RETRACT any stale step-1 `worktree dir {dir}` entry —
+    //    the dir is gone, so a fully-cleaned rollback must report empty debris,
+    //    never false-bail `fork-rollback-debris` over a tree it did clean (F-8).
     if dir.exists() {
         drop(fs::remove_dir_all(dir));
-        if dir.exists()
-            && !debris
-                .iter()
-                .any(|d| d.contains(&dir.display().to_string()))
-        {
-            debris.push(format!("dir {}", dir.display()));
+        let dir_str = dir.display().to_string();
+        if dir.exists() {
+            if !debris.iter().any(|d| d.contains(&dir_str)) {
+                debris.push(format!("dir {dir_str}"));
+            }
+        } else {
+            debris.retain(|d| !d.contains(&dir_str));
         }
     }
 
@@ -2480,6 +2484,29 @@ mod tests {
 
         assert!(is_linked_worktree(&fork).unwrap(), "a linked worktree");
         assert!(!is_linked_worktree(&primary).unwrap(), "the primary tree");
+    }
+
+    #[test]
+    fn rollback_fork_retracts_stale_worktree_entry_after_fs_reap() {
+        // F-8: when step-1 `git worktree remove` FAILS (the dir is not a
+        // registered worktree) but step-3 fs-reaps the dir, the stale step-1
+        // debris entry must be retracted so a fully-cleaned rollback reports NO
+        // debris — else run_fork false-bails `fork-rollback-debris` over a tree
+        // that was, in fact, fully cleaned.
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("src"));
+        // A plain dir that is NOT a git worktree ⇒ `worktree remove --force`
+        // errors, but `fs::remove_dir_all` reaps it.
+        let dir = tmp.path().join("orphan");
+        fs::create_dir_all(&dir).unwrap();
+
+        let debris = rollback_fork(&repo, "no-such-branch", &dir);
+
+        assert!(
+            debris.is_empty(),
+            "a fully fs-reaped rollback reports no debris; got: {debris:?}"
+        );
+        assert!(!dir.exists(), "the orphan dir was reaped");
     }
 
     // --- SL-056 PHASE-10: classify_stamp pure arms (T2) ---
