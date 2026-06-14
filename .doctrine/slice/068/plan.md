@@ -91,6 +91,15 @@ non-code discoverability work from the mechanic phases.
   (`mem.system.lifecycle.defer-needs-backlog-before-close`).
 - V1 close-target payload is `code` (D8); impl-bundle close-target support is
   deliberate/later and not on the default trunk path.
+- PHASE-06 memory spans two classes (deliberately). The candidate workflow is a
+  *product feature* doctrine clients use, so its orientation (the cli-command-map
+  signpost, the workflow + admission-by-OID + the SL-067 evidence-ref-is-not-a-
+  branch trap) is recorded as **global** masters (`memory/`, `--global`) that
+  ship to every client via `memory sync`. The build-time gotchas (the `git.rs`
+  3-way seam, create-conflict/CAS edges) stay **project-local** items
+  (`.doctrine/memory/items/`, committed to this repo only). Installer ships the
+  global corpus and creates an empty `items/` tree in a client — this repo's own
+  items never ship.
 - The invariants the design constraints (D9) demand be preserved —
   admission-by-OID, no-close-time-merge, provenance validation, raw-ref guards —
   are distributed as exit criteria across PHASE-02/04/05 rather than asserted
