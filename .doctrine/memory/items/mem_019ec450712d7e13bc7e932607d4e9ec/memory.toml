@@ -3,13 +3,13 @@ memory_key = "mem.pattern.distribution.claude-install-agents-gitignore-too-broad
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "doctrine claude install self-enforces a too-broad .doctrine/agents/* gitignore that breaks the worktree classifier and swallows authored AGENTS.md"
-summary = "doctrine claude install appends an unclassified, too-broad .doctrine/agents/* gitignore — don't commit it"
+title = "The .doctrine/agents ignore is a whitelist pair (ignore derived, re-include authored AGENTS.md), classified in DERIVED_RUNTIME — ISS-012 fixed"
+summary = "Never blanket-ignore an authored tree: agents-dir ignore is a whitelist pair + DERIVED_RUNTIME classification. ISS-012 landed it."
 created = "2026-06-14"
 updated = "2026-06-14"
 
 [scope]
-paths = ["src/worktree.rs", "src/install.rs"]
+paths = ["src/worktree.rs", "src/install.rs", "src/skills.rs"]
 globs = [".gitignore"]
 commands = []
 tags = []
