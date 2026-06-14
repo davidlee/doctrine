@@ -229,7 +229,10 @@ fn gc_patch_id_leg_reaps_a_landed_via_import_fork() {
     let patch = git(src.path(), &["diff", "main..imp"]);
     let patch_file = src.path().join("imp.patch");
     std::fs::write(&patch_file, &patch).unwrap();
-    git(src.path(), &["apply", "--index", patch_file.to_str().unwrap()]);
+    git(
+        src.path(),
+        &["apply", "--index", patch_file.to_str().unwrap()],
+    );
     std::fs::remove_file(&patch_file).unwrap();
     git(src.path(), &["add", "-A"]);
     git(src.path(), &["commit", "-q", "-m", "imported imp delta"]);
@@ -265,7 +268,12 @@ fn gc_non_ancestor_with_plus_refuses_then_force_and_superseded_reap() {
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
     // A fork whose patch is NOT upstream (never landed) ⇒ `git cherry` shows `+`.
-    make_fork_branch(src.path(), holder.path(), "unl", &[("only.rs", "fn u() {}")]);
+    make_fork_branch(
+        src.path(),
+        holder.path(),
+        "unl",
+        &[("only.rs", "fn u() {}")],
+    );
     let cherry = git(src.path(), &["cherry", "HEAD", "unl"]);
     assert!(
         cherry.lines().any(|l| l.starts_with('+')),
@@ -284,7 +292,14 @@ fn gc_non_ancestor_with_plus_refuses_then_force_and_superseded_reap() {
     let out = run(
         src.path(),
         None,
-        &["worktree", "gc", "--fork", "unl", "--superseded-head", &head],
+        &[
+            "worktree",
+            "gc",
+            "--fork",
+            "unl",
+            "--superseded-head",
+            &head,
+        ],
     );
     assert!(
         out.status.success(),
@@ -295,7 +310,12 @@ fn gc_non_ancestor_with_plus_refuses_then_force_and_superseded_reap() {
     assert!(!br, "branch reaped under matching --superseded-head");
 
     // (3) --force reaps a fresh unlanded fork.
-    make_fork_branch(src.path(), holder.path(), "unl2", &[("two.rs", "fn v() {}")]);
+    make_fork_branch(
+        src.path(),
+        holder.path(),
+        "unl2",
+        &[("two.rs", "fn v() {}")],
+    );
     let out = run(
         src.path(),
         None,
@@ -428,6 +448,85 @@ fn gc_dry_run_prints_verdict_and_destroys_nothing() {
     assert!(wt.exists(), "landed dry-run leaves the worktree");
 }
 
+// F-5: a --force/--superseded dry-run over a NOT-landed fork must NOT claim
+// `landed ✓` — the reap is authorised by the operator's override, not the
+// oracle. Telling the operator it landed defeats the dry-run's purpose (design
+// §8.1: "so the operator never --forces blind").
+#[test]
+fn gc_dry_run_force_over_unlanded_reports_override_not_landed() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let holder = tempfile::tempdir().unwrap();
+    let wt = make_fork_branch(src.path(), holder.path(), "frc", &[("f.rs", "x")]);
+    // Precondition: genuinely not landed (a `+` cherry line).
+    let cherry = git(src.path(), &["cherry", "HEAD", "frc"]);
+    assert!(
+        cherry.lines().any(|l| l.starts_with('+')),
+        "precondition: fork is NOT landed; got: {cherry:?}"
+    );
+
+    let out = run(
+        src.path(),
+        None,
+        &["worktree", "gc", "--fork", "frc", "--force", "--dry-run"],
+    );
+    assert!(
+        out.status.success(),
+        "dry-run exits 0; stderr: {}",
+        stderr(&out)
+    );
+    let so = stdout(&out);
+    assert!(
+        !so.contains("landed ✓"),
+        "a forced reap of an unlanded fork must NOT claim `landed ✓`; stdout: {so}"
+    );
+    assert!(
+        so.contains("--force") || so.contains("override"),
+        "names the override basis; stdout: {so}"
+    );
+    assert!(
+        so.contains("would reap"),
+        "reports the would-be reap; stdout: {so}"
+    );
+    // Still destroys nothing.
+    let (br, _) = git_try(src.path(), &["rev-parse", "--verify", "--quiet", "frc"]);
+    assert!(br, "dry-run leaves the branch");
+    assert!(wt.exists(), "dry-run leaves the worktree");
+}
+
+// F-5 secondary: a branch-gone target-only dry-run must report the ACTUAL
+// reap set (target only), not the hardcoded `worktree/branch/target`.
+#[test]
+fn gc_dry_run_branch_gone_reports_target_only() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let holder = tempfile::tempdir().unwrap();
+    let tbase = tempfile::tempdir().unwrap();
+    let wt = make_fork_branch(src.path(), holder.path(), "bgd", &[("f.rs", "x")]);
+    let target = ext_target(tbase.path(), "bgd");
+    std::fs::create_dir_all(&target).unwrap();
+    git(
+        src.path(),
+        &["worktree", "remove", "--force", wt.to_str().unwrap()],
+    );
+    git(src.path(), &["branch", "-D", "bgd"]);
+
+    let out = run_t(
+        src.path(),
+        None,
+        Some(tbase.path()),
+        &["worktree", "gc", "--fork", "bgd", "--dry-run"],
+    );
+    assert!(out.status.success(), "dry-run exits 0; stderr: {}", stderr(&out));
+    let so = stdout(&out);
+    assert!(so.contains("target"), "names the target reap; stdout: {so}");
+    assert!(
+        !so.contains("worktree/branch"),
+        "must not claim it would reap the gone worktree/branch; stdout: {so}"
+    );
+    assert!(target.exists(), "dry-run destroys nothing");
+}
+
 // --- VT-3: idempotent crash-rerun ---
 
 #[test]
@@ -443,7 +542,10 @@ fn gc_branch_gone_target_present_reaps_target_from_the_name() {
     let wt = make_fork_branch(src.path(), holder.path(), "bg", &[("f.rs", "x")]);
     let target = ext_target(tbase.path(), "bg");
     std::fs::create_dir_all(&target).unwrap();
-    git(src.path(), &["worktree", "remove", "--force", wt.to_str().unwrap()]);
+    git(
+        src.path(),
+        &["worktree", "remove", "--force", wt.to_str().unwrap()],
+    );
     git(src.path(), &["branch", "-D", "bg"]);
     assert!(target.exists(), "precondition: only the target survives");
 
@@ -458,7 +560,10 @@ fn gc_branch_gone_target_present_reaps_target_from_the_name() {
         "branch-gone rerun completes; stderr: {}",
         stderr(&out)
     );
-    assert!(!target.exists(), "the target dir is reaped from the branch NAME");
+    assert!(
+        !target.exists(),
+        "the target dir is reaped from the branch NAME"
+    );
 }
 
 #[test]
@@ -468,7 +573,10 @@ fn gc_fully_reaped_rerun_is_a_clean_noop() {
     let holder = tempfile::tempdir().unwrap();
     let wt = make_fork_branch(src.path(), holder.path(), "noop", &[("f.rs", "x")]);
     // Everything already gone (a completed gc). A rerun is a clean no-op.
-    git(src.path(), &["worktree", "remove", "--force", wt.to_str().unwrap()]);
+    git(
+        src.path(),
+        &["worktree", "remove", "--force", wt.to_str().unwrap()],
+    );
     git(src.path(), &["branch", "-D", "noop"]);
 
     let out = run(src.path(), None, &["worktree", "gc", "--fork", "noop"]);
@@ -489,7 +597,10 @@ fn gc_worktree_removed_before_branch_completes_the_branch_delete() {
     // passes; the rerun completes the branch delete (skipping the absent worktree).
     let wt = make_fork_branch(src.path(), holder.path(), "wbb", &[("f.rs", "x")]);
     git(src.path(), &["merge", "--no-ff", "--no-edit", "wbb"]);
-    git(src.path(), &["worktree", "remove", "--force", wt.to_str().unwrap()]);
+    git(
+        src.path(),
+        &["worktree", "remove", "--force", wt.to_str().unwrap()],
+    );
     let (br, _) = git_try(src.path(), &["rev-parse", "--verify", "--quiet", "wbb"]);
     assert!(br, "precondition: branch still lives");
 
@@ -515,7 +626,10 @@ fn gc_stale_admin_worktree_entry_folds_via_prune() {
     let wt = make_fork_branch(src.path(), holder.path(), "stale", &[("f.rs", "x")]);
     git(src.path(), &["merge", "--no-ff", "--no-edit", "stale"]);
     std::fs::remove_dir_all(&wt).unwrap();
-    assert!(!wt.exists(), "precondition: the worktree dir is gone, entry stale");
+    assert!(
+        !wt.exists(),
+        "precondition: the worktree dir is gone, entry stale"
+    );
 
     let out = run(src.path(), None, &["worktree", "gc", "--fork", "stale"]);
     assert!(
@@ -541,7 +655,14 @@ fn add_linked_fork(src: &Path, holder: &Path, branch: &str) -> PathBuf {
     let fork = holder.join("linked");
     git(
         src,
-        &["worktree", "add", "-b", branch, fork.to_str().unwrap(), &base],
+        &[
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            fork.to_str().unwrap(),
+            &base,
+        ],
     );
     fork
 }
@@ -553,7 +674,9 @@ fn orchestrator_verbs() -> Vec<(&'static str, Vec<&'static str>)> {
     vec![
         (
             "fork",
-            vec!["worktree", "fork", "--base", "HEAD", "--branch", "x", "--dir", "/tmp/x"],
+            vec![
+                "worktree", "fork", "--base", "HEAD", "--branch", "x", "--dir", "/tmp/x",
+            ],
         ),
         (
             "import",

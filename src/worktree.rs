@@ -1147,6 +1147,27 @@ fn gc_target_dir(fork: &Path, branch: &str) -> PathBuf {
     base.join(target_dir_for_branch(branch))
 }
 
+/// The reap set a [`GcPlan`] would act on, as a `/`-joined token list for the
+/// dry-run print — the ACTUAL legs, never a blanket `worktree/branch/target`
+/// (a branch-gone plan reaps the target only, F-5).
+fn reap_targets(plan: GcPlan) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    if plan.remove_worktree {
+        parts.push("worktree");
+    }
+    if plan.delete_branch {
+        parts.push("branch");
+    }
+    if plan.reap_target {
+        parts.push("target");
+    }
+    if parts.is_empty() {
+        "nothing".to_owned()
+    } else {
+        parts.join("/")
+    }
+}
+
 /// The landed-oracle (design §8.1), gathered in the shell: true ONLY when the
 /// fork's commit has provably landed, tested against durable git state — TWO LEGS,
 /// UNION:
@@ -1227,7 +1248,13 @@ pub(crate) fn run_gc(
     let worktree_present = fork_wt.is_some();
 
     // --- gather: the wt/<branch> target dir (mirrors fork-creation base) ---
-    let target = gc_target_dir(&root, fork);
+    // Under the env-absent fallback the base is `<fork-dir>/target` (NOT
+    // `<root>/target`) — fork creation derives the per-wt target from the FORK
+    // dir, so gc must too or it reaps the wrong path (F-7). Use the live linked
+    // worktree dir when present; a gone worktree took its in-tree target with it
+    // (target_present would be false), so &root is a harmless last resort there.
+    let fork_dir = fork_wt.as_deref().unwrap_or(&root);
+    let target = gc_target_dir(fork_dir, fork);
     let target_present = target.exists();
 
     // --- gather: the landed oracle (ONLY while the branch lives — design §8.2) ---
@@ -1273,10 +1300,27 @@ pub(crate) fn run_gc(
     // --- dry-run: PRINT the verdict, destroy NOTHING (the operator never --forces blind) ---
     if dry_run {
         match verdict {
-            GcVerdict::Reap(_) => {
+            GcVerdict::Reap(plan) => {
+                // Report the TRUTH the operator needs before a real run: the actual
+                // landed verdict + whether the reap is oracle- or override-authorised,
+                // and the ACTUAL reap set — never a blanket `landed ✓ (worktree/
+                // branch/target)` that lies on a forced or branch-gone reap (F-5).
+                let basis = if !branch_exists {
+                    "already-certified (branch gone)".to_owned()
+                } else if landed_verdict == Some(true) {
+                    "landed ✓ (oracle)".to_owned()
+                } else {
+                    let how = if force {
+                        "--force"
+                    } else {
+                        "--superseded-head"
+                    };
+                    format!("NOT landed — reap authorised by {how} (oracle override)")
+                };
                 writeln!(
                     io::stdout(),
-                    "{fork}: landed ✓ — would reap (worktree/branch/target)"
+                    "{fork}: {basis} — would reap ({})",
+                    reap_targets(plan)
                 )?;
             }
             GcVerdict::Refuse(GcRefusal::NotLanded) => {
