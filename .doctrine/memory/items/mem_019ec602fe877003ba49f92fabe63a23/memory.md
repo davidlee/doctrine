@@ -1,5 +1,15 @@
 # Claude Agent isolation:worktree base is session-root main, opaque — not the coordination-tree tip
 
+> ⛔ **RETRACTED 2026-06-14 — FALSE.** A controlled marker-commit test under
+> `worktree.baseRef="head"` disproved this: the worker forks the **spawning
+> orchestrator session's local HEAD** (an arbitrary, placement-controlled tip), not an
+> opaque session-root. The observations below were taken with the orchestrator session
+> sitting on `main` (so the worker forked main HEAD) and/or under default
+> `baseRef="fresh"` (forks `origin/main`) — never with the orchestrator placed on the
+> dispatch tip. Base IS controllable by placement. Superseded by
+> [[mem.pattern.dispatch.claude-isolation-worktree-forks-orchestrator-session-head]].
+> Body retained for the audit trail only — do not act on it.
+
 **Empirical (SL-064/SL-066 dispatch, observed — not inferred).** A claude `Agent`
 spawned with `isolation: worktree` creates its worktree forked from the
 **session-root main HEAD region**, which is **opaque and not orchestrator-controllable**:

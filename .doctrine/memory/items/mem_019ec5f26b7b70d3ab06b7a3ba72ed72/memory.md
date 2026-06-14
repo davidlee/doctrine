@@ -1,5 +1,16 @@
 # Claude dispatch-agent worker worktree base is uncontrollable — run dependent serial phases inline on the coordination worktree
 
+> ⛔ **RETRACTED 2026-06-14 — FALSE conclusion.** The spawn-3 evidence below is the
+> tell: "forked `main` HEAD anyway after setting `origin/main` to the dispatch tip"
+> — because the orchestrator session was *on main*. Under `worktree.baseRef="head"`
+> the worker forks the **spawning orchestrator session's local HEAD**, so the handle
+> is orchestrator PLACEMENT (put the session on the dispatch tip), not a ref-redirect.
+> Base is controllable; serial-dependent phases ARE claude-dispatchable (advance the
+> orchestrator HEAD between phases). Confirmed by a controlled marker-commit test.
+> Superseded by
+> [[mem.pattern.dispatch.claude-isolation-worktree-forks-orchestrator-session-head]].
+> Body retained for the audit trail only — do not act on it.
+
 The `/dispatch-agent` arm spawns the worker via the `Agent` tool with
 `isolation: worktree`. **Claude default-creates that worktree off the opaque
 session-root `main` HEAD region — NOT a git ref the orchestrator can set.** This is

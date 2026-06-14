@@ -1,25 +1,28 @@
-# IMP-072: WorktreeCreate hook to enable parallel claude-quality isolated dispatch workers on subscription (option Y escape hatch)
+# IMP-072: WorktreeCreate hook for pre-worker fail-closability on the claude dispatch arm (deferred; NOT needed for base control)
 
 <!-- Backlog item body — context, detail, links. The structured, queried fields
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never
      structurally parsed (the storage rule). -->
 
-**Why deferred.** SL-064/SL-066 dispatch established (empirically) that claude
-`Agent isolation:worktree` forks session-root main HEAD, opaque — not the
-orchestrator's coordination-tree tip — so it can't be base-pinned to an isolated
-`dispatch/<slice>` tip ([[mem.pattern.dispatch.claude-isolation-worktree-base-session-root-opaque]]).
-v1 (option X) abandons claude isolated workers: parallel dispatch lives on the
-subprocess arm (codex/pi → DeepSeek, ~$1/hr) where `fork --base B` pins any base;
-the claude arm does premium solo `/execute`.
+**Base control is already solved — this hook is NOT needed for it.** Confirmed
+2026-06-14 (controlled marker-commit test): under `worktree.baseRef="head"` the claude
+`Agent isolation:worktree` worker forks the **spawning orchestrator session's local
+HEAD** ([[mem.pattern.dispatch.claude-isolation-worktree-forks-orchestrator-session-head]]).
+So base==B is achieved by orchestrator **placement** (run the session inside the
+`dispatch/<slice>` coordination worktree at its tip) — parallel AND serial-dependent
+claude workers are base-controlled with **no hook** (SL-064 design §8, option Y).
 
-**What Y is.** A `WorktreeCreate` creation-replacing hook (Claude Code) that forks
-the worker worktree off an orchestrator-chosen B (the deferred SL-056 `create-fork`,
-now feasible — the hook *creates*, so it supplies path+base + can fail-closed).
-Enables parallel **claude-quality** isolated workers on subscription billing.
+**What Y/this hook would still add.** A `WorktreeCreate` creation-replacing hook
+(Claude Code) gives **true pre-worker fail-closability**: it runs *before* the worker's
+first command, so a wrong base (stripped `baseRef`, HEAD moved mid-spawn) could abort
+the worker pre-run instead of being caught post-run by the §8.4 `verify-worker` belt
+(loud + pre-import, but after a wasted worker run — the §8.1 residual). It is a
+belt-tightening nicety, not a base-control mechanism.
 
 **Cost (the gate).** WorktreeCreate has **no `agent_type` and no matcher** (confirmed
 2026-06-14 docs) → fires for *every* `isolation:worktree` subagent in the repo,
 reopening the ADR-011 D7 σ blast-radius: the hook must carry a benign pass-through +
-a dispatch-vs-benign discriminator with a misclassification race. Only worth building
-if parallel claude-quality isolated dispatch proves worth that cost over the cheap
-subprocess arm. See SL-064 design §8 + §8.5 (ADR-011 amendment).
+a dispatch-vs-benign discriminator with a misclassification race. Build only if the
+post-run `verify-worker` belt proves insufficient and true pre-worker fail-closed is
+demonstrably needed — that is now the **sole** justification (arbitrary-B base control
+is no longer one). See SL-064 design §8 + §8.5 (ADR-011 amendment).
