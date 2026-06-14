@@ -12,6 +12,7 @@ create = [
   ".doctrine/rec",
   ".doctrine/requirement",
   ".doctrine/review",
+  ".doctrine/revision",
   ".doctrine/scripts",
   ".doctrine/skills",
   ".doctrine/slice",

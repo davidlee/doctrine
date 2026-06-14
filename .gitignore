@@ -21,6 +21,7 @@
 !.doctrine/standard/
 !.doctrine/review/
 !.doctrine/rec/
+!.doctrine/revision/
 !.doctrine/backlog/
 !.doctrine/knowledge/
 !.doctrine/requirement/

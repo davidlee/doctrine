@@ -83,6 +83,13 @@ pub(crate) enum RelationLabel {
     /// rec → free-text DEC ref (no `DEC` kind; target-unvalidated, always dangles —
     /// ADR-010 Decision 2 / §5.3). No overlay.
     DecisionRef,
+    /// revision → governance/spec truth (SPEC·PRD·REQ·ADR·POL·STD). The typed
+    /// `[[change]]`-row payload IS the edge set (the members.toml precedent, SL-066
+    /// design §4.4): a `revision change add` row of `(target, action)` projects to one
+    /// `Revises` edge. `LinkPolicy::TypedVerbOnly` — `doctrine link … revises …` is
+    /// refused; the rule row exists for target validation + inbound-reciprocity naming
+    /// (`inspect ADR-X` lists every REV that revises it), NOT a writable Tier-1 edge.
+    Revises,
 }
 
 impl RelationLabel {
@@ -105,6 +112,7 @@ impl RelationLabel {
             RelationLabel::OwningSlice => "owning_slice",
             RelationLabel::Drift => "drift",
             RelationLabel::DecisionRef => "decision_ref",
+            RelationLabel::Revises => "revises",
         }
     }
 
@@ -132,6 +140,7 @@ impl RelationLabel {
             "owning_slice" => RelationLabel::OwningSlice,
             "drift" => RelationLabel::Drift,
             "decision_ref" => RelationLabel::DecisionRef,
+            "revises" => RelationLabel::Revises,
             _ => return None,
         };
         // Defence-in-depth: the spelling must round-trip, so `name()` stays the single
@@ -230,6 +239,7 @@ const POL: &Kind = &crate::policy::POLICY_KIND.kind;
 const STD: &Kind = &crate::standard::STANDARD_KIND.kind;
 const RV: &Kind = &crate::review::REVIEW_KIND;
 const REC: &Kind = &crate::rec::REC_KIND;
+const REV: &Kind = &crate::revision::REV_KIND;
 const ISS: &Kind = &crate::backlog::ISSUE_KIND;
 const IMP: &Kind = &crate::backlog::IMPROVEMENT_KIND;
 const CHR: &Kind = &crate::backlog::CHORE_KIND;
@@ -379,6 +389,19 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         label: RelationLabel::DecisionRef,
         inbound_name: "decision_ref",
         target: TargetSpec::Unvalidated,
+        tier: Tier::Typed,
+        link: LinkPolicy::TypedVerbOnly,
+    },
+    // revises (SL-066, ADR-013) — REV → governance/spec truth. Tier-2 typed: the
+    // `[[change]]`-row payload IS the edge set (members.toml precedent), authored ONLY
+    // by `revision change add`, NEVER by `doctrine link` (TypedVerbOnly). The rule row
+    // exists for target validation + inbound naming ("revises" on `inspect ADR-X`), not
+    // a writable Tier-1 edge. Targets are the six authored-truth kinds (NO SL/work/REC).
+    RelationRule {
+        sources: &[REV],
+        label: RelationLabel::Revises,
+        inbound_name: "revises",
+        target: TargetSpec::Kinds(&[SPEC, PRD, REQ, ADR, POL, STD]),
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
     },
@@ -1107,6 +1130,7 @@ mod tests {
             RelationLabel::OwningSlice,
             RelationLabel::Drift,
             RelationLabel::DecisionRef,
+            RelationLabel::Revises,
         ];
         // ALL is declared in enum order; assert it is sorted (catches a mis-ordered
         // literal) and that it equals the table's distinct-label sequence.
@@ -1519,6 +1543,40 @@ mod tests {
             check_target_kind(related, &ADR_KIND.kind, "POL").is_err(),
             "SameKind refuses a cross-gov target"
         );
+    }
+
+    /// SL-066 VT-2: the `revises` rule. Source REV, targets the six authored-truth
+    /// kinds (off-target — e.g. `revises SL` — refused), `TypedVerbOnly` so generic
+    /// `link` is refused (naming the typed verb). The rule row exists for target
+    /// validation + inbound naming ("revises"), never as a writable Tier-1 edge.
+    #[test]
+    fn revises_rule_is_typed_verb_only_with_authored_truth_targets() {
+        use crate::revision::REV_KIND;
+        // The rule resolves for REV and carries the typed-verb policy.
+        let rule = lookup(&REV_KIND, RelationLabel::Revises).expect("revises rule for REV");
+        assert_eq!(rule.link, LinkPolicy::TypedVerbOnly);
+        assert_eq!(rule.tier, Tier::Typed);
+        assert_eq!(rule.inbound_name, "revises");
+
+        // `doctrine link … revises …` is refused (TypedVerbOnly), naming the typed verb.
+        match validate_link(&REV_KIND, "revises") {
+            Ok(_) => panic!("`link … revises …` must be refused (TypedVerbOnly)"),
+            Err(e) => assert!(e.to_string().contains("typed verb"), "names the verb: {e}"),
+        }
+
+        // Target validation: the six authored-truth kinds pass; off-target refused.
+        for p in ["SPEC", "PRD", "REQ", "ADR", "POL", "STD"] {
+            assert!(
+                check_target_kind(rule, &REV_KIND, p).is_ok(),
+                "{p} is a legal revises target"
+            );
+        }
+        for p in ["SL", "ISS", "REC", "REV", "RV"] {
+            assert!(
+                check_target_kind(rule, &REV_KIND, p).is_err(),
+                "{p} is NOT a legal revises target (off-target)"
+            );
+        }
     }
 
     /// `lookup` keys on `(source ∈ sources, label)`: an illegal pairing returns

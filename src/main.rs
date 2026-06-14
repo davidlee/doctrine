@@ -41,6 +41,7 @@ mod relation_graph;
 mod requirement;
 mod retrieve;
 mod review;
+mod revision;
 mod root;
 mod skills;
 mod slice;
@@ -195,6 +196,12 @@ enum Command {
     Rec {
         #[command(subcommand)]
         command: RecCommand,
+    },
+
+    /// Create, show, and transition revisions (the REV change-axis kind, ADR-013).
+    Revision {
+        #[command(subcommand)]
+        command: RevisionCommand,
     },
 
     /// Reconcile ONE requirement against observed coverage — the sole author of
@@ -2075,6 +2082,136 @@ enum RecCommand {
 }
 
 #[derive(Subcommand)]
+enum RevisionCommand {
+    /// Open a new revision — a pending revise-intent against authored truth (the
+    /// REV change-axis kind, ADR-013). A fresh REV is a skeleton (`proposed`,
+    /// `approval=none`, no change rows); `revision change add` (PHASE-03) populates
+    /// the typed `[[change]]` payload.
+    New {
+        /// REV title.
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show one revision: status, approval, change rows, rationale.
+    Show {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Transition a revision's lifecycle: `revision status <REV-N> <state>`
+    /// (proposed→started→done; abandoned from any non-terminal). Approval-blind.
+    Status {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// Target lifecycle state.
+        state: revision::RevStatus,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Author the typed `[[change]]` payload — the `revises` rows (the touched-entity
+    /// set). The ONLY writer of a `revises` edge; `doctrine link … revises …` is
+    /// refused (`TypedVerbOnly`).
+    Change {
+        #[command(subcommand)]
+        command: RevisionChangeCommand,
+    },
+
+    /// Record an explicit approval (`approval = approved`) on the orthogonal approval
+    /// axis — the enabling act for the apply checkpoint. `revision apply` refuses unless
+    /// approved (invoker-blind: a solo dev self-approves; ADR-009).
+    Approve {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Apply an approved revision: auto-land its `status` rows (each via the requirement
+    /// status setter + one REC), surface introduce/create/modify/move/prose rows for
+    /// manual handling. Refused unless `approval = approved`. A pre-flight all-or-nothing
+    /// from-guard aborts the whole apply if any target moved since the change was drafted.
+    Apply {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum RevisionChangeCommand {
+    /// Append one `[[change]]` row to a revision (design §4.4). Shape-routed by
+    /// `--action`: a creation op (`introduce`/`create`) takes `--new-label` (required,
+    /// frozen) + `--member-of` (a live SPEC); an existing-target op
+    /// (`modify`/`retire`/`move`/`status`) takes `--target` (a live peer FK), with
+    /// `--to-status` and an auto-captured `from` for a `status` row.
+    Add {
+        /// REV reference — `REV-007` or the bare id `7`.
+        reference: String,
+
+        /// The change action.
+        #[arg(long)]
+        action: revision::ChangeAction,
+
+        /// Existing-target ops: the live peer FK (`REQ-201`, `ADR-006`).
+        #[arg(long)]
+        target: Option<String>,
+
+        /// `status` rows: the requested target status.
+        #[arg(long = "to-status")]
+        to_status: Option<String>,
+
+        /// Creation ops: the frozen membership label (required for `introduce`/`create`).
+        #[arg(long = "new-label")]
+        new_label: Option<String>,
+
+        /// Creation ops: the destination spec (a live `SPEC-NNN`).
+        #[arg(long = "member-of")]
+        member_of: Option<String>,
+
+        /// `introduce`: the new requirement's statement line (optional).
+        #[arg(long = "new-statement")]
+        new_statement: Option<String>,
+
+        /// Mark this row the revision's headline subject (display-only; at most one).
+        #[arg(long)]
+        primary: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
 enum SkillsCommand {
     /// List available skills and their install status.
     List {
@@ -2243,6 +2380,16 @@ fn write_class(cmd: &Command) -> WriteClass {
         Command::Rec { command } => match command {
             RecCommand::New { .. } => Write("rec new"),
             RecCommand::List { .. } | RecCommand::Show { .. } => Read,
+        },
+        Command::Revision { command } => match command {
+            RevisionCommand::New { .. } => Write("revision new"),
+            RevisionCommand::Status { .. } => Write("revision status"),
+            RevisionCommand::Show { .. } => Read,
+            RevisionCommand::Change { command } => match command {
+                RevisionChangeCommand::Add { .. } => Write("revision change add"),
+            },
+            RevisionCommand::Approve { .. } => Write("revision approve"),
+            RevisionCommand::Apply { .. } => Write("revision apply"),
         },
         // Writes authored requirement status + an authored REC — an authored write.
         Command::Reconcile { .. } => Write("reconcile"),
@@ -2782,6 +2929,47 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => rec::run_show(path, &reference, if json { Format::Json } else { format }),
         },
+        Command::Revision { command } => match command {
+            RevisionCommand::New { title, slug, path } => revision::run_new(path, title, slug),
+            RevisionCommand::Show {
+                reference,
+                format,
+                json,
+                path,
+            } => revision::run_show(path, &reference, if json { Format::Json } else { format }),
+            RevisionCommand::Status {
+                reference,
+                state,
+                path,
+            } => revision::run_status(path, &reference, state),
+            RevisionCommand::Change { command } => match command {
+                RevisionChangeCommand::Add {
+                    reference,
+                    action,
+                    target,
+                    to_status,
+                    new_label,
+                    member_of,
+                    new_statement,
+                    primary,
+                    path,
+                } => revision::run_change_add(
+                    path,
+                    &reference,
+                    &revision::ChangeAddArgs {
+                        action,
+                        target,
+                        to_status,
+                        new_label,
+                        member_of,
+                        new_statement,
+                        primary,
+                    },
+                ),
+            },
+            RevisionCommand::Approve { reference, path } => revision::run_approve(path, &reference),
+            RevisionCommand::Apply { reference, path } => revision::run_apply(path, &reference),
+        },
         Command::Reconcile {
             req,
             slice,
@@ -3205,15 +3393,21 @@ fn run_unlink(
 // Generic dep/seq verbs: `doctrine needs` / `doctrine after` (SL-060 §5.4)
 // ---------------------------------------------------------------------------
 
-/// The work-like membership predicate (SL-060 §5.4) — the ONE widen-later guard.
-/// Work-like = { slice } ∪ { the 5 backlog kinds }. Both the dep/seq-authoring SRC
-/// set and the admissible TGT set are this same membership (a slice or a backlog
-/// item may author dep/seq, and may only depend/sequence on another piece of work).
-/// A future phase that allows cross-tier dep/seq deletes just this predicate (and
-/// its refusal tests) — every other admitted kind (governance / spec / requirement /
-/// knowledge / review / reconciliation) is refused at author time until then.
+/// The work-like membership predicate (SL-060 §5.4, SL-066 §PHASE-04) — the ONE
+/// widen-later guard. Work-like = { slice } ∪ { the 5 backlog kinds } ∪ { revision }.
+/// Both the dep/seq-authoring SRC set and the admissible TGT set are this same
+/// membership (a slice / backlog item / revision may author dep/seq, and may only
+/// depend/sequence on another piece of work). REV is admitted as BOTH source and
+/// target: a slice or backlog item may `needs`/`after` a REV-NNN, and a REV may
+/// itself `needs`/`after` a work item (the IDE-010 payoff). Governance docs
+/// (spec/ADR/POL/STD) stay EXCLUDED — depending on governance routes THROUGH a
+/// Revision, never the evergreen doc (the SL-060 invariant). A future phase that
+/// allows cross-tier dep/seq deletes just this predicate (and its refusal tests).
 fn is_work_like(kind: &'static entity::Kind) -> bool {
-    matches!(kind.prefix, "SL" | "ISS" | "IMP" | "CHR" | "RSK" | "IDE")
+    matches!(
+        kind.prefix,
+        "SL" | "ISS" | "IMP" | "CHR" | "RSK" | "IDE" | "REV"
+    )
 }
 
 /// Resolve a generic dep/seq `(SRC, TGT)` pair against the author-time gate (§5.4),
@@ -3503,24 +3697,28 @@ fn run_validate(path: Option<PathBuf>) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
-    // SL-060: the work-like membership predicate is the ONE widen-later guard —
-    // exactly { slice } ∪ { the 5 backlog kinds }, every other admitted kind refused.
+    // SL-060 / SL-066 §PHASE-04: the work-like membership predicate is the ONE
+    // widen-later guard — exactly { slice } ∪ { the 5 backlog kinds } ∪ { revision },
+    // every other admitted kind refused. REV joins as both dep/seq source and target
+    // (the IDE-010 payoff); governance docs stay off the allowlist (SL-060 invariant).
     #[test]
-    fn is_work_like_is_exactly_slice_plus_backlog() {
-        // The work-like set: slice + the five backlog kinds.
+    fn is_work_like_is_exactly_slice_plus_backlog_plus_revision() {
+        // The work-like set: slice + the five backlog kinds + revision.
         assert!(is_work_like(&slice::SLICE_KIND));
         for k in integrity::KINDS
             .iter()
-            .filter(|k| matches!(k.kind.prefix, "ISS" | "IMP" | "CHR" | "RSK" | "IDE"))
+            .filter(|k| matches!(k.kind.prefix, "ISS" | "IMP" | "CHR" | "RSK" | "IDE" | "REV"))
         {
             assert!(is_work_like(k.kind), "{} is work-like", k.kind.prefix);
         }
         // Every OTHER admitted kind in the corpus table is refused (gov / spec / req /
         // review / reconciliation / knowledge) — the closed allowlist.
-        for k in integrity::KINDS
-            .iter()
-            .filter(|k| !matches!(k.kind.prefix, "SL" | "ISS" | "IMP" | "CHR" | "RSK" | "IDE"))
-        {
+        for k in integrity::KINDS.iter().filter(|k| {
+            !matches!(
+                k.kind.prefix,
+                "SL" | "ISS" | "IMP" | "CHR" | "RSK" | "IDE" | "REV"
+            )
+        }) {
             assert!(
                 !is_work_like(k.kind),
                 "{} must NOT be work-like (off the allowlist)",
