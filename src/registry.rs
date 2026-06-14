@@ -239,8 +239,10 @@ impl Registry {
     /// `Some`, only cycles whose slice contains that node are kept.
     pub(crate) fn parent_cycle(&self, scope: Option<&str>) -> Vec<String> {
         // Ephemeral child→parent inversion — built here, never persisted (storage
-        // rule). Skip self-loops (self_parent's). Subtype-blind: spans both families
-        // (cross-subtype edges are already invalid-kind and cannot forge a cycle).
+        // rule). Skip self-loops (self_parent's). Subtype-blind: spans both families.
+        // A cross-subtype ring still yields a cycle finding — but each of its edges is
+        // already invalid-kind, so it cannot forge a *spurious additional* cycle that
+        // matters (design §4). In practice decomposition chains are within-family.
         let mut parent_of: BTreeMap<&str, &str> = BTreeMap::new();
         for e in &self.parents {
             if e.spec == e.parent {
@@ -395,6 +397,10 @@ mod tests {
         Registry {
             requirements: ids(&["REQ-001", "REQ-002"]),
             tech_specs: ids(&["SPEC-001"]),
+            // PRD-001 appears as a member spec below, so declare it a known kind —
+            // keeps clean() symmetric across families. A future parent-edge baseline
+            // pushing a product edge here won't draw a spurious invalid-kind finding.
+            product_specs: ids(&["PRD-001"]),
             members: vec![
                 member("PRD-001", "REQ-001", "FR-001"),
                 member("SPEC-001", "REQ-002", "FR-001"),
@@ -567,6 +573,19 @@ mod tests {
         r.product_specs = ids(&["PRD-001", "PRD-002"]);
         r.parents.push(parent_edge("PRD-001", "PRD-002", true));
         r.parents.push(parent_edge("PRD-002", "PRD-001", true));
+        assert_eq!(r.parent_cycle(None).len(), 1);
+    }
+
+    #[test]
+    fn parent_cycle_mixed_family_ring_is_still_reported() {
+        // SL-065 §4: a cross-family ring (PRD→SPEC→PRD) is subtype-blind — the cycle
+        // still fires even though each edge is independently invalid-kind. Pins the
+        // load-bearing invariant against a future dedup tightening that suppresses it.
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001"]);
+        r.tech_specs = ids(&["SPEC-001"]);
+        r.parents.push(parent_edge("PRD-001", "SPEC-001", true));
+        r.parents.push(parent_edge("SPEC-001", "PRD-001", false));
         assert_eq!(r.parent_cycle(None).len(), 1);
     }
 

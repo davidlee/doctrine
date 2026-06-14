@@ -1,0 +1,52 @@
+id    = 28
+slug  = "reconciliation-review-of-sl-065"
+title = "reconciliation review of SL-065"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-065"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "clean() omits product_specs — invites false positives in future parent-edge tests"
+detail = "The clean() factory returns product_specs: Default::default() (empty BTreeSet). New product tests correctly inject product_specs explicitly, but clean_corpus_yields_no_findings doesn't exercise parent_findings/self_parent/parent_cycle at all. A future author adding a parent-edge baseline to clean() who pushes a product edge without also populating product_specs will get a false dangling or invalid-kind finding. clean() should carry a representative product_specs entry (mirroring its tech_specs and PRD-001 member coverage) or a doc-comment warning. Pre-existing asymmetry worsened by the now-symmetric rule."
+disposition = "fix-now"
+response = "Fixed in registry.rs clean(): added product_specs = {PRD-001} (PRD-001 is already a member spec, so declaring it known keeps the factory symmetric across families) plus a doc-comment on why. A future parent-edge baseline pushing a product edge no longer draws a spurious invalid-kind/dangling finding."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "parent_cycle comment says cross-subtype edges 'cannot forge a cycle' — technically false"
+detail = "Design §4 says mixed-family cycles are 'harmless — already reported as errors and cannot manufacture a spurious additional cycle finding that matters.' But the code comment on parent_cycle's map construction reads: 'cross-subtype edges are already invalid-kind and cannot forge a cycle'. This is technically false — a corpus with PRD-001→SPEC-001→PRD-001 DOES produce a cycle finding (3 findings for 2 edges). They cannot forge a *spurious* cycle that matters. The code comment should match the design's precision: 'cannot forge a spurious cycle in practice because mixed-family edges are individually invalid-kind.'"
+disposition = "fix-now"
+response = "Fixed parent_cycle comment to match design §4 precision: a cross-subtype ring DOES yield a cycle finding, but each edge is independently invalid-kind so it cannot forge a *spurious additional* cycle that matters. No longer claims edges 'cannot forge a cycle'."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "No test pins the mixed-family cycle reporting invariant"
+detail = "A test with product_specs={PRD-001}, tech_specs={SPEC-001}, and cross-subtype edges PRD-001→SPEC-001→PRD-001 that asserts parent_cycle(None).len() >= 1 would pin the expectation that cycles spanning families are still reported. Without it, a future contributor tightening parent_cycle's dedup logic could inadvertently suppress the mixed cycle finding. Low priority (realistic case never produces this) but the invariant 'cycle finding always fires if edges form a ring, regardless of subtype' is load-bearing enough to pin."
+disposition = "fix-now"
+response = "Added test parent_cycle_mixed_family_ring_is_still_reported: PRD-001->SPEC-001->PRD-001 asserts parent_cycle(None).len()==1, pinning the subtype-blind ring invariant against a future dedup tightening. Cheap to pin while in the file; fix-now over follow-up."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Design §8 OQ-1/OQ-2 deferred Follow-Ups not captured in backlog"
+detail = "Design §8 marks two items 'deferred, Follow-Up': OQ-1 level-adjacency validate tightening (parent exactly one rank above child) and OQ-2 descends_from→capability-level PRD constraint. Both are intended future work, not abandoned. Per the defer-before-close rule (mem.system.lifecycle.defer-needs-backlog-before-close), deferred-but-needed-later items must live in a slice or backlog before closeout, else they evaporate when the slice closes. Neither is in backlog (only unrelated IMP-016 exists). Expected: each OQ captured as a backlog item; observed: only in design prose."
+disposition = "follow-up"
+response = "Captured both deferred OQs as backlog improvements: IMP-069 (OQ-1 level-adjacency validate tightening) and IMP-070 (OQ-2 descends_from→capability-level PRD constraint). Both are intentional v1 deferrals (advisory-only / two-axis coupling not needed to ship); now durable beyond slice close."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
