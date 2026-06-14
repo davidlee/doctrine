@@ -36,28 +36,33 @@ GovKind data-not-trait pattern (SL-033), not per-kind copies.
   (legal states, ordered transitions, terminal set, ordering/closure guards) —
   kind-is-data-not-trait. Wire slice (re-homed) + backlog onto it first; adr /
   spec / standard / policy as the vocab table is populated.
-- **Destructive verbs (delete / archive)** as an adjacent concern sharing the
-  claim/seam machinery in `entity.rs`. Define what each means per tier (authored
-  files are committed + diffable — "delete" semantics need care vs git).
 - **The transactional supersession verb** (SL-048 OD-3 carve-out): one
   transaction that writes the forward `supersedes` edge on `<new>`, flips
   `<old>` to terminal `superseded`, and co-writes the `superseded_by` carve-out
-  on `<old>` (ADR-004 §5 / ADR-010 D4: verb-written, never hand-authored). This
-  unblocks migrating governance `supersedes` into the uniform `[[relation]]`
-  block (the SL-048 OD-3 exclusion).
+  on `<old>` (ADR-004 §5 / ADR-010 D4: verb-written, never hand-authored).
+  **ADR-first** (only ADR has a `superseded` status today; POL/STD/slice lack it
+  — design §6 D4 / F-C). Unblocks migrating governance `supersedes` into the
+  uniform `[[relation]]` block (the SL-048 OD-3 exclusion).
 - Reconcile the SL-009 status-vs-rollup divergence-*surfacing* into a transition
   that can actually *resolve* it (slice already does via SL-040; preserve under
   the extracted engine).
 
 ## Non-Goals
 
+- **Destructive verbs (delete / archive)** — carved out to follow-up F1 (design
+  §9). The file-level destruction semantics for committed authored entities
+  (archive-status vs git-rm vs tombstone) are unsettled and adjacent, not core;
+  they share only the `entity.rs` claim seam, no FSM.
+- **Supersession for POL / STD / slice** — deferred to follow-up F2 (they lack a
+  `superseded` status). This slice ships ADR supersession only.
 - Not re-opening relation *capture* (the `[[relation]]` write seam, SL-048 /
-  ADR-010) — this is the lifecycle/destructive axis, orthogonal. Supersession
-  touches both but is owned here per ADR-010 D4.
-- Not the cross-kind needs/after capture axis (SL-060).
+  ADR-010) — this is the lifecycle axis, orthogonal. Supersession touches the
+  typed `supersedes`/`superseded_by` fields but is owned here per ADR-010 D4.
+- Not the cross-kind needs/after capture axis (SL-060) — but this slice
+  *generalizes* `dep_seq::append` (SL-060's seam), keeping its suites green.
 - Not a new conduct/gating policy — reuse `conduct::resolve` as-is.
-- Not deleting/migrating existing authored files; no corpus migration beyond the
-  governance `supersedes` carve-out the supersession verb enables.
+- Not the SL-048 OD-3 `supersedes` typed→`[[relation]]` storage migration (F3) —
+  this verb *unblocks* it; the migration is downstream.
 
 ## Related work
 
@@ -65,43 +70,48 @@ GovKind data-not-trait pattern (SL-033), not per-kind copies.
   (`needs`/`after`) into a shared leaf + per-kind dispatch (`dep_seq_for`
   mirroring `outbound_for` / `status_and_title_for`). The FSM extraction here is
   the same "lift once, dispatch per kind" shape — reuse that idiom, no parallel
-  implementation. Note SL-060's non-destructive refuse-message lesson: an
-  edit-preserving seam must never fall back to "regenerate via `<kind> new`"
-  (it would nuke an authored entity) — load-bearing for the destructive verbs / R2.
+  implementation — this slice *generalizes* `dep_seq::append` rather than
+  re-rolling array-append. Note SL-060's non-destructive refuse-message lesson:
+  an edit-preserving seam must never fall back to "regenerate via `<kind> new`"
+  (it would nuke an authored entity) — pinned as a `set_authored_status` test.
 - SL-060 reinstates a typed `[relationships].needs/after` table on slices,
   ordered **before** the `[[relation]]` rows (F-1 hazard). This slice's
-  edit-preserving status setter and destructive verbs touch the same files and
-  must preserve **both** blocks. ADR-010 D1 keeps `needs`/`after` off the
-  relation vocab, so SL-060's capture seam and this slice's supersession
-  `[[relation]]` edge are orthogonal — no overlap.
+  shared `set_authored_status` + `append_relationship_array` touch the same
+  files and must preserve **both** blocks. The supersession verb writes the
+  typed `supersedes`/`superseded_by` fields (not `[[relation]]`), so SL-060's
+  capture seam and this slice are storage-orthogonal — no overlap.
 
-## Affected surface (provisional — design confirms)
+## Affected surface (design §5.1 confirms)
 
-- `src/slice.rs` — FSM extraction donor; transitions re-homed onto the engine.
-- new shared module (sibling to `src/conduct.rs`) — the lifecycle engine.
-- `src/backlog.rs` — bespoke status transition retired onto the engine.
-- `src/entity.rs` — destructive-verb claim/seam sharing.
-- `src/governance.rs` — supersession verb target; `superseded_by` carve-out.
-- CLI command wiring for the new verbs.
+- `src/lifecycle.rs` (NEW, pure leaf, beside `conduct.rs`) — the re-homed FSM
+  (`classify`/`Transition`/predicates/edge table). Completes the ADR-009 pairing.
+- the authored-TOML-mutation seam (generalize `dep_seq.rs`, OQ-3) — shared
+  `set_authored_status` (scalar) + `append_relationship_array` (generalizes
+  `dep_seq::append`). The IO half; kept OUT of the pure `lifecycle.rs` (D1).
+- `src/slice.rs` — FSM donor; `run_status` keeps the gate + RV close-gate,
+  delegates the write. `SLICE_STATUSES`/`SliceStatus` stay (read-filter + CLI vocab).
+- `src/governance.rs`, `src/spec.rs`, `src/backlog.rs` — bespoke setters retired
+  onto the shared `set_authored_status`, each keeping its own gate.
+- `src/adr.rs` / the new top-level `supersede` handler — the supersession verb +
+  `supersede_policy` (ADR `Some`, others `None`).
+- CLI command wiring for `doctrine supersede`.
 
 ## Risks / Assumptions / Open Questions
 
-- **R1** — behaviour-preservation: extraction must not perturb slice transition
-  output (decorated status, labels, classify edges). Existing slice suites are
-  the proof; they stay green unchanged.
-- **R2** — "delete" of an authored, committed entity is semantically loaded
-  (git history vs working tree). Design must pin tier-aware semantics before any
-  destructive verb ships; archive may be the only honest authored-tier verb.
-- **OQ-1** — vocab coverage: which kinds get transition verbs in *this* slice vs
-  deferred? (slice + backlog are load-bearing; gov/spec/standard/policy may be
-  vocab-only.)
-- **OQ-2** — does supersession generalize gov→gov *and* slice→slice in one verb,
-  or ship gov-first? (IMP-006 sketches "ideally uniform".)
-- **OQ-3** — destructive vs lifecycle: one slice or split? IMP-006 frames them
-  adjacent but separable; design may carve destructive out to a follow-up if the
-  FSM extraction + supersession already fill a shippable unit.
+- **R1** — behaviour-preservation: the FSM extraction + setter rewire must not
+  perturb slice/gov/spec/backlog transition output. Existing suites are the proof
+  (assertions unchanged; import paths shift on the module move).
+- **R3** — generalizing `dep_seq::append` must not regress SL-060's needs/after
+  suites (they stay green unchanged).
+- **R-atomicity** — the supersession verb writes two files non-atomically;
+  mitigated by pre-flight + not-already-superseded guard + idempotent re-run +
+  the shipped SL-048 PHASE-05 `validate` detectability (design §5.4 R1).
 - **A1** — `slice::is_terminal_status` was left at module scope precisely for
   this reuse; the extraction handhold is in place.
+
+Resolved at design (were OQ-1/2/3): altitude = **C** (re-home FSM + share setter);
+supersession = **ADR-first**; destructive verbs = **carved to F1**. Remaining
+execution-detail OQs (test home, hint wording, seam module name) live in design §9.
 
 ## Verification / Closure Intent
 
