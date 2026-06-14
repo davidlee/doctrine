@@ -131,7 +131,10 @@ pub(crate) fn read(toml_path: &Path) -> anyhow::Result<DepSeq>;
 /// Edit-preserving append into [relationships].{needs|after} (the lifted
 /// `append_relationship` body). STRICT F-1 refuse if the seeded table/array is
 /// absent — never creates it (scaffold guarantees it; out-of-band backfill seeds
-/// pre-existing entities). Idempotent.
+/// pre-existing entities). The refuse message is kind-appropriate and
+/// NON-DESTRUCTIVE — never "regenerate via <kind> new" (the lifted backlog wording,
+/// which would nuke an authored slice's content/lifecycle/relations); it points at
+/// the backfill / adding the seeded arrays. Idempotent.
 pub(crate) fn append(toml_path: &Path, edit: &RelEdit<'_>) -> anyhow::Result<()>;
 ```
 
@@ -166,8 +169,22 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
 
 - **Storage** — unchanged shape, new home: `[relationships].needs = [ids]`,
   `[relationships].after = [{to, rank}]` in the entity's own
-  `<kind>/<id>/<stem>.toml`. Slices gain a seeded `[relationships]` table
-  (scaffold) positioned **before** any `[[relation]]` rows.
+  `<kind>/<id>/<stem>.toml`. The slice scaffold (`install/templates/slice.toml`)
+  seeds the EXACT block — both empty arrays, not just the header (the strict
+  `append` refuses on an absent *array*, not just an absent table):
+
+  ```toml
+  [relationships]
+  needs = []                      # slice→work hard prerequisite
+  after = []                      # slice→work soft sequence: { to, rank }
+  ```
+
+  positioned **before** any `[[relation]]` rows. This reinstates a typed
+  `[relationships]` table for slices — NOT a reversal of the SL-048 cut: the cut
+  moved the tier-1 *structural* axes (slices/specs/drift) to `[[relation]]`;
+  dep/seq is the typed *payload* axis (ADR-010 D1) that backlog kept through the
+  cut. The `install/templates/slice.toml` comment ("slices carry no typed table")
+  is rescoped to the structural axes.
 - **Ownership** — each authoring entity owns its outbound dep/seq (ADR-004
   outbound-only; PRD-011 "each entity is the source of its own intent"). The
   priority engine *derives* blockers/order; never writes back.
@@ -178,15 +195,27 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
 
 - Author-time validation (command shell, before the leaf write):
   1. SRC resolves and is a dep/seq-authoring kind (else refuse).
-  2. TGT resolves against `integrity::KINDS` (forward-edge resolvability; **no
-     kind-pair gate** — OQ-2 / D2). Free-text targets rejected (unlike backlog
-     `drift`). A non-work-kind TGT (e.g. a slice → a spec/ADR) is **allowed but
-     inert**: the priority partition treats it as terminal, so it never blocks
-     (F2). The honest cross-tier model is the Revision kind (IDE-010), not a
-     `needs` edge — convention, not enforced here.
+  2. TGT resolves against `integrity::KINDS` **and is a work-like kind** (slice +
+     the five backlog kinds) — else refused at author time (D2). Free-text targets
+     rejected (unlike backlog `drift`). Non-work kinds (governance / spec / req /
+     knowledge) are **refused, not silently inert**: `channels::blocked_by`
+     (src/priority/channels.rs) filters dep predecessors by `StatusClass !=
+     Terminal`, NOT by kind, and a proposed ADR / draft spec / pending REQ is
+     `Workable` — so a `needs` edge onto one genuinely blocks the dependent in
+     `priority blockers`. "Allowed-but-inert" does not hold; the author-time refuse
+     is the honest gate (F2). Cross-tier gating (governance→work) is IMP-047's
+     labelled `gates`; governance revise-intent is the Revision kind (IDE-010) —
+     neither is a `needs` edge.
   3. Self-edge (SRC == TGT) refused.
-- No author-time cycle check — cordage diagnoses cycles at read (`dep` Reject /
-  `seq` Evict), matching backlog today.
+- Author-time cycle check: the **backlog delegate retains** its existing pre-write
+  cycle refuse (`run_needs`→`needs_would_cycle`, src/backlog.rs) — INV-2 forbids
+  dropping it (only `append` delegates to the leaf; the cycle refuse stays in the
+  backlog shell). The **generic slice verb** defers cycle diagnosis to read-time
+  (cordage `dep` Reject / `seq` Evict degrades the view, no corruption) rather than
+  building a cross-kind author-time oracle — SL-060 keeps the slice author path
+  thin. (The earlier "no author-time cycle check, matching backlog today" was wrong
+  — backlog DOES refuse at author time; the asymmetry is stated, not hidden. A
+  cross-kind author-time refuse is a possible follow-up, not SL-060 scope.)
 - Read/consume: `priority` build reads each scanned entity's DepSeq via the
   dispatch; emits `needs`→`dep_overlay` (B→A flip, `EdgeAttrs::new(0,0)`),
   `after`→`seq_overlay` (B→A flip, `EdgeAttrs::new(rank, age)`, age = array
@@ -194,8 +223,11 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **INV-1** seeded `[relationships]` table precedes every `[[relation]]` array in
-  authored TOML (F-1; SL-048 R2-m1). Pinned by a round-trip golden.
+- **INV-1** seeded `[relationships]` table — with BOTH `needs = []` and
+  `after = []` arrays present (the strict `append` navigates to the array, so a
+  bare header still refuses) — precedes every `[[relation]]` array in authored TOML
+  (F-1; SL-048 R2-m1). Pinned by a round-trip golden + tests for missing-table /
+  missing-needs / missing-after.
 - **INV-2** the lift is byte-identical for backlog: same reads, same writes, same
   `dep_seq_for` results, same goldens.
 - **INV-3** outbound-only — the verb writes only on SRC; never touches TGT.
@@ -219,23 +251,40 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
 - **OQ-1 — DISSOLVED.** "Which projector carries cross-kind dep/seq" — the
   `priority` graph already does, kind-agnostically (DD-2). `backlog_order.rs`
   (legacy `backlog order`, ItemKind-bound) is untouched.
-- **OQ-2 — RESOLVED (D2).** No kind-pair legal table; targets validated for
-  resolvability only. Gradient inversion (e.g. work depending on governance) is
-  not a needs/after concern — it is the future Revision kind (IDE-010).
+- **OQ-2 — RESOLVED (D2, revised).** Targets restricted to work-like kinds (slice +
+  5 backlog); non-work kinds refused at author time. The original "resolvability-only
+  / inert" stance was refuted (a non-terminal non-work predecessor blocks). Gradient
+  inversion (work depending on governance) is IMP-047's labelled `gates` / the
+  Revision kind (IDE-010), not a `needs` edge.
 - **PARKED — semantic edge labels (forelobe).** Whether dep edges should carry a
   distinguishing label (`needs` vs IMP-047 `gates` vs `blocks`) rather than
   collapsing into one unlabelled `dep_overlay`. Not decided here; IMP-047 forces
-  the question when it adds `gates`. SL-060 keeps `needs`/`after` unlabelled.
+  the question when it adds `gates`. SL-060 keeps `needs`/`after` unlabelled —
+  legitimately deferrable under D2: with work-like targets only, the `dep_overlay`
+  carries a single semantic (work→work prerequisite), so there is no
+  prereq-vs-governance-gate ambiguity to disambiguate yet. The label carrier is
+  decided when IMP-047 introduces `gates`.
 
 ## 7. Decisions, Rationale & Alternatives
 
 - **D1 — Lift the dep/seq schema+write+read into a shared leaf `src/dep_seq.rs`.**
   Rejected: per-kind copy (parallel implementation); generic over `entity::Kind`
   (fights "Kind is data, not a trait"). The leaf is the smallest honest DRY move.
-- **D2 — Unrestricted targets (resolvability only), no kind-pair gate.** Backlog's
-  prior art has no target-kind gate; a legal table would be new asymmetric policy
-  invented here, and IMP-047's intended topology is deliberately cross-tier.
-  Gradient is convention, not enforcement.
+- **D2 — Work-like targets only (slice + 5 backlog kinds); non-work kinds refused
+  at author time.** Corrects the original "unrestricted, inert if non-work" stance,
+  refuted by external review on two counts: (a) the consumer blocks on ANY
+  non-terminal dep predecessor regardless of kind (`channels::blocked_by`), so a
+  slice `needs` a proposed ADR / draft spec is NOT inert — it pollutes the blocker
+  view; (b) backlog was never a no-gate precedent — `run_needs` validates targets
+  through `require_item`/`parse_ref`, which resolve backlog prefixes ONLY (backlog
+  is item→item). Restricting to work-like kinds makes "inert" true by construction
+  (every allowed target has a real workable→terminal lifecycle, so blocking is
+  always meaningful) and aligns D2 with D3. Forward-compatible: the restriction is a
+  single author-time membership predicate; widening to cross-tier later (IMP-047's
+  `gates`) deletes one guard + its refusal test and re-touches no storage/emission
+  (already kind-blind), and authored work-like edges remain a valid subset (no
+  migration). Rejected: unrestricted targets (the false-inert hazard); a rich
+  kind-pair legal table (over-built — a flat work-like membership test suffices).
 - **D3 — Slices only as the source kind this slice activates.** Specs/ADRs as
   dep/seq sources model the wrong thing — depending on governance is *pending
   revise-intent*, the future Revision kind (IDE-010), not a `needs` edge.
@@ -252,23 +301,33 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
   contradiction).
 - **D7 — `dep_overlay` left open for IMP-047.** SL-060 generalises the typed
   producer only; the labelled-`gates` producer is IMP-047's. No producer
-  unification here.
+  unification here. The D2 work-like-target gate is what KEEPS this boundary honest:
+  without it, unrestricted `needs` onto workable-status governance nodes would
+  already implement governance-blocks-work (IMP-047's topology) unlabelled — D2
+  prevents SL-060 from silently leaking IMP-047's semantics.
 
 ## 8. Risks & Mitigations
 
 - **R1 — toml_edit positioning of a seeded table before `[[relation]]` rows.** The
   one genuine impl risk. Mitigate: scaffold authors the order directly (template);
-  the leaf never *creates* the table (strict), so positioning is a
-  scaffold/backfill concern, not a runtime-write concern. Pin with a round-trip
-  golden (INV-1) + SL-048-style storage post-check on backfilled files.
+  the leaf never *creates* the table (strict), so runtime writes are never exposed
+  to the positioning hazard. The **backfill is a required deliverable that
+  establishes the runtime invariant** (so not purely "not-runtime"); its mechanism
+  is specified: parse each existing slice TOML with `toml_edit`, insert a
+  `[relationships]` root table seeded with both empty arrays **before the first
+  `[[relation]]` row** (never a tail insert — that lands keys inside the last
+  array-of-tables element, the F-1 hazard), write once. Acceptance: round-trip
+  golden (INV-1) + SL-048-style storage post-check asserting no `needs`/`after` key
+  appears under any `[[relation]]` row across every backfilled slice.
 - **R2 — the lift perturbs backlog behaviour.** Mitigate: INV-2 byte-identical
   gate; backlog verbs/goldens run unchanged; the lift is mechanical (move + thin
   delegate).
 - **R3 — `promoted` accidentally folded into the leaf.** Mitigate: explicit D-note
   that it stays backlog-only; the leaf `DepSeq` has no `promoted` field.
-- **R4 — scope creep into IMP-047.** Mitigate: D7 + §5.5 edge — no partition /
-  `Gating` / `gates`-label work; SL-060 ends at "typed cross-kind needs/after
-  surfaces in the existing binary-partition blocker view."
+- **R4 — scope creep into IMP-047.** Mitigate: D2 (work-like targets only — no
+  governance-gates-work topology) + D7 + §5.5 edge — no partition / `Gating` /
+  `gates`-label work; SL-060 ends at "typed cross-kind needs/after surfaces in the
+  existing binary-partition blocker view."
 
 ## 9. Quality Engineering & Validation
 
@@ -305,11 +364,13 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
   surfaced as explicit ASM-1 + a follow-up. No design change — the principle
   (`mem.pattern.design.product-not-compromised-by-project-local-ops`) holds; the
   assumption is now honest. **Disposition: integrated (§5.5 ASM-1, follow-up).**
-- **F2 — D2/D3 target inconsistency.** D2 allows any resolvable TGT; D3 says
-  governance dependency is the wrong model. A slice → spec `needs` would be
-  allowed. Resolved: allowed-but-inert (non-work TGT never blocks), gradient is
-  convention; the modelled path is Revision (IDE-010). **Disposition: integrated
-  (§5.4 step 2).**
+- **F2 — D2/D3 target inconsistency.** D2 allowed any resolvable TGT; D3 says
+  governance dependency is the wrong model. Original resolution "allowed-but-inert"
+  was **REFUTED by external review** (E1 below): `channels::blocked_by` filters dep
+  predecessors by `StatusClass != Terminal`, not by kind, and proposed ADR / draft
+  spec / pending REQ are `Workable` — so a non-work target genuinely blocks.
+  **Re-resolved: work-like targets only, non-work refused at author time (D2
+  rewritten, locked by the user).** **Disposition: integrated (§5.4 step 2, D2).**
 - **F3 — `promoted` double-parse.** Lifting the read to the leaf would make backlog
   parse twice (needs/after + resolution). Resolved: dispatch returns
   `(DepSeq, promoted)`; backlog arm keeps its single `read_item`, only the type +
@@ -326,11 +387,40 @@ after  <SRC> <TGT> [--rank N] append { to: TGT, rank: N (default 0) } to SRC.aft
   runtime (strict), so positioning is wholly a scaffold/backfill concern. **Minor;
   wording stands.**
 
-### Open for external adversarial review
+### External adversarial pass (codex GPT-5.5 + Opus source-verification, integrated)
 
-- **PARKED — semantic edge labels (§6).** The collapse of `needs`/`gates`/`blocks`
-  into one unlabelled `dep_overlay`. Forced by IMP-047; not decided here.
-- **R1** — toml_edit positioning of the seeded table (the one impl risk).
-- **ASM-1** — the dogfood-only / no-upgrade-in-place assumption.
-- **D2 vs D3** — whether allowed-but-inert non-work targets are acceptable, or
-  should be refused outright.
+Hostile pass returned **revision-required**; three load-bearing justifications were
+factually wrong, not merely underspecified. All integrated; D2 fork was consulted
+and locked.
+
+- **E1 (HIGH, design wrong) — "allowed-but-inert" is false.** `channels::blocked_by`
+  keeps dep predecessors by `StatusClass != Terminal`, not by kind; proposed ADR /
+  draft spec/REQ / draft POL·STD are `Workable` → a `needs` onto one blocks the
+  dependent. **Disposition: D2 rewritten — work-like targets only (user-locked).**
+  (§5.4 step 2, §7 D2, F2.)
+- **E2 (HIGH, design wrong) — D2 mischaracterised backlog prior art.** "Backlog has
+  no target-kind gate" is false: `run_needs`→`require_item`→`parse_ref` resolves
+  backlog prefixes only (item→item). SL-060 *introduces* cross-kind targets.
+  **Disposition: rationale corrected in D2.**
+- **E3 (HIGH, design wrong) — "no author-time cycle check, matching backlog today"
+  is false.** `run_needs` runs `needs_would_cycle` and refuses pre-write. **The
+  backlog delegate must retain it (INV-2); the generic verb defers to read-time;
+  asymmetry stated.** (§5.4.)
+- **E4 (HIGH, design wrong) — D7 boundary leak.** Unrestricted `needs` already
+  implements governance-blocks-work unlabelled (IMP-047's job). **Closed by the D2
+  work-like gate.** (§7 D7, §8 R4.)
+- **E5 (MED, underspecified) — scaffold seeds a *table*; strict leaf needs seeded
+  *arrays*.** **Disposition: §5.3 specifies the exact block; INV-1 + missing-array
+  tests.**
+- **E6 (MED, design wrong) — lifted refuse message "regenerate via <kind> new" is
+  destructive for an authored slice.** **Disposition: §5.2 — non-destructive,
+  kind-appropriate message.**
+- **E7 (MED, underspecified) — backfill mechanism undefined** though it establishes
+  the runtime invariant. **Disposition: §8 R1 specifies insert-before-first-
+  `[[relation]]` + the post-check.**
+- **E8 (MED) — PARKED labels constrain IMP-047.** **Disposition: legitimately
+  deferrable under D2 (single work→work semantic); noted §6.**
+- **E9 (MED) — reverses the slice template's "no typed table" intent.** **Disposition:
+  §5.3 — rescoped to structural axes; not an SL-048 reversal.**
+- **E10 (LOW) — path error `templates/slice.toml`.** **Disposition: corrected to
+  `install/templates/slice.toml` (scope affected-surface).**
