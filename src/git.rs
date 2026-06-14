@@ -492,12 +492,25 @@ pub(crate) enum CaptureError {
 /// Run `git -C <root> <normative-flags> <args>`, capturing output. The single
 /// chokepoint that applies [`NORMATIVE_FLAGS`] (EX-1).
 fn run_git(root: &Path, args: &[&str]) -> Result<std::process::Output, CaptureError> {
-    Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(NORMATIVE_FLAGS)
-        .args(args)
-        .output()
+    run_git_env(root, args, &[])
+}
+
+/// [`run_git`] with extra environment threaded onto the child — the seam for
+/// plumbing that redirects `GIT_INDEX_FILE` to a throwaway index (`filter_tree`,
+/// EX-2) so the live coordination index is never touched. The single
+/// [`NORMATIVE_FLAGS`] chokepoint is preserved (EX-1 — no second runner; the
+/// born-frame callers route through here unchanged via `run_git`).
+fn run_git_env(
+    root: &Path,
+    args: &[&str],
+    envs: &[(&str, &std::ffi::OsStr)],
+) -> Result<std::process::Output, CaptureError> {
+    let mut cmd = Command::new("git");
+    cmd.arg("-C").arg(root).args(NORMATIVE_FLAGS).args(args);
+    for (key, val) in envs {
+        cmd.env(key, val);
+    }
+    cmd.output()
         .map_err(|e| CaptureError::Git(format!("spawn git {}: {e}", args.join(" "))))
 }
 
@@ -600,6 +613,118 @@ pub(crate) fn git_cherry(
 /// spawn failure still errors (a missing git binary is not "false"). Impure shell.
 pub(crate) fn git_status_ok(root: &Path, args: &[&str]) -> Result<bool, CaptureError> {
     Ok(run_git(root, args)?.status.success())
+}
+
+// --- SL-064 PHASE-03: projection plumbing (working-tree-free) ----------------
+
+/// Run a git command with extra env, erroring on non-zero exit; trimmed UTF-8
+/// stdout. The env-aware sibling of [`git_text`] — used by the tree-filter
+/// primitive which must thread a throwaway `GIT_INDEX_FILE`.
+fn git_env_text(
+    root: &Path,
+    args: &[&str],
+    envs: &[(&str, &std::ffi::OsStr)],
+) -> Result<String, CaptureError> {
+    let output = run_git_env(root, args, envs)?;
+    if output.status.success() {
+        let text = String::from_utf8(output.stdout)
+            .map_err(|_ignored| CaptureError::Git(format!("non-utf8 output: {}", args.join(" "))))?;
+        Ok(text.trim().to_string())
+    } else {
+        Err(CaptureError::Git(format!(
+            "{}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// A throwaway `GIT_INDEX_FILE` inside the repo's git dir, removed on drop. Lets
+/// [`filter_tree`] stage into a scratch index that is **never** the live
+/// coordination index (EX-2). Single-writer orchestrator ⇒ the pid-suffixed name
+/// is collision-free; an absent file is an empty index to git, so a leftover from
+/// a crashed run is cleared up front.
+struct ScratchIndex {
+    path: std::path::PathBuf,
+}
+
+impl ScratchIndex {
+    fn new(root: &Path) -> Result<Self, CaptureError> {
+        let git_dir = git_text(root, &["rev-parse", "--absolute-git-dir"])?;
+        let name = format!("doctrine-filter-index.{}", std::process::id());
+        let path = Path::new(&git_dir).join(name);
+        drop(std::fs::remove_file(&path));
+        Ok(Self { path })
+    }
+}
+
+impl Drop for ScratchIndex {
+    fn drop(&mut self) {
+        drop(std::fs::remove_file(&self.path));
+    }
+}
+
+/// Build a filtered tree from `source_tree` with `exclude` pathspecs dropped,
+/// staging through a throwaway `GIT_INDEX_FILE` so the live coordination index
+/// and working tree are never touched (EX-2, design §4.1). Pure ref/object
+/// plumbing — `read-tree` loads the scratch index, `rm --cached` drops the
+/// excluded pathspecs, `write-tree` emits the new tree oid. No checkout. Returns
+/// the filtered tree oid.
+pub(crate) fn filter_tree(
+    root: &Path,
+    source_tree: &str,
+    exclude: &[&str],
+) -> Result<String, CaptureError> {
+    let scratch = ScratchIndex::new(root)?;
+    let env: [(&str, &std::ffi::OsStr); 1] = [("GIT_INDEX_FILE", scratch.path.as_os_str())];
+    git_env_text(root, &["read-tree", source_tree], &env)?;
+    if !exclude.is_empty() {
+        let mut args = vec!["rm", "--cached", "-r", "-f", "--ignore-unmatch", "--quiet", "--"];
+        args.extend_from_slice(exclude);
+        git_env_text(root, &args, &env)?;
+    }
+    git_env_text(root, &["write-tree"], &env)
+}
+
+/// Commit `tree` against `parent` with no working-tree touch (design §4.1) — the
+/// B/C compose step's commit primitive. Returns the new commit oid.
+pub(crate) fn commit_tree(
+    root: &Path,
+    tree: &str,
+    parent: &str,
+    msg: &str,
+) -> Result<String, CaptureError> {
+    git_text(root, &["commit-tree", tree, "-p", parent, "-m", msg])
+}
+
+/// Outcome of a compare-and-swap ref update ([`update_ref_cas`]).
+pub(crate) enum RefCas {
+    /// The ref equalled `expected_old` and was advanced to the new oid.
+    Updated,
+    /// The ref did **not** equal `expected_old`; nothing was written. `actual`
+    /// is the ref's current value, or `None` if it does not exist.
+    Moved { actual: Option<String> },
+}
+
+/// Compare-and-swap a ref via the native 3-arg `update-ref <ref> <new> <old>`
+/// (design §4.1, ADR-012 D4): git advances the ref only if it currently equals
+/// `expected_old`, otherwise refuses. For ref *creation*, pass the zero oid as
+/// `expected_old` (git refuses if the ref already exists). On refusal the ref is
+/// left untouched and the moved-target's actual value is reported — never forced,
+/// never auto-resolved.
+pub(crate) fn update_ref_cas(
+    root: &Path,
+    refname: &str,
+    new_oid: &str,
+    expected_old: &str,
+) -> Result<RefCas, CaptureError> {
+    let output = run_git(root, &["update-ref", refname, new_oid, expected_old])?;
+    if output.status.success() {
+        Ok(RefCas::Updated)
+    } else {
+        let actual = git_opt(root, &["rev-parse", "--verify", "--quiet", refname])?;
+        Ok(RefCas::Moved { actual })
+    }
 }
 
 /// Resolve trunk's commit-ish via the peeled ladder (ADR-006 D3): an explicit
@@ -1965,5 +2090,111 @@ mod tests {
         let head = repo.commit("a.txt", "hello", "init");
         let sha = super::trunk_ladder(repo.path(), Some(OsStr::new("main"))).unwrap();
         assert_eq!(sha, Some(head));
+    }
+
+    // --- SL-064 PHASE-03: projection plumbing (VT-1/VT-2/VT-3) --------------
+
+    /// VT-1: filter-tree drops the excluded pathspecs and leaves the live index
+    /// byte-for-byte unchanged (the throwaway-`GIT_INDEX_FILE` guarantee).
+    #[test]
+    fn filter_tree_excludes_paths_and_leaves_live_index_untouched() {
+        let repo = ScratchRepo::new();
+        repo.commit("keep.txt", "k", "init");
+        repo.write(".doctrine/dispatch/64/journal.toml", "rows");
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "-m", "add ledger"]);
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+
+        let index_before = std::fs::read(repo.path().join(".git/index")).expect("read index");
+
+        let filtered =
+            super::filter_tree(repo.path(), &tree, &[".doctrine/dispatch/64"]).expect("filter");
+
+        let listing = repo.git(&["ls-tree", "-r", "--name-only", &filtered]);
+        assert!(listing.contains("keep.txt"), "kept path survives: {listing}");
+        assert!(
+            !listing.contains("journal.toml"),
+            "excluded path dropped: {listing}"
+        );
+
+        let index_after = std::fs::read(repo.path().join(".git/index")).expect("read index");
+        assert_eq!(
+            index_before, index_after,
+            "live index byte-for-byte unchanged"
+        );
+    }
+
+    /// VT-1 (degenerate): an empty exclude set is the identity filter — the tree
+    /// is re-emitted unchanged, still without touching the live index.
+    #[test]
+    fn filter_tree_empty_exclude_is_identity() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "1", "init");
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+        let filtered = super::filter_tree(repo.path(), &tree, &[]).expect("filter");
+        assert_eq!(filtered, tree, "identity filter re-emits the same tree");
+    }
+
+    /// VT-2: a filtered tree commits against a supplied parent with no checkout —
+    /// HEAD and the working tree are untouched.
+    #[test]
+    fn commit_tree_against_parent_without_checkout() {
+        let repo = ScratchRepo::new();
+        let parent = repo.commit("a.txt", "1", "first");
+        repo.commit("b.txt", "2", "second");
+        let tip_tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+        let head_before = repo.git(&["rev-parse", "HEAD"]);
+        let a_before = std::fs::read_to_string(repo.path().join("a.txt")).expect("read a");
+
+        let commit = super::commit_tree(repo.path(), &tip_tree, &parent, "synth").expect("commit");
+
+        assert_eq!(
+            repo.git(&["rev-parse", &format!("{commit}^")]),
+            parent,
+            "parent is as supplied"
+        );
+        assert_eq!(
+            repo.git(&["diff", "--name-only", &parent, &commit]),
+            "b.txt",
+            "diff parent..commit is exactly the second-commit delta"
+        );
+        assert_eq!(repo.git(&["rev-parse", "HEAD"]), head_before, "HEAD unmoved");
+        assert_eq!(
+            std::fs::read_to_string(repo.path().join("a.txt")).expect("read a"),
+            a_before,
+            "working tree untouched"
+        );
+    }
+
+    /// VT-3: CAS succeeds only at the expected old oid; a mismatch reports the
+    /// moved target's actual value and never clobbers the ref.
+    #[test]
+    fn update_ref_cas_succeeds_only_at_expected_old() {
+        let repo = ScratchRepo::new();
+        let c1 = repo.commit("a.txt", "1", "first");
+        let c2 = repo.commit("b.txt", "2", "second");
+        let zero = "0".repeat(40);
+        let refname = "refs/review/x";
+
+        // Create via zero-oid CAS (must-not-exist).
+        assert!(matches!(
+            super::update_ref_cas(repo.path(), refname, &c1, &zero).expect("create"),
+            super::RefCas::Updated
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c1);
+
+        // Wrong expected-old → Moved{actual: c1}, ref unchanged.
+        match super::update_ref_cas(repo.path(), refname, &c2, &zero).expect("cas") {
+            super::RefCas::Moved { actual } => assert_eq!(actual.as_deref(), Some(c1.as_str())),
+            super::RefCas::Updated => panic!("expected Moved at wrong expected-old"),
+        }
+        assert_eq!(repo.git(&["rev-parse", refname]), c1, "ref not clobbered");
+
+        // Correct expected-old → Updated to c2.
+        assert!(matches!(
+            super::update_ref_cas(repo.path(), refname, &c2, &c1).expect("cas2"),
+            super::RefCas::Updated
+        ));
+        assert_eq!(repo.git(&["rev-parse", refname]), c2);
     }
 }
