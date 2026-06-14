@@ -2260,8 +2260,7 @@ pub(crate) fn run_verify_worker(base: &str, dir: &Path) -> anyhow::Result<()> {
     let marker = marker_present(dir);
     // is-ancestor signals purely via exit code; unresolvable refs ⇒ Ok(false)
     // (fail-closed, never a panic). `git_status_ok` errors only on a spawn failure.
-    let base_is_ancestor =
-        git::git_status_ok(dir, &["merge-base", "--is-ancestor", base, "HEAD"])?;
+    let base_is_ancestor = git::git_status_ok(dir, &["merge-base", "--is-ancestor", base, "HEAD"])?;
 
     // --- pure classify ---
     match classify_worker_verify(head_resolved, marker, base_is_ancestor) {

@@ -3048,9 +3048,7 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => worktree::run_gc(path, &fork, superseded_head.as_deref(), force, dry_run),
             WorktreeCommand::Status { assert, path } => worktree::run_status(path, assert),
-            WorktreeCommand::VerifyWorker { base, dir } => {
-                worktree::run_verify_worker(&base, &dir)
-            }
+            WorktreeCommand::VerifyWorker { base, dir } => worktree::run_verify_worker(&base, &dir),
             WorktreeCommand::Marker {
                 clear,
                 operator,
