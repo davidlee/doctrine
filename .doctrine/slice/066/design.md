@@ -2,8 +2,10 @@
 
 > **STATUS: DRAFT (2026-06-14).** Nine design questions resolved in the `/design`
 > clarifying loop (see §8). Scope **C** (full structured delta payload) chosen by
-> user (SL-044 is done — the deferral-to-the-writer argument is moot). Internal +
-> external (codex/GPT-5.5) adversarial passes integrated (§11, §12). Awaiting lock.
+> user (SL-044 is done — the deferral-to-the-writer argument is moot). Three
+> adversarial passes integrated: internal (§11), external codex/GPT-5.5 (§12),
+> external Opus (§13, fresh-mind — G1 blocker on the KINDS-consumer wiring).
+> Awaiting lock.
 > Reference forms: padded ids (`SL-066`, `ADR-013`,
 > `REQ-NNN`, `SPEC-002`); doc-local refs bare (`D1`, `OQ-1`).
 
@@ -45,7 +47,9 @@ conduct axis, then **applied** (deltas land) and settled.
   through a future Revision vehicle (IDE-003)" (SL-044 §5.1). The B·P1 setter
   `spec req status <REQ> --to <state>` (free any→any, edit-preserving) is the lone
   requirement-status write seam. REC composed atomically, one move per REC
-  (`RecDoc`, `rec.rs:121`), `owning_slice: Option<String>`.
+  (`RecDoc`, `rec.rs:121`; the single `move` + `owning_slice: Option<String>` live
+  on the nested `RecMeta`, `rec.rs:105/111`, accessed `RecDoc.rec.owning_slice` —
+  G5).
 - **Spec composition** (SL-015): a requirement is a reserved **peer entity**
   `REQ-NNN`; membership is a spec-side `members.toml` edge (FK + mobile `FR-`/`NF-`
   label + order); `spec req add` is the only producer.
@@ -56,7 +60,10 @@ conduct axis, then **applied** (deltas land) and settled.
   artefact missing §11). ADR-009 (conduct axis; **"approval is not lifecycle"**).
   ADR-010 (relation modelling — unify contract, keep storage bespoke). ADR-004
   (relations outbound-only; reciprocity **derived**). ADR-001 (leaf←engine←command
-  layering). IMP-047 ("a model change → the canon moves first").
+  layering). **ADR-003 / §1** — the canon-moves-first authoring ethos PHASE-01 rides
+  (G7: *not* IMP-047, which is the unbuilt *trinary-actionability* improvement —
+  "kinds gate work without being actionable"; v1 REV pending statuses classify
+  `Workable`, the IMP-047 `Gating` reclassification is a follow-up, §4.7).
 - **Storage rule.** Structured/queried data in TOML; prose in MD; **no embedded
   YAML blocks** (rules out spec-driver's `supekku:revision.change@v1` block — it
   becomes a TOML payload table). Tooling **never parses prose structure / headings**.
@@ -121,8 +128,14 @@ The touched-entity set lives in a typed payload table (§4.4); **the rows ARE th
 edges** (members.toml precedent). Inbound `revises` reciprocity is derived by
 **`relation_graph`** (E2 — the cross-kind inbound seam: a new
 `revision::relation_edges` accessor reads the `[[change]]` rows, `outbound_for`
-dispatches to it, `in_edges` yields inbound — exactly the members/interactions
-path; **not** `registry.rs`, which is only the spec-validate seed). The inbound list
+dispatches to it, and inbound is an **O(1) indexed reverse-adjacency lookup**
+(`in_edges`) over the prebuilt graph — *not* a per-query scan; the one corpus walk
+is upstream in `scan_entities`, run once per `inspect` (G6). Exactly the
+members/interactions path; **not** `registry.rs`, which is only the spec-validate
+seed. Adding REV to `KINDS` means every `inspect` now also walks the `revision/`
+dir — additive cost, RSK-006-class defer; the slug-symlink alias is already skipped
+(`entity::scan_ids` filters `is_dir()` + `parse::<u32>()`, no symlink-follow). The
+inbound list
 surfaces on **`doctrine inspect ADR-X`**, **not** `adr show`/`spec show`: ADR-004 §3
 reserves inbound completeness to the registry-/scan-backed surface (`inspect`),
 never the one-way `show` reader ("no cross-corpus scan", `spec.rs:906`). So
@@ -206,7 +219,8 @@ non-transactional CLI handlers (`spec.rs:826` "NOT transactional by design"), so
 auto-applying creation rows would risk orphaned half-writes the "one commit" cannot
 undo. Narrowing v1 to status both removes that hazard and removes the handler→engine
 refactor (status already rides the engine-callable `requirement::set_status`,
-`spec.rs:897` — no ADR-001 violation).
+**defined `requirement.rs:339`** — `spec.rs:897` is only the existing CLI call site
+(G4) — no ADR-001 violation).
 
 | change action | v1 disposition |
 |---|---|
@@ -281,6 +295,30 @@ target**: `SL/ISS/IMP/…` can `needs REV-NNN` (the IDE-010 payoff); a Revision 
 itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
 (the SL-060 invariant) — depending on governance routes through the Revision.
 
+**A new `KINDS` row is read by THREE corpus-walk tables, not one (G1–G3, §13).** The
+work-like predicate alone is insufficient; each must carry a REV arm or the wiring
+half-works:
+- **`priority::partition` (G1, blocker).** Blocking is computed from
+  `status_class` (`partition.rs:186`), **not** the FSM. A kind with no `PARTITION`
+  row classifies `Unrecognised` for *every* status (`partition.rs:191-193`), and
+  `blocked_by` excuses a predecessor only when `class == Terminal`
+  (`channels.rs:67`) — so a `done`/`abandoned` REV stays `Unrecognised != Terminal`
+  and **blocks its dependent forever**, the inverse of the IDE-010 payoff. Add a
+  dedicated `KindPartition { prefix: "REV", workable: ["proposed","started"],
+  terminal: ["done","abandoned"] }` + a `REV_STATUSES` const so the VT-1 drift
+  canary binds. REV's vocab differs from backlog's (`open/triaged/resolved/closed`),
+  so it gets its **own** row — it cannot ride the backlog arm.
+- **`relation_graph::dep_seq_for` (G2).** For REV-as-*source*: the verb authors a
+  REV-sourced `needs`/`after`, but `dep_seq_for` routes only `SL` + the five backlog
+  prefixes to a reader; every other kind short-circuits to an empty `DepSeq` with no
+  disk read (`relation_graph.rs:134-137`), so REV's own edges never reach the
+  blocker/`next` view. Add a `"REV"` arm (mirror the `SL` arm — leaf `dep_seq::read`
+  over `revision-NNN.toml`). REV-as-target needs only G1; REV-as-source needs G2.
+- **`relation_graph::outbound_for` (G3, already in §5).** Its fallthrough is
+  `debug_assert!(false, …)` (`relation_graph.rs:78`); the REV arm (the
+  `revision::relation_edges` accessor, §4.3) must land **with** the `KINDS` row, not
+  a phase later, or debug-build scans panic mid-PHASE — see §7 sequencing.
+
 ## 5. Code Impact
 
 | Path | Change |
@@ -291,7 +329,8 @@ itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
 | `src/revision.rs` (new) | `REV_KIND`, `RevDoc` (id/slug/title/status/approval/`[[change]]`), scaffold, `run_new`/`run_show`/`run_status`/`run_change_add`/`run_approve`/`run_apply` |
 | `src/integrity.rs` | `KINDS` row (REV, stem `revision`, `state_dir: None`) |
 | `src/relation.rs` | `RelationLabel::Revises` + `RELATION_RULES` row (sources `[REV]`, targets `{SPEC,PRD,REQ,ADR,POL,STD}`, Tier Typed, **`LinkPolicy::TypedVerbOnly`**) |
-| `src/relation_graph.rs` | `revision::relation_edges` accessor + `outbound_for` arm (REV → reads `[[change]]` rows); inbound `revises` derived via `in_edges`, surfaced on `inspect` (E2 — **not** `registry.rs`, **not** `show`; ADR-004 §3) |
+| `src/relation_graph.rs` | (a) `revision::relation_edges` accessor + `outbound_for` arm (REV → reads `[[change]]` rows); inbound `revises` derived via indexed `in_edges`, surfaced on `inspect` (E2 — **not** `registry.rs`, **not** `show`; ADR-004 §3). (b) **`dep_seq_for` REV arm** (G2 — leaf `dep_seq::read` over `revision-NNN.toml`; mirrors the `SL` arm) so REV-as-source `needs`/`after` reach the blocker view |
+| `src/priority/partition.rs` (G1) | **dedicated REV `KindPartition`** (`workable ["proposed","started"]`, `terminal ["done","abandoned"]`) + `REV_STATUSES` const for the VT-1 canary — WITHOUT it a `done` REV classifies `Unrecognised`, never `Terminal`, so `needs REV-N` never unblocks (`partition.rs:191-193`, `channels.rs:67`) |
 | `src/requirement.rs` (E5) | v1 apply rides the existing engine-callable `set_status` (`spec.rs:897`) — **no refactor**. `spec::add_requirement`/`spec::create_spec` engine helpers are the introduce/create-apply follow-up (external B2), not v1 |
 | `src/main.rs` | `Revision { command }` dispatch (`new`/`show`/`status`/`change add`/`approve`/`apply`); work-like predicate += REV |
 | `install/manifest.toml` + `.gitignore` | `.doctrine/revision` dir + negation |
@@ -325,13 +364,22 @@ itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
 
 ## 7. Phase Sketch (refined by /plan)
 
-1. **PHASE-01** — ADR-013 + doc edits (governance moves first; IMP-047 principle).
-2. **PHASE-02** — kind + spine: `revision.rs`, KINDS row, manifest/gitignore,
-   `revision new`/`show`, lifecycle status + approval field, `revision status`.
-3. **PHASE-03** — relations: `Revises` label + rules + `[[change]]` payload table;
-   `relation_graph` reciprocity derivation (E2); `inspect` rendering.
-4. **PHASE-04** — dep/seq: work-like predicate += REV; `needs`/`after` REV
-   source+target; SL-060 governance-exclusion regression.
+1. **PHASE-01** — ADR-013 + doc edits (governance moves first; ADR-003 / §1 ethos —
+   *not* IMP-047, G7).
+2. **PHASE-02** — kind + spine: `revision.rs`, manifest/gitignore, `revision
+   new`/`show`, lifecycle status + approval field, `revision status`. **The `KINDS`
+   row lands with its three corpus-walk arms in the SAME phase (G3):** the
+   `outbound_for` REV arm (empty-then-filled in PHASE-03 is fine), the `dep_seq_for`
+   REV arm (G2), and the `priority::partition` REV row + `REV_STATUSES` const (G1) —
+   otherwise the debug-build corpus scan hits `outbound_for`'s `debug_assert!(false)`
+   / a missing partition the moment a REV is minted, going RED at PHASE-02's end
+   before later phases supply the arms.
+3. **PHASE-03** — relations payload: `Revises` label + rules + `[[change]]` payload
+   table; fill the `revision::relation_edges` accessor (reciprocity derivation, E2);
+   `inspect` rendering.
+4. **PHASE-04** — dep/seq surface: work-like predicate += REV (`main.rs:3050`);
+   `needs`/`after` REV source+target end-to-end (the partition + `dep_seq_for` arms
+   already exist from PHASE-02); SL-060 governance-exclusion regression.
 5. **PHASE-05** — apply: `revision apply` auto-landing `status` rows via
    `requirement::set_status` + RecDoc; surface-for-manual for creation/move/prose;
    approval checkpoint; from-guard pre-flight. (No `produces` edge — E6.)
@@ -360,12 +408,29 @@ itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
   `from`-guard (§4.5) covers the one real silent-clobber hazard; prose drift is
   caught by the human-in-loop + git. Full version-stamping + an approval-retraction
   FSM is disproportionate to an advisory (`gate`) approval. Recorded as rejected.
+- **No machine-verification that surfaced-for-manual rows actually landed** (G2/hunt
+  item 2). `done` requires every row landed (§4.2), but nothing checks the manual
+  subset before `revision status REV-N done` is accepted — a dependent `needs REV-N`
+  unblocks on the operator's word. This is the **same trust model** as the
+  invoker-blind approval checkpoint (E3) and SL-044's authored-truth stance;
+  blast radius is the manual subset only (status rows auto-land). Honour-system by
+  design, not an oversight.
+- **No reversal of a partially-applied Revision on abandon** (hunt item 4). Apply
+  lands the `status` rows (RecDocs, one commit) before a manual-row Revision settles;
+  if the operator then `abandoned`s it, those status deltas **stay in force** — they
+  are real reconciliations and must not be un-reconciled. `abandoned` disclaims only
+  the unlanded manual remainder. The resulting "abandoned REV with landed status
+  deltas" is coherent, not a leak.
 
 ## 10. Open Questions
 
 None blocking. Carried for plan/execute:
 - OQ-1: `[[change]]` detail column names + soft-enum action vocab — finalize against
-  the apply-path seams in PHASE-03/05 (the table shape in §4.4 is provisional).
+  the apply-path seams in PHASE-03/05 (the table shape in §4.4 is provisional). Also
+  absorbs a `change add` authoring-validation case (G-hunt item 1): **two `status`
+  rows on the same target REQ with different `to_status`** would be last-writer-wins
+  at apply — a `change add` validation/dedup concern, not a soundness blocker (the
+  pre-flight `from`-guard reads pre-apply state, so row-2 never reads row-1's write).
 - OQ-2 (**resolved**, F7 → refined E1): `revision apply` is all-or-nothing **over
   `status` rows** — pre-flight sweep, then write, one commit, N RecDocs. Heterogeneous
   atomicity dropped (external B1); creation/move/prose are surfaced-for-manual.
@@ -423,3 +488,68 @@ Seven findings (4 blocker, 3 major), each **verified against source + governance
 - **M3 → E3** — approval reframed: an apply-time forcing-function **checkpoint**, not
   actor-attributed authz (ADR-009 §113 invoker-blind). Real enforcement is the ADR-009
   identity follow-up (§4.2).
+
+## 13. Adversarial Pass (external #2 — Opus, 2026-06-14)
+
+Fresh-mind second external pass on a fresh hunt list (from-guard self-interaction,
+done honour-system, `relation_graph` cost, abandon-mid-apply, `primary` residual,
+PHASE-01 sequencing). Seven findings, each **verified against source by the
+triaging agent** (not taken on the reviewer's word). **Root cause** of the three
+substantive ones: §5/§7 under-counted the corpus-walk tables that consume an
+`integrity::KINDS` row. A new kind row is read by **three** walk surfaces; only one
+(`outbound_for`) was listed. Verdict on entry: *minor-fixes* (G1 blocks lock).
+
+- **G1 (blocker) → §4.7/§5/§7.** `needs REV-N` never unblocks. Blocking is computed
+  from `priority::status_class` (`partition.rs:186`), not the FSM: a kind with no
+  `PARTITION` row classifies `Unrecognised` for *every* status
+  (`partition.rs:191-193`), and `blocked_by` excuses a predecessor only at
+  `class == Terminal` (`channels.rs:67`). A `done`/`abandoned` REV stays
+  `Unrecognised != Terminal` → blocks its dependent forever, the inverse of the
+  IDE-010 payoff. **Fix:** dedicated REV `KindPartition` (`workable
+  ["proposed","started"]`, `terminal ["done","abandoned"]`) + `REV_STATUSES` const
+  for the VT-1 canary; its own row (REV's vocab ≠ backlog's). §5 +=
+  `priority/partition.rs`; lands with the KINDS row.
+- **G2 (major) → §4.7/§5/§7.** REV-as-source dep/seq silently dropped.
+  `dep_seq_for` (`relation_graph.rs:101`) routes only `SL` + the five backlog
+  prefixes; every other kind short-circuits to an empty `DepSeq`, no disk read
+  (`relation_graph.rs:134-137`). Editing the work-like predicate lets the verb
+  *author* a REV-sourced edge that is never read back. **Fix:** a `"REV"` arm
+  mirroring `SL`. Target-only needs only G1; source needs G2.
+- **G3 (minor, sequencing) → §7.** `outbound_for`'s fallthrough is
+  `debug_assert!(false, …)` (`relation_graph.rs:78`); a KINDS row added a phase ahead
+  of its arm panics every debug-build corpus scan the moment a REV is minted (RED at
+  PHASE-02 end). **Fix:** land the row + all three arms in one phase (§7).
+- **G4 (minor, citation) → §4.5.** `requirement::set_status` is **defined**
+  `requirement.rs:339`; `spec.rs:897` is only the CLI call site. Substance
+  (engine-callable, no refactor) holds.
+- **G5 (nit, citation) → §2.** `owning_slice` + the single `move` live on `RecMeta`
+  (`rec.rs:105/111`), accessed `RecDoc.rec.owning_slice`; `rec.rs:121` is `RecDoc`.
+- **G6 (minor, wording) → §4.3.** `in_edges` is an O(1) indexed reverse-adjacency
+  lookup, **not** a scan; the one corpus walk is upstream in `scan_entities`, once
+  per `inspect`. REV joins the per-`inspect` scan set (additive, RSK-006-class). The
+  slug-symlink footgun is **already defended** (`entity::scan_ids` `is_dir()` +
+  `parse::<u32>()`) — hunt-item-3 clean.
+- **G7 (minor, attribution) → §3/§7.** IMP-047 is the *trinary-actionability*
+  improvement ("kinds gate work without being actionable"), **not** a
+  "canon-moves-first" principle. PHASE-01's doc-first ordering rides ADR-003 / §1.
+  v1 REV pending statuses classify `Workable` (G1); the IMP-047 `Gating` reclass is a
+  follow-up.
+
+**Hunt-list dispositions (no new hole):**
+- *from-guard self-interaction (item 1)* — sound. v1 auto-applies only `status`
+  rows; the pre-flight sweep reads current status before any write, so two rows on
+  one REQ both check the same pre-apply state (row-2 never reads row-1's write). The
+  different-`to_status` case is `change add` authoring-validation, folded into OQ-1.
+- *done honour-system (item 2)* — real but acceptable/named (§9): same trust model as
+  the invoker-blind approval checkpoint; blast radius = the manual subset.
+- *abandon mid-apply (item 4)* — real but acceptable/named (§9): landed status
+  RecDocs are real reconciliations; abandon disclaims only the unlanded remainder.
+- *primary residual lean (item 5)* — clean. Nothing in apply/from-guard/RecDoc/
+  blocking keys on `primary`; "at most one" is a `change add` rule, breaks only
+  display if violated.
+- *PHASE-01/ADR-013 (item 6)* — doc-level ordering fine (ADR-013 is new; max is
+  ADR-012). The real ordering hole is intra-code → G3.
+
+**OQ-1 / OQ-3** confirmed genuinely plan/execute-deferrable. G1–G3 are one coherent
+§5/§7 wiring fix; G4–G7 citation/wording sweeps; the two honour-system gaps got §9
+lines.
