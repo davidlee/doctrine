@@ -47,3 +47,22 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
     undercounts the P01 `src/install.rs` belt test; both test-tier, invariant holds.
 - Follow-ups minted: IMP-059 (cross-corpus harvest DRY, D6), IMP-060 (`/handover`
   relocation), ISS-012 (install-gitignore fix). Ready for `/close`.
+
+## 2026-06-14 - CLOSE HELD at `reconcile` (foreign gate RED)
+
+SL-061 is complete and audited (RV-018 done, all findings terminal, F-1 blocker
+fixed). Lifecycle is at `reconcile`; the binary close-gate permits `done` (no
+unresolved RV blocker). Closure is **held** on one foreign blocker only:
+
+- `just check` is RED on `e2e_relation_migration_storage::scaffolded_entities_are_
+  post_cut_shape_all_six_paths` (slice template vs SL-048 post-cut `[relationships]`
+  assertion). SL-061 touches **no** templates/relations/migration code (0 template
+  touches across all 3 phase commits); the committed `install/templates/slice.toml`
+  is correctly post-cut. The RED is concurrent SL-060/SL-058 relation-migration
+  churn on shared `main` (the test file was being edited live during this audit),
+  possibly compounded by shared-CARGO_TARGET false-RED. Not SL-061's to fix.
+
+**Resume to close:** when `just check` is green for a foreign-independent reason
+(the concurrent SL-060/SL-058 work settles), run `doctrine slice status 61 done`
+and confirm `doctrine slice list` shows the `⚠` divergence gone. Origin **IMP-023
+is already resolved** (P04). No SL-061 work remains.
