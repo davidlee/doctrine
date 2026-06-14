@@ -419,6 +419,22 @@ mod tests {
     }
 
     #[test]
+    fn review_ledger_is_shipped() {
+        // SL-061 PHASE-01 (EX-3): the shared RV-driving protocol doc must ship via
+        // the implicit top-level install/*.md copy so /audit (and later
+        // /code-review, /inquisition) can point at the installed reference.
+        let names = embedded_filenames();
+        assert!(
+            names.contains(&"review-ledger.md".to_string()),
+            "review-ledger.md must be embedded (shipped); got {names:?}"
+        );
+        assert!(
+            !asset_text("review-ledger.md").unwrap().trim().is_empty(),
+            "review-ledger.md asset must be non-empty"
+        );
+    }
+
+    #[test]
     fn plan_creates_dirs_from_manifest() {
         let dir = tempfile::tempdir().unwrap();
         let manifest = Manifest {

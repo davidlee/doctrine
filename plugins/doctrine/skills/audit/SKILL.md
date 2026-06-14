@@ -8,18 +8,16 @@ description: Use after a slice's phases are implemented, when the task is now ev
 You are running the reconciliation loop: does the work match its design and
 governance, and is every gap consciously dispositioned before close?
 
-The audit stage is now a **review ledger** — the RV kind (`RV-NNN`, ADR-007).
-You open a `reconciliation`-facet review targeting the slice, raise each finding
-as a structured ledger entry, and dispose/verify it through the turn graph. The
-ledger replaces the old hand-made `audit.md`: findings are append-only and
+The audit stage runs on a **review ledger** — the RV kind (`RV-NNN`, ADR-007). The
+shared ledger mechanics (open + prime, raise, dispose + resolve, the severity and
+disposition vocab, synthesis, the close-gate, the parent-tree caveat) live in
+`review-ledger.md` — **read it; this skill does not repeat the verbs.** What
+follows is the audit *lens*: the facet, the modes, the scope, the evidence the
+reconciliation loop demands, and the audit-specific harvest and closure tail.
+
+The ledger replaces the old hand-made `audit.md`: findings are append-only and
 field-owned, "no undispositioned findings before close" is enforced by the binary
 (the close-gate teeth), and the audit prose becomes the review's `## Synthesis`.
-
-> **Self-audit (the usual case).** When you are both reviewer and author, drive
-> both roles with `--as <role>` — the raiser raises/verifies/withdraws, the
-> responder disposes. The per-review lock and the per-finding `can()` gate keep a
-> one- or two-party audit correct; `--as` is cooperative role assertion, not a
-> security boundary (ADR-007).
 
 > **`audit.md` is retired for new audits.** Existing `audit.md` files remain valid
 > — there is no migration. Do not author a new one; open an RV instead.
@@ -34,76 +32,60 @@ Inputs:
 - `design.md` (canonical), `slice-nnn.md`, `plan.toml`
 - relevant ADRs and `doc/*` specs (see `/canon`)
 
+## Audit lens
+
+**Subject is always the slice — target-ladder rung 1.** An audit targets its slice
+(the `--target`) and never degrades to prose; the closure-grade trigger is
+satisfied by definition (it gates the slice's `audit→reconcile→done`). Do not
+re-derive the subject — open the RV against the slice.
+
+**Facet is `reconciliation`.** That is the lifecycle aspect this stage
+interrogates. Posture, if any, rides `--raiser`, never a new facet (`review-ledger.md`
+§2).
+
+**Audit mode** — pick one:
+
+- **conformance** — post-implementation audit tied to a slice (the usual case).
+- **discovery** — backfill or existing-code investigation.
+
+**Self-audit (the usual case).** When you are both reviewer and author, drive both
+roles with `--as <role>` — the raiser raises/verifies/withdraws, the responder
+disposes. This is cooperative role assertion, not a security boundary (ADR-007;
+`review-ledger.md` §4).
+
 ## Process
 
-1. Determine audit mode:
-   - **conformance** — post-implementation audit tied to a slice (the usual case)
-   - **discovery** — backfill or existing-code investigation
-2. Open the review ledger for the slice (replaces authoring `audit.md`):
-   - `doctrine review new --facet reconciliation --target SL-NNN`
-   - then warm the reviewer context: `doctrine review prime RV-NNN --seed`
-     emits git-changed candidate paths (a starting point, not authority); curate
-     them into a `domain_map` and `doctrine review prime RV-NNN` (stdin or
-     `--from <file>`) to persist the curated areas/invariants/risks. `review
-     status RV-NNN` then reports `cache: current`/`stale` as an optimization
-     signal — never a gate.
-   - Fill the ledger's `## Brief` (in `review-NNN.md`) with the lines of attack:
-     what this audit is probing and the invariants it holds the slice to.
-   - Treat loose notes as insufficient for closure-grade work — the findings
-     belong in the RV ledger, not in conversation context.
-3. Gather evidence:
-   - run the tests/checks the design and plan require, plus `just check`
-   - inspect observed behaviour against `design.md` and the phase `VT-` criteria
-   - note where behaviour and design diverge
-4. Raise every finding as a ledger entry — `doctrine review raise RV-NNN
-   --severity <S> --title <what was expected vs observed> --detail <the
-   evidence>`. The raiser owns `severity`/`title`/`detail`, fixed at raise
-   (append-only). Severity is `blocker | major | minor | nit`:
-   - **`blocker`** is the only severity that gates `/close` — an unresolved
-     blocker on an active RV targeting this slice refuses the `audit→reconcile`
-     and `reconcile→done` transitions (the close-gate teeth, enforced in the
-     binary; D-C9b). Reserve it for findings that must not ship unreconciled.
-   - `major`/`minor`/`nit` record the finding but never block close.
-5. Disposition every finding explicitly via `doctrine review dispose RV-NNN
-   --finding F-n --disposition <vocab> --response <rationale> --as responder`,
-   then close it with `verify` (accept) or `contest` (hand back) — do not leave
-   closure-grade findings undispositioned. The recommended `disposition`
-   vocabulary (free-text, but use these consistently):
-   - **aligned** — observed behaviour is already correct; no follow-up.
-   - **fix-now** — reconcile inside this slice before closing.
-   - **design-wrong** — the design, not the code, is the defect; reconcile
-     `design.md` (and the slice scope) so canon tells the truth.
-   - **follow-up** — owned future work is the correct route; capture it
-     (`backlog new`).
-   - **tolerated** — explicit unresolved drift, with rationale, only when the
-     tradeoff is consciously accepted.
-
-   Then accept it: `doctrine review verify RV-NNN --finding F-n --as raiser`
-   (terminal). A finding **raised in error** is retracted with `doctrine review
-   withdraw RV-NNN --finding F-n --as raiser` (terminal) — not disposed. A finding
-   you disagree with after disposition goes back via `review contest` (answered →
-   contested) for re-disposition. `--note` on verify/contest is ephemeral handoff
-   chatter for the baton log, NOT durable rationale — durable justification
-   belongs in the finding's `response` or a new finding (D10).
-6. Resist easy escapes: do not pick **follow-up** just because the fix feels
-   large, and do not normalise **tolerated** without a real rationale. Do not
-   downgrade a true `blocker` to dodge the close-gate. If the correct route is
-   ambiguous after reading `design.md` and governance, stop and `/consult`.
-7. Write the audit's reasoning as the review's `## Synthesis` (append it to
-   `review-NNN.md`) — the prose that the old `audit.md` carried: the closure
-   story, the standing risks, the tradeoffs consciously accepted. Then harvest
-   durable risks, decisions, and gotchas from the disposable runtime phase sheets into
-   `notes.md`, and promote reusable facts via `/record-memory`. Capture durable
-   follow-up **work** the audit surfaced — risks, issues, chores — as backlog
-   items with `backlog new`, alongside that harvest (the work / knowledge /
+1. **Open the ledger for the slice** (replaces authoring `audit.md`): open a
+   `reconciliation`-facet RV targeting the slice, then prime it — seed the
+   git-changed candidates, curate the `domain_map`, persist it, and fill the
+   ledger's `## Brief` with the lines of attack (what this audit probes and the
+   invariants it holds the slice to). Verbs and flags: `review-ledger.md` §1–§2.
+   Loose notes are insufficient for closure-grade work — findings belong in the
+   ledger.
+2. **Gather evidence** (the audit's divergent work):
+   - run the tests/checks the design and plan require, **plus `just check`**;
+   - inspect observed behaviour against `design.md` and the phase `VT-` criteria;
+   - note where behaviour and design diverge — each divergence is a finding.
+3. **Raise + dispose every finding** on the ledger per `review-ledger.md` §3–§4.
+   Hold the audit line on the **anti-escape pressure**: do not pick **follow-up**
+   because the fix feels large, do not normalise **tolerated** without a real
+   rationale, and do not downgrade a true **blocker** to dodge the close-gate. If
+   the right route is ambiguous after reading `design.md` and governance, stop and
+   `/consult`.
+4. **Synthesize.** Write the audit's reasoning as the review's `## Synthesis`
+   (append it to `review-NNN.md`) — the closure story, the standing risks, the
+   tradeoffs consciously accepted (the prose the old `audit.md` carried).
+5. **Harvest (audit tail).** Harvest durable risks, decisions, and gotchas from the
+   disposable runtime phase sheets into `notes.md`; promote reusable facts via
+   `/record-memory`; capture durable follow-up **work** the audit surfaced — risks,
+   issues, chores — as backlog items with `backlog new` (the work / knowledge /
    decision boundary: `using-doctrine.md`).
-8. Hand off to `/close` only when the ledger is resolved and the story is
-   coherent — not merely when the tests pass. The review is **done** when every
-   finding is terminal (`verified` or `withdrawn`, D-C9a); `review status RV-NNN`
-   reports `done · await=none`. An unresolved `blocker` will be refused at the
-   close seam, so resolve it (via `verify` or `withdraw`) before handing off.
-   Record the lifecycle move: `doctrine slice status <id> reconcile` (bare
-   number) — the binary refuses it while a blocker is unresolved (D-C9b).
+6. **Close out.** Hand off to `/close` only when the ledger is resolved and the
+   story is coherent — not merely when the tests pass. The review is **done** when
+   every finding is terminal; an unresolved `blocker` will be refused at the close
+   seam (`review-ledger.md` §6). Record the lifecycle move: `doctrine slice status
+   <id> reconcile` (bare number) — the binary refuses it while a blocker is
+   unresolved (D-C9b).
 
 ## Outcomes
 
