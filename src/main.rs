@@ -13,6 +13,7 @@ mod coverage_store;
 mod coverage_verify;
 mod coverage_view;
 mod dep_seq;
+mod dispatch;
 mod dtoml;
 mod entity;
 mod fsutil;
@@ -22,6 +23,7 @@ mod input;
 mod install;
 mod integrity;
 mod knowledge;
+mod ledger;
 mod lexical;
 mod lifecycle;
 mod listing;
@@ -395,6 +397,14 @@ enum Command {
         command: WorktreeCommand,
     },
 
+    /// Dispatch coordination-branch projection (SL-064 / ADR-012): the
+    /// integration-sync seam that materialises reviewable refs from
+    /// `dispatch/<slice>`. Orchestrator-classed — refused under worker-mode.
+    Dispatch {
+        #[command(subcommand)]
+        command: DispatchCommand,
+    },
+
     /// Scan every numbered entity kind for id-integrity violations (ADR-006 D3
     /// detect-half): dir basename == toml id, no intra-kind duplicate id, and
     /// alias target equality. Exits non-zero on any violation.
@@ -565,6 +575,29 @@ enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
+    /// Create OR resume the dispatch coordination worktree for a slice on branch
+    /// `dispatch/<slice>` off the resolved trunk (SL-064 §2). MARKERLESS — the
+    /// coordination tree IS the orchestrator, so no worker marker is stamped;
+    /// provisions via the sole copier and regenerates the runtime phase sheets
+    /// from committed `plan.toml`. A live worktree already on `dispatch/<slice>`
+    /// is refused (`coordination-live`); a branch with no live worktree resumes
+    /// (reattach, never a second branch). Orchestrator-classed — refused under
+    /// worker-mode.
+    Coordinate {
+        /// The slice id (bare number, e.g. `64`) whose `dispatch/<slice>`
+        /// coordination worktree to create or resume.
+        #[arg(long)]
+        slice: u32,
+
+        /// The coordination worktree directory (must not already exist).
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Import a worker fork's single-commit delta into the coordination index,
     /// NON-committing (SL-056 PHASE-07, ADR-006 D7: import ≠ commit). Stationary-
     /// head case only — fails closed with a distinct token on any precond/belt
@@ -665,6 +698,77 @@ enum WorktreeCommand {
         /// the claude harness spawn path's mark step.
         #[arg(long)]
         stamp_subagent: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DispatchCommand {
+    /// Materialise reviewable refs from `dispatch/<slice>` (SL-064 / ADR-012
+    /// §4). The stage selector is required and single-choice; PHASE-04 ships
+    /// `--prepare-review` (stage-1: create `review/<slice>` + `phase/<slice>-NN`
+    /// under a CAS journal, never writing trunk). Orchestrator-classed — refused
+    /// under worker-mode.
+    Sync {
+        /// The slice id (bare number, e.g. `64`) whose `dispatch/<slice>`
+        /// coordination branch to project.
+        #[arg(long)]
+        slice: u32,
+
+        /// Stage-1: create the reviewable `review/<slice>` and `phase/<slice>-NN`
+        /// refs from the dispatch tip; never writes trunk.
+        #[arg(long, group = "stage", required = true)]
+        prepare_review: bool,
+
+        /// Stage-2: replay the prepared journal idempotently and project the
+        /// audited code units (opt-in `--trunk`/`--edge`); runs from parent/root
+        /// after the coordination worktree is removed. Never auto-resolves.
+        #[arg(long, group = "stage", required = true)]
+        integrate: bool,
+
+        /// Stage-2 only: project the cumulative code units onto this trunk ref,
+        /// fast-forward-only + expected-tip CAS (e.g. `refs/heads/main`). Absent ⇒
+        /// trunk is left untouched.
+        #[arg(long, requires = "integrate")]
+        trunk: Option<String>,
+
+        /// Stage-2 only: advance this standing aggregate ref to the `review/<slice>`
+        /// bundle (e.g. `refs/heads/edge`). Absent ⇒ no aggregate written.
+        #[arg(long, requires = "integrate")]
+        edge: Option<String>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Funnel-time recording: append a per-phase code boundary to
+    /// `.doctrine/dispatch/<slice>/boundaries.toml` (design §4.3). The
+    /// orchestrator runs this between the funnel's code commit and its knowledge
+    /// commit; stage-1 `sync --prepare-review` tree-reads the committed file to
+    /// cut the claude-arm `phase/<slice>-NN` deliverables. Orchestrator-classed —
+    /// refused under worker-mode.
+    RecordBoundary {
+        /// The slice id (bare number, e.g. `64`) whose ledger to append.
+        #[arg(long)]
+        slice: u32,
+
+        /// The `PHASE-NN` id this code boundary belongs to.
+        #[arg(long)]
+        phase: String,
+
+        /// Commit-ish for HEAD before the phase's code landed (resolved to a
+        /// full oid; the empty-phase test compares it to `--code-end`).
+        #[arg(long)]
+        code_start: String,
+
+        /// Commit-ish for the phase's cumulative code tip, *before* the knowledge
+        /// record commit (resolved to a full oid — the tree the cut snapshots).
+        #[arg(long)]
+        code_end: String,
 
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
@@ -2182,6 +2286,10 @@ fn write_class(cmd: &Command) -> WriteClass {
             // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
             // first Orchestrator-classed verb; refused under worker-mode.
             WorktreeCommand::Fork { .. } => Orchestrator("fork"),
+            // coordinate creates/resumes the orchestrator's OWN coordination
+            // worktree (SL-064 §2) — markerless, but still an orchestrator funnel
+            // operation; refused under worker-mode via the SAME guard as fork (EX-4).
+            WorktreeCommand::Coordinate { .. } => Orchestrator("coordinate"),
             // import lands a worker delta into the coordination index (SL-056
             // PHASE-07) — Orchestrator-classed; refused under worker-mode.
             WorktreeCommand::Import { .. } => Orchestrator("import"),
@@ -2201,6 +2309,13 @@ fn write_class(cmd: &Command) -> WriteClass {
                 ..
             } => Hookmint("marker --stamp-subagent"),
             WorktreeCommand::Marker { .. } => MarkerClear,
+        },
+        // dispatch sync projects coordination refs (SL-064 PHASE-04 / ADR-012
+        // §4) — Orchestrator-classed across the whole verb class; refused under
+        // worker-mode via the SAME guard as coordinate/fork (EX-1).
+        Command::Dispatch { command } => match command {
+            DispatchCommand::Sync { .. } => Orchestrator("dispatch-sync"),
+            DispatchCommand::RecordBoundary { .. } => Orchestrator("dispatch-record-boundary"),
         },
         // The coverage group splits per inner verb (SL-057 D2a): `show` is the
         // read-only drift view; `record`/`forget` mutate the observed store, and
@@ -2898,6 +3013,9 @@ fn main() -> anyhow::Result<()> {
                 worker,
                 path,
             } => worktree::run_fork(path, &base, &branch, &dir, worker),
+            WorktreeCommand::Coordinate { slice, dir, path } => {
+                worktree::run_coordinate(path, slice, &dir)
+            }
             WorktreeCommand::Import { base, fork, path } => {
                 worktree::run_import(path, &base, &fork)
             }
@@ -2924,6 +3042,32 @@ fn main() -> anyhow::Result<()> {
                     anyhow::bail!("`worktree marker` requires `--clear` or `--stamp-subagent`")
                 }
             }
+        },
+        Command::Dispatch { command } => match command {
+            DispatchCommand::Sync {
+                slice,
+                integrate,
+                trunk,
+                edge,
+                path,
+                ..
+            } => {
+                // The `stage` group is `required = true` single-choice: exactly one
+                // of `--prepare-review` / `--integrate` is set, so `integrate`
+                // alone selects the stage (no unreachable arm needed).
+                if integrate {
+                    dispatch::run_integrate(path, slice, trunk.as_deref(), edge.as_deref())
+                } else {
+                    dispatch::run_prepare_review(path, slice)
+                }
+            }
+            DispatchCommand::RecordBoundary {
+                slice,
+                phase,
+                code_start,
+                code_end,
+                path,
+            } => dispatch::run_record_boundary(path, slice, &phase, &code_start, &code_end),
         },
         Command::Validate { path } => run_validate(path),
         Command::Reseat {
@@ -4048,6 +4192,48 @@ mod write_class_tests {
         );
         // The guard treats it like a Write: cls surfaces the verb label.
         assert_eq!(cls(c), Some("fork"));
+    }
+
+    // SL-064 PHASE-04: `dispatch sync --prepare-review` is Orchestrator-classed —
+    // refused under worker-mode, carries the "dispatch-sync" verb label (EX-1).
+    #[test]
+    fn dispatch_sync_is_orchestrator() {
+        let c = Command::Dispatch {
+            command: DispatchCommand::Sync {
+                slice: 64,
+                prepare_review: true,
+                integrate: false,
+                trunk: None,
+                edge: None,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("dispatch-sync")),
+            "dispatch sync must be Orchestrator(\"dispatch-sync\")"
+        );
+        assert_eq!(cls(c), Some("dispatch-sync"));
+    }
+
+    // SL-064 PHASE-05: `dispatch sync --integrate` is the same Orchestrator verb
+    // class (EX-6) — the trunk-writing stage inherits the worker-mode refusal.
+    #[test]
+    fn dispatch_sync_integrate_is_orchestrator() {
+        let c = Command::Dispatch {
+            command: DispatchCommand::Sync {
+                slice: 64,
+                prepare_review: false,
+                integrate: true,
+                trunk: None,
+                edge: None,
+                path: None,
+            },
+        };
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("dispatch-sync")),
+            "dispatch sync --integrate must be Orchestrator(\"dispatch-sync\")"
+        );
+        assert_eq!(cls(c), Some("dispatch-sync"));
     }
 
     #[test]

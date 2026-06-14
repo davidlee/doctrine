@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec54a51317420a8f00342dea6197d"
+memory_key = "mem.pattern.tooling.tempfile-dev-only-use-git-dir-scratch-index"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "tempfile is a dev-dependency only — production git plumbing uses a git-dir ScratchIndex for a throwaway GIT_INDEX_FILE"
+summary = "tempfile is dev-only; production git plumbing needs a throwaway GIT_INDEX_FILE inside the git dir, not tempfile"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["src/git.rs"]
+globs = ["src/**/*.rs"]
+commands = []
+tags = ["git", "plumbing", "deps", "sl-064"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "08de4a51e54d21fcdea1adee7f86d7e766508617"
+tree = "d47895450c1a84be705f33271aae27bf617751fc"
+ref_name = "refs/heads/dispatch/064"
+checkout_state_id = ""
+base_commit = "08de4a51e54d21fcdea1adee7f86d7e766508617"
+verified_sha = "324e5f3b48c718c7616a342c2f13f60b01f7605f"
+normalizer = ""
+
+[review]
+verification_state = "verified"
+reviewed = "2026-06-14"
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

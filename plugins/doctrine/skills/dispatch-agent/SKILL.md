@@ -67,6 +67,22 @@ one-character drift **fails OPEN** (the matcher never fires ⇒ no stamp ⇒
 contained by the belt + IMP-052). A cross-surface **drift test REDS on mismatch**
 (`src/worktree.rs`, `src/boot.rs`) so the replicas cannot silently diverge.
 
+## Against `dispatch/<slice>` — no fork branch, so the cut is synthesized (EX-4)
+
+The orchestrator drives from the `dispatch/<slice>` coordination worktree
+(SL-064 / ADR-012). This arm is **fork-less**: Claude default-creates the worktree
+and the worker delta is imported and committed **directly onto `dispatch/<slice>`**
+— there is no per-worker fork branch to preserve as the code unit. So
+`phase/<slice>-NN` must be **cut from `dispatch/<slice>` at sync** (design §4.3).
+
+That cut needs an input the funnel records: after the batch's code commit and
+**before** the knowledge commit, the orchestrator runs `doctrine dispatch
+record-boundary --slice <N> --phase PHASE-NN --code-start <B> --code-end <B+1>` (the
+router's funnel step 7a). Stage-1 `dispatch sync --prepare-review` tree-reads the
+committed `boundaries.toml` and synthesizes one `phase/<slice>-NN` per row (empty-
+code phases skipped). The recording is the orchestrator's act on the trusted side —
+**not** the worker's; the worker still writes source only.
+
 ## Concurrency — parallel EXECUTION, one landing per base (υ)
 
 Each SubagentStart fires independently for its own worktree, so **concurrent

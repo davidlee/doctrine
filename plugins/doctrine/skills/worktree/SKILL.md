@@ -14,10 +14,12 @@ guards, and verify a green baseline before handing off.
 **Announce at start:** "Using the worktree skill to set up an isolated workspace."
 
 **This is a sub-skill.** `/execute` (mode=solo) invokes it for opt-in isolation;
-`/dispatch-subprocess` invokes it for codex/pi workers. (The claude arm,
-`/dispatch-agent`, does **not** use `fork` — Claude default-creates the worktree
-and a SubagentStart hook stamps it; see that skill.) It is not a `/route`
-destination — reach it through the caller.
+`/dispatch-subprocess` invokes it for codex/pi workers; the `/dispatch` router
+invokes the **coordination** path (`worktree coordinate`, below) for the
+per-run `dispatch/<slice>` tree. (The claude *worker* arm, `/dispatch-agent`, does
+**not** use `fork` — Claude default-creates the worktree and a SubagentStart hook
+stamps it; see that skill.) It is not a `/route` destination — reach it through the
+caller.
 
 ## Mode contract
 
@@ -47,6 +49,36 @@ semantics (design §5, the OQ-1 split seam).
 **Outputs:** `{ fork_path, branch, head_sha, provision_report, baseline_result }`.
 `worker` adds `{ fork_branch, head_sha_after }` once it has committed its single
 delta `S` — what the orchestrator imports `B..head_sha_after` from.
+
+## Coordination mode — `doctrine worktree coordinate` (SL-064, a THIRD path)
+
+`solo`/`worker` above both go through `fork`. The **dispatch coordination worktree**
+is a separate creation verb, **not** a `fork` mode — the `/dispatch` router calls it
+once per run, before batch 1:
+
+```sh
+doctrine worktree coordinate --slice <N> --dir <path>
+```
+
+It creates (or resumes) `dispatch/<slice>` in its own worktree off the **resolved
+trunk** — the funnel's sole write target (design §2; ADR-012). It differs from
+`fork` on every axis that matters:
+
+- **Markerless.** The coordination tree **is** the orchestrator (worker-mode OFF),
+  so — unlike `fork --worker` — it stamps **no** worker marker. Orchestrator-classed,
+  refused under worker-mode like the rest of the verb class.
+- **Create-or-resume, never a second branch.** A live worktree already on
+  `dispatch/<slice>` is **refused** (`coordination-live` — concurrent same-slice
+  dispatch is illegitimate). A branch that exists with **no** live worktree
+  **resumes** (reattach) — so a fresh orchestrator after `/handover` picks up the
+  same branch (resume-stable; a per-run discriminator would *break* resume).
+- **Regenerates the runtime phase sheets** from the committed `plan.toml` (the
+  SL-056 provision axis), via the sole copier — no coordination-tier copy.
+
+Not a worker delta path: there is no `S`, no import, no marker. Lifecycle is
+worktree-life < branch-life — the directory is removed at conclude, but
+`dispatch/<slice>` + the projected `review`/`phase` refs are **kept** as deliverables
+(see `/dispatch`). Solo/worker creation below is unchanged.
 
 ## Detection (adapt, don't re-create — D1)
 
@@ -229,6 +261,7 @@ check-allowlist`.
 |---|---|
 | `--git-dir` ≠ `--git-common-dir`, not a submodule | Already forked → adopt, skip creation |
 | Submodule (`modules/` gitdir / superproject) | Not isolation → treat as not-forked |
+| Dispatch coordination tree (per run) | `doctrine worktree coordinate --slice <N> --dir <path>` — markerless, create-or-resume, off resolved trunk; NOT a `fork` mode |
 | Default fork (solo or codex/pi worker) | `doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]` |
 | Worker fork base | `--base <B>` explicit, never the implicit session HEAD (it is not `B`) |
 | Worktree dir not ignored | Add to `.gitignore` + commit before `fork` |

@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec57abf027a139d2fd1dfb52d8f01"
+memory_key = "mem.pattern.dispatch.stage2-replay-needs-3way-cas-not-zero-oid"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Stage-2 replay needs a 3-way CAS; zero-oid creation CAS would refuse the stage-1 refs"
+summary = "Dispatch sync stage-2 replay must use a 3-way CAS, not zero-oid creation CAS — else it refuses its own stage-1 refs"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = ["src/dispatch.rs", "src/git.rs"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "0de25db1391b2466ad2e160f7276f416a17532f1"
+tree = "50a9b1e0b0b0a567840c66267ff9d945d524b0df"
+ref_name = "refs/heads/dispatch/064"
+checkout_state_id = ""
+base_commit = "0de25db1391b2466ad2e160f7276f416a17532f1"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
