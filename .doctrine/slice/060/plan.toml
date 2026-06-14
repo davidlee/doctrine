@@ -1,0 +1,118 @@
+# Implementation plan for SL-060 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-060"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "PRD-011 amendment — canon moves first"
+objective = "Amend PRD-011 to claim the cross-kind dep/seq *capture* intent before any code builds on it (D6). PRD-009 keeps the backlog instance boundary; SPEC-001 already mechanises kind-agnostically. No code."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-060 design locked; PRD-011 currently disclaims the authored capture seam as PRD-009's, and cross-kind capture is owned by neither spec (§2 canon gap)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "PRD-011 amended to claim cross-kind dep/seq *capture* intent (slice + work-like kinds), authored via doctrine needs/after." },
+  { id = "EX-2", text = "PRD-009 backlog boundary intact (still owns the backlog item→item instance); no latent contradiction left between the two specs." },
+]
+verification = [
+  { id = "VA-1", expects = "Agent read: PRD-011 amendment reads consistently with design §5.2/§7 D6; PRD-009 'backlog item' wording no longer contradicts cross-kind capture." },
+  { id = "VH-1", expects = "Canon owner accepts the PRD-011 amendment (spec change, human sign-off)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Lift dep/seq into shared leaf"
+objective = "Lift the dep/seq schema + edit-preserving write into a shared leaf src/dep_seq.rs (D1). Backlog re-points its type + write seam to the leaf, keeping its single read_item for the promoted projection. Mechanical lift — backlog behaviour byte-identical (INV-2, R2)."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked; lift source is backlog's Relationships/AfterEdge, append_relationship (src/backlog.rs:1401 strict body) and dep_seq_for (:791)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/dep_seq.rs exists: DepSeq{needs, after:Vec<AfterEdge>}, RelEdit, read (absent table → empty), strict append (F-1 refuse if seeded table/array absent; refuse message NON-DESTRUCTIVE, never 'regenerate via <kind> new'). promoted is NOT in the leaf (R3)." },
+  { id = "EX-2", text = "Backlog re-points type + append to the leaf; keeps single read_item + dep_seq_for for promoted. ADR-001 layering preserved (leaf ← engine ← command, no cycle)." },
+]
+verification = [
+  { id = "VT-1", expects = "Backlog needs/after, priority, and backlog order goldens byte-identical — including backlog verb success-message text (INV-2/F4)." },
+  { id = "VT-2", expects = "Leaf unit tests: read absent-table→empty DepSeq; strict append refuses on missing-table / missing-needs array / missing-after array; idempotent append; round-trip golden." },
+  { id = "VT-3", expects = "just gate clean; clippy zero warnings." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Slice capture surface — verbs, validation, scaffold"
+objective = "Add generic top-level doctrine needs/after verbs (sibling to link, D4) with author-time validation (D2 work-like target gate); seed the slice scaffold's [relationships] table; parse it on the slice read arm so slice show round-trips. Backlog verbs become thin delegates that RETAIN their author-time cycle refuse (E3/INV-2)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — leaf append/read available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Top-level needs <SRC> <TGT> / after <SRC> <TGT> [--rank N] verbs wired in main.rs; backlog needs/after delegate to the same leaf path but keep run_needs→needs_would_cycle author-time cycle refuse." },
+  { id = "EX-2", text = "Author-time validation in the command shell: SRC resolves and is a dep/seq-authoring kind; TGT resolves via integrity::KINDS AND is work-like (slice + 5 backlog) — free-text and non-work TGT refused (D2); self-edge refused. Target-gate predicate is the single widen-later guard." },
+  { id = "EX-3", text = "install/templates/slice.toml + src/slice.rs seed [relationships] with BOTH empty arrays (needs=[], after=[]) positioned before any [[relation]] row (INV-1); slice template's 'no typed table' comment rescoped to structural axes (E9). Slice read arm parses [relationships] so slice show/--json surfaces dep/seq." },
+]
+verification = [
+  { id = "VT-1", expects = "slice→slice needs/after authorable via doctrine needs/after; round-trips slice show and slice show --json (black-box golden)." },
+  { id = "VT-2", expects = "Refusals tested: unresolvable TGT, free-text TGT, self-edge, non-authoring SRC kind, non-work-like TGT kind (governance/spec/req/knowledge) — each a clear message." },
+  { id = "VT-3", expects = "Backlog needs/after verb success-message text byte-identical through the delegate (F4); backlog author-time cycle refuse retained (E3)." },
+  { id = "VT-4", expects = "INV-1 round-trip golden: a freshly scaffolded slice's seeded table + both arrays precede [[relation]]; just gate clean." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Cross-kind consumer — dispatch + read-gate"
+objective = "Add the engine dispatch dep_seq_for(root, kind, id) -> (DepSeq, promoted) mirroring outbound_for, and generalise the priority read-gate from a backlog-prefix test to kind dispatch so slice dep/seq edges reach the already-kind-agnostic blocker/next view. Emission unchanged (DD-2); backlog byte-identical (INV-2)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 leaf read + PHASE-03 slice seeded table exist." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Engine dep_seq_for(root, kind, id) -> (DepSeq, promoted): backlog arm via single read_item (carries promoted); slice arm via leaf read (promoted=false); non-authoring kind SHORT-CIRCUITS to empty with NO disk read (F5)." },
+  { id = "EX-2", text = "priority/graph.rs §3b read-gate generalised from backlog::kind_from_prefix to kind dispatch; edge emission (:257-277) UNCHANGED (kind-blind, DD-2). promoted stays backlog-only in the attrs pass." },
+]
+verification = [
+  { id = "VT-1", expects = "An authored slice→slice needs surfaces as a cross-kind blocker in priority blockers <SL> and holds the dependent in next." },
+  { id = "VT-2", expects = "slice→slice after rank/age ordering behaves as the backlog seq overlay (rank, age=array index)." },
+  { id = "VT-3", expects = "priority survey/next/blockers/explain goldens byte-identical for backlog (INV-2); promoted projection unchanged for backlog kinds." },
+  { id = "VT-4", expects = "Non-authoring kind contributes zero dep/seq edges with no disk read (F5) — asserted via a fixture/no-read probe." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Out-of-band backfill — data-only"
+objective = "One-off out-of-band backfill (D5/R1): seed [relationships] (both empty arrays) into this dogfood repo's pre-existing table-less slices, positioned before the first [[relation]] row, via toml_edit — never a tail insert. Establishes the runtime INV-1 invariant for existing slices. Committed as a data-only diff; durable code stays strict (no create-on-absent leniency)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 strict leaf + PHASE-03 scaffold define the seeded-table contract the backfill must match." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every pre-existing slice TOML carries [relationships] with both empty arrays before its first [[relation]] row (insert-before-first, never tail)." },
+  { id = "EX-2", text = "Committed as a data-only diff — no source/leaf change rides in this phase." },
+]
+verification = [
+  { id = "VT-1", expects = "SL-048-style storage post-check: no needs/after key appears under any [[relation]] row across every backfilled slice." },
+  { id = "VT-2", expects = "Round-trip slice show + doctrine validate clean across every backfilled slice." },
+]
+specs        = []
+requirements = []
