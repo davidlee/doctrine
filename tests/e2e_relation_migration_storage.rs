@@ -234,23 +234,27 @@ fn assert_no_migrated_key_left(path: &Path, v: &LineView, migrated: &[&str]) {
 // so a vocabulary evolution is greppable from here.
 
 #[test]
-fn slice_corpus_has_no_relationships_table_only_relation_arrays() {
+fn slice_corpus_relationships_table_holds_only_dep_seq_keys() {
     for f in slice_files() {
         let text = std::fs::read_to_string(&f).unwrap();
         let v = line_view(&text);
         assert_f1(&f, &v);
-        // F-E (SL-058 PHASE-02): the post-cut slice shape has NO `[relationships]`
-        // table AT ALL — not a typed one, not a comment-only stale one (SL-056), and
-        // not a hand-authored stray-key one (SL-054's `extends`/`adrs` were converted
-        // to a `governed_by` edge + prose). The whole-table-absence assertion is what
-        // closes the F-D detection gap: the migrated axes survive only as `#` examples
-        // in the old template, which a bare-key scan alone would pass.
-        assert!(
-            v.first_relationships.is_none(),
-            "{}: slice carries a [relationships] table (line {:?}) — slices are table-absent post-cut",
-            f.display(),
-            v.first_relationships
-        );
+        // SL-060 (§5.3/E9) supersedes the SL-058 PHASE-02 table-absent invariant.
+        // The SL-048 cut moved the STRUCTURAL axes to `[[relation]]`, but SL-060
+        // RE-CARRIES a `[relationships]` table holding ONLY the dep/seq payload axes
+        // (`needs`/`after`). A slice MAY now carry the table — the F-D detection gap is
+        // closed POSITIVELY: every typed `[relationships]` key must be a dep/seq key, so
+        // no migrated structural axis (specs/requirements/supersedes/governed_by/related)
+        // can leak back as a typed key (the subset check subsumes the old
+        // whole-table-absence guard). Mirrors `assert_backlog_shape`.
+        for k in &v.relationships_keys {
+            assert!(
+                ["needs", "after"].contains(&k.as_str()),
+                "{}: slice [relationships] carries non-dep/seq key `{k}` — only needs/after \
+                 may be typed for a slice (SL-060)",
+                f.display()
+            );
+        }
         // Every `[[relation]]` label must be a slice tier-1 label.
         // SSoT: RELATION_RULES rows whose `sources` include SL (literal by oracle
         // independence — see the note above slice_corpus_*).
