@@ -13,11 +13,6 @@
       "description": "Doctrine's memory skills alone (record/retrieve) — a standalone subset of the doctrine plugin. Install one or the other, not both."
     },
     {
-      "name": "review",
-      "source": "./plugins/review",
-      "description": "Code & security review skills."
-    },
-    {
       "name": "handover",
       "source": "./plugins/handover",
       "description": "Author the disposable handover.md for the next agent / phase."
