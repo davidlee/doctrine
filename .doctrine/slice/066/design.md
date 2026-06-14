@@ -2,8 +2,9 @@
 
 > **STATUS: DRAFT (2026-06-14).** Nine design questions resolved in the `/design`
 > clarifying loop (see §8). Scope **C** (full structured delta payload) chosen by
-> user (SL-044 is done — the deferral-to-the-writer argument is moot). Awaiting
-> adversarial pass + lock. Reference forms: padded ids (`SL-066`, `ADR-013`,
+> user (SL-044 is done — the deferral-to-the-writer argument is moot). Internal +
+> external (codex/GPT-5.5) adversarial passes integrated (§11, §12). Awaiting lock.
+> Reference forms: padded ids (`SL-066`, `ADR-013`,
 > `REQ-NNN`, `SPEC-002`); doc-local refs bare (`D1`, `OQ-1`).
 
 ## 1. Design Problem
@@ -82,31 +83,50 @@ Storage (authored tier):
 ### 4.2 Lifecycle + approval
 
 Work lifecycle (borrow backlog's, **not** slice's 9-state):
-`proposed → started → done` (+ `abandoned` from any non-terminal). `done` = deltas
-**applied** and landed. Dependents gate from `proposed` (the IDE-010 anchor works
-from birth).
+`proposed → started → done` (+ `abandoned` from any non-terminal). Dependents gate
+from `proposed` (the IDE-010 anchor works from birth).
+
+**`done` = every change row landed** (E1). Apply auto-lands only the rows with a
+safe engine seam (`status`, §4.5); `introduce`/`create`/`move`/prose rows are
+**surfaced-for-manual** and land by operator hand-edit. So apply moves a
+status-only Revision straight to `done`; a Revision carrying manual rows stays
+`started` after apply (status rows landed, manual list surfaced) until the operator
+completes them and marks `done`. `done` therefore never lies to a dependent — it
+means the authored truth is in (E1 closes external M1: prose-only Revisions cannot
+silently reach terminal).
 
 **Approval is a separate field** (hard canon: entity-model "approval is not
 lifecycle"; ADR-009): `approval = none | requested | approved | rejected`,
-orthogonal to `status`. Two enforcement tiers (resolving the advisory-vs-enforced
-tension):
+orthogonal to `status`.
 - **Lifecycle transitions are approval-blind** (advisory, surfaced not enforced —
-  ADR-009 posture). A Revision can sit `started` at `approval=none`.
-- **Apply hard-gates on `approval=approved`** (§4.5) — apply is the irreversible
-  truth-write, so it is the one place approval is *enforced*, not merely surfaced.
+  ADR-009 §108 posture). A Revision can sit `started` at `approval=none`.
+- **Apply requires `approval=approved`** (§4.5) — an apply-time **forcing-function
+  checkpoint**: apply refuses unless an explicit approval act has been recorded.
+  This is **not** actor-attributed authz — ADR-009 §113 is invoker-blind, so the
+  checkpoint cannot tell who approved (a solo dev self-approves). It forces a
+  deliberate, separate approval step before the irreversible truth-write; real
+  identity-gated enforcement is the ADR-009 OQ-1 identity follow-up, not v1 (E3
+  reframes external M3 — a *checkpoint*, not a "governance gate").
 
-**Default `gate`** — a Revision writes authored governance/spec truth at
-`reconcile`'s altitude, which ADR-009 already defaults to `gate`. **Home (v1):** a
-**baked default**, not per-repo conduct config — ADR-009's `[conduct]` table is
-*slice-FSM-state-keyed* and does not address Revision; extending it to address
-Revision is deferred. A solo dev self-approves (`revision approve REV-N`).
+**Default `gate` posture** — a Revision writes authored governance/spec truth at
+`reconcile`'s altitude, which ADR-009 defaults to `gate`. **Home (v1):** a **baked
+default**, not per-repo conduct config — ADR-009's `[conduct]` table is
+*slice-FSM-state-keyed* and does not address Revision; extending it is deferred. A
+solo dev self-approves (`revision approve REV-N`). This default is advisory for
+lifecycle and only materialises as the apply checkpoint above.
 
 ### 4.3 Cardinality — multi-target payload rows + `primary` flag
 
 The touched-entity set lives in a typed payload table (§4.4); **the rows ARE the
-edges** (members.toml precedent). The relation-index derives inbound `revises`
-reciprocity from these rows, **uniform over all rows** — so `doctrine adr show
-ADR-X` lists *every* REV that touches it.
+edges** (members.toml precedent). Inbound `revises` reciprocity is derived by
+**`relation_graph`** (E2 — the cross-kind inbound seam: a new
+`revision::relation_edges` accessor reads the `[[change]]` rows, `outbound_for`
+dispatches to it, `in_edges` yields inbound — exactly the members/interactions
+path; **not** `registry.rs`, which is only the spec-validate seed). The inbound list
+surfaces on **`doctrine inspect ADR-X`**, **not** `adr show`/`spec show`: ADR-004 §3
+reserves inbound completeness to the registry-/scan-backed surface (`inspect`),
+never the one-way `show` reader ("no cross-corpus scan", `spec.rs:906`). So
+`inspect ADR-X` lists *every* REV that touches it, uniform over all rows.
 
 **`primary` is a display/headline hint, not a functional dep anchor** (F1
 correction). `needs`/`after` target *entity ids*, never rows — `needs REV-NNN`
@@ -150,12 +170,20 @@ allocates the id and back-fills:
 ```toml
 [[change]]
 action       = "introduce"          # new requirement
-member_of    = "SPEC-018"           # destination spec → drives `spec req add`
+member_of    = "SPEC-018"           # destination spec (must be a live SPEC-NNN)
 new_statement = "The writer MUST …" # the requirement's statement line
-new_label    = "FR-007"             # optional; else auto-assigned
+new_label    = "FR-007"             # REQUIRED + frozen at `change add` (E4)
 primary      = false
 # apply allocates REQ-NNN, members it, and back-fills `allocated = "REQ-201"`
 ```
+
+**Creation rows freeze their label (E4).** `new_label` is **required**, not
+auto-assigned at apply — `spec req add` computes label+order from the *live* member
+set (`spec.rs:850-854`), so an omitted label would let membership churn between
+draft and apply silently change what lands (external M2). Capturing `new_label` at
+`change add` keeps approved == landed. **No cross-row creation deps in v1** —
+`member_of` must name a live `SPEC-NNN`, so "create spec then introduce into it" in
+one Revision is out of scope for C (the new spec has no id until applied).
 
 Detail columns are optional, populated only where the target/action warrants.
 ADR/POL/STD rows are just `{target, action, primary}` + prose excerpt in MD —
@@ -170,27 +198,51 @@ structured-anchor upgrade — `after IDE-002` (soft seq), **not** a hard `needs`
 Walks the approved `[[change]]` rows; drives **existing** seams (orchestrates,
 never reimplements):
 
-| change action | seam reused |
-|---|---|
-| `status` (retire / lifecycle) | SL-044 B·P1 `spec req status` setter + compose a `RecDoc` |
-| `introduce` | `spec req add` (reserve REQ + member); back-fill `allocated` id |
-| `modify` (statement / prose) | applied to `.md` (or flagged for human hand-edit) |
-| `create` (spec) | `spec new`; back-fill `allocated` id |
-| `move` | **flagged for manual handling** — no existing seam (F4): `spec req` is add-only, the `spec req link`/move verb is the deferred SL-015 follow-on; building it is out of scope for C. `move` rows stage fine; apply surfaces them for the operator |
-| ADR/POL/STD prose | flagged for human hand-edit (prose-only) |
+**v1 auto-applies `status` rows only (E1/E5).** The full payload *stages* (scope C),
+but apply auto-lands only rows with a genuine engine seam. Everything else is
+**surfaced-for-manual** — staged, listed at apply, landed by the operator. This is
+the honest consequence of external B1+B2: `spec req add`/`spec new` are
+non-transactional CLI handlers (`spec.rs:826` "NOT transactional by design"), so
+auto-applying creation rows would risk orphaned half-writes the "one commit" cannot
+undo. Narrowing v1 to status both removes that hazard and removes the handler→engine
+refactor (status already rides the engine-callable `requirement::set_status`,
+`spec.rs:897` — no ADR-001 violation).
 
-**Apply is atomic — one act, one commit (F7).** A `revision apply` runs a
-**pre-flight sweep** of all rows, then writes; any pre-flight refusal aborts the
-*whole* apply (no partial writes). On clean apply → `status = done`, dependents
-unblock; one commit carries the status edits, membership edits, and **N `RecDoc`s**
-(one per status row — D-B8 forces one move per REC; the grain differs from SL-044's
-one-act-one-commit, intentionally: a Revision apply is N acts in one commit, each
-REC self-describing for NF-003 reconstructability).
+| change action | v1 disposition |
+|---|---|
+| `status` (retire / lifecycle) | **AUTO** — `requirement::set_status` (engine seam) + compose a `RecDoc` |
+| `introduce` | surfaced-for-manual — `spec req add` non-transactional (orphan risk); operator runs it, fills `allocated` |
+| `create` (spec) | surfaced-for-manual — `spec new` materialises immediately; operator runs it |
+| `modify` (statement / prose) | surfaced-for-manual — human hand-edit `.md` |
+| `move` | surfaced-for-manual (F4) — no membership-move seam (`spec req link` is the deferred SL-015 follow-on) |
+| ADR/POL/STD prose | surfaced-for-manual — prose-only human hand-edit |
+
+Auto-applying `introduce`/`create` returns once `spec::add_requirement` /
+`spec::create_spec` exist as transactional engine helpers (external B2 follow-up,
+§5) — additive, no model change.
+
+**Apply over status rows is all-or-nothing (F7, refined by E1).** With v1 narrowed
+to status rows — each a single edit-preserving `requirement::set_status` write —
+apply runs a **pre-flight sweep** of all status rows (existence + `from`-guard), then
+writes; any pre-flight refusal aborts the *whole* apply before the first write. The
+earlier "atomic over N heterogeneous seams" claim was unachievable (external B1: the
+creation seams are non-transactional); status-only apply makes all-or-nothing real,
+because the only auto-writes are independent per-file edit-preserving sets with
+nothing to half-create. One commit carries the status edits and **N `RecDoc`s** (one
+per status row — D-B8 forces one move per REC; the grain differs from SL-044's
+one-act-one-commit intentionally: a Revision apply is N status acts in one commit,
+each REC self-describing for NF-003 reconstructability).
+
+**Terminal disposition (E1).** Status-only Revision → `status = done`, dependents
+unblock. A Revision also carrying surfaced-for-manual rows stays `started` after
+apply (status landed, manual list printed); the operator completes the manual rows
+and marks `done`. `done` always means every row landed (§4.2).
 
 **No drift re-prompt at apply** — the Revision already captured + approved the
 decision; SL-044's interactive drift scan is a reconcile-time aid, redundant here.
 Reuse SL-044's `RecDoc` *composition*, not its interactive CLI loop. Apply
-**hard-refuses** unless `approval = approved` (§4.2 — the one enforced gate).
+**refuses** unless `approval = approved` (§4.2 — the apply-time checkpoint, not
+actor-attributed authz).
 
 **`from`-guard on `status` rows (the only staleness check), run pre-flight.**
 Dropping the drift re-prompt opens a silent-clobber: a status row applies via
@@ -210,12 +262,17 @@ FSM — see §9 Non-Goals).
 ### 4.6 REC composition
 
 REC stays **untouched** (its `status_delta`/`evidence_ref` model is
-requirement-status-specific, immutable — SL-042/SL-044). A Revision `produces` a
-REC **only** for the requirement-status-delta subset of its changes; everything
-else (prose, membership, introduce) never had RECs and doesn't now — the
-Revision's `[[change]]` rows + git are the record. A standalone (non-slice-close)
-status change → REC `owning_slice = None` (the field is already `Option`) + a
-`produces`/`recorded_by` edge Revision↔REC. **No REC schema change.**
+requirement-status-specific, immutable — SL-042/SL-044). Apply composes a REC
+**only** for the requirement-status-delta subset (the v1 auto set); everything else
+(prose, membership, introduce) never had RECs and doesn't now — the Revision's
+`[[change]]` rows + git are the record. A standalone (non-slice-close) status change
+→ REC `owning_slice = None` (the field is already `Option`). **No REC schema change.**
+
+**No `produces`/`recorded_by` relation edge in v1 (E6).** Those labels do not exist
+in `RelationLabel`/`RELATION_RULES` (external B4) and inventing them is a governed
+ADR-010 relation addition, not a "loose edge." v1 links REC↔REV implicitly: the
+status row names the `REQ`, the REC records the same delta, and the apply commit
+groups them. A first-class REV↔REC label is a follow-up if a query demand appears.
 
 ### 4.7 Dep/seq wiring
 
@@ -234,8 +291,8 @@ itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
 | `src/revision.rs` (new) | `REV_KIND`, `RevDoc` (id/slug/title/status/approval/`[[change]]`), scaffold, `run_new`/`run_show`/`run_status`/`run_change_add`/`run_approve`/`run_apply` |
 | `src/integrity.rs` | `KINDS` row (REV, stem `revision`, `state_dir: None`) |
 | `src/relation.rs` | `RelationLabel::Revises` + `RELATION_RULES` row (sources `[REV]`, targets `{SPEC,PRD,REQ,ADR,POL,STD}`, Tier Typed, **`LinkPolicy::TypedVerbOnly`**) |
-| `src/registry.rs` (or relation-index) | derive inbound `revises` reciprocity from `[[change]]` rows (members.toml precedent) |
-| `src/spec.rs` (F8) | expose `spec req status` / `spec req add` as **engine-callable fns** (apply calls them programmatically; refactor if currently CLI-handler-bound — ADR-001 command→engine) |
+| `src/relation_graph.rs` | `revision::relation_edges` accessor + `outbound_for` arm (REV → reads `[[change]]` rows); inbound `revises` derived via `in_edges`, surfaced on `inspect` (E2 — **not** `registry.rs`, **not** `show`; ADR-004 §3) |
+| `src/requirement.rs` (E5) | v1 apply rides the existing engine-callable `set_status` (`spec.rs:897`) — **no refactor**. `spec::add_requirement`/`spec::create_spec` engine helpers are the introduce/create-apply follow-up (external B2), not v1 |
 | `src/main.rs` | `Revision { command }` dispatch (`new`/`show`/`status`/`change add`/`approve`/`apply`); work-like predicate += REV |
 | `install/manifest.toml` + `.gitignore` | `.doctrine/revision` dir + negation |
 
@@ -243,17 +300,21 @@ itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
 
 - **Lifecycle/approval** — `revision status` FSM tests (advance/abandon; approval
   orthogonal to status; default `gate`). Behaviour, not trivial impl.
-- **Cardinality/reciprocity** — golden: 3-target Revision, assert `adr show`/`spec
-  show` inbound lists **all** touching REVs (uniform, not just primary). Pins the
-  user's "find all REVs that changed ADR-X" requirement. Separately: `primary` is
-  display-only — `needs REV-N` blocks on the whole Revision regardless of `primary`
-  (and with zero `primary` rows).
+- **Cardinality/reciprocity** — golden: 3-target Revision, assert **`inspect ADR-X`
+  / `inspect REQ-N`** inbound lists **all** touching REVs (uniform, not just
+  primary) — `inspect`, never `show` (E2; ADR-004 §3). Pins the user's "find all REVs
+  that changed ADR-X" requirement. Separately: `primary` is display-only — `needs
+  REV-N` blocks on the whole Revision regardless of `primary` (and with zero
+  `primary` rows).
 - **Dep/seq** — `slice needs REV-NNN` accepted; governance-doc target still
   refused (SL-060 invariant intact); `needs REV-N` blocks until REV-N terminal.
-- **Apply (atomic)** — clean apply routes every row to the right seam, emits N
-  `RecDoc`s in one commit, REC schema unchanged; **a single pre-flight refusal
-  aborts the whole apply (no partial writes)**; `apply` hard-refused when
-  `approval≠approved`. `move` rows surfaced-for-manual, not auto-applied (F4).
+- **Apply (status-only auto, E1)** — clean apply lands every `status` row via
+  `requirement::set_status`, emits N `RecDoc`s in one commit, REC schema unchanged; a
+  single pre-flight refusal aborts the whole apply (no partial writes); `apply`
+  refused when `approval≠approved` (checkpoint). `introduce`/`create`/`modify`/`move`/
+  prose rows surfaced-for-manual, NOT auto-applied. **`done` only when every row
+  landed** — a Revision with manual rows stays `started` post-apply (M1 regression); a
+  status-only Revision reaches `done`.
 - **`from`-guard (pre-flight)** — any `status` row whose `from` ≠ the target's
   current `ReqStatus` aborts the whole apply + surfaces the stale set; never
   clobbers an intervening `reconcile` move. Non-status rows carry no guard.
@@ -268,11 +329,12 @@ itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
 2. **PHASE-02** — kind + spine: `revision.rs`, KINDS row, manifest/gitignore,
    `revision new`/`show`, lifecycle status + approval field, `revision status`.
 3. **PHASE-03** — relations: `Revises` label + rules + `[[change]]` payload table;
-   relation-index reciprocity derivation; `link`/`inspect` rendering.
+   `relation_graph` reciprocity derivation (E2); `inspect` rendering.
 4. **PHASE-04** — dep/seq: work-like predicate += REV; `needs`/`after` REV
    source+target; SL-060 governance-exclusion regression.
-5. **PHASE-05** — apply: `revision apply` orchestrating existing seams; REC
-   `produces` edge; approval gate enforcement at apply.
+5. **PHASE-05** — apply: `revision apply` auto-landing `status` rows via
+   `requirement::set_status` + RecDoc; surface-for-manual for creation/move/prose;
+   approval checkpoint; from-guard pre-flight. (No `produces` edge — E6.)
 6. **PHASE-06** (or follow-up) — `/revise` skill + workflow integration.
 
 ## 8. Resolved Design Questions
@@ -304,9 +366,12 @@ itself `needs` a spike. Governance docs remain **excluded** as dep/seq targets
 None blocking. Carried for plan/execute:
 - OQ-1: `[[change]]` detail column names + soft-enum action vocab — finalize against
   the apply-path seams in PHASE-03/05 (the table shape in §4.4 is provisional).
-- OQ-2 (**resolved**, F7): `revision apply` is **atomic** — pre-flight sweep, then
-  all-or-nothing write, one commit, N RecDocs. Mirrors SL-044's one-act grain at
-  the per-row level.
+- OQ-2 (**resolved**, F7 → refined E1): `revision apply` is all-or-nothing **over
+  `status` rows** — pre-flight sweep, then write, one commit, N RecDocs. Heterogeneous
+  atomicity dropped (external B1); creation/move/prose are surfaced-for-manual.
+- OQ-3 (carried): introduce/create **auto**-apply — needs transactional
+  `spec::add_requirement`/`spec::create_spec` engine helpers (external B2). v1
+  surfaces these rows for manual handling (§4.5).
 
 ## 11. Adversarial Pass (internal, 2026-06-14)
 
@@ -326,3 +391,35 @@ Eight findings, all integrated:
 - **F8** — apply needs `spec req status`/`add` exposed as engine-callable fns;
   refactor if handler-bound (§5).
 - **F-minor** — `from` auto-captured at `change add`, not hand-typed (§4.4).
+
+> **Note (E-tags):** F7/F8 were *superseded* by the external pass — see §12. The
+> "atomic over heterogeneous seams" thesis (F7) and the "refactor spec handlers"
+> plan (F8) were both unachievable / unnecessary for v1; E1/E5 narrow v1 apply to
+> `status` rows, which dissolves both.
+
+## 12. Adversarial Pass (external — codex/GPT-5.5, 2026-06-14)
+
+Seven findings (4 blocker, 3 major), each **verified against source + governance**
+(not taken on the reviewer's word) and integrated (E-tags above). Verdict on entry:
+*needs-rework*; all dispositioned.
+
+- **B1 → E1/E5** — "atomic apply over N heterogeneous seams" was fictional: the
+  creation seams are non-transactional (`spec.rs:826` self-documents it). v1
+  auto-applies `status` rows only (real all-or-nothing over edit-preserving writes);
+  creation/move/prose surfaced-for-manual (§4.5). Cascade: dissolves B2 and M1.
+- **B2 → E5** — F8 understated. `spec new`/`spec req add` are CLI handlers, not engine
+  fns (ADR-001 bar); the real status seam is `requirement::set_status` (`spec.rs:897`),
+  not `spec.rs`'s handlers. v1 (status-only) needs **no refactor** — it rides
+  `set_status`. `spec::add_requirement`/`create_spec` extraction is the
+  introduce/create-apply follow-up (OQ-3, §5).
+- **B3 → E2** — reciprocity is `relation_graph` (`outbound_for`/`in_edges`), not
+  `registry.rs`; inbound surfaces on `inspect`, not `show` (ADR-004 §3) (§4.3/§5/§6).
+- **B4 → E6** — `produces`/`recorded_by` labels don't exist (`relation.rs:45`).
+  Dropped from v1; REC↔REV linkage is implicit (§4.6).
+- **M1 → E1** — prose-only Revision could reach `done` with truth unlanded. `done` now
+  requires every row landed; manual-row Revisions hold at `started` (§4.2).
+- **M2 → E4** — creation rows drifted (label/order computed at apply, `spec.rs:850-854`).
+  `new_label` required + frozen at `change add`; no cross-row creation deps in v1 (§4.4).
+- **M3 → E3** — approval reframed: an apply-time forcing-function **checkpoint**, not
+  actor-attributed authz (ADR-009 §113 invoker-blind). Real enforcement is the ADR-009
+  identity follow-up (§4.2).
