@@ -354,15 +354,12 @@ worker-marked worktrees and from worktrees checked out on raw evidence refs.
 Read-only commands may warn; write-ish commands must refuse unless explicitly
 operating by ref from a safe context.
 
-## 6. Open Questions & Unknowns
+## 6. Non-Blocking Follow-Up Question
 
-OQ-1. How much should `/code-review` and `/audit` be rewired in this slice?
-Minimum: update dispatch guidance and status output. Full rewire may be follow-up
-because IMP-023/IMP-042 already track review-skill integration debt.
-
-OQ-2. Does v1 need an impl-bundle close-target candidate mode, or is it enough to
-support code close-target candidates plus review-surface candidates? Default is
-code close-target; impl-bundle close is explicit if implemented.
+OQ-1. How much should `/code-review` and `/audit` be rewired in this slice? This
+is non-blocking for SL-068 acceptance. Minimum: update dispatch guidance and
+status output. Full rewire may be follow-up because IMP-023/IMP-042 already track
+review-skill integration debt.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -394,6 +391,15 @@ the new base.
 **D7. Use `candidate/`, not `topic/`, for Doctrine-owned refs.** `candidate/`
 communicates status-bearing workflow ownership. Users can make arbitrary topic
 branches from candidate refs.
+
+**D8. V1 close-target payload is code.** V1 should implement code close-target
+candidates plus review-surface candidates. Impl-bundle close-target candidates
+are explicit/later, not part of the default trunk path.
+
+**D9. Acceptance constraints for implementation.** Phase 1 must amend ADR-006 and
+ADR-012 narrowly before or alongside implementation. The implementation plan must
+preserve admission-by-OID, no-close-time-merge, provenance-validation, and
+raw-ref guard invariants.
 
 Alternatives rejected:
 
@@ -530,3 +536,9 @@ specific, with stricter phase-chain checks for code close targets.
 F10. **Integrate journal interaction missing.** Integrated. Close appends normal
 ADR-012 CAS rows with `planned_new_oid = admitted_oid`; `edge` consumes a
 review-surface admission.
+
+## 11. Acceptance Record
+
+Accepted for planning on 2026-06-15 with implementation constraints D8 and D9.
+The accepted design keeps OQ-1 as non-blocking follow-up scope and resolves the
+former impl-bundle close question as code close-target in v1.

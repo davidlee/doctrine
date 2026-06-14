@@ -1,9 +1,9 @@
 id = 68
 slug = "wire-dispatch-stage-2-sync-integrate-into-close"
 title = "Dispatch candidates for safe audit interaction"
-status = "design"
+status = "plan"
 created = "2026-06-14"
-updated = "2026-06-15"
+updated = "2026-06-14"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
