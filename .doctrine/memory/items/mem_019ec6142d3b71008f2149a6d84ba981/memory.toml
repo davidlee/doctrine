@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec6142d3b71008f2149a6d84ba981"
+memory_key = "mem.pattern.dispatch.claude-isolation-worktree-forks-orchestrator-session-head"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Claude Agent isolation:worktree forks the spawning orchestrator session's local HEAD under baseRef=head — base controllable by placement, not ref-redirect"
+summary = "claude Agent isolation:worktree forks the spawning orchestrator session's local HEAD when worktree.baseRef=head; base is controllable by PLACING the orchestrator session on B (inside the dispatch/<slice> worktree at its tip), not by redirecting origin/main; serial-dependent phases ARE dispatchable (advance orchestrator HEAD between phases)"
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = ["src/worktree.rs", "src/boot.rs", "plugins/doctrine/skills/dispatch-agent/SKILL.md", ".claude/settings.local.json"]
+commands = []
+tags = ["dispatch", "worktree", "claude-arm"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "bf31c8db46b06c8dd3b50cd96f8a9663108c88cf"
+ref_name = "refs/heads/main"
+checkout_state_id = "a55e86a8fe3d56d92b2d1e37187e82ae61958763735c3ad36d49e6bfaee31a43"
+base_commit = "babd65617c3ea3a34a28c43f90de1d5cd8184e2b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

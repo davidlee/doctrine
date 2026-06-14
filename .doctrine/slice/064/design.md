@@ -523,38 +523,48 @@ SL-064's plan** (cf. SL-056 G1 / ADR-008). The split:
 
 ## §8 — Claude-arm base correctness (extension; SL-066-blocker remediation)
 
-> ⚠️ **SUPERSEDED-PENDING-REWRITE (empirical disproof, [[mem.pattern.dispatch.claude-isolation-worktree-base-session-root-opaque]]).**
-> The body below assumed `baseRef='head'` ⇒ worker base==B because "orchestrator cwd ≡
-> coordination HEAD." **A live SL-066 dispatch disproved it:** the claude `Agent
-> isolation:worktree` forks **session-root main HEAD** (opaque) — NOT the isolated
-> `dispatch/<slice>` tip — so `baseRef` can fix only **P1 (origin staleness)**, never
-> **P2 (dependent-phase base on the isolated branch)**. Corrected decision (User-ruled,
-> 2026-06-14):
-> - **Parallel dispatch lives on the subprocess arm** (codex/pi → DeepSeek via pi.dev,
->   ~$1/hr): `fork --base B --worker` pins any base incl. the `dispatch/<slice>` tip →
->   handles **P1 + P2** already. No new mechanism. `claude -p` is OUT (API ~$1000/hr).
-> - **Claude arm (subscription Agent) = premium solo `/execute`** in the coordination
->   worktree; serial-dependent / parallel work routes to the subprocess arm. v1 abandons
->   claude isolated workers for dispatch ("option X").
-> - **`baseRef='head'` (already set in `settings.local.json`) + the post-spawn verify-verb
->   still ship** — cheap, arm-agnostic belts (verify-verb catches a wrong base loudly,
->   pre-import; it *enforces* the boundary, P2 → `WrongBase` refuse).
-> - **`WorktreeCreate` hook = deferred escape hatch ("option Y")** — the only way to keep
->   parallel *claude-quality* isolated workers on subscription; costs the σ blast-radius
->   (no `agent_type`/matcher ⇒ fires for every worktree subagent). Backlog, not built.
+> ✅ **CONFIRMED 2026-06-14 (controlled marker-commit test; User-ruled "option Y").**
+> An earlier mid-session detour (commit `babd656`) wrongly superseded this section,
+> concluding the claude `Agent isolation:worktree` base was "opaque / uncontrollable"
+> and routing parallel dispatch exclusively to the subprocess arm ("option X"). **A
+> controlled test disproved that detour and vindicated the original §8.0 leg-1 design:**
+> with `worktree.baseRef="head"` the worker forks the **spawning orchestrator session's
+> local HEAD**. The orchestrator placed the session on a unique marker commit
+> (`d58ce62`, on no shared ref); the worker's worktree forked **exactly that marker** —
+> not `origin/main`, not an opaque session-root. ([[mem.pattern.dispatch.claude-isolation-worktree-forks-orchestrator-session-head]];
+> the two retracted findings were taken with the orchestrator sitting on `main` and/or
+> under default `baseRef="fresh"`.)
 >
-> **A fresh agent must rewrite §8 around option X + the subprocess-arm-is-the-parallel-path
-> framing.** The §8.4 verify-verb design and §8.3 installer wiring below remain valid; the
-> §8.0/§8.1/§8.2 "baseRef ⇒ base==B" claims are the falsified part.
+> **Decision (User-ruled, 2026-06-14): option Y — claude isolated workers are base-
+> controlled and kept.** The handle is orchestrator **placement**, not a ref-redirect:
+> run the orchestrator session inside the `dispatch/<slice>` coordination worktree with
+> its tip checked out (§7c stationary-head + §8.0 leg-1). This solves **both** base
+> problems on the claude arm, with **no `WorktreeCreate` hook**:
+> - **P1 (origin staleness):** `baseRef="head"` forks local HEAD, not `origin/main`.
+> - **P2 (dependent-phase base):** orchestrator advances its own HEAD/tree to phase N's
+>   integrated tip before spawning N+1 → the next worker forks the dependency. Serial-
+>   dependent phases ARE claude-dispatchable (contra the retracted "inline only").
+> - **Parallel file-disjoint phases:** orchestrator HEAD = common base B → every worker
+>   forks B.
+>
+> `baseRef="head"` (already set in `settings.local.json`) + the §8.4 post-spawn
+> verify-verb ship as before — now the *primary* base mechanism plus its fail-loud belt,
+> not a consolation. **`WorktreeCreate` (IMP-072) is demoted to a nicety** for true
+> pre-worker fail-closability (§8.1 residual), NOT the base-control mechanism; its σ
+> blast-radius is no longer a forcing cost. The subprocess arm (codex/pi → DeepSeek)
+> remains the **cheaper** parallel path (~$1/hr), not the *only* one. `claude -p` stays
+> OUT (API ~$1000/hr).
+>
+> §8.0/§8.1/§8.2 below are **vindicated as written**; §8.5's ADR-011 amendment is
+> reframed around Y (base controlled without `WorktreeCreate`).
 
-> Added after the spine locked: the claude `/dispatch` arm shipped **unusable** —
+> Added after the spine locked: the claude `/dispatch` arm first shipped **unusable** —
 > a worker forked off `origin/HEAD` (32 commits behind local trunk) lacked authored
-> state and developed against a stale tree. Root cause: Claude's default worktree
-> creation forks `origin/HEAD` (`baseRef` default `fresh`), and ADR-011 D5 framed
-> the base as "opaque, not orchestrator-controlled." This section makes the worker
-> base **== B**. **Mechanism v1 = `baseRef='head'` + matcher-scoped SubagentStart +
-> a post-spawn verify-verb** (User-ruled; WorktreeCreate carried as a deferred
-> follow-up — option 3).
+> state and developed against a stale tree. Root cause: Claude's *default* worktree
+> creation forks `origin/HEAD` (`baseRef` default `fresh`). This section makes the
+> worker base **== B** via **`baseRef="head"` + orchestrator placement + matcher-scoped
+> SubagentStart + a post-spawn verify-verb** (option Y, User-ruled). `WorktreeCreate`
+> carried as a deferred fail-closability nicety (IMP-072), not a base-control need.
 
 ### §8.0 — Current vs target
 
@@ -652,10 +662,11 @@ ADR-012):
   benign pass-through + discriminator race).
 
 **Tracker moves.** IMP-052 promoted **prose → verb** (folded into `verify-worker`).
-IMP-043 content-base assertion **closed** by the verb. **New deferred IMP** —
-`WorktreeCreate` pre-worker fail-closed arm (option 3), gated on a demonstrated need
-for arbitrary-B base control or true pre-worker fail-closability; carries the σ
-blast-radius cost explicitly. Capture via `backlog new`.
+IMP-043 content-base assertion **closed** by the verb. `WorktreeCreate` pre-worker
+fail-closed arm = **IMP-072** (already captured), now gated **only** on a demonstrated
+need for true pre-worker fail-closability — arbitrary-B base control is solved by
+orchestrator placement under Y, so it is no longer a justification; carries the σ
+blast-radius cost explicitly.
 
 ### §8.6 — Verification impact
 
@@ -666,15 +677,20 @@ blast-radius cost explicitly. Capture via `backlog new`.
   `Unstamped` / `WrongBase` / `Ok`); precond ordering pinned.
 - **`verify-worker` e2e (VT):** stale-base fork ⇒ `WrongBase` + non-zero + fork
   preserved; unstamped ⇒ `Unstamped`; B-based stamped worktree ⇒ `Ok` → proceeds.
-- **baseRef harness behaviour (VH):** that Claude forks local HEAD under
-  `baseRef='head'` is harness behaviour, **not doctrine-unit-testable** — verified
-  **empirically on the next real claude-arm dispatch**, not a VT.
+- **baseRef harness behaviour (VH):** that Claude forks the spawning orchestrator
+  session's local HEAD under `baseRef='head'` is harness behaviour, **not
+  doctrine-unit-testable** — **VERIFIED 2026-06-14** by a controlled marker-commit test
+  (worker forked the orchestrator's unique marker `d58ce62`). VH satisfied.
 - **Matcher drift (VT, regression):** existing `DISPATCH_WORKER_AGENT_TYPE` drift
   test stays green (SubagentStart untouched).
-- **Memory corrections (harvest at close):** `mem_019ec093…` (WorktreeCreate payload)
-  + `mem_019ebfd1…` ("WorktreeCreate preferred") superseded by the σ-blast-radius
-  finding; `notes.md` "forks off session HEAD" misdiagnosis corrected (it is
-  `origin/HEAD`).
+- **Memory corrections (DONE this pass):** retracted
+  [[mem.pattern.dispatch.claude-isolation-worktree-base-session-root-opaque]] and
+  [[mem.pattern.dispatch.claude-agent-worktree-forks-origin-main-tracking-ref]] (both
+  false: base IS controllable by placement); recorded
+  [[mem.pattern.dispatch.claude-isolation-worktree-forks-orchestrator-session-head]].
+  NB the worker forks the **orchestrator session's local HEAD** (it tracks placement) —
+  the babd656-era "it is origin/HEAD" gloss was itself wrong; `origin/HEAD` is only the
+  default-`fresh` fallback.
 
 ## Decision log (this pass)
 
@@ -714,3 +730,11 @@ blast-radius cost explicitly. Capture via `backlog new`.
   (ADR-001) — **locked (§8.4).**
 - DD-14 ADR-011 amended in place (D3/D5/D6/D7); WorktreeCreate option-3 deferred on
   the σ blast-radius (no agent_type/matcher), NOT on payload fields — **locked (§8.5).**
+- DD-15 (2026-06-14) DD-11's "base==B by placement" **empirically confirmed** by a
+  controlled marker-commit test: under `baseRef='head'` the worker forks the spawning
+  orchestrator session's local HEAD. Reverses the babd656 mid-session detour (option X /
+  "base uncontrollable / subprocess-only parallel"), which was drawn from runs taken on
+  `main` and/or under default `baseRef='fresh'`. **Option Y locked:** claude isolated
+  workers are base-controlled (P1+P2, parallel + serial-dependent) by orchestrator
+  placement; `WorktreeCreate`/IMP-072 demoted to a pre-worker fail-closability nicety,
+  no longer a base-control need. Two memories retracted, one recorded (§8.6).

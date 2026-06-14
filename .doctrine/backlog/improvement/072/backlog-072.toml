@@ -3,7 +3,7 @@ version = 1
 
 id = 72
 slug = "worktreecreate-hook-to-enable-parallel-claude-quality-isolated-dispatch-workers-on-subscription"
-title = "WorktreeCreate hook to enable parallel claude-quality isolated dispatch workers on subscription (option Y escape hatch)"
+title = "WorktreeCreate hook for pre-worker fail-closability on the claude dispatch arm (deferred; NOT needed for base control)"
 kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
