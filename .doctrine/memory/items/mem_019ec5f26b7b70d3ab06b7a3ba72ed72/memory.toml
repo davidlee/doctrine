@@ -3,8 +3,8 @@ memory_key = "mem.pattern.dispatch.claude-agent-worktree-forks-origin-main-track
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Claude dispatch-agent worktree forks off the origin/main tracking ref — update-ref it per phase to control the worker base"
-summary = "Claude dispatch-agent worktree forks off refs/remotes/origin/main; update-ref it per phase to control the worker base"
+title = "Claude dispatch-agent worker worktree base is uncontrollable — run dependent serial phases inline on the coordination worktree"
+summary = "Claude Agent isolation:worktree forks off the opaque session-root main HEAD, NOT a git ref you can set; a dependent phase cannot fork from the prior phase's isolated dispatch-branch result — execute serial dependent phases inline"
 created = "2026-06-14"
 updated = "2026-06-14"
 
