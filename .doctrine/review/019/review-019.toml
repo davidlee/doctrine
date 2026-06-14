@@ -1,0 +1,43 @@
+id    = 19
+slug  = "sl-061-code-review-the-review-skills-rewiring-shared-protocol-doc"
+title = "SL-061 code-review: the review-skills rewiring + shared protocol doc"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "staff-eng"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-061"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "review-ledger.md §1 ships WRONG canonical backlog prefixes (ISSUE-/CHORE-/IDEA- vs actual ISS-/CHR-/IDE-)"
+detail = "install/review-ledger.md:32 lists the target-ladder backlog kinds as (ISSUE- / IMP- / CHORE- / RSK- / IDEA-). Per integrity::KINDS and the live corpus, the canonical prefixes are ISS- / IMP- / CHR- / RSK- / IDE- (e.g. ISS-012, CHR-007, IDE-011 exist on disk). Three of five are wrong. This is a SHIPPED reference doc (ADR-005 PULL tier) — a reader copying these writes dangling refs (review new --target validates and refuses them), and the project treats reference form as identity. Expected: correct prefixes; observed: ISSUE-/CHORE-/IDEA-."
+disposition = "fix-now"
+response = "Corrected install/review-ledger.md:32 to ISS- / IMP- / CHR- / RSK- / IDE- (matches integrity::KINDS and the live corpus). Doc-only, disjoint from the foreign gate RED."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "code-review SKILL.md carries a vestigial '## severity labels' section duplicating the emoji->severity mapping table"
+detail = "plugins/doctrine/skills/code-review/SKILL.md defines severities twice: the rewrite's mapping table (lines 109-114: emoji|meaning|--severity) AND a trailing '## severity labels' section (lines 148-154) restating the same emojis without the severity mapping — leftover from the pre-rewrite skill. Two parallel definitions of one vocab; the skill itself flays 'opportunities for reuse squandered by parallel implementations' and 'carelessly adding compromises cohesion'. Expected: one source (the table); observed: table + vestigial section."
+disposition = "fix-now"
+response = "Deleted the vestigial '## severity labels' section; the emoji->severity mapping table is now the single source. 👍 remains explained in the 'Each finding -> a raise' section. Cohesion restored."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "code-review description trigger ('reviewing or auditing code') overlaps the now-sibling /audit skill after the doctrine-core relocation"
+detail = "plugins/doctrine/skills/code-review/SKILL.md:3 description (the auto-trigger surface) reads 'MUST USE whenever reviewing or auditing code'. Now that code-review lives in doctrine core beside /audit (D7 relocation), 'auditing' overlaps /audit's reconciliation trigger. Preserved verbatim from the standalone-plugin original; the relocation makes the collision newly relevant. Low-stakes (audit-for-quality != reconciliation-vs-design) but the trigger surface is load-bearing (skill.description-is-the-trigger memory)."
+disposition = "tolerated"
+response = "Preserved deliberately. The description is verbatim from the standalone original (D7 keeps the persona/voice); 'auditing code for quality & correctness' is the craft lens, distinct from /audit's reconciliation-against-design. Changing the auto-trigger surface is higher-risk than the mild overlap. Consciously tolerated; revisit if real mis-triggering is observed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

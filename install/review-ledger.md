@@ -29,7 +29,7 @@ queried, gated, and handed off later.
 1. **A slice or phase** — the implementation, design, or plan artifact under
    review. The strongest subject; an audit lives here always.
 2. **A backlog item** — `issue` / `improvement` / `chore` / `risk` / `idea`
-   (`ISSUE-` / `IMP-` / `CHORE-` / `RSK-` / `IDEA-`). A durable diff or
+   (`ISS-` / `IMP-` / `CHR-` / `RSK-` / `IDE-`). A durable diff or
    investigation with no slice yet still has a typed home here.
 3. **Create one** — if no proximate subject exists but the work is durable,
    `doctrine backlog new <kind>` mints one, *then* target it. A review worth the
