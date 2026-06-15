@@ -9,5 +9,6 @@
 //! - `diagnostic` — structured diagnostics (PHASE-03)
 
 pub(crate) mod diagnostic;
+pub(crate) mod graph;
 pub(crate) mod hydrate;
 pub(crate) mod scan;
