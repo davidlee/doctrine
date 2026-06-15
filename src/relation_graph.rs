@@ -19,6 +19,7 @@ use std::path::Path;
 
 use cordage::{Arity, CyclePolicy, EdgeAttrs, Graph, GraphBuilder, OverlayConfig, OverlayId};
 
+use crate::catalog::hydrate::EdgeTarget;
 use crate::dep_seq;
 use crate::entity;
 use crate::integrity;
@@ -306,21 +307,35 @@ fn resolve_target(
 /// `IllegalRows` uses `integrity::KINDS` (dir + stem) — no new path authority.
 pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
     let mut findings = Vec::new();
-    let scanned = scan_entities(root)?;
 
-    // (1) danglers — a validated target that fails to resolve.
-    for entity in &scanned {
-        for edge in &entity.outbound {
-            // Skip `Unvalidated` labels — their targets dangle by design.
-            let validated = crate::relation::lookup(entity.kind, edge.label)
-                .is_some_and(|r| !matches!(r.target, crate::relation::TargetSpec::Unvalidated));
-            if validated && integrity::ensure_ref_resolves(root, &edge.target).is_err() {
-                findings.push(format!(
-                    "{}: `{}` target `{}` does not resolve (dangling [[relation]] edge)",
-                    entity.key.canonical(),
-                    edge.label.name(),
-                    edge.target
-                ));
+    // (1) danglers — consume Catalog.edges for target-resolution failures
+    // (SL-071 PHASE-05). Catalog classifies every edge target via
+    // `parse_canonical_ref`; UnresolvedRef means the target parsed as a
+    // canonical ref but the entity was absent from the scan.
+    let catalog = crate::catalog::hydrate::scan_catalog(root)?;
+    // Index entity keys → Kind for label-validation lookups.
+    let entity_kinds: BTreeMap<EntityKey, &'static entity::Kind> =
+        catalog.entities.iter().map(|e| (e.key, e.kind)).collect();
+
+    for edge in &catalog.edges {
+        // Only report UnresolvedRef targets — UnvalidatedText targets dangle
+        // by design (free-text / unknown-prefix targets), and Resolved targets
+        // are fine.
+        if let EdgeTarget::UnresolvedRef { raw } = &edge.target {
+            // Only report danglers for validated labels — Unvalidated labels
+            // (TargetSpec::Unvalidated in RELATION_RULES) dangle by design
+            // (their targets are free-form by contract).
+            if let Some(kind) = entity_kinds.get(&edge.source) {
+                let validated = crate::relation::lookup(kind, edge.label)
+                    .is_some_and(|r| !matches!(r.target, TargetSpec::Unvalidated));
+                if validated {
+                    findings.push(format!(
+                        "{}: `{}` target `{}` does not resolve (dangling [[relation]] edge)",
+                        edge.source.canonical(),
+                        edge.label.name(),
+                        raw
+                    ));
+                }
             }
         }
     }
