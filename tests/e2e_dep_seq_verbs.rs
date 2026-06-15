@@ -146,7 +146,10 @@ relationships:
         stderr(&json)
     );
     let v: serde_json::Value = serde_json::from_str(&stdout(&json)).expect("valid JSON");
-    let rel = v.get("slice").and_then(|s| s.get("relationships")).expect("relationships");
+    let rel = v
+        .get("slice")
+        .and_then(|s| s.get("relationships"))
+        .expect("relationships");
     assert_eq!(rel["needs"], serde_json::json!(["SL-002"]), "json needs");
     assert_eq!(
         rel["after"],
