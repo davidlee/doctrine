@@ -1,0 +1,41 @@
+memory_uid = "mem_019ecb72f7db74a387a7256262f85328"
+memory_key = "mem.fact.doctrine.clippy-denies"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Clippy denies unwrap/expect/indexing in non-test code"
+summary = "Clippy denies unwrap_used, expect_used, and indexing_slicing in non-test code — use if-let or match patterns with documented invariants"
+created = "2026-06-15"
+updated = "2026-06-15"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "35c36c81358d7251d0edd7636013877158aa0be2"
+ref_name = "refs/heads/main"
+checkout_state_id = "bca114601dddb0805afe765560d855e1137fca8851152e379301ec3849cf06fc"
+base_commit = "3b3a0a2b24e62d57193a6c3bb9f7fb09e2eef556"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
