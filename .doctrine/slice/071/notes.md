@@ -157,3 +157,53 @@ Fixture: 4 entities (SL-001, SL-003, ADR-002, REQ-005) spanning 2 KINDS with id
   - `tests/e2e_catalog_cli.rs` (new, 3 tests)
 - **Gate**: 1344 tests (1341 + 3 new), 0 failures; `cargo clippy` zero
   warnings; `just gate` passes workspace-wide.
+
+## PHASE-07 (2026-06-15) — Code review remediation
+
+Seven code-review findings resolved:
+
+1. **Deduplicated test helpers**: Created `src/catalog/test_helpers.rs` with
+   `write`, `tmp`, `relation_rows`, `seed_slice`, `seed_adr`,
+   `seed_requirement` — `pub(in crate::catalog)` visibility. `scan.rs`,
+   `hydrate.rs`, and `graph.rs` test modules import from the shared module.
+   Module-specific helpers (`seed_fixture`, `seed_hydrate_fixture`,
+   `build_graph`, `canonical_keys`) stay in their respective test modules.
+2. **Fixed typo**: `slice_requirement` → `seed_requirement` in `graph.rs`.
+3. **Edge-source invariant documented**: Adapted from planned `.expect()` to
+   comment-documented `if let Some(kind)` — clippy denies
+   `expect_used`/`indexing_slicing`/`unwrap_used` in non-test code (project
+   convention). Comment notes the invariant: edge source always exists in
+   `entity_kinds` (edges built from entities in the same Catalog).
+4. **Strengthened e2e**: `tests/e2e_catalog_cli.rs` now asserts entity count
+   (4), edge count (2), and diagnostic count (1) on the seeded fixture.
+5. **Doc comments**: `NodeKey::Serialize` notes the canonical-ref
+   serialization asymmetry; `outgoing`/`incoming` note silent-empty for
+   absent nodes.
+6. **Removed `--json` flag**: `CatalogCommand::Scan` and `Graph` no longer
+   carry a `--json` flag — JSON is the only output format. Updated all three
+   e2e tests.
+- **Adaptation**: Task 3 originally called for `.expect()` on the
+  `entity_kinds` lookup in `validate_relations`. Clippy denies it in
+  non-test code. Kept `if let Some(kind)` with the invariant comment.
+  (The audit (RV-034 F-1) later corrected a misleading "debug_assert" claim
+  in that comment — it never existed; fixed to just state the invariant.)
+- **Gate**: 1683 tests, 0 failures; `cargo clippy` zero warnings; `just gate`
+  passes workspace-wide.
+  VA-1: zero duplicate helpers in scan/hydrate/graph.
+  VA-2: zero `slice_requirement` hits.
+  VA-3: `if let Some(kind)` pattern retained with documented invariant.
+  VA-4: `--json` flag removed from CatalogCommand.
+
+## Audit (2026-06-15) — RV-034 reconciliation
+
+- **Ledger**: RV-034 opened, primed with 8 areas / 9 tracked paths / 9
+  invariants / 2 risks.
+- **Evidence**: 1683 tests pass, clippy zero warnings, `just gate` passes.
+  All 6 design patches and 12 design decisions verified.
+- **F-1 (minor)**: `validate_relations` comment falsely claimed
+  `debug_assert` existed. Corrected to document the invariant without the
+  false claim. Verified.
+- **Standing risks**: error-tolerant walk deferred to follow-up slice;
+  `outgoing`/`incoming` not consumed in production (tested, expect-dead_code);
+  `Catalog.diagnostics` sparse until follow-up.
+- **Slice status**: audit → reconcile.
