@@ -1,4 +1,4 @@
-mod doctrine '.doctrine/doctrine.just'
+mod? doctrine '.doctrine/doctrine.just'
 
 default: lint test install
 
