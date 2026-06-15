@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Asset serving — RustEmbed + content-type mapping (SL-072 PHASE-02).
+//! Asset serving — `RustEmbed` + content-type mapping (SL-072 PHASE-02).
 //!
 //! PHASE-02 scaffolding — types consumed in PHASE-03+.
 #![allow(
     dead_code,
-    reason = "PHASE-02 foundation — functions consumed in PHASE-03+"
+    clippy::same_name_method,
+    reason = "PHASE-02 foundation + RustEmbed derive conflict"
 )]
 
 use rust_embed::RustEmbed;
@@ -27,7 +28,7 @@ pub(crate) fn content_type_for(path: &str) -> &'static str {
     }
 }
 
-/// Serve an embedded asset from the RustEmbed store.
+/// Serve an embedded asset from the `RustEmbed` store.
 /// Returns `AssetNotFound` for missing paths.
 pub(crate) fn serve_embedded(
     path: &str,

@@ -64,14 +64,5 @@ pub(crate) trait DotRenderer: Send + Sync {
     async fn render_svg(&self, _dot: &[u8]) -> Result<Vec<u8>, MapServerError>;
 }
 
-/// The production renderer — currently a stub.
-///
-/// PHASE-04 will implement `render_svg` by shelling out to `dot -Tsvg`.
+/// The production renderer — implemented in [`shell`](super::shell).
 pub(crate) struct RealDotRenderer;
-
-#[async_trait]
-impl DotRenderer for RealDotRenderer {
-    async fn render_svg(&self, _dot: &[u8]) -> Result<Vec<u8>, MapServerError> {
-        Err(MapServerError::ToolUnavailable { tool: "graphviz" })
-    }
-}
