@@ -1,0 +1,7 @@
+[[row]]
+source_oid = "da770f3e84a6fc63fb0e404c26c03dea6b3fa21d"
+target_ref = "refs/heads/review/072"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "fc99877aac3462f4acb417c023f093f363c84939"
+applied_new_oid = ""
+status = "pending"
