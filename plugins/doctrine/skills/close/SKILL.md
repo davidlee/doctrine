@@ -32,6 +32,15 @@ Inputs:
    conventional commits scoped with the slice id, rather than letting them
    accumulate. Code and workflow edits go together or separately, whichever
    commits cleanly first.
+2a. **Dispatched slice — integrate the admitted OID (post-audit only).** If the
+   slice was driven by `/dispatch`, project the audited units now with `doctrine
+   dispatch sync --slice <N> --integrate [--trunk <ref>] [--edge <ref>]`. When a
+   candidate workflow is active this targets the immutable **admitted `close_target`
+   OID** (and `--edge` the admitted `review_surface` OID) under a fast-forward-only
+   CAS row — **never a raw `phase/*`/`review/*` tip or the mutable candidate ref**,
+   and never a close-time merge. A moved trunk refuses (admit a superseding
+   close-target candidate on the new base). This is the **only** place `--integrate`
+   runs — never at `/dispatch` conclude, only here, post-audit.
 3. **Transition lifecycle:** confirm the slice is in `reconcile` (flip it with
    `doctrine slice status <id> reconcile` if `/audit` didn't), then
    `doctrine slice status <id> done` (`<id>` is the bare number, e.g. `40`).

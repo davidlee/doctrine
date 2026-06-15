@@ -26,6 +26,14 @@ field-owned, "no undispositioned findings before close" is enforced by the binar
 > `sync`/`validate` surface; reconciliation here means reconciling against
 > `design.md`, ADRs, and `doc/*`, not a spec engine.
 
+> **Dispatched slice — review the candidate surface, not the raw evidence.** When
+> the slice was driven by `/dispatch`, `review/*` and `phase/*` are immutable
+> evidence refs (R2); audit/repair runs against the **candidate interaction
+> branch** published by `doctrine dispatch candidate create` (see `doctrine
+> dispatch candidate status`). Record which surface you reviewed in the ledger
+> `## Brief` (F-2), and link the admitting RV via `doctrine dispatch candidate
+> admit --review RV-NNN`.
+
 Inputs:
 
 - the slice's implemented phases and their verification evidence

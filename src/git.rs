@@ -800,6 +800,76 @@ pub(crate) fn commit_tree(
     git_text(root, &["commit-tree", tree, "-p", parent, "-m", msg])
 }
 
+/// Outcome of an explicit 3-way merge ([`merge_tree`]).
+pub(crate) enum MergeTree {
+    /// The merge applied cleanly; the union tree oid is carried.
+    Clean { tree: String },
+    /// The merge hit a content conflict — no tree is emitted (PHASE-03 lifecycle).
+    Conflict,
+}
+
+/// Compute the 3-way union tree of `ours` and `theirs` against the common
+/// ancestor `merge_base` via `git merge-tree --write-tree --merge-base=<mb>`
+/// (git ≥ 2.38) — working-tree-free, object-db only. Exit 0 ⇒ a clean merge and
+/// stdout is the written tree oid ([`MergeTree::Clean`]); a non-zero exit ⇒ a
+/// content conflict ([`MergeTree::Conflict`]) with no tree written. A spawn /
+/// usage failure still errors (a missing git is not "conflict"); a genuine
+/// conflict (exit 1) is distinguished from a usage error (anything else) by the
+/// exit code, mirroring [`is_ancestor`]. The candidate-create 3-way (design §5.3);
+/// the no-ff merge commit is composed separately with [`commit_tree_merge`].
+pub(crate) fn merge_tree(
+    root: &Path,
+    merge_base: &str,
+    ours: &str,
+    theirs: &str,
+) -> Result<MergeTree, CaptureError> {
+    let base_flag = format!("--merge-base={merge_base}");
+    let output = run_git(
+        root,
+        &["merge-tree", "--write-tree", &base_flag, ours, theirs],
+    )?;
+    match output.status.code() {
+        Some(0) => {
+            let tree = String::from_utf8(output.stdout)
+                .map_err(|_ignored| CaptureError::Git("merge-tree: non-utf8 oid".to_owned()))?;
+            Ok(MergeTree::Clean {
+                tree: tree.trim().to_string(),
+            })
+        }
+        Some(1) => Ok(MergeTree::Conflict),
+        _ => Err(CaptureError::Git(format!(
+            "merge-tree --merge-base={merge_base} {ours} {theirs}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
+/// Commit `tree` as a 2-parent no-ff merge of `[first_parent, second_parent]`
+/// (design §5.3 EX-3) — the candidate's merge commit, whose parents are the base
+/// and the source so a diff against either is the genuine 3-way union (no phantom
+/// `.doctrine` deletions). Working-tree-free; returns the merge commit oid.
+pub(crate) fn commit_tree_merge(
+    root: &Path,
+    tree: &str,
+    first_parent: &str,
+    second_parent: &str,
+    msg: &str,
+) -> Result<String, CaptureError> {
+    git_text(
+        root,
+        &[
+            "commit-tree",
+            tree,
+            "-p",
+            first_parent,
+            "-p",
+            second_parent,
+            "-m",
+            msg,
+        ],
+    )
+}
+
 /// Outcome of a compare-and-swap ref update ([`update_ref_cas`]).
 pub(crate) enum RefCas {
     /// The ref equalled `expected_old` and was advanced to the new oid.
@@ -895,6 +965,17 @@ pub(crate) fn is_ancestor(
             String::from_utf8_lossy(&output.stderr).trim()
         ))),
     }
+}
+
+/// The parent oids of `commit`, in order, via `git rev-list --parents -n 1
+/// <commit>` (the first whitespace token is the commit itself — dropped; the rest
+/// are its parents). A root commit yields an empty vec; a 2-parent merge yields
+/// `[first, second]`. The candidate-admit provenance check (SL-068 PHASE-05, I3)
+/// compares this SET to `{base_oid, source_oid}` to prove `merge_oid` is the
+/// Doctrine-created candidate merge.
+pub(crate) fn parents(root: &Path, commit: &str) -> Result<Vec<String>, CaptureError> {
+    let line = git_text(root, &["rev-list", "--parents", "-n", "1", commit])?;
+    Ok(line.split_whitespace().skip(1).map(str::to_owned).collect())
 }
 
 /// The merge-base (best common ancestor) of `a` and `b` via `git merge-base <a>
