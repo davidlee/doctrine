@@ -5,6 +5,7 @@ mod backlog_order;
 mod boot;
 mod catalog;
 mod clock;
+mod commands;
 mod conduct;
 mod contentset;
 mod corpus;
@@ -60,6 +61,7 @@ use std::str::FromStr;
 
 use clap::{Args, Parser, Subcommand};
 
+use crate::commands::map::MapServeArgs;
 use crate::listing::{Format, ListArgs};
 
 /// doctrine — project tooling.
@@ -182,6 +184,12 @@ enum Command {
     Skills {
         #[command(subcommand)]
         command: SkillsCommand,
+    },
+
+    /// Start the local map explorer web server.
+    Map {
+        #[command(subcommand)]
+        command: MapCommand,
     },
 
     /// Create and list slices — the unit of intentional change.
@@ -2361,6 +2369,12 @@ enum RevisionChangeCommand {
 }
 
 #[derive(Subcommand)]
+enum MapCommand {
+    /// Start the local map explorer web server (loopback only)
+    Serve(MapServeArgs),
+}
+
+#[derive(Subcommand)]
 enum SkillsCommand {
     /// List available skills and their install status.
     List {
@@ -2491,6 +2505,7 @@ fn write_class(cmd: &Command) -> WriteClass {
             // `claude install`, so it carries the SAME refusal label.
             SkillsCommand::Install { .. } => Write("claude install"),
         },
+        Command::Map { .. } => Write("map"),
         Command::Slice { command } => match command {
             SliceCommand::New { .. } => Write("slice new"),
             SliceCommand::Design { .. } => Write("slice design"),
@@ -3565,6 +3580,9 @@ fn main() -> anyhow::Result<()> {
             path,
         } => run_after_edge(path, &source, &target, rank),
         Command::Supersede { new, old, path } => run_supersede(path, &new, &old),
+        Command::Map { command } => match command {
+            MapCommand::Serve(args) => commands::map::run_serve(None, args),
+        },
     }
 }
 
