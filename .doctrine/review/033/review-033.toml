@@ -12,5 +12,23 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-070"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "TITLE_EVEN/TITLE_ODD RGB values deviate from design.md"
+detail = "Design §3 specifies TITLE_EVEN=Rgb(235,219,178) (#ebdbb2, gruvbox bg1) and TITLE_ODD=Rgb(213,196,161) (#d5c4a1, gruvbox bg2). The code at src/listing.rs:428-429 carries comments matching the design but actual Rgb tuples are different: TITLE_EVEN=(235,235,235)=#ebebeb and TITLE_ODD=(215,184,57)=#d7b839. The comments are correct; the RGB values are not. This affects the visual appearance of alternating title rows on all 8 list surfaces. notes.md also repeats the design values as if they were implemented."
+disposition = "fix-now"
+response = "The design.md §3 specifies TITLE_EVEN=Rgb(235,219,178) (#ebdbb2, gruvbox bg1) and TITLE_ODD=Rgb(213,196,161) (#d5c4a1, gruvbox bg2). The code's RGB tuples (235,235,235) and (215,184,57) don't match — the comments on the constants are correct but the values aren't. Fix: correct the Rgb tuples to match the design, then re-run just check to confirm tests pass."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "EX-3 visual verification not possible in automated environment"
+detail = "EX-3 requires rendering 'doctrine slice list, backlog list, memory list, adr list, spec list, review list all render with correct new colours on a real terminal.' This audit runs in a bubblewrap jail with no display. Visual verification must be performed by a human on a real terminal. All automated evidence (tests, clippy, golden tests) is green."
+disposition = "tolerated"
+response = "EX-3 requires visual verification on a real terminal with display support. This audit environment (bubblewrap jail, no display) cannot perform it. All 9 automated VT criteria pass (VT-1 through VT-9), 1324 tests green, clippy clean. Visual verification should be done by a human before final close. Tolerated because the automated evidence is strong and the visual component is inherently manual."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

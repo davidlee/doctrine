@@ -25,6 +25,17 @@
 - Consider colour for `review` facet column and `spec` kind differentiation per scope doc.
 - Truecolour → 4-bit ANSI degradation path if demanded (low priority).
 
+## Audit (RV-033)
+
+- Review done: 2 findings, both verified, 0 unresolved.
+- **F-1 (major, fixed):** TITLE_EVEN/TITLE_ODD RGB tuples mismatched design.md.
+  Comments claimed `#ebdbb2`/`#d5c4a1` but values were `(235,235,235)` and
+  `(215,184,57)`. Corrected to match design: `Rgb(235,219,178)` and
+  `Rgb(213,196,161)`. Tests remain green.
+- **F-2 (minor, tolerated):** EX-3 visual verification on a real terminal
+  cannot be done in this environment. Automated evidence (1324 tests, clippy
+  clean) is strong; a human must confirm before final close.
+
 ## Commits
 
 All committed on `main`: `a98b7de`, `05d549d`, `bbe484e`.
