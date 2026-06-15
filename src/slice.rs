@@ -682,7 +682,9 @@ const SLICE_COLUMNS: [listing::Column<SliceRowTuple>; 5] = [
         name: "id",
         header: "id",
         cell: |(m, _)| canonical_id(m.id),
-        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+            owo_colors::AnsiColors::Cyan,
+        )),
     },
     listing::Column {
         name: "status",
