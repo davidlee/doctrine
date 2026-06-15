@@ -41,7 +41,7 @@
 /// The outbound relation vocabulary — one label per authored relation axis across
 /// the six edge-authoring kinds. `Copy + Ord` so callers can group/sort labels
 /// deterministically (no `HashMap` iteration order — REQ-077).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub(crate) enum RelationLabel {
     /// slice → spec, backlog → spec.
     Specs,

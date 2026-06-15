@@ -89,7 +89,7 @@ pub(crate) fn outbound_for(
 /// `Ord`, and carries a fn-ptr `scaffold`) — and the numeric id. The pair is the
 /// corpus-wide identity, and renders its canonical ref through the same
 /// `listing::canonical_id` source `ItemId` uses.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub(crate) struct EntityKey {
     pub(crate) prefix: &'static str,
     pub(crate) id: u32,

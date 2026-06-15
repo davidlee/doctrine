@@ -63,6 +63,7 @@ impl Claim for LocalFs {
 /// A `Kind` is *data*, not a trait: one dispatch site, no per-kind state (D2).
 /// Placement is no longer a `Kind` field — it is a runtime `MaterialiseRequest`,
 /// because a named entity carries its uid only at call time (D8).
+#[derive(serde::Serialize)]
 pub(crate) struct Kind {
     /// Entity-tree root, relative to the project root, e.g. `.doctrine/slice`.
     /// Also the base every artifact path is joined to (H1).
@@ -71,6 +72,7 @@ pub(crate) struct Kind {
     /// by named kinds, which have no numeric canonical id.
     pub prefix: &'static str,
     /// Fileset as a function — kind-supplied, never a frozen file count (D3).
+    #[serde(skip)]
     pub scaffold: fn(&ScaffoldCtx<'_>) -> anyhow::Result<Fileset>,
 }
 
