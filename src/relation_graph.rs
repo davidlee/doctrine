@@ -325,6 +325,10 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
             // Only report danglers for validated labels — Unvalidated labels
             // (TargetSpec::Unvalidated in RELATION_RULES) dangle by design
             // (their targets are free-form by contract).
+            // Edge source always exists in entity_kinds — edges are built from
+            // entities in the same Catalog. The `if let` is a type-system
+            // requirement (BTreeMap::get returns Option), not a genuine
+            // fallibility. Violation is a bug caught by debug_assert.
             if let Some(kind) = entity_kinds.get(&edge.source) {
                 let validated = crate::relation::lookup(kind, edge.label)
                     .is_some_and(|r| !matches!(r.target, TargetSpec::Unvalidated));

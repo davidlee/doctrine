@@ -27,6 +27,9 @@ pub(crate) enum NodeKey {
     Entity(EntityKey),
 }
 
+/// Serialize flattens `Entity(key)` to `key.canonical()` — a string like
+/// `"SL-001"` — not a structured variant. This is asymmetric with the type
+/// definition; consumers that deserialize must reconstruct the variant.
 impl serde::Serialize for NodeKey {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -68,6 +71,9 @@ impl CatalogGraph {
     /// All outbound edges whose `source` is the given `node`, including those
     /// with `UnresolvedRef` or `UnvalidatedText` targets. Callers must handle
     /// the case where an edge has no target node in the graph (D10).
+    ///
+    /// A node not present in the graph silently returns an empty vec —
+    /// indistinguishable from a genuine zero-edge node.
     #[cfg_attr(not(test), expect(dead_code, reason = "tested; future consumer"))]
     pub(crate) fn outgoing(&self, node: &NodeKey) -> Vec<&CatalogEdge> {
         let NodeKey::Entity(key) = node;
@@ -77,6 +83,9 @@ impl CatalogGraph {
     /// All inbound edges whose `target` is `Resolved(key)` matching the given
     /// `node`. Edges with unresolved or unvalidated targets are excluded — an
     /// edge with no target node cannot "point to" a node (D10).
+    ///
+    /// A node not present in the graph silently returns an empty vec —
+    /// indistinguishable from a genuine zero-incoming-edge node.
     #[cfg_attr(not(test), expect(dead_code, reason = "tested; future consumer"))]
     pub(crate) fn incoming(&self, node: &NodeKey) -> Vec<&CatalogEdge> {
         let NodeKey::Entity(key) = node;
@@ -98,73 +107,8 @@ impl CatalogGraph {
 #[expect(clippy::unwrap_used, clippy::expect_used, reason = "test code")]
 mod tests {
     use super::*;
-    use std::fs;
+    use crate::catalog::test_helpers::*;
     use std::path::Path;
-
-    /// Write `root/<rel>` with `body`, creating parents.
-    fn write(root: &Path, rel: &str, body: &str) {
-        let path = root.join(rel);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, body).unwrap();
-    }
-
-    fn tmp() -> tempfile::TempDir {
-        tempfile::tempdir().unwrap()
-    }
-
-    /// Format `[[relation]]` rows from (label, targets) pairs.
-    fn relation_rows(edges: &[(&str, &[&str])]) -> String {
-        let mut rows = String::new();
-        for (label, targets) in edges {
-            for t in *targets {
-                rows.push_str(&format!(
-                    "[[relation]]\nlabel = \"{label}\"\ntarget = \"{t}\"\n"
-                ));
-            }
-        }
-        rows
-    }
-
-    /// Seed a slice entity (toml + md) with the given `[[relation]]` edges.
-    fn seed_slice(root: &Path, id: u32, edges: &[(&str, &[&str])]) {
-        write(
-            root,
-            &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
-            &format!(
-                "id = {id}\nslug = \"s{id}\"\ntitle = \"S{id}\"\nstatus = \"proposed\"\n\
-                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{}",
-                relation_rows(edges)
-            ),
-        );
-        write(
-            root,
-            &format!(".doctrine/slice/{id:03}/slice-{id:03}.md"),
-            "scope\n",
-        );
-    }
-
-    /// Seed an ADR entity (toml + md) with optional `supersedes` array.
-    fn seed_adr(root: &Path, id: u32, supersedes: &[&str]) {
-        let rels = if supersedes.is_empty() {
-            String::new()
-        } else {
-            let refs: Vec<String> = supersedes.iter().map(|s| format!("\"{s}\"")).collect();
-            format!("\n[relationships]\nsupersedes = [{}]\n", refs.join(", "))
-        };
-        write(
-            root,
-            &format!(".doctrine/adr/{id:03}/adr-{id:03}.toml"),
-            &format!(
-                "id = {id}\nslug = \"a{id}\"\ntitle = \"A{id}\"\nstatus = \"accepted\"\n\
-                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"{rels}"
-            ),
-        );
-        write(
-            root,
-            &format!(".doctrine/adr/{id:03}/adr-{id:03}.md"),
-            "body\n",
-        );
-    }
 
     /// Build a CatalogGraph from a small fixture via scan_catalog.
     fn build_graph(root: &Path) -> CatalogGraph {
@@ -184,7 +128,7 @@ mod tests {
 
         // SL-001 → REQ-005 (resolved), ADR-002 → ADR-001 (resolved)
         seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
-        slice_requirement(root, 5);
+        seed_requirement(root, 5);
         seed_adr(root, 2, &["ADR-001"]);
         seed_adr(root, 1, &[]);
 
@@ -205,20 +149,6 @@ mod tests {
         assert_eq!(node.title, "S1");
         assert_eq!(node.status.as_deref(), Some("proposed"));
         assert_eq!(node.kind_label, "SL");
-    }
-
-    /// Seed a requirement entity (edge target only).
-    fn slice_requirement(root: &Path, id: u32) {
-        write(
-            root,
-            &format!(".doctrine/requirement/{id:03}/requirement-{id:03}.toml"),
-            &format!("id = {id}\nslug = \"r{id}\"\ntitle = \"R{id}\"\nstatus = \"active\"\n"),
-        );
-        write(
-            root,
-            &format!(".doctrine/requirement/{id:03}/requirement-{id:03}.md"),
-            "r\n",
-        );
     }
 
     // -----------------------------------------------------------------------
@@ -310,7 +240,7 @@ mod tests {
         // SL-001 → REQ-005, SL-003 → REQ-005 (two sources pointing TO REQ-005)
         seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
         seed_slice(root, 3, &[("requirements", &["REQ-005"])]);
-        slice_requirement(root, 5);
+        seed_requirement(root, 5);
 
         let graph = build_graph(root);
 

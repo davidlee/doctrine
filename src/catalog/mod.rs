@@ -12,3 +12,6 @@ pub(crate) mod diagnostic;
 pub(crate) mod graph;
 pub(crate) mod hydrate;
 pub(crate) mod scan;
+
+#[cfg(test)]
+pub(crate) mod test_helpers;
