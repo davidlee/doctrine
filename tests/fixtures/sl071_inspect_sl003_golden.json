@@ -1,0 +1,14 @@
+{
+  "actionability": {
+    "actionable": true,
+    "blockers": [],
+    "blocking": [],
+    "consequence": 0,
+    "eligible": true
+  },
+  "danglers": [],
+  "id": "SL-003",
+  "inbound": [],
+  "kind": "inspect",
+  "outbound": []
+}
