@@ -1,4 +1,4 @@
-# Doctrine lifecycle: route → slice → design → plan → phase → audit → close
+# Doctrine lifecycle: route → slice → design → plan → phase → audit → reconcile → close
 
 The ordering an intentional change moves through. The routing table in
 `.doctrine/state/boot.md` is the authority; the per-stage skills carry the
@@ -18,7 +18,14 @@ detail (see [[signpost.doctrine.skill-map]]). No code without an approved plan.
 6. **execute** — flip the phase `in_progress` (`doctrine slice phase`), implement
    TDD red/green/refactor (see [[pattern.doctrine.tdd-loop]]), end green, flip
    `completed`.
-7. **audit → close** — evidence, reconciliation against the design, final commit.
+7. **audit** — evidence gathering, conformance checking, and reconciliation
+   against the design. Uses the review ledger (RV kind). See
+   [[signpost.doctrine.audit]].
+8. **reconcile** — (ADR-009 closure seam) formal reconciliation of findings,
+   coverage, and lifecycle status. Resolves blockers and drift before the close
+   gate.
+9. **close** — final commit, harvest durable findings, reconcile lifecycle
+   status, and land a clean final commit.
 
 Authored artifacts land under `.doctrine/slice/nnn/`; runtime phase sheets land
 gitignored under `.doctrine/state/` (see [[concept.doctrine.storage-model]] and

@@ -26,3 +26,7 @@ Orient further:
 
 The CLI is the source of truth for command shapes — `doctrine --help`, never
 guess. See [[fact.doctrine.cli-source-of-truth]].
+
+Orient further with the shipped reference docs: [[signpost.doctrine.reference-docs]].
+Always read entities via `show` — never judge from one tier:
+[[concept.doctrine.reading-entities]].

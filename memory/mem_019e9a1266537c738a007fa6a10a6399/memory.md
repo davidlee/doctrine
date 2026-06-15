@@ -27,6 +27,7 @@ Mid-flight, an unanticipated obstacle, tradeoff, or emergent complexity routes t
 Point of truth: `/route` and the routing table in `.doctrine/state/boot.md`
 (inlined into `CLAUDE.md` via an `@`-import). See
 [[pattern.doctrine.core-loop]] for the full lifecycle the gate feeds into,
-[[signpost.doctrine.lifecycle-start]] for where to begin, and
+[[signpost.doctrine.lifecycle-start]] for where to begin,
 [[concept.doctrine.memory-model]] for the retrieve-before-you-assume habit the
-gate leans on.
+gate leans on, and [[concept.doctrine.reading-entities]] for the read-via-show
+rule that keeps the gate honest.
