@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec92b1006784282dd0ae4833f9c5c"
+memory_key = "mem.signpost.doctrine.recording-memories"
+schema_version = 1
+memory_type = "signpost"
+status = "active"
+title = "Recording doctrine memories signpost"
+summary = ""
+created = "2026-06-15"
+updated = "2026-06-15"
+
+[scope]
+paths = [".doctrine/memory/"]
+globs = []
+commands = ["doctrine memory record", "doctrine memory verify"]
+tags = []
+workspace = "default"
+repo = ""
+repo_id_kind = "local_root"
+repo_id_confidence = "low"
+
+[git]
+anchor_kind = "none"
+commit = ""
+tree = ""
+ref_name = ""
+checkout_state_id = ""
+base_commit = ""
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
