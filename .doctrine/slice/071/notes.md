@@ -75,3 +75,43 @@ Fixture: 4 entities (SL-001, SL-003, ADR-002, REQ-005) spanning 2 KINDS with id
   functions. Fields read by tests but not yet by prod consumers (PHASE-04/05/06).
 - **Gate**: 1337 tests (1330 + 9 new), 0 failures; `cargo clippy` zero warnings;
   `just gate` passes workspace-wide. PHASE-02 equivalence tests green unchanged.
+
+## PHASE-04 (2026-06-15) — Presentation-neutral graph (CatalogGraph)
+
+- **Created** `src/catalog/graph.rs` with `CatalogGraph`, `NodeKey`, `CatalogNode`.
+- `from_catalog(&Catalog)` — pure projection, no cordage dependency.
+- `outgoing(node)`: returns all edges whose source matches (incl.
+  UnresolvedRef/UnvalidatedText).
+- `incoming(node)`: returns only edges with `Resolved(target)` matching the node.
+- `neighbours(depth)` deferred per design D10.
+- 4 fixture tests covering node/edge counts, outgoing with unresolved targets,
+  incoming exclusion of unresolved, and incoming correctness.
+- **Gate**: 1341 tests, 0 failures; `cargo clippy` zero warnings.
+
+## PHASE-05 (2026-06-15) — Consumer migration
+
+- **`relation_graph`**: already consumes via re-exports — zero changes (EX-1 ✓).
+- **`validate_relations`**: dangler detection migrated from `scan_entities` +
+  manual iteration to `scan_catalog` + iteration of `catalog.edges`.
+  - Builds `BTreeMap<EntityKey, &'static entity::Kind>` from `catalog.entities`
+    for label validation via `relation::lookup`.
+  - Produces identical finding strings — the existing test
+    `validate_relations_reports_danglers_and_illegal_rows` passes unchanged.
+  - IllegalRows re-read preserved as a separate KINDS walk (Catalog has no
+    raw-TOML handle) — EX-5 ✓.
+  - Imported `EdgeTarget` from `crate::catalog::hydrate`.
+- **`priority`**: stays on `ScannedEntity` via re-exports — zero changes (EX-3 ✓).
+- **`coverage_scan`**: not migrated (EX-4 ✓).
+- **`#[expect(dead_code)]` retirement**: Removed unfulfilled expects from
+  `scan_catalog` and `Catalog::from_scanned` — both now consumed externally.
+  Remaining struct-level expects on `Catalog`, `CatalogEntity`, `CatalogEdge`,
+  `EdgeOrigin`, `SourceSpan` are NOT unfulfilled (they have `pub(crate)` fields
+  accessed externally — Rust treats them as reachable).
+- **VA-1**: `rg 'for kref in integrity::KINDS' src/` outside `catalog/` hits
+  exactly the IllegalRows walk (relation_graph.rs:348) — no other entity-scanning
+  KINDS loop remains outside catalog.
+- **VA-2**: Re-exports in `relation_graph.rs` are pure aliases — no logic wrappers.
+- **Files changed**: `src/catalog/hydrate.rs` (-14 lines, 2 expect attrs),
+  `src/relation_graph.rs` (+32/-28, dangler migration + import).
+- **Gate**: 1341 tests, 0 failures, zero test changes; `cargo clippy` zero
+  warnings; `just gate` passes workspace-wide.

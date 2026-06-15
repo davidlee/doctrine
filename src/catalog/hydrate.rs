@@ -129,13 +129,6 @@ impl Catalog {
     /// diagnostics for unresolved and unvalidated targets.
     ///
     /// `root` is used only to derive paths — no file reads happen here.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "called by scan_catalog; not directly consumed outside tests until PHASE-04/05"
-        )
-    )]
     pub(crate) fn from_scanned(root: &Path, scanned: &[ScannedEntity]) -> Self {
         // Entity key set for O(log n) target resolution lookups.
         let key_set: BTreeSet<EntityKey> = scanned.iter().map(|e| e.key).collect();
@@ -246,13 +239,6 @@ fn classify_target(raw: &str, key_set: &BTreeSet<EntityKey>) -> EdgeTarget {
 ///
 /// Calls `scan_entities` (the fail-fast KINDS walk), then `Catalog::from_scanned`
 /// (pure projection). No second disk walk.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "external consumer lands in PHASE-06 (debug CLI); tested directly in this phase"
-    )
-)]
 pub(crate) fn scan_catalog(root: &Path) -> anyhow::Result<Catalog> {
     let scanned = super::scan::scan_entities(root)?;
     Ok(Catalog::from_scanned(root, &scanned))
