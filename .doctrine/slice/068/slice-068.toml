@@ -1,7 +1,7 @@
 id = 68
 slug = "wire-dispatch-stage-2-sync-integrate-into-close"
 title = "Dispatch candidates for safe audit interaction"
-status = "reconcile"
+status = "done"
 created = "2026-06-14"
 updated = "2026-06-15"
 
