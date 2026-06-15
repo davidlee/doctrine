@@ -32,7 +32,7 @@ fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
 }
 
-/// Run the binary against the temp corpus. DOCTRINE_WORKER is explicitly UNSET — the
+/// Run the binary against the temp corpus. `DOCTRINE_WORKER` is explicitly UNSET — the
 /// self-arm guard refuses authored writes under it, and a stray inherited var would
 /// spuriously red an authored round-trip (mem.pattern.dispatch.worker-verify-unset).
 fn run(root: &Path, args: &[&str]) -> Output {
@@ -50,6 +50,33 @@ fn stdout(out: &Output) -> String {
 }
 fn stderr(out: &Output) -> String {
     String::from_utf8(out.stderr.clone()).expect("utf8 stderr")
+}
+
+/// Hand-seed a slice's authored TOML + MD with FIXED dates (the
+/// `e2e_adr_cli_golden.rs` pattern) so `slice show` determinism doesn't couple
+/// to wall-clock `clock::today()`.
+fn seed_slice(root: &Path, id: u32, title: &str, slug: &str) {
+    let name = format!("{id:03}");
+    let dir = root.join(format!(".doctrine/slice/{name}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let toml = format!(
+        "id = {id}\n\
+         slug = \"{slug}\"\n\
+         title = \"{title}\"\n\
+         status = \"proposed\"\n\
+         created = \"2026-06-14\"\n\
+         updated = \"2026-06-14\"\n\
+         \n\
+         [relationships]\n\
+         needs = []\n\
+         after = []\n"
+    );
+    std::fs::write(dir.join(format!("slice-{name}.toml")), &toml).unwrap();
+    std::fs::write(
+        dir.join(format!("slice-{name}.md")),
+        format!("# {title}\n\n## Context\n\n## Scope & Objectives\n\n## Non-Goals\n\n## Summary\n\n## Follow-Ups\n"),
+    )
+    .unwrap();
 }
 
 fn new_slice(root: &Path, title: &str, slug: &str) {
@@ -72,8 +99,10 @@ fn slice_toml(root: &Path, id: u32) -> String {
 fn slice_needs_after_round_trip_table_and_json() {
     let t = tmp();
     let root = t.path();
-    new_slice(root, "Alpha", "alpha"); // SL-001
-    new_slice(root, "Beta", "beta"); // SL-002
+    seed_slice(root, 1, "Alpha", "alpha"); // SL-001
+    seed_slice(root, 2, "Beta", "beta"); // SL-002
+    // The `clock::today()` stamp would make `slice show` non-deterministic, so the
+    // slices are hand-seeded with fixed dates (the e2e_adr_cli_golden.rs pattern).
 
     assert!(
         run(root, &["needs", "SL-001", "SL-002"]).status.success(),
@@ -117,7 +146,7 @@ relationships:
         stderr(&json)
     );
     let v: serde_json::Value = serde_json::from_str(&stdout(&json)).expect("valid JSON");
-    let rel = &v["slice"]["relationships"];
+    let rel = v.get("slice").and_then(|s| s.get("relationships")).expect("relationships");
     assert_eq!(rel["needs"], serde_json::json!(["SL-002"]), "json needs");
     assert_eq!(
         rel["after"],
