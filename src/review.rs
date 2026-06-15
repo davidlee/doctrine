@@ -907,7 +907,7 @@ const REVIEW_COLUMNS: [Column<ReviewRow>; 5] = [
         name: "title",
         header: "title",
         cell: |(d, _, _)| d.title.clone(),
-        paint: listing::ColumnPaint::None,
+        paint: listing::ColumnPaint::Alternate([listing::TITLE_EVEN, listing::TITLE_ODD]),
     },
 ];
 

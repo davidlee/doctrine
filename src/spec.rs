@@ -1238,7 +1238,7 @@ const SPEC_COLUMNS: [listing::Column<SpecListRow>; 5] = [
         name: "title",
         header: "title",
         cell: |r| r.title.clone(),
-        paint: listing::ColumnPaint::None,
+        paint: listing::ColumnPaint::Alternate([listing::TITLE_EVEN, listing::TITLE_ODD]),
     },
     listing::Column {
         name: "members",
