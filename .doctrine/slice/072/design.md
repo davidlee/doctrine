@@ -17,7 +17,7 @@ Engine tier:
   src/map_server/shell.rs   → DotRenderer trait + RealDotRenderer impl
   src/map_server/error.rs   → MapServerError enum + axum IntoResponse
   src/map_server/open.rs    → pure URL construction + browser-invoke helper
-  src/map_server/markdown.rs → entity body path lookup (delegates to catalog)
+  src/map_server/markdown.rs → entity body path lookup (isolated; temporary duplication of catalog conventions)
 
   src/catalog/              → CatalogGraph, CatalogEntity (read-only, existing)
   src/root.rs               → project root detection (existing)
@@ -121,6 +121,8 @@ pub(crate) enum MapServerError {
     EntityNotFound(String),
     #[error("asset not found: {0}")]
     AssetNotFound(String),
+    #[error("entity markdown not implemented for kind: {0}")]
+    MarkdownNotImplemented(&'static str),
     #[error("request body too large")]
     BodyTooLarge,
     #[error("{tool} is unavailable")]
@@ -140,21 +142,22 @@ pub(crate) enum MapServerError {
 
 Implements `axum::response::IntoResponse`. Response body: `{"error":"snake_case_variant","message":"..."}`
 (JSON), with `stderr` included for `CommandFailed`. Status codes: 400 BadEntityId, 404
-EntityNotFound/AssetNotFound, 413 BodyTooLarge, 422 CommandFailed, 503 ToolUnavailable,
-504 Timeout, 500 Other.
+EntityNotFound/AssetNotFound, 413 BodyTooLarge, 422 CommandFailed,
+501 MarkdownNotImplemented, 503 ToolUnavailable, 504 Timeout, 500 Other.
 
 **Stderr cap:** `CommandFailed.stderr` is truncated to 8 KiB before serialization into the
 JSON response to prevent unbounded payload leakage. The full stderr is available in any
 future server-side log layer but never in the HTTP body.
 
-### Entity markdown lookup (catalog-owned)
+### Entity markdown lookup (isolated in map_server::markdown)
 
 ```rust
 // src/map_server/markdown.rs
 
 /// Return the Markdown body for a known entity key.
-/// Delegates to catalog for path derivation — the map server does not know
-/// per-kind directory/stem conventions.
+/// Path derivation is isolated here; it temporarily duplicates catalog
+/// path conventions for non-REQ, non-memory kinds. Promotion into `catalog`
+/// is required before additional path exceptions are added.
 pub(crate) async fn read_entity_markdown(
     root: &Path,
     key: &EntityKey,
@@ -162,32 +165,35 @@ pub(crate) async fn read_entity_markdown(
     let path = entity_md_path(root, key)?;
     tokio::fs::read_to_string(&path)
         .await
-        .map_err(|e| MapServerError::Other(e.into()))
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => MapServerError::EntityNotFound(key.canonical()),
+            _ => MapServerError::Other(e.into()),
+        })
 }
 
 /// Derive the .md file path for an entity key.
 /// Known kinds use the catalog convention: `<kind.dir>/<nnn>/<stem>.md`.
-/// Memory kinds (ASM, DEC, QUE, CON) delegate to `memory::read_body`.
+/// Memory kinds (ASM, DEC, QUE, CON) read the entity's record TOML to extract
+/// the UID, then delegate to `memory::read_body`.
 /// Requirements (REQ) return 501 — unresolved in SL-072 (needs parent spec lookup).
 fn entity_md_path(root: &Path, key: &EntityKey) -> Result<PathBuf, MapServerError> {
     match key.prefix {
-        "REQ" => Err(MapServerError::Other(anyhow::anyhow!(
-            "requirement markdown not yet implemented"
-        ))),
-        // Memory kinds: items/ or shipped/ fallback
+        "REQ" => Err(MapServerError::MarkdownNotImplemented("REQ")),
+        // Knowledge records (ASM/DEC/QUE/CON): read the record TOML to get the uid,
+        // then the body lives at `{kind.dir}/{id:03}/record-{id:03}.md`.
+        // The uid is in the TOML for memory::read_body; for path-only lookup we use
+        // the entity directory's record-NNN.md directly.
         "ASM" | "DEC" | "QUE" | "CON" => {
-            // memory::read_body handles path logic; we call it synchronously.
-            // The map server only needs the path; memory's internal fallback
-            // is opaque to us.
-            let uid = memory_uid_for_key(root, key)?;
-            Ok(memory_body_path(root, &uid))
+            let kind = integrity::kind_by_prefix(key.prefix)
+                .ok_or(MapServerError::BadEntityId(key.canonical()))?;
+            let dir = root.join(kind.kind.dir).join(format!("{:03}", key.id));
+            Ok(dir.join(format!("{}-{:03}.md", kind.stem, key.id)))
         }
         _ => {
             let kind = integrity::kind_by_prefix(key.prefix)
                 .ok_or(MapServerError::BadEntityId(key.canonical()))?;
-            let dir = root.join(kind.dir).join(format!("{:03}", key.id));
-            let stem = kind_stem(key);
-            Ok(dir.join(format!("{stem}.md")))
+            let dir = root.join(kind.kind.dir).join(format!("{:03}", key.id));
+            Ok(dir.join(format!("{}-{:03}.md", kind.stem, key.id)))
         }
     }
 }
@@ -195,9 +201,10 @@ fn entity_md_path(root: &Path, key: &EntityKey) -> Result<PathBuf, MapServerErro
 
 This is the single function in the map server that knows entity kind structure.
 It validates the prefix against `integrity::KINDS` (returns 400 for unknown
-prefixes — no panics). If demand grows, this function should be promoted into
-the catalog module, but for SL-072 the isolated helper keeps the map server
-self-contained and testable.
+prefixes — no panics). **Temporary duplication:** path derivation for
+slice/adr/spec/etc. kinds repeats catalog conventions. Promotion into
+`catalog::hydrate::entity_body_path(root, key)` is required before additional
+path exceptions are added beyond SL-072.
 
 **REQ explicit decision:** requirement markdown returns HTTP 501 for SL-072.
 The parent-spec lookup needed for REQ path resolution is a non-trivial catalog
@@ -208,9 +215,6 @@ map server. The route handler and tests encode 501 explicitly.
 
 ```rust
 pub(crate) fn router(state: AppState) -> Router {
-    let body_limit = ServiceBuilder::new()
-        .layer(DefaultBodyLimit::max(DOT_BODY_LIMIT));
-
     Router::new()
         .route("/", get(index))
         .route("/assets/{*path}", get(asset))
@@ -218,7 +222,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/graph", get(graph))
         .route("/api/refresh", post(refresh))
-        .route("/api/dot/svg", post(dot_svg).layer(body_limit))
+        .route("/api/dot/svg", post(dot_svg).layer(DefaultBodyLimit::max(DOT_BODY_LIMIT)))
         .route("/api/entity/{id}/markdown", get(entity_markdown))
         .with_state(state)
 }
@@ -290,12 +294,13 @@ async fn dot_version() -> Result<String, MapServerError> {
         .arg("-V")
         .stdout(Stdio::null())
         .stderr(Stdio::piped()) // graphviz prints version to stderr
+        .kill_on_drop(true)
         .spawn()
         .map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => MapServerError::ToolUnavailable { tool: "dot" },
             _ => MapServerError::Other(e.into()),
         })?;
-
+    // kill_on_drop(true) ensures child cleanup on timeout
     let output = tokio::time::timeout(HEALTH_DOT_TIMEOUT, child.wait_with_output())
         .await
         .map_err(|_| MapServerError::Timeout { command: "dot" })??;
@@ -326,11 +331,13 @@ async fn graph(State(state): State<AppState>) -> impl IntoResponse {
 }
 ```
 
-`CatalogGraph` derives `Clone` (adds `#[derive(Clone)]`). The browser receives
-raw `CatalogGraph` JSON (`{ nodes: {...}, edges: [...], diagnostics: [...] }`).
+`CatalogGraph` already derives `Clone`. The browser receives
+raw `CatalogGraph` JSON (`{ nodes: {...}, edges: [...] }`).
 This is an **internal format** — the browser normalizes as needed and the shape
-may change with catalog evolution. A minimum contract test verifies required
-top-level keys.
+may change with catalog evolution. Diagnostics live on `Catalog`, not
+`CatalogGraph`; if diagnostics are needed in the browser later, a separate
+`/api/diagnostics` endpoint is the right seam. A minimum contract test verifies
+required top-level keys (`nodes`, `edges`).
 
 ### `POST /api/refresh` — re-scan corpus
 
@@ -346,7 +353,9 @@ async fn refresh(State(state): State<AppState>) -> Result<impl IntoResponse, Map
 ### `POST /api/dot/svg` — browser DOT → SVG
 
 Body size limited by `DefaultBodyLimit` layer on the route (defense-in-depth)
-plus an in-handler check. On timeout, the child is explicitly killed and reaped.
+plus an in-handler check. On timeout/cancellation, the child is configured with
+`kill_on_drop(true)` so it is killed on drop; explicit reap is not guaranteed
+by this function.
 
 ```rust
 async fn dot_svg(
@@ -369,8 +378,10 @@ async fn entity_markdown(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, MapServerError> {
-    validate_entity_id(&id)?;
-    let key = parse_entity_key(&id)?;
+    let (kind_ref, num) = integrity::parse_canonical_ref(&id)
+        .map_err(|_| MapServerError::BadEntityId(id.clone()))?;
+    let key = EntityKey { prefix: kind_ref.kind.prefix, id: num };
+    // Prefix + numeric id validated by parse_canonical_ref — no separate guards.
     let graph = state.graph.read().await;
     let _node = graph.nodes.get(&NodeKey::Entity(key))
         .ok_or(MapServerError::EntityNotFound(id.clone()))?;
@@ -381,9 +392,12 @@ async fn entity_markdown(
 }
 ```
 
-Entity ID validation: regex `^[A-Z][A-Z0-9]*-[0-9]{3,}$`. Loose forms are browser concerns.
-Prefix is additionally validated against `integrity::KINDS` inside `entity_md_path` —
-an unknown prefix returns 400, never panics.
+Entity ID validation reuses `integrity::parse_canonical_ref` — the single
+corpus-wide ID parser — rather than a parallel regex. No digit-count guard
+is applied: `parse_canonical_ref` accepts any valid prefix + `u32` id, and
+`EntityKey::canonical()` zero-pads to 3 digits for display regardless of
+actual magnitude. Loose forms are browser concerns. Unknown prefixes are
+rejected by `parse_canonical_ref` itself (returns 400, never panics).
 
 ## 4. Graphviz Process Bridge
 
@@ -408,17 +422,14 @@ impl DotRenderer for RealDotRenderer {
                 _ => MapServerError::Other(e.into()),
             })?;
 
-        // Write stdin in a separate task so we can race it with timeout
+        // Write stdin (owned); drop to signal EOF
         let mut stdin = child.stdin.take().expect("stdin piped");
-        let write_task = tokio::spawn(async move {
-            stdin.write_all(dot).await
-        });
-
-        // Wait for stdin write with timeout
-        tokio::time::timeout(DOT_TIMEOUT, write_task)
+        let dot_owned = dot.to_vec();
+        tokio::time::timeout(DOT_TIMEOUT, stdin.write_all(&dot_owned))
             .await
             .map_err(|_| MapServerError::Timeout { command: "dot" })?
-            .map_err(|e| MapServerError::Other(e.into()))??;
+            .map_err(|e| MapServerError::Other(e.into()))?;
+        drop(stdin);
 
         // Wait for child to finish with timeout
         let output = tokio::time::timeout(DOT_TIMEOUT, child.wait_with_output())
@@ -492,11 +503,9 @@ pub(crate) struct MapServeArgs {
 }
 
 fn validate_focus(s: &str) -> Result<String, String> {
-    if ENTITY_ID_RE.is_match(s) {
-        Ok(s.to_owned())
-    } else {
-        Err(format!("focus must be a canonical entity id (e.g. SL-001), got '{s}'"))
-    }
+    integrity::parse_canonical_ref(s)
+        .map(|_| s.to_owned())
+        .map_err(|e| format!("focus must be a canonical entity id (e.g. SL-001), got '{s}': {e}"))
 }
 
 pub(crate) async fn run_serve(path: Option<PathBuf>, args: MapServeArgs) -> anyhow::Result<()> {
@@ -556,7 +565,9 @@ pub(crate) async fn serve(config: Config) -> anyhow::Result<()> {
 
     if config.open {
         let url = map_url(addr, config.focus.as_deref(), config.depth);
-        open_browser(&url)?;
+        if let Err(err) = open_browser(&url) {
+            eprintln!("Could not open browser: {err}");
+        }
     }
 
     axum::serve(listener, app).await?;
@@ -586,8 +597,7 @@ fn open_browser(url: &str) -> anyhow::Result<()> {
 }
 ```
 
-`webbrowser` shells out to the platform browser opener (xdg-open/open/start).
-Failure is non-fatal for the server; the printed URL still works.
+Browser-open failure is non-fatal: the printed URL still works.
 
 ## 7. Browser-Side Security Policy
 
@@ -634,14 +644,14 @@ Reuses `catalog::test_helpers::*` (`seed_slice`, `seed_requirement`, `seed_adr`,
 | `GET /` → 200, HTML content-type | Index served from embedded assets | None |
 | `GET /assets/nope.js` → 404 | Missing asset returns not-found | None |
 | `GET /api/graph` → 200, valid JSON, correct entity/edge counts | Catalog→JSON round-trip | 1 slice, 1 ADR, 1 edge |
-| `GET /api/graph` → top-level keys `nodes`/`edges`/`diagnostics` present | Minimum contract shape | 1 entity |
+| `GET /api/graph` → top-level keys `nodes`/`edges` present | Minimum contract shape | 1 entity |
 | `POST /api/refresh` → 200, then `GET /api/graph` shows added entity | Refresh re-scans from disk | Mutate fixture between calls |
 | `GET /api/entity/SL-001/markdown` → 200, `text/markdown`, body matches `.md` | MD retrieval from correct path | Slice with non-empty `.md` |
 | `GET /api/entity/SL-999/markdown` → 404 | Missing entity → not found | No SL-999 in fixture |
 | `GET /api/entity/sl-001/markdown` → 400 | Malformed ID rejected | None |
 | `GET /api/entity/BOGUS-001/markdown` → 400 | Unknown prefix rejected | None |
-| `GET /api/entity/REQ-001/markdown` → 501 | REQ explicitly unimplemented | Requirement in fixture |
-| `GET /api/entity/ASM-001/markdown` → 200 | Memory entity delegates to `memory::read_body` | Memory with body |
+| `GET /api/entity/REQ-001/markdown` → 501, `{"error":"markdown_not_implemented"}` | REQ explicitly unimplemented via dedicated variant | Requirement in fixture |
+| `GET /api/entity/ASM-001/markdown` → 200 | Memory entity path derived via memory module conventions | Memory with body |
 | `GET /api/health` → 200, correct JSON shape | Health reports capability status | Fixture with entities |
 
 ### 8.3 DotRenderer tests (fake injected)
@@ -673,19 +683,20 @@ Reuses `catalog::test_helpers::*` (`seed_slice`, `seed_requirement`, `seed_adr`,
 | `CommandFailed{command:"dot",status:Some(1),stderr:"err"}` | 422 | `error`, `message`, `stderr` |
 | `ToolUnavailable{tool:"dot"}` | 503 | `error`, `message` |
 | `Timeout{command:"dot"}` | 504 | `error`, `message` |
+| `MarkdownNotImplemented("REQ")` | 501 | `error`, `message` |
 | `Other(anyhow!("internal"))` | 500 | `error`, `message` (no raw debug) |
 
 ### 8.6 Entity ID validation tests (pure unit)
 
 | Input | Expected |
 |---|---|
-| `"SL-001"` | valid |
-| `"SL-001"` → `("SL", 1)` | parsed correctly |
-| `"ADR-012"` → `("ADR", 12)` | parsed correctly |
-| `"sl-001"` | invalid (lowercase) |
-| `"SL-1"` | invalid (not 3+ digits) |
-| `"SL-1000"` | valid (4+ digits) |
-| `"SL-001-trailing"` | invalid |
+| `"SL-001"` | valid (`parse_canonical_ref` succeeds) |
+| `"SL-001"` → `("SL", 1)` | parsed correctly via `parse_canonical_ref` |
+| `"ADR-012"` → `("ADR", 12)` | parsed correctly via `parse_canonical_ref` |
+| `"sl-001"` | invalid (`parse_canonical_ref` rejects lowercase prefix) |
+| `"SL-1"` | valid (any `u32` id is accepted; no digit-count guard) |
+| `"SL-1000"` | valid (`parse_canonical_ref` succeeds) |
+| `"SL-001-trailing"` | invalid (`parse_canonical_ref` rejects) |
 | `""` | invalid |
 
 ### 8.7 URL construction tests (pure)
@@ -723,20 +734,24 @@ Reuses `catalog::test_helpers::*` (`seed_slice`, `seed_requirement`, `seed_adr`,
 | Decision | Rationale |
 |---|---|
 | Loopback-only binding (no `--host`) | Security property; non-loopback needs explicit risk assessment |
+| `MarkdownNotImplemented` dedicated variant | Named error with correct 501 status, not `Other`→500 |
 | DotRenderer as sole trait | Process seam is the only hard-to-test surface |
 | CatalogGraph cloned for response | Avoids holding read lock during serialization |
 | Refresh via POST, not polling | Explicit, simple, no cache invalidation |
 | Entity markdown in isolated `markdown.rs` module | Confines per-kind path logic; no entity semantics leak into routes |
 | REQ markdown → 501 for SL-072 | Parent-spec lookup needs catalog work; not map server's concern |
 | `AssetNotFound` separate from `EntityNotFound` | Distinct error contracts for assets vs entities |
-| `DefaultBodyLimit` layer + in-handler check | Defense-in-depth for DOT body size |
+| `DefaultBodyLimit` route-layer + in-handler check | Defense-in-depth for DOT body size |
 | `kill_on_drop(true)` on dot child | Guaranteed cleanup even under cancellation |
 | Stderr capped at 8 KiB in response | Prevents unbounded process output in HTTP body |
 | `focus` validated at CLI parse, URL constructed purely | No raw string injection into URL; URL logic is testable |
 | Depth clamped 1..=3 at CLI parse | Prevents unbounded graph expansion |
 | Browser placeholder only in SL-072 | Rust server is the deliverable; full UX is follow-up |
 | DOT is rendering utility, not graph semantics | Canonical graph remains in catalog/cordage |
+| No `tokio::spawn` for stdin write | `dot` is owned before write — no lifetime issue |
 | No `mime_guess` dep | 6 extensions cover all embedded assets |
+| Entity ID parsed via `integrity::parse_canonical_ref` | Reuses the single corpus-wide ID parser — no parallel regex; digit-count minimum enforced in route handler as a separate guard |
+| Entity ID validated against `integrity::KINDS` for prefix lookup | No second kind registry; `kind_by_prefix` is the authority |
 
 ## 11. Concurrency Model
 
@@ -749,7 +764,10 @@ Reuses `catalog::test_helpers::*` (`seed_slice`, `seed_requirement`, `seed_adr`,
 - **Refresh + markdown race:** If refresh removes an entity between the graph
   lookup and the filesystem read, the filesystem read fails → 404. This is
   correct behaviour — the entity was valid when the request started but no
-  longer exists. Test: `deleted_entity_after_lookup_returns_404`.
+  longer exists. Test: `entity_in_graph_but_missing_markdown_returns_404` (entity present in
+graph snapshot but `.md` file absent on disk). A true "deleted after lookup"
+race requires an injection seam between graph read and file read, which is
+overkill for SL-072.
 
 ## 12. Open Questions / Risks
 
@@ -759,9 +777,24 @@ Reuses `catalog::test_helpers::*` (`seed_slice`, `seed_requirement`, `seed_adr`,
 - **CatalogGraph `Clone` cost.** The graph is cloned on every `/api/graph` request.
   For a Doctrine corpus (hundreds of entities, low thousands of edges), this is
   negligible. Profile before optimizing to an `Arc`-swap pattern.
-- **Memory entity path lookup.** Uses `memory::read_body` which is synchronous
-  (reads files). The map server calls it inside `tokio::task::spawn_blocking`
-  if it proves slow. For now, file reads are fast enough.
+- **Memory entity path lookup (PHASE-03 scoping).** Knowledge records (ASM/DEC/QUE/CON)
+  live under `.doctrine/knowledge/{assumption,decision,question,constraint}/NNN/`
+  with `record-NNN.{toml,md}` files. Resolving `ASM-001` to a `.md` path requires
+  reading the entity's TOML to extract the UID, then delegating to
+  `memory::read_body(root, uid)`. The helper functions `memory_uid_for_key` and
+  `memory_body_path` do not exist yet — they are implemented in PHASE-03 as part
+  of the `map_server::markdown` module, not as a prerequisite in the memory module.
+  If the path derivation grows complex, it should move into `memory::body_path(root, key)`
+  in a follow-up.
+- **Entity ID parsing.** The map server reuses `integrity::parse_canonical_ref` —
+  the single corpus-wide ID parser — rather than introducing a parallel regex.
+  A separate digit-count guard (`id >= 100` for ≥3 digits in canonical form) is
+  applied in the route handler for URL-discipline, not at parse time.
+- **`catalog::test_helpers` visibility.** Helper functions (`seed_slice`, `seed_adr`,
+  `seed_requirement`, `seed_memory`) are currently `pub(in crate::catalog)` —
+  invisible to `src/map_server/` tests. Their visibility is widened to `pub(crate)`
+  during PHASE-05 (the first phase that needs them for route integration tests).
 - **`webbrowser` crate platform support.** Shells out to platform opener; well-tested
-  on Linux/macOS/Windows. Edge case systems (headless, minimal containers) fail
-  gracefully — the URL is still printed.
+  on Linux/macOS/Windows. Edge case systems (headless, minimal containers): the
+  URL is printed regardless, and open failure is logged but does not abort
+  server startup.
