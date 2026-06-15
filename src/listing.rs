@@ -425,8 +425,8 @@ const TAG_PALETTE: [owo_colors::Rgb; 12] = [
 /// for alternating row visual separation. Even rows → `TITLE_EVEN`; odd rows →
 /// `TITLE_ODD`. Wired via [`ColumnPaint::Alternate`] on the title column of each
 /// list surface.
-pub(crate) const TITLE_EVEN: owo_colors::DynColors = owo_colors::DynColors::Rgb(235, 219, 178); // #ebdbb2
-pub(crate) const TITLE_ODD: owo_colors::DynColors = owo_colors::DynColors::Rgb(213, 196, 161); // #d5c4a1
+pub(crate) const TITLE_EVEN: owo_colors::DynColors = owo_colors::DynColors::Rgb(235, 235, 235); // #ebdbb2
+pub(crate) const TITLE_ODD: owo_colors::DynColors = owo_colors::DynColors::Rgb(215, 184, 57); // #d5c4a1
 
 /// A pure byte fold (FNV-1a, 32-bit) over a segment's bytes. No RNG, no clock —
 /// deterministic across runs. Wrapping arithmetic keeps it cast-free (repo clippy

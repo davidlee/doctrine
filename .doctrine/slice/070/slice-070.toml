@@ -1,7 +1,7 @@
 id = 70
 slug = "list-coloring"
 title = "CLI list UI coloring & improvements"
-status = "started"
+status = "audit"
 created = "2026-06-15"
 updated = "2026-06-15"
 
