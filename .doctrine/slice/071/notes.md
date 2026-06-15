@@ -50,3 +50,28 @@ Fixture: 4 entities (SL-001, SL-003, ADR-002, REQ-005) spanning 2 KINDS with id
   warnings; `just gate` passes.
 
 **Commits**: `707f7fd` (tests + fixture + memory), `257bb29` (verify memory).
+
+## PHASE-03 (2026-06-15) — Richer catalog types
+
+- **Created** `src/catalog/diagnostic.rs` with `CatalogDiagnostic` + `Severity`.
+- **Created** `src/catalog/hydrate.rs` with `Catalog`, `CatalogEntity`,
+  `CatalogEdge`, `EdgeTarget`, `EdgeOrigin`, `SourceSpan` types.
+- **Implemented** `Catalog::from_scanned(root, &[ScannedEntity])` — pure
+  projection. Classifies edge targets via `integrity::parse_canonical_ref` into
+  `Resolved` / `UnresolvedRef` / `UnvalidatedText`. Entity paths derived from
+  `EntityKey` + `Kind.dir`. `BTreeSet<EntityKey>` for O(log n) lookups.
+- **`scan_catalog(root)`** — thin wrapper: `scan_entities` then `from_scanned`.
+  No second KINDS walk.
+- **Diagnostics**: one `Warning` per `UnresolvedRef`, one `Info` per
+  `UnvalidatedText`. Fail-fast on bad entities preserved (that's `scan_entities`).
+- **9 new tests**: entity hydration, resolved/unresolved/unvalidated edge
+  classification, diagnostic generation, path derivation, scan integration,
+  `classify_target` edge cases (unknown prefix, no dash, parses-absent,
+  parses-present).
+- **Design note**: `SourceSpan.file` and `EdgeOrigin.file` use entity directory
+  path — the entity stem is not carried on `ScannedEntity`, and each entity dir
+  has exactly one TOML, so the dir path is unambiguous.
+- **Dead code**: `cfg_attr(not(test), expect(dead_code, ...))` on structs and
+  functions. Fields read by tests but not yet by prod consumers (PHASE-04/05/06).
+- **Gate**: 1337 tests (1330 + 9 new), 0 failures; `cargo clippy` zero warnings;
+  `just gate` passes workspace-wide. PHASE-02 equivalence tests green unchanged.

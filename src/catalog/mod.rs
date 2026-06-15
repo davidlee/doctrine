@@ -8,4 +8,6 @@
 //! - `graph` — presentation-neutral graph projection (PHASE-04)
 //! - `diagnostic` — structured diagnostics (PHASE-03)
 
+pub(crate) mod diagnostic;
+pub(crate) mod hydrate;
 pub(crate) mod scan;
