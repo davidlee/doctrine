@@ -1,0 +1,25 @@
+id    = 34
+slug  = "reconciliation-review-of-sl-071"
+title = "reconciliation review of SL-071"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-071"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "validate_relations comment claims debug_assert that does not exist"
+detail = "In src/relation_graph.rs:328-331, the comment states 'Violation is a bug caught by debug_assert.' but no debug_assert!() call exists in the code path. The lookup is if let Some(kind) = entity_kinds.get(&edge.source) which silently skips if the source key is absent (unreachable by invariant, but not loud in debug). PHASE-07 runtime notes document the adaptation: clippy denies expect_used/indexing_slicing in non-test code, so .expect() or [] indexing were not options. The invariant is correctly documented, but the 'debug_assert' claim in the comment is factually wrong — it asserts behaviour that does not exist."
+disposition = "fix-now"
+response = "Remove the misleading sentence 'Violation is a bug caught by debug_assert.' from the comment. The preceding sentences already document the invariant correctly: 'Edge source always exists in entity_kinds — edges are built from entities in the same Catalog. The if let is a type-system requirement (BTreeMap::get returns Option), not a genuine fallibility.' No behavioural change — purely a comment accuracy fix."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

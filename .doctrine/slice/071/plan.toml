@@ -165,3 +165,32 @@ verification = [
 ]
 specs        = []
 requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "Code review remediation — test hygiene, defensive invariants, CLI polish"
+objective = "Resolve seven findings from the post-implementation code review: (1) extract duplicate test-helper functions (`write`, `tmp`, `relation_rows`, `seed_slice`, `seed_adr`, `seed_requirement`) from `scan.rs`, `hydrate.rs`, and `graph.rs` into a shared `#[cfg(test)] mod test_helpers` under `src/catalog/`; (2) rename the typo `slice_requirement` → `seed_requirement` in `graph.rs` tests; (3) harden `validate_relations`' edge-source lookup with `.expect()` citing the infallible-by-construction invariant; (4) strengthen e2e catalog CLI tests to assert entity/edge/diagnostic counts on the common fixture; (5) document the `NodeKey` serialization asymmetry on its `Serialize` impl; (6) document the `outgoing`/`incoming` silent-empty behaviour for non-existent nodes; (7) remove the dead `--json` flag from `CatalogCommand` subcommands (JSON is the only output, the flag misleads)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 complete — debug CLI exists, all tests green" },
+  { id = "EN-2", text = "Code review for SL-071 complete and findings documented" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Shared `#[cfg(test)] mod test_helpers` under `src/catalog/` exports `write`, `tmp`, `relation_rows`, `seed_slice`, `seed_adr`, `seed_requirement`. `scan.rs`, `hydrate.rs`, and `graph.rs` tests import from it — zero copies remain in individual test modules." },
+  { id = "EX-2", text = "`slice_requirement` in `graph.rs` renamed to `seed_requirement` — matches siblings." },
+  { id = "EX-3", text = "`validate_relations` edge-source lookup uses `.expect(\"edge source must be in entity set\")` (or an equivalent `debug_assert!` + comment citing the invariant) — never silently skips." },
+  { id = "EX-4", text = "`tests/e2e_catalog_cli.rs` asserts entity count, edge count, and diagnostic count on the seeded fixture — not JSON validity alone." },
+  { id = "EX-5", text = "`NodeKey::Serialize` impl carries a doc comment noting the asymmetry (serializes as canonical ref string, not structured variant)." },
+  { id = "EX-6", text = "`outgoing` and `incoming` doc comments note silent-empty behaviour for nodes absent from the graph." },
+  { id = "EX-7", text = "`CatalogCommand::Scan` and `CatalogCommand::Graph` drop the `--json` flag (hardcoded JSON, no format choice)." },
+  { id = "EX-8", text = "`cargo clippy` zero warnings; `cargo test` all suites green — zero regressions." },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test — all prior tests plus any new coverage tests pass, zero regressions" },
+  { id = "VT-2", expects = "cargo clippy zero warnings" },
+  { id = "VA-1", expects = "rg for test helper function bodies (write, tmp, relation_rows, seed_slice, seed_adr, seed_requirement) in scan.rs / hydrate.rs / graph.rs — zero hits; all import from the shared test_helpers module" },
+  { id = "VA-2", expects = "rg for slice_requirement in src/catalog/ — zero hits" },
+  { id = "VA-3", expects = "rg for if let Some(kind) = entity_kinds in src/relation_graph.rs — zero hits; replaced by .expect()" },
+  { id = "VA-4", expects = "rg for --json flag on CatalogCommand enum variants in src/main.rs — zero hits; flag removed" },
+]
+specs        = []
+requirements = []
