@@ -1,0 +1,50 @@
+# Implementation plan for SL-070 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewire it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-070"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "list colour improvements"
+objective = """
+Widen ColumnPaint to DynColors, replace the tag palette with gruvbox truecolour,
+add alternating title-column zebra striping, and colour backlog kind / memory
+type / memory trust columns — all gated on the existing color bool, with no
+regression on plain/JSON/no-color paths.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and all sections accepted" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "cargo test green — all existing suites pass unchanged (behaviour-preservation gate)" },
+  { id = "EX-2", text = "just check zero clippy warnings (plain cargo clippy, not --all-targets)" },
+  { id = "EX-3", text = "doctrine slice list, backlog list, memory list, adr list, spec list, review list all render with correct new colours on a real terminal" },
+  { id = "EX-4", text = "--json output byte-identical before and after for every list surface" },
+  { id = "EX-5", text = "NO_COLOR / pipe suppresses all colour (existing VT-3/4 hold)" },
+]
+verification = [
+  { id = "VT-1", expects = "paint_cell with Alternate variant returns even-hued cell at row_index 0 and odd-hued at row_index 1" },
+  { id = "VT-2", expects = "paint_cell with Alternate under color=false returns plain text (no ANSI)" },
+  { id = "VT-3", expects = "backlog_kind_hue maps all 5 known kinds to distinct DynColors; unknown kind returns None" },
+  { id = "VT-4", expects = "memory_type_hue maps all 6 known types to distinct DynColors; unknown type returns None" },
+  { id = "VT-5", expects = "trust_hue maps high/medium/low to Green/Yellow/Red DynColors; unknown trust returns None" },
+  { id = "VT-6", expects = "paint_tag with gruvbox palette produces ANSI-escaped output; strip_ansi reproduces plain tag text" },
+  { id = "VT-7", expects = "render_columns with Alternate-painted title column and plain id column: title cells carry ANSI alternating escapes, id cells carry Fixed DynColors::Ansi(Cyan) — verified via strip_ansi" },
+  { id = "VT-8", expects = "All 10 column-definition sites compile with DynColors::Ansi(AnsiColors::Cyan) — no bare AnsiColors::Cyan survives in a Fixed" },
+  { id = "VT-9", expects = "CoverageRow::status_hue return type compiles as Option<DynColors> (delegates to widened listing::status_hue)" },
+]
+specs             = []
+requirements      = []

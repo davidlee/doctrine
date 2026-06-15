@@ -282,7 +282,7 @@ impl CoverageRow {
     /// The status-column hue from the ROW's raw authored status (SL-053 PHASE-02,
     /// F-4) — a `Dangling` row (whose `status` cell is the inline load-error note)
     /// is never coloured.
-    fn status_hue(&self) -> Option<owo_colors::AnsiColors> {
+    fn status_hue(&self) -> Option<owo_colors::DynColors> {
         match self {
             CoverageRow::Healthy { status, .. } => listing::status_hue(status.as_str()),
             CoverageRow::Dangling { .. } => None,
@@ -300,7 +300,7 @@ const COVERAGE_COLUMNS: [listing::Column<CoverageRow>; 6] = [
         name: "id",
         header: "id",
         cell: |r| r.id().to_owned(),
-        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
     },
     listing::Column {
         name: "label",

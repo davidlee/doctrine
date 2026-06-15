@@ -110,7 +110,7 @@ const GOV_COLUMNS: [listing::Column<GovRow>; 4] = [
         name: "id",
         header: "id",
         cell: |r| r.id.clone(),
-        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
     },
     listing::Column {
         name: "status",
