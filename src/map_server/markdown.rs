@@ -6,6 +6,10 @@
 //! scan.  Memory kinds (ASM/DEC/QUE/CON) use the same `kind.dir`/`stem`
 //! convention — their stem is `"record"`, so the path is
 //! `{kind.dir}/{id:03}/record-{id:03}.md`.
+#![allow(
+    dead_code,
+    reason = "read_entity_markdown + entity_md_path consumed in PHASE-05 (routes)"
+)]
 
 use std::path::{Path, PathBuf};
 
@@ -16,7 +20,6 @@ use crate::map_server::error::MapServerError;
 ///
 /// Reads the `.md` file at the path derived by [`entity_md_path`].
 /// Returns [`MapServerError::EntityNotFound`] when the file does not exist.
-#[allow(dead_code, reason = "consumed in PHASE-05 (routes)")]
 pub(crate) async fn read_entity_markdown(
     root: &Path,
     key: &crate::catalog::scan::EntityKey,
@@ -42,22 +45,17 @@ pub(crate) async fn read_entity_markdown(
 /// unresolved in SL-072.
 ///
 /// Unknown prefixes return [`MapServerError::BadEntityId`].
-#[allow(dead_code, reason = "consumed in PHASE-05 (routes)")]
 fn entity_md_path(
     root: &Path,
     key: &crate::catalog::scan::EntityKey,
 ) -> Result<PathBuf, MapServerError> {
-    match key.prefix {
-        "REQ" => Err(MapServerError::MarkdownNotImplemented("REQ")),
-        _ => {
-            let kind_ref = integrity::kind_by_prefix(key.prefix)
-                .ok_or_else(|| MapServerError::BadEntityId(key.canonical()))?;
-            let dir = root
-                .join(kind_ref.kind.dir)
-                .join(format!("{:03}", key.id));
-            Ok(dir.join(format!("{}-{:03}.md", kind_ref.stem, key.id)))
-        }
+    if key.prefix == "REQ" {
+        return Err(MapServerError::MarkdownNotImplemented("REQ"));
     }
+    let kind_ref = integrity::kind_by_prefix(key.prefix)
+        .ok_or_else(|| MapServerError::BadEntityId(key.canonical()))?;
+    let dir = root.join(kind_ref.kind.dir).join(format!("{:03}", key.id));
+    Ok(dir.join(format!("{}-{:03}.md", kind_ref.stem, key.id)))
 }
 
 #[cfg(test)]
@@ -85,10 +83,7 @@ mod tests {
     #[test]
     fn path_for_adr() {
         let p = entity_md_path(root(), &key("ADR", 12)).unwrap();
-        assert_eq!(
-            p,
-            PathBuf::from("/corpus/.doctrine/adr/012/adr-012.md")
-        );
+        assert_eq!(p, PathBuf::from("/corpus/.doctrine/adr/012/adr-012.md"));
     }
 
     #[test]
