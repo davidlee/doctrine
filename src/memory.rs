@@ -1073,7 +1073,7 @@ const MEMORY_COLUMNS: [Column<Memory>; 6] = [
         name: "uid",
         header: "uid",
         cell: |m| m.uid.clone(),
-        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
     },
     Column {
         name: "type",

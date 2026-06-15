@@ -1220,7 +1220,7 @@ const SPEC_COLUMNS: [listing::Column<SpecListRow>; 5] = [
         name: "id",
         header: "id",
         cell: |r| r.id.clone(),
-        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
     },
     listing::Column {
         name: "status",
@@ -1372,7 +1372,7 @@ const REQ_COLUMNS: [listing::Column<ReqListRow>; 4] = [
         name: "id",
         header: "id",
         cell: |r| r.id.clone(),
-        paint: listing::ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
     },
     listing::Column {
         name: "label",

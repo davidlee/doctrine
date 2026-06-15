@@ -301,18 +301,23 @@ pub(crate) enum ColumnPaint<R> {
     /// only behaviour under `color = false`).
     None,
     /// A single fixed hue for every cell in the column (e.g. id columns).
-    Fixed(owo_colors::AnsiColors),
+    Fixed(owo_colors::DynColors),
     /// A hue derived from the ROW — reads the row's raw semantic status, never the
     /// emitted/decorated cell text (F-4: `slice list` decorates `done ⚠`, `review
     /// list` emits `open (await …)`; matching the cell would drop colour on exactly
     /// those surfaces). `None` ⇒ that row's cell is left uncoloured.
-    ByValue(fn(&R) -> Option<owo_colors::AnsiColors>),
+    ByValue(fn(&R) -> Option<owo_colors::DynColors>),
     /// Multi-valued cell: `split` yields the row's tokens; `render` paints ONE token
     /// (ANSI). Invoked ONLY under `color = true`; tokens joined by `", "`.
     PerToken {
         split: fn(&R) -> Vec<String>,
         render: fn(&str) -> String,
     },
+    /// Alternating two-hue foreground per data-row index, for zebra-striping the
+    /// title column. `[even_hue, odd_hue]`; data row 0 uses `even_hue`. The header
+    /// row is excluded — [`render_columns`] builds it separately via [`paint_header`].
+    #[expect(dead_code, reason = "wired in T4 (per-kind column definitions)")]
+    Alternate([owo_colors::DynColors; 2]),
 }
 
 /// The single shared status→hue map for every coloured `list` surface (SL-053
@@ -333,12 +338,14 @@ pub(crate) enum ColumnPaint<R> {
 /// mapping it would be dead. `ready` is yellow alongside its in-flight lifecycle
 /// siblings (`design`/`plan`/`started`/`audit`/`reconcile`); only the pre-engagement
 /// `proposed` stays grey.
-pub(crate) fn status_hue(s: &str) -> Option<owo_colors::AnsiColors> {
-    use owo_colors::AnsiColors::{Green, Red, Yellow};
+pub(crate) fn status_hue(s: &str) -> Option<owo_colors::DynColors> {
+    use owo_colors::{AnsiColors::{Green, Red, Yellow}, DynColors};
     match s {
-        "done" | "active" | "accepted" | "required" => Some(Green),
-        "design" | "plan" | "ready" | "started" | "audit" | "reconcile" => Some(Yellow),
-        "blocked" | "abandoned" | "contested" => Some(Red),
+        "done" | "active" | "accepted" | "required" => Some(DynColors::Ansi(Green)),
+        "design" | "plan" | "ready" | "started" | "audit" | "reconcile" => {
+            Some(DynColors::Ansi(Yellow))
+        }
+        "blocked" | "abandoned" | "contested" => Some(DynColors::Ansi(Red)),
         _ => None,
     }
 }
@@ -450,9 +457,9 @@ pub(crate) fn render_columns<R>(rows: &[R], cols: &[&Column<R>], opts: RenderOpt
     let mut grid: Vec<Vec<String>> = Vec::with_capacity(rows.len() + 1);
     // Header row: bold when colour is on (D-EX3), raw otherwise.
     grid.push(cols.iter().map(|c| paint_header(c.header, color)).collect());
-    grid.extend(rows.iter().map(|r| {
+    grid.extend(rows.iter().enumerate().map(|(i, r)| {
         cols.iter()
-            .map(|c| paint_cell(&(c.cell)(r), &c.paint, r, color))
+            .map(|c| paint_cell(&(c.cell)(r), &c.paint, r, color, i))
             .collect()
     }));
     // comfy-table's custom_styling makes its width measurement ANSI-aware, so the
@@ -476,13 +483,19 @@ fn paint_header(header: &str, color: bool) -> String {
 /// [`ColumnPaint::None`] (or a `ByValue` returning `None`) the cell is returned
 /// UNCHANGED — zero ANSI (EX-3). Uses `owo_colors`' UNCONDITIONAL `.color(..)`, gated
 /// solely on the injected bool (never `if_supports_color`, D3).
-fn paint_cell<R>(cell: &str, paint: &ColumnPaint<R>, row: &R, color: bool) -> String {
+fn paint_cell<R>(
+    cell: &str,
+    paint: &ColumnPaint<R>,
+    row: &R,
+    color: bool,
+    row_index: usize,
+) -> String {
     use owo_colors::OwoColorize;
     if !color {
         return cell.to_string();
     }
     // Multi-valued cell: paint each token via `render`, join by `", "`. Returns BEFORE
-    // the hue match (whose return type is `String`, not `Option<AnsiColors>` — folding
+    // the hue match (whose return type is `String`, not `Option<DynColors>` — folding
     // this arm in would clash). Reached ONLY under `color == true`.
     if let ColumnPaint::PerToken { split, render } = paint {
         return split(row)
@@ -491,12 +504,18 @@ fn paint_cell<R>(cell: &str, paint: &ColumnPaint<R>, row: &R, color: bool) -> St
             .collect::<Vec<_>>()
             .join(", ");
     }
+    // Alternating zebra stripe: applies to the cell directly (String-returning),
+    // so it needs its own early return before the `Option<DynColors>` hue match.
+    if let ColumnPaint::Alternate([even, odd]) = paint {
+        let hue = if row_index % 2 == 0 { *even } else { *odd };
+        return cell.color(hue).to_string();
+    }
     let hue = match paint {
         ColumnPaint::Fixed(c) => Some(*c),
         ColumnPaint::ByValue(f) => f(row),
-        // `PerToken` is handled by the early return above; folding it in beside `None`
-        // keeps the match exhaustive without a duplicate-body arm.
-        ColumnPaint::None | ColumnPaint::PerToken { .. } => None,
+        // `PerToken` and `Alternate` are handled by the early returns above; folding
+        // them in beside `None` keeps the match exhaustive.
+        ColumnPaint::None | ColumnPaint::PerToken { .. } | ColumnPaint::Alternate(_) => None,
     };
     match hue {
         Some(c) => cell.color(c).to_string(),
@@ -1321,7 +1340,7 @@ mod tests {
             name: "id",
             header: "id",
             cell: |r| r.id.to_string(),
-            paint: ColumnPaint::Fixed(owo_colors::AnsiColors::Cyan),
+            paint: ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
         },
         Column {
             name: "slug",
@@ -1514,19 +1533,27 @@ mod tests {
     /// (incl. the deliberately-unmapped phase status `in_progress`) is `None`.
     #[test]
     fn status_hue_maps_each_class_and_leaves_the_rest_uncoloured() {
-        use owo_colors::AnsiColors::{Green, Red, Yellow};
+        use owo_colors::{AnsiColors::{Green, Red, Yellow}, DynColors};
         for green in ["done", "active", "accepted", "required"] {
-            assert_eq!(status_hue(green), Some(Green), "{green} is settled/green");
+            assert_eq!(
+                status_hue(green),
+                Some(DynColors::Ansi(Green)),
+                "{green} is settled/green"
+            );
         }
         for yellow in ["design", "plan", "ready", "started", "audit", "reconcile"] {
             assert_eq!(
                 status_hue(yellow),
-                Some(Yellow),
+                Some(DynColors::Ansi(Yellow)),
                 "{yellow} is in-flight/yellow"
             );
         }
         for red in ["blocked", "abandoned", "contested"] {
-            assert_eq!(status_hue(red), Some(Red), "{red} is stopped/red");
+            assert_eq!(
+                status_hue(red),
+                Some(DynColors::Ansi(Red)),
+                "{red} is stopped/red"
+            );
         }
         // Conservative-subset tail + the pre-engagement state stay uncoloured.
         for none in [
@@ -1558,7 +1585,7 @@ mod tests {
         };
         // ByValue → Some(hue): coloured, but stripping ANSI reproduces the raw cell.
         let by_status: ColumnPaint<CRow> = ColumnPaint::ByValue(|r| status_hue(r.slug));
-        let painted = paint_cell("done", &by_status, &row, true);
+        let painted = paint_cell("done", &by_status, &row, true, 0);
         assert!(
             painted.contains('\u{1b}'),
             "ByValue Some hue emits ANSI: {painted:?}"
@@ -1571,10 +1598,10 @@ mod tests {
 
         // ByValue → None: raw, zero ANSI.
         let by_none: ColumnPaint<CRow> = ColumnPaint::ByValue(|_| None);
-        assert_eq!(paint_cell("done", &by_none, &row, true), "done");
+        assert_eq!(paint_cell("done", &by_none, &row, true, 0), "done");
 
         // color = false short-circuits before the hue lookup — raw even for Some.
-        assert_eq!(paint_cell("done", &by_status, &row, false), "done");
+        assert_eq!(paint_cell("done", &by_status, &row, false, 0), "done");
     }
 
     // -- PerToken paint + tag chips (SL-067 PHASE-02) ---------------------
@@ -1696,8 +1723,8 @@ mod tests {
             trow(&["solo"]),
         ];
         for r in &rows {
-            let plain = paint_cell(&(col.cell)(r), &col.paint, r, false);
-            let coloured = paint_cell(&(col.cell)(r), &col.paint, r, true);
+            let plain = paint_cell(&(col.cell)(r), &col.paint, r, false, 0);
+            let coloured = paint_cell(&(col.cell)(r), &col.paint, r, true, 0);
             let raw_cell = (col.cell)(r);
             assert_eq!(plain, raw_cell, "color=false is the raw cell extractor");
             assert_eq!(
@@ -1714,7 +1741,7 @@ mod tests {
     fn pertoken_color_false_emits_zero_ansi() {
         let col = tags_column();
         let r = trow(&["cli:command", "security"]);
-        let out = paint_cell(&(col.cell)(&r), &col.paint, &r, false);
+        let out = paint_cell(&(col.cell)(&r), &col.paint, &r, false, 0);
         assert!(
             !out.contains('\u{1b}'),
             "color=false PerToken is byte-clean: {out:?}"
