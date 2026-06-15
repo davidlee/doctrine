@@ -528,22 +528,15 @@ enum Command {
 #[derive(Subcommand)]
 enum CatalogCommand {
     /// Thin JSON dump of the hydrated entity corpus `Catalog` — entities,
-    /// edges, and diagnostics.
+    /// edges, and diagnostics. Output is always JSON (no format choice).
     Scan {
-        /// Output as JSON (the only format).
-        #[arg(long)]
-        json: bool,
-
         /// Explicit corpus root (default: auto-detect from CWD).
         #[arg(long)]
         root: Option<PathBuf>,
     },
     /// Thin JSON dump of the `CatalogGraph` — nodes and edges.
+    /// Output is always JSON (no format choice).
     Graph {
-        /// Output as JSON (the only format).
-        #[arg(long)]
-        json: bool,
-
         /// Explicit corpus root (default: auto-detect from CWD).
         #[arg(long)]
         root: Option<PathBuf>,
@@ -3421,8 +3414,8 @@ fn main() -> anyhow::Result<()> {
             }) => boot::run_install(path, &agent, dry_run, yes),
         },
         Command::Catalog { command } => match command {
-            CatalogCommand::Scan { json: _, root } => run_catalog_scan(root),
-            CatalogCommand::Graph { json: _, root } => run_catalog_graph(root),
+            CatalogCommand::Scan { root } => run_catalog_scan(root),
+            CatalogCommand::Graph { root } => run_catalog_graph(root),
         },
         Command::Worktree { command } => match command {
             WorktreeCommand::Provision { fork, path } => worktree::run_provision(path, &fork),

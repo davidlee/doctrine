@@ -80,7 +80,7 @@ fn catalog_scan_json_valid() {
     seed_fixture(tmp.path());
 
     let out = Command::new(BIN)
-        .args(["catalog", "scan", "--json", "--root"])
+        .args(["catalog", "scan", "--root"])
         .arg(tmp.path())
         .output()
         .expect("spawn doctrine");
@@ -97,6 +97,21 @@ fn catalog_scan_json_valid() {
     assert!(v.get("entities").is_some(), "missing entities key");
     assert!(v.get("edges").is_some(), "missing edges key");
     assert!(v.get("diagnostics").is_some(), "missing diagnostics key");
+
+    // Validate counts: 4 entities, 2 edges, 1 diagnostic.
+    // ADR-002 → ADR-001 is an UnresolvedRef (ADR-001 not in fixture);
+    // the hydrator records one Warning diagnostic per UnresolvedRef edge.
+    assert_eq!(
+        v["entities"].as_array().unwrap().len(),
+        4,
+        "expected 4 entities"
+    );
+    assert_eq!(v["edges"].as_array().unwrap().len(), 2, "expected 2 edges");
+    assert_eq!(
+        v["diagnostics"].as_array().unwrap().len(),
+        1,
+        "expected 1 diagnostic (ADR-002→ADR-001 unresolved)"
+    );
 }
 
 // --------------- VT-2: `catalog graph --json` produces valid JSON ---------------
@@ -107,7 +122,7 @@ fn catalog_graph_json_valid() {
     seed_fixture(tmp.path());
 
     let out = Command::new(BIN)
-        .args(["catalog", "graph", "--json", "--root"])
+        .args(["catalog", "graph", "--root"])
         .arg(tmp.path())
         .output()
         .expect("spawn doctrine");
@@ -123,6 +138,10 @@ fn catalog_graph_json_valid() {
     // Must carry nodes (as an object keyed by node key) and edges (as an array).
     assert!(v.get("nodes").is_some(), "missing nodes key");
     assert!(v.get("edges").is_some(), "missing edges key");
+
+    // Validate counts: 4 entities → 4 node keys, 2 edges.
+    assert_eq!(v["nodes"].as_object().unwrap().len(), 4, "expected 4 nodes");
+    assert_eq!(v["edges"].as_array().unwrap().len(), 2, "expected 2 edges");
 }
 
 // --------------- VT-3: non-existent root exits non-zero ---------------
@@ -130,7 +149,7 @@ fn catalog_graph_json_valid() {
 #[test]
 fn catalog_scan_nonexistent_root_exits_nonzero() {
     let out = Command::new(BIN)
-        .args(["catalog", "scan", "--json", "--root", "/nonexistent"])
+        .args(["catalog", "scan", "--root", "/nonexistent"])
         .output()
         .expect("spawn doctrine");
 
