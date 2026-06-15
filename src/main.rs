@@ -28,6 +28,7 @@ mod ledger;
 mod lexical;
 mod lifecycle;
 mod listing;
+mod map_server;
 mod memory;
 mod meta;
 mod plan;
