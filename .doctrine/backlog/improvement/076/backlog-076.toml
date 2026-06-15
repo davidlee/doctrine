@@ -8,8 +8,8 @@ kind = "improvement"
 status = "resolved"
 resolution = "wont-do"
 created = "2026-06-14"
-updated = "2026-06-14"
-tags = []
+updated = "2026-06-15"
+tags = ["area:cli", "testing"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with

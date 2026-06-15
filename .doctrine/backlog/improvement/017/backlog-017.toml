@@ -8,8 +8,8 @@ kind = "improvement"
 status = "resolved"
 resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-12"
-tags = []
+updated = "2026-06-15"
+tags = ["area:cli", "area:memory"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
 needs    = []                   # item→item hard prerequisite
