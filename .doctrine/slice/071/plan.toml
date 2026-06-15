@@ -1,0 +1,167 @@
+# Implementation plan for SL-071 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-071"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Mechanical re-home + compatibility re-exports"
+objective = "Create `src/catalog/mod.rs` + `src/catalog/scan.rs`. Move `EntityKey`, `ScannedEntity`, `scan_entities`, `status_and_title_for`, `title_for`, and `outbound_for` from `src/relation_graph.rs` into `catalog::scan`. Add `pub(crate) use` re-exports in `relation_graph.rs` so all existing imports compile unchanged. Add `mod catalog` to `main.rs`. `dep_seq_for` and `require_minted` stay in `relation_graph.rs`."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §1 Patch 1 is locked — no unresolved items" },
+  { id = "EN-2", text = "`src/catalog/` does not yet exist (no collision with memory corpus's `src/corpus.rs`)" },
+  { id = "EN-3", text = "Existing `inspect`/`priority`/`validate` suites are green before patch" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`catalog::scan` module compiles with all six moved items" },
+  { id = "EX-2", text = "Re-exports in `relation_graph.rs` are aliases, not wrappers — no logic duplication" },
+  { id = "EX-3", text = "`dep_seq_for` and `require_minted` remain in `relation_graph.rs` — never moved or re-exported from catalog" },
+  { id = "EX-4", text = "All existing tests pass with zero changes to test code" },
+  { id = "EX-5", text = "Zero `dead_code` warnings — every moved item is reachable through its re-export path" },
+  { id = "EX-6", text = "`cargo clippy` zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo test` all suites green — identical count, no new failures" },
+  { id = "VT-2", expects = "`cargo clippy` zero warnings — no dead_code from broken re-export chains" },
+  { id = "VT-3", expects = "`just gate` passes workspace-wide" },
+  { id = "VA-1", expects = "rg for scan_entities/outbound_for/EntityKey/ScannedEntity in relation_graph.rs hits only re-exports, no definitions" },
+  { id = "VA-2", expects = "rg for dep_seq_for/require_minted in relation_graph.rs hits definitions (not re-exports) — they stayed home" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Equivalence tests — pin scan behaviour before richer types"
+objective = "Add fixture tests that pin the existing scan's output shape, order, and consumer behaviour before richer catalog types are introduced. Tests: `scan_order_is_stable`, `catalog_scan_matches_legacy_shape`, `inspect_output_is_byte_identical`, `priority_graph_shape_unchanged`, `validate_relation_findings_unchanged`. Use a fixture `.doctrine` directory with 3+ entities spanning ≥2 KINDS entries with id gaps."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — `catalog::scan` exists with re-exports, all tests green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`scan_order_is_stable` asserts KINDS-table / id-ascending order" },
+  { id = "EX-2", text = "`catalog_scan_matches_legacy_shape` asserts (canonical key, prefix, status, title, outbound tuple) for every entity" },
+  { id = "EX-3", text = "`inspect_output_is_byte_identical` runs `doctrine inspect --json` and compares golden" },
+  { id = "EX-4", text = "`priority_graph_shape_unchanged` asserts node/edge/overlay counts" },
+  { id = "EX-5", text = "`validate_relation_findings_unchanged` asserts finding strings on known-dangling-edge fixture" },
+  { id = "EX-6", text = "Fixture directory contains ≥3 entities spanning ≥2 KINDS entries with id gaps" },
+]
+verification = [
+  { id = "VT-1", expects = "All five new tests pass" },
+  { id = "VT-2", expects = "Existing `inspect`/`priority`/`validate` suites still green — no regression" },
+  { id = "VA-1", expects = "No golden snapshots inlined as string literals in test functions — checked-in golden fixture files (e.g. `tests/fixtures/inspect_sl001_golden.json`) read via `include_str!` are permitted and preferred for byte-identical output tests" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Richer catalog types — Catalog, CatalogEntity, CatalogEdge, CatalogDiagnostic"
+objective = "Add `src/catalog/hydrate.rs` with `Catalog`, `CatalogEntity`, `CatalogEdge`, `EdgeTarget`, `EdgeOrigin` types and a `scan_catalog` entry point built from `Vec<ScannedEntity>`. Add `src/catalog/diagnostic.rs` with `CatalogDiagnostic` and `Severity`. `Catalog::from_scanned` is pure — classifies targets via `integrity::parse_canonical_ref`, derives entity paths from `EntityKey` + `Kind.dir`, wraps existing scan output. Diagnostics cover edge classification (unresolved refs) only; fail-fast entity parse is preserved."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — equivalence tests pin existing behaviour" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Catalog` struct carries `entities: Vec<CatalogEntity>`, `edges: Vec<CatalogEdge>`, `diagnostics: Vec<CatalogDiagnostic>`" },
+  { id = "EX-2", text = "`EdgeTarget` enum has three variants: `Resolved(EntityKey)`, `UnresolvedRef { raw }`, `UnvalidatedText { raw }`" },
+  { id = "EX-3", text = "`scan_catalog` calls `scan_entities` THEN `Catalog::from_scanned` — no second disk walk" },
+  { id = "EX-4", text = "`Catalog::from_scanned(root, scanned)` is pure — reads no files" },
+  { id = "EX-5", text = "Target classification uses `integrity::parse_canonical_ref` — no new parsing path" },
+  { id = "EX-6", text = "`CatalogEntity.path` is derived from `EntityKey` + `Kind.dir` — no new path convention" },
+  { id = "EX-7", text = "`SourceSpan` = `(file: PathBuf, field: Option<String>)` — no line/col tracking" },
+  { id = "EX-8", text = "`Catalog.diagnostics` contains one `CatalogDiagnostic` (severity `Warning`, with file/key/field) per `EdgeTarget::UnresolvedRef`, and one (severity `Info`) per `EdgeTarget::UnvalidatedText`" },
+]
+verification = [
+  { id = "VT-1", expects = "Fixture test: `scan_catalog` on test `.doctrine/` yields correct entities, edges, and target classifications" },
+  { id = "VT-2", expects = "Fixture test: `UnresolvedRef` detected for dangling canonical ref AND a corresponding `CatalogDiagnostic` (severity `Warning`) is present in `Catalog.diagnostics`" },
+  { id = "VT-3", expects = "Fixture test: `UnvalidatedText` detected for free-text target (e.g. Drift/DecisionRef targets)" },
+  { id = "VT-4", expects = "Fixture test: `CatalogEntity.path` is correct for each entity" },
+  { id = "VT-5", expects = "Pre-existing equivalence tests (PHASE-02) still green" },
+  { id = "VA-1", expects = "`rg 'scan_entities' src/catalog/hydrate.rs` — `Catalog::from_scanned` never calls `scan_entities` directly; only `scan_catalog` does" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Presentation-neutral graph — CatalogGraph"
+objective = "Add `src/catalog/graph.rs` with `CatalogGraph`, `NodeKey`, `CatalogNode`, `from_catalog` constructor, and `outgoing`/`incoming` query methods. Pure projection of `Catalog` — no cordage dependency. Edges with `UnresolvedRef`/`UnvalidatedText` targets appear in the edge list but have no target node. `neighbours(depth)` is deferred."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — `Catalog` types exist with `scan_catalog`" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`CatalogGraph` carries `nodes: BTreeMap<NodeKey, CatalogNode>` and `edges: Vec<CatalogEdge>`" },
+  { id = "EX-2", text = "`outgoing(node)` returns all edges whose source is `node` — including unresolved/unvalidated targets" },
+  { id = "EX-3", text = "`incoming(node)` returns only edges whose target is `Resolved(node)`" },
+  { id = "EX-4", text = "`from_catalog(&Catalog)` constructor is pure — no disk, no cordage" },
+  { id = "EX-5", text = "`CatalogGraph` does NOT implement `neighbours(depth)` — deferred per design D10" },
+]
+verification = [
+  { id = "VT-1", expects = "Fixture test: `from_catalog` on a small catalog yields correct node count and edge count" },
+  { id = "VT-2", expects = "Fixture test: `outgoing` returns edges with `UnresolvedRef` targets" },
+  { id = "VT-3", expects = "Fixture test: `incoming` does NOT return edges with `UnresolvedRef`/`UnvalidatedText` targets" },
+  { id = "VT-4", expects = "Fixture test: `incoming` correctly returns edges pointing TO a resolved entity" },
+  { id = "VT-5", expects = "All prior phase tests still green" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Consumer migration — relation_graph, validate_relations, priority"
+objective = "Migrate existing consumers to use `catalog::scan` types where beneficial. `relation_graph` already consumes via re-exports — no change. `validate_relations` optionally consumes `Catalog.edges` for dangler detection. `priority` stays on `ScannedEntity`. Verify behaviour-preservation gate: zero test changes, zero output drift. Remove any leftover adapter code that no longer serves a purpose."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete — `CatalogGraph` exists" },
+  { id = "EN-2", text = "All existing consumer tests are green before migration" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`relation_graph` continues to compile and test green via re-exports — zero changes needed" },
+  { id = "EX-2", text = "`validate_relations` optionally consumes `Catalog.edges` — behaviour identical, zero test drift" },
+  { id = "EX-3", text = "`priority` stays on `ScannedEntity` — zero changes needed, zero test drift" },
+  { id = "EX-4", text = "`coverage_scan` is NOT migrated — out of scope (follow-up slice)" },
+  { id = "EX-5", text = "No entity-scanning KINDS walker remains outside `catalog/` — `validate_relations`'s IllegalRows re-read (using KINDS for path authority: `kref.kind.dir` + `kref.stem` to locate raw TOML) is preserved as a distinct concern (Catalog carries no raw-TOML handle). The `scan_entities`-derived dangler detection migrates to `Catalog.edges`" },
+  { id = "EX-6", text = "`cargo clippy` zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo test` — all existing suites green with zero test changes" },
+  { id = "VT-2", expects = "`just gate` passes workspace-wide" },
+  { id = "VA-1", expects = "`rg 'for kref in integrity::KINDS' src/` outside `catalog/` hits exactly the IllegalRows walk in `validate_relations` and no other entity-scanning loop" },
+  { id = "VA-2", expects = "`rg 'pub(crate) use.*catalog' src/relation_graph.rs` — re-exports remain aliases, no logic wrappers" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Debug CLI — `doctrine catalog scan|graph --json`"
+objective = "Add `doctrine catalog scan --json` and `doctrine catalog graph --json` subcommands for developer inspection. Thin JSON dump of `Catalog` / `CatalogGraph` — no colour, no pagination, no table format. Optional per design D12; not gating for acceptance."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete — `Catalog` and `CatalogGraph` exist (PHASE-05 completion is recommended to prove Catalog stability but is not required for the debug CLI)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine catalog scan --json` prints a JSON representation of `Catalog` to stdout" },
+  { id = "EX-2", text = "`doctrine catalog graph --json` prints a JSON representation of `CatalogGraph` to stdout" },
+  { id = "EX-3", text = "Commands accept `--root <path>` to scan a non-default corpus" },
+  { id = "EX-4", text = "On error (malformed TOML, missing root), commands fail with a non-zero exit and stderr message" },
+  { id = "EX-5", text = "`cargo clippy` zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "`doctrine catalog scan --json` on a valid `.doctrine/` produces valid JSON with entities, edges, and diagnostics" },
+  { id = "VT-2", expects = "`doctrine catalog graph --json` on a valid `.doctrine/` produces valid JSON with nodes and edges" },
+  { id = "VT-3", expects = "`doctrine catalog scan --json --root /nonexistent` exits non-zero" },
+  { id = "VA-1", expects = "CLI is registered under `doctrine catalog` subcommand, not `doctrine corpus` or `doctrine debug` per design D4 resolution" },
+]
+specs        = []
+requirements = []
