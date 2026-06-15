@@ -27,4 +27,5 @@ Point of truth: `doc/entity-model.md` (the consolidation direction and the one
 storage rule everywhere) and `doc/relation-index.md` (why relations stay in
 typed sister files and a cache is deferred). The code lives under `src/`. See
 [[signpost.doctrine.file-map]] for the layout and [[pattern.doctrine.conventions]]
-for the pure/imperative split and no-parallel-implementation rules.
+for the pure/imperative split and no-parallel-implementation rules. For the
+relation-authoring surface, see [[signpost.doctrine.relating-entities]].

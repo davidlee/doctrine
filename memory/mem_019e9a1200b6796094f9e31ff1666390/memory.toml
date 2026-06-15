@@ -6,7 +6,7 @@ status = "active"
 title = "Doctrine skill and route map"
 summary = ""
 created = "2026-06-05"
-updated = "2026-06-06"
+updated = "2026-06-15"
 
 [scope]
 paths = ["plugins/doctrine/skills/"]

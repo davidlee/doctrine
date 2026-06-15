@@ -1,7 +1,7 @@
 # Doctrine skill and route map
 
-Doctrine ships skills under `plugins/doctrine/skills/` (glob
-`plugins/doctrine/skills/**`). Each governs a situation; `/route` chooses one
+Doctrine ships skills under `.doctrine/skills/` (glob
+`.doctrine/skills/**`). Each governs a situation; `/route` chooses one
 *before* you act. Route-before-you-act is the gate, not a suggestion.
 
 The route table's When → Skill mapping (authority: `.doctrine/state/boot.md`):
@@ -29,4 +29,6 @@ Mid-flight, any stage:
 The lifecycle ordering these stages follow:
 [[signpost.doctrine.lifecycle-start]]. Why routing is a hard gate:
 [[concept.doctrine.routing-gate]]. The CLI verbs the skills wrap:
-[[signpost.doctrine.cli-command-map]].
+[[signpost.doctrine.cli-command-map]]. See [[concept.doctrine.reading-entities]]
+for the read-via-show rule, and [[signpost.doctrine.recording-memories]] for
+the capture-retrieve cycle.

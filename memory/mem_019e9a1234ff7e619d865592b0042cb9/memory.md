@@ -27,3 +27,5 @@ Point of truth: the `## storage model (the storage rule)` section of the repo's
 it across every entity type. See [[fact.doctrine.storage-tiers]] for the tier
 cheat-sheet, [[concept.doctrine.entity-engine]] for the engine that enforces the
 TOML/MD split, and [[signpost.doctrine.file-map]] to locate the directories.
+For the reading consequence of this rule, see
+[[concept.doctrine.reading-entities]].

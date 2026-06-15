@@ -6,7 +6,7 @@ status = "active"
 title = "Doctrine file map and layout"
 summary = ""
 created = "2026-06-05"
-updated = "2026-06-06"
+updated = "2026-06-15"
 
 [scope]
 paths = [".doctrine/", "doc/", "src/"]

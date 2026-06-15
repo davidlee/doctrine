@@ -17,8 +17,10 @@ follow the skills that own each step.
   sheet just before you execute it.
 - **Execute one phase, TDD.** `/execute` flips the phase `in_progress`, builds it
   red → green → REFACTOR, ends green, flips `completed`. See [[pattern.doctrine.tdd-loop]].
-- **Audit, then close.** `/audit` reconciles evidence against the design; `/close`
-  lands the final commit and the lifecycle status.
+- **Audit, reconcile, close.** `/audit` reconciles evidence against the design via
+  a review ledger (RV kind). `/close` requires a reconciliation gate (ADR-009
+  closure seam): audit → reconcile → done. Resolves blockers and drift before
+  landing the final commit. See [[signpost.doctrine.audit]].
 
 **Authority order: design / `/canon` outrank the plan.** The plan is a sequencing
 tool, not scripture — when it conflicts with the locked design or project

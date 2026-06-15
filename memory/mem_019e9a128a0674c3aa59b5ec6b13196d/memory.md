@@ -24,4 +24,5 @@ those for the authoritative wording.
 Honour the storage rule when you write artifacts — structured data in TOML, prose in
 MD, never queried/derived data in prose ([[concept.doctrine.storage-model]],
 [[fact.doctrine.storage-tiers]]). These conventions wrap the whole lifecycle
-([[pattern.doctrine.core-loop]]).
+([[pattern.doctrine.core-loop]]). See [[signpost.doctrine.reference-docs]] for
+the glossary of entity kinds and reference forms.

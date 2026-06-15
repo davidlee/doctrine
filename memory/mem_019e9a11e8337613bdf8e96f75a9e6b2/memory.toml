@@ -6,7 +6,7 @@ status = "active"
 title = "Doctrine lifecycle start: route to slice to design to plan to phase to audit to close"
 summary = ""
 created = "2026-06-05"
-updated = "2026-06-06"
+updated = "2026-06-15"
 
 [scope]
 paths = [".doctrine/slice/", ".doctrine/state/boot.md"]
