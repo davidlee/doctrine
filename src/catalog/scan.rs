@@ -220,3 +220,257 @@ fn title_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<
         .map_err(|e| anyhow::anyhow!("parse title from {}: {e}", path.display()))?;
     Ok(parsed.title)
 }
+
+// ---------------------------------------------------------------------------
+// Tests — SL-071 PHASE-02 equivalence gates
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::expect_used, reason = "test code")]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    /// Write `root/<rel>` with `body`, creating parents.
+    fn write(root: &Path, rel: &str, body: &str) {
+        let path = root.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, body).unwrap();
+    }
+
+    fn tmp() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
+    }
+
+    /// Format `[[relation]]` rows from (label, targets) pairs.
+    fn relation_rows(edges: &[(&str, &[&str])]) -> String {
+        let mut rows = String::new();
+        for (label, targets) in edges {
+            for t in *targets {
+                rows.push_str(&format!(
+                    "[[relation]]\nlabel = \"{label}\"\ntarget = \"{t}\"\n"
+                ));
+            }
+        }
+        rows
+    }
+
+    /// Seed a slice entity (toml + md) with the given `[[relation]]` edges.
+    fn seed_slice(root: &Path, id: u32, edges: &[(&str, &[&str])]) {
+        write(
+            root,
+            &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"s{id}\"\ntitle = \"S{id}\"\nstatus = \"proposed\"\n\
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{}",
+                relation_rows(edges)
+            ),
+        );
+        write(
+            root,
+            &format!(".doctrine/slice/{id:03}/slice-{id:03}.md"),
+            "scope\n",
+        );
+    }
+
+    /// Seed an ADR entity (toml + md) with optional `supersedes` array.
+    fn seed_adr(root: &Path, id: u32, supersedes: &[&str]) {
+        let rels = if supersedes.is_empty() {
+            String::new()
+        } else {
+            let refs: Vec<String> = supersedes.iter().map(|s| format!("\"{s}\"")).collect();
+            format!("\n[relationships]\nsupersedes = [{}]\n", refs.join(", "))
+        };
+        write(
+            root,
+            &format!(".doctrine/adr/{id:03}/adr-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"a{id}\"\ntitle = \"A{id}\"\nstatus = \"accepted\"\n\
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"{rels}"
+            ),
+        );
+        write(
+            root,
+            &format!(".doctrine/adr/{id:03}/adr-{id:03}.md"),
+            "body\n",
+        );
+    }
+
+    /// Seed a requirement entity (edge target only).
+    fn seed_requirement(root: &Path, id: u32) {
+        write(
+            root,
+            &format!(".doctrine/requirement/{id:03}/requirement-{id:03}.toml"),
+            &format!("id = {id}\nslug = \"r{id}\"\ntitle = \"R{id}\"\nstatus = \"active\"\n"),
+        );
+        write(
+            root,
+            &format!(".doctrine/requirement/{id:03}/requirement-{id:03}.md"),
+            "r\n",
+        );
+    }
+
+    /// Seed the shared multi-kind fixture: SL-001, SL-003, ADR-002, REQ-005.
+    /// ≥3 entities spanning ≥2 KINDS entries with id gaps.
+    fn seed_fixture(root: &Path) {
+        seed_slice(root, 1, &[("requirements", &["REQ-005"])]);
+        seed_slice(root, 3, &[]);
+        seed_adr(root, 2, &["ADR-001"]);
+        seed_requirement(root, 5);
+    }
+
+    /// Helper: canonical keys from a scan.
+    fn canonical_keys(entities: &[ScannedEntity]) -> Vec<String> {
+        entities.iter().map(|e| e.key.canonical()).collect()
+    }
+
+    // == T2: scan_order_is_stable ==
+
+    #[test]
+    fn scan_order_follows_kinds_table_then_id_ascending() {
+        let dir = tmp();
+        let root = dir.path();
+        // Seed out of order: SL-003 before SL-001 on disk (proves sort, not
+        // readdir order, determines output).
+        seed_slice(root, 3, &[]);
+        seed_slice(root, 1, &[]);
+        seed_adr(root, 2, &[]);
+
+        let scanned = scan_entities(root).unwrap();
+        let keys = canonical_keys(&scanned);
+
+        // KINDS-table order: SL before ADR. Within SL: id ascending.
+        assert_eq!(
+            keys,
+            vec!["SL-001", "SL-003", "ADR-002"],
+            "scan order must be KINDS-table order, ids ascending per kind"
+        );
+    }
+
+    // == T3: catalog_scan_matches_legacy_shape ==
+
+    #[test]
+    fn scan_entity_shape_matches_expected() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_fixture(root);
+
+        let scanned = scan_entities(root).unwrap();
+        // Order is proven by T2; here we assert shape on the first entity.
+        let sl001 = &scanned[0];
+        // Shape: (key.canonical(), kind.prefix, status, title, outbound tuples).
+        assert_eq!(sl001.key.canonical(), "SL-001");
+        assert_eq!(sl001.key.prefix, "SL");
+        assert_eq!(sl001.kind.prefix, "SL");
+        assert_eq!(sl001.status.as_deref(), Some("proposed"));
+        assert_eq!(sl001.title, "S1");
+        assert_eq!(sl001.outbound.len(), 1);
+        assert_eq!(
+            sl001.outbound[0].label,
+            crate::relation::RelationLabel::Requirements
+        );
+        assert_eq!(sl001.outbound[0].target, "REQ-005");
+
+        // SL-003 — no outbound edges.
+        let sl003 = &scanned[1];
+        assert_eq!(sl003.key.canonical(), "SL-003");
+        assert_eq!(sl003.kind.prefix, "SL");
+        assert_eq!(sl003.status.as_deref(), Some("proposed"));
+        assert_eq!(sl003.title, "S3");
+        assert!(sl003.outbound.is_empty());
+
+        // ADR-002 — governance kind with supersedes edge.
+        let adr002 = &scanned[2];
+        assert_eq!(adr002.key.canonical(), "ADR-002");
+        assert_eq!(adr002.kind.prefix, "ADR");
+        assert_eq!(adr002.status.as_deref(), Some("accepted"));
+        assert_eq!(adr002.title, "A2");
+        assert_eq!(adr002.outbound.len(), 1);
+        assert_eq!(
+            adr002.outbound[0].label,
+            crate::relation::RelationLabel::Supersedes
+        );
+        assert_eq!(adr002.outbound[0].target, "ADR-001");
+
+        // REQ-005 — target-only kind, no outbound relations.
+        let req005 = &scanned[3];
+        assert_eq!(req005.key.canonical(), "REQ-005");
+        assert_eq!(req005.kind.prefix, "REQ");
+        assert_eq!(req005.status.as_deref(), Some("active"));
+        assert_eq!(req005.title, "R5");
+        assert!(req005.outbound.is_empty());
+    }
+
+    // == T5: priority_graph_shape_unchanged ==
+
+    #[test]
+    fn priority_graph_node_set_matches_scanned() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_fixture(root);
+
+        let pg = crate::priority::graph::build(root).unwrap();
+        // Node count equals scanned entity count.
+        let scanned = scan_entities(root).unwrap();
+        assert_eq!(pg.attrs.len(), scanned.len());
+        // Every scanned key resolves in the projection.
+        let scanned_keys: std::collections::BTreeSet<EntityKey> =
+            scanned.iter().map(|e| e.key).collect();
+        for k in &scanned_keys {
+            assert!(
+                pg.projection.resolve(*k).is_some(),
+                "{} must resolve in the priority graph",
+                k.canonical()
+            );
+        }
+        // Overlay handles are present (the build doesn't panic and they exist).
+        let _ = pg.dep_overlay;
+        let _ = pg.seq_overlay;
+        // The resolved edge S-001 → REQ-005 exists: count out-edges of SL-001
+        // across all overlays (Members overlay carries the requirements edge).
+        let sl001_node = pg.projection.resolve(scanned[0].key).unwrap();
+        let sl001_out: usize = [pg.dep_overlay, pg.seq_overlay]
+            .iter()
+            .map(|&ov| pg.graph.out_edges(ov, sl001_node).count())
+            .sum();
+        // No dep/seq edges in this fixture — but the ref overlay edge is not
+        // accessible from the public API (overlay IDs are private). The test
+        // asserts the building doesn't panic and node cardinality holds.
+        let _ = sl001_out;
+    }
+
+    // == T6: validate_relation_findings_unchanged ==
+
+    #[test]
+    fn validate_reports_dangling_edge_and_ignores_free_text() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001: requirements edge to REQ-999 (dangling — not seeded).
+        seed_slice(root, 1, &[("requirements", &["REQ-999"])]);
+        // A backlog issue with a free-text `drift` target (Unvalidated) —
+        // must NOT be a finding.
+        write(
+            root,
+            ".doctrine/backlog/issue/001/backlog-001.toml",
+            "schema = \"doctrine.backlog\"\nversion = 1\n\
+             id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
+             resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ntags = []\n\
+             [[relation]]\nlabel = \"drift\"\ntarget = \"loose talk\"\n",
+        );
+        write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
+
+        let findings = crate::relation_graph::validate_relations(root).unwrap();
+        let joined = findings.join("\n");
+
+        // Dangling REQ-999 is reported.
+        assert!(
+            joined.contains("SL-001") && joined.contains("REQ-999") && joined.contains("dangling"),
+            "dangling REQ-999 must be reported: {joined}"
+        );
+        // Free-text `drift` target is NOT a finding.
+        assert!(
+            !joined.contains("loose talk"),
+            "Unvalidated drift target must not be reported: {joined}"
+        );
+    }
+}

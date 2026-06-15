@@ -1,0 +1,41 @@
+memory_uid = "mem_019ecb23031b72f2ae3c4fa6101ea2ad"
+memory_key = "mem.fact.cordage.graph-no-public-edge-count"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Cordage Graph has no public edge_count/node_count methods"
+summary = "Cordage Graph struct has no public edge_count or node_count — use out_edges iterator per overlay or attrs.len()"
+created = "2026-06-15"
+updated = "2026-06-15"
+
+[scope]
+paths = ["crates/cordage/src/lib.rs", "src/priority/graph.rs"]
+globs = []
+commands = []
+tags = ["cordage", "api"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "00185253560571a2016f2f2a11d2cc5068996e23"
+ref_name = "refs/heads/main"
+checkout_state_id = "7f1393cbea9612a76b778d90838b74630fbf219d269cf9a38743d229dd2b09c4"
+base_commit = "bd3a4f78cc14508b59f87cfb57f964c80c322664"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

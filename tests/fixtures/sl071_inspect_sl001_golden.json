@@ -1,0 +1,21 @@
+{
+  "actionability": {
+    "actionable": true,
+    "blockers": [],
+    "blocking": [],
+    "consequence": 0,
+    "eligible": true
+  },
+  "danglers": [],
+  "id": "SL-001",
+  "inbound": [],
+  "kind": "inspect",
+  "outbound": [
+    {
+      "label": "requirements",
+      "targets": [
+        "REQ-005"
+      ]
+    }
+  ]
+}
