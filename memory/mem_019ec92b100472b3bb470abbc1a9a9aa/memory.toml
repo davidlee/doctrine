@@ -11,7 +11,7 @@ updated = "2026-06-15"
 [scope]
 paths = []
 globs = []
-commands = ["doctrine link", "doctrine unlink", "doctrine inspect"]
+commands = ["doctrine link", "doctrine unlink", "doctrine inspect", "doctrine needs", "doctrine after", "doctrine supersede"]
 tags = []
 workspace = "default"
 repo = ""

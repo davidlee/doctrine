@@ -231,42 +231,74 @@ fn path(dir: &tempfile::TempDir) -> String {
 // SL-069 PHASE-04 — integration: embed, sync, retrieval surface
 // ===========================================================================
 
-/// VT-1 (SL-069): sync from clean state materialises exactly 27 INV-signatured
-/// shipped dirs under `.doctrine/memory/shipped/`.
+/// VT-1 (SL-069): sync from clean state materialises every INV-signatured
+/// shipped dir under `.doctrine/memory/shipped/`. Count is derived from the
+/// source `memory/` tree (the embed authority) — no hard-coded cardinality.
 #[test]
-fn sync_produces_exactly_27_shipped_dirs() {
+fn sync_produces_all_shipped_dirs() {
     let repo = doctrine_repo();
     let (ok, _) = run(repo.path(), &["memory", "sync", "-y", "-p", &path(&repo)]);
     assert!(ok, "sync must exit 0");
     let shipped = repo.path().join(".doctrine/memory/shipped");
     assert!(shipped.is_dir(), "sync must create shipped/");
+
+    // Count the INV masters materialised.
     let masters: Vec<_> = std::fs::read_dir(&shipped)
         .expect("read shipped/")
         .filter_map(|e| {
-            e.ok()
-                .map(|e| e.file_name().into_string().unwrap_or_default())
+            let e = e.ok()?;
+            let name = e.file_name().into_string().ok()?;
+            if name.starts_with("mem_") && e.file_type().ok()?.is_dir() {
+                Some(name)
+            } else {
+                None
+            }
         })
-        .filter(|n| n.starts_with("mem_"))
         .collect();
+
+    // Count expected masters from the source `memory/` tree — the embed
+    // authority. Symlinks (`mem.<key>`) are skipped; only `mem_*` dirs count.
+    let memory_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("memory");
+    let expected: Vec<_> = std::fs::read_dir(&memory_root)
+        .expect("read memory/")
+        .filter_map(|e| {
+            let e = e.ok()?;
+            let name = e.file_name().into_string().ok()?;
+            if name.starts_with("mem_") && e.file_type().ok()?.is_dir() {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert!(
+        !expected.is_empty(),
+        "source memory/ must have at least one master"
+    );
     assert_eq!(
         masters.len(),
-        27,
-        "SL-069 corpus must ship exactly 27 INV dirs, got {}: {masters:?}",
+        expected.len(),
+        "sync must materialise every source master ({}), got {}: {masters:?}",
+        expected.len(),
         masters.len()
     );
 }
 
-/// VT-2 (SL-069): each of the 13 new shipped memories is retrievable via `memory
-/// find --path-scope` by its exact key, and carries the ADR-002 shipped signature
-/// (`repo=""`, `anchor_kind=none`) in its `memory show` output.
+/// VT-2 (SL-069): each of the 13 new shipped memories is retrievable via scoped
+/// `memory find`, and carries the ADR-002 shipped signature (`repo=""`,
+/// `anchor_kind=none`).
 #[test]
-fn each_new_shipped_memory_finds_by_key_and_has_shipped_signature() {
+fn each_new_shipped_memory_finds_by_scoped_search_and_has_shipped_signature() {
     let repo = doctrine_repo();
     let (ok, _) = run(repo.path(), &["memory", "sync", "-y", "-p", &path(&repo)]);
     assert!(ok, "sync must exit 0");
 
-    // The 13 new shipped memories from PHASE-01, each with a scope path/command
-    // that `memory find` will match.
+    // Each entry: (memory_key, scope_args for `memory find`). The scope_args
+    // MUST match a scope entry in the memory's TOML — the test validates that
+    // scoped retrieval actually works, not just UID lookup.
+    //
+    // When adding a shipped memory: append its entry here.
     let new_memories: &[(&str, &[&str])] = &[
         (
             "mem.signpost.doctrine.install",
@@ -322,51 +354,58 @@ fn each_new_shipped_memory_finds_by_key_and_has_shipped_signature() {
     let p = path(&repo);
     let shipped = repo.path().join(".doctrine/memory/shipped");
 
-    // Build a uid→key map from the shipped corpus TOML files.
+    // Build a uid→key map from the shipped corpus TOML files, parsing with the
+    // `toml` crate rather than fragile line-by-line string surgery.
     let mut uid_by_key: std::collections::BTreeMap<String, String> =
         std::collections::BTreeMap::new();
     for entry in std::fs::read_dir(&shipped).expect("read shipped/") {
         let entry = entry.expect("entry");
         let name = entry.file_name().into_string().unwrap_or_default();
-        if !name.starts_with("mem_") {
+        if !name.starts_with("mem_") || !entry.file_type().expect("file_type").is_dir() {
             continue;
         }
         let toml_path = shipped.join(&name).join("memory.toml");
         let toml_text = std::fs::read_to_string(&toml_path).expect("read memory.toml");
-        // Extract the key line.
-        for line in toml_text.lines() {
-            if let Some(key) = line.strip_prefix("memory_key = \"") {
-                let key = key.strip_suffix('"').unwrap_or(key);
-                uid_by_key.insert(key.to_string(), name.clone());
-                break;
-            }
-        }
+        let val: toml::Value =
+            toml::from_str(&toml_text).unwrap_or_else(|e| panic!("parse {toml_path:?}: {e}"));
+        let key = val["memory_key"]
+            .as_str()
+            .unwrap_or_else(|| panic!("memory_key missing or non-string in {toml_path:?}"));
+        uid_by_key.insert(key.to_string(), name);
     }
 
-    for (key, _scope_args) in new_memories {
+    for (key, scope_args) in new_memories {
         let uid = uid_by_key
             .get(*key)
             .unwrap_or_else(|| panic!("key {key} not found in shipped corpus"));
 
-        // Read the shipped TOML to verify ADR-002 signature.
+        // Read the shipped TOML to verify ADR-002 signature, using structured
+        // access rather than substring grep.
         let toml_path = shipped.join(uid).join("memory.toml");
         let toml_text = std::fs::read_to_string(&toml_path)
             .unwrap_or_else(|e| panic!("read {toml_path:?}: {e}"));
-        assert!(
-            toml_text.contains("repo = \"\""),
+        let val: toml::Value =
+            toml::from_str(&toml_text).unwrap_or_else(|e| panic!("parse {toml_path:?}: {e}"));
+        assert_eq!(
+            val["scope"]["repo"].as_str(),
+            Some(""),
             "{key} must have empty repo in shipped TOML"
         );
-        assert!(
-            toml_text.contains("anchor_kind = \"none\""),
+        assert_eq!(
+            val["git"]["anchor_kind"].as_str(),
+            Some("none"),
             "{key} must have anchor_kind=none in shipped TOML"
         );
 
-        // Verify findable via `memory find` by UID query.
-        let (ok, stdout) = run(repo.path(), &["memory", "find", "-p", &p, "--query", uid]);
+        // Verify findable via scoped search — drives `memory find` with the
+        // same scope args that the memory's TOML declares.
+        let mut args = vec!["memory", "find", "-p", &p];
+        args.extend_from_slice(scope_args);
+        let (ok, stdout) = run(repo.path(), &args);
         assert!(ok, "find for {key} (uid {uid}) must exit 0: {stdout}");
         assert!(
             stdout.contains(uid),
-            "find for {key} must return uid {uid}:\n{stdout}"
+            "scoped find for {key} must return uid {uid}:\n{stdout}"
         );
     }
 }
