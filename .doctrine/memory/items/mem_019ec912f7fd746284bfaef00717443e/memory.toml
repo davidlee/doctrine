@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec912f7fd746284bfaef00717443e"
+memory_key = "mem.pattern.dispatch.close-lands-via-candidate-integrate-trunk"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Close a dispatched slice by landing the admitted close_target with sync --integrate --trunk main"
+summary = "Closing a dispatched slice lands code via candidate create->admit->sync --integrate --trunk; --trunk is required and the ref-move lags the working tree"
+created = "2026-06-15"
+updated = "2026-06-15"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "close"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b56514101037c2f6e5ab93dfc133fb9f221debd7"
+ref_name = "refs/heads/main"
+checkout_state_id = "d649df38830691ce3b852879c84a33e889d3a65b587ad01535644d1f67658def"
+base_commit = "088b858439ac58e69a603fdc614f16044c0c6f52"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
