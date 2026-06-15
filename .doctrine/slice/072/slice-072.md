@@ -105,7 +105,7 @@ independent corpus walk.
 ## Verification / Closure Intent
 
 - `doctrine map serve --open` starts a loopback web app
-- Browser fetches `/api/graph` and receives valid JSON
+- Browser fetches `/api/graph` and receives valid JSON (`nodes` + `edges`)
 - Browser generates DOT from visible projection, posts to `/api/dot/svg`,
   receives SVG
 - Clicking a graph node updates the focused view

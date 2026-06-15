@@ -1,0 +1,377 @@
+# Implementation plan for SL-072 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-072"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# --- PHASE-01: Foundation — error model, types, Cargo.toml ------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "Foundation"
+objective = "Establish the error model, core types, and Cargo.toml dependencies — the compilation substrate everything else builds on."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "SL-072 design.md is locked (all adversarial review findings integrated)."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "Workspace Cargo.toml has tokio, axum, tower, http-body-util, rust-embed as workspace deps (currently commented out)."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "MapServerError enum compiles with all variants: BadEntityId, EntityNotFound, AssetNotFound, MarkdownNotImplemented, BodyTooLarge, ToolUnavailable, CommandFailed, Timeout, Other."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "MapServerError implements axum::response::IntoResponse with correct status codes per design §8.5 table (including 501 for MarkdownNotImplemented)."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "Stderr in CommandFailed truncated to 8 KiB before serialization."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "AppState, Config, DotRenderer trait, and RealDotRenderer (stub) compile in map_server module."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "Cargo.toml: tokio, axum uncommented; webbrowser = \"1\" added; cargo check passes for map_server crate root."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Error mapping tests: every variant → correct status code (400/404/413/422/501/503/504/500) and JSON keys (error, message, stderr for CommandFailed)."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "Stderr truncation test: > 8 KiB stderr → truncated in JSON response body."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "cargo check --lib succeeds (no route/asset/markdown/shell modules yet — just error + state + mod.rs skeleton)."
+
+specs        = []
+requirements = []
+
+# --- PHASE-02: Asset serving -------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Asset serving"
+objective = "Embed web/map/ static files via rust-embed and serve them with correct content-type headers."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete: error model compiles, Cargo.toml dependencies active."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "web/map/ directory exists with placeholder files (may be empty stubs for now — real content lands in PHASE-07)."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "Assets struct derives RustEmbed with #[folder = \"web/map/\"] and compiles."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "content_type_for maps .html/.css/.js/.svg/.json/.woff2 → correct MIME with charset; unknown → application/octet-stream."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "serve_embedded returns AssetNotFound (404) for missing paths, (ContentType, bytes) for found assets."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Unit tests: content_type_for returns correct type for each extension and octet-stream for unknown."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "Unit tests: Assets::get returns data for an embedded file; serve_embedded returns AssetNotFound for missing file."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "cargo check --lib succeeds with assets module added."
+
+specs        = []
+requirements = []
+
+# --- PHASE-03: Markdown lookup -----------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Entity markdown lookup"
+objective = "Derive .md file paths for entity keys and read their bodies, with correct error mapping for missing files, unknown prefixes, and explicitly-unimplemented REQ. Implements the entity_md_path helper inline in map_server::markdown (no catalog or memory module changes needed)."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete: MapServerError available with MarkdownNotImplemented and EntityNotFound variants."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "catalog::integrity::kind_by_prefix and catalog::integrity::KINDS accessible. Knowledge record kind constants (ASSUMPTION_KIND, DECISION_KIND, QUESTION_KIND, CONSTRAINT_KIND) importable for their dir fields."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "entity_md_path resolves all known kinds to correct .doctrine/…/…md paths using kind.dir/kind.stem convention — no separate memory path helper needed. ASM/DEC/QUE/CON use the same kind.dir/stem convention as other kinds (e.g. .doctrine/knowledge/assumption/001/record-001.md)."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "entity_md_path returns MarkdownNotImplemented(\"REQ\") for REQ prefix."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "entity_md_path returns BadEntityId for unknown prefixes (validated against integrity::kind_by_prefix, not a panic)."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "read_entity_markdown reads file at resolved path; maps ErrorKind::NotFound → EntityNotFound, other IO errors → Other(500)."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Path derivation tests: SL-001 → .doctrine/slice/001/slice-001.md; ADR-012 → .doctrine/adr/012/adr-012.md; ASM-001 → .doctrine/knowledge/assumption/001/record-001.md; DEC-002 → .doctrine/knowledge/decision/002/record-002.md."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "Error tests: REQ-001 → MarkdownNotImplemented; BOGUS-001 → BadEntityId; entity in graph but .md missing → EntityNotFound."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "Successful read: temp file with known content → returned as String."
+
+specs        = []
+requirements = []
+
+# --- PHASE-04: Graphviz process bridge ---------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "Graphviz process bridge"
+objective = "Implement RealDotRenderer with timeout-bound, kill-on-drop dot -Tsvg process; provide FakeDotRenderer for route testing."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete: DotRenderer trait defined, MapServerError variants (ToolUnavailable, CommandFailed, Timeout, BodyTooLarge) available."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "RealDotRenderer::render_svg spawns dot -Tsvg with piped stdin/stdout/stderr, kill_on_drop(true), and a 10-second timeout on both stdin write and process wait."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "stdin bytes are owned (to_vec) before write — no tokio::spawn, no lifetime issue."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "Error mapping: NotFound → ToolUnavailable, non-zero exit → CommandFailed (stderr captured, ≤ 8 KiB in response), timeout → Timeout."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "FakeDotRenderer provided for tests — configurable to return success, ToolUnavailable, CommandFailed, or Timeout."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Fake renderer tests: success returns SVG bytes; each error variant → correct MapServerError with expected HTTP status."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "Conditional real tests: valid DOT (\"digraph { a -> b }\") → SVG bytes; garbage input → CommandFailed with stderr. Both skipped if dot not on PATH."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "cargo check --lib succeeds with shell module; cargo test passes for shell unit tests."
+
+specs        = []
+requirements = []
+
+# --- PHASE-05: HTTP routes + router ------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "HTTP routes"
+objective = "Wire all axum route handlers and the router, with correct error propagation, body limits, and content types."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 through PHASE-04 complete: error model, assets, markdown, and graphviz modules all compile."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "Router constructed with all routes: GET /, /assets/*, /vendor/*, /api/health, /api/graph, /api/entity/{id}/markdown; POST /api/refresh, /api/dot/svg."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "/api/dot/svg route uses .layer(DefaultBodyLimit::max(DOT_BODY_LIMIT)) directly (not wrapped in ServiceBuilder). In-handler re-check for defense-in-depth."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "entity_markdown handler validates entity id via integrity::parse_canonical_ref (reuses the single corpus-wide ID parser — no parallel regex). Unknown prefixes or non-numeric ids → BadEntityId 400 before graph lookup."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "/api/graph clones snapshot under read lock (graph.read().await.clone()) — lock released before serialization."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "Health handler checks dot availability (dot -V with 2s timeout, kill_on_drop) and graph non-empty."
+
+[[phase.exit_criteria]]
+id   = "EX-6"
+text = "DOT_BODY_LIMIT constant (1 MiB) is visible from routes.rs."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Route integration tests per design §8.2 table: index → 200 text/html; missing asset → 404; graph → 200 valid JSON with nodes/edges; graph minimum contract keys present (nodes/edges, no diagnostics); refresh → 200 + graph shows added entity; SL-001 markdown → 200 text/markdown with correct body; SL-999 → 404; sl-001 → 400; BOGUS-001 → 400; REQ-001 → 501; ASM-001 → 200; health → 200 with correct shape."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "DOT route tests: valid DOT → 200 SVG; body > 1 MiB → 413; ToolUnavailable → 503; CommandFailed → 422 with stderr; Timeout → 504."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "cargo check --lib succeeds with routes + router; all route tests pass."
+
+specs        = []
+requirements = []
+
+# --- PHASE-06: CLI entry + serve + URL + browser open ------------------------
+[[phase]]
+id        = "PHASE-06"
+name      = "CLI entry and server startup"
+objective = "Wire the doctrine map serve subcommand: clap args, root detection, server binding, URL construction, and non-fatal browser open."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-05 complete: all routes working, router compiles."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "MapServeArgs struct with --port (default 0), --open (bool), --focus (validated canonical ID), --depth (1..=3, default 1)."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "map_url pure function constructs correct URLs: base, #/focus/{id}, #/focus/{id}?depth={n}."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "serve() binds 127.0.0.1:{port}, prints URL, optionally opens browser (non-fatal: logs error, continues)."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "run_serve detects project root, scans catalog, constructs Config, calls serve()."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "main.rs: Map command variant with MapCommand::Serve subcommand wired."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "URL construction tests per design §8.7: no focus → base; focus + depth=1 → hash; focus + depth=2 → hash+query; IPv6 addr → [::1]:port format."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "focus validation tests: valid IDs accepted via integrity::parse_canonical_ref; lowercase prefix / non-numeric id / unknown prefix rejected at CLI parse."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "cargo build succeeds; doctrine map serve --help prints usage."
+
+[[phase.verification]]
+id      = "VH-1"
+expects = "Manual smoke: doctrine map serve --open in a doctrine repo → browser opens, graph loads, markdown endpoint works."
+
+specs        = []
+requirements = []
+
+# --- PHASE-07: Browser placeholder -------------------------------------------
+[[phase]]
+id        = "PHASE-07"
+name      = "Browser placeholder"
+objective = "Create the embedded browser app placeholder — enough HTML/JS/CSS to exercise all API endpoints manually."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-05 complete: all API routes respond correctly in integration tests."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "web/map/index.html loads as SPA with hash routing. Contains a root element for the app shell."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "web/map/app.js fetches /api/graph on load, renders a minimal entity list in the DOM."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "Clicking a list item fetches /api/entity/{id}/markdown and renders Markdown via markdown-it + DOMPurify."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "Security: markdown-it configured html:false; DOMPurify.sanitize() before innerHTML; SVG rendered via <img> not inline."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "Vendor files present: web/map/vendor/markdown-it.min.js, purify.min.js, github-markdown.css."
+
+[[phase.verification]]
+id      = "VH-1"
+expects = "Manual: serve starts; browser loads index; graph JSON visible in network tab; entity list renders; clicking shows markdown; DOT panel hidden if dot unavailable."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "Assets::get(\"index.html\") and Assets::get(\"app.js\") return data (embedded correctly at compile time)."
+
+specs        = []
+requirements = []
+
+# --- PHASE-08: Gate ----------------------------------------------------------
+[[phase]]
+id        = "PHASE-08"
+name      = "Gate"
+objective = "Final quality gate: full test suite, clippy zero warnings, format, just gate pass."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "All prior phases (PHASE-01 through PHASE-07) complete."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "cargo test passes — all unit, integration, and conditional process tests green."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "cargo clippy --workspace produces zero warnings."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "cargo fmt --check passes."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "just gate passes (workspace-wide clippy + test)."
+
+[[phase.exit_criteria]]
+id   = "EX-5"
+text = "Slice-072.md scope/summary/risks still consistent with implemented design (no design drift)."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "CI-equivalent: all tests green, clippy zero, fmt clean."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "Review route handler code against design §3 — no duplicated graph policy, no entity semantics in routes, correct error propagation."
+
+[[phase.verification]]
+id      = "VA-2"
+expects = "Verify module layout matches design §1 — all deps point downward per ADR-001, no upward edges."
+
+specs        = []
+requirements = []
