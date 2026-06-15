@@ -338,13 +338,66 @@ pub(crate) enum ColumnPaint<R> {
 /// siblings (`design`/`plan`/`started`/`audit`/`reconcile`); only the pre-engagement
 /// `proposed` stays grey.
 pub(crate) fn status_hue(s: &str) -> Option<owo_colors::DynColors> {
-    use owo_colors::{AnsiColors::{Green, Red, Yellow}, DynColors};
+    use owo_colors::{
+        AnsiColors::{Green, Red, Yellow},
+        DynColors,
+    };
     match s {
         "done" | "active" | "accepted" | "required" => Some(DynColors::Ansi(Green)),
         "design" | "plan" | "ready" | "started" | "audit" | "reconcile" => {
             Some(DynColors::Ansi(Yellow))
         }
         "blocked" | "abandoned" | "contested" => Some(DynColors::Ansi(Red)),
+        _ => None,
+    }
+}
+
+/// Backlog item kind → hue: a distinct, stable ANSI colour per kind.
+/// `issue`/`improvement`/`chore`/`risk`/`idea`; unknown kind → `None`.
+pub(crate) fn backlog_kind_hue(kind: &str) -> Option<owo_colors::DynColors> {
+    use owo_colors::{
+        AnsiColors::{Blue, Green, Magenta, Red, Yellow},
+        DynColors,
+    };
+    match kind {
+        "issue" => Some(DynColors::Ansi(Red)),
+        "improvement" => Some(DynColors::Ansi(Green)),
+        "chore" => Some(DynColors::Ansi(Yellow)),
+        "risk" => Some(DynColors::Ansi(Magenta)),
+        "idea" => Some(DynColors::Ansi(Blue)),
+        _ => None,
+    }
+}
+
+/// Memory type → hue: a distinct, stable ANSI colour per memory kind.
+/// `concept`/`fact`/`pattern`/`signpost`/`system`/`thread`; unknown → `None`.
+pub(crate) fn memory_type_hue(kind: &str) -> Option<owo_colors::DynColors> {
+    use owo_colors::{
+        AnsiColors::{Blue, Cyan, Green, Magenta, Red, Yellow},
+        DynColors,
+    };
+    match kind {
+        "concept" => Some(DynColors::Ansi(Cyan)),
+        "fact" => Some(DynColors::Ansi(Green)),
+        "pattern" => Some(DynColors::Ansi(Magenta)),
+        "signpost" => Some(DynColors::Ansi(Blue)),
+        "system" => Some(DynColors::Ansi(Yellow)),
+        "thread" => Some(DynColors::Ansi(Red)),
+        _ => None,
+    }
+}
+
+/// Memory trust level → hue: signals confidence/severity.
+/// `high` → Green, `medium` → Yellow, `low` → Red; unknown → `None`.
+pub(crate) fn trust_hue(trust: &str) -> Option<owo_colors::DynColors> {
+    use owo_colors::{
+        AnsiColors::{Green, Red, Yellow},
+        DynColors,
+    };
+    match trust {
+        "high" => Some(DynColors::Ansi(Green)),
+        "medium" => Some(DynColors::Ansi(Yellow)),
+        "low" => Some(DynColors::Ansi(Red)),
         _ => None,
     }
 }
@@ -373,7 +426,7 @@ const TAG_PALETTE: [owo_colors::Rgb; 12] = [
 /// `TITLE_ODD`. Wired via [`ColumnPaint::Alternate`] on the title column of each
 /// list surface.
 pub(crate) const TITLE_EVEN: owo_colors::DynColors = owo_colors::DynColors::Rgb(235, 219, 178); // #ebdbb2
-pub(crate) const TITLE_ODD: owo_colors::DynColors = owo_colors::DynColors::Rgb(213, 196, 161);  // #d5c4a1
+pub(crate) const TITLE_ODD: owo_colors::DynColors = owo_colors::DynColors::Rgb(213, 196, 161); // #d5c4a1
 
 /// A pure byte fold (FNV-1a, 32-bit) over a segment's bytes. No RNG, no clock —
 /// deterministic across runs. Wrapping arithmetic keeps it cast-free (repo clippy
@@ -512,7 +565,11 @@ fn paint_cell<R>(
     // Alternating zebra stripe: applies to the cell directly (String-returning),
     // so it needs its own early return before the `Option<DynColors>` hue match.
     if let ColumnPaint::Alternate([even, odd]) = paint {
-        let hue = if row_index % 2 == 0 { *even } else { *odd };
+        let hue = if row_index.is_multiple_of(2) {
+            *even
+        } else {
+            *odd
+        };
         return cell.color(hue).to_string();
     }
     let hue = match paint {
@@ -1538,7 +1595,10 @@ mod tests {
     /// (incl. the deliberately-unmapped phase status `in_progress`) is `None`.
     #[test]
     fn status_hue_maps_each_class_and_leaves_the_rest_uncoloured() {
-        use owo_colors::{AnsiColors::{Green, Red, Yellow}, DynColors};
+        use owo_colors::{
+            AnsiColors::{Green, Red, Yellow},
+            DynColors,
+        };
         for green in ["done", "active", "accepted", "required"] {
             assert_eq!(
                 status_hue(green),
@@ -1831,5 +1891,132 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(parsed["kind"], "adr");
         assert_eq!(parsed["rows"].as_array().unwrap().len(), 0);
+    }
+
+    // -- VT-1, VT-2: Alternate paint variant -------------------------------
+
+    /// VT-1: `paint_cell` with `Alternate` returns the even hue at row 0 and
+    /// the odd hue at row 1, both carrying ANSI escapes.
+    #[test]
+    fn paint_cell_alternate_even_odd_on_row_index() {
+        use owo_colors::{
+            AnsiColors::{Green, Yellow},
+            DynColors,
+        };
+        let alt: ColumnPaint<CRow> =
+            ColumnPaint::Alternate([DynColors::Ansi(Green), DynColors::Ansi(Yellow)]);
+        let row = CRow { id: "X", slug: "x" };
+        let even = paint_cell("title", &alt, &row, true, 0);
+        let odd = paint_cell("title", &alt, &row, true, 1);
+        assert!(even.contains('\u{1b}'), "even row 0 carries ANSI: {even:?}");
+        assert!(odd.contains('\u{1b}'), "odd row 1 carries ANSI: {odd:?}");
+        assert_ne!(even, odd, "even and odd hue differ");
+        assert_eq!(strip_ansi(&even), "title", "strip even → raw cell");
+        assert_eq!(strip_ansi(&odd), "title", "strip odd → raw cell");
+    }
+
+    /// VT-2: `paint_cell` with `Alternate` under `color = false` returns plain
+    /// text — no ANSI, passing through the early `!color` return.
+    #[test]
+    fn paint_cell_alternate_color_false_is_plain() {
+        use owo_colors::{AnsiColors::Green, DynColors};
+        let alt: ColumnPaint<CRow> =
+            ColumnPaint::Alternate([DynColors::Ansi(Green), DynColors::Ansi(Green)]);
+        let row = CRow { id: "X", slug: "x" };
+        let out = paint_cell("title", &alt, &row, false, 0);
+        assert_eq!(out, "title", "color=false Alternate is raw");
+        assert!(!out.contains('\u{1b}'), "zero ANSI: {out:?}");
+    }
+
+    // -- VT-3, VT-4, VT-5: hue maps --------------------------------------
+
+    /// VT-3: `backlog_kind_hue` maps all 5 known kinds to `Some(DynColors)`;
+    /// unknown kind returns `None`.
+    #[test]
+    fn backlog_kind_hue_maps_all_known_and_none_for_unknown() {
+        for known in ["issue", "improvement", "chore", "risk", "idea"] {
+            assert!(backlog_kind_hue(known).is_some(), "{known} is a known kind");
+        }
+        assert!(backlog_kind_hue("bogus").is_none(), "unknown kind → None");
+    }
+
+    /// VT-4: `memory_type_hue` maps all 6 known memory types to `Some(DynColors)`;
+    /// unknown type returns `None`.
+    #[test]
+    fn memory_type_hue_maps_all_known_and_none_for_unknown() {
+        for known in ["concept", "fact", "pattern", "signpost", "system", "thread"] {
+            assert!(
+                memory_type_hue(known).is_some(),
+                "{known} is a known memory type"
+            );
+        }
+        assert!(memory_type_hue("bogus").is_none(), "unknown type → None");
+    }
+
+    /// VT-5: `trust_hue` maps high/medium/low → Green/Yellow/Red; unknown → None.
+    #[test]
+    fn trust_hue_maps_all_known_and_none_for_unknown() {
+        use owo_colors::{
+            AnsiColors::{Green, Red, Yellow},
+            DynColors,
+        };
+        assert_eq!(trust_hue("high"), Some(DynColors::Ansi(Green)));
+        assert_eq!(trust_hue("medium"), Some(DynColors::Ansi(Yellow)));
+        assert_eq!(trust_hue("low"), Some(DynColors::Ansi(Red)));
+        assert!(trust_hue("bogus").is_none(), "unknown trust → None");
+    }
+
+    // -- VT-7: render_columns with Alternate + Fixed  ---------------------
+
+    /// VT-7: `render_columns` with an `Alternate`-painted title column and a
+    /// `Fixed`-painted id column renders colour on both; stripping ANSI from
+    /// the coloured output reproduces the plain layout.
+    #[test]
+    fn render_columns_alternate_and_fixed_colours_strip_to_plain() {
+        use owo_colors::{AnsiColors::Cyan, DynColors};
+        struct ARow {
+            id: &'static str,
+            title: &'static str,
+        }
+        let columns: [Column<ARow>; 2] = [
+            Column {
+                name: "id",
+                header: "id",
+                cell: |r| r.id.to_string(),
+                paint: ColumnPaint::Fixed(DynColors::Ansi(Cyan)),
+            },
+            Column {
+                name: "title",
+                header: "title",
+                cell: |r| r.title.to_string(),
+                paint: ColumnPaint::Alternate([TITLE_EVEN, TITLE_ODD]),
+            },
+        ];
+        let rows = [
+            ARow {
+                id: "001",
+                title: "First",
+            },
+            ARow {
+                id: "002",
+                title: "Second",
+            },
+        ];
+        let sel = select_columns(&columns, &["id", "title"], None).unwrap();
+        let plain = render_columns(&rows, &sel, RenderOpts::default());
+        let coloured = render_columns(
+            &rows,
+            &sel,
+            RenderOpts {
+                color: true,
+                ..Default::default()
+            },
+        );
+        assert!(coloured.contains('\u{1b}'), "coloured output carries ANSI");
+        assert_eq!(
+            strip_ansi(&coloured),
+            plain,
+            "stripping ANSI from coloured render reproduces the plain layout"
+        );
     }
 }

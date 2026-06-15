@@ -1073,13 +1073,15 @@ const MEMORY_COLUMNS: [Column<Memory>; 6] = [
         name: "uid",
         header: "uid",
         cell: |m| m.uid.clone(),
-        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+            owo_colors::AnsiColors::Cyan,
+        )),
     },
     Column {
         name: "type",
         header: "type",
         cell: |m| m.kind.as_str().to_string(),
-        paint: listing::ColumnPaint::None,
+        paint: listing::ColumnPaint::ByValue(|m| listing::memory_type_hue(m.kind.as_str())),
     },
     Column {
         name: "status",
@@ -1091,7 +1093,7 @@ const MEMORY_COLUMNS: [Column<Memory>; 6] = [
         name: "trust",
         header: "trust",
         cell: |m| scrub_line(&m.trust_level),
-        paint: listing::ColumnPaint::None,
+        paint: listing::ColumnPaint::ByValue(|m| listing::trust_hue(&m.trust_level)),
     },
     Column {
         name: "key",

@@ -875,7 +875,9 @@ const REVIEW_COLUMNS: [Column<ReviewRow>; 5] = [
         name: "id",
         header: "id",
         cell: |(d, _, _)| canonical_id(d.id),
-        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+            owo_colors::AnsiColors::Cyan,
+        )),
     },
     Column {
         name: "status",

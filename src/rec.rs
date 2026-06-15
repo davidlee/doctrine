@@ -526,7 +526,9 @@ const REC_COLUMNS: [Column<RecDoc>; 4] = [
         name: "id",
         header: "id",
         cell: |d| canonical_id(d.id),
-        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+            owo_colors::AnsiColors::Cyan,
+        )),
     },
     Column {
         name: "move",

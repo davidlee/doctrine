@@ -1147,7 +1147,9 @@ const KN_COLUMNS: [listing::Column<KnowledgeRecord>; 5] = [
         name: "id",
         header: "id",
         cell: |r| r.record_kind.canonical_id(r.id),
-        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+            owo_colors::AnsiColors::Cyan,
+        )),
     },
     listing::Column {
         name: "kind",

@@ -865,13 +865,15 @@ const BL_COLUMNS: [listing::Column<BacklogItem>; 6] = [
         name: "id",
         header: "id",
         cell: |i| i.kind.canonical_id(i.id),
-        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+            owo_colors::AnsiColors::Cyan,
+        )),
     },
     listing::Column {
         name: "kind",
         header: "kind",
         cell: |i| i.kind.as_str().to_string(),
-        paint: listing::ColumnPaint::None,
+        paint: listing::ColumnPaint::ByValue(|i| listing::backlog_kind_hue(i.kind.as_str())),
     },
     listing::Column {
         name: "status",

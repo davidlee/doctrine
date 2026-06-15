@@ -300,7 +300,9 @@ const COVERAGE_COLUMNS: [listing::Column<CoverageRow>; 6] = [
         name: "id",
         header: "id",
         cell: |r| r.id().to_owned(),
-        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(owo_colors::AnsiColors::Cyan)),
+        paint: listing::ColumnPaint::Fixed(owo_colors::DynColors::Ansi(
+            owo_colors::AnsiColors::Cyan,
+        )),
     },
     listing::Column {
         name: "label",
