@@ -1,7 +1,7 @@
 id = 72
 slug = "map-server"
 title = "Doctrine Map Server: local web graph explorer"
-status = "ready"
+status = "audit"
 created = "2026-06-15"
 updated = "2026-06-15"
 

@@ -1,0 +1,34 @@
+id    = 35
+slug  = "reconciliation-review-of-sl-072"
+title = "reconciliation review of SL-072"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "clanker"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-072"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Map serve missing --path flag"
+detail = "The design §6 shows run_serve(path: Option<PathBuf>, args: MapServeArgs) accepting an explicit project root, but the CLI wiring passes None unconditionally. Users cannot use doctrine -p /some/path map serve. Other commands (catalog scan --root, slice new -p) support explicit root. MapServeArgs should add a --path arg or accept the existing project-root idiom."
+disposition = "follow-up"
+response = "SL-072 design §6 shows run_serve(path: Option<PathBuf>) but CLI passes None. Auto-detect works for primary use case. Defer to follow-up."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Health endpoint omits dot version string"
+detail = 'Design §3 shows health endpoint including dot version string: {"dot": {"ok": true, "version": "..."}}. Implementation only returns {"dot": {"ok": true}}. The dot_version() function retrieves the version but its return value is discarded via .is_ok(). Should include version for diagnostic value.'
+disposition = "fix-now"
+response = "Design §3 explicitly shows dot version string in health JSON response. Trivial fix: capture dot_version() return value and include it."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
