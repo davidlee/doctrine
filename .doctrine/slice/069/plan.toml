@@ -1,0 +1,114 @@
+# Implementation plan for SL-069 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-069"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Author 13 new shipped memories"
+objective = "Author 13 new shipped memories under `memory/` covering Tiers 1–3 capability gaps, each with an ADR-002 signature (`repo=\"\"`, `anchor_kind=none`, scoped), a `memory.toml` passing master-lint, a `memory.md` body, and a `mem.<key>` symlink alias. Review deferred to post-SL-068. No code changes — `memory/` tree only."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §2 locked — all 13 candidate keys, types, scopes, and authoring principles agreed" },
+  { id = "EN-2", text = "Existing shipped memories (14) unchanged and green on gate" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "13 new `memory.toml` files pass `corpus::lint_master` (existing lint tests green unchanged)" },
+  { id = "EX-2", text = "13 new `memory.md` bodies authored per design §2.1 principles — signpost/concept framing, fresh synthesis, cross-references to siblings, point-don't-restate for `using-doctrine.md`/`glossary.md`" },
+  { id = "EX-3", text = "13 `mem.<key>` symlink aliases created" },
+  { id = "EX-4", text = "Full 27-memory corpus golden added for master-lint" },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo test corpus::lint_master` passes with 27-memory golden" },
+  { id = "VT-2", expects = "Each new `memory.toml` carries `repo=\"\"`, `anchor_kind=\"none\"`, ≥1 scope entry (path/glob/command)" },
+  { id = "VA-1", expects = "Each new `memory.md` reviewed against design §2.1: correct type (signpost vs concept), correct scopes, cross-references to existing shipped memories, points at reference docs where appropriate, honest about implementation state" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Boot snapshot signpost-only filter + governance warning"
+objective = "In `src/boot.rs`: (a) filter the Memory section to signpost-type memories only (~137 → ~16 rows), and (b) add `boot --check` warnings for empty Policies/Standards sections plus a markdown-comment nudge in the snapshot body for each. Update boot golden tests. PHASE-02 merges the original PHASE-02 (signpost trim) and PHASE-03 (governance warning) from design — they share `src/boot.rs`."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §3 (signpost trim) and §4 (governance warning) locked" },
+  { id = "EN-2", text = "Boot snapshot golden suite green unchanged before any change" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/boot.rs` memory-render path filters `memory_type == \"signpost\"` before table construction" },
+  { id = "EX-2", text = "`boot --check` emits warning row for empty Policies section" },
+  { id = "EX-3", text = "`boot --check` emits warning row for empty Standards section" },
+  { id = "EX-4", text = "Boot snapshot body carries markdown comment nudge in empty Policies and Standards sections: `<!-- No active policies yet. See mem.signpost.doctrine.policies-standards -->`" },
+  { id = "EX-5", text = "Populated governance sections produce no false warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "Boot snapshot golden test: Memory section contains only signpost-type rows, zero non-signpost rows" },
+  { id = "VT-2", expects = "Boot snapshot golden test: empty Policies section carries the nudge comment; empty Standards section carries the nudge comment" },
+  { id = "VT-3", expects = "New test: `boot --check` on fresh-install state emits warnings for empty Policies and Standards" },
+  { id = "VT-4", expects = "New test: `boot --check` on populated governance sections emits no warnings" },
+  { id = "VT-5", expects = "Existing boot golden tests (section ordering, empty-state markers) green unchanged" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Holistic corpus refresh"
+objective = "Read all 27 shipped memories (14 existing + 13 new from PHASE-01) against the current codebase and design.md. Update the 5 worst-stale existing memories (cli-command-map, file-map, skill-map, lifecycle-start, core-loop per design §5.3 checklist), add cross-references from new to existing and existing to new, and check for duplication against `using-doctrine.md`. No new memories created. `memory/` tree only — disjoint from `src/boot.rs`."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — 13 new shipped memories authored and committed" },
+  { id = "EN-2", text = "SL-005/007/008 retrieval suites green before refresh" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`mem.signpost.doctrine.cli-command-map` updated with all current CLI verbs; `skills` verb removed" },
+  { id = "EX-2", text = "`mem.signpost.doctrine.file-map` lists all current entity directories including `.doctrine/review/`, `rec/`, `revision/`, `policy/`, `standard/`, `knowledge/`" },
+  { id = "EX-3", text = "`mem.signpost.doctrine.skill-map` paths corrected from `plugins/doctrine/skills/` to `.doctrine/skills/`" },
+  { id = "EX-4", text = "`mem.signpost.doctrine.lifecycle-start` includes `reconcile` phase per ADR-009" },
+  { id = "EX-5", text = "`mem.pattern.doctrine.core-loop` updated with `reconcile` phase" },
+  { id = "EX-6", text = "New→existing and existing→new cross-references added where appropriate" },
+  { id = "EX-7", text = "Remaining 9 existing memories unchanged except cross-reference additions and minor wording fixes (no substantive rewrites per design §5.3)" },
+]
+verification = [
+  { id = "VA-1", expects = "Agent reads each of the 5 stale memories and confirms all stalenesses from design §5.3 checklist are resolved" },
+  { id = "VT-1", expects = "`cargo test corpus::lint_master` passes — all 27 memories still valid" },
+  { id = "VT-2", expects = "SL-005/007/008 suites green. If retrieval tests fail due to legitimate body-text changes (not breakage), update test oracles per design §8 note" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Integration: embed, sync, retrieval surface, full gate"
+objective = "Build the binary with the revised 27-memory corpus embedded, sync to `.doctrine/memory/shipped/`, run retrieval surface tests, and pass the full gate (`just gate`). This is the serial final phase — all other phases must be complete."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — 13 new memories in `memory/`" },
+  { id = "EN-2", text = "PHASE-02 complete — boot snapshot changes landed" },
+  { id = "EN-3", text = "PHASE-03 complete — existing corpus refreshed" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`cargo build` succeeds with all 27 memories embedded" },
+  { id = "EX-2", text = "`doctrine memory sync` from clean state materialises exactly 27 INV-signatured dirs under `shipped/`" },
+  { id = "EX-3", text = "One integration test per new memory (13 tests): `doctrine memory find --path-scope <scope>` returns the memory by key" },
+  { id = "EX-4", text = "`doctrine memory list` surfaces all 27 shipped memories" },
+  { id = "EX-5", text = "`just gate` — zero clippy warnings, all tests pass" },
+]
+verification = [
+  { id = "VT-1", expects = "Integration test: sync from clean state, assert `shipped/` contains exactly 27 INV-signatured dirs" },
+  { id = "VT-2", expects = "Integration test per new memory (13 tests): `memory find` returns exact key match; each test asserts ADR-002 shipped signature (`repo=\"\"`, `anchor_kind=\"none\"`)" },
+  { id = "VT-3", expects = "`just gate` passes — zero clippy warnings, all tests pass including new integration tests and updated goldens" },
+  { id = "VA-1", expects = "Boot snapshot regenerated and Memory section inspected: ~16 signpost rows only, no bloat" },
+]
+specs        = []
+requirements = []

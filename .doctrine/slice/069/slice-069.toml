@@ -1,9 +1,9 @@
 id = 69
 slug = "audit-shipped-memory-corpus-onboarding-anchor"
 title = "Shipped memory corpus as a cohesive client onboarding anchor"
-status = "proposed"
+status = "ready"
 created = "2026-06-14"
-updated = "2026-06-14"
+updated = "2026-06-15"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
