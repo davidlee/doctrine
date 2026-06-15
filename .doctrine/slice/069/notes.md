@@ -18,3 +18,18 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 - TOML scaffolds carry correct INV signatures: `repo=""`, `anchor_kind=none`
 - All memories cross-reference at least one existing shipped sibling
 - Content follows design §2.1 principles: signpost/concept framing, fresh synthesis, point-don't-restate
+
+## PHASE-02 complete — 2026-06-15
+
+- Signpost-only filter: `produce()` Memory arm passes `Some(MemoryType::Signpost)`
+- Governance nudge: `gov_nudge()` for empty Policies/Standards, `is_marker` extended
+- 3 new tests: signpost-only exclusion, governance check warnings, populated governance no-warn
+- 55 boot tests pass, zero clippy warnings
+- `just check` green (1322 tests)
+- Commit: 9a0d1dd
+
+### Key details
+
+- `is_marker` now detects both `marker()` and `gov_nudge()` — governance sections properly reported
+- No false positives: populated governance does not trigger warnings
+- Memory section renders only signpost-type rows (~16 vs ~137 prior)
