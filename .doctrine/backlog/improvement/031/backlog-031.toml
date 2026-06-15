@@ -8,8 +8,8 @@ kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-11"
-updated = "2026-06-11"
-tags = []
+updated = "2026-06-15"
+tags = ["area:backlog"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
 needs    = []                   # item→item hard prerequisite

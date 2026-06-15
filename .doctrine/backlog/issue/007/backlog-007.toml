@@ -8,8 +8,8 @@ kind = "issue"
 status = "closed"
 resolution = "fixed"
 created = "2026-06-12"
-updated = "2026-06-12"
-tags = []
+updated = "2026-06-15"
+tags = ["area:relations", "testing"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
 needs    = []                   # item→item hard prerequisite

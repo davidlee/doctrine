@@ -8,8 +8,8 @@ kind = "risk"
 status = "resolved"
 resolution = "mitigated"
 created = "2026-06-11"
-updated = "2026-06-12"
-tags = ["cordage", "adapter"]
+updated = "2026-06-15"
+tags = ["adapter", "area:backlog", "area:relations", "cordage", "correctness"]
 
 [facet]                         # risk only — every field typed; seeded empty
 likelihood = "low"              # low | medium | high | critical
