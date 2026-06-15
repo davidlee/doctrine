@@ -125,6 +125,35 @@ Optional per design D12 — not gating for acceptance.
 but is not required for any consumer. It can be skipped without blocking
 slice closure.
 
+### PHASE-07 — Code review remediation
+
+Post-implementation code review identified seven findings across test hygiene,
+defensive invariants, and CLI polish. This addendum phase resolves all of them
+before slice closure — no new features, no behavioural changes.
+
+**Test helpers:** `write`, `tmp`, `relation_rows`, `seed_slice`, `seed_adr`,
+`seed_requirement` are defined identically in three catalog sub-module test
+blocks. They are extracted into a shared `#[cfg(test)] mod test_helpers` under
+`src/catalog/` so a single copy serves all three. This eliminates the
+copy-paste pathology the review identified (🟠). The e2e CLI tests are
+strengthened from JSON-validity-only to concrete entity/edge/diagnostic
+counts on the seeded fixture (🟡).
+
+**Defensive invariants:** `validate_relations`' edge-source lookup currently
+uses `if let Some(kind)` which silently skips edges from sources missing from
+the entity-kind map — infallible by construction but with no guardrail if the
+invariant breaks. Replaced with `.expect()` citing the invariant (🟡).
+`NodeKey` serialization asymmetry (serializes as canonical ref string, not a
+structured variant) is documented on the `Serialize` impl (🟡). `outgoing`
+and `incoming` doc comments note silent-empty behaviour for nodes absent from
+the graph (🔵).
+
+**CLI polish:** The `--json` flag on `CatalogCommand` subcommands is removed
+— JSON is the hardcoded only format, and the dead flag misleads callers (🔵).
+
+**Why last?** All remediation is cosmetic or defensive — zero behavioural
+changes. It gates on PHASE-06 (the code being reviewed) and closes the slice.
+
 ## Notes
 
 - `dep_seq_for` and `require_minted` remain in `relation_graph.rs` per design D1/D2. Reconsideration is a follow-up, not part of this slice.

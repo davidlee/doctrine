@@ -328,7 +328,9 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
             // Edge source always exists in entity_kinds — edges are built from
             // entities in the same Catalog. The `if let` is a type-system
             // requirement (BTreeMap::get returns Option), not a genuine
-            // fallibility. Violation is a bug caught by debug_assert.
+            // fallibility. A None here is a bug — guarded by the invariant
+            // that every CatalogEdge.source is drawn from the same Catalog
+            // whose entities built entity_kinds.
             if let Some(kind) = entity_kinds.get(&edge.source) {
                 let validated = crate::relation::lookup(kind, edge.label)
                     .is_some_and(|r| !matches!(r.target, TargetSpec::Unvalidated));
