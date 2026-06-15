@@ -27,7 +27,6 @@ use crate::map_server::state::AppState;
 // ---------------------------------------------------------------------------
 
 /// Construct the axum Router with all routes.
-#[cfg_attr(not(test), expect(dead_code, reason = "consumed in PHASE-06 (serve)"))]
 pub(crate) fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(index))
