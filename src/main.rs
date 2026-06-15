@@ -3,6 +3,7 @@ mod adr;
 mod backlog;
 mod backlog_order;
 mod boot;
+mod catalog;
 mod clock;
 mod conduct;
 mod contentset;
