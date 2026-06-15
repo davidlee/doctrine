@@ -351,27 +351,23 @@ pub(crate) fn status_hue(s: &str) -> Option<owo_colors::DynColors> {
 }
 
 /// The tag-chip segment palette: a fixed set of distinguishable hues indexed by a
-/// stable byte-fold of the segment. EXCLUDES `Red` AND `BrightRed` (`Red` is reserved
-/// for adverse status in [`status_hue`]) and `Black`/`White` (terminal bg / the colon
-/// separator). Deterministic — no RNG, no clock.
-const TAG_PALETTE: [owo_colors::AnsiColors; 10] = {
-    use owo_colors::AnsiColors::{
-        Blue, BrightBlue, BrightCyan, BrightGreen, BrightMagenta, BrightYellow, Cyan, Green,
-        Magenta, Yellow,
-    };
-    [
-        Cyan,
-        Green,
-        Yellow,
-        Blue,
-        Magenta,
-        BrightCyan,
-        BrightGreen,
-        BrightYellow,
-        BrightBlue,
-        BrightMagenta,
-    ]
-};
+/// stable byte-fold of the segment. Gruvbox truecolour palette, 12 entries for
+/// maximum distinguishability. EXCLUDES `Red` (reserved for adverse status in
+/// [`status_hue`]). Deterministic — no RNG, no clock.
+const TAG_PALETTE: [owo_colors::Rgb; 12] = [
+    owo_colors::Rgb(204, 36, 29),   // red           #cc241d
+    owo_colors::Rgb(152, 151, 26),  // green         #98971a
+    owo_colors::Rgb(215, 153, 33),  // yellow        #d79921
+    owo_colors::Rgb(69, 133, 136),  // blue          #458588
+    owo_colors::Rgb(177, 98, 134),  // purple        #b16286
+    owo_colors::Rgb(104, 157, 106), // aqua          #689d6a
+    owo_colors::Rgb(214, 93, 14),   // orange        #d65d0e
+    owo_colors::Rgb(250, 189, 47),  // bright yellow #fabd2f
+    owo_colors::Rgb(131, 165, 152), // bright blue   #83a598
+    owo_colors::Rgb(211, 134, 155), // bright purple #d3869b
+    owo_colors::Rgb(142, 192, 124), // bright aqua   #8ec07c
+    owo_colors::Rgb(254, 128, 25),  // bright orange #fe8019
+];
 
 /// A pure byte fold (FNV-1a, 32-bit) over a segment's bytes. No RNG, no clock —
 /// deterministic across runs. Wrapping arithmetic keeps it cast-free (repo clippy
@@ -387,7 +383,7 @@ fn stable_hash(seg: &str) -> u32 {
 
 /// Stable, pure hue for a colon-segment: byte-fold hash → fixed palette index. No
 /// RNG, no clock — deterministic. Empty segment → `None` (no text, no colour).
-fn segment_hue(seg: &str) -> Option<owo_colors::AnsiColors> {
+fn segment_hue(seg: &str) -> Option<owo_colors::DynColors> {
     if seg.is_empty() {
         return None;
     }
@@ -396,7 +392,9 @@ fn segment_hue(seg: &str) -> Option<owo_colors::AnsiColors> {
     // `as` and `expect`).
     let len = u32::try_from(TAG_PALETTE.len()).unwrap_or(1);
     let index = usize::try_from(stable_hash(seg) % len).unwrap_or(0);
-    TAG_PALETTE.get(index).copied()
+    TAG_PALETTE
+        .get(index)
+        .map(|c| owo_colors::DynColors::Rgb(c.0, c.1, c.2))
 }
 
 /// Render one tag as a colon-segment chip: segments hued by [`segment_hue`], colons
@@ -405,11 +403,12 @@ fn segment_hue(seg: &str) -> Option<owo_colors::AnsiColors> {
 /// hue(command); `security` → one hue; empty segments (`:x`, `a::b`) contribute no
 /// text but the white colon still renders.
 pub(crate) fn paint_tag(tag: &str) -> String {
-    use owo_colors::{AnsiColors::White, OwoColorize};
+    use owo_colors::{AnsiColors::White, DynColors, OwoColorize};
+    let white = DynColors::Ansi(White);
     let mut out = String::with_capacity(tag.len());
     for (index, seg) in tag.split(':').enumerate() {
         if index != 0 {
-            out.push_str(&":".color(White).to_string());
+            out.push_str(&":".color(white).to_string());
         }
         match segment_hue(seg) {
             Some(hue) => out.push_str(&seg.color(hue).to_string()),
@@ -1631,29 +1630,23 @@ mod tests {
         }
     }
 
-    /// VT-5: `segment_hue` is deterministic and the palette excludes Red/BrightRed and
-    /// Black/White — Red is reserved for adverse status, Black is the bg, White is the
-    /// colon separator.
+    /// VT-5: `segment_hue` is deterministic and the palette (truecolour gruvbox)
+    /// inherently excludes ANSI reserved colours. Palette size ≥ 8.
     #[test]
     fn segment_hue_is_deterministic_and_palette_excludes_reserved() {
-        use owo_colors::AnsiColors::{Black, BrightRed, BrightWhite, Red, White};
         // Determinism: same segment → same hue across calls.
         for seg in ["cli", "command", "security", "a", "longer-segment"] {
             assert_eq!(segment_hue(seg), segment_hue(seg), "{seg} is deterministic");
         }
         // Empty segment → no colour (no text either).
         assert_eq!(segment_hue(""), None, "empty segment is uncoloured");
-        // No palette entry is a reserved colour.
-        for reserved in [Red, BrightRed, Black, White, BrightWhite] {
-            assert!(
-                !TAG_PALETTE.contains(&reserved),
-                "palette must exclude {reserved:?}"
-            );
-        }
         // Every non-empty segment lands on a palette hue.
         for seg in ["x", "alpha", "cli", "命"] {
             let hue = segment_hue(seg).expect("non-empty segment is coloured");
-            assert!(TAG_PALETTE.contains(&hue), "{seg} hue is in the palette");
+            assert!(
+                matches!(hue, owo_colors::DynColors::Rgb(..)),
+                "{seg} hue {hue:?} is a truecolour palette entry"
+            );
         }
         assert!(TAG_PALETTE.len() >= 8, "palette is sufficiently large");
     }
@@ -1664,8 +1657,8 @@ mod tests {
     #[test]
     fn paint_tag_colon_segments_hued_separators_white() {
         let white_colon = {
-            use owo_colors::{AnsiColors::White, OwoColorize};
-            ":".color(White).to_string()
+            use owo_colors::{AnsiColors::White, DynColors, OwoColorize};
+            ":".color(DynColors::Ansi(White)).to_string()
         };
 
         // Single segment: a hue, no colon.
