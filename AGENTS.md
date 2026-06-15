@@ -117,6 +117,22 @@ These are the project-specific additions.)
   governance snapshot; `boot install` wires the `@`-import + SessionStart hook;
   `boot --check` is the disk sentry (stale / unpopulated). In-session edits lag ≤2
   sessions — `/canon` carries the regenerate-THEN-`/clear` freshen-now ritual.
+- **candidate / admission workflow — SHIPPED (SL-068 / ADR-012 candidate clauses).**
+  `review/*` and `phase/*` from `dispatch sync --prepare-review` are immutable
+  EVIDENCE refs — never edited or landed in place (R2). To review, repair, or land
+  dispatched work, publish a **candidate interaction branch**: `doctrine dispatch
+  candidate create --slice N --role review_surface|close_target --base <trunk>
+  [--source <ref>] [--worktree]` (a Doctrine no-ff 3-way merge recording immutable
+  source/base/merge OIDs); `… candidate status --slice N` lists evidence vs
+  candidates separately and prints the safe next verb; `… candidate admit --slice N
+  --role <role> --candidate <ref> [--review RV-NNN]` validates provenance +
+  merge-ancestry, refuses a moved ref, and pins an immutable `admitted_oid`. `/close`
+  then runs `dispatch sync --integrate`, which targets the admitted OID via an
+  ff-only CAS row (never a close-time merge or a mutable ref; a moved target refuses
+  — admit a superseding candidate). Orchestrator-classed; `create`/`admit` refuse
+  under worker-mode and from a raw-evidence worktree. Remaining `/audit` +
+  `/code-review` candidate-surface rewiring is deferred (IMP-042); freeform
+  candidate-workflow orientation masters are SL-069's to author (CHR-009).
 
 ## environment
 

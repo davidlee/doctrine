@@ -1,0 +1,41 @@
+memory_uid = "mem_019ec8841cda7ee2a522bd713fdc07de"
+memory_key = "mem.pattern.dispatch.candidate-build-seam"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Candidate create/admit build seam: no-ff 3-way merge, zero-OID CAS, admission-by-OID"
+summary = ""
+created = "2026-06-14"
+updated = "2026-06-14"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ab7ecf0a4de6c520f0cdf344ce8a86c25d07be48"
+ref_name = "refs/heads/dispatch/068"
+checkout_state_id = "930c80bfecdf20863a13681c1c4ead6d910e8c6bb5ac46d7900423a47c827c23"
+base_commit = "d5be14d22012e6e38bbaf64f5ab865de3c3b437c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
