@@ -1930,25 +1930,67 @@ mod tests {
 
     // -- VT-3, VT-4, VT-5: hue maps --------------------------------------
 
-    /// VT-3: `backlog_kind_hue` maps all 5 known kinds to `Some(DynColors)`;
-    /// unknown kind returns `None`.
+    /// VT-3: `backlog_kind_hue` maps all 5 known kinds to distinct, stable
+    /// `DynColors` per the design table; unknown kind returns `None`.
     #[test]
     fn backlog_kind_hue_maps_all_known_and_none_for_unknown() {
-        for known in ["issue", "improvement", "chore", "risk", "idea"] {
-            assert!(backlog_kind_hue(known).is_some(), "{known} is a known kind");
+        use owo_colors::{
+            AnsiColors::{Blue, Green, Magenta, Red, Yellow},
+            DynColors,
+        };
+        let known: &[(&str, DynColors)] = &[
+            ("issue", DynColors::Ansi(Red)),
+            ("improvement", DynColors::Ansi(Green)),
+            ("chore", DynColors::Ansi(Yellow)),
+            ("risk", DynColors::Ansi(Magenta)),
+            ("idea", DynColors::Ansi(Blue)),
+        ];
+        for &(kind, expected) in known {
+            assert_eq!(
+                backlog_kind_hue(kind),
+                Some(expected),
+                "{kind} hue mismatch"
+            );
+        }
+        // All 5 kinds MUST map to distinct hues.
+        let hues: Vec<_> = known.iter().map(|(_, h)| h).collect();
+        for i in 0..hues.len() {
+            for j in (i + 1)..hues.len() {
+                assert_ne!(hues[i], hues[j], "kinds must have distinct hues");
+            }
         }
         assert!(backlog_kind_hue("bogus").is_none(), "unknown kind → None");
     }
 
-    /// VT-4: `memory_type_hue` maps all 6 known memory types to `Some(DynColors)`;
-    /// unknown type returns `None`.
+    /// VT-4: `memory_type_hue` maps all 6 known memory types to distinct,
+    /// stable `DynColors` per the design table; unknown type returns `None`.
     #[test]
     fn memory_type_hue_maps_all_known_and_none_for_unknown() {
-        for known in ["concept", "fact", "pattern", "signpost", "system", "thread"] {
-            assert!(
-                memory_type_hue(known).is_some(),
-                "{known} is a known memory type"
+        use owo_colors::{
+            AnsiColors::{Blue, Cyan, Green, Magenta, Red, Yellow},
+            DynColors,
+        };
+        let known: &[(&str, DynColors)] = &[
+            ("concept", DynColors::Ansi(Cyan)),
+            ("fact", DynColors::Ansi(Green)),
+            ("pattern", DynColors::Ansi(Magenta)),
+            ("signpost", DynColors::Ansi(Blue)),
+            ("system", DynColors::Ansi(Yellow)),
+            ("thread", DynColors::Ansi(Red)),
+        ];
+        for &(kind, expected) in known {
+            assert_eq!(
+                memory_type_hue(kind),
+                Some(expected),
+                "{kind} hue mismatch"
             );
+        }
+        // All 6 types MUST map to distinct hues.
+        let hues: Vec<_> = known.iter().map(|(_, h)| h).collect();
+        for i in 0..hues.len() {
+            for j in (i + 1)..hues.len() {
+                assert_ne!(hues[i], hues[j], "memory types must have distinct hues");
+            }
         }
         assert!(memory_type_hue("bogus").is_none(), "unknown type → None");
     }
@@ -1967,6 +2009,72 @@ mod tests {
     }
 
     // -- VT-7: render_columns with Alternate + Fixed  ---------------------
+
+    /// VT-7b (zebra-pattern guard): 3 data rows with `Alternate` title column —
+    /// even-indexed rows share one hue, odd-indexed rows share a different hue,
+    /// and the header row carries bold but no alternate hue (it is built
+    /// separately by `render_columns` and does not pass through the
+    /// `enumerate()` data-row path).
+    #[test]
+    fn render_columns_alternate_zebra_pattern_on_data_rows_header_excluded() {
+        use owo_colors::{
+            AnsiColors::{Green, Red},
+            DynColors,
+        };
+        struct ZRow {
+            title: &'static str,
+        }
+        // Use a deliberately garish pair so the per-row ANSI tokens are distinct
+        // and matchable — the real TITLE_EVEN/TITLE_ODD are subtle and hard to
+        // fingerprint byte-for-byte.
+        let columns: [Column<ZRow>; 1] = [Column {
+            name: "title",
+            header: "title",
+            cell: |r| r.title.to_string(),
+            paint: ColumnPaint::Alternate([DynColors::Ansi(Green), DynColors::Ansi(Red)]),
+        }];
+        let rows = [
+            ZRow { title: "Row0" },
+            ZRow { title: "Row1" },
+            ZRow { title: "Row2" },
+        ];
+        let sel = select_columns(&columns, &["title"], None).unwrap();
+        let out = render_columns(
+            &rows,
+            &sel,
+            RenderOpts {
+                color: true,
+                ..Default::default()
+            },
+        );
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 4, "header + 3 data rows");
+
+        // Header line: bold escape present, but NO alternate hue escape (the
+        // Green SGR emitted by paint_cell for row 0 is `\x1b[32m` — the bold
+        // header uses only `\x1b[1m`).
+        let header = lines[0];
+        assert!(header.contains("\u{1b}[1m"), "header is bold");
+        assert!(
+            !header.contains("\u{1b}[32m"),
+            "header must not carry the Alternate even-hue (row 0) — header is excluded"
+        );
+
+        // Data rows: row 0 and row 2 share the even hue (Green → ESC[32m),
+        // row 1 gets the odd hue (Red → ESC[31m).
+        assert!(
+            lines[1].contains("\u{1b}[32m"),
+            "data row 0 carries even (Green) hue"
+        );
+        assert!(
+            lines[2].contains("\u{1b}[31m"),
+            "data row 1 carries odd (Red) hue"
+        );
+        assert!(
+            lines[3].contains("\u{1b}[32m"),
+            "data row 2 carries even (Green) hue — wraps back"
+        );
+    }
 
     /// VT-7: `render_columns` with an `Alternate`-painted title column and a
     /// `Fixed`-painted id column renders colour on both; stripping ANSI from

@@ -550,7 +550,7 @@ impl TryFrom<RawMemoryToml> for Memory {
             verification_state: review.verification_state,
             reviewed: review.reviewed,
             review_by: review.review_by,
-            trust_level: trust.trust_level,
+            trust_level: trust.trust_level.trim().to_lowercase(),
             severity: ranking.severity,
             weight: ranking.weight,
         })
