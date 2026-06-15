@@ -1,0 +1,34 @@
+id    = 32
+slug  = "reconciliation-review-of-sl-068"
+title = "reconciliation review of SL-068"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-068"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "VT-2 moved-during-admit refusal is asserted by name only, not exercised"
+detail = "Expected (plan.toml PHASE-05 VT-2): a candidate ref that moves DURING admission refuses with the moved-ref diagnostic. Observed: the TOCTOU guard exists and is correct (dispatch.rs read admitted_1 → pure provenance reads → re-read admitted_2 → refuse if !=, ~L536-545), but the test named e2e_dispatch_candidate_admit_records_immutable_oid_and_moved_ref_refuses only asserts POST-admit immutability (I4: ref moves after admit, admitted_oid unchanged). It never reaches the during-admit refusal branch — a single-process black-box test has no seam to move the ref between the two resolves. So VT-2's refusal clause has zero automated coverage and the test name overstates it. notes.md flagged this gap. Code correct; coverage debt."
+disposition = "follow-up"
+response = "Code is correct (the re-read TOCTOU guard refuses a mid-admission ref move); the gap is coverage of a defensive branch a single-process black-box test cannot reach without an injected ref-move seam. Captured as IMP-077. Not fix-now: closing the gap needs new test infrastructure, not a SL-068 code change."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Gate surfaced a pre-existing date-coupled golden failure (out of SL-068 scope)"
+detail = "Expected: clean full suite. Observed: tests/e2e_dep_seq_verbs.rs::slice_needs_after_round_trip_table_and_json fails — golden hardcodes 'created 2026-06-14 · updated 2026-06-14' (L92/L110) but the entity stamps the real wall-clock date (2026-06-15 today), so left!=right. NOT a SL-068 regression: the file is not in the SL-068 diff and main carries the identical 2026-06-14 literal (fails on main today too). The candidate suite (23/23), clippy (clean), and the behaviour-preservation sync suites are all green. Pre-existing wall-clock coupling in a sibling test."
+disposition = "follow-up"
+response = "Out of SL-068 scope: e2e_dep_seq_verbs.rs is not in the slice diff and fails identically on main (same 2026-06-14 literal). A real pre-existing flaky-test bug — wall-clock coupling in a black-box golden. Captured as ISS-017. SL-068's own surfaces (candidate suite 23/23, clippy clean, sync behaviour-preservation) are green."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
