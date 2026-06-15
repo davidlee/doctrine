@@ -115,3 +115,45 @@ Fixture: 4 entities (SL-001, SL-003, ADR-002, REQ-005) spanning 2 KINDS with id
   `src/relation_graph.rs` (+32/-28, dangler migration + import).
 - **Gate**: 1341 tests, 0 failures, zero test changes; `cargo clippy` zero
   warnings; `just gate` passes workspace-wide.
+
+## PHASE-06 (2026-06-15) — Debug CLI
+
+- **Added** `CatalogCommand` sub-enum with `Scan` and `Graph` variants, each
+  carrying `--json` + `--root <path>` flags.
+- **Added** `Command::Catalog` variant (between Boot and Claude in the enum).
+- **Wired** classification: `Catalog { .. } => Read` — merged into existing
+  read-only group (Validate | Inspect | Survey | Next | Blockers | Explain)
+  to satisfy `clippy::match_same_arms`.
+- **Implemented** `run_catalog_scan` / `run_catalog_graph` — resolve root
+  via `root::find`, validate `.doctrine/` dir exists, scan + serialize,
+  write stdout. Error path: non-zero exit + stderr via `anyhow::bail!`.
+- **Serde plumbing**:
+  - Added `Serialize` derives to `Catalog`, `CatalogEntity`, `CatalogEdge`,
+    `EdgeTarget`, `EdgeOrigin`, `SourceSpan`, `entity::Kind` (skipping `scaffold`
+    fn pointer), `RelationLabel`, `CatalogDiagnostic`, `Severity`,
+    `CatalogGraph`, `CatalogNode`, `EntityKey`.
+  - Custom `Serialize` for `NodeKey` — required because `BTreeMap<K, V>` in
+    serde_json requires string keys; serializes `Entity(key)` as `key.canonical()`.
+- **Retired** `#[expect(dead_code)]` from `Catalog`, `CatalogGraph`,
+  `CatalogNode`, `from_catalog` constructor, plus `CatalogEntity`,
+  `CatalogEdge`, `EdgeOrigin`, `SourceSpan`. Retained on `outgoing` /
+  `incoming` (not consumed by this CLI).
+- **Root validation**: `root::find` passes explicit paths through without
+  checking existence; added `.doctrine/` directory check in both run
+  functions so `--root /nonexistent` fails with non-zero exit + stderr
+  (EX-4).
+- **3 integration tests** in `tests/e2e_catalog_cli.rs`: valid JSON
+  (scan + graph), non-existent root non-zero exit.
+- **Files changed**:
+  - `src/main.rs` (+64 lines: `CatalogCommand` enum, `Command::Catalog`
+    variant, classify + dispatch, `run_catalog_scan` / `run_catalog_graph`)
+  - `src/catalog/hydrate.rs` (serialize derives, dead_code removal)
+  - `src/catalog/graph.rs` (serialize derives, dead_code removal, custom
+    `NodeKey::Serialize`)
+  - `src/catalog/scan.rs` (serialize derive on `EntityKey`)
+  - `src/catalog/diagnostic.rs` (serialize derives)
+  - `src/entity.rs` (serialize derive on `Kind`, skip `scaffold`)
+  - `src/relation.rs` (serialize derive on `RelationLabel`)
+  - `tests/e2e_catalog_cli.rs` (new, 3 tests)
+- **Gate**: 1344 tests (1341 + 3 new), 0 failures; `cargo clippy` zero
+  warnings; `just gate` passes workspace-wide.

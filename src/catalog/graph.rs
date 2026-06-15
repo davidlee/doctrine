@@ -14,14 +14,7 @@ use super::scan::EntityKey;
 // ---------------------------------------------------------------------------
 
 /// The presentation-neutral graph: nodes indexed by key, edges as a flat list.
-#[derive(Debug, Clone)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by tests; external consumer lands in PHASE-05/06"
-    )
-)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct CatalogGraph {
     pub(crate) nodes: BTreeMap<NodeKey, CatalogNode>,
     pub(crate) edges: Vec<CatalogEdge>,
@@ -34,15 +27,16 @@ pub(crate) enum NodeKey {
     Entity(EntityKey),
 }
 
+impl serde::Serialize for NodeKey {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            NodeKey::Entity(key) => key.canonical().serialize(serializer),
+        }
+    }
+}
+
 /// A node in the graph — the presentation-neutral view of one entity.
-#[derive(Debug, Clone)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by tests; external consumer lands in PHASE-05/06"
-    )
-)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct CatalogNode {
     pub(crate) title: String,
     pub(crate) status: Option<String>,
@@ -52,10 +46,6 @@ pub(crate) struct CatalogNode {
 impl CatalogGraph {
     /// Pure projection of a [`Catalog`] into a graph. Builds the node map
     /// from catalog entities and copies the edge list. No disk, no cordage.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "external consumer lands in PHASE-05/06")
-    )]
     pub(crate) fn from_catalog(catalog: &Catalog) -> Self {
         let mut nodes = BTreeMap::new();
         for entity in &catalog.entities {
@@ -78,7 +68,7 @@ impl CatalogGraph {
     /// All outbound edges whose `source` is the given `node`, including those
     /// with `UnresolvedRef` or `UnvalidatedText` targets. Callers must handle
     /// the case where an edge has no target node in the graph (D10).
-    #[cfg_attr(not(test), expect(dead_code, reason = "tested; PHASE-05/06 consumers"))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "tested; future consumer"))]
     pub(crate) fn outgoing(&self, node: &NodeKey) -> Vec<&CatalogEdge> {
         let NodeKey::Entity(key) = node;
         self.edges.iter().filter(|e| &e.source == key).collect()
@@ -87,7 +77,7 @@ impl CatalogGraph {
     /// All inbound edges whose `target` is `Resolved(key)` matching the given
     /// `node`. Edges with unresolved or unvalidated targets are excluded — an
     /// edge with no target node cannot "point to" a node (D10).
-    #[cfg_attr(not(test), expect(dead_code, reason = "tested; PHASE-05/06 consumers"))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "tested; future consumer"))]
     pub(crate) fn incoming(&self, node: &NodeKey) -> Vec<&CatalogEdge> {
         let NodeKey::Entity(key) = node;
         self.edges

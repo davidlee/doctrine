@@ -9,7 +9,7 @@ use super::scan::EntityKey;
 
 /// One finding from corpus scanning — never a panic or fail-fast.
 /// Collectable so consumers filter by severity or suppress known noise.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct CatalogDiagnostic {
     /// The entity directory (or TOML) that sourced this finding.
     pub(crate) file: PathBuf,
@@ -22,7 +22,7 @@ pub(crate) struct CatalogDiagnostic {
     pub(crate) severity: Severity,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub(crate) enum Severity {
     /// A hard integrity violation (malformed TOML, duplicate id). Not produced
     /// this phase — the fail-fast `scan_entities` bails before we reach here.

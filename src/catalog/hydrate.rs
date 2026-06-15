@@ -22,11 +22,7 @@ use super::scan::{EntityKey, ScannedEntity};
 /// The hydrated, presentation-neutral result of a full entity corpus scan.
 /// Consumer-neutral: every downstream query (inspect, priority, graph, coverage,
 /// agent-context) projects from this one structure.
-#[derive(Clone)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "fields read by tests + PHASE-04/05 consumers")
-)]
+#[derive(Clone, serde::Serialize)]
 pub(crate) struct Catalog {
     pub(crate) entities: Vec<CatalogEntity>,
     pub(crate) edges: Vec<CatalogEdge>,
@@ -39,11 +35,7 @@ pub(crate) struct Catalog {
 
 /// One entity hydrated from the raw scan, carrying its identity, derived
 /// filesystem path, authored metadata, and a source span.
-#[derive(Clone)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "fields read by tests + PHASE-04/05 consumers")
-)]
+#[derive(Clone, serde::Serialize)]
 pub(crate) struct CatalogEntity {
     pub(crate) key: EntityKey,
     pub(crate) kind: &'static entity::Kind,
@@ -61,11 +53,7 @@ pub(crate) struct CatalogEntity {
 // ---------------------------------------------------------------------------
 
 /// One outbound relation with its target classified and its origin recorded.
-#[derive(Debug, Clone)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "fields read by tests + PHASE-04/05 consumers")
-)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct CatalogEdge {
     pub(crate) source: EntityKey,
     pub(crate) label: RelationLabel,
@@ -75,7 +63,7 @@ pub(crate) struct CatalogEdge {
 }
 
 /// The classification of an outbound edge's `target` string.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) enum EdgeTarget {
     /// Target parsed as a canonical ref and the entity exists in the scan.
     Resolved(EntityKey),
@@ -94,8 +82,7 @@ pub(crate) enum EdgeTarget {
 
 /// Where an outbound edge was authored — the entity file and the field/section
 /// that contained the `[[relation]]` row.
-#[derive(Debug, Clone)]
-#[cfg_attr(not(test), expect(dead_code, reason = "fields read by tests"))]
+#[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct EdgeOrigin {
     /// The entity directory that authored this edge.
     pub(crate) file: PathBuf,
@@ -106,11 +93,7 @@ pub(crate) struct EdgeOrigin {
 /// The source location for an authored fact — the entity directory and an
 /// optional section/field name. No line/col tracking (deferred to a follow-up
 /// slice when a TOML span parser is available).
-#[derive(Debug, Clone)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "fields read by tests + PHASE-04/05 consumers")
-)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct SourceSpan {
     /// The entity directory on disk.
     pub(crate) file: PathBuf,

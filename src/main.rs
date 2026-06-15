@@ -161,6 +161,14 @@ enum Command {
         yes: bool,
     },
 
+    /// Debug catalog inspection — thin JSON dump of the hydrated entity corpus
+    /// (`scan`) and its graph projection (`graph`). Developer-facing; not gating
+    /// for acceptance (SL-071 D12).
+    Catalog {
+        #[command(subcommand)]
+        command: CatalogCommand,
+    },
+
     /// Manage the Claude harness surface (skills, agents, hooks).
     Claude {
         #[command(subcommand)]
@@ -514,6 +522,31 @@ enum Command {
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum CatalogCommand {
+    /// Thin JSON dump of the hydrated entity corpus `Catalog` — entities,
+    /// edges, and diagnostics.
+    Scan {
+        /// Output as JSON (the only format).
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit corpus root (default: auto-detect from CWD).
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// Thin JSON dump of the `CatalogGraph` — nodes and edges.
+    Graph {
+        /// Output as JSON (the only format).
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit corpus root (default: auto-detect from CWD).
+        #[arg(long)]
+        root: Option<PathBuf>,
     },
 }
 
@@ -2634,7 +2667,8 @@ fn write_class(cmd: &Command) -> WriteClass {
         // view (SL-046 — reads only, never mints/derives status).
         // Read-only priority surfaces (SL-047 — derive per query, never write /
         // mint / derive status; ADR-004 stores no reverse field).
-        Command::Validate { .. }
+        Command::Catalog { .. }
+        | Command::Validate { .. }
         | Command::Inspect { .. }
         | Command::Survey { .. }
         | Command::Next { .. }
@@ -2652,6 +2686,41 @@ fn write_class(cmd: &Command) -> WriteClass {
         // in one transaction (SL-062 §5.4).
         Command::Supersede { .. } => Write("supersede"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// `doctrine catalog scan --json` / `doctrine catalog graph --json` (SL-071 PHASE-06)
+// ---------------------------------------------------------------------------
+
+/// Thin JSON dump of the hydrated `Catalog` — entities, edges, and diagnostics.
+/// Developer scaffolding; not gating for acceptance (D12).
+fn run_catalog_scan(root_arg: Option<PathBuf>) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(root_arg, &crate::root::default_markers())?;
+    if !root.join(".doctrine").is_dir() {
+        anyhow::bail!("no .doctrine directory found at '{}'", root.display());
+    }
+    let catalog = crate::catalog::hydrate::scan_catalog(&root)?;
+    let json = serde_json::to_string_pretty(&catalog)
+        .map_err(|e| anyhow::anyhow!("failed to serialize catalog: {e}"))?;
+    write!(std::io::stdout(), "{json}")?;
+    Ok(())
+}
+
+/// Thin JSON dump of the `CatalogGraph` — nodes and edges.
+/// Developer scaffolding; not gating for acceptance (D12).
+fn run_catalog_graph(root_arg: Option<PathBuf>) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(root_arg, &crate::root::default_markers())?;
+    if !root.join(".doctrine").is_dir() {
+        anyhow::bail!("no .doctrine directory found at '{}'", root.display());
+    }
+    let catalog = crate::catalog::hydrate::scan_catalog(&root)?;
+    let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
+    let json = serde_json::to_string_pretty(&graph)
+        .map_err(|e| anyhow::anyhow!("failed to serialize graph: {e}"))?;
+    write!(std::io::stdout(), "{json}")?;
+    Ok(())
 }
 
 /// `doctrine inspect <ID> [--json]` — the COMMAND-LAYER composition (SL-047 §5.4 /
@@ -3350,6 +3419,10 @@ fn main() -> anyhow::Result<()> {
                 dry_run,
                 yes,
             }) => boot::run_install(path, &agent, dry_run, yes),
+        },
+        Command::Catalog { command } => match command {
+            CatalogCommand::Scan { json: _, root } => run_catalog_scan(root),
+            CatalogCommand::Graph { json: _, root } => run_catalog_graph(root),
         },
         Command::Worktree { command } => match command {
             WorktreeCommand::Provision { fork, path } => worktree::run_provision(path, &fork),
