@@ -237,6 +237,12 @@ PHASE-02 and PHASE-03 are file-disjoint from PHASE-01 (different source files)
 and from PHASE-04 (PHASE-04 touches `memory/`, not `src/boot.rs`). PHASE-02 and
 PHASE-03 share `src/boot.rs` and should be one phase or tightly sequenced.
 
+> **Plan adaptation:** the plan merged design PHASE-02 (signpost trim) and
+> PHASE-03 (governance warning) into a single PHASE-02 since they share
+> `src/boot.rs`. This renumbers design PHASE-04 → plan PHASE-03 (corpus refresh)
+> and design PHASE-05 → plan PHASE-04 (integration). The plan is the execution
+> authority — this note records the consolidation decision.
+
 ### File-disjointness for parallelism
 
 - PHASE-01: `memory/` tree only

@@ -44,3 +44,26 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 - `memory show` resolves only from `items/`, not `shipped/` — integration tests
   verify INV signature by reading shipped TOML directly and querying via `find`
+
+## Code review remediation — 2026-06-15
+
+Findings addressed from the SL-069 code review (all file-disjoint, batched):
+
+- 🟠 **Scope gaps:** `recording-memories` gained `find`/`retrieve`/`show` in its
+  `commands` scope; `relating-entities` gained `needs`/`after`/`supersede`
+- 🟠 **Brittle TOML parsing:** e2e test replaced line-by-line string surgery with
+  `toml::from_str::<toml::Value>` structured access for key extraction and INV
+  signature assertions
+- 🟠 **Hard-coded cardinality:** `sync_produces_all_shipped_dirs` now derives the
+  expected count from the source `memory/` tree (via `CARGO_MANIFEST_DIR`), not a
+  literal `27`
+- 🟡 **Unused scope_args:** e2e test now drives `memory find` with the scope args
+  from the table — validates scoped retrieval, not just UID lookup
+- 🟡 **gov_nudge allocation:** `is_marker` guards with `heading.starts_with("Active ")`
+  before calling `gov_nudge`, skipping the allocation for all non-governance sections
+- 🟡 **Design/plan numbering drift:** note added to design §7 recording the
+  PHASE-02+03→single-PHASE-02 consolidation and downstream renumbering
+- 🔵 **"see below" ambiguity:** boot-snapshot memory rephrased to inline the
+  concept/fact/pattern exclusion rather than a context-dependent forward reference
+
+All existing tests green unchanged; `just gate` passes.

@@ -11,7 +11,7 @@ updated = "2026-06-15"
 [scope]
 paths = [".doctrine/memory/"]
 globs = []
-commands = ["doctrine memory record", "doctrine memory verify"]
+commands = ["doctrine memory record", "doctrine memory verify", "doctrine memory find", "doctrine memory retrieve", "doctrine memory show"]
 tags = []
 workspace = "default"
 repo = ""

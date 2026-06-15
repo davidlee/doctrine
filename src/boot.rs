@@ -253,7 +253,8 @@ fn regenerate(root: &Path, exec: &Path) -> anyhow::Result<bool> {
 /// section is unpopulated iff its body is byte-equal to `marker(heading)` or
 /// `gov_nudge(heading)` (SL-069 — governance empty-section nudge).
 fn is_marker(section: &Section) -> bool {
-    section.body == marker(&section.heading) || section.body == gov_nudge(&section.heading)
+    section.body == marker(&section.heading)
+        || (section.heading.starts_with("Active ") && section.body == gov_nudge(&section.heading))
 }
 
 /// The disk freshness/health report (Charge II/III). DETERMINISTIC — built from
