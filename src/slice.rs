@@ -708,7 +708,7 @@ const SLICE_COLUMNS: [listing::Column<SliceRowTuple>; 5] = [
         name: "title",
         header: "title",
         cell: |(m, _)| m.title.clone(),
-        paint: listing::ColumnPaint::None,
+        paint: listing::ColumnPaint::Alternate([listing::TITLE_EVEN, listing::TITLE_ODD]),
     },
 ];
 

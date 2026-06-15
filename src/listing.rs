@@ -316,7 +316,6 @@ pub(crate) enum ColumnPaint<R> {
     /// Alternating two-hue foreground per data-row index, for zebra-striping the
     /// title column. `[even_hue, odd_hue]`; data row 0 uses `even_hue`. The header
     /// row is excluded — [`render_columns`] builds it separately via [`paint_header`].
-    #[expect(dead_code, reason = "wired in T4 (per-kind column definitions)")]
     Alternate([owo_colors::DynColors; 2]),
 }
 
@@ -368,6 +367,13 @@ const TAG_PALETTE: [owo_colors::Rgb; 12] = [
     owo_colors::Rgb(142, 192, 124), // bright aqua   #8ec07c
     owo_colors::Rgb(254, 128, 25),  // bright orange #fe8019
 ];
+
+/// Zebra-striping title-column hues: two subtle gruvbox-adjacent foreground colours
+/// for alternating row visual separation. Even rows → `TITLE_EVEN`; odd rows →
+/// `TITLE_ODD`. Wired via [`ColumnPaint::Alternate`] on the title column of each
+/// list surface.
+pub(crate) const TITLE_EVEN: owo_colors::DynColors = owo_colors::DynColors::Rgb(235, 219, 178); // #ebdbb2
+pub(crate) const TITLE_ODD: owo_colors::DynColors = owo_colors::DynColors::Rgb(213, 196, 161);  // #d5c4a1
 
 /// A pure byte fold (FNV-1a, 32-bit) over a segment's bytes. No RNG, no clock —
 /// deterministic across runs. Wrapping arithmetic keeps it cast-free (repo clippy

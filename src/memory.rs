@@ -1103,7 +1103,7 @@ const MEMORY_COLUMNS: [Column<Memory>; 6] = [
         name: "title",
         header: "title",
         cell: |m| scrub_line(&m.title),
-        paint: listing::ColumnPaint::None,
+        paint: listing::ColumnPaint::Alternate([listing::TITLE_EVEN, listing::TITLE_ODD]),
     },
 ];
 
