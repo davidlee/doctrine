@@ -194,3 +194,23 @@ Governance updates were authored before implementation planning:
 - ADR-012 now owns the candidate branch role, candidate provenance/admission
   contract, admitted-OID close semantics, no-close-time-merge rule, and v1 code
   close-target default.
+
+## Audit (2026-06-15) — RV-032, reconciled, audit-ready
+
+Reconciliation review RV-032 (done, no blockers). Reviewed the dispatched bundle
+(`review/068` = `phase/068-06` code, identical delta) from the main parent tree;
+ran the gate independently on a throwaway worktree on `review/068` with a dedicated
+CARGO_TARGET_DIR. clippy clean; `e2e_dispatch_candidate` 23/23; behaviour-
+preservation sync suites green. PHASE-01..07 conform to the locked design.
+
+Two non-blocking findings, both follow-up:
+- F-1 (IMP-077) — VT-2 moved-DURING-admit TOCTOU refusal asserted by test name
+  only; the guard is correct but a single-process black-box test cannot reach the
+  refusal branch (no injectable ref-move seam). The existing test proves post-admit
+  immutability (I4), not the during-admit refusal.
+- F-2 (ISS-017) — pre-existing date-coupled golden `e2e_dep_seq_verbs` hardcodes
+  2026-06-14; fails on any later wall-clock day, identically on main. Out of scope.
+
+Synthesis: `review-032.md`. Next: `/close` (integrate the admitted close_target OID
+— admit a close_target candidate first, then `dispatch sync --integrate` with
+`DOCTRINE_TRUNK_REF=main`).
