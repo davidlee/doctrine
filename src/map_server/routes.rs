@@ -66,11 +66,13 @@ async fn vendor_asset(Path(path): Path<String>) -> Result<impl IntoResponse, Map
 }
 
 async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let dot_ok = dot_version().await.is_ok();
+    let dot_result = dot_version().await;
+    let dot_ok = dot_result.is_ok();
+    let dot_version = dot_result.ok();
     let graph_ok = !state.graph.read().await.nodes.is_empty();
     Json(json!({
         "ok": true,
-        "dot": { "ok": dot_ok },
+        "dot": { "ok": dot_ok, "version": dot_version },
         "graph": { "ok": graph_ok }
     }))
 }
