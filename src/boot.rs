@@ -125,6 +125,16 @@ fn marker(label: &str) -> String {
     format!("<!-- {label}: not yet populated -->")
 }
 
+/// A governance-specific nudge for empty Policies/Standards sections — points
+/// at the shipped signpost memory covering these governance kinds.
+fn gov_nudge(heading: &str) -> String {
+    let kind = heading
+        .strip_prefix("Active ")
+        .unwrap_or(heading)
+        .to_lowercase();
+    format!("<!-- No active {kind} yet. See mem.signpost.doctrine.policies-standards -->")
+}
+
 // ---------------------------------------------------------------------------
 // Impure shell: produce each body, write on change, run the verb
 // ---------------------------------------------------------------------------
@@ -144,17 +154,25 @@ fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Sectio
         // byte-for-byte; a multi-element set (standards: default+required) is what
         // the `&[&str]` buys. The error≡empty marker collapse and supersession⇏status
         // gap are inherited, shared, and out of scope here (§5.5) — documented, not fixed.
-        SourceKind::GovRows(kind, set) => section_or_marker(
-            heading,
-            governance::list_rows(
+        SourceKind::GovRows(kind, set) => {
+            let produced = governance::list_rows(
                 kind,
                 root,
                 crate::listing::ListArgs {
                     status: set.iter().map(|s| (*s).to_string()).collect(),
                     ..Default::default()
                 },
-            ),
-        ),
+            );
+            // Empty Policies or Standards sections get a specific nudge
+            // pointing at the shipped signpost memory; every other governance
+            // kind gets the generic marker.
+            match (&produced, heading) {
+                (Ok(rows), "Active Policies" | "Active Standards") if rows.trim().is_empty() => {
+                    gov_nudge(heading)
+                }
+                _ => section_or_marker(heading, produced),
+            }
+        }
         // ACTIVE memories only — an explicit boot predicate, DECOUPLED from the
         // CLI `memory list` default (which keeps `draft` visible). boot is an
         // agent-context PRODUCER and `draft` is unreviewed, so it must not leak
@@ -164,7 +182,7 @@ fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Sectio
             heading,
             memory::list_rows(
                 root,
-                None,
+                Some(memory::MemoryType::Signpost),
                 crate::listing::ListArgs {
                     status: vec!["active".to_string()],
                     ..Default::default()
@@ -232,9 +250,10 @@ fn regenerate(root: &Path, exec: &Path) -> anyhow::Result<bool> {
 
 /// Whether a section still carries its not-yet-populated marker body — i.e. its
 /// source was missing or empty at render time. Exact, not a substring grep: a
-/// section is unpopulated iff its body is byte-equal to `marker(heading)`.
+/// section is unpopulated iff its body is byte-equal to `marker(heading)` or
+/// `gov_nudge(heading)` (SL-069 — governance empty-section nudge).
 fn is_marker(section: &Section) -> bool {
-    section.body == marker(&section.heading)
+    section.body == marker(&section.heading) || section.body == gov_nudge(&section.heading)
 }
 
 /// The disk freshness/health report (Charge II/III). DETERMINISTIC — built from
@@ -1310,7 +1329,7 @@ mod tests {
             Some(root.to_path_buf()),
             &memory::RecordArgs {
                 title: "Boot pointer note",
-                memory_type: memory::MemoryType::Pattern,
+                memory_type: memory::MemoryType::Signpost,
                 key: None,
                 status: memory::Status::Active,
                 summary: None,
@@ -1503,8 +1522,10 @@ mod tests {
         assert!(regenerate(root, exec).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
         assert!(
-            snap.contains("<!-- Active Policies: not yet populated -->"),
-            "zero required policies → marker, never a partial/stale row:\n{snap}"
+            snap.contains(
+                "<!-- No active policies yet. See mem.signpost.doctrine.policies-standards -->"
+            ),
+            "zero required policies → governance nudge, never a partial/stale row:\n{snap}"
         );
         assert!(
             !snap.contains("just-a-draft"),
@@ -1531,7 +1552,7 @@ mod tests {
                 Some(root.to_path_buf()),
                 &memory::RecordArgs {
                     title,
-                    memory_type: memory::MemoryType::Pattern,
+                    memory_type: memory::MemoryType::Signpost,
                     key: None,
                     status,
                     summary: None,
@@ -1585,6 +1606,53 @@ mod tests {
             assert!(
                 !listed.contains(hidden),
                 "list hides terminal {hidden}:\n{listed}"
+            );
+        }
+    }
+
+    /// VT-1 (SL-069): the Memory section renders ONLY signpost-type memories —
+    /// concepts, patterns, facts, and other types are excluded. This ensures the
+    /// boot snapshot stays compact and carries only navigational pointers.
+    #[test]
+    fn boot_memory_section_is_signpost_only_excludes_other_types() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        let rec = |title: &str, ty: memory::MemoryType| {
+            memory::run_record(
+                Some(root.to_path_buf()),
+                &memory::RecordArgs {
+                    title,
+                    memory_type: ty,
+                    key: None,
+                    status: memory::Status::Active,
+                    summary: None,
+                    tags: &[],
+                    paths: &[],
+                    globs: &[],
+                    commands: &[],
+                    repo: None,
+                    global: false,
+                },
+            )
+            .unwrap();
+        };
+        rec("Signpost pointer", memory::MemoryType::Signpost);
+        rec("Concept note", memory::MemoryType::Concept);
+        rec("Pattern note", memory::MemoryType::Pattern);
+        rec("Fact note", memory::MemoryType::Fact);
+
+        assert!(regenerate(root, exec).unwrap());
+        let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
+        assert!(
+            snap.contains("Signpost pointer"),
+            "signpost-type memory projected:\n{snap}"
+        );
+        for excluded in ["Concept note", "Pattern note", "Fact note"] {
+            assert!(
+                !snap.contains(excluded),
+                "non-signpost {excluded} must not appear in boot:\n{snap}"
             );
         }
     }
@@ -1674,7 +1742,7 @@ mod tests {
             Some(root.to_path_buf()),
             &memory::RecordArgs {
                 title: "Boot pointer note",
-                memory_type: memory::MemoryType::Pattern,
+                memory_type: memory::MemoryType::Signpost,
                 key: None,
                 status: memory::Status::Active,
                 summary: None,
@@ -1761,6 +1829,83 @@ mod tests {
             "seeded governance.md drops the marker: {:?}",
             seeded.marker_sections
         );
+    }
+
+    /// VT-3 (SL-069): `boot --check` reports empty Policies and Standards
+    /// sections as unpopulated (governance nudge, not generic marker).
+    #[test]
+    fn boot_check_reports_empty_governance_as_unpopulated() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // fresh root: zero policies, zero standards → both sections emit nudges.
+        regenerate(root, exec).unwrap();
+        let report = boot_check(root, exec);
+        assert!(
+            report
+                .marker_sections
+                .contains(&"Active Policies".to_string()),
+            "empty policies reported: {:?}",
+            report.marker_sections
+        );
+        assert!(
+            report
+                .marker_sections
+                .contains(&"Active Standards".to_string()),
+            "empty standards reported: {:?}",
+            report.marker_sections
+        );
+        assert!(report.marker_sections.contains(&"Memory".to_string()));
+    }
+
+    /// VT-4 (SL-069): `boot --check` does NOT report Policies/Standards as
+    /// unpopulated when they carry in-force rows (populated governance).
+    #[test]
+    fn boot_check_populated_governance_does_not_warn() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/target/debug/doctrine");
+
+        // seed one required policy + one required standard.
+        policy::run_new(
+            Some(root.to_path_buf()),
+            Some("Commit cadence".into()),
+            None,
+        )
+        .unwrap();
+        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required).unwrap();
+        standard::run_new(
+            Some(root.to_path_buf()),
+            Some("Two-space indent".into()),
+            None,
+        )
+        .unwrap();
+        standard::run_status(
+            Some(root.to_path_buf()),
+            1,
+            standard::StandardStatus::Required,
+        )
+        .unwrap();
+
+        regenerate(root, exec).unwrap();
+        let report = boot_check(root, exec);
+        assert!(
+            !report
+                .marker_sections
+                .contains(&"Active Policies".to_string()),
+            "populated Policies → not a marker: {:?}",
+            report.marker_sections
+        );
+        assert!(
+            !report
+                .marker_sections
+                .contains(&"Active Standards".to_string()),
+            "populated Standards → not a marker: {:?}",
+            report.marker_sections
+        );
+        // Memory is still a marker (no signpost memories created).
+        assert!(report.marker_sections.contains(&"Memory".to_string()));
     }
 
     // --- determinism: no clock — repeated checks are byte-identical ---
