@@ -1,12 +1,12 @@
 id = 73
 slug = "map-frontend"
 title = "Doctrine Map Frontend: interactive browser explorer"
-status = "design"
+status = "ready"
 created = "2026-06-15"
-updated = "2026-06-15"
+updated = "2026-06-16"
 
 [relationships]
-needs = [72]                    # slice→work hard prerequisite: SL-072 map server
+needs = ["72"]                  # slice→work hard prerequisite: SL-072 map server
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]

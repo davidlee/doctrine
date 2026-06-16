@@ -1,5 +1,46 @@
 # SL-073 Design: Doctrine Map Frontend
 
+## Hard Contracts
+
+These are binding constraints for implementation. Every module and phase must
+satisfy them; the acceptance checklist is gated by them.
+
+- **Project-authored doctrine content is untrusted display input.** DOT strings
+  are quoted/escaped before Graphviz; SVG is sanitized before injection; Markdown
+  is rendered with raw HTML disabled then sanitized.
+- **DOT node statement keys MUST be canonical entity refs.** Display label MAY
+  differ, but SVG handler identity extraction depends on `<title>` preserving the
+  DOT node key. The `<g class="node"><title>` element is the sole identity
+  extraction point — never parse `<text>` content.
+- **Edge `(source, label, target)` tuples are canonical-unique.** The catalog
+  may not contain duplicate semantic edges — coalesce during normalization if
+  the server ever produces them (defensive: the SL-072 server does not today).
+  Edge ID `e_source_label_target` is thus durable across refreshes. If multiple
+  origins later need distinct provenance, the ID formula will include
+  `origin_file`; the current design does not need this complexity.
+- **Explicit search navigation MUST return null on miss** — no fallback to first
+  node. Bootstrap and hash repair MAY fall back (resolveFocus). Search Enter uses
+  a separate `findFocus` path.
+- **Depth is valid in the closed range 0..=3 across CLI, URL, state, and
+  model.** Depth 0 means "show only the focused node" (focus node + no
+  neighbourhood edges).
+- **Async graph render and markdown render MUST use stale-response guards.**
+  A monotonically increasing `graphRenderSeq` token gates DOT/SVG injection;
+  a focus-id comparison gates Markdown injection.
+- **Kind filtering is a list/table filter, not a graph filter.** The sidebar
+  label reads "List/table filter"; the SVG always shows the full neighbourhood.
+  Search Enter-to-focus bypasses the filter by design.
+- **Frontend modules ship as separate files** loaded via `<script>` tags in
+  `index.html` (dependency order: `api.js`, `model.js`, `dot.js`, `router.js`,
+  `render.js`, `app.js`). No ES module loader, no build step.
+- **`web/map/` must never contain secrets, local config, test fixtures with
+  private paths, source maps with local absolute paths, or generated dev
+  artifacts.** Only committed, intentional static files. `.eslintrc.json` is
+  a dev-only tooling file that `RustEmbed` will embed (the `#[folder = "web/map/"]`
+  glob has no exclusion mechanism); it is harmless — served at
+  `/assets/.eslintrc.json` on loopback, no secrets — and not worth a build-script
+  workaround.
+
 ## 1. Architecture & Module Layout
 
 ### Tier placement (ADR-001)
@@ -19,11 +60,6 @@ Engine tier:
 
 No new Rust modules. No new Rust dependencies. No server route changes. The
 frontend is a pure consumer of the SL-072 API surface.
-
-Note: `.eslintrc.json` is a dev-only tooling file that `RustEmbed` will
-include in the binary (the `#[folder = "web/map/"]` glob has no exclusion
-mechanism). It is harmless — served at `/assets/.eslintrc.json` on loopback,
-no secrets — and not worth a build-script workaround.
 
 The user intends a future migration to htmx + minijinja templates once UX
 settles. This design keeps markup semantic and separable — JS modules do not
@@ -69,6 +105,7 @@ var state = {
   dotAvailable: false,     // from /api/health dot.ok
   hoveredId: null,         // currently hovered node id (for detail pane)
   kindFilter: null,        // Set of kind prefixes, or null = all
+  graphRenderSeq: 0,       // monotonically increasing; guards stale SVG injection
 };
 ```
 
@@ -133,8 +170,11 @@ white text, compact padding. Used in entity list items beside the ID.
 ### api — HTTP layer
 
 ```js
-// All return Promises. Errors surface as rejected promises with message
-// strings suitable for display.
+// All api functions return Promises. Errors reject with ApiError instances:
+//   class ApiError extends Error {
+//     constructor(message, { status, body, endpoint }) { ... }
+//   }
+// Render states branch on error.status, not substring matching.
 
 api.fetchGraph()        // GET /api/graph → CatalogGraph JSON
 api.refreshGraph()      // POST /api/refresh → {ok:true}
@@ -161,6 +201,10 @@ model.resolveFocus(query, graph)
   //   5. Substring in id, title, status, or kind (shortest match wins)
   //   6. Fallback → first sorted node id
 
+model.findFocus(query, graph)
+  // Like resolveFocus but returns null on miss — no fallback.
+  // Used by search Enter (explicit navigation intent).
+
 model.neighbourhood(focusId, depth, graph)
   // BFS from focusId through incoming + outgoing edges
   // depth clamped [0, 3]
@@ -180,6 +224,9 @@ model.searchFilter(query, graph)
 dot.dotQuote(value)     // escape for DOT string literals
 dot.nodeAttrs(node, focusId, depth)
   // → { label, fillcolor, fontcolor, shape, penwidth, tooltip, URL }
+  // label is the canonical entity ref (id), not the display title.
+  //   The display title appears in the hover pane; the node label is ID-only.
+  //   The DOT node key is the canonical ref, so Graphviz `<title>` preserves it.
   // URL attribute: "#/focus/{id}?depth={depth}" — preserved in SVG for
   //   reference but real navigation via click handlers
 
@@ -231,12 +278,18 @@ render.renderMarkdownPane(container, id)
   //   fetch entirely for the current session.
 
 render.renderRelationshipTable(container, edges)
-  // src_id | src_title | label | tgt_id | tgt_title
+  // Neighbourhood edges (from current focus neighbourhood), filtered by
+  // source kind when kindFilter is active.
+  // Columns: src_id | src_title | label | tgt_id | tgt_title
   // Src/tgt IDs are clickable (setFocus).
 
 render.renderEdgeDetail(container, edge)
-  // edge id | source (clickable) | label | target (clickable) | origin_file
-  // Navigation links to focus source / focus target.
+  // Reached via clicking an edge ID in the relationship table.
+  // Columns: field | value (metadata table)
+  // Fields: edge id, source (clickable → focus), label, target (clickable → focus),
+  //   origin_file
+  // Trivial (~30 LOC) and useful for provenance inspection; included in this slice
+  // rather than deferred because the hash model already supports it.
 
 render.renderError(container, error)
   // Error state: message + optional DOT fallback.
@@ -246,9 +299,27 @@ render.renderError(container, error)
 
 SVG text from `/api/dot/svg` is sanitized through DOMPurify with the SVG profile
 (`USE_PROFILES: {svg: true}`), then injected as inline DOM. DOMPurify will strip
-nothing from clean Graphviz output but provides pipeline symmetry with Markdown
-and defends against future SVG injection vectors (e.g. a user-editable DOT feature).
-Post-injection:
+nothing from clean Graphviz output but defends against future SVG injection vectors
+(e.g. a user-editable DOT feature). Project-authored catalog text (entity IDs,
+titles, statuses, relation labels) is treated as untrusted display input.
+
+### Stale-render guard
+
+```js
+function renderGraph(neighbourhood, focusId, depth) {
+  state.graphRenderSeq += 1;
+  var seq = state.graphRenderSeq;
+  var dotText = dot.graphToDot(neighbourhood, focusId, depth);
+  api.renderDot(dotText).then(function(svg) {
+    if (seq !== state.graphRenderSeq) return;  // stale — discard
+    injectAndWire(svg, neighbourhood);
+  });
+}
+```
+
+Refresh also increments `graphRenderSeq`, invalidating any in-flight DOT render.
+
+### Post-injection wiring:
 
 ```js
 function wireSvgHandlers(svgEl, neighbourhood) {
@@ -288,6 +359,10 @@ Empty state: "Hover a node for details" in muted text.
 
 ## 6. Kind Filter
 
+The sidebar filter is labeled **"List/table filter"** in the UI — it is not a
+graph filter. The SVG always shows the full neighbourhood regardless of filter
+state. Filtering affects only the sidebar entity list and the relationship table.
+
 Sidebar checkboxes, one row per kind group:
 
 ```
@@ -306,10 +381,19 @@ Toggle behaviour:
 - Filter is live — no submit button
 
 Interaction with focus: filtering does not change the focused entity or graph.
-It only affects the sidebar list and the relationship table below the graph.
+It only affects the sidebar list and the relationship table.
+
+Relationship table filtering: the table shows neighbourhood edges (from the
+current focus neighbourhood). When kindFilter is active, only edges whose
+*source* node passes the filter are shown — outgoing edges from visible
+entities regardless of target kind (e.g. SL→ADR edges appear when SL is
+checked even if ADR is not).
 
 The graph SVG always shows the full neighbourhood — filtering the SVG nodes
 would require DOT regeneration and is a separate concern (deferred).
+
+Acceptance case: uncheck Governance, focus SL-072 (governed_by ADR-001).
+Verify ADR-001 remains in the SVG but not in the sidebar.
 
 ## 7. Search
 
@@ -319,7 +403,8 @@ Single input at top of sidebar. On keystroke:
    case-insensitive). Text filter applies *after* the kind filter — search
    matches the full corpus but only displays results that also pass the
    current kind filter.
-2. On Enter: run `model.resolveFocus(query)` and navigate to the best match.
+2. On Enter: run `model.findFocus(query, state.graph)` — returns null on
+   miss. If non-null and different from current focus, navigate to it.
 3. On Escape: clear the input, restore full list.
 4. If Enter resolves to the current focus, no navigation occurs.
 5. If Enter finds no match, show inline "No match for '{query}'" message in
@@ -337,10 +422,26 @@ function renderMarkdown(text) {
 }
 ```
 
+### Link policy
+
+- **External links** (URLs starting with `http://` or `https://`): open in a new
+  tab via `target="_blank"` with `rel="noopener noreferrer"`. Applied during
+  DOM post-processing after sanitization — add the attributes to `<a>` elements
+  whose `href` starts with `http`.
+- **Relative links**: stripped (href removed, text preserved as `<span>`).
+  Relative links in project Markdown point to local filesystem paths that don't
+  resolve in the browser; displaying them as dead links is more confusing than
+  removing them.
+- **Anchor links** (`#fragment-only`): preserved — intra-document navigation.
+
+### Cache and error states
+
 Markdown cache:
 - Populated on fetch; cleared on refresh (`POST /api/refresh`).
 - REQ entities return 501 → display "Markdown not implemented for requirements"
   styled as an info message, not an error.
+- Stale-request guard: compare resolved id against `state.focusId`. If the
+  focus changed while the fetch was in flight, discard the response.
 
 ## 9. UI Layout
 
@@ -391,7 +492,8 @@ Markdown cache:
 | **Markdown 501** | REQ entity | Show "Markdown not implemented for requirements" info message |
 | **Markdown 500** | Server error | Show "Failed to load markdown: {message}" error |
 | **Search miss** | Enter on query with no resolve match | Show inline message, preserve current focus |
-| **Refresh** | User clicks refresh | Clear markdown cache, re-fetch graph, re-resolve focus, re-render |
+| **Stale DOT render** | Focus/depth change while DOT is in-flight | graphRenderSeq mismatch → discard SVG, no DOM mutation |
+| **Refresh** | User clicks refresh | Increment graphRenderSeq (kills in-flight renders), clear markdown cache, re-fetch graph, re-resolve focus, re-render |
 
 ## 11. CSS Approach
 
@@ -420,7 +522,11 @@ Markdown cache:
   ```
 - Layout: CSS Grid (`grid-template-columns: 280px 1fr`), not flexbox hacks.
 - Kind pills: `display: inline-block; border-radius: 3px; padding: 0 4px; font-size: 0.8em;`
-  with `background: var(--kind-{PREFIX})` and white/dark text per contrast.
+  with `background: var(--kind-{PREFIX})`. Text colour assigned per fill at
+  implementation time: white for dark fills (purple, red, blue, rust, violet),
+  dark for light fills (orange, amber, green, teal, grey). Sidebar pills and
+  graph node labels are tested separately — they use different text-on-fill
+  combinations.
 - SVG node highlights: CSS classes `.doctrine-node--focus` and `.doctrine-node--hover`
   applied to `<g>` elements, using `filter: brightness(1.2)` or stroke changes.
 
@@ -439,7 +545,7 @@ Markdown cache:
       open: bool,
       #[arg(long, value_parser = validate_focus)]
       focus: Option<String>,
-      #[arg(long, default_value = "1", value_parser = clap::value_parser!(u8).range(1..=3))]
+      #[arg(long, default_value = "1", value_parser = clap::value_parser!(u8).range(0..=3))]
       depth: u8,
   }
 
@@ -452,20 +558,31 @@ Markdown cache:
 
 ## 13. Test Strategy
 
-No automated browser tests. Manual acceptance against the criteria in the scope
-document. The Rust test suite already covers:
+### Pure JS unit tests
 
-- All API routes (SL-072 route integration tests)
-- Asset serving (embedded index.html, vendor files)
-- Error mapping (MapServerError → status codes)
-- URL construction (map_url pure tests)
+The normalization, BFS, search resolution, DOT generation, routing, and
+filtering logic is testable without a browser. Add a minimal `web/map/test.html`
+that loads the JS files and runs assertions in the console. No external test
+runner, no Node dependency — just script tags and `console.assert`.
 
-The only new Rust test: `--path` flag routes to `root::find` correctly.
-SL-072 has no CLI arg-parse tests for `map serve`; add a test in
-`src/commands/map.rs` (or `tests/` if command tests live there):
-  - `map_serve_path_flag_passed_to_root_find` — parse `--path /tmp/foo`,
-    verify the value reaches `root::find`. Existing `root::find` correctness
-    is covered by its own tests; only the CLI wire-up is new.
+Cover these pure functions:
+- `dot.dotQuote` — DOT escaping edge cases (quotes, backslashes, newlines)
+- `model.normalizeGraph` — duplicate edge coalescing, unresolved edge filtering,
+  edge ID generation, node Map population
+- `model.neighbourhood(depth=0/1/2/3)` — BFS correctness at each depth,
+  disconnected nodes, cyclic graphs
+- `model.resolveFocus` — null, exact, loose canonical, title match, substring,
+  fallback
+- `model.findFocus` — same resolution but returns null on miss
+- `router.parseHash` / `router.buildHash` — round-trip for all view/id/depth combos
+- `model.searchFilter` — substring match, case-insensitive, sorted output
+- `model.kinds` — count and sort by kind prefix
+
+### Rust test
+
+- `map_serve_path_flag_passed_to_root_find` — parse `--path /tmp/foo`,
+  verify the value reaches `root::find`. Existing `root::find` correctness
+  is covered by its own tests; only the CLI wire-up is new.
 
 ### Manual acceptance fixture
 
@@ -476,45 +593,80 @@ Build a test corpus with:
 - REQ-001 (for 501 markdown)
 - An entity with rich `.md` body (SL-072 design.md)
 - An entity with empty `.md` body
+- An entity with raw HTML in `.md` (`<script>alert(1)</script>`)
+- An entity with DOT-unsafe characters in title (quotes, backslashes)
 - Multiple kinds for filter testing
 
 ### Acceptance checklist
 
 1. `doctrine map serve --open --focus SL-072 --depth 2` opens `#/focus/SL-072?depth=2`
-2. Graph renders with kind-coloured nodes, SL-072 highlighted as focus
-3. Hovering a node shows detail pane; node highlights in SVG
-4. Clicking a node changes focus, updates graph, markdown, relationship table
-5. Depth selector (0-3) updates neighbourhood and hash
-6. Search bar live-filters entity list on keystroke
-7. Enter on search resolves and navigates to best match
-8. Kind filter checkboxes show/hide entities in sidebar list and relationship table
-9. Markdown renders below graph with safe HTML output
-10. Raw HTML in markdown source does not execute (test: `<script>alert(1)</script>` in an `.md`)
-11. REQ entity shows "Markdown not implemented" info, not a broken state
-12. Refresh clears markdown cache, reloads graph, preserves focus
-13. `--path` flag serves from specified directory
-14. Light/dark theme follows system preference
+2. `--depth 0` shows only the focused node (no neighbourhood edges)
+3. Graph renders with kind-coloured nodes, SL-072 highlighted as focus
+4. SVG contains `<g class="node"><title>SL-072</title>` for SL-072; clicking it navigates
+5. Hovering a node shows detail pane; node highlights in SVG
+6. Clicking a node changes focus, updates graph, markdown, relationship table
+7. Depth selector (0-3) updates neighbourhood and hash
+8. Search bar live-filters entity list on keystroke
+9. Enter on search with valid ref navigates; with nonsense query shows "No match"
+   inline and preserves current focus (no fallback to first node)
+10. Kind filter (labeled "List/table filter") show/hide entities in sidebar list
+    and relationship table; SVG unchanged
+11. Uncheck Governance, focus SL-072 → ADR-001 remains in SVG, absent from sidebar
+12. Markdown renders below graph with safe HTML output
+13. Raw HTML in markdown source does not execute
+14. REQ entity shows "Markdown not implemented" info, not a broken state
+15. Refresh clears markdown cache, reloads graph, preserves focus
+16. Rapid focus changes during DOT render → only the last SVG appears (no stale flash)
+17. `--path` flag serves from specified directory
+18. Light/dark theme follows system preference
+19. Edge detail page (`#/edge/e_…`) opens from relationship table edge ID click,
+    shows metadata table with source/target links
 
 ## 14. Design Decisions
 
 | Decision | Rationale |
 |---|---|
-| Inline SVG (not `<object>` blob) | Loopback-only, self-generated content — no attacker input path. Inline enables click/hover handlers without postMessage bridging |
+| Inline SVG (not `<object>` blob) | Loopback-only. Project-authored catalog text is treated as untrusted display input — DOT strings are quoted/escaped, SVG is sanitized, Markdown is sanitized. Inline enables click/hover handlers without postMessage bridging |
 | ID-only DOT labels | Clean graph; title/status in hover pane. Multi-line labels deferred as togglable option |
-| Per-kind colour palette | Visual discrimination of entity kinds; all fills verified AA contrast for normal white/dark text |
-| Kind filter in sidebar only | Full neighbourhood always in SVG; filtering only sidebar + relationship table avoids DOT regeneration on filter toggle |
-| Live search filter + Enter to focus | Exploration (filter) and navigation (resolve) in one input |
+| Per-kind colour palette | Visual discrimination of entity kinds. Palette chosen for contrast; implementation assigns text colour per fill (dark text on light fills, white on dark). Sidebar pills and graph node labels are tested separately |
+| Kind filter in sidebar only ("List/table filter") | Full neighbourhood always in SVG; filtering only sidebar + relationship table avoids DOT regeneration on filter toggle |
+| Live search filter + Enter to focus | Exploration (filter) and navigation (findFocus, no-fallback) in one input |
 | Hover pane below graph | More immediate and legible than browser tooltips; fixed position avoids layout shift |
 | Semantic CSS, no tailwind | User preference; future htmx migration; hand-editable |
 | No new Rust deps | Frontend-only slice; `--path` flag reuses existing CLI machinery |
-| Edge detail page included | Trivial (~30 LOC); already in hash model; useful for provenance inspection |
+| Edge detail page included | Trivial (~30 LOC); already in hash model; reached via edge ID click in relationship table; useful for provenance inspection |
 | JSDoc types + strict eslint, no TypeScript | Low-ceremony correctness: `@type` on normalization/focus/neighbourhood functions, eslint for globals/hoisting/equality bugs. SPA is a stepping stone to htmx — full TS migration can happen later in an hour if the SPA survives the cutover |
+| Frontend modules as separate files | `api.js`, `model.js`, `dot.js`, `router.js`, `render.js`, `app.js` loaded via `<script>` tags in dependency order. No ES module loader, no build step. Clean separation for future htmx migration |
+| Edge (source,label,target) unique-tuple contract | Coalesce duplicates during normalization; edge ID `e_source_label_target` is durable. If provenance splitting is needed later, add `origin_file` to the formula |
 
-## 15. Open Questions
+## 15. Design Revision Notes
+
+Integrated adversarial review feedback (2026-06-16):
+- Hard Contracts section added — binding constraints for implementation.
+- Security rationale revised: "no attacker input path" → "project-authored
+  content is untrusted display input".
+- DOT node identity invariant made explicit: DOT node key MUST be canonical ref.
+- Edge ID durability strengthened by declaring `(source,label,target)` tuple
+  uniqueness canonical — coalesce duplicates during normalization.
+- Search miss semantics corrected: `findFocus` (null on miss) for Enter,
+  `resolveFocus` (with fallback) for bootstrap/hash repair.
+- Stale-response guards added for DOT/SVG render (graphRenderSeq token).
+- Kind filter labeled "List/table filter" in UI; relationship table scope
+  clarified to neighbourhood edges with source-kind filtering.
+- Depth resolved to 0..=3 everywhere (CLI, state, model, acceptance).
+- Error model: `ApiError` class with status codes, not substring matching.
+- Markdown link policy added: external in new tab, relative stripped.
+- Colour accessibility claim tightened: palette chosen for contrast;
+  text colour assigned per fill at implementation time.
+- Frontend module strategy: separate files loaded via `<script>` tags.
+- Edge detail page reachability defined (edge ID click in relationship table).
+- Test strategy expanded: pure JS unit tests in `web/map/test.html`.
+- `web/map/` hygiene rule added.
+
+## 16. Open Questions
 
 - **Multi-line DOT labels**: Deferred as a togglable option. May not work well on crowded graphs.
 - **Graphviz unavailability UX**: DOT source fallback shown in `<pre>`. Could be prettier but low priority — Graphviz is the expected runtime dep.
-- **Edge detail page styling**: Included but minimal (metadata table). May warrant richer UX later.
 - **Edge hover in SVG**: Deferred. Mapping SVG edge elements to relationship table rows adds complexity for low payoff — the table already shows all visible edges.
 - **Future htmx migration**: JS modules keep rendering logic in `render.*` functions that return DOM elements, not innerHTML strings — easier to migrate to server-side templates later.
 - **TypeScript migration**: Deferred. If the SPA survives the htmx cutover, converting to `.ts` is an hour's work given the existing JSDoc type annotations. Not worth the upfront ceremony for a disposable bridge.
