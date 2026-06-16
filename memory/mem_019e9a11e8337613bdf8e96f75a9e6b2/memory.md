@@ -20,7 +20,7 @@ detail (see [[signpost.doctrine.skill-map]]). No code without an approved plan.
    `completed`.
 7. **audit** — evidence gathering, conformance checking, and reconciliation
    against the design. Uses the review ledger (RV kind). See
-   [[signpost.doctrine.audit]].
+   [[signpost.doctrine.review]].
 8. **reconcile** — (ADR-009 closure seam) formal reconciliation of findings,
    coverage, and lifecycle status. Resolves blockers and drift before the close
    gate.
