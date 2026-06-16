@@ -18,17 +18,11 @@ Confirming:
 
 ## Synthesis
 
-All RV-037 findings except F-1 are resolved in commit d000183. The five fixes are
-confirmed in place: status model corrected to authored-artifact vocabulary,
---json shorthand removed, duplicate-edge message includes line number,
-misleading test renamed, EntityRefLike regex anchored.
+All RV-037 findings except F-1 are resolved in commit d000183.
 
-F-1 (CLI unreachable) is a clap 4 framework defect also affecting the pre-existing
-Map command (SL-072). The concept_map module compiles and all 76 tests pass — the
-implementation is complete and correct. The CLI surface activation requires a
-clap investigation outside SL-074's scope. Dispositioned as follow-up.
+F-1 was a **false alarm** — the binary at `target/debug/doctrine` was stale from
+a pre-SL-074 build. After `cargo build` against the correct source, all
+concept-map subcommands work correctly: new, list, show, add, remove,
+rename-node, check, export (DOT/Mermaid/JSON). End-to-end verification passed.
 
-The slice is ready for close with one standing risk: the CLI surface is not
-reachable via `doctrine concept-map`, but the reader API and all pure functions
-are testable and correct. The module is wired and will activate once the clap
-registration issue is resolved.
+The audit is clean. Zero valid findings remain. Slice is ready for close.
