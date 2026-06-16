@@ -5,17 +5,12 @@
     {
       "name": "doctrine",
       "source": "./plugins/doctrine",
-      "description": "Doctrine's process skills — routing, slicing, design, planning, phase execution, audit and close, governance (canon/inquisition), and memory capture/retrieval."
+      "description": "Doctrine's process skills — routing, slicing, design, planning, phase execution, audit and close, governance (canon/inquisition), backlog triage, handover, and memory capture/retrieval."
     },
     {
       "name": "doctrine-memory",
       "source": "./plugins/doctrine-memory",
       "description": "Doctrine's memory skills alone (record/retrieve) — a standalone subset of the doctrine plugin. Install one or the other, not both."
-    },
-    {
-      "name": "handover",
-      "source": "./plugins/handover",
-      "description": "Author the disposable handover.md for the next agent / phase."
     },
     {
       "name": "doctrine-partner",

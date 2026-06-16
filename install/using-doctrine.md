@@ -77,6 +77,12 @@ Three tiers; know which one you are writing:
   never commit it, never record progress in an authored file.
 - **Derived**: regenerable indexes / caches — gitignored.
 
+**Example — inside a slice directory:** `slice-NNN.toml`, `slice-NNN.md`,
+`design.md`, `plan.toml`, `plan.md`, and `notes.md` are **authored** (committed,
+diffable). `handover.md` and the `phases/` symlink are **runtime** (gitignored) —
+they carry disposable context and phase tracking, never committed progress. See
+`glossary.md` for the full directory layout.
+
 **Hand-edit vs verb.** Reach for a verb to create or transition an entity; hand-
 edit the TOML for fields no verb yet owns (cite the CLI gap if so). Prose is always
 hand-edited. Keep each datum on its correct side of the tier split.
