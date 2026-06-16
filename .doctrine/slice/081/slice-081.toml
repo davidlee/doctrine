@@ -1,7 +1,7 @@
 id = 81
 slug = "memory-in-catalog"
 title = "Surface memory entities and their relations in the catalog graph + web explorer"
-status = "design"
+status = "plan"
 created = "2026-06-16"
 updated = "2026-06-16"
 
