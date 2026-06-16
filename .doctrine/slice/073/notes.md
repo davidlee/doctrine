@@ -1,5 +1,33 @@
 # SL-073 Implementation Notes
 
+## PHASE-03 (complete — 2026-06-16)
+
+**Commit:** `6b08ac7` — feat(SL-073): PHASE-03 DOT/SVG rendering
+
+Executed inline (dispatch worker failed — worked in-tree instead of forking).
+Created dot.js (dotQuote, nodeAttrs, edgeAttrs, graphToDot) with 19-kind
+colour→Graphviz mapping. SVG pipeline added to app.js: renderGraphPane
+(stale-render guard via graphRenderSeq), wireSvgHandlers (click→setFocus,
+hover→renderHoverPane via `<g class="node"><title>` extraction), escapeHtml
+helper. Graphviz unavailable state: error + DOT in `<pre>`.
+
+**Verification:** `node --check` pass (api.js, dot.js, app.js). `just check`
+green (1406 tests). 16 new unit tests (5 dotQuote, 11 graphToDot).
+
+**Watch-outs for PHASE-04/05:**
+- app.js has legacy `parseHash()` (from SL-072) alongside new `router.parseHash()`
+  — PHASE-05 reconciliation needed
+- Bootstrap still uses old render path; PHASE-05 redesign of render() needed
+- `state.dotAvailable` from model.js vs local `dotAvailable` in app.js — bootstrap
+  should sync them but current code reads health into local var
+- hover-detail pane CSS class names need styling in PHASE-05
+
+**Dispatch failure notes:** Worker spawned via subagent tool did not execute
+`/worktree` skill — worked in-tree directly. Result: partial work on wrong
+branch, incomplete (missing api.renderDot, index.html dot.js tag). Recovered by
+reverting and executing inline. Root cause: Agent tool + worktree skill
+integration — worker didn't self-fork per rung-3 contract.
+
 ## PHASE-02 (complete — 2026-06-16)
 
 **Commit:** `c75781e` — feat(SL-073): PHASE-02 model + routing layer
