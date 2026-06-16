@@ -636,6 +636,239 @@
       assert(errColl.body.indexOf('node_collision') !== -1, 'ApiError collision: body contains node_collision');
     })();
 
+    /* --- PHASE-07: CM focal node, depth filtering, styling (VT-1) --- */
+
+    /* --- cmNeighbourhood: null focusKey → wide-open --- */
+    (function() {
+      var cm = {
+        nodes: [
+          { key: 'a', label: 'A' },
+          { key: 'b', label: 'B' },
+          { key: 'c', label: 'C' },
+          { key: 'd', label: 'D' }
+        ],
+        edges: [
+          { from_key: 'a', to_key: 'b', rel: 'relates' },
+          { from_key: 'b', to_key: 'c', rel: 'relates' },
+          { from_key: 'b', to_key: 'd', rel: 'relates' }
+        ]
+      };
+      var result = model.cmNeighbourhood(cm, null, 2);
+      assert(result.nodes.length === 4, 'cmNeighbourhood: null focusKey → all 4 nodes');
+      assert(result.edges.length === 3, 'cmNeighbourhood: null focusKey → all 3 edges');
+    })();
+
+    /* --- cmNeighbourhood: depth 0 → focal only --- */
+    (function() {
+      var cm = {
+        nodes: [
+          { key: 'a', label: 'A' },
+          { key: 'b', label: 'B' }
+        ],
+        edges: [
+          { from_key: 'a', to_key: 'b', rel: 'relates' }
+        ]
+      };
+      var result = model.cmNeighbourhood(cm, 'a', 0);
+      assert(result.nodes.length === 1, 'cmNeighbourhood: depth 0 → only focal node');
+      assert(result.nodes[0].key === 'a', 'cmNeighbourhood: depth 0 → focal is A');
+      assert(result.edges.length === 0, 'cmNeighbourhood: depth 0 → no edges');
+    })();
+
+    /* --- cmNeighbourhood: depth 1 → focal + 1-hop --- */
+    (function() {
+      var cm = {
+        nodes: [
+          { key: 'a', label: 'A' },
+          { key: 'b', label: 'B' },
+          { key: 'c', label: 'C' },
+          { key: 'd', label: 'D' }
+        ],
+        edges: [
+          { from_key: 'a', to_key: 'b', rel: 'relates' },
+          { from_key: 'b', to_key: 'c', rel: 'relates' },
+          { from_key: 'b', to_key: 'd', rel: 'relates' }
+        ]
+      };
+      var result = model.cmNeighbourhood(cm, 'a', 1);
+      assert(result.nodes.length === 2, 'cmNeighbourhood: depth 1 from A → 2 nodes (A + B)');
+      var keys = result.nodes.map(function(n) { return n.key; });
+      assert(keys.indexOf('a') !== -1, 'cmNeighbourhood: depth 1 includes A');
+      assert(keys.indexOf('b') !== -1, 'cmNeighbourhood: depth 1 includes B');
+      assert(result.edges.length === 1, 'cmNeighbourhood: depth 1 → 1 edge (A→B)');
+    })();
+
+    /* --- cmNeighbourhood: depth 2 → full 4-node tree --- */
+    (function() {
+      var cm = {
+        nodes: [
+          { key: 'a', label: 'A' },
+          { key: 'b', label: 'B' },
+          { key: 'c', label: 'C' },
+          { key: 'd', label: 'D' }
+        ],
+        edges: [
+          { from_key: 'a', to_key: 'b', rel: 'relates' },
+          { from_key: 'b', to_key: 'c', rel: 'relates' },
+          { from_key: 'b', to_key: 'd', rel: 'relates' }
+        ]
+      };
+      var result = model.cmNeighbourhood(cm, 'a', 2);
+      assert(result.nodes.length === 4, 'cmNeighbourhood: depth 2 from A → all 4 nodes');
+      assert(result.edges.length === 3, 'cmNeighbourhood: depth 2 → all 3 edges');
+    })();
+
+    /* --- cmNeighbourhood: disconnected node → only itself --- */
+    (function() {
+      var cm = {
+        nodes: [
+          { key: 'e', label: 'E' },
+          { key: 'f', label: 'F' }
+        ],
+        edges: []
+      };
+      var result = model.cmNeighbourhood(cm, 'e', 2);
+      assert(result.nodes.length === 1, 'cmNeighbourhood: disconnected node E → only itself');
+      assert(result.edges.length === 0, 'cmNeighbourhood: disconnected → 0 edges');
+    })();
+
+    /* --- cmNeighbourhood: 1-node graph --- */
+    (function() {
+      var cm = {
+        nodes: [{ key: 'solo', label: 'Solo' }],
+        edges: []
+      };
+      var result = model.cmNeighbourhood(cm, 'solo', 2);
+      assert(result.nodes.length === 1, 'cmNeighbourhood: 1-node graph → only itself');
+      assert(result.edges.length === 0, 'cmNeighbourhood: 1-node graph → 0 edges');
+    })();
+
+    /* --- cmNeighbourhood: focusKey not in nodes → graceful fallback (all) --- */
+    (function() {
+      var cm = {
+        nodes: [
+          { key: 'a', label: 'A' },
+          { key: 'b', label: 'B' }
+        ],
+        edges: [{ from_key: 'a', to_key: 'b', rel: 'relates' }]
+      };
+      var result = model.cmNeighbourhood(cm, 'nonexistent', 2);
+      assert(result.nodes.length === 2, 'cmNeighbourhood: focusKey not in nodes → returns all nodes');
+      assert(result.edges.length === 1, 'cmNeighbourhood: focusKey not in nodes → returns all edges');
+    })();
+
+    /* --- cmNeighbourhood: undirected adjacency (B→D edge, focus A depth 2 includes D) --- */
+    (function() {
+      var cm = {
+        nodes: [
+          { key: 'a', label: 'A' },
+          { key: 'b', label: 'B' },
+          { key: 'd', label: 'D' }
+        ],
+        edges: [
+          { from_key: 'a', to_key: 'b', rel: 'relates' },
+          { from_key: 'b', to_key: 'd', rel: 'relates' }
+        ]
+      };
+      var result = model.cmNeighbourhood(cm, 'd', 1);
+      assert(result.nodes.length === 2, 'cmNeighbourhood: depth 1 from D → D + B (undirected)');
+      assert(result.edges.length === 1, 'cmNeighbourhood: depth 1 from D → 1 edge');
+
+      var result2 = model.cmNeighbourhood(cm, 'd', 2);
+      assert(result2.nodes.length === 3, 'cmNeighbourhood: depth 2 from D → D + B + A (all)');
+    })();
+
+    /* --- cmNeighbourhood: null/undefined cm → safe empty --- */
+    (function() {
+      var result = model.cmNeighbourhood(null, 'a', 1);
+      assert(result.nodes.length === 0, 'cmNeighbourhood: null cm → empty nodes');
+      assert(result.edges.length === 0, 'cmNeighbourhood: null cm → empty edges');
+      var result2 = model.cmNeighbourhood(undefined, 'a', 1);
+      assert(result2.nodes.length === 0, 'cmNeighbourhood: undefined cm → empty nodes');
+    })();
+
+    /* --- cmGraphToDot with focusKey --- */
+    (function() {
+      var cm = {
+        nodes: [
+          { key: 'a', label: 'Node A' },
+          { key: 'b', label: 'Node B' }
+        ],
+        edges: [
+          { from_key: 'a', to_key: 'b', rel: 'relates' }
+        ]
+      };
+      var dotText = dot.cmGraphToDot(cm, 'a');
+      assert(dotText.indexOf('penwidth=3.0') !== -1, 'cmGraphToDot: focal node A has penwidth=3.0');
+      assert(dotText.indexOf('penwidth=1.5') !== -1, 'cmGraphToDot: default penwidth=1.5 in node attrs');
+      assert(dotText.indexOf('shape=record') !== -1, 'cmGraphToDot: shape=record present');
+      assert(dotText.indexOf('fillcolor="#f8f9fa"') !== -1, 'cmGraphToDot: off-white fill present');
+      assert(dotText.indexOf('color="#4A90D9"') !== -1, 'cmGraphToDot: blue border present in node attrs');
+      assert(dotText.indexOf('fontcolor="#222222"') !== -1, 'cmGraphToDot: dark text present');
+      assert(dotText.indexOf('edge [color="#4A90D9"') !== -1, 'cmGraphToDot: blue edge colour');
+    })();
+
+    /* --- cmGraphToDot without focusKey (no penwidth overrides) --- */
+    (function() {
+      var cm = {
+        nodes: [
+          { key: 'a', label: 'Node A' },
+          { key: 'b', label: 'Node B' }
+        ],
+        edges: [
+          { from_key: 'a', to_key: 'b', rel: 'relates' }
+        ]
+      };
+      var dotText = dot.cmGraphToDot(cm, null);
+      /* No per-node penwidth=3.0 → all nodes use default penwidth=1.5 from node attrs */
+      assert(dotText.indexOf('penwidth=3.0') === -1, 'cmGraphToDot: no focusKey → no penwidth=3.0 override');
+      assert(dotText.indexOf('penwidth=1.5') !== -1, 'cmGraphToDot: default penwidth=1.5 in node attrs');
+    })();
+
+    /* --- cmGraphToDot with focusKey=undefined (backward compat) --- */
+    (function() {
+      var cm = {
+        nodes: [{ key: 'a', label: 'Node A' }],
+        edges: []
+      };
+      var dotText = dot.cmGraphToDot(cm);
+      assert(dotText.indexOf('penwidth=3.0') === -1, 'cmGraphToDot: no second arg → no penwidth=3.0');
+      assert(dotText.indexOf('digraph concept_map') !== -1, 'cmGraphToDot: valid DOT output');
+    })();
+
+    /* --- router.parseHash with cmFocus --- */
+    (function() {
+      var hashBefore = window.location.hash;
+
+      window.location.hash = '#/focus/CM-001?depth=2&cm_focus=user-story';
+      var route = router.parseHash();
+      assert(route.view === 'focus', 'parseHash cmFocus: view is focus');
+      assert(route.id === 'CM-001', 'parseHash cmFocus: id is CM-001');
+      assert(route.depth === 2, 'parseHash cmFocus: depth is 2');
+      assert(route.cmFocus === 'user-story', 'parseHash cmFocus: cmFocus is user-story');
+
+      window.location.hash = '#/focus/CM-001?depth=1';
+      var route2 = router.parseHash();
+      assert(route2.cmFocus === null, 'parseHash cmFocus: absent cm_focus → null');
+
+      window.location.hash = '#/focus/CM-001';
+      var route3 = router.parseHash();
+      assert(route3.cmFocus === null, 'parseHash cmFocus: no query string → null');
+
+      window.location.hash = '#/focus/SL-001?depth=0';
+      var route4 = router.parseHash();
+      assert(route4.cmFocus === null, 'parseHash cmFocus: non-CM focus → null');
+      assert(route4.id === 'SL-001', 'parseHash cmFocus: non-CM id preserved');
+
+      window.location.hash = '#/edge/e_CM-001_relates_CM-002';
+      var route5 = router.parseHash();
+      assert(route5.view === 'edge', 'parseHash cmFocus: edge view');
+      assert(route5.cmFocus === null, 'parseHash cmFocus: edge view cmFocus is null');
+
+      /* restore */
+      window.location.hash = hashBefore;
+    })();
+
     /* --- report --- */
     resultsEl.textContent = pass + '/' + (pass + fail) + ' assertions passed';
     if (fail > 0) {
