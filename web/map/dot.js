@@ -54,8 +54,8 @@ dot.nodeAttrs = function(node, focusId, depth) {
 };
 
 dot._EDGE_COLORS = {
-  'depends':    { color: '#888888', fontcolor: '#555555' },
-  'requires':   { color: '#888888', fontcolor: '#555555' },
+  'depends':    { color: '#aaaaaa', fontcolor: '#aaaaaa' },
+  'requires':   { color: '#aaaaaa', fontcolor: '#aaaaaa' },
   'refines':    { color: '#4A90D9', fontcolor: '#2563eb' },
   'details':    { color: '#4A90D9', fontcolor: '#2563eb' },
   'implements': { color: '#27AE60', fontcolor: '#166534' },
