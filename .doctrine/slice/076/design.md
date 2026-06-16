@@ -32,11 +32,14 @@ Leaf tier:
   (none touched)
 ```
 
-Minimal changes to `concept_map.rs`: ~6 visibility promotions (`read_concept_map`,
-`get_dsl`, `parse_dsl`, `check`, `set_dsl`, `ConceptMapDoc`, `CONCEPT_MAP_DIR` →
-`pub(crate)`) plus 3 new pure mutation functions extracted from the CLI shell verbs,
-plus one `ConceptMapMutationError` enum (see §2.1). The CLI verbs are left as-is — they
-remain the thin I/O wrappers they already are. No new dependencies.
+Minimal changes to `concept_map.rs`: visibility promotions on 8 functions/constants
+plus 5 struct/enum types with their fields (`read_concept_map`, `get_dsl`, `parse_dsl`,
+`check`, `set_dsl`, `parse_ref`, `CONCEPT_MAP_DIR`, `ConceptMapDoc`, `ConceptMapNode`,
+`ConceptMapEdge`, `ConceptMapDiagnostic`, `ParsedConceptMap` → `pub(crate)` with
+`pub(crate)` fields and `Serialize` derives) plus 3 new pure mutation functions extracted
+from the CLI shell verbs, plus one `ConceptMapMutationError` enum (see §2.1). The CLI
+verbs are left as-is — they remain the thin I/O wrappers they already are. No new
+dependencies.
 
 ### JS changes (SL-073 module layout preserved)
 
@@ -231,13 +234,31 @@ async fn get_concept_map(
 ) -> Result<impl IntoResponse, MapServerError> {
     let id = concept_map::parse_ref(&id_str).map_err(|_| MapServerError::BadConceptMapId(id_str))?;
     let cm_root = state.root.join(CONCEPT_MAP_DIR);
-    let (_doc, toml_text, _body) = concept_map::read_concept_map(&cm_root, id)
+    let (doc, toml_text, _body) = concept_map::read_concept_map(&cm_root, id)
         .map_err(|_| MapServerError::ConceptMapNotFound(id))?;
 
-    let dsl = concept_map::get_dsl(&toml_text)?;
-    let dsl_hash = hex::encode(sha2::Sha256::digest(dsl.as_bytes()));
-    let parsed = concept_map::parse_dsl(&dsl);
-    let diagnostics = concept_map::check(&parsed);
+    // get_dsl errors if the `dsl` key is absent — treat as empty CM, not 500
+    let (parsed, diagnostics, dsl_hash) = match concept_map::get_dsl(&toml_text) {
+        Ok(dsl) => {
+            let hash = hex::encode(sha2::Sha256::digest(dsl.as_bytes()));
+            let parsed = concept_map::parse_dsl(&dsl);
+            let diagnostics = concept_map::check(&parsed);
+            (parsed, diagnostics, hash)
+        }
+        Err(_) => {
+            // No DSL key — return 200 with empty nodes/edges, no diagnostics
+            return Ok(Json(json!({
+                "id": format!("CM-{id:03}"),
+                "title": doc.title,
+                "status": doc.status,
+                "description": doc.description,
+                "dsl_hash": "",
+                "nodes": [],
+                "edges": [],
+                "diagnostics": []
+            })));
+        }
+    };
 
     // Assemble response with dsl_hash ...
 }
@@ -291,7 +312,17 @@ async fn mutate_concept_map(
 
 ### §2.1: concept_map.rs changes
 
-#### Visibility promotions (existing functions → `pub(crate)`)
+**Note on `set_dsl` and TOML key comments:** `set_dsl` uses `doc.insert("dsl", value(new_dsl))`
+which replaces the `dsl` key's entire item, dropping any inline comment on the key line
+(e.g., `dsl = """...""" # my map` → the `# my map` comment is lost). The function preserves
+all *other* keys and their comments. This is an acceptable tradeoff — concept map TOML
+files authored by `doctrine concept-map new` have no inline comments on the `dsl` key.
+If hand-edited files carry such comments, they are lost on first mutation. Document this
+in the mutation function's rustdoc.
+
+#### Visibility promotions (existing symbols → `pub(crate)`)
+
+Functions and constants:
 
 | Symbol | Current visibility | Needed by |
 |---|---|---|
@@ -300,8 +331,18 @@ async fn mutate_concept_map(
 | `parse_dsl` | private | GET route (structured response) |
 | `check` | private | GET route (diagnostics) |
 | `set_dsl` | private | POST route (write-back mutation) |
+| `parse_ref` | private | GET/POST routes (parse `CM-001` → u32) |
 | `CONCEPT_MAP_DIR` | private | route handlers (join with root) |
-| `ConceptMapDoc` | private | GET route (extract title/status/description) |
+
+Structs and enums (type + all fields/variants `pub(crate)`, plus `Serialize` derives):
+
+| Symbol | Fields needed by routes |
+|---|---|
+| `ConceptMapDoc` | `id`, `slug`, `title`, `status`, `description` (GET response assembly) |
+| `ConceptMapNode` | `key`, `label` (GET response) |
+| `ConceptMapEdge` | `from_key`, `from_label`, `rel`, `to_key`, `to_label`, `line` (GET response) |
+| `ConceptMapDiagnostic` | all variants + `Serialize` (GET diagnostics payload) |
+| `ParsedConceptMap` | `nodes`, `edges`, `diagnostics` (GET response assembly) |
 
 #### Typed mutation error
 
@@ -363,6 +404,9 @@ pub(crate) fn remove_edge_from_dsl(
 ) -> Result<String, ConceptMapMutationError> { ... }
 
 /// Rename a node label across all DSL edges. Returns updated TOML.
+/// Matches source/target labels by **derived key** (`derive_node_key`), not
+/// case-insensitive label equality. The existing CLI `run_rename_node` uses
+/// case-insensitive label matching — the pure function uses keys for identity.
 /// Input fields are trimmed. Empty-after-trim → EmptyField.
 /// Returns NodeCollision if `derive_node_key(new) != derive_node_key(old)`
 /// and any existing node already holds `derive_node_key(new)`.
@@ -412,6 +456,7 @@ pub(crate) enum MapServerError {
     NodeCollision { existing_label: String, line: usize },
     EmptyField { field: &'static str },
     StaleConceptMap,
+    ConceptMapIoError(std::io::Error),
 }
 ```
 
@@ -424,6 +469,11 @@ Each maps to an HTTP status code via the existing `IntoResponse` impl:
 - `EmptyField` → 400
 - `StaleConceptMap` → 409
 - `ConceptMapParseError` → 500
+- `ConceptMapIoError` → 500
+
+Note: `sha2` and `hex` crates must be available. They are transitive dependencies
+of the existing crate graph (via `Cargo.lock`); verify and add an explicit dependency
+if the lockfile doesn't guarantee availability.
 
 `From<ConceptMapMutationError> for MapServerError` provides the safe downcast:
 ```rust

@@ -28,16 +28,16 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "integrity::KINDS contains a CM row with stem 'concept-map' and no state_dir" },
   { id = "EX-2", text = "catalog::scan outbound_for('CM') returns Ok(Vec::new())" },
-  { id = "EX-3", text = "7 concept_map symbols are pub(crate) visible to map_server" },
+  { id = "EX-3", text = "8 functions/constants + 5 struct/enum types with pub(crate) fields + Serialize derives are visible to map_server (read_concept_map, get_dsl, parse_dsl, check, set_dsl, parse_ref, CONCEPT_MAP_DIR, ConceptMapDoc, ConceptMapNode, ConceptMapEdge, ConceptMapDiagnostic, ParsedConceptMap)" },
   { id = "EX-4", text = "ConceptMapMutationError enum defined with 6 variants and Display impl" },
-  { id = "EX-5", text = "add_edge_to_dsl compiles, trims inputs, detects duplicates, returns Result<String, ConceptMapMutationError>" },
-  { id = "EX-6", text = "remove_edge_from_dsl compiles, trims inputs, removes one matching line, returns Result<String, ConceptMapMutationError>" },
-  { id = "EX-7", text = "rename_node_in_dsl compiles, trims inputs, checks key-based collision, edits all edge lines, returns Result<String, ConceptMapMutationError>" },
-  { id = "EX-8", text = "unit tests for add/remove/rename: duplicate detection, edge-not-found, key collision, case-only rename, text-identical no-op, empty-field trim" },
+  { id = "EX-5", text = "add_edge_to_dsl passes unit tests: trims inputs, detects duplicates, preserves TOML fields, returns Result<String, ConceptMapMutationError>" },
+  { id = "EX-6", text = "remove_edge_from_dsl passes unit tests: trims inputs, removes one matching line by derived key, preserves TOML fields, returns Result<String, ConceptMapMutationError>" },
+  { id = "EX-7", text = "rename_node_in_dsl passes unit tests: trims inputs, matches source/target labels by derived key (not case-insensitive label equality), checks key-based collision, edits all edge lines, preserves TOML fields, returns Result<String, ConceptMapMutationError>" },
+  { id = "EX-8", text = "unit tests for add/remove/rename pure functions pass: duplicate detection, edge-not-found, key collision, case-only rename, text-identical no-op, empty-field trim, TOML field preservation" },
 ]
 verification = [
-  { id = "VT-1", expects = "cargo test — concept_map mutation unit tests pass" },
-  { id = "VT-2", expects = "just check passes" },
+  { id = "VT-1", expects = "cargo test concept_map::tests — concept_map mutation unit tests pass (scoped to concept_map module)" },
+  { id = "VT-2", expects = "just check passes (root package only — full workspace gate in PHASE-02)" },
 ]
 specs        = []
 requirements = []
@@ -51,18 +51,19 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete — pure functions, typed error, and catalog registration exist" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "MapServerError has CM variants: BadConceptMapId, ConceptMapNotFound, DuplicateEdge, EdgeNotFound, NodeCollision, EmptyField, StaleConceptMap, ConceptMapParseError" },
+  { id = "EX-1", text = "MapServerError has CM variants: BadConceptMapId, ConceptMapNotFound, DuplicateEdge, EdgeNotFound, NodeCollision, EmptyField, StaleConceptMap, ConceptMapParseError, ConceptMapIoError" },
   { id = "EX-2", text = "From<ConceptMapMutationError> for MapServerError maps every variant correctly" },
-  { id = "EX-3", text = "GET /api/concept-map/:id returns 200 with nodes/edges/diagnostics/dsl_hash for valid CM" },
+  { id = "EX-3", text = "GET /api/concept-map/:id returns 200 with nodes/edges/diagnostics/dsl_hash/description for valid CM; returns 200 with empty nodes/edges when DSL key is absent (not 500)" },
   { id = "EX-4", text = "GET returns 404 for non-existent CM, 400 for bad id format" },
   { id = "EX-5", text = "POST add_edge succeeds (200), rejects duplicate (409), rejects empty field (400)" },
   { id = "EX-6", text = "POST remove_edge succeeds (200), rejects not-found (404), rejects empty field (400)" },
   { id = "EX-7", text = "POST rename_node succeeds (200 with occurrences), rejects collision (409), rejects empty field (400)" },
-  { id = "EX-8", text = "POST with matching base_hash succeeds; mismatched base_hash returns 409 stale_concept_map; absent base_hash succeeds" },
+  { id = "EX-8", text = "POST with matching base_hash succeeds; mismatched base_hash returns 409 stale_concept_map; absent base_hash succeeds (last-write-wins)" },
   { id = "EX-9", text = "Markdown path test: GET /api/entity/CM-001/markdown resolves to concept-map-001.md (not cm-001.md)" },
+  { id = "EX-10", text = "sha2 and hex crates are verified available (or added as explicit deps if missing from Cargo.lock)" },
 ]
 verification = [
-  { id = "VT-1", expects = "cargo test — route integration tests pass (happy path + all error paths)" },
+  { id = "VT-1", expects = "cargo test map_server::routes — route integration tests pass (happy path + all error paths, scoped to map_server)" },
   { id = "VT-2", expects = "just gate passes" },
 ]
 specs        = []
@@ -79,13 +80,14 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "Labels with quotes/backslashes/newlines/DSL delimiters tested in GET and POST" },
   { id = "EX-2", text = "TOML field preservation after each mutation action verified" },
-  { id = "EX-3", text = "DSL comment/blank-line preservation before/inside/after multiline DSL verified" },
+  { id = "EX-3", text = "DSL comment/blank-line preservation before/inside/after multiline DSL verified; TOML dsl-key inline comments are explicitly excluded from preservation (set_dsl replaces the key item)" },
   { id = "EX-4", text = "Rename collision: different spelling same key → 409; case-only rename → 200" },
   { id = "EX-5", text = "Malformed DSL lines: GET includes parse-time diagnostics, does not 500" },
   { id = "EX-6", text = "POST with unknown action discriminator → 400 (not 500)" },
   { id = "EX-7", text = "File I/O errors: missing TOML → 404; invalid TOML → 500; missing dsl key → graceful" },
   { id = "EX-8", text = "Duplicate edge detection under whitespace normalization rules verified" },
   { id = "EX-9", text = "ConceptMapMutationError Display messages are user-readable" },
+  { id = "EX-10", text = "GET with invalid TOML syntax (unparseable file) returns 500, not panic" },
 ]
 verification = [
   { id = "VT-1", expects = "cargo test — all adversarial + preservation tests pass" },
@@ -108,14 +110,14 @@ exit_criteria = [
   { id = "EX-3", text = "api.mutateConceptMap(id, action, params, baseHash) calls POST with correct body shape" },
   { id = "EX-4", text = "normalizeConceptMap parses raw response into internal cache format" },
   { id = "EX-5", text = "isConceptMap(focusId) returns true for CM entities in the catalog graph" },
-  { id = "EX-6", text = "dot.escapeStringContent escapes content without adding surrounding quotes" },
+  { id = "EX-6", text = "dot.escapeStringContent escapes content (backslash, double-quote, newline, >, ], }) without adding surrounding quotes; caller adds enclosing double quotes" },
   { id = "EX-7", text = "cmGraphToDot produces valid DOT with ellipse nodes, CM colours, correct labels" },
   { id = "EX-8", text = "CM SVG renders in browser when a CM entity is focused; hover pane shows node label" },
   { id = "EX-9", text = "renderConceptMap dispatches correctly; entity graph renders for non-CM entities" },
-  { id = "EX-10", text = "stale-render guard (graphRenderSeq) covers CM diagram renders" },
+  { id = "EX-10", text = "renderConceptMap increments graphRenderSeq before each DOT render; SVG onload handler discards the render if its sequence number doesn't match current graphRenderSeq" },
 ]
 verification = [
-  { id = "VT-1", expects = "JS tests: normalizeConceptMap, cmGraphToDot, isConceptMap pass" },
+  { id = "VT-1", expects = "JS tests: normalizeConceptMap, cmGraphToDot (hostile labels), isConceptMap, graphRenderSeq guard pass" },
   { id = "VA-1", expects = "manual smoke: doctrine map serve --focus CM-001 renders diagram with correct nodes/edges" },
 ]
 specs        = []
@@ -137,12 +139,12 @@ exit_criteria = [
   { id = "EX-5", text = "Inline rename: clicking node in edge table or SVG opens input, Enter submits, Escape cancels" },
   { id = "EX-6", text = "Successful rename updates cache, re-renders; 409 collision shows inline warning with existing label" },
   { id = "EX-7", text = "Edit/Done button toggles editingConceptMap; add form/remove buttons visible only in edit mode" },
-  { id = "EX-8", text = "All POST mutations send base_hash from cache; 409 stale_concept_map auto-refetches and notifies user" },
+  { id = "EX-8", text = "All POST mutations send base_hash from cache when available; first mutation after page load may omit base_hash if cache is cold (last-write-wins for that case); 409 stale_concept_map auto-refetches and notifies user" },
   { id = "EX-9", text = "Autocomplete datalists rebuilt from cache after every successful mutation" },
 ]
 verification = [
   { id = "VT-1", expects = "JS tests: autocomplete rebuild, stale-write handling pass" },
-  { id = "VA-1", expects = "manual smoke: add edge 'C > depends on > D', remove edge, rename 'C' to 'Component' — all persist to TOML" },
+  { id = "VA-1", expects = "manual smoke: add edge 'C > depends on > D', remove edge, rename 'C' to 'Component' — all persist to TOML (quality check, not a hard gate — PHASE-06 can begin after VT-1)" },
 ]
 specs        = []
 requirements = []
@@ -161,13 +163,13 @@ exit_criteria = [
   { id = "EX-3", text = "Cache invalidated on refresh and when focused entity changes (re-fetch on next focus)" },
   { id = "EX-4", text = "All error states rendered per design §6 error table (not-found, parse failure, duplicate, collision, stale, bad action)" },
   { id = "EX-5", text = "CM filter checkbox 'Concept Maps (CM)' in sidebar filter grid; toggle filters correctly" },
-  { id = "EX-6", text = "CM kind pill colour #16A085 applied in CSS palette and kind pill rendering" },
+  { id = "EX-6", text = "CM kind pill colour #16A085 applied in CSS palette and kind pill rendering; CM entry in JS kindOrder map set to 20" },
   { id = "EX-7", text = "CM diagram pane, add-edge form, diagnostics panel all have correct HTML containers" },
-  { id = "EX-8", text = "All JS tests pass: normalizeConceptMap, cmGraphToDot (hostile labels), isConceptMap, autocomplete, stale-write, diagnostics" },
+  { id = "EX-8", text = "All JS tests pass: normalizeConceptMap, cmGraphToDot (hostile labels: quotes, backslashes, newlines, >, ], }), isConceptMap, graphRenderSeq guard, autocomplete, stale-write, diagnostics" },
   { id = "EX-9", text = "Integration smoke: create CM via CLI, add edges, view in browser, edit, verify TOML on disk" },
 ]
 verification = [
-  { id = "VT-1", expects = "JS test suite passes (all modules)" },
+  { id = "VT-1", expects = "JS test suite passes (all modules, including hostile-label DOT escape tests)" },
   { id = "VT-2", expects = "just gate passes (workspace clean)" },
   { id = "VA-1", expects = "integration smoke: doctrine concept-map new → add edges via CLI → doctrine map serve --focus CM-001 → all smoke checks pass" },
   { id = "VA-2", expects = "manual: hostile labels (quotes, backslashes, newlines, >) render correctly in DOT and survive round-trip" },

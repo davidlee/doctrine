@@ -102,7 +102,36 @@ on PHASE-02. They can run as a concurrent batch under `/dispatch`.
 
 - Phase ids and criterion ids are immutable per the glossary reference forms.
 - PHASE-03 and PHASE-04 can be dispatched in parallel if using multi-worker mode.
+  They are file-disjoint (PHASE-03 touches `src/` tests only; PHASE-04 touches
+  `web/map/` only). PHASE-03 must not add or modify `Cargo.toml` dependencies on
+  the parallel track — if new test deps are needed, move them to PHASE-02.
+- Do not split `concept_map.rs` into submodules during this slice — the module
+  seam guard in the design is a future concern, not an implementation target.
+- PHASE-06 is broad (diagnostics + tests + CSS + HTML + integration). This is
+  intentional for a final polish phase, but note the breadth risk — a failure in
+  any sub-area blocks the entire phase.
 - The `just gate` exit criterion on every Rust phase ensures the workspace stays
   clean — clippy zero warnings, no regressions.
 - The CLI shell verbs (`run_add`/`run_remove`/`run_rename_node`) are not modified
   in this slice. The CLI collision check follow-up is deferred (design §10).
+- `rename_node_in_dsl` matches source/target labels by **derived key**, not
+  case-insensitive label equality (the CLI `run_rename_node` uses case-insensitive
+  matching — this is a deliberate semantic difference; the CLI will gain key-based
+  matching in a follow-up).
+- PHASE-04 VA-1 (manual smoke) is a quality check, not a hard gate — PHASE-05
+  can begin after PHASE-04 VT-1 passes.
+
+### Review-driven corrections (RV disposition)
+
+This plan was updated after an adversarial review that identified:
+- Visibility list undercount (7 → 13 symbols with fields)
+- Missing-DSL graceful handling (was 500, now 200 with empty data)
+- `set_dsl` drops inline comments on the `dsl` key (accepted tradeoff, documented)
+- `sha2`/`hex` crate dependency verification added
+- TOML field preservation added to PHASE-01 EX-8
+- `graphRenderSeq` stale-render guard test added to PHASE-04
+- `description` field in GET response added to EX-3
+- `kindOrder.CM` entry added to PHASE-06 EX-6
+- Escape helper character list made explicit (EX-6)
+- Parallel Cargo.toml collision risk noted
+- `ConceptMapIoError` variant added for I/O error mapping
