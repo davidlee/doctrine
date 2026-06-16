@@ -1,5 +1,52 @@
 # SL-073 Implementation Notes
 
+## PHASE-05 (complete — 2026-06-16)
+
+**Commit:** `4bf7a2c` — feat(SL-073): PHASE-05 interactive UI
+
+Executed inline. Replaced old renderList/renderFocus/renderDotEditor with
+shell-DOM-targeted interactive UI. Wired all sidebar surfaces (filter
+checkboxes, search, depth buttons, refresh) and main area panes (focus
+header, entity list, relationship table). Uses router.parseHash for
+routing, model.normalizeGraph for data, renderGraphPane/renderMarkdownPane
+from PHASE-03/04.
+
+**Key design decisions:**
+- Kind filter collected from checkbox labels, split by "/" for compound groups
+  (e.g. "ADR/POL" → ["ADR", "POL"])
+- Search live-filters via model.searchFilter then applies kindFilter on top;
+  Enter uses model.findFocus with null-on-miss (Esc clears)
+- Relationship table edges filtered by source kind when kindFilter active
+- Refresh clears markdownCache, increments graphRenderSeq, re-fetches,
+  re-resolves focus
+- Bootstrap wires interactive surfaces before fetch; render() uses state.
+  dotAvailable from health check
+
+**Removed dead code:** parseHash (old), apiGet/apiGetJSON/apiGetText,
+renderList, renderFocus, renderDotEditor, renderDotSvg — replaced by
+shell-DOM targeting.
+
+**Watch-outs for PHASE-06:**
+--path CLI flag (IMP-079, Rust change in src/commands/map.rs)
+- Edge detail page (#/edge/e_…) reachable from relationship table
+  edge ID click — currently not wired; relationship table links go to
+  focus view
+- SVG sanitization edge cases (verify DOMPurify SVG profile)
+- 21-item acceptance checklist
+- Existing dotAvailable local check in renderGraphPane vs state.dotAvailable
+  — now consistent (both read state.dotAvailable)
+- `el()` helper still present but unused since shell DOM is static — safe
+  to leave; PHASE-06 can remove if desired
+
+## PHASE-04 (complete — 2026-06-16)
+
+**Commit:** `3c4de37` — feat(SL-073): PHASE-04 markdown rendering
+
+Executed inline. Added api.fetchMarkdown and renderMarkdownPane with
+cache, stale-request guard (state.focusId comparison), applyLinkPolicy
+(external→_blank+noopener, relative→strip, anchor→preserve). Error
+states: 404 muted, 501 info, 500 error.
+
 ## PHASE-03 (complete — 2026-06-16)
 
 **Commit:** `6b08ac7` — feat(SL-073): PHASE-03 DOT/SVG rendering
