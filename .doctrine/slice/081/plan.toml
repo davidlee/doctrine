@@ -1,0 +1,235 @@
+# Implementation plan for SL-081 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-081"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ── PHASE-01: memory.rs — RawRelation + MemoryCatalogRecord + read_catalog_record ──
+[[phase]]
+id        = "PHASE-01"
+name      = "Memory TOML types for catalog consumption"
+objective = "Replace the fieldless RawRelation with label+target fields; add MemoryCatalogRecord and read_catalog_record() so the catalog scan can consume memory metadata."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §§3–4a locked (commit 1e01e58)" },
+  { id = "EN-2", text = "RawMemoryToml and MEMORY_ITEMS_DIR / MEMORY_SHIPPED_DIR exist in src/memory.rs" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RawRelation derives Deserialize/Serialize with `label: String` and `target: String` (both `#[serde(default)]`). The old fieldless struct comment is replaced with a catalog-oriented note." },
+  { id = "EX-2", text = "MemoryCatalogRecord { uid, title, status, memory_type, relations: Vec<RawRelation>, path } exists with pub(crate) visibility." },
+  { id = "EX-3", text = "read_catalog_record(toml_path) validates uid with is_uid, falls back title→uid when empty, tolerates unknown status/memory_type; returns anyhow::Result<MemoryCatalogRecord>." },
+  { id = "EX-4", text = "Existing memory tests (Memory::parse, record, list, show, find) pass unchanged — RawRelation fields are additive, RawMemoryToml parse is backward-compatible." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: read_catalog_record returns valid record with uid/title/status/memory_type/relations from a well-formed memory.toml" },
+  { id = "VT-2", expects = "Unit: read_catalog_record returns error on invalid uid (not mem_<32hex>)" },
+  { id = "VT-3", expects = "Unit: read_catalog_record uses uid as title when title field is empty" },
+  { id = "VT-4", expects = "Unit: read_catalog_record returns empty relations vec when no [[relation]] rows authored" },
+  { id = "VT-5", expects = "Unit: read_catalog_record parses multiple [[relation]] rows with label + target" },
+  { id = "VT-6", expects = "cargo test -- memory passes all existing tests (no regressions)" },
+  { id = "VT-7", expects = "Memory::parse still accepts TOML with/without [[relation]] rows (backward compat)" },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-02: catalog/hydrate.rs — CatalogKey, CatalogEdgeLabel, revised entity/edge/target types ──
+[[phase]]
+id        = "PHASE-02"
+name      = "Catalog identity types and hydration revision"
+objective = "Introduce CatalogKey (Numbered|Memory) and CatalogEdgeLabel (Validated|Raw); revise CatalogEntity/CatalogEdge/EdgeTarget/CatalogDiagnostic to use them; update from_scanned to accept memory records and classify_target to use BTreeSet<CatalogKey>."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (RawRelation + MemoryCatalogRecord ready)" },
+  { id = "EN-2", text = "Design §1–2, §5a–5g locked" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "CatalogKey enum with Numbered(EntityKey) and Memory(String) exists, manual Serialize impl flattens both to string." },
+  { id = "EX-2", text = "CatalogEdgeLabel enum with Validated(RelationLabel) and Raw(String) exists, name() returns &str for both, Serialize flattens to string." },
+  { id = "EX-3", text = "CatalogEntity.key: CatalogKey (was EntityKey), .kind_label: &'static str (was .kind), .kind: Option<&'static entity::Kind> (new, None for memory, skip_serializing_if)." },
+  { id = "EX-4", text = "CatalogEdge.source: CatalogKey (was EntityKey), .label: CatalogEdgeLabel (was RelationLabel)." },
+  { id = "EX-5", text = "EdgeTarget::Resolved(CatalogKey) (was EntityKey). UnresolvedRef/UnvalidatedText unchanged." },
+  { id = "EX-6", text = "CatalogDiagnostic.entity_key: Option<CatalogKey> (was Option<EntityKey>). All existing constructors wrap se.key in CatalogKey::Numbered." },
+  { id = "EX-7", text = "classify_target takes &BTreeSet<CatalogKey>. For memory source, target resolved mem_* uid → classified as UnvalidatedText (memory→memory out of scope)." },
+  { id = "EX-8", text = "from_scanned(root, &[ScannedEntity], &[MemoryCatalogRecord]) builds CatalogEntity with CatalogKey::Memory(uid), kind_label=\"MEM\", kind=None. Memory edges use CatalogEdgeLabel::Raw(label), origin file {record.path}/memory.toml." },
+  { id = "EX-9", text = "Empty relation label or target in memory → CatalogDiagnostic::Warning (D10)." },
+  { id = "EX-10", text = "Existing hydrate tests (VT-1..VT-5, classify_target) pass with mechanical key-type updates." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: CatalogKey::Numbered.serialize() → \"SL-001\"; CatalogKey::Memory(\"mem_abc123\").serialize() → \"mem_abc123\"" },
+  { id = "VT-2", expects = "Unit: CatalogEdgeLabel::Validated.serialize() → label name string; Raw(\"custom\").serialize() → \"custom\"" },
+  { id = "VT-3", expects = "Unit: from_scanned produces memory node with key=CatalogKey::Memory, kind_label=\"MEM\", kind=None, memory_type=Some(...)" },
+  { id = "VT-4", expects = "Unit: from_scanned memory edge has CatalogEdgeLabel::Raw and correct origin file" },
+  { id = "VT-5", expects = "Unit: empty label memory relation → Warning diagnostic; empty target → Warning" },
+  { id = "VT-6", expects = "Unit: classify_target for valid canonical ref after CatalogKey change — Resolved/UnresolvedRef/UnvalidatedText still correct" },
+  { id = "VT-7", expects = "All existing catalog/hydrate tests pass (mechanical updates only)" },
+  { id = "VA-1", expects = "Agent: grep for EntityKey in hydrate.rs confirms only CatalogKey::Numbered(EntityKey) wrappers remain — no bare EntityKey in CatalogEntity/CatalogEdge/EdgeTarget/CatalogDiagnostic fields" },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-03: catalog/scan.rs — scan_memory_entities ──
+[[phase]]
+id        = "PHASE-03"
+name      = "Memory entity scanner"
+objective = "Add scan_memory_entities() to src/catalog/scan.rs — walks MEMORY_ITEMS_DIR and MEMORY_SHIPPED_DIR via entity::scan_named, reads each memory.toml via read_catalog_record, validates uid==dirname, collects diagnostics."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (read_catalog_record available)" },
+  { id = "EN-2", text = "PHASE-02 complete (CatalogKey available for diagnostic entity_key)" },
+  { id = "EN-3", text = "Design §4b locked" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "scan_memory_entities(root, &mut diagnostics) returns Vec<MemoryCatalogRecord>." },
+  { id = "EX-2", text = "Items override shipped on uid collision (BTreeMap insert order)." },
+  { id = "EX-3", text = "uid ≠ dirname → CatalogDiagnostic::Error (D5)." },
+  { id = "EX-4", text = "Malformed toml → CatalogDiagnostic::Error with populated CatalogKey::Memory(name) (D6)." },
+  { id = "EX-5", text = "Missing shipped/ directory → silently skipped (not an error)." },
+  { id = "EX-6", text = "Items/ read error → propagated (not swallowed). Empty items/ or shipped/ → Ok(vec![])." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: scan_memory_entities returns one record for a valid memory.toml in items/" },
+  { id = "VT-2", expects = "Unit: items/ record overrides shipped/ record with same uid" },
+  { id = "VT-3", expects = "Unit: uid ≠ dirname produces Error diagnostic, record excluded" },
+  { id = "VT-4", expects = "Unit: malformed toml produces Error diagnostic with entity_key=CatalogKey::Memory(dirname)" },
+  { id = "VT-5", expects = "Unit: missing shipped/ dir → Ok(vec![]) (no error)" },
+  { id = "VT-6", expects = "Unit: empty items/ and empty shipped/ → Ok(vec![])" },
+  { id = "VT-7", expects = "Unit: scan_named skips files and symlinks, returns only real directories" },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-04: catalog/graph.rs — NodeKey → CatalogKey, memory_type ──
+[[phase]]
+id        = "PHASE-04"
+name      = "Graph projection for memory"
+objective = "Replace NodeKey with a CatalogKey re-export; add memory_type to CatalogNode; update outgoing/incoming match arms for Numbered/Memory variants."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete (CatalogKey type exists)" },
+  { id = "EN-2", text = "Design §6 locked" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "NodeKey is a pub(crate) use of CatalogKey; the old NodeKey::Entity(EntityKey) variant is removed." },
+  { id = "EX-2", text = "CatalogNode gains memory_type: Option<String> with skip_serializing_if." },
+  { id = "EX-3", text = "from_catalog copies memory_type from scan record when building memory nodes." },
+  { id = "EX-4", text = "outgoing matches CatalogKey::Numbered(key) → filter on &e.source == key; CatalogKey::Memory(_) → empty vec." },
+  { id = "EX-5", text = "incoming matches CatalogKey::Numbered(key) → Resolved target filter; CatalogKey::Memory(_) → empty vec (no memory→numbered edges point AT memory)." },
+  { id = "EX-6", text = "NodeKey Serialize produces same flat string as CatalogKey — no frontend change." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: from_catalog produces memory nodes in node map with kind_label=\"MEM\" and memory_type populated" },
+  { id = "VT-2", expects = "Unit: memory node serializes memory_type field; numbered node omits it" },
+  { id = "VT-3", expects = "Unit: outgoing for CatalogKey::Memory returns empty vec" },
+  { id = "VT-4", expects = "Unit: incoming for CatalogKey::Memory returns empty vec" },
+  { id = "VT-5", expects = "All existing graph tests (VT-1..VT-4) pass with mechanical NodeKey→CatalogKey updates" },
+  { id = "VA-1", expects = "Agent: grep confirms no remaining NodeKey::Entity pattern in graph.rs" },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-05: map_server/markdown.rs — read_memory_markdown ──
+[[phase]]
+id        = "PHASE-05"
+name      = "Memory markdown reader"
+objective = "Add read_memory_markdown() that resolves a memory uid to its memory.md body — tries items/ then shipped/ using safe_join, returns EntityNotFound on missing file."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §7 locked" },
+  { id = "EN-2", text = "is_uid, safe_join, MEMORY_ITEMS_DIR, MEMORY_SHIPPED_DIR exist (no phase dependency)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "read_memory_markdown(root, uid) returns Ok(body) from first found memory.md (items/ priority over shipped/)." },
+  { id = "EX-2", text = "Missing file in both dirs → MapServerError::EntityNotFound(uid)." },
+  { id = "EX-3", text = "Uses safe_join for path containment; async read_to_string with NotFound fallthrough (no sync exists() check)." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: read_memory_markdown returns body from items/<uid>/memory.md" },
+  { id = "VT-2", expects = "Unit: when items/ file missing, falls back to shipped/<uid>/memory.md" },
+  { id = "VT-3", expects = "Unit: neither file exists → MapServerError::EntityNotFound" },
+  { id = "VT-4", expects = "Unit: read error (not NotFound) → propagated as MapServerError::Other" },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-06: map_server/routes.rs — entity_markdown memory fallback ──
+[[phase]]
+id        = "PHASE-06"
+name      = "Markdown route memory uid fallback"
+objective = "Extend the entity_markdown handler to accept memory uids as a second path after canonical ref parse fails — validates with is_uid + graph membership check."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete (CatalogKey::Memory for graph membership check)" },
+  { id = "EN-2", text = "PHASE-05 complete (read_memory_markdown available)" },
+  { id = "EN-3", text = "Design §7 locked" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "entity_markdown tries canonical ref parse first; on failure, tries is_uid fallback." },
+  { id = "EX-2", text = "Memory uid path checks graph membership via CatalogKey::Memory(uid) — 404 if not in graph." },
+  { id = "EX-3", text = "Valid uid in graph → reads memory.md via read_memory_markdown → 200 with markdown body." },
+  { id = "EX-4", text = "Existing canonical ref path unchanged — SL/ADR/REQ/ASM routes still work as before." },
+]
+verification = [
+  { id = "VT-1", expects = "Integration: GET /api/entity/mem_<valid_uid>/markdown returns 200 with memory.md content" },
+  { id = "VT-2", expects = "Integration: GET /api/entity/mem_<uid_not_in_graph>/markdown returns 404" },
+  { id = "VT-3", expects = "Integration: GET /api/entity/mem_bogus/markdown returns 400 (is_uid fails, not a canonical ref)" },
+  { id = "VT-4", expects = "All existing entity_markdown tests (sl001, not-in-graph, lowercase-prefix, bogus-prefix, req001, asm001, cm001) pass unchanged" },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-07: relation_graph.rs — validate_relations CatalogEdgeLabel handling ──
+[[phase]]
+id        = "PHASE-07"
+name      = "Relation validation for memory edges"
+objective = "Update validate_relations to handle CatalogEdgeLabel — skip Raw (memory) edges, tighten Numbered invariant to explicit Some check, report Raw-on-numbered as internal finding."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete (CatalogEdgeLabel type exists)" },
+  { id = "EN-2", text = "Design §§7–8 locked" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Memory edges (CatalogKey::Memory source) → skipped (continue)." },
+  { id = "EX-2", text = "Numbered edges with CatalogEdgeLabel::Raw → reported as internal corruption finding." },
+  { id = "EX-3", text = "Numbered source entity_kinds lookup changed from if-let to explicit Some check (None is a bug)." },
+  { id = "EX-4", text = "Existing dangler and illegal-row tests pass unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "Unit: validate_relations returns no findings for a memory edge with Raw label (skipped)" },
+  { id = "VT-2", expects = "Unit: validate_relations reports internal finding for a Numbered edge with Raw label (corruption detection)" },
+  { id = "VT-3", expects = "Unit: all existing validate_relations tests (dangler detection, illegal row detection, supersession) pass green" },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-08: Integration — scan_catalog wiring, end-to-end, gate ──
+[[phase]]
+id        = "PHASE-08"
+name      = "Integration wiring and final gate"
+objective = "Wire scan_catalog to call scan_memory_entities; run full test suite; verify just gate passes; confirm memory nodes appear in production catalog graph."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 through PHASE-07 all complete and green" },
+  { id = "EN-2", text = "Design §10 (scan_catalog entry point) locked" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "scan_catalog(root) calls scan_memory_entities and passes result to from_scanned." },
+  { id = "EX-2", text = "cargo test passes — all existing suites green, all new tests green." },
+  { id = "EX-3", text = "cargo clippy zero warnings." },
+  { id = "EX-4", text = "just gate passes." },
+  { id = "EX-5", text = "Production catalog graph includes memory nodes (≥30 items + shipped) with kind_label=\"MEM\"." },
+  { id = "EX-6", text = "doctrine map serve --open shows memory nodes in browser graph without JS errors." },
+]
+verification = [
+  { id = "VT-1", expects = "Integration: scan_catalog on temp fixture with memory + numbered entities returns Catalog with both entity types and correct edge counts" },
+  { id = "VT-2", expects = "Integration: CatalogGraph::from_catalog includes memory nodes" },
+  { id = "VA-1", expects = "Agent: cargo test --workspace passes with 0 failures" },
+  { id = "VA-2", expects = "Agent: cargo clippy --workspace passes with 0 warnings" },
+  { id = "VA-3", expects = "Agent: just gate passes" },
+  { id = "VH-1", expects = "Human: doctrine catalog inspect shows memory nodes; map serve shows MEM nodes in browser" },
+]
+specs        = []
+requirements = []
