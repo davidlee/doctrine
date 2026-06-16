@@ -21,7 +21,7 @@ Command tier (unchanged):
 Engine tier:
   src/integrity.rs           → add CONCEPT_MAP_KIND to KINDS (1 KindRef row)
   src/catalog/scan.rs        → add "CM" arm to outbound_for (empty, like REQ/KNOWLEDGE)
-  src/concept_map.rs         → unchanged (reused, zero modifications)
+  src/concept_map.rs         → visibility promotions + 3 new pure functions (see §2.1)
   src/map_server/routes.rs   → GET /api/concept-map/:id, POST /api/concept-map/:id
   src/map_server/error.rs    → add CM-specific error variants
   src/map_server/state.rs    → unchanged
@@ -30,9 +30,11 @@ Leaf tier:
   (none touched)
 ```
 
-Zero changes to `concept_map.rs`. The web routes call the existing pure functions
-(`parse_dsl`, `get_dsl`, `set_dsl`) and thin shell helpers extracted from the CLI
-verbs (see §2). No new dependencies.
+Minimal changes to `concept_map.rs`: ~6 visibility promotions (`read_concept_map`,
+`get_dsl`, `parse_dsl`, `check`, `set_dsl`, `ConceptMapDoc`, `CONCEPT_MAP_DIR` →
+`pub(crate)`) plus 3 new pure mutation functions extracted from the CLI shell verbs
+(see §2.1). The CLI verbs are left as-is — they remain the thin I/O wrappers they
+already are. No new dependencies.
 
 ### JS changes (SL-073 module layout preserved)
 
@@ -125,7 +127,9 @@ Body: `{ "action": "...", ...params }`. Three actions.
 { "action": "remove_edge", "source": "User Story", "rel": "expresses", "target": "User Need" }
 
 // 200 — returns updated nodes/edges
-{ "ok": true, "nodes": [ ... ], "edges": [ ... ] }
+// occurrences is the count of edge lines that were renamed.
+// If 0, the rename was a no-op (case-only change with no effect on keys).
+{ "ok": true, "occurrences": 4, "nodes": [ ... ], "edges": [ ... ] }
 
 // 404 — edge not found
 { "error": "edge_not_found", "message": "edge not found: User Story > expresses > User Need" }
@@ -140,11 +144,29 @@ Body: `{ "action": "...", ...params }`. Three actions.
 { "ok": true, "occurrences": 4, "nodes": [ ... ], "edges": [ ... ] }
 
 // 409 — rename would produce a key collision with an existing node
+// Case-only renames where old is the sole key-holder pass (occurrences may be 0).
 { "error": "node_collision", "message": "rename would collide with existing node 'User Narrative' at line 3", "existing_label": "User Narrative", "line": 3 }
 ```
 
 The collision check (409) fires when `derive_node_key(new) == derive_node_key(existing_label)`
-and `existing_label != old`. This prevents silently merging two distinct nodes.
+and `existing_label != old`. This prevents silently merging two distinct nodes. This check is
+**new** — the existing CLI `run_rename_node` does not perform it. The CLI can gain it in a
+follow-up; the web route requires it for safe inline editing.
+
+Case-only renames ("User Story" → "USER STORY") where `old` is the sole key-holder
+do NOT collide, but produce `occurrences: 0` — the frontend should treat this as a no-op
+and not re-render.
+
+### entity_markdown path verification
+
+`GET /api/entity/CM-001/markdown` — the existing `markdown::read_entity_markdown`
+constructs the .md path from the `EntityKey` and the kind's directory. For CM
+entities, this must resolve to `.doctrine/concept-map/001/concept-map-001.md`.
+The function uses `KindRef.stem` (not prefix) for file naming (the stem is
+`"concept-map"`, producing `concept-map-001.md`). **Verify during implementation**
+that the path assembly works correctly for the CM kind — if the function derives
+the filename from prefix (`"CM"` → `cm-001.md`), fix it. This is a latent bug
+in the existing code, not a CM-specific change.
 
 ### Route handler structure (thin wrappers)
 
@@ -202,13 +224,29 @@ async fn mutate_concept_map(
 }
 ```
 
-### New pub(crate) functions in concept_map.rs
+### §2.1: concept_map.rs changes
 
-Three pure functions extracted from the CLI shell verbs so the web route
-doesn't couple to stdout printing and root-finding:
+#### Visibility promotions (existing functions → `pub(crate)`)
+
+| Symbol | Current visibility | Needed by |
+|---|---|---|
+| `read_concept_map` | private | GET/POST routes (read TOML + body) |
+| `get_dsl` | private | GET/POST routes (extract DSL from TOML) |
+| `parse_dsl` | private | GET route (structured response) |
+| `check` | private | GET route (diagnostics) |
+| `set_dsl` | private | POST route (write-back mutation) |
+| `CONCEPT_MAP_DIR` | private | route handlers (join with root) |
+| `ConceptMapDoc` | private | GET route (extract title/status/description) |
+
+#### New pure functions
+
+Three pure functions extracted from the CLI shell verbs. Each takes the full
+TOML text, mutates the DSL block, and returns the updated TOML text. No I/O,
+no stdout. The existing CLI verbs (`run_add`, `run_remove`, `run_rename_node`)
+remain as-is — they are thin I/O wrappers and the duplication is trivial.
 
 ```rust
-/// Append an edge line to a concept-map DSL. Returns the updated TOML string.
+/// Append an edge line. Returns updated TOML.
 /// Returns `Err` for duplicate edge (with the existing line number).
 pub(crate) fn add_edge_to_dsl(
     toml_text: &str,
@@ -217,7 +255,7 @@ pub(crate) fn add_edge_to_dsl(
     target: &str,
 ) -> anyhow::Result<String> { ... }
 
-/// Remove a matching edge line. Returns the updated TOML string.
+/// Remove a matching edge line. Returns updated TOML.
 /// Returns `Err` if the edge is not found.
 pub(crate) fn remove_edge_from_dsl(
     toml_text: &str,
@@ -226,8 +264,15 @@ pub(crate) fn remove_edge_from_dsl(
     target: &str,
 ) -> anyhow::Result<String> { ... }
 
-/// Rename a node label across all DSL edges. Returns the updated TOML string.
-/// Returns `Err` on collision (new key == existing key from a different label).
+/// Rename a node label across all DSL edges. Returns updated TOML.
+/// Returns `Err` on key collision (see below).
+///
+/// Collision check (NEW — not present in the CLI `run_rename_node`):
+/// `derive_node_key(new) == derive_node_key(existing_label)` AND
+/// `existing_label != old`. This prevents silently merging two distinct
+/// nodes through a rename. Case-only renames ("User Story" → "USER STORY")
+/// where `old` is the only node with that key pass the check but produce
+/// zero occurrences — the caller should treat this as a no-op.
 pub(crate) fn rename_node_in_dsl(
     toml_text: &str,
     old: &str,
@@ -236,9 +281,7 @@ pub(crate) fn rename_node_in_dsl(
 ```
 
 Each reuses the existing `get_dsl` / `set_dsl` pair and the line-level logic
-already in `run_add`/`run_remove`/`run_rename_node`, without the I/O and
-stdout printing. The existing CLI verbs can be refactored to call these —
-or left as-is; the duplication is trivial (5-line file read/write wrappers).
+already in `run_add`/`run_remove`/`run_rename_node`.
 
 ### MapServerError additions
 
@@ -272,7 +315,12 @@ editingConceptMap: false,     // authoring mode toggle
 editingNode: null,            // { key, label } — node currently being renamed inline
 ```
 
-`conceptMapCache` is cleared on refresh alongside `markdownCache`.
+`conceptMapCache` is cleared on refresh alongside `markdownCache`. The refresh
+handler (`wireRefresh` in app.js) must clear both caches. After a CM mutation,
+the cache is updated in-place from the POST response; a manual refresh re-fetches
+from the server. The catalog graph (which holds the CM entity node's `status`) is
+NOT updated by CM mutations — status changes require a refresh, consistent with
+all other entity kinds.
 `editingConceptMap` is toggled by the Edit/Done button. `editingNode` is set when
 an inline rename input is active, cleared on completion.
 
@@ -558,6 +606,14 @@ Added to the filter grid in `index.html`. Toggle behaviour matches all other kin
 
 - `just check` — root package tests pass
 - `just gate` — workspace clean (clippy zero warnings)
+
+### TOCTOU posture
+
+No lock on the write path. The POST handler does: read TOML → mutate in memory →
+write file. Two concurrent browser tabs mutating the same CM could interleave
+reads before either writes (last-write-wins). For a single-user loopback tool
+this is acceptable. The 409 on duplicate edge and 404 on edge-not-found provide
+enough feedback that the second writer can retry after a cache refresh.
 
 ## 9. Open Questions & Deferred
 
