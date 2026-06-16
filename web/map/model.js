@@ -190,6 +190,7 @@ model.neighbourhood = function(focusId, depth, graph) {
 
   var visited = new Set();
   var collectedEdges = [];
+  var collectedEdgeIds = new Set();
   var queue = [{ id: focusId, dist: 0 }];
   visited.add(focusId);
 
@@ -204,7 +205,10 @@ model.neighbourhood = function(focusId, depth, graph) {
         visited.add(edge.target);
         queue.push({ id: edge.target, dist: current.dist + 1 });
       }
-      collectedEdges.push(edge);
+      if (!collectedEdgeIds.has(edge.id)) {
+        collectedEdgeIds.add(edge.id);
+        collectedEdges.push(edge);
+      }
     });
 
     /* incoming edges */
@@ -214,7 +218,10 @@ model.neighbourhood = function(focusId, depth, graph) {
         visited.add(edge.source);
         queue.push({ id: edge.source, dist: current.dist + 1 });
       }
-      collectedEdges.push(edge);
+      if (!collectedEdgeIds.has(edge.id)) {
+        collectedEdgeIds.add(edge.id);
+        collectedEdges.push(edge);
+      }
     });
   }
 

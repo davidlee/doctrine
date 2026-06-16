@@ -21,6 +21,15 @@ api.fetchGraph = function() {
   });
 };
 
+api.refreshGraph = function() {
+  return fetch('/api/refresh', { method: 'POST' }).then(function(r) {
+    if (!r.ok) return r.text().then(function(body) {
+      throw new ApiError('Failed to refresh', r.status, body, '/api/refresh');
+    });
+    return r.json();
+  });
+};
+
 api.fetchHealth = function() {
   return fetch('/api/health').then(function(r) {
     if (!r.ok) return r.text().then(function(body) {

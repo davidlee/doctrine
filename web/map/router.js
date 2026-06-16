@@ -2,6 +2,8 @@
 
 var router = {};
 
+function clampDepth(d) { return Math.max(0, Math.min(3, d)); }
+
 router.parseHash = function() {
   var h = window.location.hash.slice(1);
   if (!h) return { view: 'focus', id: null, depth: state.depth };
@@ -11,7 +13,7 @@ router.parseHash = function() {
     return {
       view: 'focus',
       id: focusMatch[1],
-      depth: focusMatch[2] ? parseInt(focusMatch[2], 10) : state.depth
+      depth: focusMatch[2] ? clampDepth(parseInt(focusMatch[2], 10)) : state.depth
     };
   }
 
@@ -20,7 +22,7 @@ router.parseHash = function() {
     return {
       view: 'edge',
       id: edgeMatch[1],
-      depth: edgeMatch[2] ? parseInt(edgeMatch[2], 10) : state.depth
+      depth: edgeMatch[2] ? clampDepth(parseInt(edgeMatch[2], 10)) : state.depth
     };
   }
 

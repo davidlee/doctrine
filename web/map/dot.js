@@ -48,8 +48,7 @@ dot.nodeAttrs = function(node, focusId, depth) {
     fontcolor: font,
     shape: shape,
     penwidth: isFocus ? 3.0 : 1.0,
-    tooltip: node.id,
-    URL: '#/focus/' + node.id + '?depth=' + depth
+    tooltip: node.id
   };
 };
 
@@ -81,15 +80,13 @@ dot.graphToDot = function(neighbourhood, focusId, depth) {
     var node = state.graph.nodes.get(id);
     if (!node) return;
     var attrs = dot.nodeAttrs(node, focusId, depth);
-    var url = attrs.URL;
     lines.push('  "' + dot.dotQuote(id) + '" [' +
       'label="' + dot.dotQuote(attrs.label) + '", ' +
       'fillcolor="' + attrs.fillcolor + '", ' +
       'fontcolor="' + attrs.fontcolor + '", ' +
       'shape="' + attrs.shape + '", ' +
       'penwidth=' + attrs.penwidth + ', ' +
-      'tooltip="' + dot.dotQuote(attrs.tooltip) + '", ' +
-      'URL="' + url + '"' +
+      'tooltip="' + dot.dotQuote(attrs.tooltip) + '"' +
       '];');
   });
 
