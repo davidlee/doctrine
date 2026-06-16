@@ -13,7 +13,7 @@ tags = ["area:relations", "area:spec"]
 
 [relationships]                 # outbound-only (ADR-004)
 needs    = []                   # item→item hard prerequisite
-after    = []                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "IMP-015", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
