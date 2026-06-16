@@ -16,32 +16,24 @@
 
       <button class="refresh-btn">Refresh</button>
 
-      <div class="depth-selector">
-        <span class="depth-label">Depth</span>
-        <button class="depth-btn">0</button>
-        <button class="depth-btn active">1</button>
-        <button class="depth-btn">2</button>
-        <button class="depth-btn">3</button>
-      </div>
-
       <div class="filter-area">
         <div class="filter-header">
           <span class="filter-label">Filter by kind</span>
           <label class="filter-toggle-all"><input type="checkbox" class="toggle-all-cb" checked> all</label>
         </div>
         <div class="filter-grid">
-          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="SL"> <span class="kind-abbrev">SL</span> <span class="kind-desc">Slices</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="PRD,SPEC"> <span class="kind-abbrev">PRD/SPEC</span> <span class="kind-desc">Products / Specs</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="ADR,POL"> <span class="kind-abbrev">ADR/POL</span> <span class="kind-desc">Decisions / Policies</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="STD"> <span class="kind-abbrev">STD</span> <span class="kind-desc">Standards</span></label>
-          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="PRD,SPEC"> <span class="kind-abbrev">PRD/SPEC</span> <span class="kind-desc">Products / Specs</span></label>
-          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="REQ"> <span class="kind-abbrev">REQ</span> <span class="kind-desc">Requirements</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="SL"> <span class="kind-abbrev">SL</span> <span class="kind-desc">Slices</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="ISS,IMP,CHR,RSK"> <span class="kind-abbrev">ISS/IMP/CHR/RSK</span> <span class="kind-desc">Issues / Risks / Chores</span></label>
-          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="IDE"> <span class="kind-abbrev">IDE</span> <span class="kind-desc">Ideas</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="REV"> <span class="kind-abbrev">REV</span> <span class="kind-desc">Revisions</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="RV"> <span class="kind-abbrev">RV</span> <span class="kind-desc">Reviews</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="REQ"> <span class="kind-abbrev">REQ</span> <span class="kind-desc">Requirements</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="IDE"> <span class="kind-abbrev">IDE</span> <span class="kind-desc">Ideas</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="REC"> <span class="kind-abbrev">REC</span> <span class="kind-desc">Records</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="ASM,DEC"> <span class="kind-abbrev">ASM/DEC</span> <span class="kind-desc">Assumptions / Decisions</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="QUE,CON"> <span class="kind-abbrev">QUE/CON</span> <span class="kind-desc">Questions / Concerns</span></label>
-          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="REV"> <span class="kind-abbrev">REV</span> <span class="kind-desc">Revisions</span></label>
         </div>
       </div>
 
@@ -63,13 +55,13 @@
       <div class="edge-legend">
         <span class="legend-label">Edge types</span>
         <div class="legend-items">
-          <div class="legend-item"><span class="legend-swatch" style="background:#888"></span> depends / requires</div>
-          <div class="legend-item"><span class="legend-swatch" style="background:#4A90D9"></span> refines / details</div>
-          <div class="legend-item"><span class="legend-swatch" style="background:#27AE60"></span> implements / satisfies</div>
-          <div class="legend-item"><span class="legend-swatch" style="background:#C0392B"></span> blocks</div>
-          <div class="legend-item"><span class="legend-swatch" style="background:#7B4FBF"></span> parent / child</div>
-          <div class="legend-item"><span class="legend-swatch" style="background:#95A5A6"></span> related / see also</div>
-          <div class="legend-item"><span class="legend-swatch" style="background:#E67E22"></span> resolves / addresses</div>
+          <div class="legend-item" data-labels="depends,requires"><span class="legend-swatch" style="background:#888"></span> depends / requires</div>
+          <div class="legend-item" data-labels="refines,details"><span class="legend-swatch" style="background:#4A90D9"></span> refines / details</div>
+          <div class="legend-item" data-labels="implements,satisfies"><span class="legend-swatch" style="background:#27AE60"></span> implements / satisfies</div>
+          <div class="legend-item" data-labels="blocks"><span class="legend-swatch" style="background:#C0392B"></span> blocks</div>
+          <div class="legend-item" data-labels="parent,child"><span class="legend-swatch" style="background:#7B4FBF"></span> parent / child</div>
+          <div class="legend-item" data-labels="related,see also"><span class="legend-swatch" style="background:#95A5A6"></span> related / see also</div>
+          <div class="legend-item" data-labels="resolves,addresses"><span class="legend-swatch" style="background:#E67E22"></span> resolves / addresses</div>
         </div>
       </div>
 
@@ -82,6 +74,14 @@
 
       <div class="graph-area">
         <span class="placeholder">[Graphviz SVG will render here]</span>
+      </div>
+
+      <div class="depth-selector">
+        <span class="depth-label">Depth</span>
+        <button class="depth-btn" data-depth="0">0</button>
+        <button class="depth-btn active" data-depth="1">1</button>
+        <button class="depth-btn" data-depth="2">2</button>
+        <button class="depth-btn" data-depth="3">3</button>
       </div>
 
       <div class="hover-detail">

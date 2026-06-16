@@ -338,11 +338,11 @@
           state.depth = d;
           var allBtns = document.querySelectorAll('.depth-btn');
           for (var j = 0; j < allBtns.length; j++) {
-            allBtns[j].classList.toggle('active', parseInt(allBtns[j].textContent, 10) === d);
+            allBtns[j].classList.toggle('active', parseInt(allBtns[j].getAttribute('data-depth'), 10) === d);
           }
           if (state.focusId) { router.setFocus(state.focusId, d); }
         };
-      })(parseInt(btns[i].textContent, 10)));
+      })(parseInt(btns[i].getAttribute('data-depth'), 10)));
     }
   }
 
@@ -708,7 +708,7 @@
     // Sync depth button active state
     var depthBtns = document.querySelectorAll('.depth-btn');
     for (var di = 0; di < depthBtns.length; di++) {
-      depthBtns[di].classList.toggle('active', parseInt(depthBtns[di].textContent, 10) === state.depth);
+      depthBtns[di].classList.toggle('active', parseInt(depthBtns[di].getAttribute('data-depth'), 10) === state.depth);
     }
 
     // Graph: always re-render on focus change (BFS is centre-centric).
