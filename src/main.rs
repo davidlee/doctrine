@@ -3322,7 +3322,7 @@ fn main() -> anyhow::Result<()> {
                 reference,
                 state,
                 path,
-            } => revision::run_status(path, &reference, state),
+            } => revision::run_status(path, &reference, state, color),
             RevisionCommand::Change { command } => match command {
                 RevisionChangeCommand::Add {
                     reference,
@@ -3489,7 +3489,7 @@ fn main() -> anyhow::Result<()> {
                 json,
                 path,
             } => adr::run_show(path, &reference, if json { Format::Json } else { format }),
-            AdrCommand::Status { id, status, path } => adr::run_status(path, id, status),
+            AdrCommand::Status { id, status, path } => adr::run_status(path, id, status, color),
         },
         Command::Policy { command } => match command {
             PolicyCommand::New { title, slug, path } => policy::run_new(path, title, slug),
@@ -3502,7 +3502,7 @@ fn main() -> anyhow::Result<()> {
                 json,
                 path,
             } => policy::run_show(path, &reference, if json { Format::Json } else { format }),
-            PolicyCommand::Status { id, status, path } => policy::run_status(path, id, status),
+            PolicyCommand::Status { id, status, path } => policy::run_status(path, id, status, color),
         },
         Command::Standard { command } => match command {
             StandardCommand::New { title, slug, path } => standard::run_new(path, title, slug),
@@ -3515,7 +3515,7 @@ fn main() -> anyhow::Result<()> {
                 json,
                 path,
             } => standard::run_show(path, &reference, if json { Format::Json } else { format }),
-            StandardCommand::Status { id, status, path } => standard::run_status(path, id, status),
+            StandardCommand::Status { id, status, path } => standard::run_status(path, id, status, color),
         },
         Command::Spec { command } => match command {
             SpecCommand::New {
@@ -3618,7 +3618,7 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => knowledge::run_show(path, &id, if json { Format::Json } else { format }),
             KnowledgeCommand::Status { id, state, path } => {
-                knowledge::run_status(path, &id, &state)
+                knowledge::run_status(path, &id, &state, color)
             }
         },
         Command::Boot {

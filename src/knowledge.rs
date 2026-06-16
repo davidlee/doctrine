@@ -1330,6 +1330,7 @@ pub(crate) fn run_status(
     path: Option<PathBuf>,
     reference: &str,
     state: &str,
+    color: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (kind, id) = resolve_ref(reference)?;
@@ -1343,7 +1344,12 @@ pub(crate) fn run_status(
     }
     let today = crate::clock::today();
     set_record_status(&root, kind, id, state, &today)?;
-    writeln!(io::stdout(), "{}: {state}", kind.canonical_id(id))?;
+    writeln!(
+        io::stdout(),
+        "{}: {}",
+        kind.canonical_id(id),
+        crate::listing::status_colored(state, color)
+    )?;
     Ok(())
 }
 
