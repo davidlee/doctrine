@@ -68,6 +68,13 @@ body {
 /* Link colour — legible on both light and dark backgrounds */
 :root { --link: #2563eb; }
 @media (prefers-color-scheme: dark) { :root { --link: #60a5fa; } }
+
+@media (prefers-color-scheme: dark) {
+  .cm-edge-label { color: var(--fg); }
+  .cm-edges th { color: var(--muted); border-bottom-color: var(--border); }
+  .cm-edges td { border-bottom-color: var(--border); }
+  .cm-edge-row:hover { background: var(--hover-bg); }
+}
 a { color: var(--link); }
 
 /* ---------------------------------------------------------------------------
