@@ -101,3 +101,20 @@ no additional transition), #4 (depth button click feedback — depth changes
 
 Items #3, #4, #10 may be satisfied by the render fix + depth sync. Check
 before scoping new work.
+
+## 2026-06-16 — audit complete (RV-040)
+
+Reconciliation review RV-040: 3 findings, all verified (0 unresolved blockers).
+
+- **F-1 (design-wrong):** D1 dark-theme edge contrast `#888888` on `#1a1a1a`
+  (~1.6:1) was below WCAG AA. Design had an internal inconsistency — the
+  fallback gate was scoped to dark-theme triggers but the mechanism was
+  light-theme-only. Fixed: design.md §D1 corrected; `dot._EDGE_COLORS`
+  depends/requires bumped to `#aaaaaa` (color + fontcolor, ~7.2:1 on dark bg).
+- **F-2 (tolerated):** D4 depth button relabel not applied; "Depth" label
+  above the button group provides sufficient context.
+- **F-3 (tolerated):** `'use strict'` missing from model/router/dot; ES5
+  codebase doesn't exercise affected features.
+
+Gate green (1471 passed), node --check clean, ESLint zero errors.
+Ready for /close.

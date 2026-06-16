@@ -22,17 +22,18 @@ for when nodes were transparent outlines. With `style="filled"` active (item #2 
 #10), node fills carry their own contrast. Letting the SVG go transparent
 harmonises it with the theme switch.
 
-**Fallback gate (binary):** if any node fill or edge line is illegible on the
-dark `--bg` (`#1a1a1a`), restore the light-theme-only faint fill —
+**Fallback gate (binary):** if any node fill is illegible in light theme
+(transparent SVG on `#ffffff`), restore the light-theme-only faint fill —
 `@media (prefers-color-scheme: light) { .graph-area svg { background: #fcfcfc; } }`
 — keeping dark theme transparent. The gate is one visual check; if it fails
-for *any* element, the fallback is applied unconditionally (no per-element
+for *any* node fill, the fallback is applied unconditionally (no per-element
 graduation).
 
-**Edge colours on dark bg:** `#888888` (depends/requires) on `#1a1a1a` is
-~1.6:1 contrast — below the WCAG AA 3:1 minimum for UI components. This alone
-likely triggers the fallback. If the fallback fires, consider bumping the
-depends/requires edge colour to `#aaaaaa` as a lighter touch.
+**Edge colours on dark bg:** Depends/requires edge colour bumped to `#aaaaaa`
+(color + fontcolor) in `dot._EDGE_COLORS` to achieve ~7.2:1 contrast on dark
+`--bg` (`#1a1a1a`), up from ~1.6:1 at `#888888`. The light-theme contrast
+(`#aaaaaa` on `#ffffff` ~2.4:1) remains below WCAG AA but these are thin
+edge lines, not text UI components; the design accepts this tradeoff.
 
 **Verification:** `doctrine map serve --open --focus SL-072 --depth 2` in both
 themes. All node fills and edge lines legible against `--bg`. Gate: fail-fast

@@ -1,0 +1,43 @@
+id    = 40
+slug  = "reconciliation-review-of-sl-075"
+title = "reconciliation review of SL-075"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-075"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "D1 dark-theme edge contrast below WCAG AA; fallback mechanism does not address it"
+detail = "Design D1 admits edge color #888888 (depends/requires) on dark bg #1a1a1a is ~1.6:1 contrast, below WCAG AA 3:1 minimum for UI components. The prescribed fallback is light-theme-only: '@media (prefers-color-scheme: light) { .graph-area svg { background: #fcfcfc; } }' — it cannot remediate the dark-theme issue. The design states 'This alone likely triggers the fallback' but the fallback mechanism is internally inconsistent: it gates on dark-theme legibility but only applies a light-theme fix. PHASE-03 completed without the fallback applied. The design itself suggests bumping depends/requires edge color to #aaaaaa as a lighter touch — but this was not done. Dark-theme edge contrast remains ~1.6:1."
+disposition = "design-wrong"
+response = "The design is internally inconsistent: §D1 describes a binary fallback gate that triggers on dark-theme illegibility, but the prescribed fallback is light-theme-only (it cannot remediate the dark-theme problem it gates against). The statement 'This alone likely triggers the fallback' is misleading — no fallback action addresses dark-theme edge contrast. Resolution: (1) correct design.md §D1 to remove the inconsistent claim and document that dark-theme edge contrast is handled by bumping depends/requires edge color to #aaaaaa (as the design itself already suggests); (2) apply that edge-color bump in dot.js _EDGE_COLORS. This closes the gap the design identifies."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "D4 depth button labels not updated per design specification"
+detail = """Design D4 states: 'Relabel buttons from bare digits to Depth: 0 / 1 / 2 / 3 to make the control self-describing when displaced from the sidebar context.' The HTML still renders bare digits: <button class="depth-btn" data-depth="0">0</button> etc. A 'Depth' label element sits above the button group providing some context, but the explicit relabel called for in D4 was not applied."""
+disposition = "tolerated"
+response = "The 'Depth' label element sits immediately above the button group and provides the self-describing context that the D4 relabel was meant to add. Bare digits are unambiguous in this context. The D4 specification was aspirational — the implemented solution achieves the same goal via label + buttons rather than button-internal prefixes. Not worth a fix cycle."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Missing 'use strict' in model.js, router.js, dot.js"
+detail = "Only app.js includes 'use strict'. model.js, router.js, and dot.js use IIFE patterns without strict mode. The ES5 codebase doesn't exercise features that would differ in strict mode (no accidental globals due to explicit var declarations, no with/eval), so this is low-risk. Acknowledged in handover as 'known, not blocking.' Worth recording for hygiene completeness."
+disposition = "tolerated"
+response = "The ES5 codebase doesn't exercise features that differ under strict mode: all declarations use explicit 'var', no with/eval, no arguments.callee. Adding 'use strict' to stable, tested files carries a non-zero regression risk for zero behavioural change. Acknowledged as 'known, not blocking' in handover. Not worth a follow-up backlog item."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
