@@ -37,8 +37,8 @@ In scope:
      colour mechanism.
    - **Ad-hoc `writeln!` surfaces**: bring under colour without forking the
      mechanism. Prefer routing through `render_columns` where the surface is
-     tabular; for detail/prose surfaces (adr/policy/install/reconcile summary
-     lines, corpus detail), apply colour via the same injected `color: bool`
+     tabular; for detail/prose surfaces (adr, policy, standard, knowledge,
+     revision lifecycle status lines), apply colour via the same injected `color: bool`
      resolved in the shell, using owo_colors' unconditional methods gated by
      that bool. Never use `if_supports_color` in the pure layer (D3).
 
@@ -74,8 +74,8 @@ Out of scope:
 - `src/tty.rs` — extend `stdout_color_enabled` to accept an optional `--color`
   override, or add a new shell-side resolver (IMP-040).
 - Ad-hoc writeln! call sites (IMP-039): `src/adr.rs`, `src/policy.rs`,
-  `src/install.rs`, `src/reconcile.rs`, `src/corpus.rs` — colour applied at each
-  call site via the injected bool.
+  `src/standard.rs`, `src/knowledge.rs`, `src/revision.rs` — colour applied at each
+  call site via the injected `color: bool`.
 - CLI argument parsing — new `--color` flag (IMP-040).
 - Black-box goldens — existing goldens stay green (piped output is plain);
   priority goldens may shift if the routing change alters the output shape
@@ -104,8 +104,8 @@ Open questions resolved in design:
 
 - Priority surfaces (`survey`, `next`) render with colour on a TTY, plain when
   piped.
-- Ad-hoc writeln! surfaces (adr, policy, install, reconcile, corpus detail) show
-  coloured output on a TTY, plain when piped.
+- Ad-hoc writeln! surfaces (adr, policy, standard, knowledge, revision lifecycle)
+  show coloured output on a TTY, plain when piped.
 - `--color=never` suppresses colour even on a TTY; `--color=always` emits colour
   even when piped; `--color=auto` (default) follows `NO_COLOR` + isatty.
 - `NO_COLOR` is honoured; `--color=never` wins over `--color=auto`.

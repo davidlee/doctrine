@@ -37,9 +37,10 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "select_columns panics in debug when a default name is absent from available; does not panic when all defaults are valid" },
-  { id = "VT-2", expects = "resolve_color: Never→false (tty or not); Always→true (tty or not); Auto defers to color_enabled(no_color, is_tty)" },
-  { id = "VT-3", expects = "--color=auto|always|never parses correctly via clap (case-insensitive); default is auto" },
+  { id = "VT-2", expects = "resolve_color: Never→false directly testable; Always→true directly testable; Auto delegates to stdout_color_enabled (existing color_enabled tests cover NO_COLOR/tty matrix)" },
+  { id = "VT-3", expects = "--color=auto|always|never parses correctly via clap (lowercase tokens); default is auto" },
   { id = "VT-4", expects = "all existing golden and unit tests pass (zero behavioural change)" },
+  { id = "VT-5", expects = "at least one existing CommonListArgs surface: --color=always emits ANSI even piped; --color=never suppresses ANSI; default auto keeps piped golden plain" },
   { id = "VA-1", expects = "cargo clippy --workspace zero warnings; just check green" },
 ]
 specs        = []
@@ -89,22 +90,23 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "status_colored(status, color) pure helper exists in listing.rs next to status_hue; both inputs injected, no impurity" },
-  { id = "EX-2", text = "adr run_status: coloured status word (e.g. green \"accepted\", yellow \"proposed\")" },
+  { id = "EX-2", text = "adr run_status: green \"accepted\"; \"proposed\" plain (unmapped per status_hue, not yellow)" },
   { id = "EX-3", text = "policy run_status: coloured status word" },
   { id = "EX-4", text = "standard run_status: coloured status word" },
   { id = "EX-5", text = "knowledge run_status: coloured state word" },
   { id = "EX-6", text = "revision run_status: BOTH from and to statuses coloured separately, literal \" → \" uncoloured" },
   { id = "EX-7", text = "color:false → zero ANSI on all five surfaces (piped output plain)" },
   { id = "EX-8", text = "run_approve approval-status line intentionally NOT coloured (design §1 exclusion, RV-045 F-1)" },
+  { id = "EX-9", text = "main.rs resolves tty::resolve_color(cli.color) at each status command arm (adr/policy/standard/knowledge/revision) and passes color: bool into the five run_status handlers" },
 ]
 verification = [
   { id = "VT-1", expects = "status_colored(\"accepted\", true) contains ANSI escape; status_colored(\"accepted\", false) is plain \"accepted\"" },
   { id = "VT-2", expects = "status_colored(\"bogus\", true) is plain \"bogus\" (unmapped status → no colour)" },
   { id = "VT-3", expects = "status_colored(\"\", true) is plain \"\" (empty status → no colour)" },
-  { id = "VT-4", expects = "every mapped status token (accepted, required, active, design, plan, started, done, abandoned, contested, blocked) produces ANSI under color:true via status_hue" },
-  { id = "VA-1", expects = "doctrine adr status <id> accepted on a TTY → \"ADR 001: accepted\" with \"accepted\" in green" },
-  { id = "VA-2", expects = "doctrine revision status <id> started on a TTY → \"proposed → started\" with \"proposed\" plain (unmapped) and \"started\" yellow" },
-  { id = "VA-3", expects = "--color=never on any status command → zero ANSI, status word plain" },
+  { id = "VT-4", expects = "the complete status_hue mapped set (green: done/active/accepted/required; yellow: design/plan/ready/started/audit/reconcile; red: blocked/abandoned/contested) produces ANSI under color:true" },
+  { id = "VA-1", expects = "temp-root fixture: doctrine --color=always adr status --status accepted <id> → 'accepted' in ANSI green; doctrine --color=never adr status --status accepted <id> → plain 'accepted' (no ANSI)" },
+  { id = "VA-2", expects = "temp-root fixture: doctrine revision status <id> where from=proposed, to=started → 'proposed' plain (unmapped), ' → ' uncoloured, 'started' yellow; use --color=always to force colour even without TTY" },
+  { id = "VA-3", expects = "pipe path: doctrine adr status --status accepted <id> | cat → zero ANSI (default auto when piped); doctrine --color=always adr status --status accepted <id> | cat → ANSI present" },
   { id = "VA-4", expects = "cargo clippy zero warnings; just check green; all existing tests pass" },
 ]
 specs        = []
