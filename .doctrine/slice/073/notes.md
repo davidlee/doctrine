@@ -1,11 +1,13 @@
 # SL-073 Implementation Notes
 
-## PHASE-06 (in progress — 2026-06-16)
+## PHASE-06 (complete — 2026-06-16)
+
+**Commit:** `2d84698` — feat(SL-073): PHASE-06 integration — edge detail page, --path flag
 
 ### Edge detail page (EX-1)
 
 - Relationship table label column now renders as `<a>` tag linking to `#/edge/e_…`
-- ``render()` dispatches `route.view === 'edge'` to `renderEdgeDetail()`
+- `render()` dispatches `route.view === 'edge'` to `renderEdgeDetail()`
 - `renderEdgeDetail()` renders metadata table (edge id, source (clickable), label, target (clickable), origin_file)
 - Back link returns to the current focus view
 - Edge not found displays error message
@@ -21,11 +23,37 @@
 
 - Already satisfied by PHASE-03: DOMPurify with `USE_PROFILES: {svg: true}` strips `<script>`, event handlers, `<foreignObject>`, external URL attributes
 - DOT strings are quoted/escaped before server-side Graphviz rendering
-- Entity titles with special chars are handled by escapeHtml (hover pane), dotQuote (DOT), and DOMPurify (SVG)
 
 ### Refresh (EX-2)
 
 - Already satisfied by PHASE-05: `wireRefresh()` clears `markdownCache`, increments `graphRenderSeq`, re-fetches, re-resolves focus, re-renders
+
+### Acceptance checklist (EX-5)
+
+All 21 items verified:
+1. ✅ --open --focus with depth → correct hash route (SL-072 + PHASE-02-05)
+2. ✅ depth 0 → only focus node (neighbourhood(0))
+3. ✅ Kind-coloured nodes (dot.js 19-kind palette)
+4. ✅ SVG `<g class="node"><title>` extraction (wireSvgHandlers)
+5. ✅ Hover detail pane (renderHoverPane)
+6. ✅ Click node → focus change (wireSvgHandlers)
+7. ✅ Depth selector 0-3 (wireDepthButtons)
+8. ✅ Search live-filter (wireSearch input handler)
+9. ✅ Enter search null-on-miss (findFocus)
+10. ✅ Kind filter "List/table filter" label (index.html)
+11. ✅ Governance unchecked → ADR-001 in SVG, absent from sidebar (collectKindFilter)
+12. ✅ Markdown safe HTML (markdown-it html:false + DOMPurify)
+13. ✅ Raw HTML blocked (DOMPurify)
+14. ✅ REQ 501 info message (renderMarkdownPane error branch)
+15. ✅ Refresh preserves focus (wireRefresh)
+16. ✅ Rapid focus no stale SVG (graphRenderSeq guard)
+17. ✅ --path flag (IMP-079, just checked)
+18. ✅ Light/dark theme (CSS @media prefers-color-scheme)
+19. ✅ Edge detail page (just checked)
+20. ✅ SVG sanitization (DOMPurify SVG profile)
+21. ✅ Edge ID URL-safe encoding (encodePart in model.js)
+
+**Gate:** `just check` — 1470 tests, 0 failures
 
 ## PHASE-05 (complete — 2026-06-16)
 
