@@ -17,7 +17,7 @@ exact shapes, flags, ids, and subcommands, ask the CLI: `doctrine <verb>
   [[signpost.doctrine.recording-memories]].
 - **review** — the adversarial review ledger (RV kind, ADR-007):
   `new · raise · dispose · verify · contest · withdraw · prime · show · list`.
-  See [[signpost.doctrine.audit]].
+  See [[signpost.doctrine.review]].
 - **rec** — reconciliation records (REC kind): `new · show · list`.
 - **revision** — the change-axis for governance (REV kind, ADR-013):
   `new · show · list · status`. See [[signpost.doctrine.revisions]].
@@ -47,6 +47,7 @@ exact shapes, flags, ids, and subcommands, ask the CLI: `doctrine <verb>
   chore · risk · idea): `new · list · show · edit`. See [[signpost.doctrine.backlog]].
 - **knowledge** — durable knowledge records (assumption · decision · question ·
   constraint): `new · list · show · status`.
+  See [[signpost.doctrine.knowledge]].
 - **boot** — regenerate the governance snapshot (`.doctrine/state/boot.md`);
   `boot install` wires the `@`-import + session hook; `boot --check` is the disk
   sentry. See [[concept.doctrine.boot-snapshot]].

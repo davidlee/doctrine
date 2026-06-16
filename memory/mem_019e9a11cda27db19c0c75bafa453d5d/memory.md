@@ -15,7 +15,7 @@ does not restate them.
 - `.doctrine/backlog/` — work-intake items (issue / improvement / chore / risk /
   idea), the intake surface upstream of a slice. See [[signpost.doctrine.backlog]].
 - `.doctrine/review/nnn/` — adversarial review ledgers (RV kind): `review-nnn.{toml,md}`.
-  See [[signpost.doctrine.audit]].
+  See [[signpost.doctrine.review]].
 - `.doctrine/rec/nnn/` — reconciliation records (REC kind): `rec-nnn.{toml,md}`.
 - `.doctrine/revision/nnn/` — revision change-axis records (REV kind, ADR-013):
   `revision-nnn.{toml,md}`. See [[signpost.doctrine.revisions]].
@@ -25,6 +25,7 @@ does not restate them.
   `standard-nnn.{toml,md}`. See [[signpost.doctrine.policies-standards]].
 - `.doctrine/knowledge/nnn/` — durable knowledge records (assumption / decision /
   question / constraint): `knowledge-nnn.{toml,md}`.
+  See [[signpost.doctrine.knowledge]].
 - `.doctrine/memory/items/nnn/` — the memory store (`memory.{toml,md}` + a
   `mem.<key>` symlink). `.doctrine/memory/shipped/` is the gitignored synced
   global corpus. See [[concept.doctrine.memory-model]] and
