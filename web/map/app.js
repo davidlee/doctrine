@@ -327,6 +327,7 @@
     if (!btn) return;
     btn.addEventListener('click', function() {
       state.markdownCache.clear();
+      state.conceptMapCache.clear();
       state.graphRenderSeq += 1;
       api.refreshGraph().then(function() {
         return api.fetchGraph();
@@ -735,7 +736,11 @@
         applyFocusHighlight(state.focusId, prevFocusId);
       }
       if (state.focusId) {
-        renderGraphPane(graphArea, state.focusId, state.depth);
+        if (isConceptMap(state.focusId)) {
+          renderConceptMap();
+        } else {
+          renderGraphPane(graphArea, state.focusId, state.depth);
+        }
       }
     }
 
@@ -743,6 +748,118 @@
       mdPane = document.querySelector('.markdown-pane');
       if (mdPane) renderMarkdownPane(mdPane, state.focusId);
     }
+  }
+
+  /* -----------------------------------------------------------------------
+   * Concept Map rendering (PHASE-04)
+   * --------------------------------------------------------------------- */
+  function isConceptMap(focusId) {
+    var node = state.graph.nodes.get(focusId);
+    return node && node.kindPrefix === 'CM';
+  }
+
+  function renderCmHoverPane(nodeKey) {
+    var pane = document.querySelector('.hover-detail');
+    if (!pane) return;
+    if (!nodeKey) {
+      pane.innerHTML = '<span class="placeholder">Hover a node for details</span>';
+      return;
+    }
+    var cm = state.conceptMapCache.get(state.focusId);
+    var label = nodeKey;
+    if (cm) {
+      for (var i = 0; i < cm.nodes.length; i++) {
+        if (cm.nodes[i].key === nodeKey) {
+          label = cm.nodes[i].label;
+          break;
+        }
+      }
+    }
+    pane.innerHTML = '<div class="hover-detail-content">' +
+      '<span class="hover-detail-title">' + escapeHtml(label) + '</span>' +
+      '<span class="hover-detail-meta">concept map node</span>' +
+      '</div>';
+  }
+
+  function wireCmSvgHandlers(svgEl) {
+    var groups = svgEl.querySelectorAll('.node');
+    for (var i = 0; i < groups.length; i++) {
+      var g = groups[i];
+      var textEl = g.querySelector('text');
+      if (!textEl) continue;
+      var nodeKey = textEl.textContent.trim();
+
+      try {
+        var bbox = g.getBBox();
+        if (bbox.width > 0 && bbox.height > 0) {
+          var hitRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          hitRect.setAttribute('x', bbox.x);
+          hitRect.setAttribute('y', bbox.y);
+          hitRect.setAttribute('width', bbox.width);
+          hitRect.setAttribute('height', bbox.height);
+          hitRect.setAttribute('fill', 'transparent');
+          hitRect.setAttribute('stroke', 'none');
+          g.insertBefore(hitRect, g.firstChild);
+        }
+      } catch (_) { /* eslint-disable-line no-unused-vars */ }
+
+      g.classList.add('doctrine-node');
+
+      g.addEventListener('click', function() {});
+
+      g.addEventListener('mouseenter', (function(key) {
+        return function() { renderCmHoverPane(key); };
+      })(nodeKey));
+
+      g.addEventListener('mouseleave', function() {
+        renderCmHoverPane(null);
+      });
+    }
+  }
+
+  function renderConceptMap() {
+    var graphArea = document.querySelector('.graph-area');
+    if (!graphArea) return;
+
+    var id = state.focusId;
+
+    if (!state.conceptMapCache.has(id)) {
+      graphArea.innerHTML = '<p class="loading">Loading concept map…</p>';
+      api.fetchConceptMap(id).then(function(cm) {
+        state.conceptMapCache.set(id, cm);
+        renderConceptMap();
+      }).catch(function(err) {
+        if (state.focusId !== id) return;
+        graphArea.innerHTML = '<p class="error">Failed to load concept map: ' + escapeHtml(err.message) + '</p>';
+      });
+      return;
+    }
+
+    var cm = state.conceptMapCache.get(id);
+    var dotText = dot.cmGraphToDot(cm);
+
+    state.graphRenderSeq += 1;
+    var seq = state.graphRenderSeq;
+
+    if (!state.dotAvailable) {
+      graphArea.innerHTML = '<p class="error">Graphviz not available.</p><pre>' + escapeHtml(dotText) + '</pre>';
+      return;
+    }
+
+    graphArea.innerHTML = '<p class="loading">Rendering diagram…</p>';
+
+    api.renderDot(dotText).then(function(svgText) {
+      if (seq !== state.graphRenderSeq) return;
+      var clean = window.DOMPurify.sanitize(svgText, { USE_PROFILES: { svg: true } });
+      graphArea.innerHTML = clean;
+      var svgEl = graphArea.querySelector('svg');
+      if (svgEl) {
+        wireCmSvgHandlers(svgEl);
+      }
+    }).catch(function(err) {
+      if (seq !== state.graphRenderSeq) return;
+      graphArea.innerHTML = '<p class="error">Graphviz not available</p>';
+    });
   }
 
   // Kick off

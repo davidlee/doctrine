@@ -12,6 +12,9 @@ var state = {
   focusId: null,
   depth: 1,
   markdownCache: new Map(),
+  conceptMapCache: new Map(),
+  editingConceptMap: false,
+  editingNode: null,
   dotAvailable: false,
   hoveredId: null,
   kindFilter: null,
@@ -338,3 +341,18 @@ function looseCanonical(query) {
 
   return prefix + '-' + padId(num);
 }
+
+/* --- concept map normalization --- */
+
+model.normalizeConceptMap = function(raw) {
+  return {
+    id: raw.id,
+    title: raw.title,
+    status: raw.status,
+    description: raw.description || '',
+    dslHash: raw.dsl_hash || '',
+    nodes: raw.nodes || [],
+    edges: raw.edges || [],
+    diagnostics: raw.diagnostics || []
+  };
+};

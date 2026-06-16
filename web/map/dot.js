@@ -133,3 +133,38 @@ dot.graphToDot = function(neighbourhood, focusId, depth) {
   lines.push('}');
   return lines.join('\n');
 };
+
+/* --- concept map DOT generation --- */
+
+dot.escapeStringContent = function(s) {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')
+    .replace(/>/g, '\\>').replace(/]/g, '\\]').replace(/}/g, '\\}');
+};
+
+dot.cmGraphToDot = function(cm) {
+  var lines = [];
+  lines.push('digraph concept_map {');
+  lines.push('  rankdir=LR;');
+  lines.push('  bgcolor="transparent";');
+  lines.push('  nodesep=0.45;');
+  lines.push('  ranksep=0.8;');
+  lines.push('  node [shape=ellipse, style=filled, fillcolor="#16A085", fontcolor="#ffffff"];');
+  lines.push('');
+
+  var sortedNodes = (cm.nodes || []).slice().sort(function(a, b) {
+    return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+  });
+  sortedNodes.forEach(function(node) {
+    lines.push('  "' + dot.escapeStringContent(node.key) + '" [label="' + dot.escapeStringContent(node.label) + '"];');
+  });
+
+  lines.push('');
+
+  (cm.edges || []).forEach(function(edge) {
+    lines.push('  "' + dot.escapeStringContent(edge.from_key) + '" -> "' + dot.escapeStringContent(edge.to_key) +
+      '" [label="' + dot.escapeStringContent(edge.rel) + '"];');
+  });
+
+  lines.push('}');
+  return lines.join('\n');
+};
