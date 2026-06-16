@@ -53,6 +53,20 @@
     return window.DOMPurify.sanitize(raw);
   }
 
+  /* Factory: single entity-list <li> element (DRY). */
+  function buildEntityItem(node) {
+    var li = document.createElement('li');
+    li.className = 'entity-item';
+    if (node.id === state.focusId) li.classList.add('active');
+    var t = document.createElement('span'); t.className = 'entity-title'; t.textContent = node.title; li.appendChild(t);
+    var p = document.createElement('span'); p.className = 'kind-pill';
+    p.style.background = 'var(--kind-' + node.kindPrefix + ')'; p.textContent = node.kindPrefix; li.appendChild(p);
+    li.addEventListener('click', (function(id) {
+      return function() { router.setFocus(id, state.depth); };
+    })(node.id));
+    return li;
+  }
+
   /* -----------------------------------------------------------------------
    * Interactive UI wiring (PHASE-05) — kind filter, search, depth, refresh,
    * entity list, relationship table, focus header
@@ -72,26 +86,7 @@
 
     list.innerHTML = '';
     nodes.forEach(function(node) {
-      var li = document.createElement('li');
-      li.className = 'entity-item';
-      if (node.id === state.focusId) li.classList.add('active');
-
-      var title = document.createElement('span');
-      title.className = 'entity-title';
-      title.textContent = node.title;
-      li.appendChild(title);
-
-      var pill = document.createElement('span');
-      pill.className = 'kind-pill';
-      pill.style.background = 'var(--kind-' + node.kindPrefix + ')';
-      pill.textContent = node.kindPrefix;
-      li.appendChild(pill);
-
-      li.addEventListener('click', (function(id) {
-        return function() { router.setFocus(id, state.depth); };
-      })(node.id));
-
-      list.appendChild(li);
+      list.appendChild(buildEntityItem(node));
     });
   }
 
@@ -182,6 +177,27 @@
     });
   }
 
+  /* Re-run entity list accounting for both kind-filter and active search. */
+  function renderFilteredEntities() {
+    var input = document.querySelector('.search-input');
+    var list = document.querySelector('.entity-list');
+    if (!list) return;
+
+    if (input && input.value.trim()) {
+      // Search is active — re-run search + kind filter
+      var results = model.searchFilter(input.value.trim(), state.graph);
+      if (state.kindFilter) {
+        results = results.filter(function(node) { return state.kindFilter.has(node.kindPrefix); });
+      }
+      list.innerHTML = '';
+      results.forEach(function(node) {
+        list.appendChild(buildEntityItem(node));
+      });
+    } else {
+      renderEntityList();
+    }
+  }
+
   function collectKindFilter() {
     var cbs = document.querySelectorAll('.kind-checkbox input[type="checkbox"]');
     var allOn = true;
@@ -194,10 +210,10 @@
       state.kindFilter = new Set();
       for (var j = 0; j < cbs.length; j++) {
         if (cbs[j].checked) {
-          var label = cbs[j].parentNode.textContent.trim();
-          var prefixes = label.split('/');
-          for (var k = 0; k < prefixes.length; k++) {
-            state.kindFilter.add(prefixes[k]);
+          var kinds = (cbs[j].getAttribute('data-kinds') || '').split(',');
+          for (var k = 0; k < kinds.length; k++) {
+            var kp = kinds[k].trim();
+            if (kp) state.kindFilter.add(kp);
           }
         }
       }
@@ -205,16 +221,38 @@
   }
 
   function applyFilters() {
-    renderEntityList();
+    renderFilteredEntities();
     renderRelationshipTable();
   }
 
   function wireFilterCheckboxes() {
-    var cbs = document.querySelectorAll('.kind-checkbox input[type="checkbox"]');
-    for (var i = 0; i < cbs.length; i++) {
-      cbs[i].addEventListener('change', function() {
+    // Toggle-all checkbox
+    var toggleAll = document.querySelector('.toggle-all-cb');
+    var kindCbs = document.querySelectorAll('.kind-checkbox input[type="checkbox"]');
+
+    if (toggleAll) {
+      toggleAll.addEventListener('change', function() {
+        for (var i = 0; i < kindCbs.length; i++) {
+          kindCbs[i].checked = toggleAll.checked;
+        }
         collectKindFilter();
         applyFilters();
+      });
+    }
+
+    // Individual kind checkboxes
+    for (var i = 0; i < kindCbs.length; i++) {
+      kindCbs[i].addEventListener('change', function() {
+        collectKindFilter();
+        applyFilters();
+        // Sync toggle-all state
+        if (toggleAll) {
+          var allOn = true;
+          for (var j = 0; j < kindCbs.length; j++) {
+            if (!kindCbs[j].checked) { allOn = false; break; }
+          }
+          toggleAll.checked = allOn;
+        }
       });
     }
     collectKindFilter();
@@ -238,34 +276,55 @@
 
       list.innerHTML = '';
       results.forEach(function(node) {
-        var li = document.createElement('li');
-        li.className = 'entity-item';
-        if (node.id === state.focusId) li.classList.add('active');
-        var t = document.createElement('span'); t.className = 'entity-title'; t.textContent = node.title; li.appendChild(t);
-        var p = document.createElement('span'); p.className = 'kind-pill';
-        p.style.background = 'var(--kind-' + node.kindPrefix + ')'; p.textContent = node.kindPrefix; li.appendChild(p);
-        li.addEventListener('click', (function(id) {
-          return function() { router.setFocus(id, state.depth); };
-        })(node.id));
-        list.appendChild(li);
+        list.appendChild(buildEntityItem(node));
       });
     });
 
     input.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
+      var list = document.querySelector('.entity-list');
+      var items = list ? list.querySelectorAll('.entity-item') : [];
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (items.length === 0) return;
+        if (typeof state.listNavIndex === 'undefined' || state.listNavIndex < 0) {
+          state.listNavIndex = e.key === 'ArrowDown' ? 0 : items.length - 1;
+        } else {
+          state.listNavIndex += (e.key === 'ArrowDown' ? 1 : -1);
+          if (state.listNavIndex >= items.length) state.listNavIndex = 0;
+          if (state.listNavIndex < 0) state.listNavIndex = items.length - 1;
+        }
+        for (var i = 0; i < items.length; i++) {
+          items[i].classList.toggle('nav-highlight', i === state.listNavIndex);
+        }
+        // Scroll highlighted item into view
+        if (items[state.listNavIndex]) {
+          items[state.listNavIndex].scrollIntoView({ block: 'nearest' });
+        }
+      } else if (e.key === 'Enter') {
+        // If keyboard nav highlight is active, select that item
+        if (typeof state.listNavIndex !== 'undefined' && state.listNavIndex >= 0 && items.length > 0 && items[state.listNavIndex]) {
+          e.preventDefault();
+          items[state.listNavIndex].click();
+          state.listNavIndex = undefined;
+          return;
+        }
+        // Otherwise, use findFocus to resolve the query
         var query = input.value.trim();
         if (!query) return;
         var result = model.findFocus(query, state.graph);
         if (result) {
           router.setFocus(result, state.depth);
+          state.listNavIndex = undefined;
         } else {
-          var list = document.querySelector('.entity-list');
           if (list) {
             list.innerHTML = '<li class="entity-item"><span class="placeholder">No match for \'' + escapeHtml(query) + '\'</span></li>';
           }
         }
       } else if (e.key === 'Escape') {
         input.value = '';
+        input.blur();
+        state.listNavIndex = undefined;
         renderEntityList();
       }
     });
@@ -341,9 +400,27 @@
     var groups = svgEl.querySelectorAll('.node');
     for (var i = 0; i < groups.length; i++) {
       var g = groups[i];
-      var titleEl = g.querySelector('title');
-      if (!titleEl) continue;
-      var nodeId = titleEl.textContent.trim();
+      // Read node ID from the <text> element (label IS the canonical id).
+      // DOMPurify may strip <title>, so we avoid it.
+      var textEl = g.querySelector('text');
+      if (!textEl) continue;
+      var nodeId = textEl.textContent.trim();
+
+      // Transparent hit-area rect so clicks on the node body (not just
+      // text or 1px border) register.  Injected as the first child.
+      try {
+        var bbox = g.getBBox();
+        if (bbox.width > 0 && bbox.height > 0) {
+          var hitRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          hitRect.setAttribute('x', bbox.x);
+          hitRect.setAttribute('y', bbox.y);
+          hitRect.setAttribute('width', bbox.width);
+          hitRect.setAttribute('height', bbox.height);
+          hitRect.setAttribute('fill', 'transparent');
+          hitRect.setAttribute('stroke', 'none');
+          g.insertBefore(hitRect, g.firstChild);
+        }
+      } catch (_) { /* getBBox may fail on detached or hidden elements; non-critical */ }
 
       g.classList.add('doctrine-node');
 
@@ -437,10 +514,28 @@
     }
   }
 
+  function wireMarkdownPane(container) {
+    var btn = container.querySelector('.fullscreen-toggle');
+    if (btn) {
+      btn.addEventListener('click', function() {
+        container.classList.toggle('fullscreen');
+      });
+    }
+  }
+
   function renderMarkdownPane(container, id) {
+    function wrapContent(innerHTML) {
+      return '<div class="markdown-toolbar">' +
+        '<span class="markdown-toolbar-title">' + escapeHtml(id) + '</span>' +
+        '<button class="fullscreen-toggle" title="Toggle fullscreen">&square;</button>' +
+        '</div>' +
+        '<div class="markdown-body">' + innerHTML + '</div>';
+    }
+
     // Cache check
     if (state.markdownCache.has(id)) {
-      container.innerHTML = renderMarkdown(state.markdownCache.get(id));
+      container.innerHTML = wrapContent(renderMarkdown(state.markdownCache.get(id)));
+      wireMarkdownPane(container);
       applyLinkPolicy(container);
       return;
     }
@@ -456,7 +551,8 @@
       if (state.focusId !== id) return;
 
       state.markdownCache.set(id, text);
-      container.innerHTML = renderMarkdown(text);
+      container.innerHTML = wrapContent(renderMarkdown(text));
+      wireMarkdownPane(container);
       applyLinkPolicy(container);
     }).catch(function(err) {
       // Stale-request guard
@@ -492,6 +588,10 @@
     wireDepthButtons();
     wireRefresh();
 
+    // Register hashchange listener early — before any async work — so
+    // clicks and navigation work immediately, even during data load.
+    window.addEventListener('hashchange', render);
+
     // Fetch health and graph in parallel
     Promise.all([
       api.fetchHealth().catch(function () { return { dot: { ok: false }, graph: { ok: false } }; }),
@@ -515,7 +615,6 @@
       }
 
       render();
-      window.addEventListener('hashchange', render);
     }).catch(function (err) {
       var app = document.getElementById('app');
       showError(app, 'Failed to initialise: ' + err.message);
@@ -551,8 +650,33 @@
     if (container) container.innerHTML = html;
   }
 
+  /* Instant pre-render focus highlight on the current SVG.
+   * Applied before the async graph re-render to give immediate visual
+   * feedback when the user clicks a different node at the same depth. */
+  function applyFocusHighlight(newId, oldId) {
+    var svgEl = document.querySelector('.graph-area svg');
+    if (!svgEl) return;
+    if (oldId) {
+      var oldNodes = svgEl.querySelectorAll('.doctrine-node--focus');
+      for (var i = 0; i < oldNodes.length; i++) oldNodes[i].classList.remove('doctrine-node--focus');
+    }
+    if (newId) {
+      // The <text> content is the node id, but we need the parent <g>
+      var textEls = svgEl.querySelectorAll('text');
+      for (var j = 0; j < textEls.length; j++) {
+        if (textEls[j].textContent.trim() === newId) {
+          var g = textEls[j].closest('.node');
+          if (g) g.classList.add('doctrine-node--focus');
+          break;
+        }
+      }
+    }
+  }
+
   function render() {
     var route = router.parseHash();
+    var prevFocusId = state.focusId;
+    var prevDepth = state.depth;
 
     if (route.view === 'focus') {
       state.focusId = route.id;
@@ -575,16 +699,34 @@
       return;
     }
 
+    // Sidebar / header / table always update synchronously
     renderEntityList();
     renderFocusHeader();
+    renderRelationshipTable();
+    renderHoverPane(null);
 
-    if (state.focusId) {
-      var graphArea = document.querySelector('.graph-area');
-      if (graphArea) renderGraphPane(graphArea, state.focusId, state.depth);
+    // Sync depth button active state
+    var depthBtns = document.querySelectorAll('.depth-btn');
+    for (var di = 0; di < depthBtns.length; di++) {
+      depthBtns[di].classList.toggle('active', parseInt(depthBtns[di].textContent, 10) === state.depth);
     }
 
-    renderHoverPane(null);
-    renderRelationshipTable();
+    // Graph: always re-render on focus change (BFS is centre-centric).
+    // Apply instant highlight on old SVG for same-depth focus switch so
+    // the user sees immediate feedback before the async render completes.
+    var graphArea = document.querySelector('.graph-area');
+    var focusChanged = (state.focusId !== prevFocusId);
+    var depthChanged = (state.depth !== prevDepth);
+    var graphMissing = !graphArea || !graphArea.querySelector('svg');
+
+    if (graphArea && (focusChanged || depthChanged || graphMissing)) {
+      if (focusChanged && !depthChanged && state.focusId) {
+        applyFocusHighlight(state.focusId, prevFocusId);
+      }
+      if (state.focusId) {
+        renderGraphPane(graphArea, state.focusId, state.depth);
+      }
+    }
 
     if (state.focusId) {
       var mdPane = document.querySelector('.markdown-pane');

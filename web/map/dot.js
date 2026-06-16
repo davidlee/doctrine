@@ -52,10 +52,33 @@ dot.nodeAttrs = function(node, focusId, depth) {
   };
 };
 
+dot._EDGE_COLORS = {
+  'depends':    { color: '#888888', fontcolor: '#555555' },
+  'requires':   { color: '#888888', fontcolor: '#555555' },
+  'refines':    { color: '#4A90D9', fontcolor: '#2563eb' },
+  'details':    { color: '#4A90D9', fontcolor: '#2563eb' },
+  'implements': { color: '#27AE60', fontcolor: '#166534' },
+  'satisfies':  { color: '#27AE60', fontcolor: '#166534' },
+  'blocks':     { color: '#C0392B', fontcolor: '#991b1b' },
+  'parent':     { color: '#7B4FBF', fontcolor: '#6d28d9' },
+  'child':      { color: '#7B4FBF', fontcolor: '#6d28d9' },
+  'related':    { color: '#95A5A6', fontcolor: '#64748b' },
+  'see also':   { color: '#95A5A6', fontcolor: '#64748b' },
+  'resolves':   { color: '#E67E22', fontcolor: '#c2410c' },
+  'addresses':  { color: '#E67E22', fontcolor: '#c2410c' },
+};
+
 dot.edgeAttrs = function(edge, depth) {
+  // Edge colour by exact canonical label (design §2 / SL-073 Hard Contracts).
+  // Labels are normalized by the backend — they're a controlled vocabulary.
+  var key = edge.label.toLowerCase();
+  var entry = dot._EDGE_COLORS[key] || { color: '#888888', fontcolor: '#555555' };
+
   return {
     label: edge.label,
-    tooltip: edge.id
+    tooltip: edge.id,
+    color: entry.color,
+    fontcolor: entry.fontcolor
   };
 };
 
@@ -82,6 +105,7 @@ dot.graphToDot = function(neighbourhood, focusId, depth) {
     var attrs = dot.nodeAttrs(node, focusId, depth);
     lines.push('  "' + dot.dotQuote(id) + '" [' +
       'label="' + dot.dotQuote(attrs.label) + '", ' +
+      'style="filled", ' +
       'fillcolor="' + attrs.fillcolor + '", ' +
       'fontcolor="' + attrs.fontcolor + '", ' +
       'shape="' + attrs.shape + '", ' +
@@ -99,6 +123,8 @@ dot.graphToDot = function(neighbourhood, focusId, depth) {
     var attrs = dot.edgeAttrs(edge, depth);
     lines.push('  "' + dot.dotQuote(edge.source) + '" -> "' + dot.dotQuote(edge.target) + '" [' +
       'label="' + dot.dotQuote(attrs.label) + '", ' +
+      'color="' + attrs.color + '", ' +
+      'fontcolor="' + attrs.fontcolor + '", ' +
       'tooltip="' + dot.dotQuote(attrs.tooltip) + '"' +
       '];');
   });
