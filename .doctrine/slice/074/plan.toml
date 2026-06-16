@@ -1,0 +1,126 @@
+# Implementation plan for SL-074 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-074"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Entity kind, scaffold, list/show"
+objective = "Register CONCEPT_MAP_KIND in the entity engine with scaffold templates (TOML + optional MD), wire ConceptMapCommand (New/List/Show) into main.rs, and implement run_new/run_list/run_show. No DSL parsing yet — list/show display metadata and the raw DSL block. Register concept-map kind in RELATION_RULES so `doctrine link CM-001 contextualizes PRD-010` is accepted. This is the bootstrapping surface: an agent can create and list concept maps before any DSL support."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-074 design.md is locked and committed (a94ad0a)." },
+  { id = "EN-2", text = "The entity engine (src/entity.rs Kind/ScaffoldCtx/MaterialiseRequest), SLICE_KIND pattern (src/slice.rs), and SliceCommand/Command enum dispatch (src/main.rs) are understood." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "CONCEPT_MAP_KIND is a const Kind with dir=.doctrine/concept-map, prefix=CM, scaffold=concept_map_scaffold registered in src/concept_map.rs." },
+  { id = "EX-2", text = "Scaffold produces concept-map-NNN.toml with id/title/status/created/updated/description/dsl+comment fields and concept-map-NNN.md with optional prose headings. Templates live in install/assets/templates/." },
+  { id = "EX-3", text = "Command::ConceptMap { command: ConceptMapCommand } is wired in main.rs: enum variant, write_class Read/Write labels, worker_guard dispatch, and the match-arm in main() dispatching to concept_map::run_new/run_list/run_show." },
+  { id = "EX-4", text = "`doctrine concept-map new` with --title creates a numbered CM entity with empty dsl block; slug defaults to kebab-derivation from title." },
+  { id = "EX-5", text = "`doctrine concept-map list` prints tabular output (CM-001, status, title) reusing CommonListArgs and the meta scan/list-reader pattern." },
+  { id = "EX-6", text = "`doctrine concept-map show CM-001` prints metadata + raw DSL block; --edges and --nodes flags are parsed but produce placeholder output (parsed tables land in PHASE-02). --format json emits structured metadata JSON. Canonical-id resolution (CM-001 or bare 1) uses listing::parse_canonical_id." },
+  { id = "EX-7", text = "Concept-map kind is registered in RELATION_RULES so `doctrine link CM-001 governed_by ADR-001` and `doctrine link CM-001 contextualizes PRD-010` are accepted." },
+]
+verification = [
+  { id = "VT-1", expects = "entity::materialise with CONCEPT_MAP_KIND creates .doctrine/concept-map/001/ with both TOML and MD files, correct id substitution, and a slug symlink." },
+  { id = "VT-2", expects = "Integration test: new, then list shows the new map, then show prints metadata and empty DSL block." },
+  { id = "VT-3", expects = "Canonical id resolution: CM-001 and bare 1 both resolve to the same entity." },
+  { id = "VT-4", expects = "`doctrine link CM-001 governed_by ADR-001` succeeds; `doctrine link CM-001 contextualizes PRD-010` succeeds (relation rules registered). `doctrine inspect CM-001` shows outbound links." },
+  { id = "VA-1", expects = "Confirm the scaffold TOML template has the dsl multiline literal and the comment block explaining the DSL convention (design section 9)." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "DSL parser + check"
+objective = "Implement the pure parser layer: parse_dsl() producing ParsedConceptMap (nodes, edges, diagnostics), derive_node_key(), check() for the heuristic diagnostics (SimilarNodeLabel, RelationDrift, CanonicalNodeCollision, EntityRefLike, SelfEdge), and a local Levenshtein implementation. Wire run_check and extend run_show to render parsed edge/node tables when --edges/--nodes are passed. All pure functions, no disk/CLAP/clock — tested with string fixtures."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 is green: concept maps can be created, listed, and shown with raw DSL display." },
+  { id = "EN-2", text = "The DSL grammar (design section 3) and diagnostic types (MalformedLine, EmptyLabel, DuplicateEdge, SelfEdge, CanonicalNodeCollision, SimilarNodeLabel, RelationDrift, EntityRefLike) are understood." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "parse_dsl(&str) -> ParsedConceptMap: splits on literal ' > ', trims segments, derives node keys, deduplicates nodes by key (first-wins), records diagnostics (MalformedLine, EmptyLabel with segment kind, DuplicateEdge with existing line)." },
+  { id = "EX-2", text = "derive_node_key(&str) -> String: lowercase, collapse whitespace/underscores/hyphens to single hyphen, strip non-alphanumeric-except-hyphen, trim leading/trailing hyphens. Examples: User Story -> user-story, PRD-010 -> prd-010." },
+  { id = "EX-3", text = "check(&ParsedConceptMap) -> Vec<ConceptMapDiagnostic>: emits CanonicalNodeCollision (different labels -> same key), SimilarNodeLabel (Levenshtein <= 2, both >= 4 chars), RelationDrift (same), SelfEdge (informational), EntityRefLike (matches entity-ref pattern). Never an error exit for informational diagnostics." },
+  { id = "EX-4", text = "Local Levenshtein implementation (~20 lines) passes distance tests; no crate dependency." },
+  { id = "EX-5", text = "run_check wired: reads TOML, calls parse_dsl + check, prints diagnostics; exits zero on warnings-only, non-zero on MalformedLine/EmptyLabel." },
+  { id = "EX-6", text = "run_show --edges prints parsed edge table (from_label, rel, to_label); --nodes prints parsed node table (key, label). Both use the pure parse_dsl output." },
+]
+verification = [
+  { id = "VT-1", expects = "parse_dsl tests: empty DSL, single valid line, comments ignored, empty lines ignored, MalformedLine (2 and 4 segments), EmptyLabel (each segment), DuplicateEdge, SelfEdge, CanonicalNodeCollision, multiple edges with same node, leading/trailing whitespace trimming, node key derivation examples." },
+  { id = "VT-2", expects = "check tests: EntityRefLike diagnostics for entity-looking labels, SimilarNodeLabel (edit distance 1 for User Story vs User Stories), RelationDrift, clean valid map -> no diagnostics." },
+  { id = "VT-3", expects = "Levenshtein unit tests: identical strings -> 0, kitten/sitting -> 3, empty string, single-char difference." },
+  { id = "VT-4", expects = "Integration test: new -> add edge (manually edit DSL) -> check exits zero on clean map; add malformed line -> check exits non-zero." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "CLI mutations — add, remove, rename-node"
+objective = "Implement the three DSL-mutating CLI verbs: run_add (append edge, exact-duplicate no-op with --force override), run_remove (exact-trim case-sensitive match removal), run_rename_node (segment-match label rewrite with case-insensitive default, --case-sensitive, --dry-run). All use toml_edit for edit-preserving round-trips through get_dsl/set_dsl helpers. Depends on the parse_dsl output from PHASE-02 for duplicate detection and rename segment matching."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 is green: parse_dsl and check are built and testable." },
+  { id = "EN-2", text = "toml_edit is already in the dep tree; the parse/edit/write pattern for toml_edit round-trips is understood from existing Doctrine mutation code." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "get_dsl(toml_text) and set_dsl(toml_text, new_dsl) use toml_edit for edit-preserving round-trips. A TOML file containing both dsl and [[relation]] rows survives add/remove round-trip with non-DSL content intact." },
+  { id = "EX-2", text = "run_add: rejects empty source/rel/target (exit non-zero); trims segments before append; detects exact-duplicate edge and is no-op (exit zero) without --force, appends with --force." },
+  { id = "EX-3", text = "run_remove: exact case-sensitive trim match on all three segments; removes the matching line; exits non-zero with message if no match." },
+  { id = "EX-4", text = "run_rename_node: matches old label against source or target segment (trimmed, case-insensitive by default, case-sensitive with flag); rewrites only the matched segment, never the relation text or separators; no substring match inside longer labels. Reports count. --dry-run prints rewritten DSL to stdout without writing." },
+  { id = "EX-5", text = "run_add/run_remove/run_rename_node all wired in main.rs with Write class and dispatched to concept_map.rs handlers." },
+]
+verification = [
+  { id = "VT-1", expects = "TOML round-trip test: a full concept-map TOML with dsl and [[relation]] rows round-trips through get_dsl -> set_dsl with all non-DSL content byte-identical." },
+  { id = "VT-2", expects = "Add tests: empty DSL -> single line; trailing whitespace on segments trimmed; exact-duplicate no-op; --force appends duplicate; rejects empty source/rel/target." },
+  { id = "VT-3", expects = "Remove tests: removes matching edge; no-op on non-existent edge (non-zero exit); case-sensitive mismatch fails." },
+  { id = "VT-4", expects = "Rename tests: case-insensitive match rewrites all occurrences; case-sensitive flag limits matches; label appears as both source and target -> both rewritten; relation text unchanged; no substring match; --dry-run prints but doesn't write." },
+  { id = "VT-5", expects = "Integration test: new -> add 3 edges -> remove 1 -> rename node -> show --edges output reflects all mutations." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Export renderers — DOT, Mermaid, JSON"
+objective = "Implement the three pure export renderers: render_dot (Graphviz digraph with sorted nodes/edges, dot_escape), render_mermaid (flowchart LR with synthetic node ids, mermaid_escape), render_json_value / render_json (structured JSON). Wire run_export CLI handler reading TOML, parsing DSL, and calling the selected renderer. The DOT output must be valid Graphviz (renderable by dot -Tsvg). All renderers are pure functions over ParsedConceptMap — no disk, clock, or CLI types."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 is green: parse_dsl produces ParsedConceptMap with nodes and edges." },
+  { id = "EN-2", text = "PHASE-01/03 are green (optional but advisable — an exportable map needs content to render)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "render_dot(&ParsedConceptMap, title) -> String: produces valid digraph with rankdir=LR, box-shaped rounded nodes keyed by canonical key, labeled edges, dot_escape on all labels. Nodes and edges sorted by key for deterministic output." },
+  { id = "EX-2", text = "render_mermaid(&ParsedConceptMap) -> String: produces graph LR with synthetic node ids (n_0, n_1, ...), authored labels in brackets, relation text in pipes. mermaid_escape on labels and relation text." },
+  { id = "EX-3", text = "render_json_value(&ParsedConceptMap) -> serde_json::Value; render_json produces pretty-printed JSON. Matches parsed map structure (nodes array with key+label, edges array with from/from_label/rel/to/to_label)." },
+  { id = "EX-4", text = "dot_escape and mermaid_escape handle double quotes, backslashes, newlines (for DOT); brackets, pipes, backticks, newlines (for Mermaid)." },
+  { id = "EX-5", text = "run_export wired: reads TOML, calls parse_dsl, calls renderer, prints to stdout. ExportFormat enum (Dot, Mermaid, Json) as clap::ValueEnum. Empty map produces valid output (digraph with no nodes)." },
+]
+verification = [
+  { id = "VT-1", expects = "DOT output for a 2-node 1-edge map is valid digraph syntax; special characters (quotes, backslashes) are escaped. Nodes and edges appear in sorted-key order." },
+  { id = "VT-2", expects = "Mermaid output for same map is valid graph LR syntax; labels escaped; synthetic node ids used." },
+  { id = "VT-3", expects = "JSON output round-trips: render_json_value -> serialise -> deserialise -> matches original nodes/edges." },
+  { id = "VT-4", expects = "Empty concept map: all three renderers produce valid empty output (no crash, no orphan syntax)." },
+  { id = "VT-5", expects = "Integration test: new -> add edges -> export --format dot -> pipe through dot -Tsvg -> valid SVG output. export --format mermaid -> valid syntax. export --format json -> valid JSON." },
+  { id = "VA-1", expects = "DOT output from a realistic 10-node concept map renders correctly in Graphviz (no mangled labels, valid edge routing)." },
+]
+specs             = []
+requirements      = []
