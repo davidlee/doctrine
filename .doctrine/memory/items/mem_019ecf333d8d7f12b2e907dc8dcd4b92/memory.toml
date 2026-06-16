@@ -1,0 +1,40 @@
+memory_uid = "mem_019ecf333d8d7f12b2e907dc8dcd4b92"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Dark-theme edge colour contrast in DOT graphs is below WCAG AA unless bumped"
+summary = "Dark-theme DOT edge colour contrast: #888888 → 1.6:1, #aaaaaa → 7.2:1. Bump edge colours for dark backgrounds."
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = ["web/map"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "5b5fb3bbede423b391c3f598f39b44fa673168d6"
+tree = "a1e2d956741c8477836ffbdbc952dafb2ff20361"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "5b5fb3bbede423b391c3f598f39b44fa673168d6"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
