@@ -4196,6 +4196,65 @@ mod tests {
         let r = Cli::try_parse_from(["doctrine", "skills", "install", "--only-memory"]);
         assert!(r.is_ok());
     }
+
+    /// CHR-008 (SL-078): `run_supersede` writes NEW then OLD — a crash between
+    /// writes leaves a torn state (NEW.supersedes ∋ OLD without the reciprocal).
+    /// Re-running the same command naturally completes recovery through the
+    /// existing flow: F-1 passes, F-D skips (OLD.status ≠ superseded),
+    /// push_str_if_absent on NEW is a no-op, push_str_if_absent on OLD writes
+    /// the missing entry, and the status flip completes the transaction.
+    #[test]
+    fn supersede_recovery_from_torn_new_only_state() {
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // Seed ADR-001 (NEW): supersedes = ["ADR-002"], superseded_by = [].
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/adr/001/adr-001.toml",
+            "id = 1\nslug = \"a1\"\ntitle = \"A1\"\nstatus = \"accepted\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = [\"ADR-002\"]\nsuperseded_by = []\n",
+        );
+        catalog::test_helpers::write(root, ".doctrine/adr/001/adr-001.md", "body\n");
+
+        // Seed ADR-002 (OLD) in the torn state: superseded_by = [], status = accepted.
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/adr/002/adr-002.toml",
+            "id = 2\nslug = \"a2\"\ntitle = \"A2\"\nstatus = \"accepted\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n",
+        );
+        catalog::test_helpers::write(root, ".doctrine/adr/002/adr-002.md", "body\n");
+
+        // Act: re-run supersede from the torn state.
+        run_supersede(Some(root.to_path_buf()), "ADR-001", "ADR-002")
+            .expect("recovery supersede should succeed");
+
+        // Assert: OLD status flipped to superseded.
+        let old_toml =
+            std::fs::read_to_string(root.join(".doctrine/adr/002/adr-002.toml")).unwrap();
+        assert!(
+            old_toml.contains("status = \"superseded\""),
+            "OLD.status should be superseded, got: {old_toml}"
+        );
+
+        // Assert: OLD.superseded_by contains ADR-001.
+        assert!(
+            old_toml.contains("superseded_by = [\"ADR-001\"]"),
+            "OLD.superseded_by should contain ADR-001, got: {old_toml}"
+        );
+
+        // Assert: NEW.supersedes contains ADR-002, no duplicate.
+        let new_toml =
+            std::fs::read_to_string(root.join(".doctrine/adr/001/adr-001.toml")).unwrap();
+        let supersedes_count = new_toml.matches("ADR-002").count();
+        assert_eq!(
+            supersedes_count, 1,
+            "NEW.supersedes should contain ADR-002 exactly once, got {supersedes_count}: {new_toml}"
+        );
+    }
 }
 
 #[cfg(test)]

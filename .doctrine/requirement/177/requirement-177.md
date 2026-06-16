@@ -1,4 +1,4 @@
-# REQ-177: Surface skills list and skills install with subset, agent, global, dry-run, and yes selection
+# REQ-177: Surface claude install with subset, agent, global, dry-run, and yes selection
 
 ## Statement
 

@@ -2,8 +2,8 @@ schema = "doctrine.requirement"
 version = 1
 
 id = 177
-slug = "surface-skills-list-and-skills-install-with-subset-agent-global-dry-run-and-yes-selection"
-title = "Surface skills list and skills install with subset, agent, global, dry-run, and yes selection"
+slug = "surface-claude-install-with-subset-agent-global-dry-run-and-yes-selection"
+title = "Surface claude install with subset, agent, global, dry-run, and yes selection"
 status = "pending"
 kind = "functional"
 
