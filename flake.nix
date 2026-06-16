@@ -8,11 +8,13 @@
     pub.url = "path:/home/david/flakes/pub";
     llm-agents.url = "github:numtide/llm-agents.nix";
     rust-overlay.url = "github:oxalica/rust-overlay";
+    crane.url = "github:ipetkov/crane";
   };
 
   outputs = inputs @ {
     flake-parts,
     rust-overlay,
+    crane,
     ...
   }:
     flake-parts.lib.mkFlake {inherit inputs;} {
@@ -119,38 +121,25 @@
           bubblewrap = pkgs.bubblewrap;
         };
 
-        # Rust binary
-        doctrined = pkgs.rustPlatform.buildRustPackage {
-          pname = "doctrined";
-          version = "0.1.0";
-          src = lib.cleanSourceWith {
-            src = ./.;
-            filter = path: type: let
-              baseName = builtins.baseNameOf path;
-              relPath = lib.removePrefix (toString ./. + "/") (toString path);
-            in
-              # Include single-crate sources + migrations baked into the binary
-              # by sqlx::migrate! at build time.
-              (
-                type
-                == "directory"
-                && builtins.elem baseName [
-                  "src"
-                  "tests"
-                  "migrations"
-                ]
-              )
-              || baseName == "Cargo.toml"
-              || baseName == "Cargo.lock"
-              || lib.hasPrefix "src/" relPath
-              || lib.hasPrefix "tests/" relPath
-              || lib.hasPrefix "migrations/" relPath;
+        # Rust binary — crane for workspace-aware builds.
+        # cleanCargoSource uses git ls-files + Cargo.toml exclude list, so
+        # plugins/ and install/ (git-tracked, embedded via rust-embed) and
+        # crates/cordage (workspace member) are included automatically.
+        craneLib = crane.mkLib pkgs;
+        doctrine = craneLib.buildPackage {
+          pname = "doctrine";
+          version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
+          src = craneLib.cleanCargoSource ./. ;
+          cargoArtifacts = craneLib.buildDepsOnly {
+            pname = "doctrine-deps";
+            src = craneLib.cleanCargoSource ./. ;
+            cargoExtraArgs = "--workspace";
           };
-          cargoLock.lockFile = ./Cargo.lock;
-          doCheck = false; # tests require a live Postgres
+          cargoExtraArgs = "--workspace";
+          doCheck = false; # tests need a live Postgres
           meta = {
-            mainProgram = "doctrined";
-            description = "doctrinetable daemon";
+            mainProgram = "doctrine";
+            description = "Project governance and task-management CLI";
           };
         };
       in {
@@ -162,8 +151,8 @@
         packages =
           jailPkgs
           // {
-            inherit doctrined;
-            default = doctrined;
+            inherit doctrine;
+            default = doctrine;
           };
 
         devshells.default = {

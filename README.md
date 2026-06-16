@@ -58,6 +58,14 @@ gh repo clone davidlee/doctrine && cd doctrine
 cargo install --path .
 ```
 
+or use it as a nix flake:
+
+```nix
+inputs.doctrine.url = "github:davidlee/doctrine";
+# ...
+doctrine = inputs.doctrine.packages.${system}.doctrine;
+```
+
 to install skills for other agents:
 
 ```zsh
