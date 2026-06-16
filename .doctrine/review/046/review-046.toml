@@ -1,0 +1,79 @@
+id    = 46
+slug  = "inquisition-sl-079-plan"
+title = "Inquisition: SL-079 plan"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "plan"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-079"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected PHASE-03 status colour criteria to follow status_hue; observed ADR proposed is sentenced to yellow despite being deliberately unmapped"
+detail = "plan.toml:92 says adr run_status should colour proposed yellow, while plan.md:71-74 says proposed stays grey and src/listing.rs:326-340 documents proposed/open/draft as deliberately uncoloured. The locked design agrees: design.md:410-414 says proposed stays grey. Penance: change PHASE-03 EX-2 so ADR proposed is plain, not yellow; keep accepted green. Also fix VT-4 wording because it says every mapped status token but omits ready/audit/reconcile from the actual status_hue map at src/listing.rs:345-350."
+disposition = "fix-now"
+response = "Amend PHASE-03 before execution: EX-2 must say proposed is plain/unmapped while accepted is green, and VT-4 must either stop saying every mapped status token or include the full status_hue mapped set. This is a plan criteria defect and should be corrected in plan.toml, with plan.md kept consistent."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected --color parser criteria to match clap semantics; observed case-insensitive parsing is asserted without enabling ignore_case"
+detail = "plan.toml:41 requires --color=auto|always|never to parse case-insensitively, and design.md:235-237 makes the same claim. The installed clap ColorChoice implements ValueEnum with possible values auto/always/never, but clap_builder-4.6.0/src/util/color.rs:78-84 and value_parser.rs:1100-1124 match with ignore_case from the Arg, whose default is false unless the arg sets ignore_case. The planned field at design.md:229-232 has no ignore_case attribute. Penance: either add ignore_case = true to the Cli color arg and test uppercase variants, or delete the case-insensitive claim and test the lowercase values clap actually accepts."
+disposition = "design-wrong"
+response = "The case-insensitive parser claim is shared by design and plan. Reconcile both artifacts before PHASE-01: either add ignore_case = true to the Cli color arg and test uppercase/lowercase variants, or state that clap accepts the lowercase value enum tokens and adjust VT-3 accordingly."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected resolve_color verification to be executable; observed the plan demands tty and NO_COLOR arms from a one-argument live shell wrapper"
+detail = "plan.toml:32 and plan.toml:40 require resolve_color(mode) to be proved over Never/Always/Auto x tty arms, while design.md:78-83 defines resolve_color(mode: ColorChoice) as Auto => stdout_color_enabled(). The existing tty seam at src/tty.rs:29-47 injects NO_COLOR and is_tty only into color_enabled, not into stdout_color_enabled. There is no way for a pure table test of resolve_color(mode) to supply the two tty/env arms without changing the design. Penance: either introduce a pure helper such as resolve_color_enabled(mode, no_color, is_tty) and make resolve_color the shell wrapper, or rewrite VT-2 to test Never/Always directly, Auto == stdout_color_enabled(), and rely on the existing color_enabled(no_color, is_tty) tests for the matrix."
+disposition = "design-wrong"
+response = "The verification seam is mis-specified in both design and plan. Before PHASE-01, choose one executable shape: add an injectable pure helper for the full mode/env/tty matrix, or narrow VT-2 to direct Never/Always assertions plus Auto delegating to stdout_color_enabled while existing color_enabled tests cover NO_COLOR and tty."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected PHASE-03 to name the status-line injection seam; observed handlers are told to read cli.color they do not receive"
+detail = "plan.toml:85 says each adr/policy/standard/knowledge/revision handler resolves color once from cli.color. The current handlers take only their local status arguments: src/adr.rs:194, src/policy.rs:157-161, src/standard.rs:163-167, src/knowledge.rs:1329-1333, src/revision.rs:572-576. The locked design impact table at design.md:315-319 says those handlers should receive an injected color bool, but the plan criteria never name the required main.rs call-site/signature change. Penance: add explicit PHASE-03 exit criteria that main.rs resolves tty::resolve_color(cli.color) at each status command arm and passes a bool into the five run_status handlers, or deliberately choose and document a different seam without importing clap/tty into the pure listing layer."
+disposition = "fix-now"
+response = "Add PHASE-03 criteria that explicitly name the status-line injection seam. Preferred penance: main.rs resolves tty::resolve_color(cli.color) at the status command arm and passes color: bool into adr/policy/standard/knowledge/revision run_status; those handlers then call listing::status_colored. Do not leave this to executor inference."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected VA criteria to be safe executable commands; observed status-command checks use the wrong adr syntax and mutable live placeholders"
+detail = "plan.toml:105 says doctrine adr status <id> accepted on a TTY, but the CLI source of truth says doctrine adr status [OPTIONS] --status <STATUS> <ID>. The same VA fixes output as ADR 001 while using a placeholder id. plan.toml:106 also depends on a revision currently being proposed, or the expected proposed -> started text is false. These status verbs mutate authored entities, so a bare live command is unsafe as an acceptance step. Penance: express these as tests or temp-root fixture commands, use the actual CLI shape, and make the expected id/status state part of the fixture."
+disposition = "fix-now"
+response = "Rewrite the VA criteria before execution. Use the actual CLI shapes from --help, run status mutations only against a temp-root fixture or unit/e2e harness, and bind expected output to the fixture id and starting state. The existing live-corpus placeholder commands are not acceptable verification."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Expected the plan gate to reconcile scope versus design surfaces; observed stale install/reconcile/corpus scope remains beside standard/knowledge/revision plan criteria"
+detail = "design.md:49-51 and plan.toml:84-85 define the five status-line surfaces as adr, policy, standard, knowledge, revision. The slice scope still says adr/policy/install/reconcile/corpus in slice-079.md:40-41, slice-079.md:76-78, and the closure intent at slice-079.md:107-108. OQ-2 at slice-079.md:99-100 was corrected, so the document now contradicts itself. Penance: before execution, amend the slice scope affected-surface and closure-intent text to the locked five, or add an explicit plan entrance criterion that this scope reconciliation must be complete before PHASE-01."
+disposition = "design-wrong"
+response = "The slice scope must be reconciled with the locked design before phase execution, or PHASE-01 must explicitly gate on that reconciliation. Update slice-079.md affected-surface and closure-intent text from install/reconcile/corpus to standard/knowledge/revision so the plan, design, and scope present one target."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Expected PHASE-01 to verify the global --color override on existing list surfaces; observed only parser/resolver and unchanged-golden checks"
+detail = "SL-079 scope requires --color=never to suppress colour and --color=always to emit colour even when piped (slice-079.md:109-110). PHASE-01 is where existing list surfaces are rewired: plan.toml:33-35 requires CommonListArgs call sites and priority RenderOpts construction to pass resolve_color(cli.color). But plan.toml:39-43 verifies only select_columns, resolve_color, clap parsing, and unchanged existing tests. No VT or VA proves a real list command receives the override and renders ANSI under --color=always or suppresses it under --color=never. Penance: add a PHASE-01 integration test or CLI fixture for at least one existing CommonListArgs surface, plus the negative --color=never path; keep the default auto/piped golden unchanged."
+disposition = "fix-now"
+response = "Add PHASE-01 verification that proves the global color override traverses at least one existing CommonListArgs surface: --color=always emits ANSI even when piped, --color=never suppresses ANSI, and default auto keeps the current piped golden plain. Parser and resolver tests alone are insufficient."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

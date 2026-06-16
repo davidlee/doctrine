@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed08526777250a3e6a7087821e41d"
+memory_key = "mem.pattern.review.design-table-vs-scope"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Design decision tables must agree with scope exclusions"
+summary = "Design decision tables must not contradict the scope they serve — cross-check the 'call sites' column against scope exclusions"
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ab4c45e3940a097f71e0517935915c7953c49c24"
+ref_name = "refs/heads/main"
+checkout_state_id = "2e2452aa4190fec96d6ac11cf31e29d7a524b540cdce3f250928cd34a57f86e4"
+base_commit = "71a8f0f2f44e230e2a55c8ebb6002ce8843a07f1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

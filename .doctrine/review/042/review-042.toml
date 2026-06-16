@@ -1,0 +1,275 @@
+id    = 42
+slug  = "design-review-of-sl-077"
+title = "design review of SL-077"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-077"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "D1 table includes build_registry but scope §1 explicitly excludes it"
+detail = """
+## Expected
+
+The scope (§1, "Extract a `read_spec` reader") states unequivocally:
+
+> `build_registry` keeps its inline parse (non-trivial `second_parent` error handling)
+
+## Observed
+
+The D1 decision table includes `build_registry` as the THIRD site, claiming it converts from `read_to_string` + `from_str::<Spec>` in loop → `read_spec`, uses `parsed` and `raw-toml`.
+
+This is a direct contradiction. The scope is correct — `build_registry` must keep its inline parse because:
+
+```rust
+let spec: Spec = match toml::from_str::<Spec>(&spec_text) {
+    Ok(s) => s,
+    Err(e) if is_second_parent(&e, &spec_text) => {
+        reg.build_findings.push(BuildFinding { ... });
+        continue;  // ← carry the finding, keep scanning
+    }
+    Err(e) => {
+        return Err(anyhow::Error::new(e).context(...));
+    }
+};
+```
+
+`read_spec` returns `Result<(Spec, ...)>` — it CANNOT carry a `BuildFinding` and `continue`. If `read_spec` encounters a duplicate `parent` key, it would propagate the error as a hard failure, breaking the `second_parent` detection (SL-022 PHASE-03, codex F2 regression canary).
+
+## Penance
+
+Remove `build_registry` from the D1 table. The table should show TWO sites (`relation_edges`, `run_show`), matching the scope. The row must be struck — confession is not enough."""
+disposition = "design-wrong"
+response = "CONFESSED. The D1 table shall be corrected: strike the `build_registry` row, leaving only `relation_edges` and `run_show`. The scope §1 text is authoritative — `build_registry` keeps its inline parse for `second_parent` classification. The corrected table must match the scope: two call sites converted, third (build_registry) explicitly excluded with a note referencing the `is_second_parent` requirement. Penance: edit D1 table in design.md before any implementation begins."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "description field and ## Statement prose overlap with no reconciliation"
+detail = '''
+## Expected
+
+The storage rule (AGENTS.md) demands: prose in `.md`, structured data in `.toml`, never queried/derived data in prose. When two carriers exist for the same concept, the design must define their relationship.
+
+## Observed
+
+The current `render()` treats `requirement.description` (from `requirement-NNN.toml`) as "the statement" (D-P4-1):
+
+```rust
+if let Some(statement) = &req.description {
+    parts.push(format!("\n{statement}\n"));
+}
+```
+
+D4 adds the requirement `.md` prose body — including `## Statement` — rendering it AFTER the description field. An agent or human must now maintain the same content in TWO places:
+
+1. `requirement-NNN.toml` → `description = "..."` (structured, single-line)
+2. `requirement-NNN.md` → `## Statement\n\n...content...` (prose, multi-paragraph)
+
+The design makes BOTH visible in `spec show` output without defining:
+- Whether `description` is a summary and `## Statement` is the full text
+- Whether `description` is deprecated (and if so, whether it should still render)
+- Whether they can legitimately differ
+
+IMP-057 (requirement authoring) is deferred — but the READ side must define this contract NOW, before giving authors two fields to fill with potentially contradictory content.
+
+## Penance
+
+D4 must add a decision reconciling the two carriers. Options:
+1. `description` is the structural summary; `## Statement` is the full prose — render the description as a tagline, the prose as the body, with clear labelling
+2. `description` is deprecated on render — prose renders alone; the TOML field survives for backward compat but doesn't display
+3. Remove `description` rendering and use ONLY the prose tier — deprecate the field in a follow-up slice
+
+The design must choose and document one, and the selected rendering order must be explicit.'''
+disposition = "design-wrong"
+response = "CONFESSED. The design must add a decision reconciling `description` (TOML) and `## Statement` (MD) — two carriers of the same concept. Recommended: `description` is the structural summary / tagline rendered ABOVE the prose; `## Statement` is the full prose body rendered BELOW. Neither is deprecated; they serve different depths. The design must state this contract explicitly and the rendering order must be: `description` line → prose body (Statement + Rationale sections). If `description` is absent, prose still renders normally. If both are present, they coexist — the reader shows both, the author maintains both. Add to D4."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "prune_empty_headings algorithm underspecifies comment detection"
+detail = """
+## Expected
+
+A pure function that detects scaffold emptiness must have a well-defined, testable contract for what constitutes a "non-comment, non-whitespace line."
+
+## Observed
+
+D3 states: "keep sections containing ≥1 non-comment, non-whitespace line" and the edge case: "A heading whose entire content is a single `<!-- -->` is empty."
+
+Unspecified cases:
+
+1. **Mixed lines**: `<!-- comment -->` on line 1, `Real content` on line 2 — this section should be kept. The phrase "≥1 non-comment … line" implies per-line evaluation, but it is ambiguous whether "non-comment" means "line whose entire non-whitespace content is NOT an HTML comment" or "line that contains content outside any HTML comment."
+
+2. **Multi-line comments**: `<!--` on line 1, `still a comment` on line 2, `-->` on line 3 — are lines 1 and 2 "comment" lines? Does detection track comment-open/close state? The algorithm must state whether multi-line HTML comments are in scope or whether only single-line `<!-- ... -->` is detected.
+
+3. **Inline comments**: `Real content <!-- inline comment --> more content` — this is a content line. But what about `  <!-- just a comment -->` — is this detected as comment-only? The algorithm must define the detection boundary.
+
+4. **Non-HTML comment forms**: What about `// Rust-style` or `# shell-style` comments in the prose? The template uses `<!-- -->` only, but the detection algorithm must state which comment syntaxes are recognised and which are treated as content.
+
+## Penance
+
+D3 must add a precise specification:
+- Define "comment" detection: single-line HTML comments only (`trim().starts_with("<!--") && trim().ends_with("-->")`), or state that multi-line tracking is included
+- State that per-line evaluation is used (not per-section) — a single content line saves the section
+- Add a test case for each unspecified form above: mixed comment+content, multi-line comment, inline comment, non-HTML comment treated as content"""
+disposition = "design-wrong"
+response = 'CONFESSED. D3 must specify the comment-detection contract precisely: (a) per-line evaluation — each line is checked independently, a single content line saves the section; (b) single-line HTML comments only: `line.trim().starts_with("<!--") && line.trim().ends_with("-->")`; (c) multi-line HTML comments are NOT detected (treated as content — rare in practice, scaffold-safe); (d) non-HTML comment syntax (//, #) is treated as content — only `<!-- ... -->` is recognised as a comment. Add these to D3 and extend the test matrix with: `prune_empty_headings_mixed_comment_and_content`, `prune_empty_headings_non_html_comment_is_content`.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "prose column undefined for dangling member FK in spec req list"
+detail = """
+## Expected
+
+D6 adds a `prose` column to `spec req list` with values `✓` (filled) or `—` (scaffold). The column must be defined for all rows, including the degradation case where `requirement::load()` fails (dangling FK).
+
+## Observed
+
+The current `req_rows()` returns `(ReqListRow, Option<Requirement>)` — a dangling FK gets `None` for the `Requirement`. When `load()` fails:
+- No numeric `id` is available to construct the `.md` path
+- `load_body()` cannot determine whether prose is filled or scaffold
+- The prose column has no defined value
+
+The design makes no mention of this case. Options not explored:
+1. Show `—` (conservative: assume scaffold)
+2. Show `?` or an error indicator
+3. Show `<load error>` (mirrors the existing `kind`/`status` degradation)
+
+## Penance
+
+D6 must add a decision for the dangling-member prose column value. `—` (assume scaffold) is the safest default — it is conservative and doesn't lie about having content. The test matrix must include a `spec_req_list_prose_column_dangling` test case."""
+disposition = "design-wrong"
+response = 'CONFESSED. D6 must add a decision: a dangling member FK shall show `—` in the prose column (conservative — assume scaffold, no `load_body()` call needed, no error surface). The prose column value is derived from `Option<Requirement>` availability — `None` (dangling) → `"—"`. No `load_body()` is attempted for a dangling member. Add test `req_list_prose_column_dangling` to the verification matrix.'
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "load_body error surface undefined — abort vs degrade-and-continue"
+detail = """
+## Expected
+
+A read error on one requirement's `.md` file must have a defined failure mode: either abort the entire `spec show` or degrade that single requirement and continue rendering the rest.
+
+## Observed
+
+The design's Known Edge Cases section says:
+
+> Missing `.md` file — `load_body` errors (same posture as `spec show`'s missing prose error). All requirements are scaffolded with `.md` files; a missing file is a corrupt entity.
+
+"Same posture as `spec show`'s missing prose error" means HARD FAIL — the current `run_show` aborts on the spec's own missing prose:
+
+```rust
+let prose_body = std::fs::read_to_string(&prose_path)
+    .with_context(|| format!("Failed to read {}", prose_path.display()))?;
+```
+
+But the spec's own prose is one file. With member requirements, there are N files — one per requirement. Hard-failing on ANY missing `.md` means one corrupt requirement aborts the entire `spec show`, hiding all other valid requirements.
+
+This is inconsistent with the existing `req_rows()` degrade-and-continue pattern (E5) where a dangling FK doesn't abort the whole roster.
+
+## Penance
+
+Add a decision to D2: choose between:
+1. **Degrade-and-continue**: `load_body` returns `Option<String>`; a missing `.md` yields `None`, rendered as scaffold (empty prose section omitted). Consistent with E5.
+2. **Hard fail**: `load_body` returns `Result<String>` and propagates the error, aborting the entire show. Inconsistent with E5 but defensible (corrupt entity = noisy failure).
+
+Option 1 (degrade) is recommended — it aligns with E5, keeps `spec show` robust, and surfaces the issue in the output (prose section absent where expected) without hiding other requirements."""
+disposition = "design-wrong"
+response = 'CONFESSED. D2 must choose degrade-and-continue: `load_body` returns `Ok(Option<String>)` — `Some(pruned)` when the .md exists and has content, `None` when scaffold (all headings empty). A MISSING .md file (corrupt entity) also returns `None` and is logged — does not abort. This aligns with E5 (req_rows degrade-and-continue). A hard-fail posture would hide N-1 valid requirements behind one corrupt file. Update D2 and the Known Edge Cases section: "Missing `.md` file — `load_body` returns `None` (the requirement renders as scaffold). A corrupt entity is visible in output, not a silent error."'
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "D4 demo example assumes filled requirement prose — all current requirements are scaffolds"
+detail = """
+## Expected
+
+The design should acknowledge the production-reality gap: until IMP-057 authors real requirement prose, every `spec show` output is identical to today's.
+
+## Observed
+
+D4's filled example:
+
+```
+### FR-001 (REQ-090) — Graph core is a standalone product-neutral crate
+
+functional · pending
+
+The generic graph evaluation core is built as its own workspace member crate...
+
+#### Statement
+
+The graph core must be a standalone workspace crate with no doctrine vocabulary.
+
+#### Rationale
+
+Keeping the core product-neutral allows external consumers to depend on it
+without pulling in doctrine's entity model.
+```
+
+All 10+ existing requirements are scaffolds — the `requirement-NNN.md` files contain only `<!-- ... -->` comments under `## Statement` and `## Rationale`. After this slice, `doctrine spec show` output is completely unchanged until a requirement author fills the prose.
+
+The design says this in the scope summary ("Empty scaffolds … are detected and omitted — no noise for unfilled requirements") and D3 ("All 10+ current requirements are scaffolds → rendered output unchanged"), but the D4 example doesn't show the EMPTY case and could mislead an implementor into expecting the filled case as the default behavior.
+
+## Penance
+
+Add one line to D4 noting that the filled example is aspirational; all current production output is unchanged. The test matrix in the Verification section already covers this (`spec_show_omits_empty_requirement_prose`), so the gap is in the design exposition only."""
+disposition = "design-wrong"
+response = 'CONFESSED. D4 shall add a one-line caveat: "The filled example above is aspirational — all current requirements are scaffolds, so `doctrine spec show` output is byte-identical until IMP-057 authors real requirement prose." The Verification section already covers the empty-scaffold path (`spec_show_omits_empty_requirement_prose`), so this is exposition-only.'
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "D1 read_spec signature omits the path-helper that read_slice uses"
+detail = """
+## Expected
+
+`read_slice` uses a helper `slice_toml_path` for the toml path:
+
+```rust
+fn read_slice(slice_root: &Path, id: u32) -> anyhow::Result<(SliceDoc, String, String)> {
+    let toml_path = slice_toml_path(slice_root, id);
+    let text = fs::read_to_string(&toml_path)?;
+    ...
+    let md_path = dir.join(format!("slice-{name}.md"));
+```
+
+The design says `read_spec` "mirrors `read_slice`'s `(parsed, raw-toml, prose-body)` signature." But `read_slice` is also `(SliceDoc, String, String)` — parsed, raw-toml, prose-body.
+
+## Observed
+
+D1 inlines path construction:
+
+```rust
+let name = format!("{id:03}");
+let toml_path = spec_dir.join(&name).join(format!("spec-{name}.toml"));
+let md_path = spec_dir.join(&name).join(format!("spec-{name}.md"));
+```
+
+This is fine functionally but inconsistent with `read_slice`'s pattern. The `SPEC_STEM` constant already exists in `spec.rs` — a `spec_toml_path` helper would keep the path-construction logic in one place, mirroring the `slice_toml_path` pattern used by `read_slice` and `relation_edges` in slice.rs.
+
+## Penance
+
+Optional but recommended: extract a `spec_toml_path(spec_dir: &Path, id: u32) -> PathBuf` helper and use it in both `read_spec` and its callers. Not blocking — the inline construction is correct."""
+disposition = "followed-up"
+response = "Noted. The inline path construction is correct and clear — a `spec_toml_path` helper is nice-to-have consistency, not a correctness concern. A follow-up chore could extract it, but it shall not block this slice. No design edit needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

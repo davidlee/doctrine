@@ -8,7 +8,7 @@
 |---|---|---|---|
 | List tables (backlog, rec, governance, slice, memory, review, spec, coverage_view) | `render_columns` → `render_table` | Yes (auto-detect) | No |
 | Priority tables (`survey`, `next`) | Hand-built grid → `render_table` directly | No | No |
-| Status-bearing `writeln!` lines (adr, policy, standard, knowledge, revision) | `writeln!(io::stdout(), …)` bare | No | No |
+| Status-bearing `writeln!` lines (adr, policy, standard, knowledge, revision lifecycle) | `writeln!(io::stdout(), …)` bare | No | No |
 
 **Target:**
 
@@ -17,6 +17,11 @@
 | List tables (unchanged) | `render_columns` → `render_table` | Yes | Yes — overrides auto-detect |
 | Priority tables | `render_columns` → `render_table` | Yes | Yes |
 | Status-bearing `writeln!` lines | Point-colour via injected `bool`, reusing `status_hue` | Yes | Yes |
+
+Excluded from colour scope: creation confirmations, dispatch output, worktree
+boot messages, and the revision `run_approve` approval-status line
+(`pending`/`approved`/`rejected`) — approval is a distinct status axis
+(lifecycle states are in `status_hue`; approval states are not).
 
 All surfaces resolve colour from a single `--color=auto|always|never` flag
 (precedence: `never` > `always` > auto-detect, where auto-detect = `NO_COLOR` >
@@ -40,6 +45,10 @@ tty::stdout_color_enabled()       ├──bool──▶ render_columns(rows, co
                                                 │  knowledge, revision (NEW)
                                                 └─ reuses status_hue
 ```
+
+The **status-bearing writeln! five** are: `adr run_status`, `policy run_status`,
+`standard run_status`, `knowledge run_status`, `revision run_status`. Each emits
+a lifecycle status token whose value is in `status_hue`.
 
 `tty::resolve_color(mode: ColorChoice) -> bool` is the new shell-side resolver
 that merges the flag with auto-detection. The pure layer sees only a `bool` —
@@ -101,6 +110,12 @@ pub(crate) fn status_colored(status: &str, color: bool) -> String {
 Lives in `src/listing.rs` next to `status_hue` — the hue map is its natural
 dependency. The impure shell (`tty.rs`) does not import it; callers in the
 command layer import both `tty::resolve_color` and `listing::status_colored`.
+
+**Dual-status surface (revision `run_status`):** the revision handler emits
+TWO status tokens per line (`from → to`). Call `status_colored` twice — once
+for `from.as_str()`, once for `state.as_str()` — joining them with the literal
+`" → "` (uncoloured). Do not pass the whole formatted line through a single
+`status_colored` call.
 
 ### 3c. Priority `Column` arrays (new, `src/priority/render.rs`)
 
@@ -223,41 +238,59 @@ enum needed.
 
 ### Injection into existing list surfaces
 
-Each list command handler currently does approximately:
+The `CommonListArgs::into_list_args` method gains a `color: bool` parameter
+so the resolved colour flows into the `RenderOpts` it constructs internally:
 
 ```rust
-let color = tty::stdout_color_enabled();
-let args = ListArgs { render: RenderOpts { color, .. }, .. };
-```
+// Before (inside into_list_args):
+render: crate::listing::RenderOpts {
+    color: crate::tty::stdout_color_enabled(),
+    term_width: crate::tty::stdout_terminal_width(),
+},
 
-Becomes:
-
-```rust
-let color = tty::resolve_color(cli.color);
-let args = ListArgs { render: RenderOpts { color, .. }, .. };
-```
-
-~13 mechanical call sites. `cli` is the parsed top-level `Cli` — `--color` is
-global, so every subcommand handler already has access.
-
-### Injection into priority surfaces
-
-`run_survey` and `run_next` gain a `ColorChoice` parameter:
-
-```rust
-pub(crate) fn run_survey(
-    path: Option<PathBuf>, all: bool, format: Format, json: bool,
-    color_choice: clap::ColorChoice,  // NEW
-) -> anyhow::Result<()> {
-    let opts = RenderOpts {
-        color: crate::tty::resolve_color(color_choice),
-        term_width: crate::tty::stdout_terminal_width(),
-    };
-    render::survey_human(&rows, opts)
+// After (color injected by caller):
+impl CommonListArgs {
+    pub(crate) fn into_list_args(self, color: bool) -> ListArgs {
+        ListArgs {
+            // ...
+            render: crate::listing::RenderOpts {
+                color,  // <-- injected, no longer reads stdout_color_enabled()
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        }
+    }
 }
 ```
 
-Call sites in `main.rs` pass `cli.color`.
+Each list command handler resolves colour once at the call site:
+
+```rust
+let color = tty::resolve_color(cli.color);
+let args = list.into_list_args(color);
+```
+
+~13 call sites. `cli` is the parsed top-level `Cli` — `--color` is global, so
+every subcommand handler already has access.
+
+### Injection into priority surfaces
+
+Priority signatures keep the existing `render: RenderOpts` parameter — resolved
+in `main.rs`, not inside the priority module (no clap or tty import needed):
+
+```rust
+// main.rs call site (unchanged pattern, only the color source changes):
+Command::Survey { .. } => priority::run_survey(
+    path, all, format, json,
+    crate::listing::RenderOpts {
+        color: crate::tty::resolve_color(cli.color),
+        term_width: crate::tty::stdout_terminal_width(),
+    },
+),
+```
+
+`run_survey` and `run_next` signatures are **unchanged** — they already
+accept `render: RenderOpts`. The only change is that `main.rs` resolves
+colour from `cli.color` instead of `stdout_color_enabled()`.
 
 ### Injection into status-line surfaces
 
@@ -277,13 +310,13 @@ Then wraps the status word: `listing::status_colored(status.as_str(), color)`.
 | `src/listing.rs` | `select_columns`: `debug_assert!` default-set validation (IMP-038). New `status_colored(status, color)` pure helper (IMP-039b). No signature changes to `render_columns`/`render_table`/`ColumnPaint`/`status_hue`. |
 | `src/tty.rs` | New `resolve_color(mode: ColorChoice) -> bool` (IMP-040). Imports `clap::ColorChoice`. `stdout_color_enabled()` and `color_enabled()` unchanged. |
 | `src/priority/render.rs` | `survey_human`/`next_human`: delete hand-built grid + `render_table` call, replace with `SURVEY_COLS`/`NEXT_COLS` arrays + `render_columns`. Signatures: `(rows, opts: RenderOpts)`. Empty-list messages preserved (checked before `render_columns`). New `use` imports for `Column`, `ColumnPaint`, `status_hue`, `TITLE_EVEN`, `TITLE_ODD`, `DynColors`. (IMP-039a) |
-| `src/priority/mod.rs` | `run_survey`/`run_next`: gain `color_choice: ColorChoice` param; build `RenderOpts` from `resolve_color` + `stdout_terminal_width`; pass to render fns. (IMP-039a + IMP-040) |
-| `src/main.rs` | Top-level `--color` flag on `Cli`. `run_survey`/`run_next` calls pass `cli.color`. ~13 list handlers: `stdout_color_enabled()` → `resolve_color(cli.color)`. (IMP-040) |
+| `src/priority/mod.rs` | `run_survey`/`run_next`: signatures unchanged — already accept `render: RenderOpts`. No new imports (no clap, no tty). (IMP-039a + IMP-040) |
+| `src/main.rs` | Top-level `--color` flag on `Cli`. `CommonListArgs::into_list_args` gains `color: bool` param (callers pass `resolve_color(cli.color)`). Priority commands: construct `RenderOpts` with `resolve_color(cli.color)` instead of `stdout_color_enabled()`. ~13 list handlers: `stdout_color_enabled()` → `resolve_color(cli.color)`. (IMP-040) |
 | `src/adr.rs` | Handler: inject `color` bool, wrap status with `listing::status_colored`. (IMP-039b) |
 | `src/policy.rs` | Same pattern. |
 | `src/standard.rs` | Same pattern. |
 | `src/knowledge.rs` | Same pattern (`state` is the status word). |
-| `src/revision.rs` | Same pattern (both `from` and `to` statuses). |
+| `src/revision.rs` | Handler: inject `color` bool, wrap BOTH `from` and `to` statuses separately with `listing::status_colored`, join with literal `" → "` (uncoloured). (IMP-039b) |
 | Priority golden tests | Byte-identical: piped output under `color: false` produces the same bytes (headers plain, cells plain, same `│` layout). No re-baseline needed. |
 | E2E golden tests | Unchanged (piped → plain). |
 
@@ -336,7 +369,22 @@ New / changed evidence:
 
 Residual open questions: none.
 
-## 9. Self-review findings
+## 9. Inquisition findings (RV-045)
+
+The design survived adversarial review with four corrections applied (above):
+
+1. **F-1** — Acknowledged revision `run_approve` approval-status line exists;
+   consciously excluded (approval axis, not lifecycle — not in `status_hue`).
+2. **F-2** — Clarified dual-status revision line: two `status_colored` calls,
+   joined by literal `" → "`.
+3. **F-3** — Specified `CommonListArgs::into_list_args(self, color: bool)` seam.
+4. **F-5** — Preserved existing `RenderOpts` injection pattern for priority;
+   no clap/tty import into `src/priority/mod.rs`.
+
+One tolerated blemish: temporary Vec allocation from `&cols.iter().collect()`
+(harmless; captured under IMP-044 for future seam-uniformity pass).
+
+Original self-review findings (pre-inquisition):
 
 1. **`debug_assert!` justification.** The assertion fires only in debug builds.
    In release, the existing `pick()` error is the backstop — a bad default

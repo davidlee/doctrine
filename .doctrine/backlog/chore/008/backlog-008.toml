@@ -5,10 +5,10 @@ id = 8
 slug = "supersede-torn-state-recovery-test"
 title = "Add a torn-state recovery e2e test for supersede: NEW-only partial write, re-run completes OLD (RV-024 F-5)"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "done"
 created = "2026-06-14"
-updated = "2026-06-15"
+updated = "2026-06-16"
 tags = ["area:memory", "testing"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

@@ -1,0 +1,111 @@
+# Implementation plan for SL-079 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-079"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# PHASE-01: Foundation — column model validation (IMP-038) + --color flag (IMP-040)
+# Both are independent but share the plumbing layer (listing.rs, tty.rs, main.rs).
+# Neither surfaces new colour to users; both are pre-requisites for PHASE-02/03.
+[[phase]]
+id        = "PHASE-01"
+name      = "Foundation: column validation + --color flag"
+objective = "Add debug_assert! default-set validation to select_columns (IMP-038) and wire the --color=auto|always|never global flag with resolve_color + injection plumbing into all existing surfaces (IMP-040). No new colour surfaces yet — just the flag and validation infrastructure."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md exists and is locked (post-inquisition corrections applied)" },
+  { id = "EN-2", text = "just check is green on the parent tree" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "select_columns debug_assert! fires on invalid default and passes on valid defaults" },
+  { id = "EX-2", text = "resolve_color(mode) -> bool correct for all three modes; pure-table test covers Never/Always/Auto × tty arms" },
+  { id = "EX-3", text = "Cli struct carries --color=auto|always|never global flag (clap::ColorChoice)" },
+  { id = "EX-4", text = "CommonListArgs::into_list_args accepts color: bool; all ~13 list command call sites pass resolve_color(cli.color)" },
+  { id = "EX-5", text = "priority command call sites (survey/next/blockers/explain) construct RenderOpts with resolve_color(cli.color)" },
+  { id = "EX-6", text = "every existing test passes unchanged — no behavioural change in this phase" },
+]
+verification = [
+  { id = "VT-1", expects = "select_columns panics in debug when a default name is absent from available; does not panic when all defaults are valid" },
+  { id = "VT-2", expects = "resolve_color: Never→false (tty or not); Always→true (tty or not); Auto defers to color_enabled(no_color, is_tty)" },
+  { id = "VT-3", expects = "--color=auto|always|never parses correctly via clap (case-insensitive); default is auto" },
+  { id = "VT-4", expects = "all existing golden and unit tests pass (zero behavioural change)" },
+  { id = "VA-1", expects = "cargo clippy --workspace zero warnings; just check green" },
+]
+specs        = []
+requirements = []
+
+# PHASE-02: Priority table colour (IMP-039a) — route survey/next through render_columns
+# Depends on PHASE-01 for RenderOpts.color plumbing. Replaces hand-built grid
+# with SURVEY_COLS/NEXT_COLS Column arrays. Goldens stay byte-identical under
+# color:false.
+[[phase]]
+id        = "PHASE-02"
+name      = "Priority table colour: SURVEY_COLS + NEXT_COLS via render_columns"
+objective = "Replace the hand-built grids in survey_human/next_human with SURVEY_COLS/NEXT_COLS Column arrays routed through render_columns (IMP-039a). Under color:true, priority tables gain ANSI colour; under color:false (pipe/golden path), output is byte-identical to current goldens."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — RenderOpts.color plumbing exists and resolve_color is wired" },
+  { id = "EN-2", text = "just check green (post PHASE-01)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "survey_human/next_human call render_columns with SURVEY_COLS/NEXT_COLS; no direct render_table calls in human path" },
+  { id = "EX-2", text = "empty rows return existing messages: \"(no eligible work)\\n\" / \"(nothing actionable)\\n\"" },
+  { id = "EX-3", text = "color:true → ANSI in id (Cyan), status (status_hue), blocked badge (Red), title (Alternate zebra); headers bold" },
+  { id = "EX-4", text = "color:false → zero ANSI, byte-identical to current golden output" },
+  { id = "EX-5", text = "run_blockers and run_explain unchanged (they don't pass through render_columns; blockers_human/explain_human are prose, not tables)" },
+]
+verification = [
+  { id = "VT-1", expects = "color:true path: strip_ansi(survey_human(rows, RenderOpts { color: true, .. })) matches the raw grid (proof ANSI is present but structural layout preserved)" },
+  { id = "VT-2", expects = "color:false path: survey_human(rows, RenderOpts { color: false, .. }) is byte-identical to current golden (existing snapshot re-verified, no re-baseline)" },
+  { id = "VT-3", expects = "empty survey_human/next_human returns existing empty-string messages unchanged" },
+  { id = "VT-4", expects = "SURVEY_COLS cell closures produce identical strings to hand-built grid for a representative row (column by column)" },
+  { id = "VT-5", expects = "status_hue applied to blocked badge: \"blocked\" → Red; \"actionable\" → None (cell \"\" invisible)" },
+  { id = "VA-1", expects = "survey + next at the terminal render with colour on a TTY → id Cyan, status green/yellow/red, blocked BLOCKED red, title zebra" },
+  { id = "VA-2", expects = "cargo clippy zero warnings; just check green" },
+]
+specs        = []
+requirements = []
+
+# PHASE-03: Status-line point-colour (IMP-039b) — writeln! surfaces
+# Depends on PHASE-02 for completeness but technically independent.
+# Adds status_colored pure helper + colours five status-bearing writeln! lines.
+[[phase]]
+id        = "PHASE-03"
+name      = "Status-line colour: status_colored + five writeln! surfaces"
+objective = "Add the status_colored(status, color) pure helper to listing.rs and wire it into the five status-bearing writeln! surfaces (adr, policy, standard, knowledge, revision). Each handler resolves color once from cli.color and wraps status tokens. Revision emits two separate status_colored calls for from→to."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — resolve_color and --color flag are wired" },
+  { id = "EN-2", text = "just check green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "status_colored(status, color) pure helper exists in listing.rs next to status_hue; both inputs injected, no impurity" },
+  { id = "EX-2", text = "adr run_status: coloured status word (e.g. green \"accepted\", yellow \"proposed\")" },
+  { id = "EX-3", text = "policy run_status: coloured status word" },
+  { id = "EX-4", text = "standard run_status: coloured status word" },
+  { id = "EX-5", text = "knowledge run_status: coloured state word" },
+  { id = "EX-6", text = "revision run_status: BOTH from and to statuses coloured separately, literal \" → \" uncoloured" },
+  { id = "EX-7", text = "color:false → zero ANSI on all five surfaces (piped output plain)" },
+  { id = "EX-8", text = "run_approve approval-status line intentionally NOT coloured (design §1 exclusion, RV-045 F-1)" },
+]
+verification = [
+  { id = "VT-1", expects = "status_colored(\"accepted\", true) contains ANSI escape; status_colored(\"accepted\", false) is plain \"accepted\"" },
+  { id = "VT-2", expects = "status_colored(\"bogus\", true) is plain \"bogus\" (unmapped status → no colour)" },
+  { id = "VT-3", expects = "status_colored(\"\", true) is plain \"\" (empty status → no colour)" },
+  { id = "VT-4", expects = "every mapped status token (accepted, required, active, design, plan, started, done, abandoned, contested, blocked) produces ANSI under color:true via status_hue" },
+  { id = "VA-1", expects = "doctrine adr status <id> accepted on a TTY → \"ADR 001: accepted\" with \"accepted\" in green" },
+  { id = "VA-2", expects = "doctrine revision status <id> started on a TTY → \"proposed → started\" with \"proposed\" plain (unmapped) and \"started\" yellow" },
+  { id = "VA-3", expects = "--color=never on any status command → zero ANSI, status word plain" },
+  { id = "VA-4", expects = "cargo clippy zero warnings; just check green; all existing tests pass" },
+]
+specs        = []
+requirements = []

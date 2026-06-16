@@ -1,0 +1,38 @@
+[[area]]
+name = "spec show + prose render"
+purpose = "run_show, render, show_json — the read path that must gain requirement prose"
+paths = ["src/spec.rs"]
+
+[[area]]
+name = "requirement reader"
+purpose = "load (toml), load_body (.md), prune_empty_headings — the prose tier extension"
+paths = ["src/requirement.rs"]
+
+[[area]]
+name = "SL-077 design"
+purpose = "D1–D6 decisions governing the implementation"
+paths = [".doctrine/slice/077/design.md", ".doctrine/slice/077/slice-077.md"]
+
+[[invariant]]
+text = "Behaviour-preservation: existing tests stay green unchanged"
+
+[[invariant]]
+text = "Storage rule: prose in .md, structured data in .toml — never queried/derived data in prose"
+
+[[invariant]]
+text = "read_slice precedent: read_spec mirrors (parsed, raw-toml, prose-body) signature"
+
+[[invariant]]
+text = "second_parent: build_registry must carry the finding, not fail hard"
+
+[[invariant]]
+text = "degrade-and-continue: E5 pattern for dangling member FKs in req list"
+
+[[invariant]]
+text = "Pure/imperative split: no disk in the pure layer (render / prune_empty_headings)"
+
+[[risk]]
+text = "description field vs ## Statement prose overlap — two sources for same concept"
+
+[[risk]]
+text = "D1 table including build_registry despite scope exclusion"
