@@ -1,0 +1,81 @@
+# Implementation plan for SL-077 — the authored, durable phase plan.
+#
+# Hand-edit freely: the tool reads this file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-077"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Extract read_spec reader"
+objective = "Replace the inline `from_str::<Spec>` parse sites in `spec.rs` (`run_show` and `relation_edges`) with a single `read_spec` function mirroring `read_slice`'s `(parsed, raw_toml, prose_body)` signature. `build_registry` keeps its inline parse (non-trivial `second_parent` error handling). Existing test suites stay green unchanged — behaviour-preservation gate."
+
+entrance_criteria = [
+  { id = "EN-1", text = "`read_slice` signature and call sites understood as the mirror pattern." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`read_spec` is the single read path for `run_show` and `relation_edges` — no inline `from_str::<Spec>` in either." },
+  { id = "EX-2", text = "`build_registry` parse is unchanged (keeps its inline parse and `second_parent` guard)." },
+  { id = "EX-3", text = "Existing test suites pass unchanged — zero test diffs to existing spec tests." },
+]
+verification = [
+  { id = "VT-1", expects = "`cargo test` — all existing spec tests green, zero source changes to test bodies." },
+  { id = "VT-2", expects = "`just check` — clippy zero warnings." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Requirement prose reader + spec show render"
+objective = "Add `requirement::load_with_prose(root, fk)` returning `(Requirement, Option<String>)` — `None` when the `.md` body is scaffold (headings with only comment placeholders). Wire it into `spec show`'s `render()` and `show_json()`: the Table render emits the prose below each requirement's structured facets; scaffold → omitted (no noise). The JSON envelope gains a `body` key per member (absent when scaffold)."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — `read_spec` extracted and tests green." },
+  { id = "EN-2", text = "Requirement scaffold template understood (`## Statement` / `## Rationale` with `<!-- ... -->` comment placeholders)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`requirement::load_with_prose` reads both tiers and classifies scaffold vs filled." },
+  { id = "EX-2", text = "`spec show` Table mode renders requirement prose below structured facets; scaffold omitted." },
+  { id = "EX-3", text = "`spec show --json` includes `body` field per member requirement (absent when scaffold)." },
+  { id = "EX-4", text = "Existing `render`/`show_json` tests adapt to the new prose line (additive — new assertions, not rewrites)." },
+]
+verification = [
+  { id = "VT-1", expects = "New unit test: `load_with_prose` returns `None` for scaffold `.md`, `Some` for authored body." },
+  { id = "VT-2", expects = "New unit test: `render` includes requirement prose body when present, omits when scaffold." },
+  { id = "VT-3", expects = "New unit test: `show_json` `body` field present for filled, absent for scaffold." },
+  { id = "VT-4", expects = "`just check` — clippy zero warnings." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Prose column in spec req list"
+objective = "Add a `prose` column to `spec req list` — default, `✓` for filled, `—` for scaffold. Extend `ReqListRow` with the field, add to `REQ_COLUMNS` and `REQ_DEFAULT`, and surface in `ReqJsonRow` as a boolean. Reading the prose for every member in the roster uses `load_with_prose` from PHASE-02."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — `load_with_prose` is production-ready and test-covered." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`spec req list` Table output includes `prose` column with `✓` (filled) / `—` (scaffold)." },
+  { id = "EX-2", text = "`spec req list --json` includes `prose: true/false` per row (absent for dangling)." },
+  { id = "EX-3", text = "`prose` column is in default set and listed as 5th column in `REQ_DEFAULT`." },
+]
+verification = [
+  { id = "VT-1", expects = "New unit test: `req_list_rows` Table output includes `prose` column with correct values." },
+  { id = "VT-2", expects = "New unit test: `req_list_rows` JSON output includes `prose` boolean." },
+  { id = "VT-3", expects = "New unit test: dangling member row omits `prose` in JSON, shows `—` in Table." },
+  { id = "VT-4", expects = "Existing req_list tests updated (additive — new column assertion, no excision)." },
+  { id = "VT-5", expects = "`just check` — clippy zero warnings." },
+]
+specs        = []
+requirements = []
