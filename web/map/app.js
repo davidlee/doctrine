@@ -1,11 +1,7 @@
-// Doctrine Map Explorer — SPA shell (SL-072 PHASE-07)
-//
+// Doctrine Map Explorer — SPA shell (SL-073)
 // Hash routing: #/focus/SL-001 or #/focus/SL-001?depth=2
-// Default route (# or missing hash) shows the entity list.
-//
-// Security: markdown-it configured with html:false; DOMPurify.sanitize()
-// applied before innerHTML.  SVG from /api/dot/svg is rendered via <img>
-// (data-uri), never injected as inline HTML.
+// Security: markdown-it html:false; DOMPurify.sanitize() applied before innerHTML.
+// SVG from /api/dot/svg is sanitized via DOMPurify SVG profile, then injected as inline DOM.
 
 (function () {
   'use strict';
@@ -115,8 +111,8 @@
     }
 
     header.innerHTML = '<span>' + escapeHtml(node.title) + '</span>' +
-      ' <span class="kind-pill" style="background:var(--kind-' + node.kindPrefix + ')">' + node.kindPrefix + '</span>' +
-      ' <span class="status">' + node.status + '</span>';
+      ' <span class="kind-pill" style="background:var(--kind-' + escapeHtml(node.kindPrefix) + ')">' + escapeHtml(node.kindPrefix) + '</span>' +
+      ' <span class="status">' + escapeHtml(node.status) + '</span>';
   }
 
   function renderRelationshipTable() {
@@ -297,7 +293,9 @@
     btn.addEventListener('click', function() {
       state.markdownCache.clear();
       state.graphRenderSeq += 1;
-      api.fetchGraph().then(function(raw) {
+      api.refreshGraph().then(function() {
+        return api.fetchGraph();
+      }).then(function(raw) {
         model.normalizeGraph(raw);
         if (state.focusId) {
           state.focusId = model.resolveFocus(state.focusId, state.graph);
@@ -314,7 +312,7 @@
    * SVG Graph rendering (PHASE-03) — rendering pipeline + stale-render guard
    * --------------------------------------------------------------------- */
   function escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function renderHoverPane(nodeId) {
@@ -508,6 +506,14 @@
         model.normalizeGraph(raw);
       }
 
+      if (!state.focusId && state.graph.nodes.size > 0) {
+        state.focusId = model.resolveFocus(null, state.graph);
+        if (state.focusId) {
+          router.setFocus(state.focusId, state.depth);
+          return;
+        }
+      }
+
       render();
       window.addEventListener('hashchange', render);
     }).catch(function (err) {
@@ -551,15 +557,10 @@
     if (route.view === 'focus') {
       state.focusId = route.id;
     }
-    state.depth = route.depth;
+    state.depth = Math.max(0, Math.min(3, route.depth));
 
-    // If no focus, resolve default
-    if (!state.focusId && state.graph.nodes.size > 0) {
+    if (route.view === 'edge' && !state.focusId && state.graph.nodes.size > 0) {
       state.focusId = model.resolveFocus(null, state.graph);
-      if (state.focusId) {
-        router.setFocus(state.focusId, state.depth);
-        return; // hash change triggers re-render
-      }
     }
 
     if (route.view === 'edge') {
