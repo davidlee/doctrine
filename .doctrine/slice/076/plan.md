@@ -135,3 +135,21 @@ This plan was updated after an adversarial review that identified:
 - Escape helper character list made explicit (EX-6)
 - Parallel Cargo.toml collision risk noted
 - `ConceptMapIoError` variant added for I/O error mapping
+
+### PHASE-07: CM focal node + depth filtering + styling refresh (design amendment)
+
+Added after PHASE-05 implementation revealed the need for concept maps to
+share the entity graph's depth-filtering behaviour. A click-to-focus
+interaction sets `cmFocusNode`; BFS neighbourhood filtering from the focal
+node applies depth-based visibility. When `cmFocusNode` is null, all nodes
+and edges render (wide-open default).
+
+Node styling refreshed from green-teal ellipses to off-white records with
+blue borders (`#4A90D9`) and dark text — consistent with entity graph node
+convention. Edge colour set to `#4A90D9` (the refines/details blue) for
+legibility. Depth selector unchanged for CM views; `state.depth` shared
+between entity and CM views. Focal node gets `penwidth=3.0` highlight.
+
+`cmFocusNode` persists in URL hash as `&cm_focus=<key>`. `router.parseHash`
+gains a `cmFocus` field. Edit-mode click still triggers `startRenameNode`
+(unchanged).
