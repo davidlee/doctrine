@@ -381,6 +381,73 @@
   }
 
   /* -----------------------------------------------------------------------
+   * Markdown rendering (PHASE-04) — fetch, cache, link policy, error states
+   * --------------------------------------------------------------------- */
+  function applyLinkPolicy(container) {
+    var links = container.querySelectorAll('a');
+    for (var i = 0; i < links.length; i++) {
+      var a = links[i];
+      var href = a.getAttribute('href') || '';
+      if (href.indexOf('http://') === 0 || href.indexOf('https://') === 0) {
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+      } else if (href.indexOf('#') === 0) {
+        // Anchor link — preserve
+      } else if (href) {
+        // Relative link — strip href, preserve text
+        var span = document.createElement('span');
+        span.textContent = a.textContent;
+        a.parentNode.replaceChild(span, a);
+      }
+    }
+  }
+
+  function renderMarkdownPane(container, id) {
+    // Cache check
+    if (state.markdownCache.has(id)) {
+      container.innerHTML = renderMarkdown(state.markdownCache.get(id));
+      applyLinkPolicy(container);
+      return;
+    }
+
+    container.innerHTML = '';
+    var loading = document.createElement('p');
+    loading.className = 'loading';
+    loading.textContent = 'Loading markdown…';
+    container.appendChild(loading);
+
+    api.fetchMarkdown(id).then(function(text) {
+      // Stale-request guard
+      if (state.focusId !== id) return;
+
+      state.markdownCache.set(id, text);
+      container.innerHTML = renderMarkdown(text);
+      applyLinkPolicy(container);
+    }).catch(function(err) {
+      // Stale-request guard
+      if (state.focusId !== id) return;
+
+      container.innerHTML = '';
+      if (err.status === 404) {
+        var msg = document.createElement('p');
+        msg.className = 'muted';
+        msg.textContent = 'No markdown body for ' + id;
+        container.appendChild(msg);
+      } else if (err.status === 501) {
+        var info = document.createElement('p');
+        info.className = 'info';
+        info.textContent = 'Markdown not implemented for requirements';
+        container.appendChild(info);
+      } else {
+        var error = document.createElement('p');
+        error.className = 'error';
+        error.textContent = 'Failed to load markdown: ' + err.message;
+        container.appendChild(error);
+      }
+    });
+  }
+
+  /* -----------------------------------------------------------------------
    * Bootstrap
    * --------------------------------------------------------------------- */
   function bootstrap() {
