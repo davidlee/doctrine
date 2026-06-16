@@ -14,6 +14,7 @@ module.exports = [
         window: 'readonly',
         console: 'readonly',
         fetch: 'readonly',
+        localStorage: 'readonly',
         // ES5 builtins
         Promise: 'readonly',
         Map: 'readonly',

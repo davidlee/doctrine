@@ -575,8 +575,24 @@
   /* -----------------------------------------------------------------------
    * Bootstrap + render loop (PHASE-05)
    * --------------------------------------------------------------------- */
+  function wireTableToggle() {
+    var cb = document.getElementById('hide-relations');
+    var table = document.querySelector('.relationship-table');
+    if (!cb || !table) return;
+    // Restore persisted state
+    var hidden = false;
+    try { hidden = localStorage.getItem('doctrine-map-hide-relations') === '1'; } catch (_) { /* eslint-disable-line no-unused-vars */ }
+    cb.checked = hidden;
+    table.classList.toggle('hidden', hidden);
+    cb.addEventListener('change', function() {
+      table.classList.toggle('hidden', cb.checked);
+      try { localStorage.setItem('doctrine-map-hide-relations', cb.checked ? '1' : '0'); } catch (_) { /* eslint-disable-line no-unused-vars */ }
+    });
+  }
+
   function bootstrap() {
     // Wire interactive surfaces
+    wireTableToggle();
     wireFilterCheckboxes();
     wireSearch();
     wireDepthButtons();
