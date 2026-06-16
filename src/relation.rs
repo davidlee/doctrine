@@ -58,8 +58,10 @@ pub(crate) enum RelationLabel {
     /// spec → spec (`interactions.toml`; the per-edge free-text `type` is re-read
     /// from the source at render — a single relation class, design §5.3 / C2).
     Interactions,
-    /// slice·PRD·SPEC → governance (ADR/POL/STD). One shared label spanning all
-    /// three sources, as `supersedes` already spans SL+gov; inbound renders
+    /// concept-map → any (concept association).
+    Contextualizes,
+    /// slice·PRD·SPEC·CM → governance (ADR/POL/STD). One shared label spanning all
+    /// four sources, as `supersedes` already spans SL+gov; inbound renders
     /// "governs" via [`RelationRule::inbound_name`] (SL-048 design §5.2 / X5).
     /// Constructed only by the table/tests until PHASE-04 threads the live axes
     /// (covered by the module-level `not(test)` `dead_code` expect, below).
@@ -104,6 +106,7 @@ impl RelationLabel {
             RelationLabel::Parent => "parent",
             RelationLabel::Members => "members",
             RelationLabel::Interactions => "interactions",
+            RelationLabel::Contextualizes => "contextualizes",
             RelationLabel::GovernedBy => "governed_by",
             RelationLabel::Consumes => "consumes",
             RelationLabel::Slices => "slices",
@@ -132,6 +135,7 @@ impl RelationLabel {
             "parent" => RelationLabel::Parent,
             "members" => RelationLabel::Members,
             "interactions" => RelationLabel::Interactions,
+            "contextualizes" => RelationLabel::Contextualizes,
             "governed_by" => RelationLabel::GovernedBy,
             "consumes" => RelationLabel::Consumes,
             "slices" => RelationLabel::Slices,
@@ -233,6 +237,7 @@ pub(crate) struct RelationRule {
 const SLICE: &Kind = &crate::slice::SLICE_KIND;
 const PRD: &Kind = &crate::spec::PRODUCT_SPEC_KIND;
 const SPEC: &Kind = &crate::spec::TECH_SPEC_KIND;
+const CM: &Kind = &crate::concept_map::CONCEPT_MAP_KIND;
 const REQ: &Kind = &crate::requirement::REQUIREMENT_KIND;
 const ADR: &Kind = &crate::adr::ADR_KIND.kind;
 const POL: &Kind = &crate::policy::POLICY_KIND.kind;
@@ -329,7 +334,15 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::TypedVerbOnly,
     },
     RelationRule {
-        sources: &[SLICE, PRD, SPEC],
+        sources: &[CM],
+        label: RelationLabel::Contextualizes,
+        inbound_name: "contextualized_by",
+        target: TargetSpec::Unvalidated,
+        tier: Tier::One,
+        link: LinkPolicy::Writable,
+    },
+    RelationRule {
+        sources: &[SLICE, PRD, SPEC, CM],
         label: RelationLabel::GovernedBy,
         inbound_name: "governs",
         target: TargetSpec::Kinds(GOV),
@@ -1049,7 +1062,10 @@ mod tests {
             let differs = r.inbound_name != r.label.name();
             let allowed_to_differ = matches!(
                 r.label,
-                RelationLabel::Supersedes | RelationLabel::GovernedBy | RelationLabel::Consumes
+                RelationLabel::Supersedes
+                    | RelationLabel::GovernedBy
+                    | RelationLabel::Consumes
+                    | RelationLabel::Contextualizes
             );
             if differs {
                 assert!(
@@ -1090,7 +1106,12 @@ mod tests {
     /// un-authorable in `[[relation]]`.
     #[test]
     fn no_rule_label_is_an_inverse_spelling() {
-        const INVERSE_SPELLINGS: &[&str] = &["superseded_by", "governs", "consumed_by"];
+        const INVERSE_SPELLINGS: &[&str] = &[
+            "superseded_by",
+            "governs",
+            "consumed_by",
+            "contextualized_by",
+        ];
         for r in RELATION_RULES {
             assert!(
                 !INVERSE_SPELLINGS.contains(&r.label.name()),
@@ -1122,6 +1143,7 @@ mod tests {
             RelationLabel::Parent,
             RelationLabel::Members,
             RelationLabel::Interactions,
+            RelationLabel::Contextualizes,
             RelationLabel::GovernedBy,
             RelationLabel::Consumes,
             RelationLabel::Slices,
@@ -1154,6 +1176,7 @@ mod tests {
             RelationLabel::Specs,
             RelationLabel::Requirements,
             RelationLabel::Supersedes,
+            RelationLabel::Contextualizes,
             RelationLabel::GovernedBy,
             RelationLabel::Consumes,
             RelationLabel::Slices,
@@ -1196,7 +1219,12 @@ mod tests {
                         "gov supersedes → SameKind"
                     );
                 }
-                (RelationLabel::Drift | RelationLabel::DecisionRef, _) => {
+                (
+                    RelationLabel::Drift
+                    | RelationLabel::DecisionRef
+                    | RelationLabel::Contextualizes,
+                    _,
+                ) => {
                     assert!(
                         matches!(r.target, TargetSpec::Unvalidated),
                         "{:?} → Unvalidated",
@@ -1464,7 +1492,10 @@ mod tests {
         for label in distinct_labels_in_decl_order() {
             let inverted = matches!(
                 label,
-                RelationLabel::GovernedBy | RelationLabel::Consumes | RelationLabel::Supersedes
+                RelationLabel::GovernedBy
+                    | RelationLabel::Consumes
+                    | RelationLabel::Supersedes
+                    | RelationLabel::Contextualizes
             );
             if !inverted {
                 assert_eq!(

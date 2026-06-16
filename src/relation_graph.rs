@@ -1507,10 +1507,18 @@ mod tests {
             .collect();
         assert_eq!(
             unvalidated,
-            BTreeSet::from([RelationLabel::Drift, RelationLabel::DecisionRef]),
-            "the no-overlay pair is exactly drift + decision_ref"
+            BTreeSet::from([
+                RelationLabel::Contextualizes,
+                RelationLabel::Drift,
+                RelationLabel::DecisionRef,
+            ]),
+            "the no-overlay set is exactly contextualizes + drift + decision_ref"
         );
-        for label in [RelationLabel::Drift, RelationLabel::DecisionRef] {
+        for label in [
+            RelationLabel::Contextualizes,
+            RelationLabel::Drift,
+            RelationLabel::DecisionRef,
+        ] {
             assert!(
                 overlays.overlay_for(label).is_none(),
                 "{label:?} (Unvalidated) must have no overlay"
