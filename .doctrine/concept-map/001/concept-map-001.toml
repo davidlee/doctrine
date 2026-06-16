@@ -1,0 +1,52 @@
+id = 1
+slug = "requirements"
+title = "Requirements"
+status = "draft"
+created = "2026-06-16"
+updated = "2026-06-16"
+description = ""
+dsl = """
+Non-Functional Requirement > is a > Requirement
+Functional Requirement > is a > Requirement
+Technical Spec > is a > Spec
+PRD > is a > Spec
+Feature > is a > PRD
+Capability > is a > PRD
+Domain > is a > PRD
+User Story > is a > PRD
+User Story > belongs to > Feature
+Feature > belongs to > Capability
+Capability > belongs to > Domain
+System Context > is a > C4 Level
+Container > is a > C4 Level
+Component > is a > C4 Level
+Code > is a > C4 Level
+Capability > is a > Product Altitude
+Feature > is a > Product Altitude
+User Story > is a > Product Altitude
+Domain > is a > Product Altitude
+Product Altitude > is symmetric with > C4 Level
+Technical Spec > has a > C4 Level
+System Context Spec > is a > Technical Spec
+Component Spec > is a > Technical Spec
+Code Spec > is a > Technical Spec
+Domain Spec > is a > PRD
+User Story Spec > is a > PRD
+Feature Spec > is a > PRD
+Domain Spec > describes > Domain
+Feature Spec > describes > Feature
+Component Spec > describes > Component
+System Context Spec > describes > System Context
+Code Spec > describes > Code
+Container Spec > describes > Container
+Container Spec > is a > Technical Spec
+User Story Spec > describes > User Story
+Capability Spec > describes > Capability
+Capability Spec > is a > PRD
+Component Spec > decomposes > Container Spec
+Container Spec > decomposes > System Context Spec
+Code Spec > decomposes > Component Spec
+PRD > has a > Product Altitude
+Requirement > belongs to one or more > Spec
+Requirement > concreteness depends on > Product Altitude
+Requirement > specificity depends on > C4 Level"""
