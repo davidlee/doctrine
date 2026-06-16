@@ -2003,13 +2003,23 @@ enum ConceptMapCommand {
         #[arg(long)]
         json: bool,
 
-        /// Show edges table (placeholder in PHASE-01).
+        /// Show edges table from parsed DSL.
         #[arg(long)]
         edges: bool,
 
-        /// Show nodes table (placeholder in PHASE-01).
+        /// Show nodes table from parsed DSL.
         #[arg(long)]
         nodes: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Parse the DSL and run heuristic checks.
+    Check {
+        /// Concept-map reference — `CM-001` or the bare id `1`.
+        id: String,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -2568,7 +2578,9 @@ fn write_class(cmd: &Command) -> WriteClass {
         Command::Map { .. } => Write("map"),
         Command::ConceptMap { command } => match command {
             ConceptMapCommand::New { .. } => Write("concept-map new"),
-            ConceptMapCommand::List { .. } | ConceptMapCommand::Show { .. } => Read,
+            ConceptMapCommand::List { .. }
+            | ConceptMapCommand::Show { .. }
+            | ConceptMapCommand::Check { .. } => Read,
         },
         Command::Slice { command } => match command {
             SliceCommand::New { .. } => Write("slice new"),
@@ -2964,6 +2976,7 @@ fn main() -> anyhow::Result<()> {
                 edges,
                 nodes,
             ),
+            ConceptMapCommand::Check { id, path } => concept_map::run_check(path, &id),
         },
         Command::Slice { command } => match command {
             SliceCommand::New { title, slug, path } => slice::run_new(path, title, slug),
