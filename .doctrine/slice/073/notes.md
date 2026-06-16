@@ -183,3 +183,26 @@ RustEmbed bundle. Visual acceptance (VA-1, VH-1) pending human review.
   flexbox for the main layout.
 - Sidebar pills use `background: var(--kind-PREFIX)` with color: #fff — text colour
   assignment deferred per design (not AA tested).
+
+## Post-close fixes (2026-06-16 — RV-039)
+
+**Commits:** `e21ccfd`, `bd1ab75`, `b030cd4`
+
+**Code review (18 findings) → dispatch fix batch → RV-039 audit (8/8 verified)**
+
+8 high-severity findings addressed:
+- 🔴 F-1: Stale security comment — corrected to inline SVG + DOMPurify
+- 🔴 F-2: Missing api.refreshGraph — added, wireRefresh now chains POST /api/refresh
+- 🟠 F-3: BFS duplicate edges — collectedEdgeIds Set dedup
+- 🟠 F-4: Kind pill contrast — CSS attribute selectors for light-fill kinds
+- 🟠 F-5: SVG double-navigation — DOT URL attribute removed, JS navigation only
+- 🟠 F-6: escapeHtml completeness — added &quot; and &#39;
+- 🟠 F-7: Focus header escaping — kindPrefix and status now escapeHtml()'d
+- 🟠 F-8: Depth not clamped — clampDepth() in router.parseHash + Math.max/min in render()
+- Also: bootstrap double-render fixed, edge view null-focusId guard added
+
+10 minor/optional findings deferred (tolerated): direct edge URL fallback,
+depth button sync, markdown link formatting loss, edge detail null container,
+edge view focus-header ambiguity, code hygiene suggestions.
+
+**Gate:** just check — 1471 passed, 0 failures. JS node --check all clean.

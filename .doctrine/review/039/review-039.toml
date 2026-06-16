@@ -1,0 +1,88 @@
+id    = 39
+slug  = "reconciliation-review-of-sl-073"
+title = "reconciliation review of SL-073"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-073"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "F-1: Stale security comment describes wrong SVG posture"
+detail = "app.js header (lines 1-7) declared SVG rendered via <img> data-uri, never injected as inline HTML. Implementation injects sanitized SVG as innerHTML via DOMPurify SVG profile. Comment was misleading — a reader skimming it would believe inline SVG is impossible. Fixed in bd1ab75."
+disposition = "fix-now"
+response = "Fixed in commits e21ccfd/bd1ab75/b030cd4. Verified via node --check + just check (all green)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "F-2: Refresh button does not trigger server-side catalog rescan"
+detail = "wireRefresh() called api.fetchGraph() directly without api.refreshGraph(). POST /api/refresh endpoint existed server-side but had no client caller — refresh was client-side refetch only. Fixed: api.js gained api.refreshGraph() + wireRefresh() now chains api.refreshGraph().then(api.fetchGraph). Commits: b030cd4 (api.js), bd1ab75 (app.js)."
+disposition = "fix-now"
+response = "Fixed in commits e21ccfd/bd1ab75/b030cd4. Verified via node --check + just check (all green)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "F-3: BFS neighbourhood collects duplicate edges"
+detail = "model.neighbourhood() pushed edges to collectedEdges from both outgoing and incoming traversal, producing duplicates in cyclic/intermediate graphs. Relationship table and DOT output showed duplicate edges. Fixed: added collectedEdgeIds Set guard in b030cd4."
+disposition = "fix-now"
+response = "Fixed in commits e21ccfd/bd1ab75/b030cd4. Verified via node --check + just check (all green)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "F-4: Kind pill text colour hardcoded white regardless of fill"
+detail = "CSS .kind-pill rule hardcoded color: #fff. Light-background kinds (PRD/SPEC orange, REQ amber, IDE green, RV teal, REC grey) had white-on-light with poor contrast (<3:1). Fixed: attribute selectors for light-fill kinds set color: #222 in e21ccfd."
+disposition = "fix-now"
+response = "Fixed in commits e21ccfd/bd1ab75/b030cd4. Verified via node --check + just check (all green)."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "F-5: SVG node click triggers double-navigation"
+detail = "DOT URL attribute rendered as SVG <a xlink:href> wrapper while JS click handler also called router.setFocus() — two hash changes per click. Fixed: removed URL attribute from dot.nodeAttrs() and graphToDot in b030cd4. Navigation is JS-only."
+disposition = "fix-now"
+response = "Fixed in commits e21ccfd/bd1ab75/b030cd4. Verified via node --check + just check (all green)."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "F-6: escapeHtml incomplete for HTML attribute contexts"
+detail = "escapeHtml() escaped &, <, > but not single-quote or double-quote. Safe in current call sites (canonical refs never contain quotes), but function name promises full HTML escaping. Fixed: added &quot; and &#39; escapes in bd1ab75."
+disposition = "fix-now"
+response = "Fixed in commits e21ccfd/bd1ab75/b030cd4. Verified via node --check + just check (all green)."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "F-7: Focus header does not escape kindPrefix and status"
+detail = "renderFocusHeader() inserted node.kindPrefix and node.status into innerHTML without escapeHtml(). Safe today (controlled vocabulary), but no technical guarantee against future injection. Fixed: both fields wrapped in escapeHtml() in bd1ab75."
+disposition = "fix-now"
+response = "Fixed in commits e21ccfd/bd1ab75/b030cd4. Verified via node --check + just check (all green)."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "F-8: Depth stored in state is not clamped to 0..=3"
+detail = "router.parseHash() extracted depth without clamping; render() set state.depth from route without clamping. Hard Contract requires depth in 0..=3 across CLI, URL, state, and model. Fixed: clampDepth() helper + clamp in parseHash (b030cd4) and clamp in render() (bd1ab75)."
+disposition = "fix-now"
+response = "Fixed in commits e21ccfd/bd1ab75/b030cd4. Verified via node --check + just check (all green)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
