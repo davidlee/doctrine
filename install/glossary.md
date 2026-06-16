@@ -65,12 +65,42 @@ sheet *file* is `phase-01.md` (lowercase).
 `VT`/`VA`/`VH` are the three verification modes — pick by *who/what* confirms the
 criterion. Non-retroactive: existing `VT-` criteria stay valid as "by test."
 
-## folder conventions
+## directory layout
 
- - inside slice folder:
-   - ./notes.md
-   - ./handover.md
-   - ./phases/phase-*.md
- - inside slice, spec or backlog folder:
-   - ./research/*
-   - ./context/*
+### `.doctrine/slice/nnn/` — a slice's authored home
+
+| file | tier | purpose |
+|---|---|---|
+| `slice-nnn.toml` | authored | metadata, relations, lifecycle status |
+| `slice-nnn.md` | authored | scope document |
+| `design.md` | authored | canonical technical design |
+| `plan.toml` | authored | phase plan (objectives, EN/EX/VT criteria, links) |
+| `plan.md` | authored | plan prose — rationale & sequencing (no queried data) |
+| `notes.md` | authored | durable implementation notes (on-demand) |
+| `audit.md` | authored | verification / code-review / drift findings |
+| `handover.md` | **runtime** (gitignored) | disposable agent context |
+| `phases/` | **runtime** (gitignored) | symlink into `.doctrine/state/slice/nnn/phases/` |
+
+Also permitted inside a slice, spec, or backlog dir:
+- `research/*`
+- `context/*`
+
+### `.doctrine/adr/nnn/` — architecture decision records
+
+`adr-nnn.toml` + `adr-nnn.md`, plus an `nnn-slug` symlink alias. Authored, project-global.
+
+### `.doctrine/memory/items/nnn/` — memory store
+
+`memory.toml` + `memory.md` per item, with `mem.<key>` symlink aliases for direct lookup.
+
+### `.doctrine/governance.md`
+
+User-owned governance pointer layer — projected into the boot snapshot.
+
+### `doc/*`
+
+Evergreen, authoritative specs. Not yet structurally supported by doctrine tooling.
+
+### `.doctrine/state/` — runtime phase tracking
+
+`.doctrine/state/slice/nnn/phases/phase-NN.{toml,md}` — gitignored, disposable.
