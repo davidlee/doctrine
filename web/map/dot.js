@@ -48,7 +48,7 @@ dot.nodeAttrs = function(node, focusId, depth) {
     fontcolor: font,
     shape: shape,
     penwidth: isFocus ? 3.0 : 1.0,
-    tooltip: node.id
+    tooltip: node.id + ': ' + node.title + ' \u00b7 ' + (node.kindLabel || node.kindPrefix) + ' \u00b7 ' + node.status
   };
 };
 

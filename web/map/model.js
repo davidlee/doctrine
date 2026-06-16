@@ -228,6 +228,31 @@ model.neighbourhood = function(focusId, depth, graph) {
   return { nodes: visited, edges: collectedEdges };
 };
 
+/* --- kind priority ordering (SL-075 D6) --- */
+
+model.kindOrder = {
+  PRD: 1, SPEC: 1, ADR: 2, POL: 2, STD: 3, SL: 4,
+  ISS: 5, IMP: 5, CHR: 5, RSK: 5, REV: 6, RV: 7,
+  REQ: 8, IDE: 9, REC: 10, ASM: 11, DEC: 11, QUE: 12, CON: 12
+};
+
+function compareNodes(a, b) {
+  var ordA = model.kindOrder[a.kindPrefix] || 99;
+  var ordB = model.kindOrder[b.kindPrefix] || 99;
+  if (ordA !== ordB) return ordA - ordB;
+  var numA = parseInt(a.id.split('-').pop(), 10) || 0;
+  var numB = parseInt(b.id.split('-').pop(), 10) || 0;
+  if (numA !== numB) return numA - numB;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+function compareEdgesBySource(ea, eb) {
+  var sa = state.graph.nodes.get(ea.source);
+  var sb = state.graph.nodes.get(eb.source);
+  if (!sa || !sb) return ea.id < eb.id ? -1 : 1;
+  return compareNodes(sa, sb);
+}
+
 /* --- kind aggregation --- */
 
 model.kinds = function(nodes) {
@@ -252,7 +277,7 @@ model.searchFilter = function(query, graph) {
   var results = [];
   if (query === null || query === '') {
     graph.nodes.forEach(function(node) { results.push(node); });
-    results.sort(function(a, b) { return a.id < b.id ? -1 : 1; });
+    results.sort(compareNodes);
     return results;
   }
 
@@ -263,7 +288,7 @@ model.searchFilter = function(query, graph) {
       results.push(node);
     }
   });
-  results.sort(function(a, b) { return a.id < b.id ? -1 : 1; });
+  results.sort(compareNodes);
   return results;
 };
 
