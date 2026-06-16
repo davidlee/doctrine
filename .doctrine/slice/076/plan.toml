@@ -1,0 +1,176 @@
+# Implementation plan for SL-076 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-076"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Phase 01: Rust engine — catalog registration + concept_map.rs mutations
+[[phase]]
+id        = "PHASE-01"
+name      = "Catalog registration + concept_map.rs engine changes"
+objective = "Register CM as a catalog entity kind, promote concept_map.rs visibility, add the typed mutation error enum and three pure mutation functions with unit tests."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and current (post-review disposition committed)" },
+  { id = "EN-2", text = "repo clean on main, just gate passes" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "integrity::KINDS contains a CM row with stem 'concept-map' and no state_dir" },
+  { id = "EX-2", text = "catalog::scan outbound_for('CM') returns Ok(Vec::new())" },
+  { id = "EX-3", text = "7 concept_map symbols are pub(crate) visible to map_server" },
+  { id = "EX-4", text = "ConceptMapMutationError enum defined with 6 variants and Display impl" },
+  { id = "EX-5", text = "add_edge_to_dsl compiles, trims inputs, detects duplicates, returns Result<String, ConceptMapMutationError>" },
+  { id = "EX-6", text = "remove_edge_from_dsl compiles, trims inputs, removes one matching line, returns Result<String, ConceptMapMutationError>" },
+  { id = "EX-7", text = "rename_node_in_dsl compiles, trims inputs, checks key-based collision, edits all edge lines, returns Result<String, ConceptMapMutationError>" },
+  { id = "EX-8", text = "unit tests for add/remove/rename: duplicate detection, edge-not-found, key collision, case-only rename, text-identical no-op, empty-field trim" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test — concept_map mutation unit tests pass" },
+  { id = "VT-2", expects = "just check passes" },
+]
+specs        = []
+requirements = []
+
+# Phase 02: Map server routes + error mapping
+[[phase]]
+id        = "PHASE-02"
+name      = "Map server routes + error mapping"
+objective = "Add MapServerError CM variants with From impl, wire GET and POST /api/concept-map/:id routes with stale-write guard, add markdown path test."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — pure functions, typed error, and catalog registration exist" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "MapServerError has CM variants: BadConceptMapId, ConceptMapNotFound, DuplicateEdge, EdgeNotFound, NodeCollision, EmptyField, StaleConceptMap, ConceptMapParseError" },
+  { id = "EX-2", text = "From<ConceptMapMutationError> for MapServerError maps every variant correctly" },
+  { id = "EX-3", text = "GET /api/concept-map/:id returns 200 with nodes/edges/diagnostics/dsl_hash for valid CM" },
+  { id = "EX-4", text = "GET returns 404 for non-existent CM, 400 for bad id format" },
+  { id = "EX-5", text = "POST add_edge succeeds (200), rejects duplicate (409), rejects empty field (400)" },
+  { id = "EX-6", text = "POST remove_edge succeeds (200), rejects not-found (404), rejects empty field (400)" },
+  { id = "EX-7", text = "POST rename_node succeeds (200 with occurrences), rejects collision (409), rejects empty field (400)" },
+  { id = "EX-8", text = "POST with matching base_hash succeeds; mismatched base_hash returns 409 stale_concept_map; absent base_hash succeeds" },
+  { id = "EX-9", text = "Markdown path test: GET /api/entity/CM-001/markdown resolves to concept-map-001.md (not cm-001.md)" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test — route integration tests pass (happy path + all error paths)" },
+  { id = "VT-2", expects = "just gate passes" },
+]
+specs        = []
+requirements = []
+
+# Phase 03: Rust adversarial + preservation tests
+[[phase]]
+id        = "PHASE-03"
+name      = "Rust adversarial + preservation tests"
+objective = "Add comprehensive adversarial Rust tests covering special characters, malformed DSL, preservation, collision edge cases, I/O errors, and bad discriminators."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — routes exist and standard tests pass" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Labels with quotes/backslashes/newlines/DSL delimiters tested in GET and POST" },
+  { id = "EX-2", text = "TOML field preservation after each mutation action verified" },
+  { id = "EX-3", text = "DSL comment/blank-line preservation before/inside/after multiline DSL verified" },
+  { id = "EX-4", text = "Rename collision: different spelling same key → 409; case-only rename → 200" },
+  { id = "EX-5", text = "Malformed DSL lines: GET includes parse-time diagnostics, does not 500" },
+  { id = "EX-6", text = "POST with unknown action discriminator → 400 (not 500)" },
+  { id = "EX-7", text = "File I/O errors: missing TOML → 404; invalid TOML → 500; missing dsl key → graceful" },
+  { id = "EX-8", text = "Duplicate edge detection under whitespace normalization rules verified" },
+  { id = "EX-9", text = "ConceptMapMutationError Display messages are user-readable" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test — all adversarial + preservation tests pass" },
+  { id = "VT-2", expects = "just gate passes" },
+]
+specs        = []
+requirements = []
+
+# Phase 04: Frontend model + API + DOT rendering
+[[phase]]
+id        = "PHASE-04"
+name      = "Frontend model, API client, and DOT diagram rendering"
+objective = "Build the JS data layer (cache, API client, normalizer), CM detection, DOT generation with escape helper, SVG wiring, hover pane, and render dispatch — view-mode diagram renders in browser."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — API surface stable, routes respond correctly" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "conceptMapCache stores {nodes, edges, diagnostics, dslHash} and is cleared on refresh" },
+  { id = "EX-2", text = "api.fetchConceptMap(id) calls GET /api/concept-map/:id and returns normalized data" },
+  { id = "EX-3", text = "api.mutateConceptMap(id, action, params, baseHash) calls POST with correct body shape" },
+  { id = "EX-4", text = "normalizeConceptMap parses raw response into internal cache format" },
+  { id = "EX-5", text = "isConceptMap(focusId) returns true for CM entities in the catalog graph" },
+  { id = "EX-6", text = "dot.escapeStringContent escapes content without adding surrounding quotes" },
+  { id = "EX-7", text = "cmGraphToDot produces valid DOT with ellipse nodes, CM colours, correct labels" },
+  { id = "EX-8", text = "CM SVG renders in browser when a CM entity is focused; hover pane shows node label" },
+  { id = "EX-9", text = "renderConceptMap dispatches correctly; entity graph renders for non-CM entities" },
+  { id = "EX-10", text = "stale-render guard (graphRenderSeq) covers CM diagram renders" },
+]
+verification = [
+  { id = "VT-1", expects = "JS tests: normalizeConceptMap, cmGraphToDot, isConceptMap pass" },
+  { id = "VA-1", expects = "manual smoke: doctrine map serve --focus CM-001 renders diagram with correct nodes/edges" },
+]
+specs        = []
+requirements = []
+
+# Phase 05: Frontend authoring UI
+[[phase]]
+id        = "PHASE-05"
+name      = "Frontend authoring UI"
+objective = "Build the add-edge form, edge table with remove buttons, inline node rename, autocomplete datalists, and stale-write handling — full edit-mode authoring works in browser."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete — CM diagram renders in view mode" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Add edge form: source/rel/target inputs with autocomplete datalists, client-side trim validation, submit button" },
+  { id = "EX-2", text = "Successful add_edge updates cache in-place from response, re-renders diagram + edge table, clears form" },
+  { id = "EX-3", text = "Edge table (edit mode): each row shows source/rel/target with [✕] remove button" },
+  { id = "EX-4", text = "Remove edge: successful remove updates cache, re-renders; 404 shows inline message" },
+  { id = "EX-5", text = "Inline rename: clicking node in edge table or SVG opens input, Enter submits, Escape cancels" },
+  { id = "EX-6", text = "Successful rename updates cache, re-renders; 409 collision shows inline warning with existing label" },
+  { id = "EX-7", text = "Edit/Done button toggles editingConceptMap; add form/remove buttons visible only in edit mode" },
+  { id = "EX-8", text = "All POST mutations send base_hash from cache; 409 stale_concept_map auto-refetches and notifies user" },
+  { id = "EX-9", text = "Autocomplete datalists rebuilt from cache after every successful mutation" },
+]
+verification = [
+  { id = "VT-1", expects = "JS tests: autocomplete rebuild, stale-write handling pass" },
+  { id = "VA-1", expects = "manual smoke: add edge 'C > depends on > D', remove edge, rename 'C' to 'Component' — all persist to TOML" },
+]
+specs        = []
+requirements = []
+
+# Phase 06: Frontend diagnostics + JS tests + HTML/CSS + integration
+[[phase]]
+id        = "PHASE-06"
+name      = "Diagnostics panel, JS tests, HTML/CSS polish, and integration smoke"
+objective = "Add diagnostics panel rendering, cache invalidation, error states, CSS styling, HTML containers, JS tests, and integration smoke — the full feature is production-clean."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete — authoring UI works" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Diagnostics panel renders non-empty diagnostics in view mode with correct variant messages" },
+  { id = "EX-2", text = "Empty diagnostics → panel hidden; edit mode → panel hidden" },
+  { id = "EX-3", text = "Cache invalidated on refresh and when focused entity changes (re-fetch on next focus)" },
+  { id = "EX-4", text = "All error states rendered per design §6 error table (not-found, parse failure, duplicate, collision, stale, bad action)" },
+  { id = "EX-5", text = "CM filter checkbox 'Concept Maps (CM)' in sidebar filter grid; toggle filters correctly" },
+  { id = "EX-6", text = "CM kind pill colour #16A085 applied in CSS palette and kind pill rendering" },
+  { id = "EX-7", text = "CM diagram pane, add-edge form, diagnostics panel all have correct HTML containers" },
+  { id = "EX-8", text = "All JS tests pass: normalizeConceptMap, cmGraphToDot (hostile labels), isConceptMap, autocomplete, stale-write, diagnostics" },
+  { id = "EX-9", text = "Integration smoke: create CM via CLI, add edges, view in browser, edit, verify TOML on disk" },
+]
+verification = [
+  { id = "VT-1", expects = "JS test suite passes (all modules)" },
+  { id = "VT-2", expects = "just gate passes (workspace clean)" },
+  { id = "VA-1", expects = "integration smoke: doctrine concept-map new → add edges via CLI → doctrine map serve --focus CM-001 → all smoke checks pass" },
+  { id = "VA-2", expects = "manual: hostile labels (quotes, backslashes, newlines, >) render correctly in DOT and survive round-trip" },
+]
+specs        = []
+requirements = []
