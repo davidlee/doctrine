@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PHASE-02 Model + Routing Tests</title>
+</head>
+<body>
+  <h1>PHASE-02 Tests</h1>
+  <pre id="results"></pre>
+
+  <!-- These files are loaded via Node test runner, not needed in browser -->
+  <!-- But for completeness: -->
+  <script src="/assets/api.js"></script>
+  <script src="/assets/model.js"></script>
+  <script src="/assets/router.js"></script>
+
+  <script>
+    var resultsEl = document.getElementById('results');
+    var pass = 0, fail = 0, messages = [];
+
+    function assert(cond, msg) {
+      if (cond) { pass++; messages.push('PASS: ' + msg); }
+      else { fail++; messages.push('FAIL: ' + msg); }
+    }
+
+    function assertEqual(actual, expected, msg) {
+      if (JSON.stringify(actual) === JSON.stringify(expected)) {
+        pass++; messages.push('PASS: ' + msg);
+      } else {
+        fail++; messages.push('FAIL: ' + msg + ' — got ' + JSON.stringify(actual) + ', expected ' + JSON.stringify(expected));
+      }
+    }
+
+    /* --- encodePart --- */
+    (function() {
+      assert(model.encodePart('A-Z') === 'A-Z', 'encodePart: hyphen through unchanged');
+      assert(model.encodePart('A Z') === 'A_20Z', 'encodePart: space to _20');
+      assert(model.encodePart('foo/bar') === 'foo_2fbar', 'encodePart: slash to _2f');
+      assert(model.encodePart('hello_world') === 'hello_world', 'encodePart: underscore unchanged');
+      assert(model.encodePart('Café') === 'Caf_e9', 'encodePart: accented e to _e9');
+      assert(model.encodePart('') === '', 'encodePart: empty string returns empty');
+      assert(model.encodePart('abc') === 'abc', 'encodePart: all safe unchanged');
+    })();
+
+    /* --- padId (internal helper) --- */
+    (function() {
+      assert(padId(1) === '001', 'padId: 1 → 001');
+      assert(padId(10) === '010', 'padId: 10 → 010');
+      assert(padId(100) === '100', 'padId: 100 → 100');
+      assert(padId(999) === '999', 'padId: 999 → 999');
+    })();
+
+    /* --- ApiError --- */
+    (function() {
+      var e = new ApiError('test message', 404, 'Not Found', '/api/test');
+      assert(e.name === 'ApiError', 'ApiError: name is ApiError');
+      assert(e.message === 'test message', 'ApiError: message preserved');
+      assert(e.status === 404, 'ApiError: status preserved');
+      assert(e.body === 'Not Found', 'ApiError: body preserved');
+      assert(e.endpoint === '/api/test', 'ApiError: endpoint preserved');
+      assert(e instanceof Error, 'ApiError: instanceof Error');
+    })();
+
+    /* --- state globals exist --- */
+    (function() {
+      assert(typeof state !== 'undefined', 'state: global declared');
+      assert(state.depth === 1, 'state: default depth is 1');
+      assert(state.graph.nodes instanceof Map, 'state: graph.nodes is a Map');
+      assert(state.graph.edges instanceof Array, 'state: graph.edges is an Array');
+      assert(state.graphRenderSeq === 0, 'state: graphRenderSeq is 0');
+    })();
+
+    /* --- normalizeGraph --- */
+    (function() {
+      var raw = {
+        nodes: {
+          'SL-072': { title: 'Doctrine Map Server', status: 'done', kind_label: 'slice' },
+          'ADR-001': { title: 'Module layering', status: 'accepted', kind_label: 'adr' },
+          'SL-071': { title: 'Entity display normalization', status: 'done', kind_label: 'slice' }
+        },
+        edges: [
+          {
+            source: { prefix: 'SL', id: 72 },
+            label: 'governed_by',
+            target: { Resolved: { prefix: 'ADR', id: 1 } },
+            origin: { file: 'slice-072.toml', field: 'governed_by' }
+          },
+          {
+            source: { prefix: 'SL', id: 72 },
+            label: 'needs',
+            target: { Resolved: { prefix: 'SL', id: 71 } },
+            origin: { file: 'slice-072.toml', field: 'needs' }
+          },
+          {
+            source: { prefix: 'SL', id: 72 },
+            label: 'needs',
+            target: { Resolved: { prefix: 'SL', id: 71 } },
+            origin: { file: 'slice-072.toml', field: 'needs_dup' }
+          },
+          {
+            source: { prefix: 'SL', id: 71 },
+            label: 'broken_ref',
+            target: { Unresolved: 'NONEXIST' },
+            origin: { file: 'slice-071.toml', field: 'broken' }
+          }
+        ]
+      };
+
+      model.normalizeGraph(raw);
+
+      assert(state.graph.nodes.size === 3, 'normalizeGraph: 3 nodes');
+      assert(state.graph.edges.length === 2, 'normalizeGraph: 2 edges (1 dedup, 1 unresolved skipped)');
+      assert(state.graph.edgeById.size === 2, 'normalizeGraph: edgeById count 2');
+
+      var n072 = state.graph.nodes.get('SL-072');
+      assert(n072.kindPrefix === 'SL', 'normalizeGraph: SL-072 kindPrefix is SL');
+      assert(n072.kindLabel === 'slice', 'normalizeGraph: SL-072 kindLabel is slice');
+      assert(n072.title === 'Doctrine Map Server', 'normalizeGraph: SL-072 title preserved');
+      assert(n072.status === 'done', 'normalizeGraph: SL-072 status preserved');
+      assert(n072.id === 'SL-072', 'normalizeGraph: SL-072 id preserved');
+
+      var nAdr1 = state.graph.nodes.get('ADR-001');
+      assert(nAdr1.kindPrefix === 'ADR', 'normalizeGraph: ADR-001 kindPrefix is ADR');
+
+      var nSl71 = state.graph.nodes.get('SL-071');
+      assert(nSl71.kindPrefix === 'SL', 'normalizeGraph: SL-071 kindPrefix is SL');
+
+      /* check edge ids */
+      var edgeIds = [];
+      state.graph.edges.forEach(function(e) { edgeIds.push(e.id); });
+      assert(edgeIds.indexOf('e_SL-072_governed_by_ADR-001') !== -1, 'normalizeGraph: governed_by edge id correct');
+      assert(edgeIds.indexOf('e_SL-072_needs_SL-071') !== -1, 'normalizeGraph: needs edge id correct');
+
+      /* check incoming */
+      var adrIncoming = state.graph.incoming.get('ADR-001');
+      assert(adrIncoming !== undefined, 'normalizeGraph: ADR-001 has incoming');
+      assert(adrIncoming.length === 1, 'normalizeGraph: ADR-001 has 1 incoming edge');
+      assert(adrIncoming[0].source === 'SL-072', 'normalizeGraph: ADR-001 incoming from SL-072');
+
+      var sl71Incoming = state.graph.incoming.get('SL-071');
+      assert(sl71Incoming !== undefined, 'normalizeGraph: SL-071 has incoming');
+      assert(sl71Incoming.length === 1, 'normalizeGraph: SL-071 has 1 incoming edge');
+
+      /* check outgoing */
+      var sl72Outgoing = state.graph.outgoing.get('SL-072');
+      assert(sl72Outgoing !== undefined, 'normalizeGraph: SL-072 has outgoing');
+      assert(sl72Outgoing.length === 2, 'normalizeGraph: SL-072 has 2 outgoing edges');
+    })();
+
+    /* --- normalizeGraph: unresolved edge filtering --- */
+    (function() {
+      var raw = {
+        nodes: { 'SL-001': { title: 'Test', status: 'done', kind_label: 'slice' } },
+        edges: [
+          { source: { prefix: 'SL', id: 1 }, label: 'x', target: { Unresolved: 'MISSING' }, origin: {} }
+        ]
+      };
+      model.normalizeGraph(raw);
+      assert(state.graph.edges.length === 0, 'normalizeGraph: unresolved edge filtered out');
+      assert(state.graph.edgeById.size === 0, 'normalizeGraph: unresolved edge not in edgeById');
+    })();
+
+    /* --- neighbourhood --- */
+    (function() {
+      var raw = {
+        nodes: {
+          'SL-001': { title: 'A', status: 'done', kind_label: 'slice' },
+          'SL-002': { title: 'B', status: 'done', kind_label: 'slice' },
+          'SL-003': { title: 'C', status: 'done', kind_label: 'slice' },
+          'SL-004': { title: 'D', status: 'done', kind_label: 'slice' }
+        },
+        edges: [
+          { source: { prefix: 'SL', id: 1 }, label: 'needs', target: { Resolved: { prefix: 'SL', id: 2 } }, origin: {} },
+          { source: { prefix: 'SL', id: 2 }, label: 'needs', target: { Resolved: { prefix: 'SL', id: 3 } }, origin: {} },
+          { source: { prefix: 'SL', id: 3 }, label: 'needs', target: { Resolved: { prefix: 'SL', id: 4 } }, origin: {} }
+        ]
+      };
+      model.normalizeGraph(raw);
+      var g = state.graph;
+
+      /* depth 0 */
+      var n0 = model.neighbourhood('SL-001', 0, g);
+      assert(n0.nodes.size === 1 && n0.nodes.has('SL-001'), 'neighbourhood: depth 0 returns only focus');
+      assert(n0.edges.length === 0, 'neighbourhood: depth 0 returns empty edges');
+
+      /* depth 1 */
+      var n1 = model.neighbourhood('SL-001', 1, g);
+      assert(n1.nodes.has('SL-001') && n1.nodes.has('SL-002'), 'neighbourhood: depth 1 includes focus + 1 neighbour');
+      assert(n1.nodes.size === 2, 'neighbourhood: depth 1 has 2 nodes');
+      assert(n1.edges.length === 1, 'neighbourhood: depth 1 has 1 edge');
+
+      /* depth 2 */
+      var n2 = model.neighbourhood('SL-001', 2, g);
+      assert(n2.nodes.has('SL-003'), 'neighbourhood: depth 2 reaches SL-003');
+      assert(n2.nodes.size === 3, 'neighbourhood: depth 2 has 3 nodes');
+
+      /* depth 3 */
+      var n3 = model.neighbourhood('SL-001', 3, g);
+      assert(n3.nodes.has('SL-004'), 'neighbourhood: depth 3 reaches SL-004');
+      assert(n3.nodes.size === 4, 'neighbourhood: depth 3 has 4 nodes');
+
+      /* depth clamp */
+      var nClampLo = model.neighbourhood('SL-001', -1, g);
+      assert(nClampLo.nodes.size === 1 && nClampLo.edges.length === 0, 'neighbourhood: depth -1 clamped to 0');
+
+      var nClampHi = model.neighbourhood('SL-001', 5, g);
+      assert(nClampHi.nodes.size === 4, 'neighbourhood: depth 5 clamped to 3');
+
+      /* disconnected node */
+      var raw2 = {
+        nodes: { 'SL-099': { title: 'Isolated', status: 'done', kind_label: 'slice' } },
+        edges: []
+      };
+      model.normalizeGraph(raw2);
+      var nDisc = model.neighbourhood('SL-099', 2, state.graph);
+      assert(nDisc.nodes.size === 1 && nDisc.nodes.has('SL-099'), 'neighbourhood: disconnected node at depth 2 returns only itself');
+
+      /* cyclic (A→B, B→A) does not infinite loop */
+      var raw3 = {
+        nodes: {
+          'SL-010': { title: 'A', status: 'done', kind_label: 'slice' },
+          'SL-011': { title: 'B', status: 'done', kind_label: 'slice' }
+        },
+        edges: [
+          { source: { prefix: 'SL', id: 10 }, label: 'needs', target: { Resolved: { prefix: 'SL', id: 11 } }, origin: {} },
+          { source: { prefix: 'SL', id: 11 }, label: 'after', target: { Resolved: { prefix: 'SL', id: 10 } }, origin: {} }
+        ]
+      };
+      model.normalizeGraph(raw3);
+      var nCyc = model.neighbourhood('SL-010', 3, state.graph);
+      assert(nCyc.nodes.size === 2, 'neighbourhood: cyclic graph terminates with both nodes');
+    })();
+
+    /* --- resolveFocus --- */
+    (function() {
+      var raw = {
+        nodes: {
+          'SL-072': { title: 'Doctrine Map Server', status: 'done', kind_label: 'slice' },
+          'ADR-001': { title: 'Module layering', status: 'accepted', kind_label: 'adr' },
+          'SL-010': { title: 'Something Else', status: 'started', kind_label: 'slice' }
+        },
+        edges: []
+      };
+      model.normalizeGraph(raw);
+      var g = state.graph;
+
+      /* null → first sorted node (ADR-001 comes before SL-*) */
+      var rNull = model.resolveFocus(null, g);
+      assertEqual(rNull, 'ADR-001', 'resolveFocus: null → first sorted node (ADR-001)');
+
+      /* empty string */
+      var rEmpty = model.resolveFocus('', g);
+      assertEqual(rEmpty, 'ADR-001', 'resolveFocus: empty string → first sorted node');
+
+      /* exact match */
+      var rExact = model.resolveFocus('SL-072', g);
+      assertEqual(rExact, 'SL-072', 'resolveFocus: exact match SL-072');
+
+      /* case-insensitive */
+      var rCase = model.resolveFocus('sl-072', g);
+      assertEqual(rCase, 'SL-072', 'resolveFocus: case-insensitive sl-072');
+
+      /* loose canonical */
+      var rLoose1 = model.resolveFocus('SL72', g);
+      assertEqual(rLoose1, 'SL-072', 'resolveFocus: loose canonical SL72 → SL-072');
+
+      var rLoose2 = model.resolveFocus('SL 72', g);
+      assertEqual(rLoose2, 'SL-072', 'resolveFocus: loose canonical "SL 72" → SL-072');
+
+      var rLoose3 = model.resolveFocus('sl-72', g);
+      assertEqual(rLoose3, 'SL-072', 'resolveFocus: loose canonical sl-72 → SL-072');
+
+      var rLoose4 = model.resolveFocus('SL010', g);
+      assertEqual(rLoose4, 'SL-010', 'resolveFocus: loose canonical SL010 → SL-010');
+
+      /* title match */
+      var rTitle = model.resolveFocus('Module layering', g);
+      assertEqual(rTitle, 'ADR-001', 'resolveFocus: exact title match → ADR-001');
+
+      var rTitleCase = model.resolveFocus('module layering', g);
+      assertEqual(rTitleCase, 'ADR-001', 'resolveFocus: title case-insensitive');
+
+      /* substring match */
+      var rSub = model.resolveFocus('map', g);
+      assertEqual(rSub, 'SL-072', 'resolveFocus: substring "map" → SL-072');
+
+      /* fallback */
+      var rFb = model.resolveFocus('zzz_nonexistent', g);
+      assertEqual(rFb, 'ADR-001', 'resolveFocus: fallback to first sorted node');
+    })();
+
+    /* --- findFocus --- */
+    (function() {
+      var raw = {
+        nodes: {
+          'SL-072': { title: 'Doctrine Map Server', status: 'done', kind_label: 'slice' },
+          'ADR-001': { title: 'Module layering', status: 'accepted', kind_label: 'adr' }
+        },
+        edges: []
+      };
+      model.normalizeGraph(raw);
+      var g = state.graph;
+
+      /* null → first sorted */
+      assertEqual(model.findFocus(null, g), 'ADR-001', 'findFocus: null → first sorted');
+
+      /* exact match */
+      assertEqual(model.findFocus('SL-072', g), 'SL-072', 'findFocus: exact match');
+
+      /* loose canonical */
+      assertEqual(model.findFocus('SL72', g), 'SL-072', 'findFocus: loose canonical');
+
+      /* no match → null */
+      assertEqual(model.findFocus('nonexistent', g), null, 'findFocus: no match → null (no fallback!)');
+    })();
+
+    /* --- searchFilter --- */
+    (function() {
+      var raw = {
+        nodes: {
+          'SL-072': { title: 'Doctrine Map Server', status: 'done', kind_label: 'slice' },
+          'ADR-001': { title: 'Module layering', status: 'accepted', kind_label: 'adr' },
+          'SL-010': { title: 'Something Else', status: 'started', kind_label: 'slice' }
+        },
+        edges: []
+      };
+      model.normalizeGraph(raw);
+      var g = state.graph;
+
+      /* empty → all sorted */
+      var all = model.searchFilter('', g);
+      assert(all.length === 3, 'searchFilter: empty returns all 3 nodes');
+      assert(all[0].id === 'ADR-001', 'searchFilter: first in sort is ADR-001');
+
+      /* null → all sorted */
+      var allNull = model.searchFilter(null, g);
+      assert(allNull.length === 3, 'searchFilter: null returns all 3 nodes');
+
+      /* substring in id */
+      var idMatch = model.searchFilter('SL-072', g);
+      assert(idMatch.length === 1 && idMatch[0].id === 'SL-072', 'searchFilter: exact id match');
+
+      /* substring in title */
+      var titleMatch = model.searchFilter('layering', g);
+      assert(titleMatch.length === 1 && titleMatch[0].id === 'ADR-001', 'searchFilter: substring in title');
+
+      /* case-insensitive */
+      var caseMatch = model.searchFilter('map', g);
+      assert(caseMatch.length === 1 && caseMatch[0].id === 'SL-072', 'searchFilter: case-insensitive "map"');
+
+      /* multiple matches sorted */
+      var multi = model.searchFilter('SL', g);
+      assert(multi.length === 2, 'searchFilter: "SL" matches 2');
+      assert(multi[0].id === 'SL-010', 'searchFilter: sorted SL-010 before SL-072');
+
+      /* no match */
+      var none = model.searchFilter('zzzzzz', g);
+      assert(none.length === 0, 'searchFilter: no match returns empty');
+    })();
+
+    /* --- kinds --- */
+    (function() {
+      var raw = {
+        nodes: {
+          'SL-072': { title: 'A', status: 'done', kind_label: 'slice' },
+          'SL-071': { title: 'B', status: 'done', kind_label: 'slice' },
+          'ADR-001': { title: 'C', status: 'accepted', kind_label: 'adr' }
+        },
+        edges: []
+      };
+      model.normalizeGraph(raw);
+      var k = model.kinds(state.graph.nodes);
+
+      assert(k.get('ADR') === 1, 'kinds: ADR count = 1');
+      assert(k.get('SL') === 2, 'kinds: SL count = 2');
+
+      /* sorted alphabetically */
+      var keys = [];
+      k.forEach(function(_, key) { keys.push(key); });
+      assert(keys[0] === 'ADR', 'kinds: ADR before SL (alpha sort)');
+      assert(keys[1] === 'SL', 'kinds: SL after ADR');
+    })();
+
+    /* --- router.parseHash / buildHash --- */
+    (function() {
+      /* setup mock location */
+      var savedHash = window.location.hash;
+      var savedDepth = state.depth;
+
+      /* Test parseHash with no hash */
+      window.location.hash = '';
+      var p1 = router.parseHash();
+      assertEqual(p1, { view: 'focus', id: null, depth: state.depth }, 'parseHash: empty hash → focus default');
+
+      /* #/focus/SL-072 */
+      window.location.hash = '#/focus/SL-072';
+      var p2 = router.parseHash();
+      assertEqual(p2, { view: 'focus', id: 'SL-072', depth: state.depth }, 'parseHash: #/focus/SL-072');
+
+      /* #/focus/SL-072?depth=2 */
+      window.location.hash = '#/focus/SL-072?depth=2';
+      var p3 = router.parseHash();
+      assertEqual(p3, { view: 'focus', id: 'SL-072', depth: 2 }, 'parseHash: #/focus/SL-072?depth=2');
+
+      /* #/edge/e_SL-072_needs_SL-071 */
+      window.location.hash = '#/edge/e_SL-072_needs_SL-071';
+      var p4 = router.parseHash();
+      assertEqual(p4, { view: 'edge', id: 'e_SL-072_needs_SL-071', depth: state.depth }, 'parseHash: #/edge/e_SL-072_needs_SL-071');
+
+      /* #/edge/e_SL-072_needs_SL-071?depth=3 */
+      window.location.hash = '#/edge/e_SL-072_needs_SL-071?depth=3';
+      var p5 = router.parseHash();
+      assertEqual(p5, { view: 'edge', id: 'e_SL-072_needs_SL-071', depth: 3 }, 'parseHash: #/edge/...?depth=3');
+
+      /* buildHash omits ?depth when depth === state.depth */
+      window.location.hash = '';
+      var built = router.buildHash('focus', 'SL-072', state.depth);
+      assert(built === '#/focus/SL-072', 'buildHash: omits ?depth when depth === state.depth');
+
+      /* buildHash includes ?depth when different */
+      var builtDiff = router.buildHash('focus', 'SL-072', 2);
+      assert(builtDiff === '#/focus/SL-072?depth=2', 'buildHash: includes ?depth=2 when different');
+
+      /* round-trip: buildHash → parseHash when depth differs from default */
+      window.location.hash = router.buildHash('focus', 'SL-071', 2);
+      var rt = router.parseHash();
+      assertEqual(rt, { view: 'focus', id: 'SL-071', depth: 2 }, 'round-trip: focus SL-071 depth=2');
+
+      window.location.hash = router.buildHash('edge', 'e_SL-072_needs_SL-071', 3);
+      var rtEdge = router.parseHash();
+      assertEqual(rtEdge, { view: 'edge', id: 'e_SL-072_needs_SL-071', depth: 3 }, 'round-trip: edge depth=3');
+
+      /* garbage hash falls back */
+      window.location.hash = '#/garbage';
+      var p6 = router.parseHash();
+      assertEqual(p6, { view: 'focus', id: null, depth: state.depth }, 'parseHash: garbage hash fallback');
+
+      /* edge with hyphens in id */
+      window.location.hash = '#/edge/e_SL-072_needs_SL-071';
+      var p7 = router.parseHash();
+      assertEqual(p7, { view: 'edge', id: 'e_SL-072_needs_SL-071', depth: state.depth }, 'parseHash: edge id with hyphens');
+
+      /* restore */
+      window.location.hash = savedHash;
+    })();
+
+    /* --- router.setFocus / setEdge --- */
+    (function() {
+      var hashBefore = window.location.hash;
+      router.setFocus('SL-072');
+      assert(window.location.hash === '#/focus/SL-072', 'setFocus: sets focus hash');
+      router.setFocus('SL-071', 2);
+      assert(window.location.hash === '#/focus/SL-071?depth=2', 'setFocus: sets focus with depth');
+
+      router.setEdge('e_SL-072_needs_SL-071');
+      assert(window.location.hash === '#/edge/e_SL-072_needs_SL-071', 'setEdge: sets edge hash');
+      router.setEdge('e_SL-072_needs_SL-071', 3);
+      assert(window.location.hash === '#/edge/e_SL-072_needs_SL-071?depth=3', 'setEdge: sets edge with depth');
+
+      /* restore */
+      window.location.hash = hashBefore;
+    })();
+
+    /* --- report --- */
+    resultsEl.textContent = pass + '/' + (pass + fail) + ' assertions passed';
+    if (fail > 0) {
+      resultsEl.textContent += '\n\n' + messages.join('\n');
+    } else {
+      resultsEl.textContent += '\n\nAll tests passed!';
+    }
+  </script>
+</body>
+</html>
