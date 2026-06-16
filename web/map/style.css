@@ -225,6 +225,27 @@ a { color: var(--link); }
   border-color: var(--kind-SL);
 }
 
+/* Table visibility toggle */
+.table-toggle {
+  margin-bottom: 1rem;
+}
+
+.table-toggle label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.table-toggle input {
+  margin-right: 0.3rem;
+  vertical-align: middle;
+}
+
+.relationship-table.hidden {
+  display: none;
+}
+
 /* ---------------------------------------------------------------------------
  * Entity list
  * ------------------------------------------------------------------------- */
