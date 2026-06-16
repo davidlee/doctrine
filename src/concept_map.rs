@@ -28,13 +28,13 @@ use std::collections::BTreeMap;
 /// Relative dir of the concept-map tree inside the project root.
 const CONCEPT_MAP_DIR: &str = ".doctrine/concept-map";
 
-/// Statuses for concept maps (SL-074 § Memory: simple drafting lifecycle).
-const CONCEPT_MAP_STATUSES: &[&str] = &["draft", "active", "done", "abandoned"];
+/// Statuses for concept maps — authored-artifact lifecycle (SL-074 design §2).
+const CONCEPT_MAP_STATUSES: &[&str] = &["draft", "accepted", "superseded"];
 
-/// The `concept-map list` hide-set: terminal (`done`, `abandoned`) drop from the
-/// default list. `--all` or any explicit `--status` reveals them.
+/// The `concept-map list` hide-set: `superseded` drops from the default list.
+/// `--all` or an explicit `--status` reveals it.
 fn is_hidden(status: &str) -> bool {
-    matches!(status, "done" | "abandoned")
+    matches!(status, "superseded")
 }
 
 /// The top-level reserved concept-map kind: toml + md + slug symlink.
@@ -517,7 +517,8 @@ fn check(parsed: &ParsedConceptMap) -> Vec<ConceptMapDiagnostic> {
     }
 
     // EntityRefLike - labels that look like canonical entity refs.
-    let Ok(ref_re) = Regex::new(r"[A-Z]{2,5}-\d{3}") else {
+    // Anchored: must be exactly the pattern, not a substring.
+    let Ok(ref_re) = Regex::new(r"^[A-Z]{2,5}-\d{3}$") else {
         return diagnostics;
     };
     for (label, &line) in &label_lines {
@@ -1179,7 +1180,8 @@ pub(crate) fn run_add(
     if is_duplicate && !force {
         writeln!(
             io::stdout(),
-            "edge already exists: {source_trim} > {rel_trim} > {target_trim}"
+            "edge already exists at line {}: {source_trim} > {rel_trim} > {target_trim}",
+            parsed.edges.iter().find(|e| e.from_label == source_trim && e.rel == rel_trim && e.to_label == target_trim).map_or(0, |e| e.line)
         )?;
         return Ok(());
     }
@@ -1503,11 +1505,11 @@ mod tests {
         let root = tmp.path();
 
         run_new(Some(root.to_path_buf()), Some("Active One".into()), None).unwrap();
-        // Simulate a done concept map by changing the status in the TOML
+        // Simulate a superseded concept map by changing the status in the TOML
         let cm_root = root.join(CONCEPT_MAP_DIR);
         let toml_path = cm_root.join("001").join("concept-map-001.toml");
         let text = std::fs::read_to_string(&toml_path).unwrap();
-        let replaced = text.replace("draft", "done");
+        let replaced = text.replace("draft", "superseded");
         std::fs::write(&toml_path, replaced).unwrap();
 
         // With --all it should appear
@@ -1607,7 +1609,7 @@ mod tests {
     fn concept_map_statuses_matches_expected_variants() {
         assert_eq!(
             CONCEPT_MAP_STATUSES,
-            &["draft", "active", "done", "abandoned"]
+            &["draft", "accepted", "superseded"]
         );
     }
 
@@ -1789,13 +1791,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_dsl_canonical_node_collision() {
+    fn parse_dsl_non_colliding_labels_no_diagnostic() {
+        // "User" → "user", "Us er" → "us-er" — different keys, no collision.
         let parsed = parse_dsl("User > creates > Document\nUs er > reads > Document");
-        // "User" → "user", "Us er" → "us-er" - not the same key
-        // Let's use labels that DO collide: "User" and "US ER" both → "us-er"? No.
-        // "User" → "user", "US ER" → "us-er". Hmm, those don't collide.
-        // Actually: "User" → "user", "UsEr" → "user" (non-alpha chars stripped).
-        // Let's use a clear case: "A B" and "A_B" both → "a-b"
         assert!(parsed.diagnostics.is_empty());
     }
 
