@@ -1,0 +1,61 @@
+id    = 47
+slug  = "plan-review-of-sl-080"
+title = "plan review of SL-080"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "plan"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-080"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "EN criteria contradict stated sequencing rationale — PHASE-02 and PHASE-03 gate on PHASE-01 but plan.md says they 'could theoretically run in parallel'"
+detail = "plan.md §Sequencing: 'PHASE-02 (audit retune) and PHASE-03 (close retune) ... are file-disjoint (audit SKILL.md vs close SKILL.md) and could theoretically run in parallel.' Yet both PHASE-02 EN-1 and PHASE-03 EN-1 gate on 'PHASE-01 complete' as a hard entrance criterion. If they could genuinely run in parallel, the EN criteria should not hard-gate on PHASE-01. The plan.md's honest reason is narrative coherence ('serial execution with short phases keeps the prose coherent across files'), not a structural dependency — but the EN criteria encode it as a structural dependency. Either the EN criteria are wrong (they should not gate on PHASE-01), or the plan.md prose is wrong (they cannot run in parallel). The two statements cannot both be true."
+disposition = "fix-now"
+response = "The EN criteria encode a hard structural dependency where plan.md admits a soft narrative dependency. Fix: rewrite PHASE-02 EN-1 and PHASE-03 EN-1 to either (a) name the honest soft reason — 'PHASE-01 complete so audit/close prose can cross-reference the written reconcile skill concretely' — or (b) drop PHASE-01 from the EN criteria entirely and note the advisory sequencing in plan.md prose. Either path resolves the contradiction; (a) is preferred because it preserves the plan.md's stated sequencing judgment without lying about it being a hard gate."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "D9 principle has no explicit EX coverage in PHASE-01 — 'no new issue discovery' / 'target inspection allowed' stated as settled in EN-1 but never demanded in any exit criterion"
+detail = "Design D9 says: 'Reconcile does not perform new issue discovery. It may inspect target artefacts only to validate applicability, locate edit points, detect drift since audit, and perform the authored write.' PHASE-01 EN-1 lists D9 among the settled design decisions, but none of the EX criteria (EX-1 through EX-6) explicitly require the reconcile skill to state this principle. EX-2 covers 'all 7 process steps from D4' — step 1 is 'Read inputs' but that is a narrower concept than the D9 principle. The skill could comply with all EX criteria yet never state that it does not re-audit. A seventh EX criterion should demand this principle, or EX-2 should be widened to include D9's inspect-but-don't-rediscover contract."
+disposition = "fix-now"
+response = "D9 is a design decision with compliance risk: a skill that omits 'does not re-audit' and 'may inspect targets for safe application' would satisfy all current EX criteria yet violate the design. Fix: add EX-7 to PHASE-01 demanding the D9 principle be stated in the skill prose: 'Reconcile does not perform new issue discovery; it inspects targets only to validate applicability, locate edit points, detect drift, and perform the authored write.' Or widen EX-2 to include D9's inspect-but-don't-rediscover contract alongside the 7-step process."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "PHASE-03 EN-2 delegates stale-prose verification to IMP-008 by reference without restating the four items — implementer must cross-reference an external backlog document"
+detail = "PHASE-03 EN-2: 'IMP-008 stale-prose list reviewed — current close SKILL.md verified against the four concrete items (tooling-gaps callout, hand-edit direction, audit.md references, close-gate framing). Confirm items 1–4 are already addressed; note any residual.' The four items are parenthetically named but their full text lives in IMP-008's prose body (backlog-008.md). An implementer who reads only the plan must either trust the summary or cross-reference. The plan should either restate the four items inline (since they are concrete and short) or cite the exact lines in IMP-008.md. VA-3 and VA-4 in PHASE-03 repeat the verification intent but also don't restate the items. Risk: an implementer who skips the cross-reference could miss a regressed item."
+disposition = "fix-now"
+response = "An implementer reading only the plan should see the four items inline, not hunt through a backlog body. Fix: restate the four stale-prose items from IMP-008.md directly in PHASE-03 EN-2 or in plan.md notes, with IMP-008 cited as provenance. The items are: (1) tooling-gaps callout claims no lifecycle transition verb — false since SL-040; (2) hand-edit slice-NNN.toml direction — use doctrine slice status verb instead; (3) audit.md references — retired by SL-040, input is RV-NNN; (4) close-gate framing — verb enforces, skill verifies. These four lines added to the plan eliminate the cross-reference risk."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Cross-skill coherence check (VA-3) deferred to PHASE-04 — incoherence discovered at the final phase requires backtracking through three phases"
+detail = "PHASE-04 VA-3: 'The three skills form a coherent chain in prose: audit identifies → reconcile writes → close confirms; cross-references are consistent across all three files.' This is the ONLY coherence check across all three skills, and it runs at the final phase after all three are written. If PHASE-01's reconcile skill references a shape that PHASE-02's audit prose doesn't match, or PHASE-03's close gate references a reconcile outcome that PHASE-01 didn't define, the discrepancy is discovered at the end when all three are already 'complete.' Backtracking through three completed phases to fix a prose misalignment is wasteful. The plan should either (a) add lightweight forward-coherence checks at PHASE-02 (verify that audit's brief shape matches the reconcile skill's consumption shape) and PHASE-03 (verify that close's gate references reconcile outcomes the reconcile skill actually produces), or (b) accept the risk explicitly in the plan notes."
+disposition = "tolerated"
+response = "The backtracking risk is real but the phases are small (each is a single SKILL.md prose edit). Adding forward-coherence checks at PHASE-02 and PHASE-03 adds ceremony disproportionate to the cost of a late-stage prose fix — a misalignment between skill files is a few-line edit, not a redesign. Consciously tolerated. The plan.md notes should acknowledge this risk: 'Cross-skill coherence is verified at PHASE-04; if a prose misalignment is discovered, the affected phase(s) may need a minor revision.'"
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "PHASE-02 EN-1 rationale is circular — claims brief shape is 'confirmed against D3' by having PHASE-01 done, but D3 is the design, not the skill"
+detail = "PHASE-02 EN-1: 'PHASE-01 complete — /reconcile skill exists, so reconciliation brief shape is confirmed against D3.' Having the /reconcile skill written does not 'confirm' the brief shape — the brief shape is defined in design D3, which was locked before planning. The skill CONSUMES the brief; it does not define it. The honest reason for sequencing PHASE-01 before PHASE-02 is narrative coherence (plan.md: 'having the reconcile skill already written lets audit's handoff prose cross-reference it concretely'), which is a legitimate soft dependency. The EN-1 rationale should be rewritten to match the honest reason rather than inventing a structural dependency that does not exist."
+disposition = "fix-now"
+response = "The EN-1 rationale should match the plan.md's honest sequencing reason. Fix: rewrite PHASE-02 EN-1 to: 'PHASE-01 complete — /reconcile skill written, so audit's handoff prose can cross-reference the concrete reconcile skill (its process steps, outcome sections, REV flow) rather than describing a deferred target.' This is the honest soft dependency plan.md already states."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

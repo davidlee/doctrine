@@ -22,6 +22,11 @@ plain `bool` into the pure layer (`listing.rs`). No new impurities.
 
 ### PHASE-01 — Foundation (IMP-038 + IMP-040)
 
+The phase includes an integration test proving the global `--color` flag
+traverses at least one existing `CommonListArgs` surface: `--color=always`
+emits ANSI even when piped, `--color=never` suppresses ANSI, and default
+`auto` keeps the existing piped golden plain (RV-046 F-7).
+
 Combines two independent but co-located changes:
 
 - **IMP-038** (column model validation): a single `debug_assert!` in
@@ -65,9 +70,10 @@ wired into five handler functions. Each handler resolves `color` once at
 the top and wraps the status word. Revision is the only dual-status
 surface — two `status_colored` calls joined by literal `" → "`.
 
-The `status_hue` map requires no modification — it already covers every
-token the five surfaces emit (`accepted`, `required`, `active`, `done`,
-`design`, `plan`, `started`, `abandoned`, `contested`, `blocked`).
+The `status_hue` map requires no modification — the five surfaces collectively
+emit every mapped token (green: `accepted`, `required`, `active`, `done`;
+yellow: `design`, `plan`, `ready`, `started`, `audit`, `reconcile`;
+red: `abandoned`, `contested`, `blocked`).
 Unmapped tokens (`proposed`, `draft`, `default`, `deprecated`, `retired`,
 `open`, `answered`, `obsolete`, `waived`, `held`, `testing`, `validated`,
 `invalidated`) stay grey deliberately — the map is a conservative subset

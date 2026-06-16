@@ -22,3 +22,32 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
   code tests were run; this was a plan/review-only task.
 - Review and memory changes are uncommitted; the worktree already contained
   unrelated dirty files before this review.
+
+## 2026-06-17 — Penance applied (RV-046 synthesis)
+
+All seven F-1 through F-7 findings from RV-046 applied:
+
+- **F-1 (fix-now):** PHASE-03 EX-2: ADR `proposed` is plain (unmapped), not
+  yellow; `accepted` is green. VT-4: complete `status_hue` mapped set (13
+  tokens across green/yellow/red).
+- **F-2 (design-wrong):** Removed "case-insensitive" claim from design.md §5
+  and plan.toml VT-3. clap accepts lowercase value enum tokens only without
+  `ignore_case = true`. Memory `mem.fact.clap.colorchoice-case-sensitive` records
+  the gotcha.
+- **F-3 (design-wrong):** Narrowed VT-2 to direct `Never`/`Always` tests +
+  `Auto` delegates to `stdout_color_enabled`; existing `color_enabled` tests
+  cover the NO_COLOR/tty matrix. Design §7 updated.
+- **F-4 (fix-now):** Added EX-9 to PHASE-03: `main.rs` resolves
+  `tty::resolve_color(cli.color)` at each status command arm and passes
+  `color: bool` into the five `run_status` handlers.
+- **F-5 (fix-now):** Replaced PHASE-03 VA-1/VA-2/VA-3 with temp-root fixture
+  commands using actual CLI shapes and bound fixture ids.
+- **F-6 (design-wrong):** Replaced install/reconcile/corpus with
+  standard/knowledge/revision in slice-079.md affected-surface and closure-intent
+  sections (three locations).
+- **F-7 (fix-now):** Added VT-5 to PHASE-01: integration evidence for
+  `--color=always`/`--color=never` on at least one existing `CommonListArgs`
+  surface.
+
+`doctrine validate` passes clean. Plan is now executable — ready for
+`/phase-plan`.

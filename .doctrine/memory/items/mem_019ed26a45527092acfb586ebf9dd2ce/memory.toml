@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed26a45527092acfb586ebf9dd2ce"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "EN criteria must name the honest dependency — do not invent structural gates for soft sequencing"
+summary = ""
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["planning", "phase-plan", "heresy"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ece88cdcaa79e7fe2dd5cc8edbc94abacdfe4cff"
+ref_name = "refs/heads/main"
+checkout_state_id = "1479d96bd78db27e8cbb7236c81e6714c2326840b2745ee55af4899d463c2ebb"
+base_commit = "8520594328eb4e91b5f1948cee7382805d33c62d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

@@ -1,0 +1,19 @@
+id = 82
+slug = "dispose-doc-legacy"
+title = "Dispose of doc/* as legacy heretical practice; rehome & archive"
+status = "design"
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[relationships]
+needs = ["SL-021"]              # slice→work hard prerequisite: content must be rehomed before disposal
+after = []                      # slice→work soft sequence: { to, rank }
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.

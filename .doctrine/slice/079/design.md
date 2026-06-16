@@ -233,7 +233,7 @@ color: clap::ColorChoice,
 ```
 
 `clap::ColorChoice` provides `Auto`/`Always`/`Never` with built-in
-`ValueEnum` parsing (case-insensitive: `auto`, `always`, `never`). No custom
+`ValueEnum` parsing (lowercase tokens `auto`/`always`/`never`). No custom
 enum needed.
 
 ### Injection into existing list surfaces
@@ -329,10 +329,10 @@ New / changed evidence:
 
 - **Column model (VT):** test panics when a `Column` array defines a default not
   in its `available` set. Test passes when all defaults are valid. (IMP-038)
-- **`resolve_color` (VT):** pure-table test over all 3 modes × the 2 tty arms:
-  `Never` → false regardless; `Always` → true regardless; `Auto` → defers to
-  `color_enabled(no_color, is_tty)`. The pure `color_enabled` already has
-  coverage. (IMP-040)
+- **`resolve_color` (VT):** `Never` → false directly testable; `Always` →
+  true directly testable; `Auto` delegates to `stdout_color_enabled()`. The
+  pure `color_enabled(no_color, is_tty)` already covers the full NO_COLOR ×
+  tty matrix. (IMP-040)
 - **`status_colored` (VT):** mapped status + `color: true` → ANSI present;
   unmapped status + `color: true` → plain; any status + `color: false` → plain.
   (IMP-039b)
