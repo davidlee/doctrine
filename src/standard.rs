@@ -164,6 +164,7 @@ pub(crate) fn run_status(
     path: Option<PathBuf>,
     id: u32,
     status: StandardStatus,
+    color: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let gov_root = root.join(STANDARD_KIND.kind.dir);
@@ -174,7 +175,7 @@ pub(crate) fn run_status(
         status.as_str(),
         &crate::clock::today(),
     )?;
-    writeln!(io::stdout(), "STD {id:03}: {}", status.as_str())?;
+    writeln!(io::stdout(), "STD {id:03}: {}", crate::listing::status_colored(status.as_str(), color))?;
     Ok(())
 }
 

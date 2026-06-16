@@ -573,6 +573,7 @@ pub(crate) fn run_status(
     path: Option<PathBuf>,
     reference: &str,
     state: RevStatus,
+    color: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let rev_root = root.join(REV_DIR);
@@ -581,7 +582,12 @@ pub(crate) fn run_status(
     // Gate in the shell, BEFORE the write: the REV-local legal-transition guard.
     validate_transition(from, state)?;
     set_revision_status(&rev_root, id, state, &crate::clock::today())?;
-    writeln!(io::stdout(), "{} → {}", from.as_str(), state.as_str())?;
+    writeln!(
+        io::stdout(),
+        "{} → {}",
+        crate::listing::status_colored(from.as_str(), color),
+        crate::listing::status_colored(state.as_str(), color)
+    )?;
     Ok(())
 }
 

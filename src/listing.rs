@@ -352,6 +352,21 @@ pub(crate) fn status_hue(s: &str) -> Option<owo_colors::DynColors> {
     }
 }
 
+/// Wrap a status token in ANSI colour via the shared [`status_hue`] map, gated
+/// on the injected `color` bool. Pure — both inputs injected. When `color` is
+/// false, returns the status unchanged (zero ANSI). When `color` is true and a
+/// status is unmapped in [`status_hue`], returns it unchanged (no colour).
+pub(crate) fn status_colored(status: &str, color: bool) -> String {
+    use owo_colors::OwoColorize;
+    if !color {
+        return status.to_string();
+    }
+    match status_hue(status) {
+        Some(hue) => status.color(hue).to_string(),
+        None => status.to_string(),
+    }
+}
+
 /// Backlog item kind → hue: a distinct, stable ANSI colour per kind.
 /// `issue`/`improvement`/`chore`/`risk`/`idea`; unknown kind → `None`.
 pub(crate) fn backlog_kind_hue(kind: &str) -> Option<owo_colors::DynColors> {
@@ -1670,6 +1685,49 @@ mod tests {
             None,
             "in_progress is a phase status, not a painted status cell"
         );
+    }
+
+    // -- status_colored --------------------------------------------------
+
+    /// VT-1: mapped status + color:true → ANSI present.
+    #[test]
+    fn status_colored_mapped_status_with_color_produces_ansi() {
+        let s = status_colored("accepted", true);
+        assert!(s.contains('\u{1b}'), "accepted+color → ANSI present: {s:?}");
+        assert!(s.contains("accepted"), "the status word is still in there: {s:?}");
+    }
+
+    /// VT-2: unmapped status + color:true → plain.
+    #[test]
+    fn status_colored_unmapped_status_produces_plain() {
+        let s = status_colored("bogus", true);
+        assert_eq!(s, "bogus");
+        assert!(!s.contains('\u{1b}'));
+    }
+
+    /// VT-3: any status + color:false → plain.
+    #[test]
+    fn status_colored_without_color_produces_plain() {
+        assert_eq!(status_colored("accepted", false), "accepted");
+        assert_eq!(status_colored("bogus", false), "bogus");
+        assert_eq!(status_colored("", false), "");
+    }
+
+    /// VT-4: the complete status_hue mapped set produces ANSI under color:true.
+    #[test]
+    fn status_colored_every_mapped_token_produces_ansi() {
+        for green in ["done", "active", "accepted", "required"] {
+            let s = status_colored(green, true);
+            assert!(s.contains('\u{1b}'), "{green} + color → ANSI");
+        }
+        for yellow in ["design", "plan", "ready", "started", "audit", "reconcile"] {
+            let s = status_colored(yellow, true);
+            assert!(s.contains('\u{1b}'), "{yellow} + color → ANSI");
+        }
+        for red in ["blocked", "abandoned", "contested"] {
+            let s = status_colored(red, true);
+            assert!(s.contains('\u{1b}'), "{red} + color → ANSI");
+        }
     }
 
     /// `paint_cell`'s `ByValue` arm reads the ROW and applies the returned hue;
