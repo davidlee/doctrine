@@ -1,0 +1,61 @@
+id    = 43
+slug  = "reconciliation-review-of-sl-078"
+title = "reconciliation review of SL-078"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-078"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "VT-1: spec-010 sweep - no stale skill references"
+detail = "Expected: zero 'skills install', 'skills list', or 'doctrine skills' in spec show SPEC-010 output. Observed: 0 matches (clean)."
+disposition = "aligned"
+response = "Observed behaviour matches design expectations; no gap."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "VT-2: REQ-177 title/slug/H1 correctness"
+detail = "Expected: title, slug, and H1 reflect claude install without skills list. Observed: all three match."
+disposition = "aligned"
+response = "Observed behaviour matches design expectations; no gap."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "VT-3: supersede recovery test passes"
+detail = "Expected: cargo test supersede_recovery_from_torn passes. Observed: test ok."
+disposition = "aligned"
+response = "Observed behaviour matches design expectations; no gap."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "VT-4: no production code changes"
+detail = "Expected: SL-078 commit e4d9eb3 touches only authored spec/req files and src/main.rs test code. Observed: 5 files, zero production .rs impact."
+disposition = "aligned"
+response = "Observed behaviour matches design expectations; no gap."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "VT-5: just check gate passes"
+detail = "Expected: just check clean. Observed: 1548 tests pass, clippy zero, fmt clean."
+disposition = "aligned"
+response = "Observed behaviour matches design expectations; no gap."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
