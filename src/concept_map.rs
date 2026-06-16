@@ -1140,6 +1140,13 @@ pub(crate) fn get_dsl(toml_text: &str) -> anyhow::Result<String> {
 }
 
 /// Set the `dsl` value in a concept-map TOML string, returning the modified TOML.
+/// Replace the `dsl` key value in the concept-map TOML document.
+///
+/// **Note:** this replaces the entire `dsl` item via `doc.insert("dsl", …)`,
+/// dropping any inline comment on the `dsl` key line (e.g.
+/// `dsl = '''…''' # my map`). All other keys and their inline comments are
+/// preserved. This is an accepted tradeoff — concept-map TOML files authored
+/// by `doctrine concept-map new` carry no inline comments on the `dsl` key.
 pub(crate) fn set_dsl(toml_text: &str, new_dsl: &str) -> anyhow::Result<String> {
     let mut doc: toml_edit::DocumentMut = toml_text.parse().context("Failed to parse TOML")?;
     doc.insert("dsl", toml_edit::value(new_dsl));

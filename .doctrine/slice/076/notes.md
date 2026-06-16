@@ -27,3 +27,23 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
   Acceptable for auxiliary content. Colours: bg `#2a2410`, border `#8b6914`,
   heading `#e0c060`, item `#c0a040`, item-border `#3a3410`.
 - **Phase completed without Rust changes** — pure frontend (JS + CSS).
+
+## Audit (RV-041, 2026-06-16)
+
+Self-audit, reconciliation facet. 4 findings raised and resolved. No blockers.
+
+### Findings dispositioned
+
+| F | Severity | Summary | Disposition |
+|---|---|---|---|
+| F-1 | minor | `set_dsl` missing rustdoc about dsl-key inline comment loss | fix-now — doc added |
+| F-2 | minor | `EdgeNotFound` bare unit variant (design wanted source/rel/target fields) | tolerated |
+| F-3 | nit | Mutation function signatures take DSL text not full TOML (design drift) | design-wrong |
+| F-4 | nit | `EmptyField` uses String instead of `&'static str` | tolerated |
+
+### Standing gotchas
+
+- `set_dsl` drops inline comments on the `dsl` key line (`dsl = """...""" # comment`). Accepted tradeoff — `doctrine concept-map new` produces no such comments. Now documented in rustdoc.
+- `remove_edge` removes only first matching line when duplicates exist (legacy hand-edited files may have them).
+- CLI `run_rename_node` uses case-insensitive label matching; web `rename_node_in_dsl` uses derived-key identity. Intentional — CLI to gain key-based matching in a follow-up.
+- Mutation functions take DSL text (not full TOML) — routes own the `get_dsl`/mutate/`set_dsl` orchestration. This is functionally equivalent to the design spec's intent and improves testability.
