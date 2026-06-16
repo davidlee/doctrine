@@ -13,10 +13,7 @@
   /* -----------------------------------------------------------------------
    * State
    * --------------------------------------------------------------------- */
-  var graphData = null;      // cached /api/graph response
-  var dotAvailable = false;  // from /api/health dot.ok
   var md = null;             // markdown-it instance (lazy)
-  var currentFocusId = null; // currently displayed entity (for re-render)
 
   /* -----------------------------------------------------------------------
    * Utilities
@@ -61,216 +58,251 @@
   }
 
   /* -----------------------------------------------------------------------
-   * Hash routing
+   * Interactive UI wiring (PHASE-05) — kind filter, search, depth, refresh,
+   * entity list, relationship table, focus header
    * --------------------------------------------------------------------- */
-  function parseHash() {
-    var h = location.hash.slice(1); // strip #
-    if (!h) return { view: 'list' };
+  function renderEntityList() {
+    var list = document.querySelector('.entity-list');
+    if (!list) return;
 
-    var match = h.match(/^\/focus\/([A-Z]+-\d+)(?:\?(.*))?$/);
-    if (match) {
-      var id = match[1];
-      var params = new URLSearchParams(match[2] || '');
-      var depth = parseInt(params.get('depth') || '1', 10);
-      return { view: 'focus', id: id, depth: depth };
+    var nodes = [];
+    state.graph.nodes.forEach(function(node) { nodes.push(node); });
+
+    if (state.kindFilter) {
+      nodes = nodes.filter(function(node) { return state.kindFilter.has(node.kindPrefix); });
     }
 
-    return { view: 'unknown' };
-  }
+    nodes.sort(function(a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
 
-  /* -----------------------------------------------------------------------
-   * API helpers
-   * --------------------------------------------------------------------- */
-  function apiGet(path) {
-    return fetch(path).then(function (r) {
-      if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
-      return r;
+    list.innerHTML = '';
+    nodes.forEach(function(node) {
+      var li = document.createElement('li');
+      li.className = 'entity-item';
+      if (node.id === state.focusId) li.classList.add('active');
+
+      var title = document.createElement('span');
+      title.className = 'entity-title';
+      title.textContent = node.title;
+      li.appendChild(title);
+
+      var pill = document.createElement('span');
+      pill.className = 'kind-pill';
+      pill.style.background = 'var(--kind-' + node.kindPrefix + ')';
+      pill.textContent = node.kindPrefix;
+      li.appendChild(pill);
+
+      li.addEventListener('click', (function(id) {
+        return function() { router.setFocus(id, state.depth); };
+      })(node.id));
+
+      list.appendChild(li);
     });
   }
 
-  function apiGetJSON(path) {
-    return apiGet(path).then(function (r) { return r.json(); });
-  }
+  function renderFocusHeader() {
+    var header = document.querySelector('.focus-header');
+    if (!header) return;
 
-  function apiGetText(path) {
-    return apiGet(path).then(function (r) { return r.text(); });
-  }
-
-  /* -----------------------------------------------------------------------
-   * Render: entity list view
-   * --------------------------------------------------------------------- */
-  function renderList(container) {
-    if (!graphData) {
-      container.innerHTML = '';
-      container.appendChild(el('p', { className: 'loading' }, ['Loading graph…']));
+    if (!state.focusId) {
+      header.innerHTML = '<span class="placeholder">Entity title — kind · status</span>';
       return;
     }
 
-    var nodes = graphData.nodes || {};
-    var ids = Object.keys(nodes).sort();
-
-    container.innerHTML = '';
-
-    var layout = el('div', { className: 'layout' });
-
-    // Sidebar
-    var sidebar = el('nav', { className: 'sidebar' });
-    sidebar.appendChild(el('h2', { textContent: 'Entities' }));
-    var list = el('ul', { className: 'entity-list' });
-    ids.forEach(function (id) {
-      var node = nodes[id];
-      var label = node && node.title ? id + ' — ' + node.title : id;
-      var li = el('li', {}, [
-        el('a', { href: '#/focus/' + id, textContent: label })
-      ]);
-      list.appendChild(li);
-    });
-    sidebar.appendChild(list);
-    layout.appendChild(sidebar);
-
-    // Main area — placeholder
-    var main = el('main', { className: 'content' });
-    main.appendChild(el('p', { className: 'placeholder', textContent: 'Select an entity from the sidebar.' }));
-    layout.appendChild(main);
-
-    // DOT editor
-    if (dotAvailable) {
-      layout.appendChild(renderDotEditor());
+    var node = state.graph.nodes.get(state.focusId);
+    if (!node) {
+      header.innerHTML = '<span class="placeholder">Entity title — kind · status</span>';
+      return;
     }
 
-    container.appendChild(layout);
+    header.innerHTML = '<span>' + escapeHtml(node.title) + '</span>' +
+      ' <span class="kind-pill" style="background:var(--kind-' + node.kindPrefix + ')">' + node.kindPrefix + '</span>' +
+      ' <span class="status">' + node.status + '</span>';
   }
 
-  /* -----------------------------------------------------------------------
-   * Render: focused entity view (markdown)
-   * --------------------------------------------------------------------- */
-  function renderFocus(container, id, depth) {
-    currentFocusId = id;
+  function renderRelationshipTable() {
+    var tbody = document.querySelector('.relationship-table tbody');
+    if (!tbody) return;
 
-    container.innerHTML = '';
+    if (!state.focusId) {
+      tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[Relationship table]</span></td></tr>';
+      return;
+    }
 
-    var layout = el('div', { className: 'layout' });
+    var nb = model.neighbourhood(state.focusId, state.depth, state.graph);
+    var edges = nb.edges;
 
-    // Sidebar — compact entity list
-    var sidebar = el('nav', { className: 'sidebar' });
-    sidebar.appendChild(el('h2', { textContent: 'Entities' }));
-    if (graphData) {
-      var ids = Object.keys(graphData.nodes || {}).sort();
-      var list = el('ul', { className: 'entity-list entity-list--compact' });
-      ids.forEach(function (sid) {
-        var node = graphData.nodes[sid];
-        var label = node && node.title ? sid + ' — ' + node.title : sid;
-        var className = sid === id ? 'active' : '';
-        var li = el('li', { className: className }, [
-          el('a', { href: '#/focus/' + sid, textContent: label })
-        ]);
+    if (state.kindFilter) {
+      edges = edges.filter(function(edge) {
+        var src = state.graph.nodes.get(edge.source);
+        return src && state.kindFilter.has(src.kindPrefix);
+      });
+    }
+
+    edges.sort(function(a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+
+    tbody.innerHTML = '';
+    if (edges.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[No relationships to show]</span></td></tr>';
+      return;
+    }
+
+    edges.forEach(function(edge) {
+      var tr = document.createElement('tr');
+
+      var srcCell = document.createElement('td');
+      var srcA = document.createElement('a');
+      srcA.href = '#' + router.buildHash('focus', edge.source, state.depth);
+      srcA.textContent = edge.source;
+      srcCell.appendChild(srcA);
+      tr.appendChild(srcCell);
+
+      var srcTitle = document.createElement('td');
+      var srcNode = state.graph.nodes.get(edge.source);
+      srcTitle.textContent = srcNode ? srcNode.title : '';
+      tr.appendChild(srcTitle);
+
+      var labelCell = document.createElement('td');
+      labelCell.textContent = edge.label;
+      tr.appendChild(labelCell);
+
+      var tgtCell = document.createElement('td');
+      var tgtA = document.createElement('a');
+      tgtA.href = '#' + router.buildHash('focus', edge.target, state.depth);
+      tgtA.textContent = edge.target;
+      tgtCell.appendChild(tgtA);
+      tr.appendChild(tgtCell);
+
+      var tgtTitle = document.createElement('td');
+      var tgtNode = state.graph.nodes.get(edge.target);
+      tgtTitle.textContent = tgtNode ? tgtNode.title : '';
+      tr.appendChild(tgtTitle);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function collectKindFilter() {
+    var cbs = document.querySelectorAll('.kind-checkbox input[type="checkbox"]');
+    var allOn = true;
+    for (var i = 0; i < cbs.length; i++) {
+      if (!cbs[i].checked) { allOn = false; break; }
+    }
+    if (allOn) {
+      state.kindFilter = null;
+    } else {
+      state.kindFilter = new Set();
+      for (var j = 0; j < cbs.length; j++) {
+        if (cbs[j].checked) {
+          var label = cbs[j].parentNode.textContent.trim();
+          var prefixes = label.split('/');
+          for (var k = 0; k < prefixes.length; k++) {
+            state.kindFilter.add(prefixes[k]);
+          }
+        }
+      }
+    }
+  }
+
+  function applyFilters() {
+    renderEntityList();
+    renderRelationshipTable();
+  }
+
+  function wireFilterCheckboxes() {
+    var cbs = document.querySelectorAll('.kind-checkbox input[type="checkbox"]');
+    for (var i = 0; i < cbs.length; i++) {
+      cbs[i].addEventListener('change', function() {
+        collectKindFilter();
+        applyFilters();
+      });
+    }
+    collectKindFilter();
+  }
+
+  function wireSearch() {
+    var input = document.querySelector('.search-input');
+    if (!input) return;
+
+    input.addEventListener('input', function() {
+      var query = input.value.trim();
+      var list = document.querySelector('.entity-list');
+      if (!list) return;
+
+      if (!query) { renderEntityList(); return; }
+
+      var results = model.searchFilter(query, state.graph);
+      if (state.kindFilter) {
+        results = results.filter(function(node) { return state.kindFilter.has(node.kindPrefix); });
+      }
+
+      list.innerHTML = '';
+      results.forEach(function(node) {
+        var li = document.createElement('li');
+        li.className = 'entity-item';
+        if (node.id === state.focusId) li.classList.add('active');
+        var t = document.createElement('span'); t.className = 'entity-title'; t.textContent = node.title; li.appendChild(t);
+        var p = document.createElement('span'); p.className = 'kind-pill';
+        p.style.background = 'var(--kind-' + node.kindPrefix + ')'; p.textContent = node.kindPrefix; li.appendChild(p);
+        li.addEventListener('click', (function(id) {
+          return function() { router.setFocus(id, state.depth); };
+        })(node.id));
         list.appendChild(li);
       });
-      sidebar.appendChild(list);
-    }
-    layout.appendChild(sidebar);
+    });
 
-    // Main area — markdown render
-    var main = el('main', { className: 'content' });
-    main.appendChild(el('h2', { textContent: id }));
-    var mdContainer = el('div', { className: 'markdown-body loading-md' });
-    mdContainer.appendChild(el('p', { textContent: 'Loading markdown…' }));
-    main.appendChild(mdContainer);
-    layout.appendChild(main);
-
-    // DOT editor
-    if (dotAvailable) {
-      layout.appendChild(renderDotEditor());
-    }
-
-    container.appendChild(layout);
-
-    // Fetch markdown asynchronously
-    var url = '/api/entity/' + encodeURIComponent(id) + '/markdown';
-    apiGetText(url)
-      .then(function (text) {
-        if (currentFocusId !== id) return; // stale
-        mdContainer.className = 'markdown-body';
-        mdContainer.innerHTML = renderMarkdown(text);
-      })
-      .catch(function (err) {
-        if (currentFocusId !== id) return; // stale
-        mdContainer.className = 'markdown-body';
-        mdContainer.innerHTML = '';
-        mdContainer.appendChild(
-          el('div', { className: 'error' }, ['Failed to load markdown: ' + err.message])
-        );
-      });
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        var query = input.value.trim();
+        if (!query) return;
+        var result = model.findFocus(query, state.graph);
+        if (result) {
+          router.setFocus(result, state.depth);
+        } else {
+          var list = document.querySelector('.entity-list');
+          if (list) {
+            list.innerHTML = '<li class="entity-item"><span class="placeholder">No match for \'' + escapeHtml(query) + '\'</span></li>';
+          }
+        }
+      } else if (e.key === 'Escape') {
+        input.value = '';
+        renderEntityList();
+      }
+    });
   }
 
-  /* -----------------------------------------------------------------------
-   * DOT editor panel
-   * --------------------------------------------------------------------- */
-  function renderDotEditor() {
-    var panel = el('div', { className: 'dot-panel' });
-
-    var heading = el('h3', { textContent: 'DOT Graph Editor' });
-    panel.appendChild(heading);
-
-    var textarea = el('textarea', {
-      className: 'dot-input',
-      placeholder: 'digraph {\n  a -> b;\n}',
-      rows: '6'
-    });
-    panel.appendChild(textarea);
-
-    var actions = el('div', { className: 'dot-actions' });
-
-    var renderBtn = el('button', { textContent: 'Render SVG' });
-    renderBtn.addEventListener('click', function () {
-      var dot = textarea.value.trim();
-      if (!dot) return;
-      renderBtn.disabled = true;
-      renderBtn.textContent = 'Rendering…';
-      renderDotSvg(panel, dot)
-        .finally(function () {
-          renderBtn.disabled = false;
-          renderBtn.textContent = 'Render SVG';
-        });
-    });
-    actions.appendChild(renderBtn);
-
-    panel.appendChild(actions);
-
-    // Output container
-    panel.appendChild(el('div', { className: 'dot-output', id: 'dot-output' }));
-
-    return panel;
+  function wireDepthButtons() {
+    var btns = document.querySelectorAll('.depth-btn');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener('click', (function(d) {
+        return function() {
+          state.depth = d;
+          var allBtns = document.querySelectorAll('.depth-btn');
+          for (var j = 0; j < allBtns.length; j++) {
+            allBtns[j].classList.toggle('active', parseInt(allBtns[j].textContent, 10) === d);
+          }
+          if (state.focusId) { router.setFocus(state.focusId, d); }
+        };
+      })(parseInt(btns[i].textContent, 10)));
+    }
   }
 
-  function renderDotSvg(panel, dotText) {
-    var output = panel.querySelector('#dot-output');
-    output.innerHTML = '';
-    output.appendChild(el('p', { className: 'loading', textContent: 'Rendering DOT…' }));
-
-    return fetch('/api/dot/svg', {
-      method: 'POST',
-      body: dotText
-    })
-      .then(function (r) {
-        if (!r.ok) return r.text().then(function (msg) { throw new Error(msg); });
-        return r.text();
-      })
-      .then(function (svg) {
-        output.innerHTML = '';
-        // Render via <img> data-uri — never inject SVG as inline HTML
-        var img = el('img', {
-          src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
-          alt: 'Rendered DOT graph'
-        });
-        output.appendChild(img);
-      })
-      .catch(function (err) {
-        output.innerHTML = '';
-        output.appendChild(
-          el('div', { className: 'error' }, ['DOT render failed: ' + err.message])
-        );
+  function wireRefresh() {
+    var btn = document.querySelector('.refresh-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function() {
+      state.markdownCache.clear();
+      state.graphRenderSeq += 1;
+      api.fetchGraph().then(function(raw) {
+        model.normalizeGraph(raw);
+        if (state.focusId) {
+          state.focusId = model.resolveFocus(state.focusId, state.graph);
+        }
+        render();
+      }).catch(function(err) {
+        var app = document.getElementById('app');
+        showError(app, 'Failed to refresh: ' + err.message);
       });
+    });
   }
 
   /* -----------------------------------------------------------------------
@@ -448,40 +480,70 @@
   }
 
   /* -----------------------------------------------------------------------
-   * Bootstrap
+   * Bootstrap + render loop (PHASE-05)
    * --------------------------------------------------------------------- */
   function bootstrap() {
-    var app = document.getElementById('app');
+    // Wire interactive surfaces
+    wireFilterCheckboxes();
+    wireSearch();
+    wireDepthButtons();
+    wireRefresh();
 
-    // Fetch health (check dot availability) and graph in parallel
+    // Fetch health and graph in parallel
     Promise.all([
-      apiGetJSON('/api/health').catch(function () { return { ok: false, dot: { ok: false }, graph: { ok: false } }; }),
-      apiGetJSON('/api/graph').catch(function () { return null; })
+      api.fetchHealth().catch(function () { return { dot: { ok: false }, graph: { ok: false } }; }),
+      api.fetchGraph().catch(function () { return null; })
     ]).then(function (results) {
       var health = results[0];
-      graphData = results[1];
-      dotAvailable = !!(health && health.dot && health.dot.ok);
+      var raw = results[1];
+
+      state.dotAvailable = !!(health && health.dot && health.dot.ok);
+
+      if (raw) {
+        model.normalizeGraph(raw);
+      }
 
       render();
-
-      // Listen for hash changes
       window.addEventListener('hashchange', render);
     }).catch(function (err) {
-      app.innerHTML = '';
-      app.appendChild(
-        el('div', { className: 'error' }, ['Failed to initialise: ' + err.message])
-      );
+      var app = document.getElementById('app');
+      showError(app, 'Failed to initialise: ' + err.message);
     });
   }
 
   function render() {
-    var route = parseHash();
-    var app = document.getElementById('app');
+    var route = router.parseHash();
 
     if (route.view === 'focus') {
-      renderFocus(app, route.id, route.depth);
+      state.focusId = route.id;
     } else {
-      renderList(app);
+      state.focusId = null;
+    }
+    state.depth = route.depth;
+
+    // If no focus, resolve default
+    if (!state.focusId && state.graph.nodes.size > 0) {
+      state.focusId = model.resolveFocus(null, state.graph);
+      if (state.focusId) {
+        router.setFocus(state.focusId, state.depth);
+        return; // hash change triggers re-render
+      }
+    }
+
+    renderEntityList();
+    renderFocusHeader();
+
+    if (state.focusId) {
+      var graphArea = document.querySelector('.graph-area');
+      if (graphArea) renderGraphPane(graphArea, state.focusId, state.depth);
+    }
+
+    renderHoverPane(null);
+    renderRelationshipTable();
+
+    if (state.focusId) {
+      var mdPane = document.querySelector('.markdown-pane');
+      if (mdPane) renderMarkdownPane(mdPane, state.focusId);
     }
   }
 
