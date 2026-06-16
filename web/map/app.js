@@ -274,6 +274,113 @@
   }
 
   /* -----------------------------------------------------------------------
+   * SVG Graph rendering (PHASE-03) — rendering pipeline + stale-render guard
+   * --------------------------------------------------------------------- */
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderHoverPane(nodeId) {
+    var pane = document.querySelector('.hover-detail');
+    if (!pane) return;
+
+    if (!nodeId) {
+      pane.innerHTML = '<span class="placeholder">Hover a node for details</span>';
+      return;
+    }
+
+    var node = state.graph.nodes.get(nodeId);
+    if (!node) {
+      pane.innerHTML = '<span class="placeholder">Node not found</span>';
+      return;
+    }
+
+    var html = '<div class="hover-detail-content">';
+    html += '<span class="hover-detail-title">' + node.id + ': ' + escapeHtml(node.title) + '</span>';
+    html += '<span class="hover-detail-meta">' + node.kindLabel + ' \u00b7 ' + node.status + '</span>';
+    html += '</div>';
+    pane.innerHTML = html;
+  }
+
+  function wireSvgHandlers(svgEl, edges) {
+    var groups = svgEl.querySelectorAll('.node');
+    for (var i = 0; i < groups.length; i++) {
+      var g = groups[i];
+      var titleEl = g.querySelector('title');
+      if (!titleEl) continue;
+      var nodeId = titleEl.textContent.trim();
+
+      g.classList.add('doctrine-node');
+
+      g.addEventListener('click', (function(id) {
+        return function() {
+          router.setFocus(id, state.depth);
+        };
+      })(nodeId));
+
+      g.addEventListener('mouseenter', (function(id) {
+        return function() {
+          state.hoveredId = id;
+          renderHoverPane(id);
+        };
+      })(nodeId));
+
+      g.addEventListener('mouseleave', function() {
+        state.hoveredId = null;
+        renderHoverPane(null);
+      });
+    }
+  }
+
+  function renderGraphPane(container, focusId, depth) {
+    depth = Math.max(0, Math.min(3, depth));
+
+    var nb = model.neighbourhood(focusId, depth, state.graph);
+    var dotText = dot.graphToDot(nb, focusId, depth);
+
+    state.graphRenderSeq += 1;
+    var seq = state.graphRenderSeq;
+
+    if (!state.dotAvailable) {
+      container.innerHTML = '';
+      var errMsg = document.createElement('p');
+      errMsg.className = 'error';
+      errMsg.textContent = 'Graphviz not available. DOT source:';
+      container.appendChild(errMsg);
+      var pre = document.createElement('pre');
+      pre.textContent = dotText;
+      container.appendChild(pre);
+      return;
+    }
+
+    container.innerHTML = '';
+    var loading = document.createElement('p');
+    loading.className = 'loading';
+    loading.textContent = 'Rendering graph…';
+    container.appendChild(loading);
+
+    api.renderDot(dotText).then(function(svgText) {
+      if (seq !== state.graphRenderSeq) return;
+      var clean = window.DOMPurify.sanitize(svgText, { USE_PROFILES: { svg: true } });
+      container.innerHTML = clean;
+      var svgEl = container.querySelector('svg');
+      if (svgEl) {
+        wireSvgHandlers(svgEl, nb.edges);
+      }
+    }).catch(function(err) {
+      if (seq !== state.graphRenderSeq) return;
+      container.innerHTML = '';
+      var errMsg = document.createElement('p');
+      errMsg.className = 'error';
+      errMsg.textContent = 'Graphviz not available';
+      container.appendChild(errMsg);
+      var pre = document.createElement('pre');
+      pre.textContent = dotText;
+      container.appendChild(pre);
+    });
+  }
+
+  /* -----------------------------------------------------------------------
    * Bootstrap
    * --------------------------------------------------------------------- */
   function bootstrap() {

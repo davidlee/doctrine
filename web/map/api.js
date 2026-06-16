@@ -29,3 +29,16 @@ api.fetchHealth = function() {
     return r.json();
   });
 };
+
+api.renderDot = function(dotText) {
+  return fetch('/api/dot/svg', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: dotText
+  }).then(function(r) {
+    if (!r.ok) return r.text().then(function(body) {
+      throw new ApiError('DOT render failed', r.status, body, '/api/dot/svg');
+    });
+    return r.text();
+  });
+};

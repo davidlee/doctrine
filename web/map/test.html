@@ -13,6 +13,7 @@
   <script src="/assets/api.js"></script>
   <script src="/assets/model.js"></script>
   <script src="/assets/router.js"></script>
+  <script src="/assets/dot.js"></script>
 
   <script>
     var resultsEl = document.getElementById('results');
@@ -442,6 +443,54 @@
 
       /* restore */
       window.location.hash = savedHash;
+    })();
+
+    /* --- dot.dotQuote --- */
+    (function() {
+      assert(dot.dotQuote('hello') === 'hello', 'dotQuote: no special chars unchanged');
+      assert(dot.dotQuote('say "hello"') === 'say \"hello\"', 'dotQuote: quotes escaped');
+      assert(dot.dotQuote('C:\\path\\file') === 'C:\\\\path\\\\file', 'dotQuote: backslashes doubled');
+      assert(dot.dotQuote('line1\nline2') === 'line1\\nline2', 'dotQuote: newlines escaped');
+      assert(dot.dotQuote('') === '', 'dotQuote: empty string');
+    })();
+
+    /* --- dot.graphToDot --- */
+    (function() {
+      // Set up a mock neighbourhood for testing
+      var mockNodes = new Map();
+      mockNodes.set('SL-072', {
+        id: 'SL-072', title: 'Test Slice', status: 'done',
+        kindPrefix: 'SL', kindLabel: 'slice'
+      });
+      mockNodes.set('ADR-001', {
+        id: 'ADR-001', title: 'Test ADR', status: 'accepted',
+        kindPrefix: 'ADR', kindLabel: 'adr'
+      });
+      var savedGraph = state.graph;
+      state.graph = { nodes: mockNodes };
+
+      var nb = {
+        nodes: new Set(['SL-072', 'ADR-001']),
+        edges: [
+          { id: 'e_SL-072_governed_by_ADR-001', source: 'SL-072', target: 'ADR-001', label: 'governed_by' }
+        ]
+      };
+
+      var output = dot.graphToDot(nb, 'SL-072', 1);
+
+      assert(output.indexOf('digraph G {') === 0, 'graphToDot: starts with digraph G {');
+      assert(output.indexOf('rankdir=LR;') !== -1, 'graphToDot: contains rankdir=LR');
+      assert(output.indexOf('bgcolor="transparent"') !== -1, 'graphToDot: contains bgcolor transparent');
+      assert(output.indexOf('nodesep=0.45') !== -1, 'graphToDot: contains nodesep');
+      assert(output.indexOf('ranksep=0.8') !== -1, 'graphToDot: contains ranksep');
+      assert(output.indexOf('penwidth=3') !== -1, 'graphToDot: focus node has penwidth 3');
+      assert(output.indexOf('penwidth=1') !== -1, 'graphToDot: non-focus node has penwidth 1');
+      assert(output.indexOf('SL-072') !== -1, 'graphToDot: contains focus node id');
+      assert(output.indexOf('ADR-001') !== -1, 'graphToDot: contains target node id');
+      assert(output.indexOf('governed_by') !== -1, 'graphToDot: contains edge label');
+      assert(output.lastIndexOf('}') === output.length - 1, 'graphToDot: ends with }');
+
+      state.graph = savedGraph;
     })();
 
     /* --- router.setFocus / setEdge --- */
