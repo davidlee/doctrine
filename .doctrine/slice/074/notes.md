@@ -68,3 +68,32 @@
 | PHASE-04 | 3dc490a | (n/a) | Concurrently imported via SL-073 PHASE-06 (2d84698); worker fork redundant |
 
 Slice status: `audit ⚠` (4/4 complete). The ⚠ indicates rollup divergence — PHASE-04 was completed via SL-073 integration rather than the planned worker funnel. Next: `/audit`.
+
+## Audit (RV-037, completed 823df4f)
+
+10 findings raised across code review and design conformance:
+- F-1: CLI unreachable — FALSE ALARM (stale binary, not a clap bug)
+- F-2: Status model correction (draft/active/done/abandoned → draft/accepted/superseded)
+- F-3: Removed --json shorthand from Show
+- F-4: Template path correct (design was wrong)
+- F-5: Duplicate-edge message now includes line number
+- F-6: Misleading test renamed
+- F-7: [[relation]] display deferred to follow-up
+- F-8: EntityRefLike regex anchored
+- F-9: DSL split on ' > ' fragility documented
+- F-10: Slug field in template is correct (standard Meta field)
+
+All resolved. RV-038 re-audit confirmed clean.
+
+## Post-audit verification
+
+End-to-end CLI verification: new → list → add → show → check → export (DOT/Mermaid/JSON) → rename-node → remove — all working.
+
+## Implementation stats
+
+- `src/concept_map.rs`: 2507 lines, 76 tests
+- `src/main.rs`: ConceptMapCommand (8 variants), write_class + main dispatch
+- `src/relation.rs`: Contextualizes label + CM RELATION_RULES
+- `install/templates/concept-map.{toml,md}`: DSL-ready scaffold
+- No new crate dependencies
+- Pure/impure split per ADR-001
