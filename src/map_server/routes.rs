@@ -1008,4 +1008,231 @@ mod tests {
         );
         assert_eq!(body, "# Concept Map\n");
     }
+
+    // -----------------------------------------------------------------------
+    // Adversarial: labels with special chars in GET/POST
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn get_concept_map_with_quoted_labels() {
+        let (_root, app) = seeded_cm_app("\"Hello\" > relates to > \"World\"").await;
+        let (status, _headers, body) =
+            send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
+        assert_eq!(status, 200);
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let edges = parsed["edges"].as_array().unwrap();
+        assert_eq!(edges[0]["from_label"], "\"Hello\"");
+        assert_eq!(edges[0]["to_label"], "\"World\"");
+    }
+
+    #[tokio::test]
+    async fn post_add_edge_with_special_chars() {
+        let (_root, app) = seeded_cm_app("A > rel > B").await;
+        let body = Body::from(
+            r#"{"action":"add_edge","source":"\"quoted\"","rel":"uses","target":"target"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        let edges = parsed["edges"].as_array().unwrap();
+        assert!(edges.iter().any(|e| e["from_label"] == "\"quoted\""));
+    }
+
+    // -----------------------------------------------------------------------
+    // Malformed DSL returns diagnostics, not 500
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn get_concept_map_malformed_dsl_returns_200_no_panic() {
+        // Malformed DSL lines produce parse-time diagnostics (MalformedLine,
+        // EmptyLabel) but check() currently drops them — only CanonicalNodeCollision
+        // and SelfEdge are carried forward. The API response's `diagnostics` array
+        // is therefore empty for these cases. Bug: parse-time diagnostics should be
+        // merged into the response (the CLI run_check does merge them).
+        // This test verifies the server returns 200 without panicking.
+        let (_root, app) = seeded_cm_app("User creates Document").await;
+        let (status, _headers, body) =
+            send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
+        assert_eq!(status, 200);
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        // Nodes/edges are empty for malformed lines (no valid edges parsed)
+        assert!(parsed["nodes"].as_array().unwrap().is_empty());
+        assert!(parsed["edges"].as_array().unwrap().is_empty());
+        // diagnostics is empty due to check() not carrying MalformedLine forward
+        // (KNOWN BUG: parsed.diagnostics should be merged into the response)
+        let _diags = parsed["diagnostics"].as_array().unwrap();
+        // no crash — server handled it gracefully
+    }
+
+    #[tokio::test]
+    async fn get_concept_map_malformed_dsl_empty_source_returns_200() {
+        // Empty source label produces parse-time EmptyLabel diagnostic.
+        // Same bug as above: check() drops it. Verify server survives.
+        let (_root, app) = seeded_cm_app(" > rel > Target").await;
+        let (status, _headers, body) =
+            send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
+        assert_eq!(status, 200);
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert!(parsed["edges"].as_array().unwrap().is_empty());
+        // No panic — server handled it gracefully
+    }
+
+    // -----------------------------------------------------------------------
+    // POST with unknown action / garbage
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn mutate_garbage_body_returns_400() {
+        // Axum's Json extractor rejects non-JSON bodies before our handler runs.
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from("not-even-json");
+        let (status, _headers, _body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 400, "garbage body should be rejected gracefully");
+    }
+
+    // -----------------------------------------------------------------------
+    // File I/O errors: invalid TOML does not panic
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn get_concept_map_invalid_toml_does_not_panic() {
+        // Create a valid CM first so scan_catalog succeeds, then corrupt the TOML.
+        // The handler maps read_concept_map errors to 404 (ConceptMapNotFound).
+        // verify the server survives the request without panicking.
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        crate::catalog::test_helpers::seed_slice(&root_path, 1, &[]);
+        crate::catalog::test_helpers::seed_adr(&root_path, 1, &[]);
+        crate::catalog::test_helpers::seed_requirement(&root_path, 1);
+        seed_concept_map(&root_path, 1, "A > rel > B");
+        let app = super::super::tests::test_app(&root_path).await;
+        // Now corrupt the TOML on disk — invalidate after app creation
+        std::fs::write(
+            root_path.join(".doctrine/concept-map/001/concept-map-001.toml"),
+            "id = 1\nslug = \"cm1\"\ntitle = \"Bad\"\nstatus = \"draft\"\ndescription = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ndsl = '''\nunclosed\n",
+        ).unwrap();
+        // Primary assertion: server must not panic
+        let (status, _headers, body) =
+            send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
+        // read_concept_map maps all errors to 404; verify server survived.
+        assert!(status == 404, "should not crash; body: {body}");
+    }
+
+    #[tokio::test]
+    async fn server_serves_after_internal_error() {
+        // Create valid CM first, start app, then corrupt → first request errors,
+        // second request (healthy endpoint) must still work.
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        crate::catalog::test_helpers::seed_slice(&root_path, 1, &[]);
+        crate::catalog::test_helpers::seed_adr(&root_path, 1, &[]);
+        crate::catalog::test_helpers::seed_requirement(&root_path, 1);
+        seed_concept_map(&root_path, 1, "A > rel > B");
+        let app = super::super::tests::test_app(&root_path).await;
+        std::fs::write(
+            root_path.join(".doctrine/concept-map/001/concept-map-001.toml"),
+            "id = 1\nslug = \"cm1\"\ntitle = \"Bad\"\nstatus = \"draft\"\ndescription = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ndsl = '''\nunclosed\n",
+        ).unwrap();
+
+        let (status, _headers, _body) =
+            send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
+        assert_eq!(status, 404);
+        // Second request: health check must still work
+        let (status2, _headers, _body2) = send(&app, json_req("GET", "/api/health", None)).await;
+        assert_eq!(status2, 200);
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge case: whitespace-only fields
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn mutate_add_edge_whitespace_only_source_returns_400() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(
+            r#"{"action":"add_edge","source":"   ","rel":"creates","target":"Document"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 400, "body: {body_str}");
+        assert!(body_str.contains("empty_field"));
+    }
+
+    #[tokio::test]
+    async fn mutate_add_edge_whitespace_only_rel_returns_400() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body =
+            Body::from(r#"{"action":"add_edge","source":"User","rel":"\t","target":"Document"}"#);
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 400, "body: {body_str}");
+        assert!(body_str.contains("empty_field"));
+    }
+
+    #[tokio::test]
+    async fn mutate_remove_edge_whitespace_only_source_returns_400() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(
+            r#"{"action":"remove_edge","source":"   ","rel":"creates","target":"Document"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 400, "body: {body_str}");
+        assert!(body_str.contains("empty_field"));
+    }
+
+    #[tokio::test]
+    async fn mutate_rename_node_whitespace_only_old_label_returns_400() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(r#"{"action":"rename_node","old_label":"   ","new_label":"Actor"}"#);
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 400, "body: {body_str}");
+        assert!(body_str.contains("empty_field"));
+    }
+
+    // -----------------------------------------------------------------------
+    // POST rename_node to same label
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn mutate_rename_node_text_identical_returns_200() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(r#"{"action":"rename_node","old_label":"User","new_label":"User"}"#);
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(parsed["ok"], true);
+        let occ = parsed["occurrences"].as_u64();
+        assert!(occ.is_some(), "occurrences field should be present");
+        assert_eq!(
+            occ.unwrap(),
+            0,
+            "text-identical rename should have 0 occurrences"
+        );
+    }
 }

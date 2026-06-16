@@ -1,4 +1,5 @@
 /* api.js — HTTP layer for Doctrine Map frontend */
+/* global model */
 
 function ApiError(message, status, body, endpoint) {
   this.name = 'ApiError';
@@ -61,5 +62,50 @@ api.fetchMarkdown = function(id) {
       });
     }
     return r.text();
+  });
+};
+
+api.fetchConceptMap = function(id) {
+  return fetch('/api/concept-map/' + encodeURIComponent(id)).then(function(r) {
+    if (!r.ok) {
+      return r.json().then(function(body) {
+        throw new ApiError(
+          body.message || 'Failed to fetch concept map',
+          r.status,
+          JSON.stringify(body),
+          '/api/concept-map/' + id
+        );
+      });
+    }
+    return r.json().then(function(data) {
+      return model.normalizeConceptMap(data);
+    });
+  });
+};
+
+api.mutateConceptMap = function(id, action, params, baseHash) {
+  var body = { action: action };
+  if (params.source !== undefined) body.source = params.source;
+  if (params.rel !== undefined) body.rel = params.rel;
+  if (params.target !== undefined) body.target = params.target;
+  if (params.old_label !== undefined) body.old_label = params.old_label;
+  if (params.new_label !== undefined) body.new_label = params.new_label;
+  if (baseHash !== undefined) body.base_hash = baseHash;
+  return fetch('/api/concept-map/' + encodeURIComponent(id), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(r) {
+    return r.json().then(function(data) {
+      if (!r.ok) {
+        throw new ApiError(
+          data.message || 'Mutation failed',
+          r.status,
+          JSON.stringify(data),
+          '/api/concept-map/' + id
+        );
+      }
+      return data;
+    });
   });
 };

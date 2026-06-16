@@ -2904,4 +2904,284 @@ mod tests {
         let updated = set_dsl(&toml_text, new_dsl).unwrap();
         std::fs::write(&toml_path, updated).unwrap();
     }
+
+    // -----------------------------------------------------------------------
+    // Adversarial: special chars in pure mutation functions
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn add_edge_handles_double_quotes_in_labels() {
+        let dsl = make_dsl(&[]);
+        let result = add_edge_to_dsl(&dsl, "He said \"hello\"", "relates to", "World").unwrap();
+        assert!(result.contains("He said \"hello\" > relates to > World"));
+        let parsed = parse_dsl(&result);
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.edges[0].from_label, "He said \"hello\"");
+    }
+
+    #[test]
+    fn add_edge_handles_backslashes_in_labels() {
+        let dsl = make_dsl(&[]);
+        let result = add_edge_to_dsl(&dsl, "A\\B", "depends on", "C\\D").unwrap();
+        assert!(result.contains("A\\B > depends on > C\\D"));
+        let parsed = parse_dsl(&result);
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.edges[0].from_label, "A\\B");
+        assert_eq!(parsed.edges[0].to_label, "C\\D");
+    }
+
+    #[test]
+    fn add_edge_with_source_containing_dsl_delimiter_does_not_panic() {
+        // add_edge_to_dsl is pure string concatenation; it doesn't reject `>`.
+        // The resulting line produces MalformedLine on parse, but must not panic.
+        let dsl = make_dsl(&[]);
+        let result = add_edge_to_dsl(&dsl, "A > B", "rel", "Target").unwrap();
+        let parsed = parse_dsl(&result);
+        assert!(!parsed.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn add_edge_handles_internal_newlines_gracefully() {
+        // Internal newline in a label is not rejected by the pure function;
+        // it creates a multi-line DSL entry. Verify no panic.
+        let dsl = make_dsl(&[]);
+        let result = add_edge_to_dsl(&dsl, "A\nB", "rel", "target").unwrap();
+        let parsed = parse_dsl(&result);
+        assert_eq!(parsed.edges.len(), 1);
+        assert_eq!(parsed.edges[0].from_label, "B");
+    }
+
+    #[test]
+    fn add_edge_handles_unicode_labels() {
+        let dsl = make_dsl(&[]);
+        let result = add_edge_to_dsl(&dsl, "Üser", "crëates", "Dökument").unwrap();
+        assert!(result.contains("Üser > crëates > Dökument"));
+        let parsed = parse_dsl(&result);
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.nodes[0].key, "üser");
+        assert_eq!(parsed.nodes[1].key, "dökument");
+    }
+
+    #[test]
+    fn remove_edge_handles_special_chars_in_labels() {
+        let dsl = make_dsl(&["He said \"hello\" > relates to > World"]);
+        let result =
+            remove_edge_from_dsl(&dsl, "He said \"hello\"", "relates to", "World").unwrap();
+        assert!(!result.contains("He said \"hello\""));
+    }
+
+    #[test]
+    fn rename_node_handles_special_chars_in_labels() {
+        let dsl = make_dsl(&["A\\B > depends on > C\\D"]);
+        let (result, occurrences) = rename_node_in_dsl(&dsl, "A\\B", "Alpha\\Beta").unwrap();
+        assert_eq!(occurrences, 1);
+        assert!(result.contains("Alpha\\Beta > depends on > C\\D"));
+    }
+
+    #[test]
+    fn rename_node_handles_unicode_labels() {
+        let dsl = make_dsl(&["Üser > crëates > Dökument"]);
+        let (result, occurrences) = rename_node_in_dsl(&dsl, "Üser", "Përsön").unwrap();
+        assert_eq!(occurrences, 1);
+        assert!(result.contains("Përsön > crëates > Dökument"));
+    }
+
+    // -----------------------------------------------------------------------
+    // TOML field preservation after each mutation
+    // -----------------------------------------------------------------------
+
+    /// Helper: round-trip a TOML text through get_dsl → mutate → set_dsl and
+    /// assert that all metadata fields survive unchanged.
+    fn assert_toml_fields_preserved<F>(original_toml: &str, mutate: F)
+    where
+        F: FnOnce(&str) -> String,
+    {
+        let dsl = get_dsl(original_toml).unwrap();
+        let new_dsl = mutate(&dsl);
+        let updated = set_dsl(original_toml, &new_dsl).unwrap();
+        let doc: toml_edit::DocumentMut = updated.parse().unwrap();
+        assert_eq!(doc.get("slug").and_then(|v| v.as_str()), Some("test"));
+        assert_eq!(doc.get("title").and_then(|v| v.as_str()), Some("Test"));
+        assert_eq!(doc.get("status").and_then(|v| v.as_str()), Some("draft"));
+        assert_eq!(doc.get("description").and_then(|v| v.as_str()), Some(""));
+        assert_eq!(
+            doc.get("created").and_then(|v| v.as_str()),
+            Some("2026-01-01")
+        );
+        assert_eq!(
+            doc.get("updated").and_then(|v| v.as_str()),
+            Some("2026-01-01")
+        );
+        assert_eq!(doc.get("id").and_then(|v| v.as_integer()), Some(1));
+        // dsl was replaced correctly
+        assert_eq!(get_dsl(&updated).unwrap().trim(), new_dsl.trim());
+    }
+
+    #[test]
+    fn add_edge_preserves_toml_fields() {
+        let toml = concat!(
+            "id = 1\n",
+            "slug = \"test\"\n",
+            "title = \"Test\"\n",
+            "status = \"draft\"\n",
+            "description = \"\"\n",
+            "created = \"2026-01-01\"\n",
+            "updated = \"2026-01-01\"\n",
+            "dsl = '''\n",
+            "A > rel > B\n",
+            "'''\n",
+        );
+        assert_toml_fields_preserved(toml, |dsl| add_edge_to_dsl(dsl, "B", "uses", "C").unwrap());
+    }
+
+    #[test]
+    fn remove_edge_preserves_toml_fields() {
+        let toml = concat!(
+            "id = 1\n",
+            "slug = \"test\"\n",
+            "title = \"Test\"\n",
+            "status = \"draft\"\n",
+            "description = \"\"\n",
+            "created = \"2026-01-01\"\n",
+            "updated = \"2026-01-01\"\n",
+            "dsl = '''\n",
+            "A > rel > B\n",
+            "X > y > Z\n",
+            "'''\n",
+        );
+        assert_toml_fields_preserved(toml, |dsl| {
+            remove_edge_from_dsl(dsl, "A", "rel", "B").unwrap()
+        });
+    }
+
+    #[test]
+    fn rename_node_preserves_toml_fields() {
+        let toml = concat!(
+            "id = 1\n",
+            "slug = \"test\"\n",
+            "title = \"Test\"\n",
+            "status = \"draft\"\n",
+            "description = \"\"\n",
+            "created = \"2026-01-01\"\n",
+            "updated = \"2026-01-01\"\n",
+            "dsl = '''\n",
+            "A > rel > B\n",
+            "'''\n",
+        );
+        assert_toml_fields_preserved(toml, |dsl| {
+            let (new_dsl, _) = rename_node_in_dsl(dsl, "A", "Alpha").unwrap();
+            new_dsl
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // DSL comment and blank-line preservation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn add_edge_preserves_comments_and_blanks() {
+        let dsl = make_dsl(&["# header", "", "A > rel > B", "", "# footer"]);
+        let result = add_edge_to_dsl(&dsl, "B", "uses", "C").unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines[0], "# header");
+        assert_eq!(lines[1], "");
+        assert_eq!(lines[2], "A > rel > B");
+        assert_eq!(lines[3], "");
+        assert_eq!(lines[4], "# footer");
+        assert_eq!(lines[5], "B > uses > C");
+    }
+
+    #[test]
+    fn remove_edge_preserves_comments_within_dsl() {
+        let dsl = make_dsl(&[
+            "# section one",
+            "A > rel > B",
+            "# section two",
+            "C > uses > D",
+            "# footer",
+        ]);
+        let result = remove_edge_from_dsl(&dsl, "A", "rel", "B").unwrap();
+        assert!(result.contains("# section one"));
+        assert!(result.contains("# section two"));
+        assert!(!result.contains("A > rel > B"));
+        assert!(result.contains("C > uses > D"));
+        assert!(result.contains("# footer"));
+    }
+
+    #[test]
+    fn rename_node_preserves_comments_between_edges() {
+        let dsl = make_dsl(&["# note", "A > rel > B", "B > uses > C"]);
+        let (result, _) = rename_node_in_dsl(&dsl, "B", "Beta").unwrap();
+        assert!(result.contains("# note"));
+        assert!(result.contains("A > rel > Beta"));
+        assert!(result.contains("Beta > uses > C"));
+    }
+
+    #[test]
+    fn mutation_preserves_blank_lines_between_edges() {
+        let dsl = make_dsl(&["A > rel > B", "", "C > uses > D"]);
+        let result = add_edge_to_dsl(&dsl, "D", "creates", "E").unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines[0], "A > rel > B");
+        assert_eq!(lines[1], "");
+        assert_eq!(lines[2], "C > uses > D");
+        assert_eq!(lines[3], "D > creates > E");
+    }
+
+    // -----------------------------------------------------------------------
+    // Rename collision edge cases
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn rename_node_key_collision_different_spelling_same_key() {
+        // "User Story" → key="user-story", "User-Story" → key="user-story"
+        // Renaming "Other" to "User-Story" should collide with existing "User Story"
+        let dsl = make_dsl(&["User Story > relates to > X", "Other > uses > Y"]);
+        let result = rename_node_in_dsl(&dsl, "Other", "User-Story");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::NodeCollision { .. })
+        ));
+    }
+
+    #[test]
+    fn rename_node_text_identical_no_change() {
+        let dsl = make_dsl(&["Alpha > relates to > Beta"]);
+        let (result, occurrences) = rename_node_in_dsl(&dsl, "Alpha", "Alpha").unwrap();
+        assert_eq!(occurrences, 0);
+        assert_eq!(result, dsl);
+    }
+
+    #[test]
+    fn rename_node_text_identical_with_whitespace_no_change() {
+        let dsl = make_dsl(&["Alpha > relates to > Beta"]);
+        let (result, occurrences) = rename_node_in_dsl(&dsl, "  Alpha  ", "  Alpha  ").unwrap();
+        assert_eq!(occurrences, 0);
+        assert_eq!(result, dsl);
+    }
+
+    // -----------------------------------------------------------------------
+    // Duplicate edge detection with whitespace normalization
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn add_edge_detects_duplicate_with_extra_spaces_in_input() {
+        let dsl = make_dsl(&["A > depends on > B"]);
+        let result = add_edge_to_dsl(&dsl, "  A  ", "  depends on  ", "  B  ");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::DuplicateEdge { .. })
+        ));
+    }
+
+    #[test]
+    fn add_edge_detects_duplicate_when_dsl_has_extra_spaces() {
+        // DSL has extra spaces around the relation; trimmed comparison still matches.
+        let dsl = "A >   depends on   > B";
+        let result = add_edge_to_dsl(dsl, "A", "depends on", "B");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::DuplicateEdge { .. })
+        ));
+    }
 }
