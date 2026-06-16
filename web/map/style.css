@@ -552,3 +552,183 @@ a { color: var(--link); }
 .legend-item.legend-dimmed {
   opacity: 0.3;
 }
+
+/* ---------------------------------------------------------------------------
+ * Concept Map authoring UI (SL-076 PHASE-05)
+ * ------------------------------------------------------------------------- */
+
+/* Edit/Done toggle button in focus header */
+.cm-edit-toggle {
+  margin-left: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--kind-CM, #16A085);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--kind-CM, #16A085);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.cm-edit-toggle:hover {
+  background: var(--kind-CM, #16A085);
+  color: #ffffff;
+}
+
+/* Add edge form */
+.cm-add-edge-form {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border-light, #e0e0e0);
+  border-radius: 6px;
+  background: var(--bg-card, #fafafa);
+}
+
+.add-edge-fields {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.cm-input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-light, #d0d0d0);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  flex: 1;
+  min-width: 100px;
+}
+.cm-input:focus {
+  outline: none;
+  border-color: var(--kind-CM, #16A085);
+}
+
+.cm-add-btn {
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: 4px;
+  background: var(--kind-CM, #16A085);
+  color: #ffffff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cm-add-btn:hover {
+  background: #13876b;
+}
+
+.cm-add-error {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+.cm-add-error.cm-error {
+  background: #fde8e8;
+  color: #c0392b;
+  border: 1px solid #f5c6cb;
+}
+.cm-add-error.cm-notice {
+  background: #e8f5e9;
+  color: #27ae60;
+  border: 1px solid #c8e6c9;
+}
+
+/* Edge table */
+.cm-edge-table {
+  margin: 0.75rem 0;
+}
+
+.cm-edges {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.cm-edges th {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 2px solid var(--border-light, #e0e0e0);
+  color: var(--text-secondary, #666);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.cm-edges td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border-light, #eee);
+}
+
+.cm-edge-row:hover {
+  background: var(--bg-hover, #f5f5f5);
+}
+
+.cm-edge-label {
+  color: var(--text-primary, #333);
+}
+
+.cm-editable-node {
+  cursor: pointer;
+  color: var(--kind-CM, #16A085);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+.cm-editable-node:hover {
+  color: #13876b;
+}
+
+/* Remove button */
+.cm-remove-btn {
+  padding: 0.15rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: #c0392b;
+  font-size: 0.8rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.cm-remove-btn:hover {
+  background: #fde8e8;
+  border-color: #f5c6cb;
+}
+
+/* Inline rename input */
+.cm-rename-input {
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--kind-CM, #16A085);
+  border-radius: 3px;
+  font-size: 0.85rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cm-rename-input:focus {
+  outline: none;
+  border-color: var(--kind-CM, #16A085);
+  box-shadow: 0 0 0 2px rgba(22, 160, 133, 0.2);
+}
+
+/* CM diagnostics panel */
+.cm-diagnostics-panel {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid #f0c040;
+  border-radius: 6px;
+  background: #fffdf0;
+}
+
+.cm-diagnostics-panel h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.85rem;
+  color: #b8860b;
+}
+
+.cm-diag-item {
+  padding: 0.25rem 0;
+  font-size: 0.8rem;
+  color: #856404;
+  border-bottom: 1px solid #f5e6a3;
+}
+.cm-diag-item:last-child {
+  border-bottom: none;
+}
