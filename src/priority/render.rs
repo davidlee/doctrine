@@ -9,7 +9,10 @@
 //! and stamps the [`PRIORITY_POLICY_VERSION`] (D6 / REQ-094). NO trailing newline on
 //! either surface — the black-box golden contract (`write!`, not `writeln!`).
 
-use crate::listing::RenderOpts;
+use crate::listing::{
+    self, status_hue, Column, ColumnPaint, RenderOpts, TITLE_EVEN, TITLE_ODD,
+};
+use owo_colors::{AnsiColors::Cyan, DynColors};
 
 use super::view::{ActionabilityBlock, BlockersView, Explanation, NextRow, ReasonKind, SurveyRow};
 
@@ -18,34 +21,109 @@ use super::view::{ActionabilityBlock, BlockersView, Explanation, NextRow, Reason
 /// channel synthesis, or order composition) changes its observable verdicts.
 pub(crate) const PRIORITY_POLICY_VERSION: &str = "priority.v2";
 
+// ---------------------------------------------------------------------------
+// Column definitions for priority human tables (SL-079 PHASE-02)
+// ---------------------------------------------------------------------------
+
+const SURVEY_COLS: [Column<SurveyRow>; 7] = [
+    Column {
+        name: "id",
+        header: "id",
+        cell: |r| r.id.clone(),
+        paint: ColumnPaint::Fixed(DynColors::Ansi(Cyan)),
+    },
+    Column {
+        name: "kind",
+        header: "kind",
+        cell: |r| r.kind.clone(),
+        paint: ColumnPaint::None,
+    },
+    Column {
+        name: "status",
+        header: "status",
+        cell: |r| r.status.clone(),
+        paint: ColumnPaint::ByValue(|r| status_hue(&r.status)),
+    },
+    Column {
+        name: "act",
+        header: "",
+        cell: |r| r.act.badge().to_string(),
+        paint: ColumnPaint::ByValue(|r| status_hue(r.act.token())),
+    },
+    Column {
+        name: "cons",
+        header: "cons",
+        cell: |r| r.consequence.to_string(),
+        paint: ColumnPaint::None,
+    },
+    Column {
+        name: "blocker",
+        header: "blocker",
+        cell: |r| r.blockers.first().cloned().unwrap_or_default(),
+        paint: ColumnPaint::None,
+    },
+    Column {
+        name: "title",
+        header: "title",
+        cell: |r| r.title.clone(),
+        paint: ColumnPaint::Alternate([TITLE_EVEN, TITLE_ODD]),
+    },
+];
+
+#[expect(dead_code, reason = "declared for IMP-038 validation parity; not used by render_columns (priority has no --columns surface)")]
+const SURVEY_DEFAULT: &[&str] = &["id", "kind", "status", "act", "cons", "blocker", "title"];
+
+const NEXT_COLS: [Column<NextRow>; 5] = [
+    Column {
+        name: "id",
+        header: "id",
+        cell: |r| r.id.clone(),
+        paint: ColumnPaint::Fixed(DynColors::Ansi(Cyan)),
+    },
+    Column {
+        name: "kind",
+        header: "kind",
+        cell: |r| r.kind.clone(),
+        paint: ColumnPaint::None,
+    },
+    Column {
+        name: "status",
+        header: "status",
+        cell: |r| r.status.clone(),
+        paint: ColumnPaint::ByValue(|r| status_hue(&r.status)),
+    },
+    Column {
+        name: "unblocks",
+        header: "unblocks",
+        cell: |r| r.blocking.len().to_string(),
+        paint: ColumnPaint::None,
+    },
+    Column {
+        name: "title",
+        header: "title",
+        cell: |r| r.title.clone(),
+        paint: ColumnPaint::Alternate([TITLE_EVEN, TITLE_ODD]),
+    },
+];
+
+#[expect(dead_code, reason = "declared for IMP-038 validation parity; not used by render_columns (priority has no --columns surface)")]
+const NEXT_DEFAULT: &[&str] = &["id", "kind", "status", "unblocks", "title"];
+
+// ---------------------------------------------------------------------------
+// Render functions
+// ---------------------------------------------------------------------------
+
 /// Render `survey` for human reading — one row per eligible node in importance order.
 /// Columns: id, kind, status, BLOCKED badge (or blank), consequence, direct blocker.
-/// Rides `listing::render_table` (the shared list layout). A blocked row shows its
-/// badge + first direct blocker (the rest live in `blockers`/`explain` — direct-only
-/// here, D11).
+/// Rides `listing::render_columns` (the shared list layout + colour seam). A blocked
+/// row shows its badge + first direct blocker (the rest live in `blockers`/`explain` —
+/// direct-only here, D11).
 pub(crate) fn survey_human(rows: &[SurveyRow], opts: RenderOpts) -> String {
     if rows.is_empty() {
         return "(no eligible work)\n".to_string();
     }
-    let mut grid: Vec<Vec<String>> = Vec::with_capacity(rows.len() + 1);
-    grid.push(
-        ["id", "kind", "status", "", "cons", "blocker", "title"]
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect(),
-    );
-    for r in rows {
-        grid.push(vec![
-            r.id.clone(),
-            r.kind.clone(),
-            r.status.clone(),
-            r.act.badge().to_string(),
-            r.consequence.to_string(),
-            r.blockers.first().cloned().unwrap_or_default(),
-            r.title.clone(),
-        ]);
-    }
-    crate::listing::render_table(&grid, opts.term_width)
+    let sel: Vec<&Column<SurveyRow>> = SURVEY_COLS.iter().collect();
+    listing::render_columns(rows, &sel, opts)
 }
 
 /// Render `next` for human reading — actionable-only, in `order_key` order. Columns:
@@ -54,23 +132,8 @@ pub(crate) fn next_human(rows: &[NextRow], opts: RenderOpts) -> String {
     if rows.is_empty() {
         return "(nothing actionable)\n".to_string();
     }
-    let mut grid: Vec<Vec<String>> = Vec::with_capacity(rows.len() + 1);
-    grid.push(
-        ["id", "kind", "status", "unblocks", "title"]
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect(),
-    );
-    for r in rows {
-        grid.push(vec![
-            r.id.clone(),
-            r.kind.clone(),
-            r.status.clone(),
-            r.blocking.len().to_string(),
-            r.title.clone(),
-        ]);
-    }
-    crate::listing::render_table(&grid, opts.term_width)
+    let sel: Vec<&Column<NextRow>> = NEXT_COLS.iter().collect();
+    listing::render_columns(rows, &sel, opts)
 }
 
 /// Render `blockers` for human reading — the blocked-by and blocking lists (direct or
