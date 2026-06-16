@@ -42,3 +42,15 @@ api.renderDot = function(dotText) {
     return r.text();
   });
 };
+
+api.fetchMarkdown = function(id) {
+  return fetch('/api/entity/' + encodeURIComponent(id) + '/markdown').then(function(r) {
+    if (!r.ok) {
+      return r.text().then(function(body) {
+        throw new ApiError('Failed to fetch markdown', r.status, body,
+          '/api/entity/' + id + '/markdown');
+      });
+    }
+    return r.text();
+  });
+};
