@@ -14,13 +14,54 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use serde::Deserialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
+use crate::concept_map;
 use crate::map_server::assets;
 use crate::map_server::error::MapServerError;
 use crate::map_server::markdown;
 use crate::map_server::shell::DOT_BODY_LIMIT;
 use crate::map_server::state::AppState;
+
+// ---------------------------------------------------------------------------
+// Request types
+// ---------------------------------------------------------------------------
+
+/// A single mutation against a concept map's DSL.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "action")]
+enum MutationAction {
+    #[serde(rename = "add_edge")]
+    AddEdge {
+        source: String,
+        rel: String,
+        target: String,
+    },
+    #[serde(rename = "remove_edge")]
+    RemoveEdge {
+        source: String,
+        rel: String,
+        target: String,
+    },
+    #[serde(rename = "rename_node")]
+    RenameNode {
+        #[serde(alias = "old")]
+        old_label: String,
+        #[serde(alias = "new")]
+        new_label: String,
+    },
+}
+
+/// A pending concept-map mutation with optional optimistic concurrency hash.
+#[derive(Debug, Deserialize)]
+struct ConceptMapMutation {
+    #[serde(flatten)]
+    action: MutationAction,
+    #[serde(default)]
+    base_hash: Option<String>,
+}
 
 // ---------------------------------------------------------------------------
 // Router
@@ -40,6 +81,10 @@ pub(crate) fn router(state: AppState) -> Router {
             post(dot_svg).layer(DefaultBodyLimit::max(DOT_BODY_LIMIT)),
         )
         .route("/api/entity/{id}/markdown", get(entity_markdown))
+        .route(
+            "/api/concept-map/{id}",
+            get(get_concept_map).post(mutate_concept_map),
+        )
         .with_state(Arc::new(state))
 }
 
@@ -157,6 +202,183 @@ async fn entity_markdown(
         [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
         body,
     ))
+}
+
+// ---------------------------------------------------------------------------
+// Concept-map handlers
+// ---------------------------------------------------------------------------
+
+/// `GET /api/concept-map/:id` — return the concept map's nodes, edges, and
+/// diagnostics as JSON.
+async fn get_concept_map(
+    State(state): State<Arc<AppState>>,
+    Path(id_str): Path<String>,
+) -> Result<impl IntoResponse, MapServerError> {
+    let id = concept_map::parse_ref(&id_str)
+        .map_err(|_e| MapServerError::BadConceptMapId(id_str.clone()))?;
+    let cm_root = state.root.join(concept_map::CONCEPT_MAP_DIR);
+    let (doc, toml_text, _body) = concept_map::read_concept_map(&cm_root, id)
+        .map_err(|_e| MapServerError::ConceptMapNotFound(id))?;
+
+    // get_dsl errors if the `dsl` key is absent — treat as empty CM
+    let (parsed, diagnostics, dsl_hash) = match concept_map::get_dsl(&toml_text) {
+        Ok(dsl) => {
+            let hash = hex::encode(Sha256::digest(dsl.as_bytes()));
+            let parsed = concept_map::parse_dsl(&dsl);
+            let diagnostics = concept_map::check(&parsed);
+            (parsed, diagnostics, hash)
+        }
+        Err(_) => {
+            return Ok(Json(json!({
+                "id": format!("CM-{id:03}"),
+                "title": doc.title,
+                "status": doc.status,
+                "description": doc.description,
+                "dsl_hash": "",
+                "nodes": [],
+                "edges": [],
+                "diagnostics": []
+            })));
+        }
+    };
+
+    let nodes: Vec<serde_json::Value> = parsed
+        .nodes
+        .iter()
+        .map(|n| json!({"key": n.key, "label": n.label}))
+        .collect();
+
+    let edges: Vec<serde_json::Value> = parsed
+        .edges
+        .iter()
+        .map(|e| {
+            json!({
+                "from_key": e.from_key,
+                "from_label": e.from_label,
+                "rel": e.rel,
+                "to_key": e.to_key,
+                "to_label": e.to_label,
+                "line": e.line,
+            })
+        })
+        .collect();
+
+    let diag_list: Vec<serde_json::Value> = diagnostics
+        .iter()
+        .map(|d| serde_json::to_value(d).unwrap_or(json!({})))
+        .collect();
+
+    Ok(Json(json!({
+        "id": format!("CM-{id:03}"),
+        "title": doc.title,
+        "status": doc.status,
+        "description": doc.description,
+        "dsl_hash": dsl_hash,
+        "nodes": nodes,
+        "edges": edges,
+        "diagnostics": diag_list,
+    })))
+}
+
+/// `POST /api/concept-map/:id` — apply a mutation (`add_edge`, `remove_edge`,
+/// `rename_node`) to the concept map's DSL.
+async fn mutate_concept_map(
+    State(state): State<Arc<AppState>>,
+    Path(id_str): Path<String>,
+    Json(body): Json<ConceptMapMutation>,
+) -> Result<impl IntoResponse, MapServerError> {
+    let id = concept_map::parse_ref(&id_str)
+        .map_err(|_e| MapServerError::BadConceptMapId(id_str.clone()))?;
+    let cm_root = state.root.join(concept_map::CONCEPT_MAP_DIR);
+    let (_doc, toml_text, _body) = concept_map::read_concept_map(&cm_root, id)
+        .map_err(|_e| MapServerError::ConceptMapNotFound(id))?;
+    let old_dsl = concept_map::get_dsl(&toml_text)
+        .map_err(|_e| MapServerError::ConceptMapParseError("TOML is missing a `dsl` key".into()))?;
+
+    // Stale-write guard
+    if let Some(ref base_hash) = body.base_hash {
+        let current_hash = hex::encode(Sha256::digest(old_dsl.as_bytes()));
+        if current_hash != *base_hash {
+            return Err(MapServerError::StaleConceptMap);
+        }
+    }
+
+    // Mutate — collect (new_dsl_text, optional rename_occurrences)
+    let (new_dsl_text, rename_occurrences) = match &body.action {
+        MutationAction::AddEdge {
+            source,
+            rel,
+            target,
+        } => {
+            let dsl = concept_map::add_edge_to_dsl(&old_dsl, source, rel, target)
+                .map_err(MapServerError::from)?;
+            (dsl, None)
+        }
+        MutationAction::RemoveEdge {
+            source,
+            rel,
+            target,
+        } => {
+            let dsl = concept_map::remove_edge_from_dsl(&old_dsl, source, rel, target)
+                .map_err(MapServerError::from)?;
+            (dsl, None)
+        }
+        MutationAction::RenameNode {
+            old_label,
+            new_label,
+        } => {
+            let (dsl, count) = concept_map::rename_node_in_dsl(&old_dsl, old_label, new_label)
+                .map_err(MapServerError::from)?;
+            (dsl, Some(count))
+        }
+    };
+
+    // Write back via set_dsl
+    let updated_toml = concept_map::set_dsl(&toml_text, &new_dsl_text)
+        .map_err(|e| MapServerError::ConceptMapParseError(e.to_string()))?;
+    let name = format!("{id:03}");
+    let stem = format!("concept-map-{name}");
+    let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+    std::fs::write(&toml_path, &updated_toml)
+        .map_err(|e| MapServerError::ConceptMapIoError(e.to_string()))?;
+
+    // Re-parse for response — parse the DSL directly (we already have it)
+    let fresh_hash = hex::encode(Sha256::digest(new_dsl_text.as_bytes()));
+    let parsed = concept_map::parse_dsl(&new_dsl_text);
+
+    let nodes: Vec<serde_json::Value> = parsed
+        .nodes
+        .iter()
+        .map(|n| json!({"key": n.key, "label": n.label}))
+        .collect();
+    let edges: Vec<serde_json::Value> = parsed
+        .edges
+        .iter()
+        .map(|e| {
+            json!({
+                "from_key": e.from_key,
+                "from_label": e.from_label,
+                "rel": e.rel,
+                "to_key": e.to_key,
+                "to_label": e.to_label,
+                "line": e.line,
+            })
+        })
+        .collect();
+
+    let mut resp = json!({
+        "ok": true,
+        "nodes": nodes,
+        "edges": edges,
+        "dsl_hash": fresh_hash,
+    });
+    if let Some(occurrences) = rename_occurrences
+        && let Some(obj) = resp.as_object_mut()
+    {
+        obj.insert("occurrences".into(), json!(occurrences));
+    }
+
+    Ok(Json(resp))
 }
 
 // ---------------------------------------------------------------------------
@@ -450,5 +672,340 @@ mod tests {
         assert_eq!(status, 404);
         assert!(body.contains("entity_not_found"));
         assert!(body.contains("SL-001"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Concept-map route tests
+    // -----------------------------------------------------------------------
+
+    /// Seed a concept map entity for route tests.
+    fn seed_concept_map(root: &std::path::Path, id: u32, dsl: &str) {
+        use crate::catalog::test_helpers::write;
+        let name = format!("{id:03}");
+        let stem = format!("concept-map-{name}");
+        let toml = format!(
+            "id = {id}\nslug = \"cm{id}\"\ntitle = \"Test Map {id}\"\nstatus = \"draft\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ndescription = \"\"\ndsl = '''\n{dsl}
+'''\n",
+        );
+        let cm_root = std::path::Path::new(".doctrine/concept-map");
+        write(
+            root,
+            &format!("{}/{}/{}.toml", cm_root.display(), name, stem),
+            &toml,
+        );
+        write(
+            root,
+            &format!("{}/{}/{}.md", cm_root.display(), name, stem),
+            "# Concept Map\n",
+        );
+        // Create slug symlink
+        let link = root.join(cm_root).join(format!("{name}-cm{id}"));
+        let _ = std::os::unix::fs::symlink(&name, &link);
+    }
+
+    /// Create a temp dir + seeded CM app.
+    async fn seeded_cm_app(dsl: &str) -> (tempfile::TempDir, Router) {
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        // Seed supporting entities for the catalog graph
+        crate::catalog::test_helpers::seed_slice(&root_path, 1, &[]);
+        crate::catalog::test_helpers::seed_adr(&root_path, 1, &[]);
+        crate::catalog::test_helpers::seed_requirement(&root_path, 1);
+        // Seed CM-001
+        seed_concept_map(&root_path, 1, dsl);
+        let app = super::super::tests::test_app(&root_path).await;
+        (root, app)
+    }
+
+    // -- GET concept map --
+
+    #[tokio::test]
+    async fn get_concept_map_existing_returns_200() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let (status, headers, body) =
+            send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
+        assert_eq!(status, 200);
+        assert!(
+            headers["content-type"]
+                .to_str()
+                .unwrap()
+                .starts_with("application/json")
+        );
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed["id"], "CM-001");
+        assert_eq!(parsed["title"], "Test Map 1");
+        assert_eq!(parsed["status"], "draft");
+        assert!(!parsed["dsl_hash"].as_str().unwrap().is_empty());
+        // Nodes
+        let nodes = parsed["nodes"].as_array().unwrap();
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(nodes[0]["key"], "user");
+        assert_eq!(nodes[1]["key"], "document");
+        // Edges
+        let edges = parsed["edges"].as_array().unwrap();
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0]["from_key"], "user");
+        assert_eq!(edges[0]["rel"], "creates");
+        assert_eq!(edges[0]["to_key"], "document");
+        // Diagnostics
+        let diags = parsed["diagnostics"].as_array().unwrap();
+        assert!(
+            diags.is_empty(),
+            "clean map should have no diagnostics, got: {diags:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_concept_map_nonexistent_returns_404() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let (status, _headers, body) =
+            send(&app, json_req("GET", "/api/concept-map/CM-999", None)).await;
+        assert_eq!(status, 404);
+        assert!(body.contains("not_found"));
+        assert!(body.contains("CM-999"));
+    }
+
+    #[tokio::test]
+    async fn get_concept_map_bad_id_returns_400() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let (status, _headers, body) =
+            send(&app, json_req("GET", "/api/concept-map/garbage", None)).await;
+        assert_eq!(status, 400);
+        assert!(body.contains("bad_concept_map_id"));
+    }
+
+    #[tokio::test]
+    async fn get_concept_map_no_dsl_returns_200_empty() {
+        // Seed without a `dsl` key — that means empty concept map.
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        crate::catalog::test_helpers::seed_slice(&root_path, 1, &[]);
+        // Manually seed CM-001 without a `dsl` key
+        {
+            let cm_dir = root_path.join(".doctrine/concept-map/001");
+            std::fs::create_dir_all(&cm_dir).unwrap();
+            std::fs::write(
+                cm_dir.join("concept-map-001.toml"),
+                "id = 1\nslug = \"cm1\"\ntitle = \"Empty Map\"\nstatus = \"draft\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\ndescription = \"\"\n",
+            )
+            .unwrap();
+            std::fs::write(cm_dir.join("concept-map-001.md"), "# Empty\n").unwrap();
+            let _ =
+                std::os::unix::fs::symlink("001", root_path.join(".doctrine/concept-map/001-cm1"));
+        }
+        let app = super::super::tests::test_app(&root_path).await;
+        let (status, _headers, body) =
+            send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
+        assert_eq!(status, 200);
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed["dsl_hash"], "");
+        assert!(parsed["nodes"].as_array().unwrap().is_empty());
+        assert!(parsed["edges"].as_array().unwrap().is_empty());
+    }
+
+    // -- POST mutate concept map --
+
+    #[tokio::test]
+    async fn mutate_add_edge_returns_200() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(
+            r#"{"action":"add_edge","source":"Document","rel":"belongs to","target":"Workspace"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(parsed["ok"], true);
+        let edges = parsed["edges"].as_array().unwrap();
+        assert_eq!(edges.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn mutate_add_edge_duplicate_returns_409() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(
+            r#"{"action":"add_edge","source":"User","rel":"creates","target":"Document"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 409, "body: {body_str}");
+        assert!(body_str.contains("duplicate_edge"));
+    }
+
+    #[tokio::test]
+    async fn mutate_add_edge_empty_field_returns_400() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body =
+            Body::from(r#"{"action":"add_edge","source":"","rel":"creates","target":"Document"}"#);
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 400, "body: {body_str}");
+        assert!(body_str.contains("empty_field"));
+    }
+
+    #[tokio::test]
+    async fn mutate_remove_edge_returns_200() {
+        let (_root, app) = seeded_cm_app("User > creates > Document\nDoc > relates > Note").await;
+        let body = Body::from(
+            r#"{"action":"remove_edge","source":"Doc","rel":"relates","target":"Note"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["edges"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn mutate_remove_edge_not_found_returns_404() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(
+            r#"{"action":"remove_edge","source":"Ghost","rel":"haunts","target":"House"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 404, "body: {body_str}");
+        assert!(body_str.contains("edge_not_found"));
+    }
+
+    #[tokio::test]
+    async fn mutate_rename_node_returns_200() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(r#"{"action":"rename_node","old_label":"User","new_label":"Actor"}"#);
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(parsed["ok"], true);
+        // Verify the response contains the renamed node
+        let nodes = parsed["nodes"].as_array().unwrap();
+        assert!(nodes.iter().any(|n| n["label"] == "Actor"));
+        assert!(!nodes.iter().any(|n| n["label"] == "User"));
+        let edges = parsed["edges"].as_array().unwrap();
+        assert!(edges.iter().any(|e| e["from_label"] == "Actor"));
+    }
+
+    #[tokio::test]
+    async fn mutate_rename_node_persists_to_disk() {
+        let (root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(r#"{"action":"rename_node","old_label":"User","new_label":"Actor"}"#);
+        let (status, _headers, _body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200);
+        // Read the TOML file directly
+        let toml_content = std::fs::read_to_string(
+            root.path()
+                .join(".doctrine/concept-map/001/concept-map-001.toml"),
+        )
+        .unwrap();
+        assert!(
+            toml_content.contains("Actor > creates > Document"),
+            "TOML should contain renamed node, got:\n{toml_content}"
+        );
+    }
+
+    #[tokio::test]
+    async fn mutate_rename_node_collision_returns_409() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        // Rename "User" to "Document" — same name but should collide on keys
+        let body =
+            Body::from(r#"{"action":"rename_node","old_label":"User","new_label":"Document"}"#);
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 409, "body: {body_str}");
+        assert!(body_str.contains("node_collision"));
+    }
+
+    #[tokio::test]
+    async fn mutate_stale_write_returns_409() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(
+            r#"{"action":"add_edge","source":"Doc","rel":"uses","target":"Note","base_hash":"deadbeef"}"#,
+        );
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 409, "body: {body_str}");
+        assert!(body_str.contains("stale_concept_map"));
+    }
+
+    #[tokio::test]
+    async fn mutate_stale_write_correct_hash_succeeds() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        // First, get the current hash
+        let (_, _, get_body) = send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
+        let parsed: serde_json::Value = serde_json::from_str(&get_body).unwrap();
+        let current_hash = parsed["dsl_hash"].as_str().unwrap();
+
+        // Now POST with the correct hash
+        let body = Body::from(format!(
+            r#"{{"action":"add_edge","source":"Doc","rel":"uses","target":"Note","base_hash":"{}"}}"#,
+            current_hash
+        ));
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        assert_eq!(status, 200, "body: {body_str}");
+        let p: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(p["ok"], true);
+        assert_eq!(p["edges"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn mutate_unknown_action_returns_422() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let body = Body::from(r#"{"action":"fly_to_moon"}"#);
+        let (status, _headers, body_str) = send(
+            &app,
+            json_req("POST", "/api/concept-map/CM-001", Some(body)),
+        )
+        .await;
+        // axum returns 422 Unprocessable Entity for deserialization failures
+        assert_eq!(status, 422, "body: {body_str}");
+        assert!(body_str.contains("fly_to_moon"));
+    }
+
+    #[tokio::test]
+    async fn entity_markdown_cm001_returns_200() {
+        let (_root, app) = seeded_cm_app("User > creates > Document").await;
+        let (status, headers, body) =
+            send(&app, json_req("GET", "/api/entity/CM-001/markdown", None)).await;
+        assert_eq!(status, 200);
+        assert!(
+            headers["content-type"]
+                .to_str()
+                .unwrap()
+                .starts_with("text/markdown")
+        );
+        assert_eq!(body, "# Concept Map\n");
     }
 }

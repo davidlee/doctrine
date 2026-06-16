@@ -1,6 +1,6 @@
 [package]
 name = "doctrine"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 description = "Project tooling CLI"
 license = "GPL-3.0-only"
