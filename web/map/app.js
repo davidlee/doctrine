@@ -162,7 +162,12 @@
       tr.appendChild(srcTitle);
 
       var labelCell = document.createElement('td');
-      labelCell.textContent = edge.label;
+      var labelA = document.createElement('a');
+      labelA.href = '#' + router.buildHash('edge', edge.id, state.depth);
+      labelA.className = 'edge-id-link';
+      labelA.textContent = edge.label;
+      labelA.title = 'Edge: ' + edge.id;
+      labelCell.appendChild(labelA);
       tr.appendChild(labelCell);
 
       var tgtCell = document.createElement('td');
@@ -511,13 +516,40 @@
     });
   }
 
+  function renderEdgeDetail(id) {
+    var container = document.querySelector('.graph-area');
+    var edge = state.graph.edgeById.get(id);
+    if (!edge) {
+      if (container) {
+        container.innerHTML = '<p class="error">Edge ' + escapeHtml(id) + ' not found in graph</p>';
+      }
+      return;
+    }
+
+    var srcNode = state.graph.nodes.get(edge.source);
+    var tgtNode = state.graph.nodes.get(edge.target);
+    var originFile = edge.raw && edge.raw.origin && edge.raw.origin.file ? edge.raw.origin.file : '-';
+
+    var html = '<div class="edge-detail">';
+    html += '<h2>Edge: ' + escapeHtml(edge.id) + '</h2>';
+    html += '<table class="edge-detail-table">';
+    html += '<tr><th>Edge ID</th><td>' + escapeHtml(edge.id) + '</td></tr>';
+    html += '<tr><th>Source</th><td><a href="#' + router.buildHash('focus', edge.source, state.depth) + '">' + escapeHtml(edge.source) + '</a>' + (srcNode ? ' &mdash; ' + escapeHtml(srcNode.title) : '') + '</td></tr>';
+    html += '<tr><th>Label</th><td>' + escapeHtml(edge.label) + '</td></tr>';
+    html += '<tr><th>Target</th><td><a href="#' + router.buildHash('focus', edge.target, state.depth) + '">' + escapeHtml(edge.target) + '</a>' + (tgtNode ? ' &mdash; ' + escapeHtml(tgtNode.title) : '') + '</td></tr>';
+    html += '<tr><th>Origin file</th><td>' + escapeHtml(originFile) + '</td></tr>';
+    html += '</table>';
+    html += '<p class="edge-detail-back"><a href="#' + router.buildHash('focus', state.focusId, state.depth) + '">&larr; Back to ' + escapeHtml(state.focusId) + '</a></p>';
+    html += '</div>';
+
+    if (container) container.innerHTML = html;
+  }
+
   function render() {
     var route = router.parseHash();
 
     if (route.view === 'focus') {
       state.focusId = route.id;
-    } else {
-      state.focusId = null;
     }
     state.depth = route.depth;
 
@@ -528,6 +560,18 @@
         router.setFocus(state.focusId, state.depth);
         return; // hash change triggers re-render
       }
+    }
+
+    if (route.view === 'edge') {
+      renderEdgeDetail(route.id);
+      renderHoverPane(null);
+      var mdPane = document.querySelector('.markdown-pane');
+      if (mdPane) mdPane.innerHTML = '<span class="placeholder">[Markdown content]</span>';
+      var tbody = document.querySelector('.relationship-table tbody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[Relationship table]</span></td></tr>';
+      renderEntityList();
+      renderFocusHeader();
+      return;
     }
 
     renderEntityList();

@@ -1,5 +1,32 @@
 # SL-073 Implementation Notes
 
+## PHASE-06 (in progress — 2026-06-16)
+
+### Edge detail page (EX-1)
+
+- Relationship table label column now renders as `<a>` tag linking to `#/edge/e_…`
+- ``render()` dispatches `route.view === 'edge'` to `renderEdgeDetail()`
+- `renderEdgeDetail()` renders metadata table (edge id, source (clickable), label, target (clickable), origin_file)
+- Back link returns to the current focus view
+- Edge not found displays error message
+- `state.focusId` is preserved through edge view (not overwritten by edge route)
+
+### --path flag (EX-3)
+
+- Added `#[arg(long)] path: Option<PathBuf>` to `MapServeArgs`
+- Wired into `run_serve`: `crate::root::find(args.path.or(path), &crate::root::default_markers())`
+- Test `map_serve_path_flag_passed_to_root_find` verifies flag parsing and precedence
+
+### SVG sanitization (EX-4)
+
+- Already satisfied by PHASE-03: DOMPurify with `USE_PROFILES: {svg: true}` strips `<script>`, event handlers, `<foreignObject>`, external URL attributes
+- DOT strings are quoted/escaped before server-side Graphviz rendering
+- Entity titles with special chars are handled by escapeHtml (hover pane), dotQuote (DOT), and DOMPurify (SVG)
+
+### Refresh (EX-2)
+
+- Already satisfied by PHASE-05: `wireRefresh()` clears `markdownCache`, increments `graphRenderSeq`, re-fetches, re-resolves focus, re-renders
+
 ## PHASE-05 (complete — 2026-06-16)
 
 **Commit:** `4bf7a2c` — feat(SL-073): PHASE-05 interactive UI
