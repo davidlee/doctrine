@@ -154,7 +154,7 @@ a { color: var(--link); }
 
 .filter-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.15rem 0.5rem;
 }
 
@@ -358,16 +358,9 @@ a { color: var(--link); }
   filter: brightness(1.15);
 }
 
-/* SVG background — light fill so nodes are legible on dark theme */
+/* SVG inherits page background — nodes are filled via style="filled" (SL-075 D1) */
 .graph-area svg {
-  background: #fcfcfc;
   border-radius: 4px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .graph-area svg {
-    background: #f5f5f5;
-  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -377,7 +370,8 @@ a { color: var(--link); }
   border: 1px solid var(--border);
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
-  min-height: 2.8rem;
+  min-height: 3.4rem;
+  overflow: hidden;
 }
 
 .hover-detail-content {
@@ -532,4 +526,8 @@ a { color: var(--link); }
   height: 0.5rem;
   border-radius: 2px;
   flex-shrink: 0;
+}
+
+.legend-item.legend-dimmed {
+  opacity: 0.3;
 }
