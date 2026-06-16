@@ -50,6 +50,16 @@ Design reviewed and purified. Six findings corrected in design.md:
 
 One nit (F-7, path helper) followed-up, not blocking.
 
+## 2026-06-16 — Reconciliation audit (RV-044)
+
+One finding raised and resolved in-round:
+- **F-1 (MINOR, aligned):** Missing `non_html_comment_is_content` test
+  specified by RV-042 F-3. Behaviour is correct — `strip_html_comments` only
+  matches `<!-- ... -->` — and indirectly verified by existing tests.
+
+All nine plan exit criteria confirmed. 1548 tests, clippy zero. Slice is
+conformant and ready for close.
+
 Design is now ready for plan. Key watchpoints for implementation:
 - `prune_empty_headings` must use exact comment-detection contract from D3
 - `load_body` returns `Option<String>`, never errors

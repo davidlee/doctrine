@@ -1,0 +1,25 @@
+id    = 44
+slug  = "reconciliation-review-of-sl-077"
+title = "reconciliation review of SL-077"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-077"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Missing non_html_comment_is_content test specified by RV-042 F-3"
+detail = "The RV-042 inquisition (F-3 remedy item 5) specified adding a test `prune_empty_headings_non_html_comment_is_content` to verify that non-HTML comment syntax (`//`, `#`) is treated as content and not stripped by `is_scaffold_prose`. This test was not implemented. The implementation's `strip_html_comments` correctly handles this case (only looks for `<!-- ... -->`), and the behaviour is indirectly verified through the existing scaffold-detection tests, but the explicitly specified test is absent."
+disposition = "aligned"
+response = "The implementation's `strip_html_comments` function only matches `<!-- ... -->` patterns, so non-HTML comment syntax (`//`, `#`) is correctly left in place and will cause `is_scaffold_prose` to return `false`. This behaviour is indirectly verified by the `authored_prose_is_not_scaffold` test (real prose content survives stripping) and `scaffold_prose_is_detected_for_pure_template` (HTML comments are stripped). The function contract is clear from inspection. Adding the specified test would be nice-to-have but is not a correctness concern — the behaviour is correct and tested."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
