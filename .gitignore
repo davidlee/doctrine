@@ -28,6 +28,7 @@
 !.doctrine/spec/
 !.doctrine/memory/
 !.doctrine/rules/
+!.doctrine/concept-map/
 # SL-011 dogfood: commit the seeded boot governance layer
 # !.doctrine/governance.md
 
