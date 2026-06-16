@@ -1,0 +1,41 @@
+memory_uid = "mem_019ecfcca7887b11964746ebc07d6897"
+memory_key = "mem.fact.js.concept-map-diagnostic-variant-shape"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Concept Map diagnostic serialisation shape for JS consumption"
+summary = "ConceptMapDiagnostic serialises as tagged-enum JSON: each JS diagnostic object has a single key (variant name) with nested field values"
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = ["web/map/app.js", "src/concept_map.rs"]
+globs = []
+commands = []
+tags = ["sl-076"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "555f322eab0f75aceab4d339e78a1d70f82a7beb"
+ref_name = "refs/heads/main"
+checkout_state_id = "8ab417c291490684d2459bc3a08735bb01373db7c2544b68bf52a2d508956df7"
+base_commit = "e9a8f267f085d109a7727eede229260cea349d6a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

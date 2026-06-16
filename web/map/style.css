@@ -32,6 +32,7 @@
   --kind-DEC: #3498DB;
   --kind-QUE: #8E44AD;
   --kind-CON: #8E44AD;
+  --kind-CM: #16A085;
   --kind-REV: #A04000;
 
   /* Theme (light) */
@@ -51,6 +52,19 @@
     --border: #333333;
     --hover-bg: #2a2a2a;
     --sidebar-bg: #141414;
+  }
+
+  /* CM diagnostics — darker tones for dark background */
+  .cm-diagnostics-panel {
+    background: #2a2410;
+    border-color: #8b6914;
+  }
+  .cm-diagnostics-panel h3 {
+    color: #e0c060;
+  }
+  .cm-diag-item {
+    color: #c0a040;
+    border-bottom-color: #3a3410;
   }
 }
 
