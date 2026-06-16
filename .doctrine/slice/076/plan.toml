@@ -176,3 +176,28 @@ verification = [
 ]
 specs        = []
 requirements = []
+
+# Phase 07: CM focal node + depth filtering + styling refresh
+[[phase]]
+id        = "PHASE-07"
+name      = "CM focal node, depth filtering, and styling refresh"
+objective = "Add click-to-focus focal node with BFS neighbourhood depth filtering to concept maps, refresh node/edge styling (record shape, off-white fill, blue border, blue edges), unhide depth selector for CMs, add cm_focus URL hash parameter, and share depth state between entity and CM views."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete — authoring UI and SVG wiring exist" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Clicking a CM node in view mode sets it as cmFocusNode, re-renders with depth filtering; clicking the already-focal node clears back to wide-open (all nodes/edges visible)" },
+  { id = "EX-2", text = "BFS neighbourhood filtering: depth 0 shows focal node only, depth 1 shows focal + 1-hop neighbours, etc.; null cmFocusNode renders all" },
+  { id = "EX-3", text = "Focal node gets penwidth=3.0 highlight in DOT; non-focal nodes use penwidth=1.5" },
+  { id = "EX-4", text = "Node styling: record shape, off-white fill (#f8f9fa), blue border (#4A90D9), dark text (#222222)" },
+  { id = "EX-5", text = "Edge colour is #4A90D9 (blue) with matching fontcolor" },
+  { id = "EX-6", text = "Depth selector visible for CM views (0–3); state.depth shared between entity graph and CM views" },
+  { id = "EX-7", text = "cmFocusNode persisted in URL hash as &cm_focus=<key>; parsed on page load / hash change; cleared when focus changes away from CM" },
+  { id = "EX-8", text = "View-mode click sets/clears focal; edit-mode click still triggers startRenameNode (unchanged)" },
+]
+verification = [
+  { id = "VT-1", expects = "JS tests: cmNeighbourhood BFS filtering, cmGraphToDot with focusKey, router parseHash cm_focus parameter" },
+  { id = "VT-2", expects = "just lint-js clean; just check passes" },
+]
+specs        = []
+requirements = []

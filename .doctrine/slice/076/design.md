@@ -498,6 +498,7 @@ impl From<ConceptMapMutationError> for MapServerError {
 conceptMapCache: new Map(),   // id → { nodes, edges, diagnostics, dslHash }
 editingConceptMap: false,     // authoring mode toggle
 editingNode: null,            // { key, label } — node currently being renamed inline
+cmFocusNode: null,            // { key, label } — focal node for CM depth filtering; null = wide-open
 ```
 
 `conceptMapCache` is cleared on refresh alongside `markdownCache`. The refresh
@@ -513,6 +514,14 @@ the frontend re-fetches on next focus.
 
 `editingConceptMap` is toggled by the Edit/Done button. `editingNode` is set when
 an inline rename input is active, cleared on completion.
+
+`cmFocusNode` sets the depth-filtering focal node for the CM diagram. When `null`
+(the default), all nodes and edges render (wide-open view). When set, BFS
+neighbourhood filtering applies using `state.depth` (0 = focal only, 1 = focal +
+1-hop neighbours, etc.). Clicking a CM node in view mode toggles `cmFocusNode`;
+clicking the already-focal node deselects back to wide-open. `cmFocusNode`
+persists in the URL hash as `&cm_focus=<key>` for link-sharing. When the focused
+entity changes away from a CM, `cmFocusNode` is cleared.
 
 ### CM detection
 
@@ -541,13 +550,17 @@ function render() {
 
 `renderConceptMap()`:
 1. If `conceptMapCache` doesn't have the current focus, fetch via `api.fetchConceptMap(id)`.
-2. Generate DOT via `dot.cmGraphToDot(cachedData)`.
-3. Send to `/api/dot/svg` (existing endpoint, no changes).
-4. Wire SVG with `wireCmSvgHandlers`.
-5. If diagnostics are non-empty, render diagnostics panel (see §6).
-6. Render CM edge table.
-7. If `editingConceptMap`, show add-edge form and wire remove/rename controls.
-8. Render markdown pane (unchanged — `GET /api/entity/CM-001/markdown` already works if the entity is in the catalog graph).
+2. If `cmFocusNode` is set, apply BFS neighbourhood filtering: build undirected
+   adjacency from edges, BFS from `cmFocusNode.key` up to `state.depth` hops,
+   filter nodes/edges to the BFS-visible set. If `cmFocusNode` is null, render
+   all nodes and edges (wide-open).
+3. Generate DOT via `dot.cmGraphToDot(filteredData, cmFocusNode)`.
+4. Send to `/api/dot/svg` (existing endpoint, no changes).
+5. Wire SVG with `wireCmSvgHandlers`.
+6. If diagnostics are non-empty, render diagnostics panel (see §6).
+7. Render CM edge table.
+8. If `editingConceptMap`, show add-edge form and wire remove/rename controls.
+9. Render markdown pane (unchanged — `GET /api/entity/CM-001/markdown` already works if the entity is in the catalog graph).
 
 ## 4. DOT Generation & SVG Wiring
 
@@ -567,18 +580,23 @@ strings, extract an `escapeStringContent` that returns bare escaped content.
 ### cmGraphToDot (dot.js)
 
 ```js
-dot.cmGraphToDot = function(conceptMapData) {
+dot.cmGraphToDot = function(conceptMapData, focusKey) {
   var lines = [];
   lines.push('digraph concept_map {');
   lines.push('  rankdir=LR;');
   lines.push('  bgcolor="transparent";');
   lines.push('  nodesep=0.45;');
   lines.push('  ranksep=0.8;');
-  lines.push('  node [shape=ellipse, style=filled, fillcolor="' + CM_FILL + '", fontcolor="' + CM_FONT + '"];');
+  lines.push('  node [shape=record, style="filled,rounded", fillcolor="#f8f9fa", color="#4A90D9", fontcolor="#222222", penwidth=1.5];');
+  lines.push('  edge [color="#4A90D9", fontcolor="#4A90D9"];');
   lines.push('');
 
   conceptMapData.nodes.forEach(function(node) {
-    lines.push('  "' + dot.escapeStringContent(node.key) + '" [label="' + dot.escapeStringContent(node.label) + '"];');
+    var extra = '';
+    if (focusKey && node.key === focusKey) {
+      extra = ', penwidth=3.0';
+    }
+    lines.push('  "' + dot.escapeStringContent(node.key) + '" [label="' + dot.escapeStringContent(node.label) + '"' + extra + '];');
   });
 
   lines.push('');
@@ -595,17 +613,19 @@ dot.cmGraphToDot = function(conceptMapData) {
 
 - Node key = `derive_node_key(label)` — the Rust-returned key, used as DOT node id and SVG `<title>`.
 - Node label = original user-authored label — displayed in the diagram.
-- CM colour: `fillcolor="#16A085"` (green-teal), `fontcolor="#ffffff"`. Consistent with the CM kind pill.
-- Shape: `ellipse` for all nodes (no kind/status differentiation within a concept map).
-- No `URL` or `tooltip` attributes (follow-up: entity-ref nodes would get `URL="#/focus/SL-001"`).
+- Node styling: `record` shape with rounded corners, off-white fill (`#f8f9fa`), blue border (`#4A90D9`), dark text (`#222222`), uniform for all CM nodes (no kind/status differentiation within a concept map).
+- Edge colour: blue (`#4A90D9`) — the same blue used for `refines`/`details` entity-graph edges. Improves legibility over default Graphviz black/grey.
+- Focal node highlight: `penwidth=3.0` when `focusKey` matches. Non-focal nodes use `penwidth=1.5`.
 
 ### SVG wiring
 
 Reuses the entity graph handler pattern. Key differences:
-- **Click**: in view mode, no-op (CM nodes don't navigate). In edit mode, triggers `startRenameNode(key)`.
+- **Click (view mode)**: sets or clears `cmFocusNode`. Clicking a node sets it as focal; clicking the already-focal node clears back to wide-open. Re-renders with depth filtering.
+- **Click (edit mode)**: triggers `startRenameNode(key)` — unchanged from authoring behaviour.
 - **Hover**: shows the node label in the hover pane (not entity metadata).
 - **Hit-area rect**: identical pattern (bbox-based transparent `<rect>`).
 - **Stale-render guard**: existing `graphRenderSeq` token covers both entity and CM renders.
+- **Focal highlight**: focal node gets `penwidth=3.0` in DOT output; non-focal nodes use `penwidth=1.5`.
 
 ### Hover pane for CM nodes
 
@@ -751,11 +771,15 @@ Same as above, plus:
 | Graph pane | Entity graph SVG | CM diagram SVG | CM diagram SVG (same) |
 | Header | Entity title + kind + status | CM title + "concept map · draft" | Same + [Done] button |
 | Hover pane | Entity details (id, kind, status) | Node label + "(concept map node)" | Same |
-| Depth selector | Visible (0–3) | Hidden | Hidden |
+| Depth selector | Visible (0–3) | Visible (0–3) | Visible (0–3) |
 | Diagnostics panel | Hidden | Visible (if non-empty) | Hidden |
 | Edge table | Entity relationship table | CM edges (read-only) | CM edges + [✕] per row |
 | Add edge form | Hidden | Hidden | Visible |
 | Markdown pane | Entity .md body | CM .md body | CM .md body |
+
+**Depth state sharing.** `state.depth` is shared between entity graph and CM views — changing depth on an entity graph carries over when switching to a CM, and vice versa. This is consistent with how depth persists across all entity focus changes.
+
+**URL hash integration.** CM focal node persists in the URL: `#/focus/CM-001?depth=2&cm_focus=<key>`. `router.parseHash` gains a `cmFocus` field; `router.buildHash` appends `&cm_focus=...` when a focal node is set. This enables link-sharing of filtered CM views.
 
 ### Error states
 
