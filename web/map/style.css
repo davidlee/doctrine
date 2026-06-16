@@ -1,7 +1,7 @@
-/* Doctrine Map Explorer — styles (SL-072 PHASE-07) */
+/* Doctrine Map Explorer — styles (SL-073 PHASE-01) */
 
 /* ---------------------------------------------------------------------------
- * Reset / base
+ * Reset / box-sizing
  * ------------------------------------------------------------------------- */
 *,
 *::before,
@@ -9,218 +9,317 @@
   box-sizing: border-box;
 }
 
+/* ---------------------------------------------------------------------------
+ * CSS Custom Properties
+ * ------------------------------------------------------------------------- */
+:root {
+  /* Kind colour palette */
+  --kind-SL: #4A90D9;
+  --kind-ADR: #7B4FBF;
+  --kind-POL: #7B4FBF;
+  --kind-STD: #9B59B6;
+  --kind-PRD: #E67E22;
+  --kind-SPEC: #E67E22;
+  --kind-REQ: #F39C12;
+  --kind-ISS: #C0392B;
+  --kind-IMP: #C0392B;
+  --kind-CHR: #C0392B;
+  --kind-RSK: #C0392B;
+  --kind-IDE: #27AE60;
+  --kind-RV: #1ABC9C;
+  --kind-REC: #95A5A6;
+  --kind-ASM: #3498DB;
+  --kind-DEC: #3498DB;
+  --kind-QUE: #8E44AD;
+  --kind-CON: #8E44AD;
+  --kind-REV: #A04000;
+
+  /* Theme (light) */
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #6b6b6b;
+  --border: #e0e0e0;
+  --hover-bg: #f5f5f5;
+  --sidebar-bg: #f8f9fa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a1a;
+    --fg: #e0e0e0;
+    --muted: #9b9b9b;
+    --border: #333333;
+    --hover-bg: #2a2a2a;
+    --sidebar-bg: #141414;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Body
+ * ------------------------------------------------------------------------- */
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   margin: 0;
-  padding: 0;
-  color: #222;
-  background: #f8f9fa;
+  color: var(--fg);
+  background: var(--bg);
   line-height: 1.5;
 }
 
 /* ---------------------------------------------------------------------------
- * Layout
+ * CSS Grid layout
  * ------------------------------------------------------------------------- */
 .layout {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 280px 1fr;
   min-height: 100vh;
 }
 
 /* ---------------------------------------------------------------------------
- * Sidebar — entity list
+ * Sidebar
  * ------------------------------------------------------------------------- */
 .sidebar {
-  width: 300px;
-  min-width: 240px;
-  background: #fff;
-  border-right: 1px solid #dee2e6;
-  padding: 1.25rem;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  padding: 1rem;
   overflow-y: auto;
-  max-height: 100vh;
-  position: sticky;
-  top: 0;
-}
-
-.sidebar h2 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0 0 0.75rem 0;
-  color: #333;
-  border-bottom: 2px solid #0366d6;
-  padding-bottom: 0.4rem;
-}
-
-.entity-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.entity-list li {
-  margin: 0;
-}
-
-.entity-list a {
-  display: block;
-  padding: 0.4rem 0.5rem;
-  color: #0366d6;
-  text-decoration: none;
-  font-size: 0.9rem;
-  border-radius: 4px;
-  transition: background 0.15s;
-  word-break: break-word;
-}
-
-.entity-list a:hover {
-  background: #f0f4f8;
-}
-
-.entity-list .active a,
-.entity-list .active a:hover {
-  background: #0366d6;
-  color: #fff;
-  font-weight: 600;
 }
 
 /* ---------------------------------------------------------------------------
  * Main content area
  * ------------------------------------------------------------------------- */
-.content {
-  flex: 1;
-  min-width: 0;
-  padding: 2rem;
-  max-width: 900px;
-}
-
-.content h2 {
-  margin-top: 0;
-  font-size: 1.4rem;
-  color: #333;
-  border-bottom: 1px solid #e1e4e8;
-  padding-bottom: 0.5rem;
-  margin-bottom: 1.25rem;
-}
-
-.placeholder {
-  color: #6a737d;
-  font-style: italic;
+.main {
+  padding: 1.5rem;
+  overflow-y: auto;
 }
 
 /* ---------------------------------------------------------------------------
- * Markdown body — leverages github-markdown-css
+ * Search input
  * ------------------------------------------------------------------------- */
-.markdown-body {
-  box-sizing: border-box;
-  min-width: 200px;
-  max-width: 100%;
+.search-input {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  margin-bottom: 0.75rem;
+}
+
+.search-input::placeholder {
+  color: var(--muted);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--kind-SL);
+}
+
+/* ---------------------------------------------------------------------------
+ * Filter area
+ * ------------------------------------------------------------------------- */
+.filter-area {
+  margin-bottom: 0.75rem;
+}
+
+.filter-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.kind-checkbox {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--fg);
+  padding: 0.1rem 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.kind-checkbox input {
+  margin-right: 0.3rem;
+  vertical-align: middle;
+}
+
+/* ---------------------------------------------------------------------------
+ * Depth selector
+ * ------------------------------------------------------------------------- */
+.depth-selector {
+  margin-bottom: 0.75rem;
+}
+
+.depth-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+.depth-btn {
+  padding: 0.15rem 0.55rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+  margin-right: 0.25rem;
+}
+
+.depth-btn:hover {
+  background: var(--hover-bg);
+}
+
+.depth-btn.active {
+  background: var(--kind-SL);
+  color: #fff;
+  border-color: var(--kind-SL);
+}
+
+/* ---------------------------------------------------------------------------
+ * Entity list
+ * ------------------------------------------------------------------------- */
+.entity-list {
+  list-style: none;
+  margin: 0 0 0.75rem 0;
   padding: 0;
 }
 
-/* ---------------------------------------------------------------------------
- * DOT editor panel
- * ------------------------------------------------------------------------- */
-.dot-panel {
-  width: 100%;
-  border-top: 1px solid #dee2e6;
-  background: #fff;
-  padding: 1.25rem;
-}
-
-.dot-panel h3 {
-  margin: 0 0 0.75rem 0;
-  font-size: 1rem;
-  color: #333;
-}
-
-.dot-input {
-  width: 100%;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+.entity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.4rem;
   font-size: 0.85rem;
-  padding: 0.6rem;
-  border: 1px solid #d1d5da;
-  border-radius: 4px;
-  resize: vertical;
-  background: #fafbfc;
-}
-
-.dot-input:focus {
-  outline: none;
-  border-color: #0366d6;
-  box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15);
-}
-
-.dot-actions {
-  margin-top: 0.5rem;
-}
-
-.dot-actions button {
-  padding: 0.4rem 1rem;
-  font-size: 0.9rem;
-  color: #fff;
-  background: #0366d6;
-  border: none;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
 }
 
-.dot-actions button:hover {
-  background: #0255b9;
+.entity-item:hover {
+  background: var(--hover-bg);
 }
 
-.dot-actions button:disabled {
-  background: #8bb8ea;
-  cursor: not-allowed;
-}
-
-.dot-output {
-  margin-top: 1rem;
-}
-
-.dot-output img {
-  max-width: 100%;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
+.entity-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  margin-right: 0.35rem;
 }
 
 /* ---------------------------------------------------------------------------
- * Error / loading messages
+ * Kind pills
  * ------------------------------------------------------------------------- */
-.error {
-  color: #cb2431;
-  background: #ffdce0;
-  border: 1px solid #f5c6cb;
+.kind-pill {
+  display: inline-block;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 0.8em;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Refresh button
+ * ------------------------------------------------------------------------- */
+.refresh-btn {
+  width: 100%;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
   border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.refresh-btn:hover {
+  background: var(--hover-bg);
+}
+
+/* ---------------------------------------------------------------------------
+ * Focus header
+ * ------------------------------------------------------------------------- */
+.focus-header {
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.focus-header .placeholder {
+  font-size: 1.15rem;
+}
+
+/* ---------------------------------------------------------------------------
+ * Graph area
+ * ------------------------------------------------------------------------- */
+.graph-area {
+  border: 1px solid var(--border);
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+/* SVG node highlight classes */
+.doctrine-node--focus {
+  filter: brightness(1.2);
+}
+
+.doctrine-node--hover {
+  filter: brightness(1.15);
+}
+
+/* ---------------------------------------------------------------------------
+ * Hover detail pane
+ * ------------------------------------------------------------------------- */
+.hover-detail {
+  border: 1px solid var(--border);
   padding: 0.75rem 1rem;
-  margin: 0.5rem 0;
+  margin-bottom: 1rem;
 }
 
-.loading {
-  color: #6a737d;
-}
-
-.loading-md {
-  color: #6a737d;
+/* ---------------------------------------------------------------------------
+ * Placeholder
+ * ------------------------------------------------------------------------- */
+.placeholder {
+  color: var(--muted);
   font-style: italic;
 }
 
 /* ---------------------------------------------------------------------------
- * Responsive
+ * Relationship table
  * ------------------------------------------------------------------------- */
-@media (max-width: 768px) {
-  .sidebar {
-    width: 100%;
-    max-height: none;
-    position: static;
-    border-right: none;
-    border-bottom: 1px solid #dee2e6;
-  }
+.relationship-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
 
-  .content {
-    padding: 1rem;
-  }
+.relationship-table th,
+.relationship-table td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  text-align: left;
+}
 
-  .layout {
-    flex-direction: column;
-  }
+.relationship-table th {
+  background: var(--sidebar-bg);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Markdown pane
+ * ------------------------------------------------------------------------- */
+.markdown-pane {
+  border: 1px solid var(--border);
+  padding: 1rem;
 }

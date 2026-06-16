@@ -6,11 +6,92 @@
   <title>Doctrine Map Explorer</title>
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="stylesheet" href="/vendor/github-markdown.css">
-</head>
-<body>
-  <div id="app"><p class="loading">Loading…</p></div>
   <script src="/vendor/markdown-it.min.js"></script>
   <script src="/vendor/purify.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <input type="text" class="search-input" placeholder="Search entities...">
+
+      <div class="filter-area">
+        <span class="filter-label">List/table filter</span>
+        <label class="kind-checkbox"><input type="checkbox" checked> SL</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> ADR/POL</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> STD</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> PRD/SPEC</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> REQ</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> ISS/IMP/CHR/RSK</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> IDE</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> RV</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> REC</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> ASM/DEC</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> QUE/CON</label>
+        <label class="kind-checkbox"><input type="checkbox" checked> REV</label>
+      </div>
+
+      <div class="depth-selector">
+        <span class="depth-label">Depth</span>
+        <button class="depth-btn">0</button>
+        <button class="depth-btn active">1</button>
+        <button class="depth-btn">2</button>
+        <button class="depth-btn">3</button>
+      </div>
+
+      <ul class="entity-list">
+        <li class="entity-item">
+          <span class="entity-title">Example Slice</span>
+          <span class="kind-pill" style="background: var(--kind-SL)">SL</span>
+        </li>
+        <li class="entity-item">
+          <span class="entity-title">Example ADR</span>
+          <span class="kind-pill" style="background: var(--kind-ADR)">ADR</span>
+        </li>
+        <li class="entity-item">
+          <span class="entity-title">Example Requirement</span>
+          <span class="kind-pill" style="background: var(--kind-REQ)">REQ</span>
+        </li>
+      </ul>
+
+      <button class="refresh-btn">Refresh</button>
+    </aside>
+
+    <main class="main">
+      <div class="focus-header">
+        <span class="placeholder">Entity title — kind · status</span>
+      </div>
+
+      <div class="graph-area">
+        <span class="placeholder">[Graphviz SVG will render here]</span>
+      </div>
+
+      <div class="hover-detail">
+        <span class="placeholder">Hover a node for details</span>
+      </div>
+
+      <table class="relationship-table">
+        <thead>
+          <tr>
+            <th>src_id</th>
+            <th>src_title</th>
+            <th>label</th>
+            <th>tgt_id</th>
+            <th>tgt_title</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="5"><span class="placeholder">[Relationship table]</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="markdown-pane">
+        <span class="placeholder">[Markdown content]</span>
+      </div>
+    </main>
+  </div>
+
   <script src="/assets/app.js"></script>
 </body>
 </html>
