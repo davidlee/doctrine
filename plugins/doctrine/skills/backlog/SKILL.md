@@ -9,6 +9,8 @@ The backlog is the **work-intake home** — latent work intent captured as
 `issue`, `improvement`, `chore`, `risk`, or `idea` items, triaged and
 promoted into slices. 
 
+`needs` = hard dependency. `after` = soft ordering (suggestion).
+
 The CLI is the source of truth for exact flags: `doctrine backlog --help`
 
 ## Creating new backlog items:

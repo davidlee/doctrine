@@ -3423,21 +3423,57 @@ fn main() -> anyhow::Result<()> {
             format,
             json,
             path,
-        } => priority::run_survey(path, all, format, json),
-        Command::Next { format, json, path } => priority::run_next(path, format, json),
+        } => priority::run_survey(
+            path,
+            all,
+            format,
+            json,
+            crate::listing::RenderOpts {
+                color: crate::tty::stdout_color_enabled(),
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
+        Command::Next { format, json, path } => priority::run_next(
+            path,
+            format,
+            json,
+            crate::listing::RenderOpts {
+                color: crate::tty::stdout_color_enabled(),
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
         Command::Blockers {
             id,
             transitive,
             format,
             json,
             path,
-        } => priority::run_blockers(path, &id, transitive, format, json),
+        } => priority::run_blockers(
+            path,
+            &id,
+            transitive,
+            format,
+            json,
+            crate::listing::RenderOpts {
+                color: crate::tty::stdout_color_enabled(),
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
         Command::Explain {
             id,
             format,
             json,
             path,
-        } => priority::run_explain(path, &id, format, json),
+        } => priority::run_explain(
+            path,
+            &id,
+            format,
+            json,
+            crate::listing::RenderOpts {
+                color: crate::tty::stdout_color_enabled(),
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
             AdrCommand::List { list, path } => adr::run_list(path, list.into_list_args()),
