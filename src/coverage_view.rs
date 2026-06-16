@@ -27,21 +27,6 @@
 // The whole view layer is a leaf built ahead of its consumer: this phase lands the
 // compute + render; main.rs wires `doctrine coverage <ref>` in a later phase. Until
 // then every item is dead in the bins/lib build, so the module carries a
-// self-clearing `not(test)` dead_code expect (the `dead-code-self-clearing-leaf`
-// precedent, mirroring coverage.rs). Under `cfg(test)` the VTs exercise every item,
-// so `dead_code` would not fire and an unconditional `expect` would be unfulfilled;
-// it scopes to `not(test)` where the gate's plain `cargo clippy` (bins/lib, no test
-// cfg) sees the items as genuinely dead. It retires itself when main.rs wires the
-// `coverage` verb.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "coverage view layer (SL-045 PHASE-03) is a leaf built ahead of \
-                  its main.rs `coverage` verb consumer — every item is dead in the \
-                  bins/lib build until that verb is wired"
-    )
-)]
 
 use std::collections::BTreeSet;
 use std::io::Write;

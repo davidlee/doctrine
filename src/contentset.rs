@@ -46,17 +46,6 @@ pub(crate) struct SetDrift {
 }
 
 impl SetDrift {
-    /// Whether any class is non-empty — i.e. the two sets differ at all.
-    /// Part of the leaf's `is_stale_against` boolean shortcut (IMP-025 API
-    /// surface); the warm-cache consumer takes the `diff` path directly (it needs
-    /// the drifted paths to list), so this is exercised only by the leaf's tests.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "leaf API (is_stale_against shortcut); warm-cache consumer uses diff for the path list — IMP-025 primitive surface"
-        )
-    )]
     fn is_empty(&self) -> bool {
         self.changed.is_empty() && self.added.is_empty() && self.removed.is_empty()
     }
