@@ -13,9 +13,8 @@ Every phase is built **red → green → REFACTOR**. This is non-negotiable insi
 private wiring — that keeps tests from going brittle when you refactor. Build and
 improve test helpers and fixtures as you go; they are first-class.
 
-**End every phase green.** A phase closes with the suite passing — `cargo test`
-clean, lint clean (`just check`), formatted. Don't flip a phase `completed` over a
-red bar.
+**End every phase green.** A phase closes with the suite passing — tests clean,
+lint clean, formatted. Don't flip a phase `completed` over a red bar.
 
 **The existing suites are the proof.** When you touch shared machinery, the already-
 green tests are the behaviour-preservation gate — they must stay green *unchanged*

@@ -19,7 +19,7 @@ those for the authoritative wording.
   of truth for command shapes — don't guess ids, flags, or paths
   ([[fact.doctrine.cli-source-of-truth]]).
 - **No parallel implementation.** Ride existing seams; find duplication before
-  writing new code. Lint as you go (zero clippy warnings; `just check` before commit).
+  writing new code. Lint as you go (zero warnings; your project's lint-and-check gate before commit).
 
 Honour the storage rule when you write artifacts — structured data in TOML, prose in
 MD, never queried/derived data in prose ([[concept.doctrine.storage-model]],
