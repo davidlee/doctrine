@@ -69,12 +69,6 @@ body {
 :root { --link: #2563eb; }
 @media (prefers-color-scheme: dark) { :root { --link: #60a5fa; } }
 
-@media (prefers-color-scheme: dark) {
-  .cm-edge-label { color: var(--fg); }
-  .cm-edges th { color: var(--muted); border-bottom-color: var(--border); }
-  .cm-edges td { border-bottom-color: var(--border); }
-  .cm-edge-row:hover { background: var(--hover-bg); }
-}
 a { color: var(--link); }
 
 /* ---------------------------------------------------------------------------
@@ -655,23 +649,23 @@ a { color: var(--link); }
 .cm-edges th {
   text-align: left;
   padding: 0.4rem 0.5rem;
-  border-bottom: 2px solid var(--border-light, #e0e0e0);
-  color: var(--text-secondary, #666);
+  border-bottom: 2px solid var(--border);
+  color: var(--muted);
   font-weight: 600;
   font-size: 0.8rem;
 }
 
 .cm-edges td {
   padding: 0.35rem 0.5rem;
-  border-bottom: 1px solid var(--border-light, #eee);
+  border-bottom: 1px solid var(--border);
 }
 
 .cm-edge-row:hover {
-  background: var(--bg-hover, #f5f5f5);
+  background: var(--hover-bg);
 }
 
 .cm-edge-label {
-  color: var(--text-primary, #333);
+  color: var(--fg);
 }
 
 .cm-editable-node {
