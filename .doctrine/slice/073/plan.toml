@@ -1,0 +1,136 @@
+# Implementation plan for SL-073 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-073"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Static shell"
+objective = "Build index.html app shell, style.css semantic layout (CSS grid sidebar + main), light/dark theme custom properties, kind colour palette CSS variables. No JS data logic — static placeholder content in each panel region."
+entrance_criteria = [
+  { id = "EN-1", text = "web/map/ directory exists from SL-072 with vendor/ subdirectory (markdown-it, DOMPurify, github-markdown.css)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "index.html loads with correct grid layout (280px sidebar + 1fr main), no overflow" },
+  { id = "EX-2", text = "CSS custom properties defined for all 12 kind colour groups, both :root (light) and @media prefers-color-scheme: dark" },
+  { id = "EX-3", text = "Placeholder regions visible for sidebar (entity list, filter area, search input, refresh button), main (focus header, graph area, hover pane, relationship table, markdown pane)" },
+]
+verification = [
+  { id = "VA-1", expects = "Layout structure matches UI Layout diagram (§9 of design); all kind colour CSS vars present; no broken image/asset references" },
+  { id = "VH-1", expects = "Page opens in browser with correct grid layout; light/dark theme toggles with system preference; no JavaScript errors (no JS yet)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Model + routing"
+objective = "Implement api.js (fetchGraph, fetchHealth), model.js (normalizeGraph, resolveFocus, findFocus, neighbourhood, searchFilter, kinds), router.js (parseHash, buildHash, setFocus, setEdge). Wire state object with graphRenderSeq. No DOM rendering yet — verified through test.html unit tests."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — shell renders with correct layout and CSS vars" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "fetchGraph populates state.graphRaw; normalizeGraph builds nodes Map, edges[], incoming/outgoing/edgeById Maps; duplicate edges coalesced; unresolved edges filtered" },
+  { id = "EX-2", text = "resolveFocus handles null, exact match, loose canonical, title match, substring, fallback" },
+  { id = "EX-3", text = "findFocus handles same resolution steps but returns null on miss (no fallback)" },
+  { id = "EX-4", text = "neighbourhood BFS correct at depths 0, 1, 2, 3; depth 0 returns only focus node; disconnected nodes handled" },
+  { id = "EX-5", text = "parseHash and buildHash round-trip for all view/id/depth combinations; default hash {view:'focus',id:null,depth:1}" },
+  { id = "EX-6", text = "Edge ID formula e_source_label_target; NormalizedNode includes id, title, status, kindPrefix, kindLabel" },
+  { id = "EX-7", text = "All pure JS unit tests pass in web/map/test.html (dotQuote, normalizeGraph, neighbourhood, resolveFocus, findFocus, parseHash/buildHash, searchFilter, kinds)" },
+]
+verification = [
+  { id = "VT-1", expects = "test.html unit tests: normalizeGraph duplicate coalescing, neighbourhood BFS at each depth, resolveFocus null/exact/loose/title/substring/fallback, findFocus null-on-miss, parseHash/buildHash round-trip, searchFilter substring + case-insensitive + sorted, kinds count + sort" },
+  { id = "VA-1", expects = "findFocus vs resolveFocus separation correct per Hard Contracts § search navigation; depth clamped [0,3]; edge ID durable across calls with same data" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "DOT/SVG rendering"
+objective = "Implement dot.js (dotQuote, nodeAttrs, edgeAttrs, graphToDot), SVG rendering pipeline (fetch → sanitize → inject → wire), stale-render guard (graphRenderSeq token), click/hover handlers (wireSvgHandlers), hover detail pane (renderHoverPane). Error state: Graphviz unavailable → DOT fallback + message."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — model + routing APIs working, unit tests pass" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dot.graphToDot produces deterministic DOT output sorted by node id; bgcolor=transparent, rankdir=LR" },
+  { id = "EX-2", text = "DOT node key is canonical ref (id), label is id-only; <title> preserves canonical ref for SVG identity extraction" },
+  { id = "EX-3", text = "DOT strings quoted/escaped via dotQuote (Handles quotes, backslashes, newlines per Hard Contracts D1)" },
+  { id = "EX-4", text = "SVG sanitized through DOMPurify SVG profile, injected as inline DOM; click sets focus via router, hover updates hoveredId + renderHoverPane" },
+  { id = "EX-5", text = "Stale-render guard active: rapid focus/depth changes discard in-flight DOT renders (graphRenderSeq mismatch)" },
+  { id = "EX-6", text = "Focus node gets .doctrine-node--focus CSS class; hovered node gets .doctrine-node--hover; node fill/font colours from kind palette" },
+  { id = "EX-7", text = "Graphviz unavailable (503 or health dot.ok=false) shows error message + DOT source in <pre> fallback" },
+]
+verification = [
+  { id = "VT-1", expects = "dotQuote unit tests: quotes, backslashes, newlines, empty string; graphToDot produces valid DOT with expected node/edge count" },
+  { id = "VA-1", expects = "Node identity extracted from <g class=\"node\"><title>, never from <text>; label is canonical ref, not display title; DOT node key = canonical ref per Hard Contracts D2" },
+  { id = "VH-1", expects = "Click a node → focus changes, SVG updates, URL hash updates; hover a node → detail pane shows title/status/kind; rapid focus changes during DOT render → only last SVG appears (no stale flash)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Markdown rendering"
+objective = "Implement renderMarkdownPane: fetchMarkdown, markdown-it (html:false) + DOMPurify sanitization, link policy post-processing, cache with stale-request guard, cache clear on refresh. Handle error states: 404 (no .md body), 501 (REQ not implemented), 500 (server error)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — DOT/SVG pipeline renders correctly, click/hover working" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Markdown fetched via GET /api/entity/{id}/markdown; rendered with markdown-it html:false; sanitized with DOMPurify.sanitize()" },
+  { id = "EX-2", text = "Link policy applied post-sanitization: external links get target=_blank rel=noopener noreferrer; relative links stripped (text preserved as <span>); anchor links preserved" },
+  { id = "EX-3", text = "Markdown cache populated on fetch, hit skips request; cache cleared on refresh" },
+  { id = "EX-4", text = "Stale-request guard: focus change while fetch in-flight discards response (compare id vs state.focusId)" },
+  { id = "EX-5", text = "404 shows 'No markdown body for {id}' muted; 501 shows 'Markdown not implemented for requirements' info; 500 shows 'Failed to load markdown: {message}' error" },
+]
+verification = [
+  { id = "VA-1", expects = "Link policy: grep rendered HTML for target=_blank on http(s) hrefs; verify relative links have no href; anchor links preserved. DOMPurify config verified (html:false on markdown-it, USE_PROFILES not needed for HTML output)" },
+  { id = "VH-1", expects = "Focus SL-072 → design.md renders legibly; <script>alert(1)</script> in test .md does not execute; focus REQ-001 → 'Markdown not implemented for requirements' info shown; focus entity with no .md → muted 404 message" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Polish + acceptance"
+objective = "Wire remaining UI: kind filter (List/table filter checkboxes, sidebar + relationship table filtering, per Hard Contracts D7 label + semantics), search (live sidebar filter + Enter findFocus), relationship table (neighbourhood edges, source-kind filtered, clickable IDs), edge detail page (reachable from table), depth selector (0-3), refresh integration. Full 19-item acceptance checklist pass."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 through PHASE-04 all complete — shell, model, DOT/SVG, and markdown all working" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Kind filter labeled 'List/table filter'; checkboxes for all kind groups; toggling hides/shows entities in sidebar list and relationship table; SVG unchanged" },
+  { id = "EX-2", text = "Kind filter acceptance case passes: uncheck Governance, focus SL-072 → ADR-001 remains in SVG, absent from sidebar" },
+  { id = "EX-3", text = "Relationship table shows neighbourhood edges only; source-kind filtered when kindFilter active; src/tgt IDs clickable (setFocus)" },
+  { id = "EX-4", text = "Search live-filters sidebar on keystroke (substring id+title, case-insensitive, after kind filter); Enter runs findFocus → null on miss shows inline message, preserves current focus (no fallback to first node); Escape clears input" },
+  { id = "EX-5", text = "Depth selector (0-3) updates neighbourhood and hash; depth 0 shows only focused node" },
+  { id = "EX-6", text = "Edge detail page reachable: clicking edge ID in relationship table navigates to #/edge/e_… showing metadata table (edge id, source, label, target, origin_file); source/target are clickable focus links" },
+  { id = "EX-7", text = "Refresh clears markdown cache, increments graphRenderSeq (kills in-flight renders), re-fetches graph, re-resolves focus, re-renders; focus preserved across refresh" },
+  { id = "EX-8", text = "All 19 acceptance checklist items pass (acceptance checklist §13 of design.md)" },
+  { id = "EX-9", text = "Remaining pure JS unit tests pass (searchFilter, kinds); no lint warnings (eslint)" },
+]
+verification = [
+  { id = "VT-1", expects = "test.html: searchFilter substring + case-insensitive + sorted output; kinds count + sort. cargo test: map_serve_path_flag_passed_to_root_find" },
+  { id = "VA-1", expects = "Kind filter search miss verified: findFocus returns null on nonsense query, no fallback to first node. ADR-001 in SVG but not sidebar when Governance unchecked. Relationship table edges are neighbourhood, not all-graph." },
+  { id = "VH-1", expects = "Full 19-item acceptance checklist: open --focus, depth 0, kind-coloured nodes, SVG <title> node identity, hover pane, click navigation, depth selector, search filter + Enter null-on-miss, kind filter label + sidebar/table semantics, markdown sanitize + link policy, REQ 501, refresh preserves focus, rapid focus no stale SVG, --path flag, dark mode, edge detail page reachable" },
+]
+specs        = []
+requirements = []
