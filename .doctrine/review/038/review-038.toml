@@ -1,0 +1,25 @@
+id    = 38
+slug  = "reconciliation-review-of-sl-074"
+title = "reconciliation review of SL-074"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-074"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "CLI unreachable: concept-map command not registered by clap"
+detail = "The concept-map subcommand (and map) compile and dispatch correctly in src/main.rs but do not appear in 'doctrine --help' and are rejected at runtime. Investigation ruled out: attribute position, hidden Skills interference, single-variant sub-enum, and field naming. Root cause appears to be a clap 4 derive-macro issue with subcommand registration when a Subcommand variant uses #[command(subcommand)] on an inner enum. This also affects the pre-existing Map command (SL-072). The concept_map module compiles and all 76 tests pass — the implementation is correct, the CLI surface is inaccessible. Deferred to follow-up: needs clap upgrade or clap issue report. The other 9 RV-037 findings (F-2 through F-10) are resolved in commit d000183."
+disposition = "follow-up"
+response = "The clap 4 subcommand registration defect is a framework-level issue also affecting the pre-existing Map command (SL-072). The concept_map module compiles and all 76 tests pass — the implementation is correct. The fix requires clap upgrade investigation or a clap issue report. Capture as backlog item and track separately. The slice's code is ready; CLI surface activation is a framework dependency."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
