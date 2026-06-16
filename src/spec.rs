@@ -1369,6 +1369,7 @@ struct ReqListRow {
     label: String,
     kind: String,
     status: String,
+    prose: String,
 }
 
 /// One roster entry projected to its faithful JSON row (mirrors [`SpecRow`]).
@@ -1388,12 +1389,14 @@ struct ReqJsonRow {
     dangling: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     load_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prose: Option<bool>,
 }
 
 /// The table columns a roster row can show (`--columns` tokens over
 /// `R = ReqListRow`). Non-capturing extractors (SL-037 D5). Declaration order is
 /// what the unknown-column error lists. Mirrors [`SPEC_COLUMNS`].
-const REQ_COLUMNS: [listing::Column<ReqListRow>; 4] = [
+const REQ_COLUMNS: [listing::Column<ReqListRow>; 5] = [
     listing::Column {
         name: "id",
         header: "id",
@@ -1420,10 +1423,16 @@ const REQ_COLUMNS: [listing::Column<ReqListRow>; 4] = [
         cell: |r| r.status.clone(),
         paint: listing::ColumnPaint::ByValue(|r| listing::status_hue(&r.status)),
     },
+    listing::Column {
+        name: "prose",
+        header: "prose",
+        cell: |r| r.prose.clone(),
+        paint: listing::ColumnPaint::None,
+    },
 ];
 
 /// The default visible set — every authored column (`id label kind status`).
-const REQ_DEFAULT: &[&str] = &["id", "label", "kind", "status"];
+const REQ_DEFAULT: &[&str] = &["id", "label", "kind", "status", "prose"];
 
 /// Resolve a spec's membered requirements into rows, degrading a dangling member
 /// FK to an error-bearing row (E5). `member_reqs` (PHASE-02) supplies the ordered,
@@ -1437,13 +1446,19 @@ fn req_rows(root: &Path, spec_ref: &str) -> anyhow::Result<Vec<(ReqListRow, Opti
     let members = member_reqs(root, spec_ref)?;
     let mut rows = Vec::with_capacity(members.len());
     for m in members {
-        match requirement::load(root, &m.requirement) {
-            Ok(req) => {
+        match requirement::load_with_prose(root, &m.requirement) {
+            Ok((req, prose)) => {
+                let prose_indicator = if prose.is_some() {
+                    "\u{2713}"
+                } else {
+                    "\u{2014}"
+                };
                 let row = ReqListRow {
                     id: m.requirement.clone(),
                     label: m.label.clone(),
                     kind: req.kind.as_str().to_string(),
                     status: req.status.as_str().to_string(),
+                    prose: prose_indicator.to_string(),
                 };
                 rows.push((row, Some(req)));
             }
@@ -1456,6 +1471,7 @@ fn req_rows(root: &Path, spec_ref: &str) -> anyhow::Result<Vec<(ReqListRow, Opti
                     label: m.label.clone(),
                     kind: note.clone(),
                     status: note,
+                    prose: "\u{2014}".to_string(),
                 };
                 rows.push((row, None));
             }
@@ -1529,14 +1545,18 @@ fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Res
             let json_rows: Vec<ReqJsonRow> = kept
                 .into_iter()
                 .map(|(row, req)| match req {
-                    Some(_) => ReqJsonRow {
-                        id: row.id,
-                        label: row.label,
-                        kind: Some(row.kind),
-                        status: Some(row.status),
-                        dangling: false,
-                        load_error: None,
-                    },
+                    Some(_) => {
+                        let prose_val = Some(row.prose == "\u{2713}");
+                        ReqJsonRow {
+                            id: row.id,
+                            label: row.label,
+                            kind: Some(row.kind),
+                            status: Some(row.status),
+                            dangling: false,
+                            load_error: None,
+                            prose: prose_val,
+                        }
+                    }
                     None => ReqJsonRow {
                         id: row.id,
                         label: row.label,
@@ -1545,6 +1565,7 @@ fn req_list_rows(root: &Path, spec_ref: &str, mut args: ListArgs) -> anyhow::Res
                         dangling: true,
                         // `kind` held the load-error note for the table row.
                         load_error: Some(row.kind),
+                        prose: None,
                     },
                 })
                 .collect();

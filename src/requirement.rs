@@ -354,8 +354,17 @@ pub(crate) fn load_with_prose(
     let req: Requirement = toml::from_str(&text)
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
     let md_path = dir.join(format!("requirement-{name}.md"));
-    let body = std::fs::read_to_string(&md_path)
-        .with_context(|| format!("Failed to read {}", md_path.display()))?;
+    let body = match std::fs::read_to_string(&md_path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // Tolerate a missing `.md` — treat as scaffold. Some test setups
+            // and hand-authored requirements may lack the prose file.
+            return Ok((req, None));
+        }
+        Err(e) => {
+            return Err(e).with_context(|| format!("Failed to read {}", md_path.display()));
+        }
+    };
     let prose = if is_scaffold_prose(&body) {
         None
     } else {

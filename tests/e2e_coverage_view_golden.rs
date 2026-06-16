@@ -512,9 +512,9 @@ fn spec_req_list_table_roster_byte_exact() {
     assert!(out.status.success(), "stderr: {}", stderr(&out));
     assert_eq!(
         stdout(&out),
-        "id      │ label  │ kind       │ status\n\
-         REQ-001 │ FR-001 │ functional │ pending\n\
-         REQ-002 │ NF-001 │ quality    │ active\n"
+        "id      │ label  │ kind       │ status  │ prose\n\
+         REQ-001 │ FR-001 │ functional │ pending │ —\n\
+         REQ-002 │ NF-001 │ quality    │ active  │ —\n"
     );
 }
 
@@ -553,6 +553,11 @@ fn spec_req_list_json_faithful_rows() {
     assert!(
         r0.get("verdict").is_none(),
         "roster row has no verdict column"
+    );
+    assert_eq!(
+        r0.get("prose").and_then(|x| x.as_bool()),
+        Some(false),
+        "freshly seeded requirement has scaffold prose"
     );
 }
 
@@ -604,7 +609,7 @@ fn spec_req_list_columns_unknown_errors() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: unknown column `bogus` (available: id, label, kind, status)\n"
+        "Error: unknown column `bogus` (available: id, label, kind, status, prose)\n"
     );
 }
 
@@ -635,7 +640,17 @@ fn spec_req_list_dangling_member_degrades_does_not_abort() {
     // absolute path — split on whitespace for the healthy row's typed cells.
     assert_eq!(
         lines[1].split_whitespace().collect::<Vec<_>>(),
-        ["REQ-001", "│", "FR-001", "│", "functional", "│", "pending"]
+        [
+            "REQ-001",
+            "│",
+            "FR-001",
+            "│",
+            "functional",
+            "│",
+            "pending",
+            "│",
+            "—"
+        ]
     );
     assert!(lines[2].starts_with("REQ-999 │ FR-002 │ "));
     assert!(
