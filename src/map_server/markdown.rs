@@ -6,10 +6,6 @@
 //! scan.  Memory kinds (ASM/DEC/QUE/CON) use the same `kind.dir`/`stem`
 //! convention — their stem is `"record"`, so the path is
 //! `{kind.dir}/{id:03}/record-{id:03}.md`.
-#![allow(
-    dead_code,
-    reason = "read_entity_markdown + entity_md_path consumed in PHASE-05 (routes)"
-)]
 
 use std::path::{Path, PathBuf};
 
@@ -104,6 +100,15 @@ mod tests {
             }
             other => panic!("expected MarkdownNotImplemented, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn path_for_concept_map() {
+        let p = entity_md_path(root(), &key("CM", 1)).unwrap();
+        assert_eq!(
+            p,
+            PathBuf::from("/corpus/.doctrine/concept-map/001/concept-map-001.md")
+        );
     }
 
     #[test]

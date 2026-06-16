@@ -1298,10 +1298,6 @@ pub(crate) fn remove_edge_from_dsl(
 // Pure: rename_node_in_dsl
 // ---------------------------------------------------------------------------
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by future phases (SL-076 PHASE-02+)")
-)]
 pub(crate) fn rename_node_in_dsl(
     old_dsl: &str,
     old_label: &str,

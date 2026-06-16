@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Map-server error model (SL-072 PHASE-01).
-//!
-//! PHASE-01 scaffolding — types consumed in PHASE-02+.
-#![allow(
-    dead_code,
-    reason = "PHASE-01 foundation — types consumed in PHASE-02+"
-)]
+//! Map-server error model (SL-072 PHASE-01, SL-076 PHASE-02).
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
+
+use crate::concept_map::ConceptMapMutationError;
 
 /// The single error type for the map-server HTTP surface.
 ///
@@ -44,6 +40,33 @@ pub(crate) enum MapServerError {
 
     #[error("{command} timed out")]
     Timeout { command: &'static str },
+
+    #[error("bad concept-map id: {0}")]
+    BadConceptMapId(String),
+
+    #[error("concept map not found: CM-{0:03}")]
+    ConceptMapNotFound(u32),
+
+    #[error("duplicate edge at line {line}")]
+    DuplicateEdge { line: usize },
+
+    #[error("edge not found")]
+    EdgeNotFound,
+
+    #[error("rename would collide with existing node '{0}' at line {1}")]
+    NodeCollision(String, usize),
+
+    #[error("empty field: {0}")]
+    EmptyField(String),
+
+    #[error("concept map was modified since last read")]
+    StaleConceptMap,
+
+    #[error("concept-map parse error: {0}")]
+    ConceptMapParseError(String),
+
+    #[error("concept-map I/O error: {0}")]
+    ConceptMapIoError(String),
 
     #[error(transparent)]
     Other(#[from] anyhow::Error),
@@ -123,6 +146,63 @@ impl IntoResponse for MapServerError {
                     "command": command,
                 })
             }
+            Self::BadConceptMapId(id) => {
+                serde_json::json!({
+                    "error": "bad_concept_map_id",
+                    "message": format!("bad concept-map id: {id}"),
+                })
+            }
+            Self::ConceptMapNotFound(id) => {
+                serde_json::json!({
+                    "error": "not_found",
+                    "message": format!("concept map CM-{id:03} not found"),
+                })
+            }
+            Self::DuplicateEdge { line } => {
+                serde_json::json!({
+                    "error": "duplicate_edge",
+                    "message": format!("edge already exists at line {line}"),
+                    "line": line,
+                })
+            }
+            Self::EdgeNotFound => {
+                serde_json::json!({
+                    "error": "edge_not_found",
+                    "message": "edge not found",
+                })
+            }
+            Self::NodeCollision(existing_label, line) => {
+                serde_json::json!({
+                    "error": "node_collision",
+                    "message": format!("rename would collide with existing node '{existing_label}' at line {line}"),
+                    "existing_label": existing_label,
+                    "line": line,
+                })
+            }
+            Self::EmptyField(field) => {
+                serde_json::json!({
+                    "error": "empty_field",
+                    "message": format!("{field} must be non-empty"),
+                })
+            }
+            Self::StaleConceptMap => {
+                serde_json::json!({
+                    "error": "stale_concept_map",
+                    "message": "concept map was modified since last read; refresh and retry",
+                })
+            }
+            Self::ConceptMapParseError(msg) => {
+                serde_json::json!({
+                    "error": "concept_map_parse_error",
+                    "message": msg,
+                })
+            }
+            Self::ConceptMapIoError(msg) => {
+                serde_json::json!({
+                    "error": "concept_map_io_error",
+                    "message": msg,
+                })
+            }
             Self::Other(err) => {
                 serde_json::json!({
                     "error": "other",
@@ -139,16 +219,42 @@ impl IntoResponse for MapServerError {
 /// Map each variant to its HTTP status code.
 fn status_code(err: &MapServerError) -> StatusCode {
     match err {
-        MapServerError::BadEntityId(_) => StatusCode::BAD_REQUEST,
-        MapServerError::EntityNotFound(_) | MapServerError::AssetNotFound(_) => {
-            StatusCode::NOT_FOUND
-        }
+        MapServerError::BadEntityId(_)
+        | MapServerError::BadConceptMapId(_)
+        | MapServerError::EmptyField(_) => StatusCode::BAD_REQUEST,
+        MapServerError::EntityNotFound(_)
+        | MapServerError::AssetNotFound(_)
+        | MapServerError::ConceptMapNotFound(_)
+        | MapServerError::EdgeNotFound => StatusCode::NOT_FOUND,
         MapServerError::BodyTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
         MapServerError::CommandFailed { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+        MapServerError::DuplicateEdge { .. }
+        | MapServerError::NodeCollision(..)
+        | MapServerError::StaleConceptMap => StatusCode::CONFLICT,
         MapServerError::MarkdownNotImplemented(_) => StatusCode::NOT_IMPLEMENTED,
         MapServerError::ToolUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
         MapServerError::Timeout { .. } => StatusCode::GATEWAY_TIMEOUT,
-        MapServerError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        MapServerError::ConceptMapParseError(_)
+        | MapServerError::ConceptMapIoError(_)
+        | MapServerError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+impl From<ConceptMapMutationError> for MapServerError {
+    fn from(e: ConceptMapMutationError) -> Self {
+        match e {
+            ConceptMapMutationError::EmptyField(field) => Self::EmptyField(field),
+            ConceptMapMutationError::DuplicateEdge { line } => Self::DuplicateEdge { line },
+            ConceptMapMutationError::EdgeNotFound => Self::EdgeNotFound,
+            ConceptMapMutationError::NodeCollision {
+                existing_label,
+                line,
+            } => Self::NodeCollision(existing_label, line),
+            ConceptMapMutationError::MissingDsl => {
+                Self::ConceptMapParseError("TOML is missing a `dsl` key".into())
+            }
+            ConceptMapMutationError::InvalidToml(msg) => Self::ConceptMapParseError(msg),
+        }
     }
 }
 
