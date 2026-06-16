@@ -44,18 +44,21 @@ and long-term the ability for concept map nodes to reference real entities.
 
 - `src/integrity.rs` — add `CM` to `KINDS`
 - `src/catalog/scan.rs` — `outbound_for` arm for `CM` (empty, like REQ/KNOWLEDGE)
-- `src/map_server/routes.rs` — new API routes: `GET /api/concept-maps` (list),
-  `GET /api/concept-map/:id` (nodes + edges from DSL), `POST /api/concept-map/:id/edge`
-  (add edge), `DELETE /api/concept-map/:id/edge` (remove edge),
-  `POST /api/concept-map/:id/node` (rename node)
-- `src/map_server/state.rs` — no structural changes (concept map data is read
-  from disk per-request via `concept_map` module)
+- `src/concept_map.rs` — visibility promotions (7 symbols → `pub(crate)`) + 3 new
+  pure mutation functions (`add_edge_to_dsl`, `remove_edge_from_dsl`,
+  `rename_node_in_dsl`) extracted from CLI shell verbs
+- `src/map_server/routes.rs` — 2 new routes: `GET /api/concept-map/:id` (structured
+  data: nodes, edges, diagnostics) + `POST /api/concept-map/:id` (mutation with
+  `action` discriminator: `add_edge`/`remove_edge`/`rename_node`)
+- `src/map_server/error.rs` — CM-specific error variants (not_found, duplicate_edge,
+  edge_not_found, node_collision)
+- `src/map_server/state.rs` — unchanged (CM data read per-request from disk)
 - `web/map/app.js` — concept map diagram pane, authoring UI (add edge form,
   remove edge button, rename node), toggle between entity graph and CM diagram
 - `web/map/model.js` — concept map data normalization, CM edge/node types
 - `web/map/style.css` — authoring form styles, CM diagram pane, edge interaction
 - `web/map/index.html` — CM pane container, authoring UI elements
-- `web/map/dot.js` — no changes (DOT generation for concept maps is isomorphic)
+- `web/map/dot.js` — one new function `cmGraphToDot` (thin wrapper over existing DOT helpers)
 
 ## Non-Goals
 
@@ -82,6 +85,9 @@ and long-term the ability for concept map nodes to reference real entities.
   is proportional (file lock or in-memory lock per CM id).
 - **Catalog scan performance**: Adding one more kind to the scan is
   negligible; concept map directories are small and few.
+- **TOCTOU**: Two browser tabs could interleave reads before writes on the
+  same CM (last-write-wins). Acceptable for single-user loopback. The 409 on
+  duplicate edge and 404 on edge-not-found give enough feedback to retry.
 
 ## Verification
 
