@@ -15,10 +15,11 @@ output.
 
 The phases follow the design's module contract boundaries — `api` + `model` +
 `router` first (the data layer), then `dot` + SVG (the visualisation layer),
-then markdown (the content layer), and finally the integration/polish work
-(kind filter, search, relationship table, edge detail, refresh wiring). The
-Rust `--path` flag change (IMP-079) and JS unit tests are threaded through the
-appropriate phases rather than siloed into a separate phase.
+then markdown (the content layer), then the interactive UI surfaces (kind filter,
+search, relationship table, depth selector), and finally integration/polish
+(edge detail, refresh, --path flag, acceptance). The Rust `--path` flag change
+(IMP-079) and JS unit tests are threaded through the appropriate phases rather
+than siloed separately.
 
 ## Sequencing & Rationale
 
@@ -77,32 +78,44 @@ anchor → preserve) is implemented here because it's a markdown-specific concer
 Error states (404, 501, 500) are handled with distinct UI per the design's
 state table.
 
-### PHASE-05: Polish + acceptance
+### PHASE-05: Interactive UI
 
-The integration phase. All remaining UI surfaces (kind filter, search,
-relationship table, edge detail page, depth selector, refresh) are wired here.
-These are individually small but collectively produce the full interactive
-experience. They're grouped into one phase because they share no internal
-dependencies — each is a consumer of PHASE-02/03/04 APIs wired to a specific
-DOM region.
+Depends on PHASE-04 for a fully functional base (shell + model + SVG + markdown).
+Wires the four main interactive surfaces: kind filter, search, relationship
+table, and depth selector. These are individually small but collectively produce
+the core explorer experience. They're grouped into one phase because they share
+no internal dependencies — each is a consumer of PHASE-02/03/04 APIs wired to a
+specific DOM region.
 
 The kind filter's "List/table filter" label and semantics (sidebar + relationship
 table only, SVG unchanged) are verified against the Hard Contracts. The search
 Enter → findFocus null-on-miss behaviour is verified against the Hard Contracts
 search navigation requirement.
 
-The Rust `--path` flag test is delivered here since it's a small CLI change
-with no frontend dependency. Full 19-item acceptance checklist pass gates
-phase exit.
+### PHASE-06: Integration + acceptance
+
+The final integration phase. Edge detail page (reachable from relationship
+table), refresh wiring (clear caches, increment graphRenderSeq, re-fetch,
+preserve focus), --path CLI flag (IMP-079), SVG sanitization edge cases, and
+the full 21-item acceptance checklist.
+
+This phase is deliberately last — it exercises the full stack and validates
+that all the individually-built components compose correctly. The edge detail
+page is placed here rather than PHASE-05 because it depends on relationship
+table edge ID click wiring and URL-safe edge IDs, both delivered in PHASE-05.
+The --path flag is a small, independent Rust diff that can be implemented at
+any point; placing it in PHASE-06 keeps it from blocking frontend work.
 
 ## Notes
 
-- The Rust `--path` flag change (IMP-079) is a small, independent diff. It can
-  be implemented during any phase but is tracked in PHASE-05 to keep it from
-  blocking frontend work.
+- The Rust `--path` flag change (IMP-079) is a small, independent diff delivered
+  in PHASE-06 to avoid blocking frontend work.
 - JS unit tests in `web/map/test.html` are additive — PHASE-02 writes the
-  initial tests, PHASE-03 adds dotQuote tests, PHASE-05 adds searchFilter +
-  kinds tests.
+  initial tests (model, router), PHASE-03 adds dotQuote tests, PHASE-05 adds
+  searchFilter + kinds tests.
+- Edge ID encoding (`encodePart`: non-`[A-Za-z0-9-]` → `_HH` hex) is
+  implemented in PHASE-02 alongside `normalizeGraph` and verified in PHASE-06
+  against URL-safe round-tripping.
 - The `--open` flag already exists in SL-072's CLI. The new `--path` flag is
   additive and does not change existing behaviour.
 - No RustEmbed changes needed — `web/map/` is already embedded by SL-072's
