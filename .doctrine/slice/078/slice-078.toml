@@ -1,7 +1,7 @@
 id = 78
 slug = "chore-sweep-grid-spec-supersede"
 title = "Chore sweep: grid test, spec-010 rename, supersede recovery test"
-status = "reconcile"
+status = "done"
 created = "2026-06-16"
 updated = "2026-06-16"
 
