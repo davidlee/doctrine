@@ -5,10 +5,10 @@ id = 79
 slug = "add-explicit-path-flag-to-doctrine-map-serve"
 title = "Add explicit --path flag to doctrine map serve"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-15"
-updated = "2026-06-15"
+updated = "2026-06-16"
 tags = []
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
