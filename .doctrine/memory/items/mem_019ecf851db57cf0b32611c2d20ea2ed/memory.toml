@@ -1,0 +1,40 @@
+memory_uid = "mem_019ecf851db57cf0b32611c2d20ea2ed"
+schema_version = 1
+memory_type = "signpost"
+status = "active"
+title = "SL-076: check() drops parse-time diagnostics — malformed DSL lines yield empty diagnostics in GET response"
+summary = ""
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = ["src/concept_map.rs", "src/map_server/routes.rs"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "cca2ed289513f6fe3927de396c218f2b3d567950"
+tree = "af083d143afe572906200b42d67cb2c38d6e9b3c"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "cca2ed289513f6fe3927de396c218f2b3d567950"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

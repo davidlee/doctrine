@@ -225,7 +225,20 @@ async fn get_concept_map(
         Ok(dsl) => {
             let hash = hex::encode(Sha256::digest(dsl.as_bytes()));
             let parsed = concept_map::parse_dsl(&dsl);
-            let diagnostics = concept_map::check(&parsed);
+            let mut diagnostics = concept_map::check(&parsed);
+            // Merge parse-time diagnostics that check() doesn't carry forward
+            // (MalformedLine, EmptyLabel, DuplicateEdge). The CLI run_check
+            // does the same merge; keep both in sync.
+            for d in &parsed.diagnostics {
+                match d {
+                    concept_map::ConceptMapDiagnostic::CanonicalNodeCollision { .. }
+                    | concept_map::ConceptMapDiagnostic::SelfEdge { .. } => {
+                        // Already included by check().
+                    }
+                    _ => diagnostics.push(d.clone()),
+                }
+            }
+            diagnostics.sort_by_key(concept_map::line_of_diagnostic);
             (parsed, diagnostics, hash)
         }
         Err(_) => {
@@ -1049,11 +1062,8 @@ mod tests {
     #[tokio::test]
     async fn get_concept_map_malformed_dsl_returns_200_no_panic() {
         // Malformed DSL lines produce parse-time diagnostics (MalformedLine,
-        // EmptyLabel) but check() currently drops them — only CanonicalNodeCollision
-        // and SelfEdge are carried forward. The API response's `diagnostics` array
-        // is therefore empty for these cases. Bug: parse-time diagnostics should be
-        // merged into the response (the CLI run_check does merge them).
-        // This test verifies the server returns 200 without panicking.
+        // EmptyLabel). These are now merged with check() output in the handler
+        // (the same merge the CLI run_check performs).
         let (_root, app) = seeded_cm_app("User creates Document").await;
         let (status, _headers, body) =
             send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
@@ -1062,23 +1072,32 @@ mod tests {
         // Nodes/edges are empty for malformed lines (no valid edges parsed)
         assert!(parsed["nodes"].as_array().unwrap().is_empty());
         assert!(parsed["edges"].as_array().unwrap().is_empty());
-        // diagnostics is empty due to check() not carrying MalformedLine forward
-        // (KNOWN BUG: parsed.diagnostics should be merged into the response)
-        let _diags = parsed["diagnostics"].as_array().unwrap();
+        // Parse-time diagnostics are now merged into the response
+        let diags = parsed["diagnostics"].as_array().unwrap();
+        assert!(
+            !diags.is_empty(),
+            "malformed DSL should produce diagnostics"
+        );
+        // Externally tagged enum: {"MalformedLine": {"line": 1, "text": "..."}}
+        let has_malformed = diags.iter().any(|d| d.get("MalformedLine").is_some());
+        assert!(has_malformed, "should include MalformedLine diagnostic");
         // no crash — server handled it gracefully
     }
 
     #[tokio::test]
     async fn get_concept_map_malformed_dsl_empty_source_returns_200() {
         // Empty source label produces parse-time EmptyLabel diagnostic.
-        // Same bug as above: check() drops it. Verify server survives.
+        // These are now merged with check() output.
         let (_root, app) = seeded_cm_app(" > rel > Target").await;
         let (status, _headers, body) =
             send(&app, json_req("GET", "/api/concept-map/CM-001", None)).await;
         assert_eq!(status, 200);
         let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert!(parsed["edges"].as_array().unwrap().is_empty());
-        // No panic — server handled it gracefully
+        let diags = parsed["diagnostics"].as_array().unwrap();
+        assert!(!diags.is_empty(), "empty label should produce diagnostics");
+        let has_empty = diags.iter().any(|d| d.get("EmptyLabel").is_some());
+        assert!(has_empty, "should include EmptyLabel diagnostic");
     }
 
     // -----------------------------------------------------------------------

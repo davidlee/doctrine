@@ -351,6 +351,14 @@
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  function escapeAttr(str) {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function encodeAttr(str) {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   function renderHoverPane(nodeId) {
     var pane = document.querySelector('.hover-detail');
     if (!pane) return;
@@ -744,6 +752,29 @@
       }
     }
 
+    // Show/hide entity-graph vs concept-map UI elements
+    var isCm = state.focusId && isConceptMap(state.focusId);
+    var depthSel = document.querySelector('.depth-selector');
+    if (depthSel) depthSel.style.display = isCm ? 'none' : '';
+    var relTable = document.querySelector('.relationship-table');
+    if (relTable) relTable.style.display = isCm ? 'none' : '';
+    var tableToggle = document.querySelector('.table-toggle');
+    if (tableToggle) tableToggle.style.display = isCm ? 'none' : '';
+
+    // CM-specific UI elements
+    renderEditToggle();
+    if (isCm && !focusChanged && !depthChanged) {
+      // Same focus, re-render non-graph CM UI
+      renderCmEdgeTable();
+      renderAddEdgeForm();
+    } else if (!isCm) {
+      // Hide CM-specific elements
+      var cmEdgeTable = document.querySelector('.cm-edge-table');
+      if (cmEdgeTable) cmEdgeTable.style.display = 'none';
+      var cmAddForm = document.querySelector('.cm-add-edge-form');
+      if (cmAddForm) cmAddForm.style.display = 'none';
+    }
+
     if (state.focusId) {
       mdPane = document.querySelector('.markdown-pane');
       if (mdPane) renderMarkdownPane(mdPane, state.focusId);
@@ -805,7 +836,13 @@
 
       g.classList.add('doctrine-node');
 
-      g.addEventListener('click', function() {});
+      g.addEventListener('click', (function(key) {
+        return function() {
+          if (state.editingConceptMap) {
+            startRenameNode(key);
+          }
+        };
+      })(nodeKey));
 
       g.addEventListener('mouseenter', (function(key) {
         return function() { renderCmHoverPane(key); };
@@ -815,6 +852,345 @@
         renderCmHoverPane(null);
       });
     }
+  }
+
+  /* -----------------------------------------------------------------------
+   * Concept Map authoring UI (PHASE-05)
+   * --------------------------------------------------------------------- */
+
+  function renderCmEdgeTable() {
+    var container = document.querySelector('.cm-edge-table');
+    if (!container) return;
+
+    var cm = state.conceptMapCache.get(state.focusId);
+    if (!cm) {
+      container.innerHTML = '';
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'block';
+    var edges = cm.edges || [];
+    var editingKey = state.editingNode ? state.editingNode.key : null;
+    var editingLabel = state.editingNode ? state.editingNode.label : '';
+
+    var html = '<table class="cm-edges">';
+    html += '<thead><tr><th>Source</th><th>Relation</th><th>Target</th>';
+    if (state.editingConceptMap) {
+      html += '<th></th>';
+    }
+    html += '</tr></thead><tbody>';
+
+    if (edges.length === 0) {
+      html += '<tr><td colspan="' + (state.editingConceptMap ? '4' : '3') + '"><span class="placeholder">No edges</span></td></tr>';
+    } else {
+      edges.forEach(function(edge) {
+        html += '<tr class="cm-edge-row">';
+
+        // Source cell — render input if this node is being renamed
+        html += '<td>';
+        if (editingKey && edge.from_key === editingKey && state.editingConceptMap) {
+          html += '<input type="text" class="cm-rename-input" data-key="' + encodeAttr(editingKey) + '" value="' + escapeAttr(editingLabel) + '">';
+        } else {
+          html += '<span class="cm-edge-label' + (state.editingConceptMap ? ' cm-editable-node" data-key="' + encodeAttr(edge.from_key) + '" data-label="' + encodeAttr(edge.from_label) : '') + '">' + escapeHtml(edge.from_label) + '</span>';
+        }
+        html += '</td>';
+
+        html += '<td>' + escapeHtml(edge.rel) + '</td>';
+
+        // Target cell — render input if this node is being renamed
+        html += '<td>';
+        if (editingKey && edge.to_key === editingKey && state.editingConceptMap) {
+          html += '<input type="text" class="cm-rename-input" data-key="' + encodeAttr(editingKey) + '" value="' + escapeAttr(editingLabel) + '">';
+        } else {
+          html += '<span class="cm-edge-label' + (state.editingConceptMap ? ' cm-editable-node" data-key="' + encodeAttr(edge.to_key) + '" data-label="' + encodeAttr(edge.to_label) : '') + '">' + escapeHtml(edge.to_label) + '</span>';
+        }
+        html += '</td>';
+
+        if (state.editingConceptMap) {
+          html += '<td><button class="cm-remove-btn" data-source="' + encodeAttr(edge.from_label) + '" data-rel="' + encodeAttr(edge.rel) + '" data-target="' + encodeAttr(edge.to_label) + '" title="Remove edge">✕</button></td>';
+        }
+        html += '</tr>';
+      });
+    }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+    // Wire remove buttons
+    if (state.editingConceptMap) {
+      var removeBtns = container.querySelectorAll('.cm-remove-btn');
+      for (var i = 0; i < removeBtns.length; i++) {
+        (function(btn) {
+          btn.addEventListener('click', function() {
+            handleRemoveEdge(
+              btn.getAttribute('data-source'),
+              btn.getAttribute('data-rel'),
+              btn.getAttribute('data-target')
+            );
+          });
+        })(removeBtns[i]);
+      }
+
+      // Wire inline rename on edge table node labels (non-editing-node cells)
+      var editableNodes = container.querySelectorAll('.cm-editable-node');
+      for (var j = 0; j < editableNodes.length; j++) {
+        (function(el) {
+          el.addEventListener('click', function() {
+            startRenameNode(el.getAttribute('data-key'));
+          });
+        })(editableNodes[j]);
+      }
+
+      // Wire rename input(s) — Enter submits, Escape cancels
+      var renameInputs = container.querySelectorAll('.cm-rename-input');
+      for (var k = 0; k < renameInputs.length; k++) {
+        (function(inp) {
+          // Focus the first one
+          if (k === 0) inp.focus();
+          inp.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Enter') {
+              ev.preventDefault();
+              handleRenameNodeSubmit(inp.value);
+            } else if (ev.key === 'Escape') {
+              ev.preventDefault();
+              state.editingNode = null;
+              refreshCmView();
+            }
+          });
+        })(renameInputs[k]);
+      }
+    }
+  }
+
+  function renderAddEdgeForm() {
+    var container = document.querySelector('.cm-add-edge-form');
+    if (!container) return;
+
+    if (!state.editingConceptMap) {
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'block';
+    var cm = state.conceptMapCache.get(state.focusId);
+    var labels = model.buildNodeLabelList(cm);
+    var rels = model.buildRelLabelList(cm);
+
+    var html = '<form class="add-edge-form" onsubmit="return false;">';
+    html += '<div class="add-edge-fields">';
+    html += '<input type="text" class="cm-input cm-source" list="cm-source-list" placeholder="Source">';
+    html += '<datalist id="cm-source-list">' + labels.map(function(l) { return '<option value="' + escapeAttr(l) + '">'; }).join('') + '</datalist>';
+    html += '<input type="text" class="cm-input cm-rel" list="cm-rel-list" placeholder="relation">';
+    html += '<datalist id="cm-rel-list">' + rels.map(function(r) { return '<option value="' + escapeAttr(r) + '">'; }).join('') + '</datalist>';
+    html += '<input type="text" class="cm-input cm-target" list="cm-target-list" placeholder="Target">';
+    html += '<datalist id="cm-target-list">' + labels.map(function(l) { return '<option value="' + escapeAttr(l) + '">'; }).join('') + '</datalist>';
+    html += '<button type="submit" class="cm-add-btn">Add edge</button>';
+    html += '</div>';
+    html += '<div class="cm-add-error" style="display:none;"></div>';
+    html += '</form>';
+
+    container.innerHTML = html;
+
+    var form = container.querySelector('.add-edge-form');
+    form.addEventListener('submit', function() {
+      var source = form.querySelector('.cm-source').value;
+      var rel = form.querySelector('.cm-rel').value;
+      var target = form.querySelector('.cm-target').value;
+      handleAddEdge(source, rel, target);
+    });
+  }
+
+  function updateConceptMapCache(data) {
+    var cm = state.conceptMapCache.get(state.focusId);
+    if (!cm) return;
+    cm.nodes = data.nodes || cm.nodes;
+    cm.edges = data.edges || cm.edges;
+    cm.diagnostics = data.diagnostics || [];
+    cm.dslHash = data.dsl_hash || cm.dslHash;
+  }
+
+  function refreshCmView() {
+    renderConceptMap();
+    renderCmEdgeTable();
+    renderAddEdgeForm();
+  }
+
+  function handleAddEdge(source, rel, target) {
+    var errorEl = document.querySelector('.cm-add-error');
+    if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+
+    // Client-side trim validation
+    source = (source || '').trim();
+    rel = (rel || '').trim();
+    target = (target || '').trim();
+
+    if (!source) { showCmFormError('Source must not be empty'); return; }
+    if (!rel) { showCmFormError('Relation must not be empty'); return; }
+    if (!target) { showCmFormError('Target must not be empty'); return; }
+
+    var cm = state.conceptMapCache.get(state.focusId);
+    var baseHash = cm ? cm.dslHash : undefined;
+
+    api.mutateConceptMap(state.focusId, 'add_edge', { source: source, rel: rel, target: target }, baseHash)
+      .then(function(data) {
+        var form = document.querySelector('.add-edge-form');
+        if (form) {
+          form.querySelector('.cm-source').value = '';
+          form.querySelector('.cm-rel').value = '';
+          form.querySelector('.cm-target').value = '';
+        }
+        updateConceptMapCache(data);
+        refreshCmView();
+      }).catch(function(err) {
+        handleMutationError(err);
+      });
+  }
+
+  function handleRemoveEdge(source, rel, target) {
+    var cm = state.conceptMapCache.get(state.focusId);
+    var baseHash = cm ? cm.dslHash : undefined;
+
+    api.mutateConceptMap(state.focusId, 'remove_edge', { source: source, rel: rel, target: target }, baseHash)
+      .then(function(data) {
+        updateConceptMapCache(data);
+        refreshCmView();
+      }).catch(function(err) {
+        handleMutationError(err);
+      });
+  }
+
+  function startRenameNode(key) {
+    if (!state.editingConceptMap) return;
+    var cm = state.conceptMapCache.get(state.focusId);
+    if (!cm) return;
+
+    var label = key;
+    for (var i = 0; i < cm.nodes.length; i++) {
+      if (cm.nodes[i].key === key) {
+        label = cm.nodes[i].label;
+        break;
+      }
+    }
+
+    state.editingNode = { key: key, label: label };
+    renderCmEdgeTable();
+  }
+
+  function handleRenameNodeSubmit(newLabel) {
+    var oldLabel = state.editingNode ? state.editingNode.label : '';
+    state.editingNode = null;
+
+    var newTrimmed = (newLabel || '').trim();
+    if (!newTrimmed) {
+      showCmFormError('New label must not be empty');
+      refreshCmView();
+      return;
+    }
+
+    var cm = state.conceptMapCache.get(state.focusId);
+    var baseHash = cm ? cm.dslHash : undefined;
+
+    api.mutateConceptMap(state.focusId, 'rename_node', { old_label: oldLabel, new_label: newTrimmed }, baseHash)
+      .then(function(data) {
+        updateConceptMapCache(data);
+        refreshCmView();
+      }).catch(function(err) {
+        if (err.status === 409) {
+          var body = typeof err.body === 'string' ? JSON.parse(err.body) : err.body;
+          var existingLabel = body.existing_label || '';
+          showCmFormError('Rename would collide with existing node \'' + existingLabel + '\'');
+        } else {
+          handleMutationError(err);
+        }
+        refreshCmView();
+      });
+  }
+
+  function handleStaleWrite() {
+    // Auto-refetch and notify
+    var errorEl = document.querySelector('.cm-add-error');
+    if (!errorEl) return;
+    errorEl.textContent = 'Concept map was modified elsewhere — data refreshed';
+    errorEl.style.display = 'block';
+    errorEl.className = 'cm-add-error cm-notice';
+    window.setTimeout(function() { if (errorEl) errorEl.style.display = 'none'; }, 4000);
+
+    api.fetchConceptMap(state.focusId).then(function(cm) {
+      state.conceptMapCache.set(state.focusId, cm);
+      refreshCmView();
+    }).catch(function() {});
+  }
+
+  function handleMutationError(err) {
+    if (err.status === 409) {
+      var body;
+      try { body = typeof err.body === 'string' ? JSON.parse(err.body) : err.body; } catch (_e) { body = {}; /* eslint-disable-line no-unused-vars */ }
+      if (body.error === 'stale_concept_map') {
+        handleStaleWrite();
+        return;
+      }
+      if (body.error === 'duplicate_edge') {
+        showCmFormError('This edge already exists at line ' + (body.line || '?'));
+        return;
+      }
+      if (body.error === 'node_collision') {
+        showCmFormError('Rename would collide with existing node \'' + (body.existing_label || '') + '\'');
+        return;
+      }
+    }
+    if (err.status === 400) {
+      var b400;
+      try { b400 = typeof err.body === 'string' ? JSON.parse(err.body) : err.body; } catch (_e2) { b400 = {}; /* eslint-disable-line no-unused-vars */ }
+      if (b400.error === 'empty_field') {
+        showCmFormError(b400.message || 'Field must not be empty');
+        return;
+      }
+    }
+    if (err.status === 404) {
+      showCmFormError('Edge no longer exists — it may have been removed elsewhere');
+      return;
+    }
+    showCmFormError('Error: ' + escapeHtml(err.message || 'Unknown error'));
+  }
+
+  function showCmFormError(message) {
+    var errorEl = document.querySelector('.cm-add-error');
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+      errorEl.className = 'cm-add-error cm-error';
+    }
+  }
+
+  function renderEditToggle() {
+    var header = document.querySelector('.focus-header');
+    if (!header) return;
+
+    // Remove existing toggle button
+    var existing = header.querySelector('.cm-edit-toggle');
+    if (existing) existing.remove();
+
+    if (!state.focusId || !isConceptMap(state.focusId)) return;
+
+    var btn = document.createElement('button');
+    btn.className = 'cm-edit-toggle';
+    btn.textContent = state.editingConceptMap ? 'Done' : 'Edit';
+    btn.addEventListener('click', function() {
+      state.editingConceptMap = !state.editingConceptMap;
+      if (!state.editingConceptMap) {
+        state.editingNode = null;
+      }
+      renderEditToggle();
+      renderCmEdgeTable();
+      renderAddEdgeForm();
+      // Re-render SVG to wire/unwire click handlers
+      if (state.editingConceptMap) {
+        // Re-render to wire click handlers
+        renderConceptMap();
+      }
+    });
+    header.appendChild(btn);
   }
 
   function renderConceptMap() {
@@ -856,6 +1232,17 @@
       if (svgEl) {
         wireCmSvgHandlers(svgEl);
       }
+      // Render authoring UI sub-views after graph render
+      renderCmEdgeTable();
+      renderAddEdgeForm();
+      renderEditToggle();
+      // Show/hide entity-graph-specific UI
+      var depthSel = document.querySelector('.depth-selector');
+      if (depthSel) depthSel.style.display = 'none';
+      var relTable = document.querySelector('.relationship-table');
+      if (relTable) relTable.style.display = 'none';
+      var tableToggle = document.querySelector('.table-toggle');
+      if (tableToggle) tableToggle.style.display = 'none';
     }).catch(function(err) {
       if (seq !== state.graphRenderSeq) return;
       graphArea.innerHTML = '<p class="error">Graphviz not available</p>';

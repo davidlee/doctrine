@@ -510,6 +510,132 @@
       window.location.hash = hashBefore;
     })();
 
+    /* --- PHASE-04/05: Concept Map JS tests --- */
+
+    /* --- normalizeConceptMap --- */
+    (function() {
+      var raw = {
+        id: 'CM-001',
+        title: 'System Architecture',
+        status: 'draft',
+        description: 'High-level map',
+        dsl_hash: 'abc123',
+        nodes: [{ key: 'user-story', label: 'User Story' }],
+        edges: [{ from_key: 'user-story', from_label: 'User Story', rel: 'expresses', to_key: 'user-need', to_label: 'User Need', line: 5 }],
+        diagnostics: [{ MalformedLine: { line: 3, text: 'bad line' } }]
+      };
+
+      var cm = model.normalizeConceptMap(raw);
+      assert(cm.id === 'CM-001', 'normalizeConceptMap: id preserved');
+      assert(cm.title === 'System Architecture', 'normalizeConceptMap: title preserved');
+      assert(cm.status === 'draft', 'normalizeConceptMap: status preserved');
+      assert(cm.description === 'High-level map', 'normalizeConceptMap: description preserved');
+      assert(cm.dslHash === 'abc123', 'normalizeConceptMap: dslHash mapped correctly');
+      assert(cm.nodes.length === 1, 'normalizeConceptMap: nodes array preserved');
+      assert(cm.edges.length === 1, 'normalizeConceptMap: edges array preserved');
+      assert(cm.diagnostics.length === 1, 'normalizeConceptMap: diagnostics array preserved');
+    })();
+
+    /* --- normalizeConceptMap: missing fields --- */
+    (function() {
+      var raw = { id: 'CM-002', title: 'Empty Map', status: 'draft' };
+      var cm = model.normalizeConceptMap(raw);
+      assert(cm.description === '', 'normalizeConceptMap: missing description → empty string');
+      assert(cm.dslHash === '', 'normalizeConceptMap: missing dsl_hash → empty string');
+      assert(cm.nodes.length === 0, 'normalizeConceptMap: missing nodes → empty array');
+      assert(cm.edges.length === 0, 'normalizeConceptMap: missing edges → empty array');
+      assert(cm.diagnostics.length === 0, 'normalizeConceptMap: missing diagnostics → empty array');
+    })();
+
+    /* --- buildNodeLabelList (autocomplete) --- */
+    (function() {
+      var cm = { nodes: [] };
+      assert(model.buildNodeLabelList(cm).length === 0, 'buildNodeLabelList: empty nodes → empty array');
+
+      var cm1 = { nodes: [{ key: 'a', label: 'Alpha' }, { key: 'b', label: 'Beta' }] };
+      var labels1 = model.buildNodeLabelList(cm1);
+      assertEqual(labels1, ['Alpha', 'Beta'], 'buildNodeLabelList: two distinct labels');
+
+      var cmDup = { nodes: [{ key: 'a', label: 'Alpha' }, { key: 'a2', label: 'Alpha' }] };
+      var labelsDup = model.buildNodeLabelList(cmDup);
+      assert(labelsDup.length === 1, 'buildNodeLabelList: duplicate labels deduplicated');
+      assert(labelsDup[0] === 'Alpha', 'buildNodeLabelList: keeps first occurrence');
+
+      var cmNull = model.buildNodeLabelList(null);
+      assert(cmNull.length === 0, 'buildNodeLabelList: null cm → empty array');
+
+      var cmNoNodes = model.buildNodeLabelList({});
+      assert(cmNoNodes.length === 0, 'buildNodeLabelList: missing nodes → empty array');
+    })();
+
+    /* --- buildRelLabelList (autocomplete) --- */
+    (function() {
+      var cm = { edges: [] };
+      assert(model.buildRelLabelList(cm).length === 0, 'buildRelLabelList: empty edges → empty array');
+
+      var cm1 = { edges: [{ rel: 'expresses' }, { rel: 'depends on' }] };
+      assertEqual(model.buildRelLabelList(cm1), ['expresses', 'depends on'], 'buildRelLabelList: two distinct rels');
+
+      var cmDup = { edges: [{ rel: 'expresses' }, { rel: 'expresses' }] };
+      assert(model.buildRelLabelList(cmDup).length === 1, 'buildRelLabelList: duplicate rels deduplicated');
+
+      var cmNull = model.buildRelLabelList(null);
+      assert(cmNull.length === 0, 'buildRelLabelList: null cm → empty array');
+    })();
+
+    /* --- isConceptMap (emulated via kindPrefix check) --- */
+    (function() {
+      // Populate graph with a CM node and a non-CM node
+      var raw = {
+        nodes: {
+          'CM-001': { title: 'Test CM', status: 'draft', kind_label: 'concept map' },
+          'SL-001': { title: 'Test Slice', status: 'done', kind_label: 'slice' }
+        },
+        edges: []
+      };
+      model.normalizeGraph(raw);
+
+      var cmNode = state.graph.nodes.get('CM-001');
+      var slNode = state.graph.nodes.get('SL-001');
+      assert(cmNode.kindPrefix === 'CM', 'isConceptMap prep: CM-001 kindPrefix is CM');
+      assert(slNode.kindPrefix === 'SL', 'isConceptMap prep: SL-001 kindPrefix is SL');
+
+      // Simulate isConceptMap logic
+      var isCm = cmNode && cmNode.kindPrefix === 'CM';
+      var isNotCm = slNode && slNode.kindPrefix === 'CM';
+      assert(isCm === true, 'isConceptMap: CM-001 → true');
+      assert(isNotCm === false, 'isConceptMap: SL-001 → false');
+
+      var nonExistent = state.graph.nodes.get('NONEXIST');
+      assert(!(nonExistent && nonExistent.kindPrefix === 'CM'), 'isConceptMap: nonexistent → false');
+    })();
+
+    /* --- stale-write API error handling (ApiError) --- */
+    (function() {
+      // Verify ApiError carries status and body for stale-write detection
+      var err409 = new ApiError('stale', 409, '{"error":"stale_concept_map"}', '/api/concept-map/CM-001');
+      assert(err409.status === 409, 'ApiError stale: status 409');
+      assert(err409.body.indexOf('stale_concept_map') !== -1, 'ApiError stale: body contains stale_concept_map');
+
+      // Duplicate edge error
+      var errDup = new ApiError('duplicate', 409, '{"error":"duplicate_edge","line":5}', '/api/concept-map/CM-001');
+      assert(errDup.status === 409, 'ApiError duplicate: status 409');
+      assert(errDup.body.indexOf('duplicate_edge') !== -1, 'ApiError duplicate: body contains duplicate_edge');
+      assert(errDup.body.indexOf('"line":5') !== -1, 'ApiError duplicate: body contains line 5');
+
+      // Empty field error
+      var err400 = new ApiError('empty', 400, '{"error":"empty_field","message":"source must be non-empty"}', '/api/concept-map/CM-001');
+      assert(err400.status === 400, 'ApiError empty: status 400');
+
+      // Not found error
+      var err404 = new ApiError('not found', 404, '{"error":"edge_not_found"}', '/api/concept-map/CM-001');
+      assert(err404.status === 404, 'ApiError not found: status 404');
+
+      // Node collision error
+      var errColl = new ApiError('collision', 409, '{"error":"node_collision","existing_label":"Foo"}', '/api/concept-map/CM-001');
+      assert(errColl.body.indexOf('node_collision') !== -1, 'ApiError collision: body contains node_collision');
+    })();
+
     /* --- report --- */
     resultsEl.textContent = pass + '/' + (pass + fail) + ' assertions passed';
     if (fail > 0) {

@@ -356,3 +356,31 @@ model.normalizeConceptMap = function(raw) {
     diagnostics: raw.diagnostics || []
   };
 };
+
+model.buildNodeLabelList = function(cm) {
+  if (!cm || !cm.nodes) return [];
+  var labels = [];
+  var seen = {};
+  for (var i = 0; i < cm.nodes.length; i++) {
+    var label = cm.nodes[i].label;
+    if (!seen[label]) {
+      seen[label] = true;
+      labels.push(label);
+    }
+  }
+  return labels;
+};
+
+model.buildRelLabelList = function(cm) {
+  if (!cm || !cm.edges) return [];
+  var rels = [];
+  var seen = {};
+  for (var i = 0; i < cm.edges.length; i++) {
+    var rel = cm.edges[i].rel;
+    if (!seen[rel]) {
+      seen[rel] = true;
+      rels.push(rel);
+    }
+  }
+  return rels;
+};

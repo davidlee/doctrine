@@ -756,7 +756,7 @@ pub(crate) fn run_export(
 // ---------------------------------------------------------------------------
 
 /// Extract the primary line number from a diagnostic for stable sort ordering.
-fn line_of_diagnostic(d: &ConceptMapDiagnostic) -> usize {
+pub(crate) fn line_of_diagnostic(d: &ConceptMapDiagnostic) -> usize {
     match d {
         ConceptMapDiagnostic::MalformedLine { line, .. }
         | ConceptMapDiagnostic::EmptyLabel { line, .. }
