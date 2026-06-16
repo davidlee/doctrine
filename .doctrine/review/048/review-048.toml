@@ -1,0 +1,60 @@
+id    = 48
+slug  = "audit-shipped-memory-corpus-for-gaps-and-project-local-convention-leakage"
+title = "Audit shipped memory corpus for gaps and project-local convention leakage"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-069"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Project-local build tool leakage: just check, cargo clippy, cargo test in shipped conventions/TDD memories"
+detail = """
+mem.pattern.doctrine.conventions and mem.pattern.doctrine.tdd-loop contain project-local build tool references:
+
+- 'just check' (a Justfile target) appears in both memories as the lint/before-commit gate
+- 'cargo test' appears as the test runner in tdd-loop
+- 'zero clippy warnings' references Rust's clippy linter in conventions
+
+These are build-repo-specific tool choices. A client project using doctrine may use pytest, eslint, Make, npm — the shipped memory corpus should describe doctrine process conventions in tool-agnostic terms. The conventions memory already points at the project's own CLAUDE.md for the authoritative rules, which mitigates somewhat, but the shipped text bakes in tooling assumptions that will mislead non-Rust projects.
+
+Affected files:
+- memory/mem_019e9a128a0674c3aa59b5ec6b13196d/memory.md (conventions)
+- memory/mem_019e9a129d497012bfad47d4de27c0f8/memory.md (tdd-loop)"""
+disposition = "fixed"
+response = "Replaced 'zero clippy warnings; just check' with tool-agnostic 'zero warnings; your project lint-and-check gate' in conventions. Replaced 'cargo test clean, lint clean (just check)' with 'tests clean, lint clean' in tdd-loop."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Gap: no shipped memory for knowledge records (assumption/decision/question/constraint)"
+detail = """
+The CLI command map (mem.signpost.doctrine.cli-command-map) lists 'doctrine knowledge' as a verb. The file map (mem.signpost.doctrine.file-map) shows '.doctrine/knowledge/nnn/' in the directory layout. But no signpost or concept memory introduces knowledge records — the epistemic record kinds (assumption, decision, question, constraint), when to use them vs ADR vs memory, or the 'doctrine knowledge new/list/show/status' CLI surface.
+
+This was Tier 3 gap #13 in research.md and was explicitly excluded from the 13 new memories. It remains a real gap — a client encountering 'doctrine knowledge' in the CLI has no orientation to what it is or when to use it."""
+disposition = "follow-up"
+response = "Captured as IMP-083: shipped signpost memory for knowledge records. Tier 3 gap per research.md — conscious deferral, now tracked."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Deferred review (RV kind) signpost is now a live gap — SL-068 landed"
+detail = """
+The design deferred a review signpost memory until SL-068 stabilised. SL-068 is now done (the dispatch candidate review surface is shipped). The audit signpost (mem.signpost.doctrine.audit) covers the audit phase and mentions the RV kind, but there's no dedicated signpost for the review ledger surface — RV kind mechanics, baton handoff, raise/dispose/verify/contest/withdraw verbs, and the close-gate.
+
+This was a conscious deferral in the design (D4), but the deferral condition has resolved. A follow-up slice should author this memory."""
+disposition = "follow-up"
+response = "Captured as IMP-084: shipped signpost memory for review ledger (RV kind). SL-068 deferral resolved — now tracked."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
