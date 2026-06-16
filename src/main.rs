@@ -6,6 +6,7 @@ mod boot;
 mod catalog;
 mod clock;
 mod commands;
+mod concept_map;
 mod conduct;
 mod contentset;
 mod corpus;
@@ -190,6 +191,12 @@ enum Command {
     Map {
         #[command(subcommand)]
         command: MapCommand,
+    },
+
+    /// Create, list, and show concept maps — DSL-driven relationship diagrams.
+    ConceptMap {
+        #[command(subcommand)]
+        command: ConceptMapCommand,
     },
 
     /// Create and list slices — the unit of intentional change.
@@ -1958,6 +1965,59 @@ enum SliceCommand {
 }
 
 #[derive(Subcommand)]
+enum ConceptMapCommand {
+    /// Create a new concept map.
+    New {
+        /// Concept-map title (prompted for if omitted).
+        title: Option<String>,
+
+        /// Explicit slug (default: derived from the title).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// List concept maps.
+    List {
+        #[command(flatten)]
+        list: CommonListArgs,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show a concept map's metadata and DSL.
+    Show {
+        /// Concept-map reference — `CM-001` or the bare id `1`.
+        reference: String,
+
+        /// Output format.
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Show edges table (placeholder in PHASE-01).
+        #[arg(long)]
+        edges: bool,
+
+        /// Show nodes table (placeholder in PHASE-01).
+        #[arg(long)]
+        nodes: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
 enum ReviewCommand {
     /// Open a new review ledger targeting an entity via the `reviews` edge.
     /// The `--target` ref is validated up front — a dangling ref is refused
@@ -2506,6 +2566,10 @@ fn write_class(cmd: &Command) -> WriteClass {
             SkillsCommand::Install { .. } => Write("claude install"),
         },
         Command::Map { .. } => Write("map"),
+        Command::ConceptMap { command } => match command {
+            ConceptMapCommand::New { .. } => Write("concept-map new"),
+            ConceptMapCommand::List { .. } | ConceptMapCommand::Show { .. } => Read,
+        },
         Command::Slice { command } => match command {
             SliceCommand::New { .. } => Write("slice new"),
             SliceCommand::Design { .. } => Write("slice design"),
@@ -2879,6 +2943,26 @@ fn main() -> anyhow::Result<()> {
                     dry_run,
                     yes,
                 },
+            ),
+        },
+        Command::ConceptMap { command } => match command {
+            ConceptMapCommand::New { title, slug, path } => concept_map::run_new(path, title, slug),
+            ConceptMapCommand::List { list, path } => {
+                concept_map::run_list(path, list.into_list_args())
+            }
+            ConceptMapCommand::Show {
+                reference,
+                format,
+                json,
+                edges,
+                nodes,
+                path,
+            } => concept_map::run_show(
+                path,
+                &reference,
+                if json { Format::Json } else { format },
+                edges,
+                nodes,
             ),
         },
         Command::Slice { command } => match command {
