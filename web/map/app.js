@@ -695,7 +695,7 @@
     }
 
     // Sidebar / header / table always update synchronously
-    renderEntityList();
+    renderFilteredEntities();
     renderFocusHeader();
     renderRelationshipTable();
     renderHoverPane(null);
