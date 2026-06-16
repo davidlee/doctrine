@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed2b013ce7250970598b7401000f7"
+memory_key = "mem.pattern.catalog.catalogkey-identity-boundary"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "CatalogKey is the catalog-layer identity boundary between numbered and named entities"
+summary = "CatalogKey enum (Numbered(EntityKey) | Memory(String)) is the catalog/graph identity boundary — EntityKey stays KINDS-only Copy; CatalogKey is Clone with manual flat Serialize"
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = ["src/catalog/hydrate.rs", "src/catalog/graph.rs", "src/catalog/scan.rs"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e74aaf96f0b5e60fe39ebfa9c96421f1cb145d9a"
+ref_name = "refs/heads/main"
+checkout_state_id = "424c1a185d5afa9325a8d1e91e482eea8d4c36105f64cfe839ff46532bb8dad2"
+base_commit = "1e01e5848edd42b700cbe13cce01c69482f37765"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
