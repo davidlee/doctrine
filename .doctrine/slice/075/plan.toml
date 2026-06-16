@@ -1,0 +1,79 @@
+# Implementation plan for SL-075 — the authored, durable phase plan.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-075"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "HTML + CSS structural refactors"
+objective = "Apply pure structural changes — SVG background, filter layout, hover pane height, depth selector relocation, legend data-labels. Includes the D4 JS wiring update (wireDepthButtons) since it's mechanically coupled to the HTML move."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and complete (§D1–§D9)" },
+  { id = "EN-2", text = "batch 1 commit bd8823d green (just gate + node --check)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SVG background is transparent — no CSS background rule on .graph-area svg (§D1)" },
+  { id = "EX-2", text = "Filter checkboxes are single-column, ordered per D2 importance list, no text truncation (§D2)" },
+  { id = "EX-3", text = "Hover pane min-height is 3.4rem with overflow:hidden — no layout wobble on populate (§D3)" },
+  { id = "EX-4", text = "Depth selector moved below .graph-area in main pane; wireDepthButtons finds buttons in new location; depth change triggers graph reload (§D4)" },
+  { id = "EX-5", text = "Legend .legend-item elements carry data-labels attributes matching dot._EDGE_COLORS keys; .legend-dimmed class defined (opacity: 0.3) (§D7 HTML/CSS)" },
+]
+verification = [
+  { id = "VT-1", expects = "node --check web/map/*.js — clean" },
+  { id = "VA-1", expects = "doctrine map serve — filter checkboxes visible, no wrapping or truncation; hover pane height does not shift on mouseenter/mouseleave" },
+  { id = "VA-2", expects = "Depth selector rendered below graph in main pane; clicking depth 2 reloads graph at depth 2" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "JS logic improvements"
+objective = "Apply behaviour changes — descriptive tooltips, kind-priority sort, legend dimming function, filter/search DRY refactor, depth button bugfix. All JS-only; no HTML or CSS changes."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — EX-1 through EX-5 all satisfied, VT-1 and VA-1/VA-2 green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "DOT tooltips show 'id: title · kind · status' with kindLabel fallback to kindPrefix (§D5)" },
+  { id = "EX-2", text = "Sidebar entity list sorted kind-first (D2 order) then numeric-ID; relationship table sorted by source-node kind then numeric-ID (§D6)" },
+  { id = "EX-3", text = "dimLegend(neighbourhood) runs inside renderGraphPane .then() after wireSvgHandlers; legend items whose labels are absent from current edges get .legend-dimmed (§D7 JS)" },
+  { id = "EX-4", text = "renderEntityList accepts optional query parameter; renderFilteredEntities is a thin delegate reading search input; no duplicate list-building paths (§D8)" },
+  { id = "EX-5", text = "wireDepthButtons handler sets state.depth only via router.setFocus; depth change triggers full graph render (§D9)" },
+]
+verification = [
+  { id = "VT-1", expects = "node --check web/map/*.js — clean" },
+  { id = "VA-1", expects = "Hover a node in the SVG — tooltip shows 'id: title · kind · status'" },
+  { id = "VA-2", expects = "Sidebar entity list: PRD/SPEC appear first, SL appears before ISS/IMP/CHR/RSK, QUE/CON last; within kind groups, numeric order (e.g. ADR-001 before ADR-005)" },
+  { id = "VA-3", expects = "Edge legend: when graph has no 'blocks' edges, the blocks legend entry is dimmed (opacity 0.3); when a 'blocks' edge is present, it is full opacity" },
+  { id = "VA-4", expects = "Type in search bar — results respect active kind filter; clear search — full filtered list reappears" },
+  { id = "VA-5", expects = "Click depth button 2 — graph reloads showing depth-2 neighbourhood; depth 0 shows only focus node" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Visual verification — both themes"
+objective = "End-to-end visual verification of all 9 design decisions in both light and dark themes. Apply D1 fallback if any element is illegible on dark background."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — EX-1 through EX-5 all satisfied, VT-1 and VA-1 through VA-5 green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "D1: all node fills + edge lines legible on dark --bg; fallback applied unconditionally if any element fails" },
+  { id = "EX-2", text = "D2–D9: all visual decisions verified in both themes with no regressions" },
+  { id = "EX-3", text = "just gate — green (no Rust changes, but confirm workspace clean)" },
+]
+verification = [
+  { id = "VH-1", expects = "doctrine map serve — verify all 13 node fills legible in dark theme; if any fails, apply D1 fallback" },
+  { id = "VH-2", expects = "doctrine map serve — verify filter layout, hover pane stability, depth selector position, tooltips, sort order, legend dimming in both themes" },
+]
+specs        = []
+requirements = []

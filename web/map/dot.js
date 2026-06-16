@@ -1,4 +1,5 @@
 /* dot.js — DOT generation for Doctrine Map frontend */
+/* global state */
 
 var dot = {};
 
@@ -65,7 +66,7 @@ dot._EDGE_COLORS = {
   'related':    { color: '#95A5A6', fontcolor: '#64748b' },
   'see also':   { color: '#95A5A6', fontcolor: '#64748b' },
   'resolves':   { color: '#E67E22', fontcolor: '#c2410c' },
-  'addresses':  { color: '#E67E22', fontcolor: '#c2410c' },
+  'addresses':  { color: '#E67E22', fontcolor: '#c2410c' }
 };
 
 dot.edgeAttrs = function(edge, depth) {

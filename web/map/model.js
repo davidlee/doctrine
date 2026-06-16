@@ -246,6 +246,8 @@ function compareNodes(a, b) {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+// Used by app.js via global scope
+// eslint-disable-next-line no-unused-vars
 function compareEdgesBySource(ea, eb) {
   var sa = state.graph.nodes.get(ea.source);
   var sb = state.graph.nodes.get(eb.source);

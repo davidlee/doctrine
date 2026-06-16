@@ -1,5 +1,42 @@
 # Notes SL-075: Map Explorer UX overhaul
 
+## 2026-06-16 — PHASE-02 complete (f772ea4)
+
+JS logic improvements. Gate green. All 5 design decisions applied:
+
+- **D9 (depth bugfix):** removed premature `state.depth = d` from click handler.
+  `render()` now detects `depthChanged` and re-renders graph.
+- **D6 (kind-priority sort):** added `model.kindOrder` map + `compareNodes` /
+  `compareEdgesBySource` comparators. Updated all 5 sort sites: `renderEntityList`,
+  `renderRelationshipTable`, `model.searchFilter` (2 sites), `wireSearch`.
+- **D5 (tooltips):** `dot.nodeAttrs` tooltip now `id: title · kind · status` with
+  `kindLabel || kindPrefix` fallback.
+- **D7 (legend dimming):** `dimLegend(neighbourhood)` reads `data-labels` attrs,
+  diffs against current edge labels, toggles `.legend-dimmed`. Called in
+  `renderGraphPane` `.then()` after `wireSvgHandlers`.
+- **D8 (filter/search DRY):** `renderEntityList(query)` accepts optional query;
+  `renderFilteredEntities` delegates; `wireSearch` input handler delegates.
+
+All VA verification deferred to browser session.
+
+## 2026-06-16 — PHASE-01 complete (5febc5d)
+
+HTML + CSS structural refactors. Gate green. All 4 design decisions applied:
+
+- **D1 (SVG bg transparent):** removed `.graph-area svg { background: … }`
+  rules from CSS. SVG inherits page `--bg`. DOT `bgcolor="transparent"` already set.
+- **D2 (filter 1-col):** filter-grid now `grid-template-columns: 1fr`;
+  checkboxes reordered per D2 importance (PRD/SPEC first, QUE/CON last).
+- **D3 (hover pane):** `min-height: 3.4rem; overflow: hidden` — no wobble.
+- **D4 (depth selector):** moved from sidebar to main pane below `.graph-area`.
+  Added `data-depth` attrs; updated `wireDepthButtons` and `render()` depth-sync
+  to read `data-depth` instead of `textContent`.
+- **D7 (legend HTML/CSS):** `data-labels` attrs on all 7 legend items;
+  `.legend-dimmed { opacity: 0.3 }` in CSS.
+
+**VA-1 / VA-2 deferred:** visual verification requires browser. VA-2 reload
+half depends on D9 (PHASE-02 bugfix).
+
 ## 2026-06-16 — code-review batch 1 (bd8823d)
 
 Gate: green (1471 passed). JS syntax: clean.

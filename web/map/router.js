@@ -1,4 +1,5 @@
 /* router.js — hash-based routing for Doctrine Map frontend */
+/* global state */
 
 var router = {};
 
