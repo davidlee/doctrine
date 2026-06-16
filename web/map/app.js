@@ -740,6 +740,11 @@
     var depthChanged = (state.depth !== prevDepth);
     var graphMissing = !graphArea || !graphArea.querySelector('svg');
 
+    /* Evict old CM cache on focus change — forces re-fetch on return */
+    if (focusChanged && prevFocusId && isConceptMap(prevFocusId)) {
+      state.conceptMapCache.delete(prevFocusId);
+    }
+
     if (graphArea && (focusChanged || depthChanged || graphMissing)) {
       if (focusChanged && !depthChanged && state.focusId) {
         applyFocusHighlight(state.focusId, prevFocusId);
@@ -787,12 +792,15 @@
       // Same focus, re-render non-graph CM UI
       renderCmEdgeTable();
       renderAddEdgeForm();
+      renderCmDiagnostics();
     } else if (!isCm) {
       // Hide CM-specific elements
       var cmEdgeTable = document.querySelector('.cm-edge-table');
       if (cmEdgeTable) cmEdgeTable.style.display = 'none';
       var cmAddForm = document.querySelector('.cm-add-edge-form');
       if (cmAddForm) cmAddForm.style.display = 'none';
+      var cmDiagPanel = document.querySelector('.cm-diagnostics-panel');
+      if (cmDiagPanel) cmDiagPanel.style.display = 'none';
     }
 
     if (state.focusId) {
@@ -1009,6 +1017,80 @@
     }
   }
 
+  function renderCmDiagnostics() {
+    var panel = document.querySelector('.cm-diagnostics-panel');
+    if (!panel) return;
+
+    if (state.editingConceptMap) {
+      panel.style.display = 'none';
+      return;
+    }
+
+    var cm = state.conceptMapCache.get(state.focusId);
+    if (!cm || !cm.diagnostics || cm.diagnostics.length === 0) {
+      panel.style.display = 'none';
+      return;
+    }
+
+    var html = '<h3>Diagnostics</h3>';
+    for (var i = 0; i < cm.diagnostics.length; i++) {
+      var d = cm.diagnostics[i];
+      var msg = formatDiagnostic(d);
+      var line = diagnosticLine(d);
+      var prefix = line !== null ? ('line ' + line + ': ') : '';
+      html += '<div class="cm-diag-item">\u26A0 ' + escapeHtml(prefix + msg) + '</div>';
+    }
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+  }
+
+  /* Extract the line number from a diagnostic object, or null. */
+  function diagnosticLine(d) {
+    if (!d) return null;
+    var keys = Object.keys(d);
+    if (keys.length === 0) return null;
+    var variant = d[keys[0]];
+    if (!variant || typeof variant !== 'object') return null;
+    // CanonicalNodeCollision uses 'line' (not 'first_line')
+    if (typeof variant.line === 'number') return variant.line;
+    // SimilarNodeLabel / RelationDrift use line_a
+    if (typeof variant.line_a === 'number') return variant.line_a;
+    return null;
+  }
+
+  /* Format a diagnostic variant into a human-readable message. */
+  function formatDiagnostic(d) {
+    if (!d) return 'Unknown diagnostic';
+    var keys = Object.keys(d);
+    if (keys.length === 0) return 'Unknown diagnostic';
+    var variant = keys[0];
+    var v = d[variant] || {};
+
+    switch (variant) {
+      case 'CanonicalNodeCollision':
+        return 'Node label "' + escapeHtml(v.label || '') + '" collides with key "' + escapeHtml(v.key || '') + '" (first label "' + escapeHtml(v.first_label || '') + '" takes precedence)';
+      case 'SelfEdge':
+        return 'Self-referencing edge: "' + escapeHtml(v.node_key || '') + '" \u2192 "' + escapeHtml(v.node_key || '') + '"';
+      case 'SimilarNodeLabel':
+        return 'Similar node labels: "' + escapeHtml(v.label_a || '') + '" / "' + escapeHtml(v.label_b || '') + '"';
+      case 'RelationDrift':
+        return 'Relation "' + escapeHtml(v.rel_a || '') + '" appears only once — possible typo';
+      case 'EntityRefLike':
+        return '"' + escapeHtml(v.label || '') + '" looks like an entity reference';
+      case 'MalformedLine':
+        return 'Malformed DSL at "' + escapeHtml(v.text || '') + '"';
+      case 'EmptyLabel':
+        return 'Empty label in DSL';
+      case 'DuplicateEdge':
+        return 'Duplicate edge: "' + escapeHtml(v.from_key || '') + '" > "' + escapeHtml(v.rel || '') + '" > "' + escapeHtml(v.to_key || '') + '" (first at line ' + (v.existing_line !== undefined ? v.existing_line : '?') + ')';
+      default:
+        return 'Diagnostic: ' + variant;
+    }
+  }
+
+  /* Expose for test harness */
+  window.renderCmDiagnostics = renderCmDiagnostics;
+
   function renderAddEdgeForm() {
     var container = document.querySelector('.cm-add-edge-form');
     if (!container) return;
@@ -1060,6 +1142,7 @@
     renderConceptMap();
     renderCmEdgeTable();
     renderAddEdgeForm();
+    renderCmDiagnostics();
   }
 
   function handleAddEdge(source, rel, target) {
@@ -1230,6 +1313,7 @@
       renderEditToggle();
       renderCmEdgeTable();
       renderAddEdgeForm();
+      renderCmDiagnostics();
       // Re-render SVG to wire/unwire click handlers
       if (state.editingConceptMap) {
         // Re-render to wire click handlers
@@ -1297,6 +1381,7 @@
       // Render authoring UI sub-views after graph render
       renderCmEdgeTable();
       renderAddEdgeForm();
+      renderCmDiagnostics();
       renderEditToggle();
       // Show/hide entity-graph-specific UI
       var depthSel = document.querySelector('.depth-selector');

@@ -237,7 +237,7 @@ model.neighbourhood = function(focusId, depth, graph) {
 model.kindOrder = {
   PRD: 1, SPEC: 1, ADR: 2, POL: 2, STD: 3, SL: 4,
   ISS: 5, IMP: 5, CHR: 5, RSK: 5, REV: 6, RV: 7,
-  REQ: 8, IDE: 9, REC: 10, ASM: 11, DEC: 11, QUE: 12, CON: 12
+  REQ: 8, IDE: 9, REC: 10, ASM: 11, DEC: 11, QUE: 12, CON: 12, CM: 20
 };
 
 function compareNodes(a, b) {

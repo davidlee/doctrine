@@ -869,6 +869,157 @@
       window.location.hash = hashBefore;
     })();
 
+    /* --- PHASE-06: Diagnostics panel tests --- */
+
+    // Ensure DOM has a diagnostics panel for renderCmDiagnostics to target
+    (function() {
+      var panel = document.querySelector('.cm-diagnostics-panel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.className = 'cm-diagnostics-panel';
+        panel.style.display = 'none';
+        document.body.appendChild(panel);
+      }
+    })();
+
+    /* --- renderCmDiagnostics — non-empty diagnostics (CanonicalNodeCollision) --- */
+    (function() {
+      state.editingConceptMap = false;
+      state.focusId = 'CM-001';
+      state.conceptMapCache.set('CM-001', {
+        nodes: [{ key: 'foo', label: 'FooBar' }, { key: 'foo', label: 'Foo' }],
+        edges: [],
+        diagnostics: [
+          { CanonicalNodeCollision: { key: 'foo', first_label: 'FooBar', first_line: 1, label: 'Foo', line: 3 } }
+        ]
+      });
+      window.renderCmDiagnostics();
+      var panel = document.querySelector('.cm-diagnostics-panel');
+      assert(panel.style.display !== 'none', 'renderCmDiagnostics: non-empty diagnostics → panel visible');
+      assert(panel.innerHTML.indexOf('Foo') !== -1, 'renderCmDiagnostics: panel contains conflicting label Foo');
+      assert(panel.innerHTML.indexOf('foo') !== -1, 'renderCmDiagnostics: panel contains key foo');
+      assert(panel.innerHTML.indexOf('FooBar') !== -1, 'renderCmDiagnostics: panel contains first_label FooBar');
+      assert(panel.innerHTML.indexOf('line 3') !== -1, 'renderCmDiagnostics: panel contains line number prefix');
+      assert(panel.innerHTML.indexOf('Diagnostics') !== -1, 'renderCmDiagnostics: panel has Diagnostics header');
+      state.conceptMapCache.delete('CM-001');
+    })();
+
+    /* --- renderCmDiagnostics — empty diagnostics → hidden --- */
+    (function() {
+      state.editingConceptMap = false;
+      state.focusId = 'CM-002';
+      state.conceptMapCache.set('CM-002', {
+        nodes: [], edges: [], diagnostics: []
+      });
+      window.renderCmDiagnostics();
+      var panel = document.querySelector('.cm-diagnostics-panel');
+      assert(panel.style.display === 'none', 'renderCmDiagnostics: empty diagnostics → panel hidden');
+      state.conceptMapCache.delete('CM-002');
+    })();
+
+    /* --- renderCmDiagnostics — edit mode → hidden --- */
+    (function() {
+      state.editingConceptMap = true;
+      state.focusId = 'CM-003';
+      state.conceptMapCache.set('CM-003', {
+        nodes: [], edges: [], diagnostics: [{ SelfEdge: { line: 1, node_key: 'alpha' } }]
+      });
+      window.renderCmDiagnostics();
+      var panel = document.querySelector('.cm-diagnostics-panel');
+      assert(panel.style.display === 'none', 'renderCmDiagnostics: edit mode → panel hidden');
+      state.editingConceptMap = false;
+      state.conceptMapCache.delete('CM-003');
+    })();
+
+    /* --- renderCmDiagnostics — SelfEdge diagnostic --- */
+    (function() {
+      state.editingConceptMap = false;
+      state.focusId = 'CM-004';
+      state.conceptMapCache.set('CM-004', {
+        nodes: [], edges: [], diagnostics: [{ SelfEdge: { line: 2, node_key: 'alpha' } }]
+      });
+      window.renderCmDiagnostics();
+      var panel = document.querySelector('.cm-diagnostics-panel');
+      assert(panel.style.display !== 'none', 'renderCmDiagnostics: SelfEdge → panel visible');
+      assert(panel.innerHTML.indexOf('Self-referencing') !== -1, 'renderCmDiagnostics: SelfEdge message rendered');
+      assert(panel.innerHTML.indexOf('alpha') !== -1, 'renderCmDiagnostics: SelfEdge contains node_key');
+      state.conceptMapCache.delete('CM-004');
+    })();
+
+    /* --- renderCmDiagnostics — multiple diagnostics --- */
+    (function() {
+      state.editingConceptMap = false;
+      state.focusId = 'CM-005';
+      state.conceptMapCache.set('CM-005', {
+        nodes: [], edges: [],
+        diagnostics: [
+          { SelfEdge: { line: 1, node_key: 'a' } },
+          { EntityRefLike: { label: 'SL-001', line: 3 } },
+          { SimilarNodeLabel: { label_a: 'Foo', line_a: 2, label_b: 'Fooo', line_b: 4 } }
+        ]
+      });
+      window.renderCmDiagnostics();
+      var panel = document.querySelector('.cm-diagnostics-panel');
+      var items = panel.querySelectorAll('.cm-diag-item');
+      assert(items.length === 3, 'renderCmDiagnostics: multiple diagnostics → 3 items rendered');
+      assert(panel.innerHTML.indexOf('SL-001') !== -1, 'renderCmDiagnostics: EntityRefLike renders label');
+      assert(panel.innerHTML.indexOf('entity reference') !== -1, 'renderCmDiagnostics: EntityRefLike message');
+      assert(panel.innerHTML.indexOf('Similar node labels') !== -1, 'renderCmDiagnostics: SimilarNodeLabel message');
+      assert(panel.innerHTML.indexOf('Foo') !== -1, 'renderCmDiagnostics: SimilarNodeLabel contains label_a');
+      assert(panel.innerHTML.indexOf('Fooo') !== -1, 'renderCmDiagnostics: SimilarNodeLabel contains label_b');
+      state.conceptMapCache.delete('CM-005');
+    })();
+
+    /* --- renderCmDiagnostics — DuplicateEdge diagnostic --- */
+    (function() {
+      state.editingConceptMap = false;
+      state.focusId = 'CM-006';
+      state.conceptMapCache.set('CM-006', {
+        nodes: [], edges: [],
+        diagnostics: [{ DuplicateEdge: { line: 5, existing_line: 2, from_key: 'a', rel: 'relates', to_key: 'b' } }]
+      });
+      window.renderCmDiagnostics();
+      var panel = document.querySelector('.cm-diagnostics-panel');
+      assert(panel.innerHTML.indexOf('Duplicate edge') !== -1, 'renderCmDiagnostics: DuplicateEdge message rendered');
+      assert(panel.innerHTML.indexOf('line 2') !== -1, 'renderCmDiagnostics: DuplicateEdge mentions existing_line');
+      state.conceptMapCache.delete('CM-006');
+    })();
+
+    /* --- renderCmDiagnostics — MalformedLine diagnostic --- */
+    (function() {
+      state.editingConceptMap = false;
+      state.focusId = 'CM-007';
+      state.conceptMapCache.set('CM-007', {
+        nodes: [], edges: [],
+        diagnostics: [{ MalformedLine: { line: 7, text: 'bad > line > extra' } }]
+      });
+      window.renderCmDiagnostics();
+      var panel = document.querySelector('.cm-diagnostics-panel');
+      assert(panel.innerHTML.indexOf('Malformed DSL') !== -1, 'renderCmDiagnostics: MalformedLine message rendered');
+      assert(panel.innerHTML.indexOf('bad > line > extra') !== -1, 'renderCmDiagnostics: MalformedLine contains text');
+      state.conceptMapCache.delete('CM-007');
+    })();
+
+    /* --- renderCmDiagnostics — RelationDrift diagnostic --- */
+    (function() {
+      state.editingConceptMap = false;
+      state.focusId = 'CM-008';
+      state.conceptMapCache.set('CM-008', {
+        nodes: [], edges: [],
+        diagnostics: [{ RelationDrift: { rel_a: 'depends', line_a: 2, rel_b: 'dependes', line_b: 5 } }]
+      });
+      window.renderCmDiagnostics();
+      var panel = document.querySelector('.cm-diagnostics-panel');
+      assert(panel.innerHTML.indexOf('depends') !== -1, 'renderCmDiagnostics: RelationDrift contains rel_a');
+      assert(panel.innerHTML.indexOf('possible typo') !== -1, 'renderCmDiagnostics: RelationDrift message');
+      state.conceptMapCache.delete('CM-008');
+    })();
+
+    /* --- renderCmDiagnostics — function exposed on window --- */
+    (function() {
+      assert(typeof window.renderCmDiagnostics === 'function', 'renderCmDiagnostics: function exposed on window');
+    })();
+
     /* --- report --- */
     resultsEl.textContent = pass + '/' + (pass + fail) + ' assertions passed';
     if (fail > 0) {
