@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed0029e927a528b4f18b7f4a1d4c9"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "record CLI lacks --trust/--severity flags (audit A-3)"
+summary = "The doctrine memory record CLI has no --trust or --severity flags. Risk axes are TOML-only — you must edit the TOML by hand after recording. Producer follow-up from SL-008 remains open."
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f489f1c22189127e61dd80154168e886f35a101b"
+ref_name = "refs/heads/main"
+checkout_state_id = "e4e293f147d28b5318634f7b2b1b06b2e7ce0c13ac9b85e89b7a4820845f144f"
+base_commit = "ea8dc1e015821e3fb87f1e5ea85026c7a068991c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

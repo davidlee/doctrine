@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed002b43d7630b2d69797489e51aa"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "No standalone plan validation — malformed plan.toml surfaces late"
+summary = "There is no standalone plan.toml validation. A malformed plan.toml only surfaces when slice phases parses it at execution time. The author gets no feedback at plan-authoring time."
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f489f1c22189127e61dd80154168e886f35a101b"
+ref_name = "refs/heads/main"
+checkout_state_id = "16ceefa682ef20b404806fc6c97c12bef3d3f4cdef75eadf6d769e529166cd02"
+base_commit = "ea8dc1e015821e3fb87f1e5ea85026c7a068991c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
