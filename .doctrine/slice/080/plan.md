@@ -35,13 +35,19 @@ spec-coherence gate is the new addition.
 exist before the row is added. This phase also regenerates boot.md and verifies
 `doctrine claude install` succeeds.
 
-### Why not parallelise PHASE-02 and PHASE-03?
+### Entrance criteria: soft preferences vs hard gates
 
-They are file-disjoint (audit SKILL.md vs close SKILL.md) and could theoretically
-run in parallel. However, the mental model is cumulative — audit's handoff to
-reconcile, reconcile's writing surface, and close's verification of reconcile's
-work form a narrative chain. Serial execution with short phases keeps the prose
-coherent across files and avoids reconciliation drift between the two retunes.
+PHASE-02 and PHASE-03 entrance criteria are **soft coherence preferences**, not
+hard structural gates — they recommend reading /reconcile first so the audit and
+close handoff prose is consistent, but PHASE-02 and PHASE-03 may proceed
+concurrently if the design shapes (D3, D4) are understood. PHASE-04 is a **hard
+structural gate**: ADR-009 F14 forbids routing at a deferred skill
+(shipped-not-reachable), so all three skills must exist before the routing row
+is added.
+
+PHASE-02 and PHASE-03 are file-disjoint and could run in parallel. Serial
+execution with short phases keeps the narrative chain coherent across files
+(audit → reconcile → close) and avoids cross-skill drift.
 
 ## Dependencies
 
@@ -59,3 +65,8 @@ coherent across files and avoids reconciliation drift between the two retunes.
   edits).
 - OQ-2 (one REV per slice vs per finding) is resolved in design: one REV per
   slice by default, with split rule. Reconcile skill implements the split rule.
+- D9 (inspect-only, no re-audit) is captured as PHASE-01 EX-7 — reconcile
+  inspects targets for applicability and edit-point location but does not
+  perform new issue discovery.
+- IMP-008 stale-prose items (1–4) are restated inline in PHASE-03 EN-2 — the
+  implementer does not need to cross-reference the IMP-008 file.

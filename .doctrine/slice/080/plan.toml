@@ -32,6 +32,7 @@ exit_criteria = [
   { id = "EX-4", text = "Reconciliation Outcome section shape described (REV rationale for REV-backed changes; RV ## Reconciliation Outcome for direct-edit)." },
   { id = "EX-5", text = "Escalation path (reconcile → design) and no-op case both handled." },
   { id = "EX-6", text = "REV collision guard described per D4 step 4 + split rule." },
+  { id = "EX-7", text = "D9 honoured: reconcile inspects targets for applicability and edit-point location but does not perform new issue discovery — the audit/reconcile seam stays intact." },
 ]
 verification = [
   { id = "VA-1", expects = "Skill prose covers all 7 D4 process steps without gap." },
@@ -39,6 +40,7 @@ verification = [
   { id = "VA-3", expects = "Escalation and no-op paths are distinct sections or clearly signposted." },
   { id = "VA-4", expects = "Collision guard and split rule are both present and actionable." },
   { id = "VA-5", expects = "Skill does not reference a nonexistent `slice reconcile` CLI verb (D8)." },
+  { id = "VA-6", expects = "Skill prose describes inspection scope (validate applicability, locate edit points, detect drift) without prescribing re-audit or fresh discovery per D9." },
   { id = "VT-1", expects = "Lint passes — zero warnings on YAML frontmatter and prose." },
 ]
 specs        = []
@@ -51,7 +53,7 @@ name      = "Retune /audit to identification-only"
 objective = "Strip spec/governance writing from audit SKILL.md; add reconciliation brief as audit's final output per D5."
 
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-01 complete — /reconcile skill exists, so reconciliation brief shape is confirmed against D3." },
+  { id = "EN-1", text = "Reconciliation brief shape (design D3) is understood. PHASE-01 is a soft sequencing preference — reading /reconcile before writing audit's handoff prose keeps cross-references consistent, but PHASE-02 may proceed concurrently if the D3 shape is known." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "No prose directs writing design.md or governance during audit." },
@@ -76,8 +78,8 @@ name      = "Retune /close with spec-coherence gate"
 objective = "Add the spec-coherence check to close SKILL.md per D6 — confirm reconciliation is complete before done."
 
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-01 complete — /reconcile skill exists, so reconcile outcome shape and REV lifecycle are known." },
-  { id = "EN-2", text = "IMP-008 stale-prose list reviewed — current close SKILL.md verified against the four concrete items (tooling-gaps callout, hand-edit direction, audit.md references, close-gate framing). Confirm items 1–4 are already addressed; note any residual." },
+  { id = "EN-1", text = "Reconcile outcome shape and REV lifecycle understood. PHASE-01 is a soft sequencing preference — reading /reconcile before drafting close's spec-coherence check ensures the resolution paths align, but PHASE-03 may proceed concurrently if the shapes are known from the design." },
+  { id = "EN-2", text = "IMP-008 stale-prose list checked against current close SKILL.md: (1) tooling-gaps callout claiming 'no lifecycle transition verb' — absent; (2) hand-edit slice-nnn.toml direction — absent, uses verb; (3) audit.md references — uses RV-NNN throughout; (4) close-gate framing — uses verb, not sole guard. All four already addressed; confirm no regression." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Spec-coherence gate added: before done, every governance/spec item resolved via done REV, RV-native disposition (withdrawn/tolerated with rationale), or escalated to design." },
@@ -105,7 +107,7 @@ name      = "Wire /reconcile into routing and verify install"
 objective = "Add the /reconcile row to install/routing-process.md; regenerate boot.md; verify embedding per D7 + ADR-009 F14 (shipped-not-reachable)."
 
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-01, PHASE-02, PHASE-03 all complete — all three skills exist at their final paths." },
+  { id = "EN-1", text = "PHASE-01, PHASE-02, PHASE-03 all complete — all three skills must exist before routing can point at them. This is a hard structural gate: ADR-009 F14 forbids routing at a deferred skill (shipped-not-reachable)." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "install/routing-process.md contains the /reconcile routing row matching D7 text." },
