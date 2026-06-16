@@ -55,6 +55,7 @@
           codex
           nodejs_latest
           sqlite
+          eslint
         ];
 
         jailEnvOptions = with jailLib.combinators; [

@@ -2,6 +2,7 @@
 // Hash routing: #/focus/SL-001 or #/focus/SL-001?depth=2
 // Security: markdown-it html:false; DOMPurify.sanitize() applied before innerHTML.
 // SVG from /api/dot/svg is sanitized via DOMPurify SVG profile, then injected as inline DOM.
+/* global state, model, api, router, dot, compareNodes, compareEdgesBySource */
 
 (function () {
   'use strict';
@@ -412,7 +413,7 @@
           hitRect.setAttribute('stroke', 'none');
           g.insertBefore(hitRect, g.firstChild);
         }
-      } catch (_) { /* getBBox may fail on detached or hidden elements; non-critical */ }
+      } catch (_) { /* eslint-disable-line no-unused-vars */ }
 
       g.classList.add('doctrine-node');
 
@@ -471,7 +472,6 @@
       if (svgEl) {
         wireSvgHandlers(svgEl, nb.edges);
         dimLegend(nb);
-      }
       }
     }).catch(function(err) {
       if (seq !== state.graphRenderSeq) return;
@@ -671,6 +671,7 @@
     var route = router.parseHash();
     var prevFocusId = state.focusId;
     var prevDepth = state.depth;
+    var mdPane;
 
     if (route.view === 'focus') {
       state.focusId = route.id;
@@ -684,7 +685,7 @@
     if (route.view === 'edge') {
       renderEdgeDetail(route.id);
       renderHoverPane(null);
-      var mdPane = document.querySelector('.markdown-pane');
+      mdPane = document.querySelector('.markdown-pane');
       if (mdPane) mdPane.innerHTML = '<span class="placeholder">[Markdown content]</span>';
       var tbody = document.querySelector('.relationship-table tbody');
       if (tbody) tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[Relationship table]</span></td></tr>';
@@ -723,7 +724,7 @@
     }
 
     if (state.focusId) {
-      var mdPane = document.querySelector('.markdown-pane');
+      mdPane = document.querySelector('.markdown-pane');
       if (mdPane) renderMarkdownPane(mdPane, state.focusId);
     }
   }

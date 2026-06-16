@@ -3,10 +3,10 @@ mod? doctrine '.doctrine/doctrine.just'
 default: lint test install
 
 # Fast inner-loop gate — root package only.
-check: fmt lint test build
+check: fmt lint lint-js test build
 
 # Full gate for end-of-phase / CI — includes the cordage workspace crate.
-gate: fmt lint test-all build
+gate: fmt lint lint-js test-all build
 
 list-memories:
   @cargo run -q -- memory list
@@ -20,6 +20,9 @@ fmt:
 
 lint:
   cargo clippy
+
+lint-js:
+  npx eslint web/map/
 
 build:
   cargo build
