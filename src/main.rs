@@ -3012,13 +3012,7 @@ fn main() -> anyhow::Result<()> {
                 edges,
                 nodes,
                 path,
-            } => concept_map::run_show(
-                path,
-                &reference,
-                format,
-                edges,
-                nodes,
-            ),
+            } => concept_map::run_show(path, &reference, format, edges, nodes),
             ConceptMapCommand::Check { id, path } => concept_map::run_check(path, &id),
             ConceptMapCommand::Add {
                 id,

@@ -1181,7 +1181,13 @@ pub(crate) fn run_add(
         writeln!(
             io::stdout(),
             "edge already exists at line {}: {source_trim} > {rel_trim} > {target_trim}",
-            parsed.edges.iter().find(|e| e.from_label == source_trim && e.rel == rel_trim && e.to_label == target_trim).map_or(0, |e| e.line)
+            parsed
+                .edges
+                .iter()
+                .find(|e| e.from_label == source_trim
+                    && e.rel == rel_trim
+                    && e.to_label == target_trim)
+                .map_or(0, |e| e.line)
         )?;
         return Ok(());
     }
@@ -1607,10 +1613,7 @@ mod tests {
 
     #[test]
     fn concept_map_statuses_matches_expected_variants() {
-        assert_eq!(
-            CONCEPT_MAP_STATUSES,
-            &["draft", "accepted", "superseded"]
-        );
+        assert_eq!(CONCEPT_MAP_STATUSES, &["draft", "accepted", "superseded"]);
     }
 
     // --- derive_node_key ---
