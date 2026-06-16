@@ -26,7 +26,7 @@ use regex_lite::Regex;
 use std::collections::BTreeMap;
 
 /// Relative dir of the concept-map tree inside the project root.
-const CONCEPT_MAP_DIR: &str = ".doctrine/concept-map";
+pub(crate) const CONCEPT_MAP_DIR: &str = ".doctrine/concept-map";
 
 /// Statuses for concept maps — authored-artifact lifecycle (SL-074 design §2).
 const CONCEPT_MAP_STATUSES: &[&str] = &["draft", "accepted", "superseded"];
@@ -130,22 +130,22 @@ pub(crate) fn run_new(
 /// The full `concept-map-NNN.toml` read as data for `show` - `Meta`'s four list
 /// fields plus dates, description, and the raw DSL block.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
-struct ConceptMapDoc {
-    id: u32,
-    slug: String,
-    title: String,
-    status: String,
-    created: String,
-    updated: String,
+pub(crate) struct ConceptMapDoc {
+    pub(crate) id: u32,
+    pub(crate) slug: String,
+    pub(crate) title: String,
+    pub(crate) status: String,
+    pub(crate) created: String,
+    pub(crate) updated: String,
     #[serde(default)]
-    description: String,
+    pub(crate) description: String,
     #[serde(default)]
-    dsl: String,
+    pub(crate) dsl: String,
 }
 
 /// Parse a concept-map reference - `CM-001`, `cm-1`, or the bare id `1` - to its
 /// numeric id. The prefix is optional and case-insensitive; the id may be padded.
-fn parse_ref(reference: &str) -> anyhow::Result<u32> {
+pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
     let digits = reference
         .strip_prefix("CM-")
         .or_else(|| reference.strip_prefix("cm-"))
@@ -157,7 +157,10 @@ fn parse_ref(reference: &str) -> anyhow::Result<u32> {
 
 /// Read one concept-map's `concept-map-NNN.toml` (as data) and
 /// `concept-map-NNN.md` (body).
-fn read_concept_map(cm_root: &Path, id: u32) -> anyhow::Result<(ConceptMapDoc, String, String)> {
+pub(crate) fn read_concept_map(
+    cm_root: &Path,
+    id: u32,
+) -> anyhow::Result<(ConceptMapDoc, String, String)> {
     let name = format!("{id:03}");
     let stem = format!("concept-map-{name}");
     let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
@@ -175,26 +178,26 @@ fn read_concept_map(cm_root: &Path, id: u32) -> anyhow::Result<(ConceptMapDoc, S
 // ---------------------------------------------------------------------------
 
 /// A node in a parsed concept map - the normalised key plus the original label.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ConceptMapNode {
-    key: String,
-    label: String,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ConceptMapNode {
+    pub(crate) key: String,
+    pub(crate) label: String,
 }
 
 /// An edge in a parsed concept map - "from" and "to" nodes plus a relation label.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ConceptMapEdge {
-    from_key: String,
-    from_label: String,
-    rel: String,
-    to_key: String,
-    to_label: String,
-    line: usize,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ConceptMapEdge {
+    pub(crate) from_key: String,
+    pub(crate) from_label: String,
+    pub(crate) rel: String,
+    pub(crate) to_key: String,
+    pub(crate) to_label: String,
+    pub(crate) line: usize,
 }
 
 /// A diagnostic emitted during parsing or checking of a concept map DSL.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ConceptMapDiagnostic {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) enum ConceptMapDiagnostic {
     /// Line does not split into exactly 3 segments on " > ".
     MalformedLine { line: usize, text: String },
     /// A trimmed segment is empty.
@@ -236,8 +239,8 @@ enum ConceptMapDiagnostic {
 }
 
 /// The segment position in a DSL line that is empty.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum SegmentKind {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) enum SegmentKind {
     Source,
     Relation,
     Target,
@@ -245,10 +248,11 @@ enum SegmentKind {
 
 /// The result of parsing a concept map DSL - nodes, edges, and any parse-time
 /// diagnostics.
-struct ParsedConceptMap {
-    nodes: Vec<ConceptMapNode>,
-    edges: Vec<ConceptMapEdge>,
-    diagnostics: Vec<ConceptMapDiagnostic>,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ParsedConceptMap {
+    pub(crate) nodes: Vec<ConceptMapNode>,
+    pub(crate) edges: Vec<ConceptMapEdge>,
+    pub(crate) diagnostics: Vec<ConceptMapDiagnostic>,
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +265,7 @@ struct ParsedConceptMap {
 /// 2. Replace runs of whitespace, hyphens, and underscores with a single hyphen.
 /// 3. Strip all non-alphanumeric characters (except hyphen).
 /// 4. Trim leading/trailing hyphens.
-fn derive_node_key(label: &str) -> String {
+pub(crate) fn derive_node_key(label: &str) -> String {
     let lower = label.to_lowercase();
     let mut result = String::with_capacity(lower.len());
     let mut in_sep = false;
@@ -323,7 +327,7 @@ fn levenshtein(a: &str, b: &str) -> usize {
 
 /// Parse a concept map DSL string into a [`ParsedConceptMap`] with nodes,
 /// edges, and any parse-time diagnostics.
-fn parse_dsl(dsl: &str) -> ParsedConceptMap {
+pub(crate) fn parse_dsl(dsl: &str) -> ParsedConceptMap {
     let mut nodes: Vec<ConceptMapNode> = Vec::new();
     let mut edges: Vec<ConceptMapEdge> = Vec::new();
     let mut diagnostics: Vec<ConceptMapDiagnostic> = Vec::new();
@@ -460,7 +464,7 @@ fn parse_dsl(dsl: &str) -> ParsedConceptMap {
 /// Run heuristic checks over a parsed concept map, producing additional
 /// diagnostics (`SimilarNodeLabel`, `RelationDrift`, `EntityRefLike`) beyond those
 /// emitted during parsing.
-fn check(parsed: &ParsedConceptMap) -> Vec<ConceptMapDiagnostic> {
+pub(crate) fn check(parsed: &ParsedConceptMap) -> Vec<ConceptMapDiagnostic> {
     let mut diagnostics: Vec<ConceptMapDiagnostic> = Vec::new();
 
     // Carry forward parse-time CanonicalNodeCollision and SelfEdge.
@@ -1127,7 +1131,7 @@ const CONCEPT_MAP_DEFAULT: &[&str] = &["id", "status", "slug", "title"];
 // ---------------------------------------------------------------------------
 
 /// Extract the `dsl` value from a concept-map TOML string.
-fn get_dsl(toml_text: &str) -> anyhow::Result<String> {
+pub(crate) fn get_dsl(toml_text: &str) -> anyhow::Result<String> {
     let doc: toml_edit::DocumentMut = toml_text.parse().context("Failed to parse TOML")?;
     doc.get("dsl")
         .and_then(toml_edit::Item::as_str)
@@ -1136,10 +1140,239 @@ fn get_dsl(toml_text: &str) -> anyhow::Result<String> {
 }
 
 /// Set the `dsl` value in a concept-map TOML string, returning the modified TOML.
-fn set_dsl(toml_text: &str, new_dsl: &str) -> anyhow::Result<String> {
+pub(crate) fn set_dsl(toml_text: &str, new_dsl: &str) -> anyhow::Result<String> {
     let mut doc: toml_edit::DocumentMut = toml_text.parse().context("Failed to parse TOML")?;
     doc.insert("dsl", toml_edit::value(new_dsl));
     Ok(doc.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Pure: ConceptMapMutationError
+// ---------------------------------------------------------------------------
+
+/// Errors from pure concept-map DSL mutation functions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "variants used by future phases (SL-076 PHASE-02+)"
+    )
+)]
+pub(crate) enum ConceptMapMutationError {
+    /// A required field was empty after trimming.
+    EmptyField(String),
+    /// The exact (source, rel, target) triple already exists in the DSL.
+    DuplicateEdge { line: usize },
+    /// The edge to remove was not found.
+    EdgeNotFound,
+    /// Renaming a node would collide with an existing node's derived key.
+    NodeCollision { existing_label: String, line: usize },
+    /// The TOML is missing a `dsl` key.
+    MissingDsl,
+    /// Failed to parse the TOML document.
+    InvalidToml(String),
+}
+
+impl std::fmt::Display for ConceptMapMutationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyField(field) => write!(f, "{field} must be non-empty"),
+            Self::DuplicateEdge { line } => write!(f, "edge already exists at line {line}"),
+            Self::EdgeNotFound => write!(f, "edge not found"),
+            Self::NodeCollision {
+                existing_label,
+                line,
+            } => {
+                write!(
+                    f,
+                    "rename would collide with existing node '{existing_label}' at line {line}"
+                )
+            }
+            Self::MissingDsl => write!(f, "TOML is missing a `dsl` key"),
+            Self::InvalidToml(msg) => write!(f, "failed to parse TOML: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for ConceptMapMutationError {}
+
+// ---------------------------------------------------------------------------
+// Pure: add_edge_to_dsl
+// ---------------------------------------------------------------------------
+
+pub(crate) fn add_edge_to_dsl(
+    old_dsl: &str,
+    source: &str,
+    rel: &str,
+    target: &str,
+) -> Result<String, ConceptMapMutationError> {
+    let source = source.trim();
+    let rel = rel.trim();
+    let target = target.trim();
+
+    if source.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("source".into()));
+    }
+    if rel.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("relation".into()));
+    }
+    if target.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("target".into()));
+    }
+
+    // Detect duplicate
+    let parsed = parse_dsl(old_dsl);
+    if let Some(dup) = parsed
+        .edges
+        .iter()
+        .find(|e| e.from_label == source && e.rel == rel && e.to_label == target)
+    {
+        return Err(ConceptMapMutationError::DuplicateEdge { line: dup.line });
+    }
+
+    let new_line = format!("{source} > {rel} > {target}");
+    let new_dsl = if old_dsl.trim().is_empty() {
+        new_line
+    } else if old_dsl.ends_with('\n') {
+        format!("{old_dsl}{new_line}")
+    } else {
+        format!("{old_dsl}\n{new_line}")
+    };
+    Ok(new_dsl)
+}
+
+// ---------------------------------------------------------------------------
+// Pure: remove_edge_from_dsl
+// ---------------------------------------------------------------------------
+
+pub(crate) fn remove_edge_from_dsl(
+    old_dsl: &str,
+    source: &str,
+    rel: &str,
+    target: &str,
+) -> Result<String, ConceptMapMutationError> {
+    let source = source.trim();
+    let rel = rel.trim();
+    let target = target.trim();
+
+    if source.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("source".into()));
+    }
+    if rel.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("relation".into()));
+    }
+    if target.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("target".into()));
+    }
+
+    let mut found = false;
+    let mut lines: Vec<String> = Vec::new();
+    for line_str in old_dsl.lines() {
+        let trimmed = line_str.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            lines.push(line_str.to_string());
+            continue;
+        }
+        let segments: Vec<&str> = line_str.split(" > ").collect();
+        if segments.len() == 3 {
+            let ls = segments.first().map_or("", |s| s.trim());
+            let lr = segments.get(1).map_or("", |s| s.trim());
+            let lt = segments.get(2).map_or("", |s| s.trim());
+            if ls == source && lr == rel && lt == target && !found {
+                found = true;
+                continue; // omit only the first matching line
+            }
+        }
+        lines.push(line_str.to_string());
+    }
+
+    if !found {
+        return Err(ConceptMapMutationError::EdgeNotFound);
+    }
+
+    Ok(lines.join("\n"))
+}
+
+// ---------------------------------------------------------------------------
+// Pure: rename_node_in_dsl
+// ---------------------------------------------------------------------------
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "used by future phases (SL-076 PHASE-02+)")
+)]
+pub(crate) fn rename_node_in_dsl(
+    old_dsl: &str,
+    old_label: &str,
+    new_label: &str,
+) -> Result<(String, usize), ConceptMapMutationError> {
+    let old_label = old_label.trim();
+    let new_label = new_label.trim();
+
+    if old_label.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("old label".into()));
+    }
+    if new_label.is_empty() {
+        return Err(ConceptMapMutationError::EmptyField("new label".into()));
+    }
+
+    let old_key = derive_node_key(old_label);
+    let new_key = derive_node_key(new_label);
+
+    // Key collision check (only if keys differ — case-only rename has same key)
+    if old_key != new_key {
+        let parsed = parse_dsl(old_dsl);
+        if let Some(colliding) = parsed.nodes.iter().find(|n| n.key == new_key) {
+            // Find the line of that node
+            let line = parsed
+                .edges
+                .iter()
+                .find(|e| {
+                    derive_node_key(&e.from_label) == new_key
+                        || derive_node_key(&e.to_label) == new_key
+                })
+                .map_or(0, |e| e.line);
+            return Err(ConceptMapMutationError::NodeCollision {
+                existing_label: colliding.label.clone(),
+                line,
+            });
+        }
+    }
+
+    let mut occurrences: usize = 0;
+    let mut new_lines: Vec<String> = Vec::new();
+
+    for line_str in old_dsl.lines() {
+        let trimmed = line_str.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            new_lines.push(line_str.to_string());
+            continue;
+        }
+        let segments: Vec<&str> = line_str.split(" > ").collect();
+        if segments.len() != 3 {
+            new_lines.push(line_str.to_string());
+            continue;
+        }
+        let src = segments.first().map_or("", |s| s.trim());
+        let r = segments.get(1).map_or("", |s| s.trim());
+        let tgt = segments.get(2).map_or("", |s| s.trim());
+
+        let src_key = derive_node_key(src);
+        let tgt_key = derive_node_key(tgt);
+
+        let new_src = if src_key == old_key { new_label } else { src };
+        let new_tgt = if tgt_key == old_key { new_label } else { tgt };
+
+        if new_src != src || new_tgt != tgt {
+            occurrences += 1;
+            new_lines.push(format!("{new_src} > {r} > {new_tgt}"));
+        } else {
+            new_lines.push(line_str.to_string());
+        }
+    }
+
+    Ok((new_lines.join("\n"), occurrences))
 }
 
 // ---------------------------------------------------------------------------
@@ -1157,55 +1390,48 @@ pub(crate) fn run_add(
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let id = parse_ref(id_str)?;
-
-    // Validate: source/rel/target must be non-empty after trim.
-    let source_trim = source.trim();
-    let rel_trim = rel.trim();
-    let target_trim = target.trim();
-    anyhow::ensure!(!source_trim.is_empty(), "source must be non-empty");
-    anyhow::ensure!(!rel_trim.is_empty(), "relation must be non-empty");
-    anyhow::ensure!(!target_trim.is_empty(), "target must be non-empty");
-
     let cm_root = root.join(CONCEPT_MAP_DIR);
     let (_doc, toml_text, _body) = read_concept_map(&cm_root, id)?;
     let old_dsl = get_dsl(&toml_text)?;
 
-    // Parse DSL to check for exact duplicate edge.
-    let parsed = parse_dsl(&old_dsl);
-    let is_duplicate = parsed
-        .edges
-        .iter()
-        .any(|e| e.from_label == source_trim && e.rel == rel_trim && e.to_label == target_trim);
-
-    if is_duplicate && !force {
-        writeln!(
-            io::stdout(),
-            "edge already exists at line {}: {source_trim} > {rel_trim} > {target_trim}",
-            parsed
-                .edges
-                .iter()
-                .find(|e| e.from_label == source_trim
-                    && e.rel == rel_trim
-                    && e.to_label == target_trim)
-                .map_or(0, |e| e.line)
-        )?;
-        return Ok(());
+    match add_edge_to_dsl(&old_dsl, source, rel, target) {
+        Ok(new_dsl) => {
+            let updated = set_dsl(&toml_text, &new_dsl)?;
+            let name = format!("{id:03}");
+            let stem = format!("concept-map-{name}");
+            let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+            std::fs::write(&toml_path, updated)
+                .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+        }
+        Err(ConceptMapMutationError::DuplicateEdge { line: _ }) if force => {
+            // Force: just append the edge anyway (duplicate allowed)
+            let new_line = format!("{} > {} > {}", source.trim(), rel.trim(), target.trim());
+            let new_dsl = if old_dsl.trim().is_empty() {
+                new_line
+            } else {
+                format!("{old_dsl}\n{new_line}")
+            };
+            let updated = set_dsl(&toml_text, &new_dsl)?;
+            let name = format!("{id:03}");
+            let stem = format!("concept-map-{name}");
+            let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+            std::fs::write(&toml_path, updated)
+                .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+        }
+        Err(ConceptMapMutationError::DuplicateEdge { line }) => {
+            // Duplicate without force: print message and return Ok (existing behaviour)
+            let source_trim = source.trim();
+            let rel_trim = rel.trim();
+            let target_trim = target.trim();
+            writeln!(
+                io::stdout(),
+                "edge already exists at line {line}: {source_trim} > {rel_trim} > {target_trim}"
+            )?;
+        }
+        Err(e) => {
+            return Err(anyhow::anyhow!("{e}"));
+        }
     }
-
-    // Build new DSL text.
-    let new_line = format!("{source_trim} > {rel_trim} > {target_trim}");
-    let new_dsl = if old_dsl.trim().is_empty() {
-        new_line
-    } else {
-        format!("{old_dsl}\n{new_line}")
-    };
-    let updated = set_dsl(&toml_text, &new_dsl)?;
-
-    let name = format!("{id:03}");
-    let stem = format!("concept-map-{name}");
-    let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
-    std::fs::write(&toml_path, updated)
-        .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     Ok(())
 }
 
@@ -1225,40 +1451,15 @@ pub(crate) fn run_remove(
     let id = parse_ref(id_str)?;
     let cm_root = root.join(CONCEPT_MAP_DIR);
     let (_doc, toml_text, _body) = read_concept_map(&cm_root, id)?;
-
     let old_dsl = get_dsl(&toml_text)?;
+
     let source_trim = source.trim();
     let rel_trim = rel.trim();
     let target_trim = target.trim();
 
-    let mut found = false;
-    let mut lines: Vec<String> = Vec::new();
-    for line in old_dsl.lines() {
-        // Preserve non-edge lines (comments, blanks).
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            lines.push(line.to_string());
-            continue;
-        }
-        let segments: Vec<&str> = line.split(" > ").collect();
-        if segments.len() == 3 {
-            let ls = segments.first().map_or("", |s| s.trim());
-            let lr = segments.get(1).map_or("", |s| s.trim());
-            let lt = segments.get(2).map_or("", |s| s.trim());
-            if ls == source_trim && lr == rel_trim && lt == target_trim {
-                found = true;
-                continue; // omit this line
-            }
-        }
-        lines.push(line.to_string());
-    }
-
-    anyhow::ensure!(
-        found,
-        "edge not found: {source_trim} > {rel_trim} > {target_trim}"
-    );
-
-    let new_dsl = lines.join("\n");
+    let new_dsl = remove_edge_from_dsl(&old_dsl, source, rel, target).map_err(|_e| {
+        anyhow::anyhow!("edge not found: {source_trim} > {rel_trim} > {target_trim}")
+    })?;
     let updated = set_dsl(&toml_text, &new_dsl)?;
 
     let name = format!("{id:03}");
@@ -2482,6 +2683,208 @@ mod tests {
 
         let result = run_export(Some(root.to_path_buf()), "1", &ExportFormat::Json);
         assert!(result.is_ok());
+    }
+
+    // --- pure mutation helpers ---
+
+    fn make_dsl(lines: &[&str]) -> String {
+        lines.join("\n")
+    }
+
+    // --- add_edge_to_dsl tests ---
+
+    #[test]
+    fn add_edge_appends_to_dsl() {
+        let dsl = make_dsl(&["A > depends on > B"]);
+        let result = add_edge_to_dsl(&dsl, "B", "depends on", "C").unwrap();
+        assert_eq!(result, "A > depends on > B\nB > depends on > C");
+    }
+
+    #[test]
+    fn add_edge_detects_duplicate() {
+        let dsl = make_dsl(&["A > depends on > B"]);
+        let result = add_edge_to_dsl(&dsl, "A", "depends on", "B");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::DuplicateEdge { .. })
+        ));
+    }
+
+    #[test]
+    fn add_edge_trims_inputs() {
+        let dsl = make_dsl(&[]);
+        let result = add_edge_to_dsl(&dsl, "  A  ", " depends on ", "  B  ").unwrap();
+        assert_eq!(result, "A > depends on > B");
+    }
+
+    #[test]
+    fn add_edge_rejects_empty_source() {
+        let dsl = make_dsl(&[]);
+        let result = add_edge_to_dsl(&dsl, "", "rel", "target");
+        assert!(
+            matches!(result, Err(ConceptMapMutationError::EmptyField(f)) if f.contains("source"))
+        );
+    }
+
+    #[test]
+    fn add_edge_preserves_existing_lines() {
+        let dsl = make_dsl(&["# a comment", "", "A > depends on > B"]);
+        let result = add_edge_to_dsl(&dsl, "B", "depends on", "C").unwrap();
+        assert!(result.contains("# a comment"));
+        assert!(result.contains("B > depends on > C"));
+    }
+
+    // --- remove_edge_from_dsl tests ---
+
+    #[test]
+    fn remove_edge_removes_matching_line() {
+        let dsl = make_dsl(&["A > depends on > B", "B > depends on > C"]);
+        let result = remove_edge_from_dsl(&dsl, "A", "depends on", "B").unwrap();
+        assert!(!result.contains("A > depends on > B"));
+        assert!(result.contains("B > depends on > C"));
+    }
+
+    #[test]
+    fn remove_edge_not_found() {
+        let dsl = make_dsl(&["A > depends on > B"]);
+        let result = remove_edge_from_dsl(&dsl, "X", "depends on", "Y");
+        assert!(matches!(result, Err(ConceptMapMutationError::EdgeNotFound)));
+    }
+
+    #[test]
+    fn remove_edge_preserves_comments_and_blanks() {
+        let dsl = make_dsl(&["# header", "", "A > depends on > B", "", "# footer"]);
+        let result = remove_edge_from_dsl(&dsl, "A", "depends on", "B").unwrap();
+        assert!(result.contains("# header"));
+        assert!(result.contains("# footer"));
+    }
+
+    #[test]
+    fn remove_edge_trims_inputs() {
+        let dsl = make_dsl(&["A > depends on > B"]);
+        let result = remove_edge_from_dsl(&dsl, "  A  ", " depends on ", "  B  ").unwrap();
+        assert!(!result.contains("A > depends on > B"));
+    }
+
+    #[test]
+    fn remove_edge_removes_only_first_match() {
+        let dsl = make_dsl(&["A > depends on > B", "A > depends on > B"]);
+        let result = remove_edge_from_dsl(&dsl, "A", "depends on", "B").unwrap();
+        assert_eq!(result, "A > depends on > B"); // second line remains
+    }
+
+    // --- rename_node_in_dsl tests ---
+
+    #[test]
+    fn rename_node_edits_source_and_target_lines() {
+        let dsl = make_dsl(&["X > related to > Y", "Y > related to > Z"]);
+        let (result, occurrences) = rename_node_in_dsl(&dsl, "Y", "Ypsilon").unwrap();
+        assert_eq!(occurrences, 2);
+        assert!(result.contains("X > related to > Ypsilon"));
+        assert!(result.contains("Ypsilon > related to > Z"));
+    }
+
+    #[test]
+    fn rename_node_single_source_only() {
+        let dsl = make_dsl(&["X > related to > Y"]);
+        let (result, occurrences) = rename_node_in_dsl(&dsl, "X", "Alpha").unwrap();
+        assert_eq!(occurrences, 1);
+        assert!(result.contains("Alpha > related to > Y"));
+    }
+
+    #[test]
+    fn rename_node_key_collision_rejected() {
+        // "A" key = "a", "B" key = "b" — different keys, and "B" already exists
+        let dsl = make_dsl(&["A > relates to > X", "B > relates to > Y"]);
+        let result = rename_node_in_dsl(&dsl, "A", "B");
+        assert!(matches!(
+            result,
+            Err(ConceptMapMutationError::NodeCollision { .. })
+        ));
+    }
+
+    #[test]
+    fn rename_node_case_only_same_key_succeeds() {
+        // "Alpha" key = "alpha", "alpha" key = "alpha" — same key, no collision
+        let dsl = make_dsl(&["Alpha > relates to > Beta"]);
+        let (result, occurrences) = rename_node_in_dsl(&dsl, "Alpha", "alpha").unwrap();
+        assert_eq!(occurrences, 1);
+        assert!(result.contains("alpha > relates to > Beta"));
+    }
+
+    #[test]
+    fn rename_node_no_match_no_change() {
+        let dsl = make_dsl(&["A > relates to > B"]);
+        let (result, occurrences) = rename_node_in_dsl(&dsl, "Z", "Zeta").unwrap();
+        assert_eq!(occurrences, 0);
+        assert_eq!(result, dsl);
+    }
+
+    #[test]
+    fn rename_node_preserves_comments_and_blanks() {
+        let dsl = make_dsl(&["# header", "", "A > relates to > B", "", "# footer"]);
+        let (result, _) = rename_node_in_dsl(&dsl, "A", "Alpha").unwrap();
+        assert!(result.contains("# header"));
+        assert!(result.contains("# footer"));
+    }
+
+    #[test]
+    fn rename_node_trims_inputs() {
+        let dsl = make_dsl(&["A > relates to > B"]);
+        let (result, occurrences) = rename_node_in_dsl(&dsl, "  A  ", "  Alpha  ").unwrap();
+        assert_eq!(occurrences, 1);
+        assert!(result.contains("Alpha > relates to > B"));
+    }
+
+    #[test]
+    fn rename_node_rejects_empty_fields() {
+        let dsl = make_dsl(&["A > relates to > B"]);
+        assert!(matches!(
+            rename_node_in_dsl(&dsl, "", "X"),
+            Err(ConceptMapMutationError::EmptyField(_))
+        ));
+        assert!(matches!(
+            rename_node_in_dsl(&dsl, "X", ""),
+            Err(ConceptMapMutationError::EmptyField(_))
+        ));
+    }
+
+    // --- ConceptMapMutationError Display ---
+
+    #[test]
+    fn mutation_error_display_messages() {
+        assert!(
+            ConceptMapMutationError::EmptyField("source".into())
+                .to_string()
+                .contains("source")
+        );
+        assert!(
+            ConceptMapMutationError::DuplicateEdge { line: 5 }
+                .to_string()
+                .contains("line 5")
+        );
+        assert_eq!(
+            ConceptMapMutationError::EdgeNotFound.to_string(),
+            "edge not found"
+        );
+        assert!(
+            ConceptMapMutationError::NodeCollision {
+                existing_label: "Foo".into(),
+                line: 3
+            }
+            .to_string()
+            .contains("Foo")
+        );
+        assert!(
+            ConceptMapMutationError::MissingDsl
+                .to_string()
+                .contains("dsl")
+        );
+        assert!(
+            ConceptMapMutationError::InvalidToml("oops".into())
+                .to_string()
+                .contains("oops")
+        );
     }
 
     // --- integration helpers ---

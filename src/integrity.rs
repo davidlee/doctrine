@@ -18,6 +18,7 @@ use anyhow::{Context, bail};
 
 use crate::adr::ADR_KIND;
 use crate::backlog::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
+use crate::concept_map::CONCEPT_MAP_KIND;
 use crate::knowledge::{ASSUMPTION_KIND, CONSTRAINT_KIND, DECISION_KIND, QUESTION_KIND};
 use crate::policy::POLICY_KIND;
 use crate::rec::REC_KIND;
@@ -147,6 +148,11 @@ pub(crate) const KINDS: &[KindRef] = &[
     KindRef {
         kind: &CONSTRAINT_KIND,
         stem: "record",
+        state_dir: None,
+    },
+    KindRef {
+        kind: &CONCEPT_MAP_KIND,
+        stem: "concept-map",
         state_dir: None,
     },
     // Revision (SL-066, ADR-013) — the REV change-axis kind. Status-ful (scanned via
@@ -760,7 +766,7 @@ mod tests {
             prefixes,
             [
                 "SL", "ADR", "POL", "STD", "PRD", "SPEC", "REQ", "ISS", "IMP", "CHR", "RSK", "IDE",
-                "RV", "REC", "ASM", "DEC", "QUE", "CON", "REV"
+                "RV", "REC", "ASM", "DEC", "QUE", "CON", "CM", "REV"
             ]
         );
         // Slice and review (SL-040) own a runtime state tree (F3 guard surface).

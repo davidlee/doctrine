@@ -43,7 +43,8 @@ pub(crate) fn outbound_for(
         "PRD" => crate::spec::relation_edges(crate::spec::SpecSubtype::Product, root, id),
         "SPEC" => crate::spec::relation_edges(crate::spec::SpecSubtype::Tech, root, id),
         // REQUIREMENT authors no outbound relations — it is an edge target only.
-        "REQ" => Ok(Vec::new()),
+        // CM (concept-map, SL-076) likewise authors no outbound relations.
+        "REQ" | "CM" => Ok(Vec::new()),
         // Knowledge records (SL-059, L7/F-A1) author no outbound relations in Slice
         // A — routing only, no rules/labels/reader. The empty arm keeps the
         // KINDS-driven dispatch total once a record exists (a KINDS row with no arm
