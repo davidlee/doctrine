@@ -2025,6 +2025,41 @@ enum ConceptMapCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Add an edge to a concept map's DSL.
+    Add {
+        id: String,
+        source: String,
+        rel: String,
+        target: String,
+        #[arg(long)]
+        force: bool,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Remove an edge from a concept map's DSL.
+    Remove {
+        id: String,
+        source: String,
+        rel: String,
+        target: String,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Rename a node label across all DSL edges.
+    RenameNode {
+        id: String,
+        old: String,
+        new: String,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        case_sensitive: bool,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2578,6 +2613,9 @@ fn write_class(cmd: &Command) -> WriteClass {
         Command::Map { .. } => Write("map"),
         Command::ConceptMap { command } => match command {
             ConceptMapCommand::New { .. } => Write("concept-map new"),
+            ConceptMapCommand::Add { .. } => Write("concept-map add"),
+            ConceptMapCommand::Remove { .. } => Write("concept-map remove"),
+            ConceptMapCommand::RenameNode { .. } => Write("concept-map rename-node"),
             ConceptMapCommand::List { .. }
             | ConceptMapCommand::Show { .. }
             | ConceptMapCommand::Check { .. } => Read,
@@ -2977,6 +3015,29 @@ fn main() -> anyhow::Result<()> {
                 nodes,
             ),
             ConceptMapCommand::Check { id, path } => concept_map::run_check(path, &id),
+            ConceptMapCommand::Add {
+                id,
+                source,
+                rel,
+                target,
+                force,
+                path,
+            } => concept_map::run_add(path, &id, &source, &rel, &target, force),
+            ConceptMapCommand::Remove {
+                id,
+                source,
+                rel,
+                target,
+                path,
+            } => concept_map::run_remove(path, &id, &source, &rel, &target),
+            ConceptMapCommand::RenameNode {
+                id,
+                old,
+                new,
+                dry_run,
+                case_sensitive,
+                path,
+            } => concept_map::run_rename_node(path, &id, &old, &new, dry_run, case_sensitive),
         },
         Command::Slice { command } => match command {
             SliceCommand::New { title, slug, path } => slice::run_new(path, title, slug),

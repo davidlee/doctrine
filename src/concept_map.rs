@@ -912,6 +912,246 @@ const CONCEPT_MAP_COLUMNS: &[listing::Column<ConceptMapRow>] = &[
 const CONCEPT_MAP_DEFAULT: &[&str] = &["id", "status", "slug", "title"];
 
 // ---------------------------------------------------------------------------
+// Pure: get_dsl / set_dsl
+// ---------------------------------------------------------------------------
+
+/// Extract the `dsl` value from a concept-map TOML string.
+fn get_dsl(toml_text: &str) -> anyhow::Result<String> {
+    let doc: toml_edit::DocumentMut = toml_text.parse().context("Failed to parse TOML")?;
+    doc.get("dsl")
+        .and_then(toml_edit::Item::as_str)
+        .map(str::to_string)
+        .context("TOML is missing a `dsl` key")
+}
+
+/// Set the `dsl` value in a concept-map TOML string, returning the modified TOML.
+fn set_dsl(toml_text: &str, new_dsl: &str) -> anyhow::Result<String> {
+    let mut doc: toml_edit::DocumentMut = toml_text.parse().context("Failed to parse TOML")?;
+    doc.insert("dsl", toml_edit::value(new_dsl));
+    Ok(doc.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Shell: run_add
+// ---------------------------------------------------------------------------
+
+/// `doctrine concept-map add` — append a DSL edge line to a concept map.
+pub(crate) fn run_add(
+    path: Option<PathBuf>,
+    id_str: &str,
+    source: &str,
+    rel: &str,
+    target: &str,
+    force: bool,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let id = parse_ref(id_str)?;
+
+    // Validate: source/rel/target must be non-empty after trim.
+    let source_trim = source.trim();
+    let rel_trim = rel.trim();
+    let target_trim = target.trim();
+    anyhow::ensure!(!source_trim.is_empty(), "source must be non-empty");
+    anyhow::ensure!(!rel_trim.is_empty(), "relation must be non-empty");
+    anyhow::ensure!(!target_trim.is_empty(), "target must be non-empty");
+
+    let cm_root = root.join(CONCEPT_MAP_DIR);
+    let (_doc, toml_text, _body) = read_concept_map(&cm_root, id)?;
+    let old_dsl = get_dsl(&toml_text)?;
+
+    // Parse DSL to check for exact duplicate edge.
+    let parsed = parse_dsl(&old_dsl);
+    let is_duplicate = parsed
+        .edges
+        .iter()
+        .any(|e| e.from_label == source_trim && e.rel == rel_trim && e.to_label == target_trim);
+
+    if is_duplicate && !force {
+        writeln!(
+            io::stdout(),
+            "edge already exists: {source_trim} > {rel_trim} > {target_trim}"
+        )?;
+        return Ok(());
+    }
+
+    // Build new DSL text.
+    let new_line = format!("{source_trim} > {rel_trim} > {target_trim}");
+    let new_dsl = if old_dsl.trim().is_empty() {
+        new_line
+    } else {
+        format!("{old_dsl}\n{new_line}")
+    };
+    let updated = set_dsl(&toml_text, &new_dsl)?;
+
+    let name = format!("{id:03}");
+    let stem = format!("concept-map-{name}");
+    let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+    std::fs::write(&toml_path, updated)
+        .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Shell: run_remove
+// ---------------------------------------------------------------------------
+
+/// `doctrine concept-map remove` — remove a DSL edge line from a concept map.
+pub(crate) fn run_remove(
+    path: Option<PathBuf>,
+    id_str: &str,
+    source: &str,
+    rel: &str,
+    target: &str,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let id = parse_ref(id_str)?;
+    let cm_root = root.join(CONCEPT_MAP_DIR);
+    let (_doc, toml_text, _body) = read_concept_map(&cm_root, id)?;
+
+    let old_dsl = get_dsl(&toml_text)?;
+    let source_trim = source.trim();
+    let rel_trim = rel.trim();
+    let target_trim = target.trim();
+
+    let mut found = false;
+    let mut lines: Vec<String> = Vec::new();
+    for line in old_dsl.lines() {
+        // Preserve non-edge lines (comments, blanks).
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            lines.push(line.to_string());
+            continue;
+        }
+        let segments: Vec<&str> = line.split(" > ").collect();
+        if segments.len() == 3 {
+            let ls = segments.first().map_or("", |s| s.trim());
+            let lr = segments.get(1).map_or("", |s| s.trim());
+            let lt = segments.get(2).map_or("", |s| s.trim());
+            if ls == source_trim && lr == rel_trim && lt == target_trim {
+                found = true;
+                continue; // omit this line
+            }
+        }
+        lines.push(line.to_string());
+    }
+
+    anyhow::ensure!(
+        found,
+        "edge not found: {source_trim} > {rel_trim} > {target_trim}"
+    );
+
+    let new_dsl = lines.join("\n");
+    let updated = set_dsl(&toml_text, &new_dsl)?;
+
+    let name = format!("{id:03}");
+    let stem = format!("concept-map-{name}");
+    let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+    std::fs::write(&toml_path, updated)
+        .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Shell: run_rename_node
+// ---------------------------------------------------------------------------
+
+/// `doctrine concept-map rename-node` — rename a node label across all DSL edges.
+pub(crate) fn run_rename_node(
+    path: Option<PathBuf>,
+    id_str: &str,
+    old: &str,
+    new_label: &str,
+    dry_run: bool,
+    case_sensitive: bool,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let id = parse_ref(id_str)?;
+    let cm_root = root.join(CONCEPT_MAP_DIR);
+    let (_doc, toml_text, _body) = read_concept_map(&cm_root, id)?;
+
+    let old_dsl = get_dsl(&toml_text)?;
+
+    let mut occurrences: usize = 0;
+    let mut new_lines: Vec<String> = Vec::new();
+
+    let old_lower = if case_sensitive {
+        String::new()
+    } else {
+        old.to_lowercase()
+    };
+
+    for line in old_dsl.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            new_lines.push(line.to_string());
+            continue;
+        }
+        let segments: Vec<&str> = line.split(" > ").collect();
+        if segments.len() != 3 {
+            new_lines.push(line.to_string());
+            continue;
+        }
+        let src = segments.first().map_or("", |s| s.trim());
+        let r = segments.get(1).map_or("", |s| s.trim());
+        let tgt = segments.get(2).map_or("", |s| s.trim());
+
+        let mut changed = false;
+        let new_src = if (case_sensitive && src == old)
+            || (!case_sensitive && src.to_lowercase() == old_lower)
+        {
+            changed = true;
+            new_label
+        } else {
+            src
+        };
+        let new_tgt = if (case_sensitive && tgt == old)
+            || (!case_sensitive && tgt.to_lowercase() == old_lower)
+        {
+            changed = true;
+            new_label
+        } else {
+            tgt
+        };
+        if changed {
+            occurrences += 1;
+            new_lines.push(format!("{new_src} > {r} > {new_tgt}"));
+        } else {
+            new_lines.push(line.to_string());
+        }
+    }
+
+    // Count edges (non-comment, non-empty lines that split to 3).
+    let edges = old_dsl
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            !t.is_empty() && !t.starts_with('#') && t.split(" > ").count() == 3
+        })
+        .count();
+
+    let new_dsl = new_lines.join("\n");
+
+    if dry_run {
+        writeln!(io::stdout(), "{new_dsl}")?;
+        return Ok(());
+    }
+
+    let updated = set_dsl(&toml_text, &new_dsl)?;
+
+    let name = format!("{id:03}");
+    let stem = format!("concept-map-{name}");
+    let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+    std::fs::write(&toml_path, updated)
+        .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+
+    writeln!(
+        io::stdout(),
+        "Rewrote {occurrences} occurrences across {edges} edges."
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1478,5 +1718,329 @@ mod tests {
         let msg = format_diagnostic(&parsed.diagnostics[0]);
         assert!(msg.starts_with("line 1:"));
         assert!(msg.contains("malformed"));
+    }
+
+    // --- get_dsl / set_dsl ---
+
+    #[test]
+    fn get_dsl_extracts_dsl_value() {
+        let toml = "id = 1\nslug = \"test\"\ntitle = \"Test\"\nstatus = \"draft\"\ndsl = '''\nA > b > C\n'''";
+        let dsl = get_dsl(toml).unwrap();
+        assert_eq!(dsl.trim(), "A > b > C");
+    }
+
+    #[test]
+    fn get_dsl_errors_on_absent_key() {
+        let toml = "id = 1\nslug = \"test\"\n";
+        assert!(get_dsl(toml).is_err());
+    }
+
+    #[test]
+    fn set_dsl_round_trip_preserves_non_dsl_content() {
+        let toml = concat!(
+            "id = 1\n",
+            "slug = \"test\"\n",
+            "title = \"Test\"\n",
+            "status = \"draft\"\n",
+            "[[relation]]\n",
+            "target = \"ADR-001\"\n",
+            "label = \"test_label\"\n",
+            "dsl = '''\n",
+            "Initial\n",
+            "'''"
+        );
+        let new_dsl = "A > b > C\nX > y > Z";
+        let updated = set_dsl(toml, new_dsl).unwrap();
+        // Round-trip: get_dsl must return what we set.
+        let reread = get_dsl(&updated).unwrap();
+        assert_eq!(reread.trim(), new_dsl);
+        // Non-DSL content preserved.
+        assert!(updated.contains("id = 1"));
+        assert!(updated.contains("[[relation]]"));
+        assert!(updated.contains("label = \"test_label\""));
+        assert!(updated.contains("target = \"ADR-001\""));
+    }
+
+    #[test]
+    fn set_dsl_preserves_relation_rows_byte_identical() {
+        // A TOML file containing both dsl and [[relation]] rows must survive
+        // get_dsl → set_dsl round-trip with non-DSL content byte-identical.
+        let toml = concat!(
+            "id = 1\n",
+            "slug = \"test\"\n",
+            "title = \"Test\"\n",
+            "status = \"draft\"\n",
+            "description = \"\"\n",
+            "created = \"2026-06-01\"\n",
+            "updated = \"2026-06-01\"\n",
+            "dsl = '''\n",
+            "A > rel > B\n",
+            "'''\n",
+            "[[relation]]\n",
+            "target = \"ADR-001\"\n",
+            "label = \"test_label\"\n",
+        );
+        // Extract the relation block before DSL change.
+        let relation_block = {
+            let idx = toml.find("[[relation]]").unwrap();
+            &toml[idx..]
+        };
+        let dsl = get_dsl(toml).unwrap();
+        let updated = set_dsl(toml, &dsl).unwrap();
+        // Relation block must be byte-identical after round-trip.
+        let updated_relation = {
+            let idx = updated.find("[[relation]]").unwrap();
+            &updated[idx..]
+        };
+        assert_eq!(
+            updated_relation, relation_block,
+            "relation rows must be byte-identical after get_dsl → set_dsl round-trip"
+        );
+    }
+
+    // --- run_add ---
+
+    #[test]
+    fn run_add_empty_dsl_single_line() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        // Clear DSL.
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "");
+
+        run_add(
+            Some(root.to_path_buf()),
+            "1",
+            "User",
+            "creates",
+            "Document",
+            false,
+        )
+        .unwrap();
+        let (_doc, toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
+        let dsl = get_dsl(&toml_text).unwrap();
+        assert_eq!(dsl.trim(), "User > creates > Document");
+    }
+
+    #[test]
+    fn run_add_duplicate_noop() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "User > creates > Document");
+
+        run_add(
+            Some(root.to_path_buf()),
+            "1",
+            "User",
+            "creates",
+            "Document",
+            false,
+        )
+        .unwrap();
+        let (_doc, toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
+        let dsl = get_dsl(&toml_text).unwrap();
+        // Only one line.
+        assert_eq!(dsl.trim().lines().count(), 1);
+    }
+
+    #[test]
+    fn run_add_duplicate_force_appends() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "User > creates > Document");
+
+        run_add(
+            Some(root.to_path_buf()),
+            "1",
+            "User",
+            "creates",
+            "Document",
+            true,
+        )
+        .unwrap();
+        let (_doc, toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
+        let dsl = get_dsl(&toml_text).unwrap();
+        assert_eq!(
+            dsl.trim().lines().count(),
+            2,
+            "force should append duplicate"
+        );
+    }
+
+    #[test]
+    fn run_add_rejects_empty_segments() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+
+        assert!(run_add(Some(root.to_path_buf()), "1", "", "rel", "target", false).is_err());
+        assert!(run_add(Some(root.to_path_buf()), "1", "src", "", "target", false).is_err());
+        assert!(run_add(Some(root.to_path_buf()), "1", "src", "rel", "", false).is_err());
+        assert!(run_add(Some(root.to_path_buf()), "1", "  ", "rel", "target", false).is_err());
+    }
+
+    // --- run_remove ---
+
+    #[test]
+    fn run_remove_removes_edge() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(
+            &cm_root,
+            1,
+            "User > creates > Document\nDoc > belongs_to > Workspace",
+        );
+
+        run_remove(Some(root.to_path_buf()), "1", "User", "creates", "Document").unwrap();
+        let (_doc, toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
+        let dsl = get_dsl(&toml_text).unwrap();
+        assert!(!dsl.contains("User > creates > Document"));
+        assert!(dsl.contains("Doc > belongs_to > Workspace"));
+    }
+
+    #[test]
+    fn run_remove_not_found_bails() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "User > creates > Document");
+
+        let res = run_remove(Some(root.to_path_buf()), "1", "Ghost", "rel", "Target");
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn run_remove_case_sensitive_match() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "User > creates > Document");
+
+        let res = run_remove(Some(root.to_path_buf()), "1", "user", "creates", "document");
+        assert!(res.is_err(), "case difference should not match");
+    }
+
+    #[test]
+    fn run_remove_preserves_comments_and_blanks() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "# comment\n\nA > rel > B\n\n# another");
+
+        run_remove(Some(root.to_path_buf()), "1", "A", "rel", "B").unwrap();
+        let (_doc, toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
+        let dsl = get_dsl(&toml_text).unwrap();
+        assert!(dsl.contains("# comment"));
+        assert!(dsl.contains("# another"));
+        assert!(!dsl.contains("A > rel > B"));
+    }
+
+    // --- run_rename_node ---
+
+    #[test]
+    fn run_rename_node_case_insensitive_rewrite() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "User > creates > Document");
+
+        run_rename_node(Some(root.to_path_buf()), "1", "user", "Actor", false, false).unwrap();
+        let (_doc, toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
+        let dsl = get_dsl(&toml_text).unwrap();
+        assert!(dsl.contains("Actor > creates > Document"));
+    }
+
+    #[test]
+    fn run_rename_node_case_sensitive_no_match() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "User > creates > Document");
+
+        run_rename_node(Some(root.to_path_buf()), "1", "user", "Actor", false, true).unwrap();
+        let (_doc, toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
+        let dsl = get_dsl(&toml_text).unwrap();
+        // Case-sensitive: "user" does NOT match "User", so no change.
+        assert!(dsl.contains("User > creates > Document"));
+        assert!(!dsl.contains("Actor"));
+    }
+
+    #[test]
+    fn run_rename_node_both_source_and_target_rewritten() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "A > rel > A");
+
+        run_rename_node(Some(root.to_path_buf()), "1", "A", "B", false, false).unwrap();
+        let (_doc, toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
+        let dsl = get_dsl(&toml_text).unwrap();
+        assert_eq!(dsl.trim(), "B > rel > B");
+    }
+
+    #[test]
+    fn run_rename_node_no_substring_match() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "UserBase > rel > SuperUser");
+
+        run_rename_node(Some(root.to_path_buf()), "1", "User", "Actor", false, false).unwrap();
+        let (_doc, toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
+        let dsl = get_dsl(&toml_text).unwrap();
+        // "User" should NOT match "UserBase" or "SuperUser" (full segment match only).
+        assert_eq!(dsl.trim(), "UserBase > rel > SuperUser");
+    }
+
+    #[test]
+    fn run_rename_node_dry_run_prints_without_writing() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+        let cm_root = root.join(CONCEPT_MAP_DIR);
+        rewrite_dsl(&cm_root, 1, "User > creates > Document");
+        let original =
+            std::fs::read_to_string(&cm_root.join("001").join("concept-map-001.toml")).unwrap();
+
+        run_rename_node(Some(root.to_path_buf()), "1", "User", "Actor", true, false).unwrap();
+        let after =
+            std::fs::read_to_string(&cm_root.join("001").join("concept-map-001.toml")).unwrap();
+        assert_eq!(after, original, "dry-run must not write to file");
+    }
+
+    // --- integration helpers ---
+
+    /// Install a fresh concept map via `run_new`.
+    fn install_cm(root: &Path, title: &str, slug: Option<&str>) {
+        run_new(
+            Some(root.to_path_buf()),
+            Some(title.into()),
+            slug.map(str::to_string),
+        )
+        .unwrap();
+    }
+
+    /// Rewrite the DSL in a concept map's TOML file via `set_dsl`.
+    fn rewrite_dsl(cm_root: &Path, id: u32, new_dsl: &str) {
+        let name = format!("{id:03}");
+        let stem = format!("concept-map-{name}");
+        let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
+        let toml_text = std::fs::read_to_string(&toml_path).unwrap();
+        let updated = set_dsl(&toml_text, new_dsl).unwrap();
+        std::fs::write(&toml_path, updated).unwrap();
     }
 }
