@@ -1,0 +1,34 @@
+id    = 36
+slug  = "reconciliation-review-of-sl-073"
+title = "reconciliation review of SL-073"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-073"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "No render.js: render functions consolidated into app.js"
+detail = 'Design.md Hard Contract: "Frontend modules ship as separate files loaded via <script> tags in index.html (dependency order: api.js, model.js, dot.js, router.js, render.js, app.js)." The implementation has no render.js — all render functions (renderEntityList, renderFocusHeader, renderRelationshipTable, renderHoverPane, renderGraphPane, renderMarkdownPane, renderEdgeDetail) live in app.js alongside bootstrap and interactive UI wiring. The other modules (api.js, model.js, dot.js, router.js) are correctly separated. The separation is cosmetic-only: all functions are present and working, index.html loads the correct files. The consolidation was noted in PHASE-05 notes as intentional when replacing the old placeholder render functions.'
+disposition = "tolerated"
+response = "Pragmatic consolidation during PHASE-05 implementation: all render functions are correctly separated by concern within app.js (renderEntityList, renderFocusHeader, renderRelationshipTable, renderHoverPane, renderGraphPane, renderMarkdownPane, renderEdgeDetail). The critical module contract interfaces (api.fetch*, model.*, dot.*, router.*) are properly isolated in separate files per the design. Migrating render functions to render.js would be a pure refactor with zero behavioural change and is deferred — the future htmx + minijinja migration would eliminate the separate JS module approach entirely. The current separation (5 files: api, model, dot, router, app) is sufficient for the design's intent of clean module boundaries."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "No .eslintrc.json: design file layout mentions it but file absent"
+detail = """Design.md §1 lists .eslintrc.json as a file in web/map/: ".eslintrc.json — strict lint config (browser env, es5, eqeqeq, no-unused-vars, no-implicit-globals)". The file does not exist in the tree. JS syntax correctness is verified via node --check, and tooling config is harmless served on loopback, but the design's enumerated file list is inaccurate without it. This is a cosmetic completeness gap — no functional impact."""
+disposition = "aligned"
+response = "JS syntax correctness is already verified via node --check for all 5 JS files. The .eslintrc.json mentioned in the design's file layout is a tooling config file (not a secret, harmless on loopback) but was never authored — the design file layout was aspirational. The current tooling (node --check + just check gate) provides equivalent value: syntax errors are caught before commit. Adding eslintrc would require an eslint dependency (npm install) which contradicts the no-build-step posture. The design's file list is the inaccurate artifact, not the implementation — update design.md to remove .eslintrc.json from the layout tree."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
