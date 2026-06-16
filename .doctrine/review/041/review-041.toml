@@ -1,0 +1,52 @@
+id    = 41
+slug  = "reconciliation-review-of-sl-076"
+title = "reconciliation review of SL-076"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-076"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "set_dsl missing rustdoc about dsl-key inline comment loss"
+detail = '''Design §2.1 explicitly requires: 'Document this in the mutation function's rustdoc.' set_dsl at src/concept_map.rs:1143 uses doc.insert("dsl", value(...)) which replaces the dsl key's entire item, dropping any inline comment on the key line (e.g., dsl = """...""" # my map). The design accepts this tradeoff but requires a rustdoc note on set_dsl. Currently the function has no doc comment at all.'''
+disposition = "fix-now"
+response = """Agreed. set_dsl needs a rustdoc comment explaining that doc.insert("dsl", ...) replaces the entire dsl key item, dropping any inline comment on the key line. This is the documented accepted tradeoff from design §2.1. Will add: '/// Replace the dsl key value in the TOML document. Note: this replaces the entire dsl item, dropping any inline comment on the  key line (e.g., ). All other keys and their comments are preserved.'"""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "EdgeNotFound missing source/rel/target fields — bare unit variant"
+detail = "Design §2.1 says EdgeNotFound { source: String, rel: String, target: String }. Both ConceptMapMutationError::EdgeNotFound (src/concept_map.rs:1172) and MapServerError::EdgeNotFound (src/map_server/error.rs:54) are bare unit variants. The HTTP 404 response only says 'Edge not found' without identifying which edge. This is less useful for the user, though not functionally broken — the error is correct (404) and the frontend can display a generic message."
+disposition = "tolerated"
+response = "The bare EdgeNotFound is functionally correct — it returns 404 with a clear message. The design's source/rel/target fields would enable a more precise message but the frontend doesn't use them. Follow-up work could add field-bearing variants; not a blocker. Rationale: single-user tool, the generic message is sufficient for this use case."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Mutation function signatures deviate from design — take DSL text, not TOML text"
+detail = "Design §2.1 shows signatures: add_edge_to_dsl(toml_text: &str, ...) -> Result<String, ...> (taking full TOML, returning updated TOML). Implementation takes old_dsl: &str (just the DSL block) and returns just the updated DSL string. The routes orchestrate get_dsl() → mutate → set_dsl(), which is functionally equivalent and upholds the hard contract (routes own no DSL semantics). The design spec should be updated to reflect the actual signatures. No behavioral impact."
+disposition = "design-wrong"
+response = "The design spec signatures should reflect the actual implementation: mutation functions take DSL text (not full TOML) and return updated DSL (not full TOML). The routes own the get_dsl/mutate/set_dsl orchestration. This separation improves testability and is functionally equivalent. Update design.md 2.1 to match the real signatures."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "ConceptMapMutationError::EmptyField uses String instead of &'static str"
+detail = """Design §2.1 specifies EmptyField { field: &'static str }. Implementation at src/concept_map.rs:1163 uses EmptyField(String), requiring a heap allocation for every error path. Inline construction like EmptyField("source".into()) allocates a String. The design's &'static str would be zero-cost. Minor memory efficiency concern — no behavioral impact."""
+disposition = "tolerated"
+response = "String allocation in EmptyField is negligible for a single-user loopback tool mutating small TOML files. The field names are short fixed strings and the allocation happens on error paths only. &'static str would be more elegant but the String approach is simpler to implement and has no measurable impact. Accept."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
