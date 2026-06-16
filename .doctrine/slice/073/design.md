@@ -36,10 +36,9 @@ satisfy them; the acceptance checklist is gated by them.
 - **`web/map/` must never contain secrets, local config, test fixtures with
   private paths, source maps with local absolute paths, or generated dev
   artifacts.** Only committed, intentional static files. `.eslintrc.json` is
-  a dev-only tooling file that `RustEmbed` will embed (the `#[folder = "web/map/"]`
-  glob has no exclusion mechanism); it is harmless — served at
-  `/assets/.eslintrc.json` on loopback, no secrets — and not worth a build-script
-  workaround.
+  a tooling config file (not a secret); it is committed intentionally under
+  `web/map/` because it configures the files it lints and is harmless when
+  served on loopback.
 
 ## 1. Architecture & Module Layout
 
@@ -51,15 +50,51 @@ Command tier:
 
 Engine tier:
   src/map_server/*      → unchanged from SL-072
-  web/map/              → embedded static frontend (RustEmbed)
-    index.html          → app shell
-    app.js              → SPA (state, api, model, dot, router, render)
-    style.css           → semantic layout, light/dark theme, kind pills
-    vendor/             → markdown-it, DOMPurify, github-markdown.css (unchanged)
 ```
 
 No new Rust modules. No new Rust dependencies. No server route changes. The
 frontend is a pure consumer of the SL-072 API surface.
+
+### SVG embedding policy — deliberate revision of SL-072
+
+SL-072 prohibited inline SVG injection and required `<img>` or `<object>`
+embedding because the browser shell was placeholder-only. SL-073 requires
+graph node click/hover behaviour, so it intentionally revises that policy.
+Inline SVG is permitted only after this pipeline, in order:
+
+1. DOT strings are quoted/escaped (entity IDs, titles, relation labels are
+   untrusted: they may contain quotes, backslashes, or Graphviz-breaking chars).
+2. DOT is rendered server-side by Graphviz — ONLY from generated DOT; the
+   server never executes user-supplied DOT.
+3. Raw SVG is sanitized through DOMPurify (`USE_PROFILES: {svg: true}`).
+4. Sanitized SVG is injected as inline DOM.
+5. Click/hover handlers are attached post-injection.
+
+Raw unsanitized Graphviz SVG is never inserted into the DOM. The browser's JSON
+state graph is the same data the SVG represents — inline SVG doesn't expose
+information the JS heap doesn't already hold.
+
+### Frontend file layout
+
+```
+web/map/
+  index.html          → app shell, loads vendor + JS in order
+  style.css           → semantic layout, light/dark theme, kind pills
+  api.js              → HTTP layer (fetchGraph, refreshGraph, renderDot, …)
+  model.js            → normalizeGraph, resolveFocus, findFocus, neighbourhood, …
+  dot.js              → dotQuote, nodeAttrs, edgeAttrs, graphToDot
+  router.js           → parseHash, buildHash, setFocus, setEdge
+  render.js           → renderShell, renderSidebar, renderGraphPane, …
+  app.js              → bootstrap + orchestration (wires modules together)
+  test.html           → pure JS unit tests (console.assert, no browser automation)
+  vendor/             → markdown-it, DOMPurify, github-markdown.css (unchanged)
+  .eslintrc.json      → strict lint config (browser env, es5, eqeqeq, …)
+```
+
+Loaded via `<script>` tags in dependency order (no ES module loader, no build
+step). `.eslintrc.json` lives under `web/map/` because it configures the files
+it checks — it's a tooling file, not a secret, and is harmless served on
+loopback.
 
 The user intends a future migration to htmx + minijinja templates once UX
 settles. This design keeps markup semantic and separable — JS modules do not
@@ -126,7 +161,7 @@ var state = {
 
 ```js
 {
-  id: "e_SL-072_governed_by_ADR-001",  // durable: source_label_target
+  id: "e_SL-072_governed_by_ADR-001",  // durable: e_ + encodePart(source) + _ + encodePart(label) + _ + encodePart(target)
   source: "SL-072",     // source canonical ref
   target: "ADR-001",    // target canonical ref
   label: "governed_by", // relation label
@@ -135,11 +170,19 @@ var state = {
 }
 ```
 
+Edge ID encoding: `encodePart(s)` replaces non-`[A-Za-z0-9-]` characters with
+`_` + 2-digit hex codepoint. Preserves readability for alphanumeric labels (most
+current labels: `governed_by`, `related_to`, `descends_from`) while being robust
+against future labels containing `/`, `:`, spaces, or Unicode.
+```
+
 ### Kind colour palette
 
-Grouped for visual discrimination. Colours are accessible on both light and dark
-backgrounds (verified AA contrast for normal text on all fills; see palette below)
-contrast for graph nodes where fill carries the signal).
+Palette chosen for rough visual discrimination of entity kinds. Implementation
+assigns foreground colour per fill (dark text on light fills, white on dark fills)
+and acceptance checks legibility in both light and dark modes. Sidebar pills and
+graph node labels are tested separately — they use different text-on-fill
+combinations.
 
 ```
 SL          #4A90D9  blue         — slices (the primary change unit)
@@ -188,7 +231,8 @@ api.fetchHealth()       // GET /api/health → {dot:{ok,version}, graph:{ok}}
 ```js
 model.normalizeGraph(raw)
   // raw CatalogGraph → populates state.graph (nodes Map, edges[], incoming/outgoing/edgeById Maps)
-  // Edge id: "e_" + source + "_" + label + "_" + target (durable across refreshes)
+  // Edge id: "e_" + encodePart(source) + "_" + encodePart(label) + "_" + encodePart(target)
+  //   where encodePart(s) replaces non-[A-Za-z0-9-] with _HH hex codepoint
   // Only resolved edges included; unresolved skipped silently
 
 model.resolveFocus(query, graph)
@@ -621,12 +665,16 @@ Build a test corpus with:
 18. Light/dark theme follows system preference
 19. Edge detail page (`#/edge/e_…`) opens from relationship table edge ID click,
     shows metadata table with source/target links
+20. SVG sanitization: entity title containing `"`, `<`, `>`, or `&` renders safely;
+    no `<script>`, `onload`, `onclick`, `foreignObject`, or external URL survives
+    DOMPurify SVG-profile sanitization
+21. Edge IDs survive relation labels with `/`, spaces, or `:` (URL-safe encoding)
 
 ## 14. Design Decisions
 
 | Decision | Rationale |
 |---|---|
-| Inline SVG (not `<object>` blob) | Loopback-only. Project-authored catalog text is treated as untrusted display input — DOT strings are quoted/escaped, SVG is sanitized, Markdown is sanitized. Inline enables click/hover handlers without postMessage bridging |
+| Inline SVG (not `<object>` blob) | SL-073 deliberately revises SL-072's no-inline policy. Permitted only after DOT escaping, server-only Graphviz rendering, DOMPurify SVG sanitization, and post-sanitization handler wiring. Raw unsanitized SVG is never inserted.
 | ID-only DOT labels | Clean graph; title/status in hover pane. Multi-line labels deferred as togglable option |
 | Per-kind colour palette | Visual discrimination of entity kinds. Palette chosen for contrast; implementation assigns text colour per fill (dark text on light fills, white on dark). Sidebar pills and graph node labels are tested separately |
 | Kind filter in sidebar only ("List/table filter") | Full neighbourhood always in SVG; filtering only sidebar + relationship table avoids DOT regeneration on filter toggle |
@@ -637,33 +685,91 @@ Build a test corpus with:
 | Edge detail page included | Trivial (~30 LOC); already in hash model; reached via edge ID click in relationship table; useful for provenance inspection |
 | JSDoc types + strict eslint, no TypeScript | Low-ceremony correctness: `@type` on normalization/focus/neighbourhood functions, eslint for globals/hoisting/equality bugs. SPA is a stepping stone to htmx — full TS migration can happen later in an hour if the SPA survives the cutover |
 | Frontend modules as separate files | `api.js`, `model.js`, `dot.js`, `router.js`, `render.js`, `app.js` loaded via `<script>` tags in dependency order. No ES module loader, no build step. Clean separation for future htmx migration |
-| Edge (source,label,target) unique-tuple contract | Coalesce duplicates during normalization; edge ID `e_source_label_target` is durable. If provenance splitting is needed later, add `origin_file` to the formula |
+| Edge (source,label,target) unique-tuple contract | Coalesce duplicates during normalization. Edge ID uses URL-safe encoding: `e_` + encodePart(source) + `_` + encodePart(label) + `_` + encodePart(target) where non-`[A-Za-z0-9-]` chars become `_HH` hex. If provenance splitting is needed later, add `origin_file` to the formula |
 
 ## 15. Design Revision Notes
 
-Integrated adversarial review feedback (2026-06-16):
-- Hard Contracts section added — binding constraints for implementation.
-- Security rationale revised: "no attacker input path" → "project-authored
-  content is untrusted display input".
-- DOT node identity invariant made explicit: DOT node key MUST be canonical ref.
-- Edge ID durability strengthened by declaring `(source,label,target)` tuple
-  uniqueness canonical — coalesce duplicates during normalization.
-- Search miss semantics corrected: `findFocus` (null on miss) for Enter,
-  `resolveFocus` (with fallback) for bootstrap/hash repair.
-- Stale-response guards added for DOT/SVG render (graphRenderSeq token).
-- Kind filter labeled "List/table filter" in UI; relationship table scope
-  clarified to neighbourhood edges with source-kind filtering.
-- Depth resolved to 0..=3 everywhere (CLI, state, model, acceptance).
-- Error model: `ApiError` class with status codes, not substring matching.
-- Markdown link policy added: external in new tab, relative stripped.
-- Colour accessibility claim tightened: palette chosen for contrast;
-  text colour assigned per fill at implementation time.
-- Frontend module strategy: separate files loaded via `<script>` tags.
-- Edge detail page reachability defined (edge ID click in relationship table).
-- Test strategy expanded: pure JS unit tests in `web/map/test.html`.
-- `web/map/` hygiene rule added.
+Integrated two rounds of adversarial review feedback (2026-06-16):
+- Round 1: Hard Contracts section, security rationale, DOT identity, edge IDs,
+  search miss split, stale guards, kind filter labeling, depth 0..=3, ApiError,
+  markdown link policy, colour claims, module strategy, edge detail reachability,
+  test strategy, web/map/ hygiene.
+- Round 2: Explicit SVG embedding policy revision of SL-072; module layout tree
+  matches separate-file contract; edge ID URL-safe encoding; CatalogGraph JSON
+  fixture appendix; colour claim weakened; 21-item acceptance checklist.
 
-## 16. Open Questions
+## 16. Appendix: CatalogGraph JSON Shape
+
+This is the shape returned by `GET /api/graph` (SL-072). The browser receives
+this JSON, then normalizes it client-side via `model.normalizeGraph`.
+
+```json
+{
+  "nodes": {
+    "SL-071": {
+      "title": "Entity Corpus Scanner",
+      "status": "done",
+      "kind_label": "slice"
+    },
+    "SL-072": {
+      "title": "Doctrine Map Server",
+      "status": "done",
+      "kind_label": "slice"
+    },
+    "SL-073": {
+      "title": "Doctrine Map Frontend",
+      "status": "ready",
+      "kind_label": "slice"
+    },
+    "ADR-001": {
+      "title": "Module layering: leaf ← engine ← command, no cycles",
+      "status": "accepted",
+      "kind_label": "adr"
+    }
+  },
+  "edges": [
+    {
+      "source": {"prefix": "SL", "id": 72},
+      "label": "governed_by",
+      "target": {"Resolved": {"prefix": "ADR", "id": 1}},
+      "origin": {"file": "path/to/slice-072.toml", "field": "governed_by"}
+    },
+    {
+      "source": {"prefix": "SL", "id": 72},
+      "label": "needs",
+      "target": {"Resolved": {"prefix": "SL", "id": 71}},
+      "origin": {"file": "path/to/slice-072.toml", "field": "needs"}
+    },
+    {
+      "source": {"prefix": "SL", "id": 73},
+      "label": "governed_by",
+      "target": {"Resolved": {"prefix": "ADR", "id": 1}},
+      "origin": {"file": "path/to/slice-073.toml", "field": "governed_by"}
+    },
+    {
+      "source": {"prefix": "SL", "id": 73},
+      "label": "needs",
+      "target": {"Resolved": {"prefix": "SL", "id": 72}},
+      "origin": {"file": "path/to/slice-073.toml", "field": "needs"}
+    }
+  ]
+}
+```
+
+Key shape notes for `normalizeGraph`:
+- `nodes` keys are canonical ref strings (`"SL-072"`, `"ADR-001"`).
+- Each node has `title`, `status`, and `kind_label`. No `kind_prefix` in the
+  raw JSON — `normalizeGraph` derives `kindPrefix` from the node key by
+  splitting at the first digit (e.g. `"SL-072"` → `"SL"`).
+- `edges[].source` and `edges[].target` are `EntityKey` objects:
+  `{"prefix": "SL", "id": 72}`.
+- `edges[].target` may be `{"Resolved": {"prefix": …, "id": …}}` for resolved
+  edges, or `{"Unresolved": "REF-ID"}` for edges to missing entities.
+  Unresolved edges are skipped during normalization.
+- `edges[].origin` has `file` (relative path) and `field` (TOML key).
+  Used in the edge detail page (`origin_file`).
+
+## 17. Open Questions
 
 - **Multi-line DOT labels**: Deferred as a togglable option. May not work well on crowded graphs.
 - **Graphviz unavailability UX**: DOT source fallback shown in `<pre>`. Could be prettier but low priority — Graphviz is the expected runtime dep.

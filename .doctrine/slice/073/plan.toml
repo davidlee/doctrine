@@ -111,26 +111,46 @@ requirements = []
 
 [[phase]]
 id        = "PHASE-05"
-name      = "Polish + acceptance"
-objective = "Wire remaining UI: kind filter (List/table filter checkboxes, sidebar + relationship table filtering, per Hard Contracts D7 label + semantics), search (live sidebar filter + Enter findFocus), relationship table (neighbourhood edges, source-kind filtered, clickable IDs), edge detail page (reachable from table), depth selector (0-3), refresh integration. Full 19-item acceptance checklist pass."
+name      = "Interactive UI"
+objective = "Wire the interactive UI surfaces: kind filter (List/table filter checkboxes, sidebar + relationship table filtering, per Hard Contracts D7 label + semantics), search (live sidebar filter + Enter findFocus), relationship table (neighbourhood edges, source-kind filtered, clickable IDs), depth selector (0-3), hover detail pane."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 through PHASE-04 all complete — shell, model, DOT/SVG, and markdown all working" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Kind filter labeled 'List/table filter'; checkboxes for all kind groups; toggling hides/shows entities in sidebar list and relationship table; SVG unchanged" },
   { id = "EX-2", text = "Kind filter acceptance case passes: uncheck Governance, focus SL-072 → ADR-001 remains in SVG, absent from sidebar" },
-  { id = "EX-3", text = "Relationship table shows neighbourhood edges only; source-kind filtered when kindFilter active; src/tgt IDs clickable (setFocus)" },
+  { id = "EX-3", text = "Relationship table shows neighbourhood edges only; source-kind filtered when kindFilter active; src/tgt IDs clickable (setFocus); edge IDs use URL-safe encodePart" },
   { id = "EX-4", text = "Search live-filters sidebar on keystroke (substring id+title, case-insensitive, after kind filter); Enter runs findFocus → null on miss shows inline message, preserves current focus (no fallback to first node); Escape clears input" },
   { id = "EX-5", text = "Depth selector (0-3) updates neighbourhood and hash; depth 0 shows only focused node" },
-  { id = "EX-6", text = "Edge detail page reachable: clicking edge ID in relationship table navigates to #/edge/e_… showing metadata table (edge id, source, label, target, origin_file); source/target are clickable focus links" },
-  { id = "EX-7", text = "Refresh clears markdown cache, increments graphRenderSeq (kills in-flight renders), re-fetches graph, re-resolves focus, re-renders; focus preserved across refresh" },
-  { id = "EX-8", text = "All 19 acceptance checklist items pass (acceptance checklist §13 of design.md)" },
-  { id = "EX-9", text = "Remaining pure JS unit tests pass (searchFilter, kinds); no lint warnings (eslint)" },
+  { id = "EX-6", text = "Hover detail pane shows title, status pill, kind badge for hovered node; empty state shows 'Hover a node for details'" },
+  { id = "EX-7", text = "Remaining pure JS unit tests pass (searchFilter, kinds); no lint warnings (eslint)" },
 ]
 verification = [
-  { id = "VT-1", expects = "test.html: searchFilter substring + case-insensitive + sorted output; kinds count + sort. cargo test: map_serve_path_flag_passed_to_root_find" },
-  { id = "VA-1", expects = "Kind filter search miss verified: findFocus returns null on nonsense query, no fallback to first node. ADR-001 in SVG but not sidebar when Governance unchecked. Relationship table edges are neighbourhood, not all-graph." },
-  { id = "VH-1", expects = "Full 19-item acceptance checklist: open --focus, depth 0, kind-coloured nodes, SVG <title> node identity, hover pane, click navigation, depth selector, search filter + Enter null-on-miss, kind filter label + sidebar/table semantics, markdown sanitize + link policy, REQ 501, refresh preserves focus, rapid focus no stale SVG, --path flag, dark mode, edge detail page reachable" },
+  { id = "VT-1", expects = "test.html: searchFilter substring + case-insensitive + sorted output; kinds count + sort" },
+  { id = "VA-1", expects = "Kind filter: findFocus returns null on nonsense query, no fallback to first node. ADR-001 in SVG but not sidebar when Governance unchecked. Relationship table edges are neighbourhood, not all-graph. Edge IDs URL-safe for non-alphanumeric labels." },
+  { id = "VH-1", expects = "Toggle kind checkboxes → sidebar list updates, relationship table updates, SVG unchanged. Type nonsense in search → Enter shows 'No match', focus unchanged. Type SL71 → Enter navigates to SL-071. Depth 0 → only focused node shown. Hover a node → detail pane updates." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Integration + acceptance"
+objective = "Wire refresh integration (clear caches, increment graphRenderSeq, re-fetch, preserve focus), edge detail page (reachable from relationship table), --path CLI flag (IMP-079), SVG sanitization edge cases. Full 21-item acceptance checklist pass."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 through PHASE-05 all complete — all interactive UI surfaces working" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Edge detail page reachable: clicking edge ID in relationship table navigates to #/edge/e_… showing metadata table (edge id, source, label, target, origin_file); source/target are clickable focus links" },
+  { id = "EX-2", text = "Refresh clears markdown cache, increments graphRenderSeq (kills in-flight renders), re-fetches graph, re-resolves focus, re-renders; focus preserved across refresh" },
+  { id = "EX-3", text = "--path flag routes to root::find correctly; cargo test map_serve_path_flag_passed_to_root_find passes" },
+  { id = "EX-4", text = "SVG sanitization verified: entity title with <, >, &, \" renders safely; no script/onload/onclick/foreignObject survives DOMPurify" },
+  { id = "EX-5", text = "All 21 acceptance checklist items pass (design.md §13)" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test: map_serve_path_flag_passed_to_root_find" },
+  { id = "VA-1", expects = "SVG sanitization: inspect rendered SVG for absence of script/onload/onclick/foreignObject elements and external URL attributes after DOMPurify. Edge ID encoding rounds-trips through router for labels with spaces and special chars." },
+  { id = "VH-1", expects = "Full 21-item acceptance checklist: --open --focus + depth, depth 0, kind-coloured nodes, SVG <title> node identity + click navigates, hover pane, click navigation, depth selector, search filter + Enter null-on-miss, kind filter label + sidebar/table semantics + SVG unchanged + Governance unchecked case, markdown sanitize + link policy + raw HTML blocked, REQ 501, refresh preserves focus + kills stale renders, rapid focus no stale SVG, --path flag, dark mode, edge detail page reachable, SVG sanitization edge cases, edge ID URL-safe encoding" },
 ]
 specs        = []
 requirements = []
