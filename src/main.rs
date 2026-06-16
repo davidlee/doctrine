@@ -1999,10 +1999,6 @@ enum ConceptMapCommand {
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
         format: Format,
 
-        /// Shorthand for `--format json`.
-        #[arg(long)]
-        json: bool,
-
         /// Show edges table from parsed DSL.
         #[arg(long)]
         edges: bool,
@@ -3013,14 +3009,13 @@ fn main() -> anyhow::Result<()> {
             ConceptMapCommand::Show {
                 reference,
                 format,
-                json,
                 edges,
                 nodes,
                 path,
             } => concept_map::run_show(
                 path,
                 &reference,
-                if json { Format::Json } else { format },
+                format,
                 edges,
                 nodes,
             ),

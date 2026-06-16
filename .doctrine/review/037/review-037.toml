@@ -1,0 +1,106 @@
+id    = 37
+slug  = "reconciliation-review-of-sl-074"
+title = "reconciliation review of SL-074"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-074"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "CLI unreachable: concept-map command not registered as top-level subcommand"
+detail = "The concept-map subcommand is correctly wired in src/main.rs (Command::ConceptMap variant at line 197, ConceptMapCommand enum at line 1968, write_class dispatch at line 2623-2631, main dispatch at line 3008-3052). However, 'doctrine --help' does not list concept-map, and 'doctrine concept-map new' returns 'error: unrecognized subcommand'. This affects Map as well (line 191) — both are missing from the CLI surface. Slice, Review, Catalog, and all other Commands with #[command(subcommand)] appear correctly. This is a pre-existing issue (Map was introduced in SL-072) but makes SL-074's entire CLI surface unreachable from the doctrine binary. 76 concept_map unit tests pass in the test binary, confirming the code compiles and works — the defect is in clap command registration."
+disposition = "fix-now"
+response = "The concept-map and map subcommands both fail to register with clap despite correct code structure. Root cause investigation needed — likely a clap 4 enum variant ordering or subcommand nesting issue. The fix should make 'doctrine concept-map new --title Test' work from the CLI. This gates close."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Status model diverges from design: work-item lifecycle instead of authored-artifact vocabulary"
+detail = "Design section 2 specifies ConceptMapStatus enum with Draft, Accepted, Superseded — an authored-artifact vocabulary. Design rationale: 'No proposed→design→plan ceremony — concept maps are authored artifacts, not work items.' Implementation uses plain String with CONCEPT_MAP_STATUSES = ['draft', 'active', 'done', 'abandoned'] — the work-item lifecycle vocabulary the design explicitly rejected. This also affects the list hide-set: 'done' and 'abandoned' shouldn't be the terminal states for an authored artifact. The design says superseded through doctrine supersede CM-002 CM-001, which writes the supersession edges and flips status to superseded. The implementation has no path to superseded and no integration with the supersede verb."
+disposition = "fix-now"
+response = "Replace CONCEPT_MAP_STATUSES with ['draft', 'accepted', 'superseded'], update is_hidden to hide only 'superseded' (terminal for authored artifacts), and update scaffold default status from 'draft' to 'draft' (already correct). Remove 'active'/'done'/'abandoned' — those are work-item lifecycle states that don't belong on authored artifacts per the design rationale."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Show command has --json shorthand flag contrary to design's explicit prohibition"
+detail = "Design section 5 Show: 'No separate --json flag — output format is controlled by --format table|json (consistent with other Doctrine show commands).' Implementation adds #[arg(long)] json: bool to ConceptMapCommand::Show and resolves format via 'if json { Format::Json } else { format }'. This introduces a secondary control path where --json and --format json have different semantics if both are passed. The design explicitly prescribes a single --format flag only."
+disposition = "fix-now"
+response = "Remove the --json flag from ConceptMapCommand::Show and from the main dispatch match arm. The design prescribes --format json (consistent with other Doctrine show commands)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Template install path differs from design: install/templates/ vs install/assets/templates/"
+detail = "Design section 1 says templates live at install/assets/templates/. Implementation places them at install/templates/. The crate::install::asset_text() function resolves from install/templates/. This is consistent with existing Doctrine convention (all other templates are also at install/templates/), so the design was wrong about the path. The implementation is correct — this finding documents the drift for the design record."
+disposition = "aligned"
+response = "The design specified install/assets/templates/ but the implementation uses install/templates/ which is the existing Doctrine convention for all other templates. The implementation is correct; the design was wrong about the path. No code change needed."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Duplicate edge add message omits line number"
+detail = "Design section 5 Add: 'Without --force: print edge already exists at line N and exit zero (no-op).' Implementation prints 'edge already exists: Source > rel > Target' without the line number. The parsed edges carry line information (ConceptMapEdge.line), and parse_dsl records the first occurrence in edge_set. The line number is available but not reported."
+disposition = "fix-now"
+response = "Include the existing line number in the duplicate-edge message. The parse_dsl already records the first occurrence in edge_set. Add the line number to the stdout message: 'edge already exists at line N: Source > rel > Target'."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Test parse_dsl_canonical_node_collision is misleading — tests non-collision, not collision"
+detail = "The test named parse_dsl_canonical_node_collision at line 1808 uses labels 'User > creates > Document' and 'Us er > reads > Document' which do NOT collide ('user' vs 'us-er'). The test asserts diagnostics.is_empty() — it's testing a negative case. The actual collision detection test is the next one: parse_dsl_canonical_node_collision_detected which uses 'A B' and 'A_B'. The first test name is misleading — it should be renamed to reflect it tests non-collision, or merged into the collision test."
+disposition = "fix-now"
+response = "Rename test to parse_dsl_non_colliding_labels_detected or remove it (the parse_dsl_canonical_node_collision_detected test already covers collision detection)."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "ConceptMapDoc lacks [[relation]] struct field — free-text deserialization loses relation edges"
+detail = "Design section 2 states: 'The [[relation]] rows are standard tier-1 edges authored via doctrine link — concept maps can link to specs, ADRs, slices, etc.' and 'The Relation type reuses the existing crate::relation::Relation: { label: String, target: String }.' Implementation's ConceptMapDoc struct has no [[relation]] field — relation rows are ignored during TOML deserialization. The show command doesn't display linked relations. While get_dsl/set_dsl preserve [[relation]] rows byte-identical through round-trips (test confirms), the show command should surface these relations. The relation rows are present in the TOML but invisible to read/show."
+disposition = "follow-up"
+response = "The [[relation]] rows are preserved through get_dsl/set_dsl round-trips (test confirms byte-identical preservation). Adding them to ConceptMapDoc and show output is a feature enhancement — it would let show display linked Doctrine entities. Not blocking for v1."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "EntityRefLike regex anchored to start-of-string only, misses entity refs mid-label"
+detail = '''Design section 3: 'EntityRefLike matches the pattern [A-Z]{2,5}-\d{3}. It is purely informational.' Implementation uses Regex::new(r'[A-Z]{2,5}-\d{3}'). This matches 'PRD-010' but also matches 'XYZ-123-456' (three digit groups), 'AB-123-extra' (extra suffix), and other patterns where the entity ref is adjacent to other text like 'FooPRD-010Bar'. The regex should be anchored: r'^[A-Z]{2,5}-\d{3}$' or use word boundaries r'\b[A-Z]{2,5}-\d{3}\b'. Currently a label like 'See PRD-010 for details' would match, which is correct, but so would 'ABC-123-456-789' or 'FOOBAR-001-002' — false positives on the three-digit suffix.'''
+disposition = "fix-now"
+response = '''The regex [A-Z]{2,5}-\d{3} matches as a substring, producing false positives on labels like 'ABC-123-456'. For regex-lite, anchor with ^...$ or use a more precise pattern. Since EntityRefLike is informational-only (never an error), impact is low, but the specificity should be improved.'''
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "DSL split on ' > ' is fragile with tabs or non-ASCII whitespace around separator"
+detail = """Design section 3, decision 2: 'Split DSL on " > " (with spaces)' — the implementation splits on literal ASCII space+>+ASCII space. Design section 12 notes: 'The " > " delimiter assumes ASCII space (0x20) on both sides of >. Non-breaking spaces, tabs, or other Unicode whitespace around > will produce a malformed-line diagnostic.' This is documented in the design and implementation as a known limitation, not a bug. The scaffold template and help text should explicitly document the ASCII space requirement to prevent user confusion."""
+disposition = "aligned"
+response = "The design section 12 explicitly documents the ASCII space limitation: 'Non-breaking spaces, tabs, or other Unicode whitespace around > will produce a malformed-line diagnostic.' This is a documented design decision, not a bug. The scaffold template already documents the > convention. No code change needed."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "Scaffold template has slug field not specified in design TOML schema"
+detail = "Design section 2 TOML schema: fields are id, title, status, created, updated, description, dsl, [[relation]]. Implementation scaffold adds a 'slug' field. The design says 'slug symlink (human alias, standard entity engine convention)' — the slug is a filesystem symlink, not a TOML field. Adding it to the TOML is harmless but duplicates information (the symlink name already encodes it). It's also not in the ConceptMapDoc struct, so it's stored in the file but never read back by the tool."
+disposition = "aligned"
+response = "The extra 'slug' field in the scaffold TOML template duplicates the symlink name but is harmless. The ConceptMapDoc struct doesn't deserialize it, so it's stored but ignored. Removing it would be a cosmetic cleanup. No behavioral impact."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
