@@ -2060,6 +2060,15 @@ enum ConceptMapCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Export a concept map to DOT, Mermaid, or JSON.
+    Export {
+        id: String,
+        #[arg(long, value_enum)]
+        format: concept_map::ExportFormat,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2618,7 +2627,8 @@ fn write_class(cmd: &Command) -> WriteClass {
             ConceptMapCommand::RenameNode { .. } => Write("concept-map rename-node"),
             ConceptMapCommand::List { .. }
             | ConceptMapCommand::Show { .. }
-            | ConceptMapCommand::Check { .. } => Read,
+            | ConceptMapCommand::Check { .. }
+            | ConceptMapCommand::Export { .. } => Read,
         },
         Command::Slice { command } => match command {
             SliceCommand::New { .. } => Write("slice new"),
@@ -3038,6 +3048,9 @@ fn main() -> anyhow::Result<()> {
                 case_sensitive,
                 path,
             } => concept_map::run_rename_node(path, &id, &old, &new, dry_run, case_sensitive),
+            ConceptMapCommand::Export { id, format, path } => {
+                concept_map::run_export(path, &id, &format)
+            }
         },
         Command::Slice { command } => match command {
             SliceCommand::New { title, slug, path } => slice::run_new(path, title, slug),

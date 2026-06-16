@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! `doctrine concept-map` — create, list, and show concept maps, doctrine's
+//! `doctrine concept-map` - create, list, and show concept maps, doctrine's
 //! DSL-driven relationship-diagram entity.
 //!
 //! A concept map is a numeric directory under `.doctrine/concept-map/` holding a
 //! sister TOML (structured metadata including a raw DSL block) and a scaffolded
 //! markdown prose body, with a `<id>-<slug>` symlink as a human alias. It is an
-//! `entity::Kind` over the kind-blind engine — this module owns the
+//! `entity::Kind` over the kind-blind engine - this module owns the
 //! concept-map-specific parts (the Kind, scaffold, and thin CLI wiring); the
 //! kind-agnostic machinery lives in `crate::entity`, and the shared
 //! metadata-list substrate (`Meta`, list reader/formatter) in `crate::meta`.
@@ -91,7 +91,7 @@ fn concept_map_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
 // Shell: run_new, run_list, run_show
 // ---------------------------------------------------------------------------
 
-/// `doctrine concept-map new` — allocate the next id and scaffold a concept map.
+/// `doctrine concept-map new` - allocate the next id and scaffold a concept map.
 pub(crate) fn run_new(
     path: Option<PathBuf>,
     title: Option<String>,
@@ -127,7 +127,7 @@ pub(crate) fn run_new(
     Ok(())
 }
 
-/// The full `concept-map-NNN.toml` read as data for `show` — `Meta`'s four list
+/// The full `concept-map-NNN.toml` read as data for `show` - `Meta`'s four list
 /// fields plus dates, description, and the raw DSL block.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, Serialize)]
 struct ConceptMapDoc {
@@ -143,7 +143,7 @@ struct ConceptMapDoc {
     dsl: String,
 }
 
-/// Parse a concept-map reference — `CM-001`, `cm-1`, or the bare id `1` — to its
+/// Parse a concept-map reference - `CM-001`, `cm-1`, or the bare id `1` - to its
 /// numeric id. The prefix is optional and case-insensitive; the id may be padded.
 fn parse_ref(reference: &str) -> anyhow::Result<u32> {
     let digits = reference
@@ -174,14 +174,14 @@ fn read_concept_map(cm_root: &Path, id: u32) -> anyhow::Result<(ConceptMapDoc, S
 // DSL types
 // ---------------------------------------------------------------------------
 
-/// A node in a parsed concept map — the normalised key plus the original label.
+/// A node in a parsed concept map - the normalised key plus the original label.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ConceptMapNode {
     key: String,
     label: String,
 }
 
-/// An edge in a parsed concept map — "from" and "to" nodes plus a relation label.
+/// An edge in a parsed concept map - "from" and "to" nodes plus a relation label.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ConceptMapEdge {
     from_key: String,
@@ -243,7 +243,7 @@ enum SegmentKind {
     Target,
 }
 
-/// The result of parsing a concept map DSL — nodes, edges, and any parse-time
+/// The result of parsing a concept map DSL - nodes, edges, and any parse-time
 /// diagnostics.
 struct ParsedConceptMap {
     nodes: Vec<ConceptMapNode>,
@@ -481,7 +481,7 @@ fn check(parsed: &ParsedConceptMap) -> Vec<ConceptMapDiagnostic> {
         rel_lines.entry(&edge.rel).or_insert(edge.line);
     }
 
-    // SimilarNodeLabel — each unordered pair of labels with Levenshtein ≤ 2
+    // SimilarNodeLabel - each unordered pair of labels with Levenshtein ≤ 2
     // and both ≥ 4 characters.
     {
         let labels: Vec<&str> = label_lines.keys().copied().collect();
@@ -499,7 +499,7 @@ fn check(parsed: &ParsedConceptMap) -> Vec<ConceptMapDiagnostic> {
         }
     }
 
-    // RelationDrift — same check over relation texts.
+    // RelationDrift - same check over relation texts.
     {
         let rels: Vec<&str> = rel_lines.keys().copied().collect();
         for (i, a) in rels.iter().enumerate() {
@@ -516,7 +516,7 @@ fn check(parsed: &ParsedConceptMap) -> Vec<ConceptMapDiagnostic> {
         }
     }
 
-    // EntityRefLike — labels that look like canonical entity refs.
+    // EntityRefLike - labels that look like canonical entity refs.
     let Ok(ref_re) = Regex::new(r"[A-Z]{2,5}-\d{3}") else {
         return diagnostics;
     };
@@ -533,8 +533,218 @@ fn check(parsed: &ParsedConceptMap) -> Vec<ConceptMapDiagnostic> {
 }
 
 // ---------------------------------------------------------------------------
-// Shell: run_check
+// ExportFormat
 // ---------------------------------------------------------------------------
+
+/// Export format for concept-map to diagram languages and structured data.
+#[derive(Clone, clap::ValueEnum)]
+pub(crate) enum ExportFormat {
+    Dot,
+    Mermaid,
+    Json,
+}
+
+// ---------------------------------------------------------------------------
+// Pure: DOT escape / render
+// ---------------------------------------------------------------------------
+
+/// Escape `"`, `\`, and newlines for DOT string literals.
+fn dot_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Render a [`ParsedConceptMap`] as a valid Graphviz digraph.
+///
+/// Nodes and edges are sorted by key for deterministic output. An empty map
+/// produces a valid empty `digraph "" { ... }`.
+fn render_dot(parsed: &ParsedConceptMap, title: &str) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let escaped_title = dot_escape(title);
+    lines.push(format!("digraph \"{escaped_title}\" {{"));
+    lines.push("  rankdir=LR;".to_string());
+    lines.push("  node [shape=box, style=rounded];".to_string());
+
+    // Nodes sorted by key.
+    let mut sorted_nodes: Vec<&ConceptMapNode> = parsed.nodes.iter().collect();
+    sorted_nodes.sort_by(|a, b| a.key.cmp(&b.key));
+    for node in &sorted_nodes {
+        let escaped_key = dot_escape(&node.key);
+        let escaped_label = dot_escape(&node.label);
+        lines.push(format!("  \"{escaped_key}\" [label=\"{escaped_label}\"];"));
+    }
+
+    // Edges sorted by (from_key, to_key, rel).
+    let mut sorted_edges: Vec<&ConceptMapEdge> = parsed.edges.iter().collect();
+    sorted_edges.sort_by(|a, b| {
+        a.from_key
+            .cmp(&b.from_key)
+            .then_with(|| a.to_key.cmp(&b.to_key))
+            .then_with(|| a.rel.cmp(&b.rel))
+    });
+    for edge in &sorted_edges {
+        let escaped_from = dot_escape(&edge.from_key);
+        let escaped_to = dot_escape(&edge.to_key);
+        let escaped_rel = dot_escape(&edge.rel);
+        lines.push(format!(
+            "  \"{escaped_from}\" -> \"{escaped_to}\" [label=\"{escaped_rel}\"];"
+        ));
+    }
+
+    lines.push("}".to_string());
+    lines.join("\n") + "\n"
+}
+
+// ---------------------------------------------------------------------------
+// Pure: Mermaid escape / render
+// ---------------------------------------------------------------------------
+
+/// Escape special characters for Mermaid labels inside `["..."]`.
+///
+/// Replaces `"` with `#quot;`, `[` / `]` with `#91;` / `#93;`, and newlines
+/// with `#10;` to keep them from breaking the bracket syntax.
+fn mermaid_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("#quot;"),
+            '[' => out.push_str("#91;"),
+            ']' => out.push_str("#93;"),
+            '\n' => out.push_str("#10;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Render a [`ParsedConceptMap`] as a Mermaid `graph LR` flowchart.
+///
+/// Node ids are synthetic (`n_0`, `n_1`, ...) to avoid collisions with Mermaid
+/// reserved words. Nodes and edges are sorted by key for deterministic output.
+/// An empty map produces a valid `graph LR` with no nodes.
+fn render_mermaid(parsed: &ParsedConceptMap) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    lines.push("graph LR".to_string());
+
+    // Build key → synthetic id map from sorted nodes.
+    let mut sorted_nodes: Vec<&ConceptMapNode> = parsed.nodes.iter().collect();
+    sorted_nodes.sort_by(|a, b| a.key.cmp(&b.key));
+    let mut key_to_id: std::collections::BTreeMap<&str, String> = std::collections::BTreeMap::new();
+    for (i, node) in sorted_nodes.iter().enumerate() {
+        let id = format!("n_{i}");
+        key_to_id.insert(&node.key, id.clone());
+        let escaped_label = mermaid_escape(&node.label);
+        lines.push(format!("  {id}[\"{escaped_label}\"]"));
+    }
+
+    // Edges sorted by (from_key, to_key, rel).
+    let mut sorted_edges: Vec<&ConceptMapEdge> = parsed.edges.iter().collect();
+    sorted_edges.sort_by(|a, b| {
+        a.from_key
+            .cmp(&b.from_key)
+            .then_with(|| a.to_key.cmp(&b.to_key))
+            .then_with(|| a.rel.cmp(&b.rel))
+    });
+    for edge in &sorted_edges {
+        let from_id = key_to_id
+            .get(edge.from_key.as_str())
+            .cloned()
+            .unwrap_or_default();
+        let to_id = key_to_id
+            .get(edge.to_key.as_str())
+            .cloned()
+            .unwrap_or_default();
+        let escaped_rel = mermaid_escape(&edge.rel);
+        lines.push(format!("  {from_id} -->|{escaped_rel}| {to_id}"));
+    }
+
+    lines.join("\n") + "\n"
+}
+
+// ---------------------------------------------------------------------------
+// Pure: JSON render
+// ---------------------------------------------------------------------------
+
+/// Render a [`ParsedConceptMap`] as a `serde_json::Value` with `nodes` and
+/// `edges` arrays, sorted by key for deterministic output.
+fn render_json_value(parsed: &ParsedConceptMap) -> serde_json::Value {
+    let mut sorted_nodes: Vec<&ConceptMapNode> = parsed.nodes.iter().collect();
+    sorted_nodes.sort_by(|a, b| a.key.cmp(&b.key));
+    let nodes: Vec<serde_json::Value> = sorted_nodes
+        .iter()
+        .map(|n| {
+            serde_json::json!({
+                "key": n.key,
+                "label": n.label,
+            })
+        })
+        .collect();
+
+    let mut sorted_edges: Vec<&ConceptMapEdge> = parsed.edges.iter().collect();
+    sorted_edges.sort_by(|a, b| {
+        a.from_key
+            .cmp(&b.from_key)
+            .then_with(|| a.to_key.cmp(&b.to_key))
+            .then_with(|| a.rel.cmp(&b.rel))
+    });
+    let edges: Vec<serde_json::Value> = sorted_edges
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "from": e.from_key,
+                "from_label": e.from_label,
+                "rel": e.rel,
+                "to": e.to_key,
+                "to_label": e.to_label,
+            })
+        })
+        .collect();
+
+    serde_json::json!({
+        "nodes": nodes,
+        "edges": edges,
+    })
+}
+
+/// Render a [`ParsedConceptMap`] as pretty-printed JSON.
+fn render_json(parsed: &ParsedConceptMap) -> anyhow::Result<String> {
+    let value = render_json_value(parsed);
+    serde_json::to_string_pretty(&value).context("failed to serialize concept-map export JSON")
+}
+
+// ---------------------------------------------------------------------------
+// Shell: run_export
+// ---------------------------------------------------------------------------
+
+/// `doctrine concept-map export` - resolve a concept map, parse its DSL, and
+/// render it to the requested format (DOT, Mermaid, or JSON) on stdout.
+pub(crate) fn run_export(
+    path: Option<PathBuf>,
+    id_str: &str,
+    format: &ExportFormat,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let id = parse_ref(id_str)?;
+    let cm_root = root.join(CONCEPT_MAP_DIR);
+    let (doc, _toml_text, _body) = read_concept_map(&cm_root, id)?;
+    let parsed = parse_dsl(&doc.dsl);
+
+    let out = match format {
+        ExportFormat::Dot => render_dot(&parsed, &doc.title),
+        ExportFormat::Mermaid => render_mermaid(&parsed),
+        ExportFormat::Json => render_json(&parsed)?,
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
 
 // ---------------------------------------------------------------------------
 // Shell: run_check
@@ -554,7 +764,7 @@ fn line_of_diagnostic(d: &ConceptMapDiagnostic) -> usize {
     }
 }
 
-/// `doctrine concept-map check <id>` — parse the DSL and run heuristic checks.
+/// `doctrine concept-map check <id>` - parse the DSL and run heuristic checks.
 ///
 /// Prints one diagnostic per line. Exits zero if there are no `MalformedLine` or
 /// `EmptyLabel` errors; exits non-zero if any structural errors exist.
@@ -606,7 +816,7 @@ pub(crate) fn run_check(path: Option<PathBuf>, id_str: &str) -> anyhow::Result<(
 fn format_diagnostic(d: &ConceptMapDiagnostic) -> String {
     match d {
         ConceptMapDiagnostic::MalformedLine { line, text } => {
-            format!("line {line}: malformed — expected `Source > relation > Target`, got: `{text}`")
+            format!("line {line}: malformed - expected `Source > relation > Target`, got: `{text}`")
         }
         ConceptMapDiagnostic::EmptyLabel { line, segment } => {
             let seg = match segment {
@@ -628,7 +838,7 @@ fn format_diagnostic(d: &ConceptMapDiagnostic) -> String {
             )
         }
         ConceptMapDiagnostic::SelfEdge { line, node_key } => {
-            format!("line {line}: self-edge — `{node_key}` points to itself")
+            format!("line {line}: self-edge - `{node_key}` points to itself")
         }
         ConceptMapDiagnostic::CanonicalNodeCollision {
             key,
@@ -638,7 +848,7 @@ fn format_diagnostic(d: &ConceptMapDiagnostic) -> String {
             line,
         } => {
             format!(
-                "line {line}: canonical node collision — `{label}` and `{first_label}` both derive key `{key}` (first seen on line {first_line})"
+                "line {line}: canonical node collision - `{label}` and `{first_label}` both derive key `{key}` (first seen on line {first_line})"
             )
         }
         ConceptMapDiagnostic::SimilarNodeLabel {
@@ -648,7 +858,7 @@ fn format_diagnostic(d: &ConceptMapDiagnostic) -> String {
             line_b,
         } => {
             format!(
-                "line {line_a}: similar label — `{label_a}` and `{label_b}` (line {line_b}) differ by ≤ 2 edits"
+                "line {line_a}: similar label - `{label_a}` and `{label_b}` (line {line_b}) differ by ≤ 2 edits"
             )
         }
         ConceptMapDiagnostic::RelationDrift {
@@ -658,18 +868,18 @@ fn format_diagnostic(d: &ConceptMapDiagnostic) -> String {
             line_b,
         } => {
             format!(
-                "line {line_a}: relation drift — `{rel_a}` and `{rel_b}` (line {line_b}) differ by ≤ 2 edits"
+                "line {line_a}: relation drift - `{rel_a}` and `{rel_b}` (line {line_b}) differ by ≤ 2 edits"
             )
         }
         ConceptMapDiagnostic::EntityRefLike { label, line } => {
             format!(
-                "line {line}: entity-ref-like label — `{label}` looks like a canonical entity id"
+                "line {line}: entity-ref-like label - `{label}` looks like a canonical entity id"
             )
         }
     }
 }
 
-/// `doctrine concept-map show <ref>` — display a concept map's metadata, DSL,
+/// `doctrine concept-map show <ref>` - display a concept map's metadata, DSL,
 /// and optionally edge/node tables.
 pub(crate) fn run_show(
     path: Option<PathBuf>,
@@ -739,7 +949,7 @@ fn format_show(
             parts.push("\nNodes:".to_string());
         }
         for node in &p.nodes {
-            parts.push(format!("  {} — {}", node.key, node.label));
+            parts.push(format!("  {} - {}", node.key, node.label));
         }
     }
     parts.concat()
@@ -801,7 +1011,7 @@ fn show_json(
 }
 
 // ---------------------------------------------------------------------------
-// list — the read surface
+// list - the read surface
 // ---------------------------------------------------------------------------
 
 /// The inner list pipeline: read, filter, sort, render.
@@ -840,7 +1050,7 @@ fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<String> {
     }
 }
 
-/// `doctrine concept-map list` — the read surface: prefixed `CM-` ids, a header,
+/// `doctrine concept-map list` - the read surface: prefixed `CM-` ids, a header,
 /// the shared filter flags, the `{done, abandoned}` hide-set by default, sorted
 /// by id.
 pub(crate) fn run_list(path: Option<PathBuf>, args: ListArgs) -> anyhow::Result<()> {
@@ -869,7 +1079,7 @@ fn serialize_cm_id<S: serde::Serializer>(id: &u32, s: S) -> Result<S::Ok, S::Err
     s.serialize_str(&crate::listing::canonical_id("CM", *id))
 }
 
-/// The `FilterFields` projection for a `Meta` — used by `listing::retain`.
+/// The `FilterFields` projection for a `Meta` - used by `listing::retain`.
 fn key(m: &Meta) -> listing::FilterFields {
     listing::FilterFields {
         canonical: crate::listing::canonical_id("CM", m.id),
@@ -935,7 +1145,7 @@ fn set_dsl(toml_text: &str, new_dsl: &str) -> anyhow::Result<String> {
 // Shell: run_add
 // ---------------------------------------------------------------------------
 
-/// `doctrine concept-map add` — append a DSL edge line to a concept map.
+/// `doctrine concept-map add` - append a DSL edge line to a concept map.
 pub(crate) fn run_add(
     path: Option<PathBuf>,
     id_str: &str,
@@ -995,7 +1205,7 @@ pub(crate) fn run_add(
 // Shell: run_remove
 // ---------------------------------------------------------------------------
 
-/// `doctrine concept-map remove` — remove a DSL edge line from a concept map.
+/// `doctrine concept-map remove` - remove a DSL edge line from a concept map.
 pub(crate) fn run_remove(
     path: Option<PathBuf>,
     id_str: &str,
@@ -1055,7 +1265,7 @@ pub(crate) fn run_remove(
 // Shell: run_rename_node
 // ---------------------------------------------------------------------------
 
-/// `doctrine concept-map rename-node` — rename a node label across all DSL edges.
+/// `doctrine concept-map rename-node` - rename a node label across all DSL edges.
 pub(crate) fn run_rename_node(
     path: Option<PathBuf>,
     id_str: &str,
@@ -1369,9 +1579,9 @@ mod tests {
 
         // --nodes
         let out = format_show(&doc, "", false, true, Some(&parsed));
-        assert!(out.contains("user — User"));
-        assert!(out.contains("document — Document"));
-        assert!(out.contains("workspace — Workspace"));
+        assert!(out.contains("user - User"));
+        assert!(out.contains("document - Document"));
+        assert!(out.contains("workspace - Workspace"));
     }
 
     #[test]
@@ -1581,7 +1791,7 @@ mod tests {
     #[test]
     fn parse_dsl_canonical_node_collision() {
         let parsed = parse_dsl("User > creates > Document\nUs er > reads > Document");
-        // "User" → "user", "Us er" → "us-er" — not the same key
+        // "User" → "user", "Us er" → "us-er" - not the same key
         // Let's use labels that DO collide: "User" and "US ER" both → "us-er"? No.
         // "User" → "user", "US ER" → "us-er". Hmm, those don't collide.
         // Actually: "User" → "user", "UsEr" → "user" (non-alpha chars stripped).
@@ -1591,7 +1801,7 @@ mod tests {
 
     #[test]
     fn parse_dsl_canonical_node_collision_detected() {
-        // "A B" → "a-b", "A_B" → "a-b" — same key, different labels
+        // "A B" → "a-b", "A_B" → "a-b" - same key, different labels
         let parsed = parse_dsl("A B > rel > Target\nA_B > uses > Other");
         let collisions: Vec<_> = parsed
             .diagnostics
@@ -1645,7 +1855,7 @@ mod tests {
 
     #[test]
     fn check_similar_node_label() {
-        // "User Stori" vs "User Story" — Levenshtein distance 1 (substitute 'i' → 'y')
+        // "User Stori" vs "User Story" - Levenshtein distance 1 (substitute 'i' → 'y')
         let parsed = parse_dsl("User Stori > describes > Feature\nUser Story > relates_to > Epic");
         let diags = check(&parsed);
         let similar: Vec<_> = diags
@@ -2020,6 +2230,257 @@ mod tests {
         let after =
             std::fs::read_to_string(&cm_root.join("001").join("concept-map-001.toml")).unwrap();
         assert_eq!(after, original, "dry-run must not write to file");
+    }
+
+    // --- export renderers ---
+
+    #[test]
+    fn dot_escape_plain_text_unchanged() {
+        assert_eq!(dot_escape("hello"), "hello");
+        assert_eq!(dot_escape("foo bar"), "foo bar");
+    }
+
+    #[test]
+    fn dot_escape_handles_quotes_and_backslashes() {
+        assert_eq!(dot_escape("a\"b"), "a\\\"b");
+        assert_eq!(dot_escape("a\\b"), "a\\\\b");
+    }
+
+    #[test]
+    fn dot_escape_handles_newlines() {
+        assert_eq!(dot_escape("a\nb"), "a\\nb");
+        assert_eq!(dot_escape("line1\nline2"), "line1\\nline2");
+    }
+
+    #[test]
+    fn dot_escape_combined() {
+        assert_eq!(dot_escape("\"hello\\world\""), "\\\"hello\\\\world\\\"");
+    }
+
+    #[test]
+    fn mermaid_escape_plain_text_unchanged() {
+        assert_eq!(mermaid_escape("hello"), "hello");
+        assert_eq!(mermaid_escape("foo bar"), "foo bar");
+    }
+
+    #[test]
+    fn mermaid_escape_handles_special_chars() {
+        assert_eq!(mermaid_escape("a\"b"), "a#quot;b");
+        assert_eq!(mermaid_escape("a[b"), "a#91;b");
+        assert_eq!(mermaid_escape("a]b"), "a#93;b");
+        assert_eq!(mermaid_escape("a\nb"), "a#10;b");
+    }
+
+    #[test]
+    fn mermaid_escape_combined() {
+        assert_eq!(mermaid_escape("\"[test]\""), "#quot;#91;test#93;#quot;");
+    }
+
+    fn make_two_node_map() -> ParsedConceptMap {
+        ParsedConceptMap {
+            nodes: vec![
+                ConceptMapNode {
+                    key: "user".into(),
+                    label: "User".into(),
+                },
+                ConceptMapNode {
+                    key: "document".into(),
+                    label: "Document".into(),
+                },
+            ],
+            edges: vec![ConceptMapEdge {
+                from_key: "user".into(),
+                from_label: "User".into(),
+                rel: "creates".into(),
+                to_key: "document".into(),
+                to_label: "Document".into(),
+                line: 1,
+            }],
+            diagnostics: vec![],
+        }
+    }
+
+    fn make_empty_map() -> ParsedConceptMap {
+        ParsedConceptMap {
+            nodes: vec![],
+            edges: vec![],
+            diagnostics: vec![],
+        }
+    }
+
+    #[test]
+    fn render_dot_two_node_map() {
+        let dot = render_dot(&make_two_node_map(), "My Map");
+        // Valid digraph structure.
+        assert!(dot.starts_with("digraph \"My Map\" {\n"));
+        assert!(dot.ends_with("}\n") || dot.ends_with('}'));
+        assert!(dot.contains("rankdir=LR;"));
+        // Nodes sorted by key: "document" before "user"
+        let doc_pos = dot.find("\"document\"").unwrap();
+        let user_pos = dot.find("\"user\"").unwrap();
+        assert!(doc_pos < user_pos, "nodes should be sorted by key");
+        // Edge present.
+        assert!(dot.contains("\"user\" -> \"document\" [label=\"creates\"];"));
+    }
+
+    #[test]
+    fn render_dot_empty_map() {
+        let dot = render_dot(&make_empty_map(), "");
+        assert!(dot.contains("digraph"));
+        assert!(dot.contains("rankdir=LR;"));
+        // No node/edge lines.
+        assert!(!dot.contains("[label="));
+    }
+
+    #[test]
+    fn render_dot_escapes_labels() {
+        let parsed = ParsedConceptMap {
+            nodes: vec![ConceptMapNode {
+                key: "test".into(),
+                label: "Hello \"World\"".into(),
+            }],
+            edges: vec![],
+            diagnostics: vec![],
+        };
+        let dot = render_dot(&parsed, "Test");
+        assert!(dot.contains("Hello \\\"World\\\""));
+    }
+
+    #[test]
+    fn render_mermaid_two_node_map() {
+        let mm = render_mermaid(&make_two_node_map());
+        assert!(mm.starts_with("graph LR"));
+        // Synthetic node ids.
+        assert!(mm.contains("n_0"));
+        assert!(mm.contains("n_1"));
+        // Edge with relation text.
+        assert!(mm.contains("-->|creates|"));
+    }
+
+    #[test]
+    fn render_mermaid_empty_map() {
+        let mm = render_mermaid(&make_empty_map());
+        assert_eq!(mm.trim(), "graph LR");
+    }
+
+    #[test]
+    fn render_mermaid_escapes_labels() {
+        let parsed = ParsedConceptMap {
+            nodes: vec![ConceptMapNode {
+                key: "test".into(),
+                label: "Hello \"World\"".into(),
+            }],
+            edges: vec![],
+            diagnostics: vec![],
+        };
+        let mm = render_mermaid(&parsed);
+        // The label should escape quotes with #quot;
+        assert!(mm.contains("#quot;World#quot;"));
+    }
+
+    #[test]
+    fn render_json_value_round_trip() {
+        let value = render_json_value(&make_two_node_map());
+        let obj = value.as_object().unwrap();
+        let nodes = obj["nodes"].as_array().unwrap();
+        let edges = obj["edges"].as_array().unwrap();
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(edges.len(), 1);
+        // Verify keys.
+        assert_eq!(nodes[0]["key"], "document");
+        assert_eq!(nodes[1]["key"], "user");
+        // Verify edge fields.
+        assert_eq!(edges[0]["from"], "user");
+        assert_eq!(edges[0]["rel"], "creates");
+        assert_eq!(edges[0]["to"], "document");
+    }
+
+    #[test]
+    fn render_json_empty_map() {
+        let value = render_json_value(&make_empty_map());
+        let obj = value.as_object().unwrap();
+        assert!(obj["nodes"].as_array().unwrap().is_empty());
+        assert!(obj["edges"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn render_json_pretty_print() {
+        let json = render_json(&make_two_node_map()).unwrap();
+        assert!(json.contains("\"nodes\""));
+        assert!(json.contains("\"edges\""));
+        assert!(json.contains("\"from_label\""));
+        assert!(json.contains("\"to_label\""));
+    }
+
+    #[test]
+    fn export_dot_integration() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+
+        // Add edges.
+        run_add(
+            Some(root.to_path_buf()),
+            "1",
+            "User",
+            "creates",
+            "Document",
+            false,
+        )
+        .unwrap();
+        run_add(
+            Some(root.to_path_buf()),
+            "1",
+            "Document",
+            "belongs_to",
+            "Workspace",
+            false,
+        )
+        .unwrap();
+
+        // Export DOT.
+        let result = run_export(Some(root.to_path_buf()), "1", &ExportFormat::Dot);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn export_mermaid_integration() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+
+        run_add(
+            Some(root.to_path_buf()),
+            "1",
+            "User",
+            "creates",
+            "Document",
+            false,
+        )
+        .unwrap();
+
+        let result = run_export(Some(root.to_path_buf()), "1", &ExportFormat::Mermaid);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn export_json_integration() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        install_cm(root, "Test Map", None);
+
+        run_add(
+            Some(root.to_path_buf()),
+            "1",
+            "User",
+            "creates",
+            "Document",
+            false,
+        )
+        .unwrap();
+
+        let result = run_export(Some(root.to_path_buf()), "1", &ExportFormat::Json);
+        assert!(result.is_ok());
     }
 
     // --- integration helpers ---
