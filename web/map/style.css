@@ -224,6 +224,16 @@ body {
   flex-shrink: 0;
 }
 
+/* Kind pills — dark text for light-background kinds */
+.kind-pill[style*="--kind-PRD"],
+.kind-pill[style*="--kind-SPEC"],
+.kind-pill[style*="--kind-REQ"],
+.kind-pill[style*="--kind-IDE"],
+.kind-pill[style*="--kind-RV"],
+.kind-pill[style*="--kind-REC"] {
+  color: #222;
+}
+
 /* ---------------------------------------------------------------------------
  * Refresh button
  * ------------------------------------------------------------------------- */
