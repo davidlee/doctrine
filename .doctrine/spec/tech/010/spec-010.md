@@ -16,14 +16,14 @@ One canonical source feeds two independent channels. The `plugins/` tree is the
 single source-of-truth, embedded into the binary at compile time by a *second*
 rust-embed folder parallel to `install/`'s. The published marketplace channel
 (`.claude-plugin/marketplace.json`) lets a consumer with no Doctrine binary add
-the repo as a Claude Code plugin marketplace; the `doctrine skills` channel
+the repo as a Claude Code plugin marketplace; the `doctrine claude` channel
 serves a consumer who already holds the binary. No skill is duplicated across
 channels — both read the same embedded tree.
 
 What this container owns is the *binary-side* mechanism: catalog discovery from
 the embed, the dual-path install plan (Claude direct, every other agent
 delegated), the canonical-tree-plus-symlink lay-down with its proven-ownership
-never-clobber contract, and the `skills list`/`skills install` surface. It rides
+never-clobber contract, and the `claude install` surface. It rides
 the install container (SPEC-009) for the shared project-root walk, the embedded
 `install/` gitignore helper, and the confirm prompt, and restates none of that.
 
@@ -33,7 +33,7 @@ Mirrors the structured `responsibilities` list: carry the embedded canonical
 source; discover and validate the catalog; plan the dual-path per-agent install;
 reconcile each Claude link by proven ownership; materialise the canonical tree
 and links atomically; self-enforce the derived-tree gitignore; and surface the
-`list`/`install` commands.
+`install` command.
 
 ### One source, two channels
 
@@ -106,7 +106,7 @@ window: a foreign path that appears at the destination after the plan is built
 
 ### Gitignore self-enforcement
 
-The canonical `.doctrine/skills/*` tree is derived and must be ignored. `skills
+The canonical `.doctrine/skills/*` tree is derived and must be ignored. `claude
 install` enforces that ignore itself — independent of whether `doctrine install`
 ran first — anchored at the same base the canonical tree is written to, so under
 `--global` the entry follows the tree to `$HOME` rather than polluting a project
@@ -114,15 +114,12 @@ with an ignore for a tree that is not there.
 
 ### The command surface
 
-`skills list` enumerates the catalog grouped by domain with per-agent install
-status, read from symlink presence under `.claude/skills/` (a dangling-but-managed
-link counts as installed — status uses `symlink_metadata`, never `exists`, which
-would follow the link and hide it). `skills install` selects a subset by
-`--skill`/`--domain` or the derived `--only-memory` subset, targets one or more
-`--agent`s (default: detect `.claude/`, else error — Doctrine does not guess
-non-Claude agents), scopes to project or `--global`, and gates on `--dry-run` /
-the shared confirm prompt / `--yes`. The pure planner builds an inspectable plan;
-the thin shell prints it, prompts, and executes.
+Catalog enumeration is internal — there is no public list verb. `claude install`
+selects a subset by `--skill`/`--domain` or the derived `--only-memory` subset,
+targets one or more `--agent`s (default: detect `.claude/`, else error — Doctrine
+does not guess non-Claude agents), scopes to project or `--global`, and gates on
+`--dry-run` / the shared confirm prompt / `--yes`. The pure planner builds an
+inspectable plan; the thin shell prints it, prompts, and executes.
 
 ## Concerns
 
@@ -171,7 +168,7 @@ the thin shell prints it, prompts, and executes.
   relative link into it; a link is ours iff its value equals our computed target,
   yielding create / relink-heal / keep-foreign, re-proven at mutation time.
 - **D4 — the canonical tree is derived and self-ignored.** It owns no authored
-  data, so materialise always overwrites via a staged atomic swap, and `skills
+  data, so materialise always overwrites via a staged atomic swap, and `claude
   install` self-enforces the `.doctrine/skills/*` ignore anchored at the
   tree's base.
 - **D5 — marketplace-only subset domains are excluded from the CLI catalog.**
