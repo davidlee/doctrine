@@ -25,7 +25,7 @@ pub(crate) mod view;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::listing::Format;
+use crate::listing::{Format, RenderOpts};
 
 /// Resolve the project root (default markers), shared by every priority verb.
 fn root(path: Option<PathBuf>) -> anyhow::Result<std::path::PathBuf> {
@@ -40,30 +40,32 @@ pub(crate) fn run_survey(
     all: bool,
     format: Format,
     json: bool,
+    render: RenderOpts,
 ) -> anyhow::Result<()> {
     let root = root(path)?;
     let rows = surface::survey(&root, all)?;
     let out = if json || format == Format::Json {
         render::survey_json(&rows)?
     } else {
-        // Resolve terminal width ONCE in the impure shell (SL-054 D3) — `None` off a
-        // tty keeps piped output width-free; on a tty the pure render layer wraps.
-        render::survey_human(&rows, crate::tty::stdout_terminal_width())
+        render::survey_human(&rows, render)
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
 }
 
 /// `doctrine next [--json]` (design §5.4) — the actionable-only advisory worklist.
-pub(crate) fn run_next(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::Result<()> {
+pub(crate) fn run_next(
+    path: Option<PathBuf>,
+    format: Format,
+    json: bool,
+    render: RenderOpts,
+) -> anyhow::Result<()> {
     let root = root(path)?;
     let rows = surface::next(&root)?;
     let out = if json || format == Format::Json {
         render::next_json(&rows)?
     } else {
-        // Resolve terminal width ONCE in the impure shell (SL-054 D3) — `None` off a
-        // tty keeps piped output width-free; on a tty the pure render layer wraps.
-        render::next_human(&rows, crate::tty::stdout_terminal_width())
+        render::next_human(&rows, render)
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
@@ -77,6 +79,7 @@ pub(crate) fn run_blockers(
     transitive: bool,
     format: Format,
     json: bool,
+    _render: RenderOpts,
 ) -> anyhow::Result<()> {
     let root = root(path)?;
     let view = surface::blockers(&root, id, transitive)?;
@@ -95,6 +98,7 @@ pub(crate) fn run_explain(
     id: &str,
     format: Format,
     json: bool,
+    _render: RenderOpts,
 ) -> anyhow::Result<()> {
     let root = root(path)?;
     let ex = surface::explain(&root, id)?;
