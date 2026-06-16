@@ -1,7 +1,7 @@
 id = 77
 slug = "requirement-prose-render"
 title = "Render requirement prose in spec show"
-status = "ready"
+status = "done"
 created = "2026-06-16"
 updated = "2026-06-16"
 

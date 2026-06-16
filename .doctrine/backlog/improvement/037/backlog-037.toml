@@ -5,8 +5,8 @@ id = 37
 slug = "specrs-has-no-read-spec-reader-relation-edges-show-list-scan-each-re-parse-spec-toml-inline-4-copies-extract-one-reader"
 title = "spec.rs has no read_spec reader: relation_edges + show + list + scan each re-parse Spec toml inline (4 copies) — extract one reader"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-12"
 updated = "2026-06-16"
 tags = ["area:spec", "quality"]
@@ -19,3 +19,7 @@ triggers = []                   # watched source globs: { globs, note? }
 [[relation]]
 label = "slices"
 target = "SL-046"
+
+[[relation]]
+label = "slices"
+target = "SL-077"

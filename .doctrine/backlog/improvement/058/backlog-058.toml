@@ -5,10 +5,10 @@ id = 58
 slug = "render-the-requirement-md-prose-tier-statementrationale-in-spec-show-or-a-requirement-show-verb"
 title = "Render the requirement .md prose tier (Statement/Rationale) in spec show or a requirement show verb"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-14"
-updated = "2026-06-15"
+updated = "2026-06-16"
 tags = ["area:cli", "area:spec"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
@@ -19,3 +19,7 @@ tags = ["area:cli", "area:spec"]
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "IMP-037", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "slices"
+target = "SL-077"
