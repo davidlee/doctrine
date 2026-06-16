@@ -1,5 +1,33 @@
 # SL-073 Implementation Notes
 
+## PHASE-02 (complete — 2026-06-16)
+
+**Commit:** `c75781e` — feat(SL-073): PHASE-02 model + routing layer
+
+Data layer delivered via dispatch funnel (worker in worktree fork, deepseek-v4-pro).
+Created api.js (ApiError class, fetchGraph, fetchHealth), model.js (encodePart,
+normalizeGraph, resolveFocus, findFocus, neighbourhood, searchFilter, kinds),
+router.js (parseHash, buildHash, setFocus, setEdge). Global `state` object declared
+in model.js with graphRenderSeq (consumer: PHASE-03).
+
+**Verification:** `just check` green (1394 tests). 100/100 console.assert unit tests
+pass in test.html. Funnel: precond clean → S^==B → R-5 clean → apply clean →
+verify green → branch-point stationary → committed.
+
+**Key design points carried forward:**
+- `encodePart(s)`: non-[A-Za-z0-9-] → `_HH` hex codepoint for URL-safe edge IDs
+- `kindPrefix` derived from id by splitting at first digit (`"SL-072"` → `"SL"`)
+- Edge target check: `edge.target.Resolved !== undefined` (Unresolved → skip)
+- `padId(n)`: `(n < 100 ? (n < 10 ? '00' : '0') : '') + n` — ES5, no padStart
+- `findFocus` returns null on miss (no fallback) — Hard Contract verified in tests
+- `state` global declared ONCE in model.js; router reads `state.depth` for default
+
+**Watch-outs for PHASE-03:**
+- `Array.from` is ES6 — use manual iteration for Map/Set→array conversion
+- `Map.forEach` param order is (value, key), not (key, value)
+- Router parseHash uses `window.location.hash`; mock in Node tests
+- test.html fixture pattern reusable for dotQuote/graphToDot tests in PHASE-03
+
 ## PHASE-01 (complete — 2026-06-16)
 
 **Commit:** `4e55b57` — feat(SL-073): PHASE-01 static shell
