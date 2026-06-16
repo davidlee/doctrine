@@ -13,7 +13,7 @@ tags = ["area:relations", "cordage"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
 needs    = []                   # item→item hard prerequisite
-after    = [{ to = "RSK-001", rank = 0 }]
+after    = [{ to = "RSK-001", rank = 0 }, { to = "ISS-011", rank = 0 }]
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
