@@ -282,28 +282,34 @@ async fn mutate_concept_map(
         }
     }
 
-    let new_toml = match body.action {
+    // Mutation functions operate on raw DSL text (not full TOML).
+    // Routes own the get_dsl → mutate → set_dsl orchestration;
+    // this improves testability (no TOML-roundtrip in unit tests).
+    let old_dsl = concept_map::get_dsl(&toml_text)?;
+    let new_dsl_text = match body.action {
         MutationAction::AddEdge { source, rel, target } => {
-            concept_map::add_edge_to_dsl(&toml_text, &source, &rel, &target)?
+            concept_map::add_edge_to_dsl(&old_dsl, &source, &rel, &target)?
         }
         MutationAction::RemoveEdge { source, rel, target } => {
-            concept_map::remove_edge_from_dsl(&toml_text, &source, &rel, &target)?
+            concept_map::remove_edge_from_dsl(&old_dsl, &source, &rel, &target)?
         }
         MutationAction::RenameNode { old, new } => {
-            concept_map::rename_node_in_dsl(&toml_text, &old, &new)?
+            let (dsl, _count) = concept_map::rename_node_in_dsl(&old_dsl, &old, &new)?;
+            dsl
         }
     };
 
     // Write back. Synchronous file I/O is explicitly blessed for the map server
     // (single-user loopback tool; TOML files are small). If the server migrates
     // to an async file I/O layer, use tokio::task::spawn_blocking here.
+    let updated_toml = concept_map::set_dsl(&toml_text, &new_dsl_text)?;
     let name = format!("{id:03}");
     let stem = format!("concept-map-{name}");
     let toml_path = cm_root.join(&name).join(format!("{stem}.toml"));
-    std::fs::write(&toml_path, &new_toml)?;
+    std::fs::write(&toml_path, &updated_toml)?;
 
     // Re-parse for response
-    let new_dsl = concept_map::get_dsl(&new_toml)?;
+    let new_dsl = concept_map::get_dsl(&updated_toml)?;
     let new_hash = hex::encode(sha2::Sha256::digest(new_dsl.as_bytes()));
     let parsed = concept_map::parse_dsl(&new_dsl);
     // ... assemble response with updated nodes/edges + dsl_hash
