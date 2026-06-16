@@ -71,23 +71,33 @@
    * Interactive UI wiring (PHASE-05) — kind filter, search, depth, refresh,
    * entity list, relationship table, focus header
    * --------------------------------------------------------------------- */
-  function renderEntityList() {
+  function renderEntityList(query) {
     var list = document.querySelector('.entity-list');
     if (!list) return;
 
-    var nodes = [];
-    state.graph.nodes.forEach(function(node) { nodes.push(node); });
+    var nodes;
+    if (query && query.trim()) {
+      nodes = model.searchFilter(query.trim(), state.graph);
+    } else {
+      nodes = [];
+      state.graph.nodes.forEach(function(node) { nodes.push(node); });
+    }
 
     if (state.kindFilter) {
       nodes = nodes.filter(function(node) { return state.kindFilter.has(node.kindPrefix); });
     }
 
-    nodes.sort(function(a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+    nodes.sort(compareNodes);
 
     list.innerHTML = '';
     nodes.forEach(function(node) {
       list.appendChild(buildEntityItem(node));
     });
+  }
+
+  function renderFilteredEntities() {
+    var input = document.querySelector('.search-input');
+    renderEntityList(input ? input.value : '');
   }
 
   function renderFocusHeader() {
@@ -129,7 +139,7 @@
       });
     }
 
-    edges.sort(function(a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+    edges.sort(compareEdgesBySource);
 
     tbody.innerHTML = '';
     if (edges.length === 0) {
@@ -175,27 +185,6 @@
 
       tbody.appendChild(tr);
     });
-  }
-
-  /* Re-run entity list accounting for both kind-filter and active search. */
-  function renderFilteredEntities() {
-    var input = document.querySelector('.search-input');
-    var list = document.querySelector('.entity-list');
-    if (!list) return;
-
-    if (input && input.value.trim()) {
-      // Search is active — re-run search + kind filter
-      var results = model.searchFilter(input.value.trim(), state.graph);
-      if (state.kindFilter) {
-        results = results.filter(function(node) { return state.kindFilter.has(node.kindPrefix); });
-      }
-      list.innerHTML = '';
-      results.forEach(function(node) {
-        list.appendChild(buildEntityItem(node));
-      });
-    } else {
-      renderEntityList();
-    }
   }
 
   function collectKindFilter() {
@@ -264,20 +253,7 @@
 
     input.addEventListener('input', function() {
       var query = input.value.trim();
-      var list = document.querySelector('.entity-list');
-      if (!list) return;
-
-      if (!query) { renderEntityList(); return; }
-
-      var results = model.searchFilter(query, state.graph);
-      if (state.kindFilter) {
-        results = results.filter(function(node) { return state.kindFilter.has(node.kindPrefix); });
-      }
-
-      list.innerHTML = '';
-      results.forEach(function(node) {
-        list.appendChild(buildEntityItem(node));
-      });
+      renderEntityList(query);
     });
 
     input.addEventListener('keydown', function(e) {
@@ -335,7 +311,6 @@
     for (var i = 0; i < btns.length; i++) {
       btns[i].addEventListener('click', (function(d) {
         return function() {
-          state.depth = d;
           var allBtns = document.querySelectorAll('.depth-btn');
           for (var j = 0; j < allBtns.length; j++) {
             allBtns[j].classList.toggle('active', parseInt(allBtns[j].getAttribute('data-depth'), 10) === d);
@@ -394,6 +369,23 @@
     html += '<span class="hover-detail-meta">' + node.kindLabel + ' \u00b7 ' + node.status + '</span>';
     html += '</div>';
     pane.innerHTML = html;
+  }
+
+  function dimLegend(neighbourhood) {
+    var items = document.querySelectorAll('.legend-item');
+    if (!items.length) return;
+    var edgeLabels = new Set();
+    for (var ei = 0; ei < neighbourhood.edges.length; ei++) {
+      edgeLabels.add(neighbourhood.edges[ei].label.toLowerCase());
+    }
+    for (var i = 0; i < items.length; i++) {
+      var labels = (items[i].getAttribute('data-labels') || '').split(',');
+      var anyPresent = false;
+      for (var j = 0; j < labels.length; j++) {
+        if (edgeLabels.has(labels[j].trim())) { anyPresent = true; break; }
+      }
+      items[i].classList.toggle('legend-dimmed', !anyPresent);
+    }
   }
 
   function wireSvgHandlers(svgEl, edges) {
@@ -478,6 +470,8 @@
       var svgEl = container.querySelector('svg');
       if (svgEl) {
         wireSvgHandlers(svgEl, nb.edges);
+        dimLegend(nb);
+      }
       }
     }).catch(function(err) {
       if (seq !== state.graphRenderSeq) return;
