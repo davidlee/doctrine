@@ -836,9 +836,9 @@
     var groups = svgEl.querySelectorAll('.node');
     for (var i = 0; i < groups.length; i++) {
       var g = groups[i];
-      var textEl = g.querySelector('text');
-      if (!textEl) continue;
-      var nodeKey = textEl.textContent.trim();
+      var titleEl = g.querySelector('title');
+      if (!titleEl) continue;
+      var nodeKey = titleEl.textContent.trim();
 
       try {
         var bbox = g.getBBox();
