@@ -328,6 +328,7 @@
     btn.addEventListener('click', function() {
       state.markdownCache.clear();
       state.conceptMapCache.clear();
+      state.cmFocusNode = null;
       state.graphRenderSeq += 1;
       api.refreshGraph().then(function() {
         return api.fetchGraph();
@@ -755,11 +756,30 @@
     // Show/hide entity-graph vs concept-map UI elements
     var isCm = state.focusId && isConceptMap(state.focusId);
     var depthSel = document.querySelector('.depth-selector');
-    if (depthSel) depthSel.style.display = isCm ? 'none' : '';
+    if (depthSel) depthSel.style.display = '';
     var relTable = document.querySelector('.relationship-table');
     if (relTable) relTable.style.display = isCm ? 'none' : '';
     var tableToggle = document.querySelector('.table-toggle');
     if (tableToggle) tableToggle.style.display = isCm ? 'none' : '';
+
+    /* Reconcile cmFocusNode from URL hash */
+    if (isCm && route.cmFocus) {
+      var cachedCm = state.conceptMapCache.get(state.focusId);
+      var label = route.cmFocus;
+      if (cachedCm) {
+        for (var ci = 0; ci < cachedCm.nodes.length; ci++) {
+          if (cachedCm.nodes[ci].key === route.cmFocus) {
+            label = cachedCm.nodes[ci].label;
+            break;
+          }
+        }
+      }
+      if (!state.cmFocusNode || state.cmFocusNode.key !== route.cmFocus) {
+        state.cmFocusNode = { key: route.cmFocus, label: label };
+      }
+    } else if (focusChanged) {
+      state.cmFocusNode = null;
+    }
 
     // CM-specific UI elements
     renderEditToggle();
@@ -840,7 +860,27 @@
         return function() {
           if (state.editingConceptMap) {
             startRenameNode(key);
+            return;
           }
+          /* View-mode click: toggle cmFocusNode */
+          var cm = state.conceptMapCache.get(state.focusId);
+          var label = key;
+          if (cm) {
+            for (var ci = 0; ci < cm.nodes.length; ci++) {
+              if (cm.nodes[ci].key === key) {
+                label = cm.nodes[ci].label;
+                break;
+              }
+            }
+          }
+          if (state.cmFocusNode && state.cmFocusNode.key === key) {
+            /* Clicking already-focal node clears to wide-open */
+            state.cmFocusNode = null;
+          } else {
+            state.cmFocusNode = { key: key, label: label };
+          }
+          window.location.hash = router.buildHash('focus', state.focusId, state.depth);
+          refreshCmView();
         };
       })(nodeKey));
 
@@ -871,6 +911,12 @@
 
     container.style.display = 'block';
     var edges = cm.edges || [];
+
+    /* BFS-filtered edges in view mode when focal node is set */
+    if (!state.editingConceptMap && state.cmFocusNode) {
+      var filtered = model.cmNeighbourhood(cm, state.cmFocusNode.key, state.depth);
+      edges = filtered.edges;
+    }
     var editingKey = state.editingNode ? state.editingNode.key : null;
     var editingLabel = state.editingNode ? state.editingNode.label : '';
 
@@ -1203,6 +1249,15 @@
       graphArea.innerHTML = '<p class="loading">Loading concept map…</p>';
       api.fetchConceptMap(id).then(function(cm) {
         state.conceptMapCache.set(id, cm);
+        /* Cold-cache label fix: refresh cmFocusNode.label from freshly-cached nodes */
+        if (state.cmFocusNode && state.focusId === id) {
+          for (var ci = 0; ci < cm.nodes.length; ci++) {
+            if (cm.nodes[ci].key === state.cmFocusNode.key) {
+              state.cmFocusNode.label = cm.nodes[ci].label;
+              break;
+            }
+          }
+        }
         renderConceptMap();
       }).catch(function(err) {
         if (state.focusId !== id) return;
@@ -1212,7 +1267,14 @@
     }
 
     var cm = state.conceptMapCache.get(id);
-    var dotText = dot.cmGraphToDot(cm);
+
+    /* Apply BFS neighbourhood filtering */
+    var filtered = state.cmFocusNode
+      ? model.cmNeighbourhood(cm, state.cmFocusNode.key, state.depth)
+      : model.cmNeighbourhood(cm, null, state.depth);
+    var focusKey = state.cmFocusNode ? state.cmFocusNode.key : null;
+
+    var dotText = dot.cmGraphToDot(filtered, focusKey);
 
     state.graphRenderSeq += 1;
     var seq = state.graphRenderSeq;
@@ -1238,7 +1300,7 @@
       renderEditToggle();
       // Show/hide entity-graph-specific UI
       var depthSel = document.querySelector('.depth-selector');
-      if (depthSel) depthSel.style.display = 'none';
+      if (depthSel) depthSel.style.display = '';
       var relTable = document.querySelector('.relationship-table');
       if (relTable) relTable.style.display = 'none';
       var tableToggle = document.querySelector('.table-toggle');

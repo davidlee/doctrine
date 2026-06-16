@@ -141,21 +141,23 @@ dot.escapeStringContent = function(s) {
     .replace(/>/g, '\\>').replace(/]/g, '\\]').replace(/}/g, '\\}');
 };
 
-dot.cmGraphToDot = function(cm) {
+dot.cmGraphToDot = function(cm, focusKey) {
   var lines = [];
   lines.push('digraph concept_map {');
   lines.push('  rankdir=LR;');
   lines.push('  bgcolor="transparent";');
   lines.push('  nodesep=0.45;');
   lines.push('  ranksep=0.8;');
-  lines.push('  node [shape=ellipse, style=filled, fillcolor="#16A085", fontcolor="#ffffff"];');
+  lines.push('  node [shape=record, style="filled,rounded", fillcolor="#f8f9fa", color="#4A90D9", fontcolor="#222222", penwidth=1.5];');
+  lines.push('  edge [color="#4A90D9", fontcolor="#4A90D9"];');
   lines.push('');
 
   var sortedNodes = (cm.nodes || []).slice().sort(function(a, b) {
     return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
   });
   sortedNodes.forEach(function(node) {
-    lines.push('  "' + dot.escapeStringContent(node.key) + '" [label="' + dot.escapeStringContent(node.label) + '"];');
+    var extra = (focusKey && node.key === focusKey) ? ', penwidth=3.0' : '';
+    lines.push('  "' + dot.escapeStringContent(node.key) + '" [label="' + dot.escapeStringContent(node.label) + '"' + extra + '];');
   });
 
   lines.push('');

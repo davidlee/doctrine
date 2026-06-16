@@ -15,6 +15,7 @@ var state = {
   conceptMapCache: new Map(),
   editingConceptMap: false,
   editingNode: null,
+  cmFocusNode: null,
   dotAvailable: false,
   hoveredId: null,
   kindFilter: null,
@@ -383,4 +384,69 @@ model.buildRelLabelList = function(cm) {
     }
   }
   return rels;
+};
+
+model.cmNeighbourhood = function(cm, focusKey, depth) {
+  if (cm === null || cm === undefined) return { nodes: [], edges: [] };
+  if (focusKey === null || focusKey === undefined) {
+    return { nodes: cm.nodes || [], edges: cm.edges || [] };
+  }
+  depth = Math.max(0, Math.min(3, depth));
+
+  /* Build undirected adjacency map from edges */
+  var adj = {};
+  var edges = cm.edges || [];
+  for (var i = 0; i < edges.length; i++) {
+    var e = edges[i];
+    if (!adj[e.from_key]) adj[e.from_key] = [];
+    adj[e.from_key].push(e.to_key);
+    if (!adj[e.to_key]) adj[e.to_key] = [];
+    adj[e.to_key].push(e.from_key);
+  }
+
+  /* Ensure focusKey exists in the node set */
+  var nodeKeySet = {};
+  for (var j = 0; j < cm.nodes.length; j++) {
+    nodeKeySet[cm.nodes[j].key] = true;
+  }
+  if (!nodeKeySet[focusKey]) {
+    /* Graceful fallback: focusKey not in nodes → return all */
+    return { nodes: cm.nodes, edges: edges };
+  }
+
+  /* BFS from focusKey */
+  var visited = {};
+  var queue = [{ key: focusKey, dist: 0 }];
+  visited[focusKey] = true;
+
+  while (queue.length > 0) {
+    var cur = queue.shift();
+    if (cur.dist >= depth) continue;
+    var neighbours = adj[cur.key] || [];
+    for (var k = 0; k < neighbours.length; k++) {
+      var nb = neighbours[k];
+      if (!visited[nb]) {
+        visited[nb] = true;
+        queue.push({ key: nb, dist: cur.dist + 1 });
+      }
+    }
+  }
+
+  /* Filter nodes to visited set */
+  var filteredNodes = [];
+  for (var n = 0; n < cm.nodes.length; n++) {
+    if (visited[cm.nodes[n].key]) {
+      filteredNodes.push(cm.nodes[n]);
+    }
+  }
+
+  /* Filter edges: both source and target must be in visited */
+  var filteredEdges = [];
+  for (var m = 0; m < edges.length; m++) {
+    if (visited[edges[m].from_key] && visited[edges[m].to_key]) {
+      filteredEdges.push(edges[m]);
+    }
+  }
+
+  return { nodes: filteredNodes, edges: filteredEdges };
 };
