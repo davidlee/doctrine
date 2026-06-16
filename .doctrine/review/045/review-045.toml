@@ -1,0 +1,61 @@
+id    = 45
+slug  = "design-review-of-sl-079"
+title = "design review of SL-079"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-079"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Expected: design acknowledges revision approval line as a status-bearing surface. Observed: design names five status-bearing writeln! surfaces but does not mention the sixth — run_approve in revision.rs (line 905) emits approval state (pending/approved/rejected), which IS a status line, just a different axis than lifecycle status. The slice scope explicitly limits to five surfaces, which is defensible, but the design must acknowledge this line exists and record the conscious exclusion."
+detail = """Evidence: src/revision.rs line 905: `writeln!(io::stdout(), "{} approval: {} → approved", canonical_id(id), doc.approval.as_str())?;`. This emits approval status which is a status axis — distinct from lifecycle status but still status-bearing. The design §3b defines status_colored for 'status-bearing writeln! lines' and §1 names five (adr, policy, standard, knowledge, revision). The approval line is a sixth status-bearing surface. The design should either: (a) include it in scope (adding 'approved'/'pending'/'rejected' to status_hue or a separate hue), or (b) document the conscious exclusion with rationale."""
+disposition = "design-wrong"
+response = "The design must acknowledge this line exists. The scope intentionally limits status-bearing writeln! colouring to five lifecycle-status surfaces, which is defensible — but the design artifact is incomplete without recording that the approval status line (run_approve, revision.rs:905) exists and was consciously excluded. Add a sentence to design §1 or §3b noting: 'The revision run_approve approval-status line (pending/approved/rejected) is excluded — it is a distinct status axis (approval, not lifecycle) and approval tokens are not in the shared status_hue map. A future slice may add approval-state colouring if desired.'"
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected: status_colored usage for dual-status revision line clear in design. Observed: design §3b defines status_colored(status, color) for single-status wrapping, but revision.rs run_status emits TWO statuses ('from → to'). The design §6 says 'wrap status with listing::status_colored' but doesn't clarify that this requires TWO calls (one for from, one for to) with the intervening ' → ' rendered uncoloured."
+detail = """Evidence: src/revision.rs line 584: `writeln!(io::stdout(), "{} → {}", from.as_str(), state.as_str())?;`. This emits two distinct status tokens. The implementation must call status_colored twice: `status_colored(from.as_str(), color)` and `status_colored(state.as_str(), color)`, joining them with the literal ' → '. The design should make this explicit — the current wording suggests a single status_colored call wrapping the whole line, which is incorrect."""
+disposition = "design-wrong"
+response = """Agreed. The design §6 should clarify that revision's run_status requires TWO status_colored calls: one for 'from' and one for 'to', with the literal ' → ' rendered uncoloured between them. Add to §6 under src/revision.rs: 'Handler: inject color bool, wrap BOTH from and to statuses with listing::status_colored, join with literal " → " (uncoloured).'"""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Expected: design specifies how resolved color bool reaches CommonListArgs::into_list_args. Observed: design §5 says 'each list command handler becomes: let color = tty::resolve_color(cli.color);' but doesn't specify the seam change needed to thread that bool into CommonListArgs::into_list_args(), which currently constructs RenderOpts internally (calling stdout_color_enabled() directly)."
+detail = "Evidence: src/main.rs line 143 (inside CommonListArgs::into_list_args): `render: crate::listing::RenderOpts { color: crate::tty::stdout_color_enabled(), term_width: crate::tty::stdout_terminal_width() }`. Currently into_list_args() owns the colour resolution. With --color flag, the resolution must move up to the call site. The design must specify: (a) add a `color: bool` parameter to into_list_args(), or (b) add a `color` field to CommonListArgs (breaks clap derive), or (c) have callers construct RenderOpts externally and thread it. The design is ambiguous on this seam — any implementer will need to decide, and the wrong choice could break the clap derive."
+disposition = "fix-now"
+response = "Correct. The design must specify the seam. The cleanest approach: add a  parameter to  — the existing method signature accepts , so the parameter is additive. Callers pass . The RenderOpts construction inside into_list_args reads  from the parameter instead of calling stdout_color_enabled(). Document this in design §5."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Expected: SURVEY_COLS/NEXT_COLS column arrays are const or static, avoiding per-call allocation. Observed: design §3d shows call pattern `&cols.iter().collect::<Vec<_>>()` which allocates a temporary Vec of &Column references on every render call. render_columns takes `&[&Column<R>]` — a slice of references — which requires this adaptation for array-backed columns. Harmless but avoidable."
+detail = "Evidence: The design defines SURVEY_COLS as `&[Column<SurveyRow>]` (a slice of owned Columns) but render_columns accepts `&[&Column<R>]` (slice of references). The collect+borrow creates a temporary Vec per invocation. A const array `[Column<SurveyRow>; 7]` with a helper (`fn survey_cols() -> [&Column<SurveyRow>; 7]` returning references to the const) would avoid the allocation. This is a nit — the Vec is small and short-lived, and the current render_columns API is shaped for the select_columns caller (which returns Vec<&Column>). Not a design defect, but worth recording as a future improvement opportunity."
+disposition = "tolerated"
+response = "Acknowledged. The temporary Vec allocation is a consequence of the render_columns API accepting &[&Column<R>] (shaped for the select_columns caller path). The cost is negligible (7-column Vec, stack-allocated in practice). Capturing IMP-044 (RenderOpts migration) is the right follow-up, not a design fix for this slice. The design may add a one-sentence note acknowledging the temporary but affirming it is harmless."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Expected: priority module stays clap-free and receives resolved RenderOpts (current pattern). Observed: design §5 proposes changing run_survey/run_next signature from RenderOpts → ColorChoice, importing clap into src/priority/mod.rs and calling tty::resolve_color internally. This is a regression from the current clean pattern where main.rs resolves capabilities and priority only consumes plain values."
+detail = "Evidence: Current src/priority/mod.rs: `pub(crate) fn run_survey(path, all, format, json, render: RenderOpts) -> Result<()>`. Design §5 proposes: `pub(crate) fn run_survey(path, all, format, json, color_choice: clap::ColorChoice) -> Result<()>` with internal `let opts = RenderOpts { color: crate::tty::resolve_color(color_choice), ... }`. This (a) adds a clap import to a module that currently has none, (b) adds a tty call to a module that currently has none, (c) breaks the existing injection pattern where main.rs resolves all impurity and passes plain values. The fix is trivial: keep the RenderOpts parameter, have main.rs resolve `cli.color` into the color bool, construct RenderOpts as before, and pass it unchanged."
+disposition = "design-wrong"
+response = "Agreed. The current clean pattern (main.rs resolves RenderOpts, priority consumes plain values) should be preserved. The design should keep run_survey(..., render: RenderOpts) and run_next(..., render: RenderOpts) unchanged. main.rs resolves cli.color via tty::resolve_color, constructs RenderOpts as before (but with resolved color), and passes it. This keeps clap and tty out of the priority module entirely. Update design section 5 and 6 to reflect this: main.rs call sites pass RenderOpts { color: tty::resolve_color(cli.color), .. }, priority signatures unchanged."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

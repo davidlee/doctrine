@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed0b6b86e77f18aa25e48efb4b775"
+memory_key = "mem.fact.clap.colorchoice-case-sensitive"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "clap ColorChoice parser case sensitivity"
+summary = "clap::ColorChoice ValueEnum parsing is case-sensitive unless the arg enables ignore_case"
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = ["src/main.rs", "Cargo.lock"]
+globs = []
+commands = ["doctrine --color"]
+tags = ["area:cli", "area:clap"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e1acbb72e96df7cc8366568ae55a6c31b218b579"
+ref_name = "refs/heads/main"
+checkout_state_id = "e746050f31070869f93ee4baa3fe8017649423bb9eec4af711fe6c915487a5a6"
+base_commit = "1685e7ccfb36e6be099f2024efc07a70d9d9a48e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 2

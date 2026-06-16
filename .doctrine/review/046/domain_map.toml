@@ -1,0 +1,66 @@
+[[area]]
+name = "SL-079 plan"
+purpose = "Authored phase objective, EN/EX/VT criteria, and plan rationale under interrogation"
+paths = [
+  ".doctrine/slice/079/plan.toml",
+  ".doctrine/slice/079/plan.md",
+]
+
+[[area]]
+name = "SL-079 design and scope"
+purpose = "Locked design decisions, slice scope, and prior design-inquisition verdict that the plan must obey"
+paths = [
+  ".doctrine/slice/079/design.md",
+  ".doctrine/slice/079/slice-079.md",
+  ".doctrine/slice/079/slice-079.toml",
+  ".doctrine/review/045/review-045.md",
+]
+
+[[area]]
+name = "shared colour plumbing"
+purpose = "Pure/impure colour boundary, list argument injection, and shared table/status colouring seams"
+paths = [
+  "src/main.rs",
+  "src/listing.rs",
+  "src/tty.rs",
+]
+
+[[area]]
+name = "priority rendering surfaces"
+purpose = "survey/next render path and priority command injection shape"
+paths = [
+  "src/priority/mod.rs",
+  "src/priority/render.rs",
+]
+
+[[area]]
+name = "status-line surfaces"
+purpose = "The five writeln! lifecycle-status handlers named by the design and plan"
+paths = [
+  "src/adr.rs",
+  "src/policy.rs",
+  "src/standard.rs",
+  "src/knowledge.rs",
+  "src/revision.rs",
+]
+
+[[invariant]]
+text = "The plan is subordinate to the locked SL-079 design and RV-045 corrections."
+
+[[invariant]]
+text = "Pure/impure split: tty/clap/env capability resolution stays in the shell; pure render helpers receive plain inputs."
+
+[[invariant]]
+text = "Phase criteria must be executable and specific enough for /phase-plan and /execute without guessing command shapes or hidden scope."
+
+[[invariant]]
+text = "Existing colour-free piped/golden output remains byte-preserving unless the plan explicitly proves and verifies a deliberate change."
+
+[[risk]]
+text = "Scope text still mentions install/reconcile/corpus while the locked design and plan name standard/knowledge/revision."
+
+[[risk]]
+text = "Priority command wording can accidentally include blockers/explain, which the design says are prose and not part of render_columns."
+
+[[risk]]
+text = "TTY colour verification is easy to write as human observation only, leaving --color and NO_COLOR precedence unproven."
