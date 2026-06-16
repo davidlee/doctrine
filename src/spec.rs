@@ -532,6 +532,23 @@ fn read_interactions(interactions_path: &Path) -> anyhow::Result<Vec<Interaction
     Ok(doc.edge)
 }
 
+/// Read a spec's both tiers in one call — parse `spec-NNN.toml` into a [`Spec`]
+/// and read `spec-NNN.md` as its prose body. Mirrors [`read_slice`]'s `(parsed,
+/// raw_toml, prose_body)` signature. Errors on a missing file or malformed TOML.
+fn read_spec(subtype: SpecSubtype, root: &Path, id: u32) -> anyhow::Result<(Spec, String, String)> {
+    let name = format!("{id:03}");
+    let dir = root.join(subtype.kind().dir).join(&name);
+    let toml_path = dir.join(format!("{SPEC_STEM}-{name}.toml"));
+    let toml_text = std::fs::read_to_string(&toml_path)
+        .with_context(|| format!("Failed to read {}", toml_path.display()))?;
+    let spec: Spec = toml::from_str(&toml_text)
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+    let md_path = dir.join(format!("{SPEC_STEM}-{name}.md"));
+    let prose_body = std::fs::read_to_string(&md_path)
+        .with_context(|| format!("Failed to read {}", md_path.display()))?;
+    Ok((spec, toml_text, prose_body))
+}
+
 /// A spec's authored outbound relations (SL-046 §5.2/§5.3): the `Meta` lineage
 /// Options `descends_from` → [`RelationLabel::DescendsFrom`] and `parent` →
 /// [`RelationLabel::Parent`] (tech-only, absent on a product → emit nothing), the
@@ -540,24 +557,17 @@ fn read_interactions(interactions_path: &Path) -> anyhow::Result<Vec<Interaction
 /// the edge `target`; the per-edge free-text `type` is a SINGLE relation class here
 /// and re-read from the source at render — C2/D2, never encoded in the label).
 /// Members + interactions read via the existing `read_members`/`read_interactions`
-/// readers; the spec toml itself is parsed inline here because `spec.rs` has no
-/// single `read_spec` reader yet — it is the only edge-authoring kind without one,
-/// so this is the 4th inline `from_str::<Spec>` copy in the module (IMP-037 extracts
-/// the reader and routes all four through it). Ordering: lineage, members,
-/// interactions — each in authored order.
+/// readers; the spec toml itself is read via [`read_spec`] (IMP-037 extraction).
+/// Ordering: lineage, members, interactions — each in authored order.
 pub(crate) fn relation_edges(
     subtype: SpecSubtype,
     root: &Path,
     id: u32,
 ) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
     use crate::relation::{RelationEdge, RelationLabel};
+    let (spec, spec_text, _prose_body) = read_spec(subtype, root, id)?;
     let name = format!("{id:03}");
     let spec_dir = root.join(subtype.kind().dir).join(&name);
-    let spec_toml = spec_dir.join(format!("{SPEC_STEM}-{name}.toml"));
-    let spec_text = std::fs::read_to_string(&spec_toml)
-        .with_context(|| format!("Failed to read {}", spec_toml.display()))?;
-    let spec: Spec = toml::from_str(&spec_text)
-        .with_context(|| format!("Failed to parse {}", spec_toml.display()))?;
 
     let mut edges = Vec::new();
     if let Some(d) = &spec.descends_from {
@@ -922,15 +932,8 @@ pub(crate) fn run_show(
         spec_dir.display()
     );
 
-    let spec_toml = spec_dir.join(format!("{SPEC_STEM}-{name}.toml"));
-    let spec_text = std::fs::read_to_string(&spec_toml)
-        .with_context(|| format!("Failed to read {}", spec_toml.display()))?;
-    let spec: Spec = toml::from_str(&spec_text)
-        .with_context(|| format!("Failed to parse {}", spec_toml.display()))?;
-
-    let prose_path = spec_dir.join(format!("{SPEC_STEM}-{name}.md"));
-    let prose_body = std::fs::read_to_string(&prose_path)
-        .with_context(|| format!("Failed to read {}", prose_path.display()))?;
+    // Read both tiers in one call (IMP-037 — read_spec extraction).
+    let (spec, _spec_text, prose_body) = read_spec(subtype, &root, spec_id)?;
 
     // Resolve members → their requirement entities by canonical FK. Only the
     // membered requirement dirs are touched — no whole-tree scan (EX-2).
@@ -2642,6 +2645,44 @@ parent = \"SPEC-002\"
         );
         let members = read_members(&members_path).unwrap();
         assert!(members.is_empty(), "no partial member row written");
+    }
+
+    // --- PHASE-01: read_spec reader ---
+
+    #[test]
+    fn read_spec_returns_parsed_toml_and_prose_body() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mat = fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        let id = mat.eid.numeric_id().unwrap();
+        let (spec, raw_toml, prose) = read_spec(SpecSubtype::Tech, root, id).unwrap();
+
+        // Parsed fields from TOML.
+        assert_eq!(spec.id, id);
+        assert_eq!(spec.slug, "auth");
+        assert_eq!(spec.title, "Auth");
+        assert_eq!(spec.status, SpecStatus::Draft);
+        assert_eq!(spec.kind, SpecSubtype::Tech);
+
+        // Raw TOML is parse-able (round-trips).
+        assert!(raw_toml.contains("Auth"));
+        assert!(raw_toml.contains("draft"));
+        toml::from_str::<Spec>(&raw_toml).unwrap();
+
+        // Prose body is the scaffolded markdown.
+        assert!(prose.contains("# SPEC-001: Auth"));
+    }
+
+    #[test]
+    fn read_spec_missing_toml_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // Never created the spec — root is empty.
+        let err = read_spec(SpecSubtype::Tech, root, 1).unwrap_err();
+        assert!(
+            err.to_string().contains("Failed to read"),
+            "missing spec errors with 'Failed to read'"
+        );
     }
 
     // --- PHASE-04: the pure render compose fn (VT-1 / VT-3) ---
