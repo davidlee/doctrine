@@ -1,0 +1,41 @@
+memory_uid = "mem_019ece5bae857e02864c4cd5f43ef627"
+memory_key = "mem.pattern.frontend.es5-watchouts"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "PHASE-02 dispatch: watch-outs for later frontend phases"
+summary = "PHASE-02 dispatch: ES5 patterns, edge resolution, kindPrefix derivation for later frontend phases"
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = ["web/map/"]
+globs = []
+commands = []
+tags = ["sl-073"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "94b78cd50a762c1dfa4fdbb72a3ecd5e60eaaefc"
+ref_name = "refs/heads/main"
+checkout_state_id = "344c7865c71e2e783476d2b8882c3f44388e626f4ef929356f2b76fe8dad257e"
+base_commit = "c75781eb96b2399ca55be720df9e6ab3bda2a75f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
