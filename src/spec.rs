@@ -367,6 +367,7 @@ fn render(
     spec: &Spec,
     prose_body: &str,
     members: &[(Member, Requirement)],
+    req_bodies: &[Option<String>],
     interactions: &[Interaction],
 ) -> String {
     let canonical_ref = spec.kind.canonical_id(spec.id);
@@ -443,9 +444,9 @@ fn render(
 
     // Requirements — each member in advisory `order`, its requirement read by FK.
     parts.push("\n## Requirements\n".to_string());
-    let mut ordered: Vec<&(Member, Requirement)> = members.iter().collect();
-    ordered.sort_by_key(|(m, _)| m.order);
-    for (member, req) in ordered {
+    let mut indexed: Vec<(usize, &(Member, Requirement))> = members.iter().enumerate().collect();
+    indexed.sort_by_key(|(_, (m, _))| m.order);
+    for (i, (member, req)) in indexed {
         let req_ref = requirement::canonical_id(req.id);
         parts.push(format!(
             "\n### {} ({req_ref}) — {}\n\n",
@@ -469,6 +470,15 @@ fn render(
             parts.push("\nacceptance criteria:\n".to_string());
             for c in &req.acceptance_criteria {
                 parts.push(format!("  - {c}\n"));
+            }
+        }
+        // Prose body (IMP-058): render the requirement's `.md` body verbatim when
+        // authored; omit when scaffold (no noise).
+        if let Some(body) = req_bodies.get(i).and_then(|b| b.as_ref()) {
+            parts.push("\n".to_string());
+            parts.push(body.clone());
+            if !body.ends_with('\n') {
+                parts.push("\n".to_string());
             }
         }
     }
@@ -935,20 +945,23 @@ pub(crate) fn run_show(
     // Read both tiers in one call (IMP-037 — read_spec extraction).
     let (spec, _spec_text, prose_body) = read_spec(subtype, &root, spec_id)?;
 
-    // Resolve members → their requirement entities by canonical FK. Only the
-    // membered requirement dirs are touched — no whole-tree scan (EX-2).
+    // Resolve members → their requirement entities by canonical FK, reading both
+    // TOML and MD tiers (IMP-058 — requirement prose visible). Only the membered
+    // requirement dirs are touched — no whole-tree scan (EX-2).
     let members = read_members(&spec_dir.join("members.toml"))?;
     let mut resolved = Vec::with_capacity(members.len());
+    let mut req_bodies: Vec<Option<String>> = Vec::with_capacity(members.len());
     for member in members {
-        let req = requirement::load(&root, &member.requirement)?;
+        let (req, prose) = requirement::load_with_prose(&root, &member.requirement)?;
+        req_bodies.push(prose);
         resolved.push((member, req));
     }
 
     let interactions = read_interactions(&spec_dir.join("interactions.toml"))?;
 
     let out = match format {
-        Format::Table => render(&spec, &prose_body, &resolved, &interactions),
-        Format::Json => show_json(&spec, &prose_body, &resolved, &interactions)?,
+        Format::Table => render(&spec, &prose_body, &resolved, &req_bodies, &interactions),
+        Format::Json => show_json(&spec, &prose_body, &resolved, &req_bodies, &interactions)?,
     };
     write!(io::stdout(), "{out}")?;
     Ok(())
@@ -965,21 +978,29 @@ fn show_json(
     spec: &Spec,
     body: &str,
     members: &[(Member, Requirement)],
+    req_bodies: &[Option<String>],
     interactions: &[Interaction],
 ) -> anyhow::Result<String> {
     let member_rows: Vec<serde_json::Value> = members
         .iter()
-        .map(|(m, req)| {
+        .enumerate()
+        .map(|(i, (m, req))| {
+            let mut req_obj = serde_json::json!({
+                "id": requirement::canonical_id(req.id),
+                "slug": req.slug,
+                "title": req.title,
+                "kind": req.kind.as_str(),
+                "status": req.status.as_str(),
+            });
+            if let Some(prose) = req_bodies.get(i).and_then(|b| b.as_ref())
+                && let Some(obj) = req_obj.as_object_mut()
+            {
+                obj.insert("body".to_string(), serde_json::Value::String(prose.clone()));
+            }
             serde_json::json!({
                 "label": m.label,
                 "order": m.order,
-                "requirement": {
-                    "id": requirement::canonical_id(req.id),
-                    "slug": req.slug,
-                    "title": req.title,
-                    "kind": req.kind.as_str(),
-                    "status": req.status.as_str(),
-                },
+                "requirement": req_obj,
             })
         })
         .collect();
@@ -2272,7 +2293,7 @@ mod tests {
         }
         let interactions = read_interactions(&spec_dir.join("interactions.toml")).unwrap();
 
-        let json = show_json(&spec, &body, &resolved, &interactions).unwrap();
+        let json = show_json(&spec, &body, &resolved, &[], &interactions).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(v["kind"], "spec");
         assert_eq!(v["id"], "SPEC-001");
@@ -2746,7 +2767,7 @@ parent = \"SPEC-002\"
                 req(2, "Second", ReqKind::Quality),
             ),
         ];
-        let out = render(&spec, "## Body\n\nverbatim prose\n", &members, &[]);
+        let out = render(&spec, "## Body\n\nverbatim prose\n", &members, &[], &[]);
 
         // structured identity (single non-H1 line) + prose body verbatim.
         assert!(out.starts_with("`SPEC-007` — CLI\n"));
@@ -2794,7 +2815,7 @@ parent = \"SPEC-002\"
         r.acceptance_criteria = vec!["dispatch works".to_string()];
         let members = vec![(member("REQ-001", "FR-001", 1), r)];
 
-        let out = render(&spec, "## Overview\n", &members, &[]);
+        let out = render(&spec, "## Overview\n", &members, &[], &[]);
         // every tech flat field renders (un-deads Spec/SpecStatus/C4Level/Source).
         assert!(out.contains("tags: infra"));
         assert!(out.contains("category: cli"));
@@ -2813,7 +2834,7 @@ parent = \"SPEC-002\"
         let mut r = req(1, "Bare", ReqKind::Functional);
         r.description = None; // no statement (D-P4-1: absent → no line)
         let members = vec![(member("REQ-001", "FR-001", 1), r)];
-        let out = render(&spec, "p\n", &members, &[]);
+        let out = render(&spec, "p\n", &members, &[], &[]);
         assert!(out.contains("### FR-001 (REQ-001) — Bare"));
         assert!(!out.contains("statement"));
     }
@@ -2833,13 +2854,13 @@ parent = \"SPEC-002\"
                 notes: None,
             },
         ];
-        let with = render(&spec, "p\n", &[], &edges);
+        let with = render(&spec, "p\n", &[], &[], &edges);
         assert!(with.contains("## Interactions"));
         assert!(with.contains("- SPEC-002 — uses: calls boot"));
         assert!(with.contains("- SPEC-003 — extends\n"));
 
         // empty (product spec or a tech spec with zero edges) → block omitted.
-        let without = render(&spec, "p\n", &[], &[]);
+        let without = render(&spec, "p\n", &[], &[], &[]);
         assert!(!without.contains("## Interactions"));
     }
 
@@ -2853,7 +2874,7 @@ parent = \"SPEC-002\"
             responsibilities: vec!["route".to_string()],
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[]);
+        let out = render(&spec, "p\n", &[], &[], &[]);
         assert!(out.contains("descends from: PRD-001\n"));
         assert!(out.contains("parent: SPEC-002\n"));
         // no derived children line ever (ADR-004 §3, outbound-only).
@@ -2870,7 +2891,7 @@ parent = \"SPEC-002\"
     fn render_omits_descent_and_parent_when_none_and_for_product() {
         // VT-2: tech with both None → neither line.
         let tech = tech_spec(1);
-        let out = render(&tech, "p\n", &[], &[]);
+        let out = render(&tech, "p\n", &[], &[], &[]);
         assert!(!out.contains("descends from:"));
         assert!(!out.contains("\nparent:"));
 
@@ -2882,7 +2903,7 @@ parent = \"SPEC-002\"
             parent: None,
             ..tech_spec(1)
         };
-        let pout = render(&product, "p\n", &[], &[]);
+        let pout = render(&product, "p\n", &[], &[], &[]);
         assert!(!pout.contains("descends from:"));
         assert!(!pout.contains("parent:"));
     }
@@ -2896,7 +2917,7 @@ parent = \"SPEC-002\"
             parent: Some("PRD-003".to_string()),
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[]);
+        let out = render(&spec, "p\n", &[], &[], &[]);
         assert!(out.contains("product level: capability\n"));
         assert!(out.contains("parent: PRD-003\n"));
         // reciprocal children are derived, never rendered (ADR-004 §3).
@@ -2915,7 +2936,7 @@ parent = \"SPEC-002\"
             c4_level: Some(C4Level::Container),
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[]);
+        let out = render(&spec, "p\n", &[], &[], &[]);
         assert!(!out.contains("c4 level:"));
     }
 

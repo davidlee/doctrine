@@ -294,6 +294,76 @@ pub(crate) fn load(root: &Path, canonical_fk: &str) -> anyhow::Result<Requiremen
     toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
+/// True when a requirement's `.md` body is the scaffold — every heading section
+/// contains only HTML comments and whitespace, no authored prose. Structural, not
+/// byte-exact: strips `<!-- ... -->` comments then checks if only whitespace
+/// remains. An empty body is also scaffold.
+pub(crate) fn is_scaffold_prose(body: &str) -> bool {
+    // Strip HTML comments, then strip markdown heading lines (`# …`),
+    // then check if only whitespace remains. The scaffold template has
+    // headings + comments only; any authored prose survives both strips.
+    let no_comments = strip_html_comments(body);
+    let no_headings: String = no_comments
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n");
+    no_headings.trim().is_empty()
+}
+
+/// Strip `<!-- ... -->` HTML comment blocks from `s`. An unclosed comment is left
+/// in place (treat as non-scaffold content).
+fn strip_html_comments(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("<!--") {
+        out.push_str(rest.get(..start).unwrap_or(""));
+        if let Some(end) = rest
+            .get(start..)
+            .and_then(|t| t.find("-->"))
+            .map(|e| start + e)
+        {
+            rest = rest.get(end + 3..).unwrap_or("");
+        } else {
+            out.push_str(rest);
+            return out;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Read both tiers of a requirement: parse `requirement-NNN.toml` into a
+/// [`Requirement`] and read `requirement-NNN.md` as its prose body.
+/// Returns `None` for the prose when the body is scaffold (headings with only
+/// comment placeholders). Companion to [`load`] for callers that need prose.
+pub(crate) fn load_with_prose(
+    root: &Path,
+    canonical_fk: &str,
+) -> anyhow::Result<(Requirement, Option<String>)> {
+    let id = id_from_fk(canonical_fk)?;
+    let name = format!("{id:03}");
+    let dir = root.join(REQUIREMENT_DIR).join(&name);
+    let toml_path = dir.join(format!("requirement-{name}.toml"));
+    let text = std::fs::read_to_string(&toml_path).with_context(|| {
+        format!(
+            "requirement {canonical_fk} not found at {}",
+            toml_path.display()
+        )
+    })?;
+    let req: Requirement = toml::from_str(&text)
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+    let md_path = dir.join(format!("requirement-{name}.md"));
+    let body = std::fs::read_to_string(&md_path)
+        .with_context(|| format!("Failed to read {}", md_path.display()))?;
+    let prose = if is_scaffold_prose(&body) {
+        None
+    } else {
+        Some(body)
+    };
+    Ok((req, prose))
+}
+
 /// Overwrite the template-seeded `kind` on a reserved requirement (D-1). Edit-
 /// preserving `toml_edit` on `requirement-NNN.toml`, mirroring
 /// `adr::set_adr_status`: parse → mutate in place → write, so comments / unknown
@@ -828,5 +898,69 @@ future_key = \"survives\"
         status_round_trips(CoverageStatus::Verified, "verified");
         status_round_trips(CoverageStatus::Failed, "failed");
         status_round_trips(CoverageStatus::Blocked, "blocked");
+    }
+
+    // --- PHASE-02: is_scaffold_prose + load_with_prose ---
+
+    #[test]
+    fn scaffold_prose_is_detected_for_pure_template() {
+        // The scaffold template: headings + HTML comments only.
+        let body = "# REQ-001: Route\n\n## Statement\n\n<!-- The requirement in full: what must hold, stated testably. -->\n\n## Rationale\n\n<!-- Why it must hold — the force behind it, not the implementation. -->\n";
+        assert!(is_scaffold_prose(body));
+    }
+
+    #[test]
+    fn authored_prose_is_not_scaffold() {
+        // Authored body with real text.
+        let body = "# REQ-001: Route\n\n## Statement\n\nThe system MUST route subcommands.\n\n## Rationale\n\n<!-- Why it must hold. -->\n";
+        assert!(!is_scaffold_prose(body));
+    }
+
+    #[test]
+    fn empty_body_is_scaffold() {
+        assert!(is_scaffold_prose(""));
+    }
+
+    #[test]
+    fn whitespace_only_body_is_scaffold() {
+        assert!(is_scaffold_prose("  \n\n  "));
+    }
+
+    #[test]
+    fn load_with_prose_returns_some_for_authored_body() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // Reserve a requirement (writes both .toml and .md scaffold).
+        let mat = reserve(root, "auth", "Auth", "2026-06-16").unwrap();
+        let id = mat.eid.numeric_id().unwrap();
+        let fk = canonical_id(id);
+        // Write authored prose into the .md file.
+        let md_path = root
+            .join(".doctrine/requirement")
+            .join(format!("{id:03}"))
+            .join(format!("requirement-{id:03}.md"));
+        let body =
+            "# REQ-001: Auth\n\n## Statement\n\nMust authenticate.\n\n## Rationale\n\nSecurity.\n";
+        fs::write(&md_path, body).unwrap();
+
+        let (req, prose) = load_with_prose(root, &fk).unwrap();
+        assert_eq!(req.title, "Auth");
+        assert!(prose.is_some());
+        assert!(prose.unwrap().contains("Must authenticate"));
+    }
+
+    #[test]
+    fn load_with_prose_returns_none_for_scaffold_body() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mat = reserve(root, "route", "Route", "2026-06-16").unwrap();
+        let id = mat.eid.numeric_id().unwrap();
+        let fk = canonical_id(id);
+
+        let (_req, prose) = load_with_prose(root, &fk).unwrap();
+        assert!(
+            prose.is_none(),
+            "freshly reserved requirement has scaffold prose"
+        );
     }
 }
