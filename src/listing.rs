@@ -488,6 +488,22 @@ pub(crate) fn select_columns<'a, R>(
     default: &[&str],
     requested: Option<&[String]>,
 ) -> anyhow::Result<Vec<&'a Column<R>>> {
+    debug_assert!(
+        requested.is_some()
+            || default
+                .iter()
+                .all(|d: &&str| available.iter().any(|c| c.name == *d)),
+        "default column `{}` not in available set [{}]",
+        default
+            .iter()
+            .find(|d| !available.iter().any(|c| c.name == **d))
+            .unwrap_or(&"?"),
+        available
+            .iter()
+            .map(|c| c.name)
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     let pick = |name: &str| {
         available.iter().find(|c| c.name == name).ok_or_else(|| {
             let known = available
@@ -1463,6 +1479,22 @@ mod tests {
         assert!(err.contains("unknown column `id`"), "got: {err}");
         // The empty default over an empty available set is the benign case.
         assert!(select_columns(&none, &[], None).unwrap().is_empty());
+    }
+
+    /// IMP-038: debug_assert! fires when a default column name is not in the
+    /// available set. The assert is only active in debug builds (#[cfg(debug_assertions)]).
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "default column")]
+    fn select_columns_panics_on_invalid_default_in_debug() {
+        let _ = select_columns(&CROW_COLUMNS, &["bogus"], None);
+    }
+
+    /// IMP-038: debug_assert! does NOT fire when all defaults are valid.
+    #[test]
+    fn select_columns_valid_defaults_pass() {
+        let result = select_columns(&CROW_COLUMNS, &["id"], None);
+        assert!(result.is_ok());
     }
 
     // -- RenderOpts --------------------------------------------------------
