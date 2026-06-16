@@ -1,0 +1,40 @@
+memory_uid = "mem_019ecf6479a97c91af3686485ac0f34b"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "SL-076 PHASE-01 worker findings: visibility surprises"
+summary = "SegmentKind promotion + dead_code gates + CM-REQ arm merge"
+created = "2026-06-16"
+updated = "2026-06-16"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["sl-076"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a3ec1b34ab12c7eca83c552ae6e7cbdbcd9e8c75"
+ref_name = "refs/heads/main"
+checkout_state_id = "be5872c25b909c9f31b93509ec8a81343dedb17f150dcbcbbde26870b2b2234d"
+base_commit = "680faa69b837bb1c654de35adc2002e748765812"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
