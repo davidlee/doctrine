@@ -3,13 +3,13 @@ version = 1
 
 id = 11
 slug = "structured-vhva-test-plan-findings-record-investigate-overlap-with-rv-structured-findings-turn"
-title = "Structured VH/VA test plan + findings record: investigate overlap with RV (structured findings, turn-based/adversarial), REC (evidence_refs, status_deltas), and phase sheets (disposable Findings section) before committing to a new kind — VH/VA checks currently have no durable structured home for plan or results"
+title = "Investigate VH/VA structured plan overlap with RV, REC, and phase sheets"
 kind = "idea"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-14"
-updated = "2026-06-15"
-tags = ["area:coverage", "area:review", "exploration"]
+updated = "2026-06-16"
+tags = ["area:coverage", "area:review"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with

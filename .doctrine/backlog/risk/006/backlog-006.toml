@@ -8,8 +8,8 @@ kind = "risk"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-11"
-updated = "2026-06-15"
-tags = ["area:coverage", "perf"]
+updated = "2026-06-16"
+tags = ["area:coverage"]
 
 [facet]                         # risk only — every field typed; seeded empty
 likelihood = ""                 # low | medium | high | critical

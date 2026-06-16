@@ -3,7 +3,7 @@ version = 1
 
 id = 31
 slug = "lightweight-patch-or-update-artifact"
-title = "lightweight patch or update artifact"
+title = "Lightweight patch/update entity kind for incremental edits"
 kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
