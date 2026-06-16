@@ -8,10 +8,10 @@ kind = "chore"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-11"
-updated = "2026-06-15"
-tags = ["area:review", "correctness"]
+updated = "2026-06-16"
+tags = ["area:review"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
 needs    = []                   # item→item hard prerequisite
-after    = []                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "IMP-025", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }

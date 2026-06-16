@@ -3,7 +3,7 @@ version = 1
 
 id = 57
 slug = "requirement-authoringreview-skill-agents-leave-requirements-as-bare-scaffolds-54-have-no"
-title = "Requirement authoring/review skill: agents leave requirements as bare scaffolds (54% have no description or acceptance criteria, 100% have untouched .md templates) — create a dedicated /requirement skill for enriching and reviewing requirement entities after"
+title = "Requirement authoring/review skill — enrich bare scaffold requirements"
 kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place

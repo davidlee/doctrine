@@ -3,7 +3,7 @@ version = 1
 
 id = 7
 slug = "inspect-inbound-sort-is-lexical-on-canonical-ref-strings-not-numeric-sl-1000-sorts-before-sl-999-at-id1000-relation-graphrs-permutation-invariance-test-only-covers-single-digits"
-title = "inspect inbound sort is lexical on canonical-ref strings, not numeric: SL-1000 sorts before SL-999 at id>=1000 (relation_graph.rs); permutation-invariance test only covers single digits"
+title = "Inbound relation sort is lexical not numeric — SL-1000 sorts before SL-999 at id≥1000"
 kind = "risk"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place

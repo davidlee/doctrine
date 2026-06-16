@@ -3,7 +3,7 @@ version = 1
 
 id = 2
 slug = "durable-intra-file-region-reference-primitive-anchor-a-code-region-without-rot-prone-line-numbers-content-hash-of-span-symbol-path-serves-rv-warm-cache-domain-map-sl-040-t-c-and-review-citations-generally"
-title = "Durable intra-file region reference primitive — anchor a code region without rot-prone line numbers (content-hash-of-span / symbol path); serves RV warm-cache domain_map (SL-040 T-c) and review citations generally"
+title = "Durable intra-file region reference primitive (content-hash-of-span)"
 kind = "idea"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
@@ -13,5 +13,5 @@ tags = ["area:memory", "area:review"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
 needs    = []                   # item→item hard prerequisite
-after    = []                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "IMP-025", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
