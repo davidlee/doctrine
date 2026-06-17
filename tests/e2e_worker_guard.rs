@@ -95,9 +95,6 @@ fn stderr(out: &Output) -> String {
 // message).
 const WRITE_VERBS: &[(&[&str], &str)] = &[
     (&["install"], "install"),
-    (&["claude", "install"], "claude install"),
-    // The hidden deprecated alias shares the `claude install` refusal label.
-    (&["skills", "install"], "claude install"),
     (&["slice", "new", "x"], "slice new"),
     (
         &["memory", "record", "t", "--type", "concept"],
@@ -219,13 +216,12 @@ fn marker_in_linked_worktree_refuses_writes_env_unset() {
     }
 }
 
-// VT-5 (SL-056 PHASE-11): `claude install` AND its hidden `skills install` alias
-// are both worker-mode writes — refused from BOTH a marked linked-worktree fork
-// AND an env-set process. Drives the real write seam (the spawned `run()`), and
-// asserts the refusal HAPPENED (nonzero exit + the `claude install` verb named),
-// not merely that the pure `write_class` returned a label.
+// VT-5 (SL-088 PHASE-01): the consolidated `install` verb is a worker-mode write —
+// refused from BOTH a marked linked-worktree fork AND an env-set process.
+// Drives the real write seam (the spawned `run()`), and asserts the refusal
+// HAPPENED (nonzero exit + the `install` verb named).
 #[test]
-fn claude_install_and_skills_alias_refuse_in_worker_mode() {
+fn install_refuses_in_worker_mode() {
     let src = tmp();
     init_repo(src.path());
     let base = git(src.path(), &["rev-parse", "HEAD"]);
@@ -249,42 +245,39 @@ fn claude_install_and_skills_alias_refuse_in_worker_mode() {
     std::fs::write(marker_dir.join("worker"), b"").unwrap();
 
     let env_cwd = tmp();
-    for entry in [
-        ["claude", "install"].as_slice(),
-        ["skills", "install"].as_slice(),
-    ] {
-        // Marker leg (env UNSET, in the linked fork).
-        let out = run_no_env(&fork_dir, entry);
-        let err = stderr(&out);
-        assert!(
-            !out.status.success(),
-            "{entry:?} must refuse via the marker; stderr: {err}"
-        );
-        assert!(
-            err.contains("`claude install`"),
-            "{entry:?} marker refusal names the `claude install` verb; stderr: {err}"
-        );
-        assert!(
-            err.contains("signal: marker"),
-            "{entry:?} refuses with signal: marker; stderr: {err}"
-        );
+    let entry: &[&str] = &["install"];
 
-        // Env leg (DOCTRINE_WORKER set, on a non-linked tree).
-        let out = run_worker(env_cwd.path(), entry);
-        let err = stderr(&out);
-        assert!(
-            !out.status.success(),
-            "{entry:?} must refuse via the env leg; stderr: {err}"
-        );
-        assert!(
-            err.contains("`claude install`"),
-            "{entry:?} env refusal names the `claude install` verb; stderr: {err}"
-        );
-        assert!(
-            err.contains(DUAL_CAUSE),
-            "{entry:?} env-leg refusal carries the named dual-cause; stderr: {err}"
-        );
-    }
+    // Marker leg (env UNSET, in the linked fork).
+    let out = run_no_env(&fork_dir, entry);
+    let err = stderr(&out);
+    assert!(
+        !out.status.success(),
+        "install must refuse via the marker; stderr: {err}"
+    );
+    assert!(
+        err.contains("`install`"),
+        "marker refusal names the `install` verb; stderr: {err}"
+    );
+    assert!(
+        err.contains("signal: marker"),
+        "refuses with signal: marker; stderr: {err}"
+    );
+
+    // Env leg (DOCTRINE_WORKER set, on a non-linked tree).
+    let out = run_worker(env_cwd.path(), entry);
+    let err = stderr(&out);
+    assert!(
+        !out.status.success(),
+        "install must refuse via the env leg; stderr: {err}"
+    );
+    assert!(
+        err.contains("`install`"),
+        "env refusal names the `install` verb; stderr: {err}"
+    );
+    assert!(
+        err.contains(DUAL_CAUSE),
+        "env-leg refusal carries the named dual-cause; stderr: {err}"
+    );
 }
 
 // VT-1(c): a linked worktree WITHOUT a marker, no env (solo) ⇒ writes allowed

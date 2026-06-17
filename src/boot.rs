@@ -603,6 +603,10 @@ fn is_doctrine_sync_command(cmd: &str) -> bool {
 /// The `SubagentStart` stamp hook command for `exec`:
 /// `<exec> worktree marker --stamp-subagent` (SL-056 PHASE-10). Multi-arg, so
 /// ownership matches by suffix-strip (see `is_doctrine_stamp_command`).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "PHASE-02 forward-step dispatch")
+)]
 fn stamp_subagent_command(exec: &Path) -> String {
     format!("{} worktree marker --stamp-subagent", exec.display())
 }
@@ -612,6 +616,10 @@ fn stamp_subagent_command(exec: &Path) -> String {
 /// remaining program's file name is `doctrine`. Disjoint from the boot/sync
 /// predicates (neither owns the other's command), so the `SubagentStart` entry
 /// never clobbers the `SessionStart` ones.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "PHASE-02 forward-step dispatch")
+)]
 fn is_doctrine_stamp_command(cmd: &str) -> bool {
     let Some(program) = cmd.trim().strip_suffix(" worktree marker --stamp-subagent") else {
         return false;
@@ -658,6 +666,10 @@ impl HookSpec {
     /// `SubagentStart` entry, matcher-scoped to the dispatch-worker agent type.
     /// The matcher is sourced from `crate::worktree::DISPATCH_WORKER_AGENT_TYPE`,
     /// never re-spelled (a drift test pins the equality).
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "PHASE-02 forward-step dispatch")
+    )]
     pub(crate) fn stamp_subagent(exec: &Path) -> Self {
         Self {
             command: stamp_subagent_command(exec),

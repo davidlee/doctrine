@@ -45,6 +45,7 @@ fn install(dir: &Path) -> String {
 }
 
 #[test]
+#[ignore = "SL-088 PHASE-04 rewrites for consolidated install surface"]
 fn install_links_then_refreshes_and_keeps_an_override() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();

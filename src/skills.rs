@@ -3,6 +3,12 @@
     clippy::same_name_method,
     reason = "rust-embed derive generates conflicting method names"
 )]
+// PHASE-01 temporary: run_install and its call chain are dead because
+// Command::Claude was removed. PHASE-02 re-wires via install::run().
+#![cfg_attr(
+    not(test),
+    expect(dead_code, reason = "PHASE-02 re-wires run_install call chain")
+)]
 
 //! `doctrine skills` — list and install agent skills.
 //!

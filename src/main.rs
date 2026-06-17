@@ -222,6 +222,27 @@ enum Command {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
 
+        /// Target agent(s); repeatable. Default: auto-detect.
+        #[arg(short = 'a', long)]
+        agent: Vec<String>,
+
+        /// Skill id(s) to install; repeatable. Default: all.
+        #[arg(short = 's', long)]
+        skill: Vec<String>,
+
+        /// Domain(s) to install; repeatable. Default: all.
+        #[arg(short = 'd', long)]
+        domain: Vec<String>,
+
+        /// Install only the memory skills (record-memory + retrieve-memory).
+        /// Mutually exclusive with --skill / --domain.
+        #[arg(long, conflicts_with_all = ["skill", "domain"])]
+        only_memory: bool,
+
+        /// Install to the user directory instead of the project.
+        #[arg(short = 'g', long)]
+        global: bool,
+
         /// Print the plan and exit without making changes.
         #[arg(long)]
         dry_run: bool,
@@ -239,14 +260,8 @@ enum Command {
         command: CatalogCommand,
     },
 
-    /// Manage the Claude harness surface (skills, agents, hooks).
-    Claude {
-        #[command(subcommand)]
-        command: ClaudeCommand,
-    },
-
-    /// Deprecated alias for `claude` (skills install). Hidden — kept so existing
-    /// `skills install` invocations do not flag-day break (SR-3).
+    /// List available skills and their install status. Hidden deprecated alias
+    /// — the consolidated `install` surface is the primary path.
     #[command(hide = true)]
     Skills {
         #[command(subcommand)]
@@ -2511,83 +2526,6 @@ enum SkillsCommand {
         #[arg(long)]
         installed: bool,
     },
-
-    /// Install skills into agents.
-    Install {
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-
-        /// Target agent(s); repeatable. Default: auto-detect claude.
-        #[arg(short = 'a', long)]
-        agent: Vec<String>,
-
-        /// Skill id(s) to install; repeatable. Default: all.
-        #[arg(short = 's', long)]
-        skill: Vec<String>,
-
-        /// Domain(s) to install; repeatable. Default: all.
-        #[arg(short = 'd', long)]
-        domain: Vec<String>,
-
-        /// Install only the memory skills (record-memory + retrieve-memory).
-        /// Mutually exclusive with --skill / --domain.
-        #[arg(long, conflicts_with_all = ["skill", "domain"])]
-        only_memory: bool,
-
-        /// Install to the user directory instead of the project.
-        #[arg(short = 'g', long)]
-        global: bool,
-
-        /// Print the plan and exit without making changes.
-        #[arg(long)]
-        dry_run: bool,
-
-        /// Skip the confirmation prompt.
-        #[arg(short = 'y', long)]
-        yes: bool,
-    },
-}
-
-#[derive(Subcommand)]
-enum ClaudeCommand {
-    /// Install the doctrine Claude surface: skills, the dispatch-worker agent,
-    /// and the `SubagentStart` hook (SL-056). The same handler as the deprecated
-    /// `skills install` alias.
-    Install {
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-
-        /// Target agent(s); repeatable. Default: auto-detect claude.
-        #[arg(short = 'a', long)]
-        agent: Vec<String>,
-
-        /// Skill id(s) to install; repeatable. Default: all.
-        #[arg(short = 's', long)]
-        skill: Vec<String>,
-
-        /// Domain(s) to install; repeatable. Default: all.
-        #[arg(short = 'd', long)]
-        domain: Vec<String>,
-
-        /// Install only the memory skills (record-memory + retrieve-memory).
-        /// Mutually exclusive with --skill / --domain.
-        #[arg(long, conflicts_with_all = ["skill", "domain"])]
-        only_memory: bool,
-
-        /// Install to the user directory instead of the project.
-        #[arg(short = 'g', long)]
-        global: bool,
-
-        /// Print the plan and exit without making changes.
-        #[arg(long)]
-        dry_run: bool,
-
-        /// Skip the confirmation prompt.
-        #[arg(short = 'y', long)]
-        yes: bool,
-    },
 }
 
 /// Mutation classification for the worker-mode guard (ADR-006 D2a). `Write`
@@ -2619,16 +2557,8 @@ fn write_class(cmd: &Command) -> WriteClass {
     use WriteClass::{Hookmint, MarkerClear, Orchestrator, Read, Write};
     match cmd {
         Command::Install { .. } => Write("install"),
-        Command::Claude { command } => match command {
-            // Reconfigures this harness's skills/agents/hooks — a worker must not
-            // (charge-5; ADR-006 D2 applied uniformly, not a verb carve-out).
-            ClaudeCommand::Install { .. } => Write("claude install"),
-        },
         Command::Skills { command } => match command {
             SkillsCommand::List { .. } => Read,
-            // The hidden deprecated alias dispatches the SAME handler as
-            // `claude install`, so it carries the SAME refusal label.
-            SkillsCommand::Install { .. } => Write("claude install"),
         },
         Command::Map { .. } => Write("map"),
         Command::ConceptMap { command } => match command {
@@ -2967,56 +2897,31 @@ fn main() -> anyhow::Result<()> {
     worker_guard(&cli.command)?;
 
     match cli.command {
-        Command::Install { path, dry_run, yes } => install::run(path, dry_run, yes),
-        Command::Claude { command } => match command {
-            ClaudeCommand::Install {
-                path,
-                agent,
-                skill,
-                domain,
+        Command::Install {
+            path,
+            agent,
+            skill,
+            domain,
+            only_memory,
+            global,
+            dry_run,
+            yes,
+        } => install::run(
+            path,
+            &install::InstallArgs {
+                agents: &agent,
+                skills: &skill,
+                domains: &domain,
                 only_memory,
                 global,
                 dry_run,
                 yes,
-            } => skills::run_install(
-                path,
-                &skills::InstallArgs {
-                    agents: &agent,
-                    skills: &skill,
-                    domains: &domain,
-                    only_memory,
-                    global,
-                    dry_run,
-                    yes,
-                },
-            ),
-        },
+            },
+        ),
         Command::Skills { command } => match command {
             SkillsCommand::List { agent, installed } => {
                 skills::run_list(agent.as_deref(), installed)
             }
-            // The deprecated alias routes into the SAME handler as `claude install`.
-            SkillsCommand::Install {
-                path,
-                agent,
-                skill,
-                domain,
-                only_memory,
-                global,
-                dry_run,
-                yes,
-            } => skills::run_install(
-                path,
-                &skills::InstallArgs {
-                    agents: &agent,
-                    skills: &skill,
-                    domains: &domain,
-                    only_memory,
-                    global,
-                    dry_run,
-                    yes,
-                },
-            ),
         },
         Command::ConceptMap { command } => match command {
             ConceptMapCommand::New { title, slug, path } => concept_map::run_new(path, title, slug),
@@ -4279,8 +4184,16 @@ mod tests {
 
     #[test]
     fn only_memory_alone_parses() {
-        let r = Cli::try_parse_from(["doctrine", "skills", "install", "--only-memory"]);
+        // The consolidated install surface (SL-088); --only-memory moved from
+        // the removed `skills install` to `install`.
+        let r = Cli::try_parse_from(["doctrine", "install", "--only-memory"]);
         assert!(r.is_ok());
+    }
+
+    #[test]
+    fn skills_install_is_gone() {
+        let r = Cli::try_parse_from(["doctrine", "skills", "install"]);
+        assert!(r.is_err());
     }
 
     /// CHR-008 (SL-078): `run_supersede` writes NEW then OLD — a crash between
@@ -4382,6 +4295,11 @@ mod write_class_tests {
         assert_eq!(
             cls(Command::Install {
                 path: None,
+                agent: Vec::new(),
+                skill: Vec::new(),
+                domain: Vec::new(),
+                only_memory: false,
+                global: false,
                 dry_run: false,
                 yes: false
             }),
@@ -4390,7 +4308,7 @@ mod write_class_tests {
     }
 
     #[test]
-    fn skills_split() {
+    fn skills_list_is_read() {
         assert_eq!(
             cls(Command::Skills {
                 command: SkillsCommand::List {
@@ -4399,42 +4317,6 @@ mod write_class_tests {
                 }
             }),
             None
-        );
-        // The hidden `skills install` alias carries the SAME label as the
-        // canonical `claude install` (SR-3 — one handler, one refusal label).
-        assert_eq!(
-            cls(Command::Skills {
-                command: SkillsCommand::Install {
-                    path: None,
-                    agent: Vec::new(),
-                    skill: Vec::new(),
-                    domain: Vec::new(),
-                    only_memory: false,
-                    global: false,
-                    dry_run: false,
-                    yes: false,
-                }
-            }),
-            Some("claude install")
-        );
-    }
-
-    #[test]
-    fn claude_install_is_write() {
-        assert_eq!(
-            cls(Command::Claude {
-                command: ClaudeCommand::Install {
-                    path: None,
-                    agent: Vec::new(),
-                    skill: Vec::new(),
-                    domain: Vec::new(),
-                    only_memory: false,
-                    global: false,
-                    dry_run: false,
-                    yes: false,
-                }
-            }),
-            Some("claude install")
         );
     }
 
