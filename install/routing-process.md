@@ -15,7 +15,8 @@ When unsure, route to the stricter skill. No code without an approved plan.
 | Design locked, no plan | `/plan` |
 | Expanding the next phase just before executing | `/phase-plan` |
 | Plan approved, phase active | `/execute` |
-| Implementation done — evidence / reconciliation | `/audit` → `/close` |
+| Implementation done — evidence / reconciliation | `/audit` → `/reconcile` → `/close` |
+| Slice exists, audit RV resolved, reconciliation brief written | `/reconcile` |
 
 Mid-flight, any stage: unanticipated obstacle / tradeoff / emergent complexity →
 `/consult` (don't improvise past it). Durable gotcha / pattern → `/record-memory`.
