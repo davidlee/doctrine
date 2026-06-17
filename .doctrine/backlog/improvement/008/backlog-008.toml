@@ -5,10 +5,10 @@ id = 8
 slug = "reconcile-skill-seam-disentangle"
 title = "Reconcile skill + audit/reconcile seam disentanglement"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-17"
 tags = ["area:review", "area:skills"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
