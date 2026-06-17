@@ -173,7 +173,7 @@ fn notes_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
 // ---------------------------------------------------------------------------
 
 /// Read and validate a slice's authored `plan.toml`.
-fn read_plan(slice_root: &Path, id: u32) -> anyhow::Result<Plan> {
+pub(crate) fn read_plan(slice_root: &Path, id: u32) -> anyhow::Result<Plan> {
     let name = format!("{id:03}");
     let path = slice_root.join(&name).join("plan.toml");
     let text = fs::read_to_string(&path)

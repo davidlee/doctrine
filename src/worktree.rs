@@ -98,6 +98,12 @@ pub(crate) const WITHHELD: &[Withhold] = &[
 )]
 pub(crate) const DERIVED_RUNTIME: &[&str] = &[".doctrine/skills/*", ".doctrine/agents/*"];
 
+/// The outcome of a successful coordination setup (SL-085, design D9).
+pub(crate) struct CoordOutcome {
+    /// Abbreviated commit hash of the dispatch branch tip after setup.
+    pub dispatch_tip: String,
+}
+
 /// Match options shared by every glob comparison: `**` is the *only* way to cross
 /// a path separator, so a single `*` matches one component (gitignore-ish, and
 /// what keeps `*` from silently spanning `.doctrine/state/...`).
@@ -1664,30 +1670,10 @@ pub(crate) fn run_fork(
     Ok(())
 }
 
-/// `doctrine worktree coordinate --slice <n> --dir <path>` — create or resume the
-/// dispatch coordination worktree for a slice (SL-064 §2). MARKERLESS: the
-/// coordination tree IS the orchestrator (worker-mode OFF, must write), so it
-/// stamps NO worker marker — its write permission rests on marker-absence (D2a),
-/// never on a positive coordination marker (that is OQ-D / IMP-065, deferred).
-///
-/// Gather → pure-classify → act, patterned after [`run_fork`]:
-/// - gather: does `dispatch/<slice>` exist; does it have a live linked worktree.
-/// - [`classify_coordinate`] → Create | Resume | Err(LiveWorktree) (EX-3/EX-5).
-/// - Create: `git worktree add -b dispatch/<slice> <dir> <trunk>` (off the
-///   resolved integration base).
-/// - Resume: `git worktree add <dir> dispatch/<slice>` — reattach the SAME
-///   branch (never a second coordination branch).
-///
-/// Then BOTH paths provision via the sole copier (EX-2) and regenerate the
-/// runtime phase sheets from committed `plan.toml` via [`crate::slice::run_phases`].
-/// The coordination/runtime tier is NOT copied — provision withholds it and the
-/// orchestrator regenerates it. Post-add failure compensates: Create rolls back
-/// the branch too, Resume keeps the pre-existing branch.
-///
-/// Orchestrator-classed; refused under worker-mode by `worker_guard` (EX-4) — the
-/// marker-present / `DOCTRINE_WORKER` refusals ride the SAME guard as `fork`.
-pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> anyhow::Result<()> {
-    let repo = root::find(path, &root::default_markers())?;
+/// Pure-ish core: form the dispatch coordination worktree, provision it, and
+/// regenerate the runtime phase sheets. Returns the abbreviated dispatch tip.
+/// No stdout/stderr — I/O lives in [`run_coordinate`].
+pub(crate) fn coordinate(root: &Path, slice: u32, dir: &Path) -> anyhow::Result<CoordOutcome> {
     let branch = format!("dispatch/{slice:03}");
 
     // --- Step 1 refusal (pre-add: leave NO worktree) ---
@@ -1697,7 +1683,7 @@ pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> a
 
     // --- gather: branch existence + its live linked worktree (if any) ---
     let exists = git::git_opt(
-        &repo,
+        root,
         &[
             "rev-parse",
             "--verify",
@@ -1706,7 +1692,7 @@ pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> a
         ],
     )?
     .is_some();
-    let live_worktree = gather_fork_worktree(&repo, &branch)?;
+    let live_worktree = gather_fork_worktree(root, &branch)?;
 
     // --- pure classify (create / resume / refuse) ---
     let action = match classify_coordinate(exists, live_worktree.is_some()) {
@@ -1725,13 +1711,13 @@ pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> a
     // --- act: add the worktree (create off trunk vs resume the same branch) ---
     match action {
         CoordAction::Create => {
-            let trunk = git::trunk_commit(&repo)?.ok_or_else(|| {
+            let trunk = git::trunk_commit(root)?.ok_or_else(|| {
                 anyhow::anyhow!(
                     "coordinate-refused: no trunk ref resolves (set DOCTRINE_TRUNK_REF)"
                 )
             })?;
             git::git_text(
-                &repo,
+                root,
                 &[
                     "worktree",
                     "add",
@@ -1744,7 +1730,7 @@ pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> a
             .with_context(|| format!("git worktree add -b {branch} {} {trunk}", dir.display()))?;
         }
         CoordAction::Resume => {
-            git::git_text(&repo, &["worktree", "add", &dir.to_string_lossy(), &branch])
+            git::git_text(root, &["worktree", "add", &dir.to_string_lossy(), &branch])
                 .with_context(|| format!("git worktree add {} {branch}", dir.display()))?;
         }
     }
@@ -1752,7 +1738,7 @@ pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> a
     // From here on, any failure compensates. Create rolls back the branch it
     // minted; Resume KEEPS the pre-existing branch (only its worktree is removed).
     let finish = (|| -> anyhow::Result<()> {
-        run_provision(Some(repo.clone()), dir).context("provision coordination worktree")?;
+        run_provision(Some(root.to_path_buf()), dir).context("provision coordination worktree")?;
         crate::slice::run_phases(Some(dir.to_path_buf()), slice, false)
             .context("regenerate runtime phase sheets")?;
         Ok(())
@@ -1760,8 +1746,8 @@ pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> a
 
     if let Err(cause) = finish {
         let debris = match action {
-            CoordAction::Create => rollback_fork(&repo, &branch, dir),
-            CoordAction::Resume => remove_worktree_dir(&repo, dir),
+            CoordAction::Create => rollback_fork(root, &branch, dir),
+            CoordAction::Resume => remove_worktree_dir(root, dir),
         };
         if debris.is_empty() {
             return Err(cause.context(format!(
@@ -1775,14 +1761,52 @@ pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> a
         );
     }
 
+    // Resolve the dispatch branch tip (abbreviated commit hash).
+    let dispatch_tip = git::git_text(
+        root,
+        &["rev-parse", "--short", &format!("refs/heads/{branch}")],
+    )?;
+
+    Ok(CoordOutcome { dispatch_tip })
+}
+
+/// `doctrine worktree coordinate --slice <n> --dir <path>` — create or resume the
+/// dispatch coordination worktree for a slice (SL-064 §2). MARKERLESS: the
+/// coordination tree IS the orchestrator (worker-mode OFF, must write), so it
+/// stamps NO worker marker — its write permission rests on marker-absence (D2a),
+/// never on a positive coordination marker (that is OQ-D / IMP-065, deferred).
+///
+/// Thin wrapper over [`coordinate`]: resolves the repo root, calls into the
+/// pure-ish core, then emits the fork-style env contract on stdout and human
+/// status on stderr. The existing integration tests (`e2e_worktree_coordinate`)
+/// must stay green — the I/O surface is unchanged.
+///
+/// Orchestrator-classed; refused under worker-mode by `worker_guard` (EX-4) — the
+/// marker-present / `DOCTRINE_WORKER` refusals ride the SAME guard as `fork`.
+pub(crate) fn run_coordinate(path: Option<PathBuf>, slice: u32, dir: &Path) -> anyhow::Result<()> {
+    let repo = root::find(path, &root::default_markers())?;
+    let branch = format!("dispatch/{slice:03}");
+
+    // Pre-probe: was the branch already there? Drives the stderr verb (create vs
+    // resume) without leaking classification into the extracted core.
+    let branch_existed = git::git_opt(
+        &repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}^{{commit}}"),
+        ],
+    )?
+    .is_some();
+
+    let _outcome = coordinate(&repo, slice, dir)?;
+
     // --- env contract on stdout; human status on stderr (mirrors `fork`) ---
     for (key, value) in project_env_contract(dir, &branch) {
         writeln!(io::stdout(), "{key}={value}")?;
     }
-    let verb = match action {
-        CoordAction::Create => "created",
-        CoordAction::Resume => "resumed",
-    };
+    let verb = if branch_existed { "resumed" } else { "created" };
     writeln!(
         io::stderr(),
         "coordination worktree {verb}: {branch} → {} (markerless)",
