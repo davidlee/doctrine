@@ -1,0 +1,115 @@
+# Implementation plan for SL-084 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-084"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Create pi dispatch-worker agent definition"
+objective = "Author `.pi/agents/dispatch-worker.md` — pi equivalent of `.claude/agents/dispatch-worker.md` with pi-native tool names, worker contract, and DOCTRINE_WORKER prefix instruction. Model field direct (project-local default), no installer templating."
+entrance_criteria = [
+  { id = "EN-1", text = "Design D5 locked; agent-def contract shape agreed" },
+  { id = "EN-2", text = "Existing `.pi/agents/worker.md` available as tool-name reference" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`.pi/agents/dispatch-worker.md` exists with valid YAML frontmatter (name, description, tools)" },
+  { id = "EX-2", text = "Worker contract present: source-only mutation, single non-merge commit, verify-before-commit, structured report, no `.doctrine/` writes" },
+  { id = "EX-3", text = "DOCTRINE_WORKER prefix instruction present (not persistent export)" },
+  { id = "EX-4", text = "Model field present with project-local default" },
+  { id = "EX-5", text = "Tool set is `read, edit, write, bash` — matches design D5 rationale" },
+]
+verification = [
+  { id = "VA-1", expects = "Agent-def YAML is valid (frontmatter parses); description matches design D5" },
+  { id = "VA-2", expects = "Contract prose covers all 5 worker obligations (source-only, file-set, verify, single-commit, structured-report)" },
+  { id = "VT-1", expects = "Pi `subagent` tool can load the agent definition without error" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Update dispatch router skill — three-way harness detection"
+objective = "Update `plugins/doctrine/skills/dispatch/SKILL.md` routing table from binary codex/pi vs claude split to three-way: pi, codex, claude. Add self-belief + env cross-check logic per D2. Env markers: PI_HOME (pi), CLAUDECODE (claude), explicit self-belief only (codex). Unknown harness → refuse, never route. Update the quick-reference table."
+entrance_criteria = [
+  { id = "EN-1", text = "Design D2 locked; detection order and markers agreed" },
+  { id = "EN-2", text = "Existing routing prose in dispatch SKILL.md understood" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Routing table has three rows: pi → /dispatch-subprocess, codex → /dispatch-subprocess, claude → /dispatch-agent" },
+  { id = "EX-2", text = "Detection prose describes: PI_HOME + self-belief for pi, CLAUDECODE + self-belief for claude, self-belief=\"codex\" for codex" },
+  { id = "EX-3", text = "Mismatch/unknown refuses with cause named; no blind spawn" },
+  { id = "EX-4", text = "Quick-reference table updated to reflect three-way routing" },
+  { id = "EX-5", text = "No prose changes to funnel cadence, coordination worktree, drive loop, or conclude steps" },
+]
+verification = [
+  { id = "VA-1", expects = "Skill prose correctly describes three-harness detection with env-marker cross-check" },
+  { id = "VA-2", expects = "Mismatch scenario (self-belief=pi but no PI_HOME) → refusal prose present" },
+  { id = "VA-3", expects = "Unknown harness scenario → refusal prose present, not codex fallback" },
+  { id = "VA-4", expects = "No regressions: funnel cadence, import, R-5 belt, branch-point guard unchanged" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Update dispatch-subprocess skill — harness→spawn table"
+objective = "Add harness→spawn-template table to `plugins/doctrine/skills/dispatch-subprocess/SKILL.md`. Pi row: `subagent(agent=\"dispatch-worker\", task=\"...\", cwd=\"$D\")` with marker-primary identity + DOCTRINE_WORKER prefix self-arm. Codex row: `codex exec` preserved as legacy placeholder with documented untested caveat and no-elimination detection note. Both rows carry gc-after-sync ordering residual. Shared infrastructure (fork, marker, cwd, env contract) stays once."
+entrance_criteria = [
+  { id = "EN-1", text = "Design D1+D3+D6 locked; harness table shape, pi spawn template, extension dependency, residuals agreed" },
+  { id = "EN-2", text = "PHASE-01 complete (dispatch-worker agent-def exists — referenced by name in pi spawn row)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Harness→spawn table present with pi row (subagent) and codex row (codex exec)" },
+  { id = "EX-2", text = "Pi row: spawn mechanism is `subagent(agent=\"dispatch-worker\", task=\"<pre-distilled prompt>\", cwd=\"$D\")`" },
+  { id = "EX-3", text = "Pi row: identity is marker-primary + DOCTRINE_WORKER prefix self-arm; gc-after-sync residual noted" },
+  { id = "EX-4", text = "Pi row: notes include pi-subagents extension requirement, PI_HOME detection" },
+  { id = "EX-5", text = "Codex row: spawn mechanism is `codex exec`; marked as legacy placeholder, untested end-to-end" },
+  { id = "EX-6", text = "Codex row: detection is explicit self-belief (no elimination); env-marker deferred; gc residual noted" },
+  { id = "EX-7", text = "Existing spawn variants (unconfined env -C, confined bwrap) preserved; no regressions" },
+  { id = "EX-8", text = "D3 prose: detect subagent tool in tool list; missing → refuse with pi-subagents install message" },
+]
+verification = [
+  { id = "VA-1", expects = "Table has exactly two rows (pi, codex); claude is in dispatch-agent, not this skill" },
+  { id = "VA-2", expects = "Pi spawn parameter names are correct: `agent`, `task`, `cwd`" },
+  { id = "VA-3", expects = "D3 detection prose: instructs checking tool list for `subagent`; refusal text includes `pi install pi-subagents`" },
+  { id = "VA-4", expects = "Codex prose contains 'legacy placeholder', 'untested end-to-end', 'explicit self-belief'" },
+  { id = "VA-5", expects = "No regressions: fork --worker, marker stamping, import funnel, R-5 belt prose intact" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Verify skills install cleanly — cross-references and lint"
+objective = "Run `doctrine claude install` to install all skills, verify no broken references between dispatch skills, and confirm the installed copies match source. Lint all changed SKILL.md files (YAML frontmatter + prose)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01, PHASE-02, PHASE-03 complete; all skill files authored" },
+  { id = "EN-2", text = "No remaining TODO/placeholder markers in changed files" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine claude install` succeeds; no errors embedding skills" },
+  { id = "EX-2", text = "No broken cross-references: dispatch → dispatch-subprocess, dispatch → dispatch-agent paths resolve" },
+  { id = "EX-3", text = "All SKILL.md files: valid YAML frontmatter, no lint warnings" },
+  { id = "EX-4", text = "Installed `.doctrine/skills/dispatch*` copies match `plugins/doctrine/skills/dispatch*` source" },
+]
+verification = [
+  { id = "VT-1", expects = "`doctrine claude install` exits 0; no stderr errors" },
+  { id = "VA-1", expects = "Skill cross-references (../dispatch-subprocess, ../dispatch-agent) resolve to existing files" },
+  { id = "VA-2", expects = "No residual 'codex/pi' lump, 'elimination', or 'export DOCTRINE_WORKER' in dispatch skills" },
+  { id = "VA-3", expects = "`.pi/agents/dispatch-worker.md` is not installed by `doctrine claude install` (pi-specific, not Claude)" },
+]
+specs             = []
+requirements      = []
