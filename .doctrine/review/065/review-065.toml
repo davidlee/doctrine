@@ -14,73 +14,93 @@ ref   = "SL-073"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Monolithic 861-line file spanning 4+ subsystems with zero modularisation"
 detail = "style.css is 861 lines covering at least five distinct subsystems: (1) base layout variables + grid + sidebar/main (SL-073 original scope), (2) SVG node highlight/hover classes (SL-075), (3) concept-map authoring UI — edit toggle, add-edge form, edge table, rename inputs, diagnostics panel (SL-076), (4) priority/DAG view — zoom layers, needs/after edges, consequence badges (SL-080?), (5) view toggle / actionability (SL-080?). The SL-073 scope doc explicitly says style.css is 'layout: sidebar + main (graph + markdown).' Every subsequent slice has dumped its CSS here instead of creating its own file. There is no comment demarcating ownership boundaries beyond the single 'SL-073 PHASE-01' header. A future agent touching concept-map styles has no way to know what is safe to change — the entire file is a shared mutable namespace. Expected: modular CSS files, one per subsystem or at minimum clear section ownership with import/concatenation boundaries. Observed: one file, flat namespace, cross-slice commingling."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Second :root block redefines/extends custom properties after 710 lines of rules — violates cascade discipline"
 detail = "The canonical :root block (lines 13-63) defines the kind palette and theme tokens. Then at line 775, after ~710 lines of rules that consume those tokens, a second :root block appears redefining priority-specific properties (--priority-actionable-bg, --priority-actionable-fg, --priority-blocked-bg, etc.). This is not a cascade extension — it is a scattered token dump. A reader auditing 'what properties does :root define' must scan the entire file. The second :root block also risks accidental override: if a priority property name collides with a base token, the later block silently wins. Expected: all custom properties defined in a single :root block or imported from a dedicated tokens file. Observed: two :root blocks separated by the bulk of the stylesheet, forcing a full-file scan to audit the design token system."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Undefined custom properties with hardcoded fallback — dead code masking missing design tokens"
 detail = "The concept-map section uses --border-light and --bg-card throughout (cm-add-edge-form, cm-input, etc.) with hardcoded fallbacks like var(--border-light, #e0e0e0) and var(--bg-card, #fafafa). These custom properties are NEVER defined in any :root block. The fallback is always taken, making the property name pure dead weight. This is worse than just hardcoding the color: it creates the illusion of theme participation. An agent adding dark mode support would reasonably try to define --border-light in :root and expect it to propagate — but the existing components were never tested with non-fallback values. Additionally, cm-add-error.cm-error and .cm-add-error.cm-notice use hardcoded colors (#fde8e8, #c0392b, #f5c6cb, #e8f5e9, #27ae60, #c8e6c9) that NEVER respond to dark mode — the error/notice backgrounds will be blinding light rectangles on a dark page. Expected: all colours routed through defined custom properties that have dark variants, or at minimum explicit acknowledgement of hardcoded-only colours. Observed: undefined variables + hardcoded fallbacks + hardcoded colours with no dark-mode path."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Hardcoded colour values outside the custom property system — 18 distinct magic colours in CM section alone"
 detail = "The concept-map (SL-076) section hardcodes at least 18 colour values: #fde8e8, #c0392b, #f5c6cb, #e8f5e9, #27ae60, #c8e6c9, #13876b, #856404, #b8860b, #f0c040, #fffdf0, #f5e6a3, #ffffff (in cm-edit-toggle:hover, cm-add-btn), #d0d0d0 (cm-input fallback), #e0e0e0 (fallback), #fafafa (fallback), #16A085 (fallback ×5). None of these participate in the dark-mode media query. The base stylesheet already defines --bg, --fg, --muted, --hover-bg, etc. — the CM section ignores this system entirely and invents its own ad-hoc palette. This is a parallel colour implementation within the same file: the base layout uses design tokens; the CM section uses raw hex. Expected: all colours routed through the existing custom property system or a CM-specific palette block with dark variants. Observed: ad-hoc hardcoded hex scattered across ~15 selectors, duplicating the colour management burden."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Inconsistent naming conventions: BEM, flat, and SMACSS-ish classes coexist without apparent rule"
 detail = "The file uses at least three naming conventions with no discernible boundary: (1) BEM-style: .doctrine-node--focus, .doctrine-node--hover, .priority-node--focus, .priority-node--hover, .priority-node--zoom, .legend-item.legend-dimmed; (2) Flat/single-word: .search-input, .filter-area, .entity-list, .sidebar, .main, .layout, .refresh-btn; (3) SMACSS-ish state classes: .active, .hidden, .nav-highlight (but note: .hidden is dangerously broad — it's not scoped to relationship-table only but could collide with any element). Within the CM section: .cm-edge-row, .cm-editable-node, .cm-remove-btn — a flat prefix convention that looks like a namespace but isn't enforced (cm-input, cm-add-btn sit alongside non-prefixed classNames like .add-edge-fields). Some things get BEM modifiers (.entity-item.active), others get separate class names (.depth-btn.active). No convention doc exists. Expected: consistent naming convention documented and followed. Observed: three conventions, mixed within and across sections."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Dark mode coverage is ad-hoc: CM form controls, priority view, and error states have no dark variants"
 detail = "The @media (prefers-color-scheme: dark) block (lines 40-56) covers only: the 6 base theme tokens, and .cm-diagnostics-panel dark tones. Everything else is absent: (1) CM form controls — .cm-input, .cm-add-btn, .cm-rename-input, .cm-remove-btn, .cm-edit-toggle use hardcoded light-background colours with no dark variants, (2) CM error/notice states — .cm-add-error.cm-error (background: #fde8e8) and .cm-add-error.cm-notice (background: #e8f5e9) will render as stark light rectangles on a dark page, (3) .cm-add-edge-form uses var(--bg-card, #fafafa) — same problem, (4) Priority view entirely absent — .priority-actionable rect, .priority-blocked rect, .priority-terminal rect use hardcoded fills with no dark equivalents, (5) Edge legend swatches are hardcoded inline styles in HTML (style='background:#4A90D9') — immune to theme. Expected: systematic dark variants for every colour-bearing rule, or explicit 'light-only' annotation on sections that consciously skip dark mode. Observed: partial dark mode that covers base layout but leaves 3 subsequent slices' worth of CSS in light-only purgatory."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "verified"
 severity = "nit"
 title = "Scattered :root token definition: --link defined 13 lines after canonical :root block closed"
 detail = "The canonical :root block (lines 13-63) defines the kind palette and theme tokens. It is followed by the dark-mode media query, then body styles, then at line 76: ':root { --link: #2563eb; }' — a single-token :root block. On line 77, the dark-mode override: '@media (prefers-color-scheme: dark) { :root { --link: #60a5fa; } }'. Then on line 79: 'a { color: var(--link); }'. Functionally correct: --link is defined before use. But this scatters the token definition across three locations when it should be one more entry in the canonical :root block. A reader auditing 'what tokens does this stylesheet define' must scan all :root blocks, and the intent (link colour is a theme token, not an afterthought) is obscured. Expected: --link defined alongside --bg/--fg in the main :root block, with its dark variant in the same media query. Observed: --link scattershot-defined 13 lines after the block it belongs in."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "JS inline style manipulation bypasses CSS cascade, creating two competing visibility systems"
 detail = "Throughout app.js, visibility is controlled via direct style property manipulation: '.cm-add-error' gets style.display = 'block'/'none' set via JS (line 166-168), .cm-diagnostics-panel, .cm-edge-table, .cm-add-edge-form appear in index.html with inline style='display:none' and are toggled by JS. Meanwhile, the CSS defines .relationship-table.hidden { display: none; } and .table-toggle — a proper CSS-class-based toggle. The codebase has two parallel visibility mechanisms: (1) class-based toggling (.hidden class on relationship-table, .active class on depth-btn), (2) inline style manipulation for CM panels. An agent trying to add a transition animation to panel show/hide must fight the inline style's specificity. An agent adding a 'show all panels' debug toggle must enumerate JS-managed elements rather than toggle a class. Expected: one visibility mechanism (class-based toggling via .hidden or similar). Observed: two competing mechanisms, with the inline-style path making CSS transitions and global toggles impossible."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "verified"
 severity = "nit"
 title = "Overly specific compound selectors create DOM-structure coupling"
 detail = "The fullscreen markdown selector chain: .markdown-pane.fullscreen .markdown-body requires the .markdown-body element to be a descendant of .markdown-pane.fullscreen. If a future refactor moves .markdown-body to a wrapper or renames either class, this silently breaks. The depth: '.markdown-pane.fullscreen' -> '.markdown-body' is an implementation detail of the current DOM — the intent is 'when the pane is fullscreen, widen the body content,' which should be expressed with a single class or custom property. Similarly, .entity-item.active .kind-pill depends on exact nesting of .kind-pill inside .entity-item. Also .cm-diagnostics-panel h3 and .cm-diag-item:last-child encode element-type relationships that would break on a semantic HTML change (e.g. h3->h2, or switching from div to section). Expected: flat, composable classes that express intent without encoding DOM hierarchy. Observed: compound selectors that will break on any DOM refactor."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "verified"
 severity = "minor"
 title = ".hidden class is dangerously broad — unscoped global visibility toggle"
 detail = "The CSS defines .relationship-table.hidden { display: none; } (line 235) — a scoped selector, which is correct. But the JS toggles it via table.classList.toggle('hidden', hidden) (app.js:32) — adding the unscoped .hidden class to the element. The scoped CSS selector .relationship-table.hidden matches, so it works, BUT the element now carries an unscoped .hidden class. If any future rule adds a broad .hidden { display: none !important; } or a global reset stylesheet defines .hidden, this element is caught in the crossfire. The class name .hidden is a CSS utility class magnet — Bootstrap, Tailwind, and many reset stylesheets use it. Additionally, a developer scanning the DOM sees class='relationship-table hidden' and reasonably assumes .hidden is a global utility — which it is NOT (the rule is scoped to .relationship-table.hidden). Expected: a scoped, namespaced visibility class like .relationship-table--hidden or an is-hidden data attribute. Observed: unscoped class name .hidden used as a component state toggle, creating naming collision risk with any CSS framework or future utility stylesheet."
+disposition = "fix-now"
+response = "Resolved by SL-093 (CSS modularisation). See RV-070 audit for per-finding verification evidence. SL-093 PHASE-01 split the monolithic file into 10 modular @layer files; PHASE-02 completed TS/HTML class renames and style.display removal. All 10 findings are addressed with concrete, verifiable changes."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
