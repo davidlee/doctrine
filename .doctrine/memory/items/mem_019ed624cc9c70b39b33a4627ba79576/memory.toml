@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed624cc9c70b39b33a4627ba79576"
+memory_key = "mem.fact.sl-085.worktree-coordinate-plan-toml-not-found"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "SL-085: worktree coordinate fails to find committed plan.toml on provisioned worktree"
+summary = ""
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = ["src/worktree.rs"]
+globs = []
+commands = []
+tags = ["sl-085", "worktree"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "28d5145053e49bef315a8255eb38ce9f12e85531"
+ref_name = "refs/heads/main"
+checkout_state_id = "6048126630f271bbcc35a9c4161063a527eb9ab3a503c17f31ed457430eeee1c"
+base_commit = "0a204b11e102ab8176f8747ae9e8fcfd674f6a80"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
