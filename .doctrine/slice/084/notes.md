@@ -128,3 +128,19 @@ variety on subsequent passes." This is read by pi agents and is nonsensical in
 the pi context (pi has no `codex mcp`, no Opus sub-agent). During this
 session the instruction was harmless but confirms the leakage described in
 SL-084's context.
+
+### gc --force footgun on codex/pi arm (2026-06-17)
+
+**Finding:** On the codex/pi arm, fork branches ARE the native phase refs —
+there is no `boundaries.toml` to reconstruct them (unlike the Claude arm).
+Running `doctrine worktree gc --force` on a worker fork destroys the native
+phase deliverable irrecoverably. The dispatch router's conclude step says
+"Codex/pi only: `doctrine worktree gc --fork <branch>` each spent worker fork"
+— but this must happen AFTER `dispatch sync --prepare-review` projects the
+phase refs (the `phase/<slice>-NN` branches).
+
+**Design implication for SL-084:** The pi arm's harness→spawn table should
+include a residual note: "fork branch IS the phase ref — gc only after
+prepare-review." The codex arm has the same property. This is not a new gap
+(the current skill already says gc at conclude, after sync), but it's a
+sharp edge worth documenting in the pi-specific spawn prose.
