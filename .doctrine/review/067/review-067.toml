@@ -1,0 +1,52 @@
+id    = 67
+slug  = "reconciliation-review-of-sl-085"
+title = "reconciliation review of SL-085"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-085"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "dispatch/085 coordination ref absent — candidate workflow unavailable (vs handover expectation that dispatch/085 exists with 4 commits)"
+detail = 'The handover states "4 implementation commits on dispatch/085" and the audit skill § dispatched-slice says to review the candidate surface via `dispatch candidate create`. But `refs/heads/dispatch/085` does not exist in the git namespace (not in `git branch -a`, not in `git for-each-ref`). Only `review/085` and the 4 worker fork branches (`worker/SL-085/PHASE-0{1,2,3,4}`) exist. The dispatch branch was likely GCd after conclude (coord worktree removed). The impl-bundle `review/085` (tip: 4950b40dbb58) is a squashed single commit. Audit proceeded against `review/085` directly, which covers the same code delta. No code defect — purely a process recordkeeping gap: the dispatch branch should survive until after audit/reconciliation to preserve per-commit history and enable the candidate workflow.'
+disposition = "tolerated"
+response = "Process recordkeeping gap, not a code defect. Dispatch/085 ref was likely GCd after conclude (coord worktree removed) — the ref should survive until after audit/reconciliation per the design. However, review/085 (tip: 4950b40dbb58) is a squashed impl-bundle covering the same code delta, so code auditability is preserved. The per-commit history loss is unfortunate but not a correctness blocker. Future dispatched slices should retain the dispatch ref until the slice is closed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Skill body line counts at target ceilings: dispatch 45/45, dispatch-agent 29/30, dispatch-subprocess 24/25"
+detail = 'The three shrunk skill files after excluding YAML frontmatter have body line counts at the exact upper edge of design targets: dispatch/SKILL.md 45 lines (≤45), dispatch-agent/SKILL.md 29 lines (≤30), dispatch-subprocess/SKILL.md 24 lines (≤25). While within spec, there is zero headroom — any future addition to the router skill (e.g., a new red flag) will push it over. The design summary target of "~40" (dispatch router) was not met. Not a defect — content is correct and sufficient — but the margin is paper-thin.'
+disposition = "aligned"
+response = "All three skill files are within their design body-line-count targets: dispatch 45/45, dispatch-agent 29/30, dispatch-subprocess 24/25. Content is correct — all required prose present, new verb references accurate, dispatch import purged. Tight margins are a noted risk for future additions but not a defect in the current implementation."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "ISS-019: worktree coordinate plan.toml-not-found on provisioned worktrees — carried forward unchanged"
+detail = "The handover reports a pre-existing bug: `worktree coordinate` fails with plan.toml-not-found on provisioned worktrees. The extracted `coordinate()` function in src/worktree.rs carries the same behavior unchanged (by design — PHASE-01 is a mechanical extraction, not a bugfix). This is pre-existing, documented in ISS-019, and not in scope for SL-085. It is tolerated operational drift — no code changes were made, the existing behavior is faithfully preserved."
+disposition = "tolerated"
+response = "Pre-existing bug (ISS-019), documented and not in scope for SL-085. PHASE-01 is a mechanical extraction — it preserves existing behavior faithfully, including this bug. The extracted coordinate() function carries the same plan.toml-not-found behavior unchanged. Backlog item ISS-019 tracks the root cause. No regression introduced."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "IMP-091: worktree import corrupt-patch bug — checkout fallback used for worker imports, workers will not GC automatically (vs design)"
+detail = "The handover reports that `doctrine worktree import` has a reproducible corrupt-patch bug (IMP-091, not rtk-related). Worker forks were imported via `git checkout` fallback instead. This is functionally equivalent but means worker forks will not GC automatically via the normal import→land→gc pipeline — the patch-id leg of GC classification requires the import verb. The workers committed clean and verify gates passed, so code correctness is unaffected. The design does not mention this fallback as an expected path — it is tolerated operational drift. Backlog item IMP-091 exists for the root cause."
+disposition = "tolerated"
+response = "Pre-existing bug (IMP-091, corrupt patch in worktree import), documented and not in scope for SL-085. The git checkout fallback used during dispatch is functionally equivalent for code correctness (workers committed clean, verify gates passed). The operational consequence — worker forks will not GC automatically via the import→land→gc pipeline — is a known tradeoff. Backlog item IMP-091 tracks the root cause."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
