@@ -137,7 +137,7 @@ impl ItemKind {
 
     /// The kebab `kind` string written to `backlog-NNN.toml` (matches the serde
     /// rename). Pure; the render mirror for the stored `kind` field.
-    const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             ItemKind::Issue => "issue",
             ItemKind::Improvement => "improvement",
@@ -212,7 +212,7 @@ pub(crate) enum Status {
 
 impl Status {
     /// The kebab string for render (matches the serde rename). Pure.
-    const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Status::Open => "open",
             Status::Triaged => "triaged",
@@ -227,7 +227,7 @@ impl Status {
     /// slice lifecycles are independent vocabularies. Drives the `resolution ⟺
     /// terminal` coupling (`edit`) and the hide-terminal `list` rule — reused by
     /// `is_hidden` as the SL-025 `backlog list` hide-set (no new predicate, design §5.3).
-    const fn is_terminal(self) -> bool {
+    pub(crate) const fn is_terminal(self) -> bool {
         matches!(self, Status::Resolved | Status::Closed)
     }
 }
@@ -354,11 +354,11 @@ struct RawRiskFacet {
 /// inspection. The `"" -> None` optionals are resolved off the raw layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BacklogItem {
-    id: u32,
+    pub(crate) id: u32,
     slug: String,
-    title: String,
-    kind: ItemKind,
-    status: Status,
+    pub(crate) title: String,
+    pub(crate) kind: ItemKind,
+    pub(crate) status: Status,
     resolution: Option<Resolution>,
     created: String,
     updated: String,
@@ -808,7 +808,7 @@ pub(crate) fn dep_seq_for(root: &Path, item_kind: ItemKind, id: u32) -> anyhow::
 
 /// Read all five kinds' trees, merged (declaration order, pre-sort). Each absent
 /// kind dir contributes the empty set, so a virgin repo reads to `[]`.
-fn read_all(root: &Path) -> anyhow::Result<Vec<BacklogItem>> {
+pub(crate) fn read_all(root: &Path) -> anyhow::Result<Vec<BacklogItem>> {
     let mut items = Vec::new();
     for item_kind in ItemKind::ALL {
         items.extend(read_kind(root, item_kind)?);

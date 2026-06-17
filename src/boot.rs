@@ -262,9 +262,9 @@ fn is_marker(section: &Section) -> bool {
 /// would bust the cache every session, §5.5). `stale` ⇒ on-disk `boot.md` differs
 /// from the recompute; `marker_sections` ⇒ sections whose source is unpopulated.
 #[derive(Debug, PartialEq, Eq)]
-struct CheckReport {
-    stale: bool,
-    marker_sections: Vec<String>,
+pub(crate) struct CheckReport {
+    pub(crate) stale: bool,
+    pub(crate) marker_sections: Vec<String>,
 }
 
 impl CheckReport {
@@ -279,7 +279,7 @@ impl CheckReport {
 /// the *current inlined prefix* stays stale until `/clear`/restart — so callers
 /// must NOT read a clean report as proof the live context is fresh. Absent /
 /// unreadable on-disk file ⇒ stale (the recompute differs from nothing).
-fn boot_check(root: &Path, exec: &Path) -> CheckReport {
+pub(crate) fn boot_check(root: &Path, exec: &Path) -> CheckReport {
     let sections = build_sections(root, exec);
     let recomputed = render_boot(&sections);
     let on_disk = fs::read_to_string(root.join(BOOT_REL)).ok();

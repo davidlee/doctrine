@@ -52,6 +52,7 @@ mod slice;
 mod spec;
 mod standard;
 mod state;
+mod status;
 mod tomlfmt;
 mod tty;
 mod verify;
@@ -585,6 +586,22 @@ enum Command {
         #[arg(long, default_value_t = 0)]
         rank: i32,
         /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only project orientation dashboard: active work, blocked items, boot
+    /// staleness, recent commits. 10–20 lines human output; structured JSON.
+    Status {
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
@@ -2800,7 +2817,8 @@ fn write_class(cmd: &Command) -> WriteClass {
         | Command::Survey { .. }
         | Command::Next { .. }
         | Command::Blockers { .. }
-        | Command::Explain { .. } => Read,
+        | Command::Explain { .. }
+        | Command::Status { .. } => Read,
         // Mutates the canonical-id triple — an authored write (D2/D6).
         Command::Reseat { .. } => Write("reseat"),
         // Author / remove a tier-1 `[[relation]]` edge — authored writes (SL-048 §5.4).
@@ -3806,6 +3824,7 @@ fn main() -> anyhow::Result<()> {
             rank,
             path,
         } => run_after_edge(path, &source, &target, rank),
+        Command::Status { format, json, path } => status::run(path, format, json),
         Command::Supersede { new, old, path } => run_supersede(path, &new, &old),
         Command::Map { command } => match command {
             MapCommand::Serve(args) => commands::map::run_serve(None, args),
