@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed43148c773429bf8d9d4db8071d8"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "SL-080 PHASE-03: close SKILL.md spec-coherence gate retune complete"
+summary = ""
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = []
+globs = ["plugins/doctrine/skills/close/SKILL.md"]
+commands = []
+tags = ["sl-080", "skill-design", "spec-coherence"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6eaa8551ebbe41d05f19397024a7d6b24954c40e"
+ref_name = "refs/heads/main"
+checkout_state_id = "1cfb026e8f373db8262a8ce7be34b535f8c48b950170d9c0c3d266aebac33fcf"
+base_commit = "09d4e46efcf9c7e4ff1624fd2cb8c6496133ec72"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
