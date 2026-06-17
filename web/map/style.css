@@ -322,12 +322,12 @@ a { color: var(--link); }
 }
 
 /* Kind pills — dark text for light-background kinds */
-.kind-pill[style*="--kind-PRD"],
-.kind-pill[style*="--kind-SPEC"],
-.kind-pill[style*="--kind-REQ"],
-.kind-pill[style*="--kind-IDE"],
-.kind-pill[style*="--kind-RV"],
-.kind-pill[style*="--kind-REC"] {
+.kind-pill[data-kind="PRD"],
+.kind-pill[data-kind="SPEC"],
+.kind-pill[data-kind="REQ"],
+.kind-pill[data-kind="IDE"],
+.kind-pill[data-kind="RV"],
+.kind-pill[data-kind="REC"] {
   color: #222;
 }
 
