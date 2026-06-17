@@ -400,6 +400,13 @@ render.edgeDetail = function(opts) {
   var depth = opts.depth;
   var focusId = opts.focusId;
 
+  if (!edge) {
+    if (container) {
+      container.innerHTML = '<p class="error">Edge not found in graph</p>';
+    }
+    return;
+  }
+
   var srcNode = graph.nodes.get(edge.source);
   var tgtNode = graph.nodes.get(edge.target);
   var originFile = edge.raw && edge.raw.origin && edge.raw.origin.file ? edge.raw.origin.file : '-';
