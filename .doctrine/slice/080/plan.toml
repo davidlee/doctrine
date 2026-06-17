@@ -60,6 +60,7 @@ exit_criteria = [
   { id = "EX-2", text = "Reconciliation brief step added: dedicated ## Reconciliation Brief section in the RV markdown, separate from ## Synthesis." },
   { id = "EX-3", text = "Findings stay verified — remediation belongs to reconcile; audit prose does not mutate finding disposition to fixed/remediated." },
   { id = "EX-4", text = "Audit's last step hands off to /reconcile (not directly to /close)." },
+  { id = "EX-5", text = "Disposition convention replacing design-wrong is explicit: audit raises finding, disposes verified (terminal), records exact change in reconciliation brief. Audit's permitted dispositions are aligned, fix-now (code only, never spec/governance edit), tolerated, and verified-with-brief-link. Audit never uses design-wrong or follow-up for spec/governance changes." },
 ]
 verification = [
   { id = "VA-1", expects = "No occurrence of 'design was wrong', 'reconcile design.md', or 'fix in place' in audit prose." },
@@ -88,6 +89,7 @@ exit_criteria = [
   { id = "EX-4", text = "RV ledger confirmed resolved (done · await=none)." },
   { id = "EX-5", text = "Reconcile outcome recorded (REV rationale and/or RV ## Reconciliation Outcome)." },
   { id = "EX-6", text = "Unresolved items → refuse close and return to /reconcile." },
+  { id = "EX-7", text = "Old pre-check referencing 'design was wrong' findings reconciled into design.md is removed or rewritten to reference the reconciliation brief and REV-done gate." },
 ]
 verification = [
   { id = "VA-1", expects = "Spec-coherence gate prose enumerates all four resolution paths (REV done, withdrawn, tolerated, escalated)." },
@@ -107,16 +109,16 @@ name      = "Wire /reconcile into routing and verify install"
 objective = "Add the /reconcile row to install/routing-process.md; regenerate boot.md; verify embedding per D7 + ADR-009 F14 (shipped-not-reachable)."
 
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-01, PHASE-02, PHASE-03 all complete — all three skills must exist before routing can point at them. This is a hard structural gate: ADR-009 F14 forbids routing at a deferred skill (shipped-not-reachable)." },
+  { id = "EN-1", text = "PHASE-01, PHASE-02, PHASE-03 all complete AND doctrine claude install has succeeded — the skill must be embedded before routing can point at it. This is a hard structural gate: ADR-009 F14 forbids routing at a deferred skill (shipped-not-reachable). Install must precede routing-row edit." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "install/routing-process.md contains the /reconcile routing row matching D7 text." },
-  { id = "EX-2", text = "doctrine boot regenerates .doctrine/state/boot.md and the /reconcile row is present in the generated routing table (not just the source)." },
-  { id = "EX-3", text = "doctrine claude install succeeds — the new skill is embedded." },
+  { id = "EX-1", text = "install/routing-process.md updated: (a) existing audit row updated to '/audit → /reconcile → /close', (b) /reconcile row added per D7." },
+  { id = "EX-2", text = "doctrine boot regenerates .doctrine/state/boot.md and both the updated audit chain and the /reconcile row are present in the generated routing table (not just the source)." },
+  { id = "EX-3", text = "doctrine claude install succeeds — the new skill is embedded (completed before routing row edit per EN-1)." },
 ]
 verification = [
-  { id = "VH-1", expects = "Routing row text matches D7: 'Slice exists, audit complete, reconciliation brief ready → /reconcile'." },
-  { id = "VA-1", expects = "Generated .doctrine/state/boot.md routing table contains the /reconcile row." },
+  { id = "VH-1", expects = "Routing row text matches D7: 'Slice exists, audit RV resolved, reconciliation brief written → /reconcile'. Existing audit row shows audit → reconcile → close chain." },
+  { id = "VA-1", expects = "Generated .doctrine/state/boot.md routing table contains the /reconcile row and updated audit chain." },
   { id = "VA-2", expects = "doctrine claude install exit code 0; no errors in output." },
   { id = "VA-3", expects = "The three skills form a coherent chain in prose: audit identifies → reconcile writes → close confirms; cross-references are consistent across all three files." },
 ]
