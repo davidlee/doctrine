@@ -1369,10 +1369,6 @@ pub(crate) fn list_rows(
 /// Narrow boot-snapshot producer: active signpost keys, key-ascending, with uid
 /// fallback for keyless memories. Reuses `collect_all` — no new fs read path.
 /// The boot producer calls this; the CLI `memory list` stays on `list_rows`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-089: boot_keys called from boot.rs changes on this branch")
-)]
 pub(crate) fn boot_keys(root: &Path) -> Result<Vec<String>> {
     let mut keys: Vec<String> = collect_all(root)?
         .into_iter()
