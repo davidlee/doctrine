@@ -70,6 +70,9 @@ verification = [
   { id = "VT-3", expects = "--page 2 --limit 5 shows results 6-10; notice says '--page 3 for next'" },
   { id = "VT-4", expects = "retrieve --json output has correct array length, no trailing notice text" },
   { id = "VT-5", expects = "offset >= total emits appropriate notice (no results at this offset)" },
+  { id = "VT-6", expects = "memory find without --limit shows all results (unlimited default, D14)" },
+  { id = "VT-7", expects = "--limit 0 errors cleanly" },
+  { id = "VT-8", expects = "--page 2 alone does not error despite offset default_value (clap conflicts_with + default interaction, F-6)" },
 ]
 specs             = []
 requirements      = []

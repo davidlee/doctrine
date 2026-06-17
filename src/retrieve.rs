@@ -19,6 +19,8 @@
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
 
+use serde::Serialize;
+
 use crate::lexical::{Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker};
 use crate::memory::{Memory, MemoryType, Status, normalize_key};
 
@@ -593,7 +595,8 @@ pub(crate) fn query<'a>(
 /// `trust`+`sev` are always present so a holdback-exempt `find` keeps risk visible
 /// (B8/D8/D17). `spec` is the matched dimension (`-` for a bare `--query`). Every
 /// free value is `scrub_line`d (F-A10) so a newline cannot forge a row.
-fn format_find(cands: &[Candidate<'_>]) -> String {
+/// Render find results as a human-readable column-aligned table.
+fn format_find_table(cands: &[Candidate<'_>]) -> String {
     let scrub = |s: &str| crate::memory::scrub_line(s);
     let rows: Vec<[String; 8]> = cands
         .iter()
@@ -639,6 +642,42 @@ fn format_find(cands: &[Candidate<'_>]) -> String {
     } else {
         lines.join("\n") + "\n"
     }
+}
+
+/// A serde row for `memory find --json`, mirroring the find table columns.
+#[derive(Serialize)]
+struct MemoryFindRow {
+    uid: String,
+    #[serde(rename = "type")]
+    kind: String,
+    status: String,
+    staleness: String,
+    trust: String,
+    severity: String,
+    spec: String,
+    title: String,
+}
+
+impl From<&Candidate<'_>> for MemoryFindRow {
+    fn from(c: &Candidate<'_>) -> Self {
+        let m = c.memory;
+        MemoryFindRow {
+            uid: m.uid.clone(),
+            kind: m.kind.as_str().to_owned(),
+            status: m.status.as_str().to_owned(),
+            staleness: c.staleness.label().to_owned(),
+            trust: crate::memory::scrub_line(&m.trust_level),
+            severity: crate::memory::scrub_line(&m.severity),
+            spec: c.scope_match.map_or("-", |s| s.dim.label()).to_owned(),
+            title: crate::memory::scrub_line(&m.title),
+        }
+    }
+}
+
+/// Render find results as a JSON envelope: `{ "kind": "memory_find", "rows": […] }`.
+fn format_find_json(cands: &[Candidate<'_>]) -> Result<String> {
+    let rows: Vec<MemoryFindRow> = cands.iter().map(MemoryFindRow::from).collect();
+    crate::listing::json_envelope("memory_find", &rows)
 }
 
 /// The frozen-snapshot bundle the `find`/`retrieve` verbs both stand on. The two
@@ -687,11 +726,12 @@ fn load_query(
 }
 
 /// `doctrine memory find [--path-scope/--glob/--command/--tag/--query] [--type]
-/// [--status] [--include-draft]`. The find surface over the shared pipeline:
-/// `load_query` → `query` → `format_find`. find applies NO holdback (D8/D17);
-/// `base_filter` already excludes quarantined/retracted/superseded/archived (and
-/// draft unless `--include-draft`). It needs no body read (find renders rows, not
-/// framed bodies), so it ignores everything past `mems`/`q`/`snap`.
+/// [--status] [--include-draft] [--format] [--json]`. The find surface over
+/// the shared pipeline: `load_query` → `query` → render. find applies NO
+/// holdback (D8/D17); `base_filter` already excludes
+/// quarantined/retracted/superseded/archived (and draft unless
+/// `--include-draft`). It needs no body read (find renders rows, not framed
+/// bodies), so it ignores everything past `mems`/`q`/`snap`.
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
 pub(crate) fn run_find(
     path: Option<PathBuf>,
@@ -703,6 +743,7 @@ pub(crate) fn run_find(
     type_f: Option<MemoryType>,
     status_f: Option<Status>,
     include_draft: bool,
+    format: crate::listing::Format,
 ) -> Result<()> {
     let Loaded {
         root,
@@ -716,7 +757,11 @@ pub(crate) fn run_find(
     // BM25 is the hard default on both surfaces — no user-facing selector (D5).
     let ranker = Bm25Ranker;
     let ranked = query(&mems, &q, &snap, include_draft, &root, &ranker);
-    write!(io::stdout(), "{}", format_find(&ranked))?;
+    let output = match format {
+        crate::listing::Format::Table => format_find_table(&ranked),
+        crate::listing::Format::Json => format_find_json(&ranked)?,
+    };
+    write!(io::stdout(), "{output}")?;
     Ok(())
 }
 
@@ -2131,7 +2176,7 @@ weight = {weight}
         });
         let mut c = cand(&m, 0, false, Some(Dimension::Paths));
         c.staleness = Staleness::Unknown;
-        let out = format_find(&[c]);
+        let out = format_find_table(&[c]);
         // full uid (not a short prefix), the matched dim, and the risk columns.
         assert!(out.contains(UID), "full uid printed");
         assert!(out.contains("paths"), "spec column = matched dim");
@@ -2151,7 +2196,7 @@ weight = {weight}
         // Inject a newline post-parse to prove the row formatter scrubs it (F-A10).
         let mut m2 = m.clone();
         m2.title = "row1\nforged-row2".to_owned();
-        let out = format_find(&[cand(&m2, 0, false, None)]);
+        let out = format_find_table(&[cand(&m2, 0, false, None)]);
         assert!(
             !out.contains("\nforged-row2"),
             "newline must not forge a row"
@@ -2161,7 +2206,7 @@ weight = {weight}
 
     #[test]
     fn format_find_empty_is_empty_string() {
-        assert_eq!(format_find(&[]), "");
+        assert_eq!(format_find_table(&[]), "");
     }
 
     // === PHASE-05: the retrieve holdback, floor, and suppress-then-take. =======

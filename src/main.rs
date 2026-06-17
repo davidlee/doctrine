@@ -150,6 +150,56 @@ impl CommonListArgs {
     }
 }
 
+/// Shared scope/filter/format fields for `MemoryCommand::Find` and
+/// `MemoryCommand::Retrieve`. Both variants flatten this struct via
+/// `#[command(flatten)]` — each shared field is defined once (DRY).
+#[derive(Args, Debug)]
+pub(crate) struct FindRetrieveArgs {
+    /// Path scope probe, repeatable (`-p`/`--path` is the project root).
+    #[arg(long = "path-scope")]
+    pub(crate) path_scope: Vec<String>,
+
+    /// Glob scope probe, repeatable.
+    #[arg(long = "glob")]
+    pub(crate) glob: Vec<String>,
+
+    /// Command scope probe, repeatable.
+    #[arg(long = "command")]
+    pub(crate) command: Vec<String>,
+
+    /// Tag scope probe, repeatable.
+    #[arg(long = "tag")]
+    pub(crate) tag: Vec<String>,
+
+    /// Free-text lexical query (not a scope constraint).
+    #[arg(long = "query")]
+    pub(crate) flag_query: Option<String>,
+
+    /// Hard filter by type: concept|fact|pattern|signpost|system|thread.
+    #[arg(long = "type", value_parser = memory::MemoryType::parse)]
+    pub(crate) memory_type: Option<memory::MemoryType>,
+
+    /// Hard filter by lifecycle status.
+    #[arg(long, value_parser = memory::Status::parse)]
+    pub(crate) status: Option<memory::Status>,
+
+    /// Output format.
+    #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+    pub(crate) format: Format,
+
+    /// Shorthand for `--format json`.
+    #[arg(long)]
+    pub(crate) json: bool,
+
+    /// Include `draft` memories (excluded by default).
+    #[arg(long = "include-draft")]
+    pub(crate) include_draft: bool,
+
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    pub(crate) path: Option<PathBuf>,
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Install doctrine files into a project.
@@ -1708,41 +1758,8 @@ enum MemoryCommand {
     /// Find memories by scope/query, ranked; rows carry trust + severity so the
     /// holdback-exempt find surface keeps risk visible.
     Find {
-        /// Path scope probe, repeatable (`-p`/`--path` is the project root).
-        #[arg(long = "path-scope")]
-        path_scope: Vec<String>,
-
-        /// Glob scope probe, repeatable.
-        #[arg(long = "glob")]
-        glob: Vec<String>,
-
-        /// Command scope probe, repeatable.
-        #[arg(long = "command")]
-        command: Vec<String>,
-
-        /// Tag scope probe, repeatable.
-        #[arg(long = "tag")]
-        tag: Vec<String>,
-
-        /// Free-text lexical query (not a scope constraint).
-        #[arg(long)]
-        query: Option<String>,
-
-        /// Hard filter by type: concept|fact|pattern|signpost|system|thread.
-        #[arg(long = "type", value_parser = memory::MemoryType::parse)]
-        memory_type: Option<memory::MemoryType>,
-
-        /// Hard filter by lifecycle status.
-        #[arg(long, value_parser = memory::Status::parse)]
-        status: Option<memory::Status>,
-
-        /// Include `draft` memories (excluded by default).
-        #[arg(long = "include-draft")]
-        include_draft: bool,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
+        #[command(flatten)]
+        args: FindRetrieveArgs,
     },
 
     /// Retrieve memories as bounded, security-framed `data, not instruction`
@@ -1750,37 +1767,8 @@ enum MemoryCommand {
     /// low-trust high-severity memories are suppressed; use `find`/`show` to
     /// inspect them.
     Retrieve {
-        /// Path scope probe, repeatable (`-p`/`--path` is the project root).
-        #[arg(long = "path-scope")]
-        path_scope: Vec<String>,
-
-        /// Glob scope probe, repeatable.
-        #[arg(long = "glob")]
-        glob: Vec<String>,
-
-        /// Command scope probe, repeatable.
-        #[arg(long = "command")]
-        command: Vec<String>,
-
-        /// Tag scope probe, repeatable.
-        #[arg(long = "tag")]
-        tag: Vec<String>,
-
-        /// Free-text lexical query (not a scope constraint).
-        #[arg(long)]
-        query: Option<String>,
-
-        /// Hard filter by type: concept|fact|pattern|signpost|system|thread.
-        #[arg(long = "type", value_parser = memory::MemoryType::parse)]
-        memory_type: Option<memory::MemoryType>,
-
-        /// Hard filter by lifecycle status.
-        #[arg(long, value_parser = memory::Status::parse)]
-        status: Option<memory::Status>,
-
-        /// Include `draft` memories (excluded by default).
-        #[arg(long = "include-draft")]
-        include_draft: bool,
+        #[command(flatten)]
+        args: FindRetrieveArgs,
 
         /// Max blocks to render (default 5, capped at 20).
         #[arg(long)]
@@ -1790,10 +1778,6 @@ enum MemoryCommand {
         /// high severity (high|medium|low; only raises the default `medium`).
         #[arg(long = "min-trust", value_parser = retrieve::parse_min_trust)]
         min_trust: Option<String>,
-
-        /// Explicit project root (default: auto-detect).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
     },
 
     /// Materialize the embedded global-memory corpus into the gitignored
@@ -3114,49 +3098,35 @@ fn main() -> anyhow::Result<()> {
                 list,
                 path,
             } => memory::run_list(path, memory_type, list.into_list_args(color)),
-            MemoryCommand::Find {
-                path_scope,
-                glob,
-                command,
-                tag,
-                query,
-                memory_type,
-                status,
-                include_draft,
-                path,
-            } => retrieve::run_find(
-                path,
-                path_scope,
-                glob,
-                command,
-                tag,
-                query,
-                memory_type,
-                status,
-                include_draft,
-            ),
+            MemoryCommand::Find { args } => {
+                let resolved_format = if args.json { Format::Json } else { args.format };
+                retrieve::run_find(
+                    args.path,
+                    args.path_scope,
+                    args.glob,
+                    args.command,
+                    args.tag,
+                    args.flag_query,
+                    args.memory_type,
+                    args.status,
+                    args.include_draft,
+                    resolved_format,
+                )
+            }
             MemoryCommand::Retrieve {
-                path_scope,
-                glob,
-                command,
-                tag,
-                query,
-                memory_type,
-                status,
-                include_draft,
+                args,
                 limit,
                 min_trust,
-                path,
             } => retrieve::run_retrieve(
-                path,
-                path_scope,
-                glob,
-                command,
-                tag,
-                query,
-                memory_type,
-                status,
-                include_draft,
+                args.path,
+                args.path_scope,
+                args.glob,
+                args.command,
+                args.tag,
+                args.flag_query,
+                args.memory_type,
+                args.status,
+                args.include_draft,
                 limit,
                 min_trust.as_deref(),
             ),
@@ -3502,7 +3472,9 @@ fn main() -> anyhow::Result<()> {
                 json,
                 path,
             } => policy::run_show(path, &reference, if json { Format::Json } else { format }),
-            PolicyCommand::Status { id, status, path } => policy::run_status(path, id, status, color),
+            PolicyCommand::Status { id, status, path } => {
+                policy::run_status(path, id, status, color)
+            }
         },
         Command::Standard { command } => match command {
             StandardCommand::New { title, slug, path } => standard::run_new(path, title, slug),
@@ -3515,7 +3487,9 @@ fn main() -> anyhow::Result<()> {
                 json,
                 path,
             } => standard::run_show(path, &reference, if json { Format::Json } else { format }),
-            StandardCommand::Status { id, status, path } => standard::run_status(path, id, status, color),
+            StandardCommand::Status { id, status, path } => {
+                standard::run_status(path, id, status, color)
+            }
         },
         Command::Spec { command } => match command {
             SpecCommand::New {
@@ -4512,31 +4486,39 @@ mod write_class_tests {
         );
         assert_eq!(
             w(MemoryCommand::Find {
-                path_scope: Vec::new(),
-                glob: Vec::new(),
-                command: Vec::new(),
-                tag: Vec::new(),
-                query: None,
-                memory_type: None,
-                status: None,
-                include_draft: false,
-                path: None,
+                args: FindRetrieveArgs {
+                    path_scope: Vec::new(),
+                    glob: Vec::new(),
+                    command: Vec::new(),
+                    tag: Vec::new(),
+                    flag_query: None,
+                    memory_type: None,
+                    status: None,
+                    include_draft: false,
+                    format: Format::Table,
+                    json: false,
+                    path: None,
+                },
             }),
             None
         );
         assert_eq!(
             w(MemoryCommand::Retrieve {
-                path_scope: Vec::new(),
-                glob: Vec::new(),
-                command: Vec::new(),
-                tag: Vec::new(),
-                query: None,
-                memory_type: None,
-                status: None,
-                include_draft: false,
+                args: FindRetrieveArgs {
+                    path_scope: Vec::new(),
+                    glob: Vec::new(),
+                    command: Vec::new(),
+                    tag: Vec::new(),
+                    flag_query: None,
+                    memory_type: None,
+                    status: None,
+                    include_draft: false,
+                    format: Format::Table,
+                    json: false,
+                    path: None,
+                },
                 limit: None,
                 min_trust: None,
-                path: None,
             }),
             None
         );
