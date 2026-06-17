@@ -11,12 +11,16 @@
 //! - `status_and_title_for` — one parse per entity (private helper)
 //! - `title_for` — lenient title-only read (private helper)
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::entity;
 use crate::integrity;
 use crate::listing;
 use crate::relation::RelationEdge;
+
+use super::diagnostic::{CatalogDiagnostic, Severity};
+use super::hydrate::CatalogKey;
 
 /// Every authored outbound relation of one entity, dispatched to the owning kind's
 /// `relation_edges` accessor by canonical prefix (design §5.2 — one data-driven match
@@ -223,6 +227,58 @@ fn title_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<
 }
 
 // ---------------------------------------------------------------------------
+// Memory entities scan (SL-081 PHASE-03)
+// ---------------------------------------------------------------------------
+
+/// Scan memory entities from `MEMORY_ITEMS_DIR` and `MEMORY_SHIPPED_DIR`.
+pub(crate) fn scan_memory_entities(
+    root: &Path,
+    diagnostics: &mut Vec<CatalogDiagnostic>,
+) -> anyhow::Result<Vec<crate::memory::MemoryCatalogRecord>> {
+    use crate::memory::{MEMORY_ITEMS_DIR, MEMORY_SHIPPED_DIR};
+    let mut records: BTreeMap<String, crate::memory::MemoryCatalogRecord> = BTreeMap::new();
+    for (dir, fail_on_error) in [(MEMORY_SHIPPED_DIR, false), (MEMORY_ITEMS_DIR, true)] {
+        let base = root.join(dir);
+        let names = match entity::scan_named(&base) {
+            Ok(n) => n,
+            Err(_) if !fail_on_error => continue,
+            Err(e) => return Err(e),
+        };
+        for name in &names {
+            let toml_path = base.join(name).join("memory.toml");
+            match crate::memory::read_catalog_record(&toml_path) {
+                Ok(rec) => {
+                    if rec.uid != *name {
+                        diagnostics.push(CatalogDiagnostic {
+                            file: toml_path,
+                            entity_key: Some(CatalogKey::Memory(name.clone())),
+                            field: None,
+                            message: format!(
+                                "memory_uid {} does not match directory name {}",
+                                rec.uid, name
+                            ),
+                            severity: Severity::Error,
+                        });
+                        continue;
+                    }
+                    records.insert(rec.uid.clone(), rec);
+                }
+                Err(e) => {
+                    diagnostics.push(CatalogDiagnostic {
+                        file: toml_path,
+                        entity_key: Some(CatalogKey::Memory(name.clone())),
+                        field: None,
+                        message: format!("failed to read memory record: {e}"),
+                        severity: Severity::Error,
+                    });
+                }
+            }
+        }
+    }
+    Ok(records.into_values().collect())
+}
+
+// ---------------------------------------------------------------------------
 // Tests — SL-071 PHASE-02 equivalence gates
 // ---------------------------------------------------------------------------
 
@@ -394,5 +450,179 @@ mod tests {
             !joined.contains("loose talk"),
             "Unvalidated drift target must not be reported: {joined}"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Memory scan tests — SL-081 PHASE-03
+    // -----------------------------------------------------------------------
+
+    /// Write a memory.toml under `root/.doctrine/memory/<tree>/<dir>/memory.toml`.
+    fn seed_memory(root: &Path, tree: &str, dir: &str, body: &str) -> std::path::PathBuf {
+        let dir_path = root.join(".doctrine/memory").join(tree).join(dir);
+        std::fs::create_dir_all(&dir_path).unwrap();
+        let toml_path = dir_path.join("memory.toml");
+        std::fs::write(&toml_path, body).unwrap();
+        toml_path
+    }
+
+    // == VT-1: valid memory.toml in items/ → record returned ==
+
+    #[test]
+    fn scan_memory_entities_valid_item_record_returned() {
+        let dir = tmp();
+        let root = dir.path();
+
+        seed_memory(
+            root,
+            "items",
+            "mem_11111111112222222222333333333344",
+            "memory_uid = \"mem_11111111112222222222333333333344\"\n\
+             memory_type = \"concept\"\n\
+             status = \"active\"\n\
+             title = \"Test Memory\"\n",
+        );
+
+        let mut diags = Vec::new();
+        let records = scan_memory_entities(root, &mut diags).unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].uid, "mem_11111111112222222222333333333344");
+        assert_eq!(records[0].title, "Test Memory");
+        assert_eq!(records[0].status, "active");
+        assert_eq!(records[0].memory_type, "concept");
+        assert!(diags.is_empty());
+    }
+
+    // == VT-2: items/ overrides shipped/ with same uid ==
+
+    #[test]
+    fn scan_memory_entities_items_overrides_shipped() {
+        let dir = tmp();
+        let root = dir.path();
+
+        let uid = "mem_11111111112222222222333333333344";
+        seed_memory(
+            root,
+            "shipped",
+            uid,
+            &format!(
+                "memory_uid = \"{uid}\"\n\
+                 memory_type = \"concept\"\n\
+                 status = \"draft\"\n\
+                 title = \"Shipped Version\"\n"
+            ),
+        );
+        seed_memory(
+            root,
+            "items",
+            uid,
+            &format!(
+                "memory_uid = \"{uid}\"\n\
+                 memory_type = \"concept\"\n\
+                 status = \"active\"\n\
+                 title = \"Items Version\"\n"
+            ),
+        );
+
+        let mut diags = Vec::new();
+        let records = scan_memory_entities(root, &mut diags).unwrap();
+
+        assert_eq!(records.len(), 1, "items should override shipped");
+        assert_eq!(records[0].title, "Items Version");
+        assert!(diags.is_empty());
+    }
+
+    // == VT-3: uid != dirname → Error diagnostic, excluded ==
+
+    #[test]
+    fn scan_memory_entities_uid_dirname_mismatch_diagnostic() {
+        let dir = tmp();
+        let root = dir.path();
+
+        let dirname = "mem_11111111112222222222333333333344";
+        let wrong_uid = "mem_aaaaaaaaaabbbbbbbbbbcccccccccccc";
+        seed_memory(
+            root,
+            "items",
+            dirname,
+            &format!(
+                "memory_uid = \"{wrong_uid}\"\n\
+                 memory_type = \"concept\"\n\
+                 status = \"active\"\n\
+                 title = \"Mismatched\"\n"
+            ),
+        );
+
+        let mut diags = Vec::new();
+        let records = scan_memory_entities(root, &mut diags).unwrap();
+
+        // The record is excluded (uid mismatch).
+        assert!(records.is_empty());
+
+        // One Error diagnostic.
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert!(diags[0].message.contains("does not match directory name"));
+        assert!(diags[0].message.contains(wrong_uid));
+        assert!(diags[0].message.contains(dirname));
+        assert_eq!(
+            diags[0].entity_key.as_ref().map(|k| k.canonical()),
+            Some(dirname.to_string())
+        );
+    }
+
+    // == VT-4: malformed toml → Error diagnostic ==
+
+    #[test]
+    fn scan_memory_entities_malformed_toml_diagnostic() {
+        let dir = tmp();
+        let root = dir.path();
+
+        let uid = "mem_11111111112222222222333333333344";
+        seed_memory(root, "items", uid, "this is not valid toml at all[[[\n");
+
+        let mut diags = Vec::new();
+        let records = scan_memory_entities(root, &mut diags).unwrap();
+
+        assert!(records.is_empty());
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert!(diags[0].message.contains("failed to read memory record"));
+        assert_eq!(
+            diags[0].entity_key.as_ref().map(|k| k.canonical()),
+            Some(uid.to_string())
+        );
+    }
+
+    // == VT-5: missing shipped/ dir → Ok(vec![]) ==
+
+    #[test]
+    fn scan_memory_entities_missing_shipped_ok_empty() {
+        let dir = tmp();
+        let root = dir.path();
+
+        let mut diags = Vec::new();
+        let records = scan_memory_entities(root, &mut diags).unwrap();
+
+        assert!(records.is_empty());
+        assert!(diags.is_empty());
+    }
+
+    // == VT-6: empty both dirs → Ok(vec![]) ==
+
+    #[test]
+    fn scan_memory_entities_empty_both_dirs_ok_empty() {
+        let dir = tmp();
+        let root = dir.path();
+
+        // Create the dirs but leave them empty.
+        std::fs::create_dir_all(root.join(".doctrine/memory/shipped")).unwrap();
+        std::fs::create_dir_all(root.join(".doctrine/memory/items")).unwrap();
+
+        let mut diags = Vec::new();
+        let records = scan_memory_entities(root, &mut diags).unwrap();
+
+        assert!(records.is_empty());
+        assert!(diags.is_empty());
     }
 }

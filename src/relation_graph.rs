@@ -19,7 +19,7 @@ use std::path::Path;
 
 use cordage::{Arity, CyclePolicy, EdgeAttrs, Graph, GraphBuilder, OverlayConfig, OverlayId};
 
-use crate::catalog::hydrate::EdgeTarget;
+use crate::catalog::hydrate::{CatalogEdgeLabel, CatalogKey, EdgeTarget};
 use crate::dep_seq;
 use crate::entity;
 use crate::integrity;
@@ -314,8 +314,17 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
     // canonical ref but the entity was absent from the scan.
     let catalog = crate::catalog::hydrate::scan_catalog(root)?;
     // Index entity keys → Kind for label-validation lookups.
-    let entity_kinds: BTreeMap<EntityKey, &'static entity::Kind> =
-        catalog.entities.iter().map(|e| (e.key, e.kind)).collect();
+    let entity_kinds: BTreeMap<EntityKey, &'static entity::Kind> = catalog
+        .entities
+        .iter()
+        .filter_map(|e| {
+            if let CatalogKey::Numbered(key) = &e.key {
+                e.kind.map(|k| (*key, k))
+            } else {
+                None
+            }
+        })
+        .collect();
 
     for edge in &catalog.edges {
         // Only report UnresolvedRef targets — UnvalidatedText targets dangle
@@ -326,22 +335,37 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
             // (TargetSpec::Unvalidated in RELATION_RULES) dangle by design
             // (their targets are free-form by contract).
             // Edge source always exists in entity_kinds — edges are built from
-            // entities in the same Catalog. The `if let` is a type-system
-            // requirement (BTreeMap::get returns Option), not a genuine
-            // fallibility. A None here is a bug — guarded by the invariant
-            // that every CatalogEdge.source is drawn from the same Catalog
-            // whose entities built entity_kinds.
-            if let Some(kind) = entity_kinds.get(&edge.source) {
-                let validated = crate::relation::lookup(kind, edge.label)
-                    .is_some_and(|r| !matches!(r.target, TargetSpec::Unvalidated));
-                if validated {
-                    findings.push(format!(
-                        "{}: `{}` target `{}` does not resolve (dangling [[relation]] edge)",
-                        edge.source.canonical(),
-                        edge.label.name(),
-                        raw
-                    ));
-                }
+            // entities in the same Catalog. A None here is a bug — guarded by
+            // the invariant that every CatalogEdge.source is drawn from the
+            // same Catalog whose entities built entity_kinds.
+            let CatalogKey::Numbered(source_key) = &edge.source else {
+                continue;
+            };
+            let CatalogEdgeLabel::Validated(label) = &edge.label else {
+                // Raw label on a numbered edge is catalog corruption.
+                findings.push(format!(
+                    "internal: numbered edge {} has Raw label {:?}",
+                    source_key.canonical(),
+                    edge.label.name()
+                ));
+                continue;
+            };
+            let Some(kind) = entity_kinds.get(source_key) else {
+                findings.push(format!(
+                    "internal: edge source {} not in entity-kind map",
+                    source_key.canonical()
+                ));
+                continue;
+            };
+            let validated = crate::relation::lookup(kind, *label)
+                .is_some_and(|r| !matches!(r.target, TargetSpec::Unvalidated));
+            if validated {
+                findings.push(format!(
+                    "{}: `{}` target `{}` does not resolve (dangling [[relation]] edge)",
+                    edge.source.canonical(),
+                    edge.label.name(),
+                    raw
+                ));
             }
         }
     }
