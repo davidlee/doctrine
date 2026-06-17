@@ -99,6 +99,15 @@ edits. The retune tightens the prose:
 - **Add** the reconciliation brief as audit's final output: a dedicated
   `## Reconciliation Brief` section in the RV markdown, separate from
   `## Synthesis`, mapping findings to target artefacts.
+- **Disposition convention replacing `design-wrong`:** audit raises the
+  finding, disposes it `verified` (terminal — the observation is confirmed),
+  and records the exact change needed in the reconciliation brief. Audit's
+  permitted dispositions are: `aligned` (observation correct, no change),
+  `fix-now` (code fix within audit scope only — never spec/governance edit),
+  `tolerated` (explicit accepted drift with rationale), and
+  `verified`-with-brief-link for spec/governance changes delegated to
+  reconcile. Audit must **never** use `design-wrong` or `follow-up` for
+  spec/governance changes — those belong to reconcile's write surface.
 - Findings that require a change stay `verified` (the finding is confirmed) —
   the *remediation* belongs to reconcile and is recorded separately. Do not
   mutate finding disposition to `fixed`; the RV may not support that state,
@@ -128,19 +137,24 @@ references RV, checks closure seam). Add:
 
 ### D7 — Routing wire
 
-Add the `/reconcile` row to `install/routing-process.md` (the boot snapshot
-source). The row reads:
+Two edits to `install/routing-process.md` (the boot snapshot source):
 
-```
-| Slice exists, audit complete, reconciliation brief ready | `/reconcile` |
-```
+1. **Update the existing audit row** from `| Implementation done — evidence /
+   reconciliation | `/audit` → `/close` |` to reflect the new seam:
+   `| Implementation done — evidence / reconciliation | `/audit` → `/reconcile`
+   → `/close` |`.
+2. **Add the `/reconcile` row:**
+   ```
+   | Slice exists, audit RV resolved, reconciliation brief written | `/reconcile` |
+   ```
 
-This lands **only when the skill ships** — never point routing at a deferred
-skill (ADR-009 F2/F14). Until then, reconcile-entry is manual discipline.
+Both edits land **only after `doctrine claude install` succeeds** — never point
+routing at a deferred skill (ADR-009 F2/F14). The install must complete before
+the routing row is added. Until then, reconcile-entry is manual discipline.
 
 Verification: after `doctrine boot`, the generated `.doctrine/state/boot.md`
-must include the `/reconcile` row in the routing table, not just the install
-source.
+must include both the updated audit chain and the `/reconcile` row in the
+routing table, not just the install source.
 
 ### D8 — No CLI verb surface in this slice
 

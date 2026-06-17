@@ -1,0 +1,88 @@
+id    = 53
+slug  = "reconciliation-review-of-sl-083"
+title = "reconciliation review of SL-083"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-083"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "F-1: Manual verification checklist not completed — PHASE-06 EX-6 unmet"
+detail = '''Expected: PHASE-06 EX-6 requires "Manual checklist results recorded in .doctrine/slice/083/notes/ with pass/fail per item." Design §5 (Verification strategy): "Manual checklist results must be recorded in the slice notes (.doctrine/slice/083/notes/) before the slice can be accepted. Each item must be explicitly confirmed pass/fail with any observations."\n\nObserved: No notes/ directory exists under .doctrine/slice/083/. The handover.md contains the 16-item checklist template with '✅/❌' markers — no pass/fail results recorded for any item. Plan criteria VA-1 (all 16 items pass), VA-2 (no JS console errors; all hash routes functional), and VH-1 (light + dark mode pass) are all unverified.\n\nEvidence: .doctrine/slice/083/handover.md lines 85-101 (checklist with ✅/❌ markers); no .doctrine/slice/083/notes/ directory exists; plan.toml PHASE-06 EX-6 + VA-1/VA-2/VH-1.'''
+disposition = "fix-now"
+response = "Manual verification is a hard gate — PHASE-06 EX-6 explicitly requires 'Manual checklist results recorded in .doctrine/slice/083/notes/ with pass/fail per item' and design §5 says 'before the slice can be accepted.' The checklist exists in handover.md but all 16 items are unmarked (✅/❌). This must be completed before closure. If browser is unavailable in this environment, consult the user for access or judgement."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "F-2: render.graphPane computes model.neighbourhood internally — DI deviation from design"
+detail = 'Expected: Design §2 render.graphPane signature shows neighbourhood as a parameter — consistent with DI hard contract §1: "Modules receive state as function parameters; only app.js reads/writes state.* directly."\n\nObserved: render.graphPane receives { graph, focusId, depth, ... } and computes model.neighbourhood(focusId, depth, graph) internally (render.js line 340), reaching into the model global namespace.\n\nFunctional impact: None — neighbourhood is deterministic from graph+focusId+depth. The result is identical to app.js pre-computing it. Behavioural purity preserved.\n\nEvidence: render.js:340 (model.neighbourhood call inside render.graphPane); design.md §2 render.graphPane signature vs actual opts extraction at render.js:333-339.'
+disposition = "tolerated"
+response = "render.graphPane computes model.neighbourhood(focusId, depth, graph) internally instead of receiving a pre-computed neighbourhood object. The DI deviation is intentional and functionally transparent — neighbourhood is deterministic from graph + focusId + depth, and the result is identical to app.js pre-computing it. Fixing this would require a 3-line neighbourhood computation in app.js renderView() and remove 1 line from render.graphPane — pure ceremony with zero behavioural difference. The pragmatic choice is consciously accepted; the design.md signature for render.graphPane should be updated to reflect the actual param (graph instead of neighbourhood)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "F-4: cm.renderDiagram missing 'editing' param from documented design signature"
+detail = '''Expected: Design §2 shows cm.renderDiagram({ container, cm, focusKey, depth, editing, dotAvailable, seq, onClick, onHoverEnter, onHoverLeave }) — editing is a documented parameter.\n\nObserved: Implementation omits editing — the parameter isn't needed because editing-state branching (click handler decides rename vs focus toggle) is entirely in app.js per D2. cm.renderDiagram fires the callback unconditionally; app.js checks state.editingConceptMap before deciding the action.\n\nFunctional impact: None — D2 explicitly says "Node-click callbacks fire unconditionally — editing-state branching is app.js's responsibility." The design simply listed a param the implementation correctly doesn't consume.\n\nEvidence: concept-map.js:75 (renderDiagram signature — no editing destructure); design.md §2 cm.renderDiagram signature; app.js:85 (onClick checks state.editingConceptMap).'''
+disposition = "design-wrong"
+response = "render.relationshipTable design signature includes kindFilter, but app.js's buildTableEdges() applies kind filtering upstream before passing edges. The design over-specified the param. Update design.md §2 render.relationshipTable signature to drop kindFilter."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "F-3: render.relationshipTable signature missing kindFilter param vs design"
+detail = 'Expected: Design §2 shows render.relationshipTable({ container, edges, graph, kindFilter, focusId, depth }) — kindFilter is a documented parameter.\n\nObserved: Implementation takes { container, edges, graph, focusId, depth } — kindFilter is absent. App.js buildTableEdges() applies the kind filter upstream before passing edges.\n\nFunctional impact: None — edges are pre-filtered. Design signature is stale documentation.\n\nEvidence: render.js:148 (relationshipTable signature); app.js:15 (buildTableEdges applies kindFilter); design.md §2 render.relationshipTable signature.'
+disposition = "design-wrong"
+response = "cm.renderDiagram design signature lists 'editing' but the implementation correctly omits it — D2 says onClick fires unconditionally and editing-state branching is app.js's responsibility. The design over-specification is resolved in implementation. Update design.md §2 cm.renderDiagram signature to drop the editing param."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "F-4: render.graphPane uses onNodeHoverEnter/onNodeHoverLeave vs design's single onNodeHover"
+detail = 'Expected: Design §2 shows render.graphPane({ ..., onNodeHover }) — a single callback for hover events.\n\nObserved: Implementation uses separate onNodeHoverEnter and onNodeHoverLeave callbacks (render.js:375-376). This is a naming drift from the design — the implementation is functionally clearer (separate enter/leave vs a single ambiguous callback) but the design document is now stale.\n\nEvidence: render.js:375-376 (onNodeHoverEnter/onNodeHoverLeave usage); design.md §2 render.graphPane signature; app.js:68-69 (passes separate callbacks).'
+disposition = "design-wrong"
+response = "render.graphPane uses separate onNodeHoverEnter/onNodeHoverLeave callbacks instead of design's single onNodeHover. Update design.md §2 render.graphPane signature."
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "blocker"
+title = "F-6: Entity graph: clicking SVG nodes updates URL but does not re-render graph"
+detail = 'Expected: Clicking an entity graph SVG node triggers hash change → renderView() → focusChanged=true → render.graphPane() → async DOT render → new SVG displayed for the new focus entity.\n\nObserved: URL changes (hash updates), but graph display stays on previous entity. Depth button changes DO trigger correct re-renders, meaning the rendering pipeline works — only the node-click → re-render path is broken.\n\nRoot cause: Not yet identified through code inspection. Possible suspects:\n1. SVG click handler not firing (hit rect interference? event bubbling quirk?)\n2. The goto(id) function (router.setFocus → hashchange → renderView) path has a timing issue where renderView is called before hash updates\n3. The seq guard in render.graphPane discarding valid responses\n\nSeverity: Blocker — entity graph navigation is the core UX of the map frontend.'
+disposition = "fixed"
+response = "Re-scoped: the reproduced defect is CONCEPT-MAP node click, not entity graph (entity clicks re-render via focusChanged). Clicking a CM node mutated state.cmFocusNode only; renderView's guard (focusChanged||depthChanged||graphMissing) stayed false so renderCmGraph/api.renderDot never fired. Added state.renderedCmFocus + cmFocusChanged to the guard. Confirmed in browser by user. Commit 12b0ad2."
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "blocker"
+title = "F-7: CM navigation — router.buildHash writes cm_focus= but parseHash reads params.cmFocus (snake_case vs camelCase)"
+detail = 'Expected: router.buildHash and parseHash use same query param name for CM focus.\n\nObserved: buildHash writes cm_focus= (line 57), parseHash reads params.cmFocus (line 19). JS property access case-sensitive — params.cmFocus always undefined. CM focus state lost across hash changes.\n\nPre-existing from SL-076 (cb6451c).\n\nFix: align naming — change line 57 cm_focus→cmFocus or line 19 cmFocus→cm_focus.\n\nEvidence: router.js:57, router.js:19.'
+disposition = "fixed"
+response = "router.js:57 buildHash now emits cmFocus= (was cm_focus=), matching parseHash's params.cmFocus read. Commit 12b0ad2."
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "blocker"
+title = "F-8: Entity graph renders no relations — normalizeGraph parses pre-SL-081 edge serialization"
+detail = """/api/graph migrated to the SL-081 Catalog projection: edge.source is a flat canonical string, edge.target is {Resolved:"SL-002"}, edge.label is tagged {Validated|Raw}. web/map/model.js normalizeGraph still read edge.source.prefix / edge.target.Resolved.prefix / edge.target.Resolved.id and a string label, so every edge resolved to 'undefined-undefined' and matched no node — zero relations in graph and table. Folded into SL-083 per user decision. Fix: parse the new shape (all 492 edges now resolve); canonicalize PascalCase RelationLabel to snake_case; rebuild the stale edge-colour palette (dot.js) and legend (index.html) around the current relation vocabulary."""
+disposition = "fixed"
+response = "normalizeGraph now parses the SL-081 Catalog edge shape; 492/492 edges resolve. Label canonicalized PascalCase->snake_case; palette+legend rebuilt. Entity relations confirmin browser by user. Commit 12b0ad2."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

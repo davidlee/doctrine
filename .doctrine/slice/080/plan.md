@@ -31,9 +31,10 @@ list — the file was partially retuned since IMP-008 was filed (it already uses
 spec-coherence gate is the new addition.
 
 **PHASE-04 (routing wire) goes last.** ADR-009 F14 mandates shipped-not-reachable
-— the routing row must not point at a deferred skill. All three skills must
-exist before the row is added. This phase also regenerates boot.md and verifies
-`doctrine claude install` succeeds.
+— the routing row must not point at a deferred skill. `doctrine claude install`
+must succeed before the routing rows are edited. The intra-phase order is:
+(1) install and verify, (2) edit the routing rows (update audit→close chain
+and add /reconcile row), (3) regenerate boot.md and verify coherence.
 
 ### Entrance criteria: soft preferences vs hard gates
 
@@ -42,8 +43,8 @@ hard structural gates — they recommend reading /reconcile first so the audit a
 close handoff prose is consistent, but PHASE-02 and PHASE-03 may proceed
 concurrently if the design shapes (D3, D4) are understood. PHASE-04 is a **hard
 structural gate**: ADR-009 F14 forbids routing at a deferred skill
-(shipped-not-reachable), so all three skills must exist before the routing row
-is added.
+(shipped-not-reachable), so all three skills must be installed and embedded
+(`doctrine claude install` succeeded) before the routing rows are edited.
 
 PHASE-02 and PHASE-03 are file-disjoint and could run in parallel. Serial
 execution with short phases keeps the narrative chain coherent across files
