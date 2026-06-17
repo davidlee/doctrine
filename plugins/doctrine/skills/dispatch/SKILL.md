@@ -1,6 +1,6 @@
 ---
 name: dispatch
-description: Use to drive a slice's phases to completion through sub-agent workers in isolated worktrees — you orchestrate and are the sole writer, the workers execute. A thin router that detects the harness and hands off to `/dispatch-subprocess` (pi / codex) or `/dispatch-agent` (claude); the funnel cadence (import → verify → branch-point guard → one commit → record) is identical on both arms. Default serial (one worker per phase); parallelize file-disjoint phases. Conflicts report-and-halt, never auto-merge.
+description: Use to drive a slice's phases to completion through sub-agent workers in isolated worktrees — you orchestrate and are the sole writer, the workers execute. A thin router that detects the harness and hands off to `/dispatch-subprocess` (codex/pi) or `/dispatch-agent` (claude); the funnel cadence (import → verify → branch-point guard → one commit → record) is identical on both arms. Default serial (one worker per phase); parallelize file-disjoint phases. Conflicts report-and-halt, never auto-merge.
 ---
 
 # Dispatch (router)
@@ -37,21 +37,14 @@ agent's **harness self-belief cross-checked against env-marker detection**:
 
 | Detected harness | Hand off to | Spawn mechanism |
 |---|---|---|
-| **pi** (subprocess-capable, pi-subagents extension) | [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md) (pi row) | `subagent(agent="dispatch-worker", task="<prompt>", cwd="$D")` — see subprocess skill |
-| **codex** (subprocess-capable, env channel) | [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md) (codex row) | `env -C "$D" DOCTRINE_WORKER=1 codex exec "<prompt>"` — legacy placeholder, untested end-to-end |
+| **codex / pi** (subprocess-capable, env channel) | [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md) | `worktree fork --worker` + `env -C "$D"` / bwrap `--chdir` |
 | **claude** (`Agent` tool, `isolation: worktree`) | [`/dispatch-agent`](../dispatch-agent/SKILL.md) | `Agent` `subagent_type: dispatch-worker` + SubagentStart stamp |
 
 - **Cross-check, don't trust self-belief alone.** Confirm the agent's stated
-  harness against an env marker. Route **only when they agree:**
-
-  | Harness | Env marker | Detection order |
-  |---|---|---|
-  | pi | `PI_HOME` (set by pi binary at startup) | 1st — `PI_HOME` + self-belief="pi" |
-  | claude | `CLAUDECODE` | 2nd — `CLAUDECODE` + self-belief="claude" |
-  | codex | Unknown (deferred to codex spike) | 3rd — self-belief="codex", no env marker known |
-
-- **Mismatch ⇒ refuse, NAMING the cause** (e.g. "self-belief=pi but no `PI_HOME` in env"), never a blind spawn.
-- **Unknown harness ⇒ refuse** (not pi, not claude, not codex — never guess).
+  harness against an env marker (`CLAUDECODE` etc.). Route **only when they agree.**
+- **Mismatch / unknown ⇒ refuse, NAMING the cause** (e.g. "self-belief=claude but
+  no `CLAUDECODE` in env"), never a blind spawn. Per-harness detection is itself
+  spike-gated; an unrecognised harness is a stop, not a guess.
 
 The arms own the spawn template, worker-identity mechanism, and arm-specific
 residuals (base-pinning, self-clear, concurrency floor). Everything below is shared.
@@ -224,7 +217,7 @@ git mechanics are the shipped `import` verb (see [worktree skill](../worktree/SK
    knowledge commit and run `doctrine dispatch record-boundary --slice <N> --phase
    PHASE-NN --code-start <B> --code-end <B+1>`. This is the input stage-1
    `prepare-review` tree-reads to **cut `phase/<slice>-NN`** on the fork-less claude
-   arm (design §4.3). On pi and codex the worker fork branch **is** the native phase
+   arm (design §4.3). On codex/pi the worker fork branch **is** the native phase
    deliverable — skip this step (see [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md)).
 8. **record — knowledge trails the commit.** Memory / AC evidence / notes, *after*
    the confirmed commit (and after 7a, so `boundaries.toml` rides the knowledge
@@ -262,7 +255,7 @@ just a crash — recover the same way.
 | No phase parallelizes | **Serial — one worker per phase, batch of one, same funnel.** Never bail to inline |
 | Set up the run | `doctrine worktree coordinate --slice <N> --dir <path>` — funnel on the dedicated `dispatch/<slice>` worktree, never session `main` |
 | Drive the slice | Loop: `/phase-plan` → route+spawn → funnel → repeat from new HEAD until done |
-| Pick the arm | pi → `/dispatch-subprocess` (pi row); codex → `/dispatch-subprocess` (codex row); claude → `/dispatch-agent`; route only on self-belief↔env agreement |
+| Pick the arm | codex/pi → `/dispatch-subprocess`; claude → `/dispatch-agent`; route only on self-belief↔env agreement |
 | Harness mismatch / unknown | **Refuse, NAMING the cause** — never a blind spawn |
 | Handover cadence | Early, at a **committed** boundary, on `handover_after` (5) **or** `handover_delta` `B..S` lines (2000), whichever first |
 | Worker reports a fork / can't finish clean | It halted by contract → **you `/consult`**; never auto-adapt plan or design |
@@ -282,7 +275,7 @@ just a crash — recover the same way.
 
 **Never:**
 - Spawn without routing — a blind spawn on an unconfirmed harness. Route on
-  agreement (three-way: pi/codex/claude); refuse naming the cause on mismatch.
+  agreement; refuse naming the cause on mismatch.
 - Restate an arm's spawn template here — link to `/dispatch-subprocess` /
   `/dispatch-agent`.
 - Let a worker write `.doctrine/`/`.claude/` authored trees, or import a delta that

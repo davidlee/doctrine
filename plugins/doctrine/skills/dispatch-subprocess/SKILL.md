@@ -1,51 +1,19 @@
 ---
 name: dispatch-subprocess
-description: >-
-  The pi / codex arms of `/dispatch` — `doctrine worktree fork --worker` then spawn the worker as a subprocess with its cwd bound to the fork via the per-harness spawn mechanism (pi subprocess via `subagent` tool, codex via `codex exec`). Carries the per-worktree env contract and the DOCTRINE_WORKER self-arm. Reached only from the `/dispatch` router on a pi/codex↔env-marker agreement; do not invoke directly.
+description: The codex/pi arm of `/dispatch` — `doctrine worktree fork --worker` then spawn the worker as a subprocess with its cwd bound to the fork via `env -C`, or the confined bwrap `--chdir` profile. Carries the per-worktree env contract and the DOCTRINE_WORKER self-arm. Reached only from the `/dispatch` router on a codex/pi↔env-marker agreement; do not invoke directly.
 ---
 
-# Dispatch — pi / codex arms (`fork` verb + subprocess spawn)
+# Dispatch — codex/pi arm (`fork` verb + subprocess spawn)
 
-The harness-shaped **spawn half** for pi and codex. The harness-identical funnel
+The harness-shaped **spawn half** for codex / pi. The harness-identical funnel
 (capture `B` → import → verify → branch-point → one commit → record) and the drive
 loop live in the [`/dispatch` router](../dispatch/SKILL.md) — **do not restate them
-here.** This skill is only *how a pi or codex worker is created, identified, and
-spawned* — the correct spawn mechanism depends on the detected harness (see the
-[harness→spawn table](#harnessspawn-table) below).
+here.** This skill is only *how a codex/pi worker is created, identified, and
+spawned*.
 
 **Reached from the router, never directly.** `/dispatch` routes here only when the
-agent's harness self-belief (pi or codex) **agrees** with env-marker detection. A
+agent's harness self-belief (codex/pi) **agrees** with env-marker detection. A
 mismatch/unknown refuses there, naming the cause — never a blind spawn.
-
-## Harness→spawn table
-
-The fork verb and worker identity infrastructure are shared; only the spawn
-mechanism differs per harness. Select the row matching the harness the router
-detected:
-
-| Harness | Spawn mechanism | Identity | Notes |
-|---|---|---|---|
-| **pi** | `subagent(agent="dispatch-worker", task="<pre-distilled prompt>", cwd="$D")` | Disk marker (primary) + prompt self-arm (prefix `DOCTRINE_WORKER=1` per command) | ✅ Tested end-to-end. Requires `pi-subagents` extension; detected via `PI_HOME` env + self-belief. **Residual:** fork branch IS the phase ref — gc only after `dispatch sync --prepare-review`. |
-| **codex** | `env -C "$D" DOCTRINE_WORKER=1 $fork_env codex exec "<pre-distilled prompt>"` | Disk marker (primary) + env `DOCTRINE_WORKER=1` (orchestrator-set) | ⚠️ Legacy placeholder — **untested end-to-end.** Detected by explicit self-belief ("I am codex"), no env marker known. Env-marker validation deferred to codex spike. **Residual:** same gc-after-sync ordering constraint as pi. |
-
-### D3 — pi-subagents extension detection
-
-Before spawning a pi worker, the orchestrator MUST verify the `subagent` tool
-is available in its tool list (a self-check, not a `bash` command — the LLM's
-available function/tool surface). If `subagent` is absent:
-
-> "pi dispatch requires the `pi-subagents` extension. Install: `pi install pi-subagents`"
-
-No silent fallback — the agent-def contract (source-only discipline, structured
-report, no `.doctrine/` writes) is load-bearing and requires the extension.
-
-### D3 — codex detection (provisional)
-
-Codex detection uses explicit self-belief only ("I am codex") with no known env
-marker. The dispatch router conveys self-belief via the pre-distilled prompt
-when the harness check matches the codex branch. Env-marker characterization is
-deferred to a separate codex spike — until then, unknown/non-pi/non-claude does
-NOT imply codex; it refuses.
 
 ## Create — `doctrine worktree fork --worker`
 
@@ -62,12 +30,7 @@ fork_env="$(doctrine worktree fork --base "$B" --branch "$BR" --dir "$D" --worke
   per line); human status went to stderr. A non-zero `fork` means **no worktree** —
   halt, do not spawn.
 
-## Spawn (codex) — bind the worker cwd to the fork
-
-**The pi spawn variant is the [harness→spawn table](#harnessspawn-table) above — use
-`subagent()` instead of `codex exec`.** The codex variants below are the legacy
-`codex exec` spawn mechanism, preserved for codex workers only. Both rows share the
-same fork/marker/cwd infrastructure.
+## Spawn — bind the worker cwd to the fork
 
 The worker process **must** run with its cwd bound to the fork `$D`. Two variants:
 
@@ -98,7 +61,7 @@ bwrap --ro-bind / / --bind "$D" "$D" --bind "$TARGET" "$TARGET" \
   comes **after** `--bind "$D"`: the worktree stays rw, but the marker file is
   ro, so the worker **cannot `rm`/overwrite its own marker** (DENIED) ⇒ cannot
   escape worker-mode at the OS floor (closes the §4c self-clear residual on this
-  arm — codex only).
+  arm — codex/pi only).
 - **NEVER ro-bind `.claude/settings.local.json`.** It sits inside the rw worktree
   and is **not** overlaid — it must stay writable for the harness permission-grant
   persistence (§9). Only the marker is pinned ro.
@@ -111,10 +74,8 @@ bwrap --ro-bind / / --bind "$D" "$D" --bind "$TARGET" "$TARGET" \
 
 ## Worker identity — the disk marker + `DOCTRINE_WORKER=1`
 
-`fork --worker` stamps the marker before the spawn window. For the **codex** row the
-spawn line also sets `DOCTRINE_WORKER=1` (env self-arm); for the **pi** row the
-worker self-arms via prompt prefix per command (the `subagent` tool has no env
-parameter). `worker_mode = (is_linked_worktree &&
+`fork --worker` stamps the marker before the spawn window; the spawn line also sets
+`DOCTRINE_WORKER=1` (self-arm). `worker_mode = (is_linked_worktree &&
 marker_present) OR env DOCTRINE_WORKER`. On this arm both the marker (real env
 channel) and bwrap are available, so the worker-mode floor is firmer than the
 claude arm — the confined profile makes it an **OS floor**, not just a prompt
@@ -151,7 +112,7 @@ it; it is consumed only where the cut needs it.
 
 **Always:**
 - Halt on a non-zero `fork` — no worktree, no spawn.
-- Bind the worker cwd to the fork. For pi: use `subagent(cwd="$D")`. For codex: use `env -C "$D"` or `--chdir "$D"`. Carry `$fork_env` and `DOCTRINE_WORKER=1` (codex env; pi prompt prefix).
+- Bind the worker cwd to the fork; carry `$fork_env` and `DOCTRINE_WORKER=1`.
 - Prefer the confined bwrap profile in-jail (OS floor); fall back to `env -C` only
   where bwrap is unavailable.
 - Return to the router for the funnel cadence — import, verify, branch-point, one
