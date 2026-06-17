@@ -15,30 +15,11 @@
   /* -----------------------------------------------------------------------
    * Utilities
    * --------------------------------------------------------------------- */
-  function el(tag, attrs, children) {
-    var e = document.createElement(tag);
-    if (attrs) {
-      Object.keys(attrs).forEach(function (k) {
-        if (k === 'className') e.className = attrs[k];
-        else if (k === 'textContent') e.textContent = attrs[k];
-        else if (k === 'innerHTML') e.innerHTML = attrs[k];
-        else e.setAttribute(k, attrs[k]);
-      });
-    }
-    if (children) {
-      (Array.isArray(children) ? children : [children]).forEach(function (c) {
-        if (typeof c === 'string') e.appendChild(document.createTextNode(c));
-        else e.appendChild(c);
-      });
-    }
-    return e;
-  }
-
   function showError(container, msg) {
     container.innerHTML = '';
     container.appendChild(
-      el('div', { className: 'error' }, [
-        el('p', { textContent: 'Error: ' + msg })
+      render.el('div', { className: 'error' }, [
+        render.el('p', { textContent: 'Error: ' + msg })
       ])
     );
   }
@@ -54,28 +35,13 @@
     return window.DOMPurify.sanitize(raw);
   }
 
-  /* Factory: single entity-list <li> element (DRY). */
-  function buildEntityItem(node) {
-    var li = document.createElement('li');
-    li.className = 'entity-item';
-    if (node.id === state.focusId) li.classList.add('active');
-    var t = document.createElement('span'); t.className = 'entity-title'; t.textContent = node.title; li.appendChild(t);
-    var p = document.createElement('span'); p.className = 'kind-pill';
-    p.style.background = 'var(--kind-' + node.kindPrefix + ')'; p.textContent = node.kindPrefix; li.appendChild(p);
-    li.addEventListener('click', (function(id) {
-      return function() { router.setFocus(id, state.depth); };
-    })(node.id));
-    return li;
-  }
-
   /* -----------------------------------------------------------------------
-   * Interactive UI wiring (PHASE-05) — kind filter, search, depth, refresh,
-   * entity list, relationship table, focus header
+   * Entity list node collection helpers
    * --------------------------------------------------------------------- */
-  function renderEntityList(query) {
-    var list = document.querySelector('.entity-list');
-    if (!list) return;
 
+  // Collect and filter entity nodes for the sidebar list.
+  // query: search string (null/empty = all). Returns sorted node array.
+  function collectListNodes(query) {
     var nodes;
     if (query && query.trim()) {
       nodes = model.searchFilter(query.trim(), state.graph);
@@ -83,42 +49,22 @@
       nodes = [];
       state.graph.nodes.forEach(function(node) { nodes.push(node); });
     }
-
     if (state.kindFilter) {
       nodes = nodes.filter(function(node) { return state.kindFilter.has(node.kindPrefix); });
     }
-
     nodes.sort(compareNodes);
-
-    list.innerHTML = '';
-    nodes.forEach(function(node) {
-      list.appendChild(buildEntityItem(node));
-    });
+    return nodes;
   }
 
   function renderFilteredEntities() {
     var input = document.querySelector('.search-input');
-    renderEntityList(input ? input.value : '');
-  }
-
-  function renderFocusHeader() {
-    var header = document.querySelector('.focus-header');
-    if (!header) return;
-
-    if (!state.focusId) {
-      header.innerHTML = '<span class="placeholder">Entity title — kind · status</span>';
-      return;
-    }
-
-    var node = state.graph.nodes.get(state.focusId);
-    if (!node) {
-      header.innerHTML = '<span class="placeholder">Entity title — kind · status</span>';
-      return;
-    }
-
-    header.innerHTML = '<span>' + render.escapeHtml(node.title) + '</span>' +
-      ' <span class="kind-pill" style="background:var(--kind-' + render.escapeHtml(node.kindPrefix) + ')">' + render.escapeHtml(node.kindPrefix) + '</span>' +
-      ' <span class="status">' + render.escapeHtml(node.status) + '</span>';
+    var nodes = collectListNodes(input ? input.value : '');
+    render.entityList({
+      container: render.elements.entityList,
+      nodes: nodes,
+      focusId: state.focusId,
+      onFocus: function(id) { router.setFocus(id, state.depth); }
+    });
   }
 
   function renderRelationshipTable() {
@@ -253,8 +199,13 @@
     if (!input) return;
 
     input.addEventListener('input', function() {
-      var query = input.value.trim();
-      renderEntityList(query);
+      var nodes = collectListNodes(input.value.trim());
+      render.entityList({
+        container: render.elements.entityList,
+        nodes: nodes,
+        focusId: state.focusId,
+        onFocus: function(id) { router.setFocus(id, state.depth); }
+      });
     });
 
     input.addEventListener('keydown', function(e) {
@@ -302,7 +253,12 @@
         input.value = '';
         input.blur();
         state.listNavIndex = undefined;
-        renderEntityList();
+        render.entityList({
+          container: render.elements.entityList,
+          nodes: collectListNodes(''),
+          focusId: state.focusId,
+          onFocus: function(id) { router.setFocus(id, state.depth); }
+        });
       }
     });
   }
@@ -630,14 +586,27 @@
       if (mdPane) mdPane.innerHTML = '<span class="placeholder">[Markdown content]</span>';
       var tbody = document.querySelector('.relationship-table tbody');
       if (tbody) tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[Relationship table]</span></td></tr>';
-      renderEntityList();
-      renderFocusHeader();
+      render.entityList({
+        container: render.elements.entityList,
+        nodes: collectListNodes(''),
+        focusId: state.focusId,
+        onFocus: function(id) { router.setFocus(id, state.depth); }
+      });
+      render.focusHeader({
+        container: render.elements.focusHeader,
+        focusId: state.focusId,
+        graph: state.graph
+      });
       return;
     }
 
     // Sidebar / header / table always update synchronously
     renderFilteredEntities();
-    renderFocusHeader();
+    render.focusHeader({
+      container: render.elements.focusHeader,
+      focusId: state.focusId,
+      graph: state.graph
+    });
     renderRelationshipTable();
     renderHoverPane(null);
 
