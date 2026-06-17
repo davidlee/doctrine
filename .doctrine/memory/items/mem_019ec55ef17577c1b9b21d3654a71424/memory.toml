@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.claude-agent-worktree-integrates-commit-onto-parent"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.rtk-git-diff-stat-use-checkout-import"

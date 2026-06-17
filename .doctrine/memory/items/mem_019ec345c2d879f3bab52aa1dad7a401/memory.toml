@@ -39,3 +39,15 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.spawn-backend-harness-agnostic-no-free-env-seam"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.claude-subagentstart-worker-identity"
+
+[[relation]]
+label = "related"
+target = "mem.fact.doctrine.jail-target-dir"

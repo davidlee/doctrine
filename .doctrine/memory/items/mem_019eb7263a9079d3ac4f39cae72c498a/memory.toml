@@ -39,3 +39,11 @@ trust_level = "high"
 [ranking]
 severity = "high"
 weight = 80
+
+[[relation]]
+label = "related"
+target = "mem.concept.dispatch.gitignored-tier-partition"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.authoring-entities-not-dispatchable"

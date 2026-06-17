@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.tooling.git-cat-file-e-exit-masked-use-ls-tree"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.sync-tree-reads-ledger-not-worktree"

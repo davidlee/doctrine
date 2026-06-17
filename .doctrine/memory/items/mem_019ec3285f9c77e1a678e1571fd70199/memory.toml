@@ -39,3 +39,15 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.lint.dead-code-self-clearing-leaf"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.lint.dead-code-expect-vs-cfg-test"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.lint.expect-not-allow"

@@ -1,0 +1,34 @@
+id    = 62
+slug  = "reconciliation-review-of-sl-089"
+title = "reconciliation review of SL-089"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-089"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "view-btn.active uses --kind-SL not --accent-color per design - but --accent-color doesn't exist"
+detail = "Design.md §5 specifies .view-btn.active { background: var(--accent-color); ... } but --accent-color is not defined in :root. Implementation uses var(--kind-SL) instead, consistent with .depth-btn.active pattern. No behavioural impact; the design's specified variable was never added to the theme. Expected: either define --accent-color in :root or update design.md to reference --kind-SL."
+disposition = "aligned"
+response = "Implementation correctly uses --kind-SL (the blue accent used by .depth-btn.active) because --accent-color is not defined in :root. The design.md §5 CSS snippet was illustrative; the implementation followed the established pattern. No change needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Priority legend shows duplicate 'Edge types' label in actionability mode"
+detail = """index.html has an outer <span class="legend-label">Edge types</span> before the first .legend-items div, and the .priority-legend div contains its own <span class="legend-label">Edge types</span>. In actionability mode, both are visible (outer label is never hidden; priority-legend is shown). This produces two 'Edge types' headings. Expected: either move the outer label inside the first .legend-items div (so it hides with semantic mode), or remove the inner label from .priority-legend."""
+disposition = "fix-now"
+response = 'Removed the inner <span class="legend-label"> from .priority-legend div in index.html. The outer label serves both modes; the inner label was redundant. Fixed in dispatch/089 at 90f3f59.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

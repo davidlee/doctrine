@@ -39,3 +39,11 @@ trust_level = "high"
 [ranking]
 severity = "high"
 weight = 3
+
+[[relation]]
+label = "related"
+target = "mem.system.coordination.concurrent-design-shared-main-worktree"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.fork-rung3-base-not-session-head"

@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "high"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.fact.backend.forgettable-event-store"
+
+[[relation]]
+label = "descends_from"
+target = "mem.fact.backend.forgettable-event-store"

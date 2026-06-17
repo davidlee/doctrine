@@ -39,3 +39,19 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.skill.description-is-the-trigger"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.distribution.skills-source-vs-installed"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.distribution.skill-refresh-command"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.distribution.skill-frontmatter-yaml-no-colon-no-quote"

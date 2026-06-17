@@ -39,3 +39,19 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.build.jail-target-redirect"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.worktree-removal-stale-manifest-dir-false-red"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.review.superseded-by-is-adr004-carveout"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.entity.numbered-kind-identity-table"

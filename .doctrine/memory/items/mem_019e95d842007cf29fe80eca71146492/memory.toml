@@ -39,3 +39,7 @@ trust_level = "medium"
 [ranking]
 severity = "low"
 weight = 2
+
+[[relation]]
+label = "related"
+target = "mem.pattern.build.jail-target-redirect"

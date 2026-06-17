@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "medium"
 weight = 2
+
+[[relation]]
+label = "related"
+target = "mem.pattern.install.authored-entity-wiring"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.lint.string-build-no-push-format"

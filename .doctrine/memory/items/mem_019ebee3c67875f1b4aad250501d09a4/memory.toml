@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.review.invariant-test-must-drive-the-write-seam"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.parse.toml-error-classification-fragile"

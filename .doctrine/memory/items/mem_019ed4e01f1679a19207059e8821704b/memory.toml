@@ -39,3 +39,15 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.relation.relate-via-link-not-hand-authored-rows"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.relation.authored-rows-tooling-half-wired"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.entity.numbered-kind-identity-table"

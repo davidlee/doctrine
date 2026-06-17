@@ -39,3 +39,7 @@ trust_level = "high"
 [ranking]
 severity = "low"
 weight = 2
+
+[[relation]]
+label = "related"
+target = "mem.pattern.entity.numbered-kind-identity-table"

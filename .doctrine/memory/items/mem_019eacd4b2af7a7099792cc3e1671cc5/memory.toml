@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.install.authored-entity-wiring"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.distribution.shipped-not-reachable"

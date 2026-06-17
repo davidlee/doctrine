@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.review.guard-test-asserts-property-not-proxy"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.relation.relate-via-link-not-hand-authored-rows"

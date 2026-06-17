@@ -39,3 +39,11 @@ trust_level = "high"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.system.spec.composition-seam"
+
+[[relation]]
+label = "descends_from"
+target = "mem.system.spec.composition-seam"

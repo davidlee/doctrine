@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.authoring.reuse-tuned-prior-art-verbatim"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.distribution.skills-source-vs-installed"

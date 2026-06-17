@@ -39,3 +39,7 @@ trust_level = "medium"
 [ranking]
 severity = "high"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.system.engine.identity-claim-seam"

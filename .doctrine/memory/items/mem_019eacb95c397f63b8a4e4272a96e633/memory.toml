@@ -39,3 +39,15 @@ trust_level = "medium"
 [ranking]
 severity = "medium"
 weight = 3
+
+[[relation]]
+label = "descends_from"
+target = "mem.system.coordination.concurrent-design-shared-main-worktree"
+
+[[relation]]
+label = "descends_from"
+target = "mem.system.dispatch.orchestrator-on-shared-main-contention-cost"
+
+[[relation]]
+label = "descends_from"
+target = "mem.pattern.dispatch.fork-rung3-base-not-session-head"

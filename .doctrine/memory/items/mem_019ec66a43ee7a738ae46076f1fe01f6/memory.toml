@@ -39,3 +39,15 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.reanchor-base-on-disjoint-head-move"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.three-way-import-onto-moved-shared-main"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.sync-tree-reads-ledger-not-worktree"
