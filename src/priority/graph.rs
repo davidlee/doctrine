@@ -116,7 +116,7 @@ fn counts_toward_consequence(label: RelationLabel) -> bool {
 /// Propagates a scan/read error, or an internal cordage rejection of well-formed
 /// adapter input (an adapter bug, not a recoverable condition).
 pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
-    build_from(&relation_graph::scan_entities(root)?, root)
+    build_from(&relation_graph::scan_entities(root, &mut vec![])?, root)
 }
 
 /// Build the priority graph from a PRE-SCANNED entity slice (the SL-050 F2 shared-scan
@@ -499,11 +499,12 @@ mod tests {
 
         let pg = build(root).unwrap();
         // Node set equals the scanned entity set (one NodeAttr per scanned entity).
-        let scanned: std::collections::BTreeSet<EntityKey> = relation_graph::scan_entities(root)
-            .unwrap()
-            .iter()
-            .map(|e| e.key)
-            .collect();
+        let scanned: std::collections::BTreeSet<EntityKey> =
+            relation_graph::scan_entities(root, &mut vec![])
+                .unwrap()
+                .iter()
+                .map(|e| e.key)
+                .collect();
         let minted: std::collections::BTreeSet<EntityKey> = pg.attrs.keys().copied().collect();
         assert_eq!(minted, scanned, "every scanned entity is a node");
         // Each key resolves (distinct keys, all interned).
