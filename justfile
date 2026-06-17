@@ -24,6 +24,22 @@ lint:
 lint-js:
   npx eslint web/map/
 
+# Build the map frontend (typecheck + lint + test + vite build).
+web-build:
+  cd web/map && bun run build
+
+# Rust map server on port 8080 (matches vite proxy).
+map-serve:
+  cargo run -- map serve --port 8080
+
+# Vite dev server (proxies /api → localhost:8080). Run `just map-serve` alongside.
+web-dev:
+  cd web/map && bun run dev
+
+# Fast frontend check (typecheck + lint + test only, no dist).
+web-check:
+  cd web/map && bun run typecheck && bun run lint && bun run test
+
 build:
   cargo build
 
@@ -35,7 +51,7 @@ test:
 test-all:
   cargo test --workspace
 
-install:
+install: web-build
   cargo install --path .
 
 publish:
