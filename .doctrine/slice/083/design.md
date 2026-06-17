@@ -113,15 +113,15 @@ render.entityList = function({ container, nodes, focusId, onFocus }) { ... }
 
 render.focusHeader = function({ container, focusId, graph }) { ... }
 
-// Returns a Promise. seq guards stale renders.
-render.graphPane = function({ container, neighbourhood, focusId, depth, dotAvailable, seq, onNodeClick, onNodeHover }) { ... }
+// Returns a Promise. seq and getCurrentSeq guard stale renders.
+render.graphPane = function({ container, graph, focusId, depth, dotAvailable, seq, getCurrentSeq, onNodeClick, onNodeHoverEnter, onNodeHoverLeave }) { ... }
 
 render.hoverPane = function({ container, node }) { ... }
 
 // currentFocusId for stale-request guard. cache is the markdownCache Map.
 render.markdownPane = function({ container, id, cache, currentFocusId }) { ... }
 
-render.relationshipTable = function({ container, edges, graph, kindFilter, focusId, depth }) { ... }
+render.relationshipTable = function({ container, edges, graph, focusId, depth }) { ... }
 
 // Replaces graph-area content with edge metadata table.
 render.edgeDetail = function({ container, edge, graph, depth, focusId }) { ... }
@@ -163,8 +163,8 @@ search.renderFilteredEntities = function({ list, graph, query, kindFilter, focus
 var cm = {};
 
 // cm: normalized concept map data. focusKey: string | null.
-// editing: boolean. seq: graphRenderSeq token.
-cm.renderDiagram = function({ container, cm, focusKey, depth, editing, dotAvailable, seq, onClick, onHoverEnter, onHoverLeave }) { ... }
+// seq and getCurrentSeq guard stale renders.
+cm.renderDiagram = function({ container, cm, focusKey, depth, dotAvailable, seq, getCurrentSeq, onClick, onHoverEnter, onHoverLeave }) { ... }
 
 // editingNode: { key, label } | null.
 cm.renderEdgeTable = function({ container, cm, focusKey, depth, editing, editingNode, onRemoveEdge, onRenameNode, onSubmitRename }) { ... }
