@@ -1,0 +1,44 @@
+# Wire link/unlink CLI and template for memory relations
+
+## Context
+
+SL-081 wired the read path for memory relations end-to-end: the catalog scanner reads
+`[[relation]]` rows from `memory.toml`, classifies targets, and projects edges into the
+graph. The frontend renders them. But the write surface was deferred:
+
+- `doctrine link <mem_uid> <label> <target>` fails — `parse_canonical_ref` requires
+  `PREFIX-NNN` format and rejects `mem_<32-hex>` at the first gate (`resolve_link_path`).
+- `doctrine memory record` scaffolds a `memory.toml` with no `[[relation]]` section —
+  relations can only be added by hand-editing.
+
+Memory relations use raw (free-form) labels, not the validated `RELATION_RULES`
+vocabulary — the catalog pipeline already treats them as `CatalogEdgeLabel::Raw`.
+
+## Scope & Objectives
+
+1. **Extend `link` to accept memory UIDs as source.** When the source parses as a known
+   memory UID (items/ first, shipped/ fallback), resolve the `memory.toml` path, skip
+   forward-edge validation (target classification is the catalog's job), and append a
+   `[[relation]]` row. Idempotent — re-linking an existing (label, target) pair is a no-op.
+
+2. **Extend `unlink` to accept memory UIDs as source.** Symmetric write seam on the
+   same `memory.toml` path. Remove the matching `[[relation]]` row. Idempotent —
+   unlinking an absent edge reports `not linked`.
+
+## Non-Goals
+
+- `link` with memory as TARGET (a numbered entity linking TO a memory). That requires
+  `RELATION_RULES` entries for each source kind and a discriminable target reference
+  syntax — a larger design surface deferred to a follow-up.
+- Validated labels for memory relations. Memory-to-anything edges stay raw (free-form
+  label strings), consistent with the catalog pipeline.
+- Template scaffolding. If `link` works, the template doesn't need `[[relation]]` noise.
+
+## Summary
+
+Two focused changes: accept `mem_*` in `link`/`unlink` source position, resolve to
+items/shipped `memory.toml`, append/remove `[[relation]]` rows.
+
+## Follow-Ups
+
+- Memory as `link` TARGET (numbered entity → memory)

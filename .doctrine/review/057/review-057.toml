@@ -1,0 +1,242 @@
+id    = 57
+slug  = "design-review-of-sl-088"
+title = "design review of SL-088"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-088"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "README.md: five dangling  references after hard removal"
+detail = """
+## Expected
+The design (RSK-1) claims no external users yet — clean removal with no deprecation alias.
+The scope lists 'Affected files: src/main.rs, src/install.rs, src/skills.rs, src/boot.rs, src/corpus.rs, install/, plugins/' — README.md is conspicuously absent.
+
+## Observed
+README.md contains FIVE live references to the doomed `claude install` command:
+
+- **L44:** `npx skills add davidlee/doctrine  # or `doctrine claude install` for claude code only`
+- **L84:** `doctrine claude install # skills + dispatch-worker agent + SubagentStart hook into .claude`
+- **L86:** `doctrine claude install --agent universal --yes`
+- **L104:** `doctrine claude install --only-memory -y`
+- **L153:** `doctrine claude install            # from binary, or`
+
+These constitute the primary public-facing onboarding documentation. Removing the command without updating these references leaves the README false — a user who follows it will hit an 'unrecognized subcommand' error.
+
+## Evidence
+```
+$ rg -n 'claude install' README.md
+44:npx skills add davidlee/doctrine  # or `doctrine claude install` for claude code only
+84:doctrine claude install # skills + dispatch-worker agent + SubagentStart hook into .claude
+86:doctrine claude install --agent universal --yes
+104:doctrine claude install --only-memory -y 
+153:doctrine claude install            # from binary, or
+```
+
+The scope's 'Affected files' section omits README.md entirely. The design's test strategy mentions only new integration tests — silent on updating existing e2e or README prose."""
+disposition = "design-wrong"
+response = "The design (section 'Affected files') omits README.md entirely. Five live claude install references will become false upon command removal. The design must: (1) list README.md in affected files, (2) specify the replacement wording for each reference, (3) make this a pre-removal gate. Penance: edit design.md §1 to include README.md in the affected-files table with a note that all five references must be updated to the consolidated install surface."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "e2e_claude_install.rs: entire test file exercises the obsolete verb — no migration plan"
+detail = """
+## Expected
+The design's test strategy (section 5) lists new integration tests for the consolidated install but omits any mention of the existing e2e_claude_install.rs test file. A hard removal must address whether this test file is rewritten as consolidated-install tests or deleted and replaced.
+
+## Observed
+tests/e2e_claude_install.rs is a ~147-line integration test that:
+1. Drives the built binary with args [claude, install, --agent, claude, ...]
+2. Asserts the SubagentStart hook is merged into .claude/settings.local.json
+3. Asserts the dispatch-worker agent def resolves at .claude/agents/
+4. Tests the hidden deprecated skills install alias drives the same handler
+
+The file's own header says: 'SL-056 PHASE-11 — doctrine claude install end-to-end over the built binary.'
+
+## Evidence
+The entire file is structured around the removed command. The design says tests will be added for the new consolidated install but does not account for the e2e tests that must be rewritten or removed."""
+disposition = "design-wrong"
+response = "The design's test strategy only enumerates new integration tests for the consolidated install. It is silent on the existing e2e_claude_install.rs which tests claude install --agent claude. This file must be either: (a) rewritten as consolidated-install e2e tests (recommended — preserves the SubagentStart hook and agent-def assertions), or (b) deleted and its coverage re-proven by the new tests. The design must enumerate this file in the removal test section and state which path is taken. Penance: add e2e_claude_install.rs to the removal tests subsection, stating it will be rewritten to test 'doctrine install --agent claude --yes' with the same assertions."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "e2e_worker_guard.rs: goldens hard-code removed 'claude install' refusal label"
+detail = """
+## Expected
+The design notes that worker_guard write label for Command::Install is already Write("install") — no change needed. The existing e2e worker-guard goldens that assert the 'claude install' refusal label should either be rewritten for the consolidated verb or removed.
+
+## Observed
+tests/e2e_worker_guard.rs contains hard-coded golden strings referencing the doomed command:
+
+- L98: (&["claude", "install"], "claude install")
+- L99: (&["skills", "install"], "claude install") — the hidden alias
+- L222-228: fn claude_install_and_skills_alias_refuse_in_worker_mode()
+- L264: err.contains("`claude install`")
+- L280: err.contains("`claude install`")
+
+The test function name itself (claude_install_and_skills_alias_refuse_in_worker_mode)
+and its goldens encode the now-removed command surface as eternal truth. The design
+acknowledges the worker_guard label changes but the test strategy is silent on
+these goldens."""
+disposition = "fix-now"
+response = """Confirmed. The e2e_worker_guard.rs goldens hard-code 'claude install' and 'skills install' refusal labels. After removal, the consolidated install must assert the 'install' label (matching Write("install") in main.rs). The test function claude_install_and_skills_alias_refuse_in_worker_mode must be renamed and its goldens updated. Penance: update the golden strings to expect the consolidated 'install' verb label, rename the test function, and ensure the new consolidated install path is covered by the worker-mode refusal test."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Embed-vs-canonical path asymmetry: source is namespaced (install/agents/claude/) but canonical is flat (.doctrine/agents/)"
+detail = """
+## Expected
+The design proposes a single install_agent_def(root, agent_name, canon_subdir, embed_asset, global) function where canon_subdir is None for Claude (flat) and Some("pi") for pi (namespaced). The embed source path for Claude is install/agents/claude/dispatch-worker.md (namespaced) but the canonical writes .doctrine/agents/dispatch-worker.md (flat).
+
+## Observed
+Current code confirms this asymmetry:
+- DISPATCH_WORKER_AGENT_ASSET = "agents/claude/dispatch-worker.md" (under install/)
+- agent_canonical_dir() returns .doctrine/agents (flat)
+- canon = canon_dir.join(DISPATCH_WORKER_AGENT_FILE) = .doctrine/agents/dispatch-worker.md
+
+The pi path, per design, will be:
+- embed: install/agents/pi/dispatch-worker.md (namespaced)
+- canonical: .doctrine/agents/pi/dispatch-worker.md (namespaced)
+
+So Claude strips the namespace while pi preserves it. The design offers no rationale for this asymmetry, no guarantee it will not cause confusion when a third agent is added, and no invariant about when to use flat vs. namespaced canonical paths.
+
+Additionally, a stale .doctrine/agents/claude/dispatch-worker.md subdirectory exists (not created by current code — likely a development artifact) whose presence could confuse future investigation."""
+disposition = "design-wrong"
+response = "Confirmed. Claude canonical is flat (.doctrine/agents/dispatch-worker.md) while pi canonical is namespaced (.doctrine/agents/pi/dispatch-worker.md), yet the embed sources are both namespaced (install/agents/claude/ and install/agents/pi/). The design offers no rationale for this asymmetry. Two defensible resolutions: (a) make both flat — move the Claude embed from install/agents/claude/ to install/agents/ and keep both canonical paths flat; or (b) make both namespaced — move Claude canonical to .doctrine/agents/claude/dispatch-worker.md (with compat symlink). However (a) would change the existing canonical path and break existing installs. Recommendation: document the rationale in the design (Claude was first, shipped flat; pi postdates the pattern; a compat path exists because Claude links don't need migrating) and add an invariant: 'new agents use namespaced canonical; Claude is grandfathered flat.' Penance: add a note to design §4 explaining the asymmetry and the grandfathering rationale."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Non-fatal agent resolution underspecified: skills skipped but memory/boot still prompted"
+detail = """
+## Expected
+The design says: 'If no agents are detected and none specified, skills steps are skipped (non-fatal — user may only want base files).' The scope says: 'Non-fatal agent resolution when no .claude/ and no --agent.'
+
+## Observed
+The forward-step summary lists memory sync, boot, and skills steps. When no agents are detected and none specified, skills steps are omitted but memory sync and boot are still prompted:
+
+Forward steps:
+  memory sync  materialize shipped corpus into .doctrine/memory/shipped/
+  boot         wire @-import into AGENTS.md/CLAUDE.md + session hooks
+
+The boot prompt says: 'Wire @-import + session hooks for claude, codex?' — but if no .claude/ directory exists, the harness auto-detection would list no harnesses. What does the boot prompt say when no harnesses are detected? The design is silent on this degenerate case.
+
+Furthermore, the current resolve_agents() function bails hard ('No --agent given and no .claude/ found. Pass --agent <name>…'). The design correctly overrides this in the consolidated install path, but does not specify where the override lives — in install.rs or in skills.rs. The consolidated run() orchestrates the flow, so it must bypass resolve_agents instead of calling it directly."""
+disposition = "design-wrong"
+response = "The design correctly declares non-fatal agent resolution but does not specify: (1) what the boot prompt says when no harnesses are detected (no .claude/, no .codex/); (2) where the resolution override lives (install.rs vs skills.rs). The consolidated run() must call a relaxed agent resolver that returns empty vec instead of bailing, distinct from the focused resolve_agents used by standalone commands. Penance: add to design §2-§3: when no harness directories exist, the boot prompt says 'Wire @-import + session hooks (no harnesses detected)?' or boot is skipped entirely (designer's choice — specify it). Also note that install.rs uses a non-bailing agent resolver distinct from skills::resolve_agents."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Forward-step ordering: memory sync -> boot -> skills — arbitrary, lacks justification"
+detail = """
+## Expected
+The design should either justify the ordering or acknowledge it as cosmetic.
+
+## Observed
+The forward-step enumeration (section 2, stage 3) lists:
+1. Memory sync
+2. Boot install
+3. Skills install (per detected agent)
+
+The design offers no rationale for this ordering. Analysis shows no hidden interdependencies:
+- Memory sync is purely additive — materializes shipped corpus files; independent of boot and skills.
+- Boot install wires @-import and session hooks — independent of memory corpus and skills.
+- Skills install writes canonical files + symlinks — independent of memory and boot.
+
+Since none depend on another, the order is cosmetic. This is not a defect per se, but the design should acknowledge the independence and justify the chosen order (e.g., 'least invasive to most,' 'purely additive before mutation'). Without justification, a future reader may waste time hunting for phantom dependencies."""
+disposition = "fix-now"
+response = "Confirmed no hidden interdependencies. The ordering (memory sync → boot → skills) is defensible as 'least invasive to most': memory sync is purely additive, boot modifies config files, skills creates symlinks and runs npx. But the design should say this explicitly so future readers don't waste time hunting for phantom dependencies. Penance: add one sentence to design §2 stage 3: 'The order is least-invasive-first: memory sync is additive, boot modifies config, skills install mutates agent paths.'"
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "y/N/a prompt: boot prompt's harness labels diverge from --agent flags"
+detail = """
+## Expected
+The prompt should clearly indicate what is being installed for whom. The design says: 'Harness labels in the boot prompt come from auto-detection (.claude/, .codex/), not from --agent. Boot wiring is independent of skill install.'
+
+## Observed
+When a user runs:
+  doctrine install --agent pi
+
+The forward summary shows:
+  skills  install skills for pi (delegates to npx)
+
+But the boot prompt says:
+  Wire @-import + session hooks for claude, codex? [y/N/a]
+
+A user who passed --agent pi may be confused: they asked for pi, but the boot prompt mentions claude and codex. The design acknowledges this divergence but does not explain the rationale or mitigate the confusion risk. The boot prompt could instead say 'Wire @-import + session hooks for detected harnesses?' to avoid implying the --agent flag controls harness detection.
+
+Additionally, the [y/N/a] notation: 'a' = 'yes to all remaining' is a non-standard convention. Standard CLI would use [y/N/a] where 'a' = 'all' or [y/N/A] where capital A means 'all'. The design's prompt_step function maps only 'a' (lowercase) to all_yes — 'A' (uppercase, shift-a) would be interpreted as 'no' (fallthrough). This is a usability footgun."""
+disposition = "fix-now"
+response = "The design acknowledges the divergence but offers no mitigation. When --agent pi is passed but boot detects claude/codex harnesses, the user sees a confusing prompt naming agents they didn't select. Two mitigations: (a) use neutral language in the boot prompt: 'Wire @-import + session hooks for detected harnesses?' instead of enumerating them; or (b) add a note to the forward summary explaining that boot wiring is harness-driven and independent of --agent. Recommendation: option (a) — use 'detected harnesses' language, which is clearer and avoids the confusion. Penance: update the boot prompt text in design §2."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "prompt_step: 'A' (uppercase) silently means 'no' — only lowercase 'a' maps to all-yes"
+detail = """
+## Expected
+The prompt [y/N/a] suggests uppercase 'N' is the default. Users who type Shift-a ('A') when intending 'yes to all' would naturally expect it to work. Common CLI conventions accept both cases.
+
+## Observed
+The prompt_step function in the design does:
+  match line.trim().to_lowercase().as_str() {
+      "a" => { *all_yes = true; Ok(true) }
+      ...
+  }
+
+This converts to lowercase BEFORE matching, so both 'a' and 'A' ARE accepted. The design is actually correct — my prior reading was wrong. The to_lowercase() call normalizes the input, so 'A' maps to 'a' and works.
+
+HOWEVER, the spec for [y/N/a] implies 'N' is the default (uppercase indicates default), but the code treats ANY non-'y'/non-'a' input as 'no'. This means 'n', 'N', empty string, 'no', 'No', 'NO', and even 'quit' all map to 'no'. Only 'y', 'Y', 'a', 'A' do anything different. This is correct to_lowercase behavior.
+
+Verdict: the prompt_step implementation is actually sound. The only concern is documentation: the prompt text '[y/N/a]' doesn't explain what 'a' means. The design clarifies this in prose but the user doesn't see that prose at the prompt."""
+disposition = "aligned"
+response = "The prompt_step function calls line.trim().to_lowercase() BEFORE matching — this normalizes input, so 'A' (shift-a) correctly resolves to the 'a' arm and sets all_yes=true. The implementation is correct. The prompt label [y/N/a] could grow a short inline hint ('a=all') but the logic is sound."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = "Stale .doctrine/agents/claude/ subdirectory: misleading artifact of prior install path"
+detail = """
+## Observed
+.doctrine/agents/ contains:
+- AGENTS.md (tracked, authored)
+- dispatch-worker.md (flat canonical, installed by current code)
+- claude/dispatch-worker.md (identical copy, NOT created by current code)
+
+The claude/ subdirectory is a stale artifact. Its content is binary-identical to the flat dispatch-worker.md. The current install_agents function writes ONLY the flat canonical (agent_canonical_dir returns .doctrine/agents, flat). The claude/ subdir was likely from an earlier iteration of the agent-def install path.
+
+## Risk
+A developer inspecting .doctrine/agents/ sees two copies of dispatch-worker.md and may assume:
+1. The design's flat-vs-namespaced scheme already has a claude/ namespace
+2. The code somehow writes to both paths
+
+Neither is true. The stale directory should be cleaned up during SL-088 implementation to avoid confusion when the pi/ namespace is added."""
+disposition = "fix-now"
+response = "The stale .doctrine/agents/claude/ subdirectory is not created by current code. Its presence alongside the flat dispatch-worker.md and the future pi/ namespace would confuse developers. Clean up: remove .doctrine/agents/claude/ during SL-088 implementation or note it in a cleanup commit. Penance: add a note to the implementation notes when removing the stale directory."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

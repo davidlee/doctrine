@@ -1,0 +1,70 @@
+# Implementation plan for SL-087 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-087"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Trim the Memory section"
+objective = "Replace the full-metadata memory listing in the boot snapshot with a reference instruction plus a compact key-only listing, saving ~28 lines per session."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "Design is locked (RV-058 resolved, all 5 findings verified terminal)."
+
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "Existing test suite is green (`just check` / `just gate`)."
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "boot_keys() is implemented on memory, reusing collect_all(), with sorting/filtering/uid-fallback per design."
+
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "The SourceKind::Memories arm in produce() routes through boot_keys() and section_or_marker."
+
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "New and existing tests pass; `just check` and `just gate` are green with zero clippy warnings."
+
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "Regenerated boot.md renders the compact Memory section (~22 lines: reference line + key listing)."
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "boot_keys() returns key-ascending sorted keys for active signpost memories; keyless memories fall back to uid."
+
+[[phase.verification]]
+id      = "VT-2"
+expects = "produce(Memory, ...) with an empty memory corpus returns the existing marker (no regression)."
+
+[[phase.verification]]
+id      = "VT-3"
+expects = "produce(Memory, ...) with active signpost memories returns the reference line followed by key lines, one per memory."
+
+[[phase.verification]]
+id      = "VT-4"
+expects = "Existing boot tests pass unchanged (produce_markers_*, produce_static_*, produce_governance_*, boot_sequence_orders_*)."
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "Regenerated boot.md Memory section is ~22 lines (not ~50) and carries the retrieve-memory reference instruction."
+
+[[phase.verification]]
+id      = "VA-2"
+expects = "`just gate` — zero clippy warnings, all tests green."
