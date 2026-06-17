@@ -1,7 +1,7 @@
 id = 84
 slug = "decompose-dispatch-harness-routing-per-harness-spawn-templates-model-selection-and-agent-def-parity"
 title = "Decompose dispatch harness routing: per-harness spawn templates, model selection, and agent-def parity for pi/codex/claude"
-status = "reconcile"
+status = "done"
 created = "2026-06-17"
 updated = "2026-06-17"
 
