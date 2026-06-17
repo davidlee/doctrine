@@ -78,6 +78,9 @@ These remain as fine-grained knobs for scripting/CI.
 - `src/skills.rs` — extract per-agent install functions; `run_install` becomes internal
 - `src/boot.rs` — `wire()` called directly from install
 - `src/corpus.rs` — `sync_corpus()` called directly from install
+- `README.md` — update all `claude install` references to the consolidated `doctrine install --agent <name>` surface
+- `tests/e2e_claude_install.rs` — rewritten to test the consolidated install surface (same assertions)
+- `tests/e2e_worker_guard.rs` — goldens updated from `claude install` to `install` label
 - `install/` — no manifest changes (shipped files correct)
 - `plugins/` — no changes (skills content unchanged)
 
