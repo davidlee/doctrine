@@ -22,9 +22,12 @@ sites plus test fixture updates. The behaviour-preservation gate is the
 existing suite — it must stay green unchanged for a well-formed corpus. New
 tests prove the skip path for malformed entities.
 
-Both phases are file-disjoint in the implementation body (PHASE-01 only touches
-`relation_graph.rs`; PHASE-02 touches `catalog/scan.rs`, `catalog/hydrate.rs`,
-`main.rs`, `priority.rs`, and `relation_graph.rs`'s test wrapper). However,
+Both phases touch `relation_graph.rs` (PHASE-01 in `inspect_from` ~line 580;
+PHASE-02 in the `inspect` test wrapper at line 523), but the changed regions are
+non-overlapping. PHASE-02 also touches `catalog/scan.rs`, `catalog/hydrate.rs`,
+`main.rs`, `priority/graph.rs`, `relation_graph.rs` test sites at line 1076, and
+the priority graph test at line 502 — 9 call sites total (3 non-test, 6 test).
+
 PHASE-02's EX-1 depends on PHASE-01 being complete — the existing suite must be
 green before the scan signature changes. Sequential execution is correct.
 
