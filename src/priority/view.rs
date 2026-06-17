@@ -153,7 +153,13 @@ pub(crate) struct Explanation {
 /// One node in the actionability graph — the render source of truth for the
 /// web UI. Carries the server-computed rank (topological layer over the dep
 /// overlay) so the frontend never computes ordering.
-#[cfg_attr(not(test), expect(dead_code, reason = "PHASE-01: consumed by surface.rs tests + PHASE-02 server"))]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-01: consumed by surface.rs tests + PHASE-02 server"
+    )
+)]
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ActionabilityNode {
     pub(crate) id: String,
@@ -170,7 +176,13 @@ pub(crate) struct ActionabilityNode {
 }
 
 /// One edge in the actionability graph.
-#[cfg_attr(not(test), expect(dead_code, reason = "PHASE-01: consumed by surface.rs tests + PHASE-02 server"))]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-01: consumed by surface.rs tests + PHASE-02 server"
+    )
+)]
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ActionabilityEdge {
     /// Canonical ref of the prerequisite.
@@ -182,7 +194,13 @@ pub(crate) struct ActionabilityEdge {
 }
 
 /// The full actionability graph for the web UI.
-#[cfg_attr(not(test), expect(dead_code, reason = "PHASE-01: consumed by surface.rs tests + PHASE-02 server"))]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-01: consumed by surface.rs tests + PHASE-02 server"
+    )
+)]
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ActionabilityView {
     pub(crate) kind: String,

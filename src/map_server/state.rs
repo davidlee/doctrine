@@ -21,7 +21,10 @@ use crate::priority::graph::PriorityGraph;
 /// All three priority data stores — built and replaced atomically (SL-089 D9).
 /// A single [`RwLock<DataStores>`] guarantees a reader never sees a fresh
 /// `catalog` but a stale `priority_graph`.
-#[expect(dead_code, reason = "PHASE-01 Task 4: consumed in PHASE-02 AppState revision")]
+#[expect(
+    dead_code,
+    reason = "PHASE-01 Task 4: consumed in PHASE-02 AppState revision"
+)]
 pub(crate) struct DataStores {
     pub(crate) catalog: Catalog,
     pub(crate) priority_graph: PriorityGraph,
