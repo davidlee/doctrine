@@ -1,0 +1,193 @@
+# Implementation plan for SL-089 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-089"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# PHASE-01: Backend types, surface functions, DataStores struct — all pure
+# priority-layer work, testable without a server.
+[[phase]]
+id        = "PHASE-01"
+name      = "Backend types, surface functions, and DataStores struct"
+objective = """
+Add ActionabilityView / ActionabilityNode / ActionabilityEdge types to view.rs.
+Extract survey_for_map from survey() (pure, no behavioural change). Implement
+survey_view_for_map with server-computed topological rank over the dep overlay.
+Define DataStores wrapper in state.rs. All pure — no server wiring yet.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-089 design.md locked (D1–D12, no unresolved OQs)" },
+  { id = "EN-2", text = "PriorityGraph build pipeline understood (graph.rs, channels.rs)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ActionabilityView / ActionabilityNode / ActionabilityEdge types defined with Serialize" },
+  { id = "EX-2", text = "survey_for_map(g, all) → Vec<SurveyRow> extracted from survey() — zero behavioural divergence" },
+  { id = "EX-3", text = "survey_view_for_map(g, all) → ActionabilityView returns nodes with server-computed rank + needs/after edges" },
+  { id = "EX-4", text = "DataStores { catalog, priority_graph, graph } struct defined in map_server::state" },
+  { id = "EX-5", text = "survey() refactored: body delegates to survey_for_map — existing CLI tests unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "survey_rank_topological: chain A→B→C → rank(A)=0, rank(B)=1, rank(C)=2" },
+  { id = "VT-2", expects = "survey_needs_edges_present: dep overlay edges appear with kind=\"needs\"" },
+  { id = "VT-3", expects = "survey_after_edges_present: seq overlay edges appear with kind=\"after\"" },
+  { id = "VT-4", expects = "survey_empty_graph: zero entities → nodes: [], edges: []" },
+  { id = "VT-5", expects = "survey_excludes_terminal: closed/done item absent from nodes (all=false default)" },
+  { id = "VT-6", expects = "survey_terminal_blocker_no_edge: terminal node as needs source → no edge" },
+  { id = "VT-7", expects = "survey_for_map matches survey output byte-for-byte (extract invariant)" },
+  { id = "VT-8", expects = "Existing CLI survey/next/blockers/explain tests all pass unchanged" },
+]
+specs        = []
+requirements = []
+
+# PHASE-02: Server endpoint, state wiring, and refresh — connects the pure
+# surface to the HTTP layer. Depends on PHASE-01 types and surface functions.
+[[phase]]
+id        = "PHASE-02"
+name      = "Server endpoint, DataStores wiring, and atomic refresh"
+objective = """
+Revise AppState to hold DataStores under a single Arc<RwLock<DataStores>>.
+Build all three stores (catalog, priority_graph, CatalogGraph) at startup in
+mod.rs. Add GET /api/survey route + handler. Revise POST /api/refresh to
+atomically swap DataStores. Route the survey endpoint.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: ActionabilityView types, survey_view_for_map, DataStores struct exist" },
+  { id = "EN-2", text = "Existing test_app helper builds AppState with only CatalogGraph — must survive the transition" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "AppState.stores: Arc<RwLock<DataStores>> replaces AppState.graph: Arc<RwLock<CatalogGraph>>" },
+  { id = "EX-2", text = "serve() in mod.rs builds catalog + priority_graph + CatalogGraph into DataStores at startup" },
+  { id = "EX-3", text = "GET /api/survey returns 200 with Content-Type application/json; body carries ActionabilityView shape" },
+  { id = "EX-4", text = "POST /api/refresh atomically rebuilds all three stores in a single write() — no torn-read window" },
+  { id = "EX-5", text = "All existing route handlers (graph, health, dot_svg, entity_markdown, concept-map) continue working — read stores.graph instead of state.graph" },
+  { id = "EX-6", text = "Existing integration tests (routes.rs) pass without modification to their assertions" },
+]
+verification = [
+  { id = "VT-1", expects = "survey_returns_200_valid_json: endpoint responds with kind:\"actionability_graph\" envelope" },
+  { id = "VT-2", expects = "survey_actionable_row: unblocked open item → actionability:\"actionable\", rank:0, blockers:[]" },
+  { id = "VT-3", expects = "survey_blocked_row: item with unsatisfied needs → actionability:\"blocked\", blockers non-empty, rank>0" },
+  { id = "VT-4", expects = "survey_consequence_count: item blocked by 2 others → consequence:2 on each blocker" },
+  { id = "VT-5", expects = "survey_refresh_updates: add entity, POST refresh, GET survey → new item appears" },
+  { id = "VT-6", expects = "Existing routes test suite passes (graph, health, dot_svg, entity_markdown, concept-map CRUD)" },
+  { id = "VT-7", expects = "test_app helper revised and all callers compile" },
+]
+specs        = []
+requirements = []
+
+# PHASE-03: Frontend infrastructure — HTML, vendor files, model, and API.
+# File-disjoint from PHASE-01/02; can execute in parallel with them.
+[[phase]]
+id        = "PHASE-03"
+name      = "Frontend infrastructure: HTML, vendor files, model, and API"
+objective = """
+Vendor D3 v7 + d3-dag UMD bundle with a README recording version, source URL,
+SHA-256 checksum, and license. Add <script> tags to index.html. Split the
+backlog kind checkboxes into individual ISS/IMP/CHR/RSK rows. Add the view
+toggle control (semantic / actionability buttons) to the graph area header.
+Extend model.js with viewMode and actionabilityView state. Add fetchActionabilityGraph()
+to api.js. Wire refresh to flush the actionability cache.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete (API shape for GET /api/survey is known) OR executing in parallel with design contract as spec" },
+  { id = "EN-2", text = "Existing D3 vendor files confirmed downloadable and licensable (ISC / MIT)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "web/map/vendor/d3.v7.min.js and d3-dag.min.js present with correct checksums" },
+  { id = "EX-2", text = "web/map/vendor/README.md records version, URL, SHA-256, license, regen command for each file" },
+  { id = "EX-3", text = "index.html: D3 + d3-dag <script> tags added before app.js; ISS/IMP/CHR/RSK kind checkboxes split into 5 individual rows; view toggle control added between focus-header and graph-area" },
+  { id = "EX-4", text = "model.js: state.viewMode (string, default 'semantic'), state.actionabilityView (object), model.setActionabilityView(view)" },
+  { id = "EX-5", text = "api.js: fetchActionabilityGraph() fetches GET /api/survey, normalises; refresh flushes state.actionabilityView = null" },
+  { id = "EX-6", text = "Bootstrap fetches actionability graph alongside health + graph — app loads without errors" },
+]
+verification = [
+  { id = "VH-1", expects = "Page loads: 5 individual backlog checkboxes visible, view toggle buttons visible" },
+  { id = "VH-2", expects = "Uncheck 'ISS' — ISS items absent from entity list; other list items present" },
+  { id = "VH-3", expects = "Browser dev tools Network tab: GET /api/survey fires and returns valid JSON" },
+  { id = "VH-4", expects = "Click Refresh — actionabilityView flushed, re-fetched, no JS errors" },
+]
+specs        = []
+requirements = []
+
+# PHASE-04: Actionability renderer + view toggle wiring
+[[phase]]
+id        = "PHASE-04"
+name      = "Actionability graph renderer and view toggle wiring"
+objective = """
+Implement priority.js with layoutGraph and renderGraph — D3 sugiyama layout
+consuming the ActionabilityView from the server. Wire view toggle in app.js:
+clicking semantic/actionability buttons switches renderer, relationship table
+columns, and edge legend. Handle non-work entity fallback (inline message in
+graph area, entity details table fallback). Update render.js relationshipTable
+for actionability-mode columns. Update search.js edge legend for actionability
+mode (needs/after only).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: D3 vendor scripts load, viewMode state exists, model.setActionabilityView wired" },
+  { id = "EN-2", text = "GET /api/survey returns valid ActionabilityView JSON (PHASE-02 backend available)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "priority.js: layoutGraph(view) returns D3 sugiyama layout with (x,y) per node" },
+  { id = "EX-2", text = "priority.js: renderGraph(opts) renders SVG into container with click/hover handlers" },
+  { id = "EX-3", text = "app.js: clicking actionability toggle fetches survey, passes view to priority.js, renders D3 SVG" },
+  { id = "EX-4", text = "app.js: clicking semantic toggle restores DOT/Graphviz rendering" },
+  { id = "EX-5", text = "render.js: relationship table in actionability mode shows columns id/kind/status/actionability/blockers/consequence/title" },
+  { id = "EX-6", text = "render.js: view toggle --active class updates on click" },
+  { id = "EX-7", text = "search.js: edge legend in actionability mode shows only needs (solid red) + after (dashed amber)" },
+  { id = "EX-8", text = "Non-work entity (ADR, SPEC) in actionability mode: graph area shows inline message, relationship table shows entity info from graph.nodes" },
+]
+verification = [
+  { id = "VA-1", expects = "Focus a work entity with blockers → toggle to actionability → D3 SVG shows nodes in topological layers (rank 0 at top, blocked below)" },
+  { id = "VA-2", expects = "Toggle back to semantic → Graphviz DOT rendering restored, table columns revert to src/src_title/label/tgt/tgt_title" },
+  { id = "VA-3", expects = "needs edges: solid red line with arrowhead; after edges: dashed amber line, no arrowhead" },
+  { id = "VA-4", expects = "Click a node in D3 graph → sets focus, re-renders neighbourhood" },
+  { id = "VA-5", expects = "Hover a node → tooltip shows title, status, blockers list" },
+  { id = "VA-6", expects = "Focus ADR-001, toggle to actionability → graph area shows 'no dep/seq edges' message, relationship table shows entity info" },
+  { id = "VA-7", expects = "Edge legend in actionability mode: shows exactly 2 items (needs, after); semantic mode: full legend" },
+  { id = "VT-1", expects = "priority.js: no eligibility/blocking/rank logic — only d3-dag layout + SVG rendering" },
+]
+specs        = []
+requirements = []
+
+# PHASE-05: Styles, dark theme, kind filter contract, and final integration
+[[phase]]
+id        = "PHASE-05"
+name      = "Styles, dark theme compatibility, and final integration"
+objective = """
+Add CSS variables for actionability node/edge colours (--priority-actionable-bg,
+--priority-blocked-bg, --priority-terminal-bg, --priority-needs-edge,
+--priority-after-edge). Add view toggle button styles. Enforce the kind filter
+interaction contract: checkboxes affect entity list only, not the actionability
+graph. Verify dark theme compatibility and run the full gate.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete: D3 renderer works, toggle switches views, table columns respond" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "CSS variables defined in :root for all 5 actionability-colour properties" },
+  { id = "EX-2", text = "Dark theme media query verified: CSS variables resolve correctly in dark mode" },
+  { id = "EX-3", text = "View toggle buttons styled: flex row, active state via --accent-color" },
+  { id = "EX-4", text = "Kind filter contract enforced: actionability graph always shows all work entities regardless of checkbox state" },
+  { id = "EX-5", text = "Relationship table in actionability mode shows ALL rows (unfiltered by kind)" },
+  { id = "EX-6", text = "cargo clippy zero warnings; just gate green" },
+  { id = "EX-7", text = "All frontend files linted (eslint) zero warnings" },
+]
+verification = [
+  { id = "VH-1", expects = "System dark theme: switch OS/browser to dark → D3 node/edge colours visible and legible" },
+  { id = "VH-2", expects = "Uncheck all backlog kinds — entity list empty, actionability graph still shows all work entities" },
+  { id = "VH-3", expects = "Relationship table in actionability mode shows rows even when kind checkboxes filter entity list" },
+  { id = "VT-1", expects = "just gate passes with zero warnings" },
+]
+specs        = []
+requirements = []
