@@ -370,6 +370,9 @@ a { color: var(--link); }
  * ------------------------------------------------------------------------- */
 .graph-area {
   border: 1px solid var(--border);
+  /* Definite height so the SVG's height:100% resolves — without it the graph
+     collapses to its viewBox aspect ratio (a wide DAG renders ~1/3 tall). */
+  height: 70vh;
   min-height: 400px;
   display: flex;
   align-items: center;

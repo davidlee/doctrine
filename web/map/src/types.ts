@@ -137,8 +137,11 @@ export interface AppState {
   dotAvailable: boolean;
   hoveredId: string | null;
   viewMode: 'semantic' | 'actionability';
+  renderedViewMode: 'semantic' | 'actionability' | null;
   actionabilityView: ActionabilityView | null;
   priorityZoomId: string | null;
+  priorityTransform: { x: number; y: number; k: number } | null;
+  priorityZoomPending: boolean;
   kindFilter: Set<string> | null;
   graphRenderSeq: number;
 }

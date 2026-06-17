@@ -39,8 +39,11 @@ export const state: AppState = {
   dotAvailable: false,
   hoveredId: null,
   viewMode: 'semantic',
+  renderedViewMode: null,
   actionabilityView: null,
   priorityZoomId: null,
+  priorityTransform: null,
+  priorityZoomPending: false,
   kindFilter: null,
   graphRenderSeq: 0,
 };

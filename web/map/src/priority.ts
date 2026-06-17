@@ -15,12 +15,24 @@ export interface LayoutEdge {
   kind: string;
 }
 
+export interface Viewport {
+  x: number;
+  y: number;
+  k: number;
+}
+
 export interface PriorityRenderOpts {
   container: HTMLElement;
   view: ActionabilityView;
   zoomId: string | null;
+  /** Viewport to restore on (re)render so pan/zoom survives — null = fit. */
+  initialTransform?: Viewport | null;
+  /** One-shot: animate to `zoomId`'s node (from `initialTransform`). */
+  animateToZoom?: boolean;
   onNodeClick: (id: string) => void;
   onBackgroundClick?: () => void;
+  /** Called with every viewport change so the caller can persist it. */
+  onTransform?: (t: Viewport) => void;
   getCurrentSeq?: () => number;
 }
 
@@ -156,7 +168,7 @@ export function layoutGraph(view: ActionabilityView): { nodes: LayoutNode[]; edg
 }
 
 export function renderGraph(opts: PriorityRenderOpts): void {
-  const { container, view, zoomId, onNodeClick, onBackgroundClick } = opts;
+  const { container, view, zoomId, initialTransform, animateToZoom, onNodeClick, onBackgroundClick, onTransform } = opts;
 
   const layout = layoutGraph(view);
   const { nodes, edges } = layout;
@@ -285,8 +297,11 @@ export function renderGraph(opts: PriorityRenderOpts): void {
   // ── Viewport: free pan/zoom + zoom-to-selected (IMP-092) ──────────────────
   const behavior = d3zoom<SVGSVGElement, unknown>()
     .scaleExtent(SCALE_EXTENT)
-    .on('zoom', (event: { transform: { toString: () => string } }) => {
+    .on('zoom', (event: { transform: { x: number; y: number; k: number; toString: () => string } }) => {
       zoomLayer.setAttribute('transform', event.transform.toString());
+      if (onTransform !== undefined) {
+        onTransform({ x: event.transform.x, y: event.transform.y, k: event.transform.k });
+      }
     });
   const sel = select(svg);
   sel.call(behavior);
@@ -298,8 +313,18 @@ export function renderGraph(opts: PriorityRenderOpts): void {
     });
   }
 
-  // Initial transform: centre the selected node, else the identity (fit view).
-  const zn = zoomId !== null ? nodeMap.get(zoomId) : undefined;
+  // Restore the prior viewport instantly so any animation starts from the
+  // user's current position (not the freshly rebuilt identity).
+  const start =
+    initialTransform != null
+      ? zoomIdentity.translate(initialTransform.x, initialTransform.y).scale(initialTransform.k)
+      : zoomIdentity;
+  sel.call((s) => {
+    behavior.transform(s, start);
+  });
+
+  // One-shot: a node was just clicked — animate from the current view to it.
+  const zn = animateToZoom === true && zoomId !== null ? nodeMap.get(zoomId) : undefined;
   if (zn?.x !== undefined && zn.y !== undefined) {
     const t = zoomToNode(zn, bbox, ZOOM_SCALE);
     const target = zoomIdentity.translate(t.x, t.y).scale(t.k);
