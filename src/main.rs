@@ -3375,7 +3375,7 @@ fn main() -> anyhow::Result<()> {
                 format,
                 json,
                 path,
-            } => coverage_view::run(path, &reference, columns.as_deref(), format, json),
+            } => coverage_view::run(path, &reference, columns.as_deref(), format, json, color),
             CoverageCommand::Record {
                 slice,
                 requirement,
