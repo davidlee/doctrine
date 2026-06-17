@@ -9,9 +9,7 @@
 //! and stamps the [`PRIORITY_POLICY_VERSION`] (D6 / REQ-094). NO trailing newline on
 //! either surface — the black-box golden contract (`write!`, not `writeln!`).
 
-use crate::listing::{
-    self, status_hue, Column, ColumnPaint, RenderOpts, TITLE_EVEN, TITLE_ODD,
-};
+use crate::listing::{self, Column, ColumnPaint, RenderOpts, TITLE_EVEN, TITLE_ODD, status_hue};
 use owo_colors::{AnsiColors::Cyan, DynColors};
 
 use super::view::{ActionabilityBlock, BlockersView, Explanation, NextRow, ReasonKind, SurveyRow};
@@ -70,7 +68,10 @@ const SURVEY_COLS: [Column<SurveyRow>; 7] = [
     },
 ];
 
-#[expect(dead_code, reason = "declared for IMP-038 validation parity; not used by render_columns (priority has no --columns surface)")]
+#[expect(
+    dead_code,
+    reason = "declared for IMP-038 validation parity; not used by render_columns (priority has no --columns surface)"
+)]
 const SURVEY_DEFAULT: &[&str] = &["id", "kind", "status", "act", "cons", "blocker", "title"];
 
 const NEXT_COLS: [Column<NextRow>; 5] = [
@@ -106,7 +107,10 @@ const NEXT_COLS: [Column<NextRow>; 5] = [
     },
 ];
 
-#[expect(dead_code, reason = "declared for IMP-038 validation parity; not used by render_columns (priority has no --columns surface)")]
+#[expect(
+    dead_code,
+    reason = "declared for IMP-038 validation parity; not used by render_columns (priority has no --columns surface)"
+)]
 const NEXT_DEFAULT: &[&str] = &["id", "kind", "status", "unblocks", "title"];
 
 // ---------------------------------------------------------------------------

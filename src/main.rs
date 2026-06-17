@@ -195,6 +195,18 @@ pub(crate) struct FindRetrieveArgs {
     #[arg(long = "include-draft")]
     pub(crate) include_draft: bool,
 
+    /// Skip first N results (default 0).
+    #[arg(long, default_value_t = 0)]
+    pub(crate) offset: usize,
+
+    /// Page number (1-based; sugar over --offset). Mutually exclusive with --offset.
+    #[arg(long, conflicts_with = "offset")]
+    pub(crate) page: Option<usize>,
+
+    /// Max results to show.
+    #[arg(long)]
+    pub(crate) limit: Option<usize>,
+
     /// Explicit project root (default: auto-detect).
     #[arg(short = 'p', long)]
     pub(crate) path: Option<PathBuf>,
@@ -1758,6 +1770,9 @@ enum MemoryCommand {
     /// Find memories by scope/query, ranked; rows carry trust + severity so the
     /// holdback-exempt find surface keeps risk visible.
     Find {
+        /// Positional query (zero or one; maps to --query). Mutually exclusive with --query.
+        query: Option<String>,
+
         #[command(flatten)]
         args: FindRetrieveArgs,
     },
@@ -1769,10 +1784,6 @@ enum MemoryCommand {
     Retrieve {
         #[command(flatten)]
         args: FindRetrieveArgs,
-
-        /// Max blocks to render (default 5, capped at 20).
-        #[arg(long)]
-        limit: Option<usize>,
 
         /// Raise the trust floor: only show memories at this trust or higher under
         /// high severity (high|medium|low; only raises the default `medium`).
@@ -3098,9 +3109,59 @@ fn main() -> anyhow::Result<()> {
                 list,
                 path,
             } => memory::run_list(path, memory_type, list.into_list_args(color)),
-            MemoryCommand::Find { args } => {
+            MemoryCommand::Find { query, args } => {
+                // Merge positional query + --query; mutually exclusive.
+                let free_query = match (query, args.flag_query) {
+                    (Some(_), Some(_)) => {
+                        anyhow::bail!("cannot specify both a positional query and --query")
+                    }
+                    (q, None) | (None, q) => q,
+                };
+                // Validate --limit.
+                if args.limit == Some(0) {
+                    anyhow::bail!("--limit must be >= 1");
+                }
+                // Resolve offset: page sugar or explicit.
+                let page_size = args.limit.unwrap_or(retrieve::RETRIEVE_LIMIT_DEFAULT);
+                let offset = match args.page {
+                    Some(0) => anyhow::bail!("--page must be >= 1"),
+                    Some(p) => (p - 1) * page_size,
+                    None => args.offset,
+                };
                 let resolved_format = if args.json { Format::Json } else { args.format };
                 retrieve::run_find(
+                    args.path,
+                    args.path_scope,
+                    args.glob,
+                    args.command,
+                    args.tag,
+                    free_query,
+                    args.memory_type,
+                    args.status,
+                    args.include_draft,
+                    resolved_format,
+                    offset,
+                    args.limit,
+                )
+            }
+            MemoryCommand::Retrieve { args, min_trust } => {
+                // Validate --limit.
+                if args.limit == Some(0) {
+                    anyhow::bail!("--limit must be >= 1");
+                }
+                let retrieve_limit = args
+                    .limit
+                    .unwrap_or(retrieve::RETRIEVE_LIMIT_DEFAULT)
+                    .min(retrieve::RETRIEVE_LIMIT_MAX);
+                // Resolve offset: page sugar or explicit.
+                let page_size = args.limit.unwrap_or(retrieve::RETRIEVE_LIMIT_DEFAULT);
+                let offset = match args.page {
+                    Some(0) => anyhow::bail!("--page must be >= 1"),
+                    Some(p) => (p - 1) * page_size,
+                    None => args.offset,
+                };
+                let resolved_format = if args.json { Format::Json } else { args.format };
+                retrieve::run_retrieve(
                     args.path,
                     args.path_scope,
                     args.glob,
@@ -3110,26 +3171,12 @@ fn main() -> anyhow::Result<()> {
                     args.memory_type,
                     args.status,
                     args.include_draft,
+                    retrieve_limit,
+                    min_trust.as_deref(),
+                    offset,
                     resolved_format,
                 )
             }
-            MemoryCommand::Retrieve {
-                args,
-                limit,
-                min_trust,
-            } => retrieve::run_retrieve(
-                args.path,
-                args.path_scope,
-                args.glob,
-                args.command,
-                args.tag,
-                args.flag_query,
-                args.memory_type,
-                args.status,
-                args.include_draft,
-                limit,
-                min_trust.as_deref(),
-            ),
             MemoryCommand::Sync {
                 command,
                 dry_run: sync_dry_run,
@@ -4486,6 +4533,7 @@ mod write_class_tests {
         );
         assert_eq!(
             w(MemoryCommand::Find {
+                query: None,
                 args: FindRetrieveArgs {
                     path_scope: Vec::new(),
                     glob: Vec::new(),
@@ -4497,6 +4545,9 @@ mod write_class_tests {
                     include_draft: false,
                     format: Format::Table,
                     json: false,
+                    offset: 0,
+                    page: None,
+                    limit: None,
                     path: None,
                 },
             }),
@@ -4515,9 +4566,11 @@ mod write_class_tests {
                     include_draft: false,
                     format: Format::Table,
                     json: false,
+                    offset: 0,
+                    page: None,
+                    limit: None,
                     path: None,
                 },
-                limit: None,
                 min_trust: None,
             }),
             None

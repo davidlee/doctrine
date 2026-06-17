@@ -1393,7 +1393,13 @@ mod tests {
         .unwrap();
         policy::run_new(Some(root.to_path_buf()), Some("Old rule".into()), None).unwrap();
         policy::run_new(Some(root.to_path_buf()), Some("Dead rule".into()), None).unwrap();
-        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required, false).unwrap();
+        policy::run_status(
+            Some(root.to_path_buf()),
+            1,
+            policy::PolicyStatus::Required,
+            false,
+        )
+        .unwrap();
         policy::run_status(
             Some(root.to_path_buf()),
             3,
@@ -1401,7 +1407,13 @@ mod tests {
             false,
         )
         .unwrap();
-        policy::run_status(Some(root.to_path_buf()), 4, policy::PolicyStatus::Retired, false).unwrap();
+        policy::run_status(
+            Some(root.to_path_buf()),
+            4,
+            policy::PolicyStatus::Retired,
+            false,
+        )
+        .unwrap();
         // policy 2 stays `draft`.
 
         assert!(regenerate(root, exec).unwrap());
@@ -1731,7 +1743,13 @@ mod tests {
             None,
         )
         .unwrap();
-        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required, false).unwrap();
+        policy::run_status(
+            Some(root.to_path_buf()),
+            1,
+            policy::PolicyStatus::Required,
+            false,
+        )
+        .unwrap();
         standard::run_new(
             Some(root.to_path_buf()),
             Some("Two-space indent".into()),
@@ -1881,7 +1899,13 @@ mod tests {
             None,
         )
         .unwrap();
-        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required, false).unwrap();
+        policy::run_status(
+            Some(root.to_path_buf()),
+            1,
+            policy::PolicyStatus::Required,
+            false,
+        )
+        .unwrap();
         standard::run_new(
             Some(root.to_path_buf()),
             Some("Two-space indent".into()),
