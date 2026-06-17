@@ -136,7 +136,7 @@ export function wireSearch(opts: WireSearchOpts): void {
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         if (item !== undefined) {
-          item.classList.toggle('nav-highlight', i === navIdx);
+          item.classList.toggle('entity-item--nav-highlight', i === navIdx);
         }
       }
       const highlighted = items[navIdx];

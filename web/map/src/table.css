@@ -1,0 +1,77 @@
+/* Doctrine Map Explorer — tables (SL-093 PHASE-01) */
+
+@layer layout {
+  /* ---------------------------------------------------------------------------
+   * Relationship table
+   * ------------------------------------------------------------------------- */
+  .relationship-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+
+  .relationship-table th,
+  .relationship-table td {
+    border: 1px solid var(--border);
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    text-align: left;
+  }
+
+  .relationship-table th {
+    background: var(--sidebar-bg);
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  /* ---------------------------------------------------------------------------
+   * Edge detail view
+   * ------------------------------------------------------------------------- */
+  .edge-id-link {
+    font-family: monospace;
+    font-size: 0.82rem;
+  }
+
+  /* ---------------------------------------------------------------------------
+   * Edge type legend
+   * ------------------------------------------------------------------------- */
+  .edge-legend {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .legend-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .legend-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .legend-item {
+    font-size: 0.75rem;
+    color: var(--fg);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .legend-swatch {
+    display: inline-block;
+    width: 1rem;
+    height: 0.5rem;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .legend-item.legend-dimmed {
+    opacity: 0.3;
+  }
+}

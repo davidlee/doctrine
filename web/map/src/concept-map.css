@@ -1,0 +1,213 @@
+/* Doctrine Map Explorer — concept-map authoring UI (SL-093 PHASE-01) */
+
+@layer components {
+  /* ---------------------------------------------------------------------------
+   * Edit/Done toggle button in focus header
+   * ------------------------------------------------------------------------- */
+  .cm-edit-toggle {
+    margin-left: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.8rem;
+    border: 1px solid var(--cm-primary);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--cm-primary);
+    cursor: pointer;
+    vertical-align: middle;
+  }
+
+  .cm-edit-toggle:hover {
+    background: var(--cm-primary);
+    color: var(--cm-btn-text);
+  }
+
+  /* ---------------------------------------------------------------------------
+   * Add edge form
+   * ------------------------------------------------------------------------- */
+  .cm-add-edge-form {
+    margin: 0.75rem 0;
+    padding: 0.75rem;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    background: var(--bg-card);
+  }
+
+  .add-edge-fields {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .cm-input {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--cm-input-border);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    flex: 1;
+    min-width: 100px;
+  }
+
+  .cm-input:focus {
+    outline: none;
+    border-color: var(--cm-primary);
+  }
+
+  .cm-add-btn {
+    padding: 0.35rem 0.75rem;
+    border: none;
+    border-radius: 4px;
+    background: var(--cm-primary);
+    color: var(--cm-btn-text);
+    font-size: 0.85rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .cm-add-btn:hover {
+    background: var(--cm-primary-hover);
+  }
+
+  .cm-add-error {
+    margin-top: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }
+
+  .cm-add-error.cm-error {
+    background: var(--cm-error-bg);
+    color: var(--cm-error-fg);
+    border: 1px solid var(--cm-error-border);
+  }
+
+  .cm-add-error.cm-notice {
+    background: var(--cm-success-bg);
+    color: var(--cm-success-fg);
+    border: 1px solid var(--cm-success-border);
+  }
+
+  /* ---------------------------------------------------------------------------
+   * Edge table
+   * ------------------------------------------------------------------------- */
+  .cm-edge-table {
+    margin: 0.75rem 0;
+  }
+
+  .cm-edges {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .cm-edges th {
+    text-align: left;
+    padding: 0.4rem 0.5rem;
+    border-bottom: 2px solid var(--border);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+
+  .cm-edges td {
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cm-edge-row:hover {
+    background: var(--hover-bg);
+  }
+
+  .cm-edge-label {
+    color: var(--fg);
+  }
+
+  .cm-editable-node {
+    cursor: pointer;
+    color: var(--cm-primary);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+  }
+
+  .cm-editable-node:hover {
+    color: var(--cm-primary-hover);
+  }
+
+  /* Remove button */
+  .cm-remove-btn {
+    padding: 0.15rem 0.4rem;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--cm-error-fg);
+    font-size: 0.8rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .cm-remove-btn:hover {
+    background: var(--cm-error-bg);
+    border-color: var(--cm-error-border);
+  }
+
+  /* Inline rename input */
+  .cm-rename-input {
+    padding: 0.2rem 0.35rem;
+    border: 1px solid var(--cm-primary);
+    border-radius: 3px;
+    font-size: 0.85rem;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .cm-rename-input:focus {
+    outline: none;
+    border-color: var(--cm-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--cm-primary) 20%, transparent);
+  }
+
+  /* ---------------------------------------------------------------------------
+   * Diagnostics panel
+   * ------------------------------------------------------------------------- */
+  .cm-diagnostics-panel {
+    margin: 0.75rem 0;
+    padding: 0.75rem;
+    border: 1px solid var(--cm-warning-border);
+    border-radius: 6px;
+    background: var(--cm-warning-bg);
+  }
+
+  .cm-diagnostics-panel__title {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.85rem;
+    color: var(--cm-warning-heading);
+  }
+
+  .cm-diag-item {
+    padding: 0.25rem 0;
+    font-size: 0.8rem;
+    color: var(--cm-warning-fg);
+    border-bottom: 1px solid var(--cm-warning-divider);
+  }
+
+  .cm-diag-item:last-child {
+    border-bottom: none;
+  }
+
+  /* Dark mode overrides for CM diagnostics */
+  @media (prefers-color-scheme: dark) {
+    .cm-diagnostics-panel {
+      background: var(--cm-warning-bg);
+      border-color: var(--cm-warning-border);
+    }
+
+    .cm-diagnostics-panel__title {
+      color: var(--cm-warning-heading);
+    }
+
+    .cm-diag-item {
+      color: var(--cm-warning-fg);
+      border-bottom-color: var(--cm-warning-divider);
+    }
+  }
+}

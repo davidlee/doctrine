@@ -172,7 +172,10 @@ function buildEntityItem(
 ): HTMLElement {
   const li = document.createElement('li');
   li.className = 'entity-item';
-  if (node.id === focusId) li.classList.add('active');
+  if (node.id === focusId) {
+    li.classList.add('entity-item--active');
+    p.classList.add('kind-pill--active');
+  }
 
   const tSpan = document.createElement('span');
   tSpan.className = 'entity-title';
@@ -263,44 +266,28 @@ export function focusHeader(opts: FocusHeaderOpts): void {
 // ---------------------------------------------------------------------------
 
 export function setPageMode(mode: 'entity-graph' | 'actionability' | 'concept-map' | 'edge'): void {
-  // Depth selector: visible in entity-graph and concept-map, hidden in edge
+  const layout = document.querySelector<HTMLElement>('.layout');
   // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-  if (elements.depthSelector) {
-    elements.depthSelector.style.display = mode === 'edge' ? 'none' : '';
-  }
+  if (layout) layout.dataset.pageMode = mode;
 
-  // Relationship table: visible in entity-graph and actionability
-  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-  if (elements.relationshipTable) {
-    elements.relationshipTable.style.display =
-      mode === 'entity-graph' || mode === 'actionability' ? '' : 'none';
-  }
-
-  // Table toggle: visible in entity-graph and actionability
-  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-  if (elements.tableToggle) {
-    elements.tableToggle.style.display =
-      mode === 'entity-graph' || mode === 'actionability' ? '' : 'none';
-  }
-
-  // CM containers: hide/clear when leaving concept-map mode
+  // CM containers: hide AND clear when leaving concept-map mode
   if (mode !== 'concept-map') {
     const cmEdgeTable = elements.cmEdgeTable;
     // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (cmEdgeTable) {
-      cmEdgeTable.style.display = 'none';
+      cmEdgeTable.classList.add('u-hidden');
       cmEdgeTable.innerHTML = '';
     }
     const cmAddForm = elements.cmAddEdgeForm;
     // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (cmAddForm) {
-      cmAddForm.style.display = 'none';
+      cmAddForm.classList.add('u-hidden');
       cmAddForm.innerHTML = '';
     }
     const cmDiagPanel = elements.cmDiagnosticsPanel;
     // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (cmDiagPanel) {
-      cmDiagPanel.style.display = 'none';
+      cmDiagPanel.classList.add('u-hidden');
       cmDiagPanel.innerHTML = '';
     }
   }
@@ -561,6 +548,9 @@ function wireFullscreenToggle(container: HTMLElement): void {
   if (btn) {
     btn.addEventListener('click', () => {
       container.classList.toggle('fullscreen');
+      const body = container.querySelector<HTMLElement>('.markdown-body');
+      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+      if (body) body.classList.toggle('markdown-body--fullscreen');
     });
   }
 }

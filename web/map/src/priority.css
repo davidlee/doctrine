@@ -1,0 +1,105 @@
+/* Doctrine Map Explorer — priority/DAG view (SL-093 PHASE-01) */
+
+@layer components {
+  /* ---------------------------------------------------------------------------
+   * View toggle buttons
+   * ------------------------------------------------------------------------- */
+  .view-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .view-btn {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--fg);
+    cursor: pointer;
+  }
+
+  .view-btn.active {
+    background: var(--kind-SL);
+    border-color: var(--kind-SL);
+    color: #fff;
+  }
+
+  .priority-node {
+    cursor: pointer;
+  }
+
+  .priority-node text {
+    fill: currentColor;
+    font-size: 12px;
+    font-weight: 600;
+    pointer-events: none;
+  }
+
+  .priority-actionable {
+    color: var(--priority-actionable-fg);
+  }
+
+  .priority-actionable rect {
+    fill: var(--priority-actionable-bg);
+  }
+
+  .priority-blocked {
+    color: var(--priority-blocked-fg);
+  }
+
+  .priority-blocked rect {
+    fill: var(--priority-blocked-bg);
+  }
+
+  .priority-terminal {
+    color: var(--priority-terminal-fg);
+  }
+
+  .priority-terminal rect {
+    fill: var(--priority-terminal-bg);
+  }
+
+  .priority-node--focus rect {
+    stroke: var(--kind-SL);
+    stroke-width: 3;
+  }
+
+  .priority-node--hover rect {
+    filter: brightness(1.1);
+  }
+
+  .priority-consequence-badge circle {
+    fill: var(--bg);
+  }
+
+  .priority-consequence-badge text {
+    fill: var(--fg);
+    font-size: 10px;
+  }
+
+  .priority-zoom-layer {
+    transition: transform 0.45s ease;
+  }
+
+  .priority-node--zoom rect {
+    stroke: var(--priority-needs-edge);
+    stroke-width: 2;
+  }
+
+  .priority-edge {
+    fill: none;
+  }
+
+  .priority-needs-edge {
+    stroke: var(--priority-needs-edge);
+    stroke-width: 2;
+  }
+
+  .priority-after-edge {
+    stroke: var(--priority-after-edge);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+  }
+}
