@@ -1,7 +1,7 @@
 id = 80
 slug = "reconcile-skill-seam"
 title = "Reconcile skill + audit/reconcile seam disentanglement"
-status = "started"
+status = "reconcile"
 created = "2026-06-16"
 updated = "2026-06-17"
 
