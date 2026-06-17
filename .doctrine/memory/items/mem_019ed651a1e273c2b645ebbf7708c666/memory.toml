@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed651a1e273c2b645ebbf7708c666"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Web frontend TypeScript dev workflow"
+summary = "Web frontend dev: bun run dev (Vite HMR), typecheck (tsc --noEmit), lint (eslint), test (vitest), build (vite build). Debug embed raw web/map/, release web/map/dist/. Vendor from npm."
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:web,area:frontend,area:toolchain"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f3df278afa3172ba6d27c555b1bcf2599979d5fd"
+ref_name = ""
+checkout_state_id = "c5b5740a6c8aec03986ad321826ef388f1d936d0c4d3b9c47037f5952e3305b9"
+base_commit = "a986b60351bd9fa3dd70edb70881250574e390fc"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
