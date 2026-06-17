@@ -1,0 +1,142 @@
+id    = 51
+slug  = "inquisition-sl-086-design-cli-agent-facing-ux-hardening"
+title = "Inquisition: SL-086 design — CLI agent-facing UX hardening"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-086"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected: memory find without --limit shows ALL results (current behaviour preserved). Observed: design's common resolution defaults limit to RETRIEVE_LIMIT_DEFAULT=5, silently capping find at 5 results."
+detail = """
+The design §2 IMP-091 code impact shows a shared resolution block:
+
+    let limit = args.limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT).min(RETRIEVE_LIMIT_MAX);
+
+Applied to both find and retrieve, this makes find default to 5 results when --limit is not specified. Currently, run_find (src/retrieve.rs:696-731) has NO limit parameter — format_find renders ALL ranked candidates. The scope (IMP-091) says "Add --offset N and --page N to both memory find and memory retrieve" but NEVER says find's default behaviour should change from unlimited to limited-to-5. No design decision addresses this transition. No EX/VT criterion tests find without --limit.
+
+Evidence:
+- design.md §2 common resolution: RETRIEVE_LIMIT_DEFAULT fallback on find
+- src/retrieve.rs:696-731: run_find has no limit arg, renders all ranked
+- scope §IMP-091: only mentions adding offset/page, not changing defaults
+- plan.toml PHASE-02 VT-3: tests --page 2 --limit 5, never tests without --limit
+
+Penance: find's limit must default to usize::MAX (unlimited) OR find must have a separate resolution that leaves limit=None when not specified, only applying truncation when --limit is explicitly set. Add a VT criterion for 'find without --limit shows all results'."""
+disposition = "design-wrong"
+response = "Accepted. find must NOT acquire an implicit 5-result cap. The common resolution block in design §2 must be split: find's limit defaults to None (unlimited, only apply truncation when --limit is explicitly passed), while retrieve retains RETRIEVE_LIMIT_DEFAULT. Reconcile design.md §2 code blocks to show two separate resolutions, add a design decision documenting that find is unlimited by default (no limit), and add a VT criterion 'memory find without --limit shows all results'."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected: boot staleness signal has a single, unambiguous definition consistent with existing CheckReport. Observed: D13 specifies clock-based freshness (≤5 min) with age_seconds; existing boot_check computes content-diff staleness — two signals, no reconciliation rule."
+detail = """
+D13 and the data-sources table both say boot staleness is time-based: 'fresh if ≤ 5 min, stale otherwise, missing if no boot.md'. The JSON shape includes age_seconds. But the existing CheckReport (src/boot.rs:265) computes stale as 'on_disk != recomputed' — a content diff, not a clock check. boot_check has NO clock input — it's deterministic (by design, §5.5). The status command would need to call boot_check (for the commit hash and marker_sections) AND do a file stat (for mtime). Then the pure assemble_status receives both signals but must collapse them to a single 'staleness: fresh|stale|missing' string. The design does not specify: what happens when the file is clock-fresh but content-drifted? Or clock-stale but content-identical? If the file doesn't exist, that's 'missing' — unambiguous. But the fresh/stale boundary conflates two independent signals into one display value without a resolution rule.
+
+Evidence:
+- design.md D13: 'fresh if ≤ 5 min, stale otherwise'
+- design.md data-sources table: 'boot --check + file stat'
+- src/boot.rs:265-296: CheckReport.stale = content-diff, no clock
+- src/boot.rs: §5.5: boot_check is deterministic, no embedded timestamp
+
+Penance: Resolve the staleness display to a single, documented rule. Recommend: keep the content-diff as the primary signal (it already exists in boot_check), and let the file-stat age be an additional informational field (e.g. 'age_seconds: 120') without folding it into the fresh/stale classification. Or, if time-based freshness is required, add a dedicated stat check in the impure shell and resolve the interaction explicitly."""
+disposition = "design-wrong"
+response = "Accepted. D13 must be reconciled with existing bootstrap mechanism. Recommendation: let CheckReport.stale (content-diff) drive the primary staleness signal, and keep age_seconds as an informational field from file stat — decouple the two signals rather than collapsing them into one ambiguous 'fresh/stale' classification. Update design D13 to document the resolution rule: stale = content-diff (from boot_check); age_seconds = mtime delta (from stat, informational only)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = 'Expected: flag_query field preserves --query flag name via #[arg(long = "query")], and is included in the FindRetrieveArgs shared struct. Observed: design omits the necessary #[arg(long)] override and omits flag_query from the explicit FindRetrieveArgs extraction list.'
+detail = """
+The design says 'Rename the existing --query field to flag_query to avoid namespace collision with the positional query'. But a clap field named flag_query with #[arg(long)] generates --flag-query, not --query. To preserve the user-facing flag name, the attribute must be #[arg(long = "query")]. The design does not specify this attribute override — an implementer following the design literally would break the --query flag.
+
+Additionally, the design's non-architectural notes list the fields to extract into FindRetrieveArgs: 'path_scope, glob, command, tag, memory_type, status, include_draft' plus 'offset, page, limit, format, json'. The --query flag (renamed flag_query) is shared between Find AND Retrieve (both currently have query: Option<String>) but is conspicuously absent from the extraction list. With it absent, an implementer must either duplicate it or infer it — the design should be explicit.
+
+Evidence:
+- design.md §1 code impact: 'Rename the existing --query field to flag_query'
+- design.md §1: no #[arg(long = "query")] shown on flag_query
+- design.md §6 notes: extraction list omits flag_query
+- src/main.rs:1728 (Find) and 1762 (Retrieve): both have query: Option<String>
+
+Penance: Add #[arg(long = "query")] to the flag_query field in the design. Add flag_query to the explicit FindRetrieveArgs extraction list."""
+disposition = "design-wrong"
+response = 'Accepted. Add #[arg(long = "query")] to the flag_query field in design §1 code impact. Add flag_query to the explicit FindRetrieveArgs extraction list in §6 non-architectural notes. Both Find and Retrieve share --query — it belongs in the shared struct.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Expected: design references correct function name (priority::surface::next). Observed: design references priority::surface::next_work which does not exist."
+detail = """
+The design's data-sources table for the status dashboard says the 'next up' section sources data from 'priority engine (priority::surface::next_work)'. But the actual function is named next (src/priority/surface.rs:168), not next_work. There is no next_work function anywhere in the priority module. An implementer following the design literally would grep for a function that doesn't exist.
+
+Evidence:
+- design.md §4 data-sources table: 'priority::surface::next_work'
+- src/priority/surface.rs:168: pub(crate) fn next(root: &Path) -> anyhow::Result<Vec<NextRow>>
+
+Penance: Correct the reference to priority::surface::next in the data-sources table."""
+disposition = "design-wrong"
+response = "Accepted. Correct the data-sources table in design §4: priority::surface::next_work → priority::surface::next. The actual function is next (src/priority/surface.rs:168)."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Expected: args-struct ceiling rationale correctly identifies the lint being mitigated. Observed: design conflates clap struct field count with the too_many_arguments function-parameter lint."
+detail = """
+The design's non-architectural notes say: 'MemoryCommand::Find currently has 9 fields, Retrieve has 11. Adding query+offset+page+limit+format+json pushes Find to 15 and Retrieve to 17 — well past the too_many_arguments lint ceiling of 7.' But too_many_arguments applies to FUNCTION parameters, not struct fields. The clap struct fields don't trigger this lint — the actual lints on run_find/run_retrieve are suppressed with #[expect(clippy::too_many_arguments)] already (src/retrieve.rs:695,787). The FindRetrieveArgs extraction helps with struct organization and reduces duplication, which is a valid rationale — but the stated reason (avoiding too_many_arguments) is incorrect.
+
+Evidence:
+- design.md §6 notes: 'too_many_arguments lint ceiling of 7' applied to struct fields
+- src/retrieve.rs:695: #[expect(clippy::too_many_arguments)] on run_find (9 params)
+- src/retrieve.rs:787: same on run_retrieve (11 params)
+- Cargo.toml: no clippy::too_many_arguments configured at project level
+
+Penance: Correct the rationale — the extraction is for DRY/clarity, not to dodge too_many_arguments (which the functions already suppress). The struct field count is not subject to that lint."""
+disposition = "design-wrong"
+response = "Accepted. The too_many_arguments lint applies to function parameters, not struct fields. The FindRetrieveArgs extraction is valuable for DRY and organization — use that as the stated rationale. The functions already carry #[expect(clippy::too_many_arguments)] and adding params to them is handled. Fix the non-architectural notes rationale."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Expected: --page/--offset mutual exclusion with default_value_t is explicitly verified. Observed: design does not interrogate clap's conflicts_with behaviour when offset carries default_value_t = 0."
+detail = """
+The design adds offset: usize with #[arg(long, default_value_t = 0)] and page: Option<usize> with #[arg(long, conflicts_with = "offset")]. The question: does clap treat offset's default value (0) as 'present' for conflicts_with resolution? If so, --page 2 would conflict with the default offset, making --page always an error. In clap derive, default_value_t provides a value when the arg is absent from argv — the arg is still considered 'not present' for conflicts_with purposes. So --page 2 alone should work. But this is subtle behaviour, and the design doesn't acknowledge the interaction. A design that relies on clap's default-value/conflict interaction without calling it out invites a future regression (e.g., a clap version change, or a contributor adding default_value_t to a field they shouldn't).
+
+Evidence:
+- design.md §2: offset has default_value_t = 0, page has conflicts_with = "offset"
+- clap derive behaviour: default_value_t doesn't mark the arg as 'present' for conflicts, but this is version-dependent
+
+Penance: Add a design note acknowledging the default_value + conflicts_with interaction, or use a separate validation step in the shell (already present for page=0). Recommend adding a VT criterion: '--page 2 alone does not error despite offset default'."""
+disposition = "design-wrong"
+response = "Accepted. Add a design note acknowledging the default_value + conflicts_with interaction. clap 4 treats default_value_t as 'not present' for conflicts purposes, but this is subtle. Add VT criterion: '--page 2 alone does not error despite offset default_value_t = 0'."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Expected: limit=0 is either rejected or handled gracefully. Observed: no validation on --limit 0 for either find or retrieve."
+detail = """
+The design adds --limit: Option<usize> with resolution to limit.unwrap_or(default).min(RETRIEVE_LIMIT_MAX). If a user passes --limit 0, take(0) would return zero visible results, shown=0, and the '0 of N' truncation notice fires. This is not wrong per se, but it's a surprising degenerate input with no guard. The retrieve surface currently has no explicit limit=0 guard either. If adding limit support to find, a simple guard (bail if limit == 0) would be cheap and user-friendly.
+
+Evidence:
+- design.md §2: limit is Option<usize> with no range validation besides .min(MAX)
+- design.md §2: shown=0 edge case mentions offset >= total but not limit=0
+
+Penance: Add a guard rejecting --limit 0 (or document that 0 is intentionally supported with truncation-notice-only behaviour). Recommend rejecting with a clear error."""
+disposition = "design-wrong"
+response = "Accepted. Add a guard rejecting --limit 0 with a clear error: '--limit must be >= 1'. Cheap to add, clear to the user. If 0 is intentionally supported (show nothing but a truncation notice), document it as a design decision."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
