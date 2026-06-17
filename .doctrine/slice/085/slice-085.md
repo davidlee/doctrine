@@ -22,12 +22,13 @@ can emit the structured next-action instruction the agent mechanically executes.
 
 - Move deterministic dispatch logic into `doctrine dispatch` subcommands:
   - `dispatch setup <SL-ID>` — create/resume coordination worktree, print env contract
-  - `dispatch plan-next <SL-ID>` — read plan.toml → next phase(s), file-disjointness info
-  - `dispatch status <SL-ID>` — phase rollup, what's done/blocked/next
-  - `dispatch import <SL-ID> <PHASE-ID>` — alias/thin-wrapper over `worktree import`
+  - `dispatch plan-next <SL-ID>` — read plan.toml → ordered phase rollup, next action
+  - `dispatch status <SL-ID>` — full dispatch state: coordination, phases, trunk drift,
+    sync state, candidates
 - Shrink `dispatch/SKILL.md` to ~40 lines: when to use, `dispatch setup` → spawn worker
-  → `dispatch import` loop, close handoff
-- Shrink `dispatch-agent` / `dispatch-subprocess` to harness-specific spawn templates only
+  → funnel → `dispatch plan-next` loop, close handoff
+- Shrink `dispatch-agent` / `dispatch-subprocess` to harness-specific spawn templates
+  (~25 and ~20 lines respectively)
 - CLI verbs are independently testable (unit + integration)
 
 ## Non-Goals

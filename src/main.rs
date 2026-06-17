@@ -938,6 +938,23 @@ enum DispatchCommand {
         path: Option<PathBuf>,
     },
 
+    /// Create OR resume the coordination worktree and emit the dispatch env
+    /// contract on stdout (design §2). Orchestrator-classed — refused under
+    /// worker-mode.
+    Setup {
+        /// The slice id (bare number, e.g. `85`).
+        #[arg(long)]
+        slice: u32,
+
+        /// The coordination worktree directory (must not already exist).
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Candidate lifecycle (SL-068 / design §5.3). `create` publishes a
     /// reviewable/landable candidate at `candidate/<slice>/<label>` by computing
     /// the no-ff 3-way merge of a verified source ref onto a base, under zero-oid
@@ -945,6 +962,39 @@ enum DispatchCommand {
     Candidate {
         #[command(subcommand)]
         command: CandidateCommand,
+    },
+
+    /// Read the plan and runtime phase sheets; print ordered phase rollup
+    /// and identify the next actionable phase(s). Read-only — callable from
+    /// anywhere.
+    PlanNext {
+        /// The slice id (bare number).
+        #[arg(long)]
+        slice: u32,
+
+        /// Emit JSON instead of human-readable table.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only full dispatch rollup: coordination state, phase table,
+    /// trunk drift, sync state, candidate summary, next-step guidance.
+    Status {
+        /// The slice id (bare number, e.g. `85`).
+        #[arg(long)]
+        slice: u32,
+
+        /// Emit JSON instead of human-readable table.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root.
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
     },
 }
 
@@ -2713,6 +2763,7 @@ fn write_class(cmd: &Command) -> WriteClass {
         Command::Dispatch { command } => match command {
             DispatchCommand::Sync { .. } => Orchestrator("dispatch-sync"),
             DispatchCommand::RecordBoundary { .. } => Orchestrator("dispatch-record-boundary"),
+            DispatchCommand::Setup { .. } => Orchestrator("dispatch-setup"),
             // candidate create publishes coordination refs + ledger rows (SL-068
             // §5.3) — Orchestrator-classed like sync/record-boundary; refused
             // under worker-mode.
@@ -2727,6 +2778,9 @@ fn write_class(cmd: &Command) -> WriteClass {
                 // under worker-mode.
                 CandidateCommand::Admit { .. } => Orchestrator("dispatch-candidate-admit"),
             },
+            // plan-next / status — read plan + phase sheets; never mutates a
+            // ref or ledger row — Read-classed so it works under worker-mode.
+            DispatchCommand::PlanNext { .. } | DispatchCommand::Status { .. } => Read,
         },
         // The coverage group splits per inner verb (SL-057 D2a): `show` is the
         // read-only drift view; `record`/`forget` mutate the observed store, and
@@ -3652,6 +3706,7 @@ fn main() -> anyhow::Result<()> {
                 code_end,
                 path,
             } => dispatch::run_record_boundary(path, slice, &phase, &code_start, &code_end),
+            DispatchCommand::Setup { slice, dir, path } => dispatch::run_setup(path, slice, &dir),
             DispatchCommand::Candidate { command } => match command {
                 CandidateCommand::Create {
                     slice,
@@ -3699,6 +3754,12 @@ fn main() -> anyhow::Result<()> {
                     dispatch::run_candidate_admit(path, &req)
                 }
             },
+            DispatchCommand::PlanNext { slice, json, path } => {
+                dispatch::run_plan_next(path, slice, json)
+            }
+            DispatchCommand::Status { slice, json, path } => {
+                dispatch::run_status(path, slice, json)
+            }
         },
         Command::Validate { path } => run_validate(path),
         Command::Reseat {
