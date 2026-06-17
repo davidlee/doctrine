@@ -1,0 +1,161 @@
+# Implementation plan for SL-088 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-088"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ── CLI surface first (the shape everything else plugs into), then orchestration,
+# then agent-def generalization, then docs+e2e, then gate. ──
+#
+# Sequencing rationale: PHASE-01 removes the old CLI surface and plumbs the new
+# one — the skeleton. PHASE-02 builds the forward-step flow that fills it.
+# PHASE-03 extracts the agent-def install into a single generalised function —
+# it rides PHASE-02's per-step dispatch. PHASE-04 rewrites prose and e2e tests
+# to match; it depends on the new CLI surface existing (PHASE-01) and the install
+# flow being correct (PHASE-02/03). PHASE-05 is the conventions gate — only runs
+# when implementation is done.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "CLI surface consolidation"
+objective = """
+Move agent selection flags to `Command::Install`, remove `Command::Claude` +
+`ClaudeCommand` entirely, remove `SkillsCommand::Install` (keep
+`SkillsCommand::List` hidden), and wire the new `Command::Install` match arm to
+`install::run()`. Update `worker_guard` goldens from `claude install` to
+`install`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (RV-057 reconciled, all 9 findings terminal)." },
+  { id = "EN-2", text = "plan.toml + plan.md exist and are approved." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Command::Install` carries `agent`, `skill`, `domain`, `only_memory`, `global` alongside existing `path`, `dry_run`, `yes`. `Command::Claude` and `ClaudeCommand` are removed. `SkillsCommand::Install` variant removed; `SkillsCommand::List` kept." },
+  { id = "EX-2", text = "`Command::Install` match arm dispatches to `install::run(path, dry_run, yes, &agent, &skill, &domain, only_memory, global)`. The standalone `memory sync`, `boot install`, `skills list` commands still parse and dispatch to their existing handlers." },
+  { id = "EX-3", text = "`worker_guard` goldens updated: `claude install` replaced with `install` in the Write label; hidden `skills install` alias is gone (no guard entry)." },
+  { id = "EX-4", text = "`cargo check` compiles with zero errors; `just check` green." },
+]
+verification = [
+  { id = "VT-1", expects = "`doctrine --help` shows no `claude` subcommand. `doctrine claude install` yields 'error: unrecognized subcommand'. `doctrine skills install` yields 'error: unrecognized subcommand'. `doctrine skills list` still works." },
+  { id = "VT-2", expects = "`doctrine install --help` shows `--agent`, `--skill`, `--domain`, `--only-memory`, `--global` flags alongside existing `-p`, `--dry-run`, `-y`." },
+  { id = "VT-3", expects = "worker_guard golden tests pass: `install` is classified Write, old `claude install` label is gone." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Forward-step orchestration"
+objective = """
+Implement the forward-step flow in `install::run()`: relaxed `detect_agents()`,
+`prompt_step()` helper, forward summary printing (dry-run vs live), and per-step
+dispatch (memory sync → boot wire → skills per agent). Extract per-agent skill
+install functions from `skills.rs` for reuse.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green: CLI surface is consolidated, `install::run()` signature accepts the new flags." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`detect_agents(agents, &root)` returns a `Vec<String>` — returns claude when `.claude/` exists and no `--agent` specified, returns specified agents, returns empty `Vec` (never errors) when no `.claude/` and no `--agent`. Distinct from `skills::resolve_agents()` which `bail!`s." },
+  { id = "EX-2", text = "`prompt_step(question, yes, all_yes)` implements y/N/a prompt: 'y'→true, 'a'→sets `*all_yes=true`+true, anything else→false. `--yes` flag skips all prompts. Unit-tested for all input variants." },
+  { id = "EX-3", text = "Forward summary prints correct steps based on detected agents: memory sync, boot wire, skills per agent. Skills steps omitted when agent list is empty. Boot prompt skipped when no harness dirs detected. Dry-run prints forward steps with '(not executed)' suffix." },
+  { id = "EX-4", text = "Per-step dispatch calls `corpus::sync_corpus()`, `boot::wire()`, and per-agent skill install in order. Partial failure continues to next step (error printed, not fatal)." },
+  { id = "EX-5", text = "`skills::install_for_claude()` and `skills::install_for_other()` extracted from `execute()` — each callable from `install.rs`. `run_install()` stays `pub(crate)`." },
+]
+verification = [
+  { id = "VT-1", expects = "`prompt_step` unit tests: returns true for 'y', 'a', yes=true, all_yes=true; returns false for 'n', '', 'no', 'x'; sets `*all_yes=true` on 'a' and returns true." },
+  { id = "VT-2", expects = "`detect_agents` unit tests: `.claude/` dir present → ['claude']; `--agent pi` → ['pi']; no dir, no flag → []; never panics/errors." },
+  { id = "VT-3", expects = "Integration: `doctrine install --dry-run` prints base + forward plan with correct step labels, exits 0." },
+  { id = "VT-4", expects = "Integration: `doctrine install -y` (in temp dir with `.claude/`) completes all steps without interaction." },
+  { id = "VT-5", expects = "Integration: `doctrine install` (all 'n'/empty inputs) does only base install — files, dirs, gitignore — and exits clean. Forward steps skipped." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Agent-def generalization"
+objective = """
+Implement `install_agent_def(root, agent_name, canon_subdir, embed_asset, global)`
+— a single function that writes canonical agent-def copies + symlinks for both
+Claude (flat canonical path, grandfathered) and pi (namespaced canonical path).
+Reuses `classify_link`/`write_link`/`relative_target` from `skills.rs`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 green: per-step dispatch exists; the per-agent skills step calls `install_agent_def` for each detected/specified agent." },
+  { id = "EN-2", text = "SL-084 embed `install/agents/pi/dispatch-worker.md` exists at the expected path (content provided by SL-084; this slice reads it via `embedded_asset()`)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`install_agent_def` writes Claude's dispatch-worker agent to `.doctrine/agents/dispatch-worker.md` (flat canonical) and symlinks `.claude/agents/dispatch-worker.md` → `../../.doctrine/agents/dispatch-worker.md`. Reuses `classify_link`/`write_link`/`relative_target`." },
+  { id = "EX-2", text = "`install_agent_def` writes pi's dispatch-worker agent to `.doctrine/agents/pi/dispatch-worker.md` (namespaced canonical) and symlinks `.pi/agents/dispatch-worker.md` → `../../.doctrine/agents/pi/dispatch-worker.md`. Same function, `canon_subdir = Some(\"pi\")`." },
+  { id = "EX-3", text = "Idempotent: reinstall does not duplicate symlinks or canonical files. Global mode anchors paths at `$HOME`." },
+]
+verification = [
+  { id = "VT-1", expects = "After `doctrine install --agent claude --yes`: `.doctrine/agents/dispatch-worker.md` exists; `.claude/agents/dispatch-worker.md` is a symlink resolving to the canonical copy." },
+  { id = "VT-2", expects = "After `doctrine install --agent pi --yes`: `.doctrine/agents/pi/dispatch-worker.md` exists; `.pi/agents/dispatch-worker.md` is a symlink resolving to the canonical copy." },
+  { id = "VT-3", expects = "`doctrine install --agent claude --agent pi --yes` installs both agent defs. Reinstall is idempotent (no duplicates)." },
+  { id = "VT-4", expects = "`doctrine install --agent pi --global --yes` writes canonical to `$HOME/.doctrine/agents/pi/` and symlinks `$HOME/.pi/agents/`." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Docs + e2e migration"
+objective = """
+Rewrite README.md (5 `claude install` references → consolidated surface), rewrite
+`tests/e2e_claude_install.rs` to drive `doctrine install --agent claude --yes` with
+the same assertions, and update `tests/e2e_worker_guard.rs` goldens.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 through PHASE-03 green: CLI surface exists, install flow works, agent-def install works — docs and e2e describe shipped mechanism." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "README.md: all 5 `claude install` references updated to `doctrine install --agent claude`. L44 (npx skills note), L84 (skills+hook), L86 (universal agent), L104 (only-memory), L153 (binary install) — each rewritten per design §3." },
+  { id = "EX-2", text = "`tests/e2e_claude_install.rs` rewritten (or renamed) to drive `doctrine install --agent claude --yes`. Same assertions preserved: SubagentStart hook merged into `.claude/settings.local.json`, dispatch-worker agent def at `.claude/agents/`." },
+  { id = "EX-3", text = "`tests/e2e_worker_guard.rs` goldens updated: `claude install` → `install` label. Hidden `skills install` alias guard entry removed. Test function renamed accordingly." },
+  { id = "EX-4", text = "Integration test: `doctrine install --agent pi --dry-run` prints pi delegation plan. Standalone `doctrine memory sync`, `doctrine boot install`, `doctrine skills list` still work." },
+]
+verification = [
+  { id = "VT-1", expects = "`just check` passes with rewritten e2e tests. New integration test for `--agent pi --dry-run`." },
+  { id = "VT-2", expects = "E2E claude install test passes: runs `doctrine install --agent claude --yes`, asserts SubagentStart hook + agent def + skills." },
+  { id = "VT-3", expects = "Worker guard golden tests pass with updated labels. Old `claude install` + `skills install` guard entries are absent from goldens." },
+  { id = "VH-1", expects = "README.md reads correctly — all five references use the consolidated surface. No orphaned `claude install` strings remain." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Gate and clean"
+objective = """
+Run `just gate` (full workspace clippy) to zero warnings, remove the stale
+`.doctrine/agents/claude/` directory, verify conventions, and commit.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 green: all code, tests, and docs are written." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`just gate` passes with zero clippy warnings across the workspace." },
+  { id = "EX-2", text = "Stale `.doctrine/agents/claude/` directory removed (content is now installed by `doctrine install --agent claude` from embeds)." },
+  { id = "EX-3", text = "`just check` green. Conventional commit with `SL-088` scope. Status transitioned to `done`." },
+]
+verification = [
+  { id = "VA-1", expects = "`just gate` output is clean — zero warnings, zero errors. `just check` passes." },
+  { id = "VA-2", expects = "`.doctrine/agents/claude/` directory no longer exists on disk. The claude agent def is installed from embeds by `install_agent_def`." },
+  { id = "VA-3", expects = "`doctrine slice status 088 done` succeeds; `doctrine inspect SL-088` shows status `done`." },
+]
+specs        = []
+requirements = []
