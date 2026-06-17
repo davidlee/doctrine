@@ -1,7 +1,7 @@
 // Doctrine Map Explorer — SPA shell (SL-073)
 // Hash routing: #/focus/SL-001 or #/focus/SL-001?depth=2
 // Security: markdown-it html:false; DOMPurify.sanitize() applied before innerHTML.
-/* global state, model, api, router, svg, render, search, cm, compareEdgesBySource */
+/* global state, model, api, router, svg, render, search, cm, compareEdgesBySource, priority */
 
 (function () {
   'use strict';
@@ -12,7 +12,7 @@
 
   function showError(container, msg) { container.innerHTML = ''; container.appendChild(render.el('div', { className: 'error' }, [render.el('p', { textContent: 'Error: ' + msg })])); }
   function buildTableEdges() { var nb = model.neighbourhood(state.focusId, state.depth, state.graph), edges = nb.edges; if (state.kindFilter) edges = edges.filter(function(e) { var s = state.graph.nodes.get(e.source); return s && state.kindFilter.has(s.kindPrefix); }); edges.sort(compareEdgesBySource); return edges; }
-  function applyFilters() { var qEl = document.querySelector('.search-input'); search.renderFilteredEntities({ list: render.elements.entityList, graph: state.graph, query: qEl ? qEl.value : '', kindFilter: state.kindFilter, focusId: state.focusId, onFocus: goto }); render.relationshipTable({ container: render.elements.relationshipTableBody, edges: buildTableEdges(), graph: state.graph, focusId: state.focusId, depth: state.depth }); }
+  function applyFilters() { var qEl = document.querySelector('.search-input'); search.renderFilteredEntities({ list: render.elements.entityList, graph: state.graph, query: qEl ? qEl.value : '', kindFilter: state.kindFilter, focusId: state.focusId, onFocus: goto }); if (state.viewMode === 'actionability') render.relationshipTable({ container: render.elements.relationshipTableBody, graph: state.graph, focusId: state.focusId, depth: state.depth, viewMode: 'actionability', actionabilityView: state.actionabilityView }); else render.relationshipTable({ container: render.elements.relationshipTableBody, edges: buildTableEdges(), graph: state.graph, focusId: state.focusId, depth: state.depth, viewMode: 'semantic' }); }
   function isConceptMap(focusId) { var n = state.graph.nodes.get(focusId); return n && n.kindPrefix === 'CM'; }
   function refreshCmView() { renderView(); }
 
@@ -25,12 +25,19 @@
 
   function bootstrap() {
     render.cacheElements(document); wireTableToggle();
+    var viewBtns = document.querySelectorAll('.view-btn'), vb;
+    for (vb = 0; vb < viewBtns.length; vb++) {
+      viewBtns[vb].addEventListener('click', function() {
+        state.viewMode = this.getAttribute('data-view') || 'semantic';
+        renderView();
+      });
+    }
     search.wireFilters({ container: document, onChange: function(filterSet) { state.kindFilter = filterSet; applyFilters(); } });
     search.wireSearch({ input: document.querySelector('.search-input'), list: render.elements.entityList, graph: state.graph, getFocusId: function() { return state.focusId; }, getKindFilter: function() { return state.kindFilter; }, onFocus: goto });
     search.wireDepthButtons({ container: document, onDepthChange: function(d) { if (state.focusId) router.setFocus(state.focusId, d); } });
-    search.wireRefresh({ button: document.querySelector('.refresh-btn'), onRefresh: function() { state.markdownCache.clear(); state.conceptMapCache.clear(); state.cmFocusNode = null; state.graphRenderSeq += 1; api.refreshGraph().then(function() { return api.fetchGraph(); }).then(function(raw) { model.normalizeGraph(raw); if (state.focusId) state.focusId = model.resolveFocus(state.focusId, state.graph); renderView(); }).catch(function(err) { showError(document.getElementById('app'), 'Failed to refresh: ' + err.message); }); } });
+    search.wireRefresh({ button: document.querySelector('.refresh-btn'), onRefresh: function() { state.markdownCache.clear(); state.conceptMapCache.clear(); state.cmFocusNode = null; state.graphRenderSeq += 1; state.actionabilityView = null; api.refreshGraph().then(function() { return api.fetchGraph(); }).then(function(raw) { model.normalizeGraph(raw); if (state.focusId) state.focusId = model.resolveFocus(state.focusId, state.graph); renderView(); }).catch(function(err) { showError(document.getElementById('app'), 'Failed to refresh: ' + err.message); }); } });
     window.addEventListener('hashchange', renderView);
-    Promise.all([api.fetchHealth().catch(function() { return { dot: { ok: false }, graph: { ok: false } }; }), api.fetchGraph().catch(function() { return null; })]).then(function(results) { var health = results[0], raw = results[1]; state.dotAvailable = !!(health && health.dot && health.dot.ok); if (raw) model.normalizeGraph(raw); if (!state.focusId && state.graph.nodes.size > 0) { state.focusId = model.resolveFocus(null, state.graph); if (state.focusId) { router.setFocus(state.focusId, state.depth); return; } } renderView(); }).catch(function(err) { showError(document.getElementById('app'), 'Failed to initialise: ' + err.message); });
+    Promise.all([api.fetchHealth().catch(function() { return { dot: { ok: false }, graph: { ok: false } }; }), api.fetchGraph().catch(function() { return null; }), api.fetchActionabilityGraph().catch(function() { return null; })]).then(function(results) { var health = results[0], raw = results[1]; state.dotAvailable = !!(health && health.dot && health.dot.ok); if (raw) model.normalizeGraph(raw); if (results[2]) model.setActionabilityView(results[2]); if (!state.focusId && state.graph.nodes.size > 0) { state.focusId = model.resolveFocus(null, state.graph); if (state.focusId) { router.setFocus(state.focusId, state.depth); return; } } renderView(); }).catch(function(err) { showError(document.getElementById('app'), 'Failed to initialise: ' + err.message); });
   }
 
   function renderView() {
@@ -51,7 +58,6 @@
     var qEl = document.querySelector('.search-input');
     search.renderFilteredEntities({ list: render.elements.entityList, graph: state.graph, query: qEl ? qEl.value : '', kindFilter: state.kindFilter, focusId: state.focusId, onFocus: goto });
     render.focusHeader({ container: render.elements.focusHeader, focusId: state.focusId, graph: state.graph });
-    render.relationshipTable({ container: render.elements.relationshipTableBody, edges: buildTableEdges(), graph: state.graph, focusId: state.focusId, depth: state.depth });
     render.hoverPane({ container: render.elements.hoverDetail, node: null });
 
     var depthBtns = document.querySelectorAll('.depth-btn'), di;
@@ -62,7 +68,39 @@
     var cmCacheChanged = state.focusId && isConceptMap(state.focusId) && state.cmCacheMutationSeq !== state.renderedCmCacheSeq;
     if (focusChanged && prevFocusId && isConceptMap(prevFocusId)) state.conceptMapCache.delete(prevFocusId);
 
-    if (graphArea && (focusChanged || depthChanged || graphMissing || cmFocusChanged || cmCacheChanged)) {
+    if (state.viewMode === 'actionability') {
+      if (!state.actionabilityView) {
+        if (graphArea) graphArea.innerHTML = '<p class="loading">Loading actionability graph…</p>';
+        api.fetchActionabilityGraph().then(function(result) { model.setActionabilityView(result); renderView(); }).catch(function(err) { if (graphArea) graphArea.innerHTML = '<p class="error">Failed to load actionability graph: ' + render.escapeHtml(err.message) + '</p>'; });
+      } else if (graphArea) {
+        var actionabilityNodes = Array.isArray(state.actionabilityView.nodes) ? state.actionabilityView.nodes : [];
+        var hasFocusedWorkEntity = actionabilityNodes.some(function(n) { return n.id === state.focusId; });
+        if (hasFocusedWorkEntity) {
+          priority.renderGraph({
+            container: graphArea,
+            layout: priority.layoutGraph(state.actionabilityView),
+            focusId: state.focusId,
+            depth: state.depth,
+            onNodeClick: goto,
+            onNodeHoverEnter: function(id) {
+              var hoveredNode = null, ai;
+              state.hoveredId = id;
+              for (ai = 0; ai < actionabilityNodes.length; ai++) {
+                if (actionabilityNodes[ai].id === id) {
+                  hoveredNode = { id: id, title: actionabilityNodes[ai].title || '', kindLabel: actionabilityNodes[ai].kind || '', status: actionabilityNodes[ai].status || '' };
+                  break;
+                }
+              }
+              render.hoverPane({ container: render.elements.hoverDetail, node: hoveredNode });
+            },
+            onNodeHoverLeave: function() { state.hoveredId = null; render.hoverPane({ container: render.elements.hoverDetail, node: null }); }
+          });
+        } else {
+          var fallbackNode = state.graph.nodes.get(state.focusId);
+          graphArea.innerHTML = '<p class="placeholder">No actionability graph node for ' + render.escapeHtml(state.focusId || '') + (fallbackNode && fallbackNode.title ? ' (' + render.escapeHtml(fallbackNode.title) + ')' : '') + '.</p>';
+        }
+      }
+    } else if (graphArea && (focusChanged || depthChanged || graphMissing || cmFocusChanged || cmCacheChanged)) {
       if (focusChanged && !depthChanged && state.focusId) { var svgEl = graphArea.querySelector('svg'); if (svgEl) svg.applyFocusHighlight(svgEl, state.focusId, prevFocusId, function(g) { var t = g.querySelector('text'); if (t) return t.textContent.trim(); var ti = g.querySelector('title'); return ti ? ti.textContent.trim() : ''; }); }
       if (state.focusId) {
         if (isConceptMap(state.focusId)) renderCmGraph(graphArea);
@@ -70,7 +108,22 @@
       }
     }
 
-    var isCm = state.focusId && isConceptMap(state.focusId); render.setViewMode(isCm ? 'concept-map' : 'entity-graph');
+    var legendItems = document.querySelector('.edge-legend .legend-items');
+    var priorityLegend = document.querySelector('.priority-legend');
+    if (state.viewMode === 'actionability') {
+      render.relationshipTable({ container: render.elements.relationshipTableBody, graph: state.graph, focusId: state.focusId, depth: state.depth, viewMode: 'actionability', actionabilityView: state.actionabilityView });
+      if (priorityLegend) priorityLegend.style.display = '';
+      if (legendItems) legendItems.style.display = 'none';
+    } else {
+      render.relationshipTable({ container: render.elements.relationshipTableBody, edges: buildTableEdges(), graph: state.graph, focusId: state.focusId, depth: state.depth, viewMode: 'semantic' });
+      if (legendItems) legendItems.style.display = '';
+      if (priorityLegend) priorityLegend.style.display = 'none';
+    }
+
+    var viewBtns = document.querySelectorAll('.view-btn'), vi;
+    for (vi = 0; vi < viewBtns.length; vi++) viewBtns[vi].classList.toggle('active', viewBtns[vi].getAttribute('data-view') === state.viewMode);
+
+    var isCm = state.viewMode === 'semantic' && state.focusId && isConceptMap(state.focusId); render.setViewMode(state.viewMode === 'actionability' ? 'actionability' : (isCm ? 'concept-map' : 'entity-graph'));
     if (isCm && route.cmFocus) { var cachedCm = state.conceptMapCache.get(state.focusId), label = route.cmFocus; if (cachedCm) for (var ci = 0; ci < cachedCm.nodes.length; ci++) { if (cachedCm.nodes[ci].key === route.cmFocus) { label = cachedCm.nodes[ci].label; break; } } if (!state.cmFocusNode || state.cmFocusNode.key !== route.cmFocus) state.cmFocusNode = { key: route.cmFocus, label: label }; }
     else if (focusChanged) state.cmFocusNode = null;
 

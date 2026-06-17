@@ -1,7 +1,7 @@
 id = 89
 slug = "map-actionability-views"
 title = "Backlog filtering, actionability graph, and prioritization views in the Map Explorer"
-status = "started"
+status = "done"
 created = "2026-06-17"
 updated = "2026-06-17"
 

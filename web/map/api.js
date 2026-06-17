@@ -22,6 +22,15 @@ api.fetchGraph = function() {
   });
 };
 
+api.fetchActionabilityGraph = function() {
+  return fetch('/api/survey').then(function(r) {
+    if (!r.ok) return r.text().then(function(body) {
+      throw new ApiError('Failed to fetch actionability graph', r.status, body, '/api/survey');
+    });
+    return r.json();
+  });
+};
+
 api.refreshGraph = function() {
   return fetch('/api/refresh', { method: 'POST' }).then(function(r) {
     if (!r.ok) return r.text().then(function(body) {
