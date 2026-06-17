@@ -29,7 +29,7 @@ plus the concept-map module that SL-076 added:
 | `app.js` | Bootstrap, render loop, orchestration | ~100 |
 | `render.js` | DOM construction (`el()`), entity list, focus header, relationship table, markdown pane, hover detail, graph pane | ~350 |
 | `search.js` | Search input wiring, keyboard nav, filter checkboxes, depth buttons | ~150 |
-| `concept-map.js` | CM rendering, edge table, diagnostics, add-edge form, edit toggle, mutation handlers, stale-write recovery, rename | ~400 |
+| `concept-map.js` | CM rendering (diagram, edge table, diagnostics, add-edge form, edit toggle) — pure renderer; mutation handlers stay in `app.js` | ~350 |
 | `svg.js` | SVG post-processing: hit-area injection, click/hover handlers, focus highlight, legend dimming (shared by entity graph and CM) | ~100 |
 
 Remaining lines in `app.js` become pure orchestration: bootstrap, `render()`
