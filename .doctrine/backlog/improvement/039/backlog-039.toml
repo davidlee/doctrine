@@ -5,10 +5,10 @@ id = 39
 slug = "colour-the-deferred-listing-surfaces-ad-hoc-writeln-priority-surveynext"
 title = "Colour the deferred listing surfaces: ad-hoc writeln! + priority survey/next"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-12"
-updated = "2026-06-15"
+updated = "2026-06-17"
 tags = ["area:cli"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

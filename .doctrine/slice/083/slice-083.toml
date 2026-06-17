@@ -1,13 +1,13 @@
-id = 81
-slug = "memory-in-catalog"
-title = "Surface memory entities and their relations in the catalog graph + web explorer"
-status = "ready"
-created = "2026-06-16"
-updated = "2026-06-16"
+id = 83
+slug = "decompose-webmapappjs-god-object-into-modular-frontend-components"
+title = "Decompose web/map/app.js God Object into modular frontend components"
+status = "design"
+created = "2026-06-17"
+updated = "2026-06-17"
 
 [relationships]
-needs = ["SL-072", "SL-073"]        # slice→work hard prerequisite
-after = []                      # slice→work soft sequence: { to, rank }
+needs = ["IMP-085"]                      # slice→work hard prerequisite
+after = [{ to = "SL-073", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
 label = "governed_by"

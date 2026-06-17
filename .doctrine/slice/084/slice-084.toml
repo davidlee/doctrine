@@ -1,17 +1,25 @@
-id = 81
-slug = "memory-in-catalog"
-title = "Surface memory entities and their relations in the catalog graph + web explorer"
-status = "ready"
-created = "2026-06-16"
-updated = "2026-06-16"
+id = 84
+slug = "decompose-dispatch-harness-routing-per-harness-spawn-templates-model-selection-and-agent-def-parity"
+title = "Decompose dispatch harness routing: per-harness spawn templates, model selection, and agent-def parity for pi/codex/claude"
+status = "proposed"
+created = "2026-06-17"
+updated = "2026-06-17"
 
 [relationships]
-needs = ["SL-072", "SL-073"]        # slice→work hard prerequisite
+needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
 label = "governed_by"
-target = "ADR-001"
+target = "ADR-006"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-011"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-012"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
