@@ -54,7 +54,7 @@ router.buildHash = function(view, id, depth) {
     params.push('depth=' + depth);
   }
   if (state.cmFocusNode && state.cmFocusNode.key) {
-    params.push('cm_focus=' + encodeURIComponent(state.cmFocusNode.key));
+    params.push('cmFocus=' + encodeURIComponent(state.cmFocusNode.key));
   }
   if (params.length > 0) {
     base += '?' + params.join('&');

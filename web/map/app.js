@@ -58,13 +58,14 @@
     for (di = 0; di < depthBtns.length; di++) depthBtns[di].classList.toggle('active', parseInt(depthBtns[di].getAttribute('data-depth'), 10) === state.depth);
 
     var graphArea = document.querySelector('.graph-area'), focusChanged = state.focusId !== prevFocusId, depthChanged = state.depth !== prevDepth, graphMissing = !graphArea || !graphArea.querySelector('svg');
+    var cmFocusChanged = state.focusId && isConceptMap(state.focusId) && (state.cmFocusNode ? state.cmFocusNode.key : null) !== state.renderedCmFocus;
     if (focusChanged && prevFocusId && isConceptMap(prevFocusId)) state.conceptMapCache.delete(prevFocusId);
 
-    if (graphArea && (focusChanged || depthChanged || graphMissing)) {
+    if (graphArea && (focusChanged || depthChanged || graphMissing || cmFocusChanged)) {
       if (focusChanged && !depthChanged && state.focusId) { var svgEl = graphArea.querySelector('svg'); if (svgEl) svg.applyFocusHighlight(svgEl, state.focusId, prevFocusId, function(g) { var t = g.querySelector('text'); if (t) return t.textContent.trim(); var ti = g.querySelector('title'); return ti ? ti.textContent.trim() : ''; }); }
       if (state.focusId) {
         if (isConceptMap(state.focusId)) renderCmGraph(graphArea);
-        else { state.graphRenderSeq += 1; render.graphPane({ container: graphArea, graph: state.graph, focusId: state.focusId, depth: state.depth, dotAvailable: state.dotAvailable, seq: state.graphRenderSeq, getCurrentSeq: function() { return state.graphRenderSeq; }, onNodeClick: goto, onNodeHoverEnter: function(id) { state.hoveredId = id; render.hoverPane({ container: render.elements.hoverDetail, node: state.graph.nodes.get(id) }); }, onNodeHoverLeave: function() { state.hoveredId = null; render.hoverPane({ container: render.elements.hoverDetail, node: null }); } }); }
+        else { state.renderedCmFocus = null; state.graphRenderSeq += 1; render.graphPane({ container: graphArea, graph: state.graph, focusId: state.focusId, depth: state.depth, dotAvailable: state.dotAvailable, seq: state.graphRenderSeq, getCurrentSeq: function() { return state.graphRenderSeq; }, onNodeClick: goto, onNodeHoverEnter: function(id) { state.hoveredId = id; render.hoverPane({ container: render.elements.hoverDetail, node: state.graph.nodes.get(id) }); }, onNodeHoverLeave: function() { state.hoveredId = null; render.hoverPane({ container: render.elements.hoverDetail, node: null }); } }); }
       }
     }
 
@@ -82,6 +83,7 @@
     if (!container) return; var id = state.focusId;
     if (!state.conceptMapCache.has(id)) { container.innerHTML = '<p class="loading">Loading concept map…</p>'; api.fetchConceptMap(id).then(function(cm) { state.conceptMapCache.set(id, cm); if (state.cmFocusNode && state.focusId === id) for (var ci = 0; ci < cm.nodes.length; ci++) { if (cm.nodes[ci].key === state.cmFocusNode.key) { state.cmFocusNode.label = cm.nodes[ci].label; break; } } renderView(); }).catch(function(err) { if (state.focusId !== id) return; container.innerHTML = '<p class="error">Failed to load concept map: ' + render.escapeHtml(err.message) + '</p>'; }); return; }
     var cmCache = state.conceptMapCache.get(id), filtered = state.cmFocusNode ? model.cmNeighbourhood(cmCache, state.cmFocusNode.key, state.depth) : model.cmNeighbourhood(cmCache, null, state.depth), focusKey = state.cmFocusNode ? state.cmFocusNode.key : null;
+    state.renderedCmFocus = focusKey;
     state.graphRenderSeq += 1; var seq = state.graphRenderSeq;
     cm.renderDiagram({ container: container, cm: filtered, focusKey: focusKey, depth: state.depth, editing: state.editingConceptMap, dotAvailable: state.dotAvailable, seq: seq, getCurrentSeq: function() { return state.graphRenderSeq; }, onClick: function(key) { if (state.editingConceptMap) { startRenameNode(key); return; } var cmData = state.conceptMapCache.get(state.focusId), label = key; if (cmData) for (var ci = 0; ci < cmData.nodes.length; ci++) { if (cmData.nodes[ci].key === key) { label = cmData.nodes[ci].label; break; } } if (state.cmFocusNode && state.cmFocusNode.key === key) state.cmFocusNode = null; else state.cmFocusNode = { key: key, label: label }; window.location.hash = router.buildHash('focus', state.focusId, state.depth); renderView(); }, onHoverEnter: null, onHoverLeave: null });
   }
