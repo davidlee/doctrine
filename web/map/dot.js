@@ -43,20 +43,32 @@ dot.nodeAttrs = function(node, focusId) {
   };
 };
 
+// Keyed on canonical RelationLabel.name() (snake_case), grouped by semantic family.
 dot._EDGE_COLORS = {
-  'depends':    { color: '#aaaaaa', fontcolor: '#aaaaaa' },
-  'requires':   { color: '#aaaaaa', fontcolor: '#aaaaaa' },
-  'refines':    { color: '#4A90D9', fontcolor: '#2563eb' },
-  'details':    { color: '#4A90D9', fontcolor: '#2563eb' },
-  'implements': { color: '#27AE60', fontcolor: '#166534' },
-  'satisfies':  { color: '#27AE60', fontcolor: '#166534' },
-  'blocks':     { color: '#C0392B', fontcolor: '#991b1b' },
-  'parent':     { color: '#7B4FBF', fontcolor: '#6d28d9' },
-  'child':      { color: '#7B4FBF', fontcolor: '#6d28d9' },
-  'related':    { color: '#95A5A6', fontcolor: '#64748b' },
-  'see also':   { color: '#95A5A6', fontcolor: '#64748b' },
-  'resolves':   { color: '#E67E22', fontcolor: '#c2410c' },
-  'addresses':  { color: '#E67E22', fontcolor: '#c2410c' }
+  // spec graph — decomposition, membership, requirement linkage (blue)
+  'specs':         { color: '#4A90D9', fontcolor: '#2563eb' },
+  'requirements':  { color: '#4A90D9', fontcolor: '#2563eb' },
+  'descends_from': { color: '#4A90D9', fontcolor: '#2563eb' },
+  'parent':        { color: '#4A90D9', fontcolor: '#2563eb' },
+  'members':       { color: '#4A90D9', fontcolor: '#2563eb' },
+  // change lineage — replacement / revision (orange)
+  'supersedes':    { color: '#E67E22', fontcolor: '#c2410c' },
+  'revises':       { color: '#E67E22', fontcolor: '#c2410c' },
+  // governance (purple)
+  'governed_by':   { color: '#7B4FBF', fontcolor: '#6d28d9' },
+  'related':       { color: '#7B4FBF', fontcolor: '#6d28d9' },
+  'decision_ref':  { color: '#7B4FBF', fontcolor: '#6d28d9' },
+  // flow / association — provider→consumer, interactions, concept association (green)
+  'consumes':       { color: '#27AE60', fontcolor: '#166534' },
+  'interactions':   { color: '#27AE60', fontcolor: '#166534' },
+  'contextualizes': { color: '#27AE60', fontcolor: '#166534' },
+  // work routing — backlog/rec → slice (teal)
+  'slices':        { color: '#16A085', fontcolor: '#0f766e' },
+  'owning_slice':  { color: '#16A085', fontcolor: '#0f766e' },
+  // review (slate)
+  'reviews':       { color: '#64748b', fontcolor: '#475569' },
+  // dangling / drift (red)
+  'drift':         { color: '#C0392B', fontcolor: '#991b1b' }
 };
 
 dot.edgeAttrs = function(edge, depth) {

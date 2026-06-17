@@ -16,6 +16,7 @@ var state = {
   editingConceptMap: false,
   editingNode: null,
   cmFocusNode: null,
+  renderedCmFocus: null,
   dotAvailable: false,
   hoveredId: null,
   kindFilter: null,
@@ -45,6 +46,11 @@ function encodePart(s) {
   return result;
 }
 model.encodePart = encodePart;
+
+function pascalToSnake(s) {
+  return s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+}
+model.pascalToSnake = pascalToSnake;
 
 function splitPrefix(s) {
   /* canonical id is PREFIX-NNN; split on the last hyphen */
@@ -82,14 +88,20 @@ model.normalizeGraph = function(raw) {
 
   /* build edges */
   (raw.edges || []).forEach(function(edge) {
-    /* skip unresolved targets */
-    if (!('Resolved' in edge.target)) return;
+    /* skip unresolved targets — EdgeTarget is { Resolved | UnresolvedRef | UnvalidatedText } */
+    if (!edge.target || !('Resolved' in edge.target)) return;
 
-    var source = edge.source.prefix + '-' + padId(edge.source.id);
-    var target = edge.target.Resolved.prefix + '-' + padId(edge.target.Resolved.id);
+    /* CatalogKey serializes flat to a canonical string ("SL-003"); EdgeTarget::Resolved
+       wraps one; CatalogEdgeLabel is tagged { Validated | Raw } (SL-081 catalog graph). */
+    var source = edge.source;
+    var target = edge.target.Resolved;
+    /* RelationLabel serializes as its PascalCase variant name ("OwningSlice"); the
+       rest of the system uses the canonical snake_case form ("owning_slice"). */
+    var label = edge.label && edge.label.Validated !== undefined ? pascalToSnake(edge.label.Validated)
+      : (edge.label && edge.label.Raw !== undefined ? edge.label.Raw : '');
 
     /* build edge id using nodes-canonical forms */
-    var edgeId = 'e_' + encodePart(source) + '_' + encodePart(edge.label) + '_' + encodePart(target);
+    var edgeId = 'e_' + encodePart(source) + '_' + encodePart(label) + '_' + encodePart(target);
 
     /* coalesce duplicates */
     if (edgeById.has(edgeId)) return;
@@ -97,7 +109,7 @@ model.normalizeGraph = function(raw) {
     var edgeObj = {
       id: edgeId,
       source: source,
-      label: edge.label,
+      label: label,
       target: target,
       raw: edge
     };
