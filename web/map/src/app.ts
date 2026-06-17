@@ -350,6 +350,9 @@ function renderView(): void {
   const depthChanged = state.depth !== prevDepth
   // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
   const graphMissing = graphArea === null || graphArea.querySelector('svg') === null
+  // A pure view-mode toggle changes none of focus/depth/graph-presence, so the
+  // semantic branch must also fire when the view mode itself changed (ISS-020).
+  const viewModeChanged = state.viewMode !== state.renderedViewMode
 
   const currentCmKey = state.cmFocusNode?.key ?? null
   const cmFocusChanged = state.focusId !== null && isConceptMap(state.focusId) && currentCmKey !== state.renderedCmFocus
@@ -387,19 +390,30 @@ function renderView(): void {
           container: graphArea,
           view: state.actionabilityView,
           zoomId: state.priorityZoomId,
+          initialTransform: state.priorityTransform,
+          animateToZoom: state.priorityZoomPending,
           onNodeClick: (id) => {
             // Zoom to the clicked node (re-renders via hash → focus) and update
             // the detail pane. IMP-092.
             state.priorityZoomId = id
+            state.priorityZoomPending = true
             goto(id)
           },
           onBackgroundClick: () => {
-            if (state.priorityZoomId !== null) {
+            if (state.priorityZoomId !== null || state.priorityTransform !== null) {
               state.priorityZoomId = null
+              state.priorityTransform = null
+              state.priorityZoomPending = false
               renderView()
             }
           },
+          onTransform: (t) => {
+            state.priorityTransform = t
+          },
         })
+        // Consume the one-shot — later re-renders restore the viewport without
+        // re-animating to the (still-highlighted) node.
+        state.priorityZoomPending = false
       } else if (state.focusId !== null) {
         const focusNode = state.graph.nodes.get(state.focusId)
         const isWorkKind = focusNode !== undefined &&
@@ -426,7 +440,7 @@ function renderView(): void {
     }
 
     // ---- Entity-graph (semantic) view ----
-  } else if (graphArea !== null && (focusChanged || depthChanged || graphMissing || cmFocusChanged || cmCacheChanged)) {
+  } else if (graphArea !== null && (focusChanged || depthChanged || graphMissing || cmFocusChanged || cmCacheChanged || viewModeChanged)) {
     if (focusChanged && !depthChanged && state.focusId !== null) {
       const svgEl = graphArea.querySelector('svg')
       if (svgEl !== null) {
@@ -559,6 +573,9 @@ function renderView(): void {
       })
     }
   }
+
+  // Record what we just rendered so a pure view-mode toggle re-renders (ISS-020).
+  state.renderedViewMode = state.viewMode
 }
 
 // ---------------------------------------------------------------------------
