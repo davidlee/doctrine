@@ -39,3 +39,11 @@ trust_level = "high"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.fork-rung3-base-not-session-head"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.build.clean-head-worktree-binary-vs-stash"

@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.lint.expect-not-allow"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.lint.clippy-denies"

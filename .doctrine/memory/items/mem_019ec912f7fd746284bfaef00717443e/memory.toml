@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.candidate-build-seam"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.gc-squash-indistinguishable-from-unlanded"

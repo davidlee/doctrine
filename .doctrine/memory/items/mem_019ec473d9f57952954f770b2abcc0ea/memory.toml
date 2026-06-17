@@ -39,3 +39,27 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.glob-add-sweeps-foreign-untracked-on-shared-main"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.tooling.git-cat-file-e-exit-masked-use-ls-tree"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.rtk-git-diff-stat-use-checkout-import"
+
+[[relation]]
+label = "related"
+target = "mem.system.coordination.concurrent-design-shared-main-worktree"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.three-way-import-onto-moved-shared-main"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.reanchor-base-on-disjoint-head-move"

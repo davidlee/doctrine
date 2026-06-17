@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.fact.backend.the external decision register-event-store"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.entity.free-text-ref-not-forward-validated"

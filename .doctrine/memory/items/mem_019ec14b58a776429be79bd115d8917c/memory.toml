@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.build.jail-target-redirect"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.relation.authored-rows-tooling-half-wired"

@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.entity.edit-preserving-status-transition"
+
+[[relation]]
+label = "related"
+target = "mem.system.engine.identity-claim-seam"

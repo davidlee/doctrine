@@ -39,3 +39,15 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.system.dispatch.orchestrator-on-shared-main-contention-cost"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.glob-add-sweeps-foreign-untracked-on-shared-main"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.tooling.stale-lsp-diagnostics-after-build"

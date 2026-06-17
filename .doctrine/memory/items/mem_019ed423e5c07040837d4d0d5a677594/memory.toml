@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "descends_from"
+target = "mem.pattern.distribution.skills-source-vs-installed"
+
+[[relation]]
+label = "descends_from"
+target = "mem.pattern.distribution.skill-refresh-command"

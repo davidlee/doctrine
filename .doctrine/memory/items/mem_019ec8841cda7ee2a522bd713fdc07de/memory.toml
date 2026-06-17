@@ -39,3 +39,11 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.worktree-import-corrupt-patch-use-checkout"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.detection.share-write-seam-identity-notion"

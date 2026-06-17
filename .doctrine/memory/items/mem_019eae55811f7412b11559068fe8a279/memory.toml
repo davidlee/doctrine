@@ -39,3 +39,15 @@ trust_level = "high"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.build.rust-embed-no-rerun"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.embed.rustembed-recompile-and-symlinks"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.distribution.skills-source-vs-installed"

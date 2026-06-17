@@ -39,3 +39,15 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.system.spec.composition-seam"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.parse.toml-error-classification-fragile"
+
+[[relation]]
+label = "descends_from"
+target = "mem.system.spec.composition-seam"

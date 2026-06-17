@@ -39,3 +39,19 @@ trust_level = "medium"
 [ranking]
 severity = "none"
 weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.system.spec.composition-seam"
+
+[[relation]]
+label = "descends_from"
+target = "mem.system.lifecycle.defer-needs-backlog-before-close"
+
+[[relation]]
+label = "descends_from"
+target = "mem.system.spec.composition-seam"
+
+[[relation]]
+label = "descends_from"
+target = "mem.concept.backlog.work-intake-membership"
