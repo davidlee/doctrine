@@ -32,7 +32,7 @@ module.exports = [
       'semi': ['error', 'always'],
       'eqeqeq': ['error', 'always'],
       'no-undef': 'error',
-      'no-unused-vars': ['error', { args: 'none' }],
+      'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
       'no-redeclare': 'error',
       'indent': ['error', 2, { SwitchCase: 1 }],
       'quotes': ['error', 'single', { avoidEscape: true }],
