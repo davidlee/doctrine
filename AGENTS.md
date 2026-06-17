@@ -66,6 +66,3 @@ nixos; bubblewrap jails (mounted into /workspace/*).
 - Always use READ tool *before* writing any substantial edit (e.g.
   filling a template, writing `handover.md`) to avoid expensive write
   failure. `cot`, etc do NOT count!
-- default reviewer: codex mcp - use default (GPT-5.5) for external
-  adversarial reviews. Opus sub-agent is also useful for variety on
-  subsequent passes.
