@@ -2809,7 +2809,7 @@ fn run_catalog_graph(root_arg: Option<PathBuf>) -> anyhow::Result<()> {
 /// - **`--json`**: the inspect envelope with an additive `"actionability"` key —
 ///   the relation surfaces (`outbound`/`inbound`/`danglers`) unchanged.
 fn run_inspect(path: Option<PathBuf>, id: &str, format: Format, json: bool) -> anyhow::Result<()> {
-    use std::io::Write;
+    use std::io::{self, Write};
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let resolved = if json { Format::Json } else { format };
 
@@ -2817,7 +2817,12 @@ fn run_inspect(path: Option<PathBuf>, id: &str, format: Format, json: bool) -> a
     // priority each walked the corpus). Both `_from` entry points consume this slice;
     // the scan order is the same both saw (KINDS table / id ascending), preserving
     // REQ-077 determinism and the byte-identical relation/priority surfaces (VT-4).
-    let scanned = relation_graph::scan_entities(&root)?;
+    let mut diagnostics = Vec::new();
+    let scanned = relation_graph::scan_entities(&root, &mut diagnostics)?;
+    // Surface scan degradation diagnostics to stderr before normal output (D3).
+    for diag in &diagnostics {
+        writeln!(io::stderr(), "{}: {}", diag.file.display(), diag.message)?;
+    }
 
     let out = match resolved {
         Format::Table => {

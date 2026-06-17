@@ -520,7 +520,7 @@ pub(crate) struct InspectView {
     )
 )]
 pub(crate) fn inspect(root: &Path, id: &str) -> anyhow::Result<InspectView> {
-    inspect_from(&scan_entities(root)?, root, id)
+    inspect_from(&scan_entities(root, &mut vec![])?, root, id)
 }
 
 /// `inspect` over a PRE-SCANNED entity slice (the SL-050 F2 shared-scan seam). `inspect`
@@ -565,21 +565,21 @@ pub(crate) fn inspect_from(
     // inbound — derived from in_edges per overlay (no stored reverse field read).
     let mut inbound_by_label: BTreeMap<RelationLabel, Vec<String>> = BTreeMap::new();
     for (&overlay, &label) in &rg.overlays.by_overlay {
-        let mut srcs: Vec<String> = rg
+        let mut srcs: Vec<EntityKey> = rg
             .graph
             .in_edges(overlay, node)
             .filter_map(|(src_node, _attrs)| rg.projection.key_of(src_node))
-            .map(EntityKey::canonical)
-            .collect();
+            .collect::<Vec<EntityKey>>();
         if !srcs.is_empty() {
             // in_edges orders by the (src,rank,age) adjacency key, but src NodeId
-            // order is mint order, not ref order — sort for a deterministic,
-            // permutation-invariant render (REQ-077). NOTE: this is a LEXICAL sort of
-            // the canonical-ref strings, which equals numeric order only while every
-            // namespace stays below id 1000 (zero-pad is min-3, not fixed-width):
-            // "SL-1000" sorts before "SL-999". True numeric order is RSK-007.
+            // order is mint order, not ref order — sort by EntityKey::Ord
+            // (prefix lexicographic, id numeric) for a deterministic,
+            // permutation-invariant render correct past id 999 (RSK-007).
             srcs.sort();
-            inbound_by_label.entry(label).or_default().extend(srcs);
+            inbound_by_label
+                .entry(label)
+                .or_default()
+                .extend(srcs.into_iter().map(EntityKey::canonical));
         }
     }
     let inbound: Vec<(RelationLabel, Vec<String>)> = inbound_by_label.into_iter().collect();
@@ -1073,7 +1073,7 @@ mod tests {
             "id = 1\nslug = \"r\"\ntitle = \"R\"\nstatus = \"active\"\n",
         );
         write(&root, ".doctrine/requirement/001/requirement-001.md", "b\n");
-        let scanned = scan_entities(&root).unwrap();
+        let scanned = scan_entities(&root, &mut vec![]).unwrap();
         let keys: Vec<_> = scanned.iter().map(|e| e.key.canonical()).collect();
         assert_eq!(keys, vec!["REQ-001"], "no record kind contributes a node");
     }
@@ -1363,7 +1363,7 @@ mod tests {
         let root = dir.path();
         // Three supersedors of SL-001, planted out of id order on disk; scan_ids is
         // read_dir order (unsorted), so the only thing making the render stable is
-        // the ascending sort + the canonical-ref sort in inspect.
+        // the ascending sort + the EntityKey sort in inspect.
         seed_slice(&root, 1, &[]);
         seed_slice(&root, 4, &[("supersedes", &["SL-001"])]);
         seed_slice(&root, 2, &[("supersedes", &["SL-001"])]);
@@ -1373,6 +1373,23 @@ mod tests {
             inbound_for(&view, RelationLabel::Supersedes),
             vec!["SL-002", "SL-003", "SL-004"],
             "inbound renders in ascending canonical-ref order, not filesystem order"
+        );
+
+        // RSK-007: same-prefix ids ≥ 1000 must sort numerically, not lexically.
+        // Plant SL-998, SL-999, SL-1000, SL-1001 out-of-order as supersedors of
+        // SL-001. Lexical sort would give ["SL-1000","SL-1001","SL-0998","SL-0999"].
+        let dir2 = tmp();
+        let root2 = dir2.path();
+        seed_slice(&root2, 1, &[]);
+        seed_slice(&root2, 1001, &[("supersedes", &["SL-001"])]);
+        seed_slice(&root2, 998, &[("supersedes", &["SL-001"])]);
+        seed_slice(&root2, 1000, &[("supersedes", &["SL-001"])]);
+        seed_slice(&root2, 999, &[("supersedes", &["SL-001"])]);
+        let view2 = inspect(&root2, "SL-001").unwrap();
+        assert_eq!(
+            inbound_for(&view2, RelationLabel::Supersedes),
+            vec!["SL-998", "SL-999", "SL-1000", "SL-1001"],
+            "inbound sort is numeric-within-prefix, not lexical (RSK-007)"
         );
     }
 
