@@ -9,6 +9,7 @@ router.parseHash = function() {
   var h = window.location.hash.slice(1);
   if (!h) return { view: 'focus', id: null, depth: state.depth, cmFocus: null };
 
+  // Numbered entities: PREFIX-NNN (e.g. SL-001, ADR-002)
   var focusMatch = h.match(/^\/focus\/([A-Z]+-\d+)(?:\?(.+))?$/);
   if (focusMatch) {
     var params = parseQueryString(focusMatch[2]);
@@ -17,6 +18,18 @@ router.parseHash = function() {
       id: focusMatch[1],
       depth: params.depth !== undefined ? clampDepth(parseInt(params.depth, 10)) : state.depth,
       cmFocus: params.cmFocus !== undefined ? decodeURIComponent(params.cmFocus) : null
+    };
+  }
+
+  // Memory entities: mem_<32-hex> (e.g. mem_019ed32d16b178629d58a6e1e1a0a797)
+  var memMatch = h.match(/^\/focus\/(mem_[0-9a-fA-F]{32})(?:\?(.+))?$/);
+  if (memMatch) {
+    var mp = parseQueryString(memMatch[2]);
+    return {
+      view: 'focus',
+      id: memMatch[1],
+      depth: mp.depth !== undefined ? clampDepth(parseInt(mp.depth, 10)) : state.depth,
+      cmFocus: mp.cmFocus !== undefined ? decodeURIComponent(mp.cmFocus) : null
     };
   }
 

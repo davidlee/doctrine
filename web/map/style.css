@@ -33,6 +33,7 @@
   --kind-QUE: #8E44AD;
   --kind-CON: #8E44AD;
   --kind-CM: #16A085;
+  --kind-MEM: #6C3483;
   --kind-REV: #A04000;
 
   /* Theme (light) */
@@ -327,7 +328,8 @@ a { color: var(--link); }
 .kind-pill[data-kind="REQ"],
 .kind-pill[data-kind="IDE"],
 .kind-pill[data-kind="RV"],
-.kind-pill[data-kind="REC"] {
+.kind-pill[data-kind="REC"],
+.kind-pill[data-kind="MEM"] {
   color: #222;
 }
 

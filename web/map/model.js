@@ -78,6 +78,10 @@ model.normalizeGraph = function(raw) {
     var entry = raw.nodes[key];
     var sp = splitPrefix(key);
     var kindPrefix = sp ? sp.prefix : '';
+    // Memory entities (mem_*) have no hyphen-numeric ref — fall back to
+    // the backend-supplied kind_label ("MEM") so pills, filters, and
+    // sort-ordering work (SL-081 RV-001).
+    if (!kindPrefix && entry.kind_label) kindPrefix = entry.kind_label;
     nodes.set(key, {
       id: key,
       title: entry.title,
@@ -260,7 +264,7 @@ model.neighbourhood = function(focusId, depth, graph) {
 model.kindOrder = {
   PRD: 1, SPEC: 1, ADR: 2, POL: 2, STD: 3, SL: 4,
   ISS: 5, IMP: 5, CHR: 5, RSK: 5, REV: 6, RV: 7,
-  REQ: 8, IDE: 9, REC: 10, ASM: 11, DEC: 11, QUE: 12, CON: 12, CM: 20
+  REQ: 8, IDE: 9, REC: 10, MEM: 10, ASM: 11, DEC: 11, QUE: 12, CON: 12, CM: 20
 };
 
 function compareNodes(a, b) {
