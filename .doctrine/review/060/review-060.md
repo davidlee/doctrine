@@ -55,3 +55,15 @@ findings or concerns.
 - The pre-existing `e2e_memory_sync::sync_produces_all_shipped_dirs` failure exists on clean main — SL-087 is not the cause
 - No design or governance artifacts need amendment
 - Slice can proceed directly to /close after reconciliation sign-off
+
+## Reconciliation Outcome
+
+No per-slice design edits needed — the design.md is current and accurate.
+No governance/spec (REV) items exist — all findings were withdrawn or tolerated
+with rationale:
+
+- **F-1 (aligned):** All RV-058 design findings faithfully implemented. No writes.
+- **F-2 (tolerated):** Pre-existing `sync_produces_all_shipped_dirs` failure —
+  not within SL-087 scope to fix; rationale in finding disposition.
+
+Reconcile pass complete — handoff to /close.
