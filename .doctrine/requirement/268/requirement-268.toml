@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 268
+slug = "the-estimate-schema-is-forward-compatible"
+title = "The estimate schema is forward-compatible"
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

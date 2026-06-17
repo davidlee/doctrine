@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 261
+slug = "record-an-optional-bounded-estimate-facet-on-an-entity"
+title = "Record an optional bounded estimate facet on an entity"
+status = "pending"
+kind = "functional"
+
+description = "An author can attach an optional [estimate] table carrying lower and upper bounded effort claims to an entity's TOML; bounds may be integers or floats and normalize internally to floats."
+tags = []
+acceptance_criteria = [
+  "A present [estimate] records lower and upper as the two bounded effort claims.",
+  "Bounds authored as TOML integers or floats are both accepted and normalized to finite floats internally.",
+  "An entity is valid with or without the [estimate] table.",
+  "A valid estimate survives parse, hydrate, and catalog projection unchanged.",
+]
