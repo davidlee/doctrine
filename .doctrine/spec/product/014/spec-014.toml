@@ -1,0 +1,17 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 14
+slug = "estimation"
+title = "Estimation"
+status = "draft"
+kind = "product"
+category = "estimation"
+tags = ["estimate", "facet", "attention-burden", "graph", "cordage"]
+responsibilities = [
+  "Carry an optional, bounded claim about the human attention burden an entity implies — not wall-clock time, labour hours, or a delivery commitment.",
+  "Stay a thin, reusable, kind-agnostic facet attachable to any TOML-backed addressable entity, without becoming slice-specific.",
+  "Validate a present estimate structurally while keeping absence valid, so bookkeeping never blocks work.",
+  "Surface the estimate in detailed display and expose it to graph tooling through a stable, policy-agnostic contract.",
+  "Keep aggregation, simulation, thresholds, and milestone prediction outside the facet — the facet records local bounds, callers decide rollup.",
+]
