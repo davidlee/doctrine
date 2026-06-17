@@ -1,6 +1,7 @@
 // Doctrine Map Explorer — entity-graph DOM construction (SL-083 PHASE-03)
 // Exposed on window.render. Depends on: model (neighbourhood), dot (graphToDot),
 // api (renderDot, fetchMarkdown), svg (injectHitRects, wireHandlers, dimLegend).
+/* global router, compareEdgesBySource */
 /* exported render */
 
 var render = {};
@@ -138,4 +139,91 @@ render.setViewMode = function(mode) {
     var cmDiagPanel = render.elements.cmDiagnosticsPanel;
     if (cmDiagPanel) { cmDiagPanel.style.display = 'none'; cmDiagPanel.innerHTML = ''; }
   }
+};
+
+/* -----------------------------------------------------------------------
+ * Relationship table DOM construction
+ * Options: { container, edges, graph, focusId, depth }
+ * --------------------------------------------------------------------- */
+render.relationshipTable = function(opts) {
+  var tbody = opts.container;
+  if (!tbody) return;
+
+  if (!opts.focusId) {
+    tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[Relationship table]</span></td></tr>';
+    return;
+  }
+
+  var edges = opts.edges;
+  var graph = opts.graph;
+  var depth = opts.depth;
+
+  edges.sort(compareEdgesBySource);
+
+  tbody.innerHTML = '';
+  if (edges.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[No relationships to show]</span></td></tr>';
+    return;
+  }
+
+  edges.forEach(function(edge) {
+    var tr = document.createElement('tr');
+
+    var srcCell = document.createElement('td');
+    var srcA = document.createElement('a');
+    srcA.href = '#' + router.buildHash('focus', edge.source, depth);
+    srcA.textContent = edge.source;
+    srcCell.appendChild(srcA);
+    tr.appendChild(srcCell);
+
+    var srcTitle = document.createElement('td');
+    var srcNode = graph.nodes.get(edge.source);
+    srcTitle.textContent = srcNode ? srcNode.title : '';
+    tr.appendChild(srcTitle);
+
+    var labelCell = document.createElement('td');
+    var labelA = document.createElement('a');
+    labelA.href = '#' + router.buildHash('edge', edge.id, depth);
+    labelA.className = 'edge-id-link';
+    labelA.textContent = edge.label;
+    labelA.title = 'Edge: ' + edge.id;
+    labelCell.appendChild(labelA);
+    tr.appendChild(labelCell);
+
+    var tgtCell = document.createElement('td');
+    var tgtA = document.createElement('a');
+    tgtA.href = '#' + router.buildHash('focus', edge.target, depth);
+    tgtA.textContent = edge.target;
+    tgtCell.appendChild(tgtA);
+    tr.appendChild(tgtCell);
+
+    var tgtTitle = document.createElement('td');
+    var tgtNode = graph.nodes.get(edge.target);
+    tgtTitle.textContent = tgtNode ? tgtNode.title : '';
+    tr.appendChild(tgtTitle);
+
+    tbody.appendChild(tr);
+  });
+};
+
+/* -----------------------------------------------------------------------
+ * Hover detail pane
+ * Options: { container, node }
+ *   node: graph node object, or null to show placeholder
+ * --------------------------------------------------------------------- */
+render.hoverPane = function(opts) {
+  var pane = opts.container;
+  if (!pane) return;
+
+  if (!opts.node) {
+    pane.innerHTML = '<span class="placeholder">Hover a node for details</span>';
+    return;
+  }
+
+  var node = opts.node;
+  var html = '<div class="hover-detail-content">';
+  html += '<span class="hover-detail-title">' + node.id + ': ' + render.escapeHtml(node.title) + '</span>';
+  html += '<span class="hover-detail-meta">' + node.kindLabel + ' \u00b7 ' + node.status + '</span>';
+  html += '</div>';
+  pane.innerHTML = html;
 };
