@@ -125,3 +125,20 @@ conscious tradeoff.
 
 None. No ADR, spec, or governance document requires amendment as a result of
 this audit.
+
+## Reconciliation Outcome
+
+All 4 findings were withdrawn or tolerated with rationale. No writes needed —
+no design or governance artifacts require audit-driven correction.
+
+- **RV-067 F-1** (dispatch/085 ref absent): tolerated — process recordkeeping
+gap, not a code defect. Future dispatched slices should retain the dispatch ref
+until after audit/reconciliation.
+- **RV-067 F-2** (line count ceilings): aligned — within design targets. Tight
+margins are a noted risk, not a defect in the current implementation.
+- **RV-067 F-3** (ISS-019): tolerated — pre-existing bug, faithfully preserved
+by the mechanical extraction. No regression introduced.
+- **RV-067 F-4** (IMP-091): tolerated — pre-existing bug, checkout fallback is
+a conscious and correct tradeoff. Backlog item IMP-091 tracks the root cause.
+
+Reconcile pass complete — handoff to /close.
