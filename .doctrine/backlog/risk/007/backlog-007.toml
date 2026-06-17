@@ -5,10 +5,10 @@ id = 7
 slug = "inspect-inbound-sort-is-lexical-on-canonical-ref-strings-not-numeric-sl-1000-sorts-before-sl-999-at-id1000-relation-graphrs-permutation-invariance-test-only-covers-single-digits"
 title = "Inbound relation sort is lexical not numeric — SL-1000 sorts before SL-999 at id≥1000"
 kind = "risk"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-12"
-updated = "2026-06-15"
+updated = "2026-06-17"
 tags = ["area:cli", "area:relations"]
 
 [facet]                         # risk only — every field typed; seeded empty

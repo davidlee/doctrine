@@ -5,10 +5,10 @@ id = 36
 slug = "inspect-full-corpus-scan-should-tolerate-a-malformed-sibling-entity-not-abort-corpus-wide"
 title = "inspect full-corpus scan should tolerate a malformed sibling entity, not abort corpus-wide"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-12"
-updated = "2026-06-16"
+updated = "2026-06-17"
 tags = ["area:cli", "correctness"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
