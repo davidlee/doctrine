@@ -252,6 +252,9 @@ impl Catalog {
             });
 
             for relation in &record.relations {
+                // D10: empty-field rows are surfaced as diagnostics, NOT emitted
+                // as blank graph edges. Continue after each empty-field diagnostic
+                // so the edges.push below is never reached for degenerate rows.
                 if relation.label.is_empty() {
                     diagnostics.push(CatalogDiagnostic {
                         file: record.path.clone(),
@@ -260,6 +263,7 @@ impl Catalog {
                         message: "empty relation label".to_string(),
                         severity: Severity::Warning,
                     });
+                    continue;
                 }
                 if relation.target.is_empty() {
                     diagnostics.push(CatalogDiagnostic {
@@ -269,12 +273,29 @@ impl Catalog {
                         message: "empty relation target".to_string(),
                         severity: Severity::Warning,
                     });
+                    continue;
+                }
+
+                let target = classify_target(&relation.target, &key_set);
+
+                // Generate diagnostics for memory-edge target classification,
+                // mirroring the numbered-entity pattern (RV-051 F-3).
+                if let EdgeTarget::UnresolvedRef { raw } = &target {
+                    diagnostics.push(CatalogDiagnostic {
+                        file: record.path.join("memory.toml"),
+                        entity_key: Some(CatalogKey::Memory(record.uid.clone())),
+                        field: Some(relation.label.clone()),
+                        message: format!(
+                            "dangling reference: memory edge target `{raw}` does not resolve"
+                        ),
+                        severity: Severity::Warning,
+                    });
                 }
 
                 edges.push(CatalogEdge {
                     source: CatalogKey::Memory(record.uid.clone()),
                     label: CatalogEdgeLabel::Raw(relation.label.clone()),
-                    target: classify_target(&relation.target, &key_set),
+                    target,
                     origin: EdgeOrigin {
                         file: record.path.join("memory.toml"),
                         field: Some(relation.label.clone()),
@@ -628,5 +649,133 @@ mod tests {
         set.insert(CatalogKey::Numbered(key));
         let result = classify_target("SL-001", &set);
         assert_eq!(result, EdgeTarget::Resolved(CatalogKey::Numbered(key)));
+    }
+
+    // == Memory integration helpers and tests ==
+
+    fn seed_memory(root: &Path, uid: &str, title: &str, relations: &[(&str, &str)]) {
+        use crate::memory::MEMORY_ITEMS_DIR;
+        let items_dir = root.join(MEMORY_ITEMS_DIR).join(uid);
+        std::fs::create_dir_all(&items_dir).unwrap();
+        let rels: Vec<String> = relations
+            .iter()
+            .map(|(l, t)| format!("[[relation]]\nlabel = \"{l}\"\ntarget = \"{t}\"\n"))
+            .collect();
+        std::fs::write(
+            items_dir.join("memory.toml"),
+            format!(
+                "schema = \"doctrine.memory\"\nversion = 1\nmemory_uid = \"{uid}\"\ntitle = \"{title}\"\nstatus = \"active\"\nmemory_type = \"pattern\"\n{}",
+                rels.concat()
+            ),
+        )
+        .unwrap();
+    }
+
+    /// RV-051 F-7: integration test for memory-edge target resolution pipeline.
+    #[test]
+    fn memory_edge_pipeline_resolves_and_diagnoses() {
+        let dir = tmp();
+        let root = dir.path();
+
+        seed_slice(root, 1, &[]);
+
+        seed_memory(
+            root,
+            "mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "Test Memory",
+            &[
+                ("references", "SL-001"),
+                ("references", "SL-999"),
+                ("see-also", "some free text"),
+            ],
+        );
+
+        let catalog = scan_catalog(root).unwrap();
+
+        assert_eq!(catalog.entities.len(), 2);
+        assert_eq!(catalog.edges.len(), 3);
+
+        let mem_entity = catalog
+            .entities
+            .iter()
+            .find(|e| matches!(e.key, CatalogKey::Memory(_)))
+            .unwrap();
+        assert_eq!(mem_entity.kind_label, "MEM");
+        assert_eq!(mem_entity.title, "Test Memory");
+        assert_eq!(mem_entity.memory_type.as_deref(), Some("pattern"));
+        assert!(mem_entity.kind.is_none());
+
+        let resolved_edge = catalog
+            .edges
+            .iter()
+            .find(|e| {
+                matches!(&e.target, EdgeTarget::Resolved(k) if k.canonical() == "SL-001")
+            })
+            .unwrap();
+        assert_eq!(resolved_edge.label.name(), "references");
+
+        let unresolved_edge = catalog
+            .edges
+            .iter()
+            .find(|e| {
+                matches!(&e.target, EdgeTarget::UnresolvedRef { raw } if raw == "SL-999")
+            })
+            .unwrap();
+        assert_eq!(unresolved_edge.label.name(), "references");
+
+        let free_text_edge = catalog
+            .edges
+            .iter()
+            .find(|e| {
+                matches!(&e.target, EdgeTarget::UnvalidatedText { raw } if raw == "some free text")
+            })
+            .unwrap();
+        assert_eq!(free_text_edge.label.name(), "see-also");
+
+        let warnings: Vec<&CatalogDiagnostic> = catalog
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Warning)
+            .collect();
+        assert_eq!(warnings.len(), 1, "expected one dangling-ref Warning");
+        assert!(warnings[0].message.contains("SL-999"));
+        assert!(warnings[0].message.contains("does not resolve"));
+    }
+
+    /// RV-051 F-1: D10 — empty-field memory relations surface diagnostics
+    /// but must NOT emit blank graph edges.
+    #[test]
+    fn memory_empty_relation_fields_surface_diagnostics_not_edges() {
+        let dir = tmp();
+        let root = dir.path();
+
+        seed_memory(
+            root,
+            "mem_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "Empty Relations",
+            &[
+                ("", "SL-001"),
+                ("refs", ""),
+                ("", ""),
+            ],
+        );
+
+        let catalog = scan_catalog(root).unwrap();
+
+        assert_eq!(catalog.entities.len(), 1);
+        assert_eq!(
+            catalog.edges.len(),
+            0,
+            "empty-field relations must not produce blank graph edges"
+        );
+
+        let warnings: Vec<&CatalogDiagnostic> = catalog
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Warning)
+            .collect();
+        assert_eq!(warnings.len(), 3);
+        assert!(warnings.iter().any(|d| d.message.contains("empty relation label")));
+        assert!(warnings.iter().any(|d| d.message.contains("empty relation target")));
     }
 }
