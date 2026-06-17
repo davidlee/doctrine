@@ -54,3 +54,25 @@ Each phase is independently testable. The fork in PHASE-03 is the thinnest
 possible integration — a single `if let Ok(mref)` block per function.
 
 Status transitioned: design → plan. Next: `/phase-plan` → `/execute`.
+
+## 2026-06-17 — Audit complete (RV-061)
+
+Conformance audit against `candidate/090/review-001` (merge-resolved from
+review/090 impl bundle).
+
+**Outcome: clean — all 19 VT criteria pass, 0 findings raised.**
+
+- All 3 phases delivered against design.md with full fidelity.
+- Candidate merge conflict (src/memory.rs) was additive — SL-087 boot_keys
+  tests + SL-090 relation tests — resolved by keeping both sets.
+- Behaviour-preservation gate (VT-6, `link SL-048 governed_by ADR-010`) holds.
+- SL-087 regression gate (boot_keys tests) holds.
+- `just check` green: 1608 tests, no clippy warnings, no lint-js warnings.
+
+**Deferred (slice Non-Goals):** memory as LINK TARGET (numbered entity →
+memory).
+
+**No new backlog items.** The implementation is fully additive, self-contained,
+and carries no deferred risks.
+
+Proceed to `/reconcile`.
