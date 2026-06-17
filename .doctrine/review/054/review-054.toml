@@ -39,5 +39,14 @@ detail = 'Expected: Single newline separating Boot and Recent commits sections p
 disposition = "fix-now"
 response = 'Already fixed in this audit session. Changed `parts.push("\n\nRecent commits\n".to_string())` to `parts.push("\nRecent commits\n".to_string())` in src/status.rs. The fix is uncommitted — will be included in the audit commit.'
 
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "F-3: SliceCounts.blocked capped at 5 — count captured after truncation"
+detail = 'Expected: SliceCounts.blocked reports the total count of blocked active slices, e.g. "2 active (8 blocked), 4 total". The blocked display is top-5 per design §4, but the summary count should report the real total.\n\nObserved: `let cb = bs.len()` is computed AFTER `bs.truncate(5)`, so if 8 slices are blocked, the summary line shows "2 active (5 blocked)" instead of "2 active (8 blocked)".\n\nEvidence: src/status.rs lines 303-305:\n```rust\nbs.sort_by(|a, b| a.id.cmp(&b.id));\nbs.truncate(5);\nlet cb = bs.len();  // ← after truncation, not before\n```\n\nFix: capture total before truncation:\n```rust\nlet cb = bs.len();  // total blocked count\nbs.truncate(5);     // top 5 for display\n```'
+disposition = "fix-now"
+response = "Swap the order: capture total blocked count before truncation. Trivial 2-line swap in run()."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -388,14 +388,12 @@ Dispatched to `status::run(path, format, json)`.
       { "id": "SL-086", "status": "design", "title": "..." }
     ]
   },
-  "blocked": {
-    "slices": [
-      { "id": "SL-082", "title": "...", "blocked_by": ["SL-047"] }
-    ],
-    "backlog": [
-      { "id": "ISS-003", "title": "...", "blocked_by": ["SL-082"] }
-    ]
-  },
+  "blocked_slices": [
+    { "id": "SL-082", "title": "...", "blocked_by": ["SL-047"] }
+  ],
+  "blocked_backlog": [
+    { "id": "ISS-003", "title": "...", "blocked_by": ["SL-082"] }
+  ],
   "boot": {
     "staleness": "fresh",      // content-diff (boot_check) — fresh|stale|missing
     "age_seconds": 120,        // mtime delta, informational only
