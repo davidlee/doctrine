@@ -1,0 +1,160 @@
+id    = 49
+slug  = "code-review-review-of-imp-085"
+title = "code-review review of IMP-085"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "staff-engineer"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "IMP-085"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected: single-responsibility modules. Observed: 1406-line app.js is an undifferentiated God Object mixing 8+ concerns"
+detail = "web/map/app.js is 1,406 lines in a single IIFE. It owns: state management, DOM construction (el()), error display (showError()), markdown rendering (renderMarkdown()), entity list rendering (renderEntityList(), buildEntityItem()), search wiring (wireSearch()), filter wiring (wireFilterCheckboxes()), depth-button wiring (wireDepthButtons()), refresh wiring (wireRefresh()), focus header rendering (renderFocusHeader()), relationship table rendering (renderRelationshipTable()), SVG graph rendering (renderGraphPane(), wireSvgHandlers()), hover pane (renderHoverPane()), legend dimming (dimLegend()), focus highlighting (applyFocusHighlight()), markdown pane (renderMarkdownPane(), applyLinkPolicy()), fullscreen toggle (wireMarkdownPane()), table toggle persistence (wireTableToggle()), concept map rendering (renderConceptMap(), wireCmSvgHandlers()), CM edge table (renderCmEdgeTable()), CM diagnostics (renderCmDiagnostics(), formatDiagnostic(), diagnosticLine()), CM add-edge form (renderAddEdgeForm()), CM edit toggle (renderEditToggle()), CM mutation handlers (handleAddEdge(), handleRemoveEdge(), startRenameNode(), handleRenameNodeSubmit()), stale-write recovery (handleStaleWrite()), error formatting (handleMutationError(), showCmFormError()), edge detail view (renderEdgeDetail()), and the bootstrap/render loop. Each of these is a candidate module: graph-renderer, concept-map-editor, search-controller, markdown-pane, relationship-table. The file is a single point of change for every feature and a single point of failure for every bug."
+disposition = "follow-up"
+response = "Captured as scope of IMP-085 itself — the web frontend decomposition is the work this backlog item exists to track. The map explorer is feature-complete and working; decomposition is improvement architecture, not a defect blocking shipment. Each sub-finding (module boundaries, state encapsulation, inline HTML, ES modules) is a workstream within IMP-085."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected: DRY DOM construction or a templating strategy. Observed: pervasive inline HTML string concatenation with inconsistent escaping"
+detail = "renderCmEdgeTable() (app.js) constructs a 40+ line HTML string via concatenation, interleaving conditional logic (edit mode vs view mode) directly into the string builder. renderEdgeDetail() builds a full edge-detail view as a string. renderGraphPane() builds DOT error HTML as strings. renderAddEdgeForm() builds form HTML as strings. The el() helper exists but is unused by these larger constructions. Escaping is applied inconsistently: some paths use escapeHtml(), some use escapeAttr(), some trust the source (e.g. router.buildHash output is injected without escaping into href attributes). The decodeURIComponent call on cmFocus params (router.js:23) produces raw user input that is later used in href construction without re-encoding. This is not an XSS vector today (hash fragments are client-side only, and DOMPurify covers the SVG path), but the pattern is fragile and will not survive a move to History API routing or server-side rendering."
+disposition = "follow-up"
+response = "Captured as scope of IMP-085 itself — the web frontend decomposition is the work this backlog item exists to track. The map explorer is feature-complete and working; decomposition is improvement architecture, not a defect blocking shipment. Each sub-finding (module boundaries, state encapsulation, inline HTML, ES modules) is a workstream within IMP-085."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected: encapsulated state with clear ownership. Observed: 14-field mutable global state object with no access control"
+detail = "web/map/model.js defines a single mutable global 'state' with: graphRaw, graph (nodes/edges/incoming/outgoing/edgeById Maps), focusId, depth, markdownCache, conceptMapCache, editingConceptMap, editingNode, cmFocusNode, dotAvailable, hoveredId, kindFilter, graphRenderSeq. Every function in app.js reads and writes state directly — no getter, setter, or ownership boundary. The graphRenderSeq integer is a concurrency guard (stale-render detection) — a raw counter racing async promises. No component can be tested in isolation; every test must reconstruct full global state."
+disposition = "follow-up"
+response = "Captured as scope of IMP-085 itself — the web frontend decomposition is the work this backlog item exists to track. The map explorer is feature-complete and working; decomposition is improvement architecture, not a defect blocking shipment. Each sub-finding (module boundaries, state encapsulation, inline HTML, ES modules) is a workstream within IMP-085."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected: ES modules or a bundler with explicit dependency graph. Observed: global-namespace script loading with implicit order dependency"
+detail = "index.html loads scripts in required order: api.js → model.js → router.js → dot.js → app.js. Each file declares dependencies via /* global */ comments. Nothing enforces order — reordering silently breaks. No import/export, no bundler, no namespacing beyond app.js's IIFE. test.html replicates the load order. Adding a module requires touching index.html, preserving order, and updating global comments. compareNodes and compareEdgesBySource in model.js are consumed via global scope in app.js."
+disposition = "follow-up"
+response = "Captured as scope of IMP-085 itself — the web frontend decomposition is the work this backlog item exists to track. The map explorer is feature-complete and working; decomposition is improvement architecture, not a defect blocking shipment. Each sub-finding (module boundaries, state encapsulation, inline HTML, ES modules) is a workstream within IMP-085."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Expected: one escapeHtml function, or a trusted templating engine. Observed: three near-identical escape functions, one dead code"
+detail = """web/map/app.js defines escapeHtml(str) (escapes &, <, >, ", '), escapeAttr(str) (escapes &, ", ', <, > — same set), and encodeAttr(str) (escapes &, ", ', <, > — identical to escapeAttr). encodeAttr is never called anywhere in the codebase — grep confirms zero callers. escapeAttr and encodeAttr are character-identical functions with different names. The triple definition wastes bytes, confuses readers, and invites the next developer to pick the wrong one."""
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Expected: data-driven node-attribute mapping. Observed: 15-case switch statement with only 2 shape values and 2 font colors"
+detail = "web/map/dot.js dot.nodeAttrs() has a switch on kindPrefix with 15+ cases. The actual variance is: shape is 'box,rounded' for SL and PRD/SPEC, 'box' for everything else. font color is '#ffffff' for dark-background kinds, '#222222' for light-background kinds. This is a data table, not control flow. A simple lookup object: {SL: {fill:'#4A90D9', font:'#fff', shape:'box,rounded'}, ADR: {fill:'#7B4FBF', font:'#fff', shape:'box'}, ...} would eliminate the switch and make the mapping obvious. The CSS already defines identical colours as custom properties — the DOT colours duplicate the CSS palette."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Expected: CSS class or data-attribute selectors. Observed: attribute selectors matching on inline style strings"
+detail = "web/map/style.css lines 169-176: .kind-pill[style*='--kind-PRD'], .kind-pill[style*='--kind-SPEC'], etc. — CSS attribute selectors matching on the content of inline style attributes. This is fragile to any formatting change (spaces around colon, different quote style, reordering). If the inline style changes from 'background: var(--kind-PRD)' to 'background:var(--kind-PRD)' (no space), the selector breaks. The correct approach is a data attribute (data-kind='PRD') or a CSS class (kind-pill--PRD). The same data already exists in the JS (node.kindPrefix) — it just isn't surfaced into the DOM."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Expected: no parallel BFS implementations. Observed: model.neighbourhood and model.cmNeighbourhood are independent BFS traversals"
+detail = "model.neighbourhood() (entity graph, line 117-160 of model.js) and model.cmNeighbourhood() (concept map, line 254-306) both implement BFS graph traversal: visited set, queue with dist, edge collection with dedup. The entity version tracks directed edges (incoming + outgoing separately), the CM version builds an undirected adjacency map from edges first. The core BFS loop — dequeue, check depth, expand neighbours, collect edges, track visited — is structurally identical. A shared BFS(graph, focusId, depth, { directed, getNeighbours }) would collapse ~60 lines of duplicated traversal logic."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "Expected: DOM elements cached or dependency-injected. Observed: repeated document.querySelector calls for the same elements"
+detail = "Throughout app.js, document.querySelector('.graph-area') is called in render(), renderEdgeDetail(), renderConceptMap(), and renderGraphPane(). document.querySelector('.focus-header') is called in renderFocusHeader(), render(), and renderEditToggle(). document.querySelector('.markdown-pane') in render() and renderMarkdownPane(). document.querySelector('.cm-add-edge-form') in renderAddEdgeForm(), render(), and handleAddEdge(). Each render cycle re-queries the DOM — some elements are queried 4+ times per render. In a 60fps interaction, this is negligible; in a codebase, it's sprawl that obscures which functions own which DOM regions."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "Expected: pinned vendor dependencies with integrity hashes. Observed: minified vendor files committed directly with no version metadata"
+detail = "web/map/vendor/ contains markdown-it.min.js, purify.min.js, github-markdown.css — minified libraries without version numbers in filenames, no SRI integrity hashes, no lockfile, no package.json. There is no way to audit which version is vendored without diffing against upstream source. If a CVE is published against markdown-it or DOMPurify, there is no automated path to determine whether this codebase is affected. The github-markdown.css vendor file has no version at all — it is unpinned and unverifiable."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "Expected: dark mode toggle respecting user preference with manual override. Observed: @media (prefers-color-scheme: dark) only, no manual toggle"
+detail = "style.css uses @media (prefers-color-scheme: dark) to switch themes. There is no manual override — a user whose OS is in dark mode but prefers light for this app, or vice versa, cannot change it. Standard practice (WCAG 2.2 advisory, every major framework) is a three-state toggle: light | dark | auto (system). The CSS custom properties architecture actually makes this easy to add — a data-theme attribute on <html> with a JS toggle. The dark-mode overrides for .cm-diagnostics-panel are also hardcoded inside the media query rather than inheriting from adjusted custom properties like other elements do."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "Expected: test framework with runner and CI integration. Observed: single monolithic HTML file with hand-rolled assert/assertEqual"
+detail = "web/map/test.html is 560 lines. All tests live in one <script> block with hand-rolled assert(cond, msg) and assertEqual(actual, expected, msg). No test framework (Mocha, Jest, Vitest), no test runner, no watch mode, no CI integration, no code coverage. Tests mutate global state (model.normalizeGraph() writes to the shared state.graph) and don't reliably clean up between suites. The compareNodes/compareEdgesBySource globals required by app.js are tested only implicitly through state setup. There is no DOM-rendering test — the entire render() pipeline (the bulk of app.js) has zero automated coverage. The test file is loaded in a browser but never connected to a headless CI pipeline."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "minor"
+title = "Expected: semantic HTML elements for interactive controls. Observed: <div> and <span> used where <button>, <nav>, <section> belong"
+detail = "index.html uses a <div> with class 'layout' where <main>/<aside> semantic pairing exists (the <aside> and <main> are inside it, to be fair). The refresh button is a <button> — good. The depth selector uses <button> elements — good. But the filter area uses <label> wrapped around checkboxes, which is correct. The search input is an <input> — correct. The entity list is a <ul>/<li> — correct. The relationship table uses <table>/<thead>/<tbody> — correct. The markdown pane uses a <div class='markdown-pane'> — this should be a <section> or <article>. The hover detail pane is a <div> — should be an <aside> or <output>. No <nav> for sidebar navigation. No landmark roles. The focus-header is a <div> — should be <header>. Overall the HTML is better than most SPAs but misses several semantic opportunities that would improve screen-reader navigation."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "nit"
+title = "Expected: generic event-handler factory. Observed: closure-in-loop pattern repeated in 4+ places"
+detail = "The pattern (function(id) { return function() { ... }; })(capturedValue) appears in: buildEntityItem() (entity list click), wireSvgHandlers() (node click + mouseenter × 2), wireCmSvgHandlers() (node click + mouseenter × 2). Each creates a new closure per DOM node. At 500+ entities this is 500+ closures for click alone, doubled for hover. This is not a memory leak (nodes are DOM-attached and GC'd together), but the repetition of the pattern across four unrelated functions is a DRY violation. A single bindNodeHandler(g, event, handlerFactory) would eliminate 20+ lines of near-identical closure boilerplate."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "nit"
+title = "Expected: JSON body built declaratively. Observed: api.mutateConceptMap conditionally adds fields one by one"
+detail = "web/map/api.js mutateConceptMap() builds the request body field-by-field: 'if (params.source !== undefined) body.source = params.source; if (params.rel !== undefined) body.rel = params.rel; ...' — six conditional field assignments. A declarative approach (Object.assign or spread with filtering) would be clearer and less error-prone. The explicit undefined checks mean that an empty string (valid for some fields? unclear) is included but undefined is skipped — this is implicit coupling to the JS falsy semantics."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+[[finding]]
+id = "F-16"
+status = "verified"
+severity = "nit"
+title = "Expected: localStorage access wrapped in a feature-detection helper. Observed: inline try/catch in only one of several places that could use it"
+detail = "wireTableToggle() wraps localStorage access in try/catch — the only function that does. The pattern is correct (localStorage can throw in privacy modes, sandboxed iframes, or when quota is exceeded), but it's not extracted. If another feature adds localStorage persistence (e.g. theme toggle, last-viewed entity, depth preference), the try/catch must be re-implemented. A three-line safeStorage helper (get/set with fallback) would DRY this pattern."
+disposition = "follow-up"
+response = "Captured as a work item within IMP-085 scope. The code is functional; this cleanup is improvement work tracked under the broader frontend quality hardening backlog item."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

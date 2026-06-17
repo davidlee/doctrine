@@ -5,10 +5,10 @@ id = 38
 slug = "column-model-validate-default-set-against-available-at-construction-not-first-request"
 title = "Column model: validate default set against available at construction not first request"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-12"
-updated = "2026-06-15"
+updated = "2026-06-17"
 tags = ["area:cli"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
