@@ -1323,7 +1323,7 @@ mod tests {
         // two ADRs, only the first accepted.
         adr::run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
         adr::run_new(Some(root.to_path_buf()), Some("Adopt CI".into()), None).unwrap();
-        adr::run_status(Some(root.to_path_buf()), 1, adr::AdrStatus::Accepted).unwrap();
+        adr::run_status(Some(root.to_path_buf()), 1, adr::AdrStatus::Accepted, false).unwrap();
 
         // one memory pointer.
         memory::run_record(
@@ -1393,14 +1393,15 @@ mod tests {
         .unwrap();
         policy::run_new(Some(root.to_path_buf()), Some("Old rule".into()), None).unwrap();
         policy::run_new(Some(root.to_path_buf()), Some("Dead rule".into()), None).unwrap();
-        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required).unwrap();
+        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required, false).unwrap();
         policy::run_status(
             Some(root.to_path_buf()),
             3,
             policy::PolicyStatus::Deprecated,
+            false,
         )
         .unwrap();
-        policy::run_status(Some(root.to_path_buf()), 4, policy::PolicyStatus::Retired).unwrap();
+        policy::run_status(Some(root.to_path_buf()), 4, policy::PolicyStatus::Retired, false).unwrap();
         // policy 2 stays `draft`.
 
         assert!(regenerate(root, exec).unwrap());
@@ -1459,24 +1460,28 @@ mod tests {
             Some(root.to_path_buf()),
             2,
             standard::StandardStatus::Default,
+            false,
         )
         .unwrap();
         standard::run_status(
             Some(root.to_path_buf()),
             3,
             standard::StandardStatus::Required,
+            false,
         )
         .unwrap();
         standard::run_status(
             Some(root.to_path_buf()),
             4,
             standard::StandardStatus::Deprecated,
+            false,
         )
         .unwrap();
         standard::run_status(
             Some(root.to_path_buf()),
             5,
             standard::StandardStatus::Retired,
+            false,
         )
         .unwrap();
         // standard 1 stays `draft`.
@@ -1719,14 +1724,14 @@ mod tests {
         fs::create_dir_all(gov.parent().unwrap()).unwrap();
         fs::write(&gov, "# Governance\n\npoint at doc/spec.md\n").unwrap();
         adr::run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
-        adr::run_status(Some(root.to_path_buf()), 1, adr::AdrStatus::Accepted).unwrap();
+        adr::run_status(Some(root.to_path_buf()), 1, adr::AdrStatus::Accepted, false).unwrap();
         policy::run_new(
             Some(root.to_path_buf()),
             Some("Commit cadence".into()),
             None,
         )
         .unwrap();
-        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required).unwrap();
+        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required, false).unwrap();
         standard::run_new(
             Some(root.to_path_buf()),
             Some("Two-space indent".into()),
@@ -1737,6 +1742,7 @@ mod tests {
             Some(root.to_path_buf()),
             1,
             standard::StandardStatus::Required,
+            false,
         )
         .unwrap();
         memory::run_record(
@@ -1875,7 +1881,7 @@ mod tests {
             None,
         )
         .unwrap();
-        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required).unwrap();
+        policy::run_status(Some(root.to_path_buf()), 1, policy::PolicyStatus::Required, false).unwrap();
         standard::run_new(
             Some(root.to_path_buf()),
             Some("Two-space indent".into()),
@@ -1886,6 +1892,7 @@ mod tests {
             Some(root.to_path_buf()),
             1,
             standard::StandardStatus::Required,
+            false,
         )
         .unwrap();
 

@@ -69,6 +69,10 @@ use crate::listing::{Format, ListArgs};
 #[derive(Parser)]
 #[command(name = "doctrine", about = "doctrine CLI")]
 struct Cli {
+    /// Control colour output
+    #[arg(long, default_value = "auto", global = true)]
+    color: clap::ColorChoice,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -124,7 +128,7 @@ pub(crate) struct CommonListArgs {
 impl CommonListArgs {
     /// Lower the parsed clap bundle onto the clap-free leaf input ([`ListArgs`]).
     /// The seam where command-layer clap types stop and the pure spine begins.
-    pub(crate) fn into_list_args(self) -> ListArgs {
+    pub(crate) fn into_list_args(self, color: bool) -> ListArgs {
         ListArgs {
             substr: self.filter,
             regexp: self.regexp,
@@ -135,12 +139,11 @@ impl CommonListArgs {
             format: self.format,
             json: self.json,
             columns: self.columns,
-            // Resolve terminal capability ONCE at the clap→leaf seam (SL-053/SL-054 D3):
-            // the sole impure reads (colour, width), injected into the render bundle the
-            // pure leaf consumes. `term_width` is `None` off a tty ⇒ piped output stays
-            // width-free; on a tty it carries the live width and the pure layer wraps.
+            // Resolve terminal capability ONCE at the clap→leaf seam (SL-053 SL-079 D3):
+            // colour is now injected by the caller via --color flag resolution;
+            // term_width is still resolved here (no flag override).
             render: crate::listing::RenderOpts {
-                color: crate::tty::stdout_color_enabled(),
+                color,
                 term_width: crate::tty::stdout_terminal_width(),
             },
         }
@@ -2943,6 +2946,7 @@ fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let color = crate::tty::resolve_color(cli.color);
 
     // ADR-006 D2a / SL-056 §3 worker-mode guard: a dispatched worker mints/anchors
     // nothing. Bail before dispatch on any Write-classed verb; Read / MarkerClear
@@ -3004,7 +3008,7 @@ fn main() -> anyhow::Result<()> {
         Command::ConceptMap { command } => match command {
             ConceptMapCommand::New { title, slug, path } => concept_map::run_new(path, title, slug),
             ConceptMapCommand::List { list, path } => {
-                concept_map::run_list(path, list.into_list_args())
+                concept_map::run_list(path, list.into_list_args(color))
             }
             ConceptMapCommand::Show {
                 reference,
@@ -3060,7 +3064,7 @@ fn main() -> anyhow::Result<()> {
                 note,
                 path,
             } => slice::run_status(path, id, state, note.as_deref()),
-            SliceCommand::List { list, path } => slice::run_list(path, list.into_list_args()),
+            SliceCommand::List { list, path } => slice::run_list(path, list.into_list_args(color)),
             SliceCommand::Show {
                 reference,
                 format,
@@ -3109,7 +3113,7 @@ fn main() -> anyhow::Result<()> {
                 memory_type,
                 list,
                 path,
-            } => memory::run_list(path, memory_type, list.into_list_args()),
+            } => memory::run_list(path, memory_type, list.into_list_args(color)),
             MemoryCommand::Find {
                 path_scope,
                 glob,
@@ -3188,7 +3192,9 @@ fn main() -> anyhow::Result<()> {
                     responder,
                 },
             ),
-            ReviewCommand::List { list, path } => review::run_list(path, list.into_list_args()),
+            ReviewCommand::List { list, path } => {
+                review::run_list(path, list.into_list_args(color))
+            }
             ReviewCommand::Show {
                 reference,
                 format,
@@ -3296,7 +3302,7 @@ fn main() -> anyhow::Result<()> {
                     title,
                 },
             ),
-            RecCommand::List { list, path } => rec::run_list(path, list.into_list_args()),
+            RecCommand::List { list, path } => rec::run_list(path, list.into_list_args(color)),
             RecCommand::Show {
                 reference,
                 format,
@@ -3316,7 +3322,7 @@ fn main() -> anyhow::Result<()> {
                 reference,
                 state,
                 path,
-            } => revision::run_status(path, &reference, state),
+            } => revision::run_status(path, &reference, state, color),
             RevisionCommand::Change { command } => match command {
                 RevisionChangeCommand::Add {
                     reference,
@@ -3369,7 +3375,7 @@ fn main() -> anyhow::Result<()> {
                 format,
                 json,
                 path,
-            } => coverage_view::run(path, &reference, columns.as_deref(), format, json),
+            } => coverage_view::run(path, &reference, columns.as_deref(), format, json, color),
             CoverageCommand::Record {
                 slice,
                 requirement,
@@ -3429,7 +3435,7 @@ fn main() -> anyhow::Result<()> {
             format,
             json,
             crate::listing::RenderOpts {
-                color: crate::tty::stdout_color_enabled(),
+                color,
                 term_width: crate::tty::stdout_terminal_width(),
             },
         ),
@@ -3438,7 +3444,7 @@ fn main() -> anyhow::Result<()> {
             format,
             json,
             crate::listing::RenderOpts {
-                color: crate::tty::stdout_color_enabled(),
+                color,
                 term_width: crate::tty::stdout_terminal_width(),
             },
         ),
@@ -3455,7 +3461,7 @@ fn main() -> anyhow::Result<()> {
             format,
             json,
             crate::listing::RenderOpts {
-                color: crate::tty::stdout_color_enabled(),
+                color,
                 term_width: crate::tty::stdout_terminal_width(),
             },
         ),
@@ -3470,42 +3476,46 @@ fn main() -> anyhow::Result<()> {
             format,
             json,
             crate::listing::RenderOpts {
-                color: crate::tty::stdout_color_enabled(),
+                color,
                 term_width: crate::tty::stdout_terminal_width(),
             },
         ),
         Command::Adr { command } => match command {
             AdrCommand::New { title, slug, path } => adr::run_new(path, title, slug),
-            AdrCommand::List { list, path } => adr::run_list(path, list.into_list_args()),
+            AdrCommand::List { list, path } => adr::run_list(path, list.into_list_args(color)),
             AdrCommand::Show {
                 reference,
                 format,
                 json,
                 path,
             } => adr::run_show(path, &reference, if json { Format::Json } else { format }),
-            AdrCommand::Status { id, status, path } => adr::run_status(path, id, status),
+            AdrCommand::Status { id, status, path } => adr::run_status(path, id, status, color),
         },
         Command::Policy { command } => match command {
             PolicyCommand::New { title, slug, path } => policy::run_new(path, title, slug),
-            PolicyCommand::List { list, path } => policy::run_list(path, list.into_list_args()),
+            PolicyCommand::List { list, path } => {
+                policy::run_list(path, list.into_list_args(color))
+            }
             PolicyCommand::Show {
                 reference,
                 format,
                 json,
                 path,
             } => policy::run_show(path, &reference, if json { Format::Json } else { format }),
-            PolicyCommand::Status { id, status, path } => policy::run_status(path, id, status),
+            PolicyCommand::Status { id, status, path } => policy::run_status(path, id, status, color),
         },
         Command::Standard { command } => match command {
             StandardCommand::New { title, slug, path } => standard::run_new(path, title, slug),
-            StandardCommand::List { list, path } => standard::run_list(path, list.into_list_args()),
+            StandardCommand::List { list, path } => {
+                standard::run_list(path, list.into_list_args(color))
+            }
             StandardCommand::Show {
                 reference,
                 format,
                 json,
                 path,
             } => standard::run_show(path, &reference, if json { Format::Json } else { format }),
-            StandardCommand::Status { id, status, path } => standard::run_status(path, id, status),
+            StandardCommand::Status { id, status, path } => standard::run_status(path, id, status, color),
         },
         Command::Spec { command } => match command {
             SpecCommand::New {
@@ -3514,7 +3524,7 @@ fn main() -> anyhow::Result<()> {
                 slug,
                 path,
             } => spec::run_new(path, subtype, title, slug),
-            SpecCommand::List { list, path } => spec::run_list(path, list.into_list_args()),
+            SpecCommand::List { list, path } => spec::run_list(path, list.into_list_args(color)),
             SpecCommand::Show {
                 spec_ref,
                 format,
@@ -3543,7 +3553,7 @@ fn main() -> anyhow::Result<()> {
                     spec_ref,
                     list,
                     path,
-                } => spec::run_req_list(path, &spec_ref, list.into_list_args()),
+                } => spec::run_req_list(path, &spec_ref, list.into_list_args(color)),
             },
         },
         Command::Backlog { command } => match command {
@@ -3566,7 +3576,7 @@ fn main() -> anyhow::Result<()> {
                 if list.filter.is_none() {
                     list.filter = substr;
                 }
-                backlog::run_list(path, kind, by, list.into_list_args())
+                backlog::run_list(path, kind, by, list.into_list_args(color))
             }
             BacklogCommand::Show {
                 id,
@@ -3599,7 +3609,7 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => knowledge::run_new(path, kind, title, slug),
             KnowledgeCommand::List { list, path } => {
-                knowledge::run_list(path, list.into_list_args())
+                knowledge::run_list(path, list.into_list_args(color))
             }
             KnowledgeCommand::Show {
                 id,
@@ -3608,7 +3618,7 @@ fn main() -> anyhow::Result<()> {
                 path,
             } => knowledge::run_show(path, &id, if json { Format::Json } else { format }),
             KnowledgeCommand::Status { id, state, path } => {
-                knowledge::run_status(path, &id, &state)
+                knowledge::run_status(path, &id, &state, color)
             }
         },
         Command::Boot {

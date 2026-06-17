@@ -19,6 +19,19 @@
 
 use std::ffi::OsStr;
 
+use clap::ColorChoice;
+
+/// Resolve the effective colour bool from the CLI flag + auto-detection.
+/// `Never` beats `NO_COLOR` beats isatty; `Always` beats non-TTY.
+/// The single shell-side authority for colour capability.
+pub(crate) fn resolve_color(mode: ColorChoice) -> bool {
+    match mode {
+        ColorChoice::Never => false,
+        ColorChoice::Always => true,
+        ColorChoice::Auto => stdout_color_enabled(),
+    }
+}
+
 /// Whether colour should be emitted on stdout.
 ///
 /// Thin shell: the env read (`NO_COLOR`) and the tty probe are the only impurities;
@@ -93,6 +106,18 @@ const MIN_WRAP_WIDTH: u16 = 16;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// VT-5: `resolve_color` modes — Never false, Always true, Auto delegates.
+    /// Driven through the pure decision fn; the *live* tty branch in [`stdout_color_enabled`]
+    /// is documented-not-driven (under `cargo test` stdout is not a terminal).
+    #[test]
+    fn resolve_color_modes() {
+        assert!(!resolve_color(ColorChoice::Never));
+        assert!(resolve_color(ColorChoice::Always));
+        // Auto delegates to stdout_color_enabled — under test (pipe) it returns false.
+        // The positive tty arm is asserted purely in color_enabled tests above.
+        assert!(!resolve_color(ColorChoice::Auto));
+    }
 
     /// VT-3: `NO_COLOR` present (even empty) ⇒ colour disabled, regardless of the
     /// tty arm. Driven through the pure seam ([`color_enabled`]) — the process env
