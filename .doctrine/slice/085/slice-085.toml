@@ -1,7 +1,7 @@
 id = 85
 slug = "dispatch-drive-loop-into-cli"
 title = "Push dispatch drive loop into CLI — shrink skill to a thin CLI-calling wrapper"
-status = "reconcile"
+status = "done"
 created = "2026-06-17"
 updated = "2026-06-17"
 
