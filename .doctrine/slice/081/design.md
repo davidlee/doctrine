@@ -541,6 +541,7 @@ pub(crate) fn scan_catalog(root: &Path) -> anyhow::Result<Catalog> {
 |---|---|---|
 | `src/memory.rs` | `RawRelation` gains `label`/`target`; new `MemoryCatalogRecord` + `read_catalog_record()` | Memory TOML parse only; `Memory::parse` unchanged |
 | `src/catalog/hydrate.rs` | `CatalogKey`, `CatalogEdgeLabel`, revised `CatalogEntity`/`CatalogEdge`/`EdgeTarget`; `from_scanned` accepts memory; `classify_target` uses `CatalogKey`; `CatalogDiagnostic.entity_key` → `CatalogKey`; `scan_catalog` calls memory scan | ~15 type changes, all mechanical |
+| `src/catalog/diagnostic.rs` | `CatalogDiagnostic.entity_key` type change from `Option<EntityKey>` to `Option<CatalogKey>`; `Severity::Error` doc comment updated | 10 lines, mechanical |
 | `src/catalog/scan.rs` | New `scan_memory_entities()` | Additive; no existing fn signatures change |
 | `src/catalog/graph.rs` | `NodeKey` → `CatalogKey` re-export; `CatalogNode.memory_type` | 2 lines + test updates |
 | `src/map_server/routes.rs` | `entity_markdown` handler gains memory uid fallback | ~15 lines added |
@@ -593,6 +594,7 @@ pub(crate) fn scan_catalog(root: &Path) -> anyhow::Result<Catalog> {
 | Memory TOML schema drifts from `RawMemoryToml` | `RawMemoryToml` is the same struct `Memory::parse` uses — schema drift breaks `memory find` too. Single source of truth. |
 | Memory entities without `memory.md` (shipped masters often prose-only) | `read_memory_markdown` returns `EntityNotFound` on missing file — same as numbered entities without a `.md`. Frontend handles this gracefully. |
 | `CatalogKey` is `Clone` not `Copy` — perf impact on BTreeSet lookups | Memory is ~60 entities. The BTreeSet in `classify_target` has ~600 entries. `Clone` on a 24-byte String is negligible. |
+| `EdgeTarget::Resolved` serialization changed from `EntityKey` struct to flat `CatalogKey` string | The frontend does not consume `edge.target` fields today. The format change is real (struct → string) but has no runtime impact. |
 
 ---
 

@@ -1,9 +1,9 @@
 id = 81
 slug = "memory-in-catalog"
 title = "Surface memory entities and their relations in the catalog graph + web explorer"
-status = "plan"
+status = "implement"
 created = "2026-06-16"
-updated = "2026-06-16"
+updated = "2026-06-17"
 
 [relationships]
 needs = ["SL-072", "SL-073"]        # slice→work hard prerequisite
