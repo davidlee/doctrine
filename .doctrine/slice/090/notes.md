@@ -19,3 +19,21 @@ ordered penance.
 
 Durable pattern recorded: `mem.pattern.link.memory-label-fork` — memory write
 path labels are free-form; RELATION_RULES vocabulary is closed to memory edges.
+
+## 2026-06-17 — Plan authored
+
+Three sequential phases, bottom-up: resolution → manipulation → CLI fork.
+
+- **PHASE-01** (`resolve_memory_toml_path`): items-first/shipped-fallback
+  existence check, shipped-only refusal, uid-prefix disambiguation.
+- **PHASE-02** (`append_memory_relation`/`remove_memory_relation`): raw
+  toml_edit with free-form labels, duplicated F1 guard, empty-label/target
+  refusal. Reuses `AppendOutcome`/`RemoveOutcome` from relation.rs (leaf→leaf).
+- **PHASE-03** (link/unlink fork): memory branch before `parse_canonical_ref`,
+  best-effort target validation (canonical refs must resolve; free-text/memory
+  uid pass through), CLI help text update.
+
+Each phase is independently testable. The fork in PHASE-03 is the thinnest
+possible integration — a single `if let Ok(mref)` block per function.
+
+Status transitioned: design → plan. Next: `/phase-plan` → `/execute`.

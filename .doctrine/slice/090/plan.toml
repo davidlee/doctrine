@@ -1,14 +1,8 @@
-# Implementation plan for SL-090 — the authored, durable phase plan.
-#
-# This is the single source of each phase's objective, criteria, verification,
-# and links. Runtime status lives separately under .doctrine/state/ (phase
-# tracking) — never record progress here. Hand-edit freely: the tool reads this
-# file but does not rewrite it.
 schema  = "doctrine.plan.overview"
 version = 1
 slice   = "SL-090"
 
-[specs]                          # empty in v1 — no spec/requirement registry yet
+[specs]
 primary       = []
 collaborators = []
 
@@ -16,17 +10,78 @@ collaborators = []
 targets      = []
 dependencies = []
 
-# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
-# never reused once authored — edits append, they never renumber. Criterion ids
-# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
-# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
-# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
 [[phase]]
 id        = "PHASE-01"
-name      = ""
-objective = ""
-entrance_criteria = []           # [{ id = "EN-1", text = "…" }]
-exit_criteria     = []           # [{ id = "EX-1", text = "…" }]
-verification      = []           # [{ id = "VT-1", expects = "…" }] — VT/VA/VH by mode
-specs             = []           # per-phase narrowing of the plan's specs
+name      = "Memory resolution helper"
+objective = "Implement `resolve_memory_toml_path(root, mref) -> Result<PathBuf>` in `memory.rs`: resolve a `MemoryRef` (uid, uid-prefix, or key) to the writable `items/<uid>/memory.toml` path. Existence check probes items/ first, shipped/ as fallback. Shipped/-only → hard error (read-only). Neither → not-found error."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked; no prior `resolve_memory_toml_path` exists." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Function resolves Uid/Key/UidPrefix to `items/<uid>/memory.toml`." },
+  { id = "EX-2", text = "Items/ exists → Ok(path). Shipped/ only → error with shipped-read-only message. Neither → not-found error." },
+  { id = "EX-3", text = "UidPrefix resolves via scan (reuses `resolve_uid_prefix` pattern), then same items/shipped gate." },
+]
+verification = [
+  { id = "VT-1", expects = "Uid in items/ → Ok(items/<uid>/memory.toml)." },
+  { id = "VT-2", expects = "Uid only in shipped/ → Err with 'shipped corpus record…read-only'." },
+  { id = "VT-3", expects = "Uid nowhere → Err with 'memory not found'." },
+  { id = "VT-4", expects = "UidPrefix resolves correctly when unique." },
+  { id = "VT-5", expects = "UidPrefix ambiguous → error." },
+  { id = "VT-6", expects = "Key in items/ → Ok." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Memory relation write helpers"
+objective = "Implement `append_memory_relation(path, label, target) -> Result<AppendOutcome>` and `remove_memory_relation(path, label, target) -> Result<RemoveOutcome>` in `memory.rs`: raw toml_edit append/remove with free-form label strings, duplicated F1 trap guard, empty-label/target refusal. Reuses `relation::AppendOutcome`/`relation::RemoveOutcome`."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `resolve_memory_toml_path` green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`append_memory_relation` appends `[[relation]]` row with free-form label string, idempotent (re-link → Noop)." },
+  { id = "EX-2", text = "`remove_memory_relation` removes matching row, idempotent (re-unlink → Absent)." },
+  { id = "EX-3", text = "F1 trap: typed table after `[[relation]]` → hard error before touching file." },
+  { id = "EX-4", text = "Empty label or empty target → hard error before touching file." },
+  { id = "EX-5", text = "`toml_edit::value()` escapes targets; special chars never break out." },
+]
+verification = [
+  { id = "VT-1", expects = "Append to empty file → Wrote with one [[relation]] row. Append second distinct edge → two rows." },
+  { id = "VT-2", expects = "Re-append same (label, target) → Noop, text byte-unchanged." },
+  { id = "VT-3", expects = "Remove existing edge → Removed. Re-remove → Absent." },
+  { id = "VT-4", expects = "F1: file with [trust] after [[relation]] → error mentioning F1 and [trust]." },
+  { id = "VT-5", expects = "Empty label → error. Empty target → error." },
+  { id = "VT-6", expects = "Target with quotes/backslashes → correctly escaped in TOML output." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Wire link/unlink CLI fork"
+objective = "Fork `run_link`/`run_unlink` in `main.rs`: insert a memory branch before the `parse_canonical_ref` gate. Detect memory source via `MemoryRef::parse` → resolve path via PHASE-01 → best-effort target validation (canonical-ref targets must resolve; free-text/memory-uid pass through) → append/remove via PHASE-02. Update CLI help text. Existing numbered-entity behaviour unchanged."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: append/remove helpers green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine link mem_<uid> <label> <target>` appends `[[relation]]` row to `items/<uid>/memory.toml`." },
+  { id = "EX-2", text = "`doctrine unlink mem_<uid> <label> <target>` removes matching row." },
+  { id = "EX-3", text = "`doctrine link mem.<key> <label> <target>` resolves key to uid, same behaviour." },
+  { id = "EX-4", text = "Target that parses as canonical ref (`SL-999`) but doesn't resolve → error mentioning the target." },
+  { id = "EX-5", text = "Free-text target and memory-uid target pass through unvalidated." },
+  { id = "EX-6", text = "`doctrine link SL-048 governed_by ADR-010` unchanged (behaviour-preservation gate)." },
+  { id = "EX-7", text = "CLI `--help` for link/unlink documents `mem_<uid>` / `mem.<key>` as valid source refs." },
+]
+verification = [
+  { id = "VT-1", expects = "link mem_<uid> related SL-001 → 'linked: mem_<uid> related SL-001'." },
+  { id = "VT-2", expects = "Re-link → 'already linked: …', toml byte-unchanged." },
+  { id = "VT-3", expects = "unlink → 'unlinked: …'. Re-unlink → 'not linked: …'." },
+  { id = "VT-4", expects = "link mem_<uid> related SL-999 (nonexistent target) → error with 'does not resolve'." },
+  { id = "VT-5", expects = "link mem_<uid> related 'some free text' → succeeds (no target validation)." },
+  { id = "VT-6", expects = "link SL-048 governed_by ADR-010 → unchanged success (existing test fixture)." },
+  { id = "VT-7", expects = "link/unlink --help shows mem_<uid> / mem.<key> in source arg description." },
+]
+specs             = []
 requirements      = []
