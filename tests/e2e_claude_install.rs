@@ -162,8 +162,5 @@ fn install_agent_pi_dry_run_prints_delegation_plan() {
         !dir.join(".doctrine").exists(),
         "dry-run created no .doctrine dir"
     );
-    assert!(
-        !dir.join(".pi").exists(),
-        "dry-run created no .pi dir"
-    );
+    assert!(!dir.join(".pi").exists(), "dry-run created no .pi dir");
 }
