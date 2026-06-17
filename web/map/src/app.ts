@@ -386,9 +386,10 @@ function renderView(): void {
         : []
 
       if (actionabilityNodes.length > 0) {
+        const av = state.actionabilityView
         renderGraph({
           container: graphArea,
-          view: state.actionabilityView,
+          view: av,
           zoomId: state.priorityZoomId,
           initialTransform: state.priorityTransform,
           animateToZoom: state.priorityZoomPending,
@@ -410,7 +411,24 @@ function renderView(): void {
           onTransform: (t) => {
             state.priorityTransform = t
           },
+          onNodeHoverEnter: (id) => {
+            const an = av.nodes.find((n) => n.id === id)
+            if (an !== undefined) {
+              hoverPane({ container: hoverDetailEl, node: { id: an.id, title: an.title, kindLabel: an.kind, status: an.status } })
+            }
+          },
+          onNodeHoverLeave: () => {
+            hoverPane({ container: hoverDetailEl, node: null })
+          },
         })
+        // Show the selected node in the hover detail pane after (re)render.
+        if (state.priorityZoomId !== null) {
+          const an = av.nodes.find((n) => n.id === state.priorityZoomId)
+          if (an !== undefined) {
+            hoverPane({ container: hoverDetailEl, node: { id: an.id, title: an.title, kindLabel: an.kind, status: an.status } })
+          }
+        }
+
         // Consume the one-shot — later re-renders restore the viewport without
         // re-animating to the (still-highlighted) node.
         state.priorityZoomPending = false

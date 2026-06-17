@@ -30,6 +30,8 @@ export interface PriorityRenderOpts {
   /** One-shot: animate to `zoomId`'s node (from `initialTransform`). */
   animateToZoom?: boolean;
   onNodeClick: (id: string) => void;
+  onNodeHoverEnter?: (id: string) => void;
+  onNodeHoverLeave?: () => void;
   onBackgroundClick?: () => void;
   /** Called with every viewport change so the caller can persist it. */
   onTransform?: (t: Viewport) => void;
@@ -281,12 +283,14 @@ export function renderGraph(opts: PriorityRenderOpts): void {
       };
     })(node.id));
 
-    // Hover classes (no external callbacks in the new API)
+    // Hover classes + optional detail-pane callbacks
     group.addEventListener('mouseenter', () => {
       group.classList.add('priority-node--hover');
+      if (opts.onNodeHoverEnter !== undefined) opts.onNodeHoverEnter(node.id);
     });
     group.addEventListener('mouseleave', () => {
       group.classList.remove('priority-node--hover');
+      if (opts.onNodeHoverLeave !== undefined) opts.onNodeHoverLeave();
     });
 
     zoomLayer.appendChild(group);

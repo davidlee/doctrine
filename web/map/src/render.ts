@@ -482,9 +482,16 @@ export function relationshipTable(opts: RelationshipTableOpts): void {
 // Hover detail pane
 // ---------------------------------------------------------------------------
 
+export interface HoverableNode {
+  id: string;
+  title: string;
+  kindLabel: string;
+  status: string;
+}
+
 interface HoverPaneOpts {
   container: HTMLElement;
-  node: CatalogNode | null;
+  node: HoverableNode | null;
 }
 
 export function hoverPane(opts: HoverPaneOpts): void {
