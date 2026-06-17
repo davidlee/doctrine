@@ -1,0 +1,298 @@
+# Implementation plan for SL-091 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-091"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Phase 00: scaffold — project config, types, empty src/, updated index.html.
+# No TS files compile yet. Sets up the build toolchain.
+[[phase]]
+id        = "PHASE-00"
+name      = "Scaffold project config and type definitions"
+objective = "Create package.json, tsconfig.json, vite.config.ts, src/types.ts, move style.css to src/, update index.html to load a single module script. No TS files compile yet — just the skeleton."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked and committed; no unresolved design questions." },
+  { id = "EN-2", text = "Existing web/map/ JS source files are committed and unchanged." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "package.json exists with correct dependencies and scripts." },
+  { id = "EX-2", text = "tsconfig.json exists (strict, moduleResolution bundler, target es2020)." },
+  { id = "EX-3", text = "vite.config.ts exists with proxy /api → localhost:8080 and publicDir: public." },
+  { id = "EX-4", text = "src/types.ts exists with all interfaces from the design." },
+  { id = "EX-5", text = "src/style.css exists (moved from web/map/style.css)." },
+  { id = "EX-6", text = "web/map/public/vendor/github-markdown.css exists (moved from web/map/vendor/)." },
+  { id = "EX-7", text = "index.html updated: single <script type=\"module\" src=\"/src/app.ts\">, old <script> tags removed. CSS link stays." },
+  { id = "EX-8", text = "bun install succeeds." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (with empty src/app.ts stub that imports nothing)." },
+  { id = "VT-2", expects = "bun run dev starts Vite without errors (app.ts just renders placeholder)." },
+  { id = "VT-3", expects = "existing map server integration tests pass (no Rust changes yet)." }
+]
+specs        = []
+requirements = []
+
+# Phase 01: router.ts — pure string parsing, no DOM, no deps beyond types.ts.
+[[phase]]
+id        = "PHASE-01"
+name      = "Convert router.js → src/router.ts"
+objective = "Convert router.js to TypeScript with exact parity. Pure function module — no DOM, no state dependency. Export parseHash, buildHash, setFocus, setEdge."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-00 exits green: scaffold exists, tsc passes on empty app.ts, Vite starts." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/router.ts exists with all functions exported." },
+  { id = "EX-2", text = "Functions have correct TypeScript signatures matching the design." },
+  { id = "EX-3", text = "web/map/router.js deleted." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (router.ts has zero errors)." },
+  { id = "VT-2", expects = "Existing router.js tests in test.html still pass (old .js file loaded)." },
+  { id = "VA-1", expects = "Agent verifies parseHash returns correct Route for #/focus/SL-001, #/focus/SL-001?depth=2, #/edge/e_abc, empty hash." },
+  { id = "VA-2", expects = "Agent verifies buildHash produces correct hash strings for focus and edge views with depth." }
+]
+specs        = []
+requirements = []
+
+# Phase 02: api.ts — HTTP layer, no DOM, only fetch + types.
+[[phase]]
+id        = "PHASE-02"
+name      = "Convert api.js → src/api.ts"
+objective = "Convert api.js to TypeScript. ApiError class with typed constructor. All fetch functions return typed Promises."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 exits green: router.ts compiled and verified." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/api.ts exists with ApiError class and all fetch functions exported." },
+  { id = "EX-2", text = "All functions have correct Promise<T> return types." },
+  { id = "EX-3", text = "web/map/api.js deleted." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (api.ts has zero errors)." },
+  { id = "VA-1", expects = "Agent verifies ApiError constructor and prototype chain correct." },
+  { id = "VA-2", expects = "Agent verifies fetchGraph returns Promise<RawGraph> shape matches types.ts." }
+]
+specs        = []
+requirements = []
+
+# Phase 03: dot.ts — pure text generation, DOT helpers + style constants.
+[[phase]]
+id        = "PHASE-03"
+name      = "Convert dot.js → src/dot.ts"
+objective = "Convert dot.js to TypeScript. Exports dotQuote, graphToDot, cmGraphToDot, NODE_STYLES, EDGE_STYLES. Pure text generation — no DOM."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 exits green: api.ts compiled and verified." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/dot.ts exists with all exports." },
+  { id = "EX-2", text = "NODE_STYLES and EDGE_STYLES typed as Record<string, ...>." },
+  { id = "EX-3", text = "web/map/dot.js deleted." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (dot.ts has zero errors)." },
+  { id = "VA-1", expects = "Agent verifies graphToDot output for a simple 2-node neighbourhood matches expected DOT string (node attributes, edge, rankdir)." },
+  { id = "VA-2", expects = "Agent verifies cmGraphToDot output for a simple 2-node CM matches expected DOT string." }
+]
+specs        = []
+requirements = []
+
+# Phase 04: svg.ts — SVG DOM manipulation, no state dependency.
+[[phase]]
+id        = "PHASE-04"
+name      = "Convert svg.js → src/svg.ts"
+objective = "Convert svg.js to TypeScript. Exports injectHitRects, wireHandlers, applyFocusHighlight, dimLegend. All take explicit SVGElement params — no state dependency."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 exits green: dot.ts compiled and verified." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/svg.ts exists with all exports." },
+  { id = "EX-2", text = "SvgHandlerOpts type defined in this module." },
+  { id = "EX-3", text = "web/map/svg.js deleted." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (svg.ts has zero errors)." },
+  { id = "VA-1", expects = "Agent verifies injectHitRects adds hit-rect elements to node groups in a sample SVG document." },
+  { id = "VA-2", expects = "Agent verifies wireHandlers attaches click/hover listeners to node groups." }
+]
+specs        = []
+requirements = []
+
+# Phase 05: model.ts — state singleton + pure functions for graph normalization.
+[[phase]]
+id        = "PHASE-05"
+name      = "Convert model.js → src/model.ts"
+objective = "Convert model.js to TypeScript. Export the state singleton and all pure functions: normalizeGraph, normalizeConceptMap, findFocus, resolveFocus, neighbourhood, cmNeighbourhood, searchFilter, kindOrder, compareNodes, compareEdgesBySource, encodePart, pascalToSnake, buildNodeLabelList, buildRelLabelList, setActionabilityView."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 exits green: svg.ts compiled and verified." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/model.ts exists with all exports typed." },
+  { id = "EX-2", text = "state singleton initialized with correct default values." },
+  { id = "EX-3", text = "web/map/model.js deleted." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (model.ts has zero errors)." },
+  { id = "VA-1", expects = "Agent verifies normalizeGraph produces correct nodes Map and edges array from sample RawGraph JSON." },
+  { id = "VA-2", expects = "Agent verifies neighbourhood BFS returns correct nodes and edges for depth 0, 1, 2." },
+  { id = "VA-3", expects = "Agent verifies findFocus resolves case-insensitive canonical ref, loose canonical, title match, substring fallback." },
+  { id = "VA-4", expects = "Agent verifies cmNeighbourhood with focusKey returns filtered nodes/edges; null focusKey returns all." },
+  { id = "VA-5", expects = "Existing model.js tests in test.html still pass." }
+]
+specs        = []
+requirements = []
+
+# Phase 06: render.ts — DOM construction for entity-graph views.
+[[phase]]
+id        = "PHASE-06"
+name      = "Convert render.js → src/render.ts"
+objective = "Convert render.js to TypeScript. Imports model, dot, api, svg. Exports cacheElements, el, escapeHtml, escapeAttr, setPageMode, entityList, graphPane, focusHeader, hoverPane, relationshipTable, markdownPane, edgeDetail."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 exits green: model.ts compiled and verified." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/render.ts exists with all exports typed." },
+  { id = "EX-2", text = "Module-specific option types defined (GraphPaneOpts, RelationshipTableOpts, EdgeDetailOpts, RenderedElements)." },
+  { id = "EX-3", text = "web/map/render.js deleted." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (render.ts has zero errors)." }
+]
+specs        = []
+requirements = []
+
+# Phase 07: search.ts — DOM event wiring for search, filters, depth, refresh.
+[[phase]]
+id        = "PHASE-07"
+name      = "Convert search.js → src/search.ts"
+objective = "Convert search.js to TypeScript. Imports model, render. Exports renderFilteredEntities, wireFilters, wireSearch, wireDepthButtons, wireRefresh, collectKindFilter."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 exits green: render.ts compiled and verified." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/search.ts exists with all exports typed." },
+  { id = "EX-2", text = "web/map/search.js deleted." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (search.ts has zero errors)." },
+  { id = "VA-1", expects = "Agent verifies collectKindFilter returns correct Set from checkbox state." }
+]
+specs        = []
+requirements = []
+
+# Phase 08: concept-map.ts — CM rendering + editing.
+[[phase]]
+id        = "PHASE-08"
+name      = "Convert concept-map.js → src/concept-map.ts"
+objective = "Convert concept-map.js to TypeScript. Imports model, dot, api, svg, render. Exports renderDiagram, renderEdgeTable, renderAddEdgeForm, renderDiagnostics, renderEditToggle."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-07 exits green: search.ts compiled and verified." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/concept-map.ts exists with all exports typed." },
+  { id = "EX-2", text = "Module-specific option types defined (CmDiagramOpts, CmEdgeTableOpts, CmAddEdgeFormOpts)." },
+  { id = "EX-3", text = "web/map/concept-map.js deleted." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (concept-map.ts has zero errors)." }
+]
+specs        = []
+requirements = []
+
+# Phase 09: priority.ts — D3 force layout for actionability view.
+[[phase]]
+id        = "PHASE-09"
+name      = "Convert priority.js → src/priority.ts"
+objective = "Convert priority.js to TypeScript. Imports d3, d3-dag. Exports layoutGraph, renderGraph. Module-specific types defined (LayoutNode, LayoutEdge, PriorityRenderOpts)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-08 exits green: concept-map.ts compiled and verified." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/priority.ts exists with all exports typed." },
+  { id = "EX-2", text = "d3 and d3-dag imports resolve correctly from node_modules." },
+  { id = "EX-3", text = "web/map/priority.js deleted." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (priority.ts has zero errors)." }
+]
+specs        = []
+requirements = []
+
+# Phase 10: app.ts — entry point + test.html conversion + vendor cleanup.
+[[phase]]
+id        = "PHASE-10"
+name      = "Convert app.js → src/app.ts, convert test.html, clean up vendor/"
+objective = "Convert app.js to TypeScript entry point. Imports all modules. bootstrap() and renderView() functions. Convert test.html to <script type=\"module\"> with import statements. Remove old vendor bundles (d3.v7.min.js, d3-dag.min.js, markdown-it.min.js, purify.min.js). Remove old style.css from web/map/ root."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-09 exits green: priority.ts compiled and verified." },
+  { id = "EN-2", text = "All .js source files deleted (only .ts remain in src/)." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/app.ts exists with bootstrap() and renderView() typed." },
+  { id = "EX-2", text = "test.html converted to <script type=\"module\"> importing from ../src/*.ts." },
+  { id = "EX-3", text = "Old vendor bundles deleted (d3.v7.min.js, d3-dag.min.js, markdown-it.min.js, purify.min.js)." },
+  { id = "EX-4", text = "web/map/style.css deleted (now at src/style.css)." },
+  { id = "EX-5", text = "web/map/vendor/ directory contains only README.md." }
+]
+verification = [
+  { id = "VT-1", expects = "tsc --noEmit passes (all .ts files, zero errors)." },
+  { id = "VT-2", expects = "bun run dev starts Vite, browser loads the app, all test.html tests pass." },
+  { id = "VT-3", expects = "bun run build produces dist/ with index.html, hashed JS/CSS, vendor/github-markdown.css." },
+  { id = "VH-1", expects = "Manual smoke: navigate graph, search entities, filter by kind, toggle depth, toggle semantic/actionability view, view markdown, edit concept map — all function identically to pre-conversion behaviour." }
+]
+specs        = []
+requirements = []
+
+# Phase 11: Rust integration — assets.rs cfg_attr, .gitignore, verify tests.
+[[phase]]
+id        = "PHASE-11"
+name      = "Update Rust embedding and gitignore"
+objective = "Change rust-embed folder to use cfg_attr: debug embeds web/map/, release embeds web/map/dist/. Add dist/ and node_modules/ to .gitignore. Verify all map server integration tests pass."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-10 exits green: app.ts, test.html converted, vendor cleaned, Vite build works." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/map_server/assets.rs uses cfg_attr for debug/release folder selection." },
+  { id = "EX-2", text = ".gitignore includes web/map/dist/ and web/map/node_modules/." },
+  { id = "EX-3", text = "cargo build (debug) succeeds, embeds web/map/." },
+  { id = "EX-4", text = "cargo build --release succeeds after bun run build, embeds web/map/dist/." }
+]
+verification = [
+  { id = "VT-1", expects = "cargo test -p doctrine -- all map server integration tests pass (debug embed)." },
+  { id = "VT-2", expects = "cargo build --release succeeds (requires bun run build first)." },
+  { id = "VT-3", expects = "just gate passes (zero clippy warnings, workspace tests green)." }
+]
+specs        = []
+requirements = []
+
+# Phase 12: cleanup and memory — final housekeeping.
+[[phase]]
+id        = "PHASE-12"
+name      = "Final cleanup and record memory"
+objective = "Remove any remaining stale files. Record durable memory for the new dev workflow. Commit final state."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-11 exits green: Rust integration verified, all tests pass." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "No stale .js files remain in web/map/ (only src/*.ts, public/, index.html, test.html, package.json, tsconfig.json, vite.config.ts)." },
+  { id = "EX-2", text = "Memory recorded: web frontend dev workflow (bun run dev, bun run build, Vite proxy)." },
+  { id = "EX-3", text = "Slice scope updated if any deviations occurred." }
+]
+verification = [
+  { id = "VT-1", expects = "find web/map -name '*.js' returns empty (no stale JS files)." },
+  { id = "VT-2", expects = "bun run build && cargo build --release succeeds from clean state." },
+  { id = "VA-1", expects = "Agent verifies slice-091.md scope matches delivered outcome." }
+]
+specs        = []
+requirements = []
