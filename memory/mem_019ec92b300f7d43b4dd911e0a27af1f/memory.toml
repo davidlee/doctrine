@@ -6,7 +6,7 @@ status = "active"
 title = "Doctrine spec authoring signpost"
 summary = ""
 created = "2026-06-15"
-updated = "2026-06-15"
+updated = "2026-06-18"
 
 [scope]
 paths = [".doctrine/spec/"]
