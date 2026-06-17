@@ -548,7 +548,7 @@ enum Command {
     /// target must resolve to an entity of a legal kind (forward-edge validation,
     /// §5.5). Idempotent — re-linking an existing edge is a no-op.
     Link {
-        /// The source entity's canonical ref, e.g. `SL-048`.
+        /// The source entity's canonical ref (e.g. `SL-048`) or memory ref (`mem_<uid>`, `mem.<key>`).
         source: String,
         /// The relation label, e.g. `governed_by`, `consumes`, `related`.
         label: String,
@@ -563,7 +563,7 @@ enum Command {
     /// Remove a tier-1 `[[relation]]` edge authored by `link` (SL-048 §5.4). Symmetric
     /// on the same write seam; idempotent — unlinking an absent edge is a no-op.
     Unlink {
-        /// The source entity's canonical ref, e.g. `SL-048`.
+        /// The source entity's canonical ref (e.g. `SL-048`) or memory ref (`mem_<uid>`, `mem.<key>`).
         source: String,
         /// The relation label to remove, e.g. `governed_by`.
         label: String,
@@ -3765,8 +3765,36 @@ fn resolve_link_path(
 /// the legal-KIND assertion), then appends edit-preservingly. Idempotent (a re-link
 /// reports `already linked`, file untouched).
 fn run_link(path: Option<PathBuf>, source: &str, label: &str, target: &str) -> anyhow::Result<()> {
+    use anyhow::Context;
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    // Memory branch — detect mem_<uid> / mem.<key> / mem_<prefix> sources
+    // and route to memory.toml relations (SL-090 §PHASE-03).
+    if let Ok(mref) = memory::MemoryRef::parse(source) {
+        let toml_path = memory::resolve_memory_toml_path(&root, &mref)?;
+        // Best-effort target validation: if target looks like a canonical ref,
+        // validate it resolves. Free-text and mem_* targets pass through.
+        if integrity::parse_canonical_ref(target).is_ok() {
+            integrity::ensure_ref_resolves(&root, target).with_context(|| {
+                format!("target `{target}` does not resolve to an existing entity")
+            })?;
+        }
+        let outcome = memory::append_memory_relation(&toml_path, label, target)?;
+        match outcome {
+            relation::AppendOutcome::Wrote => {
+                writeln!(std::io::stdout(), "linked: {source} {label} {target}")?;
+            }
+            relation::AppendOutcome::Noop => {
+                writeln!(
+                    std::io::stdout(),
+                    "already linked: {source} {label} {target}"
+                )?;
+            }
+        }
+        return Ok(());
+    }
+
     let (toml_path, rule) = resolve_link_path(&root, source, label)?;
     // Forward-edge validation (§5.5): free-text labels skip both gates; validated
     // labels must resolve AND be of a legal target kind.
@@ -3802,6 +3830,24 @@ fn run_unlink(
 ) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    // Memory branch — detect mem_<uid> / mem.<key> / mem_<prefix> sources
+    // and route to memory.toml relations (SL-090 §PHASE-03).
+    if let Ok(mref) = memory::MemoryRef::parse(source) {
+        let toml_path = memory::resolve_memory_toml_path(&root, &mref)?;
+        // No target validation for unlink (matching existing behaviour for numbered entities).
+        let outcome = memory::remove_memory_relation(&toml_path, label, target)?;
+        match outcome {
+            relation::RemoveOutcome::Removed => {
+                writeln!(std::io::stdout(), "unlinked: {source} {label} {target}")?;
+            }
+            relation::RemoveOutcome::Absent => {
+                writeln!(std::io::stdout(), "not linked: {source} {label} {target}")?;
+            }
+        }
+        return Ok(());
+    }
+
     let (toml_path, rule) = resolve_link_path(&root, source, label)?;
     let outcome = relation::remove_edge(&toml_path, rule.label, target)?;
     match outcome {
@@ -4253,6 +4299,190 @@ mod tests {
             supersedes_count, 1,
             "NEW.supersedes should contain ADR-002 exactly once, got {supersedes_count}: {new_toml}"
         );
+    }
+    // --- SL-090 §PHASE-03: memory link/unlink tests ---------------------------
+
+    const MEM_TEST_UID: &str = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7";
+
+    fn seed_sl_toml(root: &std::path::Path, id: u32) {
+        let padded = format!("{id:03}");
+        let dir = root.join(".doctrine/slice").join(&padded);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("slice-{padded}.toml")),
+            format!(
+                "id = {id}\nslug = \"t{padded}\"\ntitle = \"Test SL-{padded}\"\n\
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+                 status = \"accepted\"\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("slice-{padded}.md")), "body\n").unwrap();
+    }
+
+    fn seed_adr_toml(root: &std::path::Path, id: u32) {
+        let padded = format!("{id:03}");
+        let dir = root.join(".doctrine/adr").join(&padded);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("adr-{padded}.toml")),
+            format!(
+                "id = {id}\nslug = \"a{padded}\"\ntitle = \"ADR {padded}\"\n\
+                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+                 status = \"accepted\"\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("adr-{padded}.md")), "body\n").unwrap();
+    }
+
+    fn seed_memory_toml(root: &std::path::Path, uid: &str, content: &str) {
+        let mem_dir = root.join(".doctrine/memory/items").join(uid);
+        std::fs::create_dir_all(&mem_dir).unwrap();
+        std::fs::write(mem_dir.join("memory.toml"), content).unwrap();
+    }
+
+    // VT-1 — link mem_<uid> to a canonical ref appends a [[relation]] row.
+    #[test]
+    fn link_memory_uid_appends_relation_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_sl_toml(root, 1);
+        seed_memory_toml(root, MEM_TEST_UID, "");
+
+        run_link(Some(root.to_path_buf()), MEM_TEST_UID, "related", "SL-001").unwrap();
+
+        let content = std::fs::read_to_string(
+            root.join(format!(".doctrine/memory/items/{MEM_TEST_UID}/memory.toml")),
+        )
+        .unwrap();
+        assert!(content.contains("[[relation]]"), "relation row written");
+        assert!(content.contains("label = \"related\""), "label present");
+        assert!(content.contains("target = \"SL-001\""), "target present");
+    }
+
+    // VT-2 — Re-link is no-op (already linked).
+    #[test]
+    fn link_memory_uid_repeat_is_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_sl_toml(root, 1);
+        let seed = "[[relation]]\nlabel = \"related\"\ntarget = \"SL-001\"\n";
+        seed_memory_toml(root, MEM_TEST_UID, seed);
+
+        let before = std::fs::read_to_string(
+            root.join(format!(".doctrine/memory/items/{MEM_TEST_UID}/memory.toml")),
+        )
+        .unwrap();
+        run_link(Some(root.to_path_buf()), MEM_TEST_UID, "related", "SL-001").unwrap();
+        let after = std::fs::read_to_string(
+            root.join(format!(".doctrine/memory/items/{MEM_TEST_UID}/memory.toml")),
+        )
+        .unwrap();
+        assert_eq!(before, after, "file unchanged on re-link");
+    }
+
+    // VT-3 — unlink + re-unlink.
+    #[test]
+    fn unlink_memory_uid_then_repeat() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let seed = "[[relation]]\nlabel = \"related\"\ntarget = \"SL-001\"\n";
+        seed_memory_toml(root, MEM_TEST_UID, seed);
+
+        run_unlink(Some(root.to_path_buf()), MEM_TEST_UID, "related", "SL-001").unwrap();
+        let after_first = std::fs::read_to_string(
+            root.join(format!(".doctrine/memory/items/{MEM_TEST_UID}/memory.toml")),
+        )
+        .unwrap();
+        assert!(
+            !after_first.contains("[[relation]]"),
+            "relation row removed after unlink"
+        );
+
+        // Re-unlink — idempotent, no error.
+        run_unlink(Some(root.to_path_buf()), MEM_TEST_UID, "related", "SL-001").unwrap();
+    }
+
+    // VT-4 — link with nonexistent canonical ref target fails.
+    #[test]
+    fn link_memory_uid_bad_target_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_memory_toml(root, MEM_TEST_UID, "");
+
+        let err =
+            run_link(Some(root.to_path_buf()), MEM_TEST_UID, "related", "SL-999").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("does not resolve"),
+            "error should mention 'does not resolve', got: {msg}"
+        );
+    }
+
+    // VT-5 — link with free-text target (no validation).
+    #[test]
+    fn link_memory_uid_free_text_target_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_memory_toml(root, MEM_TEST_UID, "");
+
+        run_link(
+            Some(root.to_path_buf()),
+            MEM_TEST_UID,
+            "drift",
+            "some free text",
+        )
+        .unwrap();
+        let content = std::fs::read_to_string(
+            root.join(format!(".doctrine/memory/items/{MEM_TEST_UID}/memory.toml")),
+        )
+        .unwrap();
+        assert!(
+            content.contains("target = \"some free text\""),
+            "free text stored"
+        );
+    }
+
+    // VT-6 — behaviour-preservation: numbered-entity link still works.
+    #[test]
+    fn link_numbered_entity_still_works() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_sl_toml(root, 48);
+        seed_adr_toml(root, 10);
+
+        run_link(Some(root.to_path_buf()), "SL-048", "governed_by", "ADR-010").unwrap();
+
+        let toml_path = root.join(".doctrine/slice/048/slice-048.toml");
+        let content = std::fs::read_to_string(&toml_path).unwrap();
+        assert!(content.contains("[[relation]]"));
+        assert!(content.contains("governed_by"));
+        assert!(content.contains("ADR-010"));
+    }
+
+    // VT-7 — link with mem.<key> source.
+    #[test]
+    fn link_memory_key_appends_relation_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_sl_toml(root, 1);
+        seed_memory_toml(root, "mem.fact.cli.skinny", "");
+
+        run_link(
+            Some(root.to_path_buf()),
+            "mem.fact.cli.skinny",
+            "related",
+            "SL-001",
+        )
+        .unwrap();
+
+        let content = std::fs::read_to_string(
+            root.join(".doctrine/memory/items/mem.fact.cli.skinny/memory.toml"),
+        )
+        .unwrap();
+        assert!(content.contains("[[relation]]"), "relation row written");
+        assert!(content.contains("target = \"SL-001\""), "target present");
     }
 }
 
