@@ -9,25 +9,20 @@ session's system prompt. Two issues surfaced in UX audit:
    status, trust, key, title) — ~50 lines of the 115-line snapshot. Most are signpost
    references; an agent pays for this index every session regardless of what subsystem
    they touch.
-2. `doctrine boot` regenerates the snapshot but the already-inlined prefix stays stale
-   until session restart. Agents editing governance may think `doctrine boot` has
-   refreshed their context.
 
-**Origin:** IMP-094, IMP-095.
+**Origin:** IMP-094.
+
+IMP-095 (boot post-regeneration warning) was dropped during design — the `--check`
+sentry and `/route`'s freshen-now ritual already cover the concern; a bare printed
+warning without verification would be theatre.
 
 ## Scope & Objectives
 
 ### Trim the Memory section (IMP-094)
-Replace the full memory listing with a single reference line:
-`Run 'doctrine memory retrieve' to surface relevant memories for your task.`
-The `/retrieve-memory` skill already wraps this; the inlined index is redundant.
-If discoverability is a concern, list only the signpost keys (one line each) without
-full metadata.
-
-### Boot post-regeneration warning (IMP-095)
-`doctrine boot` should emit: `Snapshot regenerated. Restart session or /clear for
-changes to take effect.` The `--check` sentry already exists but isn't sufficient —
-agents need the warning at regeneration time, not just a later check.
+Replace the full memory listing with a reference instruction (`/retrieve-memory`)
+plus a compact listing of signpost keys only (one per line, no metadata). The
+`/retrieve-memory` skill already provides the richer pull path; the inlined
+table is redundant for the PUSH tier.
 
 ## Non-Goals
 
@@ -37,9 +32,10 @@ agents need the warning at regeneration time, not just a later check.
 
 ## Summary
 
-Two small changes: trim the Memory section from the boot snapshot (saving ~50 lines
-per session), and warn on `doctrine boot` that the inlined prefix is stale. Both are
-high-leverage — they improve every agent session with minimal implementation risk.
+Trim the Memory section from the boot snapshot (saving ~30 lines per session):
+replace the full metadata table with a reference instruction (`/retrieve-memory`)
+plus a compact key-only listing. High-leverage — improves every agent session
+with minimal implementation risk.
 
 ## Follow-Ups
 
