@@ -46,9 +46,9 @@ all styles are hand-authored.
 
    **F-3 (major).** `--border-light` and `--bg-card` are used throughout the CM
    section with hardcoded fallbacks but are *never defined*.
-   → Define `--border-light` (light: `#e0e0e0`, dark: `#333333`) and
-   `--bg-card` (light: `#fafafa`, dark: `#2a2a2a`) in `tokens.css`. Remove
-   all hardcoded fallbacks once tokens exist.
+   → Promote to theme-level tokens alongside `--border` and `--bg`.
+   `--border-light` (light: `#e0e0e0`, dark: `#444444`);
+   `--bg-card` (light: `#fafafa`, dark: `#2a2a2a`). Remove all fallbacks.
 
    **F-4 (minor).** 18 distinct hardcoded hex colours in the CM section bypass
    the custom property system.
@@ -74,14 +74,17 @@ all styles are hand-authored.
 
    **F-8 (minor).** JS inline `style.display` manipulation competes with CSS
    class-based toggling — two visibility mechanisms, same file.
-   → Audit the TypeScript source for `style.display` assignments and replace
-   with class-based toggling (`.visible`/`.hidden` or module-specific
-   toggle classes). This touches TS files, not just CSS.
+   → Two mechanisms for two use cases: generic show/hide → `.u-hidden`
+   utility class (15 TS sites + 5 inline HTML); page-mode visibility →
+   `data-page-mode` attribute on `.layout` + CSS rules (6 TS sites in
+   `setPageMode()`).
 
    **F-9 (nit).** Compound selectors like `.markdown-pane.fullscreen .markdown-body`
    encode DOM hierarchy that will break on any refactor.
-   → Flatten where safe, or add a dedicated class (`.markdown-body--fullscreen`)
-   on the inner element when fullscreen activates.
+   → Replace with flat modifier classes: `.markdown-body--fullscreen`,
+   `.cm-diagnostics-panel__title`, `.kind-pill--active`. Preserve
+   `:last-child` pseudo-class (is robust CSS, not a DOM-structure coupling
+   issue).
 
    **F-10 (minor).** `.hidden` class name is dangerously broad — a utility-class
    collision magnet if any CSS framework ever enters.
@@ -94,19 +97,22 @@ all styles are hand-authored.
 
 ### Affected surface
 
-- `web/map/src/style.css` — decomposed into 10 files; becomes an import-only
-  entry point
-- `web/map/src/app.ts` — update CSS import (single entry import unchanged if
-  using `@import` cascade; one additional import per module if flat)
-- `web/map/src/concept-map.ts` — replace `style.display` with class toggling
-  (F-8)
-- `web/map/src/render.ts` — replace `style.display` with class toggling (F-8)
-- `web/map/src/priority.ts` — replace `style.display` with class toggling (F-8)
-- `web/map/src/search.ts` — replace `style.display` with class toggling (F-8,
-  if applicable)
+- `web/map/src/style.css` — deleted; replaced by 10 modular files (see table below)
+- `web/map/src/app.ts` — no import change (still `import './style.css'`);
+  replace `style.display` toggles with `.u-hidden` classList operations (F-8)
+- `web/map/src/concept-map.ts` — replace `style.display` with `.u-hidden`
+  classList (F-8); replace `style="display:none"` in generated HTML string;
+  update `.cm-diagnostics-panel h3` → `.cm-diagnostics-panel__title` (F-9)
+- `web/map/src/render.ts` — replace 6 `style.display` assignments in
+  `setPageMode()` with `data-page-mode` attribute + CSS rules (F-8); update
+  class name renames (F-5, F-9)
+- `web/map/src/search.ts` — rename `.nav-highlight` →
+  `.entity-item--nav-highlight` (F-5)
+- `web/map/index.html` — replace 4 `style="display:none"` inlines with
+  class `u-hidden` (F-8)
 
-Vite's CSS pipeline (`vite.config.ts`) handles `@import` natively; no config
-changes expected.
+Vite's CSS pipeline handles `@layer` and `@import` identically in dev and
+prod; no config changes expected.
 
 ### Module decomposition table
 
@@ -136,35 +142,38 @@ changes expected.
 
 ## Risks
 
-- **Visual regression.** Splitting and reorganising CSS can silently change
-  cascade order or specificity. Mitigation: `@import` order preserves the
-  existing cascade; visual comparison gate required before closure.
-- **Import order sensitivity.** Vite resolves `@import` in source order. The
-  existing file's top-to-bottom order is the canonical cascade; the import
-  list must match it exactly.
-- **F-8 JS changes.** Replacing `style.display` with class toggling touches
-  the TypeScript source — functional behaviour change, not pure CSS refactor.
-  Keep scope tight: change only the visibility mechanism, not the logic.
+- **Cascade order sensitivity.** The `@import` order in `style.css` is the
+  canonical cascade. Verified by matching section comment headers in each
+  layout sub-file against the original — the order is identical.
+- **Unlayered style escalation.** Any CSS rule outside a declared `@layer`
+  block beats all layered rules per spec. Mitigation: every rule lives in an
+  explicit layer block.
+- **Visual regression.** Splitting CSS into layers can expose latent
+  specificity assumptions. Mitigation: side-by-side visual comparison gate
+  (all views, both colour schemes).
+- **JS class name changes.** 9 class renames across CSS and TS — TypeScript
+  won't catch `classList` string mismatches. Mitigation: visual smoke test
+  covers all interactive states.
+- **`data-page-mode` is a new mechanism.** Replaces 6 imperative
+  `style.display` assignments in `setPageMode()` with declarative CSS rules.
+  Functional equivalence verified by visual comparison.
 
 ## Verification / Closure Intent
 
-1. `npm run build` (or `bun run build`) succeeds — Vite bundles all CSS
-   modules without error
-2. `npm run dev` renders the map explorer with identical visual appearance in
-   both light and dark modes (before/after visual comparison)
-3. Each `@import`d file is self-contained: no undefined custom property
-   references within any module (audit via grep for `var(--` without
-   corresponding definition in the import chain)
-4. No `:root {}` block appears outside `tokens.css`
-5. No hardcoded hex colour remains in `concept-map.css` (all promoted to
-   `--cm-*` or existing theme tokens)
-6. No `style.display` assignment remains in the TypeScript source
-7. `.hidden` is renamed to `.u-hidden` or module-specific equivalent
-8. `npx eslint` — zero warnings
-9. `just check` — root package tests pass (no Rust changes, gate is a
-   formality)
-10. All RV-065 findings are addressed; each disposition recorded in a closure
-    note
+1. `npm run build` — Vite bundles all `@layer`/`@import` cascade without error.
+   `npm run dev` confirms HMR resolves layers identically.
+2. Cascade-order audit: diff original section headers against `@import` order
+   in new `style.css` — identical sequence.
+3. Visual comparison — side-by-side browser tabs, each view in both light and
+   dark mode: entity focus, concept-map focus, edge detail, fullscreen
+   markdown, priority/DAG view, empty/error states. Zero visual differences.
+4. Design-system audit:
+   - `grep -n 'var(--.*,.*)' web/map/src/*.css` → no fallbacks
+   - `grep -n '#[0-9a-fA-F]' web/map/src/concept-map.css` → zero hits
+   - `grep -n ':root'` on all non-token CSS files → zero hits
+   - `grep -rn 'style\.display' web/map/src/` → zero hits
+5. `npx eslint` — zero warnings
+6. `just check` — root package tests pass (no Rust changes)
 
 ## Follow-Ups
 
