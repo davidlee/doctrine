@@ -191,7 +191,7 @@ pub(crate) fn render_human(status: &Status) -> String {
 
     // Recent commits.
     if !status.recent_commits.is_empty() {
-        parts.push("\n\nRecent commits\n".to_string());
+        parts.push("\nRecent commits\n".to_string());
         for c in &status.recent_commits {
             parts.push(format!(
                 "  {} {} — {}\n",
@@ -301,8 +301,8 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
                 }
             }
             bs.sort_by(|a, b| a.id.cmp(&b.id));
-            bs.truncate(5);
             let cb = bs.len();
+            bs.truncate(5);
 
             // Blocked backlog: open + has unresolved needs edges.
             let mut bb: Vec<BlockedItem> = Vec::new();
