@@ -33,15 +33,15 @@
     }
     if (stratifyData.length === 0) return emptyLayout();
 
-    var dag = d3.dagStratify()(stratifyData);
-    d3.sugiyama().size([width, height])(dag);
+    var dag = d3.graphStratify()(stratifyData);
+    d3.sugiyama().nodeSize([72, 28]).gap([20, 30])(dag);
 
     var nodes = [];
-    dag.descendants().forEach(function(node) {
+    Array.from(dag.nodes()).forEach(function(node) {
       var base = node.data && node.data.data ? node.data.data : {};
       nodes.push(Object.assign({}, base, {
         x: typeof node.x === 'number' ? node.x : width / 2,
-        y: height - (typeof node.y === 'number' ? node.y : height / 2)
+        y: typeof node.y === 'number' ? node.y : height / 2
       }));
     });
 
