@@ -27,11 +27,11 @@ Find {
 }
 ```
 
-- Rename the existing `--query` field to `flag_query` to avoid namespace collision
-  with the positional `query`. Clap allows a positional and a long flag with the
-  same Rust field name, but the semantics are cleaner when they're distinct fields
-  and the shell resolves them. Both are `Option<String>`; if both are `Some` →
-  `anyhow::bail!("cannot specify both a positional query and --query")`.
+- Rename the existing `--query` field to `flag_query` (with
+  `#[arg(long = "query")]` to preserve the user-facing flag name) to avoid
+  namespace collision with the positional `query`. Both are `Option<String>`;
+  if both are `Some` → `anyhow::bail!("cannot specify both a positional query
+  and --query")`.
 - Dispatch passes `query.or(flag_query)` to `retrieve::run_find` as `free_query`.
 
 **`src/retrieve.rs`** — `run_find` signature unchanged (it already accepts `free_query:
@@ -104,12 +104,27 @@ let offset = match page {
 
 **`src/retrieve.rs`** — both `run_find` and `run_retrieve` gain pagination params.
 
-Common resolution (shell-side, before calling retrieve):
+Resolution (shell-side, before calling retrieve):
+
 ```rust
-let limit = args.limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT).min(RETRIEVE_LIMIT_MAX);
+// --limit 0 is rejected for both commands.
+if args.limit == Some(0) {
+    anyhow::bail!("--limit must be >= 1");
+}
+
+// find: limit defaults to None (unlimited, all results shown).
+//       When --limit is explicitly set, cap at RETRIEVE_LIMIT_MAX.
+let find_limit: Option<usize> = args.limit.map(|l| l.min(RETRIEVE_LIMIT_MAX));
+
+// retrieve: limit defaults to RETRIEVE_LIMIT_DEFAULT (5), capped at MAX.
+let retrieve_limit: usize =
+    args.limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT).min(RETRIEVE_LIMIT_MAX);
+
+// Page offset: page size uses explicit --limit or RETRIEVE_LIMIT_DEFAULT.
+let page_size = args.limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT);
 let resolved_offset = match args.page {
     Some(p) if p == 0 => anyhow::bail!("--page must be >= 1"),
-    Some(p) => (p - 1) * limit,
+    Some(p) => (p - 1) * page_size,
     None => args.offset,
 };
 ```
@@ -165,6 +180,11 @@ emit a notice: `0 of 142; no results at this offset; reduce --offset or --page`.
   - `find`: total = `ranked.len()` (holdback-exempt — all candidates count).
   - `retrieve`: total = post-holdback count (held-back memories are suppressed,
     not truncated; they don't count as "matching").
+- D14: `find` has no default limit — without `--limit`, all results are shown.
+  Only when `--limit` is explicitly set does truncation apply. `retrieve` retains
+  `RETRIEVE_LIMIT_DEFAULT` (5). This preserves the current `memory find`
+  behaviour (unlimited) while keeping `memory retrieve` safe against
+  accidentally dumping the entire memory store.
 
 ---
 
@@ -280,7 +300,7 @@ Recent commits
 |---|---|---|
 | Work → slices | corpus scan (slice-scoped) | Count active (not `done`/`abandoned`); blocked = active ∧ has unresolved `needs` edges |
 | Work → backlog | backlog scan | Count by kind, `open`-only |
-| Work → next up | priority engine (`priority::surface::next_work`) | Top 5 actionable, id+status only |
+| Work → next up | priority engine (`priority::surface::next`) | Top 5 actionable, id+status only |
 | Blocked slices | dep/seq graph: slices with unresolved `needs` edges AND not terminal | Top 5, each with its blocker ids |
 | Blocked backlog | dep/seq graph: backlog items with unresolved `needs` edges AND `open` | Top 5, each with its blocker ids |
 | Boot | `boot --check` + file stat | Staleness + commit that wrote it |
@@ -377,8 +397,8 @@ Dispatched to `status::run(path, format, json)`.
     ]
   },
   "boot": {
-    "staleness": "fresh",
-    "age_seconds": 120,
+    "staleness": "fresh",      // content-diff (boot_check) — fresh|stale|missing
+    "age_seconds": 120,        // mtime delta, informational only
     "commit": "a3f7b2c"
   },
   "recent_commits": [
@@ -396,8 +416,10 @@ Dispatched to `status::run(path, format, json)`.
 - D12: Recent commits via `git log` (impure shell). The boot staleness already
   gives time-since orientation, but commit context is high-value for agent
   orientation and cheap to fetch.
-- D13: Boot staleness: `fresh` if ≤ 5 min, `stale` otherwise, `missing` if no
-  boot.md. Simple, clear signal.
+- D13: Boot staleness is driven by content-diff (`CheckReport.stale` from
+  `boot_check`). `stale` when on-disk ≠ recomputed; `fresh` when identical;
+  `missing` when no boot.md exists. `age_seconds` (mtime delta from file stat)
+  is informational only — it does not affect the staleness classification.
 
 ---
 
@@ -406,7 +428,7 @@ Dispatched to `status::run(path, format, json)`.
 | IMP | VT (test) | EN (entry) | EX (exit) |
 |---|---|---|---|
 | 090 | Golden test: `doctrine memory find cli` outputs same as `--query cli` | Positional + `--query` together errors cleanly | Positional query finds expected results |
-| 091 | Golden test: truncation notice appears when `--limit 2` with 3+ matches | `--page 0` errors; `--offset` + `--page` conflict | `--page 2 --limit 5` shows results 6-10; `--json` has no notice |
+| 091 | Golden test: truncation notice appears when `--limit 2` with 3+ matches; `memory find` without `--limit` shows all results; `--limit 0` errors; `--page 2` alone does not error despite offset default | `--page 0` errors; `--offset` + `--page` conflict | `--page 2 --limit 5` shows results 6-10; `--json` has no notice |
 | 092 | Golden test: `memory find --json` output is valid JSON with `kind: "memory_find"` | `--format bogus` errors | JSON rows match table column set 1:1 |
 | 093 | Golden test: `doctrine status` output contains expected sections | Command runs to completion on empty repo | `--json` output parses; empty repo shows `No active work.` |
 
@@ -425,9 +447,13 @@ Each IMP adds at least one black-box CLI golden test pinning the exact output sh
   follows the same impure shell pattern.
 - **Args-struct ceiling.** `MemoryCommand::Find` currently has 9 fields, `Retrieve`
   has 11. Adding query+offset+page+limit+format+json pushes Find to 15 and
-  Retrieve to 17 — well past the `too_many_arguments` lint ceiling of 7.
-  **Mitigation**: extract the shared scope/filter fields (path_scope, glob,
-  command, tag, memory_type, status, include_draft) plus the new pagination/format
-  fields (offset, page, limit, format, json) into a `FindRetrieveArgs` struct that
-  both variants flatten via `#[command(flatten)]`. This is the established pattern
-  (`CommonListArgs`, `RecordArgs`). The positional query stays on `Find` only.
+  Retrieve to 17. **Mitigation**: extract the shared scope/filter fields
+  (path_scope, glob, command, tag, memory_type, status, include_draft) plus the
+  new pagination/format fields (offset, page, limit, format, json, flag_query)
+  into a `FindRetrieveArgs` struct that both variants flatten via
+  `#[command(flatten)]`. This is the established pattern (`CommonListArgs`,
+  `RecordArgs`) and follows DRY — each shared field is defined once rather than
+  duplicated across both variants. The positional query stays on `Find` only.
+  Note: `offset` carries `default_value_t = 0` but is mutually exclusive with
+  `--page` via `conflicts_with` — clap 4 treats a default_value as "not present"
+  for conflict resolution, so `--page 2` alone resolves correctly.
