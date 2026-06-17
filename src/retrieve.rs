@@ -596,7 +596,7 @@ pub(crate) fn query<'a>(
 /// (B8/D8/D17). `spec` is the matched dimension (`-` for a bare `--query`). Every
 /// free value is `scrub_line`d (F-A10) so a newline cannot forge a row.
 /// Render find results as a human-readable column-aligned table.
-fn format_find_table(cands: &[Candidate<'_>]) -> String {
+fn format_find_table(cands: &[&Candidate<'_>]) -> String {
     let scrub = |s: &str| crate::memory::scrub_line(s);
     let rows: Vec<[String; 8]> = cands
         .iter()
@@ -658,8 +658,8 @@ struct MemoryFindRow {
     title: String,
 }
 
-impl From<&Candidate<'_>> for MemoryFindRow {
-    fn from(c: &Candidate<'_>) -> Self {
+impl From<&&Candidate<'_>> for MemoryFindRow {
+    fn from(c: &&Candidate<'_>) -> Self {
         let m = c.memory;
         MemoryFindRow {
             uid: m.uid.clone(),
@@ -675,7 +675,7 @@ impl From<&Candidate<'_>> for MemoryFindRow {
 }
 
 /// Render find results as a JSON envelope: `{ "kind": "memory_find", "rows": […] }`.
-fn format_find_json(cands: &[Candidate<'_>]) -> Result<String> {
+fn format_find_json(cands: &[&Candidate<'_>]) -> Result<String> {
     let rows: Vec<MemoryFindRow> = cands.iter().map(MemoryFindRow::from).collect();
     crate::listing::json_envelope("memory_find", &rows)
 }
@@ -726,12 +726,12 @@ fn load_query(
 }
 
 /// `doctrine memory find [--path-scope/--glob/--command/--tag/--query] [--type]
-/// [--status] [--include-draft] [--format] [--json]`. The find surface over
-/// the shared pipeline: `load_query` → `query` → render. find applies NO
-/// holdback (D8/D17); `base_filter` already excludes
-/// quarantined/retracted/superseded/archived (and draft unless
+/// [--status] [--include-draft] [--format] [--json] [--offset] [--page]
+/// [--limit]`. The find surface over the shared pipeline: `load_query` → `query`
+/// → paginate → render. find applies NO holdback (D8/D17); `base_filter`
+/// already excludes quarantined/retracted/superseded/archived (and draft unless
 /// `--include-draft`). It needs no body read (find renders rows, not framed
-/// bodies), so it ignores everything past `mems`/`q`/`snap`.
+/// bodies).
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
 pub(crate) fn run_find(
     path: Option<PathBuf>,
@@ -744,6 +744,8 @@ pub(crate) fn run_find(
     status_f: Option<Status>,
     include_draft: bool,
     format: crate::listing::Format,
+    offset: usize,
+    limit: Option<usize>,
 ) -> Result<()> {
     let Loaded {
         root,
@@ -757,10 +759,27 @@ pub(crate) fn run_find(
     // BM25 is the hard default on both surfaces — no user-facing selector (D5).
     let ranker = Bm25Ranker;
     let ranked = query(&mems, &q, &snap, include_draft, &root, &ranker);
-    let output = match format {
-        crate::listing::Format::Table => format_find_table(&ranked),
-        crate::listing::Format::Json => format_find_json(&ranked)?,
+    // Total = all candidates (holdback-exempt for find — D6).
+    let total = ranked.len();
+    // Paginate: skip(offset).take(limit).
+    let visible: Vec<&Candidate<'_>> = ranked
+        .iter()
+        .skip(offset)
+        .take(limit.unwrap_or(usize::MAX))
+        .collect();
+    let shown = visible.len();
+    let mut parts: Vec<String> = Vec::new();
+    let body = match format {
+        crate::listing::Format::Table => format_find_table(&visible),
+        crate::listing::Format::Json => format_find_json(&visible)?,
     };
+    parts.push(body);
+    // Truncation notice: table mode only, when results are truncated or offset exceeds total.
+    if format == crate::listing::Format::Table && shown < total {
+        let page_size = limit.unwrap_or(RETRIEVE_LIMIT_DEFAULT);
+        parts.push(format_truncation_notice(shown, total, offset, page_size));
+    }
+    let output = parts.concat();
     write!(io::stdout(), "{output}")?;
     Ok(())
 }
@@ -772,9 +791,9 @@ pub(crate) fn run_find(
 // render with a fresh nonce each (design §5.1, D2/D8/D17/D19/B7/B10).
 
 /// `--limit` default — an agent-context boundary is bounded by default (B10).
-const RETRIEVE_LIMIT_DEFAULT: usize = 5;
+pub(crate) const RETRIEVE_LIMIT_DEFAULT: usize = 5;
 /// `--limit` cap — a single query cannot flood the context (D17).
-const RETRIEVE_LIMIT_MAX: usize = 20;
+pub(crate) const RETRIEVE_LIMIT_MAX: usize = 20;
 
 /// Validate a `--min-trust` value at the CLI edge (clap `value_parser`). Only the
 /// three trust tiers are floors; anything else is a hard error, never a silent
@@ -805,29 +824,70 @@ fn held_back(m: &Memory, floor: u8) -> bool {
     severity_rank(&m.severity) <= severity_rank("high") && trust_rank(&m.trust_level) > floor
 }
 
-/// The candidates `retrieve` actually renders: suppress held-back PRE-render, THEN
-/// `take(limit)` (suppress-then-take, K3 — a held-back memory never consumes a
-/// slot). Pure: the impure render (body read + nonce) happens over the result.
-fn select_shown<'r, 'a>(
-    ranked: &'r [Candidate<'a>],
-    floor: u8,
-    limit: usize,
-) -> Vec<&'r Candidate<'a>> {
-    ranked
-        .iter()
-        .filter(|c| !held_back(c.memory, floor))
-        .take(limit)
-        .collect()
+/// Format a truncation notice line for table-mode output when results are
+/// truncated or the offset exceeds the total. Returns empty string when
+/// `total == 0` (empty result set — nothing to paginate).
+fn format_truncation_notice(shown: usize, total: usize, offset: usize, page_size: usize) -> String {
+    if total == 0 {
+        return String::new();
+    }
+    if offset >= total {
+        return format!(
+            "{shown} of {total}; no results at this offset; reduce --offset or --page\n"
+        );
+    }
+    #[expect(
+        clippy::integer_division,
+        reason = "floor division for 1-based page calc"
+    )]
+    let next_page = (offset / page_size) + 2; // 1-based
+    format!("{shown} of {total}; use --page {next_page} for next or specify a higher --limit\n")
 }
 
-/// `doctrine memory retrieve <query/filter flags> [--limit N] [--min-trust L]`.
+/// A serde row for `memory retrieve --json`.
+#[derive(Serialize)]
+struct MemoryRetrieveRow {
+    uid: String,
+    #[serde(rename = "type")]
+    kind: String,
+    status: String,
+    staleness: String,
+    trust: String,
+    severity: String,
+    title: String,
+}
+
+impl From<&Candidate<'_>> for MemoryRetrieveRow {
+    fn from(c: &Candidate<'_>) -> Self {
+        let m = c.memory;
+        MemoryRetrieveRow {
+            uid: m.uid.clone(),
+            kind: m.kind.as_str().to_owned(),
+            status: m.status.as_str().to_owned(),
+            staleness: c.staleness.label().to_owned(),
+            trust: crate::memory::scrub_line(&m.trust_level),
+            severity: crate::memory::scrub_line(&m.severity),
+            title: crate::memory::scrub_line(&m.title),
+        }
+    }
+}
+
+/// Render retrieve results as a JSON envelope: `{ "kind": "memory_retrieve", "rows": […] }`.
+fn format_retrieve_json(cands: &[&Candidate<'_>]) -> Result<String> {
+    let rows: Vec<MemoryRetrieveRow> = cands.iter().map(|c| MemoryRetrieveRow::from(*c)).collect();
+    crate::listing::json_envelope("memory_retrieve", &rows)
+}
+
+/// `doctrine memory retrieve <query/filter flags> [--limit N] [--min-trust L]
+/// [--offset N] [--page N] [--format F] [--json]`.
 /// The agent-context surface over the shared pipeline: collect → `select_rows` →
 /// `freeze` → `query` (identical survivor set to `find` pre-limit), then the
 /// retrieve-only layer — the trust floor suppresses held-back memories PRE-render
-/// (B7/D8), `take(limit)` over the survivors (suppress-then-take: a held-back
-/// memory never steals a slot, K3), and per hit `render_show` with a FRESHLY
-/// minted nonce each (D2) plus a `staleness:` header line (D19). Bodies are read
-/// lazily for the ≤limit shown hits only.
+/// (B7/D8), `skip(offset).take(limit)` over the survivors (holdback-then-offset-
+/// then-limit), and per hit `render_show` with a FRESHLY minted nonce each (D2)
+/// plus a `staleness:` header line (D19). Bodies are read lazily for the ≤limit
+/// shown hits only. Under `--json`, output is a structured envelope and the
+/// truncation notice is suppressed (D4).
 #[expect(clippy::too_many_arguments, reason = "CLI surface fans flags 1:1")]
 pub(crate) fn run_retrieve(
     path: Option<PathBuf>,
@@ -839,8 +899,10 @@ pub(crate) fn run_retrieve(
     type_f: Option<MemoryType>,
     status_f: Option<Status>,
     include_draft: bool,
-    limit: Option<usize>,
+    limit: usize,
     min_trust: Option<&str>,
+    offset: usize,
+    format: crate::listing::Format,
 ) -> Result<()> {
     let Loaded {
         root,
@@ -855,23 +917,41 @@ pub(crate) fn run_retrieve(
     let ranked = query(&mems, &q, &snap, include_draft, &root, &ranker);
 
     let floor = holdback_floor(min_trust);
-    let limit = limit
-        .unwrap_or(RETRIEVE_LIMIT_DEFAULT)
-        .min(RETRIEVE_LIMIT_MAX);
-    let mut out = String::new();
-    for c in select_shown(&ranked, floor, limit) {
-        let body = crate::memory::read_body(&root, &c.memory.uid);
-        // FRESH nonce per BLOCK: one nonce across N bodies lets body i forge body
-        // i+1's close (D2). Minted inside the loop, never hoisted.
-        let nonce = uuid::Uuid::new_v4().simple().to_string();
-        out.push_str(&crate::memory::render_show(
-            c.memory,
-            &body,
-            &nonce,
-            Some(c.staleness.label()),
-        ));
+    // Holdback filter first, THEN count total, THEN offset + limit.
+    // Total = post-holdback count (D6).
+    let eligible: Vec<&Candidate<'_>> = ranked
+        .iter()
+        .filter(|c| !held_back(c.memory, floor))
+        .collect();
+    let total = eligible.len();
+    let visible: Vec<&Candidate<'_>> = eligible.iter().skip(offset).take(limit).copied().collect();
+    let shown = visible.len();
+    let mut parts: Vec<String> = Vec::new();
+    match format {
+        crate::listing::Format::Table => {
+            for c in &visible {
+                let body = crate::memory::read_body(&root, &c.memory.uid);
+                // FRESH nonce per BLOCK: one nonce across N bodies lets body i forge
+                // body i+1's close (D2). Minted inside the loop, never hoisted.
+                let nonce = uuid::Uuid::new_v4().simple().to_string();
+                parts.push(crate::memory::render_show(
+                    c.memory,
+                    &body,
+                    &nonce,
+                    Some(c.staleness.label()),
+                ));
+            }
+            // Truncation notice: suppressed under --json (D4).
+            if shown < total {
+                parts.push(format_truncation_notice(shown, total, offset, limit));
+            }
+        }
+        crate::listing::Format::Json => {
+            parts.push(format_retrieve_json(&visible)?);
+        }
     }
-    write!(io::stdout(), "{out}")?;
+    let output = parts.concat();
+    write!(io::stdout(), "{output}")?;
     Ok(())
 }
 
@@ -2176,7 +2256,7 @@ weight = {weight}
         });
         let mut c = cand(&m, 0, false, Some(Dimension::Paths));
         c.staleness = Staleness::Unknown;
-        let out = format_find_table(&[c]);
+        let out = format_find_table(&[&c]);
         // full uid (not a short prefix), the matched dim, and the risk columns.
         assert!(out.contains(UID), "full uid printed");
         assert!(out.contains("paths"), "spec column = matched dim");
@@ -2196,7 +2276,8 @@ weight = {weight}
         // Inject a newline post-parse to prove the row formatter scrubs it (F-A10).
         let mut m2 = m.clone();
         m2.title = "row1\nforged-row2".to_owned();
-        let out = format_find_table(&[cand(&m2, 0, false, None)]);
+        let c = cand(&m2, 0, false, None);
+        let out = format_find_table(&[&c]);
         assert!(
             !out.contains("\nforged-row2"),
             "newline must not forge a row"
@@ -2206,7 +2287,8 @@ weight = {weight}
 
     #[test]
     fn format_find_empty_is_empty_string() {
-        assert_eq!(format_find_table(&[]), "");
+        let empty: [&Candidate<'_>; 0] = [];
+        assert_eq!(format_find_table(&empty), "");
     }
 
     // === PHASE-05: the retrieve holdback, floor, and suppress-then-take. =======
@@ -2293,36 +2375,49 @@ weight = {weight}
     // VT-2 / EX-3: a held-back memory is dropped before render (its body is never
     // read), while clean memories pass through.
     #[test]
-    fn select_shown_suppresses_held_back_pre_render() {
+    fn holdback_suppresses_low_trust_critical_pre_offset_limit() {
         let [u0, u1, _] = uids();
         let clean = risky(u0, "medium", "high"); // medium trust ⇒ kept
         let held = risky(u1, "low", "critical"); // low ∧ critical ⇒ suppressed
         let ranked = vec![ranked_cand(&clean), ranked_cand(&held)];
-        let shown = select_shown(&ranked, holdback_floor(None), 10);
-        let uids: Vec<&str> = shown.iter().map(|c| c.memory.uid.as_str()).collect();
-        assert_eq!(uids, vec![u0], "held-back memory absent from the shown set");
+        let floor = holdback_floor(None);
+        let eligible: Vec<&Candidate<'_>> = ranked
+            .iter()
+            .filter(|c| !held_back(c.memory, floor))
+            .collect();
+        let uids: Vec<&str> = eligible.iter().map(|c| c.memory.uid.as_str()).collect();
+        assert_eq!(
+            uids,
+            vec![u0],
+            "held-back memory absent from the eligible set"
+        );
     }
 
-    // K3: suppress-then-take — a held-back memory ranked first does NOT steal the
+    // K3: holdback-then-limit — a held-back memory ranked first does NOT steal the
     // single slot; the clean memory behind it is still shown.
     #[test]
-    fn select_shown_held_back_does_not_consume_a_limit_slot() {
+    fn holdback_does_not_consume_a_limit_slot() {
         let [u0, u1, _] = uids();
         // `held` ranks first (uid u0 < u1), but is suppressed; `clean` takes the slot.
         let held = risky(u0, "low", "high");
         let clean = risky(u1, "high", "high");
         let ranked = vec![ranked_cand(&held), ranked_cand(&clean)];
-        let shown = select_shown(&ranked, holdback_floor(None), 1);
-        assert_eq!(shown.len(), 1);
+        let floor = holdback_floor(None);
+        let eligible: Vec<&Candidate<'_>> = ranked
+            .iter()
+            .filter(|c| !held_back(c.memory, floor))
+            .collect();
+        let visible: Vec<&Candidate<'_>> = eligible.iter().take(1).copied().collect();
+        assert_eq!(visible.len(), 1);
         assert_eq!(
-            shown[0].memory.uid, u1,
+            visible[0].memory.uid, u1,
             "clean memory takes the slot, not held"
         );
     }
 
     // EX-2 / VT-3: the limit caps the shown count.
     #[test]
-    fn select_shown_caps_at_limit() {
+    fn holdback_then_limit_caps_at_limit() {
         let [u0, u1, u2] = uids();
         let ms = [
             risky(u0, "high", "none"),
@@ -2330,7 +2425,14 @@ weight = {weight}
             risky(u2, "high", "none"),
         ];
         let ranked: Vec<Candidate<'_>> = ms.iter().map(ranked_cand).collect();
-        assert_eq!(select_shown(&ranked, holdback_floor(None), 2).len(), 2);
-        assert_eq!(select_shown(&ranked, holdback_floor(None), 10).len(), 3);
+        let floor = holdback_floor(None);
+        let eligible: Vec<&Candidate<'_>> = ranked
+            .iter()
+            .filter(|c| !held_back(c.memory, floor))
+            .collect();
+        let v2: Vec<&Candidate<'_>> = eligible.iter().take(2).copied().collect();
+        assert_eq!(v2.len(), 2);
+        let v10: Vec<&Candidate<'_>> = eligible.iter().take(10).copied().collect();
+        assert_eq!(v10.len(), 3);
     }
 }

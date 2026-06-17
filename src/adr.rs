@@ -191,7 +191,12 @@ pub(crate) fn run_show(
 /// `doctrine adr status` — bind the concrete `AdrStatus` enum at the boundary,
 /// delegate the edit-preserving transition to the spine, then print. The clock is
 /// read here and passed in (the pure/imperative split).
-pub(crate) fn run_status(path: Option<PathBuf>, id: u32, status: AdrStatus, color: bool) -> anyhow::Result<()> {
+pub(crate) fn run_status(
+    path: Option<PathBuf>,
+    id: u32,
+    status: AdrStatus,
+    color: bool,
+) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let gov_root = root.join(ADR_KIND.kind.dir);
     governance::set_status(
@@ -201,7 +206,11 @@ pub(crate) fn run_status(path: Option<PathBuf>, id: u32, status: AdrStatus, colo
         status.as_str(),
         &crate::clock::today(),
     )?;
-    writeln!(io::stdout(), "ADR {id:03}: {}", crate::listing::status_colored(status.as_str(), color))?;
+    writeln!(
+        io::stdout(),
+        "ADR {id:03}: {}",
+        crate::listing::status_colored(status.as_str(), color)
+    )?;
     Ok(())
 }
 

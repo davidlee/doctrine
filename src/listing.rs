@@ -1694,7 +1694,10 @@ mod tests {
     fn status_colored_mapped_status_with_color_produces_ansi() {
         let s = status_colored("accepted", true);
         assert!(s.contains('\u{1b}'), "accepted+color → ANSI present: {s:?}");
-        assert!(s.contains("accepted"), "the status word is still in there: {s:?}");
+        assert!(
+            s.contains("accepted"),
+            "the status word is still in there: {s:?}"
+        );
     }
 
     /// VT-2: unmapped status + color:true → plain.

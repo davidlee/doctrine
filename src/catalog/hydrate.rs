@@ -708,18 +708,14 @@ mod tests {
         let resolved_edge = catalog
             .edges
             .iter()
-            .find(|e| {
-                matches!(&e.target, EdgeTarget::Resolved(k) if k.canonical() == "SL-001")
-            })
+            .find(|e| matches!(&e.target, EdgeTarget::Resolved(k) if k.canonical() == "SL-001"))
             .unwrap();
         assert_eq!(resolved_edge.label.name(), "references");
 
         let unresolved_edge = catalog
             .edges
             .iter()
-            .find(|e| {
-                matches!(&e.target, EdgeTarget::UnresolvedRef { raw } if raw == "SL-999")
-            })
+            .find(|e| matches!(&e.target, EdgeTarget::UnresolvedRef { raw } if raw == "SL-999"))
             .unwrap();
         assert_eq!(unresolved_edge.label.name(), "references");
 
@@ -753,11 +749,7 @@ mod tests {
             root,
             "mem_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "Empty Relations",
-            &[
-                ("", "SL-001"),
-                ("refs", ""),
-                ("", ""),
-            ],
+            &[("", "SL-001"), ("refs", ""), ("", "")],
         );
 
         let catalog = scan_catalog(root).unwrap();
@@ -775,7 +767,15 @@ mod tests {
             .filter(|d| d.severity == Severity::Warning)
             .collect();
         assert_eq!(warnings.len(), 3);
-        assert!(warnings.iter().any(|d| d.message.contains("empty relation label")));
-        assert!(warnings.iter().any(|d| d.message.contains("empty relation target")));
+        assert!(
+            warnings
+                .iter()
+                .any(|d| d.message.contains("empty relation label"))
+        );
+        assert!(
+            warnings
+                .iter()
+                .any(|d| d.message.contains("empty relation target"))
+        );
     }
 }

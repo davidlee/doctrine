@@ -169,7 +169,11 @@ pub(crate) fn run_status(
         status.as_str(),
         &crate::clock::today(),
     )?;
-    writeln!(io::stdout(), "POL {id:03}: {}", crate::listing::status_colored(status.as_str(), color))?;
+    writeln!(
+        io::stdout(),
+        "POL {id:03}: {}",
+        crate::listing::status_colored(status.as_str(), color)
+    )?;
     Ok(())
 }
 
