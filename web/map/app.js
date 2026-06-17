@@ -67,71 +67,19 @@
     });
   }
 
-  function renderRelationshipTable() {
-    var tbody = document.querySelector('.relationship-table tbody');
-    if (!tbody) return;
-
-    if (!state.focusId) {
-      tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[Relationship table]</span></td></tr>';
-      return;
-    }
-
+  // Build edges array for render.relationshipTable from neighbourhood.
+  // Applies kindFilter and returns sorted edges.
+  function buildTableEdges() {
     var nb = model.neighbourhood(state.focusId, state.depth, state.graph);
     var edges = nb.edges;
-
     if (state.kindFilter) {
       edges = edges.filter(function(edge) {
         var src = state.graph.nodes.get(edge.source);
         return src && state.kindFilter.has(src.kindPrefix);
       });
     }
-
     edges.sort(compareEdgesBySource);
-
-    tbody.innerHTML = '';
-    if (edges.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[No relationships to show]</span></td></tr>';
-      return;
-    }
-
-    edges.forEach(function(edge) {
-      var tr = document.createElement('tr');
-
-      var srcCell = document.createElement('td');
-      var srcA = document.createElement('a');
-      srcA.href = '#' + router.buildHash('focus', edge.source, state.depth);
-      srcA.textContent = edge.source;
-      srcCell.appendChild(srcA);
-      tr.appendChild(srcCell);
-
-      var srcTitle = document.createElement('td');
-      var srcNode = state.graph.nodes.get(edge.source);
-      srcTitle.textContent = srcNode ? srcNode.title : '';
-      tr.appendChild(srcTitle);
-
-      var labelCell = document.createElement('td');
-      var labelA = document.createElement('a');
-      labelA.href = '#' + router.buildHash('edge', edge.id, state.depth);
-      labelA.className = 'edge-id-link';
-      labelA.textContent = edge.label;
-      labelA.title = 'Edge: ' + edge.id;
-      labelCell.appendChild(labelA);
-      tr.appendChild(labelCell);
-
-      var tgtCell = document.createElement('td');
-      var tgtA = document.createElement('a');
-      tgtA.href = '#' + router.buildHash('focus', edge.target, state.depth);
-      tgtA.textContent = edge.target;
-      tgtCell.appendChild(tgtA);
-      tr.appendChild(tgtCell);
-
-      var tgtTitle = document.createElement('td');
-      var tgtNode = state.graph.nodes.get(edge.target);
-      tgtTitle.textContent = tgtNode ? tgtNode.title : '';
-      tr.appendChild(tgtTitle);
-
-      tbody.appendChild(tr);
-    });
+    return edges;
   }
 
   function collectKindFilter() {
@@ -158,7 +106,13 @@
 
   function applyFilters() {
     renderFilteredEntities();
-    renderRelationshipTable();
+    render.relationshipTable({
+      container: render.elements.relationshipTableBody,
+      edges: buildTableEdges(),
+      graph: state.graph,
+      focusId: state.focusId,
+      depth: state.depth
+    });
   }
 
   function wireFilterCheckboxes() {
@@ -304,28 +258,6 @@
   /* -----------------------------------------------------------------------
    * SVG Graph rendering (PHASE-03) — rendering pipeline + stale-render guard
    * --------------------------------------------------------------------- */
-  function renderHoverPane(nodeId) {
-    var pane = document.querySelector('.hover-detail');
-    if (!pane) return;
-
-    if (!nodeId) {
-      pane.innerHTML = '<span class="placeholder">Hover a node for details</span>';
-      return;
-    }
-
-    var node = state.graph.nodes.get(nodeId);
-    if (!node) {
-      pane.innerHTML = '<span class="placeholder">Node not found</span>';
-      return;
-    }
-
-    var html = '<div class="hover-detail-content">';
-    html += '<span class="hover-detail-title">' + node.id + ': ' + render.escapeHtml(node.title) + '</span>';
-    html += '<span class="hover-detail-meta">' + node.kindLabel + ' \u00b7 ' + node.status + '</span>';
-    html += '</div>';
-    pane.innerHTML = html;
-  }
-
   function renderGraphPane(container, focusId, depth) {
     depth = Math.max(0, Math.min(3, depth));
 
@@ -365,8 +297,14 @@
           return t ? t.textContent.trim() : '';
         }, {
           onClick: function(id) { router.setFocus(id, state.depth); },
-          onHoverEnter: function(id) { state.hoveredId = id; renderHoverPane(id); },
-          onHoverLeave: function() { state.hoveredId = null; renderHoverPane(null); }
+          onHoverEnter: function(id) {
+            state.hoveredId = id;
+            render.hoverPane({ container: render.elements.hoverDetail, node: state.graph.nodes.get(id) });
+          },
+          onHoverLeave: function() {
+            state.hoveredId = null;
+            render.hoverPane({ container: render.elements.hoverDetail, node: null });
+          }
         });
         svg.dimLegend(nb);
       }
@@ -580,7 +518,7 @@
 
     if (route.view === 'edge') {
       renderEdgeDetail(route.id);
-      renderHoverPane(null);
+      render.hoverPane({ container: render.elements.hoverDetail, node: null });
       render.setViewMode('edge');
       mdPane = document.querySelector('.markdown-pane');
       if (mdPane) mdPane.innerHTML = '<span class="placeholder">[Markdown content]</span>';
@@ -607,8 +545,14 @@
       focusId: state.focusId,
       graph: state.graph
     });
-    renderRelationshipTable();
-    renderHoverPane(null);
+    render.relationshipTable({
+      container: render.elements.relationshipTableBody,
+      edges: buildTableEdges(),
+      graph: state.graph,
+      focusId: state.focusId,
+      depth: state.depth
+    });
+    render.hoverPane({ container: render.elements.hoverDetail, node: null });
 
     // Sync depth button active state
     var depthBtns = document.querySelectorAll('.depth-btn');
