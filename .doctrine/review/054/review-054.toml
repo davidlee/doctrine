@@ -1,0 +1,43 @@
+id    = 54
+slug  = "reconciliation-review-of-sl-086"
+title = "reconciliation review of SL-086"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "implementor"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-086"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "F-1: JSON blocked fields flat vs design's nested blocked object"
+detail = """
+Expected (design.md §4 JSON output shape): `{ "blocked": { "slices": [...], "backlog": [...] } }`.
+
+Observed: `{ "blocked_slices": [...], "blocked_backlog": [...] }` — flat top-level keys instead of a nested "blocked" object.
+
+The Status struct has blocked_slices and blocked_backlog as separate fields, and #[serde(flatten)] in StatusEnvelope flattens them to top-level keys rather than nesting under a "blocked" parent.
+
+Evidence: src/status.rs Status struct (lines 79-86); render_json StatusEnvelope with #[serde(flatten)] (lines 222-226); design.md §4 JSON output shape example.
+
+Impact: Agents consuming --json per the design contract would access response.blocked.slices but get undefined — must use response.blocked_slices instead. Human output correctly uses separate sections per D10."""
+disposition = "design-wrong"
+response = "The design.md §4 JSON output shape shows nested `blocked.slices`/`blocked.backlog` but the Status struct definition in the same design section uses flat `blocked_slices`/`blocked_backlog` fields — the design is internally inconsistent. The flat keys match the struct definition, the human output (separate sections per D10), and are simpler for agents to consume. Fix: update design.md §4 JSON output shape example to use flat `blocked_slices`/`blocked_backlog` keys consistent with the struct definition."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "F-2: Spurious double newline between Boot and Recent commits sections"
+detail = 'Expected: Single newline separating Boot and Recent commits sections per design §4 example.\n\nObserved: Two newlines between "boot.md stale from commit 09d4e46" and "Recent commits". The boot_line function appends a trailing \n, and the Recent commits section started with `\n\nRecent commits\n`, producing a blank line.\n\nEvidence: src/status.rs line ~199: `parts.push("\n\nRecent commits\n".to_string());`\n\nFix: Changed to single `\nRecent commits\n` — already applied in this audit session, uncommitted.'
+disposition = "fix-now"
+response = 'Already fixed in this audit session. Changed `parts.push("\n\nRecent commits\n".to_string())` to `parts.push("\nRecent commits\n".to_string())` in src/status.rs. The fix is uncommitted — will be included in the audit commit.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
