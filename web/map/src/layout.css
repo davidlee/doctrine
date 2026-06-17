@@ -1,0 +1,54 @@
+/* Doctrine Map Explorer — layout (SL-093 PHASE-01) */
+
+@layer layout {
+  /* ---------------------------------------------------------------------------
+   * Body
+   * ------------------------------------------------------------------------- */
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.5;
+  }
+
+  a { color: var(--link); }
+
+  /* ---------------------------------------------------------------------------
+   * CSS Grid layout
+   * ------------------------------------------------------------------------- */
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ---------------------------------------------------------------------------
+   * Main content area
+   * ------------------------------------------------------------------------- */
+  .main {
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
+
+  /* ---------------------------------------------------------------------------
+   * Page-mode visibility (driven by TS in PHASE-02)
+   * ------------------------------------------------------------------------- */
+  .layout[data-page-mode="edge"] .depth-selector,
+  .layout[data-page-mode="edge"] .relationship-table,
+  .layout[data-page-mode="edge"] .table-toggle {
+    display: none;
+  }
+
+  .layout[data-page-mode="concept-map"] .relationship-table,
+  .layout[data-page-mode="concept-map"] .table-toggle {
+    display: none;
+  }
+
+  /* ---------------------------------------------------------------------------
+   * Utility
+   * ------------------------------------------------------------------------- */
+  .u-hidden {
+    display: none;
+  }
+}

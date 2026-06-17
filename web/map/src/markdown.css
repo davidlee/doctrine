@@ -1,0 +1,63 @@
+/* Doctrine Map Explorer — markdown (SL-093 PHASE-01) */
+
+@layer layout {
+  /* ---------------------------------------------------------------------------
+   * Markdown pane
+   * ------------------------------------------------------------------------- */
+  .markdown-pane {
+    border: 1px solid var(--border);
+    padding: 0;
+  }
+
+  .markdown-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--sidebar-bg);
+  }
+
+  .markdown-toolbar-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .fullscreen-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    color: var(--fg);
+  }
+
+  .fullscreen-toggle:hover {
+    background: var(--hover-bg);
+  }
+
+  .markdown-body {
+    padding: 1rem;
+  }
+
+  /* Fullscreen mode */
+  .markdown-pane.fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    background: var(--bg);
+    overflow-y: auto;
+    border: none;
+  }
+
+  .markdown-pane.fullscreen .markdown-body {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+}
