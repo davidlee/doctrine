@@ -8,17 +8,18 @@
 @layer reset, tokens, layout, components;
 ```
 
-| Layer | Priority | Contents | File |
+| Layer | Priority | Contents | File(s) |
 |---|---|---|---|
 | `reset` | lowest | `box-sizing: border-box` | `reset.css` |
 | `tokens` | — | All custom properties + dark-mode overrides | `tokens.css` |
-| `layout` | — | Body, grid, sidebar, search, filter, depth, entity-list, kind-pills, refresh, focus-header, graph/SVG, hover, markdown, fullscreen, tables, edge detail, legend, utilities | `layout.css` |
+| `layout` | — | Body, grid, sidebar, main, search, filter, depth, entity-list, kind-pills, refresh, focus-header, graph/SVG, hover, markdown, fullscreen, tables, edge detail, legend, utilities, page-mode visibility | `layout.css`, `sidebar.css`, `graph.css`, `markdown.css`, `table.css` (all `@import`ed into the same `layout` layer, cascade order preserved by import sequence) |
 | `components` | highest | Concept-map authoring + priority/DAG view | `concept-map.css`, `priority.css` |
 
 Custom properties (`tokens` layer) resolve globally regardless of layer, so
 `tokens` needs no cascade priority relative to `layout`/`components`. Rules in
 `components` always win over `layout` regardless of specificity. Within a
-layer, normal specificity applies.
+layer, normal specificity applies — the `@import` order of layout sub-files
+preserves the original cascade exactly.
 
 New slices add CSS by appending an `@import` to the appropriate layer in
 `style.css` — no existing files touched.
@@ -27,10 +28,14 @@ New slices add CSS by appending an `@import` to the appropriate layer in
 
 ```
 web/map/src/
-  style.css          ← entry point (~10 lines)
+  style.css          ← entry point (~15 lines)
   tokens.css         ← all custom properties (~80 lines)
   reset.css          ← box-sizing (~8 lines)
-  layout.css         ← shared layout/CSS (~570 lines)
+  layout.css         ← grid + body + main + page-mode visibility (~65 lines)
+  sidebar.css        ← search, filter, depth, entity-list, kind-pills, refresh, focus-header (~260 lines)
+  graph.css          ← graph area, SVG nodes, hover pane, placeholder (~110 lines)
+  markdown.css       ← markdown pane, fullscreen, toolbar (~100 lines)
+  table.css          ← relationship table, edge detail, legend (~100 lines)
   concept-map.css    ← CM authoring UI (~140 lines)
   priority.css       ← priority/DAG (~65 lines)
 ```
@@ -43,6 +48,10 @@ web/map/src/
 @import './reset.css' layer(reset);
 @import './tokens.css' layer(tokens);
 @import './layout.css' layer(layout);
+@import './sidebar.css' layer(layout);
+@import './graph.css' layer(layout);
+@import './markdown.css' layer(layout);
+@import './table.css' layer(layout);
 @import './concept-map.css' layer(components);
 @import './priority.css' layer(components);
 ```
@@ -52,11 +61,23 @@ web/map/src/
 ### Cascade contract
 
 - Rules in `components` always win over `layout` regardless of specificity.
-- Within a layer, normal specificity rules apply.
+- Within the `layout` layer, `@import` order is the canonical cascade — identical
+  to the original top-to-bottom file order. Each sub-file's position is
+  verified by matching its section comment headers to the original.
+- Every CSS rule lives in an explicit `@layer` block. No bare selectors outside
+  a layer — this prevents unlayered style escalation (per CSS spec, unlayered
+  beats all layers).
 - `!important` is banned — if a component needs to beat layout, it already
   lives in the higher layer.
 - No `:root {}` block appears outside `tokens.css`.
 - No `@media (prefers-color-scheme: dark)` block appears outside `tokens.css`.
+
+### Vite processing note
+
+Vite resolves CSS `@import` and `@layer` identically in dev (HMR-injected) and
+prod (bundled). No config changes needed. Verified: Vite 5+ supports `@layer`
+in both modes; `@import url() layer(name)` is part of the CSS Cascading and
+Inheritance Level 5 spec, shipped in all modern browsers.
 
 ## Naming convention
 
@@ -65,21 +86,27 @@ web/map/src/
 | Layout | Flat, descriptive | `.sidebar`, `.search-input`, `.graph-area` |
 | Layout states | BEM `--modifier` | `.doctrine-node--focus`, `.entity-item--active`, `.depth-btn--active` |
 | Components | Mandatory prefix | `cm-*`, `priority-*` |
-| Component states | Prefix + `--modifier` | `.cm-edge-row--hidden`, `.priority-node--faded` |
+| Component states | Prefix + `--modifier` | `.priority-node--focus`, `.priority-node--hover` |
 | Utilities | `u-` prefix | `.u-hidden`, `.u-sr-only` |
 
 Class renames (zero visual impact):
 
 | Current | New | Affected files |
 |---|---|---|
-| `.hidden` | `.relationship-table--hidden` | `layout.css`, `app.ts`, `render.ts` |
-| `.entity-item.active` | `.entity-item--active` | `layout.css`, `render.ts` |
-| `.depth-btn.active` | `.depth-btn--active` | `layout.css`, `render.ts` |
-| `.view-btn.active` | `.view-btn--active` | `layout.css`, `app.ts`, `render.ts` |
-| `.nav-highlight` | `.entity-item--nav-highlight` | `layout.css`, `search.ts` |
-| `.markdown-pane.fullscreen .markdown-body` | `.markdown-body--fullscreen` | `layout.css`, `render.ts` |
+| `.hidden` | `.relationship-table--hidden` | `table.css`, `app.ts`, `render.ts` |
+| `.entity-item.active` | `.entity-item--active` | `sidebar.css`, `render.ts` |
+| `.depth-btn.active` | `.depth-btn--active` | `sidebar.css`, `render.ts` |
+| `.view-btn.active` | `.view-btn--active` | `table.css`, `app.ts`, `render.ts` |
+| `.nav-highlight` | `.entity-item--nav-highlight` | `sidebar.css`, `search.ts` |
+| `.markdown-pane.fullscreen .markdown-body` | `.markdown-body--fullscreen` | `markdown.css`, `render.ts` |
 | `.cm-diagnostics-panel h3` | `.cm-diagnostics-panel__title` | `concept-map.css`, `concept-map.ts` |
-| `.cm-diag-item:last-child` | `.cm-diag-item--last` (set by JS) | `concept-map.css`, `concept-map.ts` |
+
+**Not renamed** (robust CSS, not DOM-structure coupling):
+- `.cm-diag-item:last-child` — `:last-child` is a CSS pseudo-class that
+  automatically tracks DOM changes; it is not a brittle compound selector.
+- `.entity-item.active .kind-pill` — becomes `.kind-pill--active` on the pill
+  element itself (set by JS when the entity-item becomes active), eliminating
+  the descendant selector.
 
 ## Custom property token taxonomy
 
@@ -91,13 +118,16 @@ dark-mode `@media` block. Organised as:
   :root {
     /* Kind palette (22 kinds) */
     --kind-SL: #4A90D9;
-    /* ... */
+    /* ... (20 more kind tokens unchanged) */
+    --kind-REV: #A04000;
 
     /* Theme (light) */
     --bg: #ffffff;
     --fg: #1a1a1a;
     --muted: #6b6b6b;
     --border: #e0e0e0;
+    --border-light: #e0e0e0;   /* was undefined; promoted from CM fallback */
+    --bg-card: #fafafa;         /* was undefined; promoted from CM fallback */
     --hover-bg: #f5f5f5;
     --sidebar-bg: #f8f9fa;
     --link: #2563eb;
@@ -118,8 +148,6 @@ dark-mode `@media` block. Organised as:
     --cm-warning-divider: #f5e6a3;
     --cm-btn-text: #ffffff;
     --cm-input-border: #d0d0d0;
-    --cm-card-bg: #fafafa;
-    --cm-card-border: #e0e0e0;
 
     /* Priority palette */
     --priority-actionable-bg: #27AE60;
@@ -139,6 +167,8 @@ dark-mode `@media` block. Organised as:
       --fg: #e0e0e0;
       --muted: #9b9b9b;
       --border: #333333;
+      --border-light: #444444;
+      --bg-card: #2a2a2a;
       --hover-bg: #2a2a2a;
       --sidebar-bg: #141414;
       --link: #60a5fa;
@@ -159,8 +189,6 @@ dark-mode `@media` block. Organised as:
       --cm-warning-divider: #3a3410;
       --cm-btn-text: #1a1a1a;
       --cm-input-border: #444444;
-      --cm-card-bg: #2a2a2a;
-      --cm-card-border: #333333;
 
       /* Priority overrides */
       --priority-actionable-bg: #2ECC71;
@@ -173,11 +201,26 @@ dark-mode `@media` block. Organised as:
 }
 ```
 
-Ghost tokens replaced:
-- `--border-light` (undefined, fallback `#e0e0e0`) → `--cm-card-border`
-- `--bg-card` (undefined, fallback `#fafafa`) → `--cm-card-bg`
+### Design decisions
+
+- **`--border-light` and `--bg-card` are theme-level, not CM-specific.** They
+  were undefined ghost tokens with CM hardcoded fallbacks. Rather than
+  narrowing them to `--cm-card-border`/`--cm-card-bg`, they are promoted to
+  proper theme tokens alongside `--border` and `--bg`. Any future component
+  needing a lighter border or card background uses these tokens. The CM
+  section consumes them as `var(--border-light)` and `var(--bg-card)` — no
+  fallbacks needed.
+- **CM palette tokens (`--cm-*`) are component-specific.** They capture
+  semantic colours unique to the concept-map authoring surface (error,
+  success, warning states). These are not theme-level because they have no
+  meaning outside the CM UI. If another component later needs an error state,
+  a cross-component error palette should be designed then — not now.
 
 ## `style.display` → class-based toggling
+
+Two distinct use cases, two mechanisms:
+
+### 1. Generic visibility toggles → `.u-hidden`
 
 Define utility in `layout.css`:
 
@@ -185,105 +228,115 @@ Define utility in `layout.css`:
 .u-hidden { display: none; }
 ```
 
-Replace all `style.display` manipulation with `classList` operations on
-`.u-hidden`.
+| Site count | Files | Context |
+|---|---|---|
+| 6 | `concept-map.ts` | `renderEdgeTable`, `renderDiagnostics`, `renderAddEdgeForm` — show/hide CM panels |
+| 6 | `app.ts` | Legend toggle (priority ↔ entity legend), error banner, diagnostics placeholder |
+| 5 inline | `index.html` (4) + `concept-map.ts` generated HTML (1) | `style="display:none"` → class `u-hidden` |
 
-### concept-map.ts (6 sites)
+Replace `style.display = 'none'`/`'block'` with `classList.add('u-hidden')` /
+`classList.remove('u-hidden')`.
+
+### 2. Page-mode visibility → `data-page-mode` + CSS
+
+`setPageMode()` in `render.ts` controls element visibility based on which view
+is active (entity-graph, actionability, concept-map, edge). These are semantic
+page-mode switches, not generic show/hide toggles. Using `.u-hidden` loses the
+semantic intent.
+
+**Mechanism:** Set `data-page-mode` on the `.layout` root element in TS; CSS
+rules handle visibility.
+
+```css
+/* Page-mode visibility — in layout.css */
+.layout[data-page-mode="edge"] .depth-selector,
+.layout[data-page-mode="edge"] .relationship-table,
+.layout[data-page-mode="edge"] .table-toggle { display: none; }
+
+.layout[data-page-mode="concept-map"] .relationship-table,
+.layout[data-page-mode="concept-map"] .table-toggle { display: none; }
+```
 
 ```typescript
-// Before: container.style.display = 'none'
-// After:  container.classList.add('u-hidden')
+// render.ts — setPageMode
+export function setPageMode(mode: 'entity-graph' | 'actionability' | 'concept-map' | 'edge'): void {
+  const layout = document.querySelector<HTMLElement>('.layout');
+  if (layout) layout.dataset.pageMode = mode;
 
-// Before: container.style.display = 'block'
-// After:  container.classList.remove('u-hidden')
+  // CM containers: hide AND clear when leaving concept-map mode (CM-specific logic)
+  if (mode !== 'concept-map') {
+    elements.cmEdgeTable?.classList.add('u-hidden');
+    if (elements.cmEdgeTable) elements.cmEdgeTable.innerHTML = '';
+    elements.cmAddEdgeForm?.classList.add('u-hidden');
+    if (elements.cmAddEdgeForm) elements.cmAddEdgeForm.innerHTML = '';
+    elements.cmDiagnosticsPanel?.classList.add('u-hidden');
+    if (elements.cmDiagnosticsPanel) elements.cmDiagnosticsPanel.innerHTML = '';
+  }
+}
 ```
 
-Toggles `cm-edge-table`, `cm-diagnostics-panel`, `cm-add-edge-form`.
+| Site count | File | Context |
+|---|---|---|
+| 6 | `render.ts` `setPageMode()` | Page-mode visibility for depthSelector, relationshipTable, tableToggle, cmEdgeTable, cmAddForm, cmDiagnosticsPanel |
+| 3 | `app.ts` (lines 709, 723, 727) | Error banner visibility (generic toggle — `.u-hidden`) |
 
-### render.ts (8 sites)
+**Total display manipulation sites: 21 TS + 5 inline HTML = 26.**
 
-```typescript
-// depthSelector, relationshipTable, tableToggle — toggle .u-hidden
-// cmEdgeTable, cmAddForm, cmDiagPanel — toggle .u-hidden
-```
+### Summary
 
-### app.ts (8 sites)
+| Mechanism | Sites | Files |
+|---|---|---|
+| `.u-hidden` classList toggle | 15 TS + 5 inline | `concept-map.ts`, `app.ts`, `index.html` |
+| `data-page-mode` + CSS | 6 TS | `render.ts` `setPageMode()` |
 
-```typescript
-// Legend toggle, error banner, placeholder — toggle .u-hidden
-```
+## Pre-existing coupling acknowledged
 
-### index.html (4 inlines)
-
-```html
-<!-- Before -->
-<div class="legend-items priority-legend" style="display:none">
-<div class="cm-diagnostics-panel" style="display:none;">
-<div class="cm-edge-table" style="display:none;">
-<div class="cm-add-edge-form" style="display:none;">
-
-<!-- After -->
-<div class="legend-items priority-legend u-hidden">
-<div class="cm-diagnostics-panel u-hidden">
-<div class="cm-edge-table u-hidden">
-<div class="cm-add-edge-form u-hidden">
-```
-
-### concept-map.ts generated HTML (1 inline)
-
-`renderAddEdgeForm` generates a `<div class="cm-add-error" style="display:none;">` in
-its innerHTML string (line 306). Replace with `class="cm-add-error u-hidden"`.
+| Issue | Source | Disposition |
+|---|---|---|
+| `data-key` attributes in concept-map.ts | SL-076 | Pre-existing DOM coupling (same fragility class as F-9 compound selectors). Out of scope for this slice. |
 
 ## RV-065 findings resolved
 
 | Finding | Resolution |
 |---|---|
-| **F-1** (major) — Monolithic file | Split into 6 files with `@layer` boundaries |
+| **F-1** (major) — Monolithic file | Split into 10 files with `@layer` boundaries: `tokens.css`, `reset.css`, `layout.css`, `sidebar.css`, `graph.css`, `markdown.css`, `table.css`, `concept-map.css`, `priority.css`, `style.css` (entry) |
 | **F-2** (major) — Second `:root` block | Consolidated into single `tokens.css` `:root` block |
-| **F-3** (major) — Undefined `--border-light`/`--bg-card` | Replaced by `--cm-card-border`/`--cm-card-bg`, defined with dark variants |
-| **F-4** (minor) — 18 hardcoded hex colours | 17 `--cm-*` tokens defined in `tokens.css`; zero raw hex in `concept-map.css` |
+| **F-3** (major) — Undefined `--border-light`/`--bg-card` | Promoted to theme-level tokens; defined with dark variants. All fallbacks removed. |
+| **F-4** (minor) — 18 hardcoded hex colours | 15 `--cm-*` tokens defined in `tokens.css`; remaining 3 (`--border-light`, `--bg-card`, `--cm-input-border`) use existing or promoted theme tokens. Zero raw hex in `concept-map.css`. |
 | **F-5** (minor) — Inconsistent naming | Prefix-scoped with BEM-modifier states per naming convention table above |
 | **F-6** (minor) — Dark mode gaps | Every CM/priority token has a dark variant in `tokens.css` `@media` block |
 | **F-7** (nit) — Scattered `--link` | Moved into canonical `:root` block with dark variant |
-| **F-8** (minor) — `style.display` vs class toggling | All 22 JS assignments + 4 HTML inlines replaced with `.u-hidden` classList operations |
-| **F-9** (nit) — Compound selectors | `.markdown-body--fullscreen`, `.cm-diagnostics-panel__title`, `.cm-diag-item--last` — flat, composable |
+| **F-8** (minor) — `style.display` vs class toggling | All 26 display manipulations replaced. Generic toggles → `.u-hidden`; page-mode visibility → `data-page-mode` + CSS. |
+| **F-9** (nit) — Compound selectors | `.markdown-body--fullscreen`, `.cm-diagnostics-panel__title`, `.kind-pill--active` — flat, composable. `:last-child` preserved (is robust CSS). |
 | **F-10** (minor) — `.hidden` too broad | `.relationship-table--hidden`; `u-` utility prefix prevents framework collision |
 
 ## Risks
 
 - **Cascade order sensitivity.** The `@import` order in `style.css` is the
-  canonical cascade. Module content must not depend on position within a layer
-  beyond what `@layer` guarantees. Mitigation: all layout rules go in
-  `layout.css` as a single flat sequence; no cross-module ordering dependency
-  between `concept-map.css` and `priority.css`.
+  canonical cascade. Verified by matching section comment headers in each
+  layout sub-file against the original `style.css` — the order is identical.
 - **Unlayered style escalation.** Per CSS spec, any rule outside a declared
   layer beats all layered rules regardless of specificity. Mitigation:
   contract: every CSS rule in the project lives in an explicit `@layer` block.
-  No bare selectors outside a layer. The `:root` blocks in `tokens.css`, the
-  utilities in `layout.css`, and every component rule must be wrapped in its
-  layer. This is enforced by file structure — each file contains exactly one
-  `@layer` block.
-- **layout.css size.** At ~570 lines, `layout.css` is a large file within a
-  single layer. It preserves the exact cascade order of the original file,
-  which has been battle-tested across 4 slices. Intra-layer specificity
-  conflicts are resolved by normal cascade — same as today. Splitting further
-  into sub-layers (`layout-grid`, `layout-sidebar`, etc.) would add ceremony
-  without benefit since these sections don't compete on specificity.
+  No bare selectors outside a layer.
 - **Visual regression.** Splitting CSS into layers can expose latent
   specificity assumptions. Mitigation: visual comparison gate before closure
   (all views and states listed in Verification).
 - **JS class name changes.** Renames in CSS must match renames in TS;
   TypeScript will catch some but not all mismatches (classList strings are
   opaque). Mitigation: visual smoke test covers all interactive states.
-- **`.cm-diag-item--last` requires JS support.** The `:last-child` pseudo-class
-  is replaced by an explicit modifier class. `renderDiagnostics` in
-  `concept-map.ts` must add `.cm-diag-item--last` to the final `<div>` in its
-  generated HTML.
+- **`data-page-mode` approach is new mechanism.** The `setPageMode` refactor
+  introduces a `data-page-mode` attribute on `.layout`. This replaces 6
+  imperative `style.display` assignments with declarative CSS rules.
+  Functional equivalence is verified by the visual comparison gate.
 
 ## Verification
 
-1. `npm run build` — Vite bundles all `@import` cascade without error
-2. Visual comparison — side-by-side browser tabs (before build vs after),
+1. `npm run build` — Vite bundles all `@import` cascade without error.
+   `npm run dev` confirms HMR resolves `@layer`/`@import` identically.
+2. Cascade-order audit: diff original `style.css` section headers against
+   `@import` order in new `style.css` — identical sequence.
+3. Visual comparison — side-by-side browser tabs (before build vs after),
    each view in both light and dark mode:
    - Entity focus: `#/focus/SL-072?depth=2` — sidebar, graph, hover, markdown, table
    - Concept map focus: `#/focus/CM-001?depth=2` — CM diagram, edge table, add form, diagnostics
@@ -292,13 +345,13 @@ its innerHTML string (line 306). Replace with `class="cm-add-error u-hidden"`.
    - Priority/DAG: actionability view
    - Empty/error states: search miss, server unreachable
    Zero visual differences expected.
-3. Design-system audit:
+4. Design-system audit:
    - `grep -n 'var(--.*,.*)' web/map/src/*.css` → no fallbacks (all tokens defined)
    - `grep -n '#[0-9a-fA-F]' web/map/src/concept-map.css` → zero hits
-   - `grep -n ':root' web/map/src/layout.css web/map/src/reset.css web/map/src/concept-map.css web/map/src/priority.css` → zero hits
+   - `grep -n ':root' web/map/src/layout.css web/map/src/reset.css web/map/src/sidebar.css web/map/src/graph.css web/map/src/markdown.css web/map/src/table.css web/map/src/concept-map.css web/map/src/priority.css` → zero hits
    - `grep -rn 'style\.display' web/map/src/` → zero hits in TS
-4. `npx eslint` — zero warnings
-5. `just check` — root package tests pass (no Rust changes)
+5. `npx eslint` — zero warnings
+6. `just check` — root package tests pass (no Rust changes)
 
 ## Open questions
 
