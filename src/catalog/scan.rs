@@ -146,20 +146,48 @@ pub(crate) struct ScannedEntity {
 /// Disk touches live here (the thin imperative shell — `scan_ids`/
 /// `status_and_title_for`/`outbound_for` read the entity tomls); a consumer's
 /// tally/mint/edge policy stays pure over the returned `Vec`.
-pub(crate) fn scan_entities(root: &Path) -> anyhow::Result<Vec<ScannedEntity>> {
+pub(crate) fn scan_entities(
+    root: &Path,
+    diagnostics: &mut Vec<CatalogDiagnostic>,
+) -> anyhow::Result<Vec<ScannedEntity>> {
     let mut out = Vec::new();
     for kref in integrity::KINDS {
         let prefix = kref.kind.prefix;
         let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
         ids.sort_unstable();
         for id in ids {
-            let (status, title) = status_and_title_for(root, kref, id)?;
+            let (status, title) = match status_and_title_for(root, kref, id) {
+                Ok(v) => v,
+                Err(e) => {
+                    diagnostics.push(CatalogDiagnostic {
+                        file: root.join(kref.kind.dir).join(format!("{id:03}")),
+                        entity_key: Some(CatalogKey::Numbered(EntityKey { prefix, id })),
+                        field: None,
+                        message: format!("failed to read {prefix}-{id:03}: {e}"),
+                        severity: Severity::Error,
+                    });
+                    continue;
+                }
+            };
+            let outbound = match outbound_for(root, kref.kind, id) {
+                Ok(v) => v,
+                Err(e) => {
+                    diagnostics.push(CatalogDiagnostic {
+                        file: root.join(kref.kind.dir).join(format!("{id:03}")),
+                        entity_key: Some(CatalogKey::Numbered(EntityKey { prefix, id })),
+                        field: None,
+                        message: format!("failed to read relations for {prefix}-{id:03}: {e}"),
+                        severity: Severity::Error,
+                    });
+                    continue;
+                }
+            };
             out.push(ScannedEntity {
                 key: EntityKey { prefix, id },
                 kind: kref.kind,
                 status,
                 title,
-                outbound: outbound_for(root, kref.kind, id)?,
+                outbound,
             });
         }
     }
@@ -314,7 +342,7 @@ mod tests {
         seed_slice(root, 1, &[]);
         seed_adr(root, 2, &[]);
 
-        let scanned = scan_entities(root).unwrap();
+        let scanned = scan_entities(root, &mut vec![]).unwrap();
         let keys = canonical_keys(&scanned);
 
         // KINDS-table order: SL before ADR. Within SL: id ascending.
@@ -333,7 +361,7 @@ mod tests {
         let root = dir.path();
         seed_fixture(root);
 
-        let scanned = scan_entities(root).unwrap();
+        let scanned = scan_entities(root, &mut vec![]).unwrap();
         // Order is proven by T2; here we assert shape on the first entity.
         let sl001 = &scanned[0];
         // Shape: (key.canonical(), kind.prefix, status, title, outbound tuples).
@@ -389,7 +417,7 @@ mod tests {
 
         let pg = crate::priority::graph::build(root).unwrap();
         // Node count equals scanned entity count.
-        let scanned = scan_entities(root).unwrap();
+        let scanned = scan_entities(root, &mut vec![]).unwrap();
         assert_eq!(pg.attrs.len(), scanned.len());
         // Every scanned key resolves in the projection.
         let scanned_keys: std::collections::BTreeSet<EntityKey> =
@@ -624,5 +652,137 @@ mod tests {
 
         assert!(records.is_empty());
         assert!(diags.is_empty());
+    }
+
+    // == SL-092 PHASE-02: graceful scan degradation tests ==
+
+    /// VT-1: malformed sibling TOML (status_and_title_for failure) →
+    /// remaining entities + one Error diagnostic with correct entity_key.
+    #[test]
+    fn scan_entities_skips_malformed_meta_and_emits_diagnostic() {
+        let dir = tmp();
+        let root = dir.path();
+
+        // SL-001: well-formed
+        seed_slice(root, 1, &[]);
+        // SL-002: malformed TOML — meta parse will fail
+        write(
+            root,
+            ".doctrine/slice/002/slice-002.toml",
+            "id = notanumber\n",
+        );
+        write(root, ".doctrine/slice/002/slice-002.md", "scope\n");
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags).unwrap();
+
+        // Only SL-001 returned.
+        assert_eq!(scanned.len(), 1);
+        assert_eq!(scanned[0].key.canonical(), "SL-001");
+        assert_eq!(scanned[0].title, "S1");
+
+        // One diagnostic for SL-002.
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert_eq!(
+            diags[0].entity_key.as_ref().map(|k| k.canonical()),
+            Some("SL-002".to_string())
+        );
+        assert!(diags[0].file.to_string_lossy().contains("002"));
+        assert!(diags[0].message.contains("SL-002"));
+    }
+
+    /// VT-2: malformed [[relation]] block (outbound_for failure) →
+    /// entity skipped + Error diagnostic; message differs from VT-1 meta case.
+    #[test]
+    fn scan_entities_skips_malformed_relations_and_emits_diagnostic() {
+        let dir = tmp();
+        let root = dir.path();
+
+        // SL-001: well-formed
+        seed_slice(root, 1, &[]);
+        // SL-002: valid meta but malformed [[relation]] — missing target field
+        write(
+            root,
+            ".doctrine/slice/002/slice-002.toml",
+            "id = 2\nslug = \"s2\"\ntitle = \"S2\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [[relation]]\nlabel = \"supersedes\"\n",
+        );
+        write(root, ".doctrine/slice/002/slice-002.md", "scope\n");
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags).unwrap();
+
+        // Only SL-001 returned.
+        assert_eq!(scanned.len(), 1);
+        assert_eq!(scanned[0].key.canonical(), "SL-001");
+
+        // One Error diagnostic for SL-002.
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert_eq!(
+            diags[0].entity_key.as_ref().map(|k| k.canonical()),
+            Some("SL-002".to_string())
+        );
+        // Message must mention "relations" (outbound_for failure), not just "read" (meta failure).
+        assert!(diags[0].message.contains("relations"));
+    }
+
+    /// VT-3: all-malformed siblings → empty Vec + N diagnostics; no panic.
+    #[test]
+    fn scan_entities_all_malformed_returns_empty_no_panic() {
+        let dir = tmp();
+        let root = dir.path();
+
+        // Three malformed SL entities, none parse properly.
+        for id in 1..=3u32 {
+            write(
+                root,
+                &format!(".doctrine/slice/{id:03}/slice-{id:03}.toml"),
+                "id = garbage\n",
+            );
+            write(
+                root,
+                &format!(".doctrine/slice/{id:03}/slice-{id:03}.md"),
+                "scope\n",
+            );
+        }
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags).unwrap();
+
+        assert!(scanned.is_empty(), "no entities should be returned");
+        assert_eq!(diags.len(), 3, "one diagnostic per malformed entity");
+        for d in &diags {
+            assert_eq!(d.severity, Severity::Error);
+        }
+    }
+
+    /// VT-4: mixed-validity (two good, one bad) → two entities, one diagnostic.
+    #[test]
+    fn scan_entities_mixed_validity_returns_good_and_skips_bad() {
+        let dir = tmp();
+        let root = dir.path();
+
+        // SL-001: well-formed
+        seed_slice(root, 1, &[]);
+        // SL-002: malformed
+        write(root, ".doctrine/slice/002/slice-002.toml", "id = bogus\n");
+        write(root, ".doctrine/slice/002/slice-002.md", "scope\n");
+        // SL-003: well-formed
+        seed_slice(root, 3, &[]);
+
+        let mut diags = Vec::new();
+        let scanned = scan_entities(root, &mut diags).unwrap();
+
+        assert_eq!(scanned.len(), 2);
+        let keys: Vec<String> = scanned.iter().map(|e| e.key.canonical()).collect();
+        assert_eq!(keys, vec!["SL-001", "SL-003"]);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(
+            diags[0].entity_key.as_ref().map(|k| k.canonical()),
+            Some("SL-002".to_string())
+        );
     }
 }

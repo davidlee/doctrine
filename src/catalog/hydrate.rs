@@ -371,8 +371,8 @@ fn classify_target(
 /// a memory key→UID map from items/ symlinks so that memory→memory edge targets
 /// resolve to their canonical UID nodes.
 pub(crate) fn scan_catalog(root: &Path) -> anyhow::Result<Catalog> {
-    let scanned = super::scan::scan_entities(root)?;
     let mut diagnostics = Vec::new();
+    let scanned = super::scan::scan_entities(root, &mut diagnostics)?;
     let memory = super::scan::scan_memory_entities(root, &mut diagnostics)?;
     let mem_key_map = build_memory_key_map(root);
     let mut catalog = Catalog::from_scanned(root, &scanned, &memory, &mem_key_map);
@@ -839,5 +839,44 @@ mod tests {
                 .iter()
                 .any(|d| d.message.contains("empty relation target"))
         );
+    }
+
+    /// SL-092 VT-5: scan_catalog propagates entity-scan diagnostics through
+    /// Catalog.diagnostics; severity, entity_key, and file survive round-trip.
+    #[test]
+    fn scan_catalog_propagates_entity_scan_diagnostics() {
+        let dir = tmp();
+        let root = dir.path();
+
+        // Well-formed entity.
+        seed_slice(root, 1, &[]);
+        // Malformed entity (meta parse failure).
+        write(
+            root,
+            ".doctrine/slice/002/slice-002.toml",
+            "id = notanumber\n",
+        );
+        write(root, ".doctrine/slice/002/slice-002.md", "scope\n");
+
+        let catalog = scan_catalog(root).unwrap();
+
+        // Only SL-001 in entities.
+        assert_eq!(catalog.entities.len(), 1);
+        assert!(catalog.entities[0].key.canonical().contains("SL-001"));
+
+        // One Error diagnostic for SL-002.
+        assert!(!catalog.diagnostics.is_empty());
+        let entity_diags: Vec<_> = catalog
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert_eq!(entity_diags.len(), 1);
+        assert_eq!(
+            entity_diags[0].entity_key.as_ref().map(|k| k.canonical()),
+            Some("SL-002".to_string())
+        );
+        assert!(entity_diags[0].file.to_string_lossy().contains("002"));
+        assert!(entity_diags[0].message.contains("SL-002"));
     }
 }
