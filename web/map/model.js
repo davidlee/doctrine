@@ -186,50 +186,59 @@ model.resolveFocus = function(query, graph) {
 
 /* --- neighbourhood (BFS) --- */
 
-model.neighbourhood = function(focusId, depth, graph) {
-  depth = Math.max(0, Math.min(3, depth));
-  if (depth === 0) {
-    return { nodes: new Set([focusId]), edges: [] };
+// Shared BFS core — used by both neighbourhood (entity graph) and
+// cmNeighbourhood (concept map). expandNeighbours(id) returns
+// [{ nodeId, edge }]; edgeKey(edge) returns a unique dedup key
+// (defaults to edge.id).
+function bfsCore(startId, maxDepth, expandNeighbours, edgeKey) {
+  maxDepth = Math.max(0, Math.min(3, maxDepth));
+  if (maxDepth === 0) {
+    return { nodes: new Set([startId]), edges: [] };
   }
 
   var visited = new Set();
   var collectedEdges = [];
-  var collectedEdgeIds = new Set();
-  var queue = [{ id: focusId, dist: 0 }];
-  visited.add(focusId);
+  var collectedEdgeKeys = new Set();
+  var queue = [{ id: startId, dist: 0 }];
+  visited.add(startId);
 
   while (queue.length > 0) {
     var current = queue.shift();
-    if (current.dist >= depth) continue;
+    if (current.dist >= maxDepth) continue;
 
-    /* outgoing edges */
-    var outEdges = graph.outgoing.get(current.id) || [];
-    outEdges.forEach(function(edge) {
-      if (!visited.has(edge.target)) {
-        visited.add(edge.target);
-        queue.push({ id: edge.target, dist: current.dist + 1 });
+    var neighbours = expandNeighbours(current.id);
+    for (var i = 0; i < neighbours.length; i++) {
+      var nb = neighbours[i];
+      if (!visited.has(nb.nodeId)) {
+        visited.add(nb.nodeId);
+        queue.push({ id: nb.nodeId, dist: current.dist + 1 });
       }
-      if (!collectedEdgeIds.has(edge.id)) {
-        collectedEdgeIds.add(edge.id);
-        collectedEdges.push(edge);
+      var key = edgeKey ? edgeKey(nb.edge) : nb.edge.id;
+      if (!collectedEdgeKeys.has(key)) {
+        collectedEdgeKeys.add(key);
+        collectedEdges.push(nb.edge);
       }
-    });
-
-    /* incoming edges */
-    var inEdges = graph.incoming.get(current.id) || [];
-    inEdges.forEach(function(edge) {
-      if (!visited.has(edge.source)) {
-        visited.add(edge.source);
-        queue.push({ id: edge.source, dist: current.dist + 1 });
-      }
-      if (!collectedEdgeIds.has(edge.id)) {
-        collectedEdgeIds.add(edge.id);
-        collectedEdges.push(edge);
-      }
-    });
+    }
   }
 
   return { nodes: visited, edges: collectedEdges };
+}
+
+model.neighbourhood = function(focusId, depth, graph) {
+  function expandNeighbours(id) {
+    var result = [];
+    var outEdges = graph.outgoing.get(id) || [];
+    var inEdges = graph.incoming.get(id) || [];
+    for (var o = 0; o < outEdges.length; o++) {
+      result.push({ nodeId: outEdges[o].target, edge: outEdges[o] });
+    }
+    for (var n = 0; n < inEdges.length; n++) {
+      result.push({ nodeId: inEdges[n].source, edge: inEdges[n] });
+    }
+    return result;
+  }
+
+  return bfsCore(focusId, depth, expandNeighbours, function(e) { return e.id; });
 };
 
 /* --- kind priority ordering (SL-075 D6) --- */
@@ -393,15 +402,16 @@ model.cmNeighbourhood = function(cm, focusKey, depth) {
   }
   depth = Math.max(0, Math.min(3, depth));
 
-  /* Build undirected adjacency map from edges */
-  var adj = {};
   var edges = cm.edges || [];
+
+  /* Build undirected adjacency map with edge references for bfsCore */
+  var adj = {};
   for (var i = 0; i < edges.length; i++) {
     var e = edges[i];
     if (!adj[e.from_key]) adj[e.from_key] = [];
-    adj[e.from_key].push(e.to_key);
+    adj[e.from_key].push({ nodeId: e.to_key, edge: e });
     if (!adj[e.to_key]) adj[e.to_key] = [];
-    adj[e.to_key].push(e.from_key);
+    adj[e.to_key].push({ nodeId: e.from_key, edge: e });
   }
 
   /* Ensure focusKey exists in the node set */
@@ -414,36 +424,27 @@ model.cmNeighbourhood = function(cm, focusKey, depth) {
     return { nodes: cm.nodes, edges: edges };
   }
 
-  /* BFS from focusKey */
-  var visited = {};
-  var queue = [{ key: focusKey, dist: 0 }];
-  visited[focusKey] = true;
-
-  while (queue.length > 0) {
-    var cur = queue.shift();
-    if (cur.dist >= depth) continue;
-    var neighbours = adj[cur.key] || [];
-    for (var k = 0; k < neighbours.length; k++) {
-      var nb = neighbours[k];
-      if (!visited[nb]) {
-        visited[nb] = true;
-        queue.push({ key: nb, dist: cur.dist + 1 });
-      }
-    }
+  /* BFS node traversal via shared core */
+  function expandNeighbours(key) {
+    return adj[key] || [];
   }
 
-  /* Filter nodes to visited set */
+  var result = bfsCore(focusKey, depth, expandNeighbours, function(e) {
+    return e.from_key + '\x00' + e.rel + '\x00' + e.to_key;
+  });
+
+  /* Filter nodes to visited set (preserving original order) */
   var filteredNodes = [];
   for (var n = 0; n < cm.nodes.length; n++) {
-    if (visited[cm.nodes[n].key]) {
+    if (result.nodes.has(cm.nodes[n].key)) {
       filteredNodes.push(cm.nodes[n]);
     }
   }
 
-  /* Filter edges: both source and target must be in visited */
+  /* Filter edges: both ends in visited (preserving original order) */
   var filteredEdges = [];
   for (var m = 0; m < edges.length; m++) {
-    if (visited[edges[m].from_key] && visited[edges[m].to_key]) {
+    if (result.nodes.has(edges[m].from_key) && result.nodes.has(edges[m].to_key)) {
       filteredEdges.push(edges[m]);
     }
   }
