@@ -1,0 +1,48 @@
+id    = 60
+slug  = "reconciliation-review-of-sl-087"
+title = "reconciliation review of SL-087"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-087"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "RV-058 design findings all faithfully implemented — uid fallback, section_or_marker, key sort, contract"
+detail = """
+All five RV-058 findings (F-1 through F-5) are correctly resolved in the implementation:
+
+F-1 (keyless → uid fallback): boot_keys uses m.key.unwrap_or_else(|| m.uid.clone()). Confirmed by unit test boot_keys_returns_key_ascending_active_signpost_keys_with_uid_fallback (src/memory.rs:3848) and integration test produce_memory_renders_reference_and_key_list (src/boot.rs:2676). The keyless uid mem_019ecf851db57cf0b32611c2d20ea2ed appears in the regenerated boot.md.
+
+F-2 (error handling → section_or_marker): produce() arm wraps the body construction in a Result and passes it to section_or_marker(heading, body) — consistent with every other arm. Empty corpus → marker, error → marker.
+
+F-3 (sort → key-ascending): boot_keys calls keys.sort() on Vec<String>. Tests confirm ref_pos < alpha_pos < bravo_pos < charlie_pos ordering.
+
+F-4 (contract → pub(crate), internal filtering, sort): boot_keys is pub(crate), filters to status==active && kind==Signpost internally, sorts key-ascending, falls back to uid. Contract matches design.
+
+F-5 (reference line → pull pointer): produce() emits 'Run /retrieve-memory to surface relevant memories for your task.' — confirmed in regenerated boot.md and in produce_memory_renders_reference_and_key_list test."""
+disposition = "aligned"
+response = "Confirmed: all five RV-058 design-review findings are faithfully implemented. uid fallback (F-1), section_or_marker routing (F-2), key-ascending sort (F-3), full contract spec (F-4), pull-pointer reference line (F-5). Tests pass, regenerated boot.md shows ~22-line compact Memory section with 21 keys. No code changes needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "VA-2 gate blocked by pre-existing unrelated e2e_memory_sync::sync_produces_all_shipped_dirs failure"
+detail = """
+just gate reports 1 failure: e2e_memory_sync::sync_produces_all_shipped_dirs panics with 'read memory/: Os { code: 2, kind: NotFound }'. This test failure is pre-existing and unrelated to SL-087 (confirmed on clean main per phase sheet). 1613 other tests pass (0 failures, 1 ignored). just check (root package only) is green with zero clippy warnings.
+
+Expected: just gate fully green. Observed: pre-existing unrelated failure blocks the gate. The phase sheet already acknowledges this limitation. Disposition: tolerated — not within SL-087 scope to fix."""
+disposition = "tolerated"
+response = "Pre-existing unrelated failure confirmed. 1613/1614 tests pass. SL-087 changes are not implicated — the failure exists on clean main. The /reconcile step should note this as a standing risk but it does not block SL-087 closure."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
