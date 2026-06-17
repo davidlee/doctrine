@@ -2,7 +2,7 @@
 // Hash routing: #/focus/SL-001 or #/focus/SL-001?depth=2
 // Security: markdown-it html:false; DOMPurify.sanitize() applied before innerHTML.
 // SVG from /api/dot/svg is sanitized via DOMPurify SVG profile, then injected as inline DOM.
-/* global state, model, api, router, dot, svg, compareNodes, compareEdgesBySource */
+/* global state, model, api, router, dot, svg, render, compareNodes, compareEdgesBySource */
 
 (function () {
   'use strict';
@@ -116,9 +116,9 @@
       return;
     }
 
-    header.innerHTML = '<span>' + escapeHtml(node.title) + '</span>' +
-      ' <span class="kind-pill" style="background:var(--kind-' + escapeHtml(node.kindPrefix) + ')">' + escapeHtml(node.kindPrefix) + '</span>' +
-      ' <span class="status">' + escapeHtml(node.status) + '</span>';
+    header.innerHTML = '<span>' + render.escapeHtml(node.title) + '</span>' +
+      ' <span class="kind-pill" style="background:var(--kind-' + render.escapeHtml(node.kindPrefix) + ')">' + render.escapeHtml(node.kindPrefix) + '</span>' +
+      ' <span class="status">' + render.escapeHtml(node.status) + '</span>';
   }
 
   function renderRelationshipTable() {
@@ -295,7 +295,7 @@
           state.listNavIndex = undefined;
         } else {
           if (list) {
-            list.innerHTML = '<li class="entity-item"><span class="placeholder">No match for \'' + escapeHtml(query) + '\'</span></li>';
+            list.innerHTML = '<li class="entity-item"><span class="placeholder">No match for \'' + render.escapeHtml(query) + '\'</span></li>';
           }
         }
       } else if (e.key === 'Escape') {
@@ -337,7 +337,7 @@
         if (state.focusId) {
           state.focusId = model.resolveFocus(state.focusId, state.graph);
         }
-        render();
+        renderView();
       }).catch(function(err) {
         var app = document.getElementById('app');
         showError(app, 'Failed to refresh: ' + err.message);
@@ -348,18 +348,6 @@
   /* -----------------------------------------------------------------------
    * SVG Graph rendering (PHASE-03) — rendering pipeline + stale-render guard
    * --------------------------------------------------------------------- */
-  function escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
-  function escapeAttr(str) {
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  function encodeAttr(str) {
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
   function renderHoverPane(nodeId) {
     var pane = document.querySelector('.hover-detail');
     if (!pane) return;
@@ -376,7 +364,7 @@
     }
 
     var html = '<div class="hover-detail-content">';
-    html += '<span class="hover-detail-title">' + node.id + ': ' + escapeHtml(node.title) + '</span>';
+    html += '<span class="hover-detail-title">' + node.id + ': ' + render.escapeHtml(node.title) + '</span>';
     html += '<span class="hover-detail-meta">' + node.kindLabel + ' \u00b7 ' + node.status + '</span>';
     html += '</div>';
     pane.innerHTML = html;
@@ -473,7 +461,7 @@
   function renderMarkdownPane(container, id) {
     function wrapContent(innerHTML) {
       return '<div class="markdown-toolbar">' +
-        '<span class="markdown-toolbar-title">' + escapeHtml(id) + '</span>' +
+        '<span class="markdown-toolbar-title">' + render.escapeHtml(id) + '</span>' +
         '<button class="fullscreen-toggle" title="Toggle fullscreen">&square;</button>' +
         '</div>' +
         '<div class="markdown-body">' + innerHTML + '</div>';
@@ -544,6 +532,9 @@
   }
 
   function bootstrap() {
+    // Populate DOM element cache (F-9)
+    render.cacheElements(document);
+
     // Wire interactive surfaces
     wireTableToggle();
     wireFilterCheckboxes();
@@ -553,7 +544,7 @@
 
     // Register hashchange listener early — before any async work — so
     // clicks and navigation work immediately, even during data load.
-    window.addEventListener('hashchange', render);
+    window.addEventListener('hashchange', renderView);
 
     // Fetch health and graph in parallel
     Promise.all([
@@ -577,7 +568,7 @@
         }
       }
 
-      render();
+      renderView();
     }).catch(function (err) {
       var app = document.getElementById('app');
       showError(app, 'Failed to initialise: ' + err.message);
@@ -589,7 +580,7 @@
     var edge = state.graph.edgeById.get(id);
     if (!edge) {
       if (container) {
-        container.innerHTML = '<p class="error">Edge ' + escapeHtml(id) + ' not found in graph</p>';
+        container.innerHTML = '<p class="error">Edge ' + render.escapeHtml(id) + ' not found in graph</p>';
       }
       return;
     }
@@ -599,15 +590,15 @@
     var originFile = edge.raw && edge.raw.origin && edge.raw.origin.file ? edge.raw.origin.file : '-';
 
     var html = '<div class="edge-detail">';
-    html += '<h2>Edge: ' + escapeHtml(edge.id) + '</h2>';
+    html += '<h2>Edge: ' + render.escapeHtml(edge.id) + '</h2>';
     html += '<table class="edge-detail-table">';
-    html += '<tr><th>Edge ID</th><td>' + escapeHtml(edge.id) + '</td></tr>';
-    html += '<tr><th>Source</th><td><a href="#' + router.buildHash('focus', edge.source, state.depth) + '">' + escapeHtml(edge.source) + '</a>' + (srcNode ? ' &mdash; ' + escapeHtml(srcNode.title) : '') + '</td></tr>';
-    html += '<tr><th>Label</th><td>' + escapeHtml(edge.label) + '</td></tr>';
-    html += '<tr><th>Target</th><td><a href="#' + router.buildHash('focus', edge.target, state.depth) + '">' + escapeHtml(edge.target) + '</a>' + (tgtNode ? ' &mdash; ' + escapeHtml(tgtNode.title) : '') + '</td></tr>';
-    html += '<tr><th>Origin file</th><td>' + escapeHtml(originFile) + '</td></tr>';
+    html += '<tr><th>Edge ID</th><td>' + render.escapeHtml(edge.id) + '</td></tr>';
+    html += '<tr><th>Source</th><td><a href="#' + router.buildHash('focus', edge.source, state.depth) + '">' + render.escapeHtml(edge.source) + '</a>' + (srcNode ? ' &mdash; ' + render.escapeHtml(srcNode.title) : '') + '</td></tr>';
+    html += '<tr><th>Label</th><td>' + render.escapeHtml(edge.label) + '</td></tr>';
+    html += '<tr><th>Target</th><td><a href="#' + router.buildHash('focus', edge.target, state.depth) + '">' + render.escapeHtml(edge.target) + '</a>' + (tgtNode ? ' &mdash; ' + render.escapeHtml(tgtNode.title) : '') + '</td></tr>';
+    html += '<tr><th>Origin file</th><td>' + render.escapeHtml(originFile) + '</td></tr>';
     html += '</table>';
-    html += '<p class="edge-detail-back"><a href="#' + router.buildHash('focus', state.focusId, state.depth) + '">&larr; Back to ' + escapeHtml(state.focusId) + '</a></p>';
+    html += '<p class="edge-detail-back"><a href="#' + router.buildHash('focus', state.focusId, state.depth) + '">&larr; Back to ' + render.escapeHtml(state.focusId) + '</a></p>';
     html += '</div>';
 
     if (container) container.innerHTML = html;
@@ -616,7 +607,7 @@
   /* Instant pre-render focus highlight on the current SVG.
    * Applied before the async graph re-render to give immediate visual
    * feedback when the user clicks a different node at the same depth. */
-  function render() {
+  function renderView() {
     var route = router.parseHash();
     var prevFocusId = state.focusId;
     var prevDepth = state.depth;
@@ -766,7 +757,7 @@
       }
     }
     pane.innerHTML = '<div class="hover-detail-content">' +
-      '<span class="hover-detail-title">' + escapeHtml(label) + '</span>' +
+      '<span class="hover-detail-title">' + render.escapeHtml(label) + '</span>' +
       '<span class="hover-detail-meta">concept map node</span>' +
       '</div>';
   }
@@ -813,25 +804,25 @@
         // Source cell — render input if this node is being renamed
         html += '<td>';
         if (editingKey && edge.from_key === editingKey && state.editingConceptMap) {
-          html += '<input type="text" class="cm-rename-input" data-key="' + encodeAttr(editingKey) + '" value="' + escapeAttr(editingLabel) + '">';
+          html += '<input type="text" class="cm-rename-input" data-key="' + render.escapeAttr(editingKey) + '" value="' + render.escapeAttr(editingLabel) + '">';
         } else {
-          html += '<span class="cm-edge-label' + (state.editingConceptMap ? ' cm-editable-node" data-key="' + encodeAttr(edge.from_key) + '" data-label="' + encodeAttr(edge.from_label) : '') + '">' + escapeHtml(edge.from_label) + '</span>';
+          html += '<span class="cm-edge-label' + (state.editingConceptMap ? ' cm-editable-node" data-key="' + render.escapeAttr(edge.from_key) + '" data-label="' + render.escapeAttr(edge.from_label) : '') + '">' + render.escapeHtml(edge.from_label) + '</span>';
         }
         html += '</td>';
 
-        html += '<td>' + escapeHtml(edge.rel) + '</td>';
+        html += '<td>' + render.escapeHtml(edge.rel) + '</td>';
 
         // Target cell — render input if this node is being renamed
         html += '<td>';
         if (editingKey && edge.to_key === editingKey && state.editingConceptMap) {
-          html += '<input type="text" class="cm-rename-input" data-key="' + encodeAttr(editingKey) + '" value="' + escapeAttr(editingLabel) + '">';
+          html += '<input type="text" class="cm-rename-input" data-key="' + render.escapeAttr(editingKey) + '" value="' + render.escapeAttr(editingLabel) + '">';
         } else {
-          html += '<span class="cm-edge-label' + (state.editingConceptMap ? ' cm-editable-node" data-key="' + encodeAttr(edge.to_key) + '" data-label="' + encodeAttr(edge.to_label) : '') + '">' + escapeHtml(edge.to_label) + '</span>';
+          html += '<span class="cm-edge-label' + (state.editingConceptMap ? ' cm-editable-node" data-key="' + render.escapeAttr(edge.to_key) + '" data-label="' + render.escapeAttr(edge.to_label) : '') + '">' + render.escapeHtml(edge.to_label) + '</span>';
         }
         html += '</td>';
 
         if (state.editingConceptMap) {
-          html += '<td><button class="cm-remove-btn" data-source="' + encodeAttr(edge.from_label) + '" data-rel="' + encodeAttr(edge.rel) + '" data-target="' + encodeAttr(edge.to_label) + '" title="Remove edge">✕</button></td>';
+          html += '<td><button class="cm-remove-btn" data-source="' + render.escapeAttr(edge.from_label) + '" data-rel="' + render.escapeAttr(edge.rel) + '" data-target="' + render.escapeAttr(edge.to_label) + '" title="Remove edge">✕</button></td>';
         }
         html += '</tr>';
       });
@@ -907,7 +898,7 @@
       var msg = formatDiagnostic(d);
       var line = diagnosticLine(d);
       var prefix = line !== null ? ('line ' + line + ': ') : '';
-      html += '<div class="cm-diag-item">\u26A0 ' + escapeHtml(prefix + msg) + '</div>';
+      html += '<div class="cm-diag-item">\u26A0 ' + render.escapeHtml(prefix + msg) + '</div>';
     }
     panel.innerHTML = html;
     panel.style.display = 'block';
@@ -937,21 +928,21 @@
 
     switch (variant) {
       case 'CanonicalNodeCollision':
-        return 'Node label "' + escapeHtml(v.label || '') + '" collides with key "' + escapeHtml(v.key || '') + '" (first label "' + escapeHtml(v.first_label || '') + '" takes precedence)';
+        return 'Node label "' + render.escapeHtml(v.label || '') + '" collides with key "' + render.escapeHtml(v.key || '') + '" (first label "' + render.escapeHtml(v.first_label || '') + '" takes precedence)';
       case 'SelfEdge':
-        return 'Self-referencing edge: "' + escapeHtml(v.node_key || '') + '" \u2192 "' + escapeHtml(v.node_key || '') + '"';
+        return 'Self-referencing edge: "' + render.escapeHtml(v.node_key || '') + '" \u2192 "' + render.escapeHtml(v.node_key || '') + '"';
       case 'SimilarNodeLabel':
-        return 'Similar node labels: "' + escapeHtml(v.label_a || '') + '" / "' + escapeHtml(v.label_b || '') + '"';
+        return 'Similar node labels: "' + render.escapeHtml(v.label_a || '') + '" / "' + render.escapeHtml(v.label_b || '') + '"';
       case 'RelationDrift':
-        return 'Relation "' + escapeHtml(v.rel_a || '') + '" appears only once — possible typo';
+        return 'Relation "' + render.escapeHtml(v.rel_a || '') + '" appears only once — possible typo';
       case 'EntityRefLike':
-        return '"' + escapeHtml(v.label || '') + '" looks like an entity reference';
+        return '"' + render.escapeHtml(v.label || '') + '" looks like an entity reference';
       case 'MalformedLine':
-        return 'Malformed DSL at "' + escapeHtml(v.text || '') + '"';
+        return 'Malformed DSL at "' + render.escapeHtml(v.text || '') + '"';
       case 'EmptyLabel':
         return 'Empty label in DSL';
       case 'DuplicateEdge':
-        return 'Duplicate edge: "' + escapeHtml(v.from_key || '') + '" > "' + escapeHtml(v.rel || '') + '" > "' + escapeHtml(v.to_key || '') + '" (first at line ' + (v.existing_line !== undefined ? v.existing_line : '?') + ')';
+        return 'Duplicate edge: "' + render.escapeHtml(v.from_key || '') + '" > "' + render.escapeHtml(v.rel || '') + '" > "' + render.escapeHtml(v.to_key || '') + '" (first at line ' + (v.existing_line !== undefined ? v.existing_line : '?') + ')';
       default:
         return 'Diagnostic: ' + variant;
     }
@@ -977,11 +968,11 @@
     var html = '<form class="add-edge-form" onsubmit="return false;">';
     html += '<div class="add-edge-fields">';
     html += '<input type="text" class="cm-input cm-source" list="cm-source-list" placeholder="Source">';
-    html += '<datalist id="cm-source-list">' + labels.map(function(l) { return '<option value="' + escapeAttr(l) + '">'; }).join('') + '</datalist>';
+    html += '<datalist id="cm-source-list">' + labels.map(function(l) { return '<option value="' + render.escapeAttr(l) + '">'; }).join('') + '</datalist>';
     html += '<input type="text" class="cm-input cm-rel" list="cm-rel-list" placeholder="relation">';
-    html += '<datalist id="cm-rel-list">' + rels.map(function(r) { return '<option value="' + escapeAttr(r) + '">'; }).join('') + '</datalist>';
+    html += '<datalist id="cm-rel-list">' + rels.map(function(r) { return '<option value="' + render.escapeAttr(r) + '">'; }).join('') + '</datalist>';
     html += '<input type="text" class="cm-input cm-target" list="cm-target-list" placeholder="Target">';
-    html += '<datalist id="cm-target-list">' + labels.map(function(l) { return '<option value="' + escapeAttr(l) + '">'; }).join('') + '</datalist>';
+    html += '<datalist id="cm-target-list">' + labels.map(function(l) { return '<option value="' + render.escapeAttr(l) + '">'; }).join('') + '</datalist>';
     html += '<button type="submit" class="cm-add-btn">Add edge</button>';
     html += '</div>';
     html += '<div class="cm-add-error" style="display:none;"></div>';
@@ -1149,7 +1140,7 @@
       showCmFormError('Edge no longer exists — it may have been removed elsewhere');
       return;
     }
-    showCmFormError('Error: ' + escapeHtml(err.message || 'Unknown error'));
+    showCmFormError('Error: ' + render.escapeHtml(err.message || 'Unknown error'));
   }
 
   function showCmFormError(message) {
@@ -1214,7 +1205,7 @@
         renderConceptMap();
       }).catch(function(err) {
         if (state.focusId !== id) return;
-        graphArea.innerHTML = '<p class="error">Failed to load concept map: ' + escapeHtml(err.message) + '</p>';
+        graphArea.innerHTML = '<p class="error">Failed to load concept map: ' + render.escapeHtml(err.message) + '</p>';
       });
       return;
     }
@@ -1233,7 +1224,7 @@
     var seq = state.graphRenderSeq;
 
     if (!state.dotAvailable) {
-      graphArea.innerHTML = '<p class="error">Graphviz not available.</p><pre>' + escapeHtml(dotText) + '</pre>';
+      graphArea.innerHTML = '<p class="error">Graphviz not available.</p><pre>' + render.escapeHtml(dotText) + '</pre>';
       return;
     }
 
