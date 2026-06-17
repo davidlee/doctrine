@@ -28,25 +28,32 @@ Single change site: the `SourceKind::Memories` arm in `produce()` in
 
 ### New narrow API on `memory`
 
-Add `memory::boot_keys(root: &Path) -> Result<Vec<String>>` that returns the
-sorted keys of all active signpost memories. This follows the existing seam
-pattern (`memory::list_rows` is already the boot→memory boundary) and keeps the
-pure/imperative split clean.
+```rust
+pub(crate) fn boot_keys(root: &Path) -> Result<Vec<String>>
+```
 
-The implementation reuses `memory::collect_all()` internally — same data source,
-narrower projection. Keys are sorted **key ascending** (the canonical order for
-a compact key listing — no uid/created metadata in the output to derive a
-chronological sort).
+- **Visibility:** `pub(crate)` — called from `boot.rs` only.
+- **Filtering:** Internal to the function: filters to `status == active` AND
+  `kind == Signpost`. No parameters — the call site never varies these filters.
+- **Sort:** Key-ascending (the canonical order for a compact key listing — no
+  uid/created metadata in the output).
+- **Keyless memories:** `Memory.key` is `Option<String>`. Memories with no key
+  render their `uid` as the fallback key line — the uid is always present and
+  unambiguous.
+- **Data source:** Reuses `memory::collect_all()` (already `pub(crate)`) — same
+  source, narrower projection. No new filesystem read path.
+
+The existing seam pattern (`memory::list_rows` is the boot→memory boundary for
+the current table) is preserved.
 
 ### Updated `produce()` arm
 
 ```rust
 SourceKind::Memories => {
-    let keys = memory::boot_keys(root)
-        .unwrap_or_default();
-    if keys.is_empty() {
-        marker(heading)
-    } else {
+    let body = memory::boot_keys(root).map(|keys| {
+        if keys.is_empty() {
+            return String::new();
+        }
         let mut body = String::from(
             "Run /retrieve-memory to surface relevant memories for your task.\n"
         );
@@ -54,14 +61,15 @@ SourceKind::Memories => {
             body.push_str(key);
             body.push('\n');
         }
-        body.trim_end().to_string()
-    }
+        body
+    });
+    section_or_marker(heading, body)
 }
 ```
 
-The reference line is always present when keys exist. An empty corpus returns
-the existing marker (no memory signposts at all). Errors fall through
-`section_or_marker` — consistent with every other producer arm.
+Routes through `section_or_marker` — consistent with every other producer arm:
+an error returns the marker, an empty corpus returns the marker, and a populated
+result renders the reference line + key list.
 
 ## Test impact
 
@@ -75,7 +83,8 @@ the existing marker (no memory signposts at all). Errors fall through
 
 - **VT:** With active signpost memories, `produce("Memory", &SourceKind::Memories,
   root, exec)` returns the reference line followed by key lines, one per memory.
-- **VT:** Keys are sorted (consistent with `sort_default` order).
+- **VT:** Keys are sorted key-ascending (the canonical order for a compact key
+  listing without metadata, per Design Decisions).
 - **VT:** `memory::boot_keys()` returns the correct keys for active signpost
   memories; an empty corpus returns an empty vec.
 
@@ -92,6 +101,8 @@ the existing marker (no memory signposts at all). Errors fall through
 | Keys only (no uid/type/status/trust) | Discoverability without metadata bloat; compact per ADR-005 |
 | Reference line always present when keys exist | Points at the richer pull path; empty corpus gets marker |
 | Keys sorted ascending | Canonical order for a compact listing without metadata |
+| Uid fallback for keyless memories | Every active signpost gets a line; uid is always available |
+| `section_or_marker` error path | Consistent with every other producer arm |
 
 ## Verification alignment
 
