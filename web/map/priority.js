@@ -8,8 +8,6 @@
   }
 
   function layoutGraph(view) {
-    var width = 960;
-    var height = 600;
     var i;
 
     if (!view || !Array.isArray(view.nodes) || view.nodes.length === 0) return emptyLayout();
@@ -34,18 +32,18 @@
     if (stratifyData.length === 0) return emptyLayout();
 
     var dag = d3.graphStratify()(stratifyData);
-    d3.sugiyama().nodeSize([72, 28]).gap([20, 30])(dag);
+    var layout = d3.sugiyama().nodeSize([72, 28]).gap([20, 30])(dag);
 
     var nodes = [];
     Array.from(dag.nodes()).forEach(function(node) {
       var base = node.data && node.data.data ? node.data.data : {};
       nodes.push(Object.assign({}, base, {
-        x: typeof node.x === 'number' ? node.x : width / 2,
-        y: typeof node.y === 'number' ? node.y : height / 2
+        x: typeof node.x === 'number' ? node.x : 0,
+        y: typeof node.y === 'number' ? node.y : 0
       }));
     });
 
-    return { nodes: nodes, edges: edges };
+    return { nodes: nodes, edges: edges, width: layout.width || 960, height: layout.height || 600 };
   }
 
   function renderGraph(opts) {
@@ -62,7 +60,9 @@
     container.innerHTML = '';
 
     var svg = document.createElementNS(svgNs, 'svg');
-    svg.setAttribute('viewBox', '0 0 960 600');
+    var vw = layout && layout.width ? layout.width : 960;
+    var vh = layout && layout.height ? layout.height : 600;
+    svg.setAttribute('viewBox', '0 0 ' + vw + ' ' + vh);
     svg.setAttribute('width', '100%');
     svg.setAttribute('height', '100%');
 
