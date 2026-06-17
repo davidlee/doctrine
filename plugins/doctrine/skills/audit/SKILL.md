@@ -6,7 +6,7 @@ description: Use after a slice's phases are implemented, when the task is now ev
 # Audit
 
 You are running the reconciliation loop: does the work match its design and
-governance, and is every gap consciously dispositioned before close?
+governance, and is every gap consciously dispositioned before reconciliation?
 
 The audit stage runs on a **review ledger** — the RV kind (`RV-NNN`, ADR-007). The
 shared ledger mechanics (open + prime, raise, dispose + resolve, the severity and
@@ -61,6 +61,16 @@ roles with `--as <role>` — the raiser raises/verifies/withdraws, the responder
 disposes. This is cooperative role assertion, not a security boundary (ADR-007;
 `review-ledger.md` §4).
 
+**Disposition convention (audit-specific).** Audit's permitted dispositions are:
+`aligned` (observation correct, no change needed), `fix-now` (code fix within
+audit scope — never a spec or governance edit), `tolerated` (explicit accepted
+drift with rationale), and `verified` with a reconciliation-brief link for
+spec/governance changes delegated to `/reconcile`. Audit must **never** use
+`design-wrong` or `follow-up` for spec/governance items — those belong to the
+reconcile write surface. Every finding stays `verified` (the observation is
+confirmed); the *remediation* is reconcile's job and is recorded separately — do
+not mutate a finding to `fixed`/`remediated`.
+
 ## Process
 
 1. **Open the ledger for the slice** (replaces authoring `audit.md`): open a
@@ -76,30 +86,53 @@ disposes. This is cooperative role assertion, not a security boundary (ADR-007;
    - note where behaviour and design diverge — each divergence is a finding.
 3. **Raise + dispose every finding** on the ledger per `review-ledger.md` §3–§4.
    Hold the audit line on the **anti-escape pressure**: do not pick **follow-up**
-   because the fix feels large, do not normalise **tolerated** without a real
-   rationale, and do not downgrade a true **blocker** to dodge the close-gate. If
-   the right route is ambiguous after reading `design.md` and governance, stop and
-   `/consult`.
+   for spec/governance findings — those go to the reconciliation brief with
+   `verified`; for code findings, do not pick **follow-up** merely because the fix
+   is large; do not normalise **tolerated** without a real rationale; and do not
+   downgrade a true **blocker** to dodge the close-gate. If the right route is
+   ambiguous after reading `design.md` and governance, stop and `/consult`.
 4. **Synthesize.** Write the audit's reasoning as the review's `## Synthesis`
    (append it to `review-NNN.md`) — the closure story, the standing risks, the
    tradeoffs consciously accepted (the prose the old `audit.md` carried).
-5. **Harvest (audit tail).** Harvest durable risks, decisions, and gotchas from the
+5. **Write the reconciliation brief.** Append a dedicated `## Reconciliation Brief`
+   section to `review-NNN.md` — separate from `## Synthesis`. This is the
+   structured handoff from audit to `/reconcile`, mapping every spec/governance
+   finding to its target and the intended write surface (D3):
+
+   ```markdown
+   ## Reconciliation Brief
+
+   ### Per-slice (direct edit)
+   - design.md §3: the eviction model changed from edge-at-a-time to per-SCC —
+     update prose to match implementation.
+
+   ### Governance/spec (REV)
+   - ADR-006 §D5: branch-point staleness description is wrong → REV modify
+   - REQ-077: cordage scale target verified at 50k nodes → REV status active
+   ```
+
+   Build the brief from every non-aligned, non-tolerated finding that touches
+   design or governance. Group by write surface (per-slice direct edit vs.
+   governance/spec REV). Each entry cites the finding id and describes the exact
+   change needed.
+6. **Harvest (audit tail).** Harvest durable risks, decisions, and gotchas from the
    disposable runtime phase sheets into `notes.md`; promote reusable facts via
    `/record-memory`; capture durable follow-up **work** the audit surfaced — risks,
    issues, chores — as backlog items with `backlog new` (the work / knowledge /
    decision boundary: `using-doctrine.md`).
-6. **Close out.** Hand off to `/close` only when the ledger is resolved and the
-   story is coherent — not merely when the tests pass. The review is **done** when
-   every finding is terminal; an unresolved `blocker` will be refused at the close
-   seam (`review-ledger.md` §6). Record the lifecycle move: `doctrine slice status
-   <id> reconcile` (bare number) — the binary refuses it while a blocker is
-   unresolved (D-C9b).
+7. **Hand off to reconcile.** Once the reconciliation brief is written, the ledger
+   is resolved, and every finding is terminal, hand off to `/reconcile`. Do NOT
+   hand off directly to `/close` — reconcile is the sole writer of reconciled
+   truth; close only confirms the outcome. Record the lifecycle move:
+   `doctrine slice status <id> reconcile` (bare number) — the binary refuses it
+   while a blocker is unresolved (D-C9b).
 
 ## Outcomes
 
 - Audit evidence is a structured RV ledger (`review-NNN.toml` + the review's
-  `## Synthesis`), not a hand-made `audit.md`.
+  `## Synthesis` + `## Reconciliation Brief`), not a hand-made `audit.md`.
 - Every finding ends terminal with an explicit disposition (or is withdrawn).
 - No unresolved `blocker` remains — the close-gate would refuse it.
-- Design and governance are reconciled before closure handoff.
-- `/close` receives work that is actually audit-ready.
+- The reconciliation brief maps every spec/governance finding to its target and
+  write surface.
+- `/reconcile` receives a complete, actionable brief — not raw findings.
