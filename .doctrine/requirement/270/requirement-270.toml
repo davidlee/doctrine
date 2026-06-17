@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 270
+slug = "validate-a-present-estimate-as-a-hard-error-and-accept-absence"
+title = "Validate a present estimate as a hard error and accept absence"
+status = "pending"
+kind = "functional"
+
+description = "A present [estimate] is structurally validated as a hard error; an absent table validates. Optional means omittable, not malformed."
+tags = []
+acceptance_criteria = [
+  "A present estimate validates only when lower and upper are both present and finite with lower >= 0 and upper >= lower.",
+  "Missing lower, missing upper, negative lower, and upper < lower are each hard validation errors.",
+  "An absent [estimate] passes validation.",
+  "A malformed present estimate is rejected loudly, never silently repaired.",
+]

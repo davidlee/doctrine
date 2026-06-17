@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 276
+slug = "keep-the-estimate-facet-kind-agnostic-reusable-and-pure-layer"
+title = "Keep the estimate facet kind-agnostic, reusable, and pure-layer"
+status = "pending"
+kind = "quality"
+
+description = "The facet model is defined once and shared; attaching it to a new kind wires only parse/hydrate; normalize/validate/render stay in the pure layer."
+tags = []
+acceptance_criteria = [
+  "The estimate model is defined once and shared, not duplicated or specialised per entity kind.",
+  "Attaching the facet to a new entity kind requires only wiring that kind's parse/hydrate path, not remodelling the schema.",
+  "Normalization, validation, and rendering are pure (no clock, rng, git, or disk); only unit resolution and hydration touch the shell.",
+]

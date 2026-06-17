@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 273
+slug = "render-the-estimate-in-display-without-classifying-spread"
+title = "Render the estimate in display without classifying spread"
+status = "pending"
+kind = "functional"
+
+description = "Display renders the estimate as a pure function: present/absent in detailed view, ratio + width in verbose view, classifying nothing."
+tags = []
+acceptance_criteria = [
+  "Detailed display shows 'Estimate: <lower>-<upper> <unit>' present and 'Estimate: none recorded' absent, using normalized compact bounds.",
+  "Verbose/review display shows attention spread (ratio) and attention width (absolute).",
+  "When lower == 0 the spread ratio is reported unavailable while width is still shown.",
+  "Normal display never classifies spread as wide, very wide, risky, or split-worthy.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 277
+slug = "keep-the-estimate-schema-forward-compatible"
+title = "Keep the estimate schema forward-compatible"
+status = "pending"
+kind = "quality"
+
+description = "The v1 two-bound schema extends without invalidating estimates authored under v1."
+tags = []
+acceptance_criteria = [
+  "A v1-valid estimate (lower/upper only) remains valid when later optional fields (e.g. mode, distribution) are added.",
+  "The parser tolerates additive unknown facet fields rather than rejecting the table.",
+  "v1 persists no inferred mode or distribution.",
+]

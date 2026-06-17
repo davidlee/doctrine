@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 272
+slug = "preserve-a-valid-estimate-through-parse-hydrate-and-catalog"
+title = "Preserve a valid estimate through parse, hydrate, and catalog"
+status = "pending"
+kind = "functional"
+
+description = "A valid estimate survives parse -> hydrate -> catalog projection unchanged in its normalized form."
+tags = []
+acceptance_criteria = [
+  "A valid estimate's normalized lower/upper are identical after parse, hydrate, and catalog projection.",
+  "Original TOML numeric formatting is not retained; the normalized form is what round-trips.",
+  "Equal bounds (lower == upper) round-trip as a valid zero-width estimate.",
+]

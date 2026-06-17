@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 275
+slug = "read-estimate-presence-in-no-workflow-predicate"
+title = "Read estimate presence in no workflow predicate"
+status = "pending"
+kind = "quality"
+
+description = "No dispatch/execute/audit/close predicate reads estimate presence; the non-blocking guarantee is structural, not run-proven."
+tags = []
+acceptance_criteria = [
+  "No dispatch, execute, audit, or close predicate reads estimate presence.",
+  "A missing estimate cannot block, fatally warn, or refuse any workflow, and is never a validation error.",
+  "The absence of a gating read is demonstrable structurally, not merely by a passing run.",
+]
