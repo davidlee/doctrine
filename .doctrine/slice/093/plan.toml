@@ -1,0 +1,83 @@
+# Implementation plan for SL-093 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-093"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "CSS modularisation — file split, tokens, layers"
+objective = "Decompose the monolithic style.css into 10 modular files with @layer boundaries, consolidate all custom properties into a single tokens.css, and add dark-mode variants for every token."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked and approved (post RV-069)" },
+  { id = "EN-2", text = "original style.css is unchanged from RV-065 baseline" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "10 CSS files exist: style.css (entry), tokens.css, reset.css, layout.css, sidebar.css, graph.css, markdown.css, table.css, concept-map.css, priority.css" },
+  { id = "EX-2", text = "original style.css is deleted" },
+  { id = "EX-3", text = "every CSS file is wrapped in its declared @layer block with no bare selectors outside a layer" },
+  { id = "EX-4", text = "tokens.css contains a single :root block with kind palette, theme vars, --link, --border-light, --bg-card, 15 --cm-* tokens, and priority vars" },
+  { id = "EX-5", text = "tokens.css contains a single @media (prefers-color-scheme: dark) block with dark variants for every token" },
+  { id = "EX-6", text = "no other CSS file contains :root { } or @media (prefers-color-scheme: dark)" },
+  { id = "EX-7", text = "concept-map.css contains zero hardcoded hex colours; all colours are var(--cm-*) or var(--border-light)/var(--bg-card)" },
+  { id = "EX-8", text = "@import order in style.css matches the original cascade order exactly (section header sequence verified)" },
+]
+verification = [
+  { id = "VT-1", expects = "npm run build succeeds — Vite bundles all @import cascade without error" },
+  { id = "VA-1", expects = "grep -n ':root' on layout.css, sidebar.css, graph.css, markdown.css, table.css, reset.css, concept-map.css, priority.css returns zero hits" },
+  { id = "VA-2", expects = "grep -n '#[0-9a-fA-F]' concept-map.css returns zero hits (excluding comments)" },
+  { id = "VA-3", expects = "grep -n 'var(--.*,.*)' on all CSS files returns zero hits — no fallbacks remain" },
+  { id = "VA-4", expects = "npm run dev starts without CSS errors; page renders in browser" },
+]
+
+[[phase]]
+id        = "PHASE-02"
+name      = "TS/HTML updates — class renames and style.display removal"
+objective = "Rename CSS classes to the standardised convention across all files, replace style.display manipulation with .u-hidden classList toggles and data-page-mode CSS rules, and update index.html inline styles."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 is completed and verified (all CSS files exist, build passes)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "All 9 class renames applied to CSS and TS/HTML files per the naming convention table in design.md" },
+  { id = "EX-2", text = "zero style.display assignments remain in web/map/src/ TypeScript files" },
+  { id = "EX-3", text = "zero style=\"display:none\" inlines remain in index.html (replaced by class u-hidden)" },
+  { id = "EX-4", text = "zero style=\"display:none\" in concept-map.ts generated HTML strings" },
+  { id = "EX-5", text = "data-page-mode attribute is set on .layout element in render.ts setPageMode()" },
+  { id = "EX-6", text = "data-page-mode CSS rules defined in layout.css for edge and concept-map modes" },
+  { id = "EX-7", text = "npx eslint passes with zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "npm run build succeeds" },
+  { id = "VA-1", expects = "grep -rn 'style\\.display' web/map/src/ returns zero hits" },
+  { id = "VA-2", expects = "grep -n 'style=\"display:none\"' web/map/index.html returns zero hits" },
+  { id = "VA-3", expects = "npx eslint returns zero warnings" },
+]
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Visual verification and RV-065 closure"
+objective = "Verify zero visual regressions across all views and colour schemes, run design-system audit gates, and record RV-065 finding dispositions as resolved."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 is completed and verified (build passes, no style.display, no inline display:none)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Visual comparison confirms zero differences in light and dark modes for all views: entity focus, concept-map focus, edge detail, fullscreen markdown, priority/DAG, empty/error states" },
+  { id = "EX-2", text = "All 10 RV-065 findings have dispositions recorded" },
+  { id = "EX-3", text = "just check passes (no Rust changes expected)" },
+]
+verification = [
+  { id = "VH-1", expects = "Visual side-by-side comparison: before-build vs after-build, light and dark mode, all 6 view categories. Zero visual differences." },
+  { id = "VA-1", expects = "just check passes — root package tests green" },
+]
