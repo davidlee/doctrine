@@ -177,7 +177,7 @@
     background: var(--cm-warning-bg);
   }
 
-  .cm-diagnostics-panel h3 {
+  .cm-diagnostics-panel__title {
     margin: 0 0 0.5rem 0;
     font-size: 0.85rem;
     color: var(--cm-warning-heading);
@@ -201,7 +201,7 @@
       border-color: var(--cm-warning-border);
     }
 
-    .cm-diagnostics-panel h3 {
+    .cm-diagnostics-panel__title {
       color: var(--cm-warning-heading);
     }
 
