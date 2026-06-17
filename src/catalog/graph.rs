@@ -6,7 +6,8 @@
 
 use std::collections::BTreeMap;
 
-use super::hydrate::{Catalog, CatalogEdge, EdgeTarget};
+use super::hydrate::{Catalog, CatalogEdge, CatalogKey, EdgeTarget};
+#[cfg(test)]
 use super::scan::EntityKey;
 
 // ---------------------------------------------------------------------------
@@ -20,23 +21,7 @@ pub(crate) struct CatalogGraph {
     pub(crate) edges: Vec<CatalogEdge>,
 }
 
-/// The identity of a node in the graph. Currently a single variant; future
-/// node types (e.g. free-text targets rendered as nodes) could extend it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum NodeKey {
-    Entity(EntityKey),
-}
-
-/// Serialize flattens `Entity(key)` to `key.canonical()` — a string like
-/// `"SL-001"` — not a structured variant. This is asymmetric with the type
-/// definition; consumers that deserialize must reconstruct the variant.
-impl serde::Serialize for NodeKey {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            NodeKey::Entity(key) => key.canonical().serialize(serializer),
-        }
-    }
-}
+pub(crate) use super::hydrate::CatalogKey as NodeKey;
 
 /// A node in the graph — the presentation-neutral view of one entity.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -44,6 +29,8 @@ pub(crate) struct CatalogNode {
     pub(crate) title: String,
     pub(crate) status: Option<String>,
     pub(crate) kind_label: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) memory_type: Option<String>,
 }
 
 impl CatalogGraph {
@@ -52,13 +39,14 @@ impl CatalogGraph {
     pub(crate) fn from_catalog(catalog: &Catalog) -> Self {
         let mut nodes = BTreeMap::new();
         for entity in &catalog.entities {
-            let key = NodeKey::Entity(entity.key);
+            let key = entity.key.clone();
             nodes.insert(
                 key,
                 CatalogNode {
                     title: entity.title.clone(),
                     status: entity.status.clone(),
-                    kind_label: entity.kind.prefix,
+                    kind_label: entity.kind_label,
+                    memory_type: entity.memory_type.clone(),
                 },
             );
         }
@@ -76,8 +64,10 @@ impl CatalogGraph {
     /// indistinguishable from a genuine zero-edge node.
     #[cfg_attr(not(test), expect(dead_code, reason = "tested; future consumer"))]
     pub(crate) fn outgoing(&self, node: &NodeKey) -> Vec<&CatalogEdge> {
-        let NodeKey::Entity(key) = node;
-        self.edges.iter().filter(|e| &e.source == key).collect()
+        let CatalogKey::Numbered(_key) = node else {
+            return vec![];
+        };
+        self.edges.iter().filter(|e| &e.source == node).collect()
     }
 
     /// All inbound edges whose `target` is `Resolved(key)` matching the given
@@ -88,11 +78,13 @@ impl CatalogGraph {
     /// indistinguishable from a genuine zero-incoming-edge node.
     #[cfg_attr(not(test), expect(dead_code, reason = "tested; future consumer"))]
     pub(crate) fn incoming(&self, node: &NodeKey) -> Vec<&CatalogEdge> {
-        let NodeKey::Entity(key) = node;
+        let CatalogKey::Numbered(_key) = node else {
+            return vec![];
+        };
         self.edges
             .iter()
             .filter(|e| match &e.target {
-                EdgeTarget::Resolved(tgt) => tgt == key,
+                EdgeTarget::Resolved(tgt) => tgt == node,
                 EdgeTarget::UnresolvedRef { .. } | EdgeTarget::UnvalidatedText { .. } => false,
             })
             .collect()
@@ -140,7 +132,7 @@ mod tests {
         assert_eq!(graph.edges.len(), 2, "expected 2 edges");
 
         // Verify node content for one entity
-        let sl001_node = graph.nodes.get(&NodeKey::Entity(EntityKey {
+        let sl001_node = graph.nodes.get(&CatalogKey::Numbered(EntityKey {
             prefix: "SL",
             id: 1,
         }));
@@ -169,7 +161,7 @@ mod tests {
         assert_eq!(graph.nodes.len(), 1);
         assert_eq!(graph.edges.len(), 1);
 
-        let sl_key = NodeKey::Entity(EntityKey {
+        let sl_key = CatalogKey::Numbered(EntityKey {
             prefix: "SL",
             id: 1,
         });
@@ -209,7 +201,7 @@ mod tests {
         let graph = build_graph(root);
 
         // No incoming edges for the absent REQ-999 target (UnresolvedRef)
-        let absent_key = NodeKey::Entity(EntityKey {
+        let absent_key = CatalogKey::Numbered(EntityKey {
             prefix: "REQ",
             id: 999,
         });
@@ -220,7 +212,7 @@ mod tests {
         );
 
         // No incoming edges for the source entity either (no one points TO SL-001)
-        let sl_key = NodeKey::Entity(EntityKey {
+        let sl_key = CatalogKey::Numbered(EntityKey {
             prefix: "SL",
             id: 1,
         });
@@ -249,7 +241,7 @@ mod tests {
         assert_eq!(graph.edges.len(), 2);
 
         // REQ-005 has 2 incoming edges
-        let req_key = NodeKey::Entity(EntityKey {
+        let req_key = CatalogKey::Numbered(EntityKey {
             prefix: "REQ",
             id: 5,
         });
@@ -265,15 +257,20 @@ mod tests {
         for edge in &incoming {
             match &edge.target {
                 EdgeTarget::Resolved(key) => {
-                    assert_eq!(key.prefix, "REQ");
-                    assert_eq!(key.id, 5);
+                    assert_eq!(
+                        key,
+                        &CatalogKey::Numbered(EntityKey {
+                            prefix: "REQ",
+                            id: 5
+                        })
+                    );
                 }
                 other => panic!("expected Resolved target, got {other:?}"),
             }
         }
 
         // SL-001 has 1 outgoing edge (to REQ-005)
-        let sl001_key = NodeKey::Entity(EntityKey {
+        let sl001_key = CatalogKey::Numbered(EntityKey {
             prefix: "SL",
             id: 1,
         });

@@ -10,10 +10,50 @@ use std::path::{Path, PathBuf};
 
 use crate::entity;
 use crate::integrity;
+use crate::memory::MemoryCatalogRecord;
 use crate::relation::RelationLabel;
 
 use super::diagnostic::{CatalogDiagnostic, Severity};
 use super::scan::{EntityKey, ScannedEntity};
+
+/// Corpus-wide identity — numbered AND named (memory) entities.
+/// Serializes flat: Numbered → "SL-001", Memory → "`mem_019ecf`..."
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum CatalogKey {
+    Numbered(EntityKey),
+    Memory(String),
+}
+
+impl CatalogKey {
+    pub(crate) fn canonical(&self) -> String {
+        match self {
+            CatalogKey::Numbered(key) => key.canonical(),
+            CatalogKey::Memory(uid) => uid.clone(),
+        }
+    }
+}
+
+impl serde::Serialize for CatalogKey {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.canonical().serialize(serializer)
+    }
+}
+
+/// An edge label — validated for numbered, raw for memory.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) enum CatalogEdgeLabel {
+    Validated(RelationLabel),
+    Raw(String),
+}
+
+impl CatalogEdgeLabel {
+    pub(crate) fn name(&self) -> &str {
+        match self {
+            CatalogEdgeLabel::Validated(label) => label.name(),
+            CatalogEdgeLabel::Raw(label) => label.as_str(),
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Catalog — the top-level scan result
@@ -37,8 +77,9 @@ pub(crate) struct Catalog {
 /// filesystem path, authored metadata, and a source span.
 #[derive(Clone, serde::Serialize)]
 pub(crate) struct CatalogEntity {
-    pub(crate) key: EntityKey,
-    pub(crate) kind: &'static entity::Kind,
+    pub(crate) key: CatalogKey,
+    pub(crate) kind_label: &'static str,
+    pub(crate) kind: Option<&'static entity::Kind>,
     /// The entity's directory on disk, derived from `EntityKey` + `Kind.dir` —
     /// the same path authority used by the existing readers.
     pub(crate) path: PathBuf,
@@ -46,6 +87,9 @@ pub(crate) struct CatalogEntity {
     pub(crate) status: Option<String>,
     /// Source location for this entity's identity/metadata.
     pub(crate) source: SourceSpan,
+    /// Memory type classification for `CatalogKey::Memory` entities;
+    /// `None` for numbered entities.
+    pub(crate) memory_type: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -55,8 +99,8 @@ pub(crate) struct CatalogEntity {
 /// One outbound relation with its target classified and its origin recorded.
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct CatalogEdge {
-    pub(crate) source: EntityKey,
-    pub(crate) label: RelationLabel,
+    pub(crate) source: CatalogKey,
+    pub(crate) label: CatalogEdgeLabel,
     pub(crate) target: EdgeTarget,
     /// Where this edge was authored (which entity file, which field).
     pub(crate) origin: EdgeOrigin,
@@ -66,7 +110,7 @@ pub(crate) struct CatalogEdge {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) enum EdgeTarget {
     /// Target parsed as a canonical ref and the entity exists in the scan.
-    Resolved(EntityKey),
+    Resolved(CatalogKey),
     /// Target parsed as a canonical ref but no entity exists under that id.
     UnresolvedRef {
         /// The raw authored target string.
@@ -112,11 +156,23 @@ impl Catalog {
     /// diagnostics for unresolved and unvalidated targets.
     ///
     /// `root` is used only to derive paths — no file reads happen here.
-    pub(crate) fn from_scanned(root: &Path, scanned: &[ScannedEntity]) -> Self {
+    pub(crate) fn from_scanned(
+        root: &Path,
+        scanned: &[ScannedEntity],
+        memory: &[MemoryCatalogRecord],
+    ) -> Self {
         // Entity key set for O(log n) target resolution lookups.
-        let key_set: BTreeSet<EntityKey> = scanned.iter().map(|e| e.key).collect();
+        let key_set: BTreeSet<CatalogKey> = scanned
+            .iter()
+            .map(|entity| CatalogKey::Numbered(entity.key))
+            .chain(
+                memory
+                    .iter()
+                    .map(|record| CatalogKey::Memory(record.uid.clone())),
+            )
+            .collect();
 
-        let mut entities = Vec::with_capacity(scanned.len());
+        let mut entities = Vec::with_capacity(scanned.len() + memory.len());
         let mut edges = Vec::new();
         let mut diagnostics = Vec::new();
 
@@ -124,11 +180,13 @@ impl Catalog {
             let entity_dir = root.join(se.kind.dir).join(format!("{:03}", se.key.id));
 
             entities.push(CatalogEntity {
-                key: se.key,
-                kind: se.kind,
+                key: CatalogKey::Numbered(se.key),
+                kind_label: se.key.prefix,
+                kind: Some(se.kind),
                 path: entity_dir.clone(),
                 title: se.title.clone(),
                 status: se.status.clone(),
+                memory_type: None,
                 source: SourceSpan {
                     file: entity_dir.clone(),
                     field: None,
@@ -147,7 +205,7 @@ impl Catalog {
                     EdgeTarget::UnresolvedRef { raw } => {
                         diagnostics.push(CatalogDiagnostic {
                             file: entity_dir.clone(),
-                            entity_key: Some(se.key),
+                            entity_key: Some(CatalogKey::Numbered(se.key)),
                             field: Some(edge.label.name().to_string()),
                             message: format!(
                                 "dangling reference: `{raw}` does not resolve to any scanned entity"
@@ -158,7 +216,7 @@ impl Catalog {
                     EdgeTarget::UnvalidatedText { raw } => {
                         diagnostics.push(CatalogDiagnostic {
                             file: entity_dir.clone(),
-                            entity_key: Some(se.key),
+                            entity_key: Some(CatalogKey::Numbered(se.key)),
                             field: Some(edge.label.name().to_string()),
                             message: format!(
                                 "unvalidated target: `{raw}` is not a canonical reference"
@@ -170,10 +228,78 @@ impl Catalog {
                 }
 
                 edges.push(CatalogEdge {
-                    source: se.key,
-                    label: edge.label,
+                    source: CatalogKey::Numbered(se.key),
+                    label: CatalogEdgeLabel::Validated(edge.label),
                     target,
                     origin,
+                });
+            }
+        }
+
+        for record in memory {
+            entities.push(CatalogEntity {
+                key: CatalogKey::Memory(record.uid.clone()),
+                kind_label: "MEM",
+                kind: None,
+                path: record.path.clone(),
+                title: record.title.clone(),
+                status: Some(record.status.clone()),
+                memory_type: Some(record.memory_type.clone()),
+                source: SourceSpan {
+                    file: record.path.clone(),
+                    field: None,
+                },
+            });
+
+            for relation in &record.relations {
+                // D10: empty-field rows are surfaced as diagnostics, NOT emitted
+                // as blank graph edges. Continue after each empty-field diagnostic
+                // so the edges.push below is never reached for degenerate rows.
+                if relation.label.is_empty() {
+                    diagnostics.push(CatalogDiagnostic {
+                        file: record.path.clone(),
+                        entity_key: Some(CatalogKey::Memory(record.uid.clone())),
+                        field: None,
+                        message: "empty relation label".to_string(),
+                        severity: Severity::Warning,
+                    });
+                    continue;
+                }
+                if relation.target.is_empty() {
+                    diagnostics.push(CatalogDiagnostic {
+                        file: record.path.clone(),
+                        entity_key: Some(CatalogKey::Memory(record.uid.clone())),
+                        field: Some(relation.label.clone()),
+                        message: "empty relation target".to_string(),
+                        severity: Severity::Warning,
+                    });
+                    continue;
+                }
+
+                let target = classify_target(&relation.target, &key_set);
+
+                // Generate diagnostics for memory-edge target classification,
+                // mirroring the numbered-entity pattern (RV-051 F-3).
+                if let EdgeTarget::UnresolvedRef { raw } = &target {
+                    diagnostics.push(CatalogDiagnostic {
+                        file: record.path.join("memory.toml"),
+                        entity_key: Some(CatalogKey::Memory(record.uid.clone())),
+                        field: Some(relation.label.clone()),
+                        message: format!(
+                            "dangling reference: memory edge target `{raw}` does not resolve"
+                        ),
+                        severity: Severity::Warning,
+                    });
+                }
+
+                edges.push(CatalogEdge {
+                    source: CatalogKey::Memory(record.uid.clone()),
+                    label: CatalogEdgeLabel::Raw(relation.label.clone()),
+                    target,
+                    origin: EdgeOrigin {
+                        file: record.path.join("memory.toml"),
+                        field: Some(relation.label.clone()),
+                    },
                 });
             }
         }
@@ -193,13 +319,13 @@ impl Catalog {
 /// 1. Parse fails → `UnvalidatedText`
 /// 2. Parse succeeds, entity present in `key_set` → `Resolved(key)`
 /// 3. Parse succeeds, entity absent from `key_set` → `UnresolvedRef`
-fn classify_target(raw: &str, key_set: &BTreeSet<EntityKey>) -> EdgeTarget {
+fn classify_target(raw: &str, key_set: &BTreeSet<CatalogKey>) -> EdgeTarget {
     match integrity::parse_canonical_ref(raw) {
         Ok((kref, id)) => {
-            let key = EntityKey {
+            let key = CatalogKey::Numbered(EntityKey {
                 prefix: kref.kind.prefix,
                 id,
-            };
+            });
             if key_set.contains(&key) {
                 EdgeTarget::Resolved(key)
             } else {
@@ -220,11 +346,15 @@ fn classify_target(raw: &str, key_set: &BTreeSet<EntityKey>) -> EdgeTarget {
 
 /// Scan the full entity corpus, hydrate into a `Catalog`.
 ///
-/// Calls `scan_entities` (the fail-fast KINDS walk), then `Catalog::from_scanned`
-/// (pure projection). No second disk walk.
+/// Calls `scan_entities` (the fail-fast KINDS walk) and `scan_memory_entities`
+/// (the memory walk), then `Catalog::from_scanned` (pure projection).
 pub(crate) fn scan_catalog(root: &Path) -> anyhow::Result<Catalog> {
     let scanned = super::scan::scan_entities(root)?;
-    Ok(Catalog::from_scanned(root, &scanned))
+    let mut diagnostics = Vec::new();
+    let memory = super::scan::scan_memory_entities(root, &mut diagnostics)?;
+    let mut catalog = Catalog::from_scanned(root, &scanned, &memory);
+    catalog.diagnostics.extend(diagnostics);
+    Ok(catalog)
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +403,7 @@ mod tests {
         assert_eq!(sl001.path, root.join(".doctrine/slice/001"));
         assert_eq!(sl001.title, "S1");
         assert_eq!(sl001.status.as_deref(), Some("proposed"));
-        assert_eq!(sl001.kind.prefix, "SL");
+        assert_eq!(sl001.kind.unwrap().prefix, "SL");
 
         let req005 = catalog
             .entities
@@ -294,10 +424,10 @@ mod tests {
         assert_eq!(sl001_edge.label.name(), "requirements");
         assert_eq!(
             sl001_edge.target,
-            EdgeTarget::Resolved(EntityKey {
+            EdgeTarget::Resolved(CatalogKey::Numbered(EntityKey {
                 prefix: "REQ",
                 id: 5
-            })
+            }))
         );
         assert_eq!(sl001_edge.origin.file, root.join(".doctrine/slice/001"));
         assert_eq!(sl001_edge.origin.field.as_deref(), Some("requirements"));
@@ -311,10 +441,10 @@ mod tests {
         assert_eq!(adr002_edge.label.name(), "supersedes");
         assert_eq!(
             adr002_edge.target,
-            EdgeTarget::Resolved(EntityKey {
+            EdgeTarget::Resolved(CatalogKey::Numbered(EntityKey {
                 prefix: "ADR",
                 id: 1
-            })
+            }))
         );
     }
 
@@ -352,7 +482,7 @@ mod tests {
         assert!(diag.message.contains("REQ-999"));
         assert!(diag.message.contains("dangling"));
         assert_eq!(
-            diag.entity_key.map(|k| k.canonical()),
+            diag.entity_key.as_ref().map(|k| k.canonical()),
             Some("SL-001".to_string())
         );
         assert_eq!(diag.field.as_deref(), Some("requirements"));
@@ -415,9 +545,11 @@ mod tests {
         let catalog = scan_catalog(root).unwrap();
 
         for entity in &catalog.entities {
-            let expected = root
-                .join(entity.kind.dir)
-                .join(format!("{:03}", entity.key.id));
+            let CatalogKey::Numbered(key) = &entity.key else {
+                panic!("fixture should only produce numbered entities");
+            };
+            let kind = entity.kind.unwrap();
+            let expected = root.join(kind.dir).join(format!("{:03}", key.id));
             assert_eq!(
                 entity.path,
                 expected,
@@ -473,7 +605,7 @@ mod tests {
     #[test]
     fn classify_target_unknown_kind_prefix_is_unvalidated() {
         // ZZ-001 parses as a ref pattern but ZZ is not a known KINDS prefix.
-        let empty_set: BTreeSet<EntityKey> = BTreeSet::new();
+        let empty_set: BTreeSet<CatalogKey> = BTreeSet::new();
         let result = classify_target("ZZ-001", &empty_set);
         assert_eq!(
             result,
@@ -485,7 +617,7 @@ mod tests {
 
     #[test]
     fn classify_target_no_dash_is_unvalidated() {
-        let empty_set: BTreeSet<EntityKey> = BTreeSet::new();
+        let empty_set: BTreeSet<CatalogKey> = BTreeSet::new();
         let result = classify_target("just_text", &empty_set);
         assert_eq!(
             result,
@@ -497,7 +629,7 @@ mod tests {
 
     #[test]
     fn classify_target_parses_but_absent_is_unresolved() {
-        let empty_set: BTreeSet<EntityKey> = BTreeSet::new();
+        let empty_set: BTreeSet<CatalogKey> = BTreeSet::new();
         let result = classify_target("SL-999", &empty_set);
         assert_eq!(
             result,
@@ -514,8 +646,136 @@ mod tests {
             id: 1,
         };
         let mut set = BTreeSet::new();
-        set.insert(key);
+        set.insert(CatalogKey::Numbered(key));
         let result = classify_target("SL-001", &set);
-        assert_eq!(result, EdgeTarget::Resolved(key));
+        assert_eq!(result, EdgeTarget::Resolved(CatalogKey::Numbered(key)));
+    }
+
+    // == Memory integration helpers and tests ==
+
+    fn seed_memory(root: &Path, uid: &str, title: &str, relations: &[(&str, &str)]) {
+        use crate::memory::MEMORY_ITEMS_DIR;
+        let items_dir = root.join(MEMORY_ITEMS_DIR).join(uid);
+        std::fs::create_dir_all(&items_dir).unwrap();
+        let rels: Vec<String> = relations
+            .iter()
+            .map(|(l, t)| format!("[[relation]]\nlabel = \"{l}\"\ntarget = \"{t}\"\n"))
+            .collect();
+        std::fs::write(
+            items_dir.join("memory.toml"),
+            format!(
+                "schema = \"doctrine.memory\"\nversion = 1\nmemory_uid = \"{uid}\"\ntitle = \"{title}\"\nstatus = \"active\"\nmemory_type = \"pattern\"\n{}",
+                rels.concat()
+            ),
+        )
+        .unwrap();
+    }
+
+    /// RV-051 F-7: integration test for memory-edge target resolution pipeline.
+    #[test]
+    fn memory_edge_pipeline_resolves_and_diagnoses() {
+        let dir = tmp();
+        let root = dir.path();
+
+        seed_slice(root, 1, &[]);
+
+        seed_memory(
+            root,
+            "mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "Test Memory",
+            &[
+                ("references", "SL-001"),
+                ("references", "SL-999"),
+                ("see-also", "some free text"),
+            ],
+        );
+
+        let catalog = scan_catalog(root).unwrap();
+
+        assert_eq!(catalog.entities.len(), 2);
+        assert_eq!(catalog.edges.len(), 3);
+
+        let mem_entity = catalog
+            .entities
+            .iter()
+            .find(|e| matches!(e.key, CatalogKey::Memory(_)))
+            .unwrap();
+        assert_eq!(mem_entity.kind_label, "MEM");
+        assert_eq!(mem_entity.title, "Test Memory");
+        assert_eq!(mem_entity.memory_type.as_deref(), Some("pattern"));
+        assert!(mem_entity.kind.is_none());
+
+        let resolved_edge = catalog
+            .edges
+            .iter()
+            .find(|e| {
+                matches!(&e.target, EdgeTarget::Resolved(k) if k.canonical() == "SL-001")
+            })
+            .unwrap();
+        assert_eq!(resolved_edge.label.name(), "references");
+
+        let unresolved_edge = catalog
+            .edges
+            .iter()
+            .find(|e| {
+                matches!(&e.target, EdgeTarget::UnresolvedRef { raw } if raw == "SL-999")
+            })
+            .unwrap();
+        assert_eq!(unresolved_edge.label.name(), "references");
+
+        let free_text_edge = catalog
+            .edges
+            .iter()
+            .find(|e| {
+                matches!(&e.target, EdgeTarget::UnvalidatedText { raw } if raw == "some free text")
+            })
+            .unwrap();
+        assert_eq!(free_text_edge.label.name(), "see-also");
+
+        let warnings: Vec<&CatalogDiagnostic> = catalog
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Warning)
+            .collect();
+        assert_eq!(warnings.len(), 1, "expected one dangling-ref Warning");
+        assert!(warnings[0].message.contains("SL-999"));
+        assert!(warnings[0].message.contains("does not resolve"));
+    }
+
+    /// RV-051 F-1: D10 — empty-field memory relations surface diagnostics
+    /// but must NOT emit blank graph edges.
+    #[test]
+    fn memory_empty_relation_fields_surface_diagnostics_not_edges() {
+        let dir = tmp();
+        let root = dir.path();
+
+        seed_memory(
+            root,
+            "mem_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "Empty Relations",
+            &[
+                ("", "SL-001"),
+                ("refs", ""),
+                ("", ""),
+            ],
+        );
+
+        let catalog = scan_catalog(root).unwrap();
+
+        assert_eq!(catalog.entities.len(), 1);
+        assert_eq!(
+            catalog.edges.len(),
+            0,
+            "empty-field relations must not produce blank graph edges"
+        );
+
+        let warnings: Vec<&CatalogDiagnostic> = catalog
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Warning)
+            .collect();
+        assert_eq!(warnings.len(), 3);
+        assert!(warnings.iter().any(|d| d.message.contains("empty relation label")));
+        assert!(warnings.iter().any(|d| d.message.contains("empty relation target")));
     }
 }

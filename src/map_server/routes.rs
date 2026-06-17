@@ -183,25 +183,44 @@ async fn entity_markdown(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, MapServerError> {
-    let (kind_ref, num) = crate::integrity::parse_canonical_ref(&id)
-        .map_err(|_e| MapServerError::BadEntityId(id.clone()))?;
-    let key = crate::catalog::scan::EntityKey {
-        prefix: kind_ref.kind.prefix,
-        id: num,
-    };
-    let graph = state.graph.read().await;
-    let node_exists = graph
-        .nodes
-        .contains_key(&crate::catalog::graph::NodeKey::Entity(key));
-    drop(graph);
-    if !node_exists {
-        return Err(MapServerError::EntityNotFound(id));
+    // Path 1: canonical ref (numbered entities — SL-001, ADR-010, etc.)
+    if let Ok((kind_ref, num)) = crate::integrity::parse_canonical_ref(&id) {
+        let key = crate::catalog::scan::EntityKey {
+            prefix: kind_ref.kind.prefix,
+            id: num,
+        };
+        let graph = state.graph.read().await;
+        let node_exists = graph
+            .nodes
+            .contains_key(&crate::catalog::graph::NodeKey::Numbered(key));
+        drop(graph);
+        if !node_exists {
+            return Err(MapServerError::EntityNotFound(id));
+        }
+        let body = markdown::read_entity_markdown(&state.root, &key).await?;
+        return Ok((
+            [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+            body,
+        ));
     }
-    let body = markdown::read_entity_markdown(&state.root, &key).await?;
-    Ok((
-        [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
-        body,
-    ))
+
+    // Path 2: memory uid (mem_019ecf… — validated shape + graph membership)
+    if crate::memory::is_uid(&id) {
+        let graph_key = crate::catalog::graph::NodeKey::Memory(id.clone());
+        let graph = state.graph.read().await;
+        let node_exists = graph.nodes.contains_key(&graph_key);
+        drop(graph);
+        if !node_exists {
+            return Err(MapServerError::EntityNotFound(id));
+        }
+        let body = markdown::read_memory_markdown(&state.root, &id).await?;
+        return Ok((
+            [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+            body,
+        ));
+    }
+
+    Err(MapServerError::BadEntityId(id))
 }
 
 // ---------------------------------------------------------------------------
@@ -1020,6 +1039,104 @@ mod tests {
                 .starts_with("text/markdown")
         );
         assert_eq!(body, "# Concept Map\n");
+    }
+
+    // -----------------------------------------------------------------------
+    // Memory uid entity_markdown (SL-081 PHASE-06)
+    // -----------------------------------------------------------------------
+
+    /// Valid memory uid used in tests — 32 hex chars after `mem_`.
+    const TEST_MEM_UID: &str = "mem_0123456789abcdef0123456789abcdef";
+
+    /// Build a test app whose in-memory graph includes a memory uid node,
+    /// and whose disk contains the corresponding markdown file so
+    /// `read_memory_markdown` succeeds.
+    async fn app_with_memory_node(root_path: &std::path::Path, uid: &str) -> Router {
+        use crate::catalog::graph::NodeKey;
+        use crate::map_server::shell::{FakeDotMode, FakeDotRenderer};
+
+        // Write the memory markdown body on disk (items/ dir takes priority).
+        let md_dir = root_path.join(format!(".doctrine/memory/items/{uid}"));
+        std::fs::create_dir_all(&md_dir).unwrap();
+        std::fs::write(md_dir.join("memory.md"), "# memory body\n").unwrap();
+
+        // Build the graph from a normal catalog (SL-001, ADR-001, etc.)
+        // and manually insert a memory node.
+        let catalog = crate::catalog::hydrate::scan_catalog(root_path).expect("scan");
+        let mut graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
+        graph.nodes.insert(
+            NodeKey::Memory(uid.to_string()),
+            crate::catalog::graph::CatalogNode {
+                title: "Test Memory".to_string(),
+                status: Some("active".to_string()),
+                kind_label: "Assumption",
+                memory_type: Some("assumption".to_string()),
+            },
+        );
+
+        let state = AppState {
+            root: root_path.to_path_buf(),
+            graph: Arc::new(tokio::sync::RwLock::new(graph)),
+            dot_renderer: Arc::new(FakeDotRenderer {
+                mode: FakeDotMode::Success(b"<svg></svg>".to_vec()),
+            }),
+        };
+        router(state)
+    }
+
+    #[tokio::test]
+    async fn entity_markdown_memory_uid_in_graph_returns_200() {
+        // VT-1: memory uid that is_uid passes, present in graph, and on disk
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        crate::catalog::test_helpers::seed_slice(&root_path, 1, &[]);
+        crate::catalog::test_helpers::seed_adr(&root_path, 1, &[]);
+        let app = app_with_memory_node(&root_path, TEST_MEM_UID).await;
+
+        let (status, headers, body) = send(
+            &app,
+            json_req("GET", &format!("/api/entity/{TEST_MEM_UID}/markdown"), None),
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert!(
+            headers["content-type"]
+                .to_str()
+                .unwrap()
+                .starts_with("text/markdown")
+        );
+        assert_eq!(body, "# memory body\n");
+    }
+
+    #[tokio::test]
+    async fn entity_markdown_memory_uid_not_in_graph_returns_404() {
+        // VT-2: memory uid that is_uid passes but not in graph → 404
+        let (_root, app) = seeded_app().await;
+        let missing_uid = "mem_deadbeef000000000000000000000000";
+
+        let (status, _headers, body) = send(
+            &app,
+            json_req("GET", &format!("/api/entity/{missing_uid}/markdown"), None),
+        )
+        .await;
+        // seeded_app builds graph from catalog only, so the uid won't be in it.
+        assert_eq!(status, 404);
+        assert!(body.contains("entity_not_found"));
+        assert!(body.contains(missing_uid));
+    }
+
+    #[tokio::test]
+    async fn entity_markdown_bogus_mem_string_returns_400() {
+        // VT-3: string "mem_garbage" doesn't pass is_uid, not a canonical ref → 400
+        let (_root, app) = seeded_app().await;
+
+        let (status, _headers, body) = send(
+            &app,
+            json_req("GET", "/api/entity/mem_garbage/markdown", None),
+        )
+        .await;
+        assert_eq!(status, 400);
+        assert!(body.contains("bad_entity_id"));
     }
 
     // -----------------------------------------------------------------------

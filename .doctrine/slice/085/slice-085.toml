@@ -1,17 +1,13 @@
-id = 81
-slug = "memory-in-catalog"
-title = "Surface memory entities and their relations in the catalog graph + web explorer"
-status = "done"
-created = "2026-06-16"
+id = 85
+slug = "dispatch-drive-loop-into-cli"
+title = "Push dispatch drive loop into CLI — shrink skill to a thin CLI-calling wrapper"
+status = "proposed"
+created = "2026-06-17"
 updated = "2026-06-17"
 
 [relationships]
-needs = ["SL-072", "SL-073"]        # slice→work hard prerequisite
+needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
-
-[[relation]]
-label = "governed_by"
-target = "ADR-001"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
