@@ -1,0 +1,108 @@
+/* Doctrine Map Explorer — tokens (SL-093 PHASE-01) */
+
+@layer tokens {
+  :root {
+    /* Kind colour palette */
+    --kind-SL: #4A90D9;
+    --kind-ADR: #7B4FBF;
+    --kind-POL: #7B4FBF;
+    --kind-STD: #9B59B6;
+    --kind-PRD: #E67E22;
+    --kind-SPEC: #E67E22;
+    --kind-REQ: #F39C12;
+    --kind-ISS: #C0392B;
+    --kind-IMP: #C0392B;
+    --kind-CHR: #C0392B;
+    --kind-RSK: #C0392B;
+    --kind-IDE: #27AE60;
+    --kind-RV: #1ABC9C;
+    --kind-REC: #95A5A6;
+    --kind-ASM: #3498DB;
+    --kind-DEC: #3498DB;
+    --kind-QUE: #8E44AD;
+    --kind-CON: #8E44AD;
+    --kind-CM: #16A085;
+    --kind-MEM: #6C3483;
+    --kind-REV: #A04000;
+
+    /* Theme (light) */
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --border: #e0e0e0;
+    --border-light: #e0e0e0;
+    --bg-card: #fafafa;
+    --hover-bg: #f5f5f5;
+    --sidebar-bg: #f8f9fa;
+    --link: #2563eb;
+
+    /* Concept-map palette */
+    --cm-primary: #16A085;
+    --cm-primary-hover: #13876b;
+    --cm-error-bg: #fde8e8;
+    --cm-error-fg: #c0392b;
+    --cm-error-border: #f5c6cb;
+    --cm-success-bg: #e8f5e9;
+    --cm-success-fg: #27ae60;
+    --cm-success-border: #c8e6c9;
+    --cm-warning-bg: #fffdf0;
+    --cm-warning-fg: #856404;
+    --cm-warning-border: #f0c040;
+    --cm-warning-heading: #b8860b;
+    --cm-warning-divider: #f5e6a3;
+    --cm-btn-text: #ffffff;
+    --cm-input-border: #d0d0d0;
+
+    /* Priority palette */
+    --priority-actionable-bg: #27AE60;
+    --priority-actionable-fg: #ffffff;
+    --priority-blocked-bg: #E67E22;
+    --priority-blocked-fg: #ffffff;
+    --priority-terminal-bg: #95A5A6;
+    --priority-terminal-fg: #ffffff;
+    --priority-needs-edge: #C0392B;
+    --priority-after-edge: #E67E22;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* Theme overrides */
+      --bg: #1a1a1a;
+      --fg: #e0e0e0;
+      --muted: #9b9b9b;
+      --border: #333333;
+      --border-light: #444444;
+      --bg-card: #2a2a2a;
+      --hover-bg: #2a2a2a;
+      --sidebar-bg: #141414;
+      --link: #60a5fa;
+
+      /* CM overrides */
+      --cm-primary: #1ABC9C;
+      --cm-primary-hover: #16A085;
+      --cm-error-bg: #3a1a1a;
+      --cm-error-fg: #e07070;
+      --cm-error-border: #6b3030;
+      --cm-success-bg: #1a2a1a;
+      --cm-success-fg: #4ecb7c;
+      --cm-success-border: #2a4a2a;
+      --cm-warning-bg: #2a2410;
+      --cm-warning-fg: #c0a040;
+      --cm-warning-border: #8b6914;
+      --cm-warning-heading: #e0c060;
+      --cm-warning-divider: #3a3410;
+      --cm-btn-text: #1a1a1a;
+      --cm-input-border: #444444;
+
+      /* Priority overrides */
+      --priority-actionable-bg: #2ECC71;
+      --priority-actionable-fg: #ffffff;
+      --priority-blocked-bg: #F39C12;
+      --priority-blocked-fg: #ffffff;
+      --priority-terminal-bg: #7F8C8D;
+      --priority-terminal-fg: #ffffff;
+      --priority-needs-edge: #E74C3C;
+      --priority-after-edge: #F39C12;
+    }
+  }
+}

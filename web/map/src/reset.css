@@ -1,0 +1,9 @@
+/* Doctrine Map Explorer — reset (SL-093 PHASE-01) */
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+}
