@@ -1,0 +1,44 @@
+id    = 64
+slug  = "reconciliation-review-of-sl-088"
+title = "reconciliation review of SL-088"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-088"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Missing --agent pi --dry-run integration test (PHASE-04 VT-1, EX-4)"
+detail = """
+Plan PHASE-04 VT-1: 'New integration test for --agent pi --dry-run.' EX-4: 'Integration test: doctrine install --agent pi --dry-run prints pi delegation plan.' Phase sheet phase-04.md T4: 'Add integration test for doctrine install --agent pi --dry-run (VT-1 from plan).'
+
+The review/088 diff adds no pi-specific integration test. tests/e2e_claude_install.rs has only install_wires_skills_agent_and_hook_idempotently (Claude path). No test drives --agent pi --dry-run to assert the pi delegation plan prints.
+
+The pi install code path exists and is functionally complete (install_agents_for called with agent+Some(agent) in the non-claude loop). The gap is measurable test coverage, not functional correctness."""
+disposition = "fix-now"
+response = "Add an integration test for `doctrine install --agent pi --dry-run` to tests/e2e_claude_install.rs (or a new test file). The test should: 1) create a temp dir, 2) run `doctrine install --agent pi --dry-run`, 3) assert stdout contains 'pi' and '(not executed)' or similar dry-run indicator, 4) assert exit 0. The pi install code path is already functional — this is coverage closure."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "README.md L153 adds --yes not reflected in design §3"
+detail = """
+Design §3 specifies the reference text as: 'doctrine install --agent claude            # from binary, or' (without --yes).
+
+Implementation (review/088): 'doctrine install --agent claude --yes # from binary, or' (with --yes).
+
+The other four README line rewrites match design exactly (L44, L84, L86, L104). The --yes addition is a reasonable editorial improvement (avoids interactive prompts in the pip-install context) but deviates from the published design text."""
+disposition = "tolerated"
+response = "The --yes addition is a reasonable editorial improvement: in the 'cargo install --path .' context (L149-152), the reader is building from source and using the binary in their projects — --yes avoids interactive prompts and matches the established pattern on L84/L86. The other four README rewrites match design exactly. Accepting this deviation as a better user experience."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

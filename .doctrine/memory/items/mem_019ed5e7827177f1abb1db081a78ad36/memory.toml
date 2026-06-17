@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed5e7827177f1abb1db081a78ad36"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Agent-def generalization: wildcard fallback fragile for N>2 agents"
+summary = "When generalizing install_agent_def() from Claude-only to Claude+pi, two wildcard fallbacks (_ → pi) were used: in install_agents_for() for embed asset selection, and in install_agent_def() for link_dir selection. This works correctly for the current two-agent world but adding a third agent type will require replacing the wildcards with explicit match arms. Not a defect — a natural extension point."
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = []
+globs = ["src/skills.rs"]
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e56b14965646716fea8ddedc3b64796882580ec6"
+ref_name = "refs/heads/main"
+checkout_state_id = "6606c1ad34cc28851d56fd22594d9fb5dcef0623fcf2b235d43e13affb3d909d"
+base_commit = "9620e0b5cc1678c07fc5c60e3c29e427aea4416e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
