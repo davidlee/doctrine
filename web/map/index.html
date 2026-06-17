@@ -26,11 +26,14 @@
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="ADR,POL"> <span class="kind-abbrev">ADR/POL</span> <span class="kind-desc">Decisions / Policies</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="STD"> <span class="kind-abbrev">STD</span> <span class="kind-desc">Standards</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="SL"> <span class="kind-abbrev">SL</span> <span class="kind-desc">Slices</span></label>
-          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="ISS,IMP,CHR,RSK"> <span class="kind-abbrev">ISS/IMP/CHR/RSK</span> <span class="kind-desc">Issues / Risks / Chores</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="ISS"> <span class="kind-abbrev">ISS</span> <span class="kind-desc">Issues</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="IMP"> <span class="kind-abbrev">IMP</span> <span class="kind-desc">Improvements</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="CHR"> <span class="kind-abbrev">CHR</span> <span class="kind-desc">Chores</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="RSK"> <span class="kind-abbrev">RSK</span> <span class="kind-desc">Risks</span></label>
+          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="IDE"> <span class="kind-abbrev">IDE</span> <span class="kind-desc">Ideas</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="REV"> <span class="kind-abbrev">REV</span> <span class="kind-desc">Revisions</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="RV"> <span class="kind-abbrev">RV</span> <span class="kind-desc">Reviews</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="REQ"> <span class="kind-abbrev">REQ</span> <span class="kind-desc">Requirements</span></label>
-          <label class="kind-checkbox"><input type="checkbox" checked data-kinds="IDE"> <span class="kind-abbrev">IDE</span> <span class="kind-desc">Ideas</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="REC"> <span class="kind-abbrev">REC</span> <span class="kind-desc">Records</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="ASM,DEC"> <span class="kind-abbrev">ASM/DEC</span> <span class="kind-desc">Assumptions / Decisions</span></label>
           <label class="kind-checkbox"><input type="checkbox" checked data-kinds="QUE,CON"> <span class="kind-abbrev">QUE/CON</span> <span class="kind-desc">Questions / Concerns</span></label>
@@ -72,6 +75,11 @@
     <main class="main">
       <div class="focus-header">
         <span class="placeholder">Entity title — kind · status</span>
+      </div>
+
+      <div class="view-toggle">
+        <button class="view-btn active" data-view="semantic">Semantic</button>
+        <button class="view-btn" data-view="actionability">Actionability</button>
       </div>
 
       <div class="graph-area">
@@ -129,6 +137,8 @@
   <script src="/assets/render.js"></script>
   <script src="/assets/search.js"></script>
   <script src="/assets/concept-map.js"></script>
+  <script src="/vendor/d3.v7.min.js"></script>
+  <script src="/vendor/d3-dag.min.js"></script>
   <script src="/assets/app.js"></script>
 </body>
 </html>
