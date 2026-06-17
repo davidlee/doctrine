@@ -385,11 +385,16 @@ struct RawGit {
     normalizer: String,
 }
 
-// Carried for shape-faithful parse (consumed, not leaked into `extra`) but not
-// read by any v1 verb yet: relation/source resolution is the SL-008 registry.
-// Modelled fieldless — serde ignores their keys, v1 stores nothing from them.
+// Carried for shape-faithful parse (consumed, not leaked into `extra`). Catalog
+// reads relations for graph display via `read_catalog_record`; any stricter
+// relation vocabulary governance stays deferred.
 #[derive(Debug, Default, Deserialize, Serialize)]
-struct RawRelation {}
+pub(crate) struct RawRelation {
+    #[serde(default)]
+    pub(crate) label: String,
+    #[serde(default)]
+    pub(crate) target: String,
+}
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 struct RawSource {}
@@ -468,6 +473,43 @@ pub(crate) struct Memory {
     pub(crate) trust_level: String,
     pub(crate) severity: String,
     pub(crate) weight: i64,
+}
+
+pub(crate) struct MemoryCatalogRecord {
+    pub(crate) uid: String,
+    pub(crate) title: String,
+    pub(crate) status: String,
+    pub(crate) memory_type: String,
+    pub(crate) relations: Vec<RawRelation>,
+    pub(crate) path: PathBuf,
+}
+
+pub(crate) fn read_catalog_record(toml_path: &Path) -> Result<MemoryCatalogRecord> {
+    let text = std::fs::read_to_string(toml_path)?;
+    let raw: RawMemoryToml = match toml::from_str(&text) {
+        Ok(raw) => raw,
+        Err(err) => bail!("failed to parse memory.toml: {err}"),
+    };
+    if !is_uid(&raw.memory_uid) {
+        bail!(
+            "memory_uid {:?} is not a valid mem_<32 hex> uid",
+            raw.memory_uid
+        );
+    }
+    let title = if raw.title.is_empty() {
+        raw.memory_uid.clone()
+    } else {
+        raw.title
+    };
+
+    Ok(MemoryCatalogRecord {
+        uid: raw.memory_uid,
+        title,
+        status: raw.status,
+        memory_type: raw.memory_type,
+        relations: raw.relations,
+        path: toml_path.parent().unwrap_or(Path::new(".")).to_path_buf(),
+    })
 }
 
 impl TryFrom<RawMemoryToml> for Memory {
@@ -1705,6 +1747,87 @@ ref = "src/main.rs"
     fn invalid_uid_is_rejected() {
         let toml = full_toml().replace(UID, "mem_NOTHEX");
         assert!(Memory::parse(&toml).is_err());
+    }
+
+    fn write_catalog_toml(dir: &Path, body: &str) -> PathBuf {
+        fs::create_dir_all(dir).unwrap();
+        let path = dir.join("memory.toml");
+        fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[test]
+    fn read_catalog_record_reads_a_well_formed_memory_toml() {
+        let tmp = tempfile::tempdir().unwrap();
+        let uid = "mem_00000000000000000000000000000001";
+        let path = write_catalog_toml(tmp.path(), &full_toml().replace(UID, uid));
+
+        let record = read_catalog_record(&path).unwrap();
+        assert_eq!(record.uid, uid);
+        assert_eq!(record.title, "Skinny CLI");
+        assert_eq!(record.status, "active");
+        assert_eq!(record.memory_type, "pattern");
+        assert_eq!(record.path, tmp.path());
+    }
+
+    #[test]
+    fn read_catalog_record_rejects_an_invalid_uid() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_catalog_toml(tmp.path(), &full_toml().replace(UID, "mem_NOTHEX"));
+        assert!(read_catalog_record(&path).is_err());
+    }
+
+    #[test]
+    fn read_catalog_record_falls_back_to_uid_when_title_is_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let uid = "mem_00000000000000000000000000000002";
+        let toml = full_toml()
+            .replace(UID, uid)
+            .replace("title = \"Skinny CLI\"", "title = \"\"");
+        let path = write_catalog_toml(tmp.path(), &toml);
+
+        let record = read_catalog_record(&path).unwrap();
+        assert_eq!(record.title, uid);
+    }
+
+    #[test]
+    fn read_catalog_record_defaults_to_an_empty_relations_vec() {
+        let tmp = tempfile::tempdir().unwrap();
+        let uid = "mem_00000000000000000000000000000003";
+        let toml = full_toml().replace(UID, uid).replace(
+            "\n[[relation]]\nrel = \"supersedes\"\nto = \"mem_018e000000000000000000000000000b\"\n",
+            "",
+        );
+        let path = write_catalog_toml(tmp.path(), &toml);
+
+        let record = read_catalog_record(&path).unwrap();
+        assert!(record.relations.is_empty());
+    }
+
+    #[test]
+    fn read_catalog_record_parses_multiple_relations_with_label_and_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        let uid = "mem_00000000000000000000000000000004";
+        let toml = full_toml()
+            .replace(UID, uid)
+            .replace(
+                "[[relation]]\nrel = \"supersedes\"\nto = \"mem_018e000000000000000000000000000b\"\n",
+                "[[relation]]\nlabel = \"supersedes\"\ntarget = \"mem_018e000000000000000000000000000b\"\n\n[[relation]]\nlabel = \"supports\"\ntarget = \"mem_018e000000000000000000000000000c\"\n",
+            );
+        let path = write_catalog_toml(tmp.path(), &toml);
+
+        let record = read_catalog_record(&path).unwrap();
+        assert_eq!(record.relations.len(), 2);
+        assert_eq!(record.relations[0].label, "supersedes");
+        assert_eq!(
+            record.relations[0].target,
+            "mem_018e000000000000000000000000000b"
+        );
+        assert_eq!(record.relations[1].label, "supports");
+        assert_eq!(
+            record.relations[1].target,
+            "mem_018e000000000000000000000000000c"
+        );
     }
 
     // -- VT-3: MemoryRef ----------------------------------------------------
