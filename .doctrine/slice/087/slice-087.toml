@@ -1,7 +1,7 @@
 id = 87
 slug = "boot-snapshot-hardening"
 title = "Boot snapshot token efficiency & correctness hardening"
-status = "started"
+status = "done"
 created = "2026-06-17"
 updated = "2026-06-17"
 
