@@ -31,18 +31,28 @@ existing files, deduplicates gitignore entries.
 
 ### Stage 2 — forward-step summary (always printed)
 
-A compact summary of the forward steps, one line each:
+A compact summary of the forward steps, one line each. Wording adapts to
+`--dry-run` vs live:
 
 ```
+# live (base install just ran)
 Base install complete. Forward steps:
 
   memory sync  materialize shipped corpus into .doctrine/memory/shipped/
   boot         wire @-import into AGENTS.md/CLAUDE.md + session hooks
   skills       install skills + agent defs for claude
   skills       install skills for pi (delegates to npx)
+
+# --dry-run (nothing executed yet)
+Forward steps (not executed under --dry-run):
+
+  memory sync  materialize shipped corpus into .doctrine/memory/shipped/
+  ...
 ```
 
-Step labels adapt to detected/selected agents.
+Step labels adapt to detected/selected agents. If no agents are detected and
+none specified, skills steps are omitted (non-fatal — user may just want base
+files).
 
 ### Stage 3 — forward steps with individual prompts
 
@@ -161,20 +171,24 @@ via the existing `install::embedded_asset` accessor and writes it to
 - `wire()` already `pub(crate)` (called internally by `run_install`) — called
   directly from `install.rs`
 
-## 4. Agent-def install (pi)
+## 4. Agent-def install (generalized)
 
 SL-084 creates `install/agents/pi/dispatch-worker.md` as an embed asset. The
-consolidated install writes it using the same canonical-copy + symlink pattern
-as the Claude dispatch-worker agent (SL-056 PHASE-11):
+consolidated install writes agent defs using the same canonical-copy + symlink
+pattern as the Claude dispatch-worker agent (SL-056 PHASE-11).
 
-1. Read `install/agents/pi/dispatch-worker.md` via `install::embedded_asset`
-2. Write canonical copy to `.doctrine/agents/pi/dispatch-worker.md`
-3. Symlink `.pi/agents/dispatch-worker.md` →
-   `../../.doctrine/agents/pi/dispatch-worker.md`
+Canonical paths differ by agent to avoid collisions:
+- Claude: `.doctrine/agents/dispatch-worker.md` (flat, existing path)
+- Pi:     `.doctrine/agents/pi/dispatch-worker.md` (namespaced)
 
-This mirrors `skills::install_agents()` for Claude, generalized for the
-agent name. A single `install_agent_def(root, agent_name, global)` function
-handles both.
+Link targets:
+- Claude: `.claude/agents/dispatch-worker.md` → `../../.doctrine/agents/dispatch-worker.md`
+- Pi:     `.pi/agents/dispatch-worker.md` → `../../.doctrine/agents/pi/dispatch-worker.md`
+
+A single `install_agent_def(root, agent_name, canon_subdir, embed_asset, global)`
+function handles both. `canon_subdir` is `None` for Claude (flat) and
+`Some("pi")` for pi (namespaced). Reuses `classify_link`/`write_link`/
+`relative_target` from `skills.rs` — no parallel symlink impl.
 
 ## 5. Test strategy
 
@@ -206,9 +220,10 @@ handles both.
 
 ## 6. Edge cases
 
-- **No `.claude/` and no `--agent`:** `resolve_agents` bails with a clear
-  message. Base install + memory + boot still run (boot auto-detects
-  harnesses independently).
+- **No `.claude/` and no `--agent`:** Agent resolution returns an empty list
+  (non-fatal). Skills steps are skipped. Base install + memory + boot still
+  run (boot auto-detects harnesses independently). The standalone `claude
+  install` (now removed) was the only path that needed the hard error.
 - **`--only-memory` with `--agent pi`:** The skills install step only
   installs `record-memory` + `retrieve-memory` for pi via `npx skills
   --skill record-memory --skill retrieve-memory`. clap enforces

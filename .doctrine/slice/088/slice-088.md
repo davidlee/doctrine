@@ -51,16 +51,17 @@ The forward steps, in order:
 | Skills install (per detected agent) | Symlinks skills + agent defs + hooks | Prompted per agent |
 
 Agent auto-detection follows the existing `resolve_agents` logic (`.claude/`
-directory → Claude; explicit `--agent` names override). Non-Claude agents
-delegate to `npx skills` as today.
+directory → Claude; explicit `--agent` names override). If no agents are
+detected and none specified, skills steps are skipped (non-fatal — user may
+only want base files). Non-Claude agents delegate to `npx skills` as today.
 
-### 4. `doctrine claude install` removed as primary command
+### 4. `doctrine claude install` removed outright
 
-The `claude install` subcommand is removed from the public CLI. `skills
-install` (already a hidden deprecated alias) may also be removed. The
-underlying machinery (`skills::run_install`, `boot::install_claude_hook`,
-etc.) is preserved — it's now called from `install::run`, not from its own
-command entry point.
+The `Command::Claude` variant and `ClaudeCommand` enum are removed entirely.
+`SkillsCommand::Install` is removed (the hidden `SkillsCommand::List` stays).
+No deprecation alias — no external users yet. The underlying machinery
+(`skills::run_install`, `boot::install_claude_hook`, etc.) is preserved — now
+called from `install::run`, not from its own command entry point.
 
 ### 5. Standalone focused commands preserved
 
@@ -72,12 +73,12 @@ These remain as fine-grained knobs for scripting/CI.
 
 ### Affected files
 
-- `src/main.rs` — CLI surface: move agent flags to `Install`, remove `ClaudeCommand::Install`
-- `src/install.rs` — orchestrate forward steps, prompt logic
-- `src/skills.rs` — `run_install` becomes an internal function called from install
-- `src/boot.rs` — `run_install` (boot) callable from install
-- `src/memory.rs` — `sync` callable from install
-- `install/` — no manifest changes (the shipped files are correct)
+- `src/main.rs` — CLI surface: move agent flags to `Install`, remove `Command::Claude` + `ClaudeCommand`, remove `SkillsCommand::Install`
+- `src/install.rs` — orchestrate forward steps, prompt logic, agent-def install
+- `src/skills.rs` — extract per-agent install functions; `run_install` becomes internal
+- `src/boot.rs` — `wire()` called directly from install
+- `src/corpus.rs` — `sync_corpus()` called directly from install
+- `install/` — no manifest changes (shipped files correct)
 - `plugins/` — no changes (skills content unchanged)
 
 ## Non-Goals
@@ -93,8 +94,8 @@ These remain as fine-grained knobs for scripting/CI.
 
 - **ASM-1:** `npx`/Node is available when delegating to non-Claude agents.
   Existing assumption; not introduced here.
-- **RSK-1:** Removing `claude install` may break user scripts. Mitigation:
-  keep as hidden alias for one release cycle, printing a migration hint.
+- **RSK-1:** Removing `claude install` may break scripts. Mitigation: none
+  needed — no external users yet. Clean removal.
 - **RSK-2:** The forward-step prompt flow must not be confusing. Each prompt
   must be clear about what will be written where. The `--dry-run` output
   serves as the reference plan.
