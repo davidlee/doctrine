@@ -18,6 +18,13 @@ No new sort function, no new types, no `EntityKey` repr change. The derived
 `Ord` is stable and already tested implicitly by every surface that sorts
 `EntityKey` in a `BTreeSet` or `BTreeMap`.
 
+Cross-prefix ordering (e.g. ADR-001 before SL-001 because `'A' < 'S'`) is
+exercised implicitly by `scan_ids` producing a `BTreeSet<EntityKey>` and by
+projection/resolution tests — the RSK-007 finding is specifically about the
+numeric-within-prefix cliff at id ≥ 1000. The PHASE-01 test extension therefore
+covers same-prefix ordering only; a cross-prefix inbound-sort assertion would
+be redundant with existing `BTreeSet<EntityKey>` coverage.
+
 **Sort site:** single change in `inspect_from` (`relation_graph.rs`), the
 inbound render block. No other site sorts canonical-ref strings bound for
 display — `dep_seq_for` produces per-entity edges consumed by the priority
@@ -66,9 +73,10 @@ matching the `validate` findings style. The stdout output (human table / JSON)
 is unchanged — byte-identical for a well-formed corpus.
 
 `scan_catalog` already accumulates diagnostics in its own `Vec` and returns
-them in `Catalog.diagnostics`. The catalog's diagnostics flow through existing
-render paths for survey, next, and other catalog consumers — no new stderr
-printing needed there.
+them in `Catalog.diagnostics`. Entity-scan errors and memory-scan errors land
+in the same `Vec`, with entity-scan errors ordered first (KINDS-table order).
+The catalog's diagnostics flow through existing render paths for survey, next,
+and other catalog consumers — no new stderr printing needed there.
 
 `priority::graph::build` and the test-only `inspect` wrapper pass
 `&mut vec![]` — diagnostics are discarded (priority doesn't display per-entity
@@ -80,6 +88,19 @@ scan errors).
 failure semantics (meta parse vs relation-block parse). Merging them into one
 match would couple distinct failure modes and produce a less specific error
 message. Each gets its own `match` arm with a targeted diagnostic message.
+
+### D5 — Dangler amplification: skipped-entity references become danglers
+
+When a sibling entity is skipped (malformed TOML), any other entity that
+references it via an outbound edge will display that reference as a **dangler**
+in `inspect` output — indistinguishable from a free-text target that was never
+minted. This is an accepted trade-off: the stderr diagnostic flags the
+malformed entity, and the dangling reference is a visibility cue rather than a
+silent omission. The alternative (partial entity with meta but no edges, or
+propagating a degraded-marker through the projection) would require a larger
+change to `ScannedEntity` and every consumer — out of scope for IMP-036. The
+`--strict` flag (deferred) would be the natural place to restore fail-fast
+behaviour for consumers that reject this trade-off.
 
 ## Current behaviour vs target behaviour
 
@@ -99,27 +120,33 @@ message. Each gets its own `match` arm with a targeted diagnostic message.
 | `src/relation_graph.rs` `inbound_render_is_permutation_invariant` test | Seed ids ≥ 1000; ~8 lines |
 | `src/catalog/scan.rs` `scan_entities` signature | Add `diagnostics: &mut Vec<CatalogDiagnostic>` param |
 | `src/catalog/scan.rs` `scan_entities` loop body | Two `?` → `match` with `continue` + diagnostic; ~25 lines |
-| `src/catalog/scan.rs` tests | Two new tests: skip-malformed, all-malformed-empty |
+| `src/catalog/scan.rs` tests (3 existing + new) | Existing calls (lines 317, 336, 392) pass `&mut vec![]`; new tests: skip-malformed (both failure channels), all-malformed, mixed-validity |
 | `src/catalog/hydrate.rs` `scan_catalog` | Pass `&mut diagnostics` to `scan_entities`; ~3 lines |
 | `src/main.rs` `run_inspect` | Pass collector, print non-empty diags to stderr; ~5 lines |
-| `src/priority.rs` `build` | Pass `&mut vec![]`; ~1 line |
-| `src/relation_graph.rs:523` `inspect` wrapper | Pass `&mut vec![]`; ~1 line |
+| `src/priority/graph.rs` `build` (line 119) | Pass `&mut vec![]`; ~1 line |
+| `src/priority/graph.rs` test (line 502) | Pass `&mut vec![]`; ~1 line |
+| `src/relation_graph.rs:523` `inspect` wrapper (test-only) | Pass `&mut vec![]`; ~1 line |
+| `src/relation_graph.rs` test (line 1076) | Pass `&mut vec![]`; ~1 line |
 
 ## Verification
 
 - `inbound_render_is_permutation_invariant` extended: seed SL-998, SL-999,
   SL-1000, SL-1001 as supersedors of SL-001, planted out-of-order on disk →
   assert inbound order `["SL-0998", "SL-0999", "SL-1000", "SL-1001"]`
-  (numeric, not lexical).
-- New test: `scan_entities` with one malformed TOML returns remaining entities
-  + one Error diagnostic; the good entity's fields are intact.
+  (numeric, not lexical). Cross-prefix ordering is covered implicitly by
+  `BTreeSet<EntityKey>` construction in scan-order and projection tests.
+- New test: `scan_entities` with `status_and_title_for` failure → remaining
+  entities + one Error diagnostic; assert `severity == Severity::Error`,
+  `entity_key` matches the skipped entity, and `file` is populated.
+- New test: `scan_entities` with `outbound_for` failure → entity skipped +
+  one Error diagnostic; diagnostic message differs from the meta-parse case.
 - New test: `scan_entities` with all-malformed siblings returns empty
   `Vec` + N diagnostics; no panic.
 - New test: mixed-validity — two good, one bad → two entities returned, one
   diagnostic.
 - New integration test: `scan_catalog` with one malformed entity returns
-  remaining entities + diagnostic propagated through `Catalog.diagnostics`
-  (covers survey/next/backlog-list consumers).
+  remaining entities + diagnostic propagated through `Catalog.diagnostics`;
+  `severity`, `entity_key`, and `file` survive the round-trip.
 - Existing suite stays green — behaviour-preserving for well-formed corpus
   (the gate).
 - `cargo clippy` zero warnings.

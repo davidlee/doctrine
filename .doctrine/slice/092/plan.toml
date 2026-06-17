@@ -42,16 +42,19 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete; existing test suite green." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "scan_entities returns remaining entities + diagnostics when one sibling is malformed." },
-  { id = "EX-2", text = "All call sites updated (4 non-test); existing suite stays green (behaviour-preserving for well-formed corpus)." },
-  { id = "EX-3", text = "scan_catalog propagates diagnostics from scan_entities through Catalog.diagnostics." },
+  { id = "EX-1", text = "scan_entities returns remaining entities + diagnostics when one sibling is malformed (both failure channels: status_and_title_for and outbound_for)." },
+  { id = "EX-2", text = "All 9 call sites updated (3 non-test + 6 test); existing suite stays green (behaviour-preserving for well-formed corpus)." },
+  { id = "EX-3", text = "scan_catalog propagates diagnostics from scan_entities through Catalog.diagnostics; diagnostic fields (severity, entity_key, file) survive the round-trip." },
   { id = "EX-4", text = "run_inspect surfaces diagnostics to stderr before normal output." },
+  { id = "EX-5", text = "Dangler-amplification trade-off documented in design.md (D5): skipped-entity references become danglers; stderr diagnostic is the warning." },
 ]
 verification = [
-  { id = "VT-1", expects = "Test: one malformed sibling in scan_entities → remaining entities + one Error diagnostic." },
-  { id = "VT-2", expects = "Test: all-malformed siblings → empty Vec + N diagnostics; no panic." },
-  { id = "VT-3", expects = "Test: scan_catalog integration with malformed entity → diagnostic propagated through Catalog.diagnostics." },
-  { id = "VT-4", expects = "just gate green; cargo clippy zero warnings." },
+  { id = "VT-1", expects = "Test: one malformed sibling (status_and_title_for failure) → remaining entities + one Error diagnostic; assert severity=Error, entity_key matches, file populated." },
+  { id = "VT-2", expects = "Test: one malformed sibling (outbound_for failure) → entity skipped + one Error diagnostic; message differs from VT-1 (relation-block vs meta parse)." },
+  { id = "VT-3", expects = "Test: all-malformed siblings → empty Vec + N diagnostics; no panic." },
+  { id = "VT-4", expects = "Test: mixed-validity (two good, one bad) → two entities returned, one diagnostic." },
+  { id = "VT-5", expects = "Test: scan_catalog integration with malformed entity → diagnostic propagated through Catalog.diagnostics; severity, entity_key, and file survive round-trip." },
+  { id = "VT-6", expects = "just gate green; cargo clippy zero warnings." },
 ]
 specs             = []
 requirements      = []
