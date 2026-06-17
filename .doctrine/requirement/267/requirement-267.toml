@@ -7,8 +7,10 @@ title = "The estimate facet is reusable and kind-agnostic"
 status = "pending"
 kind = "quality"
 
-# description — optional one-line summary (queryable). Omitted by default (None);
-# the full statement/rationale stays prose in the sister `.md`. Add as:
-#   description = "…"
+description = "The estimate facet is a single reusable, kind-agnostic schema attachable to any TOML-backed addressable entity; it is not slice-specific, so later adoption by other kinds is mechanical."
 tags = []
-acceptance_criteria = []
+acceptance_criteria = [
+  "The estimate model is defined once and shared, not duplicated or specialised per entity kind.",
+  "Attaching the facet to a new entity kind requires wiring the kind's parse/hydrate path, not remodelling the estimate schema.",
+  "No part of the schema assumes a slice-specific shape.",
+]

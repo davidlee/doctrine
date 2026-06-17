@@ -7,8 +7,10 @@ title = "Expose estimate metadata to graph tooling through a stable contract"
 status = "pending"
 kind = "functional"
 
-# description — optional one-line summary (queryable). Omitted by default (None);
-# the full statement/rationale stays prose in the sister `.md`. Add as:
-#   description = "…"
+description = "Catalog/graph hydration exposes each estimated node's metadata to graph tooling through a stable, policy-agnostic contract, so a consumer can aggregate without doctrine-specific project-management semantics."
 tags = []
-acceptance_criteria = []
+acceptance_criteria = [
+  "For each estimated node, hydration exposes entity id, entity kind, estimate lower, estimate upper, the project estimation unit, the node's relations/graph edges, and lifecycle state where available.",
+  "The exposed contract carries no aggregation, traversal, or interpretation policy.",
+  "A consumer can build traversal/aggregation primitives over the exposed metadata without understanding doctrine project-management semantics.",
+]

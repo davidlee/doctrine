@@ -7,8 +7,11 @@ title = "Estimates are optional everywhere and never gate work"
 status = "pending"
 kind = "quality"
 
-# description — optional one-line summary (queryable). Omitted by default (None);
-# the full statement/rationale stays prose in the sister `.md`. Add as:
-#   description = "…"
+description = "Estimates are optional on every entity kind and never gate work; absence is surfaced at most as a generic nudge, never as a schema violation or a workflow block."
 tags = []
-acceptance_criteria = []
+acceptance_criteria = [
+  "No dispatch, execute, audit, or close predicate reads estimate presence; a missing estimate cannot block, fatally warn, or refuse any workflow.",
+  "An absent estimate is never a validation error.",
+  "A wide estimate is never auto-classified or used to force split pressure.",
+  "The absence of a gating read is demonstrable structurally, not merely by a passing run.",
+]
