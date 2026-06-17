@@ -1,0 +1,100 @@
+id    = 52
+slug  = "inquisition-on-sl-080-design-plan"
+title = "Inquisition on SL-080 design & plan"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-080"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-04 EN-1 gate is file-existence, not install-verified — ADR-009 F14 shipped-not-reachable risk"
+detail = """
+Expected: Per ADR-009 F14, the routing row must not point at a deferred skill (shipped-not-reachable). The /reconcile row should be added only after 'doctrine claude install' confirms the skill is embedded and reachable.
+
+Observed: PHASE-04 EN-1 gates on 'PHASE-01, PHASE-02, PHASE-03 all complete' — i.e. SKILL.md files exist. The plan describes PHASE-04 steps in order: (1) add routing row to install/routing-process.md, (2) regenerate boot.md, (3) do 'doctrine claude install'. If step 3 fails, the routing row and generated boot.md point at a skill that is not installed — precisely what F14 forbids.
+
+Evidence: plan.toml PHASE-04 entrance_criteria EN-1 text; plan.md 'PHASE-04 (routing wire) goes last' paragraph; ADR-009 Verification section (lines 218-222): 'the routing-table skill row stays unchanged until the /reconcile skill lands — pointing it at a deferred skill would be shipped-not-reachable (F2/F14).'
+
+Penance: reverse the intra-phase ordering: install ('doctrine claude install') first, verify success, THEN add the routing row and regenerate boot.md. Or add an explicit mid-phase gate in the EX criteria."""
+disposition = "fix-now"
+response = "Correct — the intra-phase ordering creates a shipped-not-reachable window. Accept penance: reverse ordering within PHASE-04 (install first, then routing row + boot), or add EX criterion that routing row is added only after install succeeds."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "D5 removes design-wrong disposition but no replacement convention for 'finding needs a spec change'"
+detail = """
+Expected: When audit identifies a finding that requires a spec/governance change, there must be a clear convention for how the finding is dispositioned and how the needed change is recorded for reconcile. The finding must reach a terminal state that doesn't imply 'no work needed.'
+
+Observed: D5 directs audit to 'Remove any guidance that implies writing design.md or governance during audit (the design was wrong → reconcile design.md disposition pattern).' But the review-ledger.md disposition vocab (aligned, fix-now, design-wrong, follow-up, tolerated) has no slot for 'this finding is correct but needs a change that reconcile will write.' The design says 'findings stay verified' (D4 step 2) but doesn't specify what terminal disposition conveys this. Without explicit guidance, the implementer of PHASE-02 may leave audit with no way to mark 'this needs writing by reconcile' — findings would all appear as aligned (no work needed) or tolerated (drift accepted).
+
+Evidence: design.md D5 text; review-ledger.md §4 disposition vocab (five terms, none meaning 'confirmed, write delegated to reconcile'); audit SKILL.md delegates disposition choice to review-ledger.md.
+
+Penance: D5 (or the PHASE-02 exit criteria) must specify the convention: audit raises the finding, disposes it as 'verified' (terminal — the observation is confirmed), and records the exact change needed in the reconciliation brief. The audit SKILL.md retune must explicitly restrict audit to dispositions: aligned, fix-now (for code fixes within audit scope), tolerated, and the reconciliation-brief pathway for spec changes — and must never use design-wrong."""
+disposition = "fix-now"
+response = "Confirmed — D5 needs an explicit convention for what replaces design-wrong. Accept penance: D5 (or PHASE-02 EX criteria) must specify: audit raises finding, disposes as verified (terminal), records exact change in reconciliation brief. Audit SKILL.md retune must restrict its disposition palette to aligned, fix-now (code only), tolerated, plus the brief pathway — never design-wrong."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "PHASE-03 EX criteria omit removal of old 'design was wrong' pre-check in close SKILL.md"
+detail = """
+Expected: PHASE-03 (close retune) should explicitly address ALL stale-prose that belongs to the old audit-writes-design model, including removing or replacing the 'design was wrong' phrasing in close SKILL.md.
+
+Observed: Close SKILL.md line 17 reads: '"design was wrong" findings already reconciled into design.md.' This is the exact phrasing ADR-003 §7 amendment calls out as over-reach. PHASE-03's exit criteria (EX-1 through EX-6) enumerate the spec-coherence gate additions but do NOT explicitly require removing or replacing this old pre-check item. The EN-2 stale-prose check goes the other direction: it verifies IMP-008 items 1–4 are still addressed (they are), but doesn't flag this new stale-prose risk.
+
+The retune would naturally replace this line as part of EX-1/EX-2 (spec-coherence check), but without an explicit EX criterion, a narrow implementer might leave it and add the new gate alongside — producing a close SKILL.md with both old and new models in tension.
+
+Evidence: close SKILL.md line 17; plan.toml PHASE-03 exit_criteria (EX-1 through EX-6); ADR-003 §7 amendment text.
+
+Penance: Add an EX criterion to PHASE-03: 'Old pre-check item referencing design-wrong findings reconciled to design.md is removed or rewritten to reference the reconciliation brief and REV-done gate.'"""
+disposition = "fix-now"
+response = "Accepted — the stale-prose risk is real even though a competent implementer would naturally remove the line. Accept penance: add EX criterion to PHASE-03: 'Old pre-check item referencing design-wrong findings reconciled to design.md is removed or rewritten to reference the reconciliation brief and REV-done gate.'"
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "D7 adds /reconcile row but doesn't update existing audit→close routing row"
+detail = """
+Expected: After SL-080 lands, the routing table should reflect the full audit→reconcile→close chain. The generated boot.md's routing table should show coherence.
+
+Observed: The existing routing row reads: '| Implementation done — evidence / reconciliation | /audit → /close |'. D7 only describes adding the new /reconcile row: '| Slice exists, audit complete, reconciliation brief ready | /reconcile |'. It does not address updating the existing audit row to audit→reconcile→close. 
+
+The routing table's Skill column shows the starting skill with the chain for context. After SL-080, audit no longer hands off to close — it hands off to reconcile. Leaving audit→close in the table while adding a standalone /reconcile row creates an inconsistency: the audit row chains to close, but close's pre-check now requires reconciliation to have happened.
+
+Evidence: install/routing-process.md current audit row; design.md D7 text; ADR-003 §8 canonical loop order 'audit -> reconcile -> close'; ADR-009 Verification (lines 218-220): 'Core-process prose will name … audit → reconcile → close.'
+
+Penance: D7 (and/or PHASE-04) should include updating the existing audit row to: '| Implementation done — evidence / reconciliation | /audit → /reconcile → /close |'."""
+disposition = "fix-now"
+response = "Confirmed — the routing table is the source of truth for the boot snapshot, and audit→close without the reconcile step in the chain is inconsistent after SL-080 lands. Accept penance: update D7 and PHASE-04 to include updating the existing audit row to '| Implementation done — evidence / reconciliation | /audit → /reconcile → /close |'."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "D7 routing trigger 'audit complete' could be misinterpreted as lifecycle state, not handoff"
+detail = """
+Expected: The routing row's trigger condition should precisely describe when to invoke /reconcile — when audit has produced a reconciliation brief and handed off, not merely when audit is in the 'audit' lifecycle state.
+
+Observed: D7 proposes: 'Slice exists, audit complete, reconciliation brief ready → /reconcile'. 'audit complete' could be interpreted as 'the slice's lifecycle status is audit and phase rollup is complete' rather than 'audit has finished its work and produced the reconciliation brief'. The third condition ('reconciliation brief ready') is the actual trigger; 'audit complete' is redundant and potentially misleading. An agent seeing 'audit complete' might check  (status=audit) rather than checking whether the RV ledger is resolved and the brief is written.
+
+Evidence: design.md D7 text; ADR-003 §7 seam — audit identifies, reconcile writes.
+
+Penance: Reword to: 'Slice exists, audit RV resolved, reconciliation brief written → /reconcile'. This precisely names the two artefacts that signal audit is done (resolved RV + brief), without referencing the lifecycle state which is a weaker signal."""
+disposition = "fix-now"
+response = "Reasonable — precision in trigger conditions prevents agent misinterpretation. Accept penance: reword to 'Slice exists, audit RV resolved, reconciliation brief written → /reconcile'."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

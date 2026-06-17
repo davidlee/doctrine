@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed3fa2e0c7301a889a346105d3011"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Routing row must follow install: install skill before adding to routing-process.md"
+summary = "When adding a skill to the routing table, install the skill (doctrine claude install) BEFORE adding the routing row — otherwise the boot snapshot points at a deferred skill, violating ADR-009 F14 shipped-not-reachable."
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = []
+globs = ["install/routing-process.md", ".agents/skills/**/SKILL.md"]
+commands = []
+tags = ["routing", "adr-009", "skill-install"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "4b873a019ce35e7f59df7448cab256277bf05540"
+ref_name = "refs/heads/main"
+checkout_state_id = "b07cc520868be98c7047f29712e530f7ecaae15f65be866de46b70fea79671dc"
+base_commit = "23080302e1122e67c18d531ee31112ec8adbaa0a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

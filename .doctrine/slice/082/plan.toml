@@ -1,0 +1,136 @@
+# Implementation plan for SL-082 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-082"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Update source code references"
+objective = "Repoint every `doc/` reference in `src/` per design §3.1 (S1–S10). Change test fixtures, corpus config, doc comments, and string literals. Source tests must pass with updated path expectations."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §3.1 reference map locked; all 10 source citations mapped" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "S1: `src/boot.rs` test fixtures updated from `\"point at doc/spec.md\"` → `\"point at .doctrine/spec/tech/\"`" },
+  { id = "EX-2", text = "S2–S3: `src/corpus.rs` corpus config + test string-replace updated to `.doctrine/spec/tech/`" },
+  { id = "EX-3", text = "S4–S7: `src/coverage.rs` doc comment + test fixtures updated; tests pass with new path expectations" },
+  { id = "EX-4", text = "S8: `src/install.rs` comment updated (historical note preserved)" },
+  { id = "EX-5", text = "S9: `src/memory.rs` test path updated" },
+  { id = "EX-6", text = "S10: `src/spec.rs` doc comment updated to cite SPEC-004" },
+  { id = "EX-7", text = "`just check` green — no compile errors or test failures from path changes" },
+]
+verification = [
+  { id = "VT-1", expects = "`rg 'doc/' src/` returns zero hits for legacy `doc/` paths; `\"legacy doc/\"` in install.rs comment acceptable" },
+  { id = "VT-2", expects = "`just check` green; no test failures in changed files" },
+  { id = "VA-1", expects = "Every reference in design §3.1 has a corresponding edit; no S1–S10 missed" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Update skill references"
+objective = "Repoint or delete every `doc/` reference in `plugins/doctrine/skills/` per design §3.2 (K1–K11). Delete the `doc/*` mental model from skill prose — redirect agents to the entity surface (`.doctrine/spec/tech/`, `.doctrine/adr/`, `doctrine spec new`, `doctrine adr new`). Include `SKILL.compact.md`."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §3.2 reference map locked; all 11 skill citations mapped" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "K1: `canon/SKILL.md:18` — `doc/*` replaced with `.doctrine/spec/tech/` + `.doctrine/adr/`" },
+  { id = "EX-2", text = "K2–K4: `slice/SKILL.md` — three `doc/*` refs removed/replaced; `author under` redirected to `doctrine spec new` / `adr new`" },
+  { id = "EX-3", text = "K5: `route/SKILL.md:36` — routing table entry updated" },
+  { id = "EX-4", text = "K6–K7: `audit/SKILL.md` — two refs updated" },
+  { id = "EX-5", text = "K8: `inquisition/SKILL.md:58` — authority list expanded to include tech + product specs" },
+  { id = "EX-6", text = "K9: `preflight/SKILL.md:90` — updated" },
+  { id = "EX-7", text = "K10: `record-memory/SKILL.md:82` — redirected from `doc/*` to spec/ADR" },
+  { id = "EX-8", text = "K11: `design/SKILL.compact.md:22` — updated" },
+  { id = "EX-9", text = "`retrieve-memory/SKILL.md` and `design/SKILL.md` unchanged (false positive + already clean)" },
+  { id = "EX-10", text = "`doctrine claude install` succeeds; installed copies match source" },
+]
+verification = [
+  { id = "VT-1", expects = "`rg 'doc/\\*' plugins/doctrine/skills/` returns zero hits (escaped for literal `doc/*`)" },
+  { id = "VT-2", expects = "`rg 'doc/' plugins/doctrine/skills/retrieve-memory/SKILL.md` still matches — `file/doc/ADR` is unchanged (false positive)" },
+  { id = "VA-1", expects = "No skill still says 'evergreen specs under doc/*' or 'author under doc/*'" },
+  { id = "VA-2", expects = "Every reference in design §3.2 has a corresponding edit; no K1–K11 missed" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Update install templates"
+objective = "Repoint or remove `doc/` references in `install/glossary.md` and `install/governance.md` per design §3.3 (I1–I3). Remove the `doc/*` glossary section entirely; update governance pointer; remove stale HTML comment."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §3.3 reference map locked; all 3 install citations mapped" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "I1: `install/glossary.md` — `### \\`doc/*\\`` section removed" },
+  { id = "EX-2", text = "I2: `install/governance.md:9` — pointer updated to `.doctrine/spec/tech/` + `.doctrine/adr/`" },
+  { id = "EX-3", text = "I3: `install/governance.md:20` — stale `<!-- Architecture spec: doc/architecture.md -->` comment removed" },
+]
+verification = [
+  { id = "VT-1", expects = "`rg 'doc/' install/` returns zero hits" },
+  { id = "VA-1", expects = "Glossary no longer has a `doc/*` entry; governance correctly points at entity surface" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Update memory records"
+objective = "Update 6 memory records per design §3.4 (M1–M6). Replace `doc/*` paths in `memory.toml` scope fields with `.doctrine/spec/tech/NNN/` directories. Update prose refs in `memory.md` bodies. No semantics changed — scope-only updates."
+entrance_criteria = [
+  { id = "EN-1", text = "Design §3.4 reference map locked; all 6 memory citations mapped to tech spec dirs" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "M1: `mem_019ea25af18d...` (backlog work-intake) — paths updated to SPEC-004" },
+  { id = "EX-2", text = "M2: `mem_019e95a9926b...` (forgettable backend) — paths updated to SPEC-007" },
+  { id = "EX-3", text = "M3: `mem_019ea298bcee...` (canonical change loop) — paths updated to SPEC-014" },
+  { id = "EX-4", text = "M4: `mem_019e97df317d...` (spec composition) — prose ref updated to SPEC-004" },
+  { id = "EX-5", text = "M5: `mem_019ea298bcee...` (md body) — prose ref updated to SPEC-014" },
+  { id = "EX-6", text = "M6: `mem_019e95a99276...` (governance surface) — prose refs ×2 updated" },
+]
+verification = [
+  { id = "VA-1", expects = "Every `doc/*` reference in memory records replaced per design §3.4" },
+  { id = "VT-1", expects = "Memory `paths` fields resolve to existing tech spec directories" },
+  { id = "VT-2", expects = "`rg 'doc/' .doctrine/memory/items/` returns zero hits" },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Remove `doc/` directory and final verification"
+objective = "Delete the `doc/` directory from the repo. Run the full verification sweep: `rg` for residual `doc/` references, `just check` for build/test integrity, `doctrine claude install` for skill propagation. Commit the removal and all reference updates."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 through PHASE-04 complete; all references repointed or removed" },
+  { id = "EN-2", text = "No `doc/` references remain in source, skills, install, or memory" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`git rm -r doc/` succeeds; `doc/` does not exist in working tree" },
+  { id = "EX-2", text = "`rg 'doc/'` across repo (excluding `.doctrine/memory/shipped/`, `target/`, `.git/`) returns zero legacy hits" },
+  { id = "EX-3", text = "`just check` green — no build errors or test failures" },
+  { id = "EX-4", text = "`doctrine claude install` succeeds; installed skills match source" },
+  { id = "EX-5", text = "All changes committed in one or more conventional commits" },
+]
+verification = [
+  { id = "VT-1", expects = "`doc/` absent from working tree; `git status` shows deletion staged" },
+  { id = "VT-2", expects = "`rg 'doc/' src/ plugins/doctrine/skills/ install/ .doctrine/memory/items/` — zero hits for legacy refs" },
+  { id = "VT-3", expects = "`just check` exits 0" },
+  { id = "VT-4", expects = "`doctrine claude install` exits 0" },
+  { id = "VA-1", expects = "CLAUDE.md and AGENTS.md confirmed clean (SL-084 cross-check); no `doc/` leakage" },
+]
+specs             = []
+requirements      = []

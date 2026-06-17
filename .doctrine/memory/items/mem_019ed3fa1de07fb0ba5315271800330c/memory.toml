@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed3fa1de07fb0ba5315271800330c"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Delegated-write disposition convention: bridge review-ledger vocab to downstream writer"
+summary = "When a skill delegates writing to another skill, the disposition vocabulary must bridge the gap — a finding confirmed by one skill but written by another needs an explicit convention."
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = []
+globs = [".agents/skills/**/SKILL.md", ".doctrine/review-ledger.md"]
+commands = []
+tags = ["review-ledger", "skill-design", "disposition"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "4b873a019ce35e7f59df7448cab256277bf05540"
+ref_name = "refs/heads/main"
+checkout_state_id = "8a1674618f332d185a9b4c1d6b9c0ad301e5fb6df5fe5e62acf99b9a556ff14a"
+base_commit = "23080302e1122e67c18d531ee31112ec8adbaa0a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

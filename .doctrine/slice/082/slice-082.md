@@ -43,8 +43,8 @@ in sequence:
    repo. Update every reference to `doc/*` across:
    - Source code (`src/boot.rs`, `src/corpus.rs`, `src/coverage.rs`,
      `src/install.rs`, `src/spec.rs`, `src/memory.rs`)
-   - Skills (`plugins/doctrine/skills/{canon,route,slice,design,audit,
-     inquisition,preflight,record-memory,retrieve-memory}/SKILL.md`)
+   - Skills (`plugins/doctrine/skills/` — every skill; do not enumerate by name;
+     SL-084 adds dispatch, dispatch-subprocess, and dispatch-agent to this tree)
    - Install templates (`install/governance.md`, `install/glossary.md`)
    - Memory records (`.doctrine/memory/items/` entries referencing `doc/*`)
    - Any other docs or config pointing at `doc/*`
@@ -69,12 +69,15 @@ in sequence:
 - **`doc/` directory** — the 9 `.md` files and the directory itself (removed).
 - **Source code** — `src/boot.rs`, `src/corpus.rs`, `src/coverage.rs`,
   `src/install.rs`, `src/spec.rs`, `src/memory.rs` (reference updates).
-- **Skills** — 9 skill files under `plugins/doctrine/skills/` (reference
+- **Skills** — every skill under `plugins/doctrine/skills/` (SL-084 adds
+  dispatch, dispatch-subprocess, dispatch-agent to this tree; reference
   updates, propagated to `.doctrine/skills/` by installer).
 - **Install templates** — `install/governance.md`, `install/glossary.md`.
 - **Memory records** — `.doctrine/memory/items/` entries citing `doc/*`.
-- **CLAUDE.md / AGENTS.md / governance.md** — any standing instruction or
-  governance surface referencing `doc/*`.
+- **`CLAUDE.md`** — now a separate file with Claude-specific reviewers section
+  (SL-084 scope item 4, commit 227c3b0; no longer a symlink to AGENTS.md).
+- **`AGENTS.md`** — harness-agnostic shared conventions (SL-084).
+- **`install/governance.md`** — governance surface referencing `doc/*`.
 - **`.gitignore`** — verify no entry needed; `doc/` has no negation rule.
 
 ## Risks, assumptions, open questions
@@ -93,6 +96,11 @@ in sequence:
   intentional and handle the residual.
 - **Assumption:** No private content to archive — all 9 files are committed
   public architectural specs.
+- **Aware:** SL-084 broke the `CLAUDE.md → AGENTS.md` symlink (commit 227c3b0).
+  The reference sweep must search both files independently — they now carry
+  different content.
+- **Aware:** SL-084 creates `.pi/agents/dispatch-worker.md` — the `rg` sweep
+  covers it; no special handling needed.
 - **Open:** Should the `doc/` directory be `.gitignore`d post-removal to
   prevent accidental re-creation, or is the removal sufficient?
 
@@ -103,6 +111,8 @@ in sequence:
   `target/`) returns zero hits for legacy `doc/` references — every former
   reference points to a valid entity (tech spec, ADR) or is removed.
 - `just check` green; no broken references.
+- `doctrine claude install` succeeds — re-run after all skill edits so installed
+  copies under `.doctrine/skills/` match source.
 - Memory records citing `doc/*` are updated or superseded.
 - SL-021 is `done` (content rehomed) before this slice is `done`.
 
