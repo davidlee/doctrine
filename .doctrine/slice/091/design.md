@@ -220,13 +220,6 @@ export interface AppState {
   graphRenderSeq: number;
 }
 
-// Error type
-export class ApiError extends Error {
-  status: number;
-  body: string;
-  endpoint: string;
-  constructor(message: string, status: number, body: string, endpoint: string);
-}
 ```
 
 ### router.ts
@@ -237,7 +230,7 @@ Pure string parsing — no DOM, no state dependency.
 import type { Route } from './types';
 
 export function parseHash(depth: number): Route { ... }
-export function buildHash(view: string, id: string, depth: number, cmFocusNode: CmNode | null): string { ... }
+export function buildHash(view: string, id: string, depth: number, cmFocusKey: string | null): string { ... }
 export function setFocus(id: string, depth: number): void { ... }
 export function setEdge(edgeId: string, depth: number): void { ... }
 ```
@@ -246,11 +239,18 @@ Auxiliary `parseQueryString`, `clampDepth` stay module-private.
 
 ### api.ts
 
-HTTP layer — depends only on `types.ts` for `ApiError`, `RawGraph`, `ActionabilityView`,
-`ConceptMap`.
+HTTP layer. `ApiError` class lives here (runtime export). Imports types from `types.ts`
+(type-only — `RawGraph`, `ActionabilityView`, `ConceptMap`).
 
 ```ts
-import { ApiError, type RawGraph, type ActionabilityView, type ConceptMap } from './types';
+import type { RawGraph, ActionabilityView, ConceptMap } from './types';
+
+export class ApiError extends Error {
+  status: number;
+  body: string;
+  endpoint: string;
+  constructor(message: string, status: number, body: string, endpoint: string);
+}
 
 export function fetchGraph(): Promise<RawGraph>;
 export function fetchActionabilityGraph(): Promise<ActionabilityView>;
@@ -264,7 +264,7 @@ export function mutateConceptMap(id: string, action: string, params: Record<stri
 
 ### dot.ts
 
-Pure text generation — depends on `State` type for `NODE_STYLES`, `EDGE_STYLES`.
+Pure text generation. Exports DOT helpers plus style constants.
 
 ```ts
 import type { Graph, ConceptMap, CmNeighbourhood } from './types';
@@ -341,7 +341,9 @@ export function cacheElements(doc: Document): void;
 export function el(tag: string, attrs?: Record<string, string>, children?: (HTMLElement | string)[]): HTMLElement;
 export function escapeHtml(s: string): string;
 export function escapeAttr(s: string): string;
-export function setViewMode(mode: 'entity-graph' | 'actionability' | 'concept-map' | 'edge'): void;
+// AppState.viewMode is 'semantic'|'actionability'; setPageMode controls the DOM
+// body class for CSS scoping (entity-graph|actionability|concept-map|edge).
+export function setPageMode(mode: 'entity-graph' | 'actionability' | 'concept-map' | 'edge'): void;
 
 export function entityList(opts: { container: HTMLElement; graph: Graph; query: string; kindFilter: Set<string> | null; focusId: string | null; onFocus: (id: string) => void }): void;
 export function graphPane(opts: GraphPaneOpts): void;
@@ -398,10 +400,10 @@ Entry point. Imports all modules. `bootstrap()` wires event listeners on
 `DOMContentLoaded`, `renderView()` handles hashchange + initial render.
 
 ```ts
-import { state, normalizeGraph, resolveFocus, setActionabilityView, model } from './model';
+import { state, normalizeGraph, resolveFocus, setActionabilityView } from './model';
 import { parseHash, setFocus, buildHash } from './router';
 import * as api from './api';
-import { cacheElements, graphPane, focusHeader, hoverPane, render, relationshipTable, markdownPane, edgeDetail, escapeHtml, setViewMode } from './render';
+import { cacheElements, graphPane, focusHeader, hoverPane, render, relationshipTable, markdownPane, edgeDetail, escapeHtml, setPageMode } from './render';
 import { renderFilteredEntities, wireFilters, wireSearch, wireDepthButtons, wireRefresh } from './search';
 import * as cm from './concept-map';
 import * as priority from './priority';
@@ -449,6 +451,7 @@ export default defineConfig({
     }
   },
   publicDir: 'public',  // github-markdown.css lives here, copied as-is to dist/
+  // Vite resolves /vendor/ in dev from publicDir; in release RustEmbed serves dist/vendor/
 });
 ```
 
@@ -487,3 +490,4 @@ None — resolved during design.
 | `markdown-it` API break between vendored and npm | The vendored bundle is markdown-it v14.x (minified). npm `markdown-it` v14 should be identical. |
 | Vite proxy doesn't forward WebSocket upgrades needed for future features | Not needed now. If we later add WebSocket endpoints, add `ws: true` to the proxy config. |
 | `test.html` uses bare `<script src="/assets/...">` tags — incompatible with ES modules | During transition, test against old `.js` files + `tsc --noEmit` for `.ts`. Convert `test.html` to `<script type="module">` with `import` statements in Phase 10, served via Vite. |
+| Vite hashed asset paths (`/assets/index-abc123.js`) may not match the Rust route patterns | Verify the `asset()` route handler serves any path under `/assets/`; the current `/{*path}` wildcard already handles this. The `vendor_asset()` handler similarly covers `/vendor/{*path}`. No Rust route changes needed. |
