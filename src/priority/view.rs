@@ -13,6 +13,8 @@
 //! Pure data: no clock, RNG, or disk. The surface shell ([`super::surface`]) reads
 //! the graph + titles and fills these rows; the renderer only formats them.
 
+use serde::Serialize;
+
 use super::partition::StatusClass;
 use crate::backlog_order::OverrideReason;
 
@@ -144,4 +146,47 @@ pub(crate) struct Explanation {
     pub(crate) blocker_chain: Vec<ReasonKind>,
     pub(crate) evictions: Vec<ReasonKind>,
     pub(crate) consequence: ReasonKind,
+}
+
+// ── SL-089 actionability-graph view types ──────────────────────────────────
+
+/// One node in the actionability graph — the render source of truth for the
+/// web UI. Carries the server-computed rank (topological layer over the dep
+/// overlay) so the frontend never computes ordering.
+#[cfg_attr(not(test), expect(dead_code, reason = "PHASE-01: consumed by surface.rs tests + PHASE-02 server"))]
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ActionabilityNode {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) kind: String,
+    pub(crate) status: String,
+    /// `"actionable"` | `"blocked"` | `"terminal"`.
+    pub(crate) actionability: String,
+    pub(crate) consequence: u32,
+    /// Topological layer: 0 = no non-terminal blockers.
+    pub(crate) rank: u32,
+    /// Direct non-terminal blockers (canonical refs).
+    pub(crate) blockers: Vec<String>,
+}
+
+/// One edge in the actionability graph.
+#[cfg_attr(not(test), expect(dead_code, reason = "PHASE-01: consumed by surface.rs tests + PHASE-02 server"))]
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ActionabilityEdge {
+    /// Canonical ref of the prerequisite.
+    pub(crate) source: String,
+    /// Canonical ref of the dependent.
+    pub(crate) target: String,
+    /// `"needs"` (hard block) | `"after"` (soft sequence).
+    pub(crate) kind: String,
+}
+
+/// The full actionability graph for the web UI.
+#[cfg_attr(not(test), expect(dead_code, reason = "PHASE-01: consumed by surface.rs tests + PHASE-02 server"))]
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ActionabilityView {
+    pub(crate) kind: String,
+    pub(crate) policy_version: String,
+    pub(crate) nodes: Vec<ActionabilityNode>,
+    pub(crate) edges: Vec<ActionabilityEdge>,
 }
