@@ -387,7 +387,18 @@ function renderView(): void {
           container: graphArea,
           view: state.actionabilityView,
           zoomId: state.priorityZoomId,
-          onNodeClick: goto,
+          onNodeClick: (id) => {
+            // Zoom to the clicked node (re-renders via hash → focus) and update
+            // the detail pane. IMP-092.
+            state.priorityZoomId = id
+            goto(id)
+          },
+          onBackgroundClick: () => {
+            if (state.priorityZoomId !== null) {
+              state.priorityZoomId = null
+              renderView()
+            }
+          },
         })
       } else if (state.focusId !== null) {
         const focusNode = state.graph.nodes.get(state.focusId)
