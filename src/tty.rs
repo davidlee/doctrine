@@ -107,16 +107,18 @@ const MIN_WRAP_WIDTH: u16 = 16;
 mod tests {
     use super::*;
 
-    /// VT-5: `resolve_color` modes — Never false, Always true, Auto delegates.
-    /// Driven through the pure decision fn; the *live* tty branch in [`stdout_color_enabled`]
-    /// is documented-not-driven (under `cargo test` stdout is not a terminal).
+    /// VT-5: `resolve_color` modes — Never false, Always true, Auto delegates
+    /// to stdout_color_enabled. Both tty arms are asserted through the pure
+    /// [`color_enabled`] seam; the *live* tty branch is documented-not-driven
+    /// (stdout may be a terminal under some harnesses).
     #[test]
     fn resolve_color_modes() {
         assert!(!resolve_color(ColorChoice::Never));
         assert!(resolve_color(ColorChoice::Always));
-        // Auto delegates to stdout_color_enabled — under test (pipe) it returns false.
-        // The positive tty arm is asserted purely in color_enabled tests above.
-        assert!(!resolve_color(ColorChoice::Auto));
+        // Auto delegates to stdout_color_enabled → color_enabled.
+        // The live isatty probe is environment-dependent; both arms are proven
+        // by the pure color_enabled tests below (absent_no_color_follows_the_tty +
+        // no_color_present_disables_colour_even_when_empty).
     }
 
     /// VT-3: `NO_COLOR` present (even empty) ⇒ colour disabled, regardless of the
