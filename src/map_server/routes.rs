@@ -160,8 +160,7 @@ async fn graph(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 
 async fn survey(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, MapServerError> {
     let stores = state.stores.read().await;
-    let view =
-        crate::priority::surface::survey_view_for_map(&stores.priority_graph, false);
+    let view = crate::priority::surface::survey_view_for_map(&stores.priority_graph, false);
     let body = serde_json::to_string_pretty(&view).map_err(|e| MapServerError::Other(e.into()))?;
     Ok((
         [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
@@ -633,10 +632,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
         let edges = parsed["edges"].as_array().unwrap();
         // At least one needs edge from ISS-001 to a dependent
-        let needs_edges: Vec<_> = edges
-            .iter()
-            .filter(|e| e["kind"] == "needs")
-            .collect();
+        let needs_edges: Vec<_> = edges.iter().filter(|e| e["kind"] == "needs").collect();
         assert!(!needs_edges.is_empty(), "should have needs edges");
     }
 
