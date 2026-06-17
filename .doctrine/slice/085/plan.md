@@ -22,23 +22,18 @@ renderer internals.
 
 **PHASE-03** is the richest verb. It reuses the phase table from PHASE-02 and
 adds coordination state (impure: git ref resolution, worktree list parsing),
-trunk drift detection (merge-base ancestor check), sync state (ref existence),
+trunk drift detection (stateless, rev-list count since fork-point), sync state (ref existence),
 and candidate summary (reads `candidates.toml`). All operations are read-only.
 The risk is in the impure shell — git invocations that need careful error
 handling for absent refs and detached worktrees.
 
-**PHASE-04** is pure content editing. No Rust code changes — the three skill
-markdown files are edited in `plugins/`, re-installed, and re-embedded. The
-verification is primarily agent review (VA-1): does each skill describe its
-role without restating what another skill or the CLI owns? A secondary gate is
-`just gate` — the skill changes are embedded at build time, so the build must
-stay green.
+**PHASE-04 (skill shrink + embed verification)** changes no Rust behavior, but must refresh and verify embedded skill content. The three skill markdown files are edited in `plugins/`, re-installed via `doctrine install`, and re-embedded via `touch src/skills.rs && cargo build`. An integration test (EX-6) verifies embedded text matches the shrunk plugin source; without it `just gate` cannot detect a stale binary.
 
 ## Boundaries
 
 | Phase | Touches |
 |---|---|
-| PHASE-01 | `src/worktree.rs` (extract), `src/dispatch.rs` (new `run_setup`, `CoordOutcome`), `src/main.rs` (clap) |
+| PHASE-01 | `src/worktree.rs` (extract + define `CoordOutcome`), `src/dispatch.rs` (new `run_setup`), `src/main.rs` (clap) |
 | PHASE-02 | `src/dispatch.rs` (new `run_plan_next`, `render_phase_table`), `src/main.rs` (clap) |
 | PHASE-03 | `src/dispatch.rs` (new `run_status`), `src/main.rs` (clap) |
 | PHASE-04 | `plugins/doctrine/skills/dispatch/SKILL.md`, `plugins/doctrine/skills/dispatch-agent/SKILL.md`, `plugins/doctrine/skills/dispatch-subprocess/SKILL.md` |
@@ -70,10 +65,11 @@ Every design decision (D1–D10) maps to a phase:
   stay unchanged. The extraction is mechanical — move the coordination logic
   into `coordinate()`, leave the I/O in `run_coordinate`. Existing integration
   tests are the safety net.
-- **PHASE-03 git fragility:** `git worktree list --porcelain` parsing is new
-  shell code. The porcelain format is stable but edge cases (bare repos,
-  detached HEAD) need handling. Read-only posture limits blast radius.
+- **PHASE-03 git fragility:** `git worktree list --porcelain` parsing and `git
+  rev-list --count` are new shell code. Edge cases (bare repos, detached HEAD,
+  absent refs) need explicit handling per the absent-ref table in design §4.
+  Read-only posture limits blast radius.
 - **PHASE-04 stale-embed risk:** After editing skill files, `touch
-  src/skills.rs && cargo build` is mandatory to re-embed. The VT-1 gate (`just
-  gate` green) catches a stale build but only if the test exercises the
-  installed path.
+  src/skills.rs && cargo build` re-embeds. An integration test (EX-6) verifies
+  the embedded text matches the shrunk plugin source. Without it, `just gate`
+  cannot detect a stale binary.

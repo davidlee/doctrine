@@ -25,9 +25,9 @@ Three new CLI verbs replace paragraphs of skill prose:
 
 | Verb | Replaces |
 |---|---|
-| `dispatch setup <SL-ID> --dir <path>` | The "Set up once — the coordination worktree" section + base-capture |
-| `dispatch plan-next <SL-ID>` | The "Plan the next unit" step — phase ordering, status checking |
-| `dispatch status <SL-ID>` | The "repeat until done" awareness + the conclude checklist |
+| `dispatch setup --slice <N> --dir <path>` | The "Set up once — the coordination worktree" section + base-capture |
+| `dispatch plan-next --slice <N>` | The "Plan the next unit" step — phase ordering, status checking |
+| `dispatch status --slice <N>` | The "repeat until done" awareness + the conclude checklist |
 
 The existing verbs (`worktree import`, `worktree branch-point-check`, etc.) stay
 as-is — the orchestrator calls them directly, the same as today, but with less
@@ -61,8 +61,7 @@ doctrine dispatch setup --slice <N> --dir <path>
    create-or-resume logic. A live worktree already on `dispatch/<slice>` is
    refused (`coordination-live`); a branch with no live worktree resumes.
 4. Resolve the dispatch ref tip (`refs/heads/dispatch/<nnn>`).
-5. Compute the trunk base: `git merge-base dispatch/<nnn> trunk`.
-6. Emit env contract on stdout, one `KEY=value` per line (same shape as
+5. Emit env contract on stdout, one `KEY=value` per line (same shape as
    `worktree fork`'s contract). Human status on stderr.
 
 ### Env contract
@@ -72,12 +71,10 @@ coordination_dir=/path/to/dispatch/085
 base=abc123def456...
 slice=85
 dispatch_ref=refs/heads/dispatch/085
-trunk_base=def789abc012...
 ```
 
 `base` is the tip of `dispatch/<slice>` post-setup — the `B` the orchestrator
-captures. `trunk_base` is the merge-base with trunk at setup time (for drift
-detection later).
+captures.
 
 ### Code impact
 
@@ -86,18 +83,20 @@ detection later).
   1. Resolve root.
   2. Read + parse plan.toml via `Plan::parse`; gate on non-empty phase list.
   3. Call `worktree::coordinate(root, slice, &dir)` — a new pure-core function
-     factored out of `worktree::run_coordinate`. Returns a `CoordOutcome` struct
-     carrying the dispatch ref tip and trunk base.
+     factored out of `worktree::run_coordinate`. Returns a `worktree::CoordOutcome`
+     struct carrying the dispatch ref tip.
   4. Emit the env contract on stdout.
 - `worktree.rs` refactor: extract `fn coordinate(root: &Path, slice: u32, dir: &Path)
   -> Result<CoordOutcome>` from `run_coordinate`. `run_coordinate` wraps it with
   CLI I/O (unchanged behavior). `run_setup` wraps it with the env contract.
-- New type `CoordOutcome { dispatch_tip: String, trunk_base: String }`.
+- New type `worktree::CoordOutcome { dispatch_tip: String }`.
+  Defined in `src/worktree.rs`, consumed by `dispatch::run_setup` — the dependency
+  direction is dispatch → worktree, not the reverse.
 
 ### Verification
 
 - **VT-1:** `dispatch setup --slice 85 --dir /tmp/coord` on a slice with a plan
-  creates the coordination worktree, prints the env contract with all five keys,
+  creates the coordination worktree, prints the env contract with all four keys,
   and exits 0.
 - **VT-2:** `dispatch setup` on a slice with no plan.toml exits non-zero with
   `"no plan for SL-NNN"`.
@@ -123,18 +122,31 @@ rollup and identifies the next actionable phase(s).
 2. For each phase, read `.doctrine/state/slice/<N>/phases/<phase-id>.toml` to
    get its runtime status. Absent runtime sheet → `pending`.
 3. Print the rollup table (id, status, name).
-4. Identify `next`: all consecutive non-completed, non-blocked phases
-   starting from the first one in plan order. A single `in_progress` phase
-   gates — subsequent `pending` phases are excluded (don't start new work
-   until the current phase lands). If the first non-completed phase is
-   `in_progress`, `next` contains only that phase (resume). If all
-   remaining phases are blocked, `next` is empty.
+4. Identify `next` by scanning phases in plan order:
+   a. Skip `completed` phases.
+   b. Skip `blocked` phases (blocked = not actionable — soft gap, not a
+      sequence gate).
+   c. If the first actionable phase is `in_progress`, `next` contains only
+      that phase (resume; do not start new work while a phase is active).
+   d. If the first actionable phase is `pending`, `next` contains that
+      phase plus immediately following `pending` phases, stopping at the
+      first `blocked`, `completed`, or `in_progress` phase.
+   e. If no actionable phase remains and all are `completed`: `next` is
+      the completed message (see status §4).
+   f. If no actionable phase remains and some are `blocked`: `next` is
+      the all-blocked message.
 
    Examples:
    - PHASE-03 `pending`, PHASE-04 `pending`, PHASE-05 `blocked` →
-     `next: ["PHASE-03", "PHASE-04"]`
+     `next: ["PHASE-03", "PHASE-04"]` (pending run, stops at blocked)
    - PHASE-03 `in_progress`, PHASE-04 `pending` → `next: ["PHASE-03"]`
+     (resume; `in_progress` gates subsequent pending)
    - PHASE-03 `blocked`, PHASE-04 `pending` → `next: ["PHASE-04"]`
+     (skip blocked, first pending)
+   - PHASE-03 `blocked`, PHASE-04 `blocked`, PHASE-05 `pending` →
+     `next: ["PHASE-05"]` (skip multiple blocked)
+   - `completed`, `blocked`, `pending`, `pending`, `blocked`, `pending` →
+     `next: [first two pending]` (stops at second blocked)
 
 ### Output (human)
 
@@ -145,6 +157,7 @@ PHASE-03  blocked     Agent guidance
 PHASE-04  pending     Memory recording
 
 next: PHASE-04
+  ⚠ run /phase-plan before parallel spawn; do not assume file-disjointness
 ```
 
 When `next` is empty (all remaining blocked):
@@ -167,7 +180,8 @@ next: (none — all remaining phases are blocked)
     {"id": "PHASE-03", "name": "Agent guidance", "status": "blocked"},
     {"id": "PHASE-04", "name": "Memory recording", "status": "pending"}
   ],
-  "next": ["PHASE-04"]
+  "next": ["PHASE-04"],
+  "batching_requires_phase_plan": true
 }
 ```
 
@@ -217,19 +231,64 @@ Read-only full dispatch rollup: coordination state, phase table, trunk drift,
 sync state, candidate summary.
 
 1. Coordination state: dispatch ref tip, live worktree path (via `git worktree
-   list --porcelain`), trunk base.
-2. **Trunk drift:** recompute fork-point `git merge-base dispatch/<N> trunk`,
-   then `git merge-base --is-ancestor <fork_point> <live_trunk_tip>`.
-   If no → `trunk: moved (N commits ahead of fork-point)`. If yes →
-   `trunk: stable`. No stored state — recomputed each invocation.
+   list --porcelain`).
+2. **Trunk drift (stateless, current divergence):** compute fork-point
+   `git merge-base dispatch/<N> trunk`, then count commits between fork-point
+   and live trunk tip via `git rev-list --count <fork_point>..<trunk>`.
+   If 0 → `trunk: stable`. If N > 0 → `trunk: moved (N commits ahead of
+   fork-point)`. Recomputes each invocation — no stored setup-time base.
 3. Phase table: same as `plan-next`'s rollup (shared renderer).
 4. Sync state: check whether `review/<slice>` ref exists → `prepared` or
    `not yet run`. Count `phase/<slice>-NN` refs.
 5. Candidate summary: when `candidates.toml` has ≥1 row → `N candidate(s)
    (M admitted)`. Full detail is `dispatch candidate status`.
-6. `next`: same as `plan-next`'s output.
+6. `next`: same as `plan-next`'s output, except when all phases are completed
+   the guidance depends on lifecycle position (see next-step guidance below).
+
+### Absent-ref behavior
+
+| Missing ref | Behavior |
+|---|---|
+| `dispatch/<N>` | Exit non-zero: `"dispatch branch not found; run 'dispatch setup --slice <N>' first"` |
+| `trunk` | Exit non-zero: `"trunk ref not found"` |
+| `review/<N>` | `sync: not yet run` (not an error) |
+| `phase/<N>-NN` | Phase cuts: 0 (not an error) |
+| `candidates.toml` | `candidates: 0` (not an error) |
+| Phase runtime sheet | `pending` (not an error) |
+| No live coord worktree | `coord: (removed)` — only when dispatch branch exists |
+
+### Next-step guidance state machine
+
+The `next` line in status output depends on lifecycle position, not just phase
+status:
+
+| Condition | `next` output |
+|---|---|
+| Phases remain (per `plan-next` algorithm) | Phase id(s) from `plan-next` |
+| All phases completed, no `review/<N>` ref | `(all phases completed — run 'dispatch sync --prepare-review')` |
+| All phases completed, `review/<N>` exists, no admitted candidates | `(all phases completed — review ref prepared; run audit or 'dispatch candidate status')` |
+| All phases completed, `review/<N>` exists, admitted close_target | `(all phases completed — admitted candidate exists; run audit then 'dispatch sync --integrate')` |
+| Coord removed, integrated | `(complete — coordination worktree removed; slice is integrated)` |
+| Coord removed, admitted exists, not yet ancestor of trunk | `(awaiting integration — run 'dispatch sync --integrate' after audit)` |
+
+**Detection predicates:**
+
+- **Admitted close_target:** `candidates.toml` `current_admission.close_target` is
+  `Some`. If present, `status` resolves its `admitted_oid`; if it does not resolve
+  to a commit, the admission is stale and `candidates` summary reports `M admitted`
+  excluding it.
+- **Admitted count (M):** number of non-`None` entries in `current_admission`
+  (max 2: `review_surface` and `close_target`) whose `admitted_oid` resolves to
+  a commit reachable from trunk (for close_target) or the review ref (for
+  review_surface).
+- **Integrated:** the admitted close_target's `admitted_oid` is an ancestor of
+  the live trunk tip (`git merge-base --is-ancestor <admitted_oid> <trunk>`).
+  Checked only when `coord: (removed)` and a close_target admission exists.
+  If not yet ancestor → `awaiting_integration`.
 
 ### Output (human)
+
+Fresh after setup — phases all pending:
 
 ```
 dispatch: refs/heads/dispatch/085  (abc123de)
@@ -237,17 +296,17 @@ coord:    /tmp/sl-085-coord (live)
 trunk:    stable
 
 phases:
-  PHASE-01  completed   Templates & scaffold-output guard
-  PHASE-02  completed   Detection-gap closure
-  PHASE-03  blocked     Agent guidance
+  PHASE-01  pending     Templates & scaffold-output guard
+  PHASE-02  pending     Detection-gap closure
+  PHASE-03  pending     Agent guidance
   PHASE-04  pending     Memory recording
 
 sync:     not yet run
 candidates: 0
-next:     PHASE-04
+next:     PHASE-01
 ```
 
-When the coordination worktree has been removed (post-conclude):
+When all phases completed, review ref exists, admitted close_target:
 
 ```
 dispatch: refs/heads/dispatch/085  (abc123de)
@@ -262,8 +321,71 @@ phases:
 
 sync:     prepared — review/085, 4 phase cuts
 candidates: 1 (1 admitted)
-next:     (all phases completed — run 'dispatch sync --integrate' after audit)
+next:     (all phases completed — admitted candidate exists; run audit then 'dispatch sync --integrate')
 ```
+
+When all phases completed, review ref not yet prepared:
+
+```
+dispatch: refs/heads/dispatch/085  (abc123de)
+coord:    /tmp/sl-085-coord (live)
+trunk:    stable
+
+phases:
+  PHASE-01  completed   Templates & scaffold-output guard
+  PHASE-02  completed   Detection-gap closure
+  PHASE-03  completed   Agent guidance
+  PHASE-04  completed   Memory recording
+
+sync:     not yet run
+candidates: 0
+next:     (all phases completed — run 'dispatch sync --prepare-review')
+```
+
+### Output (--json)
+
+The JSON contract for `status --json`:
+
+```json
+{
+  "dispatch": {
+    "ref": "refs/heads/dispatch/085",
+    "tip": "abc123de"
+  },
+  "coord": {
+    "state": "live",
+    "path": "/tmp/sl-085-coord"
+  },
+  "trunk": {
+    "state": "stable",
+    "fork_point": "abc123de",
+    "ahead": 0
+  },
+  "phases": [
+    {"id": "PHASE-01", "name": "...", "status": "completed"}
+  ],
+  "sync": {
+    "state": "not_prepared",
+    "review_ref": null,
+    "phase_cuts": 0
+  },
+  "candidates": {
+    "total": 0,
+    "admitted": 0
+  },
+  "next": {
+    "kind": "phases",
+    "phases": ["PHASE-04"]
+  }
+}
+```
+
+`coord.state` is `"live"` or `"removed"`. `trunk.state` is `"stable"` or
+`"moved"`. Missing trunk is a command error (exit non-zero) in both human and
+JSON modes. `sync.state` is `"not_prepared"` or `"prepared"`. `next.kind` is
+`"phases"`, `"blocked"`, `"completed"`, `"audit"`, `"awaiting_integration"`, or
+`"integrate"` — it encodes lifecycle position as structured data, not human
+prose.
 
 ### Code impact
 
@@ -271,8 +393,10 @@ next:     (all phases completed — run 'dispatch sync --integrate' after audit)
 - New `dispatch::run_status(path, slice, json)` entry point (~80 lines):
   1. Resolve root.
   2. Coordination state: resolve dispatch ref tip, find live worktree via
-     `git worktree list --porcelain`, compute trunk base.
-  3. Trunk drift: resolve live trunk tip, run `git merge-base --is-ancestor`.
+     `git worktree list --porcelain`. Fail fast on missing `dispatch/<N>` or
+     `trunk` refs (see absent-ref behavior above).
+  3. Trunk drift: resolve live trunk tip, compute `git merge-base` + `git
+     rev-list --count`.
   4. Phase table via shared renderer.
   5. Sync state: check `review/<N>` + `phase/<N>-*` refs.
   6. Candidate summary via `read_candidates`.
@@ -289,14 +413,18 @@ next:     (all phases completed — run 'dispatch sync --integrate' after audit)
 - **VT-2:** `status --slice 85` post-sync prints `sync: prepared — review/085,
   N phase cuts`.
 - **VT-3:** `status --slice 85` with a moved trunk prints `trunk: moved (N commits
-  ahead since setup)`.
-- **VT-4:** `status --slice 85` with all phases completed prints
-  `next: (all phases completed — run 'dispatch sync --prepare-review')`.
-- **VT-5:** `status --slice 85` with coordination worktree removed prints
+  ahead of fork-point)` (N ≥ 1).
+- **VT-4:** `status --slice 85` with all phases completed and no review ref
+  prints `next: (all phases completed — run 'dispatch sync --prepare-review')`.
+- **VT-5:** `status --slice 85` with all phases completed and review ref present
+  prints guidance referencing audit + integrate.
+- **VT-6:** `status --slice 85` with coordination worktree removed prints
   `coord: (removed)` and still resolves dispatch ref tip from the branch.
-- **VT-6:** `status --slice 85 --json` emits valid JSON with all sections.
+- **VT-7:** `status --slice 85 --json` emits valid JSON with all sections
+  (`dispatch`, `coord`, `trunk`, `phases`, `sync`, `candidates`, `next`),
+  `next.kind` is a structured token, not human prose.
 
-## 5. Skill shrinkage
+## 5. Skill shrinkage + embed verification
 
 ### dispatch/SKILL.md → ~40 lines
 
@@ -339,6 +467,18 @@ The shrunk arm skill retains only the spawn template:
 - The env contract sourcing
 - A pointer back to the router for the funnel
 
+### PHASE-04 embedding verification
+
+Skill changes affect the embedded binary (`src/skills.rs` is generated at build
+time). Verification must confirm the embedded text matches the edited source:
+
+- `doctrine install` re-copies `plugins/` to the install target.
+- `touch src/skills.rs && cargo build` re-embeds the installed skills.
+- An integration test reads the embedded skill text and asserts it matches the
+  shrunk plugin source (line count within target range, key prose present).
+- `just gate` catches a stale build only if this integration test exists —
+  without it, an un-rebuilt binary silently carries the old skill text.
+
 ### What does NOT change
 
 - `worktree/SKILL.md` — the fork lifecycle is self-contained and already
@@ -354,13 +494,13 @@ The shrunk arm skill retains only the spawn template:
 | File | Change | Lines |
 |---|---|---|
 | `src/main.rs` | New `DispatchCommand` variants: `Setup`, `PlanNext`, `Status`; new match arms | ~30 |
-| `src/dispatch.rs` | New entry points: `run_setup`, `run_plan_next`, `run_status`; shared `render_phase_table` helper; new `CoordOutcome` type | ~190 |
-| `src/worktree.rs` | Extract `fn coordinate()` pure-core from `run_coordinate`; `CoordOutcome` returned | ~15 refactor |
+| `src/dispatch.rs` | New entry points: `run_setup`, `run_plan_next`, `run_status`; shared `render_phase_table` helper | ~180 |
+| `src/worktree.rs` | Extract `fn coordinate()` pure-core from `run_coordinate`; define `worktree::CoordOutcome { dispatch_tip }` | ~20 refactor |
 | `plugins/doctrine/skills/dispatch/SKILL.md` | Shrink from 321 → ~40 lines | ~280 removed |
 | `plugins/doctrine/skills/dispatch-agent/SKILL.md` | Shrink from 162 → ~25 lines | ~137 removed |
 | `plugins/doctrine/skills/dispatch-subprocess/SKILL.md` | Shrink from 119 → ~20 lines | ~99 removed |
 
-Net: ~235 lines added to Rust, ~515 lines removed from skills.
+Net: ~225 lines added to Rust, ~515 lines removed from skills.
 
 ## 7. Design decisions log
 
@@ -371,10 +511,10 @@ Net: ~235 lines added to Rust, ~515 lines removed from skills.
 | D3 | Env contract format: `KEY=value` lines on stdout, matching `worktree fork`'s convention. Human status on stderr. |
 | D4 | `plan-next` skips blocked phases in `next` output. Blocked = not actionable for dispatch. All-remaining-blocked prints an explicit `(none)` message. |
 | D5 | File-disjointness is out of scope for v1. Adding a `files` field to plan.toml is an authored schema change. The orchestrator still runs `/phase-plan` for file sets. |
-| D6 | `status` includes trunk drift detection: `git merge-base --is-ancestor <trunk_base> <live_trunk>` catches divergence early. |
+| D6 | `status` includes stateless trunk drift detection: recomputes `git merge-base dispatch/<N> trunk` against the current trunk tip at each invocation. No stored setup-time base. |
 | D7 | `status` shows a candidate summary (count + admitted count) but defers full detail to `dispatch candidate status` — no duplication. |
 | D8 | Phase table rendering is a shared helper (`render_phase_table`) used by both `plan-next` and `status`. |
-| D9 | `worktree::run_coordinate` is refactored to extract a pure-core `coordinate()` returning `CoordOutcome`, so `run_setup` can call it without duplicating I/O. |
+| D9 | `worktree::run_coordinate` is refactored to extract a pure-core `coordinate()` returning `worktree::CoordOutcome { dispatch_tip }`, so `run_setup` can call it without duplicating I/O. The type lives in `src/worktree.rs` — `dispatch` depends on `worktree`, not the reverse. |
 | D10 | All three new verbs are read-only where possible; `setup` is the only mutating verb (creates/resumes the coordination worktree). |
 
 ## 8. Verification alignment
@@ -385,13 +525,19 @@ Net: ~235 lines added to Rust, ~515 lines removed from skills.
 - **`dispatch_setup_creates_coordination`** — setup creates the worktree, emits valid env contract
 - **`dispatch_setup_refuses_live_worktree`** — refuses when coordination-live
 - **`dispatch_setup_resumes_branch`** — reattaches to an existing branch with no live worktree
-- **`dispatch_plan_next_orders_phases`** — correct statuses, correct `next` (skips completed + blocked)
+- **`dispatch_plan_next_orders_phases`** — correct statuses, correct `next` (skips completed + blocked, multiple blocked)
 - **`dispatch_plan_next_all_blocked`** — `next` is empty with explicit message
-- **`dispatch_plan_next_json`** — valid JSON output
+- **`dispatch_plan_next_stops_at_second_blocked`** — pending run stops at the next blocked phase mid-sequence
+- **`dispatch_plan_next_json`** — valid JSON output, includes `batching_requires_phase_plan`
 - **`dispatch_status_full_rollup`** — coordination, phases, trunk drift, sync, candidates, next
-- **`dispatch_status_trunk_drift`** — moved trunk reported correctly
+- **`dispatch_status_missing_dispatch_ref`** — exits non-zero with "dispatch branch not found"
+- **`dispatch_status_missing_trunk_ref`** — exits non-zero with "trunk ref not found"
+- **`dispatch_status_trunk_drift`** — moved trunk reported correctly with N ≥ 1
 - **`dispatch_status_post_sync`** — sync state shows `prepared`
 - **`dispatch_status_post_conclude`** — coord removed, all phases completed, guidance text
+- **`dispatch_status_integrated`** — admitted close_target ancestor of trunk, `next.kind: "integrate"`
+- **`dispatch_status_json_next_kind`** — `--json` output has `next.kind` as structured token
+- **`embedded_skills_match_plugin_sources`** — PHASE-04 integration test: embedded text line count within target, key prose present
 
 ### Existing suites (behaviour-preservation gate)
 
