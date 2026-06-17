@@ -1,0 +1,92 @@
+[[area]]
+name = "SL-090 design"
+purpose = "The design under interrogation — six decisions, code-impact table, invariants, test coverage plan"
+paths = [
+  ".doctrine/slice/090/design.md",
+]
+
+[[area]]
+name = "SL-090 scope"
+purpose = "Approved scope the design must conform to — shipped/ fallback language vs items/-only decision"
+paths = [
+  ".doctrine/slice/090/slice-090.md",
+  ".doctrine/slice/090/slice-090.toml",
+]
+
+[[area]]
+name = "link/unlink entry points"
+purpose = "run_link / run_unlink in main.rs — the fork points the design targets"
+paths = [
+  "src/main.rs",
+]
+
+[[area]]
+name = "relation write seam"
+purpose = "AppendEdge/RemoveOutcome enums, append_edge/remove_edge shells, trailing_typed_table_after_relation guard, RELATION_RULES vocabulary"
+paths = [
+  "src/relation.rs",
+]
+
+[[area]]
+name = "memory module"
+purpose = "MemoryRef parse, resolve_show, read_catalog_record, MEMORY_ITEMS_DIR, MEMORY_SHIPPED_DIR, RawRelation shape"
+paths = [
+  "src/memory.rs",
+]
+
+[[area]]
+name = "integrity ref resolution"
+purpose = "parse_canonical_ref, ensure_ref_resolves — the target-validation tools D3 borrows"
+paths = [
+  "src/integrity.rs",
+]
+
+[[area]]
+name = "catalog hydrate"
+purpose = "CatalogEdgeLabel::Raw — how memory relations are read today (the write path's consumer)"
+paths = [
+  "src/catalog/hydrate.rs",
+]
+
+[[area]]
+name = "governing ADRs"
+purpose = "ADR-010 (relation modelling, tier-1 block, RELATION_RULES, outbound-only) and ADR-004 (storage direction, reciprocity derived)"
+paths = [
+  ".doctrine/adr/010/adr-010.toml",
+  ".doctrine/adr/010/adr-010.md",
+  ".doctrine/adr/004/adr-004.toml",
+  ".doctrine/adr/004/adr-004.md",
+]
+
+[[invariant]]
+text = "Scope (slice-090.md) and design (design.md) must not contradict on shipped/ fallback behaviour."
+
+[[invariant]]
+text = "Design decisions must not silently widen or narrow approved scope without flagging the delta."
+
+[[invariant]]
+text = "Memory relation write path must honour ADR-004 outbound-only (no spurious backlink authors)."
+
+[[invariant]]
+text = "D3 target validation: free-text + memory UID pass-through must NOT contradict the test table."
+
+[[invariant]]
+text = "D4 items/-only resolve must be coherent with the catalog scan (items/ + shipped/ union)."
+
+[[invariant]]
+text = "D5 reuse of AppendOutcome/RemoveOutcome must respect ADR-001 module layering."
+
+[[invariant]]
+text = "D6 F1 trap defence must be decidable: reuse vs duplicate — pick one."
+
+[[invariant]]
+text = "The design must specify which path-resolution strategy applies (H1 safe_join or bespoke)."
+
+[[risk]]
+text = "Scope's 'items/ first, shipped/ fallback' language contradicts D4's 'items/ only' — a scope-design delta with no rationale recorded."
+
+[[risk]]
+text = "Shipped/-only memory unlink is a dead end: there is no 'clone to items/' verb, so D4's error message has no actionable remedy."
+
+[[risk]]
+text = "D5 AppendOutcome/RemoveOutcome imports from relation.rs may create a module cycle depending on what memory.rs provides back to relation.rs."

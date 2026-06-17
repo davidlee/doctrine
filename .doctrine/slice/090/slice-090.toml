@@ -1,13 +1,13 @@
-id = 82
-slug = "dispose-doc-legacy"
-title = "Dispose of doc/* as legacy heretical practice; rehome & archive"
-status = "ready"
-created = "2026-06-16"
+id = 90
+slug = "wire-linkunlink-cli-and-template-for-memory-relations"
+title = "Wire link/unlink CLI and template for memory relations"
+status = "design"
+created = "2026-06-17"
 updated = "2026-06-17"
 
 [relationships]
-needs = ["SL-021"]              # slice→work hard prerequisite: content must be rehomed before disposal
-after = [{ to = "SL-084", rank = 0 }] # slice→work soft sequence: SL-084 restructures CLAUDE.md & adds dispatch skills — be aware before reference sweep
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

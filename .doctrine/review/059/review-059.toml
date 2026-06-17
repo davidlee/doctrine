@@ -1,0 +1,152 @@
+id    = 59
+slug  = "design-review-of-sl-090"
+title = "design review of SL-090"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-090"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "D4 items/-only contradicts scope's 'items/ first, shipped/ fallback'"
+detail = """
+Scope (slice-090.md §1): 'When the source parses as a known memory UID (items/ first, shipped/ fallback), resolve the memory.toml path.' Design D4: 'resolve_memory_toml_path resolves exclusively to MEMORY_ITEMS_DIR/<uid>/memory.toml.' AND 'If the uid exists only in shipped/, both link and unlink error.'
+
+Expected: the design either conforms to the approved scope OR explicitly flags the scope narrowing with rationale. Observed: the design silently tightens the scope from 'items/ first, shipped/ fallback' to 'items/ only' with no delta annotation. The implementor arrives at contradictory authorities.
+
+Evidence: .doctrine/slice/090/slice-090.md §1 vs .doctrine/slice/090/design.md D4."""
+disposition = "design-wrong"
+response = """Scope (slice-090.md §1) says "items/ first, shipped/ fallback" — that was the approved intent. D4 silently tightened to "items/ only, error if shipped/." The design must honour the approved scope. Fix: reinstate shipped/ fallback for unlink (items/ write, shipped/ read-only), OR file a scope amendment that records the narrowing with an explicit rationale and the User's approval. Until then, the shipped/ fallback is the governing text."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "D4 shipped/-only unlink prescribes an unavailable remedy"
+detail = """
+D4 prescribes: 'clone to items/ first, then link.' But there is no `doctrine memory clone` verb. The error message advises the user to take an action the CLI does not support.
+
+Expected: if the design increases the implementation surface (a clone verb), it must either be in scope or deferred to a follow-up item. Observed: the design creates a dead-end UX path — 'do this thing that doesn't exist' — with no follow-up reference.
+
+This is a design defect, not a missing implementation: the error message is the design's responsibility."""
+disposition = "design-wrong"
+response = """D4's "clone to items/ first" prescribes an unavailable verb. The remedy is twofold: (a) if shipped/ fallback is restored (F-1), unlink on a shipped/-only uid works read-only — no clone needed; (b) the error message must not prescribe an action the CLI does not support. Replace with an honest message: "memory X is a shipped corpus record — shipped/ is read-only; hand-add to items/ or backlink a new record.""""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "D5 AppendOutcome/RemoveOutcome reuse: module-layering not checked"
+detail = """
+D5 proposes: 'Reuse AppendOutcome/RemoveOutcome — The existing enums (Wrote/Noop, Removed/Absent) carry exactly the right semantics. Memory append/remove returns the same types.'
+
+This means `memory.rs` imports `relation::AppendOutcome` / `relation::RemoveOutcome`. The import direction (memory → relation) is leaf→leaf, which ADR-001 permits. BUT: memory.rs already exports `MemoryCatalogRecord` consumed by `catalog/hydrate.rs`. If the future requires relation.rs to import from memory.rs, a cycle forms. The design does not verify no cycles exist, nor does it document the import direction.
+
+Expected: either the design explicitly asserts the import direction is safe (memory → relation, no back-import needed), or it defines bespoke outcome enums in memory.rs to avoid cross-leaf coupling. Observed: D5 is a one-liner hand-wave."""
+disposition = "fix-now"
+response = 'The import direction is memory → relation (leaf → leaf, ADR-001 permits). Relation.rs does not and will not import from memory.rs (it is a vocabulary leaf). Fix: add a one-line note to D5: "Import direction: memory.rs imports relation::AppendOutcome/RemoveOutcome (leaf → leaf, no cycle)."'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "D6 F1 trap defence: two contradictory directives"
+detail = """
+D6: 'Reuse the trailing_typed_table_after_relation guard from relation.rs. Make the guard public (or duplicate the logic).'
+
+'Make the guard public' and 'duplicate the logic' are contradictory strategies. Making it public adds to the API surface; duplicating creates a maintenance burden. A locked design must choose. The implementor should not arrive at this fork and have to decide.
+
+Expected: pick one — either 'make `trailing_typed_table_after_relation` pub(crate), import it from memory.rs' or 'duplicate the guard in memory.rs.' Observed: a parenthetical shrug.
+
+Note: if the memory helpers are thin wrappers around `append_relation_row`/`remove_relation_row` (which already contain the F1 guard), neither option is needed — the design should say so."""
+disposition = "fix-now"
+response = 'Pick one. The right choice: duplicate the guard + append/remove logic in memory.rs, adapted for free-form label strings. Rationale: append_relation_row takes a RelationLabel enum (vocabulary-bound); memory labels are raw strings per D2. Duplicating with the free-form adaptation is the cleaner path — the two write paths share a shape (toml_edit, idempotency, F1 guard) but not the label type. Fix D6 to read: "Duplicate the trailing_typed_table_after_relation guard and append/remove logic in memory.rs, adapted for free-form label strings (RelationLabel is vocabulary-bound; memory labels are raw)."'
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "D3 target pass-through: 'memory UIDs' and 'nonexistent uid' ambiguous"
+detail = """
+D3: 'Free-text targets and memory UIDs pass through unvalidated.' The test table entry 'Nonexistent uid (items/) → error | Path resolution failure surface' uses 'uid' without distinguishing source-uid vs target-uid.
+
+In context, the test is about the source: linking FROM a memory uid that doesn't exist in items/. But a fast reader could misread it as target validation. The design should disambiguate: 'Nonexistent SOURCE uid (items/) → error.'
+
+This is a nit but one that could send the implementor down a false path."""
+disposition = "fix-now"
+response = 'Agreed. Disambiguate the test table entry: "Nonexistent SOURCE uid (items/) → error | Path resolution failure surface." The word "source" prevents misreading it as a target-validation gate.'
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Missing path-resolution joiner specification"
+detail = """
+The design specifies resolve_memory_toml_path(root, uid_or_key) but does not state how the path is built. MemoryRef::parse screens traversal, but the existing memory paths use safe_join (the H1 chokepoint) as belt-and-braces.
+
+Expected: the design either says 'use safe_join (same as resolve_show)' or specifies a bespoke join with equivalent safety. Observed: no mention of the join mechanism.
+
+Evidence: src/memory.rs resolve_show uses crate::fsutil::safe_join(items_root, Path::new(&name))."""
+disposition = "fix-now"
+response = 'Add to the Code Impact table or the resolve_memory_toml_path description: "uses safe_join (the H1 chokepoint), same as resolve_show — belt-and-braces over MemoryRef::parse."'
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "No mention of help-text update for link/unlink"
+detail = """
+The design covers code changes but does not mention updating / CLI help text to document the new memory source capability.
+
+Expected: the code-impact table or a test-coverage entry notes that Author a tier-1 `[[relation]]` edge: `link SL-048 governed_by ADR-010` (SL-048 §5.4). The label must be `link`-writable for the source kind, and the target must resolve to an entity of a legal kind (forward-edge validation, §5.5). Idempotent — re-linking an existing edge is a no-op
+
+Usage: doctrine link [OPTIONS] <SOURCE> <LABEL> <TARGET>
+
+Arguments:
+  <SOURCE>  The source entity's canonical ref, e.g. `SL-048`
+  <LABEL>   The relation label, e.g. `governed_by`, `consumes`, `related`
+  <TARGET>  The target — a canonical ref (`ADR-010`) for validated labels, free text for `drift`
+
+Options:
+      --color <COLOR>  Control colour output [default: auto] [possible values: auto, always, never]
+  -p, --path <PATH>    Explicit project root (default: auto-detect from CWD)
+  -h, --help           Print help and Remove a tier-1 `[[relation]]` edge authored by `link` (SL-048 §5.4). Symmetric on the same write seam; idempotent — unlinking an absent edge is a no-op
+
+Usage: doctrine unlink [OPTIONS] <SOURCE> <LABEL> <TARGET>
+
+Arguments:
+  <SOURCE>  The source entity's canonical ref, e.g. `SL-048`
+  <LABEL>   The relation label to remove, e.g. `governed_by`
+  <TARGET>  The target ref the edge points at
+
+Options:
+      --color <COLOR>  Control colour output [default: auto] [possible values: auto, always, never]
+  -p, --path <PATH>    Explicit project root (default: auto-detect from CWD)
+  -h, --help           Print help now mention  as a valid source. Observed: silent omission."""
+disposition = "fix-now"
+response = 'Add to the Code Impact table: "src/main.rs (cli_definition) — update link/unlink argument help text to document mem_<uid> / mem.<key> as valid source refs."'
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Handover contradicts D4 on shipped/ behaviour for unlink"
+detail = """
+Handover: "resolve to memory.toml in items/ (writable) or shipped/ (read-only, for unlink)." Design D4: "If the uid exists only in shipped/, both link and unlink error."
+
+Expected: handover accurately reflects the design. Observed: handover says shipped/ is usable for unlink; design says it errors. The handover was written before D4 was tightened; it is stale. This is not a design defect per se, but a coordination risk — the next agent reading the handover will be misled.
+
+Evidence: .doctrine/slice/090/handover.md (unlink mention) vs design.md D4."""
+disposition = "fix-now"
+response = 'The handover is stale — written before D4 tightened. Fix: after the design corrections are applied, update the handover to match. Specifically, either remove "(read-only, for unlink)" if D4 stays items/-only, or keep it if shipped/ fallback is restored per F-1.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

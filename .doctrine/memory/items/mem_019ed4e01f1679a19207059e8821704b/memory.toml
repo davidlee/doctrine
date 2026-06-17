@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed4e01f1679a19207059e8821704b"
+memory_key = "mem.pattern.link.memory-label-fork"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Memory write path labels are free-form; RELATION_RULES vocabulary is closed to memory edges"
+summary = "Memory [[relation]] rows use raw label strings (CatalogEdgeLabel::Raw). The link/unlink write path for memory relations therefore forks at the label type from the numbered-entity path — RelationLabel is vocabulary-bound; memory labels are user-chosen free text. Any future unified-label work must reconcile these two write paths."
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["link", "memory", "relations"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "94005d2d30c4758ae1cedb6d9fc1f0dbae14628e"
+ref_name = "refs/heads/main"
+checkout_state_id = "c251c973597b9342abd145af6e1afa8b49bad7dc63f6ec3615ae027d068cd7d5"
+base_commit = "5eefb4e00f2477666d3e1a698e57d867d35a61fb"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
