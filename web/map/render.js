@@ -6,6 +6,28 @@
 var render = {};
 
 /* -----------------------------------------------------------------------
+ * DOM element factory (moved from app.js)
+ * --------------------------------------------------------------------- */
+render.el = function(tag, attrs, children) {
+  var e = document.createElement(tag);
+  if (attrs) {
+    Object.keys(attrs).forEach(function (k) {
+      if (k === 'className') e.className = attrs[k];
+      else if (k === 'textContent') e.textContent = attrs[k];
+      else if (k === 'innerHTML') e.innerHTML = attrs[k];
+      else e.setAttribute(k, attrs[k]);
+    });
+  }
+  if (children) {
+    (Array.isArray(children) ? children : [children]).forEach(function (c) {
+      if (typeof c === 'string') e.appendChild(document.createTextNode(c));
+      else e.appendChild(c);
+    });
+  }
+  return e;
+};
+
+/* -----------------------------------------------------------------------
  * HTML escaping (F-5: moved from app.js; encodeAttr deleted as dead duplicate)
  * --------------------------------------------------------------------- */
 render.escapeHtml = function(str) {
@@ -35,6 +57,57 @@ render.cacheElements = function(root) {
   render.elements.cmEdgeTable = qs('.cm-edge-table');
   render.elements.cmAddEdgeForm = qs('.cm-add-edge-form');
   render.elements.cmDiagnosticsPanel = qs('.cm-diagnostics-panel');
+};
+
+/* -----------------------------------------------------------------------
+ * Entity list + focus header DOM construction
+ * --------------------------------------------------------------------- */
+
+/* Single entity-list <li> element (DRY). */
+render.buildEntityItem = function(node, focusId, onFocus) {
+  var li = document.createElement('li');
+  li.className = 'entity-item';
+  if (node.id === focusId) li.classList.add('active');
+  var t = document.createElement('span'); t.className = 'entity-title'; t.textContent = node.title; li.appendChild(t);
+  var p = document.createElement('span'); p.className = 'kind-pill';
+  p.setAttribute('data-kind', node.kindPrefix);  // F-7: data-kind selector target
+  p.style.background = 'var(--kind-' + node.kindPrefix + ')';
+  p.textContent = node.kindPrefix;
+  li.appendChild(p);
+  li.addEventListener('click', function(id) {
+    return function() { onFocus(id); };
+  }(node.id));
+  return li;
+};
+
+/* Options: { container, nodes, focusId, onFocus } */
+render.entityList = function(opts) {
+  if (!opts.container) return;
+  opts.container.innerHTML = '';
+  (opts.nodes || []).forEach(function(node) {
+    opts.container.appendChild(render.buildEntityItem(node, opts.focusId, opts.onFocus));
+  });
+};
+
+/* Options: { container, focusId, graph } */
+render.focusHeader = function(opts) {
+  var container = opts.container;
+  if (!container) return;
+
+  if (!opts.focusId) {
+    container.innerHTML = '<span class="placeholder">Entity title \u2014 kind \u00b7 status</span>';
+    return;
+  }
+
+  var node = opts.graph.nodes.get(opts.focusId);
+  if (!node) {
+    container.innerHTML = '<span class="placeholder">Entity title \u2014 kind \u00b7 status</span>';
+    return;
+  }
+
+  container.innerHTML = '<span>' + render.escapeHtml(node.title) + '</span>' +
+    ' <span class="kind-pill" data-kind="' + render.escapeAttr(node.kindPrefix) + '" style="background:var(--kind-' + render.escapeHtml(node.kindPrefix) + ')">' + render.escapeHtml(node.kindPrefix) + '</span>' +
+    ' <span class="status">' + render.escapeHtml(node.status) + '</span>';
 };
 
 /* -----------------------------------------------------------------------
