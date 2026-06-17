@@ -29,6 +29,7 @@
     for (vb = 0; vb < viewBtns.length; vb++) {
       viewBtns[vb].addEventListener('click', function() {
         state.viewMode = this.getAttribute('data-view') || 'semantic';
+        state.priorityZoomId = null;
         renderView();
       });
     }
@@ -79,6 +80,8 @@
             container: graphArea,
             layout: priority.layoutGraph(state.actionabilityView),
             focusId: state.focusId,
+            zoomId: state.priorityZoomId,
+            onZoomToggle: function(id) { state.priorityZoomId = id; renderView(); },
             depth: state.depth,
             onNodeClick: goto,
             onNodeHoverEnter: function(id) {

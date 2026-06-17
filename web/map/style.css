@@ -836,6 +836,15 @@ a { color: var(--link); }
   font-size: 10px;
 }
 
+.priority-zoom-layer {
+  transition: transform 0.45s ease;
+}
+
+.priority-node--zoom rect {
+  stroke: var(--priority-needs-edge, #C0392B);
+  stroke-width: 2;
+}
+
 .priority-edge {
   fill: none;
 }

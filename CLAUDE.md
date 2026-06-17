@@ -1,3 +1,5 @@
+@.doctrine/state/boot.md
+
 @AGENTS.md
 
 # Claude-specific
