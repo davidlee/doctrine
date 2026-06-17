@@ -1,0 +1,409 @@
+id    = 63
+slug  = "inquisition-sl-091-plan-typed-lint-gate-and-ts-hardening"
+title = "Inquisition: SL-091 plan — typed lint gate and TS hardening"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "plan"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-091"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "ESLint entirely absent from plan — no typed lint gate exists for the TypeScript migration"
+detail = """
+Expected: the plan must specify an ESLint configuration with typescript-eslint strictTypeChecked + stylisticTypeChecked rules, added as a devDependency in PHASE-00 (scaffold), with verification items asserting eslint --max-warnings=0 passes at each phase gate. Every leaf-to-root conversion phase should carry a VT: eslint passes with zero warnings.
+
+Observed: The plan's 13 phases (PHASE-00 through PHASE-12) mention tsc --noEmit 13 times, vite/vite.config.ts 7 times, bun 5 times, and cargo 12 times. ESLint appears zero times. The word 'lint' does not appear in plan.toml or plan.md. No phase adds eslint, typescript-eslint, @eslint/js, or globals. No verification item gates on eslint. The scaffold phase (PHASE-00) lists devDeps: vite + typescript only — no eslint packages.
+
+Evidence: plan.toml — 13 phases, 0 mentions of 'eslint' or 'lint'. plan.md — same. design.md — mentions tsc --noEmit 8 times, never eslint. The verification chain is tsc --noEmit → bun run dev/bun run build → just gate → manual smoke. Every step in this chain is blind to: any-widening, unsafe-* member access, floating promises, misused promises, import/export drift, stale globals, innerHTML writes, JSX creep, and switch exhaustiveness — all failure modes LLMs routinely introduce in TS migrations.
+
+This is a blocker: without a lint gate, the plan permits code that compiles but carries silent architectural corruption past every verification checkpoint."""
+disposition = "fix-now"
+response = """
+F-1 (blocker): Plan must be revised to include ESLint in the verification chain. Concrete remediation:
+
+1. Add to plan.md §Sequencing: a note that PHASE-00 scaffold MUST include eslint.config.js creation with typescript-eslint strictTypeChecked + stylisticTypeChecked rules.
+2. Add to plan.toml PHASE-00: 
+   - EN criteria: add 'EN-3: eslint.config.js design locked (ruleset specified in user-provided config).'
+   - EX criteria: add 'EX-9: eslint.config.js exists with JS legacy block + TS strict block (per user specification).'
+   - VT: add 'VT-4: eslint . --max-warnings=0 passes (legacy .js files pass their block; empty src/ passes TS block).'
+3. Add eslint, typescript-eslint, @eslint/js, globals to PHASE-00 devDependencies list.
+4. Add eslint VT to every conversion phase (PHASE-01 through PHASE-10): 'VT-N: eslint --max-warnings=0 passes (module.ts has zero warnings).'
+5. Define eslint.config.js as specified by user: flat config, js.configs.recommended + tseslint.configs.strictTypeChecked + tseslint.configs.stylisticTypeChecked, per-file overrides for legacy .js and new .ts.
+6. Reference the full user-provided config as the canonical eslint ruleset.
+
+The config must include all LLM-damage-containment rules: no-explicit-any, no-unsafe-*, no-floating-promises, no-misused-promises, switch-exhaustiveness-check, strict-boolean-expressions, consistent-type-imports, await-thenable, require-await, return-await, and reportUnusedDisableDirectives: error. Plus restricted-syntax bans for innerHTML/outerHTML/insertAdjacentHTML/eval/new Function/JSXElement/window.* assignment, and no-restricted-globals for bare event."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "tsconfig insufficiently hardened — missing noUncheckedIndexedAccess, verbatimModuleSyntax, exactOptionalPropertyTypes, noImplicitOverride, noImplicitReturns, useUnknownInCatchVariables, skipLibCheck: false"
+detail = """
+Expected: tsconfig.json must include noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, exactOptionalPropertyTypes: true, noImplicitOverride: true, noImplicitReturns: true, useUnknownInCatchVariables: true, skipLibCheck: false — in addition to strict: true, moduleResolution: bundler, target: ES2020. These close holes that strict alone does not cover.
+
+Observed: The design says 'strict, moduleResolution bundler, target es2020.' The plan inherits this by reference and never specifies the tsconfig. Even the design's phrasing is the minimum — it omits noUncheckedIndexedAccess (protects against undefined reads on sparse arrays/Records), verbatimModuleSyntax (prevents import elision side-effects), exactOptionalPropertyTypes (prevents undefined-vs-missing confusion), noImplicitOverride (catches missing override on subclass methods), noImplicitReturns (catches code paths that fall off), useUnknownInCatchVariables (catches typed catch clauses that shouldn't compile), and skipLibCheck: false (validates vendor type declarations, not just our own).
+
+Risk without these: (1) Record<> access with noUncheckedIndexedAccess off → T[K] typed as T[K], not T[K]|undefined — silent undefined propagation; (2) verbatimModuleSyntax off → import { type Foo } elided silently, side-effect imports lost; (3) exactOptionalPropertyTypes off → { x?: string } accepts { x: undefined }; (4) skipLibCheck: true (TypeScript default when project references used) → vendor type errors hidden.
+
+Blocker: these are not style preferences; they are correctness gates that prevent entire classes of runtime errors from reaching production."""
+disposition = "fix-now"
+response = """
+F-2 (blocker): Plan must specify the full tsconfig.json compilerOptions set. Concrete remediation:
+
+Add to plan.toml PHASE-00 EX-2: specify the exact tsconfig.json content — not just 'strict, moduleResolution bundler, target es2020.' The minimum hardening set:
+
+{
+  compilerOptions: {
+    target: 'ES2020',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+    strict: true,
+    noImplicitOverride: true,
+    noUncheckedIndexedAccess: true,
+    exactOptionalPropertyTypes: true,
+    noImplicitReturns: true,
+    noFallthroughCasesInSwitch: true,
+    noUnusedLocals: true,
+    noUnusedParameters: true,
+    useUnknownInCatchVariables: true,
+    verbatimModuleSyntax: true,
+    isolatedModules: true,
+    allowJs: false,
+    checkJs: false,
+    skipLibCheck: false
+  },
+  include: ['src/**/*.ts', 'vite.config.ts']
+}
+
+Design.md should also be updated to reference this full set rather than the abbreviated 'strict, moduleResolution bundler, target es2020.' (Or the plan can carry the detail; the plan's authority over implementation detail is established.)"""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "package.json scripts undefined — missing lint gate in build chain"
+detail = """
+Expected: package.json scripts must define:
+- "lint": "eslint . --max-warnings=0"
+- "typecheck": "tsc --noEmit"
+- "build": "bun run typecheck && bun run lint && vite build"
+- "dev": "vite"
+
+This chains typecheck → lint → build so a single 'bun run build' gates on both correctness checks before producing output. 'bun run lint' must be usable standalone for fast inner-loop feedback.
+
+Observed: The plan references 'bun run build' and 'bun run dev' but never defines the scripts. PHASE-00 exit criteria say 'package.json exists with correct dependencies and scripts' but 'scripts' is never specified. The current package.json at web/map/ (if it exists) has no scripts section defined.
+
+Risk: without explicit script definitions, an implementer writes 'build: vite build' and the lint/typecheck gates are never run."""
+disposition = "fix-now"
+response = """
+F-3 (major): Plan must specify package.json scripts explicitly. Concrete remediation:
+
+Add to plan.toml PHASE-00 exit criteria EX-1 (or a new EX): specify the scripts section:
+
+{
+  scripts: {
+    lint: 'eslint . --max-warnings=0',
+    typecheck: 'tsc --noEmit',
+    build: 'bun run typecheck && bun run lint && vite build',
+    dev: 'vite'
+  }
+}
+
+The 'build' script MUST chain typecheck → lint → vite build (lint before build, not after). The 'lint' script MUST use --max-warnings=0 so warnings are errors. Update plan.md PHASE-00 description to note the script chain."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Missing eslint devDependencies — eslint, typescript-eslint, @eslint/js, globals not listed in any phase"
+detail = """
+Expected: PHASE-00 (scaffold) must add devDependencies: eslint, typescript-eslint, @eslint/js, globals — in addition to vite and typescript already listed. The plan should state: bun add -d eslint typescript-eslint @eslint/js globals.
+
+Observed: PHASE-00 exit criteria EX-1 says 'package.json exists with correct dependencies and scripts.' The design's Vendor dependencies section lists only runtime deps (d3, d3-dag, markdown-it, dompurify). DevDeps are mentioned only in the File layout diagram as 'devDeps: vite, typescript' — no lint packages.
+
+Risk: an implementer following the plan literally installs vite + typescript and discovers eslint is missing only when they try to run it — or, more likely, never discovers it because the plan never demands it."""
+disposition = "fix-now"
+response = """
+F-4 (major): Plan must list eslint devDependencies in PHASE-00. Concrete remediation:
+
+Add to plan.toml PHASE-00 exit criteria or plan.md sequencing: 'bun add -d eslint typescript-eslint @eslint/js globals' must be listed alongside 'bun add -d vite typescript' (or in addition to). The design.md File layout comment should list eslint, typescript-eslint, @eslint/js, globals under devDeps.
+
+This rides on F-1 resolution — once eslint is specified, the dependency list follows mechanically."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Verification gates incomplete — every phase VTs assert tsc --noEmit but none assert eslint --max-warnings=0"
+detail = """
+Expected: every phase that converts a .js → .ts file should carry a VT: 'eslint --max-warnings=0 passes (module.ts has zero warnings).' At minimum, PHASE-00 should gate on eslint config creation, and PHASE-10 (integration) should gate on full-project eslint.
+
+Observed: 13 phases, 26 verification items (VT/VA/VH). Every VT says some form of 'tsc --noEmit passes (module.ts has zero errors).' Zero VTs mention eslint. The verification taxonomy has room — VT-1 in each phase could be split into VT-1a (tsc) and VT-1b (eslint), or a new VT added.
+
+Risk: an LLM agent executing phase-by-phase checks every tsc VT, sees them all green, and moves on — the lint gate is never checked because it was never demanded."""
+disposition = "fix-now"
+response = """
+F-5 (major): Verification gates must include eslint VTs. Concrete remediation:
+
+For each phase that produces or modifies a .ts file (PHASE-00 through PHASE-10), add a VT:
+  VT-N: 'eslint . --max-warnings=0 passes (module.ts has zero warnings).'
+
+Specifically:
+- PHASE-00: VT-4 (eslint on scaffold — no .ts content yet, config exists)
+- PHASE-01 through PHASE-09: add VT-Nb ('eslint passes on <module>.ts')
+- PHASE-10: VT-1 should read 'eslint . --max-warnings=0 passes (all .ts files, zero warnings)' alongside the existing tsc VT
+
+The plan.md Sequencing section should note that each phase verifies both tsc --noEmit AND eslint --max-warnings=0 before deleting the .js original."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "just gate undefined for frontend — ESLint must be included in the workspace gate"
+detail = """
+Expected: just gate (or just check) must include 'cd web/map && bun run lint' or equivalent. The plan should specify that the workspace gate covers both Rust (cargo clippy) and TypeScript (eslint). A 'just web-lint' or direct inclusion in the existing check recipe.
+
+Observed: PHASE-11 verification VT-3 says 'just gate passes (zero clippy warnings, workspace tests green).' This only gates on Rust clippy — the existing justfile likely runs cargo clippy and cargo test. There is no mention of extending just gate to include frontend linting.
+
+Risk: CI passes (cargo clippy green) while the TypeScript codebase accumulates type-widening, floating promises, and innerHTML writes — because the gate does not check."""
+disposition = "fix-now"
+response = """
+F-6 (major): just gate must include ESLint for the frontend. Concrete remediation:
+
+Add to plan.toml PHASE-11 (Rust integration) or a new verification criterion:
+  VT: 'just gate passes (cargo clippy zero warnings AND eslint --max-warnings=0 zero warnings).'
+
+Update justfile (or note in plan.md) that the gate recipe should run:
+  1. cargo clippy --workspace (existing)
+  2. cd web/map && bun run lint (new)
+  
+The 'just check' fast inner-loop variant may skip eslint for speed, but 'just gate' (the pre-commit gate) must include it.
+
+This depends on eslint existing (F-1) and the lint script being defined (F-3)."""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "No restricted-syntax or global bans — JSX, innerHTML, eval, window.* assignment can pass undetected"
+detail = """
+Expected: eslint.config.js must include no-restricted-syntax rules that ban: JSXElement, innerHTML/outerHTML assignment, insertAdjacentHTML calls, eval, new Function, and window.* assignment. no-restricted-globals must ban bare 'event'. These enforce design decision D6 (no framework — plain DOM) and prevent architectural regression during migration.
+
+Observed: The design's D6 says 'No framework — plain DOM. Vite is strictly dev server + TS transpiler + bundler. No JSX, React, Svelte, Vue.' The plan has no mechanism to enforce this. An LLM that imports React, writes JSX, or re-introduces window.X = {} globals will pass tsc --noEmit (if the types exist) and pass all plan verification items — the heresy is only caught in manual smoke.
+
+Risk: without automated enforcement, D6 is a wish, not a constraint. LLMs routinely 'helpfully' add JSX patterns during migration because they pattern-match against the vast majority of Vite projects in training data."""
+disposition = "fix-now"
+response = """
+F-7 (major): Plan must include restricted-syntax and global bans in the eslint config specification. Concrete remediation:
+
+The eslint.config.js referenced in F-1's remediation must include:
+
+1. no-restricted-globals: ban bare 'event' (use explicit Event parameter)
+2. no-restricted-syntax: ban
+   - JSXElement (no framework drift — enforces D6)
+   - AssignmentExpression[left.property.name='innerHTML'] (unsafe HTML)
+   - AssignmentExpression[left.property.name='outerHTML'] (unsafe HTML)
+   - CallExpression[callee.property.name='insertAdjacentHTML'] (unsafe HTML)
+   - CallExpression[callee.name='eval'] (code execution from strings)
+   - NewExpression[callee.name='Function'] (code execution from strings)
+   - AssignmentExpression[left.object.name='window'] (global state regression)
+
+3. A per-file override for web/map/src/render.ts and web/map/src/concept-map.ts that allows innerHTML/outerHTML/insertAdjacentHTML via local eslint-disable-next-line (not a blanket rule weakening — the sanctions are reviewed at each use site).
+
+Note in plan: the innerHTML ban WILL cause migration pain. Acceptable — LLMs routinely 'fix' TS errors by writing innerHTML. The rules make that move noisy and force explicit sanitization through the render helpers."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "ESLint config format unspecified — plan does not state flat config (eslint.config.js) vs legacy (.eslintrc) format"
+detail = """
+Expected: the plan should specify ESLint flat config format (eslint.config.js) — the only format supported by ESLint v9+ and typescript-eslint v8+. The recommended config uses module.exports = [...] with js.configs.recommended and ...tseslint.configs.strictTypeChecked.
+
+Observed: since eslint is not mentioned at all, the config format question never arises. When an implementer adds it, they may default to .eslintrc (legacy, deprecated) — which is incompatible with typescript-eslint v8's flat config requirement.
+
+Minor: this is a follow-on from F-1 (the absence of eslint). Once eslint is specified, the format should be explicit to prevent format drift."""
+disposition = "fix-now"
+response = """
+F-8 (minor): Plan should specify ESLint flat config format explicitly. Concrete remediation:
+
+In plan.md or plan.toml PHASE-00, specify: 'eslint.config.js — flat config format (ESLint v9+, required by typescript-eslint v8+). Uses module.exports = [...] with CommonJS require() since Vite does not process eslint.config.js.' This prevents an implementer from reaching for the deprecated .eslintrc format.
+
+The user-provided config uses the correct flat config format — the plan should simply reference it as canonical."""
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "blocker"
+title = "test.html broken during migration — .js files deleted in PHASE-01 through PHASE-09 but test.html converted to modules only in PHASE-10"
+detail = """
+Expected: test.html must remain runnable throughout the migration. Either: (a) defer all .js deletions to PHASE-10 (keep old .js files as fallback until test.html is converted), or (b) convert test.html incrementally alongside each module conversion, or (c) explicitly state that test.html is non-functional between PHASE-01 and PHASE-10 and manual smoke/agent verification suffices.
+
+Observed: The plan deletes each .js file immediately upon conversion:
+- PHASE-01 EX-3: 'web/map/router.js deleted.'
+- PHASE-02 EX-3: 'web/map/api.js deleted.'
+- ... through PHASE-09 EX-3: 'web/map/priority.js deleted.'
+
+But test.html currently loads ALL .js files via global <script> tags at line 13-21:
+  <script src="/assets/api.js"></script>
+  <script src="/assets/model.js"></script>
+  ...
+These are served via rust-embed's /assets/ route. The inline test code references , , ,  — all global references.
+
+Deleting router.js in PHASE-01 means the <script> tag for router.js 404s. The router test block (lines ~460-515) runs  against an undefined  — every assertion fails silently (the assert function catches the ReferenceError, counts it as one FAIL, and continues). The plan's VT-2 says 'Existing router.js tests in test.html still pass' — this is physically impossible after router.js is deleted unless test.html is being served by Vite (which transpiles router.ts) rather than by rust-embed.
+
+Even if test.html is served by Vite, the inline test code uses globals (router, model, dot, cm) that don't exist in an ES module world — the .ts modules export named exports, not window globals. So test.html's inline script blocks would fail with ReferenceError for every test.
+
+Blocker: the plan's own verification items demand test.html tests pass after each .js deletion, but the plan deletes the files those tests depend on without providing an alternative loading mechanism. Either the verification items are lying (the tests CAN'T pass), or the plan has a missing migration step for test.html at every intervening phase."""
+disposition = "fix-now"
+response = """
+F-9 (blocker): Plan must resolve the .js deletion / test.html migration gap. Three options; recommend Option A:
+
+Option A (recommended): Keep all old .js files until PHASE-10. Change EX-3 in PHASE-01 through PHASE-09 from 'web/map/X.js deleted' to 'web/map/X.js retained for test.html backward compat; deletion deferred to PHASE-10.' Add to PHASE-10 EX criteria: 'EX-6: All old .js files deleted (router.js, api.js, dot.js, svg.js, model.js, render.js, search.js, concept-map.js, priority.js, app.js).' This keeps test.html functional throughout — the old .js globals are still loaded via rust-embed, and test.html's inline tests continue to pass. The .ts modules are verified by tsc --noEmit + VA items during intermediate phases. At PHASE-10, test.html is converted to ES modules (importing from .ts files), old .js files are deleted, and the converted test.html tests pass against the .ts module exports.
+
+Option B: Convert test.html incrementally. Each phase that deletes a .js file also updates the corresponding test block in test.html to import from the .ts module. This is higher churn and risks inconsistent test states.
+
+Option C: Remove test.html VT items from intermediate phases. PHASE-01 through PHASE-09 rely only on tsc --noEmit + agent VA items; test.html is only verified at PHASE-10 after full conversion. This is honest about the gap but loses incremental regression detection.
+
+Add to plan.md Sequencing section: a note on the test.html strategy (Option A, B, or C) with rationale."""
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "major"
+title = "test.html inline tests use global references incompatible with ES module migration"
+detail = """
+Expected: test.html tests must use ES module import syntax after conversion, or an alternative test runner must be specified. The plan must state how the inline test code (IIFE blocks referencing model.xxx(), router.xxx(), dot.xxx(), cm.xxx()) will be rewritten to import from the .ts modules.
+
+Observed: test.html contains ~800 lines of inline test code using var, IIFE patterns, and bare global references: model.normalizeGraph(), router.parseHash(), dot.dotQuote(), cm.renderDiagnostics(). These globals exist because the .js files attach to window. The .ts modules export named exports — they do NOT attach to window.
+
+PHASE-10 EX-2 says 'test.html converted to <script type=module> importing from ../src/*.ts.' This describes the <script> tag change but does not address the inline test code. An LLM implementing this exit criterion will change the <script> tags to type=module, discover that model/router/dot/cm are undefined in the inline tests, and either: (a) add import statements to each test block (correct but unspecified), (b) add window.X = X shims to each .ts module (undoing the whole point of the migration), or (c) delete the test blocks (silently losing all verification coverage).
+
+The design's D2 (functional-core, imperative-shell) says 'exported state singleton mutates directly.' The test code directly mutates state.graph and reads state.graph.nodes.get() — this works with ES module imports of the state singleton. But the plan doesn't say to add the imports.
+
+Risk: an LLM agent reaches PHASE-10, converts test.html minimally, discovers the inline tests are broken, and either ships broken tests or deletes them. The VT-2 verification ('all test.html tests pass') becomes a lie because there are no tests left to run."""
+disposition = "fix-now"
+response = """
+F-10 (major): Plan must specify how test.html inline tests are migrated to ES module imports. Concrete remediation:
+
+Add to PHASE-10 objective/exit criteria: 'Convert test.html inline test code to use ES module import statements. Each test block (currently referencing model.xxx(), router.xxx(), dot.xxx(), cm.xxx() as globals) must add the appropriate import at the top of the module script.'
+
+The converted test.html structure:
+<script type="module">
+  import { state, normalizeGraph, neighbourhood, findFocus, resolveFocus, searchFilter, cmNeighbourhood, buildNodeLabelList, buildRelLabelList, encodePart, normalizeConceptMap } from './src/model.ts';
+  import { parseHash, buildHash, setFocus, setEdge } from './src/router.ts';
+  import { dotQuote, graphToDot, cmGraphToDot } from './src/dot.ts';
+  import * as cm from './src/concept-map.ts';
+  // ... original test code with assert/assertEqual helpers ...
+</script>
+
+The ApiError tests need import { ApiError } from './src/api.ts'.
+
+The plan should also note: the assert/assertEqual helper functions and the padId helper (currently defined inline) should be retained. The results reporting (innerHTML to <pre id="results">) stays. The test code itself should NOT be rewritten — only the import statements added at the top and var → const/let where needed for tsc compliance (the module script is inline, not compiled by tsc, so this is optional).
+
+Risk note for implementer: the test code mutates state.graph directly (state.graph = { nodes: mockNodes }) for isolated test scenarios. This MUST continue to work with the ES module import of state — the imported state is the live singleton, mutations are visible to the module."""
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "major"
+title = "test.html serving path undefined during migration — rust-embed vs Vite ambiguity"
+detail = """
+Expected: The plan must specify how test.html is served and executed during each phase. During PHASE-01 through PHASE-09, module .ts files exist alongside deleted .js files. The browser needs to load test.html and execute tests against SOME module system. The plan should state: 'test.html is served by Vite dev server (which transpiles .ts on the fly) from PHASE-01 onward', or 'test.html tests are only runnable after PHASE-10; agent verification (VA items) covers the gap.'
+
+Observed: The plan is silent on how test.html reaches the browser during the migration. Currently test.html is served by rust-embed at /assets/test.html. The Rust map server can serve test.html but cannot transpile .ts files. Vite can transpile .ts but the plan doesn't state that test.html is added to Vite's serve path. The Vite config only mentions index.html as input (rollupOptions.input: 'index.html').
+
+The verification items that reference test.html:
+- PHASE-01 VT-2: 'Existing router.js tests in test.html still pass (old .js file loaded).'
+- PHASE-05 VA-5: 'Existing model.js tests in test.html still pass.'
+- PHASE-10 VT-2: 'bun run dev starts Vite, browser loads the app, all test.html tests pass.'
+
+These three items describe three different execution contexts (rust-embed serving old .js, ??? during transition, Vite serving .ts modules) but the plan never explains the transition between them.
+
+Risk: an implementer doesn't know how to run the tests. They try loading test.html via http://localhost:8080/assets/test.html (rust-embed) — the .js files are deleted, tests fail. They try via http://localhost:5173/test.html (Vite) — the inline global references don't resolve. They give up and mark VT-2 green anyway."""
+disposition = "fix-now"
+response = """
+F-11 (major): Plan must specify how test.html is served/executed at each migration stage. Concrete remediation:
+
+Add to plan.md Sequencing section or a new 'Test execution strategy' subsection:
+
+Stage 1 (PHASE-00 through PHASE-09, old .js retained per F-9 resolution):
+- test.html is served by the Rust map server via rust-embed at http://localhost:8080/assets/test.html
+- Old .js files are loaded via <script src="/assets/X.js"> (rust-embed serves them as static assets)
+- Tests run against the global window.X functions
+- This is the SAME execution path as pre-migration — no change needed
+- Verification: open http://localhost:8080/assets/test.html, confirm 0 FAIL lines in the <pre> element
+
+Stage 2 (PHASE-10, old .js deleted, test.html converted to ES modules):
+- test.html is served by Vite dev server at http://localhost:5173/test.html
+- Vite transpiles the imported .ts files on the fly
+- Tests run against ES module exports
+- The Rust map server DOES NOT serve test.html at this stage (test.html imports .ts files, Rust can't transpile them)
+- Verification: bun run dev, open http://localhost:5173/test.html, confirm 0 FAIL lines
+
+Stage 3 (post-PHASE-10, production):
+- test.html is NOT embedded in production builds (it's a dev-only test artifact)
+- Add test.html to the Vite build exclusion (or accept it's bundled; either is fine since it's not linked from index.html)
+- cargo test -p doctrine continues to test the Rust embed mechanism (assets.rs tests)"""
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "major"
+title = "No verification that test assertions remain semantically correct after TS migration — tests are the only behavioral guard but their own correctness is unverified"
+detail = """
+Expected: The plan should include verification that the test assertions themselves are valid for the TS versions of each module. Since test.html is the only behavioral test surface (IMP-088 is deferred), its correctness is critical. A VT should exist: 'test.html assertions produce identical pass/fail counts before and after conversion for each module.'
+
+Observed: The plan's VA items for model.ts, router.ts, dot.ts describe agent-manual verification of specific properties (parseHash returns correct Route, graphToDot output matches expected DOT). But these VA items are additive — they verify ADDITIONAL properties beyond what test.html covers. They do not verify that test.html's assertions remain valid.
+
+An LLM could: change normalizeGraph to return nodes as an array instead of a Map (changing the return type to match the TS interface), make test.html pass by rewriting the test assertion (state.graph.nodes instanceof Map becomes state.graph.nodes instanceof Array), and the plan's VTs would all pass (test.html passes! tsc passes!) — but the actual behavior is now wrong and the only guard (test.html) was silently rewritten to accommodate the wrong behavior.
+
+Risk: test.html is both the test and the specification. If the test is rewritten to match buggy TS code, there is no independent specification to catch the drift."""
+disposition = "fix-now"
+response = """
+F-12 (major): Plan must include verification that test assertions remain semantically correct after TS migration. Concrete remediation:
+
+Add to PHASE-10 verification (or as a new phase-crossing invariant in plan.md):
+
+VT: 'test.html pass/fail counts are identical before and after conversion (same number of assertions, same PASS/FAIL counts per test block).'
+
+Specifically: before PHASE-10 (with old .js files), record the pass/fail output of test.html. After PHASE-10 (with ES module imports), run the converted test.html and confirm the output is identical. Any change in pass/fail count signals a semantic regression in the TS conversion.
+
+Additionally, the plan should state: the test assertions in test.html are the behavioral specification for each module. The .ts conversion must preserve the behavior that makes these assertions pass. The VA items (agent-verified properties) are supplemental — they do not replace test.html as the regression suite.
+
+This gates on F-9 resolution (old .js kept until PHASE-10) — otherwise there is no 'before' baseline to compare against."""
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "minor"
+title = "test.html uses assert/assertEqual but has no structured test runner, no failure-as-exit-code, no CI integration"
+detail = """
+Expected: The plan should acknowledge that test.html's test infrastructure is minimal (manual assertions, text output to a <pre> element, no exit code, no CI hook) and either: (a) state that this is acceptable because VT items are verified manually by an agent reading the pass/fail output, or (b) add a future task to adopt a test framework (IMP-088 is already deferred). The plan should note that 'all tests pass' means a human/agent reads the <pre> element and confirms 0 FAIL lines.
+
+Observed: The plan's Non-Goals says 'Test framework or DOM testing (that's IMP-088).' But the plan relies on test.html as a verification gate at PHASE-01, PHASE-05, and PHASE-10. The tests run in a browser with no structured output — the results are written to innerHTML of a <pre> element. There is no exit code, no CI integration, no way to fail a build if tests don't pass. An agent running bun run dev and opening a browser must manually scroll to the <pre> element and visually confirm the pass/fail count.
+
+This is acceptable if explicitly stated — the plan's verification items are manual agent verifications, not automated CI gates. But the plan never acknowledges this dependency on human/agent eyeballs. An implementer might assume 'tests pass' means an automated check.
+
+Minor: the existing approach works for agent-assisted development. The plan just needs to be honest about it."""
+disposition = "fix-now"
+response = '''
+F-13 (minor): Plan should acknowledge test.html limitations honestly. Concrete remediation:
+
+Add to plan.md (either in a Testing Strategy section or a note in the Sequencing discussion):
+
+'Test infrastructure: test.html uses manual assertions (assert/assertEqual helpers) with text output to a <pre> element. There is no structured test runner, no exit code, and no CI integration. Verification is manual: an agent opens the browser, reads the pass/fail count in the <pre> element, and confirms 0 FAIL lines. This is acceptable for the migration — IMP-088 (test framework) is deferred. The plan\u2019s verification items that reference test.html are agent-manual verifications, not automated CI gates.'
+
+This is not a defect — it is an honest statement of the current constraints. The plan should not pretend test.html is an automated test suite when it requires human/agent judgment.'''
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

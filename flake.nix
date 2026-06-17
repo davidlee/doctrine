@@ -56,8 +56,10 @@
           stdenv.cc.cc.lib
           codex
           nodejs_latest
-          sqlite
           eslint
+          bun
+          typescript
+          typescript-language-server
         ];
 
         jailEnvOptions = with jailLib.combinators; [
@@ -129,10 +131,10 @@
         doctrine = craneLib.buildPackage {
           pname = "doctrine";
           version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
-          src = craneLib.cleanCargoSource ./. ;
+          src = craneLib.cleanCargoSource ./.;
           cargoArtifacts = craneLib.buildDepsOnly {
             pname = "doctrine-deps";
-            src = craneLib.cleanCargoSource ./. ;
+            src = craneLib.cleanCargoSource ./.;
             cargoExtraArgs = "--workspace";
           };
           cargoExtraArgs = "--workspace";
