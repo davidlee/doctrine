@@ -41,7 +41,7 @@ cargo install doctrine
 cd my_project || mkdir my_project
 
 doctrine install                  # prompts to confirm; or use --dry-run | --yes
-npx skills add davidlee/doctrine  # or `doctrine claude install` for claude code only
+npx skills add davidlee/doctrine  # or `doctrine install --agent claude` for claude code only
 
 doctrine slice new "add killer feature"
 ```
@@ -81,9 +81,8 @@ git init
 mkdir .claude 
 
 doctrine install -y 
-doctrine claude install # skills + dispatch-worker agent + SubagentStart hook into .claude
-                        # (the old `doctrine skills install` is a hidden deprecated alias)
-doctrine claude install --agent universal --yes
+doctrine install --agent claude --yes # skills + dispatch-worker agent + SubagentStart hook into .claude
+doctrine install --agent universal --yes
 
 doctrine memory sync 
 
@@ -101,7 +100,7 @@ Use Doctrine's memory system with your preferred tooling for the rest:
 
 ```zsh
 cd my-project
-doctrine claude install --only-memory -y 
+doctrine install --agent claude --only-memory -y 
 
 # doctrine memory help
 # doctrine memory record --type pattern "red/green/refactor TDD" --glob "src/lib/**/*" --summary "..."
@@ -150,7 +149,7 @@ git commit -m "feat: review like a pirate" && git push
 cargo install --path .             # build with your edits
 
 # in your projects
-doctrine claude install            # from binary, or
+doctrine install --agent claude --yes # from binary, or
 npx skills add my-github/doctrine
 ```
 

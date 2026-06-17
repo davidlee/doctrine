@@ -1,6 +1,7 @@
-//! SL-010 PHASE-05 EX-1 / VT-1 — end-to-end over the built binary.
+//! SL-088 PHASE-04 — `doctrine install --agent claude --skill code-review`
+//! end-to-end over the built binary.
 //!
-//! Drives the real `doctrine skills install` against a temp project: the Claude
+//! Drives the consolidated `doctrine install` against a temp project: the Claude
 //! path materialises a canonical `.doctrine/skills/<id>` tree and links
 //! `.claude/skills/<id>` into it. Proves the slice's whole point — a re-install
 //! refreshes a stale canonical (the silent no-op the old copy-and-skip dropped) —
@@ -23,7 +24,6 @@ const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
 fn install(dir: &Path) -> String {
     let out = Command::new(BIN)
         .args([
-            "skills",
             "install",
             "--agent",
             "claude",
@@ -37,7 +37,7 @@ fn install(dir: &Path) -> String {
         .expect("spawn doctrine");
     assert!(
         out.status.success(),
-        "skills install failed: {}\n{}",
+        "install failed: {}\n{}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr),
     );
@@ -45,7 +45,6 @@ fn install(dir: &Path) -> String {
 }
 
 #[test]
-#[ignore = "SL-088 PHASE-04 rewrites for consolidated install surface"]
 fn install_links_then_refreshes_and_keeps_an_override() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
