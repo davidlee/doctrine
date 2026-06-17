@@ -1,0 +1,130 @@
+id    = 69
+slug  = "design-review-sl-093-css-modularisation"
+title = "Design review: SL-093 CSS modularisation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "code-review/css"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-093"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "layout.css at ~570 lines defeats the modularisation promise — 65% of the codebase remains monolithic"
+detail = """
+The design's file structure shows 6 files: style.css (~10 lines), tokens.css (~80), reset.css (~8), layout.css (~570), concept-map.css (~140), priority.css (~65). That's 570 of ~873 lines (65%) in a single layout.css. The design's own modular decomposition table from the scope doc listed 10 files, including sidebar.css (~260), graph.css (~110), markdown.css (~100), and table.css (~100) as separate modules. The locked design collapses these into one file, rationalised as 'layout.css preserves the exact cascade order of the original file.' 
+
+This is not modularisation — it's a TWO-file split (extract tokens + extract two components) masquerading as six. The 570-line layout.css has the same blast radius, same merge-conflict surface, and same discoverability problem as the original monolith. A developer who needs to change .depth-btn styling still opens a 570-line file and scrolls to the right section — exactly the same workflow the scope identified as organisational debt.
+
+The @layer contract says 'new slices add CSS by appending an @import to the appropriate layer in style.css — no existing files touched.' But with only two component files in the components layer, every new layout concern still lands in the 570-line heap. The layer architecture is earnest, but the decomposition is fundamentally incomplete.
+
+Expected: either the 10-file decomposition from the scope table, or an explicit, reasoned design decision for why 4 of those files were collapsed — with an analysis of the tradeoffs. Observed: the design silently collapsed 4 planned modules into layout.css with one sentence of historical rationale."""
+disposition = "design-wrong"
+response = "Accepted. The scope document originally scoped 10 files; the design silently collapsed 4 into layout.css with one sentence. The design will be updated to: (1) explicitly state why the 10-file decomposition was collapsed to 6 — the primary reason is cascade-order preservation within the single layout layer, which is battle-tested across 4 slices and cross-references between sidebar/graph/markdown/table sections mean splitting into separate files within the same layer would create unpredictable cascade order; (2) state trigger criteria for future splitting — if any layout section exceeds 300 lines or gains a dedicated maintainer, it graduates to its own file; (3) acknowledge the tradeoff explicitly: the design prioritises correctness (cascade fidelity) over decomposition granularity in this round. The 570-line layout.css is a principled decision, not an oversight, and the design will say so."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "setPageMode() style.display assignments are semantic page-mode switches, not simple visibility toggles — u-hidden mapping is lossy"
+detail = """
+render.ts setPageMode() has 6 style.display assignments that control which DOM regions are visible per page mode (entity-graph, actionability, concept-map, edge):
+
+- elements.depthSelector.style.display = mode === 'edge' ? 'none' : '';
+- elements.relationshipTable.style.display = mode === 'entity-graph' || mode === 'actionability' ? '' : 'none';
+- elements.tableToggle.style.display = ... (same condition)
+- cmEdgeTable.style.display = 'none';
+- cmAddForm.style.display = 'none';
+- cmDiagPanel.style.display = 'none';
+
+The design says 'Replace all style.display manipulation with classList operations on .u-hidden.' But applying .u-hidden here conflates two distinct concerns: (1) 'this element is currently hidden' (a transient state) and (2) 'this element doesn't belong in this page mode' (a structural invariant). 
+
+If setPageMode toggles .u-hidden, and a future code path also toggles .u-hidden on .depth-selector for a different reason (e.g. a 'hide sidebar' feature), the two toggles will fight. The design's one-size-fits-all .u-hidden approach loses the semantic distinction between 'mode switch' and 'element toggle.'
+
+For setPageMode specifically, a mode-specific class (e.g. .u-hidden-in-edge-mode) or a container-level mode class (e.g. .mode--edge on the main element with descendant selectors) would be more robust. The design should at minimum distinguish these cases and provide a rule.
+
+Expected: the design addresses mode-switch vs element-toggle semantics and provides a mechanism that won't create toggling conflicts. Observed: all 21+ sites are mapped to a single .u-hidden class with no discussion of semantic differences."""
+disposition = "fix-now"
+response = "Accepted. The design will distinguish page-mode switches from visibility toggles. setPageMode() assignments control structural page-mode regions and will use a container-level mode class (.mode-edge, .mode-concept-map, etc. on <main>) with descendant selectors, rather than u-hidden classList operations. The other 15 style.display sites (CM show/hide, error banners, legend toggles) are genuine visibility toggles and will use .u-hidden. The design will add a taxonomy: mode-switch (CSS container-class driven) vs visibility-toggle (.u-hidden classList driven)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "token rename from border-light/bg-card to cm-card-border/cm-card-bg is a semantic narrowing without rationale"
+detail = 'The current code uses --border-light and --bg-card with hardcoded fallbacks in the concept-map section. The design replaces these with --cm-card-border and --cm-card-bg — narrowing from theme-level to component-level semantics. The original names express a design intent: "a lighter border than the default" and "a card background." These concepts could reasonably apply to non-CM elements in the future (e.g. an entity detail card, a settings panel). By renaming to --cm-card-border (component-scoped), the design forecloses that reuse. If a future slice adds a card component outside the concept-map, it either (a) uses --cm-card-border (leaking CM semantics) or (b) defines a duplicate token (--layout-card-border) — the exact parallel-implementation pattern the project conventions forbid. The design should either keep theme-level names (--border-light, --bg-card) and define them in tokens.css with dark variants, satisfying F-3 without the rename, or explicitly justify the semantic narrowing with a rationale. Expected: F-3 is resolved by defining the missing tokens — the rename to --cm-* is an additional design decision that needs a tradeoff analysis. Observed: the rename is presented as the natural resolution with no rationale.'
+disposition = "fix-now"
+response = 'Accepted. The design will keep theme-level token names (--border-light, --bg-card) and define them in tokens.css with dark variants: --border-light: light #e0e0e0 / dark #333333; --bg-card: light #fafafa / dark #2a2a2a. These are genuinely theme-level concepts — "lighter border" and "card background" are not CM-specific even though CM is their only current consumer. The CM components will reference var(--border-light) and var(--bg-card) instead of CM-scoped tokens. This resolves F-3 without the semantic narrowing and keeps the token system open to future consumers.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "cm-diag-item--last replaces :last-child pseudo-class with JS-set modifier class — robustness regression"
+detail = """
+The design replaces the CSS pseudo-class :last-child on .cm-diag-item with an explicit .cm-diag-item--last modifier class set by JavaScript. The rationale is F-9 (compound selectors encoding DOM hierarchy). But :last-child is a DOM-structure pseudo-class — it does not encode "hierarchy" in the way F-9 warns about (it is not .cm-diagnostics-panel .cm-diag-item:last-child, which would encode parent-child nesting). It simply selects the last child of any parent. 
+
+The replacement creates a robustness regression: every code path that renders diagnostics must now remember to add .cm-diag-item--last to the final <div>. Currently renderDiagnostics() in concept-map.ts iterates diagnostics and builds innerHTML — there is no logic to mark the final item. The design acknowledges this in a single sentence: "renderDiagnostics in concept-map.ts must add .cm-diag-item--last to the final <div> in its generated HTML." But it does not show the code change, does not mention whether the existing for-of loop must be restructured (currently uses string concatenation, not DOM building), and does not address the fragility: a future refactor that changes the rendering loop can silently drop the class.
+
+The risk section lists it: ".cm-diag-item--last requires JS support." But the risk is mischaracterised as "requires JS support" when the real issue is that it requires ongoing developer discipline to not forget — exactly the kind of fragility the original :last-child avoids.
+
+Expected: either (a) keep :last-child and accept the mild DOM-structure coupling (it is not a compound parent-child selector — it is structurally minimal), or (b) provide a concrete implementation sketch showing how the for-loop changes, and add a verification gate for the class (e.g. a test that checks the last item has the class). Observed: one sentence of hand-waving with no implementation detail and a mischaracterised risk."""
+disposition = "fix-now"
+response = 'Accepted — excellent catch. The design will keep :last-child and add it to the naming convention table as an explicit exception: "Structural pseudo-classes (:last-child, :first-child) are permitted and preferred over JS-set modifier classes — they represent structural position, not deep DOM hierarchy. Restrict to direct-child use only." The .cm-diagnostics-panel h3 selector will still be replaced with .cm-diagnostics-panel__title (genuine hierarchy encoding), but .cm-diag-item:last-child stays as-is. The risk section entry for .cm-diag-item--last will be removed.'
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "style.display audit count in design is off — 21 TS assignments not 22, per-file counts do not match source"
+detail = """The design says "All 22 JS assignments + 4 HTML inlines replaced with .u-hidden classList operations" and separately notes the innerHTML inline in renderAddEdgeForm. Actual count from current source: render.ts setPageMode: 6 assignments, concept-map.ts: 6 assignments (3 show/hide pairs), app.ts: 9 assignments (legend toggles 4, renderCmDiagnostics 1, showCmFormError 1, handleStaleWrite 2, handleAddEdge 1). Total TS: 21 (not 22). index.html inlines: 4. concept-map.ts innerHTML inline: 1. The variance is small (1 off), but an audit that cannot produce an exact count raises questions about whether every site has been verified. More concerning: the design maps specific sites for concept-map.ts (6 sites, correct), render.ts (8 sites, actually 6), and app.ts (8 sites, actually 9). The per-file mismatch suggests the design was written from memory, not from a grep. Expected: the design's style.display audit reconciles with a grep of the current source, and the count is exact or the discrepancy is noted and explained. Observed: per-file counts do not match the source; design total is off by 1."""
+disposition = "fix-now"
+response = "Accepted. The design will be reconciled against a fresh grep. Current count: 21 TS assignments (setPageMode 6, concept-map.ts 6, app.ts legend toggles 4, renderCmDiagnostics 1, showCmFormError 1, handleStaleWrite 2, handleAddEdge 1) + 4 HTML inlines (index.html) + 1 innerHTML inline (concept-map.ts renderAddEdgeForm) = 26 total sites. Design will state exact counts per file with line numbers. The per-file section in the style.display mapping table will be updated: render.ts (6, not 8), app.ts (9, not 8)."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "class rename table encodes DOM hierarchy in data-key attributes — same fragility pattern RV-065 F-9 condemned"
+detail = """
+The design renames several compound selectors per RV-065 F-9 (compound selectors encode DOM hierarchy). Specifically .markdown-pane.fullscreen .markdown-body becomes .markdown-body--fullscreen and .cm-diagnostics-panel h3 becomes .cm-diagnostics-panel__title. But the edge table rendering in concept-map.ts uses data-key and data-label attributes on .cm-editable-node spans to encode the identity of the node being renamed (lines 168-178 of concept-map.ts). These data-* attributes create a DOM-contract dependency: the rename-submit handler reads data-key from the DOM element, and the renderer must set it. This is the same "DOM hierarchy encoding" pattern F-9 warned about, just with data attributes instead of compound selectors. If the rename flow is refactored to use a different DOM structure, these data-* contracts silently break.
+
+This is pre-existing in the current code and not introduced by SL-093. But the design adds .cm-diag-item--last as another JS-set class, compounding the pattern. The design should at minimum acknowledge this existing pattern and state whether SL-093 inherits or addresses it.
+
+Expected: the design addresses the data-attribute DOM coupling pattern that mirrors the F-9 fragility it claims to resolve. Observed: the design resolves F-9 at the CSS level while the TS level propagates the same fragility pattern unattended."""
+disposition = "tolerated"
+response = 'The data-key and data-label attributes on .cm-editable-node spans are pre-existing DOM contracts introduced by SL-076 PHASE-05 (the concept-map authoring UI). They are not modified or compounded by SL-093 — the design only renames CSS classes, not the data-* attribute contract. Acknowledged as a standing risk: the data-attribute coupling is the same fragility class as F-9, but it lives in the TS layer (outside SL-093 CSS scope) and is the mechanism by which the rename workflow operates. Consciously tolerated — fixing this would require refactoring the CM rename flow (out of scope). The design will add a note in the Risks section: "Pre-existing data-* DOM coupling in concept-map.ts rename flow is out of scope; tracked under IMP-085."'
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "design does not verify that the @import ordering in style.css matches the original cascade order — risk of silent specificity changes"
+detail = """
+The design says "The @import order in style.css is the canonical cascade" and "Module content must not depend on position within a layer beyond what @layer guarantees." But the design does not provide a line-by-line cascade audit: it does not show which original line ranges map to which new file positions, and does not verify that no rule in the original file depends on being after another rule in the same flat file in a way that the new file boundary would break.
+
+Within layout.css the order is preserved (same flat file), so intra-layout specificity is fine. But consider: the original file has the :root block with priority tokens AFTER the .view-btn.active block (line ~775), which means priority tokens defined in :root on line 775 override any earlier :root definitions. In the new design, priority tokens move to the tokens.css :root block alongside all other tokens. Since custom properties in :root cascade by declaration order within the same block, moving priority tokens earlier in the file (adjacent to other tokens instead of 710 lines later) changes their position relative to other token declarations. If any token is accidentally duplicated (same name, different value), the winning value changes.
+
+This is a low-probability risk but the design should address it. The verification section has grep-based checks (no :root outside tokens.css, no hex in concept-map.css) but no cascade-order verification.
+
+Expected: the design includes a cascade audit or a verification step that confirms the effective cascade is unchanged. Observed: the design asserts the @import order preserves the cascade but provides no evidence."""
+disposition = "fix-now"
+response = 'Accepted. The design verification section will add a cascade audit step: after building the modularised CSS, diff the computed styles of the map explorer in dev mode (before vs after branch) using browser DevTools "Computed" pane for at least 10 representative elements (sidebar, entity-item.active, cm-edge-row, priority-node, etc.) across both colour schemes. The grep-based checks already cover token presence and :root locality; the computed-style diff closes the cascade-fidelity gap. This is a one-time visual verification, not an automated test — consistent with the design existing verification section.'
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "nit"
+title = "Vite CSS bundling behaviour not addressed — @import cascade may differ between dev and production builds"
+detail = 'The design says "Vite handles @import natively" and "no config changes expected." But Vite processes @import differently in dev mode (native browser @import, potentially with different resolution order) vs production (rollup bundles CSS, potentially inlining or reordering). The design does not verify that the 6-file @import cascade produces identical CSS output in both modes. Vite CSS code-splitting may produce separate CSS chunks for component files, and a chunk loaded later could override earlier styles. This is low risk for a single-bundle SPA where everything flows through style.css via @import, and the current Vite config is simple. But the design should at minimum note the dev/prod difference and confirm the build output is verified in both modes. Expected: the design acknowledges the dev/prod CSS processing difference and includes verification for both. Observed: the design assumes Vite handles everything identically in both modes with no investigation.'
+disposition = "fix-now"
+response = 'Accepted. The design will add a note in the Risks section: "Vite processes @import natively in dev mode (browser-native resolution) and bundles via rollup in production. Both modes produce a single CSS output for this project (all @imports flow through style.css which is the sole CSS entry point), so no chunk-order risk. Verification includes npm run build (production bundle) and npm run dev (dev server) — both must render identically." This closes the dev/prod gap without config changes.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
