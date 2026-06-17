@@ -20,6 +20,23 @@ ordered penance.
 Durable pattern recorded: `mem.pattern.link.memory-label-fork` — memory write
 path labels are free-form; RELATION_RULES vocabulary is closed to memory edges.
 
+## 2026-06-17 — Plan revised after critical review
+
+Five corrections applied to scope, design, and plan:
+
+1. **Scope amended**: "items/ first, shipped/ fallback" → "resolve the writable
+   `items/<uid>/memory.toml` path (shipped/ is read-only)". Eliminates the
+   scope-plan contradiction.
+2. **D4 error message fixed**: removed "clone to items/ first" (unavailable verb)
+   → honest message naming `doctrine memory sync` and the items/ remedy.
+3. **UidPrefix in shipped/ dropped**: PHASE-01 no longer scans shipped/ for
+   prefix disambiguation — shipped/ is read-only, error immediately.
+4. **PHASE-03 target classification specified**: two-step try/catch —
+   `parse_canonical_ref` succeeds → `ensure_ref_resolves`; fails → free text
+   passthrough. Behavior-preservation invariant documented.
+5. **Key symlink mechanism documented**: items/ key→uid symlinks are what make
+   `MemoryRef::Key` resolution work; noted in plan.md and PHASE-01 assumptions.
+
 ## 2026-06-17 — Plan authored
 
 Three sequential phases, bottom-up: resolution → manipulation → CLI fork.
