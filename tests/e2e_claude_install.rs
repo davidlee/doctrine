@@ -128,3 +128,42 @@ fn install_wires_skills_agent_and_hook_idempotently() {
     );
     assert_installed(dir);
 }
+
+#[test]
+fn install_agent_pi_dry_run_prints_delegation_plan() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+
+    let out = Command::new(BIN)
+        .args(["install", "--agent", "pi", "--dry-run", "-p"])
+        .arg(dir)
+        .output()
+        .expect("spawn doctrine");
+    assert!(
+        out.status.success(),
+        "install --agent pi --dry-run failed: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
+    assert!(
+        stdout.contains("pi"),
+        "pi agent mentioned in plan: {stdout}"
+    );
+    assert!(
+        stdout.contains("delegates to npx"),
+        "npx delegation shown: {stdout}"
+    );
+    assert!(
+        stdout.contains("not executed"),
+        "dry-run indicator present: {stdout}"
+    );
+    // Dry-run must NOT create any files beyond what the temp dir started with.
+    assert!(
+        !dir.join(".doctrine").exists(),
+        "dry-run created no .doctrine dir"
+    );
+    assert!(
+        !dir.join(".pi").exists(),
+        "dry-run created no .pi dir"
+    );
+}
