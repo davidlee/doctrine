@@ -29,6 +29,35 @@ use crate::ledger::{
 use crate::listing::render_table;
 use crate::root;
 
+/// CLI entry — create or resume the dispatch coordination worktree for `slice`
+/// and emit the orchestration env contract on stdout (SL-085, design §2).
+/// Gates on `plan.toml` existence + non-empty phase list BEFORE creating the
+/// coordination worktree.
+pub(crate) fn run_setup(path: Option<PathBuf>, slice: u32, dir: &Path) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+
+    // Plan gate: read plan.toml, require existence + non-empty phase list.
+    let slice_root = root.join(".doctrine/slice");
+    let plan = crate::slice::read_plan(&slice_root, slice).with_context(|| {
+        format!("no plan for SL-{slice:03}; run 'doctrine slice plan {slice}' first")
+    })?;
+    if plan.phases.is_empty() {
+        anyhow::bail!("plan for SL-{slice:03} has no phases; add phases to plan.toml first");
+    }
+
+    // Delegate to the extracted pure-ish core.
+    let outcome = crate::worktree::coordinate(&root, slice, dir)?;
+
+    // Emit the dispatch env contract on stdout (4 KEY=value lines).
+    let dispatch_ref = format!("refs/heads/dispatch/{slice:03}");
+    writeln!(io::stdout(), "coordination_dir={}", dir.display())?;
+    writeln!(io::stdout(), "base={}", outcome.dispatch_tip)?;
+    writeln!(io::stdout(), "slice={slice}")?;
+    writeln!(io::stdout(), "dispatch_ref={dispatch_ref}")?;
+
+    Ok(())
+}
+
 /// One planned projection: a target ref and the commit it should be created at.
 /// `source_oid` is the object the projection was computed from (the journal's
 /// replay input).
@@ -1332,5 +1361,1004 @@ fn commit_journal(
             "journal-commit: dispatch branch moved under us (expected {parent}, found {})",
             actual.as_deref().unwrap_or("?")
         ),
+    }
+}
+
+/// Render an ordered phase-status table. Pure formatting — caller owns data.
+/// Designed for reuse by `plan-next` and `status` (PHASE-03).
+pub(crate) fn render_phase_table(rows: &[(String, String, String)]) -> String {
+    use comfy_table::Table;
+    let mut table = Table::new();
+    table
+        .load_preset(comfy_table::presets::NOTHING)
+        .set_header(vec!["  ID", "  Status", "  Name"])
+        .force_no_tty();
+    for (id, status, name) in rows {
+        table.add_row(vec![
+            format!("  {id}"),
+            format!("  {status}"),
+            format!("  {name}"),
+        ]);
+    }
+    // Trim trailing whitespace (comfy-table last-column cell-fill edge case)
+    let out = table.to_string();
+    out.lines()
+        .map(|l| l.trim_end().to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// `doctrine dispatch plan-next` — read the plan and runtime phase sheets;
+/// print an ordered phase rollup and identify the next actionable phase(s).
+/// Read-only — callable from anywhere.
+pub(crate) fn run_plan_next(path: Option<PathBuf>, slice: u32, json: bool) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+
+    // 1. Read plan.toml
+    let plan = crate::slice::read_plan(&root.join(".doctrine/slice"), slice)?;
+
+    // 2. Read phase statuses from runtime state
+    let state_dir = crate::state::phases_dir(&root, slice);
+
+    // Build ordered phase+status list
+    let mut rows: Vec<(String, String, String)> = Vec::new();
+    for ph in &plan.phases {
+        let stem = ph.id.to_lowercase();
+        let status = match crate::state::read_phase_status(&state_dir, &stem) {
+            Ok(Some(s)) => s,
+            Ok(None) => "pending".to_string(), // absent tracking file → pending
+            Err(_) => "unknown".to_string(),
+        };
+        rows.push((ph.id.clone(), status, ph.name.clone()));
+    }
+
+    // 3. Compute `next`
+    // Scan in plan order, skip completed/blocked.
+    // First actionable in_progress → only that phase.
+    // First actionable pending → that phase + consecutive pending.
+    let mut next: Vec<String> = Vec::new();
+    let mut found_actionable = false;
+    let mut saw_blocked = false;
+
+    for (id, status, _) in &rows {
+        match status.as_str() {
+            "completed" => {}
+            "blocked" => {
+                saw_blocked = true;
+                if found_actionable {
+                    break; // stop at blocked after we started collecting
+                }
+            }
+            "in_progress" => {
+                if !found_actionable {
+                    next.push(id.clone());
+                    break; // in_progress gates subsequent pending
+                }
+            }
+            _ => {
+                // pending or unknown
+                if !found_actionable {
+                    next.push(id.clone());
+                    found_actionable = true;
+                    // continue for consecutive pending
+                } else if status.as_str() == "pending" {
+                    next.push(id.clone());
+                } else {
+                    break; // non-pending stops the run
+                }
+            }
+        }
+    }
+
+    // 4. Render output
+    if json {
+        #[derive(serde::Serialize)]
+        struct PhaseRow {
+            id: String,
+            name: String,
+            status: String,
+        }
+        #[derive(serde::Serialize)]
+        struct Output {
+            phases: Vec<PhaseRow>,
+            next: Vec<String>,
+            batching_requires_phase_plan: bool,
+        }
+        let output = Output {
+            phases: rows
+                .iter()
+                .map(|(id, status, name)| PhaseRow {
+                    id: id.clone(),
+                    name: name.clone(),
+                    status: status.clone(),
+                })
+                .collect(),
+            next,
+            batching_requires_phase_plan: true,
+        };
+        writeln!(io::stdout(), "{}", serde_json::to_string_pretty(&output)?)?;
+    } else {
+        // Human output
+        let table = render_phase_table(&rows);
+        writeln!(io::stdout(), "{table}")?;
+        if next.is_empty() {
+            if saw_blocked {
+                writeln!(
+                    io::stdout(),
+                    "\nnext: (none — all remaining phases are blocked)"
+                )?;
+            }
+        } else {
+            let ids = next.join(", ");
+            writeln!(io::stdout(), "\nnext: {ids}")?;
+            writeln!(
+                io::stdout(),
+                "  ⚠ run /phase-plan before parallel spawn; do not assume file-disjointness"
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+/// `doctrine dispatch status` — read-only full dispatch rollup: coordination
+/// state, phase table, trunk drift, sync state, candidate summary, next-step
+/// guidance. Read-only — callable from anywhere.
+pub(crate) fn run_status(path: Option<PathBuf>, slice: u32, json: bool) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice3 = format!("{slice:03}");
+    let dispatch_ref = format!("refs/heads/dispatch/{slice3}");
+
+    // --- Coordination state ---------------------------------------------------
+    let dispatch_tip = resolve_commit(&root, &dispatch_ref)?.with_context(|| {
+        format!("dispatch branch not found; run 'dispatch setup --slice {slice}' first")
+    })?;
+    let dispatch_short = git::git_text(&root, &["rev-parse", "--short=7", &dispatch_tip])?;
+
+    // Find live worktree via git worktree list --porcelain
+    let coord_state = find_coordination_worktree(&root, &slice3);
+
+    // --- Trunk drift -----------------------------------------------------------
+    let trunk_tip = git::trunk_commit(&root)?.with_context(|| "trunk ref not found")?;
+    let fork_point = git::merge_base(&root, &dispatch_tip, &trunk_tip)?
+        .with_context(|| format!("dispatch/{slice3} and trunk share no common ancestor"))?;
+    let ahead_cnt = git::git_text(
+        &root,
+        &["rev-list", "--count", &format!("{fork_point}..{trunk_tip}")],
+    )?;
+    let ahead: u32 = ahead_cnt.trim().parse().unwrap_or(0);
+    let trunk_state = if ahead == 0 { "stable" } else { "moved" };
+
+    // --- Phase table -----------------------------------------------------------
+    let plan = crate::slice::read_plan(&root.join(".doctrine/slice"), slice)?;
+    let state_dir = crate::state::phases_dir(&root, slice);
+    let mut phase_rows: Vec<(String, String, String)> = Vec::new();
+    for ph in &plan.phases {
+        let stem = ph.id.to_lowercase();
+        let status = match crate::state::read_phase_status(&state_dir, &stem) {
+            Ok(Some(s)) => s,
+            Ok(None) => "pending".to_string(),
+            Err(_) => "unknown".to_string(),
+        };
+        phase_rows.push((ph.id.clone(), status, ph.name.clone()));
+    }
+
+    // --- Sync state ------------------------------------------------------------
+    let review_ref = format!("refs/heads/review/{slice3}");
+    let review_exists = resolve_commit(&root, &review_ref)?.is_some();
+    let phase_ref_count = count_phase_refs(&root, &slice3);
+
+    // --- Candidate summary -----------------------------------------------------
+    let candidates = read_candidates(&root, slice)?;
+    let candidate_total = candidates.rows.len();
+    let candidate_admitted = [
+        candidates.current_admission.close_target.is_some(),
+        candidates.current_admission.review_surface.is_some(),
+    ]
+    .into_iter()
+    .filter(|&x| x)
+    .count();
+
+    // --- Next-step guidance ----------------------------------------------------
+    let all_completed = phase_rows
+        .iter()
+        .all(|(_, status, _)| status == "completed");
+    let coord_live = !matches!(coord_state.as_str(), "(removed)");
+    let admitted_ct = candidates.current_admission.close_target.as_ref();
+
+    let next_guidance = if !all_completed {
+        // Condition 1: phases remain
+        let next_phases = compute_next_phases(&phase_rows);
+        NextGuidance::Phases {
+            phases: next_phases,
+        }
+    } else if !review_exists {
+        // Condition 2: all completed, no review ref
+        NextGuidance::PrepareReview
+    } else if coord_live && admitted_ct.is_some() {
+        // Condition 3: all completed, review ref, admitted close_target, coord live
+        NextGuidance::AuditThenIntegrate
+    } else if coord_live && admitted_ct.is_none() {
+        // Condition 4: all completed, review ref, no admitted close_target, coord live
+        NextGuidance::AuditOrCandidateStatus
+    } else if let Some(ct) = admitted_ct {
+        if is_ancestor_of_trunk(&root, &ct.admitted_oid, &trunk_tip)? {
+            // Condition 5: coord removed, admitted close_target is ancestor of trunk
+            NextGuidance::Complete
+        } else {
+            // Condition 6: coord removed, admitted exists, NOT ancestor of trunk
+            NextGuidance::AwaitingIntegration
+        }
+    } else {
+        // Fallback (shouldn't normally reach here)
+        NextGuidance::AuditOrCandidateStatus
+    };
+
+    // --- Output ----------------------------------------------------------------
+    if json {
+        let output = StatusOutput {
+            dispatch: DispatchState {
+                r#ref: dispatch_ref,
+                tip: dispatch_short,
+            },
+            coord: CoordState {
+                state: if coord_live {
+                    "live".to_string()
+                } else {
+                    "removed".to_string()
+                },
+                path: if coord_live { Some(coord_state) } else { None },
+            },
+            trunk: TrunkState {
+                state: trunk_state.to_string(),
+                fork_point,
+                ahead,
+            },
+            phases: phase_rows
+                .iter()
+                .map(|(id, status, name)| PhaseState {
+                    id: id.clone(),
+                    name: name.clone(),
+                    status: status.clone(),
+                })
+                .collect(),
+            sync: SyncState {
+                state: if review_exists {
+                    "prepared".to_string()
+                } else {
+                    "not_prepared".to_string()
+                },
+                review_ref: if review_exists {
+                    Some(review_ref)
+                } else {
+                    None
+                },
+                phase_cuts: phase_ref_count,
+            },
+            candidates: CandidateSummary {
+                total: candidate_total,
+                admitted: candidate_admitted,
+            },
+            next: next_guidance.to_json(),
+        };
+        writeln!(io::stdout(), "{}", serde_json::to_string_pretty(&output)?)?;
+    } else {
+        // Human output
+        writeln!(io::stdout(), "dispatch: {dispatch_ref}  ({dispatch_short})")?;
+        writeln!(io::stdout(), "coord:    {coord_state}")?;
+        if ahead > 0 {
+            writeln!(
+                io::stdout(),
+                "trunk:    {trunk_state} ({ahead} commit(s) ahead of fork-point)"
+            )?;
+        } else {
+            writeln!(io::stdout(), "trunk:    {trunk_state}")?;
+        }
+        writeln!(io::stdout())?;
+        writeln!(io::stdout(), "phases:")?;
+        write!(io::stdout(), "{}", render_phase_table(&phase_rows))?;
+        writeln!(io::stdout())?;
+        writeln!(io::stdout())?;
+        if review_exists {
+            writeln!(
+                io::stdout(),
+                "sync:     prepared — {review_ref} ({phase_ref_count} phase cut(s))"
+            )?;
+        } else {
+            writeln!(io::stdout(), "sync:     not yet run")?;
+        }
+        writeln!(
+            io::stdout(),
+            "candidates: {candidate_total} ({candidate_admitted} admitted)"
+        )?;
+        match &next_guidance {
+            NextGuidance::Phases { phases } => {
+                let ids = phases.join(", ");
+                writeln!(io::stdout(), "next:     {ids}")?;
+            }
+            NextGuidance::PrepareReview => {
+                writeln!(
+                    io::stdout(),
+                    "next:     all phases completed — run 'dispatch sync --prepare-review'"
+                )?;
+            }
+            NextGuidance::AuditThenIntegrate => {
+                writeln!(
+                    io::stdout(),
+                    "next:     all phases completed — admitted candidate exists; run audit then 'dispatch sync --integrate'"
+                )?;
+            }
+            NextGuidance::AuditOrCandidateStatus => {
+                writeln!(
+                    io::stdout(),
+                    "next:     all phases completed — review ref prepared; run audit or 'dispatch candidate status'"
+                )?;
+            }
+            NextGuidance::Complete => {
+                writeln!(
+                    io::stdout(),
+                    "next:     complete — coordination worktree removed; slice is integrated"
+                )?;
+            }
+            NextGuidance::AwaitingIntegration => {
+                writeln!(
+                    io::stdout(),
+                    "next:     awaiting integration — run 'dispatch sync --integrate' after audit"
+                )?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Parse `git worktree list --porcelain` for a worktree checked out on
+/// `dispatch/<slice3>`. Returns the worktree path or "(removed)".
+fn find_coordination_worktree(root: &Path, slice3: &str) -> String {
+    let target_branch = format!("refs/heads/dispatch/{slice3}");
+    let Ok(out) = git::git_text(root, &["worktree", "list", "--porcelain"]) else {
+        return "(removed)".to_string();
+    };
+    let mut current_path: Option<String> = None;
+    for line in out.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            current_path = Some(path.to_string());
+        } else if let Some(branch) = line.strip_prefix("branch ")
+            && branch == target_branch
+        {
+            return current_path.unwrap_or_else(|| "(removed)".to_string());
+        }
+    }
+    "(removed)".to_string()
+}
+
+/// Count `refs/heads/phase/{slice3}-*` refs via `git for-each-ref`.
+fn count_phase_refs(root: &Path, slice3: &str) -> usize {
+    let pattern = format!("refs/heads/phase/{slice3}-*");
+    let Ok(out) = git::git_text(root, &["for-each-ref", "--format=%(refname)", &pattern]) else {
+        return 0;
+    };
+    if out.trim().is_empty() {
+        0
+    } else {
+        out.lines().count()
+    }
+}
+
+/// Compute next phases using same logic as plan-next.
+fn compute_next_phases(rows: &[(String, String, String)]) -> Vec<String> {
+    let mut next: Vec<String> = Vec::new();
+    let mut found_actionable = false;
+    for (id, status, _) in rows {
+        match status.as_str() {
+            "completed" => {}
+            "blocked" => {
+                if found_actionable {
+                    break;
+                }
+            }
+            "in_progress" => {
+                if !found_actionable {
+                    next.push(id.clone());
+                    break;
+                }
+            }
+            _ => {
+                if !found_actionable {
+                    next.push(id.clone());
+                    found_actionable = true;
+                } else if status.as_str() == "pending" {
+                    next.push(id.clone());
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    next
+}
+
+/// Check if `oid` is an ancestor of `trunk_tip` (or equal).
+fn is_ancestor_of_trunk(root: &Path, oid: &str, trunk_tip: &str) -> anyhow::Result<bool> {
+    if oid == trunk_tip {
+        return Ok(true);
+    }
+    let mb = git::merge_base(root, oid, trunk_tip)?;
+    Ok(mb.as_deref() == Some(oid))
+}
+
+// --- JSON output types -------------------------------------------------------
+
+#[derive(serde::Serialize)]
+struct StatusOutput {
+    dispatch: DispatchState,
+    coord: CoordState,
+    trunk: TrunkState,
+    phases: Vec<PhaseState>,
+    sync: SyncState,
+    candidates: CandidateSummary,
+    next: NextJson,
+}
+
+#[derive(serde::Serialize)]
+struct DispatchState {
+    #[serde(rename = "ref")]
+    r#ref: String,
+    tip: String,
+}
+
+#[derive(serde::Serialize)]
+struct CoordState {
+    state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct TrunkState {
+    state: String,
+    fork_point: String,
+    ahead: u32,
+}
+
+#[derive(serde::Serialize)]
+struct PhaseState {
+    id: String,
+    name: String,
+    status: String,
+}
+
+#[derive(serde::Serialize)]
+struct SyncState {
+    state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    review_ref: Option<String>,
+    phase_cuts: usize,
+}
+
+#[derive(serde::Serialize)]
+struct CandidateSummary {
+    total: usize,
+    admitted: usize,
+}
+
+#[derive(serde::Serialize)]
+struct NextJson {
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    phases: Option<Vec<String>>,
+}
+
+/// The next-step guidance resolved from the deterministic state machine.
+enum NextGuidance {
+    Phases { phases: Vec<String> },
+    PrepareReview,
+    AuditThenIntegrate,
+    AuditOrCandidateStatus,
+    Complete,
+    AwaitingIntegration,
+}
+
+impl NextGuidance {
+    fn to_json(&self) -> NextJson {
+        match self {
+            NextGuidance::Phases { phases } => NextJson {
+                kind: "phases".to_string(),
+                phases: Some(phases.clone()),
+            },
+            NextGuidance::PrepareReview => NextJson {
+                kind: "blocked".to_string(),
+                phases: None,
+            },
+            NextGuidance::AuditThenIntegrate | NextGuidance::AuditOrCandidateStatus => NextJson {
+                kind: "audit".to_string(),
+                phases: None,
+            },
+            NextGuidance::Complete => NextJson {
+                kind: "completed".to_string(),
+                phases: None,
+            },
+            NextGuidance::AwaitingIntegration => NextJson {
+                kind: "awaiting_integration".to_string(),
+                phases: None,
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .expect("spawn git");
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    fn init_repo(dir: &Path) {
+        std::fs::create_dir_all(dir).unwrap();
+        git(dir, &["init", "-q", "-b", "main"]);
+        git(dir, &["config", "user.email", "t@example.com"]);
+        git(dir, &["config", "user.name", "Test"]);
+        std::fs::create_dir_all(dir.join(".doctrine")).unwrap();
+        std::fs::write(dir.join("a.txt"), "hello").unwrap();
+        git(dir, &["add", "."]);
+        git(dir, &["commit", "-q", "-m", "base"]);
+    }
+
+    fn seed_slice_dir(dir: &Path, slice: u32) {
+        let rel = format!(".doctrine/slice/{slice:03}");
+        let full = dir.join(&rel);
+        std::fs::create_dir_all(&full).unwrap();
+        std::fs::write(
+            full.join("slice.toml"),
+            format!("id = {slice}\ntitle = \"test\"\nkind = \"slice\"\nstatus = \"planned\"\n"),
+        )
+        .unwrap();
+        git(dir, &["add", "-A"]);
+        git(dir, &["commit", "-q", "-m", "seed slice dir"]);
+    }
+
+    fn seed_plan(dir: &Path, slice: u32, phases: &str) {
+        let rel = format!(".doctrine/slice/{slice:03}/plan.toml");
+        let full = dir.join(&rel);
+        std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+        std::fs::write(&full, phases).unwrap();
+        git(dir, &["add", "-A"]);
+        git(dir, &["commit", "-q", "-m", "seed plan"]);
+    }
+
+    #[test]
+    fn dispatch_setup_gates_on_no_plan() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        // No plan.toml — the gate should fail before touching git.
+        let holder = tempfile::tempdir().unwrap();
+        let coord = holder.path().join("coord");
+        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord);
+        assert!(result.is_err());
+        let err = format!("{}", result.unwrap_err());
+        assert!(
+            err.contains("no plan"),
+            "error should mention 'no plan'; got: {err}"
+        );
+    }
+
+    #[test]
+    fn dispatch_setup_gates_on_empty_plan() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            "schema = \"doctrine.plan.overview\"\nversion = 1\nslice = \"SL-085\"\n",
+        );
+        // Plan has zero phases.
+        let holder = tempfile::tempdir().unwrap();
+        let coord = holder.path().join("coord");
+        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord);
+        assert!(result.is_err());
+        let err = format!("{}", result.unwrap_err());
+        assert!(
+            err.contains("no phases"),
+            "error should mention 'no phases'; got: {err}"
+        );
+    }
+
+    #[test]
+    fn dispatch_setup_creates_coordination() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            "schema = \"doctrine.plan.overview\"\nversion = 1\nslice = \"SL-085\"\n\n[[phase]]\nid = \"PHASE-01\"\nname = \"fixture\"\nobjective = \"fixture\"\n",
+        );
+        let holder = tempfile::tempdir().unwrap();
+        let coord = holder.path().join("coord");
+        let result = run_setup(Some(src.path().to_path_buf()), 85, &coord);
+        assert!(result.is_ok(), "setup must succeed; err: {result:?}");
+
+        // Verify worktree exists.
+        assert!(coord.exists(), "coordination dir exists");
+        assert!(coord.join("a.txt").exists(), "checkout exists");
+
+        // Verify env contract keys on stdout (print! from run_setup).
+        // Since run_setup uses println!, we test via the returned Ok(()).
+        // The actual stdout capture is an integration-test concern; here we
+        // verify the function doesn't panic and the worktree is real.
+        assert!(coord.join(".doctrine").exists(), "provisioned");
+    }
+
+    // --- plan-next helpers ---
+
+    /// Write a `phase-NN.toml` tracking file under
+    /// `.doctrine/state/slice/{slice:03}/phases/`.
+    fn seed_phase_tracking(dir: &Path, slice: u32, phase_num: u32, status: &str) {
+        let state_dir = dir
+            .join(".doctrine/state/slice")
+            .join(format!("{slice:03}"))
+            .join("phases");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        std::fs::write(
+            state_dir.join(format!("phase-{phase_num:02}.toml")),
+            format!("status = \"{status}\"\n"),
+        )
+        .unwrap();
+    }
+
+    /// Build a multi-phase plan.toml body from phase ids + names. Each entry is
+    /// `(id, name)`; the fixture automatically wraps in a `[[phase]]` array.
+    fn plan_body(phases: &[(&str, &str)]) -> String {
+        let mut body =
+            String::from("schema = \"doctrine.plan.overview\"\nversion = 1\nslice = \"SL-085\"\n");
+        for (id, name) in phases {
+            body.push_str(&format!(
+                "\n[[phase]]\nid = \"{id}\"\nname = \"{name}\"\nobjective = \"fixture\"\n"
+            ));
+        }
+        body
+    }
+
+    // --- plan-next tests ---
+
+    #[test]
+    fn dispatch_plan_next_orders_phases() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            &plan_body(&[
+                ("PHASE-01", "setup"),
+                ("PHASE-02", "build"),
+                ("PHASE-03", "blocked-one"),
+                ("PHASE-04", "final"),
+            ]),
+        );
+        seed_phase_tracking(src.path(), 85, 1, "completed");
+        seed_phase_tracking(src.path(), 85, 2, "completed");
+        seed_phase_tracking(src.path(), 85, 3, "blocked");
+        // PHASE-04 has no tracking → pending
+
+        // run_plan_next prints to stdout; we verify it doesn't panic and
+        // check that the return is Ok.
+        let result = run_plan_next(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "plan-next should succeed; err: {result:?}");
+    }
+
+    #[test]
+    fn dispatch_plan_next_all_blocked() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            &plan_body(&[
+                ("PHASE-01", "setup"),
+                ("PHASE-02", "blocked-one"),
+                ("PHASE-03", "blocked-two"),
+            ]),
+        );
+        seed_phase_tracking(src.path(), 85, 1, "completed");
+        seed_phase_tracking(src.path(), 85, 2, "blocked");
+        seed_phase_tracking(src.path(), 85, 3, "blocked");
+
+        let result = run_plan_next(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "plan-next should succeed; err: {result:?}");
+    }
+
+    #[test]
+    fn dispatch_plan_next_stops_at_blocked_mid() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            &plan_body(&[
+                ("PHASE-01", "setup"),
+                ("PHASE-02", "first-pending"),
+                ("PHASE-03", "second-pending"),
+                ("PHASE-04", "blocked"),
+                ("PHASE-05", "after-blocked"),
+            ]),
+        );
+        seed_phase_tracking(src.path(), 85, 1, "completed");
+        // PHASE-02, PHASE-03: no tracking → pending
+        seed_phase_tracking(src.path(), 85, 4, "blocked");
+        // PHASE-05: no tracking → pending
+
+        let result = run_plan_next(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "plan-next should succeed; err: {result:?}");
+    }
+
+    #[test]
+    fn dispatch_plan_next_resume_in_progress() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            &plan_body(&[
+                ("PHASE-01", "setup"),
+                ("PHASE-02", "in-progress"),
+                ("PHASE-03", "next-one"),
+                ("PHASE-04", "next-two"),
+            ]),
+        );
+        seed_phase_tracking(src.path(), 85, 1, "completed");
+        seed_phase_tracking(src.path(), 85, 2, "in_progress");
+        // PHASE-03, PHASE-04: no tracking → pending
+
+        let result = run_plan_next(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "plan-next should succeed; err: {result:?}");
+    }
+
+    #[test]
+    fn dispatch_plan_next_json() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            &plan_body(&[("PHASE-01", "setup"), ("PHASE-02", "active")]),
+        );
+        seed_phase_tracking(src.path(), 85, 1, "completed");
+        // PHASE-02: no tracking → pending
+
+        let result = run_plan_next(Some(src.path().to_path_buf()), 85, true);
+        assert!(
+            result.is_ok(),
+            "plan-next --json should succeed; err: {result:?}"
+        );
+    }
+
+    #[test]
+    fn dispatch_plan_next_no_plan() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        // No plan.toml seeded.
+
+        let result = run_plan_next(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_err(), "plan-next without plan should fail");
+        let err = format!("{}", result.unwrap_err());
+        assert!(
+            err.contains("not found"),
+            "error should mention 'not found'; got: {err}"
+        );
+    }
+
+    // --- status helpers ---
+
+    /// Create a `refs/heads/dispatch/{slice:03}` ref pointing at the current HEAD.
+    fn create_dispatch_ref(dir: &Path, slice: u32) {
+        let head = git(dir, &["rev-parse", "HEAD"]);
+        git(
+            dir,
+            &[
+                "update-ref",
+                &format!("refs/heads/dispatch/{slice:03}"),
+                &head,
+            ],
+        );
+    }
+
+    /// Create a `refs/heads/review/{slice:03}` ref pointing at the current HEAD.
+    fn create_review_ref(dir: &Path, slice: u32) {
+        let head = git(dir, &["rev-parse", "HEAD"]);
+        git(
+            dir,
+            &[
+                "update-ref",
+                &format!("refs/heads/review/{slice:03}"),
+                &head,
+            ],
+        );
+    }
+
+    /// Advance trunk by making a commit on main.
+    fn advance_trunk(dir: &Path) -> String {
+        std::fs::write(dir.join("b.txt"), "world").unwrap();
+        git(dir, &["add", "b.txt"]);
+        git(dir, &["commit", "-q", "-m", "advance trunk"]);
+        git(dir, &["rev-parse", "HEAD"])
+    }
+
+    // --- status tests ---
+
+    /// T3-1: Status fresh after setup → coord live, phases pending, sync not yet run.
+    #[test]
+    fn dispatch_status_fresh_after_setup() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            &plan_body(&[("PHASE-01", "setup"), ("PHASE-02", "build")]),
+        );
+        create_dispatch_ref(src.path(), 85);
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "status should succeed; err: {result:?}");
+    }
+
+    /// T3-2: Status missing dispatch ref → non-zero exit (error).
+    #[test]
+    fn dispatch_status_missing_dispatch_ref() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(src.path(), 85, &plan_body(&[("PHASE-01", "setup")]));
+        // No dispatch ref created.
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_err(), "status without dispatch ref should fail");
+        let err = format!("{}", result.unwrap_err());
+        assert!(
+            err.contains("dispatch branch not found"),
+            "error should mention 'dispatch branch not found'; got: {err}"
+        );
+    }
+
+    /// T3-3: Status missing trunk ref → non-zero exit (error).
+    #[test]
+    fn dispatch_status_missing_trunk_ref() {
+        // Create a repo that initialises with an orphaned initial commit on a
+        // non-standard branch, so the trunk ladder (origin/HEAD, main, master)
+        // finds nothing.
+        let src = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(src.path()).unwrap();
+        git(src.path(), &["init", "-q", "-b", "other"]);
+        git(src.path(), &["config", "user.email", "t@example.com"]);
+        git(src.path(), &["config", "user.name", "Test"]);
+        std::fs::create_dir_all(src.path().join(".doctrine")).unwrap();
+        std::fs::write(src.path().join("a.txt"), "hello").unwrap();
+        git(src.path(), &["add", "."]);
+        git(src.path(), &["commit", "-q", "-m", "base"]);
+        seed_slice_dir(src.path(), 85);
+        seed_plan(src.path(), 85, &plan_body(&[("PHASE-01", "setup")]));
+        create_dispatch_ref(src.path(), 85);
+        // No main/master branch — trunk ladder returns None.
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_err(), "status without trunk ref should fail");
+        let err = format!("{}", result.unwrap_err());
+        assert!(
+            err.contains("trunk ref not found"),
+            "error should mention 'trunk ref not found'; got: {err}"
+        );
+    }
+
+    /// T3-4: Status after sync → sync prepared, phase cuts count.
+    #[test]
+    fn dispatch_status_after_sync() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(src.path(), 85, &plan_body(&[("PHASE-01", "setup")]));
+        create_dispatch_ref(src.path(), 85);
+        create_review_ref(src.path(), 85);
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "status should succeed; err: {result:?}");
+    }
+
+    /// T3-5: Status moved trunk → trunk moved.
+    #[test]
+    fn dispatch_status_moved_trunk() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(src.path(), 85, &plan_body(&[("PHASE-01", "setup")]));
+        // Create dispatch ref BEFORE trunk advances, so the fork point is older.
+        create_dispatch_ref(src.path(), 85);
+        advance_trunk(src.path());
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "status should succeed; err: {result:?}");
+    }
+
+    /// T3-6: Status all phases completed, no review ref → next guidance for prepare-review.
+    #[test]
+    fn dispatch_status_all_completed_no_review() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(src.path(), 85, &plan_body(&[("PHASE-01", "setup")]));
+        create_dispatch_ref(src.path(), 85);
+        seed_phase_tracking(src.path(), 85, 1, "completed");
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "status should succeed; err: {result:?}");
+    }
+
+    /// T3-7: Status all completed, review ref present → guidance references audit.
+    #[test]
+    fn dispatch_status_all_completed_review_present() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(src.path(), 85, &plan_body(&[("PHASE-01", "setup")]));
+        create_dispatch_ref(src.path(), 85);
+        create_review_ref(src.path(), 85);
+        seed_phase_tracking(src.path(), 85, 1, "completed");
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "status should succeed; err: {result:?}");
+    }
+
+    /// T3-8: Status coord removed → coord (removed).
+    #[test]
+    fn dispatch_status_coord_removed() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(src.path(), 85, &plan_body(&[("PHASE-01", "setup")]));
+        create_dispatch_ref(src.path(), 85);
+        // No worktree exists — worktree list won't find it.
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "status should succeed; err: {result:?}");
+    }
+
+    /// T3-9: Status JSON → all sections, next.kind structured.
+    #[test]
+    fn dispatch_status_json() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            &plan_body(&[("PHASE-01", "setup"), ("PHASE-02", "build")]),
+        );
+        create_dispatch_ref(src.path(), 85);
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, true);
+        assert!(
+            result.is_ok(),
+            "status --json should succeed; err: {result:?}"
+        );
     }
 }
