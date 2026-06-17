@@ -24,7 +24,8 @@ use super::channels;
 use super::graph::{self, NodeAttr, PriorityGraph};
 use super::partition::{StatusClass, status_class};
 use super::view::{
-    Actionability, ActionabilityBlock, BlockersView, Explanation, NextRow, ReasonKind, SurveyRow,
+    Actionability, ActionabilityBlock, ActionabilityEdge, ActionabilityNode, ActionabilityView,
+    BlockersView, Explanation, NextRow, ReasonKind, SurveyRow,
 };
 
 /// The per-node attrs entry, or the defensive `None` path (a caller bug — every
@@ -93,16 +94,23 @@ struct SurveyDecorated {
     blockers: Vec<String>,
 }
 
-/// `survey [--all]` (design §5.4) — the eligible set in importance order (D10).
-///
-/// Set: every `eligible` node, MINUS `promoted` backlog items (excluded as their own
-/// reason, F1), UNLESS `all` reveals the full picture. With `all`, terminal +
-/// promoted nodes are included too (the complete view). Sort (the empty
-/// authored-priority slot collapses to): `actionability(Actionable first) →
-/// consequence desc → canonical-id asc`.
-pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
-    let g = graph::build(root)?;
+/// Sort rank for [`Actionability`] — Actionable (0) before Blocked (1).
+fn act_rank(a: Actionability) -> u8 {
+    match a {
+        Actionability::Actionable => 0,
+        Actionability::Blocked => 1,
+    }
+}
 
+/// Pure survey over an already-built [`PriorityGraph`] (the body of [`survey`],
+/// extracted for the web map server so it reuses a single build — SL-089 D2).
+/// Zero behavioural divergence — byte-identical output (VT-7).
+///
+/// Filtering (when `all == false`):
+///   1. [`channels::eligible`] — status-class gate ([`super::partition::StatusClass::Workable`]) only
+///   2. `!`[`channels::promoted`] — exclude promoted-backlog items
+///      These two filters exactly match the CLI `survey` default.
+pub(crate) fn survey_for_map(g: &PriorityGraph, all: bool) -> Vec<SurveyRow> {
     // Decorate ONCE: materialise each surfaced node's sort/render signals so neither
     // the comparator nor the row map recomputes a graph walk per comparison (SL-050 F3).
     let mut rows: Vec<SurveyDecorated> = g
@@ -114,13 +122,13 @@ pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
                 return true;
             }
             // Default: eligible, and not a promoted backlog item (its own exclusion).
-            channels::eligible(&g, k) && !channels::promoted(&g, k)
+            channels::eligible(g, k) && !channels::promoted(g, k)
         })
         .map(|k| SurveyDecorated {
             key: k,
-            act: actionability(&g, k),
-            consequence: channels::consequence(&g, k),
-            blockers: refs(&channels::blocked_by(&g, k)),
+            act: actionability(g, k),
+            consequence: channels::consequence(g, k),
+            blockers: refs(&channels::blocked_by(g, k)),
         })
         .collect();
 
@@ -133,10 +141,9 @@ pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
         act.then(cons).then_with(|| a.key.cmp(&b.key))
     });
 
-    let rows = rows
-        .into_iter()
+    rows.into_iter()
         .map(|d| {
-            let mut reasons = vec![eligibility_reason(&g, d.key)];
+            let mut reasons = vec![eligibility_reason(g, d.key)];
             if !d.blockers.is_empty() {
                 reasons.push(ReasonKind::BlockedBy {
                     items: d.blockers.clone(),
@@ -147,24 +154,184 @@ pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
             });
             SurveyRow {
                 id: d.key.canonical(),
-                title: title_of(&g, d.key),
-                kind: kind_of(&g, d.key),
-                status: status_of(&g, d.key),
+                title: title_of(g, d.key),
+                kind: kind_of(g, d.key),
+                status: status_of(g, d.key),
                 act: d.act,
                 consequence: d.consequence,
                 blockers: d.blockers,
                 reasons,
             }
         })
-        .collect();
-    Ok(rows)
+        .collect()
 }
 
-/// Sort rank for [`Actionability`] — Actionable (0) before Blocked (1).
-fn act_rank(a: Actionability) -> u8 {
-    match a {
-        Actionability::Actionable => 0,
-        Actionability::Blocked => 1,
+/// `survey [--all]` (design §5.4) — the eligible set in importance order (D10).
+///
+/// Set: every `eligible` node, MINUS `promoted` backlog items (excluded as their own
+/// reason, F1), UNLESS `all` reveals the full picture. With `all`, terminal +
+/// promoted nodes are included too (the complete view). Sort (the empty
+/// authored-priority slot collapses to): `actionability(Actionable first) →
+/// consequence desc → canonical-id asc`.
+pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
+    let g = graph::build(root)?;
+    Ok(survey_for_map(&g, all))
+}
+
+/// Build the actionability graph view for the web UI from a [`PriorityGraph`]
+/// (SL-089 D3). Pure over the graph — no disk, no clock.
+///
+/// Returns nodes with server-computed topological ranks over the dep overlay,
+/// plus `needs` and `after` edges among work entities.
+///
+/// Node set (default, `all == false`): eligible AND !promoted — exactly the
+/// [`survey_for_map`] filter. Every node carries its rank (topological layer
+/// over the dep overlay: 0 = no non-terminal blockers).
+///
+/// Edges:
+///   - `needs` edges: dep overlay, non-terminal source only → oriented
+///     prerequisite→dependent (matching the B→A flip stored in the graph).
+///   - `after` edges: seq overlay, oriented prerequisite→dependent.
+///     Both source and target must be in the node set.
+#[cfg_attr(not(test), expect(dead_code, reason = "PHASE-01 Task 3: consumed by tests + PHASE-02 server endpoint"))]
+pub(crate) fn survey_view_for_map(g: &PriorityGraph, all: bool) -> ActionabilityView {
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+    // 1. Build canonical rows (eligible set + ordering).
+    let rows = survey_for_map(g, all);
+
+    // 2. EntityKey lookup: canonical ref ↔ key.
+    let key_by_id: BTreeMap<String, EntityKey> = rows
+        .iter()
+        .filter_map(|r| parse_key(&r.id).ok().map(|k| (r.id.clone(), k)))
+        .collect();
+    let node_keys: BTreeSet<EntityKey> = key_by_id.values().copied().collect();
+
+    // 3. Compute ranks via Kahn-style topological walk over the dep overlay.
+    //    Indegree = number of non-terminal blockers (in the node set).
+    let mut blockers_of: BTreeMap<EntityKey, Vec<EntityKey>> = BTreeMap::new();
+    let mut dependents_of: BTreeMap<EntityKey, Vec<EntityKey>> = BTreeMap::new();
+    let mut indeg: BTreeMap<EntityKey, usize> = BTreeMap::new();
+
+    for &k in &node_keys {
+        let blockers: Vec<EntityKey> = channels::blocked_by(g, k)
+            .into_iter()
+            .filter(|b| node_keys.contains(b))
+            .collect();
+        indeg.insert(k, blockers.len());
+        for &b in &blockers {
+            dependents_of.entry(b).or_default().push(k);
+        }
+        blockers_of.insert(k, blockers);
+    }
+
+    let mut ranks: BTreeMap<EntityKey, u32> = BTreeMap::new();
+
+    // Kahn: seed with in-degree 0 nodes (no non-terminal blockers in set).
+    let mut queue: VecDeque<EntityKey> = indeg
+        .iter()
+        .filter(|(_, d)| **d == 0)
+        .map(|(&k, _)| k)
+        .collect();
+
+    while let Some(k) = queue.pop_front() {
+        // Rank = 1 + max(blocker ranks), or 0 if no blockers.
+        let rank = blockers_of.get(&k).map_or(0, |bs| {
+            bs.iter()
+                .filter_map(|b| ranks.get(b))
+                .max()
+                .map_or(0, |r| r + 1)
+        });
+        ranks.insert(k, rank);
+
+        // Decrement dependents; enqueue when their in-degree reaches 0.
+        if let Some(deps) = dependents_of.get(&k) {
+            for &dep in deps {
+                if let Some(d) = indeg.get_mut(&dep) {
+                    *d -= 1;
+                    if *d == 0 {
+                        queue.push_back(dep);
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: cyclic nodes (still indeg > 0).
+    for &k in &node_keys {
+        if !ranks.contains_key(&k) {
+            let rank = blockers_of.get(&k).map_or(0, |bs| {
+                bs.iter()
+                    .filter_map(|b| ranks.get(b))
+                    .max()
+                    .map_or(0, |r| r + 1)
+            });
+            ranks.insert(k, rank);
+        }
+    }
+
+    // 4. Extract needs edges (dep overlay, non-terminal src, both ends in node set).
+    //    blocked_by already filters to non-terminal, so every edge source is
+    //    non-terminal by construction.
+    let mut edges: Vec<ActionabilityEdge> = Vec::new();
+    for &k in &node_keys {
+        for blocker in &channels::blocked_by(g, k) {
+            if node_keys.contains(blocker) {
+                edges.push(ActionabilityEdge {
+                    source: blocker.canonical(),
+                    target: k.canonical(),
+                    kind: "needs".into(),
+                });
+            }
+        }
+    }
+
+    // 5. Extract after edges (seq overlay, both ends in node set, oriented
+    //    prerequisite→dependent).
+    for &k in &node_keys {
+        if let Some(n) = g.projection.resolve(k) {
+            for (pred, _) in g.graph.in_edges(g.seq_overlay, n) {
+                if let Some(pred_key) = g.projection.key_of(pred)
+                    && node_keys.contains(&pred_key)
+                {
+                    edges.push(ActionabilityEdge {
+                        source: pred_key.canonical(),
+                        target: k.canonical(),
+                        kind: "after".into(),
+                    });
+                }
+            }
+        }
+    }
+
+    // 6. Assemble nodes — reuse the pre-computed row data + rank.
+    let nodes: Vec<ActionabilityNode> = rows
+        .into_iter()
+        .filter_map(|r| {
+            let k = parse_key(&r.id).ok()?;
+            let rank = ranks.get(&k).copied().unwrap_or(0);
+            let actionability = match r.act {
+                Actionability::Actionable => "actionable",
+                Actionability::Blocked => "blocked",
+            };
+            Some(ActionabilityNode {
+                id: r.id,
+                title: r.title,
+                kind: r.kind,
+                status: r.status,
+                actionability: actionability.into(),
+                consequence: r.consequence,
+                rank,
+                blockers: r.blockers,
+            })
+        })
+        .collect();
+
+    ActionabilityView {
+        kind: "actionability_graph".into(),
+        policy_version: "priority.v2".into(),
+        nodes,
+        edges,
     }
 }
 
@@ -315,4 +482,196 @@ pub(crate) fn actionability_block_from(
         blocking: refs(&channels::blocking(&g, key)),
         consequence: channels::consequence(&g, key),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    use crate::priority::graph::build;
+
+    fn write(root: &Path, rel: &str, body: &str) {
+        let path = root.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, body).unwrap();
+    }
+
+    fn tmp() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
+    }
+
+    fn seed_issue(root: &Path, id: u32, status: &str, resolution: &str, axes: &[(&str, &[&str])]) {
+        let rels = crate::relation::rels_block(&crate::backlog::ISSUE_KIND, axes);
+        write(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"{status}\"\n\
+                 resolution = \"{resolution}\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+                 {rels}"
+            ),
+        );
+        write(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.md"),
+            "b\n",
+        );
+    }
+
+    // ── VT-1: survey_rank_topological ─────────────────────────────────────
+
+    #[test]
+    fn survey_rank_topological_chain_a_to_b_to_c() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001 needs ISS-002; ISS-002 needs ISS-003.
+        seed_issue(root, 1, "open", "", &[("needs", &["ISS-002"])]);
+        seed_issue(root, 2, "open", "", &[("needs", &["ISS-003"])]);
+        seed_issue(root, 3, "open", "", &[]);
+
+        let g = build(root).unwrap();
+        let view = survey_view_for_map(&g, false);
+
+        // Find nodes by id.
+        let n1 = view.nodes.iter().find(|n| n.id == "ISS-001").unwrap();
+        let n2 = view.nodes.iter().find(|n| n.id == "ISS-002").unwrap();
+        let n3 = view.nodes.iter().find(|n| n.id == "ISS-003").unwrap();
+
+        assert_eq!(n3.rank, 0, "ISS-003 has no blockers → rank 0");
+        assert_eq!(n2.rank, 1, "ISS-002 blocked by ISS-003 (rank 0) → rank 1");
+        assert_eq!(n1.rank, 2, "ISS-001 blocked by ISS-002 (rank 1) → rank 2");
+    }
+
+    // ── VT-2: survey_needs_edges_present ──────────────────────────────────
+
+    #[test]
+    fn survey_needs_edges_present() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue(root, 1, "open", "", &[("needs", &["ISS-002"])]);
+        seed_issue(root, 2, "open", "", &[("needs", &["ISS-003"])]);
+        seed_issue(root, 3, "open", "", &[]);
+
+        let g = build(root).unwrap();
+        let view = survey_view_for_map(&g, false);
+
+        assert!(view
+            .edges
+            .iter()
+            .any(|e| e.source == "ISS-003" && e.target == "ISS-002" && e.kind == "needs"));
+        assert!(view
+            .edges
+            .iter()
+            .any(|e| e.source == "ISS-002" && e.target == "ISS-001" && e.kind == "needs"));
+    }
+
+    // ── VT-3: survey_after_edges_present ──────────────────────────────────
+
+    #[test]
+    fn survey_after_edges_present() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001 has an after edge onto ISS-002.
+        seed_issue(root, 2, "open", "", &[]);
+        write(
+            root,
+            ".doctrine/backlog/issue/001/backlog-001.toml",
+            "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
+             resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nafter = [{ to = \"ISS-002\", rank = 0 }]\n",
+        );
+        write(
+            root,
+            ".doctrine/backlog/issue/001/backlog-001.md",
+            "b\n",
+        );
+
+        let g = build(root).unwrap();
+        let view = survey_view_for_map(&g, false);
+
+        assert!(view
+            .edges
+            .iter()
+            .any(|e| e.source == "ISS-002" && e.target == "ISS-001" && e.kind == "after"));
+    }
+
+    // ── VT-4: survey_empty_graph ──────────────────────────────────────────
+
+    #[test]
+    fn survey_empty_graph() {
+        let dir = tmp();
+        let root = dir.path();
+        // Only a terminal (closed) issue — no eligible nodes.
+        seed_issue(root, 1, "closed", "", &[]);
+
+        let g = build(root).unwrap();
+        let view = survey_view_for_map(&g, false);
+
+        assert!(view.nodes.is_empty());
+        assert!(view.edges.is_empty());
+    }
+
+    // ── VT-5: survey_excludes_terminal ────────────────────────────────────
+
+    #[test]
+    fn survey_excludes_terminal() {
+        let dir = tmp();
+        let root = dir.path();
+        // Two issues: one open (eligible), one closed (terminal).
+        seed_issue(root, 1, "open", "", &[]);
+        seed_issue(root, 2, "closed", "", &[]);
+
+        let g = build(root).unwrap();
+        let view = survey_view_for_map(&g, false);
+
+        assert_eq!(view.nodes.len(), 1, "only the eligible (open) node");
+        assert_eq!(view.nodes[0].id, "ISS-001");
+        assert!(view.nodes.iter().all(|n| n.id != "ISS-002"));
+    }
+
+    // ── VT-6: survey_terminal_blocker_no_edge ─────────────────────────────
+
+    #[test]
+    fn survey_terminal_blocker_no_edge() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001 (open) needs ISS-002 (closed/terminal).
+        // The terminal blocker is satisfied → no edge emitted.
+        seed_issue(root, 1, "open", "", &[("needs", &["ISS-002"])]);
+        seed_issue(root, 2, "closed", "", &[]);
+
+        let g = build(root).unwrap();
+        let view = survey_view_for_map(&g, false);
+
+        // ISS-001 appears (eligible), ISS-002 does not (terminal).
+        assert_eq!(view.nodes.len(), 1);
+        let n1 = &view.nodes[0];
+        assert_eq!(n1.id, "ISS-001");
+        // No edge from ISS-002 (it's terminal and not in the node set).
+        assert!(view.edges.is_empty(), "terminal → eligible edge suppressed");
+        // ISS-001 is actionable (its blocker is terminal/satisfied).
+        assert_eq!(n1.actionability, "actionable");
+        assert_eq!(n1.rank, 0);
+    }
+
+    // ── VT-7: survey_for_map matches survey byte-for-byte ─────────────────
+
+    #[test]
+    fn survey_for_map_matches_survey_byte_for_byte() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue(root, 1, "open", "", &[("needs", &["ISS-003"])]);
+        seed_issue(root, 2, "open", "", &[("needs", &["ISS-003"])]);
+        seed_issue(root, 3, "open", "", &[]);
+
+        let g = build(root).unwrap();
+        let from_survey = survey(root, false).unwrap();
+        let from_for_map = survey_for_map(&g, false);
+
+        assert_eq!(from_survey, from_for_map, "survey_for_map must match survey output exactly");
+    }
+
+    // ── VT-8 (implicit): existing tests pass — verified by `cargo test` ───
 }
