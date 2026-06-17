@@ -2,7 +2,7 @@
 // Hash routing: #/focus/SL-001 or #/focus/SL-001?depth=2
 // Security: markdown-it html:false; DOMPurify.sanitize() applied before innerHTML.
 // SVG from /api/dot/svg is sanitized via DOMPurify SVG profile, then injected as inline DOM.
-/* global state, model, api, router, dot, svg, render, compareNodes, compareEdgesBySource */
+/* global state, model, api, router, dot, svg, render, search, compareEdgesBySource */
 
 (function () {
   'use strict';
@@ -27,34 +27,6 @@
    * Entity list node collection helpers
    * --------------------------------------------------------------------- */
 
-  // Collect and filter entity nodes for the sidebar list.
-  // query: search string (null/empty = all). Returns sorted node array.
-  function collectListNodes(query) {
-    var nodes;
-    if (query && query.trim()) {
-      nodes = model.searchFilter(query.trim(), state.graph);
-    } else {
-      nodes = [];
-      state.graph.nodes.forEach(function(node) { nodes.push(node); });
-    }
-    if (state.kindFilter) {
-      nodes = nodes.filter(function(node) { return state.kindFilter.has(node.kindPrefix); });
-    }
-    nodes.sort(compareNodes);
-    return nodes;
-  }
-
-  function renderFilteredEntities() {
-    var input = document.querySelector('.search-input');
-    var nodes = collectListNodes(input ? input.value : '');
-    render.entityList({
-      container: render.elements.entityList,
-      nodes: nodes,
-      focusId: state.focusId,
-      onFocus: function(id) { router.setFocus(id, state.depth); }
-    });
-  }
-
   // Build edges array for render.relationshipTable from neighbourhood.
   // Applies kindFilter and returns sorted edges.
   function buildTableEdges() {
@@ -70,176 +42,21 @@
     return edges;
   }
 
-  function collectKindFilter() {
-    var cbs = document.querySelectorAll('.kind-checkbox input[type="checkbox"]');
-    var allOn = true;
-    for (var i = 0; i < cbs.length; i++) {
-      if (!cbs[i].checked) { allOn = false; break; }
-    }
-    if (allOn) {
-      state.kindFilter = null;
-    } else {
-      state.kindFilter = new Set();
-      for (var j = 0; j < cbs.length; j++) {
-        if (cbs[j].checked) {
-          var kinds = (cbs[j].getAttribute('data-kinds') || '').split(',');
-          for (var k = 0; k < kinds.length; k++) {
-            var kp = kinds[k].trim();
-            if (kp) state.kindFilter.add(kp);
-          }
-        }
-      }
-    }
-  }
-
   function applyFilters() {
-    renderFilteredEntities();
+    search.renderFilteredEntities({
+      list: render.elements.entityList,
+      graph: state.graph,
+      query: document.querySelector('.search-input') ? document.querySelector('.search-input').value : '',
+      kindFilter: state.kindFilter,
+      focusId: state.focusId,
+      onFocus: function(id) { router.setFocus(id, state.depth); }
+    });
     render.relationshipTable({
       container: render.elements.relationshipTableBody,
       edges: buildTableEdges(),
       graph: state.graph,
       focusId: state.focusId,
       depth: state.depth
-    });
-  }
-
-  function wireFilterCheckboxes() {
-    // Toggle-all checkbox
-    var toggleAll = document.querySelector('.toggle-all-cb');
-    var kindCbs = document.querySelectorAll('.kind-checkbox input[type="checkbox"]');
-
-    if (toggleAll) {
-      toggleAll.addEventListener('change', function() {
-        for (var i = 0; i < kindCbs.length; i++) {
-          kindCbs[i].checked = toggleAll.checked;
-        }
-        collectKindFilter();
-        applyFilters();
-      });
-    }
-
-    // Individual kind checkboxes
-    for (var i = 0; i < kindCbs.length; i++) {
-      kindCbs[i].addEventListener('change', function() {
-        collectKindFilter();
-        applyFilters();
-        // Sync toggle-all state
-        if (toggleAll) {
-          var allOn = true;
-          for (var j = 0; j < kindCbs.length; j++) {
-            if (!kindCbs[j].checked) { allOn = false; break; }
-          }
-          toggleAll.checked = allOn;
-        }
-      });
-    }
-    collectKindFilter();
-  }
-
-  function wireSearch() {
-    var input = document.querySelector('.search-input');
-    if (!input) return;
-
-    input.addEventListener('input', function() {
-      var nodes = collectListNodes(input.value.trim());
-      render.entityList({
-        container: render.elements.entityList,
-        nodes: nodes,
-        focusId: state.focusId,
-        onFocus: function(id) { router.setFocus(id, state.depth); }
-      });
-    });
-
-    input.addEventListener('keydown', function(e) {
-      var list = document.querySelector('.entity-list');
-      var items = list ? list.querySelectorAll('.entity-item') : [];
-
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (items.length === 0) return;
-        if (typeof state.listNavIndex === 'undefined' || state.listNavIndex < 0) {
-          state.listNavIndex = e.key === 'ArrowDown' ? 0 : items.length - 1;
-        } else {
-          state.listNavIndex += (e.key === 'ArrowDown' ? 1 : -1);
-          if (state.listNavIndex >= items.length) state.listNavIndex = 0;
-          if (state.listNavIndex < 0) state.listNavIndex = items.length - 1;
-        }
-        for (var i = 0; i < items.length; i++) {
-          items[i].classList.toggle('nav-highlight', i === state.listNavIndex);
-        }
-        // Scroll highlighted item into view
-        if (items[state.listNavIndex]) {
-          items[state.listNavIndex].scrollIntoView({ block: 'nearest' });
-        }
-      } else if (e.key === 'Enter') {
-        // If keyboard nav highlight is active, select that item
-        if (typeof state.listNavIndex !== 'undefined' && state.listNavIndex >= 0 && items.length > 0 && items[state.listNavIndex]) {
-          e.preventDefault();
-          items[state.listNavIndex].click();
-          state.listNavIndex = undefined;
-          return;
-        }
-        // Otherwise, use findFocus to resolve the query
-        var query = input.value.trim();
-        if (!query) return;
-        var result = model.findFocus(query, state.graph);
-        if (result) {
-          router.setFocus(result, state.depth);
-          state.listNavIndex = undefined;
-        } else {
-          if (list) {
-            list.innerHTML = '<li class="entity-item"><span class="placeholder">No match for \'' + render.escapeHtml(query) + '\'</span></li>';
-          }
-        }
-      } else if (e.key === 'Escape') {
-        input.value = '';
-        input.blur();
-        state.listNavIndex = undefined;
-        render.entityList({
-          container: render.elements.entityList,
-          nodes: collectListNodes(''),
-          focusId: state.focusId,
-          onFocus: function(id) { router.setFocus(id, state.depth); }
-        });
-      }
-    });
-  }
-
-  function wireDepthButtons() {
-    var btns = document.querySelectorAll('.depth-btn');
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].addEventListener('click', (function(d) {
-        return function() {
-          var allBtns = document.querySelectorAll('.depth-btn');
-          for (var j = 0; j < allBtns.length; j++) {
-            allBtns[j].classList.toggle('active', parseInt(allBtns[j].getAttribute('data-depth'), 10) === d);
-          }
-          if (state.focusId) { router.setFocus(state.focusId, d); }
-        };
-      })(parseInt(btns[i].getAttribute('data-depth'), 10)));
-    }
-  }
-
-  function wireRefresh() {
-    var btn = document.querySelector('.refresh-btn');
-    if (!btn) return;
-    btn.addEventListener('click', function() {
-      state.markdownCache.clear();
-      state.conceptMapCache.clear();
-      state.cmFocusNode = null;
-      state.graphRenderSeq += 1;
-      api.refreshGraph().then(function() {
-        return api.fetchGraph();
-      }).then(function(raw) {
-        model.normalizeGraph(raw);
-        if (state.focusId) {
-          state.focusId = model.resolveFocus(state.focusId, state.graph);
-        }
-        renderView();
-      }).catch(function(err) {
-        var app = document.getElementById('app');
-        showError(app, 'Failed to refresh: ' + err.message);
-      });
     });
   }
 
@@ -270,10 +87,52 @@
 
     // Wire interactive surfaces
     wireTableToggle();
-    wireFilterCheckboxes();
-    wireSearch();
-    wireDepthButtons();
-    wireRefresh();
+
+    search.wireFilters({
+      container: document,
+      onChange: function(filterSet) {
+        state.kindFilter = filterSet;
+        applyFilters();
+      }
+    });
+
+    search.wireSearch({
+      input: document.querySelector('.search-input'),
+      list: render.elements.entityList,
+      graph: state.graph,
+      getFocusId: function() { return state.focusId; },
+      getKindFilter: function() { return state.kindFilter; },
+      onFocus: function(id) { router.setFocus(id, state.depth); }
+    });
+
+    search.wireDepthButtons({
+      container: document,
+      onDepthChange: function(d) {
+        if (state.focusId) { router.setFocus(state.focusId, d); }
+      }
+    });
+
+    search.wireRefresh({
+      button: document.querySelector('.refresh-btn'),
+      onRefresh: function() {
+        state.markdownCache.clear();
+        state.conceptMapCache.clear();
+        state.cmFocusNode = null;
+        state.graphRenderSeq += 1;
+        api.refreshGraph().then(function() {
+          return api.fetchGraph();
+        }).then(function(raw) {
+          model.normalizeGraph(raw);
+          if (state.focusId) {
+            state.focusId = model.resolveFocus(state.focusId, state.graph);
+          }
+          renderView();
+        }).catch(function(err) {
+          var app = document.getElementById('app');
+          showError(app, 'Failed to refresh: ' + err.message);
+        });
+      }
+    });
 
     // Register hashchange listener early — before any async work — so
     // clicks and navigation work immediately, even during data load.
@@ -341,9 +200,11 @@
       if (mdPane) mdPane.innerHTML = '<span class="placeholder">[Markdown content]</span>';
       var tbody = document.querySelector('.relationship-table tbody');
       if (tbody) tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[Relationship table]</span></td></tr>';
-      render.entityList({
-        container: render.elements.entityList,
-        nodes: collectListNodes(''),
+      search.renderFilteredEntities({
+        list: render.elements.entityList,
+        graph: state.graph,
+        query: '',
+        kindFilter: state.kindFilter,
         focusId: state.focusId,
         onFocus: function(id) { router.setFocus(id, state.depth); }
       });
@@ -356,7 +217,14 @@
     }
 
     // Sidebar / header / table always update synchronously
-    renderFilteredEntities();
+    search.renderFilteredEntities({
+      list: render.elements.entityList,
+      graph: state.graph,
+      query: document.querySelector('.search-input') ? document.querySelector('.search-input').value : '',
+      kindFilter: state.kindFilter,
+      focusId: state.focusId,
+      onFocus: function(id) { router.setFocus(id, state.depth); }
+    });
     render.focusHeader({
       container: render.elements.focusHeader,
       focusId: state.focusId,
