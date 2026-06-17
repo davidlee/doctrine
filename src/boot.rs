@@ -173,22 +173,25 @@ fn produce(heading: &str, kind: &SourceKind, root: &Path, exec: &Path) -> Sectio
                 _ => section_or_marker(heading, produced),
             }
         }
-        // ACTIVE memories only — an explicit boot predicate, DECOUPLED from the
-        // CLI `memory list` default (which keeps `draft` visible). boot is an
-        // agent-context PRODUCER and `draft` is unreviewed, so it must not leak
-        // into the snapshot (SL-025 §5.1 / C-4). The explicit `status:["active"]`
-        // also reveals past the list hide-set, mirroring the ADR section above.
-        SourceKind::Memories => section_or_marker(
-            heading,
-            memory::list_rows(
-                root,
-                Some(memory::MemoryType::Signpost),
-                crate::listing::ListArgs {
-                    status: vec!["active".to_string()],
-                    ..Default::default()
-                },
-            ),
-        ),
+        // Compact key listing for the boot snapshot: active signpost memories
+        // only, key-ascending, with uid fallback for keyless. The full table is
+        // reachable via /retrieve-memory (ADR-005 PUSH-tier compactness).
+        SourceKind::Memories => {
+            let body = memory::boot_keys(root).map(|keys| {
+                if keys.is_empty() {
+                    return String::new();
+                }
+                let mut body = String::from(
+                    "Run /retrieve-memory to surface relevant memories for your task.\n",
+                );
+                for key in &keys {
+                    body.push_str(key);
+                    body.push('\n');
+                }
+                body
+            });
+            section_or_marker(heading, body)
+        }
         // canonical embedded digest — read from the embed, never disk (§5.2).
         SourceKind::Static(name) => section_or_marker(heading, install::asset_text(name)),
         // user-owned governance pointer layer — read from disk (§5.3).
@@ -997,7 +1000,12 @@ pub(crate) fn run_install(
 /// `current_exe()` and prompts; this does the work — union + dedup import
 /// targets, prepend the `@`-import **once**, then refresh each harness, isolating
 /// a single harness's failure (it is printed; the others still run — A9/§5.5).
-pub(crate) fn wire(root: &Path, exec: &Path, harnesses: &[Harness], dry_run: bool) -> anyhow::Result<()> {
+pub(crate) fn wire(
+    root: &Path,
+    exec: &Path,
+    harnesses: &[Harness],
+    dry_run: bool,
+) -> anyhow::Result<()> {
     let reference = format!("@{BOOT_REL}");
     let targets: Vec<PathBuf> = harnesses
         .iter()
@@ -1362,9 +1370,21 @@ mod tests {
             !snap.contains("adopt-ci"),
             "non-accepted ADR filtered:\n{snap}"
         );
+        // New format: reference line + key list. Key is None, so uid is the
+        // fallback key line. Use collect_all to find the uid by title.
+        let all = memory::collect_all(root).unwrap();
+        let mem_uid = all
+            .iter()
+            .find(|m| m.title == "Boot pointer note")
+            .map(|m| m.uid.as_str())
+            .expect("memory recorded");
         assert!(
-            snap.contains("Boot pointer note"),
-            "memory pointer projected:\n{snap}"
+            snap.contains("Run /retrieve-memory"),
+            "reference line projected:\n{snap}"
+        );
+        assert!(
+            snap.contains(mem_uid),
+            "memory uid projected as keyless fallback: {mem_uid}\n{snap}"
         );
         assert!(!snap.contains("<!-- Accepted ADRs:"), "ADR marker replaced");
         assert!(!snap.contains("<!-- Memory:"), "memory marker replaced");
@@ -1594,17 +1614,29 @@ mod tests {
         // boot section: ACTIVE ONLY — no draft, no terminal.
         assert!(regenerate(root, exec).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
-        assert!(snap.contains("Active note"), "boot shows active:\n{snap}");
-        for leaked in [
-            "Draft note",
-            "Superseded note",
-            "Retracted note",
-            "Archived note",
-            "Quarantined note",
-        ] {
+        // New format: reference line + key list. Find active memory's uid.
+        let all = memory::collect_all(root).unwrap();
+        let active_uid = all
+            .iter()
+            .find(|m| m.title == "Active note")
+            .map(|m| m.uid.as_str())
+            .expect("active memory recorded");
+        assert!(snap.contains(active_uid), "boot shows active uid: {}", snap);
+        assert!(
+            snap.contains("Run /retrieve-memory"),
+            "reference line present: {}",
+            snap
+        );
+        // Collect uids of non-active memories and assert they don't appear.
+        let leaked_uids: Vec<&str> = all
+            .iter()
+            .filter(|m| m.title != "Active note")
+            .map(|m| m.uid.as_str())
+            .collect();
+        for uid in &leaked_uids {
             assert!(
-                !snap.contains(leaked),
-                "boot must not leak {leaked}:\n{snap}"
+                !snap.contains(uid),
+                "boot must not leak non-active uid {uid}:\n{snap}"
             );
         }
 
@@ -1663,14 +1695,33 @@ mod tests {
 
         assert!(regenerate(root, exec).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
+        // New format: reference line + key list. Find signpost memory's uid.
+        let all = memory::collect_all(root).unwrap();
+        let signpost_uid = all
+            .iter()
+            .find(|m| m.title == "Signpost pointer")
+            .map(|m| m.uid.as_str())
+            .expect("signpost memory recorded");
         assert!(
-            snap.contains("Signpost pointer"),
-            "signpost-type memory projected:\n{snap}"
+            snap.contains(signpost_uid),
+            "signpost uid projected: {}",
+            snap
         );
-        for excluded in ["Concept note", "Pattern note", "Fact note"] {
+        assert!(
+            snap.contains("Run /retrieve-memory"),
+            "reference line present: {}",
+            snap
+        );
+        // Collect uids of non-signpost memories and assert they don't appear.
+        let excluded_uids: Vec<&str> = all
+            .iter()
+            .filter(|m| m.title != "Signpost pointer")
+            .map(|m| m.uid.as_str())
+            .collect();
+        for uid in &excluded_uids {
             assert!(
-                !snap.contains(excluded),
-                "non-signpost {excluded} must not appear in boot:\n{snap}"
+                !snap.contains(uid),
+                "non-signpost uid {uid} must not appear in boot:\n{snap}"
             );
         }
     }
@@ -2623,6 +2674,117 @@ mod tests {
             agents.matches(REF).count(),
             1,
             "codex import survived the claude failure"
+        );
+    }
+
+    // --- SL-087: produce(Memory) with active signpost memories ---
+
+    fn write_memory_toml(items: &Path, uid: &str, kind: &str, st: &str, key: Option<&str>) {
+        let key_line = key
+            .map(|k| format!("memory_key = \"{k}\"\n"))
+            .unwrap_or_default();
+        let toml = format!(
+            r#"memory_uid = "{uid}"
+{key_line}schema_version = 1
+memory_type = "{kind}"
+status = "{st}"
+title = "Test"
+summary = ""
+created = "2026-06-04"
+updated = "2026-06-04"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = ""
+
+[git]
+anchor_kind = "none"
+
+[review]
+verification_state = "unverified"
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "low"
+weight = 0
+"#
+        );
+        let dir = items.join(uid);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("memory.toml"), toml).unwrap();
+        fs::write(dir.join("memory.md"), "").unwrap();
+    }
+
+    #[test]
+    fn produce_memory_renders_reference_and_key_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(memory::MEMORY_ITEMS_DIR);
+        fs::create_dir_all(&items).unwrap();
+
+        let a = "mem_000000000000000000000000000000a1";
+        let b = "mem_000000000000000000000000000000b2";
+        let c = "mem_000000000000000000000000000000c3";
+        let d = "mem_000000000000000000000000000000d4";
+        let e = "mem_000000000000000000000000000000e5";
+        let f = "mem_000000000000000000000000000000f6";
+
+        write_memory_toml(&items, c, "signpost", "active", Some("mem.charlie"));
+        write_memory_toml(&items, a, "signpost", "active", Some("mem.alpha"));
+        write_memory_toml(&items, b, "signpost", "active", Some("mem.bravo"));
+        write_memory_toml(&items, d, "signpost", "active", None);
+        write_memory_toml(&items, e, "signpost", "draft", Some("mem.draft"));
+        write_memory_toml(&items, f, "pattern", "active", Some("mem.pattern"));
+
+        let exec = Path::new("/abs/target/debug/doctrine");
+        let section = produce("Memory", &SourceKind::Memories, root, exec);
+
+        assert!(
+            section.body.contains("Run /retrieve-memory"),
+            "ref: {}",
+            section.body
+        );
+        assert!(
+            section.body.contains("mem.alpha"),
+            "alpha: {}",
+            section.body
+        );
+        assert!(
+            section.body.contains("mem.bravo"),
+            "bravo: {}",
+            section.body
+        );
+        assert!(
+            section.body.contains("mem.charlie"),
+            "charlie: {}",
+            section.body
+        );
+        assert!(section.body.contains(d), "keyless: {}", section.body);
+        assert!(
+            !section.body.contains("mem.draft"),
+            "draft: {}",
+            section.body
+        );
+        assert!(
+            !section.body.contains("mem.pattern"),
+            "pattern: {}",
+            section.body
+        );
+
+        let ref_pos = section.body.find("Run /retrieve-memory").unwrap();
+        let alpha_pos = section.body.find("mem.alpha").unwrap();
+        let bravo_pos = section.body.find("mem.bravo").unwrap();
+        let charlie_pos = section.body.find("mem.charlie").unwrap();
+        assert!(
+            ref_pos < alpha_pos && alpha_pos < bravo_pos && bravo_pos < charlie_pos,
+            "sort: {}",
+            section.body
         );
     }
 }
