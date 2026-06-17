@@ -196,8 +196,19 @@ pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
 pub(crate) fn survey_view_for_map(g: &PriorityGraph, all: bool) -> ActionabilityView {
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+    /// Work-entity kinds — the only entities with dep/seq edges that constitute
+    /// the actionability graph (SL-089 D2). SPEC, REQ, ADR, etc. are governance
+    /// entities and are excluded from the actionability view.
+    const WORK_PREFIXES: &[&str] = &["SL", "ISS", "IMP", "CHR", "RSK", "IDE"];
+
     // 1. Build canonical rows (eligible set + ordering).
-    let rows = survey_for_map(g, all);
+    let rows: Vec<_> = survey_for_map(g, all)
+        .into_iter()
+        .filter(|r| {
+            // Only work entities appear in the actionability graph (SL-089 D2).
+            WORK_PREFIXES.contains(&r.kind.as_str())
+        })
+        .collect();
 
     // 2. EntityKey lookup: canonical ref ↔ key.
     let key_by_id: BTreeMap<String, EntityKey> = rows

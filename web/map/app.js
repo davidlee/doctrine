@@ -74,8 +74,7 @@
         api.fetchActionabilityGraph().then(function(result) { model.setActionabilityView(result); renderView(); }).catch(function(err) { if (graphArea) graphArea.innerHTML = '<p class="error">Failed to load actionability graph: ' + render.escapeHtml(err.message) + '</p>'; });
       } else if (graphArea) {
         var actionabilityNodes = Array.isArray(state.actionabilityView.nodes) ? state.actionabilityView.nodes : [];
-        var hasFocusedWorkEntity = actionabilityNodes.some(function(n) { return n.id === state.focusId; });
-        if (hasFocusedWorkEntity) {
+        if (actionabilityNodes.length > 0) {
           priority.renderGraph({
             container: graphArea,
             layout: priority.layoutGraph(state.actionabilityView),
@@ -95,9 +94,16 @@
             },
             onNodeHoverLeave: function() { state.hoveredId = null; render.hoverPane({ container: render.elements.hoverDetail, node: null }); }
           });
+        } else if (state.focusId) {
+          var focusNode = state.graph.nodes.get(state.focusId);
+          var isWorkKind = focusNode && (focusNode.kindPrefix === 'SL' || focusNode.kindPrefix === 'ISS' || focusNode.kindPrefix === 'IMP' || focusNode.kindPrefix === 'CHR' || focusNode.kindPrefix === 'RSK');
+          if (isWorkKind) {
+            graphArea.innerHTML = '<p class="placeholder">' + render.escapeHtml(state.focusId) + ' is ' + (focusNode.status || 'terminal') + ' — terminal items don\'t appear in the actionability graph.</p>';
+          } else {
+            graphArea.innerHTML = '<p class="placeholder">This entity has no dep/seq edges — switch to a work entity (SL/backlog) or use Semantic view.</p>';
+          }
         } else {
-          var fallbackNode = state.graph.nodes.get(state.focusId);
-          graphArea.innerHTML = '<p class="placeholder">No actionability graph node for ' + render.escapeHtml(state.focusId || '') + (fallbackNode && fallbackNode.title ? ' (' + render.escapeHtml(fallbackNode.title) + ')' : '') + '.</p>';
+          graphArea.innerHTML = '<p class="placeholder">No eligible work items found.</p>';
         }
       }
     } else if (graphArea && (focusChanged || depthChanged || graphMissing || cmFocusChanged || cmCacheChanged)) {
