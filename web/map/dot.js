@@ -7,48 +7,38 @@ dot.dotQuote = function(s) {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
 };
 
-dot.nodeAttrs = function(node, focusId, depth) {
-  var kind = node.kindPrefix;
-  var isFocus = (node.id === focusId);
+dot.NODE_STYLES = {
+  SL:  { fill: '#4A90D9', font: '#ffffff', shape: 'box,rounded' },
+  ADR: { fill: '#7B4FBF', font: '#ffffff', shape: 'box' },
+  POL: { fill: '#7B4FBF', font: '#ffffff', shape: 'box' },
+  STD: { fill: '#9B59B6', font: '#ffffff', shape: 'box' },
+  PRD: { fill: '#E67E22', font: '#222222', shape: 'box,rounded' },
+  SPEC:{ fill: '#E67E22', font: '#222222', shape: 'box,rounded' },
+  REQ: { fill: '#F39C12', font: '#222222', shape: 'box' },
+  ISS: { fill: '#C0392B', font: '#ffffff', shape: 'box' },
+  IMP: { fill: '#C0392B', font: '#ffffff', shape: 'box' },
+  CHR: { fill: '#C0392B', font: '#ffffff', shape: 'box' },
+  RSK: { fill: '#C0392B', font: '#ffffff', shape: 'box' },
+  IDE: { fill: '#27AE60', font: '#222222', shape: 'box' },
+  RV:  { fill: '#1ABC9C', font: '#222222', shape: 'box' },
+  REC: { fill: '#95A5A6', font: '#222222', shape: 'box' },
+  ASM: { fill: '#3498DB', font: '#ffffff', shape: 'box' },
+  DEC: { fill: '#3498DB', font: '#ffffff', shape: 'box' },
+  QUE: { fill: '#8E44AD', font: '#ffffff', shape: 'box' },
+  CON: { fill: '#8E44AD', font: '#ffffff', shape: 'box' },
+  REV: { fill: '#A04000', font: '#ffffff', shape: 'box' },
+  CM:  { fill: '#16A085', font: '#ffffff', shape: 'box' }
+};
+dot.DEFAULT_NODE_STYLE = { fill: '#95A5A6', font: '#222222', shape: 'box' };
 
-  var fill, font, shape;
-
-  // Kind colour → Graphviz fill/font mapping (design §2)
-  switch (kind) {
-    case 'SL':
-      fill = '#4A90D9'; font = '#ffffff'; shape = 'box,rounded'; break;
-    case 'ADR': case 'POL':
-      fill = '#7B4FBF'; font = '#ffffff'; shape = 'box'; break;
-    case 'STD':
-      fill = '#9B59B6'; font = '#ffffff'; shape = 'box'; break;
-    case 'PRD': case 'SPEC':
-      fill = '#E67E22'; font = '#222222'; shape = 'box,rounded'; break;
-    case 'REQ':
-      fill = '#F39C12'; font = '#222222'; shape = 'box'; break;
-    case 'ISS': case 'IMP': case 'CHR': case 'RSK':
-      fill = '#C0392B'; font = '#ffffff'; shape = 'box'; break;
-    case 'IDE':
-      fill = '#27AE60'; font = '#222222'; shape = 'box'; break;
-    case 'RV':
-      fill = '#1ABC9C'; font = '#222222'; shape = 'box'; break;
-    case 'REC':
-      fill = '#95A5A6'; font = '#222222'; shape = 'box'; break;
-    case 'ASM': case 'DEC':
-      fill = '#3498DB'; font = '#ffffff'; shape = 'box'; break;
-    case 'QUE': case 'CON':
-      fill = '#8E44AD'; font = '#ffffff'; shape = 'box'; break;
-    case 'REV':
-      fill = '#A04000'; font = '#ffffff'; shape = 'box'; break;
-    default:
-      fill = '#95A5A6'; font = '#222222'; shape = 'box'; break;
-  }
-
+dot.nodeAttrs = function(node, focusId) {
+  var s = dot.NODE_STYLES[node.kindPrefix] || dot.DEFAULT_NODE_STYLE;
   return {
     label: node.id,
-    fillcolor: fill,
-    fontcolor: font,
-    shape: shape,
-    penwidth: isFocus ? 3.0 : 1.0,
+    fillcolor: s.fill,
+    fontcolor: s.font,
+    shape: s.shape,
+    penwidth: (node.id === focusId) ? 3.0 : 1.0,
     tooltip: node.id + ': ' + node.title + ' \u00b7 ' + (node.kindLabel || node.kindPrefix) + ' \u00b7 ' + node.status
   };
 };
@@ -103,7 +93,7 @@ dot.graphToDot = function(neighbourhood, focusId, depth) {
   sortedIds.forEach(function(id) {
     var node = state.graph.nodes.get(id);
     if (!node) return;
-    var attrs = dot.nodeAttrs(node, focusId, depth);
+    var attrs = dot.nodeAttrs(node, focusId);
     lines.push('  "' + dot.dotQuote(id) + '" [' +
       'label="' + dot.dotQuote(attrs.label) + '", ' +
       'style="filled", ' +
