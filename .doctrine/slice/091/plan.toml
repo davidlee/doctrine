@@ -59,7 +59,7 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "src/router.ts exists with all functions exported and correctly typed." },
   { id = "EX-2", text = "src/router.test.ts exists alongside router.ts (the behaviour contract tests — designed before implementation)." },
-  { id = "EX-3", text = "src/router.ts compiled and typechecks; web/map/router.js retained as test scaffold (not deleted until PHASE-10)." }
+  { id = "EX-3", text = "src/router.ts compiled and typechecks; web/map/router.js retained as test scaffold (not deleted until PHASE-12)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (router.ts has zero errors)." },
@@ -81,7 +81,7 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "src/api.ts exists with ApiError class and all fetch functions exported." },
   { id = "EX-2", text = "All functions have correct Promise<T> return types." },
-  { id = "EX-3", text = "src/api.ts compiled and typechecks; web/map/api.js retained as test scaffold (not deleted until PHASE-10)." }
+  { id = "EX-3", text = "src/api.ts compiled and typechecks; web/map/api.js retained as test scaffold (not deleted until PHASE-12)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (api.ts has zero errors)." },
@@ -105,7 +105,7 @@ exit_criteria = [
   { id = "EX-1", text = "src/dot.ts exists with all exports." },
   { id = "EX-2", text = "NODE_STYLES and EDGE_STYLES typed as Record<string, ...>." },
   { id = "EX-3", text = "src/dot.test.ts exists alongside dot.ts (behaviour contract tests)." },
-  { id = "EX-4", text = "src/dot.ts compiled and typechecks; web/map/dot.js retained as test scaffold (not deleted until PHASE-10)." }
+  { id = "EX-4", text = "src/dot.ts compiled and typechecks; web/map/dot.js retained as test scaffold (not deleted until PHASE-12)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (dot.ts has zero errors)." },
@@ -126,7 +126,7 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "src/svg.ts exists with all exports." },
   { id = "EX-2", text = "SvgHandlerOpts type defined in this module." },
-  { id = "EX-3", text = "src/svg.ts compiled and typechecks; web/map/svg.js retained as test scaffold (not deleted until PHASE-10)." }
+  { id = "EX-3", text = "src/svg.ts compiled and typechecks; web/map/svg.js retained as test scaffold (not deleted until PHASE-12)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (svg.ts has zero errors)." },
@@ -150,7 +150,7 @@ exit_criteria = [
   { id = "EX-1", text = "src/model.ts exists with all exports typed." },
   { id = "EX-2", text = "state singleton initialized with correct default values." },
   { id = "EX-3", text = "src/model.test.ts exists alongside model.ts (behaviour contract tests, designed before implementation)." },
-  { id = "EX-4", text = "src/model.ts compiled and typechecks; web/map/model.js retained as test scaffold (not deleted until PHASE-10)." }
+  { id = "EX-4", text = "src/model.ts compiled and typechecks; web/map/model.js retained as test scaffold (not deleted until PHASE-12)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (model.ts has zero errors)." },
@@ -172,7 +172,7 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "src/render.ts exists with all exports typed." },
   { id = "EX-2", text = "Module-specific option types defined (GraphPaneOpts, RelationshipTableOpts, EdgeDetailOpts, RenderedElements)." },
-  { id = "EX-3", text = "src/render.ts compiled and typechecks; web/map/render.js retained as test scaffold (not deleted until PHASE-10)." }
+  { id = "EX-3", text = "src/render.ts compiled and typechecks; web/map/render.js retained as test scaffold (not deleted until PHASE-12)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (render.ts has zero errors)." },
@@ -191,7 +191,7 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "src/search.ts exists with all exports typed." },
-  { id = "EX-2", text = "src/search.ts compiled and typechecks; web/map/search.js retained as test scaffold (not deleted until PHASE-10)." }
+  { id = "EX-2", text = "src/search.ts compiled and typechecks; web/map/search.js retained as test scaffold (not deleted until PHASE-12)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (search.ts has zero errors)." },
@@ -212,7 +212,7 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "src/concept-map.ts exists with all exports typed." },
   { id = "EX-2", text = "Module-specific option types defined (CmDiagramOpts, CmEdgeTableOpts, CmAddEdgeFormOpts)." },
-  { id = "EX-3", text = "src/concept-map.ts compiled and typechecks; web/map/concept-map.js retained as test scaffold (not deleted until PHASE-10)." }
+  { id = "EX-3", text = "src/concept-map.ts compiled and typechecks; web/map/concept-map.js retained as test scaffold (not deleted until PHASE-12)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (concept-map.ts has zero errors)." },
