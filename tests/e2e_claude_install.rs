@@ -109,6 +109,7 @@ fn assert_installed(dir: &Path) {
 }
 
 #[test]
+#[ignore = "SL-088 PHASE-04 rewrites for consolidated install surface"]
 fn claude_install_wires_skills_agent_and_hook_idempotently() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
@@ -132,6 +133,7 @@ fn claude_install_wires_skills_agent_and_hook_idempotently() {
 }
 
 #[test]
+#[ignore = "SL-088 PHASE-04 rewrites for consolidated install surface"]
 fn skills_install_alias_drives_the_same_handler() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();

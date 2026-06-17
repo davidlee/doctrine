@@ -93,15 +93,29 @@ struct Plan {
 // CLI entry point
 // ---------------------------------------------------------------------------
 
+/// Borrow-holding args struct for the consolidated install surface (SL-088).
+/// Follows the house pattern (`memory::RecordArgs`, `skills::InstallArgs`)
+/// to keep the `run()` fn under clippy's parameter/bool ceilings.
+pub(crate) struct InstallArgs<'a> {
+    #[expect(dead_code, reason = "wired in PHASE-02")]
+    pub(crate) agents: &'a [String],
+    #[expect(dead_code, reason = "wired in PHASE-02")]
+    pub(crate) skills: &'a [String],
+    #[expect(dead_code, reason = "wired in PHASE-02")]
+    pub(crate) domains: &'a [String],
+    #[expect(dead_code, reason = "wired in PHASE-02")]
+    pub(crate) only_memory: bool,
+    #[expect(dead_code, reason = "wired in PHASE-02")]
+    pub(crate) global: bool,
+    pub(crate) dry_run: bool,
+    pub(crate) yes: bool,
+}
+
 /// Run `doctrine install`.
 ///
-/// `project_path` is an explicit project root override; `dry_run_only` prints
-/// and exits; `yes` skips the interactive prompt.
-pub(crate) fn run(
-    project_path: Option<PathBuf>,
-    dry_run_only: bool,
-    yes: bool,
-) -> anyhow::Result<()> {
+/// `project_path` is an explicit project root override; agent/skill/domain
+/// flags are carried in `args` for forward-step dispatch (PHASE-02+).
+pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyhow::Result<()> {
     let manifest = load_manifest()?;
     let project_root =
         detect_project_root(project_path, &manifest).context("Could not find project root")?;
@@ -109,11 +123,11 @@ pub(crate) fn run(
 
     print_plan(&plan)?;
 
-    if dry_run_only {
+    if args.dry_run {
         return Ok(());
     }
 
-    if !yes && !prompt_confirm("\nProceed? [y/N] ")? {
+    if !args.yes && !prompt_confirm("\nProceed? [y/N] ")? {
         stdout_line("Aborted.")?;
         return Ok(());
     }
