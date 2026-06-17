@@ -5,12 +5,12 @@
 //! via `integrity::parse_canonical_ref`, derives entity paths, and builds
 //! structured diagnostics — but reads no files and performs no second disk walk.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::entity;
 use crate::integrity;
-use crate::memory::MemoryCatalogRecord;
+use crate::memory::{self, MEMORY_ITEMS_DIR, MemoryCatalogRecord};
 use crate::relation::RelationLabel;
 
 use super::diagnostic::{CatalogDiagnostic, Severity};
@@ -160,6 +160,7 @@ impl Catalog {
         root: &Path,
         scanned: &[ScannedEntity],
         memory: &[MemoryCatalogRecord],
+        mem_key_map: &BTreeMap<String, String>,
     ) -> Self {
         // Entity key set for O(log n) target resolution lookups.
         let key_set: BTreeSet<CatalogKey> = scanned
@@ -194,7 +195,7 @@ impl Catalog {
             });
 
             for edge in &se.outbound {
-                let target = classify_target(&edge.target, &key_set);
+                let target = classify_target(&edge.target, &key_set, mem_key_map);
                 let origin = EdgeOrigin {
                     file: entity_dir.clone(),
                     field: Some(edge.label.name().to_string()),
@@ -276,7 +277,7 @@ impl Catalog {
                     continue;
                 }
 
-                let target = classify_target(&relation.target, &key_set);
+                let target = classify_target(&relation.target, &key_set, mem_key_map);
 
                 // Generate diagnostics for memory-edge target classification,
                 // mirroring the numbered-entity pattern (RV-051 F-3).
@@ -316,27 +317,46 @@ impl Catalog {
 ///
 /// Uses `integrity::parse_canonical_ref` — the same oracle `link` and
 /// `validate_relations` use. Four outcomes map to three `EdgeTarget` variants:
-/// 1. Parse fails → `UnvalidatedText`
+/// 1. Parse fails → try memory resolution → `UnvalidatedText` if unresolvable
 /// 2. Parse succeeds, entity present in `key_set` → `Resolved(key)`
 /// 3. Parse succeeds, entity absent from `key_set` → `UnresolvedRef`
-fn classify_target(raw: &str, key_set: &BTreeSet<CatalogKey>) -> EdgeTarget {
-    match integrity::parse_canonical_ref(raw) {
-        Ok((kref, id)) => {
-            let key = CatalogKey::Numbered(EntityKey {
-                prefix: kref.kind.prefix,
-                id,
-            });
-            if key_set.contains(&key) {
-                EdgeTarget::Resolved(key)
-            } else {
-                EdgeTarget::UnresolvedRef {
-                    raw: raw.to_string(),
-                }
+///
+/// Memory target resolution (applied when `parse_canonical_ref` fails):
+/// - If `raw` is a memory UID (`mem_<hex>`) → look up `CatalogKey::Memory(raw)` in `key_set`
+/// - If `raw` is a known memory key → resolve to UID via `mem_key_map` → look up in `key_set`
+fn classify_target(
+    raw: &str,
+    key_set: &BTreeSet<CatalogKey>,
+    mem_key_map: &BTreeMap<String, String>,
+) -> EdgeTarget {
+    if let Ok((kref, id)) = integrity::parse_canonical_ref(raw) {
+        let key = CatalogKey::Numbered(EntityKey {
+            prefix: kref.kind.prefix,
+            id,
+        });
+        if key_set.contains(&key) {
+            EdgeTarget::Resolved(key)
+        } else {
+            EdgeTarget::UnresolvedRef {
+                raw: raw.to_string(),
             }
         }
-        Err(_) => EdgeTarget::UnvalidatedText {
+    } else {
+        // Memory target resolution: try UID first, then key→UID lookup.
+        let uid = if memory::is_uid(raw) {
+            Some(raw.to_string())
+        } else {
+            mem_key_map.get(raw).cloned()
+        };
+        if let Some(uid) = uid {
+            let mem_key = CatalogKey::Memory(uid);
+            if key_set.contains(&mem_key) {
+                return EdgeTarget::Resolved(mem_key);
+            }
+        }
+        EdgeTarget::UnvalidatedText {
             raw: raw.to_string(),
-        },
+        }
     }
 }
 
@@ -347,14 +367,52 @@ fn classify_target(raw: &str, key_set: &BTreeSet<CatalogKey>) -> EdgeTarget {
 /// Scan the full entity corpus, hydrate into a `Catalog`.
 ///
 /// Calls `scan_entities` (the fail-fast KINDS walk) and `scan_memory_entities`
-/// (the memory walk), then `Catalog::from_scanned` (pure projection).
+/// (the memory walk), then `Catalog::from_scanned` (pure projection). Also builds
+/// a memory key→UID map from items/ symlinks so that memory→memory edge targets
+/// resolve to their canonical UID nodes.
 pub(crate) fn scan_catalog(root: &Path) -> anyhow::Result<Catalog> {
     let scanned = super::scan::scan_entities(root)?;
     let mut diagnostics = Vec::new();
     let memory = super::scan::scan_memory_entities(root, &mut diagnostics)?;
-    let mut catalog = Catalog::from_scanned(root, &scanned, &memory);
+    let mem_key_map = build_memory_key_map(root);
+    let mut catalog = Catalog::from_scanned(root, &scanned, &memory, &mem_key_map);
     catalog.diagnostics.extend(diagnostics);
     Ok(catalog)
+}
+
+/// Build a map of memory keys → UIDs by reading symlinks from `items/`.
+/// Key symlinks are `mem.<type>.<domain>.<subject> -> mem_<uid>`.
+fn build_memory_key_map(root: &Path) -> BTreeMap<String, String> {
+    let items = root.join(MEMORY_ITEMS_DIR);
+    let mut map = BTreeMap::new();
+    let Ok(entries) = std::fs::read_dir(&items) else {
+        return map;
+    };
+    for entry in entries.flatten() {
+        let Ok(ft) = entry.file_type() else {
+            continue;
+        };
+        if !ft.is_symlink() {
+            continue;
+        }
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if !name_str.starts_with("mem.") {
+            continue;
+        }
+        // Read the symlink target — it's the UID directory name.
+        let Ok(target) = std::fs::read_link(entry.path()) else {
+            continue;
+        };
+        let Some(uid_os) = target.file_name() else {
+            continue;
+        };
+        let uid = uid_os.to_string_lossy().to_string();
+        if memory::is_uid(&uid) {
+            map.insert(name_str.to_string(), uid);
+        }
+    }
+    map
 }
 
 // ---------------------------------------------------------------------------
@@ -606,7 +664,8 @@ mod tests {
     fn classify_target_unknown_kind_prefix_is_unvalidated() {
         // ZZ-001 parses as a ref pattern but ZZ is not a known KINDS prefix.
         let empty_set: BTreeSet<CatalogKey> = BTreeSet::new();
-        let result = classify_target("ZZ-001", &empty_set);
+        let empty_map: BTreeMap<String, String> = BTreeMap::new();
+        let result = classify_target("ZZ-001", &empty_set, &empty_map);
         assert_eq!(
             result,
             EdgeTarget::UnvalidatedText {
@@ -618,7 +677,8 @@ mod tests {
     #[test]
     fn classify_target_no_dash_is_unvalidated() {
         let empty_set: BTreeSet<CatalogKey> = BTreeSet::new();
-        let result = classify_target("just_text", &empty_set);
+        let empty_map: BTreeMap<String, String> = BTreeMap::new();
+        let result = classify_target("just_text", &empty_set, &empty_map);
         assert_eq!(
             result,
             EdgeTarget::UnvalidatedText {
@@ -630,7 +690,8 @@ mod tests {
     #[test]
     fn classify_target_parses_but_absent_is_unresolved() {
         let empty_set: BTreeSet<CatalogKey> = BTreeSet::new();
-        let result = classify_target("SL-999", &empty_set);
+        let empty_map: BTreeMap<String, String> = BTreeMap::new();
+        let result = classify_target("SL-999", &empty_set, &empty_map);
         assert_eq!(
             result,
             EdgeTarget::UnresolvedRef {
@@ -647,7 +708,8 @@ mod tests {
         };
         let mut set = BTreeSet::new();
         set.insert(CatalogKey::Numbered(key));
-        let result = classify_target("SL-001", &set);
+        let empty_map: BTreeMap<String, String> = BTreeMap::new();
+        let result = classify_target("SL-001", &set, &empty_map);
         assert_eq!(result, EdgeTarget::Resolved(CatalogKey::Numbered(key)));
     }
 
