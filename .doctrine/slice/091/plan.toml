@@ -269,10 +269,10 @@ requirements = []
 [[phase]]
 id        = "PHASE-11"
 name      = "Convert test.html to ES modules + baseline verification"
-objective = "Convert test.html from bare-global <script> tags to <script type=\"module\"> with explicit import statements. Preserve test logic unchanged. Before conversion, mechanically record baseline: save assertion labels, count, and pass/fail output to /tmp/sl-091-test-baseline.txt. After conversion, verify assertions match baseline exactly. No .js files deleted yet."
+objective = "Convert test.html from bare-global <script> tags to <script type=\"module\"> with explicit import statements. Preserve test logic unchanged. Before conversion, mechanically record baseline: save assertion labels, count, and pass/fail output to web/map/test-baseline.txt. After conversion, verify assertions match baseline exactly. No .js files deleted yet."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-10 exits green: app.ts compiled, Vite app loads." },
-  { id = "EN-2", text = "Baseline prepared: before editing test.html, save current assertion labels (one per line), total assertion count, and pass/fail output from the <pre> element to /tmp/sl-091-test-baseline.txt. Commit this file." }
+  { id = "EN-2", text = "Baseline prepared: before editing test.html, save current assertion labels (one per line), total assertion count, and pass/fail output from the <pre> element to web/map/test-baseline.txt. Commit this file." }
 ]
 exit_criteria = [
   { id = "EX-1", text = "test.html converted to <script type=\"module\"> with explicit import statements for all exported modules (router, api, dot, svg, model, render, search, concept-map, priority). Test logic unchanged — only imports replace bare-global references." },
@@ -282,7 +282,7 @@ exit_criteria = [
   { id = "EX-5", text = "test.html served via Vite at /test.html. Not embedded in production — dev/test artifact only." }
 ]
 verification = [
-  { id = "VT-1", expects = "Mechanical baseline check: assertion labels in converted test.html match /tmp/sl-091-test-baseline.txt line-for-line. Assertion count identical." },
+  { id = "VT-1", expects = "Mechanical baseline check: assertion labels in converted test.html match web/map/test-baseline.txt line-for-line. Assertion count identical." },
   { id = "VT-2", expects = "bun run dev starts Vite, /test.html loads, all tests pass (PASS output)." },
   { id = "VT-3", expects = "tsc --noEmit passes." },
   { id = "VT-4", expects = "eslint --max-warnings=0 passes." }
@@ -341,12 +341,12 @@ requirements = []
 [[phase]]
 id        = "PHASE-14"
 name      = "Final cleanup and record memory"
-objective = "Remove any remaining stale files. Record durable memory for the new dev workflow. Acknowledge deferred test infrastructure (IMP-088). Commit final state."
+objective = "Remove any remaining stale files including web/map/test-baseline.txt (unless the team elects to keep it). Record durable memory for the new dev workflow. Acknowledge deferred test infrastructure (IMP-088). Commit final state."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-13 exits green: Rust integration verified, all tests pass." }
 ]
 exit_criteria = [
-  { id = "EX-1", text = "No residual stale files reappeared; web/map/ contains only src/*.ts, public/, index.html, test.html, package.json, tsconfig.json, vite.config.ts, eslint.config.js, dist/ (gitignored), node_modules/ (gitignored)." },
+  { id = "EX-1", text = "No residual stale files reappeared; web/map/ contains only src/*.ts, public/, index.html, test.html, package.json, tsconfig.json, vite.config.ts, eslint.config.js, dist/ (gitignored), node_modules/ (gitignored). web/map/test-baseline.txt removed unless explicitly kept." },
   { id = "EX-2", text = "Memory recorded: web frontend dev workflow (bun run dev, bun run build, Vite proxy)." },
   { id = "EX-3", text = "Slice scope updated if any deviations occurred." },
   { id = "EX-4", text = "Acknowledged: test.html has no structured runner, no CI exit code, no automation. Agent must manually read <pre> element. IMP-088 (test framework) is deferred — this is a known, honest gap." }

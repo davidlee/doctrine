@@ -7,6 +7,18 @@ module by module, leaf to root. Each phase is a single-file conversion with
 a `tsc --noEmit` AND `eslint --max-warnings=0` gate — type safety plus
 architectural conformance. No multi-module debugging.
 
+## Plan-level constraints
+
+**No broad rewrites.** Within each phase, preserve function names, behaviour,
+and DOM structure unless the phase explicitly authorises a change. Do not
+redesign UI, routing, API shapes, or state ownership during TS conversion.
+
+**Type escape budget.** Any use of `unknown`, type assertion (`as`),
+`eslint-disable`, or non-null assertion (`!`) must be locally justified in a
+comment. `any` is forbidden — the eslint config enforces `no-explicit-any`
+at error level. A phase cannot close with unused `eslint-disable` directives
+(`reportUnusedDisableDirectives: error`).
+
 ## Test discipline
 
 Three pure-function modules (router, dot, model) use a **test-designer /
@@ -36,13 +48,14 @@ project configs (`package.json`, `tsconfig.json`, `vite.config.ts`,
 `vitest.config.ts`, `eslint.config.js`) are created: tsconfig hardened
 beyond `strict` (noUncheckedIndexedAccess, verbatimModuleSyntax, etc.),
 eslint flat config with typescript-eslint strictTypeChecked +
-stylisticTypeChecked plus LLM-damage-containment rules and
-restricted-syntax bans, vitest extending vite config for node environment.
-`types.ts` defines shared interfaces, and `index.html` is updated to load
-a single module script. `bun install` fetches dependencies including eslint
-and vitest packages. At the end of this phase, `tsc --noEmit` AND
-`eslint --max-warnings=0` pass on an empty app.ts stub, and `bun run dev`
-starts Vite.
+stylisticTypeChecked plus LLM-damage-containment rules and restricted-
+syntax bans, vitest extending vite config for node environment. `types.ts`
+defines shared interfaces, and `index.html` is updated to load a single
+module script. `bun install` fetches dependencies including eslint and
+vitest packages. **PHASE-00 success does not require functional graph
+rendering.** It only proves the toolchain, empty module entry, config, and
+dev server. `tsc --noEmit`, `eslint --max-warnings=0`, and `bun run dev`
+all pass on an empty `app.ts` stub.
 
 **PHASE-01 through PHASE-04 (Pure leaf modules)** convert modules with no
 DOM or state dependencies. **PHASE-01 (router.ts)** and **PHASE-03
@@ -51,7 +64,7 @@ Vitest behaviour-contract tests first (RED), then the satisfier makes them
 green. **PHASE-02 (api.ts)** and **PHASE-04 (svg.ts)** are straightforward
 conversions — api.ts verified by VA items, svg.ts DOM-only. **Old .js files
 are retained** as test scaffold throughout — no .js file is deleted until
-PHASE-10, so `test.html` (which references them as bare globals) remains
+PHASE-12, so `test.html` (which references them as bare globals) remains
 runnable at every intermediate phase.
 
 **PHASE-05 (model.ts)** is the critical inflection point and uses the
@@ -61,45 +74,61 @@ contract tests target the nontrivial algorithms: BFS neighbourhood,
 normalization, focus resolution, cmNeighbourhood, comparators. Every other
 module depends on model.ts; these tests are the migration's strongest
 correctness backstop. Old `model.js` is retained for test.html until
-PHASE-10.
+PHASE-12.
 
 **PHASE-06 through PHASE-09 (DOM-heavy modules)** depend on model, dot, api,
 and svg being converted already. `render.ts` builds DOM, `search.ts` wires
 events, `concept-map.ts` renders/edits CMs, `priority.ts` runs D3 layouts.
-Each phase adds one module and verifies `tsc --noEmit` + `eslint`. Old .js
+Each phase adds one module and verifies `tsc --noEmit` + `eslint`.
+**PHASE-09** includes a d3-dag version checkpoint: compare vendored
+`d3-dag.min.js` against the npm package version, pin to closest compatible
+if version can't be determined, and document any API adaptations. Old .js
 files retained throughout.
 
-**PHASE-10 (app.ts + test.html + .js deletion + vendor cleanup)** is the big
-integration phase — the only phase that deletes anything. Before any
-deletion, test.html assertion pass/fail is recorded as a baseline at the end
-of PHASE-09. `app.ts` is converted as the entry point. `test.html` is
-converted from bare-global `<script>` tags to `<script type="module">` with
-explicit import statements for all converted modules — test logic is
-preserved unchanged, only imports replace bare-global references like
-`model.xxx()`. Then ALL old .js source files (router.js, api.js, dot.js,
-svg.js, model.js, render.js, search.js, concept-map.js, priority.js,
-app.js) are deleted in one atomic wave. Old vendor bundles and root
-style.css are removed — npm packages replace vendored libraries.
-`test.html` is served via Vite at `/test.html` (not embedded in production —
-dev artifact only). After conversion, the VT-5 baseline comparison confirms
-no test assertions were semantically altered by the migration.
+**PHASE-10 (app.ts — no deletions)** converts `app.js` to `src/app.ts` as
+the TypeScript entry point. `bootstrap()` and `renderView()` are typed.
+Vite loads the app at `/`. No files are deleted — all old .js files
+remain alongside new .ts files. This is the first phase with a functioning
+Vite app (previous phases compile but don't yet run the full SPA).
 
-**PHASE-11 (Rust integration)** changes the rust-embed folder to use
-`cfg_attr`: debug embeds `web/map/` (always present), release embeds
-`web/map/dist/` (requires `bun run build` first). `.gitignore` adds
-`dist/` and `node_modules/`. `just gate` must include `cd web/map && bun
-run lint` alongside `cargo clippy`. All existing map server tests must pass.
+**PHASE-11 (test.html — ES modules + mechanical baseline)** is the test
+migration phase. Before any edit, the current test.html output is
+mechanically recorded to `web/map/test-baseline.txt`: assertion labels
+(one per line), assertion count, and pass/fail output from the `<pre>`
+element. This file is committed. Then test.html is converted from
+bare-global `<script>` tags to `<script type="module">` with explicit
+import statements. Test logic is preserved unchanged — only imports
+replace bare-global references. After conversion, assertion labels must
+match the baseline line-for-line, assertion count must match exactly, and
+output must pass. Only import mechanics may differ. No .js files deleted
+yet.
 
-**PHASE-12 (Cleanup)** removes any remaining stale files, records durable
-memory for the new workflow, and reconciles the slice scope. **Acknowledges
-F-13**: `test.html` has no structured test runner, no CI exit code, no
-automation. The agent must manually read a `<pre>` element. IMP-088 (test
-framework adoption) is deferred — this is a known, honest gap.
+**PHASE-12 (Delete old .js + vendor cleanup)** is the only destructive
+phase. All old .js source files (router.js, api.js, dot.js, svg.js,
+model.js, render.js, search.js, concept-map.js, priority.js, app.js) are
+deleted in one atomic wave. Old vendor bundles and root style.css are
+removed. Vite dev and build are verified — the app and test.html must
+work identically. Final manual smoke confirms behavioural parity.
+
+**PHASE-13 (Rust integration)** changes the rust-embed folder to be
+build-profile-dependent: debug embeds `web/map/`, release embeds
+`web/map/dist/`. No Rust dev server mode, proxy, or route changes — only
+the embed path becomes conditional. `.gitignore` adds `dist/` and
+`node_modules/`. `just gate` includes `cd web/map && bun run lint`
+alongside `cargo clippy`. All existing map server tests must pass.
+
+**PHASE-14 (Cleanup)** removes any remaining stale files (including
+`web/map/test-baseline.txt` unless the team keeps it), records durable
+memory for the new dev workflow, and reconciles the slice scope.
+**Acknowledges F-13**: `test.html` has no structured test runner, no CI
+exit code, no automation. The agent must manually read a `<pre>` element.
+IMP-088 (test framework adoption) is deferred — this is a known, honest gap.
 
 ## Parallelization potential
 
 PHASE-01 through PHASE-04 are file-disjoint and could run in parallel
-(router.ts, api.ts, dot.ts, svg.ts share no runtime imports). PHASE-05 is a
-hard sequential gate (all later phases import from model). PHASE-06 through
-PHASE-09 are also file-disjoint after model is done. PHASE-10 depends on all
-prior conversions. PHASE-11 and PHASE-12 are sequential finalization.
+(router.ts, api.ts, dot.ts, svg.ts share no runtime imports). PHASE-05 is
+a hard sequential gate (all later phases import from model). PHASE-06
+through PHASE-09 are also file-disjoint after model is done. PHASE-10
+through PHASE-14 are sequential: app.ts → test.html conversion →
+deletion → Rust integration → final cleanup.
