@@ -3,11 +3,13 @@
     clippy::same_name_method,
     reason = "rust-embed derive generates conflicting method names"
 )]
-// PHASE-01 temporary: run_install and its call chain are dead because
-// Command::Claude was removed. PHASE-02 re-wires via install::run().
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "PHASE-02 re-wires run_install call chain")
+// run_install() and its call chain are pub(crate) but not currently called
+// from main.rs (PHASE-01 consolidated the CLI surface). They are preserved
+// for the standalone skills install path and are reachable via the extracted
+// install_for_claude/install_for_other functions (SL-088 PHASE-02).
+#![expect(
+    dead_code,
+    reason = "run_install call chain — preserved for standalone and ref paths"
 )]
 
 //! `doctrine skills` — list and install agent skills.
@@ -128,7 +130,7 @@ fn parse_meta(md: &str) -> anyhow::Result<Meta> {
 // ---------------------------------------------------------------------------
 
 /// Discover all embedded skills, grouped by `<domain>/skills/<skill>/`.
-fn discover() -> anyhow::Result<Vec<Entry>> {
+pub(crate) fn discover() -> anyhow::Result<Vec<Entry>> {
     use std::collections::BTreeMap;
 
     let mut grouped: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
@@ -179,7 +181,7 @@ fn discover() -> anyhow::Result<Vec<Entry>> {
 // ---------------------------------------------------------------------------
 
 /// Filter `all` by skill ids and/or domains. Empty filters match everything.
-fn select<'a>(all: &'a [Entry], ids: &[String], domains: &[String]) -> Vec<&'a Entry> {
+pub(crate) fn select<'a>(all: &'a [Entry], ids: &[String], domains: &[String]) -> Vec<&'a Entry> {
     all.iter()
         .filter(|e| {
             let id_ok = ids.is_empty() || ids.iter().any(|i| i == &e.id);
@@ -190,7 +192,11 @@ fn select<'a>(all: &'a [Entry], ids: &[String], domains: &[String]) -> Vec<&'a E
 }
 
 /// Validate that every requested id/domain matches at least one skill.
-fn validate_filters(all: &[Entry], ids: &[String], domains: &[String]) -> anyhow::Result<()> {
+pub(crate) fn validate_filters(
+    all: &[Entry],
+    ids: &[String],
+    domains: &[String],
+) -> anyhow::Result<()> {
     for id in ids {
         if !all.iter().any(|e| &e.id == id) {
             bail!("Unknown skill '{id}'");
@@ -676,6 +682,114 @@ fn execute(
         bail!("npx skills failed for agent(s): {}", failed.join(", "));
     }
     Ok(())
+}
+
+/// Install skills for Claude: refresh canonical tree + reconcile agent symlinks.
+/// Extracted from `execute()` for reuse from the consolidated `install::run()`
+/// forward-step dispatch (SL-088 PHASE-02).
+pub(crate) fn install_for_claude(
+    root: &Path,
+    catalog: &[Entry],
+    selected: &[&Entry],
+    global: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let agent_dir = claude_dir(root, global)?;
+    let canon_dir = canonical_dir(root, global)?;
+    let canonical: Vec<Canonical> = selected
+        .iter()
+        .map(|e| Canonical {
+            id: e.id.clone(),
+            dest: canon_dir.join(&e.id),
+        })
+        .collect();
+    let links = claude_links(selected, &agent_dir, &canon_dir);
+
+    writeln!(out, "agent claude (direct):")?;
+    // 1. Refresh the canonical tree (always overwrite — derived).
+    for c in &canonical {
+        let entry = catalog
+            .iter()
+            .find(|e| e.id == c.id)
+            .with_context(|| format!("Skill '{}' vanished from catalog", c.id))?;
+        materialise_canonical(entry, &c.dest)?;
+        writeln!(out, "  refreshed {}", c.id)?;
+    }
+    // 2. Reconcile the agent links by proven ownership.
+    for link in &links {
+        let (id, dest, target) = match link {
+            Link::Create { id, dest, target } | Link::Relink { id, dest, target } => {
+                (id, dest, target)
+            }
+            Link::KeepForeign { id, dest, reason } => {
+                let _ = dest;
+                writeln!(out, "  kept      {id} ({})", foreign_reason(reason))?;
+                continue;
+            }
+        };
+        match classify_link(id, dest, target) {
+            Link::Create { .. } => {
+                write_link(dest, target)?;
+                writeln!(out, "  linked    {id}")?;
+            }
+            Link::Relink { .. } => {
+                write_link(dest, target)?;
+                writeln!(out, "  relinked  {id}")?;
+            }
+            Link::KeepForeign { reason, .. } => {
+                writeln!(out, "  kept      {id} ({})", foreign_reason(&reason))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Install skills for a non-Claude agent: delegate to `npx skills`.
+/// Extracted from `execute()` for reuse from the consolidated `install::run()`
+/// forward-step dispatch (SL-088 PHASE-02).
+pub(crate) fn install_for_other(
+    agent_name: &str,
+    _catalog: &[Entry],
+    selected: &[&Entry],
+    global: bool,
+    runner: &dyn Runner,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let subset = !selected.is_empty();
+    let argv = delegate_argv(agent_name, selected, global, subset);
+    writeln!(out, "agent {agent_name} (delegate): npx {}", argv.join(" "))?;
+    if !runner.run("npx", &argv)? {
+        bail!("npx skills failed for agent: {agent_name}");
+    }
+    Ok(())
+}
+
+/// Select and validate skills for the consolidated install path.
+/// Thin wrapper over `validate_filters` + `select` so `install.rs` doesn't
+/// reach into the private filter logic.
+pub(crate) fn select_for_install<'a>(
+    catalog: &'a [Entry],
+    skills: &[String],
+    domains: &[String],
+) -> anyhow::Result<Vec<&'a Entry>> {
+    validate_filters(catalog, skills, domains)?;
+    Ok(select(catalog, skills, domains))
+}
+
+/// Real runner for the forwarding install path.
+pub(crate) fn real_runner() -> Box<dyn Runner> {
+    Box::new(Npx)
+}
+
+/// Public wrapper for `install_agents`: install the Claude dispatch-worker
+/// agent def (canonical copy + symlink).
+pub(crate) fn install_agents_for(
+    root: &Path,
+    global: bool,
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    install_agents(root, global, dry_run, out)
 }
 
 // ---------------------------------------------------------------------------
