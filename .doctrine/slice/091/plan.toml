@@ -21,25 +21,28 @@ dependencies = []
 [[phase]]
 id        = "PHASE-00"
 name      = "Scaffold project config and type definitions"
-objective = "Create package.json, tsconfig.json, vite.config.ts, src/types.ts, move style.css to src/, update index.html to load a single module script. No TS files compile yet — just the skeleton."
+objective = "Create package.json, tsconfig.json, vite.config.ts, vitest.config.ts, eslint.config.js, src/types.ts, move style.css to src/, update index.html to load a single module script. No TS files compile yet — just the skeleton."
 entrance_criteria = [
   { id = "EN-1", text = "Design locked and committed; no unresolved design questions." },
   { id = "EN-2", text = "Existing web/map/ JS source files are committed and unchanged." }
 ]
 exit_criteria = [
-  { id = "EX-1", text = "package.json exists with correct dependencies and scripts." },
-  { id = "EX-2", text = "tsconfig.json exists (strict, moduleResolution bundler, target es2020)." },
+  { id = "EX-1", text = "package.json exists with dependencies (typescript, vite, eslint, typescript-eslint, @eslint/js, globals, vitest) and scripts (dev: vite, typecheck: tsc --noEmit, lint: eslint --max-warnings=0, test: vitest run, build: bun run typecheck && bun run lint && bun run test && vite build)." },
+  { id = "EX-2", text = "tsconfig.json exists with compilerOptions: strict, moduleResolution bundler, target es2020, noUncheckedIndexedAccess, verbatimModuleSyntax, exactOptionalPropertyTypes, noImplicitOverride, noImplicitReturns, useUnknownInCatchVariables, skipLibCheck: false, noUnusedLocals, noUnusedParameters, isolatedModules, allowJs: false, checkJs: false." },
   { id = "EX-3", text = "vite.config.ts exists with proxy /api → localhost:8080 and publicDir: public." },
-  { id = "EX-4", text = "src/types.ts exists with all interfaces from the design." },
-  { id = "EX-5", text = "src/style.css exists (moved from web/map/style.css)." },
-  { id = "EX-6", text = "web/map/public/vendor/github-markdown.css exists (moved from web/map/vendor/)." },
-  { id = "EX-7", text = "index.html updated: single <script type=\"module\" src=\"/src/app.ts\">, old <script> tags removed. CSS link stays." },
-  { id = "EX-8", text = "bun install succeeds." }
+  { id = "EX-4", text = "vitest.config.ts exists (extends vite.config.ts, environment: node)." },
+  { id = "EX-5", text = "src/types.ts exists with all shared interfaces from the design." },
+  { id = "EX-6", text = "src/style.css exists (moved from web/map/style.css)." },
+  { id = "EX-7", text = "web/map/public/vendor/github-markdown.css exists (moved from web/map/vendor/)." },
+  { id = "EX-8", text = "index.html updated: single <script type=\"module\" src=\"/src/app.ts\">, old <script> tags removed. CSS link stays." },
+  { id = "EX-9", text = "bun install succeeds." },
+  { id = "EX-10", text = "eslint.config.js exists (flat config, ESLint v9+): js.configs.recommended + tseslint.configs.strictTypeChecked + tseslint.configs.stylisticTypeChecked, plus LLM-damage-containment rules (no-explicit-any, no-unsafe-*, no-floating-promises, no-misused-promises, switch-exhaustiveness-check, strict-boolean-expressions, consistent-type-imports, await-thenable, require-await, return-await), plus restricted-syntax bans (JSXElement, innerHTML/outerHTML assignment, insertAdjacentHTML, eval, new Function, window.* assignment, no-restricted-globals for bare event). Per-file overrides for render.ts/concept-map.ts innerHTML sites (eslint-disable-next-line, not blanket weakening). reportUnusedDisableDirectives: error." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (with empty src/app.ts stub that imports nothing)." },
   { id = "VT-2", expects = "bun run dev starts Vite without errors (app.ts just renders placeholder)." },
-  { id = "VT-3", expects = "existing map server integration tests pass (no Rust changes yet)." }
+  { id = "VT-3", expects = "existing map server integration tests pass (no Rust changes yet)." },
+  { id = "VT-4", expects = "eslint --max-warnings=0 passes." }
 ]
 specs        = []
 requirements = []
@@ -47,21 +50,22 @@ requirements = []
 # Phase 01: router.ts — pure string parsing, no DOM, no deps beyond types.ts.
 [[phase]]
 id        = "PHASE-01"
-name      = "Convert router.js → src/router.ts"
-objective = "Convert router.js to TypeScript with exact parity. Pure function module — no DOM, no state dependency. Export parseHash, buildHash, setFocus, setEdge."
+name      = "Test-design → implement router.ts per behaviour contract"
+objective = "Convert router.js to TypeScript with exact parity. Test-first: a separate agent designs Vitest behaviour-contract tests against router.js's actual outputs (RED), then the satisfier implements router.ts until all tests pass (GREEN) and tsc/eslint are clean. Export parseHash, buildHash, setFocus, setEdge."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-00 exits green: scaffold exists, tsc passes on empty app.ts, Vite starts." }
+  { id = "EN-1", text = "PHASE-00 exits green: scaffold exists, tsc passes on empty app.ts, Vite starts." },
+  { id = "EN-2", text = "Router behaviour-contract tests designed and committed by a separate agent (test designer ≠ satisfier). Tests run via Vitest (bun run test). Tests encode the contract: parseHash edge cases (empty hash, malformed, depth, edge view), buildHash round-trips (focus and edge views with/without depth). Tests fail against empty src/router.test.ts stub (RED)." }
 ]
 exit_criteria = [
-  { id = "EX-1", text = "src/router.ts exists with all functions exported." },
-  { id = "EX-2", text = "Functions have correct TypeScript signatures matching the design." },
-  { id = "EX-3", text = "web/map/router.js deleted." }
+  { id = "EX-1", text = "src/router.ts exists with all functions exported and correctly typed." },
+  { id = "EX-2", text = "src/router.test.ts exists alongside router.ts (the behaviour contract tests — designed before implementation)." },
+  { id = "EX-3", text = "src/router.ts compiled and typechecks; web/map/router.js retained as test scaffold (not deleted until PHASE-10)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (router.ts has zero errors)." },
   { id = "VT-2", expects = "Existing router.js tests in test.html still pass (old .js file loaded)." },
-  { id = "VA-1", expects = "Agent verifies parseHash returns correct Route for #/focus/SL-001, #/focus/SL-001?depth=2, #/edge/e_abc, empty hash." },
-  { id = "VA-2", expects = "Agent verifies buildHash produces correct hash strings for focus and edge views with depth." }
+  { id = "VT-3", expects = "eslint --max-warnings=0 passes." },
+  { id = "VT-4", expects = "All router behaviour-contract tests pass via Vitest (bun run test) — GREEN." }
 ]
 specs        = []
 requirements = []
@@ -77,12 +81,13 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "src/api.ts exists with ApiError class and all fetch functions exported." },
   { id = "EX-2", text = "All functions have correct Promise<T> return types." },
-  { id = "EX-3", text = "web/map/api.js deleted." }
+  { id = "EX-3", text = "src/api.ts compiled and typechecks; web/map/api.js retained as test scaffold (not deleted until PHASE-10)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (api.ts has zero errors)." },
   { id = "VA-1", expects = "Agent verifies ApiError constructor and prototype chain correct." },
-  { id = "VA-2", expects = "Agent verifies fetchGraph returns Promise<RawGraph> shape matches types.ts." }
+  { id = "VA-2", expects = "Agent verifies fetchGraph returns Promise<RawGraph> shape matches types.ts." },
+  { id = "VT-3", expects = "eslint --max-warnings=0 passes." }
 ]
 specs        = []
 requirements = []
@@ -90,20 +95,22 @@ requirements = []
 # Phase 03: dot.ts — pure text generation, DOT helpers + style constants.
 [[phase]]
 id        = "PHASE-03"
-name      = "Convert dot.js → src/dot.ts"
-objective = "Convert dot.js to TypeScript. Exports dotQuote, graphToDot, cmGraphToDot, NODE_STYLES, EDGE_STYLES. Pure text generation — no DOM."
+name      = "Test-design → implement dot.ts per behaviour contract"
+objective = "Convert dot.js to TypeScript. Test-first: separate agent designs Vitest tests capturing dot.js outputs for known inputs (RED), then satisfier implements dot.ts until GREEN. Exports dotQuote, graphToDot, cmGraphToDot, NODE_STYLES, EDGE_STYLES. Pure text generation — no DOM."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-02 exits green: api.ts compiled and verified." }
+  { id = "EN-1", text = "PHASE-02 exits green: api.ts compiled and verified." },
+  { id = "EN-2", text = "Dot behaviour-contract tests designed and committed by a separate agent. Tests encode the contract: dotQuote escapes special characters, graphToDot produces valid DOT for a 2-node neighbourhood, cmGraphToDot produces valid DOT for a 2-node CM, NODE_STYLES/EDGE_STYLES have expected shape. Tests fail against empty stub (RED)." }
 ]
 exit_criteria = [
   { id = "EX-1", text = "src/dot.ts exists with all exports." },
   { id = "EX-2", text = "NODE_STYLES and EDGE_STYLES typed as Record<string, ...>." },
-  { id = "EX-3", text = "web/map/dot.js deleted." }
+  { id = "EX-3", text = "src/dot.test.ts exists alongside dot.ts (behaviour contract tests)." },
+  { id = "EX-4", text = "src/dot.ts compiled and typechecks; web/map/dot.js retained as test scaffold (not deleted until PHASE-10)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (dot.ts has zero errors)." },
-  { id = "VA-1", expects = "Agent verifies graphToDot output for a simple 2-node neighbourhood matches expected DOT string (node attributes, edge, rankdir)." },
-  { id = "VA-2", expects = "Agent verifies cmGraphToDot output for a simple 2-node CM matches expected DOT string." }
+  { id = "VT-2", expects = "eslint --max-warnings=0 passes." },
+  { id = "VT-3", expects = "All dot behaviour-contract tests pass via Vitest (bun run test) — GREEN." }
 ]
 specs        = []
 requirements = []
@@ -119,12 +126,13 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "src/svg.ts exists with all exports." },
   { id = "EX-2", text = "SvgHandlerOpts type defined in this module." },
-  { id = "EX-3", text = "web/map/svg.js deleted." }
+  { id = "EX-3", text = "src/svg.ts compiled and typechecks; web/map/svg.js retained as test scaffold (not deleted until PHASE-10)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (svg.ts has zero errors)." },
   { id = "VA-1", expects = "Agent verifies injectHitRects adds hit-rect elements to node groups in a sample SVG document." },
-  { id = "VA-2", expects = "Agent verifies wireHandlers attaches click/hover listeners to node groups." }
+  { id = "VA-2", expects = "Agent verifies wireHandlers attaches click/hover listeners to node groups." },
+  { id = "VT-2", expects = "eslint --max-warnings=0 passes." }
 ]
 specs        = []
 requirements = []
@@ -132,23 +140,23 @@ requirements = []
 # Phase 05: model.ts — state singleton + pure functions for graph normalization.
 [[phase]]
 id        = "PHASE-05"
-name      = "Convert model.js → src/model.ts"
-objective = "Convert model.js to TypeScript. Export the state singleton and all pure functions: normalizeGraph, normalizeConceptMap, findFocus, resolveFocus, neighbourhood, cmNeighbourhood, searchFilter, kindOrder, compareNodes, compareEdgesBySource, encodePart, pascalToSnake, buildNodeLabelList, buildRelLabelList, setActionabilityView."
+name      = "Test-design → implement model.ts per behaviour contract"
+objective = "Convert model.js to TypeScript. Test-first: separate agent designs Vitest tests against model.js's actual outputs — targeting the nontrivial pure logic (BFS neighbourhood, normalization, findFocus resolution, cmNeighbourhood, comparators). RED on empty stub; satisfier implements model.ts until GREEN. Export state singleton, normalizeGraph, normalizeConceptMap, findFocus, resolveFocus, neighbourhood, cmNeighbourhood, searchFilter, kindOrder, compareNodes, compareEdgesBySource, encodePart, pascalToSnake, buildNodeLabelList, buildRelLabelList, setActionabilityView."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-04 exits green: svg.ts compiled and verified." }
+  { id = "EN-1", text = "PHASE-04 exits green: svg.ts compiled and verified." },
+  { id = "EN-2", text = "Model behaviour-contract tests designed and committed by a separate agent. Tests encode the contract: normalizeGraph maps RawGraph JSON to nodes/edges state shape, neighbourhood BFS returns correct boundary at depths 0/1/2, findFocus resolves by exact match → loose canonical → title → substring, cmNeighbourhood with/without focusKey, compareNodes uses kindOrder, encodePart round-trips canonical ids, splitPrefix/looseCanonical edge cases. Tests fail against empty stub (RED)." }
 ]
 exit_criteria = [
   { id = "EX-1", text = "src/model.ts exists with all exports typed." },
   { id = "EX-2", text = "state singleton initialized with correct default values." },
-  { id = "EX-3", text = "web/map/model.js deleted." }
+  { id = "EX-3", text = "src/model.test.ts exists alongside model.ts (behaviour contract tests, designed before implementation)." },
+  { id = "EX-4", text = "src/model.ts compiled and typechecks; web/map/model.js retained as test scaffold (not deleted until PHASE-10)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (model.ts has zero errors)." },
-  { id = "VA-1", expects = "Agent verifies normalizeGraph produces correct nodes Map and edges array from sample RawGraph JSON." },
-  { id = "VA-2", expects = "Agent verifies neighbourhood BFS returns correct nodes and edges for depth 0, 1, 2." },
-  { id = "VA-3", expects = "Agent verifies findFocus resolves case-insensitive canonical ref, loose canonical, title match, substring fallback." },
-  { id = "VA-4", expects = "Agent verifies cmNeighbourhood with focusKey returns filtered nodes/edges; null focusKey returns all." },
-  { id = "VA-5", expects = "Existing model.js tests in test.html still pass." }
+  { id = "VT-2", expects = "eslint --max-warnings=0 passes." },
+  { id = "VT-3", expects = "All model behaviour-contract tests pass via Vitest (bun run test) — GREEN." },
+  { id = "VT-4", expects = "Existing model.js tests in test.html still pass." }
 ]
 specs        = []
 requirements = []
@@ -164,10 +172,11 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "src/render.ts exists with all exports typed." },
   { id = "EX-2", text = "Module-specific option types defined (GraphPaneOpts, RelationshipTableOpts, EdgeDetailOpts, RenderedElements)." },
-  { id = "EX-3", text = "web/map/render.js deleted." }
+  { id = "EX-3", text = "src/render.ts compiled and typechecks; web/map/render.js retained as test scaffold (not deleted until PHASE-10)." }
 ]
 verification = [
-  { id = "VT-1", expects = "tsc --noEmit passes (render.ts has zero errors)." }
+  { id = "VT-1", expects = "tsc --noEmit passes (render.ts has zero errors)." },
+  { id = "VT-2", expects = "eslint --max-warnings=0 passes." }
 ]
 specs        = []
 requirements = []
@@ -182,11 +191,12 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "src/search.ts exists with all exports typed." },
-  { id = "EX-2", text = "web/map/search.js deleted." }
+  { id = "EX-2", text = "src/search.ts compiled and typechecks; web/map/search.js retained as test scaffold (not deleted until PHASE-10)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (search.ts has zero errors)." },
-  { id = "VA-1", expects = "Agent verifies collectKindFilter returns correct Set from checkbox state." }
+  { id = "VA-1", expects = "Agent verifies collectKindFilter returns correct Set from checkbox state." },
+  { id = "VT-2", expects = "eslint --max-warnings=0 passes." }
 ]
 specs        = []
 requirements = []
@@ -202,10 +212,11 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "src/concept-map.ts exists with all exports typed." },
   { id = "EX-2", text = "Module-specific option types defined (CmDiagramOpts, CmEdgeTableOpts, CmAddEdgeFormOpts)." },
-  { id = "EX-3", text = "web/map/concept-map.js deleted." }
+  { id = "EX-3", text = "src/concept-map.ts compiled and typechecks; web/map/concept-map.js retained as test scaffold (not deleted until PHASE-10)." }
 ]
 verification = [
-  { id = "VT-1", expects = "tsc --noEmit passes (concept-map.ts has zero errors)." }
+  { id = "VT-1", expects = "tsc --noEmit passes (concept-map.ts has zero errors)." },
+  { id = "VT-2", expects = "eslint --max-warnings=0 passes." }
 ]
 specs        = []
 requirements = []
@@ -216,83 +227,135 @@ id        = "PHASE-09"
 name      = "Convert priority.js → src/priority.ts"
 objective = "Convert priority.js to TypeScript. Imports d3, d3-dag. Exports layoutGraph, renderGraph. Module-specific types defined (LayoutNode, LayoutEdge, PriorityRenderOpts)."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-08 exits green: concept-map.ts compiled and verified." }
+  { id = "EN-1", text = "PHASE-08 exits green: concept-map.ts compiled and verified." },
+  { id = "EN-2", text = "d3-dag version checkpoint: compare vendored web/map/vendor/d3-dag.min.js version against npm d3-dag version. If version cannot be determined, pin npm d3-dag to the closest compatible version and document any call-site API adaptations. Record findings in phase notes." }
 ]
 exit_criteria = [
   { id = "EX-1", text = "src/priority.ts exists with all exports typed." },
-  { id = "EX-2", text = "d3 and d3-dag imports resolve correctly from node_modules." },
-  { id = "EX-3", text = "web/map/priority.js deleted." }
+  { id = "EX-2", text = "d3 and d3-dag imports resolve correctly from node_modules (version pinned per EN-2)." },
+  { id = "EX-3", text = "src/priority.ts compiled and typechecks; web/map/priority.js retained as test scaffold (not deleted until PHASE-12)." }
 ]
 verification = [
-  { id = "VT-1", expects = "tsc --noEmit passes (priority.ts has zero errors)." }
+  { id = "VT-1", expects = "tsc --noEmit passes (priority.ts has zero errors)." },
+  { id = "VT-2", expects = "eslint --max-warnings=0 passes." }
 ]
 specs        = []
 requirements = []
 
-# Phase 10: app.ts — entry point + test.html conversion + vendor cleanup.
+# Phase 10: app.ts only — entry point conversion, no deletions.
 [[phase]]
 id        = "PHASE-10"
-name      = "Convert app.js → src/app.ts, convert test.html, clean up vendor/"
-objective = "Convert app.js to TypeScript entry point. Imports all modules. bootstrap() and renderView() functions. Convert test.html to <script type=\"module\"> with import statements. Remove old vendor bundles (d3.v7.min.js, d3-dag.min.js, markdown-it.min.js, purify.min.js). Remove old style.css from web/map/ root."
+name      = "Convert app.js → src/app.ts (no deletions)"
+objective = "Convert app.js to TypeScript entry point. Imports all modules. bootstrap() and renderView() functions typed. Old app.js retained. All other .js files still present. Vite dev server loads the app."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-09 exits green: priority.ts compiled and verified." },
-  { id = "EN-2", text = "All .js source files deleted (only .ts remain in src/)." }
+  { id = "EN-1", text = "PHASE-09 exits green: priority.ts compiled and verified, d3-dag version pinned." },
+  { id = "EN-2", text = "All .ts files compiled and lint-clean; old .js files retained as test scaffold (not yet deleted)." }
 ]
 exit_criteria = [
   { id = "EX-1", text = "src/app.ts exists with bootstrap() and renderView() typed." },
-  { id = "EX-2", text = "test.html converted to <script type=\"module\"> importing from ../src/*.ts." },
-  { id = "EX-3", text = "Old vendor bundles deleted (d3.v7.min.js, d3-dag.min.js, markdown-it.min.js, purify.min.js)." },
-  { id = "EX-4", text = "web/map/style.css deleted (now at src/style.css)." },
-  { id = "EX-5", text = "web/map/vendor/ directory contains only README.md." }
+  { id = "EX-2", text = "Vite dev server starts and loads the app at / (still using old .js + new .ts modules side-by-side during transition)." }
 ]
 verification = [
   { id = "VT-1", expects = "tsc --noEmit passes (all .ts files, zero errors)." },
-  { id = "VT-2", expects = "bun run dev starts Vite, browser loads the app, all test.html tests pass." },
+  { id = "VT-2", expects = "eslint --max-warnings=0 passes." },
+  { id = "VT-3", expects = "bun run test passes (all contract tests green)." },
+  { id = "VT-4", expects = "bun run dev starts Vite, browser loads the app at /." },
+  { id = "VA-1", expects = "Agent confirms no .js files have been deleted — all old .js files still present alongside new .ts files." }
+]
+specs        = []
+requirements = []
+
+# Phase 11: test.html conversion to ES modules + baseline verification.
+[[phase]]
+id        = "PHASE-11"
+name      = "Convert test.html to ES modules + baseline verification"
+objective = "Convert test.html from bare-global <script> tags to <script type=\"module\"> with explicit import statements. Preserve test logic unchanged. Before conversion, mechanically record baseline: save assertion labels, count, and pass/fail output to /tmp/sl-091-test-baseline.txt. After conversion, verify assertions match baseline exactly. No .js files deleted yet."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-10 exits green: app.ts compiled, Vite app loads." },
+  { id = "EN-2", text = "Baseline prepared: before editing test.html, save current assertion labels (one per line), total assertion count, and pass/fail output from the <pre> element to /tmp/sl-091-test-baseline.txt. Commit this file." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "test.html converted to <script type=\"module\"> with explicit import statements for all exported modules (router, api, dot, svg, model, render, search, concept-map, priority). Test logic unchanged — only imports replace bare-global references." },
+  { id = "EX-2", text = "Assertion labels match baseline exactly (same N labels, same names)." },
+  { id = "EX-3", text = "Assertion count matches baseline exactly." },
+  { id = "EX-4", text = "all test.html tests pass (output: no failures)." },
+  { id = "EX-5", text = "test.html served via Vite at /test.html. Not embedded in production — dev/test artifact only." }
+]
+verification = [
+  { id = "VT-1", expects = "Mechanical baseline check: assertion labels in converted test.html match /tmp/sl-091-test-baseline.txt line-for-line. Assertion count identical." },
+  { id = "VT-2", expects = "bun run dev starts Vite, /test.html loads, all tests pass (PASS output)." },
+  { id = "VT-3", expects = "tsc --noEmit passes." },
+  { id = "VT-4", expects = "eslint --max-warnings=0 passes." }
+]
+specs        = []
+requirements = []
+
+# Phase 12: delete old .js + vendor cleanup — the only destructive phase.
+[[phase]]
+id        = "PHASE-12"
+name      = "Delete old .js files + vendor cleanup"
+objective = "Delete ALL old .js source files in one atomic wave: router.js, api.js, dot.js, svg.js, model.js, render.js, search.js, concept-map.js, priority.js, app.js. Remove old vendor bundles (d3.v7.min.js, d3-dag.min.js, markdown-it.min.js, purify.min.js). Remove root style.css. Verify app and tests still work after deletion."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-11 exits green: test.html converted, baseline verified, tests pass." }
+]
+exit_criteria = [
+  { id = "EX-1", text = "All old .js source files deleted: web/map/router.js, api.js, dot.js, svg.js, model.js, render.js, search.js, concept-map.js, priority.js, app.js." },
+  { id = "EX-2", text = "Old vendor bundles deleted (d3.v7.min.js, d3-dag.min.js, markdown-it.min.js, purify.min.js)." },
+  { id = "EX-3", text = "web/map/style.css deleted (now at src/style.css)." },
+  { id = "EX-4", text = "web/map/vendor/ directory contains only README.md." }
+]
+verification = [
+  { id = "VT-1", expects = "find web/map -name '*.js' returns empty (no .js source files)." },
+  { id = "VT-2", expects = "bun run dev starts Vite, app loads at /, test.html loads at /test.html, all tests pass." },
   { id = "VT-3", expects = "bun run build produces dist/ with index.html, hashed JS/CSS, vendor/github-markdown.css." },
+  { id = "VT-4", expects = "tsc --noEmit passes (all .ts files, zero errors)." },
+  { id = "VT-5", expects = "eslint --max-warnings=0 passes." },
   { id = "VH-1", expects = "Manual smoke: navigate graph, search entities, filter by kind, toggle depth, toggle semantic/actionability view, view markdown, edit concept map — all function identically to pre-conversion behaviour." }
 ]
 specs        = []
 requirements = []
 
-# Phase 11: Rust integration — assets.rs cfg_attr, .gitignore, verify tests.
+# Phase 13: Rust integration — assets.rs cfg_attr, .gitignore, verify tests.
 [[phase]]
-id        = "PHASE-11"
+id        = "PHASE-13"
 name      = "Update Rust embedding and gitignore"
-objective = "Change rust-embed folder to use cfg_attr: debug embeds web/map/, release embeds web/map/dist/. Add dist/ and node_modules/ to .gitignore. Verify all map server integration tests pass."
+objective = "Change rust-embed folder path to be build-profile-dependent: debug embeds web/map/, release embeds web/map/dist/. No Rust dev server mode or route changes — only the embed path becomes conditional. Add dist/ and node_modules/ to .gitignore. Verify all map server integration tests pass."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-10 exits green: app.ts, test.html converted, vendor cleaned, Vite build works." }
+  { id = "EN-1", text = "PHASE-12 exits green: all .js deleted, vendor cleaned, Vite dev and build work, smoke passes." }
 ]
 exit_criteria = [
   { id = "EX-1", text = "src/map_server/assets.rs uses cfg_attr for debug/release folder selection." },
   { id = "EX-2", text = ".gitignore includes web/map/dist/ and web/map/node_modules/." },
   { id = "EX-3", text = "cargo build (debug) succeeds, embeds web/map/." },
-  { id = "EX-4", text = "cargo build --release succeeds after bun run build, embeds web/map/dist/." }
+  { id = "EX-4", text = "cargo build --release succeeds after bun run build, embeds web/map/dist/. test.html NOT embedded in release (dev artifact)." }
 ]
 verification = [
   { id = "VT-1", expects = "cargo test -p doctrine -- all map server integration tests pass (debug embed)." },
   { id = "VT-2", expects = "cargo build --release succeeds (requires bun run build first)." },
-  { id = "VT-3", expects = "just gate passes (zero clippy warnings, workspace tests green)." }
+  { id = "VT-3", expects = "just gate passes (cd web/map && bun run lint + cargo clippy zero warnings, workspace tests green)." }
 ]
 specs        = []
 requirements = []
 
-# Phase 12: cleanup and memory — final housekeeping.
+# Phase 14: cleanup and memory — final housekeeping.
 [[phase]]
-id        = "PHASE-12"
+id        = "PHASE-14"
 name      = "Final cleanup and record memory"
-objective = "Remove any remaining stale files. Record durable memory for the new dev workflow. Commit final state."
+objective = "Remove any remaining stale files. Record durable memory for the new dev workflow. Acknowledge deferred test infrastructure (IMP-088). Commit final state."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-11 exits green: Rust integration verified, all tests pass." }
+  { id = "EN-1", text = "PHASE-13 exits green: Rust integration verified, all tests pass." }
 ]
 exit_criteria = [
-  { id = "EX-1", text = "No stale .js files remain in web/map/ (only src/*.ts, public/, index.html, test.html, package.json, tsconfig.json, vite.config.ts)." },
+  { id = "EX-1", text = "No residual stale files reappeared; web/map/ contains only src/*.ts, public/, index.html, test.html, package.json, tsconfig.json, vite.config.ts, eslint.config.js, dist/ (gitignored), node_modules/ (gitignored)." },
   { id = "EX-2", text = "Memory recorded: web frontend dev workflow (bun run dev, bun run build, Vite proxy)." },
-  { id = "EX-3", text = "Slice scope updated if any deviations occurred." }
+  { id = "EX-3", text = "Slice scope updated if any deviations occurred." },
+  { id = "EX-4", text = "Acknowledged: test.html has no structured runner, no CI exit code, no automation. Agent must manually read <pre> element. IMP-088 (test framework) is deferred — this is a known, honest gap." }
 ]
 verification = [
-  { id = "VT-1", expects = "find web/map -name '*.js' returns empty (no stale JS files)." },
+  { id = "VT-1", expects = "find web/map -name '*.js' returns empty (PHASE-12 confirmed clean; no stale .js regenerated)." },
   { id = "VT-2", expects = "bun run build && cargo build --release succeeds from clean state." },
-  { id = "VA-1", expects = "Agent verifies slice-091.md scope matches delivered outcome." }
+  { id = "VA-1", expects = "Agent verifies slice-091.md scope matches delivered outcome." },
+  { id = "VH-1", expects = "F-13 acknowledged: test.html has no structured runner or CI integration. IMP-088 deferred." }
 ]
 specs        = []
 requirements = []
