@@ -1,0 +1,57 @@
+# Implementation plan for SL-092 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-092"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "numeric inbound sort"
+objective = "Replace lexical sort of canonical-ref strings with numeric sort via EntityKey::Ord in inspect_from's inbound render block."
+entrance_criteria = [
+  { id = "EN-1", text = "Existing test suite green (behaviour-preserving for id < 1000)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "inbound_render_is_permutation_invariant test extended with ids ≥ 1000 and passes." },
+  { id = "EX-2", text = "inspect output for id < 1000 is byte-identical (no golden changes at current corpus size)." },
+]
+verification = [
+  { id = "VT-1", expects = "Test proves SL-1000 > SL-999 in numeric sort order within same prefix." },
+  { id = "VT-2", expects = "just gate green; cargo clippy zero warnings." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "graceful scan degradation"
+objective = "Replace ? with match + diagnostic accumulation in scan_entities so a malformed sibling entity is skipped with a diagnostic instead of aborting the entire corpus scan."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete; existing test suite green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "scan_entities returns remaining entities + diagnostics when one sibling is malformed." },
+  { id = "EX-2", text = "All call sites updated (4 non-test); existing suite stays green (behaviour-preserving for well-formed corpus)." },
+  { id = "EX-3", text = "scan_catalog propagates diagnostics from scan_entities through Catalog.diagnostics." },
+  { id = "EX-4", text = "run_inspect surfaces diagnostics to stderr before normal output." },
+]
+verification = [
+  { id = "VT-1", expects = "Test: one malformed sibling in scan_entities → remaining entities + one Error diagnostic." },
+  { id = "VT-2", expects = "Test: all-malformed siblings → empty Vec + N diagnostics; no panic." },
+  { id = "VT-3", expects = "Test: scan_catalog integration with malformed entity → diagnostic propagated through Catalog.diagnostics." },
+  { id = "VT-4", expects = "just gate green; cargo clippy zero warnings." },
+]
+specs             = []
+requirements      = []
