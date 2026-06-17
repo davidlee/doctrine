@@ -193,7 +193,6 @@ pub(crate) fn survey(root: &Path, all: bool) -> anyhow::Result<Vec<SurveyRow>> {
 ///     prerequisite→dependent (matching the B→A flip stored in the graph).
 ///   - `after` edges: seq overlay, oriented prerequisite→dependent.
 ///     Both source and target must be in the node set.
-#[cfg_attr(not(test), expect(dead_code, reason = "PHASE-01 Task 3: consumed by tests + PHASE-02 server endpoint"))]
 pub(crate) fn survey_view_for_map(g: &PriorityGraph, all: bool) -> ActionabilityView {
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
