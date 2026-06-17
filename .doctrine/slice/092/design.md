@@ -40,6 +40,15 @@ behaviour to an entity that was never minted (absent dir).
 The parameter channel matches `scan_memory_entities`'s existing precedent
 (`src/catalog/scan.rs:240`).
 
+**Failures that remain fatal (return `Err`):**
+- `entity::scan_ids` fails to read a top-level kind directory (e.g. permission
+denied on `.doctrine/slice/`).
+- Any error outside the per-entity `for id in ids` loop (KINDS table walk,
+initial setup).
+
+Only the two per-entity reads (`status_and_title_for`, `outbound_for`) are
+softened to `match` + skip.
+
 **The queried entity's own parse failure remains hard.** The F6 existence gate
 (`require_minted`) in `inspect_from` / `render_from` checks whether the
 queried entity's key is in the `Projection<EntityKey>` before reading it. If
@@ -52,7 +61,9 @@ failure as a hard error (out of scope).
 The `run_inspect` handler in `main.rs` is the single direct `scan_entities`
 consumer that surfaces to a user. It passes a throwaway `Vec` to collect
 diagnostics, and after scan prints any non-empty diagnostics to stderr before
-normal output.
+normal output. Format: one `eprintln!` per diagnostic, `"{id}: {message}"`,
+matching the `validate` findings style. The stdout output (human table / JSON)
+is unchanged — byte-identical for a well-formed corpus.
 
 `scan_catalog` already accumulates diagnostics in its own `Vec` and returns
 them in `Catalog.diagnostics`. The catalog's diagnostics flow through existing
@@ -97,14 +108,18 @@ message. Each gets its own `match` arm with a targeted diagnostic message.
 ## Verification
 
 - `inbound_render_is_permutation_invariant` extended: seed SL-998, SL-999,
-  SL-1000, SL-1001 as supersedors → assert order SL-998, SL-999, SL-1000,
-  SL-1001.
+  SL-1000, SL-1001 as supersedors of SL-001, planted out-of-order on disk →
+  assert inbound order `["SL-0998", "SL-0999", "SL-1000", "SL-1001"]`
+  (numeric, not lexical).
 - New test: `scan_entities` with one malformed TOML returns remaining entities
   + one Error diagnostic; the good entity's fields are intact.
 - New test: `scan_entities` with all-malformed siblings returns empty
   `Vec` + N diagnostics; no panic.
 - New test: mixed-validity — two good, one bad → two entities returned, one
   diagnostic.
+- New integration test: `scan_catalog` with one malformed entity returns
+  remaining entities + diagnostic propagated through `Catalog.diagnostics`
+  (covers survey/next/backlog-list consumers).
 - Existing suite stays green — behaviour-preserving for well-formed corpus
   (the gate).
 - `cargo clippy` zero warnings.
