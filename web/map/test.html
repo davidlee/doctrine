@@ -8,18 +8,21 @@
   <h1>PHASE-02 Tests</h1>
   <pre id="results"></pre>
 
-  <!-- These files are loaded via Node test runner, not needed in browser -->
-  <!-- But for completeness: -->
-  <script src="/assets/api.js"></script>
-  <script src="/assets/model.js"></script>
-  <script src="/assets/router.js"></script>
-  <script src="/assets/dot.js"></script>
-  <script src="/assets/svg.js"></script>
-  <script src="/assets/render.js"></script>
-  <script src="/assets/search.js"></script>
-  <script src="/assets/concept-map.js"></script>
+  <script type="module">
+    import { state, encodePart, normalizeGraph, neighbourhood, resolveFocus, findFocus, searchFilter, kinds, normalizeConceptMap, buildNodeLabelList, buildRelLabelList, cmNeighbourhood, compareEdgesBySource } from './src/model.ts'
+    import { ApiError } from './src/api.ts'
+    import * as router from './src/router.ts'
+    import * as dot from './src/dot.ts'
+    import * as cm from './src/concept-map.ts'
+    import { renderCmDiagnostics } from './src/app.ts'
 
-  <script>
+    // padId NOT exported by model.ts — define inline
+    function padId(n) { return String(n).padStart(3, '0') }
+
+    // Keep the assert/assertEqual helpers
+    // Set window.renderCmDiagnostics for the last assertion
+    window.renderCmDiagnostics = renderCmDiagnostics
+
     var resultsEl = document.getElementById('results');
     var pass = 0, fail = 0, messages = [];
 
@@ -38,13 +41,13 @@
 
     /* --- encodePart --- */
     (function() {
-      assert(model.encodePart('A-Z') === 'A-Z', 'encodePart: hyphen through unchanged');
-      assert(model.encodePart('A Z') === 'A_20Z', 'encodePart: space to _20');
-      assert(model.encodePart('foo/bar') === 'foo_2fbar', 'encodePart: slash to _2f');
-      assert(model.encodePart('hello_world') === 'hello_world', 'encodePart: underscore unchanged');
-      assert(model.encodePart('Café') === 'Caf_e9', 'encodePart: accented e to _e9');
-      assert(model.encodePart('') === '', 'encodePart: empty string returns empty');
-      assert(model.encodePart('abc') === 'abc', 'encodePart: all safe unchanged');
+      assert(encodePart('A-Z') === 'A-Z', 'encodePart: hyphen through unchanged');
+      assert(encodePart('A Z') === 'A_20Z', 'encodePart: space to _20');
+      assert(encodePart('foo/bar') === 'foo_2fbar', 'encodePart: slash to _2f');
+      assert(encodePart('hello_world') === 'hello_world', 'encodePart: underscore unchanged');
+      assert(encodePart('Café') === 'Caf_e9', 'encodePart: accented e to _e9');
+      assert(encodePart('') === '', 'encodePart: empty string returns empty');
+      assert(encodePart('abc') === 'abc', 'encodePart: all safe unchanged');
     })();
 
     /* --- padId (internal helper) --- */
@@ -111,7 +114,7 @@
         ]
       };
 
-      model.normalizeGraph(raw);
+      normalizeGraph(raw);
 
       assert(state.graph.nodes.size === 3, 'normalizeGraph: 3 nodes');
       assert(state.graph.edges.length === 2, 'normalizeGraph: 2 edges (1 dedup, 1 unresolved skipped)');
@@ -160,7 +163,7 @@
           { source: { prefix: 'SL', id: 1 }, label: 'x', target: { Unresolved: 'MISSING' }, origin: {} }
         ]
       };
-      model.normalizeGraph(raw);
+      normalizeGraph(raw);
       assert(state.graph.edges.length === 0, 'normalizeGraph: unresolved edge filtered out');
       assert(state.graph.edgeById.size === 0, 'normalizeGraph: unresolved edge not in edgeById');
     })();
@@ -180,35 +183,35 @@
           { source: { prefix: 'SL', id: 3 }, label: 'needs', target: { Resolved: { prefix: 'SL', id: 4 } }, origin: {} }
         ]
       };
-      model.normalizeGraph(raw);
+      normalizeGraph(raw);
       var g = state.graph;
 
       /* depth 0 */
-      var n0 = model.neighbourhood('SL-001', 0, g);
+      var n0 = neighbourhood('SL-001', 0, g);
       assert(n0.nodes.size === 1 && n0.nodes.has('SL-001'), 'neighbourhood: depth 0 returns only focus');
       assert(n0.edges.length === 0, 'neighbourhood: depth 0 returns empty edges');
 
       /* depth 1 */
-      var n1 = model.neighbourhood('SL-001', 1, g);
+      var n1 = neighbourhood('SL-001', 1, g);
       assert(n1.nodes.has('SL-001') && n1.nodes.has('SL-002'), 'neighbourhood: depth 1 includes focus + 1 neighbour');
       assert(n1.nodes.size === 2, 'neighbourhood: depth 1 has 2 nodes');
       assert(n1.edges.length === 1, 'neighbourhood: depth 1 has 1 edge');
 
       /* depth 2 */
-      var n2 = model.neighbourhood('SL-001', 2, g);
+      var n2 = neighbourhood('SL-001', 2, g);
       assert(n2.nodes.has('SL-003'), 'neighbourhood: depth 2 reaches SL-003');
       assert(n2.nodes.size === 3, 'neighbourhood: depth 2 has 3 nodes');
 
       /* depth 3 */
-      var n3 = model.neighbourhood('SL-001', 3, g);
+      var n3 = neighbourhood('SL-001', 3, g);
       assert(n3.nodes.has('SL-004'), 'neighbourhood: depth 3 reaches SL-004');
       assert(n3.nodes.size === 4, 'neighbourhood: depth 3 has 4 nodes');
 
       /* depth clamp */
-      var nClampLo = model.neighbourhood('SL-001', -1, g);
+      var nClampLo = neighbourhood('SL-001', -1, g);
       assert(nClampLo.nodes.size === 1 && nClampLo.edges.length === 0, 'neighbourhood: depth -1 clamped to 0');
 
-      var nClampHi = model.neighbourhood('SL-001', 5, g);
+      var nClampHi = neighbourhood('SL-001', 5, g);
       assert(nClampHi.nodes.size === 4, 'neighbourhood: depth 5 clamped to 3');
 
       /* disconnected node */
@@ -216,8 +219,8 @@
         nodes: { 'SL-099': { title: 'Isolated', status: 'done', kind_label: 'slice' } },
         edges: []
       };
-      model.normalizeGraph(raw2);
-      var nDisc = model.neighbourhood('SL-099', 2, state.graph);
+      normalizeGraph(raw2);
+      var nDisc = neighbourhood('SL-099', 2, state.graph);
       assert(nDisc.nodes.size === 1 && nDisc.nodes.has('SL-099'), 'neighbourhood: disconnected node at depth 2 returns only itself');
 
       /* cyclic (A→B, B→A) does not infinite loop */
@@ -231,8 +234,8 @@
           { source: { prefix: 'SL', id: 11 }, label: 'after', target: { Resolved: { prefix: 'SL', id: 10 } }, origin: {} }
         ]
       };
-      model.normalizeGraph(raw3);
-      var nCyc = model.neighbourhood('SL-010', 3, state.graph);
+      normalizeGraph(raw3);
+      var nCyc = neighbourhood('SL-010', 3, state.graph);
       assert(nCyc.nodes.size === 2, 'neighbourhood: cyclic graph terminates with both nodes');
     })();
 
@@ -246,51 +249,51 @@
         },
         edges: []
       };
-      model.normalizeGraph(raw);
+      normalizeGraph(raw);
       var g = state.graph;
 
       /* null → first sorted node (ADR-001 comes before SL-*) */
-      var rNull = model.resolveFocus(null, g);
+      var rNull = resolveFocus(null, g);
       assertEqual(rNull, 'ADR-001', 'resolveFocus: null → first sorted node (ADR-001)');
 
       /* empty string */
-      var rEmpty = model.resolveFocus('', g);
+      var rEmpty = resolveFocus('', g);
       assertEqual(rEmpty, 'ADR-001', 'resolveFocus: empty string → first sorted node');
 
       /* exact match */
-      var rExact = model.resolveFocus('SL-072', g);
+      var rExact = resolveFocus('SL-072', g);
       assertEqual(rExact, 'SL-072', 'resolveFocus: exact match SL-072');
 
       /* case-insensitive */
-      var rCase = model.resolveFocus('sl-072', g);
+      var rCase = resolveFocus('sl-072', g);
       assertEqual(rCase, 'SL-072', 'resolveFocus: case-insensitive sl-072');
 
       /* loose canonical */
-      var rLoose1 = model.resolveFocus('SL72', g);
+      var rLoose1 = resolveFocus('SL72', g);
       assertEqual(rLoose1, 'SL-072', 'resolveFocus: loose canonical SL72 → SL-072');
 
-      var rLoose2 = model.resolveFocus('SL 72', g);
+      var rLoose2 = resolveFocus('SL 72', g);
       assertEqual(rLoose2, 'SL-072', 'resolveFocus: loose canonical "SL 72" → SL-072');
 
-      var rLoose3 = model.resolveFocus('sl-72', g);
+      var rLoose3 = resolveFocus('sl-72', g);
       assertEqual(rLoose3, 'SL-072', 'resolveFocus: loose canonical sl-72 → SL-072');
 
-      var rLoose4 = model.resolveFocus('SL010', g);
+      var rLoose4 = resolveFocus('SL010', g);
       assertEqual(rLoose4, 'SL-010', 'resolveFocus: loose canonical SL010 → SL-010');
 
       /* title match */
-      var rTitle = model.resolveFocus('Module layering', g);
+      var rTitle = resolveFocus('Module layering', g);
       assertEqual(rTitle, 'ADR-001', 'resolveFocus: exact title match → ADR-001');
 
-      var rTitleCase = model.resolveFocus('module layering', g);
+      var rTitleCase = resolveFocus('module layering', g);
       assertEqual(rTitleCase, 'ADR-001', 'resolveFocus: title case-insensitive');
 
       /* substring match */
-      var rSub = model.resolveFocus('map', g);
+      var rSub = resolveFocus('map', g);
       assertEqual(rSub, 'SL-072', 'resolveFocus: substring "map" → SL-072');
 
       /* fallback */
-      var rFb = model.resolveFocus('zzz_nonexistent', g);
+      var rFb = resolveFocus('zzz_nonexistent', g);
       assertEqual(rFb, 'ADR-001', 'resolveFocus: fallback to first sorted node');
     })();
 
@@ -303,20 +306,20 @@
         },
         edges: []
       };
-      model.normalizeGraph(raw);
+      normalizeGraph(raw);
       var g = state.graph;
 
       /* null → first sorted */
-      assertEqual(model.findFocus(null, g), 'ADR-001', 'findFocus: null → first sorted');
+      assertEqual(findFocus(null, g), 'ADR-001', 'findFocus: null → first sorted');
 
       /* exact match */
-      assertEqual(model.findFocus('SL-072', g), 'SL-072', 'findFocus: exact match');
+      assertEqual(findFocus('SL-072', g), 'SL-072', 'findFocus: exact match');
 
       /* loose canonical */
-      assertEqual(model.findFocus('SL72', g), 'SL-072', 'findFocus: loose canonical');
+      assertEqual(findFocus('SL72', g), 'SL-072', 'findFocus: loose canonical');
 
       /* no match → null */
-      assertEqual(model.findFocus('nonexistent', g), null, 'findFocus: no match → null (no fallback!)');
+      assertEqual(findFocus('nonexistent', g), null, 'findFocus: no match → null (no fallback!)');
     })();
 
     /* --- searchFilter --- */
@@ -329,37 +332,37 @@
         },
         edges: []
       };
-      model.normalizeGraph(raw);
+      normalizeGraph(raw);
       var g = state.graph;
 
       /* empty → all sorted */
-      var all = model.searchFilter('', g);
+      var all = searchFilter('', g);
       assert(all.length === 3, 'searchFilter: empty returns all 3 nodes');
       assert(all[0].id === 'ADR-001', 'searchFilter: first in sort is ADR-001');
 
       /* null → all sorted */
-      var allNull = model.searchFilter(null, g);
+      var allNull = searchFilter(null, g);
       assert(allNull.length === 3, 'searchFilter: null returns all 3 nodes');
 
       /* substring in id */
-      var idMatch = model.searchFilter('SL-072', g);
+      var idMatch = searchFilter('SL-072', g);
       assert(idMatch.length === 1 && idMatch[0].id === 'SL-072', 'searchFilter: exact id match');
 
       /* substring in title */
-      var titleMatch = model.searchFilter('layering', g);
+      var titleMatch = searchFilter('layering', g);
       assert(titleMatch.length === 1 && titleMatch[0].id === 'ADR-001', 'searchFilter: substring in title');
 
       /* case-insensitive */
-      var caseMatch = model.searchFilter('map', g);
+      var caseMatch = searchFilter('map', g);
       assert(caseMatch.length === 1 && caseMatch[0].id === 'SL-072', 'searchFilter: case-insensitive "map"');
 
       /* multiple matches sorted */
-      var multi = model.searchFilter('SL', g);
+      var multi = searchFilter('SL', g);
       assert(multi.length === 2, 'searchFilter: "SL" matches 2');
       assert(multi[0].id === 'SL-010', 'searchFilter: sorted SL-010 before SL-072');
 
       /* no match */
-      var none = model.searchFilter('zzzzzz', g);
+      var none = searchFilter('zzzzzz', g);
       assert(none.length === 0, 'searchFilter: no match returns empty');
     })();
 
@@ -373,8 +376,8 @@
         },
         edges: []
       };
-      model.normalizeGraph(raw);
-      var k = model.kinds(state.graph.nodes);
+      normalizeGraph(raw);
+      var k = kinds(state.graph.nodes);
 
       assert(k.get('ADR') === 1, 'kinds: ADR count = 1');
       assert(k.get('SL') === 2, 'kinds: SL count = 2');
@@ -529,7 +532,7 @@
         diagnostics: [{ MalformedLine: { line: 3, text: 'bad line' } }]
       };
 
-      var cm = model.normalizeConceptMap(raw);
+      var cm = normalizeConceptMap(raw);
       assert(cm.id === 'CM-001', 'normalizeConceptMap: id preserved');
       assert(cm.title === 'System Architecture', 'normalizeConceptMap: title preserved');
       assert(cm.status === 'draft', 'normalizeConceptMap: status preserved');
@@ -543,7 +546,7 @@
     /* --- normalizeConceptMap: missing fields --- */
     (function() {
       var raw = { id: 'CM-002', title: 'Empty Map', status: 'draft' };
-      var cm = model.normalizeConceptMap(raw);
+      var cm = normalizeConceptMap(raw);
       assert(cm.description === '', 'normalizeConceptMap: missing description → empty string');
       assert(cm.dslHash === '', 'normalizeConceptMap: missing dsl_hash → empty string');
       assert(cm.nodes.length === 0, 'normalizeConceptMap: missing nodes → empty array');
@@ -554,36 +557,36 @@
     /* --- buildNodeLabelList (autocomplete) --- */
     (function() {
       var cm = { nodes: [] };
-      assert(model.buildNodeLabelList(cm).length === 0, 'buildNodeLabelList: empty nodes → empty array');
+      assert(buildNodeLabelList(cm).length === 0, 'buildNodeLabelList: empty nodes → empty array');
 
       var cm1 = { nodes: [{ key: 'a', label: 'Alpha' }, { key: 'b', label: 'Beta' }] };
-      var labels1 = model.buildNodeLabelList(cm1);
+      var labels1 = buildNodeLabelList(cm1);
       assertEqual(labels1, ['Alpha', 'Beta'], 'buildNodeLabelList: two distinct labels');
 
       var cmDup = { nodes: [{ key: 'a', label: 'Alpha' }, { key: 'a2', label: 'Alpha' }] };
-      var labelsDup = model.buildNodeLabelList(cmDup);
+      var labelsDup = buildNodeLabelList(cmDup);
       assert(labelsDup.length === 1, 'buildNodeLabelList: duplicate labels deduplicated');
       assert(labelsDup[0] === 'Alpha', 'buildNodeLabelList: keeps first occurrence');
 
-      var cmNull = model.buildNodeLabelList(null);
+      var cmNull = buildNodeLabelList(null);
       assert(cmNull.length === 0, 'buildNodeLabelList: null cm → empty array');
 
-      var cmNoNodes = model.buildNodeLabelList({});
+      var cmNoNodes = buildNodeLabelList({});
       assert(cmNoNodes.length === 0, 'buildNodeLabelList: missing nodes → empty array');
     })();
 
     /* --- buildRelLabelList (autocomplete) --- */
     (function() {
       var cm = { edges: [] };
-      assert(model.buildRelLabelList(cm).length === 0, 'buildRelLabelList: empty edges → empty array');
+      assert(buildRelLabelList(cm).length === 0, 'buildRelLabelList: empty edges → empty array');
 
       var cm1 = { edges: [{ rel: 'expresses' }, { rel: 'depends on' }] };
-      assertEqual(model.buildRelLabelList(cm1), ['expresses', 'depends on'], 'buildRelLabelList: two distinct rels');
+      assertEqual(buildRelLabelList(cm1), ['expresses', 'depends on'], 'buildRelLabelList: two distinct rels');
 
       var cmDup = { edges: [{ rel: 'expresses' }, { rel: 'expresses' }] };
-      assert(model.buildRelLabelList(cmDup).length === 1, 'buildRelLabelList: duplicate rels deduplicated');
+      assert(buildRelLabelList(cmDup).length === 1, 'buildRelLabelList: duplicate rels deduplicated');
 
-      var cmNull = model.buildRelLabelList(null);
+      var cmNull = buildRelLabelList(null);
       assert(cmNull.length === 0, 'buildRelLabelList: null cm → empty array');
     })();
 
@@ -597,7 +600,7 @@
         },
         edges: []
       };
-      model.normalizeGraph(raw);
+      normalizeGraph(raw);
 
       var cmNode = state.graph.nodes.get('CM-001');
       var slNode = state.graph.nodes.get('SL-001');
@@ -657,7 +660,7 @@
           { from_key: 'b', to_key: 'd', rel: 'relates' }
         ]
       };
-      var result = model.cmNeighbourhood(cm, null, 2);
+      var result = cmNeighbourhood(cm, null, 2);
       assert(result.nodes.length === 4, 'cmNeighbourhood: null focusKey → all 4 nodes');
       assert(result.edges.length === 3, 'cmNeighbourhood: null focusKey → all 3 edges');
     })();
@@ -673,7 +676,7 @@
           { from_key: 'a', to_key: 'b', rel: 'relates' }
         ]
       };
-      var result = model.cmNeighbourhood(cm, 'a', 0);
+      var result = cmNeighbourhood(cm, 'a', 0);
       assert(result.nodes.length === 1, 'cmNeighbourhood: depth 0 → only focal node');
       assert(result.nodes[0].key === 'a', 'cmNeighbourhood: depth 0 → focal is A');
       assert(result.edges.length === 0, 'cmNeighbourhood: depth 0 → no edges');
@@ -694,7 +697,7 @@
           { from_key: 'b', to_key: 'd', rel: 'relates' }
         ]
       };
-      var result = model.cmNeighbourhood(cm, 'a', 1);
+      var result = cmNeighbourhood(cm, 'a', 1);
       assert(result.nodes.length === 2, 'cmNeighbourhood: depth 1 from A → 2 nodes (A + B)');
       var keys = result.nodes.map(function(n) { return n.key; });
       assert(keys.indexOf('a') !== -1, 'cmNeighbourhood: depth 1 includes A');
@@ -717,7 +720,7 @@
           { from_key: 'b', to_key: 'd', rel: 'relates' }
         ]
       };
-      var result = model.cmNeighbourhood(cm, 'a', 2);
+      var result = cmNeighbourhood(cm, 'a', 2);
       assert(result.nodes.length === 4, 'cmNeighbourhood: depth 2 from A → all 4 nodes');
       assert(result.edges.length === 3, 'cmNeighbourhood: depth 2 → all 3 edges');
     })();
@@ -731,7 +734,7 @@
         ],
         edges: []
       };
-      var result = model.cmNeighbourhood(cm, 'e', 2);
+      var result = cmNeighbourhood(cm, 'e', 2);
       assert(result.nodes.length === 1, 'cmNeighbourhood: disconnected node E → only itself');
       assert(result.edges.length === 0, 'cmNeighbourhood: disconnected → 0 edges');
     })();
@@ -742,7 +745,7 @@
         nodes: [{ key: 'solo', label: 'Solo' }],
         edges: []
       };
-      var result = model.cmNeighbourhood(cm, 'solo', 2);
+      var result = cmNeighbourhood(cm, 'solo', 2);
       assert(result.nodes.length === 1, 'cmNeighbourhood: 1-node graph → only itself');
       assert(result.edges.length === 0, 'cmNeighbourhood: 1-node graph → 0 edges');
     })();
@@ -756,7 +759,7 @@
         ],
         edges: [{ from_key: 'a', to_key: 'b', rel: 'relates' }]
       };
-      var result = model.cmNeighbourhood(cm, 'nonexistent', 2);
+      var result = cmNeighbourhood(cm, 'nonexistent', 2);
       assert(result.nodes.length === 2, 'cmNeighbourhood: focusKey not in nodes → returns all nodes');
       assert(result.edges.length === 1, 'cmNeighbourhood: focusKey not in nodes → returns all edges');
     })();
@@ -774,20 +777,20 @@
           { from_key: 'b', to_key: 'd', rel: 'relates' }
         ]
       };
-      var result = model.cmNeighbourhood(cm, 'd', 1);
+      var result = cmNeighbourhood(cm, 'd', 1);
       assert(result.nodes.length === 2, 'cmNeighbourhood: depth 1 from D → D + B (undirected)');
       assert(result.edges.length === 1, 'cmNeighbourhood: depth 1 from D → 1 edge');
 
-      var result2 = model.cmNeighbourhood(cm, 'd', 2);
+      var result2 = cmNeighbourhood(cm, 'd', 2);
       assert(result2.nodes.length === 3, 'cmNeighbourhood: depth 2 from D → D + B + A (all)');
     })();
 
     /* --- cmNeighbourhood: null/undefined cm → safe empty --- */
     (function() {
-      var result = model.cmNeighbourhood(null, 'a', 1);
+      var result = cmNeighbourhood(null, 'a', 1);
       assert(result.nodes.length === 0, 'cmNeighbourhood: null cm → empty nodes');
       assert(result.edges.length === 0, 'cmNeighbourhood: null cm → empty edges');
-      var result2 = model.cmNeighbourhood(undefined, 'a', 1);
+      var result2 = cmNeighbourhood(undefined, 'a', 1);
       assert(result2.nodes.length === 0, 'cmNeighbourhood: undefined cm → empty nodes');
     })();
 

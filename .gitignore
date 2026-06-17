@@ -53,3 +53,6 @@ handover.md
 .doctrine/**/handover.md
 .doctrine/agents/*
 !.doctrine/agents/AGENTS.md
+
+web/map/dist/
+web/map/node_modules/
