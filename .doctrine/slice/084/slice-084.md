@@ -125,13 +125,13 @@ from codex within the "subprocess-capable" block.
 
 ### Affected files
 
-- `plugins/dispatch/SKILL.md` — router harness detection table (3-way)
-- `plugins/dispatch-subprocess/SKILL.md` — spawn templates (add pi `subagent` variant, keep codex `codex exec`)
-- `plugins/dispatch-agent/SKILL.md` — model selection docs
+- `plugins/dispatch/SKILL.md` — router harness detection table (3-way + refuse catch-all)
+- `plugins/dispatch-subprocess/SKILL.md` — harness→spawn-template table (pi `subagent` row, codex `codex exec` row)
+- `plugins/dispatch-agent/SKILL.md` — no material change (Claude arm unchanged)
 - ~~`AGENTS.md`~~ — already harness-agnostic (done)
 - ~~`CLAUDE.md`~~ — already `@AGENTS.md` + Claude section (done)
-- `.pi/agents/dispatch-worker.md` — NEW (pi dispatch worker agent definition)
-- `.claude/agents/dispatch-worker.md` — may need model field docs
+- `.pi/agents/dispatch-worker.md` — **NEW** (pi dispatch worker agent definition with direct `model:` field)
+- `.claude/agents/dispatch-worker.md` — no change
 
 ## Non-Goals
 
@@ -155,41 +155,36 @@ from codex within the "subprocess-capable" block.
 - **ASM-1:** pi's `subagent` tool's `cwd` parameter correctly binds the worker
   to the fork directory. Verified in SL-081: `subagent(agent="worker", cwd="$D")`
   produced correct source edits in the fork.
-- **ASM-2:** pi's `subagent` tool's `model` parameter overrides the agent-def
-  YAML model. To be verified in design.
-- **ASM-3:** codex has an env marker that distinguishes it from pi (to be
-  researched).
+- **ASM-2:** ✅ RESOLVED — Model from direct `model:` field in agent-def YAML.
+  This slice does not introduce runtime `model=` override or .toml templating.
+- **ASM-3:** codex env marker unresearched; detection by explicit self-belief
+  ("I am codex") with refuse fallback for unknown harnesses.
 - **RSK-1:** ~~AGENTS.md separation may need a `doctrine boot` update~~ — resolved.
-  `CLAUDE.md` uses `@AGENTS.md` include (Claude Code native); `doctrine boot`
-  reads `AGENTS.md` only. No boot change needed.
-- **RSK-2:** pi `subagent` `model` parameter vs agent-def YAML model field —
-  which takes precedence? Mitigation: test the parameter path.
-- **RSK-3:** `pi-subagents` extension is a runtime dependency for pi dispatch.
-  If absent, pi dispatch cannot spawn workers via `subagent`. Detection-and-
-  refuse is the minimum; a `pi -p` fallback is a design question (OQ-6).
+- **RSK-2:** ✅ RESOLVED — Model from direct `model:` field in agent-def YAML.
+  No runtime override or .toml surface in this slice.
+- **RSK-3:** ✅ RESOLVED — Detect `subagent` tool in tool list; refuse with
+  install message if missing. No `pi -p` fallback (loses agent-def contract).
+- **RSK-4 (new):** pi subagent workers lack bwrap confinement (codex arm has
+  OS-floor bwrap profile). Acceptable — same posture as Claude arm; jail bounds
+  all harnesses; marker is primary identity; R-5 belt is real protection.
+- **RSK-5 (new):** Fork branch IS the phase ref on codex/pi arm — `gc --force`
+  before `dispatch sync --prepare-review` destroys the deliverable irrecoverably.
+  Documented as harness-table residual.
 
 ## Open Questions
 
 - **OQ-1:** ✅ RESOLVED — AGENTS.md/CLAUDE.md separated in commit 227c3b0.
-  `CLAUDE.md` includes `@AGENTS.md` + Claude reviewer section.
-- **OQ-2:** What env marker reliably distinguishes pi from codex? `PI_HOME` is
-  set in the pi process; does `CODE_PATH` or similar exist for codex?
-- **OQ-3:** Does pi `subagent` `model` parameter override or compose with the
-  agent-def YAML model field? The spawn template must emit the right incantation.
-- **OQ-4:** Should pi dispatch use a **third arm** (`/dispatch-pi`?) or a
-  variant within `/dispatch-subprocess`? The mechanism is subprocess-based (cwd,
-  marker, env) but the invocation is via the `subagent` tool (not a raw shell
-  command). The two current arms are: subprocess=raw spawn, agent=Claude Agent.
-  pi is a hybrid: subprocess worker, agent-def contract, tool invocation.
-  Decision needed in design.
-- **OQ-6:** How does doctrine declare the `pi-subagents` extension dependency?
-  Should install docs list it as required for dispatch, should the dispatch
-  router detect and refuse if missing, or should a `pi -p` fallback exist for
-  extension-free environments? The `pi -p` fallback has no agent-def contract
-  (prompt-only) and no cwd binding — it would need `env -C` or `cd` wrapping.
-- **OQ-5:** `DOCTRINE_TRUNK_REF` — document as a bwrap-jail requirement, or
-  fix the ladder to prefer local `main` when remote is stale? The latter is an
-  ADR-012 concern; the former is scope-appropriate documentation.
+- **OQ-2:** ✅ RESOLVED — Codex detection by explicit self-belief check ("I am
+  codex") with refuse catch-all for unknown harnesses. Env marker research
+  deferred to codex spike.
+- **OQ-3:** ✅ RESOLVED — Model from direct `model:` field in agent-def YAML.
+  No runtime override or .toml surface in this slice.
+- **OQ-4:** ✅ RESOLVED — Harness table within `/dispatch-subprocess` (Option C).
+  Pi spawn via `subagent()` tool; codex via `codex exec`. One arm, two rows.
+- **OQ-5:** `DOCTRINE_TRUNK_REF` — documented as a bwrap-jail requirement.
+  Ladder fix is ADR-012 territory, not this slice.
+- **OQ-6:** ✅ RESOLVED — Detect `subagent` tool in tool list; refuse with
+  install message if missing. No `pi -p` fallback.
 
 ## Verification intent
 
@@ -198,7 +193,8 @@ from codex within the "subprocess-capable" block.
 - **VA:** pi `subagent` spawn template (`agent: dispatch-worker`, `cwd: $D`,
   `task: <prompt>`) is documented in the skill with correct parameter names.
 - **VT:** pi worker launched via `subagent` arrives in the correct worktree cwd
-  with `DOCTRINE_WORKER=1` set and marker present (confirmed in SL-081).
+  with disk marker present; prompt contains DOCTRINE_WORKER prefix instruction
+  (confirmed in SL-081).
 - **VA:** pi `dispatch-worker.md` agent definition carries the worker contract
   (source-only, single commit, verify, no `.doctrine/` writes).
 - **VA:** AGENTS.md is harness-agnostic; Claude-specific content is only visible
@@ -213,9 +209,7 @@ gaps confirmed by SL-081 empirical data: (1) pi's spawn template is wrong
 (`codex exec` blocks git writes in bwrap; correct mechanism is `subagent` tool),
 (2) pi needs a `dispatch-worker` agent definition matching the claude one, and
 (3) model selection needs a surface in the skills. AGENTS.md leakage is already
-fixed (CLAUDE.md now includes @AGENTS.md + Claude section). An open design
-question (OQ-4) is whether pi needs its own dispatch arm or a variant within
-the existing subprocess arm. codex end-to-end validation is explicitly deferred.
+fixed (CLAUDE.md now includes @AGENTS.md + Claude section).
 
 ## Follow-Ups
 
