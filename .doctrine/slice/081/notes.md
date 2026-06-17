@@ -36,3 +36,14 @@ against the `review/081` candidate branch.
 - `memory_type` propagation gap fixed
 - 1567 tests pass (dispatch baseline)
 - 142 MEM entities in catalog graph
+
+---
+
+## Closure — 2026-06-17
+
+- Slice advanced: `reconcile` → `done`; all 8 phases complete, penance resolved.
+- **RV-051** (SL-086 inquisition, not SL-081 code-review) recovered from `stash@{3}` and landed. Findings all `verified`.
+- **RV-052** lost — the original SL-081 code-review RV was orphaned in a dispatch worktree (GC'd). Substance resolved in penance table above.
+- Both SL-081 review ledgers (RV-051 code-review, RV-052) lost from dispatch worktree GC; RV-051 recovered is the SL-086 design inquisition.
+- No originating backlog item found — slice spawned directly.
+- `just check`: 1568 passed, 0 failed (pre-existing `sync_produces_all_shipped_dirs` failure outside of this slice).
