@@ -1,0 +1,61 @@
+id    = 58
+slug  = "sl-087-design-memory-section-trim"
+title = "SL-087 design: Memory section trim"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-087"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Memory.key is Option<String> — keyless memories (e.g. mem_019ecf85…) render as '-' in current table; design silent on what boot_keys() emits for them"
+detail = "src/memory.rs:461: Memory.key is Option<String>. The current table listing renders keyless memories with a '-' placeholder (mem_019ecf851db57cf0b32611c2d20ea2ed, the SL-076 diagnostics memory). The design's code example iterates keys and pushes each verbatim: an empty string? Skip it? Use uid? The design says nothing. An implementer will guess — and guessing is the first mortal sin of /canon. Expected: the design states explicitly what boot_keys() returns for a keyless memory (skip, or the uid, or a '-' placeholder with rationale)."
+disposition = "fix-now"
+response = "Keyless memories (key==None) are rendered with their uid as the fallback key. The existing table listing shows '-' for keyless memories; uid is the more informative fallback (unambiguous, always present). Design will state: 'Memories with no key render their uid as the key line.'"
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Code example uses unwrap_or_default() but prose says 'Errors fall through section_or_marker' — inconsistency in error-handling path"
+detail = "design.md §Updated produce() arm: the code sample shows , silently swallowing errors into an empty vec. But the prose just above says 'Errors fall through section_or_marker — consistent with every other producer arm.' These are different paths: unwrap_or_default loses the error's cause (the Err variant), while section_or_marker captures both Err and empty-Ok as a marker. The code example and prose must agree — the implementer must not have to guess which is authority. Expected: the code example matches the prose (use section_or_marker), or the prose matches the code (explain explicitly that boot_keys errors are unrecoverable and silence is acceptable)."
+disposition = "fix-now"
+response = "The code example is the draft — the prose is authority. The code example will be updated to route through section_or_marker: produce the body as a String, wrap it in Ok(body), and pass to section_or_marker(machine_name, body_result). This keeps error handling consistent with every other arm."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Test impact section says 'Keys are sorted (consistent with sort_default order)' but Design Decisions table says 'Keys sorted ascending' — contradictory sort specifications"
+detail = "design.md §Test impact: 'Keys are sorted (consistent with sort_default order).' But sort_default is created-desc + uid-asc (src/memory.rs:1029), NOT key-ascending. The Design Decisions table correctly says 'Keys sorted ascending' (post-review fix). The test section was not updated and still carries the stale sort_default reference. An implementer reading the test section would implement the wrong sort. Expected: the test section reflects the settled sort order (key ascending, not sort_default)."
+disposition = "fix-now"
+response = "Accepted. The test section's 'consistent with sort_default order' is a stale holdover from the pre-review draft. Will replace with 'Keys sorted key-ascending (the canonical order for a compact key listing without metadata, per Design Decisions).'"
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "boot_keys() contract underspecified: visibility, exact return type, filtering rules, and sort key not stated precisely"
+detail = "The design says 'Add memory::boot_keys(root: &Path) -> Result<Vec<String>> that returns the sorted keys of all active signpost memories' — but does not state: (a) pub(crate) vs pub visibility; (b) whether it filters to active+signpost internally or takes parameters (the current call site passes those filters to list_rows); (c) what 'sorted' means (key ascending, stated elsewhere but not in the spec paragraph); (d) whether keyless memories are included (F-1). An implementer reverse-engineers the prose. Expected: the function contract paragraph states visibility, filtering scope, sort key, and keyless behaviour — all in one place."
+disposition = "fix-now"
+response = "Accepted. The design will state explicitly: pub(crate) fn boot_keys(root: &Path) -> Result<Vec<String>> — returns key-ascending keys of active signpost memories. Filtering (active+signpost) is internal to boot_keys (no parameters). Keyless memories use uid as the fallback key. The existing collect_all() is already pub(crate) and provides the data source."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "Reference line cites '/retrieve-memory' but agent may not know what a bare skill name buys — the instruction is a pointer with no context"
+detail = "The reference line 'Run /retrieve-memory to surface relevant memories for your task' is a pull pointer — consistent with ADR-005. But it assumes the agent knows (a) /retrieve-memory is a skill invocation and (b) what 'relevant memories' means in context. A first-session agent seeing this without having invoked the skill gets an instruction with no payload. The current Memory section at least tells the agent what memories exist. Expected: either accept this as a fine pull pointer (the skill explains itself on invocation), or add a one-line explanation of what /retrieve-memory does. Designers' choice."
+disposition = "aligned"
+response = "The pull pointer pattern is correct per ADR-005. The reference line's job is to point, not restate."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
