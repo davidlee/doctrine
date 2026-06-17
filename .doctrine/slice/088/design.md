@@ -56,6 +56,10 @@ files).
 
 ### Stage 3 — forward steps with individual prompts
 
+The forward steps run in least-invasive-first order: memory sync is purely
+additive, boot modifies config files, skills install mutates agent paths and
+may spawn `npx`.
+
 Each step prompts `y/N/a`:
 
 - `y` — yes to this step
@@ -67,17 +71,28 @@ Steps and their underlying calls:
 | # | Prompt | Underlying call |
 |---|--------|-----------------|
 | 1 | `Materialize shipped memory corpus? [y/N/a]` | `corpus::sync_corpus(&root, &corpus::embedded_assets(), false)` |
-| 2 | `Wire @-import + session hooks for claude, codex? [y/N/a]` | `boot::wire(&root, &exec, &harnesses, false)` |
+| 2 | `Wire @-import + session hooks for detected harnesses? [y/N/a]` | `boot::wire(&root, &exec, &harnesses, false)` |
 | 3+ | `Install skills for claude? [y/N/a]` | skills materialize + install agent-def + SubagentStart hook |
 | ... | `Install skills for pi? [y/N/a]` | skills delegate to `npx skills` + install pi agent-def |
 
-Harness labels in the boot prompt come from auto-detection (`.claude/`,
-`.codex/`), not from `--agent`. Boot wiring is independent of skill install.
+Boot wiring is independent of skill install. Harness labels in the boot
+prompt are auto-detected from the filesystem (`.claude/`, `.codex/`), not from
+`--agent` — the prompt uses the neutral phrase "detected harnesses" to avoid
+confusion when `--agent` flags differ from what is present on disk. When no
+harness directories exist, the boot prompt is skipped (no harnesses → nothing
+to wire).
 
 Agent-def install rides each skills step: `--agent claude` installs
 `.claude/agents/dispatch-worker.md`, `--agent pi` installs
 `.pi/agents/dispatch-worker.md`, both via canonical copy + symlink (existing
 pattern).
+
+Agent resolution in the consolidated `install` path is non-fatal: when no
+`.claude/` directory exists and no `--agent` flag is given, skills steps are
+skipped (empty agent list). This is a relaxed resolver distinct from
+`skills::resolve_agents()`, which `bail!`s — the focused resolver is preserved
+for the standalone `skills list` verb. The consolidated path calls a separate
+`detect_agents()` that returns an empty `Vec` instead of erroring.
 
 ### 4. Prompt helper
 
@@ -117,6 +132,17 @@ fn prompt_step(question: &str, yes: bool, all_yes: &mut bool) -> io::Result<bool
 - `worker_guard` write label: `Command::Install { .. }` already labelled
   `Write("install")` — no change needed
 
+### `README.md`
+
+All five `claude install` references must be updated to the consolidated
+surface before the command is removed:
+
+- **L44:** `npx skills add davidlee/doctrine  # or \`doctrine install --agent claude\` for claude code only`
+- **L84:** `doctrine install --agent claude --yes # skills + dispatch-worker agent + SubagentStart hook into .claude`
+- **L86:** `doctrine install --agent universal --yes`
+- **L104:** `doctrine install --agent claude --only-memory -y`
+- **L153:** `doctrine install --agent claude            # from binary, or`
+
 ### `src/install.rs`
 
 `run()` signature expands:
@@ -137,9 +163,12 @@ pub(crate) fn run(
 Internally:
 1. Load manifest, detect root, build base plan, print it
 2. If `!dry_run`, execute base plan
-3. Resolve agents via `skills::resolve_agents(agents, &root)`
-4. Print forward summary
-5. Walk forward steps with `prompt_step`
+3. Resolve agents via a relaxed `detect_agents(agents, &root)` — returns empty
+   `Vec` when no `.claude/` and no `--agent` (never errors), distinct from
+   `skills::resolve_agents()`
+4. Print forward summary — skills steps omitted when agent list is empty
+5. Walk forward steps with `prompt_step` — boot prompt skipped when no
+   harness directories are detected
 
 Agent-def install requires the pi embed path. SL-084 places
 `install/agents/pi/dispatch-worker.md` in the embed. The install code reads it
@@ -152,7 +181,8 @@ via the existing `install::embedded_asset` accessor and writes it to
 - `run_install()` stays `pub(crate)` — now called from `install.rs`, not from
   `main.rs`
 - `InstallArgs` unchanged; the CLI arg parsing moves to `main.rs`
-- `resolve_agents()` unchanged — reused from `install.rs`
+- `resolve_agents()` stays focused (bails on no agent) — the relaxed
+  `detect_agents()` in `install.rs` handles the "empty list is fine" policy
 - The per-agent skills install logic (materialise canonical + symlink for
   Claude, delegate `npx skills` for others) is extracted from `execute()` into
   two callable functions:
@@ -180,6 +210,14 @@ pattern as the Claude dispatch-worker agent (SL-056 PHASE-11).
 Canonical paths differ by agent to avoid collisions:
 - Claude: `.doctrine/agents/dispatch-worker.md` (flat, existing path)
 - Pi:     `.doctrine/agents/pi/dispatch-worker.md` (namespaced)
+
+The asymmetry is intentional: Claude shipped first with a flat canonical path
+(SL-056 PHASE-11); that path is grandfathered to avoid breaking existing
+installs. New agents use namespaced canonical paths under
+`.doctrine/agents/<name>/` to prevent collisions as more agent types are
+added. The embed sources are namespaced for both (`install/agents/claude/`
+and `install/agents/pi/`) — the flat canonical for Claude is a compat
+concession, not a pattern to replicate.
 
 Link targets:
 - Claude: `.claude/agents/dispatch-worker.md` → `../../.doctrine/agents/dispatch-worker.md`
@@ -217,6 +255,19 @@ function handles both. `canon_subdir` is `None` for Claude (flat) and
 - `doctrine claude install` yields "error: unrecognized subcommand"
 - `doctrine skills install` yields "error: unrecognized subcommand" (the
   hidden `skills list` still works)
+
+### Migration of existing e2e tests
+
+- `tests/e2e_claude_install.rs` — rewritten to drive the consolidated
+  `doctrine install --agent claude --yes` surface. The same assertions are
+  preserved: SubagentStart hook is merged into `.claude/settings.local.json`,
+  the dispatch-worker agent def resolves at `.claude/agents/`, and the hidden
+  `skills install` alias is removed. The test file is renamed accordingly
+  (e.g. `tests/e2e_install_claude.rs`).
+- `tests/e2e_worker_guard.rs` — goldens updated from `claude install` to
+  `install`. The test function `claude_install_and_skills_alias_refuse_in_worker_mode`
+  is renamed to cover the consolidated verb. The hidden `skills install`
+  alias path is removed (that verb no longer exists).
 
 ## 6. Edge cases
 
