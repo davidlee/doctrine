@@ -2,7 +2,7 @@
 // Hash routing: #/focus/SL-001 or #/focus/SL-001?depth=2
 // Security: markdown-it html:false; DOMPurify.sanitize() applied before innerHTML.
 // SVG from /api/dot/svg is sanitized via DOMPurify SVG profile, then injected as inline DOM.
-/* global state, model, api, router, dot, svg, render, search, cm, compareEdgesBySource */
+/* global state, model, api, router, svg, render, search, cm, compareEdgesBySource */
 
 (function () {
   'use strict';
@@ -518,14 +518,14 @@
   function handleMutationError(err) {
     if (err.status === 409) {
       var body;
-      try { body = typeof err.body === 'string' ? JSON.parse(err.body) : err.body; } catch (_e) { body = {}; }
+      try { body = typeof err.body === 'string' ? JSON.parse(err.body) : err.body; } catch (_e) { body = {}; /* eslint-disable-line no-unused-vars */ }
       if (body.error === 'stale_concept_map') { handleStaleWrite(); return; }
       if (body.error === 'duplicate_edge') { showCmFormError('This edge already exists at line ' + (body.line || '?')); return; }
       if (body.error === 'node_collision') { showCmFormError('Rename would collide with existing node \'' + (body.existing_label || '') + '\''); return; }
     }
     if (err.status === 400) {
       var b400;
-      try { b400 = typeof err.body === 'string' ? JSON.parse(err.body) : err.body; } catch (_e2) { b400 = {}; }
+      try { b400 = typeof err.body === 'string' ? JSON.parse(err.body) : err.body; } catch (_e2) { b400 = {}; /* eslint-disable-line no-unused-vars */ }
       if (b400.error === 'empty_field') { showCmFormError(b400.message || 'Field must not be empty'); return; }
     }
     if (err.status === 404) { showCmFormError('Edge no longer exists — it may have been removed elsewhere'); return; }
