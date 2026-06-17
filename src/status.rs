@@ -357,9 +357,7 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
         )
         .ok()
         .filter(|s| !s.is_empty())
-        .or_else(|| {
-            crate::git::git_text(&root, &["log", "-1", "--format=%h"]).ok()
-        })
+        .or_else(|| crate::git::git_text(&root, &["log", "-1", "--format=%h"]).ok())
         .unwrap_or_default();
         (staleness_str, age, commit_sha)
     } else {

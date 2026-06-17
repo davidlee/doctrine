@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed42b5a9b7f41af602250f9dbb791"
+memory_key = "mem.fact.skills.audit-already-clean"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "SL-080 PHASE-02: audit skill already clean of design-writing prose"
+summary = ""
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = ["plugins/doctrine/skills/audit/"]
+globs = []
+commands = []
+tags = ["skills", "audit", "sl-080"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6eaa8551ebbe41d05f19397024a7d6b24954c40e"
+ref_name = "refs/heads/main"
+checkout_state_id = "dabb848777d2a2071e12af0113d456e800d877963e8841714cca88eebe2ba468"
+base_commit = "09d4e46efcf9c7e4ff1624fd2cb8c6496133ec72"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
