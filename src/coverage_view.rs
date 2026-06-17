@@ -435,6 +435,7 @@ pub(crate) fn run(
     columns: Option<&[String]>,
     format: listing::Format,
     json: bool,
+    color: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let rows = rows(&root, reference)?;
@@ -442,14 +443,13 @@ pub(crate) fn run(
     let resolved = if json { listing::Format::Json } else { format };
     let out = match resolved {
         listing::Format::Json => render_json(&rows)?,
-        // Resolve terminal capability ONCE in the impure shell (SL-053/SL-054 D3),
-        // inject (colour bool, width Option) — JSON stays plain; width is `None` off a
-        // tty so piped output stays width-free.
+        // Colour is injected from the CLI --color flag (SL-079 D3); term_width
+        // is resolved once in the impure shell (SL-053/SL-054 D3).
         listing::Format::Table => render_table(
             &rows,
             columns,
             listing::RenderOpts {
-                color: crate::tty::stdout_color_enabled(),
+                color,
                 term_width: crate::tty::stdout_terminal_width(),
             },
         )?,
