@@ -1,0 +1,136 @@
+# Implementation plan for SL-085 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-085"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Refactor worktree::coordinate + dispatch setup"
+objective = """
+Extract a pure-core `fn coordinate()` from `run_coordinate` returning a \
+`worktree::CoordOutcome` with the dispatch ref tip. Build `dispatch setup` \
+on it: read plan.toml, gate on non-empty phase list, call `coordinate`, emit \
+the env contract on stdout. Wire the clap variant in main.rs."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked — design §2 (dispatch setup) is settled; CoordOutcome struct shape defined; env contract format (`KEY=value` lines) specified." },
+  { id = "EN-2", text = "Green baseline: `just gate` clean at phase start; existing worktree and dispatch tests pass unchanged." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`worktree::coordinate(root, slice, dir)` extracted from `run_coordinate`, returns `worktree::CoordOutcome { dispatch_tip }`. `run_coordinate` wraps it with CLI I/O (behavior unchanged — existing integration tests still green)." },
+  { id = "EX-2", text = "`dispatch setup` plan-gate: reads plan.toml via `Plan::parse`, refuses missing file or zero phases with a clear error message." },
+  { id = "EX-3", text = "`dispatch setup` emits env contract (coordination_dir, base, slice, dispatch_ref) on stdout; human status on stderr." },
+  { id = "EX-4", text = "`dispatch setup` refuses live coordination worktree (`coordination-live`) and resumes a branch with no live worktree — both via `coordinate()` delegation." },
+]
+verification = [
+  { id = "VT-1", expects = "`dispatch setup --slice 85 --dir <tmp>` on a slice with a plan creates the coordination worktree, prints env contract with all four KEY=value lines, exits 0." },
+  { id = "VT-2", expects = "`dispatch setup` on a slice with no plan.toml exits non-zero with message containing 'no plan'." },
+  { id = "VT-3", expects = "`dispatch setup` on a slice with an empty phase list exits non-zero with message about empty plan." },
+  { id = "VT-4", expects = "`dispatch setup` twice on the same slice: second invocation exits non-zero with 'coordination-live'." },
+  { id = "VT-5", expects = "`dispatch setup` with a coordination branch but no live worktree resumes (reattaches), prints env contract, exits 0." },
+  { id = "VT-6", expects = "Existing worktree coordinate integration tests stay green — `run_coordinate` behavior unchanged by the extraction." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "dispatch plan-next"
+objective = """
+Build the `dispatch plan-next` verb: read plan.toml for ordered phase list, \
+read runtime phase sheets for status, compute `next` (scan in plan order: \
+skip completed, skip blocked, return first actionable pending run or \
+in_progress resume), render human table or JSON. Introduce the shared \
+`render_phase_table` helper that PHASE-03 reuses."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — plan.toml parsing path exists (reused from `setup`'s plan gate); `Plan::parse` and runtime state module are the data sources." },
+  { id = "EN-2", text = "design §3 (dispatch plan-next) settled: `next` definition (consecutive non-completed non-blocked, in_progress gates), JSON schema." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`dispatch plan-next` prints ordered phase table (id, status, name) for every phase in plan.toml, sourcing status from `state/slice/<N>/phases/phase-NN.toml`. Absent tracking file → `pending`." },
+  { id = "EX-2", text = "`next` scans in plan order: skip completed, skip blocked, return first actionable pending run or in_progress resume. `in_progress` gates subsequent `pending`. All remaining blocked → `next` empty with explicit message." },
+  { id = "EX-3", text = "`--json` output is valid JSON with `phases` array (id, name, status per phase) and `next` array." },
+  { id = "EX-4", text = "Shared `render_phase_table` helper factored out — designed so PHASE-03 can reuse it without fork." },
+]
+verification = [
+  { id = "VT-1", expects = "`dispatch plan-next --slice 85` with phases [completed, completed, blocked, pending] prints correct statuses and `next: PHASE-04`." },
+  { id = "VT-2", expects = "`dispatch plan-next --slice 85` with an `in_progress` phase PHASE-03 and `pending` PHASE-04 → `next: [PHASE-03]` (gated by in_progress)." },
+  { id = "VT-3", expects = "`dispatch plan-next --slice 85` with all remaining phases blocked → `next: (none — all remaining phases are blocked)` and exits 0." },
+  { id = "VT-4", expects = "`dispatch plan-next --slice 85` with no plan.toml exits non-zero." },
+  { id = "VT-5", expects = "`dispatch plan-next --slice 85 --json` emits valid JSON, `phases` array matches plan order, `next` is a JSON array, includes `batching_requires_phase_plan: true`." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "dispatch status"
+objective = """
+Build the `dispatch status` verb: coordination state (ref tip, live worktree \
+path), trunk drift (stateless, `git rev-list --count` since fork-point), \
+phase table via shared renderer, sync state (review/phase refs), candidate \
+summary, next-step guidance from lifecycle state machine. Human table or \
+JSON output."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — shared `render_phase_table` exists; phase rollup logic available." },
+  { id = "EN-2", text = "design §4 (dispatch status) settled: trunk drift via stateless rev-list count, sync state from ref existence, candidate summary from `read_candidates`, absent-ref error handling, JSON schema." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`dispatch status` prints coordination state: dispatch ref tip (abbreviated), worktree path or `(removed)`." },
+  { id = "EX-2", text = "`dispatch status` prints trunk drift: `stable` or `moved (N commits ahead of fork-point)`. Recomputes fork-point each invocation. No stored setup-time base." },
+  { id = "EX-3", text = "`dispatch status` prints phase table via shared renderer (same as `plan-next`)." },
+  { id = "EX-4", text = "`dispatch status` prints sync state: `not yet run`, `prepared — review/<N>, N phase cuts`, or `integrated`." },
+  { id = "EX-5", text = "`dispatch status` prints candidate summary: count + admitted count, or `0`. Does not duplicate `candidate status` detail." },
+  { id = "EX-6", text = "`dispatch status` prints `next` guidance per lifecycle state machine: next phase(s), or lifecycle-appropriate advice (prepare-review / audit / integrate / complete)." },
+]
+verification = [
+  { id = "VT-1", expects = "`dispatch status --slice 85` fresh after setup prints coordination state with live worktree, all phases `pending`, `sync: not yet run`, exits 0." },
+  { id = "VT-2", expects = "`dispatch status --slice 85` after sync prints `sync: prepared — review/085` and phase cut count." },
+  { id = "VT-3", expects = "`dispatch status --slice 85` with a moved trunk prints `trunk: moved (N commits ahead of fork-point)` (N ≥ 1)." },
+  { id = "VT-4", expects = "`dispatch status --slice 85` with all phases completed and no review ref prints `next: (all phases completed — run 'dispatch sync --prepare-review')`." },
+  { id = "VT-5", expects = "`dispatch status --slice 85` with all phases completed and review ref present prints guidance referencing audit + integrate." },
+  { id = "VT-6", expects = "`dispatch status --slice 85` with coordination worktree removed prints `coord: (removed)` and still resolves dispatch ref tip." },
+  { id = "VT-7", expects = "`dispatch status --slice 85 --json` emits valid JSON with all sections (`dispatch`, `coord`, `trunk`, `phases`, `sync`, `candidates`, `next`); `next.kind` is a structured token, not human prose." },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Skill shrinkage"
+objective = """
+Shrink the three dispatch skill files to their post-CLI-verb forms. \
+`dispatch/SKILL.md` → ~40 lines (when to use, setup→spawn→funnel→plan-next \
+loop, conclude, red flags). `dispatch-agent/SKILL.md` → ~25 lines (claude spawn \
+template, verify-worker, boundary recording, red flags). \
+`dispatch-subprocess/SKILL.md` → ~20 lines (codex/pi spawn template, env \
+contract, confined profile). Re-install and re-embed."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01..03 complete — all three new verbs exist and are tested. The skills can reference `dispatch setup`, `dispatch plan-next`, `dispatch status`." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`dispatch/SKILL.md` ≤ ~45 lines. Retains: when to use, outer loop, funnel cadence, handover, conclude, red flags. Removes: coordination setup internals, phase ordering logic, per-arm fork details (delegated to arm skills), candidate lifecycle prose (CLI-owned)." },
+  { id = "EX-2", text = "`dispatch-agent/SKILL.md` ≤ ~30 lines. Retains: spawn template (`Agent` tool, subagent_type, isolation), verify-worker, boundary recording note, red flags." },
+  { id = "EX-3", text = "`dispatch-subprocess/SKILL.md` ≤ ~25 lines. Retains: fork invocation, `env -C` / bwrap spawn, env contract sourcing, red flags." },
+  { id = "EX-4", text = "Skills re-installed via `doctrine install` and re-embedded (`touch src/skills.rs && cargo build`)." },
+  { id = "EX-5", text = "References to `dispatch import` purged from all three skills (the verb was dropped from scope)." },
+  { id = "EX-6", text = "Embedded skill text matches edited plugin source — integration test verifies line count within target range and key prose present." },
+]
+verification = [
+  { id = "VA-1", expects = "Agent review: each skill is self-contained for its role — the router describes the outer loop without restating arm mechanics; the arm skills describe spawn mechanics without restating the funnel. No 'dispatch import' references remain." },
+  { id = "VT-1", expects = "`just gate` green — skill changes are prose-only, no code impact, but the re-embed and rebuild must not break compilation or existing tests. Embedded skill text matches edited plugin source." },
+]
+specs             = []
+requirements      = []

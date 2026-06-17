@@ -130,7 +130,7 @@ pub(crate) struct InitReport {
 }
 
 /// Canonical state path for a slice's phase tracking, computed from the id.
-fn phases_dir(project_root: &Path, slice_id: u32) -> PathBuf {
+pub(crate) fn phases_dir(project_root: &Path, slice_id: u32) -> PathBuf {
     project_root
         .join(STATE_SLICE_DIR)
         .join(format!("{slice_id:03}"))
@@ -234,7 +234,7 @@ fn write_if_absent(path: &Path, body: &str) -> anyhow::Result<bool> {
 
 /// Distinct `phase-*` stems already present on disk (from either file of a
 /// pair). A missing dir yields an empty set.
-fn existing_phase_stems(dir: &Path) -> anyhow::Result<BTreeSet<String>> {
+pub(crate) fn existing_phase_stems(dir: &Path) -> anyhow::Result<BTreeSet<String>> {
     let mut stems = BTreeSet::new();
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -268,7 +268,7 @@ struct TrackingStatus {
 /// `.md`-only crash-partial), unparseable, or carries no `status` — all of which
 /// the fold counts as `missing_toml` rather than dropping the phase (R-F4). A
 /// genuine IO error (not "not found") propagates.
-fn read_phase_status(dir: &Path, stem: &str) -> anyhow::Result<Option<String>> {
+pub(crate) fn read_phase_status(dir: &Path, stem: &str) -> anyhow::Result<Option<String>> {
     let path = dir.join(format!("{stem}.toml"));
     let text = match fs::read_to_string(&path) {
         Ok(t) => t,
