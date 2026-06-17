@@ -75,6 +75,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .route("/vendor/{*path}", get(vendor_asset))
         .route("/api/health", get(health))
         .route("/api/graph", get(graph))
+        .route("/api/survey", get(survey))
         .route("/api/refresh", post(refresh))
         .route(
             "/api/dot/svg",
@@ -114,7 +115,7 @@ async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let dot_result = dot_version().await;
     let dot_ok = dot_result.is_ok();
     let dot_version = dot_result.ok();
-    let graph_ok = !state.graph.read().await.nodes.is_empty();
+    let graph_ok = !state.stores.read().await.graph.nodes.is_empty();
     Json(json!({
         "ok": true,
         "dot": { "ok": dot_ok, "version": dot_version },
@@ -153,15 +154,32 @@ async fn dot_version() -> Result<String, MapServerError> {
 }
 
 async fn graph(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let snapshot = state.graph.read().await.clone();
+    let snapshot = state.stores.read().await.graph.clone();
     Json(snapshot)
+}
+
+async fn survey(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, MapServerError> {
+    let stores = state.stores.read().await;
+    let view = crate::priority::surface::survey_view_for_map(&stores.priority_graph, false);
+    let body = serde_json::to_string_pretty(&view).map_err(|e| MapServerError::Other(e.into()))?;
+    Ok((
+        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+        body,
+    ))
 }
 
 async fn refresh(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, MapServerError> {
     let catalog =
         crate::catalog::hydrate::scan_catalog(&state.root).map_err(MapServerError::Other)?;
-    let g = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
-    *state.graph.write().await = g;
+    let priority_graph =
+        crate::priority::graph::build(&state.root).map_err(MapServerError::Other)?;
+    let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
+    let stores = crate::map_server::state::DataStores {
+        catalog,
+        priority_graph,
+        graph,
+    };
+    *state.stores.write().await = stores;
     Ok(Json(json!({"ok": true})))
 }
 
@@ -189,11 +207,12 @@ async fn entity_markdown(
             prefix: kind_ref.kind.prefix,
             id: num,
         };
-        let graph = state.graph.read().await;
+        let stores = state.stores.read().await;
+        let graph = &stores.graph;
         let node_exists = graph
             .nodes
             .contains_key(&crate::catalog::graph::NodeKey::Numbered(key));
-        drop(graph);
+        drop(stores);
         if !node_exists {
             return Err(MapServerError::EntityNotFound(id));
         }
@@ -207,9 +226,9 @@ async fn entity_markdown(
     // Path 2: memory uid (mem_019ecf… — validated shape + graph membership)
     if crate::memory::is_uid(&id) {
         let graph_key = crate::catalog::graph::NodeKey::Memory(id.clone());
-        let graph = state.graph.read().await;
-        let node_exists = graph.nodes.contains_key(&graph_key);
-        drop(graph);
+        let stores = state.stores.read().await;
+        let node_exists = stores.graph.nodes.contains_key(&graph_key);
+        drop(stores);
         if !node_exists {
             return Err(MapServerError::EntityNotFound(id));
         }
@@ -473,6 +492,38 @@ mod tests {
         (root, app)
     }
 
+    fn seed_issue(root: &std::path::Path, id: u32, edges: &[(&str, &[&str])]) {
+        let rels = crate::relation::rels_block(&crate::backlog::ISSUE_KIND, edges);
+        crate::catalog::test_helpers::write(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"issue{id}\"\ntitle = \"Issue {id}\"\nkind = \"issue\"\nstatus = \"open\"\nresolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{rels}"
+            ),
+        );
+        crate::catalog::test_helpers::write(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.md"),
+            "issue\n",
+        );
+    }
+
+    fn seed_risk(root: &std::path::Path, id: u32, status: &str) {
+        let rels = crate::relation::rels_block(&crate::backlog::RISK_KIND, &[]);
+        crate::catalog::test_helpers::write(
+            root,
+            &format!(".doctrine/backlog/risk/{id:03}/backlog-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"risk{id}\"\ntitle = \"Risk {id}\"\nkind = \"risk\"\nstatus = \"{status}\"\nresolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{rels}"
+            ),
+        );
+        crate::catalog::test_helpers::write(
+            root,
+            &format!(".doctrine/backlog/risk/{id:03}/backlog-{id:03}.md"),
+            "risk\n",
+        );
+    }
+
     #[tokio::test]
     async fn index_returns_200_html() {
         let (status, headers, _body) =
@@ -511,6 +562,100 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert!(parsed.get("nodes").is_some(), "missing nodes key");
         assert!(parsed.get("edges").is_some(), "missing edges key");
+    }
+
+    #[tokio::test]
+    async fn survey_returns_200_actionability_graph() {
+        let (status, headers, body) =
+            send(&seeded_app().await.1, json_req("GET", "/api/survey", None)).await;
+        assert_eq!(status, 200);
+        assert!(
+            headers["content-type"]
+                .to_str()
+                .unwrap()
+                .starts_with("application/json")
+        );
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed["kind"], "actionability_graph");
+    }
+
+    #[tokio::test]
+    async fn survey_unblocked_issue_is_actionable_with_rank_zero() {
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        seed_issue(&root_path, 1, &[]);
+        let app = super::super::tests::test_app(&root_path).await;
+
+        let (_status, _headers, body) = send(&app, json_req("GET", "/api/survey", None)).await;
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let item = parsed["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == "ISS-001")
+            .unwrap();
+        assert_eq!(item["actionability"], "actionable");
+        assert_eq!(item["rank"], 0);
+        assert_eq!(item["blockers"], json!([]));
+    }
+
+    #[tokio::test]
+    async fn survey_blocked_issue_reports_blockers() {
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        seed_issue(&root_path, 1, &[("needs", &["RSK-001"])]);
+        seed_risk(&root_path, 1, "open");
+        let app = super::super::tests::test_app(&root_path).await;
+
+        let (_status, _headers, body) = send(&app, json_req("GET", "/api/survey", None)).await;
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let item = parsed["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == "ISS-001")
+            .unwrap();
+        assert_eq!(item["actionability"], "blocked");
+        assert!(!item["blockers"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn survey_needs_edges_in_output() {
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        seed_issue(&root_path, 1, &[]);
+        seed_issue(&root_path, 2, &[("needs", &["ISS-001"])]);
+        seed_issue(&root_path, 3, &[("needs", &["ISS-001"])]);
+        let app = super::super::tests::test_app(&root_path).await;
+
+        let (_status, _headers, body) = send(&app, json_req("GET", "/api/survey", None)).await;
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let edges = parsed["edges"].as_array().unwrap();
+        // At least one needs edge from ISS-001 to a dependent
+        let needs_edges: Vec<_> = edges.iter().filter(|e| e["kind"] == "needs").collect();
+        assert!(!needs_edges.is_empty(), "should have needs edges");
+    }
+
+    #[tokio::test]
+    async fn survey_refresh_picks_up_new_items() {
+        let root = crate::catalog::test_helpers::tmp();
+        let root_path = root.path().to_path_buf();
+        seed_issue(&root_path, 1, &[]);
+        let app = super::super::tests::test_app(&root_path).await;
+
+        crate::catalog::test_helpers::seed_slice(&root_path, 9, &[]);
+        let (refresh_status, _headers, _body) =
+            send(&app, json_req("POST", "/api/refresh", Some(Body::empty()))).await;
+        assert_eq!(refresh_status, 200);
+
+        let (_status, _headers, body) = send(&app, json_req("GET", "/api/survey", None)).await;
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let has_new_item = parsed["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == "SL-009");
+        assert!(has_new_item, "refreshed survey should include SL-009");
     }
 
     #[tokio::test]
@@ -668,10 +813,16 @@ mod tests {
         crate::catalog::test_helpers::seed_slice(&root_path, 1, &[]);
 
         let catalog = crate::catalog::hydrate::scan_catalog(&root_path).expect("scan");
+        let priority_graph = crate::priority::graph::build(&root_path).expect("priority graph");
         let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
+        let stores = crate::map_server::state::DataStores {
+            catalog,
+            priority_graph,
+            graph,
+        };
         let state = AppState {
             root: root_path,
-            graph: Arc::new(RwLock::new(graph)),
+            stores: Arc::new(RwLock::new(stores)),
             dot_renderer: Arc::new(FakeDotRenderer {
                 mode: FakeDotMode::ToolUnavailable,
             }),
@@ -1073,10 +1224,16 @@ mod tests {
                 memory_type: Some("assumption".to_string()),
             },
         );
+        let priority_graph = crate::priority::graph::build(root_path).expect("priority graph");
+        let stores = crate::map_server::state::DataStores {
+            catalog,
+            priority_graph,
+            graph,
+        };
 
         let state = AppState {
             root: root_path.to_path_buf(),
-            graph: Arc::new(tokio::sync::RwLock::new(graph)),
+            stores: Arc::new(tokio::sync::RwLock::new(stores)),
             dot_renderer: Arc::new(FakeDotRenderer {
                 mode: FakeDotMode::Success(b"<svg></svg>".to_vec()),
             }),

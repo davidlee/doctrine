@@ -120,14 +120,14 @@ render.setViewMode = function(mode) {
     render.elements.depthSelector.style.display = (mode === 'edge') ? 'none' : '';
   }
 
-  // Relationship table: visible only in entity-graph
+  // Relationship table: visible in entity-graph and actionability, hidden in edge/concept-map
   if (render.elements.relationshipTable) {
-    render.elements.relationshipTable.style.display = (mode === 'entity-graph') ? '' : 'none';
+    render.elements.relationshipTable.style.display = (mode === 'entity-graph' || mode === 'actionability') ? '' : 'none';
   }
 
-  // Table toggle: visible only in entity-graph
+  // Table toggle: visible in entity-graph and actionability
   if (render.elements.tableToggle) {
-    render.elements.tableToggle.style.display = (mode === 'entity-graph') ? '' : 'none';
+    render.elements.tableToggle.style.display = (mode === 'entity-graph' || mode === 'actionability') ? '' : 'none';
   }
 
   // CM containers: hide/clear when leaving concept-map mode (crash-clearing gate)
@@ -145,9 +145,72 @@ render.setViewMode = function(mode) {
  * Relationship table DOM construction
  * Options: { container, edges, graph, focusId, depth }
  * --------------------------------------------------------------------- */
+function setRelationshipTableHeadings(container, headings) {
+  var table = container ? container.closest('table') : null;
+  var headerRow = table ? table.querySelector('thead tr') : null;
+  var i;
+  if (!headerRow) return;
+  headerRow.innerHTML = '';
+  for (i = 0; i < headings.length; i++) {
+    var th = document.createElement('th');
+    th.textContent = headings[i];
+    headerRow.appendChild(th);
+  }
+}
+
 render.relationshipTable = function(opts) {
   var tbody = opts.container;
   if (!tbody) return;
+
+  if (opts.viewMode === 'actionability') {
+    var nodes = opts.actionabilityView && Array.isArray(opts.actionabilityView.nodes) ? opts.actionabilityView.nodes : [];
+    setRelationshipTableHeadings(tbody, ['id', 'kind', 'status', 'actionability', 'blockers', 'consequence', 'title']);
+    tbody.innerHTML = '';
+
+    if (nodes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7"><span class="placeholder">[No actionability data to show]</span></td></tr>';
+      return;
+    }
+
+    nodes.forEach(function(node) {
+      var tr = document.createElement('tr');
+      var idCell = document.createElement('td');
+      var idLink = document.createElement('a');
+      idLink.href = '#' + router.buildHash('focus', node.id, opts.depth);
+      idLink.textContent = node.id;
+      idCell.appendChild(idLink);
+      tr.appendChild(idCell);
+
+      var kindCell = document.createElement('td');
+      kindCell.textContent = node.kind || '';
+      tr.appendChild(kindCell);
+
+      var statusCell = document.createElement('td');
+      statusCell.textContent = node.status || '';
+      tr.appendChild(statusCell);
+
+      var actionabilityCell = document.createElement('td');
+      actionabilityCell.textContent = node.actionability || '';
+      tr.appendChild(actionabilityCell);
+
+      var blockersCell = document.createElement('td');
+      blockersCell.textContent = Array.isArray(node.blockers) ? node.blockers.join(', ') : '';
+      tr.appendChild(blockersCell);
+
+      var consequenceCell = document.createElement('td');
+      consequenceCell.textContent = node.consequence !== null && node.consequence !== undefined ? String(node.consequence) : '';
+      tr.appendChild(consequenceCell);
+
+      var titleCell = document.createElement('td');
+      titleCell.textContent = node.title || '';
+      tr.appendChild(titleCell);
+
+      tbody.appendChild(tr);
+    });
+    return;
+  }
+
+  setRelationshipTableHeadings(tbody, ['src_id', 'src_title', 'label', 'tgt_id', 'tgt_title']);
 
   if (!opts.focusId) {
     tbody.innerHTML = '<tr><td colspan="5"><span class="placeholder">[Relationship table]</span></td></tr>';
