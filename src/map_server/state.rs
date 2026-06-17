@@ -14,7 +14,19 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use crate::catalog::graph::CatalogGraph;
+use crate::catalog::hydrate::Catalog;
 use crate::map_server::error::MapServerError;
+use crate::priority::graph::PriorityGraph;
+
+/// All three priority data stores — built and replaced atomically (SL-089 D9).
+/// A single [`RwLock<DataStores>`] guarantees a reader never sees a fresh
+/// `catalog` but a stale `priority_graph`.
+#[expect(dead_code, reason = "PHASE-01 Task 4: consumed in PHASE-02 AppState revision")]
+pub(crate) struct DataStores {
+    pub(crate) catalog: Catalog,
+    pub(crate) priority_graph: PriorityGraph,
+    pub(crate) graph: CatalogGraph,
+}
 
 /// Shared application state available to every request handler.
 pub(crate) struct AppState {
