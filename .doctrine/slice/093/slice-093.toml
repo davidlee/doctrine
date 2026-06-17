@@ -1,7 +1,7 @@
 id = 93
 slug = "css-modularisation-rv-065"
 title = "CSS modularisation: split monolithic style.css and resolve RV-065 findings"
-status = "started"
+status = "done"
 created = "2026-06-17"
 updated = "2026-06-17"
 
