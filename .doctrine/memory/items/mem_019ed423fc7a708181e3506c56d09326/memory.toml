@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed423fc7a708181e3506c56d09326"
+memory_key = "mem.fact.doctrine.jail-target-dir"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "CARGO_TARGET_DIR is set to /home/david/.cargo/doctrine-target-jail in the bwrap jail"
+summary = ""
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = ["plugins/"]
+globs = []
+commands = ["cargo build"]
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "aaa92b327221508500ac735f9f6ac4bcbb293a2d"
+ref_name = "refs/heads/main"
+checkout_state_id = "9484399de3517eb4cf0112bca65dc748afff01462ed428bc78308d9e3b8bc7d4"
+base_commit = "922f26f8757cbd3bfa957d2b2d203b96d0d7eb61"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
