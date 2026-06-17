@@ -34,8 +34,8 @@ reviewed = ""
 review_by = ""
 
 [trust]
-trust_level = "medium"
+trust_level = "high"
 
 [ranking]
-severity = "none"
-weight = 0
+severity = "medium"
+weight = 1
