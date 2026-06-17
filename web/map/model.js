@@ -23,6 +23,7 @@ var state = {
   hoveredId: null,
   viewMode: 'semantic',
   actionabilityView: null,
+  priorityZoomId: null,
   kindFilter: null,
   graphRenderSeq: 0
 };

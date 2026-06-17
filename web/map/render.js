@@ -174,6 +174,10 @@ render.relationshipTable = function(opts) {
 
     nodes.forEach(function(node) {
       var tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', function() {
+        window.location.hash = '#' + router.buildHash('focus', node.id, opts.depth);
+      });
       var idCell = document.createElement('td');
       var idLink = document.createElement('a');
       idLink.href = '#' + router.buildHash('focus', node.id, opts.depth);

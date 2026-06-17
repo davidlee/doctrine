@@ -50,6 +50,8 @@
     var container = opts && opts.container;
     var layout = opts && opts.layout;
     var focusId = opts && opts.focusId;
+    var zoomId = opts && opts.zoomId;
+    var onZoomToggle = opts && opts.onZoomToggle;
     var onNodeClick = opts && opts.onNodeClick;
     var onNodeHoverEnter = opts && opts.onNodeHoverEnter;
     var onNodeHoverLeave = opts && opts.onNodeHoverLeave;
@@ -84,8 +86,28 @@
     var nodes = layout && Array.isArray(layout.nodes) ? layout.nodes : [];
     var edges = layout && Array.isArray(layout.edges) ? layout.edges : [];
     var nodeMap = new Map();
-
     for (i = 0; i < nodes.length; i++) nodeMap.set(nodes[i].id, nodes[i]);
+
+    // Zoom layer — all graph content lives in this <g> so we can transform it.
+    var zoomLayer = document.createElementNS(svgNs, 'g');
+    zoomLayer.setAttribute('class', 'priority-zoom-layer');
+    var ZOOM_SCALE = 5;
+    if (zoomId) {
+      var zn = nodeMap.get(zoomId);
+      if (zn) {
+        var tx = vw / 2 - zn.x * ZOOM_SCALE;
+        var ty = vh / 2 - zn.y * ZOOM_SCALE;
+        zoomLayer.setAttribute('transform', 'translate(' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ') scale(' + ZOOM_SCALE + ')');
+      }
+    }
+    svg.appendChild(zoomLayer);
+
+    // Background click to zoom out.
+    svg.addEventListener('click', function(e) {
+      if (e.target === svg && zoomId && typeof onZoomToggle === 'function') {
+        onZoomToggle(null);
+      }
+    });
 
     for (i = 0; i < edges.length; i++) {
       var edge = edges[i];
@@ -101,24 +123,25 @@
       line.setAttribute('y2', target.y);
       line.setAttribute('class', edge.kind === 'needs' ? 'priority-edge priority-needs-edge' : 'priority-edge priority-after-edge');
       if (edge.kind === 'needs') line.setAttribute('marker-end', 'url(#needs-arrow)');
-      svg.appendChild(line);
+      zoomLayer.appendChild(line);
     }
 
     for (i = 0; i < nodes.length; i++) {
       var node = nodes[i];
-      var width = Math.max(72, (String(node.id || '').length * 7) + 16);
+      var nw = Math.max(72, (String(node.id || '').length * 7) + 16);
       var group = document.createElementNS(svgNs, 'g');
       var rect = document.createElementNS(svgNs, 'rect');
       var text = document.createElementNS(svgNs, 'text');
       var classes = 'priority-node priority-' + (node.actionability || 'terminal');
 
       if (node.id === focusId) classes += ' priority-node--focus';
+      if (node.id === zoomId) classes += ' priority-node--zoom';
       group.setAttribute('class', classes);
       group.setAttribute('transform', 'translate(' + node.x + ' ' + node.y + ')');
 
-      rect.setAttribute('x', -width / 2);
+      rect.setAttribute('x', -nw / 2);
       rect.setAttribute('y', -14);
-      rect.setAttribute('width', width);
+      rect.setAttribute('width', nw);
       rect.setAttribute('height', 28);
       rect.setAttribute('rx', 6);
       rect.setAttribute('ry', 6);
@@ -134,7 +157,7 @@
         var circle = document.createElementNS(svgNs, 'circle');
         var badgeText = document.createElementNS(svgNs, 'text');
         badge.setAttribute('class', 'priority-consequence-badge');
-        badge.setAttribute('transform', 'translate(' + ((width / 2) - 6) + ' -10)');
+        badge.setAttribute('transform', 'translate(' + ((nw / 2) - 6) + ' -10)');
         circle.setAttribute('r', '8');
         badge.appendChild(circle);
         badgeText.setAttribute('text-anchor', 'middle');
@@ -145,8 +168,14 @@
       }
 
       if (typeof onNodeClick === 'function') {
-        group.addEventListener('click', function(id) {
-          return function() { onNodeClick(id); };
+        group.addEventListener('click', function(e, id) {
+          return function(evt) {
+            evt.stopPropagation();
+            if (typeof onZoomToggle === 'function') {
+              onZoomToggle(zoomId === id ? null : id);
+            }
+            onNodeClick(id);
+          };
         }(node.id));
       }
       if (typeof onNodeHoverEnter === 'function') {
@@ -166,7 +195,7 @@
         }(group));
       }
 
-      svg.appendChild(group);
+      zoomLayer.appendChild(group);
     }
 
     container.appendChild(svg);
