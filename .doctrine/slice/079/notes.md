@@ -51,3 +51,47 @@ All seven F-1 through F-7 findings from RV-046 applied:
 
 `doctrine validate` passes clean. Plan is now executable — ready for
 `/phase-plan`.
+
+## 2026-06-17 — Implementation complete (dispatch, self-orchestrated)
+
+All three phases implemented directly in worktree forks (no codex subprocess):
+
+- **PHASE-01** — IMP-038 (debug_assert! in select_columns) + IMP-040
+  (resolve_color, --color flag, into_list_args(color:) injection). 89 + 22 -
+  lines. All 1551 unit tests pass; clippy clean.
+- **PHASE-02** — IMP-039a (SURVEY_COLS/NEXT_COLS routed through
+  render_columns). 103 + 40 - lines. RSK-1 confirmed: 16/16 e2e priority
+  goldens byte-identical under color:false.
+- **PHASE-03** — IMP-039b (status_colored helper + 5 status-bearing writeln!
+  sites). 96 + 17 - lines. 4 new status_colored tests (1555 total pass).
+
+Total delta: ~285 lines across 10 files. Funneled as three commits on
+`dispatch/079` via cherry-pick (S^ == B in all cases). Coordination branch
+at `e82069b`.
+
+Outstanding:
+- 3 e2e_adr_cli_golden tests fail on worker forks (Write-classed verbs
+  blocked by marker). They pass on the coordination worktree (markerless).
+  Not a regression.
+- IMP-044 (RenderOpts migration for priority) deferred per scope.
+- IMP-056 (coverage kebab-case) deferred per scope.
+
+## 2026-06-17 — RV-050 reconciliation + code-review (audit)
+
+- Opened RV-050 against SL-079 with facet `reconciliation`; primed with 6
+  areas, 12 tracked paths, 5 invariants, 2 risks.
+- Three findings raised: F-1 (major) — `coverage_view::run` bypassed --color
+  flag; F-2 (minor) — `run_blockers`/`run_explain` accept unused RenderOpts;
+  F-3 (nit) — doubled deref in debug_assert! error message.
+- **F-1 fix-now:** `coverage_view::run()` at line 452 was still calling
+  `stdout_color_enabled()` directly — the only surface missed in the PHASE-01
+  flag-wiring pass. Fixed by adding `color: bool` parameter to
+  `coverage_view::run()` and passing `resolve_color(cli.color)` from main.rs.
+  Committed as `fix(SL-079): wire --color flag into coverage_view::run` on
+  `dispatch/079` (commit `7ce4f37`).
+- **F-2 tolerated:** Design explicitly says blockers/explain are prose;
+  `_render` prefix signals unused per Rust convention.
+- **F-3 aligned:** Style observation only — `*d` vs `**d` in closure produces
+  identical code.
+- Review status: `done · await=none`. No unresolved blockers.
+- `cargo test coverage_view` — 9/9 pass post-fix.

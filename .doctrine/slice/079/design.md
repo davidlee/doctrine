@@ -135,7 +135,7 @@ const SURVEY_COLS: &[Column<SurveyRow>] = &[
     Column { name: "status",  header: "status",
              cell: |r| r.status.clone(),
              paint: ColumnPaint::ByValue(|r| status_hue(&r.status)) },
-    Column { name: "blocked", header: "",
+    Column { name: "act",     header: "",
              cell: |r| r.act.badge().to_string(),
              paint: ColumnPaint::ByValue(|r| status_hue(r.act.token())) },
     Column { name: "cons",    header: "cons",
@@ -148,14 +148,16 @@ const SURVEY_COLS: &[Column<SurveyRow>] = &[
              cell: |r| r.title.clone(),
              paint: ColumnPaint::Alternate([TITLE_EVEN, TITLE_ODD]) },
 ];
+
+const SURVEY_DEFAULT: &[&str] = &["id", "kind", "status", "act", "cons", "blocker", "title"];
 ```
 
 - `id` — Cyan fixed hue (distinct from per-kind id hues on kind-specific
   surfaces; priority rows are mixed-kind, one hue is neutral).
 - `status` — reuses `status_hue` (green/yellow/red per the shared map).
-- `blocked` badge — `ByValue` on `act.token()` ("blocked" → Red; "actionable"
-  → unmapped → plain). Cell text is `""` for actionable (invisible anyway) and
-  `"BLOCKED"` for blocked (visible, red).
+- `act` — actionability badge column (D2). `ByValue` on `act.token()`
+  ("blocked" → Red; "actionable" → unmapped → plain). Cell text is `""` for
+  actionable (invisible anyway) and `"BLOCKED"` for blocked (visible, red).
 - `title` — zebra-striped via `Alternate` (matches all other list surfaces).
 
 **Next (5 columns):**
@@ -178,6 +180,8 @@ const NEXT_COLS: &[Column<NextRow>] = &[
              cell: |r| r.title.clone(),
              paint: ColumnPaint::Alternate([TITLE_EVEN, TITLE_ODD]) },
 ];
+
+const NEXT_DEFAULT: &[&str] = &["id", "kind", "status", "unblocks", "title"];
 ```
 
 ### 3d. Priority function signatures (changed)
@@ -198,6 +202,11 @@ Implementation: check `rows.is_empty()` first (return the existing empty-string
 message), else `render_columns(rows, &cols.iter().collect::<Vec<_>>(), opts)`.
 Never call `render_table` directly — every cell goes through `paint_cell`.
 
+Priority does not support `--columns` filtering — the full column array is
+always passed to `render_columns`. The `SURVEY_DEFAULT` / `NEXT_DEFAULT`
+slices are declared for IMP-038 validation parity but not passed through
+`select_columns` at render time (no user-columns surface).
+
 ## 4. IMP-038 — Column model: validate defaults at construction
 
 In `select_columns`, before the `match requested`:
@@ -211,9 +220,13 @@ debug_assert!(
 );
 ```
 
-`debug_assert!` catches the bug during development/test. In release, the
-existing `pick()` → `Err(unknown column)` backstop still fires — the fix makes
-it earlier and clearer in debug, not new behaviour.
+`debug_assert!` catches the bug during development/test (approach A:
+validate at list-render start — the assertion runs at `select_columns` entry,
+before any rendering work). In release, the existing `pick()` → `Err(unknown
+column)` backstop still fires — the fix makes it earlier and clearer in
+debug, not new behaviour. Chose inline `debug_assert!` over a separate
+`validate_default_columns` function: tighter integration, no new public
+surface, same call-point semantics.
 
 The assertion is at the top of `select_columns`, before any work, so it acts as
 a construction-time gate: if a kind defines a default column name not in its
@@ -419,4 +432,21 @@ Original self-review findings (pre-inquisition):
    not a user-filterable list surface.
 
 7. **Adversarial review pass.** Self-review complete. Findings integrated above.
+
+## 10. Second adversarial review pass
+
+Second review (D6 internal pass, post-user-design-approval) surfaced three
+additional findings, all integrated above:
+
+1. **F-R1** — Survey column name `"blocked"` → `"act"` (user's explicit choice,
+   D2). Column name, annotation, and default slice updated.
+2. **F-R2** — Missing `SURVEY_DEFAULT` / `NEXT_DEFAULT` declared after each
+   column array (IMP-038 parity, correctly noted as not used by
+   `select_columns` at priority render time — priority has no `--columns`
+   surface).
+3. **F-R3** — `debug_assert!` tradeoff recorded: inline assertion chose
+   tighter integration over a separate `validate_default_columns` call, same
+   call-point semantics (approach A: validate at list-render start).
+
+Design locked. Proceed to `/plan`.
    Offer external review or advance to `/plan`.

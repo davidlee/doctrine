@@ -1,0 +1,43 @@
+id    = 50
+slug  = "reconciliation-review-of-sl-079"
+title = "reconciliation review of SL-079"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-079"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "coverage_view::run bypasses --color flag — calls stdout_color_enabled() directly instead of receiving injected color: bool"
+detail = "src/coverage_view.rs:452 constructs listing::RenderOpts with color: crate::tty::stdout_color_enabled() — the pre-SL-079 auto-detect path. This means --color=never and --color=always have no effect on 'doctrine coverage show' output. The --color flag was wired into 12 CommonListArgs surfaces and 4 priority commands, but coverage_view was missed because it uses its own render_table wrapper rather than CommonListArgs::into_list_args. Fix: coverage_view::run() should accept a color: bool parameter (injected from main.rs via resolve_color(cli.color)), and coverage_view::render_table() should use it in its RenderOpts. The main.rs call site at Command::Coverage { CoverageCommand::Show { .. } } → coverage_view::run(path, &reference, columns.as_deref(), format, json) needs the additional argument."
+disposition = "fix-now"
+response = "Confirmed. coverage_view::run() at line 452 calls stdout_color_enabled() directly — it was missed during the PHASE-01 flag-wiring pass because it uses its own render_table wrapper rather than CommonListArgs::into_list_args. The --color flag is incomplete without this. Fix requires: (a) add color: bool parameter to coverage_view::run(), (b) pass resolve_color(cli.color) from main.rs CoverageCommand::Show arm, (c) use the injected color in the RenderOpts construction on line 452, replacing the stdout_color_enabled() call. Tests: coverage_view already has unit tests at lines 761/781 that construct RenderOpts::default() — update them to test both color:true and color:false paths."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "run_blockers / run_explain accept but discard RenderOpts — misleading API surface"
+detail = "src/priority/mod.rs: run_blockers and run_explain accept _render: RenderOpts but never use it — their human render functions (blockers_human, explain_human) are prose surfaces that don't consume RenderOpts. The parameter exists because main.rs constructs RenderOpts { color, term_width } for all four priority commands uniformly. This is harmless at runtime but misleading at the type level — it signals 'this surface takes colour options' when it doesn't. Fix: either document the ignored parameter with a comment at each call site, or restructure main.rs to only construct RenderOpts for survey/next (the table surfaces)."
+disposition = "tolerated"
+response = "The design explicitly states blockers_human and explain_human are prose surfaces (design §1: 'run_blockers and run_explain unchanged — they do not pass through render_columns; blockers_human/explain_human are prose, not tables'). The _render parameter exists because main.rs constructs RenderOpts uniformly for all four priority commands. Accepting an unused parameter is slightly misleading, but the alternative (special-casing the main.rs call sites) would add branching for no functional gain. This is a conscious uniformity tradeoff — the parameter is prefixed with _ to signal unused-ness per Rust convention."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "debug_assert! error message uses verbose **d dereference where *d is idiomatic"
+detail = "src/listing.rs line ~515 in select_columns debug_assert! error message: .find(|d| !available.iter().any(|c| c.name == **d)). Here d: &&str (iterating &[&str]), so *d gives &str and **d gives str. The == comparison works identically either way (Rust auto-derefs). The project style generally uses single deref in closure predicates — **d is correct but unnecessarily verbose. Suggestion: use *d for consistency."
+disposition = "aligned"
+response = "Both *d and **d produce identical behavior in the == comparison. The project uses single-deref (deref coercion) consistently elsewhere in closure predicates. However, **d is semantically correct (explicit about the number of derefs) and the compiler produces identical code. This is purely a style observation, not a defect. No action warranted."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

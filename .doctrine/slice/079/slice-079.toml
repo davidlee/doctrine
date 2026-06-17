@@ -1,7 +1,7 @@
 id = 79
 slug = "finish-the-cli-colour-story-deferred-surfaces-color-flag"
 title = "Finish the CLI colour story: deferred surfaces + --color flag"
-status = "ready"
+status = "audit"
 created = "2026-06-16"
 updated = "2026-06-16"
 
