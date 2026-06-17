@@ -1,0 +1,167 @@
+# Implementation plan for SL-083 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-083"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# --- PHASE-01: Pre-extraction cleanup (existing modules) ---
+[[phase]]
+id        = "PHASE-01"
+name      = "Pre-extraction cleanup: dot.js, model.js, api.js"
+objective = "Apply contained cleanup items F-6, F-8, and F-15 to already-extracted modules before any new module extraction begins. These are low-risk, independently testable, and touch no new module boundaries."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (review feedback integrated)" },
+  { id = "EN-2", text = "plan.toml authored and approved" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dot.nodeAttrs uses NODE_STYLES lookup table (F-6); dot.graphToDot output byte-identical to pre-change" },
+  { id = "EX-2", text = "model.neighbourhood and model.cmNeighbourhood delegate to shared bfsCore (F-8); both return identical results to pre-change for all test cases" },
+  { id = "EX-3", text = "api.mutateConceptMap body constructed declaratively via Object.assign (F-15); all test cases pass unchanged" },
+  { id = "EX-4", text = "no functions added or removed from any module — only implementation changes within existing functions" },
+]
+verification = [
+  { id = "VT-1", expects = "test.html: all dot tests pass, graphToDot output byte-identical" },
+  { id = "VT-2", expects = "test.html: all model tests pass, neighbourhood and cmNeighbourhood return identical results" },
+  { id = "VT-3", expects = "test.html: api.mutateConceptMap tests pass unchanged" },
+  { id = "VT-4", expects = "test.html: full suite passes — no regression from cleanup" },
+]
+specs        = []
+requirements = []
+
+# --- PHASE-02: Extract svg.js ---
+[[phase]]
+id        = "PHASE-02"
+name      = "Extract svg.js: shared SVG DOM manipulation"
+objective = "Extract SVG post-processing functions (hit-rect injection, handler wiring with extractId callback, focus highlight, legend dimming) into a new svg.js module. Consolidate duplicated handler-wiring pattern (F-14). Wire applyFocusHighlight with extractId callback (design review fix)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete; test.html passes" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "svg.js module exists at web/map/svg.js, exposing window.svg with injectHitRects, wireHandlers, applyFocusHighlight, dimLegend" },
+  { id = "EX-2", text = "svg.wireHandlers accepts extractId callback and handlers object — single shared implementation for entity graph and CM (F-14)" },
+  { id = "EX-3", text = "svg.applyFocusHighlight accepts extractId callback matching wireHandlers contract" },
+  { id = "EX-4", text = "app.js: all SVG functions removed; call sites updated to svg.* namespace" },
+  { id = "EX-5", text = "index.html loads svg.js after dot.js and before render.js" },
+  { id = "EX-6", text = "test.html updated: /* global svg */ added, no assertion changes" },
+]
+verification = [
+  { id = "VT-1", expects = "test.html: full suite passes unchanged" },
+]
+specs        = []
+requirements = []
+
+# --- PHASE-03: Extract render.js ---
+[[phase]]
+id        = "PHASE-03"
+name      = "Extract render.js: entity-graph DOM construction"
+objective = "Extract all entity-graph DOM construction into render.js, including el() helper, entity list, focus header, relationship table, markdown pane, hover detail, graph pane, edge detail, and setViewMode. Includes F-5 (remove encodeAttr, namespace escapeHtml/escapeAttr), F-7 (data-kind attributes + CSS selector swap), F-9 (cache DOM element refs via render.cacheElements). setViewMode clears CM containers when leaving concept-map mode (design review fix)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete; test.html passes" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "render.js module exists at web/map/render.js, exposing all functions per design §1 responsibility matrix" },
+  { id = "EX-2", text = "render.escapeHtml and render.escapeAttr are namespaced on window.render, not bare globals" },
+  { id = "EX-3", text = "Dead encodeAttr function deleted; zero callers remain (F-5)" },
+  { id = "EX-4", text = "Kind-pill elements carry data-kind attribute; CSS selectors use [data-kind=\"X\"] instead of [style*=\"--kind-X\"] (F-7); visual output unchanged" },
+  { id = "EX-5", text = "render.cacheElements populates render.elements at bootstrap; repeated querySelector calls eliminated (F-9)" },
+  { id = "EX-6", text = "render.setViewMode hides/clears all CM containers (.cm-edge-table, .cm-add-edge-form, .cm-diagnostics-panel) when mode !== 'concept-map'" },
+  { id = "EX-7", text = "app.js: all render functions removed; call sites updated to render.* namespace" },
+  { id = "EX-8", text = "index.html loads render.js after svg.js" },
+  { id = "EX-9", text = "test.html updated: /* global render */ added; renderCmDiagnostics test calls cm.renderDiagnostics (existing function, not moved)" },
+]
+verification = [
+  { id = "VT-1", expects = "test.html: full suite passes unchanged; renderCmDiagnostics test still passes" },
+  { id = "VA-1", expects = "Manual checklist items 1-7 pass: entity list populates, focus header renders, graph renders, relationship table displays, markdown pane fetches and renders, hover detail shows, edge detail view works" },
+  { id = "VA-2", expects = "Visual diff: light and dark mode output matches pre-change for entity list, focus header, relationship table, hover detail, markdown pane, and graph pane" },
+  { id = "VH-1", expects = "data-kind attribute values match entity kind prefixes; CSS text-color overrides apply correctly in both light and dark modes" },
+]
+specs        = []
+requirements = []
+
+# --- PHASE-04: Extract search.js ---
+[[phase]]
+id        = "PHASE-04"
+name      = "Extract search.js: search, keyboard nav, filters, depth"
+objective = "Extract search input wiring, keyboard navigation, kind-filter checkboxes, depth buttons, refresh button, and filtered-entity-list composition into search.js. Keyboard nav state (listNavIndex) stays closure-local, never on global state."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete; test.html passes; manual checklist 1-7 passes" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "search.js module exists at web/map/search.js, exposing all functions per design §2 signatures" },
+  { id = "EX-2", text = "search.renderFilteredEntities composes model.searchFilter → render.entityList; no duplicated DOM construction" },
+  { id = "EX-3", text = "Keyboard nav state (listNavIndex) is closure-local to wireSearch" },
+  { id = "EX-4", text = "app.js: all search functions removed; call sites updated to search.* namespace" },
+  { id = "EX-5", text = "index.html loads search.js after render.js" },
+  { id = "EX-6", text = "test.html updated: /* global search */ added" },
+]
+verification = [
+  { id = "VT-1", expects = "test.html: full suite passes unchanged" },
+  { id = "VA-1", expects = "Manual checklist items 3-5 pass: search 'SL' + Enter navigates; arrow-down keyboard nav highlights + Enter selects; kind filter toggles update entity list and relationship table" },
+  { id = "VA-2", expects = "Manual checklist items 6-7 pass: depth buttons expand/contract neighbourhood; refresh button reloads graph and clears markdown cache" },
+  { id = "VH-1", expects = "Keyboard nav closure state does not leak between re-renders; filter state consistent across hash changes" },
+]
+specs        = []
+requirements = []
+
+# --- PHASE-05: Extract concept-map.js ---
+[[phase]]
+id        = "PHASE-05"
+name      = "Extract concept-map.js: CM rendering (pure renderer)"
+objective = "Extract concept-map diagram rendering, edge table, diagnostics panel, add-edge form, and edit toggle into concept-map.js as a pure renderer. CM mutation handlers (handleAddEdge, handleRemoveEdge, handleRenameNode, stale-write recovery) remain in app.js per D2. Node-click callbacks fire unconditionally — editing-state branching is app.js's responsibility."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete; test.html passes; manual checklist 1-7 passes" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "concept-map.js module exists at web/map/concept-map.js, exposing cm.renderDiagram, cm.renderEdgeTable, cm.renderDiagnostics, cm.renderAddEdgeForm, cm.renderEditToggle" },
+  { id = "EX-2", text = "cm.js is a pure renderer: receives cm data, editing state, and callbacks; does not read/write global state directly" },
+  { id = "EX-3", text = "Node-click callbacks (onClick) fire unconditionally; editing-mode branch logic stays in app.js" },
+  { id = "EX-4", text = "CM mutation handlers (handleAddEdge, handleRemoveEdge, handleRenameNode, handleStaleWrite, handleMutationError, showCmFormError) remain in app.js" },
+  { id = "EX-5", text = "app.js: all CM render functions removed; call sites updated to cm.* namespace" },
+  { id = "EX-6", text = "index.html loads concept-map.js after search.js" },
+  { id = "EX-7", text = "test.html updated: /* global cm */ added; renderCmDiagnostics test calls cm.renderDiagnostics" },
+]
+verification = [
+  { id = "VT-1", expects = "test.html: full suite passes unchanged; renderCmDiagnostics test passes via cm.renderDiagnostics" },
+  { id = "VA-1", expects = "Manual checklist items 8-11 pass: CM diagram renders, edge table shows, diagnostics visible in view mode; edit toggle switches to edit mode; add-edge form submits, cache updates, view refreshes; remove edge works; rename node inline input commits on Enter, cancels on Escape" },
+  { id = "VA-2", expects = "Manual checklist item 16: navigate entity graph → CM → entity graph — no stale CM panels remain visible" },
+  { id = "VH-1", expects = "CM mutation pipeline preserved: add/remove edge → API call → cache update → re-render; 409 stale-write recovery triggers auto-refetch; duplicate-edge 409 shows form error; 400 empty-field shows form error" },
+]
+specs        = []
+requirements = []
+
+# --- PHASE-06: Shrink app.js, wire together ---
+[[phase]]
+id        = "PHASE-06"
+name      = "Shrink app.js and finalize integration"
+objective = "Reduce app.js to ~100 lines of pure orchestration: bootstrap, render() dispatch, CM mutation pipeline, error display, and markdown rendering. Extract safeStorage helper (F-16). Update index.html load order. Finalize test.html /* global */ comments. Run full manual verification checklist and record results."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete; test.html passes; manual checklist 1-11 passes" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "app.js is ≤150 lines (target ~100); contains only bootstrap, render() dispatch, CM mutation pipeline, error display, markdown rendering, and safeStorage helper" },
+  { id = "EX-2", text = "safeStorage.get/set helper extracted and used by wireTableToggle (F-16)" },
+  { id = "EX-3", text = "index.html script load order matches design §1: api.js → model.js → router.js → dot.js → svg.js → render.js → search.js → concept-map.js → app.js" },
+  { id = "EX-4", text = "test.html /* global */ comments updated for all five new modules; no assertion changes" },
+  { id = "EX-5", text = "No module exceeds ~400 lines; app.js is the only module that touches global state directly (state owner: model.js)" },
+  { id = "EX-6", text = "Manual checklist results recorded in .doctrine/slice/083/notes/ with pass/fail per item" },
+]
+verification = [
+  { id = "VT-1", expects = "test.html: full suite passes unchanged — no regression from any phase" },
+  { id = "VA-1", expects = "Full manual checklist (all 16 items) passes; results recorded in slice notes" },
+  { id = "VA-2", expects = "App loads without JS console errors; all hash routes functional; no 404s for new module files" },
+  { id = "VH-1", expects = "All 16 manual checklist items pass with no regressions in light or dark mode" },
+]
+specs        = []
+requirements = []
