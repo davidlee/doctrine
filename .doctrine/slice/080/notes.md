@@ -40,3 +40,50 @@ convention), mem_019ed3fa... (routing row must follow install).
 ### Next agent should
 1. Apply RV-052 penances to design.md and plan.toml/plan.md
 2. Then `/phase-plan` PHASE-01 → `/execute` PHASE-01 → PHASE-02 → PHASE-03 → PHASE-04
+
+## Session 2026-06-17 (execution — all four phases)
+
+### PHASE-01: Author /reconcile skill
+- Wrote `plugins/doctrine/skills/reconcile/SKILL.md` — the master (RustEmbed source),
+  not `.agents/skills/` (gitignored install copy)
+- All 7 D4 process steps present with exact CLI verb shapes
+- `doctrine claude install` succeeded after rebuild
+- CARGO_TARGET_DIR trap: jail sets it to `/home/david/.cargo/doctrine-target-jail`;
+  `./target/` and `~/.cargo/bin/doctrine` are stale
+
+### PHASE-02: Retune /audit
+- Current audit SKILL.md was already clean — no "design was wrong" prose found
+- Added reconciliation brief step (step 5), disposition convention paragraph,
+  handoff to `/reconcile` (step 7)
+- 3x commits: editing, install verification, lint
+
+### PHASE-03: Retune /close
+- Rewrote pre-check to reference `/reconcile` + `## Reconciliation Outcome`
+- Inserted spec-coherence gate as step 2: four resolution paths, no free-floating
+  "rejected", unresolved → refuse close and return to `/reconcile`
+- Step renumbering preserved dispatched-slice and lifecycle steps intact
+- `just check` green (1589 passed)
+
+### PHASE-04: Routing wire + boot regeneration
+- D7 edits to `install/routing-process.md` already committed in prior session
+  (commit 23358ed) — edit was a no-op against HEAD
+- Real deliverable: re-embedded binary + `doctrine boot` regeneration
+- RustEmbed trap (mem_019e98a783ea): must `touch src/install.rs && cargo build`
+  then use jail-target-dir binary for `doctrine boot`
+- Verified both routing-process.md and generated boot.md carry D7 edits
+- `just gate` green; `doctrine claude install` succeeded
+
+### Harvest from phases
+- **Binary selection discipline:** PATH `doctrine` is AUR release (stale plugins);
+  always use jail binary at `/home/david/.cargo/doctrine-target-jail/debug/doctrine`
+  for `claude install` and `boot` after plugin edits
+- **Skill master location:** `plugins/doctrine/skills/<name>/SKILL.md` is the
+  RustEmbed master; `.doctrine/skills/` is the install destination (gitignored)
+
+## Session 2026-06-17 (audit — RV-055)
+
+Clean audit — zero findings. All phases conformant; three skills form coherent
+chain; routing wire correct; install succeeds; gate green.
+
+RV-055 `## Synthesis` and `## Reconciliation Brief` (empty) written. Slice
+advanced to `reconcile`.
