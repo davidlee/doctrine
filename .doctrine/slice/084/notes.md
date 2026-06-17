@@ -144,3 +144,25 @@ include a residual note: "fork branch IS the phase ref — gc only after
 prepare-review." The codex arm has the same property. This is not a new gap
 (the current skill already says gc at conclude, after sync), but it's a
 sharp edge worth documenting in the pi-specific spawn prose.
+
+---
+
+# SL-084 Audit (RV-056) — 2026-06-17
+
+**Verdict: clean — zero findings.** All 4 phases conform to design.md and
+plan.toml.
+
+## Key observations
+
+- Pi `subagent` tool with `cwd=$D` validated in dispatch — workers committed
+  successfully, confirming the mechanism SL-084 designs into the skill.
+- ISS-016 (import corrupt patch) required manual `git diff | git apply --index`
+  workaround for all 3 funnels.
+- `doctrine claude install` from main tree installed old source — no defect;
+  install will pick up new source after integration to trunk.
+
+## Memories recorded
+
+- `mem.pattern.dispatch.pi-subagent-cwd-binding` — subagent cwd binding works
+  for worker forks; worker.md carries contract in task prompt
+- `mem.fact.doctrine.import-corrupt-patch` — ISS-016 workaround

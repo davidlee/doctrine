@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed44cbfe6743092c066cb57c5a4ca"
+memory_key = "mem.fact.doctrine.import-corrupt-patch"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "doctrine worktree import corrupt patch workaround"
+summary = "ISS-016: doctrine worktree import generates corrupt patch for git apply --3way. Workaround: git diff B..S | git apply --index manually."
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a4e5640457fc1e7719641e0b9738c5944bc3f9cd"
+ref_name = "refs/heads/main"
+checkout_state_id = "98e0ba6546e47bdc5ac1c8f26eba40a3be36e2e1f449a898e64b4e7a6aed9b6e"
+base_commit = "e39714514b52746c958dd4c9dad5d42b76f84de1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

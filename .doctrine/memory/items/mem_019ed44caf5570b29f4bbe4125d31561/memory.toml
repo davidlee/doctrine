@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed44caf5570b29f4bbe4125d31561"
+memory_key = "mem.pattern.dispatch.pi-subagent-cwd-binding"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "pi subagent cwd binding for dispatch worker forks"
+summary = "pi subagent cwd binding works for dispatch worker forks — source edits land in fork, git writes succeed, worker.md agent carries dispatch contract in task prompt"
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a4e5640457fc1e7719641e0b9738c5944bc3f9cd"
+ref_name = "refs/heads/main"
+checkout_state_id = "ccb6f5e41e197a3e0fda530c14ab2d3bd129a2c369e08c194ea02444570ec6ec"
+base_commit = "e39714514b52746c958dd4c9dad5d42b76f84de1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
