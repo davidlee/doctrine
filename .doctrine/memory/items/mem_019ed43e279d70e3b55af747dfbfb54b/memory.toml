@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed43e279d70e3b55af747dfbfb54b"
+memory_key = "mem.pattern.build.jail-binary-for-skill-install"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Use jail-built binary for doctrine claude install and boot after plugin edits"
+summary = "After editing plugin SKILL.md, use the jail-built binary for claude install and boot — the PATH binary carries stale embedded assets"
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = ["plugins/doctrine/skills/", "install/routing-process.md"]
+globs = []
+commands = ["claude install", "boot"]
+tags = ["build", "skills", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "cc02cd0e9dae5ca07b7456492b2045cbb57a1dc6"
+ref_name = "refs/heads/main"
+checkout_state_id = "22c6e4fec15a8dcae55d6bd8f7ae480d77dc085cadf4d75d6e6d66441e601644"
+base_commit = "985f8d0d140b0e5b5dc9fedceadbdaf16ee64357"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
