@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 269
+slug = "define-a-reusable-estimatefacet-and-normalize-bounds-to-finite-f64"
+title = "Define a reusable EstimateFacet and normalize bounds to finite f64"
+status = "pending"
+kind = "functional"
+
+description = "A single reusable EstimateFacet is parsed from an optional [estimate] table; lower/upper authored as TOML integers or floats normalize to finite f64 internally, and non-finite values are rejected at the parse boundary."
+tags = []
+acceptance_criteria = [
+  "An optional [estimate] table parses into one shared EstimateFacet model carrying lower and upper as f64.",
+  "Bounds authored as TOML integers and as floats both normalize to finite f64.",
+  "NaN, +Infinity, and -Infinity are rejected at normalization, never carried inward.",
+  "The model is defined once, not specialised per entity kind.",
+]

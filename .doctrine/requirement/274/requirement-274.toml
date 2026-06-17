@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 274
+slug = "expose-estimate-metadata-through-a-policy-free-graph-contract"
+title = "Expose estimate metadata through a policy-free graph contract"
+status = "pending"
+kind = "functional"
+
+description = "Catalog/graph hydration exposes each estimated node's metadata through a stable, policy-free contract carrying no aggregation or interpretation."
+tags = []
+acceptance_criteria = [
+  "For each estimated node, hydration exposes entity id, kind, lower, upper, the project unit, the node's relations/edges, and lifecycle state where available.",
+  "The exposed contract carries no aggregation, traversal, or interpretation policy.",
+  "The graph-facing surface uses graph-neutral vocabulary and passes the whole-word denylist (no project/task/schedule/capacity).",
+]
