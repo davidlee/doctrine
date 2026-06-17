@@ -30,7 +30,7 @@ svg.injectHitRects = function(svgEl) {
         hitRect.setAttribute('data-doctrine-hit', 'true');
         g.insertBefore(hitRect, g.firstChild);
       }
-    } catch (_) { /* getBBox may fail on detached nodes */ }
+    } catch (_) { /* getBBox may fail on detached nodes */ /* eslint-disable-line no-unused-vars */ }
   }
 };
 
