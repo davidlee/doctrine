@@ -1,6 +1,6 @@
 ---
 name: close
-description: Use to formally close a slice once its phases are complete and audited — confirm the rollup, harvest durable findings, reconcile lifecycle status, and land a clean final commit. Routed to from /audit.
+description: Use to formally close a slice once its phases are complete, audited, and reconciled — confirm the rollup, verify spec-coherence, harvest durable findings, reconcile lifecycle status, and land a clean final commit. Routed to from /reconcile.
 ---
 
 # Close
@@ -9,8 +9,9 @@ You are executing formal closure, not just marking work done.
 
 Inputs:
 
-- completed, audited implementation phases
-- the reconciliation review (RV) with every finding dispositioned (see `/audit`)
+- completed, audited, reconciled implementation phases
+- the reconciliation review (RV) with every finding terminal and the
+  `## Reconciliation Outcome` recorded (see `/reconcile`)
 - the governing slice id
 
 ## Process
@@ -19,8 +20,10 @@ Inputs:
    - Phase exit criteria (`EX-`) and verification (`VT-`) are met. Confirm the
      rollup: `doctrine slice list` should show the slice as `X/X complete` with
      no `!N` blocked, no `?N` anomalous, no `—` untracked.
-   - `/audit` is done: every finding on the RV ledger has a disposition;
-     "design was wrong" findings already reconciled into `design.md`.
+   - `/reconcile` is done (via `/audit → /reconcile`): the RV ledger is resolved,
+     every governance/spec finding is dispositioned, and the RV carries a
+     `## Reconciliation Outcome` section. If the reconciliation brief was empty
+     (no-op), the outcome confirms that explicitly.
    - Durable facts, patterns, or gotchas from the slice are harvested into
      `notes.md`, and reusable ones captured via `/record-memory`,
      before closure — or consciously rejected. Durable follow-up **work** the
@@ -28,11 +31,32 @@ Inputs:
      with `backlog new` (the work / knowledge / decision boundary:
      `using-doctrine.md`), or consciously rejected.
    - `just check` is green.
-2. **Commit cleanly:** land `.doctrine/**` workflow artefacts in small, clean
+2. **Spec-coherence gate — confirm reconciliation is complete before `done`:**
+   Before the terminal transition, verify every item from the audit's
+   reconciliation brief is resolved through one of four paths:
+   * **REV done** — governance/spec items covered by a `done` REV
+     (`revision status REV-N done`). The REV rationale (`revision-NNN.md`)
+     carries the reconcile narrative.
+   * **Withdrawn** — finding withdrawn in the RV with rationale.
+   * **Tolerated** — finding tolerated in the RV with rationale.
+   * **Escalated to design** — slice transitioned back to `design` via the
+     ADR-009 §1 back-edge (`reconcile → design`).
+   Additionally:
+   * Every per-slice direct-edit item is applied to `design.md` /
+     `slice-NNN.md` and recorded in the `## Reconciliation Outcome`.
+   * The RV ledger is resolved (`done · await=none`).
+   * The reconcile outcome is recorded (REV rationale and/or RV
+     `## Reconciliation Outcome`).
+   No free-floating "rejected" disposition is permitted — every finding
+   must land in one of the terminal states above.
+   If any item is unresolved, **refuse close** and return to `/reconcile`.
+   (The structural closure seam is the mechanical backstop; this gate is the
+   substantive check — the verb enforces; the skill verifies.)
+3. **Commit cleanly:** land `.doctrine/**` workflow artefacts in small, clean
    conventional commits scoped with the slice id, rather than letting them
    accumulate. Code and workflow edits go together or separately, whichever
    commits cleanly first.
-2a. **Dispatched slice — integrate the admitted OID (post-audit only).** If the
+3a. **Dispatched slice — integrate the admitted OID (post-audit only).** If the
    slice was driven by `/dispatch`, project the audited units now with `doctrine
    dispatch sync --slice <N> --integrate [--trunk <ref>] [--edge <ref>]`. When a
    candidate workflow is active this targets the immutable **admitted `close_target`
@@ -41,7 +65,7 @@ Inputs:
    and never a close-time merge. A moved trunk refuses (admit a superseding
    close-target candidate on the new base). This is the **only** place `--integrate`
    runs — never at `/dispatch` conclude, only here, post-audit.
-3. **Transition lifecycle:** confirm the slice is in `reconcile` (flip it with
+4. **Transition lifecycle:** confirm the slice is in `reconcile` (flip it with
    `doctrine slice status <id> reconcile` if `/audit` didn't), then
    `doctrine slice status <id> done` (`<id>` is the bare number, e.g. `40`).
    The closure seam enforces the order and refuses while an RV targeting the
@@ -49,12 +73,12 @@ Inputs:
    the `⚠` divergence marker is gone — authored status now agrees with the
    rollup. (The terminal set is `{done, abandoned}`; closure here is the `done`
    path — abandoning a slice is a separate decision, not this skill.)
-4. **Close the originating backlog item:** if a backlog item (ISS/IMP/CHR/RSK)
+5. **Close the originating backlog item:** if a backlog item (ISS/IMP/CHR/RSK)
    spawned this slice, transition it too — `doctrine backlog edit <ID>
    --status resolved --resolution fixed` (or the resolution that fits). A closed
    slice with its origin still open is hygiene debt.
-5. If a blocking finding remains unresolved, do **not** close — return to
-   `/audit` or `/execute`. If closure depends on tolerated drift with material
+6. If a blocking finding remains unresolved, do **not** close — return to
+   `/reconcile`. If closure depends on tolerated drift with material
    tradeoffs, `/consult` before normalising around it.
 
 ## Outcomes
