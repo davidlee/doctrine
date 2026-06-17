@@ -12,5 +12,32 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-091"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "normalizeConceptMap duplicated in api.ts (design.md says model.ts owns it)"
+detail = "Design § model.ts declares normalizeConceptMap as a model.ts export. Implementation: model.ts exports normalizeConceptMap at line 434 (typed raw: unknown → ConceptMap), but api.ts also has a private inlined copy at line 55 (typed raw: Record<string, unknown> → ConceptMap). The api.ts copy is used locally at line 168 in fetchConceptMap. The dedup was acknowledged as deferred in the phase handover notes. This is a DRY violation — two divergent implementations of the same function."
+disposition = "tolerated"
+response = "The normalizeConceptMap duplication was a conscious deferral during implementation (noted in phase handover). The model.ts export (line 434) is the canonical version; the api.ts private copy at line 55 is a convenience inlining. Both are functionally correct, and deduplication would require aligning the type signatures (model.ts uses unknown, api.ts uses Record<string, unknown>). This is a DRY cleanup item — low risk, no behavioural impact. Tracked as a known follow-up."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "d3-dag API name: design.md says dagStratify, code uses graphStratify"
+detail = "Design D5: 'd3-dag is imported as import { dagStratify, sugiyama, ... } from d3-dag'. Implementation (priority.ts line 1): import { graphStratify, sugiyama } from 'd3-dag'. The npm d3-dag v1.2.1 exports graphStratify, not dagStratify. The API name in the design doc is incorrect — it should say graphStratify. No behavioural impact; purely a design-doc drift."
+disposition = "fix-now"
+response = "The design.md D5 text says dagStratify but the npm d3-dag v1.2.1 package exports graphStratify. This is a documentation error — correct the design.md to say graphStratify to match reality."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "index.html retains static /assets/style.css link — 404 in release builds"
+detail = """index.html has <link rel="stylesheet" href="/assets/style.css">. In dev mode, Vite serves this from src/style.css. In the release build, Vite bundles CSS into dist/assets/index-[hash].css (and appends a correct <link> to the built HTML). But the static /assets/style.css reference is preserved, generating a benign 404 in release builds because dist/assets/style.css does not exist. Styling still works via the Vite-injected hashed CSS link. Fix: remove the static /assets/style.css <link> from index.html since the CSS is already handled by app.ts's import './style.css' via the Vite module graph."""
+disposition = "tolerated"
+response = "The static /assets/style.css <link> in index.html generates a benign 404 in release builds because dist/assets/style.css does not exist (CSS is bundled as dist/assets/index-[hash].css). However, styling is correctly applied via the Vite-injected hashed CSS <link> that the build process adds to the output HTML. In dev mode, Vite serves /assets/style.css from the source tree. The cosmetic 404 is harmless and removing the link requires verifying dev-mode behaviour. Accepting this as minor drift."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

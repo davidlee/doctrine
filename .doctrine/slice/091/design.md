@@ -433,7 +433,7 @@ and various handlers in `app.ts`. This preserves the current imperative style.
 | github-markdown.css | `vendor/github-markdown.css` | moved to `public/vendor/`, copied by Vite's `publicDir` |
 
 D3 v7 is imported as `import * as d3 from 'd3'` (tree-shaken by Vite in prod build).
-d3-dag is imported as `import { dagStratify, sugiyama, ... } from 'd3-dag'`.
+d3-dag is imported as `import { graphStratify, sugiyama } from 'd3-dag'` (npm d3-dag v1.2.1).
 
 ## Vite config
 

@@ -1,7 +1,7 @@
 id = 91
 slug = "frontend-dev-server"
 title = "Frontend dev server with TypeScript, HMR, and hot reload"
-status = "audit"
+status = "reconcile"
 created = "2026-06-17"
 updated = "2026-06-17"
 
