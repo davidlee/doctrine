@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed545101170f2a2cfc9f4b946123e"
+memory_key = "mem.fact.js.d3-dag-vendor-url"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "d3-dag UMD bundle vendor URL correction"
+summary = "d3-dag UMD bundle URL: unpkg @1/build/ returns 404, use @1.2.1/dist/d3-dag.iife.min.js instead"
+created = "2026-06-17"
+updated = "2026-06-17"
+
+[scope]
+paths = ["web/map/vendor/"]
+globs = []
+commands = []
+tags = ["sl-089"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "050237abf71ea04b23b27335d500c90c918bbdc0"
+tree = "a43b7e216111b250974d1d235ae145b0956a7f64"
+ref_name = "refs/heads/dispatch/089"
+checkout_state_id = ""
+base_commit = "050237abf71ea04b23b27335d500c90c918bbdc0"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
