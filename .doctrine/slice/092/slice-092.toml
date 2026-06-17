@@ -1,7 +1,7 @@
 id = 92
 slug = "inspect-sort-scan-robustness"
 title = "Inspect sort + scan robustness: RSK-007 and IMP-036"
-status = "ready"
+status = "done"
 created = "2026-06-17"
 updated = "2026-06-17"
 
