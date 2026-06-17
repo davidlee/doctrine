@@ -2,10 +2,6 @@
 //! Map-server shared state and configuration (SL-072 PHASE-01).
 //!
 //! PHASE-01 scaffolding — types consumed in PHASE-02+.
-#![allow(
-    dead_code,
-    reason = "PHASE-01 foundation — types consumed in PHASE-02+"
-)]
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,8 +17,11 @@ use crate::priority::graph::PriorityGraph;
 /// All three priority data stores — built and replaced atomically (SL-089 D9).
 /// A single [`RwLock<DataStores>`] guarantees a reader never sees a fresh
 /// `catalog` but a stale `priority_graph`.
-#[expect(dead_code, reason = "PHASE-01 Task 4: consumed in PHASE-02 AppState revision")]
 pub(crate) struct DataStores {
+    #[expect(
+        dead_code,
+        reason = "stored alongside priority_graph for atomic refresh; not yet read directly by handlers"
+    )]
     pub(crate) catalog: Catalog,
     pub(crate) priority_graph: PriorityGraph,
     pub(crate) graph: CatalogGraph,
@@ -33,11 +32,9 @@ pub(crate) struct AppState {
     /// The project root — the directory containing `.doctrine/`.
     pub(crate) root: PathBuf,
 
-    /// The live catalog graph, behind a read-write lock so the serve thread
-    /// can refresh it on every request (a write is cheap — it replaces the
-    /// single allocation). The `Arc` is the single-owner copy; `axum::State`
-    /// clones the `Arc` cheaply.
-    pub(crate) graph: Arc<RwLock<CatalogGraph>>,
+    /// The live read models, behind a read-write lock so refresh can replace
+    /// them atomically and every handler sees a coherent snapshot.
+    pub(crate) stores: Arc<RwLock<DataStores>>,
 
     /// A Graphviz `dot → SVG` renderer. Injected as a trait object so unit
     /// tests can supply a stub without shelling out.
@@ -50,6 +47,7 @@ pub(crate) struct Config {
     pub(crate) root: PathBuf,
 
     /// The catalog graph hydrated at start-up.
+    #[expect(dead_code, reason = "serve() now hydrates stores from root at startup")]
     pub(crate) graph: CatalogGraph,
 
     /// The TCP port the HTTP server binds to.

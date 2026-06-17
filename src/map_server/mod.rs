@@ -13,9 +13,17 @@ pub(crate) async fn serve(config: state::Config) -> anyhow::Result<()> {
 
     use tokio::sync::RwLock;
 
+    let catalog = crate::catalog::hydrate::scan_catalog(&config.root)?;
+    let priority_graph = crate::priority::graph::build(&config.root)?;
+    let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
+    let stores = state::DataStores {
+        catalog,
+        priority_graph,
+        graph,
+    };
     let state = state::AppState {
         root: config.root.clone(),
-        graph: Arc::new(RwLock::new(config.graph)),
+        stores: Arc::new(RwLock::new(stores)),
         dot_renderer: Arc::new(state::RealDotRenderer),
     };
     let app = routes::router(state);
@@ -47,10 +55,16 @@ mod tests {
 
     pub(crate) async fn test_app(root: &std::path::Path) -> axum::Router {
         let catalog = crate::catalog::hydrate::scan_catalog(root).expect("scan");
+        let priority_graph = crate::priority::graph::build(root).expect("priority graph");
         let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
+        let stores = super::state::DataStores {
+            catalog,
+            priority_graph,
+            graph,
+        };
         let state = super::state::AppState {
             root: root.to_path_buf(),
-            graph: Arc::new(RwLock::new(graph)),
+            stores: Arc::new(RwLock::new(stores)),
             dot_renderer: Arc::new(FakeDotRenderer {
                 mode: FakeDotMode::Success(b"<svg></svg>".to_vec()),
             }),
