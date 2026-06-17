@@ -231,7 +231,7 @@ Define utility in `layout.css`:
 | Site count | Files | Context |
 |---|---|---|
 | 6 | `concept-map.ts` | `renderEdgeTable`, `renderDiagnostics`, `renderAddEdgeForm` — show/hide CM panels |
-| 6 | `app.ts` | Legend toggle (priority ↔ entity legend), error banner, diagnostics placeholder |
+| 9 | `app.ts` | Legend toggle (4 sites), error banner (4 sites), diagnostics placeholder (1 site) |
 | 5 inline | `index.html` (4) + `concept-map.ts` generated HTML (1) | `style="display:none"` → class `u-hidden` |
 
 Replace `style.display = 'none'`/`'block'` with `classList.add('u-hidden')` /
@@ -278,7 +278,6 @@ export function setPageMode(mode: 'entity-graph' | 'actionability' | 'concept-ma
 | Site count | File | Context |
 |---|---|---|
 | 6 | `render.ts` `setPageMode()` | Page-mode visibility for depthSelector, relationshipTable, tableToggle, cmEdgeTable, cmAddForm, cmDiagnosticsPanel |
-| 3 | `app.ts` (lines 709, 723, 727) | Error banner visibility (generic toggle — `.u-hidden`) |
 
 **Total display manipulation sites: 21 TS + 5 inline HTML = 26.**
 
