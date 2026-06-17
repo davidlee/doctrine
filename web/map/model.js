@@ -17,6 +17,8 @@ var state = {
   editingNode: null,
   cmFocusNode: null,
   renderedCmFocus: null,
+  cmCacheMutationSeq: 0,
+  renderedCmCacheSeq: 0,
   dotAvailable: false,
   hoveredId: null,
   kindFilter: null,

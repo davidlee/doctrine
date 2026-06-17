@@ -59,9 +59,10 @@
 
     var graphArea = document.querySelector('.graph-area'), focusChanged = state.focusId !== prevFocusId, depthChanged = state.depth !== prevDepth, graphMissing = !graphArea || !graphArea.querySelector('svg');
     var cmFocusChanged = state.focusId && isConceptMap(state.focusId) && (state.cmFocusNode ? state.cmFocusNode.key : null) !== state.renderedCmFocus;
+    var cmCacheChanged = state.focusId && isConceptMap(state.focusId) && state.cmCacheMutationSeq !== state.renderedCmCacheSeq;
     if (focusChanged && prevFocusId && isConceptMap(prevFocusId)) state.conceptMapCache.delete(prevFocusId);
 
-    if (graphArea && (focusChanged || depthChanged || graphMissing || cmFocusChanged)) {
+    if (graphArea && (focusChanged || depthChanged || graphMissing || cmFocusChanged || cmCacheChanged)) {
       if (focusChanged && !depthChanged && state.focusId) { var svgEl = graphArea.querySelector('svg'); if (svgEl) svg.applyFocusHighlight(svgEl, state.focusId, prevFocusId, function(g) { var t = g.querySelector('text'); if (t) return t.textContent.trim(); var ti = g.querySelector('title'); return ti ? ti.textContent.trim() : ''; }); }
       if (state.focusId) {
         if (isConceptMap(state.focusId)) renderCmGraph(graphArea);
@@ -84,6 +85,7 @@
     if (!state.conceptMapCache.has(id)) { container.innerHTML = '<p class="loading">Loading concept map…</p>'; api.fetchConceptMap(id).then(function(cm) { state.conceptMapCache.set(id, cm); if (state.cmFocusNode && state.focusId === id) for (var ci = 0; ci < cm.nodes.length; ci++) { if (cm.nodes[ci].key === state.cmFocusNode.key) { state.cmFocusNode.label = cm.nodes[ci].label; break; } } renderView(); }).catch(function(err) { if (state.focusId !== id) return; container.innerHTML = '<p class="error">Failed to load concept map: ' + render.escapeHtml(err.message) + '</p>'; }); return; }
     var cmCache = state.conceptMapCache.get(id), filtered = state.cmFocusNode ? model.cmNeighbourhood(cmCache, state.cmFocusNode.key, state.depth) : model.cmNeighbourhood(cmCache, null, state.depth), focusKey = state.cmFocusNode ? state.cmFocusNode.key : null;
     state.renderedCmFocus = focusKey;
+    state.renderedCmCacheSeq = state.cmCacheMutationSeq;
     state.graphRenderSeq += 1; var seq = state.graphRenderSeq;
     cm.renderDiagram({ container: container, cm: filtered, focusKey: focusKey, depth: state.depth, editing: state.editingConceptMap, dotAvailable: state.dotAvailable, seq: seq, getCurrentSeq: function() { return state.graphRenderSeq; }, onClick: function(key) { if (state.editingConceptMap) { startRenameNode(key); return; } var cmData = state.conceptMapCache.get(state.focusId), label = key; if (cmData) for (var ci = 0; ci < cmData.nodes.length; ci++) { if (cmData.nodes[ci].key === key) { label = cmData.nodes[ci].label; break; } } if (state.cmFocusNode && state.cmFocusNode.key === key) state.cmFocusNode = null; else state.cmFocusNode = { key: key, label: label }; window.location.hash = router.buildHash('focus', state.focusId, state.depth); renderView(); }, onHoverEnter: null, onHoverLeave: null });
   }
@@ -94,7 +96,7 @@
 
   window.renderCmDiagnostics = function() { var p = document.querySelector('.cm-diagnostics-panel'); if (!p) return; if (state.editingConceptMap) { p.style.display = 'none'; return; } var c = state.conceptMapCache.get(state.focusId); cm.renderDiagnostics({ container: p, diagnostics: (c && c.diagnostics) || [] }); };
 
-  function updateConceptMapCache(data) { var cm = state.conceptMapCache.get(state.focusId); if (!cm) return; cm.nodes = data.nodes || cm.nodes; cm.edges = data.edges || cm.edges; cm.diagnostics = data.diagnostics || []; cm.dslHash = data.dsl_hash || cm.dslHash; }
+  function updateConceptMapCache(data) { var cm = state.conceptMapCache.get(state.focusId); if (!cm) return; cm.nodes = data.nodes || cm.nodes; cm.edges = data.edges || cm.edges; cm.diagnostics = data.diagnostics || []; cm.dslHash = data.dsl_hash || cm.dslHash; state.cmCacheMutationSeq += 1; }
   function handleAddEdge(source, rel, target) { var errEl = document.querySelector('.cm-add-error'); if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; } source = (source || '').trim(); rel = (rel || '').trim(); target = (target || '').trim(); if (!source) { showCmFormError('Source must not be empty'); return; } if (!rel) { showCmFormError('Relation must not be empty'); return; } if (!target) { showCmFormError('Target must not be empty'); return; } var cm = state.conceptMapCache.get(state.focusId), baseHash = cm ? cm.dslHash : undefined; api.mutateConceptMap(state.focusId, 'add_edge', { source: source, rel: rel, target: target }, baseHash).then(function(data) { var f = document.querySelector('.add-edge-form'); if (f) { f.querySelector('.cm-source').value = ''; f.querySelector('.cm-rel').value = ''; f.querySelector('.cm-target').value = ''; } updateConceptMapCache(data); refreshCmView(); }).catch(function(err) { handleMutationError(err); }); }
   function handleRemoveEdge(source, rel, target) { var cm = state.conceptMapCache.get(state.focusId), baseHash = cm ? cm.dslHash : undefined; api.mutateConceptMap(state.focusId, 'remove_edge', { source: source, rel: rel, target: target }, baseHash).then(function(data) { updateConceptMapCache(data); refreshCmView(); }).catch(function(err) { handleMutationError(err); }); }
   function startRenameNode(key) { if (!state.editingConceptMap) return; var cm = state.conceptMapCache.get(state.focusId); if (!cm) return; var label = key, i; for (i = 0; i < cm.nodes.length; i++) { if (cm.nodes[i].key === key) { label = cm.nodes[i].label; break; } } state.editingNode = { key: key, label: label }; renderCmEdgeTable(); }
