@@ -21,6 +21,8 @@ var state = {
   renderedCmCacheSeq: 0,
   dotAvailable: false,
   hoveredId: null,
+  viewMode: 'semantic',
+  actionabilityView: null,
   kindFilter: null,
   graphRenderSeq: 0
 };
@@ -200,6 +202,10 @@ model.resolveFocus = function(query, graph) {
   /* fallback to first sorted node */
   var sortedIds = sortedNodeIds(graph);
   return sortedIds.length > 0 ? sortedIds[0] : null;
+};
+
+model.setActionabilityView = function(view) {
+  state.actionabilityView = view;
 };
 
 /* --- neighbourhood (BFS) --- */
