@@ -20,6 +20,12 @@ ids or flags; ask the CLI. Durable knowledge lives in doctrine's own memory
 (`doctrine memory record|find|retrieve`), not Claude's — the index is in the
 snapshot's Memory section; `/record-memory` and `/retrieve-memory` wrap it.
 
+# git
+
+Do not stash. *never* checkout or otherwise discard uncommitted work.
+Assume multiple agents are working in the same repository, and use `/worktree` 
+or `/dispatch` accordingly.
+
 ---
 
 ## storage model (the storage rule)
