@@ -185,11 +185,11 @@ export function renderEdgeTable(opts: CmEdgeTableOpts): void {
 
   if (cmData === null) {
     container.innerHTML = '';
-    container.style.display = 'none';
+    container.classList.add('u-hidden');
     return;
   }
 
-  container.style.display = 'block';
+  container.classList.remove('u-hidden');
 
   let edges = cmData.edges;
   if (!editing && focusKey !== null && focusKey !== '') {
@@ -270,10 +270,10 @@ export function renderDiagnostics(opts: { container: HTMLElement | null; diagnos
   const { container, diagnostics } = opts;
   if (container === null) return;
   if (diagnostics.length === 0) {
-    container.style.display = 'none';
+    container.classList.add('u-hidden');
     return;
   }
-  let html = '<h3>Diagnostics</h3>';
+  let html = '<h3 class="cm-diagnostics-panel__title">Diagnostics</h3>';
   for (const d of diagnostics) {
     const msg: string = formatDiagnostic(d);
     const line: number | null = diagnosticLine(d);
@@ -281,17 +281,17 @@ export function renderDiagnostics(opts: { container: HTMLElement | null; diagnos
     html += '<div class="cm-diag-item">⚠ ' + escapeHtml(prefix + msg) + '</div>';
   }
   container.innerHTML = html;
-  container.style.display = 'block';
+  container.classList.remove('u-hidden');
 }
 
 export function renderAddEdgeForm(opts: CmAddEdgeFormOpts): void {
   const { container, cm: cmData, editing } = opts;
   if (container === null) return;
   if (!editing) {
-    container.style.display = 'none';
+    container.classList.add('u-hidden');
     return;
   }
-  container.style.display = 'block';
+  container.classList.remove('u-hidden');
 
   const labels: string[] = buildNodeLabelList(cmData);
   const rels: string[] = buildRelLabelList(cmData);
@@ -303,7 +303,7 @@ export function renderAddEdgeForm(opts: CmAddEdgeFormOpts): void {
   html += '<datalist id="cm-rel-list">' + rels.map((r: string): string => '<option value="' + escapeAttr(r) + '">').join('') + '</datalist>';
   html += '<input type="text" class="cm-input cm-target" list="cm-target-list" placeholder="Target">';
   html += '<datalist id="cm-target-list">' + labels.map((l: string): string => '<option value="' + escapeAttr(l) + '">').join('') + '</datalist>';
-  html += '<button type="submit" class="cm-add-btn">Add edge</button></div><div class="cm-add-error" style="display:none;"></div></form>';
+  html += '<button type="submit" class="cm-add-btn">Add edge</button></div><div class="cm-add-error u-hidden"></div></form>';
 
   container.innerHTML = html;
 

@@ -133,7 +133,7 @@
     background: var(--hover-bg);
   }
 
-  .depth-btn.active {
+  .depth-btn--active {
     background: var(--kind-SL);
     color: #fff;
     border-color: var(--kind-SL);
@@ -156,7 +156,7 @@
     vertical-align: middle;
   }
 
-  .relationship-table.hidden {
+  .relationship-table--hidden {
     display: none;
   }
 
@@ -183,17 +183,17 @@
     background: var(--hover-bg);
   }
 
-  .entity-item.active {
+  .entity-item--active {
     background: var(--kind-SL);
     color: #fff;
     border-radius: 3px;
   }
 
-  .entity-item.active .kind-pill {
+  .kind-pill--active {
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
   }
 
-  .entity-item.nav-highlight {
+  .entity-item--nav-highlight {
     background: var(--hover-bg);
     outline: 2px solid var(--kind-SL);
     outline-offset: -2px;

@@ -138,10 +138,10 @@ function wireTableToggle(): void {
 
   const hidden = safeStorage.get('doctrine-map-hide-relations', '0') === '1'
   cb.checked = hidden
-  table.classList.toggle('hidden', hidden)
+  table.classList.toggle('relationship-table--hidden', hidden)
 
   cb.addEventListener('change', () => {
-    table.classList.toggle('hidden', cb.checked)
+    table.classList.toggle('relationship-table--hidden', cb.checked)
     safeStorage.set('doctrine-map-hide-relations', cb.checked ? '1' : '0')
   })
 }
@@ -341,7 +341,7 @@ function renderView(): void {
   const depthBtns = document.querySelectorAll<HTMLElement>('.depth-btn')
   for (const depthBtn of depthBtns) {
     const dataDepth = parseInt(depthBtn.getAttribute('data-depth') ?? '0', 10)
-    depthBtn.classList.toggle('active', dataDepth === state.depth)
+    depthBtn.classList.toggle('depth-btn--active', dataDepth === state.depth)
   }
 
   // View change detection
@@ -515,8 +515,8 @@ function renderView(): void {
       viewMode: 'actionability',
       actionabilityView: state.actionabilityView,
     })
-    if (priorityLegend !== null) priorityLegend.style.display = ''
-    if (legendItems !== null) legendItems.style.display = 'none'
+    if (priorityLegend !== null) priorityLegend.classList.remove('u-hidden')
+    if (legendItems !== null) legendItems.classList.add('u-hidden')
   } else {
     relationshipTable({
       container: relTableBody,
@@ -526,14 +526,14 @@ function renderView(): void {
       depth: state.depth,
       viewMode: 'semantic',
     })
-    if (legendItems !== null) legendItems.style.display = ''
-    if (priorityLegend !== null) priorityLegend.style.display = 'none'
+    if (legendItems !== null) legendItems.classList.remove('u-hidden')
+    if (priorityLegend !== null) priorityLegend.classList.add('u-hidden')
   }
 
   // Highlight active view toggle button
   const viewBtns = document.querySelectorAll<HTMLElement>('.view-btn')
   for (const viewBtn of viewBtns) {
-    viewBtn.classList.toggle('active', viewBtn.getAttribute('data-view') === state.viewMode)
+    viewBtn.classList.toggle('view-btn--active', viewBtn.getAttribute('data-view') === state.viewMode)
   }
 
   const isCm = state.viewMode === 'semantic' && state.focusId !== null && isConceptMap(state.focusId)
@@ -718,7 +718,7 @@ export function renderCmDiagnostics(): void {
   const p = document.querySelector<HTMLElement>('.cm-diagnostics-panel')
   if (p === null) return
   if (state.editingConceptMap) {
-    p.style.display = 'none'
+    p.classList.add('u-hidden')
     return
   }
   const c = state.conceptMapCache.get(state.focusId ?? '')
@@ -752,7 +752,7 @@ function showCmFormError(msg: string): void {
   const errEl = document.querySelector<HTMLElement>('.cm-add-error')
   if (errEl !== null) {
     errEl.textContent = msg
-    errEl.style.display = 'block'
+    errEl.classList.remove('u-hidden')
     errEl.className = 'cm-add-error cm-error'
   }
 }
@@ -766,11 +766,11 @@ function handleStaleWrite(): void {
   if (errEl === null) return
 
   errEl.textContent = 'Concept map was modified elsewhere — data refreshed'
-  errEl.style.display = 'block'
+  errEl.classList.remove('u-hidden')
   errEl.className = 'cm-add-error cm-notice'
 
   window.setTimeout(() => {
-    errEl.style.display = 'none'
+    errEl.classList.add('u-hidden')
   }, 4000)
 
   const focusId = state.focusId
@@ -846,7 +846,7 @@ function handleMutationError(err: unknown): void {
 function handleAddEdge(source: string, rel: string, target: string): void {
   const errEl = document.querySelector<HTMLElement>('.cm-add-error')
   if (errEl !== null) {
-    errEl.style.display = 'none'
+    errEl.classList.add('u-hidden')
     errEl.textContent = ''
   }
 
