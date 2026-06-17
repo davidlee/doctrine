@@ -556,14 +556,16 @@ mod tests {
         let g = build(root).unwrap();
         let view = survey_view_for_map(&g, false);
 
-        assert!(view
-            .edges
-            .iter()
-            .any(|e| e.source == "ISS-003" && e.target == "ISS-002" && e.kind == "needs"));
-        assert!(view
-            .edges
-            .iter()
-            .any(|e| e.source == "ISS-002" && e.target == "ISS-001" && e.kind == "needs"));
+        assert!(
+            view.edges
+                .iter()
+                .any(|e| e.source == "ISS-003" && e.target == "ISS-002" && e.kind == "needs")
+        );
+        assert!(
+            view.edges
+                .iter()
+                .any(|e| e.source == "ISS-002" && e.target == "ISS-001" && e.kind == "needs")
+        );
     }
 
     // ── VT-3: survey_after_edges_present ──────────────────────────────────
@@ -581,19 +583,16 @@ mod tests {
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
              [relationships]\nafter = [{ to = \"ISS-002\", rank = 0 }]\n",
         );
-        write(
-            root,
-            ".doctrine/backlog/issue/001/backlog-001.md",
-            "b\n",
-        );
+        write(root, ".doctrine/backlog/issue/001/backlog-001.md", "b\n");
 
         let g = build(root).unwrap();
         let view = survey_view_for_map(&g, false);
 
-        assert!(view
-            .edges
-            .iter()
-            .any(|e| e.source == "ISS-002" && e.target == "ISS-001" && e.kind == "after"));
+        assert!(
+            view.edges
+                .iter()
+                .any(|e| e.source == "ISS-002" && e.target == "ISS-001" && e.kind == "after")
+        );
     }
 
     // ── VT-4: survey_empty_graph ──────────────────────────────────────────
@@ -669,7 +668,10 @@ mod tests {
         let from_survey = survey(root, false).unwrap();
         let from_for_map = survey_for_map(&g, false);
 
-        assert_eq!(from_survey, from_for_map, "survey_for_map must match survey output exactly");
+        assert_eq!(
+            from_survey, from_for_map,
+            "survey_for_map must match survey output exactly"
+        );
     }
 
     // ── VT-8 (implicit): existing tests pass — verified by `cargo test` ───
