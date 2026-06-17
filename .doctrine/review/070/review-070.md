@@ -108,7 +108,14 @@ None. No ADRs, policies, standards, or specs are affected by this slice.
 ### Pending gate
 
 - **VH-1 (F-11):** Human visual verification required before slice close.
-  Evidence is ready — open the map explorer on both `main` and `candidate/093/audit-001`
+  ~~Evidence is ready — open the map explorer on both `main` and `candidate/093/audit-001`
   branches, cycle through all views (entity focus, concept-map focus, edge
   detail, fullscreen markdown, priority/DAG, empty/error states) in both light
-  and dark mode. Confirm zero visual differences.
+  and dark mode. Confirm zero visual differences.~~ **Passed 2026-06-18.**
+
+## Reconciliation Outcome
+
+All findings were `aligned` with the implementation — no design or governance
+changes needed. RV-065 closed; all 10 findings verified as resolved by SL-093.
+VH-1 visual verification passed — zero visual regressions. Reconcile pass
+complete — handoff to /close.
