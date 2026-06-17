@@ -2,7 +2,7 @@
 // Hash routing: #/focus/SL-001 or #/focus/SL-001?depth=2
 // Security: markdown-it html:false; DOMPurify.sanitize() applied before innerHTML.
 // SVG from /api/dot/svg is sanitized via DOMPurify SVG profile, then injected as inline DOM.
-/* global state, model, api, router, dot, compareNodes, compareEdgesBySource */
+/* global state, model, api, router, dot, svg, compareNodes, compareEdgesBySource */
 
 (function () {
   'use strict';
@@ -382,71 +382,6 @@
     pane.innerHTML = html;
   }
 
-  function dimLegend(neighbourhood) {
-    var items = document.querySelectorAll('.legend-item');
-    if (!items.length) return;
-    var edgeLabels = new Set();
-    for (var ei = 0; ei < neighbourhood.edges.length; ei++) {
-      edgeLabels.add(neighbourhood.edges[ei].label.toLowerCase());
-    }
-    for (var i = 0; i < items.length; i++) {
-      var labels = (items[i].getAttribute('data-labels') || '').split(',');
-      var anyPresent = false;
-      for (var j = 0; j < labels.length; j++) {
-        if (edgeLabels.has(labels[j].trim())) { anyPresent = true; break; }
-      }
-      items[i].classList.toggle('legend-dimmed', !anyPresent);
-    }
-  }
-
-  function wireSvgHandlers(svgEl, edges) {
-    var groups = svgEl.querySelectorAll('.node');
-    for (var i = 0; i < groups.length; i++) {
-      var g = groups[i];
-      // Read node ID from the <text> element (label IS the canonical id).
-      // DOMPurify may strip <title>, so we avoid it.
-      var textEl = g.querySelector('text');
-      if (!textEl) continue;
-      var nodeId = textEl.textContent.trim();
-
-      // Transparent hit-area rect so clicks on the node body (not just
-      // text or 1px border) register.  Injected as the first child.
-      try {
-        var bbox = g.getBBox();
-        if (bbox.width > 0 && bbox.height > 0) {
-          var hitRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          hitRect.setAttribute('x', bbox.x);
-          hitRect.setAttribute('y', bbox.y);
-          hitRect.setAttribute('width', bbox.width);
-          hitRect.setAttribute('height', bbox.height);
-          hitRect.setAttribute('fill', 'transparent');
-          hitRect.setAttribute('stroke', 'none');
-          g.insertBefore(hitRect, g.firstChild);
-        }
-      } catch (_) { /* eslint-disable-line no-unused-vars */ }
-
-      g.classList.add('doctrine-node');
-
-      g.addEventListener('click', (function(id) {
-        return function() {
-          router.setFocus(id, state.depth);
-        };
-      })(nodeId));
-
-      g.addEventListener('mouseenter', (function(id) {
-        return function() {
-          state.hoveredId = id;
-          renderHoverPane(id);
-        };
-      })(nodeId));
-
-      g.addEventListener('mouseleave', function() {
-        state.hoveredId = null;
-        renderHoverPane(null);
-      });
-    }
-  }
-
   function renderGraphPane(container, focusId, depth) {
     depth = Math.max(0, Math.min(3, depth));
 
@@ -480,8 +415,16 @@
       container.innerHTML = clean;
       var svgEl = container.querySelector('svg');
       if (svgEl) {
-        wireSvgHandlers(svgEl, nb.edges);
-        dimLegend(nb);
+        svg.injectHitRects(svgEl);
+        svg.wireHandlers(svgEl, function(g) {
+          var t = g.querySelector('text');
+          return t ? t.textContent.trim() : '';
+        }, {
+          onClick: function(id) { router.setFocus(id, state.depth); },
+          onHoverEnter: function(id) { state.hoveredId = id; renderHoverPane(id); },
+          onHoverLeave: function() { state.hoveredId = null; renderHoverPane(null); }
+        });
+        svg.dimLegend(nb);
       }
     }).catch(function(err) {
       if (seq !== state.graphRenderSeq) return;
@@ -673,26 +616,6 @@
   /* Instant pre-render focus highlight on the current SVG.
    * Applied before the async graph re-render to give immediate visual
    * feedback when the user clicks a different node at the same depth. */
-  function applyFocusHighlight(newId, oldId) {
-    var svgEl = document.querySelector('.graph-area svg');
-    if (!svgEl) return;
-    if (oldId) {
-      var oldNodes = svgEl.querySelectorAll('.doctrine-node--focus');
-      for (var i = 0; i < oldNodes.length; i++) oldNodes[i].classList.remove('doctrine-node--focus');
-    }
-    if (newId) {
-      // The <text> content is the node id, but we need the parent <g>
-      var textEls = svgEl.querySelectorAll('text');
-      for (var j = 0; j < textEls.length; j++) {
-        if (textEls[j].textContent.trim() === newId) {
-          var g = textEls[j].closest('.node');
-          if (g) g.classList.add('doctrine-node--focus');
-          break;
-        }
-      }
-    }
-  }
-
   function render() {
     var route = router.parseHash();
     var prevFocusId = state.focusId;
@@ -747,7 +670,15 @@
 
     if (graphArea && (focusChanged || depthChanged || graphMissing)) {
       if (focusChanged && !depthChanged && state.focusId) {
-        applyFocusHighlight(state.focusId, prevFocusId);
+        var svgEl = graphArea.querySelector('svg');
+        if (svgEl) {
+          svg.applyFocusHighlight(svgEl, state.focusId, prevFocusId, function(g) {
+            var t = g.querySelector('text');
+            if (t) return t.textContent.trim();
+            var title = g.querySelector('title');
+            return title ? title.textContent.trim() : '';
+          });
+        }
       }
       if (state.focusId) {
         if (isConceptMap(state.focusId)) {
@@ -838,68 +769,6 @@
       '<span class="hover-detail-title">' + escapeHtml(label) + '</span>' +
       '<span class="hover-detail-meta">concept map node</span>' +
       '</div>';
-  }
-
-  function wireCmSvgHandlers(svgEl) {
-    var groups = svgEl.querySelectorAll('.node');
-    for (var i = 0; i < groups.length; i++) {
-      var g = groups[i];
-      var titleEl = g.querySelector('title');
-      if (!titleEl) continue;
-      var nodeKey = titleEl.textContent.trim();
-
-      try {
-        var bbox = g.getBBox();
-        if (bbox.width > 0 && bbox.height > 0) {
-          var hitRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          hitRect.setAttribute('x', bbox.x);
-          hitRect.setAttribute('y', bbox.y);
-          hitRect.setAttribute('width', bbox.width);
-          hitRect.setAttribute('height', bbox.height);
-          hitRect.setAttribute('fill', 'transparent');
-          hitRect.setAttribute('stroke', 'none');
-          g.insertBefore(hitRect, g.firstChild);
-        }
-      } catch (_) { /* eslint-disable-line no-unused-vars */ }
-
-      g.classList.add('doctrine-node');
-
-      g.addEventListener('click', (function(key) {
-        return function() {
-          if (state.editingConceptMap) {
-            startRenameNode(key);
-            return;
-          }
-          /* View-mode click: toggle cmFocusNode */
-          var cm = state.conceptMapCache.get(state.focusId);
-          var label = key;
-          if (cm) {
-            for (var ci = 0; ci < cm.nodes.length; ci++) {
-              if (cm.nodes[ci].key === key) {
-                label = cm.nodes[ci].label;
-                break;
-              }
-            }
-          }
-          if (state.cmFocusNode && state.cmFocusNode.key === key) {
-            /* Clicking already-focal node clears to wide-open */
-            state.cmFocusNode = null;
-          } else {
-            state.cmFocusNode = { key: key, label: label };
-          }
-          window.location.hash = router.buildHash('focus', state.focusId, state.depth);
-          refreshCmView();
-        };
-      })(nodeKey));
-
-      g.addEventListener('mouseenter', (function(key) {
-        return function() { renderCmHoverPane(key); };
-      })(nodeKey));
-
-      g.addEventListener('mouseleave', function() {
-        renderCmHoverPane(null);
-      });
-    }
   }
 
   /* -----------------------------------------------------------------------
@@ -1376,7 +1245,38 @@
       graphArea.innerHTML = clean;
       var svgEl = graphArea.querySelector('svg');
       if (svgEl) {
-        wireCmSvgHandlers(svgEl);
+        svg.injectHitRects(svgEl);
+        svg.wireHandlers(svgEl, function(g) {
+          var t = g.querySelector('title');
+          return t ? t.textContent.trim() : '';
+        }, {
+          onClick: function(key) {
+            if (state.editingConceptMap) {
+              startRenameNode(key);
+              return;
+            }
+            /* View-mode click: toggle cmFocusNode */
+            var cm = state.conceptMapCache.get(state.focusId);
+            var label = key;
+            if (cm) {
+              for (var ci = 0; ci < cm.nodes.length; ci++) {
+                if (cm.nodes[ci].key === key) {
+                  label = cm.nodes[ci].label;
+                  break;
+                }
+              }
+            }
+            if (state.cmFocusNode && state.cmFocusNode.key === key) {
+              state.cmFocusNode = null;
+            } else {
+              state.cmFocusNode = { key: key, label: label };
+            }
+            window.location.hash = router.buildHash('focus', state.focusId, state.depth);
+            refreshCmView();
+          },
+          onHoverEnter: function(key) { renderCmHoverPane(key); },
+          onHoverLeave: function() { renderCmHoverPane(null); }
+        });
       }
       // Render authoring UI sub-views after graph render
       renderCmEdgeTable();
