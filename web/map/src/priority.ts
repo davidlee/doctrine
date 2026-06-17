@@ -50,7 +50,7 @@ const ZOOM_SCALE = 5;
 const BBOX_PAD = 40;
 const NODE_HALF_HEIGHT = 14;
 const SCALE_EXTENT: [number, number] = [0.2, 8];
-const ZOOM_DURATION_MS = 300;
+const ZOOM_DURATION_MS = 150;
 
 /** Node box width — shared by the renderer and the fit-box computation. */
 function nodeWidth(id: string): number {
