@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! SL-056 PHASE-11 — `doctrine claude install` end-to-end over the built binary.
+//! SL-088 PHASE-04 — `doctrine install --agent claude` end-to-end over the built binary.
 //!
-//! Drives the real handler against a temp project and proves the Claude-surface
-//! install does three things in one verb (design §9):
-//!   * VT-1 / SR-3: the hidden `skills install` alias drives the SAME handler —
-//!     same skills, agent, and hook side effects.
+//! Drives the consolidated `doctrine install` handler against a temp project and
+//! proves the Claude-surface install does three things in one verb (design §9):
+//!   * VT-1: `install --agent claude --skill code-review` wires skills, agent def,
+//!     and the SubagentStart hook into `.claude/`.
 //!   * VT-2: the dispatch-worker agent def resolves at `.claude/agents/`.
 //!   * the `SubagentStart` hook is merged into `.claude/settings.local.json`,
 //!     matcher-scoped to the dispatch-worker agent type, idempotent on reinstall.
@@ -24,27 +24,25 @@ use serde_json::Value;
 
 const BIN: &str = env!("CARGO_BIN_EXE_doctrine");
 
-/// Run `doctrine <verb...> install --agent claude --skill code-review` rooted at
-/// `dir`, asserting success; return stdout. `verb` is `["claude"]` or `["skills"]`.
-fn install(dir: &Path, verb: &[&str]) -> String {
-    let mut args: Vec<&str> = verb.to_vec();
-    args.extend([
-        "install",
-        "--agent",
-        "claude",
-        "--skill",
-        "code-review",
-        "--yes",
-        "-p",
-    ]);
+/// Run `doctrine install --agent claude --skill code-review` rooted at `dir`,
+/// asserting success; return stdout.
+fn install(dir: &Path) -> String {
     let out = Command::new(BIN)
-        .args(&args)
+        .args([
+            "install",
+            "--agent",
+            "claude",
+            "--skill",
+            "code-review",
+            "--yes",
+            "-p",
+        ])
         .arg(dir)
         .output()
         .expect("spawn doctrine");
     assert!(
         out.status.success(),
-        "{verb:?} install failed: {}\n{}",
+        "install failed: {}\n{}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr),
     );
@@ -109,12 +107,11 @@ fn assert_installed(dir: &Path) {
 }
 
 #[test]
-#[ignore = "SL-088 PHASE-04 rewrites for consolidated install surface"]
-fn claude_install_wires_skills_agent_and_hook_idempotently() {
+fn install_wires_skills_agent_and_hook_idempotently() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
-    let out = install(dir, &["claude"]);
+    let out = install(dir);
     assert!(out.contains("linked    code-review"), "skills leg: {out}");
     assert!(
         out.contains("linked    dispatch-worker.md"),
@@ -124,7 +121,7 @@ fn claude_install_wires_skills_agent_and_hook_idempotently() {
     assert_installed(dir);
 
     // Reinstall is idempotent: no duplicate SubagentStart entry, hook now current.
-    let out = install(dir, &["claude"]);
+    let out = install(dir);
     assert!(
         out.contains("subagent hook: already current"),
         "reinstall hook no-op: {out}"
@@ -133,16 +130,40 @@ fn claude_install_wires_skills_agent_and_hook_idempotently() {
 }
 
 #[test]
-#[ignore = "SL-088 PHASE-04 rewrites for consolidated install surface"]
-fn skills_install_alias_drives_the_same_handler() {
+fn install_agent_pi_dry_run_prints_delegation_plan() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
-    // SR-3 / VT-1: the deprecated alias produces the SAME side effects.
-    let out = install(dir, &["skills"]);
+    let out = Command::new(BIN)
+        .args(["install", "--agent", "pi", "--dry-run", "-p"])
+        .arg(dir)
+        .output()
+        .expect("spawn doctrine");
     assert!(
-        out.contains("linked    dispatch-worker.md") && out.contains("subagent hook: wired"),
-        "alias installs the agent + hook too: {out}"
+        out.status.success(),
+        "install --agent pi --dry-run failed: {}",
+        String::from_utf8_lossy(&out.stderr),
     );
-    assert_installed(dir);
+    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
+    assert!(
+        stdout.contains("pi"),
+        "pi agent mentioned in plan: {stdout}"
+    );
+    assert!(
+        stdout.contains("delegates to npx"),
+        "npx delegation shown: {stdout}"
+    );
+    assert!(
+        stdout.contains("not executed"),
+        "dry-run indicator present: {stdout}"
+    );
+    // Dry-run must NOT create any files beyond what the temp dir started with.
+    assert!(
+        !dir.join(".doctrine").exists(),
+        "dry-run created no .doctrine dir"
+    );
+    assert!(
+        !dir.join(".pi").exists(),
+        "dry-run created no .pi dir"
+    );
 }

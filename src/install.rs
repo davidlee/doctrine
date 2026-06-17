@@ -294,7 +294,14 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
                 continue;
             }
             // Agent-def install rides the Claude skills step.
-            if let Err(e) = crate::skills::install_agents_for(root, args.global, false, &mut out) {
+            if let Err(e) = crate::skills::install_agents_for(
+                root,
+                "claude",
+                None,
+                args.global,
+                false,
+                &mut out,
+            ) {
                 writeln!(io::stdout(), "  claude agent-def install failed: {e:#}")?;
                 continue;
             }
@@ -330,6 +337,17 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
                 &mut out,
             ) {
                 writeln!(io::stdout(), "  {agent} skills install failed: {e:#}")?;
+            }
+            // Agent-def install for pi (non-claude agent).
+            if let Err(e) = crate::skills::install_agents_for(
+                root,
+                agent,
+                Some(agent),
+                args.global,
+                false,
+                &mut out,
+            ) {
+                writeln!(io::stdout(), "  {agent} agent-def install failed: {e:#}")?;
             }
         }
     }
