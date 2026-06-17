@@ -32,4 +32,37 @@ render.cacheElements = function(root) {
   render.elements.markdownPane = qs('.markdown-pane');
   render.elements.tableToggle = qs('.table-toggle');
   render.elements.depthSelector = qs('.depth-selector');
+  render.elements.cmEdgeTable = qs('.cm-edge-table');
+  render.elements.cmAddEdgeForm = qs('.cm-add-edge-form');
+  render.elements.cmDiagnosticsPanel = qs('.cm-diagnostics-panel');
+};
+
+/* -----------------------------------------------------------------------
+ * View mode: toggle entity-graph vs concept-map vs edge UI visibility (D5)
+ * --------------------------------------------------------------------- */
+render.setViewMode = function(mode) {
+  // Depth selector: visible in entity-graph and concept-map, hidden in edge
+  if (render.elements.depthSelector) {
+    render.elements.depthSelector.style.display = (mode === 'edge') ? 'none' : '';
+  }
+
+  // Relationship table: visible only in entity-graph
+  if (render.elements.relationshipTable) {
+    render.elements.relationshipTable.style.display = (mode === 'entity-graph') ? '' : 'none';
+  }
+
+  // Table toggle: visible only in entity-graph
+  if (render.elements.tableToggle) {
+    render.elements.tableToggle.style.display = (mode === 'entity-graph') ? '' : 'none';
+  }
+
+  // CM containers: hide/clear when leaving concept-map mode (crash-clearing gate)
+  if (mode !== 'concept-map') {
+    var cmEdgeTable = render.elements.cmEdgeTable;
+    if (cmEdgeTable) { cmEdgeTable.style.display = 'none'; cmEdgeTable.innerHTML = ''; }
+    var cmAddForm = render.elements.cmAddEdgeForm;
+    if (cmAddForm) { cmAddForm.style.display = 'none'; cmAddForm.innerHTML = ''; }
+    var cmDiagPanel = render.elements.cmDiagnosticsPanel;
+    if (cmDiagPanel) { cmDiagPanel.style.display = 'none'; cmDiagPanel.innerHTML = ''; }
+  }
 };

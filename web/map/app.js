@@ -625,6 +625,7 @@
     if (route.view === 'edge') {
       renderEdgeDetail(route.id);
       renderHoverPane(null);
+      render.setViewMode('edge');
       mdPane = document.querySelector('.markdown-pane');
       if (mdPane) mdPane.innerHTML = '<span class="placeholder">[Markdown content]</span>';
       var tbody = document.querySelector('.relationship-table tbody');
@@ -680,14 +681,9 @@
       }
     }
 
-    // Show/hide entity-graph vs concept-map UI elements
+    /* Show/hide entity-graph vs concept-map UI elements */
     var isCm = state.focusId && isConceptMap(state.focusId);
-    var depthSel = document.querySelector('.depth-selector');
-    if (depthSel) depthSel.style.display = '';
-    var relTable = document.querySelector('.relationship-table');
-    if (relTable) relTable.style.display = isCm ? 'none' : '';
-    var tableToggle = document.querySelector('.table-toggle');
-    if (tableToggle) tableToggle.style.display = isCm ? 'none' : '';
+    render.setViewMode(isCm ? 'concept-map' : 'entity-graph');
 
     /* Reconcile cmFocusNode from URL hash */
     if (isCm && route.cmFocus) {
@@ -715,14 +711,6 @@
       renderCmEdgeTable();
       renderAddEdgeForm();
       renderCmDiagnostics();
-    } else if (!isCm) {
-      // Hide CM-specific elements
-      var cmEdgeTable = document.querySelector('.cm-edge-table');
-      if (cmEdgeTable) cmEdgeTable.style.display = 'none';
-      var cmAddForm = document.querySelector('.cm-add-edge-form');
-      if (cmAddForm) cmAddForm.style.display = 'none';
-      var cmDiagPanel = document.querySelector('.cm-diagnostics-panel');
-      if (cmDiagPanel) cmDiagPanel.style.display = 'none';
     }
 
     if (state.focusId) {
@@ -1274,13 +1262,7 @@
       renderAddEdgeForm();
       renderCmDiagnostics();
       renderEditToggle();
-      // Show/hide entity-graph-specific UI
-      var depthSel = document.querySelector('.depth-selector');
-      if (depthSel) depthSel.style.display = '';
-      var relTable = document.querySelector('.relationship-table');
-      if (relTable) relTable.style.display = 'none';
-      var tableToggle = document.querySelector('.table-toggle');
-      if (tableToggle) tableToggle.style.display = 'none';
+      render.setViewMode('concept-map');
     }).catch(function(err) {
       if (seq !== state.graphRenderSeq) return;
       graphArea.innerHTML = '<p class="error">Graphviz not available</p>';
