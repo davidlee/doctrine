@@ -291,9 +291,17 @@ const DISPATCH_WORKER_AGENT_FILE: &str = "dispatch-worker.md";
 /// The embedded source of the agent def, relative to `install/`.
 const DISPATCH_WORKER_AGENT_ASSET: &str = "agents/claude/dispatch-worker.md";
 
+/// The embedded source of the pi agent def, relative to `install/`.
+const DISPATCH_WORKER_AGENT_ASSET_PI: &str = "agents/pi/dispatch-worker.md";
+
 /// The Claude agents directory (project-local or, with `global`, user home).
 fn claude_agents_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
     Ok(install_base(root, global)?.join(".claude/agents"))
+}
+
+/// The pi agents directory (project-local or, with `global`, user home).
+fn pi_agents_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".pi/agents"))
 }
 
 /// The canonical agents tree, mirroring `canonical_dir` so the relative link
@@ -781,15 +789,28 @@ pub(crate) fn real_runner() -> Box<dyn Runner> {
     Box::new(Npx)
 }
 
-/// Public wrapper for `install_agents`: install the Claude dispatch-worker
-/// agent def (canonical copy + symlink).
+/// Public wrapper for `install_agent_def`.
 pub(crate) fn install_agents_for(
     root: &Path,
+    agent_name: &str,
+    canon_subdir: Option<&str>,
     global: bool,
     dry_run: bool,
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
-    install_agents(root, global, dry_run, out)
+    let embed_asset = match agent_name {
+        "claude" => DISPATCH_WORKER_AGENT_ASSET,
+        _ => DISPATCH_WORKER_AGENT_ASSET_PI,
+    };
+    install_agent_def(
+        root,
+        agent_name,
+        canon_subdir,
+        embed_asset,
+        global,
+        dry_run,
+        out,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -844,25 +865,35 @@ fn print_plan(plan: &Plan, out: &mut dyn Write) -> io::Result<()> {
     Ok(())
 }
 
-/// Install the Claude dispatch-worker agent def: materialize the canonical copy
-/// from the embed into `.doctrine/agents/`, then symlink `.claude/agents/<file>`
-/// at it. Idempotent — refreshes the canonical each run and only (re)writes a
-/// link that is missing or proven ours, never clobbering a foreign one. A no-op
-/// under `dry_run` (the plan line is printed by the caller). Reuses
+/// Install a dispatch-worker agent def for the given agent: materialize the
+/// canonical copy from the embed into `.doctrine/agents/` (under an optional
+/// subdir), then symlink the agent's link dir at it. Idempotent — refreshes
+/// the canonical each run and only (re)writes a link that is missing or proven
+/// ours, never clobbering a foreign one. Reuses
 /// `classify_link`/`write_link`/`relative_target` — no parallel symlink impl.
-fn install_agents(
+pub(crate) fn install_agent_def(
     root: &Path,
+    agent_name: &str,
+    canon_subdir: Option<&str>,
+    embed_asset: &str,
     global: bool,
     dry_run: bool,
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
-    let canon_dir = agent_canonical_dir(root, global)?;
-    let link_dir = claude_agents_dir(root, global)?;
+    let canon_base = agent_canonical_dir(root, global)?;
+    let canon_dir = match canon_subdir {
+        Some(sub) => canon_base.join(sub),
+        None => canon_base,
+    };
+    let link_dir = match agent_name {
+        "claude" => claude_agents_dir(root, global)?,
+        _ => pi_agents_dir(root, global)?,
+    };
     let canon = canon_dir.join(DISPATCH_WORKER_AGENT_FILE);
     let dest = link_dir.join(DISPATCH_WORKER_AGENT_FILE);
     let target = relative_target(&link_dir, &canon_dir, DISPATCH_WORKER_AGENT_FILE);
 
-    writeln!(out, "agent claude (dispatch-worker):")?;
+    writeln!(out, "agent {agent_name} (dispatch-worker):")?;
     writeln!(
         out,
         "  agent     {DISPATCH_WORKER_AGENT_FILE} → {}",
@@ -873,8 +904,8 @@ fn install_agents(
     }
 
     // 1. Refresh the canonical copy from the embed (always overwrite — derived).
-    let data = crate::install::embedded_asset(DISPATCH_WORKER_AGENT_ASSET)
-        .with_context(|| format!("Embedded agent def '{DISPATCH_WORKER_AGENT_ASSET}' not found"))?;
+    let data = crate::install::embedded_asset(embed_asset)
+        .with_context(|| format!("Embedded agent def '{embed_asset}' not found"))?;
     fs::create_dir_all(&canon_dir)
         .with_context(|| format!("Failed to create {}", canon_dir.display()))?;
     crate::fsutil::write_atomic(&canon, &data)?;
@@ -1010,7 +1041,7 @@ pub(crate) fn run_install(path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
         let base = install_base(&root, args.global)?;
         crate::install::ensure_gitignored(&base, ".doctrine/agents/*")?;
         crate::install::ensure_gitignored(&base, "!.doctrine/agents/AGENTS.md")?;
-        install_agents(&root, args.global, args.dry_run, &mut out)?;
+        install_agents_for(&root, "claude", None, args.global, args.dry_run, &mut out)?;
 
         // Wire the dispatch-worker SubagentStart hook into the project's
         // settings (project-local only — the hook command is an absolute exec
