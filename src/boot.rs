@@ -366,7 +366,7 @@ const SESSION_MATCHER: &str = "startup|clear";
 /// Identity-unification with `skills::Agent` is deferred debt until SL-012 frees
 /// `skills.rs` (the §3 concurrency gate forbids touching it now).
 #[derive(Debug, PartialEq, Eq)]
-enum Harness {
+pub(crate) enum Harness {
     Claude,
     Codex,
 }
@@ -384,7 +384,7 @@ fn parse_harness(s: &str) -> anyhow::Result<Harness> {
     }
 }
 
-fn harness_label(h: &Harness) -> &'static str {
+pub(crate) fn harness_label(h: &Harness) -> &'static str {
     match h {
         Harness::Claude => "claude",
         Harness::Codex => "codex",
@@ -408,7 +408,7 @@ fn import_targets(h: &Harness, root: &Path) -> Vec<PathBuf> {
 /// with `.claude/` and a separate-inode `AGENTS.md` wires both; this repo's
 /// `AGENTS.md` symlink onto `CLAUDE.md` is Claude's import target via one inode,
 /// not a codex surface, so it stays Claude-only (SL-063 §3.1).
-fn resolve_harnesses(explicit: &[String], root: &Path) -> anyhow::Result<Vec<Harness>> {
+pub(crate) fn resolve_harnesses(explicit: &[String], root: &Path) -> anyhow::Result<Vec<Harness>> {
     if !explicit.is_empty() {
         return explicit.iter().map(|s| parse_harness(s)).collect();
     }
@@ -603,10 +603,6 @@ fn is_doctrine_sync_command(cmd: &str) -> bool {
 /// The `SubagentStart` stamp hook command for `exec`:
 /// `<exec> worktree marker --stamp-subagent` (SL-056 PHASE-10). Multi-arg, so
 /// ownership matches by suffix-strip (see `is_doctrine_stamp_command`).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "PHASE-02 forward-step dispatch")
-)]
 fn stamp_subagent_command(exec: &Path) -> String {
     format!("{} worktree marker --stamp-subagent", exec.display())
 }
@@ -616,10 +612,6 @@ fn stamp_subagent_command(exec: &Path) -> String {
 /// remaining program's file name is `doctrine`. Disjoint from the boot/sync
 /// predicates (neither owns the other's command), so the `SubagentStart` entry
 /// never clobbers the `SessionStart` ones.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "PHASE-02 forward-step dispatch")
-)]
 fn is_doctrine_stamp_command(cmd: &str) -> bool {
     let Some(program) = cmd.trim().strip_suffix(" worktree marker --stamp-subagent") else {
         return false;
@@ -666,10 +658,6 @@ impl HookSpec {
     /// `SubagentStart` entry, matcher-scoped to the dispatch-worker agent type.
     /// The matcher is sourced from `crate::worktree::DISPATCH_WORKER_AGENT_TYPE`,
     /// never re-spelled (a drift test pins the equality).
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "PHASE-02 forward-step dispatch")
-    )]
     pub(crate) fn stamp_subagent(exec: &Path) -> Self {
         Self {
             command: stamp_subagent_command(exec),
@@ -1009,7 +997,7 @@ pub(crate) fn run_install(
 /// `current_exe()` and prompts; this does the work — union + dedup import
 /// targets, prepend the `@`-import **once**, then refresh each harness, isolating
 /// a single harness's failure (it is printed; the others still run — A9/§5.5).
-fn wire(root: &Path, exec: &Path, harnesses: &[Harness], dry_run: bool) -> anyhow::Result<()> {
+pub(crate) fn wire(root: &Path, exec: &Path, harnesses: &[Harness], dry_run: bool) -> anyhow::Result<()> {
     let reference = format!("@{BOOT_REL}");
     let targets: Vec<PathBuf> = harnesses
         .iter()

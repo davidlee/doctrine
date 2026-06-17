@@ -1366,6 +1366,23 @@ pub(crate) fn list_rows(
     }
 }
 
+/// Narrow boot-snapshot producer: active signpost keys, key-ascending, with uid
+/// fallback for keyless memories. Reuses `collect_all` — no new fs read path.
+/// The boot producer calls this; the CLI `memory list` stays on `list_rows`.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-089: boot_keys called from boot.rs changes on this branch")
+)]
+pub(crate) fn boot_keys(root: &Path) -> Result<Vec<String>> {
+    let mut keys: Vec<String> = collect_all(root)?
+        .into_iter()
+        .filter(|m| m.status == Status::Active && m.kind == MemoryType::Signpost)
+        .map(|m| m.key.unwrap_or_else(|| m.uid.clone()))
+        .collect();
+    keys.sort();
+    Ok(keys)
+}
+
 /// `doctrine memory list [--type T] [-f SUBSTR] [-r RE] [-i] [-s S,…] [-t T] [-a]
 /// [--format F | --json]` — newest first, on the shared spine. Thin shell (§5.4):
 /// find the root, lower the args, print verbatim (`list_rows` carries the
@@ -3770,5 +3787,136 @@ ref = "src/main.rs"
         assert!(by_key.contains("mem.thread.x.y"));
         let by_uid = thread_hidden_notice(MemoryType::Thread, "mem_deadbeef").unwrap();
         assert!(by_uid.contains("mem_deadbeef"));
+    }
+
+    // --- SL-087 PHASE-01: boot_keys() returns key-ascending active signpost keys,
+    //     with uid fallback for keyless memories ---
+
+    /// Write a memory with caller-chosen type, status, and optional key.
+    fn write_boot_memory(
+        base: &Path,
+        uid: &str,
+        kind: MemoryType,
+        status: Status,
+        key: Option<&str>,
+    ) {
+        let key_line = match key {
+            Some(k) => format!("memory_key = \"{k}\"",),
+            None => String::new(),
+        };
+        let toml = format!(
+            r#"
+memory_uid = "{uid}"
+{key_line}
+schema_version = 1
+memory_type = "{kind}"
+status = "{status}"
+title = "Test {uid}"
+summary = "test"
+created = "2026-06-04"
+updated = "2026-06-04"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = ""
+
+[git]
+anchor_kind = "none"
+
+[review]
+verification_state = "unverified"
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "low"
+weight = 0
+"#,
+            uid = uid,
+            key_line = key_line,
+            kind = kind.as_str(),
+            status = status.as_str(),
+        );
+        let dir = base.join(uid);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("memory.toml"), toml).unwrap();
+        fs::write(dir.join("memory.md"), "body").unwrap();
+    }
+
+    #[test]
+    fn boot_keys_returns_key_ascending_active_signpost_keys_with_uid_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        fs::create_dir_all(&items).unwrap();
+
+        // Active signposts with keys — planted out of sort order.
+        let charlie = "mem_000000000000000000000000000000c3";
+        let alpha = "mem_000000000000000000000000000000a1";
+        let bravo = "mem_000000000000000000000000000000b2";
+        write_boot_memory(
+            &items,
+            charlie,
+            MemoryType::Signpost,
+            Status::Active,
+            Some("mem.charlie"),
+        );
+        write_boot_memory(
+            &items,
+            alpha,
+            MemoryType::Signpost,
+            Status::Active,
+            Some("mem.alpha"),
+        );
+        write_boot_memory(
+            &items,
+            bravo,
+            MemoryType::Signpost,
+            Status::Active,
+            Some("mem.bravo"),
+        );
+
+        // Keyless active signpost — uid fallback.
+        let keyless = "mem_000000000000000000000000000000d4";
+        write_boot_memory(&items, keyless, MemoryType::Signpost, Status::Active, None);
+
+        // Draft signpost — excluded.
+        let draft = "mem_000000000000000000000000000000e5";
+        write_boot_memory(
+            &items,
+            draft,
+            MemoryType::Signpost,
+            Status::Draft,
+            Some("mem.draft"),
+        );
+
+        // Active pattern (not Signpost kind) — excluded.
+        let pattern = "mem_000000000000000000000000000000f6";
+        write_boot_memory(
+            &items,
+            pattern,
+            MemoryType::Pattern,
+            Status::Active,
+            Some("mem.pattern"),
+        );
+
+        let keys = boot_keys(root).unwrap();
+        assert_eq!(
+            keys,
+            vec!["mem.alpha", "mem.bravo", "mem.charlie", keyless],
+            "key-ascending sort; keyless falls back to uid; draft and non-signpost excluded"
+        );
+    }
+
+    #[test]
+    fn boot_keys_empty_corpus_returns_empty_vec() {
+        let dir = tempfile::tempdir().unwrap();
+        let keys = boot_keys(dir.path()).unwrap();
+        assert!(keys.is_empty());
     }
 }
