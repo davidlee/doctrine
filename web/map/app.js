@@ -10,7 +10,6 @@
   /* -----------------------------------------------------------------------
    * State
    * --------------------------------------------------------------------- */
-  var md = null;             // markdown-it instance (lazy)
 
   /* -----------------------------------------------------------------------
    * Utilities
@@ -22,17 +21,6 @@
         render.el('p', { textContent: 'Error: ' + msg })
       ])
     );
-  }
-
-  /* -----------------------------------------------------------------------
-   * Markdown rendering (safe pipeline)
-   * --------------------------------------------------------------------- */
-  function renderMarkdown(text) {
-    if (!md) {
-      md = window.markdownit({ html: false, linkify: true, typographer: true });
-    }
-    var raw = md.render(text);
-    return window.DOMPurify.sanitize(raw);
   }
 
   /* -----------------------------------------------------------------------
@@ -258,155 +246,6 @@
   /* -----------------------------------------------------------------------
    * SVG Graph rendering (PHASE-03) — rendering pipeline + stale-render guard
    * --------------------------------------------------------------------- */
-  function renderGraphPane(container, focusId, depth) {
-    depth = Math.max(0, Math.min(3, depth));
-
-    var nb = model.neighbourhood(focusId, depth, state.graph);
-    var dotText = dot.graphToDot(nb, focusId, depth);
-
-    state.graphRenderSeq += 1;
-    var seq = state.graphRenderSeq;
-
-    if (!state.dotAvailable) {
-      container.innerHTML = '';
-      var errMsg = document.createElement('p');
-      errMsg.className = 'error';
-      errMsg.textContent = 'Graphviz not available. DOT source:';
-      container.appendChild(errMsg);
-      var pre = document.createElement('pre');
-      pre.textContent = dotText;
-      container.appendChild(pre);
-      return;
-    }
-
-    container.innerHTML = '';
-    var loading = document.createElement('p');
-    loading.className = 'loading';
-    loading.textContent = 'Rendering graph…';
-    container.appendChild(loading);
-
-    api.renderDot(dotText).then(function(svgText) {
-      if (seq !== state.graphRenderSeq) return;
-      var clean = window.DOMPurify.sanitize(svgText, { USE_PROFILES: { svg: true } });
-      container.innerHTML = clean;
-      var svgEl = container.querySelector('svg');
-      if (svgEl) {
-        svg.injectHitRects(svgEl);
-        svg.wireHandlers(svgEl, function(g) {
-          var t = g.querySelector('text');
-          return t ? t.textContent.trim() : '';
-        }, {
-          onClick: function(id) { router.setFocus(id, state.depth); },
-          onHoverEnter: function(id) {
-            state.hoveredId = id;
-            render.hoverPane({ container: render.elements.hoverDetail, node: state.graph.nodes.get(id) });
-          },
-          onHoverLeave: function() {
-            state.hoveredId = null;
-            render.hoverPane({ container: render.elements.hoverDetail, node: null });
-          }
-        });
-        svg.dimLegend(nb);
-      }
-    }).catch(function(err) {
-      if (seq !== state.graphRenderSeq) return;
-      container.innerHTML = '';
-      var errMsg = document.createElement('p');
-      errMsg.className = 'error';
-      errMsg.textContent = 'Graphviz not available';
-      container.appendChild(errMsg);
-      var pre = document.createElement('pre');
-      pre.textContent = dotText;
-      container.appendChild(pre);
-    });
-  }
-
-  /* -----------------------------------------------------------------------
-   * Markdown rendering (PHASE-04) — fetch, cache, link policy, error states
-   * --------------------------------------------------------------------- */
-  function applyLinkPolicy(container) {
-    var links = container.querySelectorAll('a');
-    for (var i = 0; i < links.length; i++) {
-      var a = links[i];
-      var href = a.getAttribute('href') || '';
-      if (href.indexOf('http://') === 0 || href.indexOf('https://') === 0) {
-        a.setAttribute('target', '_blank');
-        a.setAttribute('rel', 'noopener noreferrer');
-      } else if (href.indexOf('#') === 0) {
-        // Anchor link — preserve
-      } else if (href) {
-        // Relative link — strip href, preserve text
-        var span = document.createElement('span');
-        span.textContent = a.textContent;
-        a.parentNode.replaceChild(span, a);
-      }
-    }
-  }
-
-  function wireMarkdownPane(container) {
-    var btn = container.querySelector('.fullscreen-toggle');
-    if (btn) {
-      btn.addEventListener('click', function() {
-        container.classList.toggle('fullscreen');
-      });
-    }
-  }
-
-  function renderMarkdownPane(container, id) {
-    function wrapContent(innerHTML) {
-      return '<div class="markdown-toolbar">' +
-        '<span class="markdown-toolbar-title">' + render.escapeHtml(id) + '</span>' +
-        '<button class="fullscreen-toggle" title="Toggle fullscreen">&square;</button>' +
-        '</div>' +
-        '<div class="markdown-body">' + innerHTML + '</div>';
-    }
-
-    // Cache check
-    if (state.markdownCache.has(id)) {
-      container.innerHTML = wrapContent(renderMarkdown(state.markdownCache.get(id)));
-      wireMarkdownPane(container);
-      applyLinkPolicy(container);
-      return;
-    }
-
-    container.innerHTML = '';
-    var loading = document.createElement('p');
-    loading.className = 'loading';
-    loading.textContent = 'Loading markdown…';
-    container.appendChild(loading);
-
-    api.fetchMarkdown(id).then(function(text) {
-      // Stale-request guard
-      if (state.focusId !== id) return;
-
-      state.markdownCache.set(id, text);
-      container.innerHTML = wrapContent(renderMarkdown(text));
-      wireMarkdownPane(container);
-      applyLinkPolicy(container);
-    }).catch(function(err) {
-      // Stale-request guard
-      if (state.focusId !== id) return;
-
-      container.innerHTML = '';
-      if (err.status === 404) {
-        var msg = document.createElement('p');
-        msg.className = 'muted';
-        msg.textContent = 'No markdown body for ' + id;
-        container.appendChild(msg);
-      } else if (err.status === 501) {
-        var info = document.createElement('p');
-        info.className = 'info';
-        info.textContent = 'Markdown not implemented for requirements';
-        container.appendChild(info);
-      } else {
-        var error = document.createElement('p');
-        error.className = 'error';
-        error.textContent = 'Failed to load markdown: ' + err.message;
-        container.appendChild(error);
-      }
-    });
-  }
-
   /* -----------------------------------------------------------------------
    * Bootstrap + render loop (PHASE-05)
    * --------------------------------------------------------------------- */
@@ -469,35 +308,6 @@
     });
   }
 
-  function renderEdgeDetail(id) {
-    var container = document.querySelector('.graph-area');
-    var edge = state.graph.edgeById.get(id);
-    if (!edge) {
-      if (container) {
-        container.innerHTML = '<p class="error">Edge ' + render.escapeHtml(id) + ' not found in graph</p>';
-      }
-      return;
-    }
-
-    var srcNode = state.graph.nodes.get(edge.source);
-    var tgtNode = state.graph.nodes.get(edge.target);
-    var originFile = edge.raw && edge.raw.origin && edge.raw.origin.file ? edge.raw.origin.file : '-';
-
-    var html = '<div class="edge-detail">';
-    html += '<h2>Edge: ' + render.escapeHtml(edge.id) + '</h2>';
-    html += '<table class="edge-detail-table">';
-    html += '<tr><th>Edge ID</th><td>' + render.escapeHtml(edge.id) + '</td></tr>';
-    html += '<tr><th>Source</th><td><a href="#' + router.buildHash('focus', edge.source, state.depth) + '">' + render.escapeHtml(edge.source) + '</a>' + (srcNode ? ' &mdash; ' + render.escapeHtml(srcNode.title) : '') + '</td></tr>';
-    html += '<tr><th>Label</th><td>' + render.escapeHtml(edge.label) + '</td></tr>';
-    html += '<tr><th>Target</th><td><a href="#' + router.buildHash('focus', edge.target, state.depth) + '">' + render.escapeHtml(edge.target) + '</a>' + (tgtNode ? ' &mdash; ' + render.escapeHtml(tgtNode.title) : '') + '</td></tr>';
-    html += '<tr><th>Origin file</th><td>' + render.escapeHtml(originFile) + '</td></tr>';
-    html += '</table>';
-    html += '<p class="edge-detail-back"><a href="#' + router.buildHash('focus', state.focusId, state.depth) + '">&larr; Back to ' + render.escapeHtml(state.focusId) + '</a></p>';
-    html += '</div>';
-
-    if (container) container.innerHTML = html;
-  }
-
   /* Instant pre-render focus highlight on the current SVG.
    * Applied before the async graph re-render to give immediate visual
    * feedback when the user clicks a different node at the same depth. */
@@ -517,7 +327,14 @@
     }
 
     if (route.view === 'edge') {
-      renderEdgeDetail(route.id);
+      var edge = state.graph.edgeById.get(route.id);
+      render.edgeDetail({
+        container: render.elements.graphArea,
+        edge: edge,
+        graph: state.graph,
+        depth: state.depth,
+        focusId: state.focusId
+      });
       render.hoverPane({ container: render.elements.hoverDetail, node: null });
       render.setViewMode('edge');
       mdPane = document.querySelector('.markdown-pane');
@@ -589,7 +406,25 @@
         if (isConceptMap(state.focusId)) {
           renderConceptMap();
         } else {
-          renderGraphPane(graphArea, state.focusId, state.depth);
+          state.graphRenderSeq += 1;
+          render.graphPane({
+            container: graphArea,
+            graph: state.graph,
+            focusId: state.focusId,
+            depth: state.depth,
+            dotAvailable: state.dotAvailable,
+            seq: state.graphRenderSeq,
+            getCurrentSeq: function() { return state.graphRenderSeq; },
+            onNodeClick: function(id) { router.setFocus(id, state.depth); },
+            onNodeHoverEnter: function(id) {
+              state.hoveredId = id;
+              render.hoverPane({ container: render.elements.hoverDetail, node: state.graph.nodes.get(id) });
+            },
+            onNodeHoverLeave: function() {
+              state.hoveredId = null;
+              render.hoverPane({ container: render.elements.hoverDetail, node: null });
+            }
+          });
         }
       }
     }
@@ -628,7 +463,12 @@
 
     if (state.focusId) {
       mdPane = document.querySelector('.markdown-pane');
-      if (mdPane) renderMarkdownPane(mdPane, state.focusId);
+      if (mdPane) render.markdownPane({
+        container: mdPane,
+        id: state.focusId,
+        cache: state.markdownCache,
+        currentFocusId: state.focusId
+      });
     }
   }
 

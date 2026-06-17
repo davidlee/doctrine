@@ -1,7 +1,7 @@
 // Doctrine Map Explorer — entity-graph DOM construction (SL-083 PHASE-03)
 // Exposed on window.render. Depends on: model (neighbourhood), dot (graphToDot),
 // api (renderDot, fetchMarkdown), svg (injectHitRects, wireHandlers, dimLegend).
-/* global router, compareEdgesBySource */
+/* global router, compareEdgesBySource, model, dot, api, svg */
 /* exported render */
 
 var render = {};
@@ -226,4 +226,195 @@ render.hoverPane = function(opts) {
   html += '<span class="hover-detail-meta">' + node.kindLabel + ' \u00b7 ' + node.status + '</span>';
   html += '</div>';
   pane.innerHTML = html;
+};
+
+/* -----------------------------------------------------------------------
+ * Markdown rendering pipeline (safe: markdown-it → DOMPurify)
+ * --------------------------------------------------------------------- */
+var _markdownIt = null;
+
+render.renderMarkdown = function(text) {
+  if (!_markdownIt) {
+    _markdownIt = window.markdownit({ html: false, linkify: true, typographer: true });
+  }
+  var raw = _markdownIt.render(text);
+  return window.DOMPurify.sanitize(raw);
+};
+
+function _applyLinkPolicy(container) {
+  var links = container.querySelectorAll('a');
+  for (var i = 0; i < links.length; i++) {
+    var a = links[i];
+    var href = a.getAttribute('href') || '';
+    if (href.indexOf('http://') === 0 || href.indexOf('https://') === 0) {
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener noreferrer');
+    } else if (href.indexOf('#') === 0) {
+      // Anchor link — preserve
+    } else if (href) {
+      var span = document.createElement('span');
+      span.textContent = a.textContent;
+      a.parentNode.replaceChild(span, a);
+    }
+  }
+}
+
+function _wireFullscreenToggle(container) {
+  var btn = container.querySelector('.fullscreen-toggle');
+  if (btn) {
+    btn.addEventListener('click', function() {
+      container.classList.toggle('fullscreen');
+    });
+  }
+}
+
+/* Options: { container, id, cache, currentFocusId } */
+render.markdownPane = function(opts) {
+  var container = opts.container;
+  var id = opts.id;
+  var cache = opts.cache;
+  var currentFocusId = opts.currentFocusId;
+
+  function wrapContent(innerHTML) {
+    return '<div class="markdown-toolbar">' +
+      '<span class="markdown-toolbar-title">' + render.escapeHtml(id) + '</span>' +
+      '<button class="fullscreen-toggle" title="Toggle fullscreen">&square;</button>' +
+      '</div>' +
+      '<div class="markdown-body">' + innerHTML + '</div>';
+  }
+
+  // Cache check
+  if (cache.has(id)) {
+    container.innerHTML = wrapContent(render.renderMarkdown(cache.get(id)));
+    _wireFullscreenToggle(container);
+    _applyLinkPolicy(container);
+    return;
+  }
+
+  container.innerHTML = '';
+  var loading = document.createElement('p');
+  loading.className = 'loading';
+  loading.textContent = 'Loading markdown…';
+  container.appendChild(loading);
+
+  api.fetchMarkdown(id).then(function(text) {
+    if (currentFocusId !== id) return;
+    cache.set(id, text);
+    container.innerHTML = wrapContent(render.renderMarkdown(text));
+    _wireFullscreenToggle(container);
+    _applyLinkPolicy(container);
+  }).catch(function(err) {
+    if (currentFocusId !== id) return;
+    container.innerHTML = '';
+    if (err.status === 404) {
+      var msg = document.createElement('p');
+      msg.className = 'muted';
+      msg.textContent = 'No markdown body for ' + id;
+      container.appendChild(msg);
+    } else if (err.status === 501) {
+      var info = document.createElement('p');
+      info.className = 'info';
+      info.textContent = 'Markdown not implemented for requirements';
+      container.appendChild(info);
+    } else {
+      var error = document.createElement('p');
+      error.className = 'error';
+      error.textContent = 'Failed to load markdown: ' + err.message;
+      container.appendChild(error);
+    }
+  });
+};
+
+/* -----------------------------------------------------------------------
+ * Entity-graph SVG rendering (async: DOT → API → DOMPurify → SVG DOM)
+ * Options: { container, graph, focusId, depth, dotAvailable, seq,
+ *            getCurrentSeq, onNodeClick, onNodeHoverEnter, onNodeHoverLeave }
+ * --------------------------------------------------------------------- */
+render.graphPane = function(opts) {
+  var container = opts.container;
+  var graph = opts.graph;
+  var focusId = opts.focusId;
+  var depth = Math.max(0, Math.min(3, opts.depth));
+  var dotAvailable = opts.dotAvailable;
+  var seq = opts.seq;
+
+  var nb = model.neighbourhood(focusId, depth, graph);
+  var dotText = dot.graphToDot(nb, focusId, depth);
+
+  if (!dotAvailable) {
+    container.innerHTML = '';
+    var errMsg = document.createElement('p');
+    errMsg.className = 'error';
+    errMsg.textContent = 'Graphviz not available. DOT source:';
+    container.appendChild(errMsg);
+    var pre = document.createElement('pre');
+    pre.textContent = dotText;
+    container.appendChild(pre);
+    return;
+  }
+
+  container.innerHTML = '';
+  var loading = document.createElement('p');
+  loading.className = 'loading';
+  loading.textContent = 'Rendering graph…';
+  container.appendChild(loading);
+
+  api.renderDot(dotText).then(function(svgText) {
+    if (seq !== opts.getCurrentSeq()) return;
+    var clean = window.DOMPurify.sanitize(svgText, { USE_PROFILES: { svg: true } });
+    container.innerHTML = clean;
+    var svgEl = container.querySelector('svg');
+    if (svgEl) {
+      svg.injectHitRects(svgEl);
+      svg.wireHandlers(svgEl, function(g) {
+        var t = g.querySelector('text');
+        return t ? t.textContent.trim() : '';
+      }, {
+        onClick: opts.onNodeClick,
+        onHoverEnter: opts.onNodeHoverEnter,
+        onHoverLeave: opts.onNodeHoverLeave
+      });
+      svg.dimLegend(nb);
+    }
+  }).catch(function(err) {
+    if (seq !== opts.getCurrentSeq()) return;
+    container.innerHTML = '';
+    var errMsg2 = document.createElement('p');
+    errMsg2.className = 'error';
+    errMsg2.textContent = 'Graphviz not available';
+    container.appendChild(errMsg2);
+    var pre2 = document.createElement('pre');
+    pre2.textContent = dotText;
+    container.appendChild(pre2);
+  });
+};
+
+/* -----------------------------------------------------------------------
+ * Edge detail view
+ * Options: { container, edge, graph, depth, focusId }
+ * --------------------------------------------------------------------- */
+render.edgeDetail = function(opts) {
+  var container = opts.container;
+  var edge = opts.edge;
+  var graph = opts.graph;
+  var depth = opts.depth;
+  var focusId = opts.focusId;
+
+  var srcNode = graph.nodes.get(edge.source);
+  var tgtNode = graph.nodes.get(edge.target);
+  var originFile = edge.raw && edge.raw.origin && edge.raw.origin.file ? edge.raw.origin.file : '-';
+
+  var html = '<div class="edge-detail">';
+  html += '<h2>Edge: ' + render.escapeHtml(edge.id) + '</h2>';
+  html += '<table class="edge-detail-table">';
+  html += '<tr><th>Edge ID</th><td>' + render.escapeHtml(edge.id) + '</td></tr>';
+  html += '<tr><th>Source</th><td><a href="#' + router.buildHash('focus', edge.source, depth) + '">' + render.escapeHtml(edge.source) + '</a>' + (srcNode ? ' &mdash; ' + render.escapeHtml(srcNode.title) : '') + '</td></tr>';
+  html += '<tr><th>Label</th><td>' + render.escapeHtml(edge.label) + '</td></tr>';
+  html += '<tr><th>Target</th><td><a href="#' + router.buildHash('focus', edge.target, depth) + '">' + render.escapeHtml(edge.target) + '</a>' + (tgtNode ? ' &mdash; ' + render.escapeHtml(tgtNode.title) : '') + '</td></tr>';
+  html += '<tr><th>Origin file</th><td>' + render.escapeHtml(originFile) + '</td></tr>';
+  html += '</table>';
+  html += '<p class="edge-detail-back"><a href="#' + router.buildHash('focus', focusId, depth) + '">&larr; Back to ' + render.escapeHtml(focusId) + '</a></p>';
+  html += '</div>';
+
+  if (container) container.innerHTML = html;
 };
