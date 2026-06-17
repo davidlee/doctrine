@@ -84,12 +84,7 @@ api.fetchConceptMap = function(id) {
 };
 
 api.mutateConceptMap = function(id, action, params, baseHash) {
-  var body = { action: action };
-  if (params.source !== undefined) body.source = params.source;
-  if (params.rel !== undefined) body.rel = params.rel;
-  if (params.target !== undefined) body.target = params.target;
-  if (params.old_label !== undefined) body.old_label = params.old_label;
-  if (params.new_label !== undefined) body.new_label = params.new_label;
+  var body = Object.assign({ action: action }, params);
   if (baseHash !== undefined) body.base_hash = baseHash;
   return fetch('/api/concept-map/' + encodeURIComponent(id), {
     method: 'POST',
