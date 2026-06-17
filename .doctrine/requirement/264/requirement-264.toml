@@ -7,8 +7,12 @@ title = "Surface estimates in detailed display with optional derived spread"
 status = "pending"
 kind = "functional"
 
-# description — optional one-line summary (queryable). Omitted by default (None);
-# the full statement/rationale stays prose in the sister `.md`. Add as:
-#   description = "…"
+description = "Detailed entity display shows the estimate when present and a fixed phrase when absent; verbose/review display may add derived attention spread (ratio and absolute width) without classifying the spread."
 tags = []
-acceptance_criteria = []
+acceptance_criteria = [
+  "Detailed display shows 'Estimate: <lower>-<upper> <unit>' when present, using normalized compact values rather than preserved TOML formatting.",
+  "Detailed display shows 'Estimate: none recorded' when absent.",
+  "Verbose/review display may show attention spread (ratio) and attention width (absolute).",
+  "When lower == 0 the spread ratio is reported as unavailable while width is still shown.",
+  "Normal display never classifies spread as wide, very wide, risky, or split-worthy.",
+]
