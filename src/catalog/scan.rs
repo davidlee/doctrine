@@ -56,11 +56,11 @@ pub(crate) fn outbound_for(
         // `knowledge::relation_edges` accessor. Kept a SEPARATE arm from `REQ`
         // (which is empty forever) precisely because its body diverges in Slice B —
         // merging the identical-today bodies would couple two distinct futures.
-        #[expect(
-            clippy::match_same_arms,
-            reason = "SL-059 L7: distinct from the REQ arm — Slice B replaces this empty body with knowledge::relation_edges; REQ stays empty forever"
-        )]
-        "ASM" | "DEC" | "QUE" | "CON" => Ok(Vec::new()),
+        "ASM" | "DEC" | "QUE" | "CON" => {
+            let record_kind = crate::knowledge::RecordKind::from_prefix(kind.prefix)
+                .ok_or_else(|| anyhow::anyhow!("unknown record prefix {}", kind.prefix))?;
+            crate::knowledge::relation_edges(root, record_kind, id)
+        }
         "RV" => crate::review::relation_edges(root, id),
         "REC" => crate::rec::relation_edges(root, id),
         // REV (SL-066, G3) — the arm MUST land WITH the `KINDS` row or the
