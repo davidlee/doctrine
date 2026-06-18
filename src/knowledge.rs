@@ -331,6 +331,7 @@ pub(crate) struct KnowledgeRecord {
     tags: Vec<String>,
     facet: RecordFacet,
     evidence: Evidence,
+    tier1: Vec<crate::relation::RelationEdge>,
 }
 
 /// The typed facet, kind-dispatched (one variant per kind — no untyped bag). Built
@@ -553,6 +554,7 @@ fn validate(raw: RawRecordToml) -> anyhow::Result<KnowledgeRecord> {
         tags: raw.tags,
         facet,
         evidence,
+        tier1: Vec::new(),
     })
 }
 
@@ -838,7 +840,16 @@ fn read_record(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<Knowled
         .with_context(|| format!("record not found at {}", path.display()))?;
     let raw: RawRecordToml =
         toml::from_str(&text).with_context(|| format!("Failed to parse {}", path.display()))?;
-    validate(raw)
+    let mut record = validate(raw)?;
+    record.tier1 = crate::relation::tier1_edges(kind.kind(), &text)?;
+    Ok(record)
+}
+
+/// The kind-module accessor for relation edges (SL-096 PHASE-01): read one record
+/// and return its tier-1 relation edges. Delegates to [`read_record`].
+pub(crate) fn relation_edges(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
+    let record = read_record(root, kind, id)?;
+    Ok(record.tier1)
 }
 
 /// Read every record under one kind's tree into validated [`KnowledgeRecord`]s. Rides
@@ -942,6 +953,14 @@ fn format_show(record: &KnowledgeRecord) -> String {
     }
     parts.push(format_facet(&record.facet));
     parts.push(format_evidence(&record.evidence));
+    // shapes, spawns, governed_by axes
+    for label in [crate::relation::RelationLabel::Shapes, crate::relation::RelationLabel::Spawns, crate::relation::RelationLabel::GovernedBy] {
+        let targets = crate::relation::targets_for(&record.tier1, label);
+        if !targets.is_empty() {
+            let targets_str = targets.join(", ");
+            parts.push(format!("{}: [{}]\n", label.name(), targets_str));
+        }
+    }
     parts.concat()
 }
 
@@ -1053,6 +1072,11 @@ fn show_json(record: &KnowledgeRecord) -> anyhow::Result<String> {
                 "supports": record.evidence.supports,
                 "contradicts": record.evidence.contradicts,
                 "notes": record.evidence.notes,
+            },
+            "relationships": {
+                "shapes": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Shapes),
+                "spawns": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::Spawns),
+                "governed_by": crate::relation::targets_for(&record.tier1, crate::relation::RelationLabel::GovernedBy),
             },
         },
     });
@@ -1742,5 +1766,172 @@ notes = []
         // the rendered text re-parses to the same struct (escaping survived).
         let reparsed = validate(toml::from_str::<RawRecordToml>(&rendered).unwrap()).unwrap();
         assert_eq!(reparsed, record);
+    }
+
+    // --- VT-6: tier1 relation edges via read_record (SL-096 PHASE-01) ---
+
+    fn seed_record(root: &Path, kind: RecordKind, id: u32, body: &str) {
+        let name = format!("{id:03}");
+        let dir = root.join(kind.kind().dir).join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("record-{name}.toml")), body).unwrap();
+    }
+
+    #[test]
+    fn record_without_relation_block_has_empty_tier1() {
+        let root = std::env::temp_dir().join("doctrine-sl096-pt1-empty");
+        let _ = std::fs::remove_dir_all(&root);
+        let record = "\
+schema = \"doctrine.knowledge\"
+version = 1
+
+id = 1
+slug = \"test\"
+title = \"Test\"
+record_kind = \"assumption\"
+status = \"held\"
+created = \"2026-06-08\"
+updated = \"2026-06-08\"
+tags = []
+
+[facet]
+
+[evidence]
+supports = []
+contradicts = []
+notes = []
+";
+        seed_record(&root, RecordKind::Assumption, 1, record);
+        let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
+        assert!(r.tier1.is_empty(), "no [[relation]] block → empty tier1");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn record_with_authored_relation_rows_populates_tier1() {
+        let root = std::env::temp_dir().join("doctrine-sl096-pt1-auth");
+        let _ = std::fs::remove_dir_all(&root);
+        let record = "\
+schema = \"doctrine.knowledge\"
+version = 1
+
+id = 1
+slug = \"test\"
+title = \"Test\"
+record_kind = \"assumption\"
+status = \"held\"
+created = \"2026-06-08\"
+updated = \"2026-06-08\"
+tags = []
+
+[facet]
+
+[evidence]
+supports = []
+contradicts = []
+notes = []
+
+[[relation]]
+label = \"shapes\"
+target = \"SL-001\"
+
+[[relation]]
+label = \"spawns\"
+target = \"ISS-001\"
+
+[[relation]]
+label = \"governed_by\"
+target = \"ADR-001\"
+";
+        seed_record(&root, RecordKind::Assumption, 1, record);
+        let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
+        assert_eq!(r.tier1.len(), 3);
+        assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::Shapes);
+        assert_eq!(r.tier1[0].target, "SL-001");
+        assert_eq!(r.tier1[1].label, crate::relation::RelationLabel::Spawns);
+        assert_eq!(r.tier1[1].target, "ISS-001");
+        assert_eq!(r.tier1[2].label, crate::relation::RelationLabel::GovernedBy);
+        assert_eq!(r.tier1[2].target, "ADR-001");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn record_with_illegal_label_excludes_illegal_from_tier1() {
+        let root = std::env::temp_dir().join("doctrine-sl096-pt1-illegal");
+        let _ = std::fs::remove_dir_all(&root);
+        let record = "\
+schema = \"doctrine.knowledge\"
+version = 1
+
+id = 1
+slug = \"test\"
+title = \"Test\"
+record_kind = \"assumption\"
+status = \"held\"
+created = \"2026-06-08\"
+updated = \"2026-06-08\"
+tags = []
+
+[facet]
+
+[evidence]
+supports = []
+contradicts = []
+notes = []
+
+[[relation]]
+label = \"supersedes\"
+target = \"SL-001\"
+
+[[relation]]
+label = \"shapes\"
+target = \"PRD-001\"
+";
+        seed_record(&root, RecordKind::Assumption, 1, record);
+        let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
+        assert_eq!(r.tier1.len(), 1, "illegal supersedes row excluded, shapes survives");
+        assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::Shapes);
+        assert_eq!(r.tier1[0].target, "PRD-001");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn record_with_unknown_label_excludes_unknown_from_tier1() {
+        let root = std::env::temp_dir().join("doctrine-sl096-pt1-unknown");
+        let _ = std::fs::remove_dir_all(&root);
+        let record = "\
+schema = \"doctrine.knowledge\"
+version = 1
+
+id = 1
+slug = \"test\"
+title = \"Test\"
+record_kind = \"assumption\"
+status = \"held\"
+created = \"2026-06-08\"
+updated = \"2026-06-08\"
+tags = []
+
+[facet]
+
+[evidence]
+supports = []
+contradicts = []
+notes = []
+
+[[relation]]
+label = \"nonsense\"
+target = \"X\"
+
+[[relation]]
+label = \"governed_by\"
+target = \"ADR-001\"
+";
+        seed_record(&root, RecordKind::Assumption, 1, record);
+        let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
+        assert_eq!(r.tier1.len(), 1, "unknown nonsense label excluded, governed_by survives");
+        assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::GovernedBy);
+        assert_eq!(r.tier1[0].target, "ADR-001");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -1044,16 +1044,32 @@ mod tests {
     // -- SL-059 VT-1: outbound_for total-dispatch for the four knowledge kinds --
 
     #[test]
-    fn knowledge_kinds_author_no_outbound_never_panic() {
+    fn knowledge_kinds_author_outbound_edges() {
         let dir = tmp();
         let root = dir.path();
-        // F-A1: the four-prefix empty arm returns Ok(vec![]) for each ASM/DEC/QUE/CON
-        // and never falls through to the debug_assert!(false) unrouted-prefix panic
-        // (the empty-arm regression guard — a KINDS row with no arm would panic here).
-        for prefix in ["ASM", "DEC", "QUE", "CON"] {
-            let edges = outbound_for(&root, kind_for(prefix), 1).unwrap();
-            assert!(edges.is_empty(), "{prefix} authors no outbound");
-        }
+        // Seed an assumption record with [[relation]] rows
+        write(&root, ".doctrine/knowledge/assumption/001/record-001.toml",
+            "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
+             id = 1\nslug = \"a\"\ntitle = \"A\"\n\
+             record_kind = \"assumption\"\nstatus = \"held\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             tags = []\n\n\
+             [facet]\n\
+             claim = \"\"\nconfidence = \"\"\nbasis = \"\"\n\
+             validation_plan = \"\"\nvalidated_by = \"\"\nvalidated_on = \"\"\n\
+             invalidated_by = \"\"\ninvalidated_on = \"\"\n\n\
+             [evidence]\n\
+             supports = []\ncontradicts = []\nnotes = []\n\
+             [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
+        write(&root, ".doctrine/knowledge/assumption/001/record-001.md", "body\n");
+        let edges = outbound_for(&root, kind_for("ASM"), 1).unwrap();
+        assert_eq!(edges.len(), 3);
+        // Verify each edge exists with correct target
+        assert!(edges.iter().any(|e| e.label == RelationLabel::Shapes && e.target == "SL-001"));
+        assert!(edges.iter().any(|e| e.label == RelationLabel::Spawns && e.target == "ISS-001"));
+        assert!(edges.iter().any(|e| e.label == RelationLabel::GovernedBy && e.target == "ADR-001"));
     }
 
     // -- SL-059 VT-2: scan-side totality (F-A7, the L7 partner) ---------------
@@ -1565,9 +1581,9 @@ mod tests {
                 "{label:?} (Unvalidated) must have no overlay"
             );
         }
-        // The 14 = 16 distinct labels minus the 2 Unvalidated. The set, not just the
+        // The 16 = 19 distinct labels minus the 3 Unvalidated. The set, not just the
         // count, is the real assertion above; the count is a human-readable sanity tag.
-        assert_eq!(overlay_backed.len(), 14, "overlay-backed label count is 14");
+        assert_eq!(overlay_backed.len(), 16, "overlay-backed label count is 16");
     }
 
     // -- PHASE-04 VT-4 / X3 arm (a): exact reader coverage (read_block live) ---
@@ -1729,6 +1745,96 @@ mod tests {
             emitted_labels(root, "REC", 1),
             table_labels_for("REC"),
             "rec reader emits exactly owning_slice + decision_ref"
+        );
+
+        // --- ASM (knowledge): shapes + spawns + governed_by ---
+        write(&root, ".doctrine/knowledge/assumption/001/record-001.toml",
+            "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
+             id = 1\nslug = \"a\"\ntitle = \"A\"\n\
+             record_kind = \"assumption\"\nstatus = \"held\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             tags = []\n\n\
+             [facet]\n\
+             claim = \"\"\nconfidence = \"\"\nbasis = \"\"\n\
+             validation_plan = \"\"\nvalidated_by = \"\"\nvalidated_on = \"\"\n\
+             invalidated_by = \"\"\ninvalidated_on = \"\"\n\n\
+             [evidence]\n\
+             supports = []\ncontradicts = []\nnotes = []\n\
+             [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
+        write(&root, ".doctrine/knowledge/assumption/001/record-001.md", "body\n");
+        assert_eq!(
+            emitted_labels(root, "ASM", 1),
+            table_labels_for("ASM"),
+            "ASM reader emits exactly shapes + spawns + governed_by"
+        );
+
+        // --- DEC (knowledge): shapes + spawns + governed_by ---
+        write(&root, ".doctrine/knowledge/decision/001/record-001.toml",
+            "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
+             id = 1\nslug = \"d\"\ntitle = \"D\"\n\
+             record_kind = \"decision\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             tags = []\n\n\
+             [facet]\n\
+             context = \"\"\nchoice = \"\"\nalternatives = []\n\
+             rationale = \"\"\nconsequences = []\n\
+             decided_by = \"\"\ndecided_on = \"\"\n\n\
+             [evidence]\n\
+             supports = []\ncontradicts = []\nnotes = []\n\
+             [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
+        write(&root, ".doctrine/knowledge/decision/001/record-001.md", "body\n");
+        assert_eq!(
+            emitted_labels(root, "DEC", 1),
+            table_labels_for("DEC"),
+            "DEC reader emits exactly shapes + spawns + governed_by"
+        );
+
+        // --- QUE (knowledge): shapes + spawns + governed_by ---
+        write(&root, ".doctrine/knowledge/question/001/record-001.toml",
+            "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
+             id = 1\nslug = \"q\"\ntitle = \"Q\"\n\
+             record_kind = \"question\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             tags = []\n\n\
+             [facet]\n\
+             question = \"\"\nwhy_matters = \"\"\nanswer = \"\"\n\
+             answered_by = \"\"\nanswered_on = \"\"\n\n\
+             [evidence]\n\
+             supports = []\ncontradicts = []\nnotes = []\n\
+             [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
+        write(&root, ".doctrine/knowledge/question/001/record-001.md", "body\n");
+        assert_eq!(
+            emitted_labels(root, "QUE", 1),
+            table_labels_for("QUE"),
+            "QUE reader emits exactly shapes + spawns + governed_by"
+        );
+
+        // --- CON (knowledge): shapes + spawns + governed_by ---
+        write(&root, ".doctrine/knowledge/constraint/001/record-001.toml",
+            "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
+             id = 1\nslug = \"c\"\ntitle = \"C\"\n\
+             record_kind = \"constraint\"\nstatus = \"active\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             tags = []\n\n\
+             [facet]\n\
+             statement = \"\"\nsource = \"\"\napplies_to = []\n\
+             waiver_reason = \"\"\nwaived_by = \"\"\nwaived_on = \"\"\n\n\
+             [evidence]\n\
+             supports = []\ncontradicts = []\nnotes = []\n\
+             [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
+        write(&root, ".doctrine/knowledge/constraint/001/record-001.md", "body\n");
+        assert_eq!(
+            emitted_labels(root, "CON", 1),
+            table_labels_for("CON"),
+            "CON reader emits exactly shapes + spawns + governed_by"
         );
     }
 
