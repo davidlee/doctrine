@@ -837,12 +837,12 @@ mod tests {
         write(
             &root,
             ".doctrine/adr/002/adr-002.toml",
-            // SL-048 PHASE-04 (OD-3): supersedes/superseded_by/tags stay TYPED in a
-            // `[relationships]` table preceding the arrays; only `related` migrates.
+            // SL-095 PHASE-02: `supersedes` is now a `[[relation]]` row.
             "id = 2\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [relationships]\nsupersedes = [\"ADR-001\"]\nsuperseded_by = [\"ADR-009\"]\n\
+             [relationships]\nsuperseded_by = [\"ADR-009\"]\n\
              tags = [\"layering\"]\n\
+             [[relation]]\nlabel = \"supersedes\"\ntarget = \"ADR-001\"\n\
              [[relation]]\nlabel = \"related\"\ntarget = \"ADR-004\"\n",
         );
         write(&root, ".doctrine/adr/002/adr-002.md", "body\n");
@@ -1642,7 +1642,7 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
 
-        // --- SL: specs, requirements, supersedes, governed_by (all tier-1) ---
+        // --- SL: specs, requirements, supersedes, governed_by, related (all tier-1) ---
         write(
             &root,
             ".doctrine/slice/001/slice-001.toml",
@@ -1651,7 +1651,8 @@ mod tests {
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
              [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-001\"\n\
              [[relation]]\nlabel = \"supersedes\"\ntarget = \"SL-002\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n",
         );
         write(&root, ".doctrine/slice/001/slice-001.md", "s\n");
         assert_eq!(
@@ -1660,13 +1661,14 @@ mod tests {
             "slice reader emits exactly its table labels"
         );
 
-        // --- ADR (governance): supersedes (typed) + related (tier-1) ---
+        // --- ADR (governance): supersedes + related (both tier-1 after SL-095) ---
         write(
             &root,
             ".doctrine/adr/001/adr-001.toml",
             "id = 1\nslug = \"a\"\ntitle = \"A\"\nstatus = \"accepted\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [relationships]\nsupersedes = [\"ADR-002\"]\nsuperseded_by = []\ntags = []\n\
+             [relationships]\nsuperseded_by = []\ntags = []\n\
+             [[relation]]\nlabel = \"supersedes\"\ntarget = \"ADR-002\"\n\
              [[relation]]\nlabel = \"related\"\ntarget = \"ADR-003\"\n",
         );
         write(&root, ".doctrine/adr/001/adr-001.md", "a\n");
@@ -1676,7 +1678,7 @@ mod tests {
             "governance reader emits exactly supersedes + related"
         );
 
-        // --- ISS (backlog): specs + slices + drift (all tier-1) ---
+        // --- ISS (backlog): specs + slices + related + drift (all tier-1) ---
         write(
             &root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
@@ -1684,13 +1686,14 @@ mod tests {
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
              [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n\
              [[relation]]\nlabel = \"drift\"\ntarget = \"free-text\"\n",
         );
         write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
         assert_eq!(
             emitted_labels(root, "ISS", 1),
             table_labels_for("ISS"),
-            "backlog reader emits exactly specs + slices + drift"
+            "backlog reader emits exactly specs + slices + related + drift"
         );
 
         // --- SPEC (tech): governed_by (tier-1) + descends_from/parent (typed) +
@@ -1784,6 +1787,7 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+
         );
         write(
             &root,
@@ -1824,6 +1828,7 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+
         );
         write(
             &root,
@@ -1857,6 +1862,7 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+
         );
         write(
             &root,
@@ -1890,6 +1896,7 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+
         );
         write(
             &root,
@@ -1939,13 +1946,14 @@ mod tests {
              [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n",
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
-        // SL-002 carries a HAND-EDITED illegal row: a slice cannot author `related`.
+        // SL-002 carries a HAND-EDITED illegal row: a slice cannot author `descends_from`
+        // (a spec-only label; `related` is now legal for slices since SL-095).
         write(
             root,
             ".doctrine/slice/002/slice-002.toml",
             "id = 2\nslug = \"s\"\ntitle = \"S\"\nstatus = \"proposed\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [[relation]]\nlabel = \"related\"\ntarget = \"SL-001\"\n",
+             [[relation]]\nlabel = \"descends_from\"\ntarget = \"PRD-001\"\n",
         );
         write(root, ".doctrine/slice/002/slice-002.md", "s\n");
 
@@ -1965,13 +1973,13 @@ mod tests {
         );
         assert!(
             joined.contains("SL-002") && joined.contains("illegal"),
-            "the hand-edited illegal `related` row is reported: {joined}"
+            "the hand-edited illegal `descends_from` row is reported: {joined}"
         );
         // Report-only: the corpus file is byte-unchanged.
         let after =
             std::fs::read_to_string(root.join(".doctrine/slice/002/slice-002.toml")).unwrap();
         assert!(
-            after.contains("label = \"related\""),
+            after.contains("label = \"descends_from\""),
             "validate never rewrites the corpus"
         );
     }
