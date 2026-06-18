@@ -1,0 +1,55 @@
+[[area]]
+name = "Relation vocabulary"
+purpose = "RelationLabel::Shapes/Spawns variants, RELATION_RULES rows, GovernedBy source-set extension, RECORD source-group const, golden test updates"
+paths = [
+  "src/relation.rs",
+]
+
+[[area]]
+name = "Knowledge record read path"
+purpose = "KnowledgeRecord.tier1 field, read_record population, relation_edges accessor, format_show/show_json relation axes, VT tests"
+paths = [
+  "src/knowledge.rs",
+]
+
+[[area]]
+name = "outbound_for dispatch"
+purpose = "ASM/DEC/QUE/CON arm wired to knowledge::relation_edges, clippy expect removed"
+paths = [
+  "src/catalog/scan.rs",
+]
+
+[[area]]
+name = "Relation graph invariants"
+purpose = "SL-059 VT-1 replacement, exact-coverage extension for RECORD source group, overlay_backed count update"
+paths = [
+  "src/relation_graph.rs",
+]
+
+[[area]]
+name = "CLI golden"
+purpose = "show_json golden updated for relationships object"
+paths = [
+  "tests/e2e_knowledge_cli_golden.rs",
+]
+
+[[invariant]]
+text = "All design decisions (D1-D6) faithfully implemented: Shapes/Spawns variants, RELATION_RULES rows, GovernedBy extension, Drift NOT extended, RECORD const, tier1 read path, outbound_for dispatch, show/inspect render"
+
+[[invariant]]
+text = "All PHASE-01 VT criteria met (10/10): from_name round-trip, lookup rules, target-kind refusal, golden churn, inbound_name inversion, tier1 empty/populated/illegal/unknown"
+
+[[invariant]]
+text = "All PHASE-02 VT criteria met (5/5): SL-059 VT-1 replacement, exact-coverage, sources_match_shipped, show render, show JSON; plus VA-1 existing suites, VH-1 just gate"
+
+[[invariant]]
+text = "Supersession (FR-006/IMP-006) not in scope — no Supersedes RECORD rule row, no transactional verb"
+
+[[invariant]]
+text = "No template changes — [evidence] ends file; append_edge creates [[relation]] on first link"
+
+[[risk]]
+text = "The e2e_link_unlink test does not exercise knowledge record link/unlink directly; it relies on the shared link verb mechanism validated through RELATION_RULES. Low risk given the relation unit tests exercise lookup + target-kind refusal for Shapes/Spawns."
+
+[[risk]]
+text = "PHASE-02 plan lists VT-4 (knowledge show renders axes) and VT-5 (show_json) as explicit VT criteria, but no dedicated e2e test seeds a record with relation edges and asserts show output. Coverage relies on the golden update (empty relationships) plus unit-level VT tests."
