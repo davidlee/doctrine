@@ -264,12 +264,7 @@ mod tests {
         let body = render_adr_toml(1, "s", "T", "2026-06-04").unwrap();
         // VT-3: the [relationships] table parses as a whole document …
         let doc: toml::Value = toml::from_str(&body).unwrap();
-        assert!(
-            doc["relationships"]["supersedes"]
-                .as_array()
-                .unwrap()
-                .is_empty()
-        );
+        // SL-095: `supersedes` is no longer a typed field; it's now a `[[relation]]` row.
         assert!(
             doc["relationships"]["superseded_by"]
                 .as_array()

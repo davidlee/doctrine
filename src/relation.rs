@@ -950,10 +950,10 @@ pub(crate) fn check_target_kind(
 #[cfg(test)]
 pub(crate) fn rels_block(source: &Kind, axes: &[(&str, &[&str])]) -> String {
     let migrated = |label: RelationLabel| -> bool {
-        // Tier-1 AND link-writable-or-not-lifecycle: the migration moves a label iff
-        // it is `Tier::One` and not the OD-3-excluded gov supersedes (LifecycleOnly).
+        // Tier-1 — SL-095 migrated governance supersedes from typed to
+        // [[relation]], so the LifecycleOnly exclusion is dropped.
         lookup(source, label)
-            .map(|r| r.tier == Tier::One && r.link != LinkPolicy::LifecycleOnly)
+            .map(|r| r.tier == Tier::One)
             .unwrap_or(false)
     };
     let mut typed = String::new();
