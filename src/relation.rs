@@ -317,6 +317,14 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::LifecycleOnly,
     },
     RelationRule {
+        sources: RECORD,
+        label: RelationLabel::Supersedes,
+        inbound_name: "superseded by",
+        target: TargetSpec::Kinds(RECORD),
+        tier: Tier::One,
+        link: LinkPolicy::LifecycleOnly,
+    },
+    RelationRule {
         sources: &[SPEC],
         label: RelationLabel::DescendsFrom,
         inbound_name: "descends_from",
@@ -360,7 +368,9 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         sources: RECORD,
         label: RelationLabel::Shapes,
         inbound_name: "shaped_by",
-        target: TargetSpec::Kinds(&[PRD, SPEC, REQ, SLICE, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, ASM, DEC, QUE, CON]),
+        target: TargetSpec::Kinds(&[
+            PRD, SPEC, REQ, SLICE, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, ASM, DEC, QUE, CON,
+        ]),
         tier: Tier::One,
         link: LinkPolicy::Writable,
     },
@@ -997,6 +1007,7 @@ mod tests {
     use crate::adr::ADR_KIND;
     use crate::backlog::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
     use crate::entity::Kind;
+    use crate::knowledge::ASSUMPTION_KIND;
     use crate::policy::POLICY_KIND;
     use crate::rec::REC_KIND;
     use crate::requirement::REQUIREMENT_KIND;
@@ -1004,7 +1015,6 @@ mod tests {
     use crate::slice::SLICE_KIND;
     use crate::spec::{PRODUCT_SPEC_KIND, TECH_SPEC_KIND};
     use crate::standard::STANDARD_KIND;
-    use crate::knowledge::ASSUMPTION_KIND;
 
     /// The distinct labels of `RELATION_RULES`, in declaration order.
     fn distinct_labels_in_decl_order() -> Vec<RelationLabel> {
@@ -1054,7 +1064,7 @@ mod tests {
                 &["SL", "ISS", "IMP", "CHR", "RSK", "IDE"],
             ),
             (RelationLabel::Requirements, &["SL"]),
-            (RelationLabel::Supersedes, &["SL", "ADR", "POL", "STD"]),
+            (RelationLabel::Supersedes, &["SL", "ADR", "POL", "STD", "ASM", "DEC", "QUE", "CON"]),
             (RelationLabel::DescendsFrom, &["SPEC"]),
             (RelationLabel::Parent, &["SPEC"]),
             (RelationLabel::Members, &["PRD", "SPEC"]),
@@ -1254,10 +1264,33 @@ mod tests {
                     );
                 }
                 (RelationLabel::Supersedes, s) if !s.iter().any(|k| k.prefix == "SL") => {
-                    assert!(
-                        matches!(r.target, TargetSpec::SameKind),
-                        "gov supersedes → SameKind"
-                    );
+                    // GOV supersedes is SameKind; RECORD supersedes is Kinds(RECORD).
+                    if s.iter().any(|k| k.prefix == "ADR") {
+                        assert!(
+                            matches!(r.target, TargetSpec::SameKind),
+                            "gov supersedes → SameKind"
+                        );
+                    } else {
+                        // RECORD supersedes → Kinds(RECORD). The pattern match on a
+                        // constant ref (`Kinds(RECORD)`) is unstable; fall back to a
+                        // contents check.
+                        match r.target {
+                            TargetSpec::Kinds(ks) => {
+                                let got: Vec<&str> =
+                                    ks.iter().map(|k| k.prefix).collect();
+                                let want: Vec<&str> =
+                                    RECORD.iter().map(|k| k.prefix).collect();
+                                assert_eq!(
+                                    got, want,
+                                    "record supersedes → Kinds(RECORD)"
+                                );
+                            }
+                            other => panic!(
+                                "record supersedes → Kinds(RECORD), got {:?}",
+                                std::mem::discriminant(&other)
+                            ),
+                        }
+                    }
                 }
                 (
                     RelationLabel::Drift
@@ -1317,12 +1350,14 @@ mod tests {
             assert_eq!(
                 got,
                 [
-                    "ADR", "ASM", "CHR", "CON", "DEC", "IDE", "IMP",
-                    "ISS", "POL", "PRD", "QUE", "REQ", "RSK", "SL", "SPEC", "STD"
+                    "ADR", "ASM", "CHR", "CON", "DEC", "IDE", "IMP", "ISS", "POL", "PRD", "QUE",
+                    "REQ", "RSK", "SL", "SPEC", "STD"
                 ]
             );
         } else {
-            panic!("shapes → Kinds([PRD, SPEC, REQ, SLICE, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, ASM, DEC, QUE, CON])");
+            panic!(
+                "shapes → Kinds([PRD, SPEC, REQ, SLICE, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, ASM, DEC, QUE, CON])"
+            );
         }
         // spawns target is the 5 backlog-item kinds.
         if let TargetSpec::Kinds(ks) = lookup(&ASSUMPTION_KIND, RelationLabel::Spawns)
@@ -1334,6 +1369,22 @@ mod tests {
             assert_eq!(got, ["CHR", "IDE", "IMP", "ISS", "RSK"]);
         } else {
             panic!("spawns → Kinds([ISS, IMP, CHR, RSK, IDE])");
+        }
+        // RECORD Supersedes target is Kinds(RECORD), NOT SameKind (D4 — records
+        // admit cross-kind supersession; the §6 matrix enforces it at the verb).
+        let r = lookup(&ASSUMPTION_KIND, RelationLabel::Supersedes)
+            .unwrap_or_else(|| panic!("RECORD Supersedes row not found for ASM"));
+        assert_eq!(
+            r.link,
+            LinkPolicy::LifecycleOnly,
+            "record supersedes → LifecycleOnly"
+        );
+        if let TargetSpec::Kinds(ks) = r.target {
+            let mut got: Vec<&str> = ks.iter().map(|k| k.prefix).collect();
+            got.sort_unstable();
+            assert_eq!(got, ["ASM", "CON", "DEC", "QUE"]);
+        } else {
+            panic!("record supersedes → Kinds(RECORD)");
         }
     }
 
