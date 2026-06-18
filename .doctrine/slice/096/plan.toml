@@ -31,16 +31,19 @@ exit_criteria = [
   { id = "EX-3", text = "GovernedBy rule sources extended to include ASM/DEC/QUE/CON" },
   { id = "EX-4", text = "KnowledgeRecord carries tier1: Vec<RelationEdge> populated by read_record via tier1_edges()" },
   { id = "EX-5", text = "knowledge::relation_edges(root, kind, id) delegates to read_record and returns tier1" },
+  { id = "EX-6", text = "ASM/DEC/QUE/CON local kind aliases and RECORD source-group const in relation.rs" },
 ]
 verification = [
-  { id = "VT-1", expects = "RelationLabel::from_name(\"shapes\") round-trips; \"spawns\" round-trips" },
+  { id = "VT-1", expects = "RelationLabel::from_name(\"shapes\") round-trips; \"spawns\" round-trips (debug_assert in from_name verifies)" },
   { id = "VT-2", expects = "RELATION_RULES lookup(ASM, Shapes) and lookup(DEC, Spawns) return the correct rules" },
   { id = "VT-3", expects = "RELATION_RULES lookup(ASM, GovernedBy) returns the extended rule (source-set extension works)" },
   { id = "VT-4", expects = "Shapes target-kind check refuses a RV target; Spawns refuses a SLICE target" },
-  { id = "VT-5", expects = "distinct_labels golden updated for the two new labels" },
-  { id = "VT-6", expects = "Seeded record has empty tier1 edges" },
-  { id = "VT-7", expects = "Record with authored [[relation]] shapes/spawns rows → relation_edges returns them via read_record" },
-  { id = "VT-8", expects = "Illegal [[relation]] row (e.g. label=\"supersedes\" on a record) → classified as IllegalRow, not a live edge" },
+  { id = "VT-5", expects = "distinct_labels golden updated: enum Ord matches RELATION_RULES order; every_variant_appears_in_the_table ALL array includes Shapes/Spawns; tier_partition_matches_design tier_one array includes Shapes/Spawns" },
+  { id = "VT-6", expects = "inbound_name_equals_name_except_the_inverted: Shapes and Spawns added to allowed-inverted list (inbound_name = shaped_by/spawned_by)" },
+  { id = "VT-7", expects = "Seeded record has empty tier1 edges (read_record populates empty Vec from empty [[relation]] block)" },
+  { id = "VT-8", expects = "Record with authored [[relation]] shapes/spawns rows → read_record returns KnowledgeRecord with populated tier1 (check record.tier1 directly, not through renderer — render_record_toml doesn't emit [[relation]])" },
+  { id = "VT-9", expects = "Illegal [[relation]] row (e.g. label=\"supersedes\" on a record whose kind can't author it) → classified as IllegalRow(IllegalForSource), not a live edge" },
+  { id = "VT-10", expects = "Unknown label spelling in [[relation]] (e.g. \"superseded_by\") → classified as IllegalRow(UnknownLabel)" },
 ]
 specs        = []
 requirements = []
@@ -64,11 +67,13 @@ exit_criteria = [
   { id = "EX-8", text = "All existing suites (slice, ADR, spec, backlog, memory, relation, governance) stay green unchanged" },
 ]
 verification = [
-  { id = "VT-1", expects = "Record fixture with [[relation]] rows → outbound_for returns correct edges (SL-059 VT-1 replacement)" },
-  { id = "VT-2", expects = "Exact-coverage invariant: RECORD source-group labels match reader's emitted labels" },
-  { id = "VT-3", expects = "knowledge show renders shapes/spawns/governed_by axes when edges present; silent when absent" },
+  { id = "VT-1", expects = "Record fixture with [[relation]] rows → outbound_for returns correct edges (SL-059 VT-1 replacement: knowledge_kinds_author_no_outbound_never_panic → knowledge_kinds_author_outbound_edges)" },
+  { id = "VT-2", expects = "Exact-coverage invariant: reader_emitted_labels_equal_table_labels_per_source extended with ASM/DEC/QUE/CON fixtures; emitted_labels == table_labels_for for each record prefix" },
+  { id = "VT-3", expects = "relation.rs sources_match_shipped_accessors extended: Shapes sources = [ASM/DEC/QUE/CON]; Spawns sources = [ASM/DEC/QUE/CON]" },
+  { id = "VT-4", expects = "knowledge show renders shapes/spawns/governed_by axes when edges present; silent when absent" },
+  { id = "VT-5", expects = "knowledge show --json projects relation axes into JSON relationships object (shapes/spawns/governed_by)" },
   { id = "VA-1", expects = "Existing per-kind suites green — no regression from relation infrastructure" },
-  { id = "VH-1", expects = "just gate passes with zero warnings" },
+  { id = "VH-1", expects = "just gate passes with zero clippy warnings; dead_code expect comment updated (narrowed but not fully self-cleared until outbound_for wires)" },
 ]
 specs        = []
 requirements = []
