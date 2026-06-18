@@ -1,0 +1,72 @@
+id    = 77
+slug  = "reconciliation-review-of-sl-097"
+title = "reconciliation review of SL-097"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-097"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "E2E test stale assertion: 'cross-kind' vs 'cross-family' error message"
+detail = """
+The pre-existing e2e test `supersede_refuses_non_adr_cross_kind_and_self` at tests/e2e_supersede.rs:224 asserts `stderr(&cross).contains("cross-kind")` but the SL-097 PHASE-03 implementation changed the cross-family error message from 'cross-kind supersession is refused' to 'cross-family supersession refused'. The e2e test now fails because 'cross-family' does not contain 'cross-kind' as a substring.
+
+Evidence:
+```
+---- supersede_refuses_non_adr_cross_kind_and_self stdout ----
+thread 'supersede_refuses_non_adr_cross_kind_and_self' panicked at tests/e2e_supersede.rs:224:5:
+names cross-kind: Error: cross-family supersession refused: `ADR-001` is a ADR but `SL-001` is a SL
+```
+
+The fix is to update the assertion to check for 'cross-family' (or a substring present in both old and new messages, such as 'cross-'). This also means VT-12 (just gate clean) cannot pass until fixed."""
+disposition = "fix-now"
+response = """
+The e2e assertion is stale. Fix: change the assertion at tests/e2e_supersede.rs:224 from 'cross-kind' to 'cross-family'. The purpose of the test (cross-kind/cross-family refusal for ADR→SL) is preserved — only the error substring needs updating to match the new message emitted by the cross-family gate.
+
+Additional check: test (a) slc_pair at line 219 (SL-001→ADR-001) asserts only status.success() == false and doesn't check the error message — it passes unchanged. Test (d) slice_pair at line 238 (SL-001→SL-002) checks 'not yet supported for SL' which is also unaffected by this change."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Plan EX-3 misleading parenthetical: QUE→CON (not in matrix)"
+detail = """
+Plan EX-3 lists 'QUE→CON (not in matrix)' as a §6 reopening direction that must be refused. However, the §6 matrix row for question explicitly includes constraint: 'question → question, decision, constraint, assumption'. So QUE→CON (question superseded by constraint) IS allowed by the matrix.
+
+The validate_matrix() implementation correctly allows (Question, Constraint). The plan's parenthetical '(not in matrix)' is inconsistent with both the §6 table in the design and the actual implementation. No code change needed; this is an authored-plan annotation error."""
+disposition = "aligned"
+response = "The code is correct — validate_matrix() allows (Question, Constraint) per the §6 matrix. The plan annotation '(not in matrix)' next to QUE→CON is a cosmetic error in the authored plan. No code change needed. The plan.toml EX-3 text can be corrected as part of the reconciliation pass, removing '(not in matrix)' from the QUE→CON entry."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "just gate fails on pre-existing cordage denylist test"
+detail = """
+VT-12 specifies 'just gate clean (full --workspace)' as a verification criterion. `just gate` (and `just check`) fails because of `crate_source_carries_no_forbidden_vocabulary` in crates/cordage/tests/denylist.rs, which panics:
+
+```
+forbidden vocabulary in crate source (REQ-079 boundary):
+/workspace/doctrine/crates/cordage/LICENSE: forbidden token <commitment>
+```
+
+This failure is pre-existing and NOT introduced by SL-097 — the cordage LICENSE file is unchanged in the SL-097 diff. The SL-097-specific gate (doctrine unit tests + clippy) is clean: 1681 unit tests pass, cargo clippy zero warnings. However, the VT criterion as written demands a clean workspace gate, which cannot be satisfied in the current environment.
+
+Recommendation: verify with just check --package doctrine (root only) as a SL-097-specific gate, and note the cordage failure as a pre-existing environmental issue."""
+disposition = "tolerated"
+response = """
+The cordage denylist test failure is pre-existing and unrelated to SL-097 changes. The cordage LICENSE file is unchanged in the SL-097 diff. The SL-097-specific gate is clean: cargo clippy zero warnings, all 1681 doctrine unit tests pass.
+
+The VT-12 criterion's wording ('just gate clean (full --workspace)') cannot be satisfied because of this environmental issue. The SL-097 gate equivalent is demonstrated: just check --package doctrine (root only) passes cleanly. Tolerating the workspace-level gate failure with rationale that it's a pre-existing cordage issue, not introduced by SL-097."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
