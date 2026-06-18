@@ -21,6 +21,10 @@ and outbound-only composition — was taken in **ADR-010 (accepted)**. This spec
 enumeration in code** (`RELATION_RULES`, `src/relation.rs`); per the storage rule
 it never transcribes the vocabulary, which would duplicate queried data into prose.
 
+A companion reference — [relation-vocabulary.md](relation-vocabulary.md) — groups
+the 17 labels into semantic classes (composition, authorization, work→artefact,
+peer association, succession, and the epistemic gap for knowledge records).
+
 ## Responsibilities
 
 ### The relation model
