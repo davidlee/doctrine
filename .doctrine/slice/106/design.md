@@ -67,7 +67,7 @@ regenerate.
 
 | File | Change | Lines |
 |---|---|---|
-| `src/knowledge.rs` | Delete `set_record_status` fn (1346–1383); inline path+hint in `run_status`; delete the `set_record_status` doc comment (1337–1344) | ~-40, +15 |
+| `src/knowledge.rs` | Delete `set_record_status` fn (1346–1383) and its doc comment (1337–1345); inline path+hint in `run_status`; update three stale comment references (lines 26, 637, 1388) | ~-45, +18 |
 | `src/slice.rs` | Reword hint string at line 526 | 1 line |
 | `src/backlog.rs` | Reword hint string at line 1390 | 1 line |
 | `src/dep_seq.rs` | Unchanged | 0 |
@@ -86,3 +86,13 @@ regenerate.
 - `rg "regenerate via" src/` — zero hits
 - `rg "fn set_record_status" src/` — zero hits
 - `just gate` clean
+
+## Adversarial review findings (self-review)
+
+- **F1 — stale comment references.** Lines 26, 637, and 1388 in `knowledge.rs`
+  reference `set_record_status` by name. After deletion these go stale.
+  Update to `dep_seq::set_authored_status` (or reword the `run_status` doc
+  comment to not name the implementation). All three updated in D1 scope.
+- **No other findings.** The change is confined to deletion of a byte-duplicate
+  and rewording of three refuse strings. No architectural impact, no new imports,
+  no coupling change, no behaviour change in the transition path.
