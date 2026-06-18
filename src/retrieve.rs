@@ -23,7 +23,7 @@ use std::io::{self, Write};
 use serde::Serialize;
 
 use crate::lexical::{Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker};
-use crate::links::extract_wikilinks;
+use crate::links::{extract_wikilinks, resolve_wikilink};
 use crate::memory::{
     self, Lifespan, Memory, MemoryType, Status, collect_all, normalize_key, sort_default,
 };
@@ -1013,10 +1013,17 @@ fn expand_graph(visible: &[&Candidate<'_>], max_depth: usize, root: &Path) -> Re
     let all_memories = collect_all(root)?;
     let mut edges = BTreeMap::new();
 
+    // Build key_to_uid map for resolving wikilink key-form targets
+    let key_to_uid: BTreeMap<String, String> = all_memories
+        .iter()
+        .filter_map(|m| m.key.as_ref().map(|k| (normalize_key(k).unwrap_or_default(), m.uid.clone())))
+        .collect();
+    let known_uids: BTreeSet<String> = all_memories.iter().map(|m| m.uid.clone()).collect();
+
     for memory in &all_memories {
         let mut targets = Vec::new();
 
-        // Add wikilink targets (need to read body from disk)
+        // Add wikilink targets — resolve key-form targets to uids
         let body_path = root
             .join("memory/items")
             .join(&memory.uid)
@@ -1024,7 +1031,12 @@ fn expand_graph(visible: &[&Candidate<'_>], max_depth: usize, root: &Path) -> Re
         let body = std::fs::read_to_string(body_path).unwrap_or_default();
         let wikilinks = extract_wikilinks(&body);
         for link in wikilinks {
-            targets.push(link.target);
+            if let Ok(resolved) =
+                resolve_wikilink(&known_uids, &key_to_uid, &link.target, link.is_uid)
+            {
+                targets.push(resolved);
+            }
+            // Dangling wikilinks are silently skipped
         }
 
         // Add relation targets
@@ -1042,12 +1054,16 @@ fn expand_graph(visible: &[&Candidate<'_>], max_depth: usize, root: &Path) -> Re
     let expanded = bfs_expand(&edges, start_uids, max_depth);
 
     // Render expanded nodes by depth
+    let mut first = true;
     for (depth, uids) in expanded.iter().enumerate() {
         if uids.is_empty() {
             continue;
         }
 
-        writeln!(io::stderr())?; // blank line separator
+        if !first {
+            writeln!(io::stdout())?; // blank line separator between depth groups
+        }
+        first = false;
 
         // Collect memories for this depth
         let mut depth_memories: Vec<Memory> = all_memories
