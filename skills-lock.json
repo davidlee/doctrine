@@ -47,19 +47,19 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/dispatch/SKILL.md",
-      "computedHash": "4f496a17b6eebb9c7ce41e4fd080f5dae0b7fd2df54a82579678b8b0658cf5ed"
+      "computedHash": "4689eac56abd33f1a7e17c767905d2132c4a4e70ea6a9c0ce6bb2449359bee54"
     },
     "dispatch-agent": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/dispatch-agent/SKILL.md",
-      "computedHash": "dfa95db78aa38913b8db417640fd147985252bd97e83f53adc34e29d0fb18092"
+      "computedHash": "ee075b236f90ba9e6ef47caf40f812d1f6ed591a4c7be2a8d9432122e352ae78"
     },
     "dispatch-subprocess": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/dispatch-subprocess/SKILL.md",
-      "computedHash": "d95fc9e6698b5f901578ddf9e27068c86a9c57b4d2a5d3060ec71ecab0f0c053"
+      "computedHash": "45439b941687f9e777414e0284e0eda96d37829a9fb714670d0e18c49acdad01"
     },
     "execute": {
       "source": "davidlee/doctrine",
