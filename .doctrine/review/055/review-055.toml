@@ -12,5 +12,12 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-080"
 
+[[finding]]
+id = "F-1"
+status = "withdrawn"
+severity = "nit"
+title = "clean audit: no findings to raise"
+detail = "This is a self-closing token finding. The review has zero substantive findings — every design decision is conformant, all verification criteria met. This finding exists solely to establish a terminal raiser round so the baton flips from await=raiser to done."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -1,0 +1,87 @@
+# Implementation plan for SL-105 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-105"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Leaf: dep_seq::remove_after core + IO wrapper + source-path refactor"
+objective = "Add the pure `remove_after` core and its IO wrapper to `dep_seq.rs`, plus extract `resolve_dep_seq_src_path` for source-only resolution. All unit-tested."
+
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and approved" },
+  { id = "EN-2", text = "dep_seq.rs unchanged from current HEAD — existing append/status seams green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`remove_after(doc, to, rank_ceiling)` removes matching inline tables from `after` array, edit-preserving" },
+  { id = "EX-2", text = "`remove(toml_path, to, rank_ceiling)` IO wrapper: read→parse→core→write-once; no-op holds mtime" },
+  { id = "EX-3", text = "`resolve_dep_seq_src_path(root, source)` extracts source-only validation; existing `resolve_dep_seq_src` delegates to it" },
+  { id = "EX-4", text = "All existing tests still green (append, read, status seams)" },
+]
+verification = [
+  { id = "VT-1", expects = "`remove_after` removes all matching edges by to+ceiling, returns correct count" },
+  { id = "VT-2", expects = "`remove_after` on empty array returns 0 (no match, not an error)" },
+  { id = "VT-3", expects = "F-1 refuse: absent `after` array bails with non-destructive message, file untouched" },
+  { id = "VT-4", expects = "IO wrapper: no-op (0 removed) leaves file byte-identical and mtime unchanged" },
+  { id = "VT-5", expects = "IO wrapper: edit-preserving — comments and inert tables survive removal" },
+  { id = "VT-6", expects = "`resolve_dep_seq_src_path` rejects non-work-like source; self-edge still gated in `resolve_dep_seq_src`" },
+]
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Shell: --remove flag on Command::After and BacklogCommand::After"
+objective = "Wire the `--remove` flag on both the generic cross-kind and backlog-specific `after` commands. Make `target` optional with `required_unless_present(\"prune\")` in preparation for PHASE-03. E2E golden tests for remove."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: leaf functions available, all VT green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine after SRC TGT --remove` removes all edges to TGT, reports count" },
+  { id = "EX-2", text = "`doctrine after SRC TGT --remove --rank N` removes edges with rank ≤ N" },
+  { id = "EX-3", text = "`doctrine after SRC TGT --remove` on non-existent edge errors with clear message" },
+  { id = "EX-4", text = "`doctrine backlog after SRC TGT --remove` works identically (backlog shell)" },
+  { id = "EX-5", text = "Existing append behaviour unchanged (no regression)" },
+  { id = "EX-6", text = "`cargo clippy` zero warnings; `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "E2E golden: remove single edge, verify count printed and TOML on disk" },
+  { id = "VT-2", expects = "E2E golden: remove with rank ceiling — only low-rank edges dropped" },
+  { id = "VT-3", expects = "E2E golden: remove non-existent edge → non-zero exit, stderr message" },
+  { id = "VT-4", expects = "E2E golden: append still works after `target` made optional" },
+]
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Shell: --prune flag + probe logic + e2e + sweep"
+objective = "Add the `--prune` flag, implement the prune probe-and-remove loop, E2E golden tests, and manually verify the 15 current overrides are gone."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: --remove working, target optional wired" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine after SRC --prune` probes all `after` targets, drops terminal/absent edges" },
+  { id = "EX-2", text = "Prune reports each dropped edge with rank and reason; no-op prints 'nothing to prune'" },
+  { id = "EX-3", text = "`doctrine backlog after SRC --prune` works identically (backlog shell)" },
+  { id = "EX-4", text = "`--remove` and `--prune` are mutually exclusive (clap conflicts_with)" },
+  { id = "EX-5", text = "Manual: `doctrine backlog list` footer has zero `overrides:` lines after pruning all affected items" },
+  { id = "EX-6", text = "`cargo clippy` zero warnings; `just check` green" },
+]
+verification = [
+  { id = "VT-1", expects = "E2E golden: prune drops resolved target, reports line with rank and reason" },
+  { id = "VT-2", expects = "E2E golden: prune no-op on all-live edges prints 'nothing to prune'" },
+  { id = "VT-3", expects = "E2E golden: prune mixed (live + resolved + absent) drops only dangling, keeps live" },
+  { id = "VA-1", expects = "Manual: clean sweep — run `doctrine backlog list` after pruning all 12 affected items, confirm `overrides:` block absent" },
+]
