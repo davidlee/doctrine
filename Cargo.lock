@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "cordage"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "core-foundation"
