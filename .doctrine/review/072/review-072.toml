@@ -12,5 +12,91 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-094"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Expected: D1-D5 faithfully implemented — Observed: all 5 design decisions conform"
+detail = """
+Conformance verified against design.md design decisions table:
+D1 — CSS transform wrapper (not SVG transform): render.ts L714 creates .graph-transform-layer div, applies style.transform. graph.css has transform-origin:0:0. SVG internals untouched.
+D2 — Viewport in app state: types.ts L150 graphViewport field in AppState, state.ts initialises null, app.ts L488-490 passes initialViewport + onViewportChange.
+D3 — minK fit-to-container: render.ts L705-707 computes minK = fitViewport(...).k, stores on wrapper.dataset.minK (L717). Wheel handler reads curMinK from layer.dataset.minK (L732) and clamps.
+D4 — Focus change centres: app.ts L349 computes focusChanged, passed to graphPane() L489. render.ts L710-711 calls applyFocusChange() when focusChanged is true.
+D5 — Same focus restores: render.ts L713 passes initialViewport through as-is when not null and not focusChanged."""
+disposition = "aligned"
+response = "All 5 design decisions verified conformant in source. No changes needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected: RV-071 findings F1-F7 integrated — Observed: all 7 confirmed"
+detail = """
+RV-071 inquisition findings verified post-implementation:
+F-1 (blocker, fix-now — deltaMode): render.ts L728 normalizes via deltaMode===1 check. L729 caps abs(delta) at 40.
+F-2 (major, fix-now — {once:true}): render.ts L761 mouseup listener uses {once:true}.
+F-3 (major, fix-now — cross-mode guard): render.ts L725-726 (wheel) and L741-742 (mousedown) gate on .graph-transform-layer DOM presence.
+F-4 (minor, design-wrong — depth-change edge case): design.md L225 now includes the edge case sentence.
+F-5 (minor, fix-now — touch-action:none): graph.css L16 touch-action:none present.
+F-6 (minor, tolerated — dimLegend): legend items render in .edge-legend sidebar outside .graph-area. No change needed.
+F-7 (nit, aligned — seq guard): Event wiring L720 is inside the seq check block (L679). Stale renders never reach wiring. No change needed."""
+disposition = "aligned"
+response = "All 7 RV-071 findings confirmed integrated. No changes needed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Expected: ISS-021 scope satisfied — Observed: scroll-wheel zoom, drag-to-pan, crop-on-bounds all implemented"
+detail = """
+ISS-021 requirements verified:
+1. Scroll-wheel zoom: Wheel handler on .graph-area (render.ts L724-737), deltaMode-normalized, cursor-relative scale, clamped to [minK, 10]. event.preventDefault() suppresses page scroll.
+2. Drag-to-pan: mousedown/mousemove/mouseup on .graph-area (render.ts L740-762), divide-by-k tracking, {once:true} on mouseup, grabbing cursor. Skips .doctrine-node targets.
+3. Crop-on-bounds: .graph-area overflow:hidden (graph.css L13). Container clips the transform wrapper. No SVG overflow past container edge."""
+disposition = "aligned"
+response = "ISS-021 scope: scroll-wheel zoom, drag-to-pan, crop-on-bounds all implemented. No changes needed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Expected: Evidence gates pass — Observed: tsc clean, eslint clean, 312/312 tests, vite build success"
+detail = """
+Evidence gathered 2026-06-18 on main branch (1db6ecbf):
+- npx tsc --noEmit: clean (no errors)
+- npx eslint --max-warnings=0 src/: clean (graph.css not in eslint scope — CSS is not a lint target)
+- npx vitest run: 312/312 tests pass (25 viewport, 48 router, 107 dot, 6 priority, 126 model)
+- npx vite build: success (output: dist/assets/index-tsznYhUh.js 331.98 kB, dist/assets/index-BREG56be.css 12.81 kB)"""
+disposition = "aligned"
+response = "Automated evidence gates all pass: tsc clean, eslint 0-warn (src/ only), 312/312 vitest, vite build success. No changes needed."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected: All VA criteria verified interactively — Observed: 6 VA criteria deferred to browser verification"
+detail = """
+PHASE-02 VA-1 (zoom/pan interactive, no overflow, hit-rects work) and VA-2 (cross-mode switch) — deferred.
+PHASE-03 VA-1 (viewport persistence), VA-2 (focus-change centre), VA-3 (clamp on larger graph), VA-4 (first load fits) — deferred.
+All 6 VA criteria require interactive browser verification. The implementing agent deferred these, noting 'The implementation follows the design precisely and all automated gates pass.'
+Automated evidence (tsc, eslint 0-warn, 312 tests, vite build) is strong. Mechanical conformance verified from source code. Interactive verification requires loading the map in a browser — outside the audit agent's capability.
+The plan explicitly designates these as VA (agent verification), not VH (human). The deferred status should be acknowledged but does not block close given the mechanical conformance evidence."""
+disposition = "verified"
+response = "Deferred VA verification confirmed. 6 VA criteria (PHASE-02 VA-1/VA-2, PHASE-03 VA-1 through VA-4) are not interactively verified. Automated evidence is strong. Remediation: reconciliation brief maps these to VA criteria with recommended browser verification before close."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Expected: design.md reflects implementation — Observed: 3 minor design amendments needed"
+detail = """
+Three implementation details differ from the authored design.md:
+1. lastRenderedFocusId: design.md 'app.ts integration' says add . Implementation reuses existing  capture at L349 — functionally equivalent, cleaner (no extra state field). Design.md should be updated to reflect the simpler approach.
+2. parseTransform(): design.md 'Pure helpers' doesn't list this function, but it was added in PHASE-02 as a solution to the stale-closure-on-re-render problem (handlers read viewport from CSS transform string each event, not from closure-captured vp). 6 unit tests. Design.md should mention this helper.
+3. minK stored on wrapper dataset: design.md 'Wheel (zoom)' describes the handler using closure-captured minK. Implementation stores minK on wrapper.dataset.minK (render.ts L717) so the handler reads the current wrapper's minK on each event — correct for re-renders with different SVG sizes. Design.md's event handler section should note this pattern."""
+disposition = "verified"
+response = "Three minor design amendments confirmed. 1) lastRenderedFocusId simplification is correct. 2) parseTransform() is a necessary implementation detail. 3) minK-on-wrapper is correct for re-render safety. Remediation: reconciliation brief maps these to design.md sections for update."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

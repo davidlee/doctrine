@@ -1,0 +1,41 @@
+memory_uid = "mem_019ed8c48e117e90b694a0a6c889a675"
+memory_key = "mem.pattern.web-map.zoom-stale-closure"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SL-094: stale-closure pattern — parseTransform() decouples event handlers from closure-captured viewport"
+summary = ".dataset.zoomWired guard prevents re-wiring but creates stale-closure problem; parseTransform() reads viewport from CSS transform each event instead"
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = ["web/map/src/render.ts", "web/map/src/viewport.ts"]
+globs = []
+commands = []
+tags = ["web-map", "zoom-pan"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ea846220bf789d2b0b56bcd3035a87575c189a47"
+ref_name = "refs/heads/main"
+checkout_state_id = "965d9e69aff4fb4f38c09fafb43bee80b6c52fbf8d0e32911325d314c9b9ddfb"
+base_commit = "2be2397c02bb174d7a0f0b989aa78f0051c44aa6"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
