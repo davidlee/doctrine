@@ -85,10 +85,13 @@ it must add.
 **F-2: The REQ-DNN masquerade.** A structured tuple — handle, statement, kind,
 home hint, ancestor decision — stored as prose and defended with the lie that
 "LLM-reading-prose is the same operation as reading ADR-003." It is not.
-ADR-003 is argument. REQ-DNN is schema. The storage rule is absolute: queryable
-data → TOML. Prose-only structured metadata that must survive a five-skill
-handoff is a corruption of the tier model. *Burn the prose-only heresy at the
-stake!* Penance: define a design-level TOML facet (`[[implied_req]]`) for
+ADR-003 is argument. REQ-DNN is schema. The storage rule is absolute: structured
+data in TOML, prose in MD, **never queried/derived data in prose** (`AGENTS.md`
+§ storage model). The design's own citation of `doc/entity-model.md` is moot —
+that tree is marked for erasure (SL-082), but the rule survives in the
+project-root canon. Prose-only structured metadata that must survive a
+five-skill handoff is a corruption of the tier model. *Burn the prose-only heresy
+at the stake!* Penance: define a design-level TOML facet (`[[implied_req]]`) for
 REQ-DNN handles. The design.md `## Implied Requirements` section becomes derived
 prose rendered from TOML — honouring the storage rule in both directions.
 
