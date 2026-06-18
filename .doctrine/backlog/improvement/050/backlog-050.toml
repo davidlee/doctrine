@@ -5,13 +5,17 @@ id = 50
 slug = "scopeship-spec-019-fr-005-knowledge-record-relation-seam-record-source-group-minted-relatespawns"
 title = "Scope+ship SPEC-019 FR-005: knowledge-record relation seam (RECORD source-group, minted relate/spawns labels, outbound_for arm, record reader)"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "triaged"
+resolution = ""
 created = "2026-06-13"
-updated = "2026-06-15"
+updated = "2026-06-18"
 tags = ["area:memory", "area:relations", "area:spec"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "IMP-064", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "slices"
+target = "SL-096"

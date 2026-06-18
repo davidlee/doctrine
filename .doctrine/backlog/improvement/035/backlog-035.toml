@@ -5,10 +5,10 @@ id = 35
 slug = "slice-relationships-schema-has-no-adr-slot-slice-to-adr-refs-are-prose-only"
 title = "Slice relationships schema has no ADR slot: slice to ADR refs are prose-only"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-12"
-updated = "2026-06-15"
+updated = "2026-06-18"
 tags = ["area:relations", "area:slice", "area:spec"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

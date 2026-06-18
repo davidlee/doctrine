@@ -16,3 +16,7 @@ responsibilities = [
   "Order the backlog by priority and bridge a captured item into a scoped slice, feeding the spec-driver loop.",
   "Provide a forward relation seam linking items to slices, specs, and drift without reshaping the item.",
 ]
+
+[[relation]]
+label = "consumes"
+target = "PRD-010"

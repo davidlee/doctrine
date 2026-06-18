@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 64
-slug = "sl-048-od-3-migrate-gov-supersedes-typed-array-to-relation-lifecycleonly-slot-repoint-supersede-verb"
-title = "SL-048 OD-3: migrate gov supersedes typed array to [[relation]] LifecycleOnly slot; repoint supersede verb"
-kind = "improvement"
-status = "triaged"
-resolution = ""
-created = "2026-06-14"
-updated = "2026-06-18"
-tags = ["area:governance"]
+id = 21
+slug = "semanticgraphviz-view-overflows-bounding-box-needs-zoompancrop"
+title = "Semantic/graphviz view overflows bounding box — needs zoom/pan/crop"
+kind = "issue"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-06-17"
+updated = "2026-06-17"
+tags = ["area:ux", "area:web"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
@@ -17,9 +17,9 @@ tags = ["area:governance"]
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
-after    = [{ to = "IMP-028", rank = 0 }, { to = "IMP-012", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "IMP-092", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
 label = "slices"
-target = "SL-095"
+target = "SL-094"
