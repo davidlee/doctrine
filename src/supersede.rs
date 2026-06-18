@@ -72,13 +72,6 @@ pub(crate) fn supersede_policy(kind: &Kind) -> Option<SupersedePolicy> {
 /// - OLD question → question, decision, constraint, assumption
 /// - OLD decision → decision, constraint
 /// - OLD constraint → constraint, decision
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-097 record-supersede matrix; wired in main's run_supersede post-PHASE-03"
-    )
-)]
 pub(crate) fn validate_matrix(new: RecordKind, old: RecordKind) -> bool {
     use RecordKind::{Assumption, Constraint, Decision, Question};
     #[expect(clippy::unnested_or_patterns, reason = "clear matrix representation")]

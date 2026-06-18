@@ -1787,7 +1787,6 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
-
         );
         write(
             &root,
@@ -1828,7 +1827,6 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
-
         );
         write(
             &root,
@@ -1862,7 +1860,6 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
-
         );
         write(
             &root,
@@ -1896,7 +1893,6 @@ mod tests {
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
              [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
-
         );
         write(
             &root,

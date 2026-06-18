@@ -4172,7 +4172,8 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
     let old_status = old_doc
         .get("status")
         .and_then(toml_edit::Item::as_str)
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .to_string();
 
     // Dispatch write path on storage discriminant (SL-095 D7).
     match policy.storage {
@@ -4284,17 +4285,20 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
             // Conditional status flip: skip if OLD record is already terminal (SL-097 D2).
             let old_record_kind = crate::knowledge::RecordKind::from_prefix(old_kref.kind.prefix)
                 .context("OLD kind not a valid record kind")?;
-            if !old_record_kind.is_terminal(old_status) {
-                dep_seq::apply_status(
-                    &mut old_doc,
-                    &[("status", old_policy.superseded_status), ("updated", &today)],
-                    &status_hint,
-                )?;
-            } else {
+            if old_record_kind.is_terminal(&old_status) {
                 // Already terminal: skip status flip, update timestamp only.
                 old_doc
                     .as_table_mut()
                     .insert("updated", toml_edit::value(today.as_str()));
+            } else {
+                dep_seq::apply_status(
+                    &mut old_doc,
+                    &[
+                        ("status", old_policy.superseded_status),
+                        ("updated", &today),
+                    ],
+                    &status_hint,
+                )?;
             }
 
             // Write each file ONCE, NEW then OLD.
