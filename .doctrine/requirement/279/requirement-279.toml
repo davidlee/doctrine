@@ -7,8 +7,11 @@ title = "Validate a present value: value required, finite; absent parses clean"
 status = "pending"
 kind = "functional"
 
-# description — optional one-line summary (queryable). Omitted by default (None);
-# the full statement/rationale stays prose in the sister `.md`. Add as:
-#   description = "…"
+description = "A present [value] requires the value field present and finite — missing or non-finite is a hard parse error; there is no range validation (single magnitude, no ordering constraint). An absent [value] parses clean."
 tags = []
-acceptance_criteria = []
+acceptance_criteria = [
+  "A present value validates only when the value field is present and finite.",
+  "A missing value field and a non-finite value (NaN, +Infinity, -Infinity) are each hard parse errors.",
+  "No range or ordering validation is applied — a single magnitude has nothing to compare against.",
+  "An absent [value] parses clean and is never a validation error.",
+]

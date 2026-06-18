@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 281
+slug = "record-an-optional-value-worthpayoff-magnitude-facet-on-an-entity"
+title = "Record an optional value worth/payoff magnitude facet on an entity"
+status = "pending"
+kind = "functional"
+
+description = "An author can attach an optional [value] table carrying a single worth/payoff magnitude to an entity's TOML; the magnitude may be an integer or float and normalizes internally to a finite float."
+tags = []
+acceptance_criteria = [
+  "A present [value] records a single value as the worth/payoff magnitude.",
+  "A magnitude authored as a TOML integer or float is accepted and normalized to a finite float internally.",
+  "An entity is valid with or without the [value] table.",
+  "A valid value survives parse, hydrate, and catalog projection unchanged.",
+]

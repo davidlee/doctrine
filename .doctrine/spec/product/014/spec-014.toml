@@ -3,15 +3,16 @@ version = 1
 
 id = 14
 slug = "estimation"
-title = "Estimation"
+title = "Estimation & Value"
 status = "active"
 kind = "product"
 category = "estimation"
-tags = ["estimate", "facet", "attention-burden", "graph", "cordage"]
+tags = ["estimate", "value", "facet", "attention-burden", "worth", "graph", "cordage"]
 responsibilities = [
   "Carry an optional, bounded claim about the human attention burden an entity implies — not wall-clock time, labour hours, or a delivery commitment.",
-  "Stay a thin, reusable, kind-agnostic facet attachable to any TOML-backed addressable entity, without becoming slice-specific.",
-  "Validate a present estimate structurally while keeping absence valid, so bookkeeping never blocks work.",
-  "Surface the estimate in detailed display and expose it to graph tooling through a stable, policy-agnostic contract.",
-  "Keep aggregation, simulation, thresholds, and milestone prediction outside the facet — the facet records local bounds, callers decide rollup.",
+  "Carry an optional single-magnitude claim about the expected worth/payoff an entity represents — the deliberate counterpart to the attention-burden estimate, so cost can be weighed against value.",
+  "Keep both facets thin, reusable, and kind-agnostic — attachable to any TOML-backed addressable entity, never slice-specific.",
+  "Validate a present estimate or value structurally while keeping absence valid, so bookkeeping never blocks work.",
+  "Surface both facets in detailed display and expose them to graph tooling through a stable, policy-agnostic contract.",
+  "Keep aggregation, simulation, thresholds, milestone prediction, and cost-vs-value arithmetic outside the facets — they record local claims, callers decide rollup.",
 ]

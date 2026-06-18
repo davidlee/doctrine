@@ -7,10 +7,10 @@ title = "Resolve a project-wide estimation unit with a default"
 status = "pending"
 kind = "functional"
 
-description = "The estimation unit is read from doctrine.toml [estimation].unit, defaulting to high_caffeine_hours; no entity carries its own unit."
+description = "The estimation unit is read from doctrine.toml [estimation].unit, defaulting to espresso_shots; no entity carries its own unit."
 tags = []
 acceptance_criteria = [
   "With [estimation].unit configured, the resolved unit is that value.",
-  "With [estimation].unit omitted, the resolved unit defaults to high_caffeine_hours.",
+  "With [estimation].unit omitted, the resolved unit defaults to espresso_shots.",
   "The facet schema exposes no entity-local unit field.",
 ]
