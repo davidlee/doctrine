@@ -4,7 +4,7 @@ version = 1
 id = 175
 slug = "route-claude-installs-directly-and-delegate-every-other-agent-to-npx-skills-add-davidleedoctrine"
 title = "Route Claude installs directly and delegate every other agent to npx skills add davidlee/doctrine"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

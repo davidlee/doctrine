@@ -4,7 +4,7 @@ version = 1
 id = 143
 slug = "spec-composition-reads-only-the-spec-directory-and-the-requirement-directories-reached-by-fk-and-the-integrity-pass-parses-the-typed-edge-tables-never-the-prose-bodies"
 title = "Spec composition reads only the spec directory and the requirement directories reached by FK, and the integrity pass parses the typed edge tables, never the prose bodies"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

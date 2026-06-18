@@ -4,7 +4,7 @@ version = 1
 id = 164
 slug = "embed-the-install-source-tree-at-compile-time-and-reproduce-it-into-a-target-directory-under-the-project-root"
 title = "Embed the install source tree at compile time and reproduce it into a target directory under the project root"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

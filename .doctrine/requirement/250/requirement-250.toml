@@ -4,7 +4,7 @@ version = 1
 id = 250
 slug = "worktree-land-solo-non-squash-merge"
 title = "`worktree land --fork BR` lands a solo isolated-worktree branch onto the coordination branch structurally non-squash (`git merge --no-ff`, never `--squash`); refuse a marker-bearing (`dispatch-fork`) or worktree-gone fork and abort a conflicted merge before refusing. Orchestrator-classed, solo-only."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

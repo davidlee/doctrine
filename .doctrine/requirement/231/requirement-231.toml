@@ -4,7 +4,7 @@ version = 1
 id = 231
 slug = "carry-descends-from-techprd-and-parent-spec-as-single-valued-outbound-scalars-the-reciprocal-childrenrealised-by-views-are-derived-never-stored-adr-004"
 title = "Carry `descends_from` (tech→PRD) and `parent` (→SPEC) as single-valued outbound scalars; the reciprocal children/realised-by views are derived, never stored (ADR-004)."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

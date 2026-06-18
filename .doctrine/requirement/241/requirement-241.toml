@@ -4,7 +4,7 @@ version = 1
 id = 241
 slug = "hold-the-per-kind-typed-facet-block-and-the-shared-minimal-evidence-support-structure"
 title = "Hold the per-kind typed [facet] block and the shared minimal [evidence] support structure (supports/contradicts/notes) as typed enumerated storage through the empty-to-None seam, with confidence an assumption-only facet"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

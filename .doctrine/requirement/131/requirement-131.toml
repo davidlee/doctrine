@@ -4,7 +4,7 @@ version = 1
 id = 131
 slug = "hide-rejected-superseded-and-deprecated-adrs-from-the-default-list-revealed-by-all-or-an-explicit-status"
 title = "Hide rejected, superseded, and deprecated ADRs from the default list, revealed by --all or an explicit --status"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

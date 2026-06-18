@@ -4,7 +4,7 @@ version = 1
 id = 87
 slug = "enforce-single-parent-acyclic-decomposition-integrity"
 title = "Enforce single-parent acyclic decomposition integrity"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "The decomposition is enforced as a single-parent acyclic tree: a containment that would introduce a cycle or a second parent is surfaced as a hard finding."

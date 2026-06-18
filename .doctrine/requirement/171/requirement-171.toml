@@ -4,7 +4,7 @@ version = 1
 id = 171
 slug = "distribution-is-one-self-contained-binary-with-a-compile-time-embed-no-network-fetch-and-no-separate-asset-bundle"
 title = "Distribution is one self-contained binary with a compile-time embed, no network fetch and no separate asset bundle"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

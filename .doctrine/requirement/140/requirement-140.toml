@@ -4,7 +4,7 @@ version = 1
 id = 140
 slug = "a-membership-label-is-state-carried-on-the-spec-to-requirement-edge-never-the-requirements-durable-identity-which-every-reference-targets-as-req-nnn"
 title = "A membership label is state carried on the spec-to-requirement edge, never the requirement's durable identity, which every reference targets as REQ-NNN"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

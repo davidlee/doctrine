@@ -4,7 +4,7 @@ version = 1
 id = 177
 slug = "surface-claude-install-with-subset-agent-global-dry-run-and-yes-selection"
 title = "Surface claude install with subset, agent, global, dry-run, and yes selection"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

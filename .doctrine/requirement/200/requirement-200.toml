@@ -4,7 +4,7 @@ version = 1
 id = 200
 slug = "select-and-order-visible-table-columns-via-columns-over-pre-materialised-column-descriptors-reject-unknown-names-with-the-available-set-no-effect-under-json-rejected-on-memory-list"
 title = "Select and order visible table columns via --columns over pre-materialised Column descriptors; reject unknown names with the available set; no effect under --json; rejected on memory list."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

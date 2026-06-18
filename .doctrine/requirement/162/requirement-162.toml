@@ -4,7 +4,7 @@ version = 1
 id = 162
 slug = "id-allocation-and-every-integrity-check-are-per-namespace-and-intra-kind-differently-prefixed-ids-coexist-legitimately-and-are-never-compared"
 title = "Id allocation and every integrity check are per-namespace and intra-kind; differently-prefixed ids coexist legitimately and are never compared"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

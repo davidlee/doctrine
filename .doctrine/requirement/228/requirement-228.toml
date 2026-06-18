@@ -4,7 +4,7 @@ version = 1
 id = 228
 slug = "each-status-known-set-mirrors-its-clap-enum-exactly-held-in-lockstep-by-a-per-kind-drift-canary-test-so-the-known-set-is-the-complete-vocabulary"
 title = "Each status known-set mirrors its clap enum exactly, held in lockstep by a per-kind drift-canary test so the known-set is the complete vocabulary."
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

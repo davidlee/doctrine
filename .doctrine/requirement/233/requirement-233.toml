@@ -4,7 +4,7 @@ version = 1
 id = 233
 slug = "render-the-spine-on-spec-show-kind-gated-and-some-gated-keeping-product-and-unfilled-tech-output-byte-stable-never-render-derived-children"
 title = "Render the spine on `spec show` kind-gated and Some-gated, keeping product and unfilled-tech output byte-stable; never render derived children."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

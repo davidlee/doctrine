@@ -4,7 +4,7 @@ version = 1
 id = 117
 slug = "authored-runtime-and-derived-artefacts-are-kept-in-three-physically-separate-tiers-queried-data-never-lives-in-prose"
 title = "Authored, runtime, and derived artefacts are kept in three physically separate tiers; queried data never lives in prose"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

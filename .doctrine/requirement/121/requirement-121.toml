@@ -4,7 +4,7 @@ version = 1
 id = 121
 slug = "materialise-every-authored-kind-through-one-kind-agnostic-engine-from-a-data-valued-kind-descriptor"
 title = "Materialise every authored kind through one kind-agnostic engine from a data-valued Kind descriptor"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

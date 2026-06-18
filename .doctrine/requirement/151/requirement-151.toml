@@ -4,7 +4,7 @@ version = 1
 id = 151
 slug = "render-every-retrieved-memory-as-a-quoted-attributed-delimited-data-block-never-instruction-and-suppress-quarantined-and-retracted-memories-from-agent-context"
 title = "Render every retrieved memory as a quoted, attributed, delimited data block, never instruction, and suppress quarantined and retracted memories from agent context"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

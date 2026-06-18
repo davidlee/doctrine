@@ -4,7 +4,7 @@ version = 1
 id = 125
 slug = "enumerate-every-entity-kind-its-directory-prefix-and-stateful-status-set-in-one-corpus-wide-kind-table"
 title = "Enumerate every entity kind, its directory, prefix, and stateful status set in one corpus-wide kind table"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

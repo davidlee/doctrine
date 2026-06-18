@@ -4,7 +4,7 @@ version = 1
 id = 226
 slug = "carry-a-reserved-inert-relationships-seam-supersedes-superseded-by-related-tags-from-the-first-record-supersession-is-a-relationship-not-a-status"
 title = "Carry a reserved inert [relationships] seam (supersedes, superseded_by, related, tags) from the first record; supersession is a relationship, not a status."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

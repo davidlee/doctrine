@@ -4,7 +4,7 @@ version = 1
 id = 213
 slug = "bind-five-itemkinds-issue-improvement-chore-risk-idea-onto-five-engine-kinds-each-its-own-tree-and-reservation-namespace-diverging-only-by-prefix-and-the-risk-only-facet-seed"
 title = "Bind five ItemKinds (issue, improvement, chore, risk, idea) onto five engine Kinds, each its own tree and reservation namespace, diverging only by prefix and the risk-only [facet] seed."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

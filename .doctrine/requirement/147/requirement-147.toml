@@ -4,7 +4,7 @@ version = 1
 id = 147
 slug = "attest-a-memory-with-verify-by-stamping-its-verification-axis-against-a-clean-working-tree-refusing-a-dirty-tree-so-no-false-attestation-is-recorded"
 title = "Attest a memory with verify by stamping its verification axis against a clean working tree, refusing a dirty tree so no false attestation is recorded"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

@@ -4,7 +4,7 @@ version = 1
 id = 85
 slug = "anchor-a-technical-spec-to-the-code-it-governs"
 title = "Anchor a technical spec to the code it governs"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A technical spec anchors to the concrete code it governs by language, identifier, and optional module, locating the how in source."

@@ -4,7 +4,7 @@ version = 1
 id = 246
 slug = "keep-the-knowledge-record-and-backlog-item-kind-families-disjoint-by-the-work-intake-membership"
 title = "Keep the knowledge_record and backlog item_kind families disjoint by the work-intake membership test (no kind admitted to both); store every outbound relation one-way with the reverse derived (ADR-004), the supersession pair the sole sanctioned typed carve-out"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

@@ -4,7 +4,7 @@ version = 1
 id = 176
 slug = "install-claude-as-a-derived-canonical-skills-tree-with-relative-agent-symlinks-reconciled-by-proven-target-value-ownership"
 title = "Install Claude as a derived canonical skills tree with relative agent symlinks reconciled by proven target-value ownership"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

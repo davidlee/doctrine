@@ -4,7 +4,7 @@ version = 1
 id = 168
 slug = "expose-asset-text-as-the-shared-read-seam-the-entity-scaffolding-verbs-draw-embedded-templates-through"
 title = "Expose asset_text as the shared read seam the entity-scaffolding verbs draw embedded templates through"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

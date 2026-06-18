@@ -4,7 +4,7 @@ version = 1
 id = 82
 slug = "descend-a-technical-spec-from-the-product-capability-it-realises"
 title = "Descend a technical spec from the product capability it realises"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A technical spec records the product capability (PRD-002) it realises, descending from the what to the how without restating the what."

@@ -4,7 +4,7 @@ version = 1
 id = 139
 slug = "run-a-corpus-fk-integrity-pass-on-validate-that-reports-dangling-and-invalid-kind-member-descent-parent-and-interaction-targets-self-parent-and-second-parent-parse-error-classification-scopable-to-one-spec-or-corpus-wide"
 title = "Run a corpus FK-integrity pass on validate that reports dangling and invalid-kind member, descent, parent, and interaction targets, self-parent, and second_parent parse-error classification, scopable to one spec or corpus-wide"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

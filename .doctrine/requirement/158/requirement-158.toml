@@ -4,7 +4,7 @@ version = 1
 id = 158
 slug = "fold-trunk-side-ids-into-the-candidate-scan-for-fork-safe-allocation-read-once-at-the-shell-edge-and-degrading-to-local-only-without-a-trunk"
 title = "Fold trunk-side ids into the candidate scan for fork-safe allocation, read once at the shell edge and degrading to local-only without a trunk"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

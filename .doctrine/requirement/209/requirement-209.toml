@@ -4,7 +4,7 @@ version = 1
 id = 209
 slug = "resolve-an-orthogonal-advisory-conduct-posture-actor-autonomy-per-lifecycle-state-from-the-project-doctrinetoml-conduct-table-surfaced-on-slice-status-as-the-source-states-exit-posture"
 title = "Resolve an orthogonal advisory conduct posture (actor × autonomy) per lifecycle state from the project doctrine.toml [conduct] table, surfaced on slice status as the source state's exit posture."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

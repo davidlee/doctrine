@@ -4,7 +4,7 @@ version = 1
 id = 218
 slug = "project-items-into-the-backlog-order-cordage-adapter-needs-hard-and-after-soft-overlays-plus-the-risk-exposure-tiebreak-composing-priority-order-without-the-adapter-sorting-itself"
 title = "Project items into the backlog_order cordage adapter — needs hard and after soft overlays plus the risk exposure tiebreak — composing priority order without the adapter sorting itself."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

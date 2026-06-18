@@ -4,7 +4,7 @@ version = 1
 id = 132
 slug = "carry-the-reserved-inert-relationships-seam-supersedes-superseded-by-related-tags-from-the-first-record-round-tripping-untouched"
 title = "Carry the reserved, inert [relationships] seam (supersedes, superseded_by, related, tags) from the first record, round-tripping untouched"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

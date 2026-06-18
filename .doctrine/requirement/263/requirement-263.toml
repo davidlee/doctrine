@@ -4,7 +4,7 @@ version = 1
 id = 263
 slug = "configure-a-project-wide-estimation-unit-with-a-default"
 title = "Configure a project-wide estimation unit with a default"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The estimation unit is read from project config [estimation].unit and defaults to high_caffeine_hours when unconfigured; the unit is project-wide, never entity-local."

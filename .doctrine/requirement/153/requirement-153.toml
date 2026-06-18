@@ -4,7 +4,7 @@ version = 1
 id = 153
 slug = "partition-memory-by-workspace-and-repo-a-memory-whose-repo-is-non-empty-and-differs-from-the-querying-repo-is-hard-filtered-the-empty-repo-global-class-admitted-in-every-partition"
 title = "Partition memory by workspace and repo; a memory whose repo is non-empty and differs from the querying repo is hard-filtered, the empty-repo global class admitted in every partition"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

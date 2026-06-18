@@ -4,7 +4,7 @@ version = 1
 id = 215
 slug = "hide-terminal-resolved-closed-items-from-the-default-list-via-the-typed-is-terminal-predicate-revealed-by-all-or-an-explicit-status"
 title = "Hide terminal (resolved, closed) items from the default list via the typed is_terminal predicate, revealed by --all or an explicit --status."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

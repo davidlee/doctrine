@@ -4,7 +4,7 @@ version = 1
 id = 149
 slug = "address-a-memory-as-a-named-entity-by-a-client-minted-content-addressable-uuid-with-an-edit-preserving-memorytoml-plus-prose-memorymd-and-a-mem-key-slug-aliased-by-a-non-authoritative-symlink"
 title = "Address a memory as a named entity by a client-minted content-addressable UUID, with an edit-preserving memory.toml plus prose memory.md and a mem-key slug aliased by a non-authoritative symlink"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

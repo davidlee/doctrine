@@ -4,7 +4,7 @@ version = 1
 id = 192
 slug = "worker-mode-guard-disk-marker-primary-fail-closed"
 title = "Enforce worker-sole-writer via a disk-marker-primary, fail-closed guard: refuse authored/Orchestrator/Hook-mint writes under `worker_mode = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`; a marker-absent linked worktree is fail-closed; reads and the fork-side read verbs stay open; `write_class` is exhaustive (a new verb is a compile error)."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

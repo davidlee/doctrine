@@ -4,7 +4,7 @@ version = 1
 id = 208
 slug = "gate-the-closure-seam-by-target-edge-reconcile-only-from-audit-and-done-only-from-reconcile-every-other-source-to-those-targets-is-a-refused-seambreach"
 title = "Gate the closure seam by target edge: → reconcile only from audit and → done only from reconcile; every other source to those targets is a refused SeamBreach."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

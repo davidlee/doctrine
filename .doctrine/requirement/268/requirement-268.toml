@@ -4,7 +4,7 @@ version = 1
 id = 268
 slug = "the-estimate-schema-is-forward-compatible"
 title = "The estimate schema is forward-compatible"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "The v1 two-bound schema is forward-compatible: future optional fields (e.g. mode, distribution) can extend the facet without invalidating any estimate authored under v1."

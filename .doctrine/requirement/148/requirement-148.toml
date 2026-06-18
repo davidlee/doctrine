@@ -4,7 +4,7 @@ version = 1
 id = 148
 slug = "materialise-the-embedded-globalderived-orientation-corpus-into-the-gitignored-shipped-tree-with-memory-sync-a-clean-no-op-outside-a-doctrine-repo"
 title = "Materialise the embedded global/derived orientation corpus into the gitignored shipped/ tree with memory sync, a clean no-op outside a Doctrine repo"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

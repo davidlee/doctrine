@@ -4,7 +4,7 @@ version = 1
 id = 128
 slug = "mutable-runtime-state-is-held-physically-apart-from-the-authored-entity-taxonomy"
 title = "Mutable runtime state is held physically apart from the authored entity taxonomy"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

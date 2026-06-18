@@ -4,7 +4,7 @@ version = 1
 id = 155
 slug = "resolve-every-undecidable-git-reachability-case-to-an-explicit-freshstaleunknownunanchoredreference-state-never-a-silent-hide-or-silent-over-trust"
 title = "Resolve every undecidable git-reachability case to an explicit fresh/stale/unknown/unanchored/reference state, never a silent hide or silent over-trust"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

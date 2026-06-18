@@ -4,7 +4,7 @@ version = 1
 id = 214
 slug = "fix-the-closed-status-vocabulary-open-triaged-started-resolved-closed-as-both-the-transition-set-and-the-backlog-list-status-known-set-with-resolvedclosed-terminal"
 title = "Fix the closed status vocabulary open, triaged, started, resolved, closed as both the transition set and the `backlog list` --status known-set, with resolved/closed terminal."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

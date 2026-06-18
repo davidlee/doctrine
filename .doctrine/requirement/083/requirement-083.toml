@@ -4,7 +4,7 @@ version = 1
 id = 83
 slug = "decompose-a-technical-spec-into-a-single-parent-acyclic-hierarchy"
 title = "Decompose a technical spec into a single-parent acyclic hierarchy"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A coarser technical spec decomposes into finer child specs, each recording at most one parent, forming an acyclic hierarchy stored outbound on the child."
