@@ -847,7 +847,11 @@ fn read_record(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<Knowled
 
 /// The kind-module accessor for relation edges (SL-096 PHASE-01): read one record
 /// and return its tier-1 relation edges. Delegates to [`read_record`].
-pub(crate) fn relation_edges(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
+pub(crate) fn relation_edges(
+    root: &Path,
+    kind: RecordKind,
+    id: u32,
+) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
     let record = read_record(root, kind, id)?;
     Ok(record.tier1)
 }
@@ -954,7 +958,11 @@ fn format_show(record: &KnowledgeRecord) -> String {
     parts.push(format_facet(&record.facet));
     parts.push(format_evidence(&record.evidence));
     // shapes, spawns, governed_by axes
-    for label in [crate::relation::RelationLabel::Shapes, crate::relation::RelationLabel::Spawns, crate::relation::RelationLabel::GovernedBy] {
+    for label in [
+        crate::relation::RelationLabel::Shapes,
+        crate::relation::RelationLabel::Spawns,
+        crate::relation::RelationLabel::GovernedBy,
+    ] {
         let targets = crate::relation::targets_for(&record.tier1, label);
         if !targets.is_empty() {
             let targets_str = targets.join(", ");
@@ -1889,7 +1897,11 @@ target = \"PRD-001\"
 ";
         seed_record(&root, RecordKind::Assumption, 1, record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
-        assert_eq!(r.tier1.len(), 1, "illegal supersedes row excluded, shapes survives");
+        assert_eq!(
+            r.tier1.len(),
+            1,
+            "illegal supersedes row excluded, shapes survives"
+        );
         assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::Shapes);
         assert_eq!(r.tier1[0].target, "PRD-001");
         let _ = std::fs::remove_dir_all(&root);
@@ -1929,7 +1941,11 @@ target = \"ADR-001\"
 ";
         seed_record(&root, RecordKind::Assumption, 1, record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
-        assert_eq!(r.tier1.len(), 1, "unknown nonsense label excluded, governed_by survives");
+        assert_eq!(
+            r.tier1.len(),
+            1,
+            "unknown nonsense label excluded, governed_by survives"
+        );
         assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::GovernedBy);
         assert_eq!(r.tier1[0].target, "ADR-001");
         let _ = std::fs::remove_dir_all(&root);

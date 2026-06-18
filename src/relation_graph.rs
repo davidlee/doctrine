@@ -1048,7 +1048,9 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // Seed an assumption record with [[relation]] rows
-        write(&root, ".doctrine/knowledge/assumption/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/assumption/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"a\"\ntitle = \"A\"\n\
              record_kind = \"assumption\"\nstatus = \"held\"\n\
@@ -1062,14 +1064,31 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/assumption/001/record-001.md", "body\n");
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+        );
+        write(
+            &root,
+            ".doctrine/knowledge/assumption/001/record-001.md",
+            "body\n",
+        );
         let edges = outbound_for(&root, kind_for("ASM"), 1).unwrap();
         assert_eq!(edges.len(), 3);
         // Verify each edge exists with correct target
-        assert!(edges.iter().any(|e| e.label == RelationLabel::Shapes && e.target == "SL-001"));
-        assert!(edges.iter().any(|e| e.label == RelationLabel::Spawns && e.target == "ISS-001"));
-        assert!(edges.iter().any(|e| e.label == RelationLabel::GovernedBy && e.target == "ADR-001"));
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.label == RelationLabel::Shapes && e.target == "SL-001")
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.label == RelationLabel::Spawns && e.target == "ISS-001")
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.label == RelationLabel::GovernedBy && e.target == "ADR-001")
+        );
     }
 
     // -- SL-059 VT-2: scan-side totality (F-A7, the L7 partner) ---------------
@@ -1623,7 +1642,7 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
 
-        // --- SL: specs, requirements, supersedes, governed_by (all tier-1) ---
+        // --- SL: specs, requirements, supersedes, governed_by, related (all tier-1) ---
         write(
             &root,
             ".doctrine/slice/001/slice-001.toml",
@@ -1632,7 +1651,8 @@ mod tests {
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
              [[relation]]\nlabel = \"requirements\"\ntarget = \"REQ-001\"\n\
              [[relation]]\nlabel = \"supersedes\"\ntarget = \"SL-002\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n\
+             [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n",
         );
         write(&root, ".doctrine/slice/001/slice-001.md", "s\n");
         assert_eq!(
@@ -1657,7 +1677,7 @@ mod tests {
             "governance reader emits exactly supersedes + related"
         );
 
-        // --- ISS (backlog): specs + slices + drift (all tier-1) ---
+        // --- ISS (backlog): specs + slices + related + drift (all tier-1) ---
         write(
             &root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
@@ -1665,13 +1685,14 @@ mod tests {
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
              [[relation]]\nlabel = \"specs\"\ntarget = \"PRD-010\"\n\
              [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n\
+             [[relation]]\nlabel = \"related\"\ntarget = \"ADR-010\"\n\
              [[relation]]\nlabel = \"drift\"\ntarget = \"free-text\"\n",
         );
         write(&root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
         assert_eq!(
             emitted_labels(root, "ISS", 1),
             table_labels_for("ISS"),
-            "backlog reader emits exactly specs + slices + drift"
+            "backlog reader emits exactly specs + slices + related + drift"
         );
 
         // --- SPEC (tech): governed_by (tier-1) + descends_from/parent (typed) +
@@ -1748,7 +1769,9 @@ mod tests {
         );
 
         // --- ASM (knowledge): shapes + spawns + governed_by ---
-        write(&root, ".doctrine/knowledge/assumption/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/assumption/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"a\"\ntitle = \"A\"\n\
              record_kind = \"assumption\"\nstatus = \"held\"\n\
@@ -1762,8 +1785,13 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/assumption/001/record-001.md", "body\n");
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+        );
+        write(
+            &root,
+            ".doctrine/knowledge/assumption/001/record-001.md",
+            "body\n",
+        );
         assert_eq!(
             emitted_labels(root, "ASM", 1),
             table_labels_for("ASM"),
@@ -1771,7 +1799,9 @@ mod tests {
         );
 
         // --- DEC (knowledge): shapes + spawns + governed_by ---
-        write(&root, ".doctrine/knowledge/decision/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/decision/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"d\"\ntitle = \"D\"\n\
              record_kind = \"decision\"\nstatus = \"proposed\"\n\
@@ -1785,8 +1815,13 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/decision/001/record-001.md", "body\n");
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+        );
+        write(
+            &root,
+            ".doctrine/knowledge/decision/001/record-001.md",
+            "body\n",
+        );
         assert_eq!(
             emitted_labels(root, "DEC", 1),
             table_labels_for("DEC"),
@@ -1794,7 +1829,9 @@ mod tests {
         );
 
         // --- QUE (knowledge): shapes + spawns + governed_by ---
-        write(&root, ".doctrine/knowledge/question/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/question/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"q\"\ntitle = \"Q\"\n\
              record_kind = \"question\"\nstatus = \"open\"\n\
@@ -1807,8 +1844,13 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/question/001/record-001.md", "body\n");
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+        );
+        write(
+            &root,
+            ".doctrine/knowledge/question/001/record-001.md",
+            "body\n",
+        );
         assert_eq!(
             emitted_labels(root, "QUE", 1),
             table_labels_for("QUE"),
@@ -1816,7 +1858,9 @@ mod tests {
         );
 
         // --- CON (knowledge): shapes + spawns + governed_by ---
-        write(&root, ".doctrine/knowledge/constraint/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/constraint/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"c\"\ntitle = \"C\"\n\
              record_kind = \"constraint\"\nstatus = \"active\"\n\
@@ -1829,8 +1873,13 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/constraint/001/record-001.md", "body\n");
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+        );
+        write(
+            &root,
+            ".doctrine/knowledge/constraint/001/record-001.md",
+            "body\n",
+        );
         assert_eq!(
             emitted_labels(root, "CON", 1),
             table_labels_for("CON"),
@@ -1870,13 +1919,14 @@ mod tests {
              [[relation]]\nlabel = \"slices\"\ntarget = \"SL-001\"\n",
         );
         write(root, ".doctrine/backlog/issue/001/backlog-001.md", "i\n");
-        // SL-002 carries a HAND-EDITED illegal row: a slice cannot author `related`.
+        // SL-002 carries a HAND-EDITED illegal row: a slice cannot author `descends_from`
+        // (a spec-only label; `related` is now legal for slices since SL-095).
         write(
             root,
             ".doctrine/slice/002/slice-002.toml",
             "id = 2\nslug = \"s\"\ntitle = \"S\"\nstatus = \"proposed\"\n\
              created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [[relation]]\nlabel = \"related\"\ntarget = \"SL-001\"\n",
+             [[relation]]\nlabel = \"descends_from\"\ntarget = \"PRD-001\"\n",
         );
         write(root, ".doctrine/slice/002/slice-002.md", "s\n");
 
@@ -1896,13 +1946,13 @@ mod tests {
         );
         assert!(
             joined.contains("SL-002") && joined.contains("illegal"),
-            "the hand-edited illegal `related` row is reported: {joined}"
+            "the hand-edited illegal `descends_from` row is reported: {joined}"
         );
         // Report-only: the corpus file is byte-unchanged.
         let after =
             std::fs::read_to_string(root.join(".doctrine/slice/002/slice-002.toml")).unwrap();
         assert!(
-            after.contains("label = \"related\""),
+            after.contains("label = \"descends_from\""),
             "validate never rewrites the corpus"
         );
     }
