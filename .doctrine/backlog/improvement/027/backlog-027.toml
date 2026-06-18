@@ -5,10 +5,10 @@ id = 27
 slug = "deferred-doc-canon-has-no-tracked-home-or-enforcement-after-tech-spec-backfill-bifurcates-the-doc"
 title = "Deferred doc/* canon has no tracked home or enforcement after tech-spec backfill bifurcates the doc"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-11"
-updated = "2026-06-16"
+updated = "2026-06-18"
 tags = ["area:governance", "area:spec", "docs"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
