@@ -1,0 +1,38 @@
+id    = 83
+slug  = "083-reconciliation-review-of-sl-099"
+title = "Reconciliation of SL-099 — Memory read-path relations and data-model hardening"
+
+[review]
+facet     = "reconciliation"
+raiser    = "self-audit"
+responder = "responder"
+
+[target]
+ref = "SL-099"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "expand_graph: blank-line separator written to stderr instead of stdout (I7 violation)"
+detail = "In src/retrieve.rs expand_graph(), the blank line separator between depth blocks uses writeln!(io::stderr())?; instead of writeln!(io::stdout())?;. The rendered memory blocks go to stdout correctly, but the separators between them go to stderr. Design D9 says --expand output goes to STDOUT. Invariant I7 requires no stream confusion between suggested relations (stderr) and --expand (stdout)."
+disposition = "fix-now"
+response = "Trivial fix: change writeln!(io::stderr()) to writeln!(io::stdout()) in expand_graph(). Applied in candidate at 49f41684."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "BFS expansion edge set uses raw wikilink targets without resolving key-to-uid (I8 gap)"
+detail = "In src/retrieve.rs expand_graph(), the edge set builds targets by pushing raw wikilink strings from extract_wikilinks(). Wikilinks with key form (e.g. 'mem.foo') are included as-is, but the BFS traversal filter (target.starts_with(\"mem_\")) excludes them — key-form wikilinks are silently dropped. The design D9 states BFS follows 'the union of wikilinks + relation targets'; wikilink key-form targets should be resolved to uids before inclusion in the edge set. The resolve_wikilink function in src/links.rs is available but not called during edge building."
+disposition = "fix-now"
+response = "The edge set should resolve wikilink targets via resolve_wikilink() before including them. Build key_to_uid map from all_memories, build known_uids set, call resolve_wikilink for each wikilink target, push resolved uid (skip dangling). Applied in candidate at 49f41684."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "expand_graph writes a leading blank line before the first depth block"
+detail = "In expand_graph(), the blank-line separator is emitted before every non-empty depth level, including the first one (depth 1). This produces a leading blank line at the start of --expand output, which is visually unnecessary. Should skip the separator for the first non-empty depth to avoid the leading blank line."
+disposition = "fix-now"
+response = "Track whether this is the first non-empty depth and skip the separator for the first one. Add a first flag and guard the writeln. Applied in candidate at 49f41684."
