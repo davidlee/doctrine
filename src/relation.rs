@@ -34,7 +34,7 @@
     not(test),
     expect(
         dead_code,
-        reason = "SL-048 PHASE-02 — RELATION_RULES table + GovernedBy/Consumes built ahead of their PHASE-03/04 consumers; self-clears when wired"
+        reason = "SL-096 PHASE-01/02 — read_record exercises from_name/RELATION_RULES/lookup/read_block/tier1_edges; PHASE-02 wires outbound_for to knowledge::relation_edges (more callers for tier1_edges); remaining dead symbols (validate_link, check_target_kind, append_edge/remove_edge, writable_labels_for, owning_verb_for) self-clear when their command handlers land"
     )
 )]
 
@@ -60,6 +60,12 @@ pub(crate) enum RelationLabel {
     Interactions,
     /// concept-map → any (concept association).
     Contextualizes,
+    /// knowledge record → any artefact. Epistemic influence — the record shapes
+    /// the target's design; inbound renders `shaped_by` (SL-096 PHASE-01).
+    Shapes,
+    /// knowledge record → backlog item. Work creation — the record spawned a
+    /// backlog item; inbound renders `spawned_by` (SL-096 PHASE-01).
+    Spawns,
     /// slice·PRD·SPEC·CM → governance (ADR/POL/STD). One shared label spanning all
     /// four sources, as `supersedes` already spans SL+gov; inbound renders
     /// "governs" via [`RelationRule::inbound_name`] (SL-048 design §5.2 / X5).
@@ -107,6 +113,8 @@ impl RelationLabel {
             RelationLabel::Members => "members",
             RelationLabel::Interactions => "interactions",
             RelationLabel::Contextualizes => "contextualizes",
+            RelationLabel::Shapes => "shapes",
+            RelationLabel::Spawns => "spawns",
             RelationLabel::GovernedBy => "governed_by",
             RelationLabel::Consumes => "consumes",
             RelationLabel::Slices => "slices",
@@ -136,6 +144,8 @@ impl RelationLabel {
             "members" => RelationLabel::Members,
             "interactions" => RelationLabel::Interactions,
             "contextualizes" => RelationLabel::Contextualizes,
+            "shapes" => RelationLabel::Shapes,
+            "spawns" => RelationLabel::Spawns,
             "governed_by" => RelationLabel::GovernedBy,
             "consumes" => RelationLabel::Consumes,
             "slices" => RelationLabel::Slices,
@@ -250,6 +260,11 @@ const IMP: &Kind = &crate::backlog::IMPROVEMENT_KIND;
 const CHR: &Kind = &crate::backlog::CHORE_KIND;
 const RSK: &Kind = &crate::backlog::RISK_KIND;
 const IDE: &Kind = &crate::backlog::IDEA_KIND;
+const ASM: &Kind = &crate::knowledge::ASSUMPTION_KIND;
+const DEC: &Kind = &crate::knowledge::DECISION_KIND;
+const QUE: &Kind = &crate::knowledge::QUESTION_KIND;
+const CON: &Kind = &crate::knowledge::CONSTRAINT_KIND;
+const RECORD: &[&Kind] = &[ASM, DEC, QUE, CON];
 
 /// Every governance kind — the source-set for `supersedes`(gov)/`related`, and the
 /// `governed_by` target-set.
@@ -342,7 +357,23 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         link: LinkPolicy::Writable,
     },
     RelationRule {
-        sources: &[SLICE, PRD, SPEC, CM],
+        sources: RECORD,
+        label: RelationLabel::Shapes,
+        inbound_name: "shaped_by",
+        target: TargetSpec::Kinds(&[PRD, SPEC, REQ, SLICE, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, ASM, DEC, QUE, CON]),
+        tier: Tier::One,
+        link: LinkPolicy::Writable,
+    },
+    RelationRule {
+        sources: RECORD,
+        label: RelationLabel::Spawns,
+        inbound_name: "spawned_by",
+        target: TargetSpec::Kinds(&[ISS, IMP, CHR, RSK, IDE]),
+        tier: Tier::One,
+        link: LinkPolicy::Writable,
+    },
+    RelationRule {
+        sources: &[SLICE, PRD, SPEC, CM, ASM, DEC, QUE, CON],
         label: RelationLabel::GovernedBy,
         inbound_name: "governs",
         target: TargetSpec::Kinds(GOV),
@@ -973,6 +1004,7 @@ mod tests {
     use crate::slice::SLICE_KIND;
     use crate::spec::{PRODUCT_SPEC_KIND, TECH_SPEC_KIND};
     use crate::standard::STANDARD_KIND;
+    use crate::knowledge::ASSUMPTION_KIND;
 
     /// The distinct labels of `RELATION_RULES`, in declaration order.
     fn distinct_labels_in_decl_order() -> Vec<RelationLabel> {
@@ -1033,6 +1065,8 @@ mod tests {
             (RelationLabel::OwningSlice, &["REC"]),
             (RelationLabel::Drift, &["ISS", "IMP", "CHR", "RSK", "IDE"]),
             (RelationLabel::DecisionRef, &["REC"]),
+            (RelationLabel::Shapes, &["ASM", "DEC", "QUE", "CON"]),
+            (RelationLabel::Spawns, &["ASM", "DEC", "QUE", "CON"]),
         ];
         for (label, want_prefixes) in expected {
             let mut got: Vec<&str> = RELATION_RULES
@@ -1066,6 +1100,8 @@ mod tests {
                     | RelationLabel::GovernedBy
                     | RelationLabel::Consumes
                     | RelationLabel::Contextualizes
+                    | RelationLabel::Shapes
+                    | RelationLabel::Spawns
             );
             if differs {
                 assert!(
@@ -1144,6 +1180,8 @@ mod tests {
             RelationLabel::Members,
             RelationLabel::Interactions,
             RelationLabel::Contextualizes,
+            RelationLabel::Shapes,
+            RelationLabel::Spawns,
             RelationLabel::GovernedBy,
             RelationLabel::Consumes,
             RelationLabel::Slices,
@@ -1177,6 +1215,8 @@ mod tests {
             RelationLabel::Requirements,
             RelationLabel::Supersedes,
             RelationLabel::Contextualizes,
+            RelationLabel::Shapes,
+            RelationLabel::Spawns,
             RelationLabel::GovernedBy,
             RelationLabel::Consumes,
             RelationLabel::Slices,
@@ -1266,6 +1306,34 @@ mod tests {
             assert_eq!(got, ["ADR", "POL", "STD"]);
         } else {
             panic!("governed_by → Kinds([ADR,POL,STD])");
+        }
+        // shapes target is the explicit 16-kind set (D2).
+        if let TargetSpec::Kinds(ks) = lookup(&ASSUMPTION_KIND, RelationLabel::Shapes)
+            .unwrap()
+            .target
+        {
+            let mut got: Vec<&str> = ks.iter().map(|k| k.prefix).collect();
+            got.sort_unstable();
+            assert_eq!(
+                got,
+                [
+                    "ADR", "ASM", "CHR", "CON", "DEC", "IDE", "IMP",
+                    "ISS", "POL", "PRD", "QUE", "REQ", "RSK", "SL", "SPEC", "STD"
+                ]
+            );
+        } else {
+            panic!("shapes → Kinds([PRD, SPEC, REQ, SLICE, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, ASM, DEC, QUE, CON])");
+        }
+        // spawns target is the 5 backlog-item kinds.
+        if let TargetSpec::Kinds(ks) = lookup(&ASSUMPTION_KIND, RelationLabel::Spawns)
+            .unwrap()
+            .target
+        {
+            let mut got: Vec<&str> = ks.iter().map(|k| k.prefix).collect();
+            got.sort_unstable();
+            assert_eq!(got, ["CHR", "IDE", "IMP", "ISS", "RSK"]);
+        } else {
+            panic!("spawns → Kinds([ISS, IMP, CHR, RSK, IDE])");
         }
     }
 
@@ -1496,6 +1564,8 @@ mod tests {
                     | RelationLabel::Consumes
                     | RelationLabel::Supersedes
                     | RelationLabel::Contextualizes
+                    | RelationLabel::Shapes
+                    | RelationLabel::Spawns
             );
             if !inverted {
                 assert_eq!(
@@ -1641,6 +1711,12 @@ mod tests {
             &RISK_KIND,
             &IDEA_KIND,
         );
+        // Shapes is legal for record kinds, illegal for SL.
+        assert!(lookup(&ASSUMPTION_KIND, RelationLabel::Shapes).is_some());
+        assert!(lookup(&SLICE_KIND, RelationLabel::Shapes).is_none());
+        // Spawns is legal for record kinds, illegal for SL.
+        assert!(lookup(&ASSUMPTION_KIND, RelationLabel::Spawns).is_some());
+        assert!(lookup(&SLICE_KIND, RelationLabel::Spawns).is_none());
         let _: &Kind = &SLICE_KIND;
     }
 }
