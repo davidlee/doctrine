@@ -1,0 +1,74 @@
+# Implementation plan for SL-096 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-096"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Phase 1 — Ship the vocabulary and the record read path
+[[phase]]
+id        = "PHASE-01"
+name      = "Relation vocabulary + KnowledgeRecord.tier1 + relation_edges"
+objective = "Add Shapes/Spawns RelationLabel variants, RELATION_RULES rows, GovernedBy source-set extension, KnowledgeRecord.tier1 field, and the relation_edges accessor — the pure infrastructure before wiring."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and approved" },
+  { id = "EN-2", text = "plan.toml authored and phase sheets materialised" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Shapes and Spawns variants exist in RelationLabel enum with name()/from_name() arms" },
+  { id = "EX-2", text = "RELATION_RULES carries Shapes and Spawns rules with correct sources/targets/tier/link/inbound_name" },
+  { id = "EX-3", text = "GovernedBy rule sources extended to include ASM/DEC/QUE/CON" },
+  { id = "EX-4", text = "KnowledgeRecord carries tier1: Vec<RelationEdge> populated by read_record via tier1_edges()" },
+  { id = "EX-5", text = "knowledge::relation_edges(root, kind, id) delegates to read_record and returns tier1" },
+]
+verification = [
+  { id = "VT-1", expects = "RelationLabel::from_name(\"shapes\") round-trips; \"spawns\" round-trips" },
+  { id = "VT-2", expects = "RELATION_RULES lookup(ASM, Shapes) and lookup(DEC, Spawns) return the correct rules" },
+  { id = "VT-3", expects = "RELATION_RULES lookup(ASM, GovernedBy) returns the extended rule (source-set extension works)" },
+  { id = "VT-4", expects = "Shapes target-kind check refuses a RV target; Spawns refuses a SLICE target" },
+  { id = "VT-5", expects = "distinct_labels golden updated for the two new labels" },
+  { id = "VT-6", expects = "Seeded record has empty tier1 edges" },
+  { id = "VT-7", expects = "Record with authored [[relation]] shapes/spawns rows → relation_edges returns them via read_record" },
+  { id = "VT-8", expects = "Illegal [[relation]] row (e.g. label=\"supersedes\" on a record) → classified as IllegalRow, not a live edge" },
+]
+specs        = []
+requirements = []
+
+# Phase 2 — Wire into the graph + render, then gate
+[[phase]]
+id        = "PHASE-02"
+name      = "outbound_for dispatch + show/inspect render + gate"
+objective = "Swap the empty outbound_for stub for the real knowledge::relation_edges call; extend format_show/show_json to render relation axes; update SL-059 VT-1 and exact-coverage invariant; gate clean."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — relation vocabulary and record read path ship green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "outbound_for dispatch arm resolves RecordKind from prefix and delegates to knowledge::relation_edges" },
+  { id = "EX-2", text = "format_show renders shapes/spawns/governed_by axes via targets_for(); empty axes silent" },
+  { id = "EX-3", text = "show_json projects relation axes into JSON relationships object" },
+  { id = "EX-4", text = "clippy::match_same_arms expect removed from outbound_for arm" },
+  { id = "EX-5", text = "SL-059 VT-1 test updated: knowledge kinds now author edges (not empty)" },
+  { id = "EX-6", text = "Exact-coverage invariant extended for RECORD source group and green" },
+  { id = "EX-7", text = "just gate clean — zero clippy warnings across workspace" },
+  { id = "EX-8", text = "All existing suites (slice, ADR, spec, backlog, memory, relation, governance) stay green unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "Record fixture with [[relation]] rows → outbound_for returns correct edges (SL-059 VT-1 replacement)" },
+  { id = "VT-2", expects = "Exact-coverage invariant: RECORD source-group labels match reader's emitted labels" },
+  { id = "VT-3", expects = "knowledge show renders shapes/spawns/governed_by axes when edges present; silent when absent" },
+  { id = "VA-1", expects = "Existing per-kind suites green — no regression from relation infrastructure" },
+  { id = "VH-1", expects = "just gate passes with zero warnings" },
+]
+specs        = []
+requirements = []
