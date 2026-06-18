@@ -1,0 +1,47 @@
+# Implementation plan for SL-106 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-106"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Fold and reword"
+objective = "Delete knowledge::set_record_status, route run_status through dep_seq::set_authored_status, update three stale comment references, and reword three 'regenerate via' refuse hints to the non-destructive pattern."
+
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked; plan accepted." },
+  { id = "EN-2", text = "All existing tests green on main." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "set_record_status fn and doc comment deleted from src/knowledge.rs." },
+  { id = "EX-2", text = "run_status calls dep_seq::set_authored_status with managed [status, updated]." },
+  { id = "EX-3", text = "Three stale comment references (lines 26, 637, 1388) updated." },
+  { id = "EX-4", text = "Three 'regenerate via' strings absent from src/." },
+  { id = "EX-5", text = "All existing status-transition tests green unchanged." },
+  { id = "EX-6", text = "just gate clean (zero clippy warnings)." },
+]
+
+verification = [
+  { id = "VT-1", expects = "cargo test knowledge:: — all green." },
+  { id = "VT-2", expects = "cargo test -- slice -- backlog — all green (message-only change)." },
+  { id = "VT-3", expects = "rg 'regenerate via' src/ — zero hits." },
+  { id = "VT-4", expects = "rg 'fn set_record_status' src/ — zero hits." },
+  { id = "VT-5", expects = "just gate — zero clippy warnings." },
+]
+
+specs        = []
+requirements = []
