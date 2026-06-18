@@ -1,0 +1,86 @@
+# Implementation plan for SL-094 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-094"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Pure viewport helpers + types"
+objective = "Extract the zoom/pan math and viewport rules into pure, testable functions with no DOM dependency — the foundation that phases 02-03 build on."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and inquisition (RV-071) resolved" },
+  { id = "EN-2", text = "test framework available (bun test, used by existing web/map tests)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "GraphViewport type, fitViewport(), applyFocusChange(), clampViewport(), readSvgDims() implemented" },
+  { id = "EX-2", text = "all pure helpers unit-tested (VT-1 through VT-4) and passing" },
+  { id = "EX-3", text = "cargo clippy clean on the project (no new warnings introduced)" },
+]
+verification = [
+  { id = "VT-1", expects = "fitViewport: SVG < container → k=1, centred; SVG wider → scaled; SVG taller → scaled; zero-size → k=1" },
+  { id = "VT-2", expects = "applyFocusChange: null vp → fit; prior k ≥ minK → k preserved, centred; prior k < minK → clamped to minK, centred" },
+  { id = "VT-3", expects = "clampViewport: k below minK → minK; k above maxK → maxK; within range → unchanged" },
+  { id = "VT-4", expects = "readSvgDims: reads getBoundingClientRect(); guards zero-size → {w:1, h:1}" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "CSS + graphPane() zoom/pan wiring"
+objective = "Apply the container CSS changes, create the transform wrapper inside graphPane(), and wire the wheel + drag event handlers with all guards (deltaMode, cross-mode, listener lifecycle). The DOT graph is zoomable/pannable as a standalone feature."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — viewport helpers and types available" },
+]
+exit_criteria = [
+  { id = "EX-1", text = ".graph-area restyled: overflow:hidden, position:relative, touch-action:none, cursor:grab" },
+  { id = "EX-2", text = ".graph-transform-layer wrapper created per render inside graphPane(), CSS transform applied from viewport" },
+  { id = "EX-3", text = "wheel handler: deltaMode normalization, cursor-relative scale, clamped to [minK, 10]" },
+  { id = "EX-4", text = "drag handler: mousedown/mousemove/mouseup with {once:true} on mouseup, divide-by-k tracking, grabbing cursor" },
+  { id = "EX-5", text = "cross-mode guard: both handlers gate on .graph-transform-layer DOM presence" },
+  { id = "EX-6", text = "handler wired once per graphPane lifecycle (dataset.zoomWired guard)" },
+  { id = "EX-7", text = "GraphPaneOpts extended: initialViewport?, focusChanged, onViewportChange?" },
+  { id = "EX-8", text = "existing hit-rects, focus/hover, legend dimming unaffected by wrapper (VA-1 check)" },
+]
+verification = [
+  { id = "VA-1", expects = "agent loads map with large graph, scroll-zooms, drag-pans — content moves within bounds, no overflow, hit-rects still clickable, focus+hover still work, legend still dims" },
+  { id = "VA-2", expects = "agent switches to actionability view and back — zoom/pan on DOT view resumes without cross-mode interference" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "App state integration + viewport persistence"
+objective = "Wire the GraphViewport into app.ts state so zoom/pan position survives re-renders and focus changes apply the centring/clamp rules from the design."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — graphPane() accepts and emits viewport, zoom/pan interactive" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "app.ts state: graphViewport (GraphViewport | null), lastRenderedFocusId (string | null)" },
+  { id = "EX-2", text = "render() computes focusChanged, passes initialViewport + focusChanged + onViewportChange to graphPane()" },
+  { id = "EX-3", text = "onViewportChange callback updates state.graphViewport — viewport persists across same-focus re-renders" },
+  { id = "EX-4", text = "focus change: centres new graph per applyFocusChange() rules (clamp to new minK, preserve k if above)" },
+  { id = "EX-5", text = "first-ever render: null viewport → fitViewport() (graph fits container on load)" },
+]
+verification = [
+  { id = "VA-1", expects = "agent: zoom in on node A, change depth — viewport restored at same position" },
+  { id = "VA-2", expects = "agent: zoom in on node A, click node B — graph centred on B at preserved scale (if scale ≥ new minK)" },
+  { id = "VA-3", expects = "agent: zoom out to minK on a small graph, click a node with a large neighbourhood — scale clamped up to new (smaller) minK, graph centred" },
+  { id = "VA-4", expects = "agent: first load — graph fits container, no part cut off" },
+]
+specs        = []
+requirements = []
