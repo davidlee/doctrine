@@ -62,8 +62,11 @@ pub(crate) fn seed_adr(root: &Path, id: u32, supersedes: &[&str]) {
     let rels = if supersedes.is_empty() {
         String::new()
     } else {
-        let refs: Vec<String> = supersedes.iter().map(|s| format!("\"{s}\"")).collect();
-        format!("\n[relationships]\nsupersedes = [{}]\n", refs.join(", "))
+        supersedes
+            .iter()
+            .map(|s| format!("\n[[relation]]\nlabel = \"supersedes\"\ntarget = \"{s}\""))
+            .collect::<Vec<_>>()
+            .join("")
     };
     write(
         root,
