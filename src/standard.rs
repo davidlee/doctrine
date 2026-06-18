@@ -46,14 +46,15 @@ pub(crate) const STANDARD_KIND: GovKind = GovKind {
 /// The status transitions `standard status` writes. A standing convention's life:
 /// `draft → default / required → deprecated / retired`. `default` (recommended
 /// unless justified) and `required` (mandated) are the in-force states (the boot
-/// section projects both, SL-033 PHASE-02). Supersession is a relationship
-/// (`relationships.supersedes`), not a status (design D2) — so no `Superseded`
-/// variant. A flat enum, no per-state stamping.
+/// section projects both, SL-033 PHASE-02). `superseded` is a terminal state
+/// set ONLY by `doctrine supersede` (SL-095 PHASE-03), NOT an authoring-surface
+/// status. A flat enum, no per-state stamping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub(crate) enum StandardStatus {
     Draft,
     Default,
     Required,
+    Superseded,
     Deprecated,
     Retired,
 }
@@ -64,6 +65,7 @@ impl StandardStatus {
             Self::Draft => "draft",
             Self::Default => "default",
             Self::Required => "required",
+            Self::Superseded => "superseded",
             Self::Deprecated => "deprecated",
             Self::Retired => "retired",
         }
@@ -74,15 +76,21 @@ impl StandardStatus {
 /// `--status` against. Mirrors `StandardStatus`'s variants, kept in lockstep by
 /// `standard_known_set_matches_variants` (a drift canary). The enum kinds cannot
 /// store an out-of-vocab status, so this doubles as the complete vocabulary.
-pub(crate) const STANDARD_STATUSES: &[&str] =
-    &["draft", "default", "required", "deprecated", "retired"];
+pub(crate) const STANDARD_STATUSES: &[&str] = &[
+    "draft",
+    "default",
+    "required",
+    "superseded",
+    "deprecated",
+    "retired",
+];
 
 /// The `standard list` hide-set (design §5.3): `deprecated` (sunsetting but extant)
 /// and `retired` (terminal off) standards no longer govern, so they drop from the
 /// default list. The override (`--all` or any explicit `--status`) reveals them —
 /// handled in `listing::retain`, not here. Bound as `STANDARD_KIND.hidden`.
 fn is_hidden(status: &str) -> bool {
-    matches!(status, "deprecated" | "retired")
+    matches!(status, "superseded" | "deprecated" | "retired")
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +301,7 @@ mod tests {
             StandardStatus::Draft,
             StandardStatus::Default,
             StandardStatus::Required,
+            StandardStatus::Superseded,
             StandardStatus::Deprecated,
             StandardStatus::Retired,
         ];
@@ -310,6 +319,7 @@ mod tests {
             // converse guard: a status flagged hidden must be in the vocab.
             let _ = is_hidden(s);
         }
+        assert!(is_hidden("superseded"));
         assert!(is_hidden("deprecated"));
         assert!(is_hidden("retired"));
         assert!(!is_hidden("draft"));

@@ -63,3 +63,36 @@
 - The `rels_block` fix was not in the original worker's changeset — surfaced 6 additional test failures that required touching `adr.rs`, `policy.rs`, `standard.rs`, `catalog/test_helpers.rs`, and `relation_graph.rs`
 
 **Next:** PHASE-03 requires SL-097 extraction complete (EN-2: `src/supersede.rs` exists with ADR+RECORD arms).
+
+## PHASE-03 — Extend `doctrine supersede` to POL/STD with `[[relation]]` writes
+
+**Commit:** (pending) on `dispatch/095`
+
+**What was done:**
+- Added `Superseded` variant to `PolicyStatus` and `StandardStatus` enums (after in-force, before terminal)
+- Wired `"superseded"` into `POLICY_STATUSES`, `STANDARD_STATUSES`, `is_hidden()` for both kinds
+- Updated partition tables (`src/priority/partition.rs`): added `"superseded"` to POL + STD terminal sets
+- Defined `StorageTarget` enum with `RelationRow` and `TypedArray { field }` variants in `src/supersede.rs`
+- Replaced `SupersedePolicy.supersedes_field` with `storage: StorageTarget`
+- Added POL and STD arms to `supersede_policy()` → `StorageTarget::RelationRow`
+- Refactored record arms (ASM/DEC/QUE/CON) to use `StorageTarget::TypedArray { field: "supersedes" }`
+- Refactored `run_supersede` to dispatch on `policy.storage`:
+  - `RelationRow` path: F-1 reads `[[relation]]` via `read_block`, F-D checks edges, writes via `relation::append_edge`
+  - `TypedArray` path: unchanged existing logic
+- Added unit tests for `supersede_policy` (POL, STD, governance, records, unsupported kinds)
+- Updated `supersede_recovery_from_torn_new_only_state` test to assert `[[relation]]` row (not typed array count)
+
+**Verification:**
+- 1674 bin tests pass, 0 failures
+- `cargo clippy` zero warnings
+- `cargo fmt` clean
+- ESLint failure in `just check` is pre-existing (missing `@eslint/js` package) — not our code
+
+**EN-2 handling:**
+- Cherry-picked `src/supersede.rs` from `main` (SL-097) onto `dispatch/095` at `7cf5a70b`
+- Removed stale `SupersedePolicy` struct + `supersede_policy()` from `src/adr.rs`
+- Added `mod supersede;` to `src/main.rs`, updated `adr::supersede_policy` → `crate::supersede::supersede_policy`
+- SL-097 shipped without `StorageTarget` — PHASE-03 added it
+
+**Clippy note:**
+- Used `if let Some(edge) = existing_supersedes.first()` instead of `existing_supersedes[0]` to satisfy `clippy::indexing_slicing`
