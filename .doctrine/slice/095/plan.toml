@@ -1,0 +1,100 @@
+# Implementation plan for SL-095 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-095"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Add `related` for slice & backlog"
+objective = "Add one RELATION_RULES row enabling `doctrine link SL-X related <any>` and `doctrine link IMP-X related <any>`, update the exact-coverage invariant, and keep every existing suite green."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and committed" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RELATION_RULES carries slice/backlog `related` row with `AnyNumbered` target" },
+  { id = "EX-2", text = "`doctrine link SL-095 related ADR-010` succeeds" },
+  { id = "EX-3", text = "`doctrine link IMP-082 related SPEC-018` succeeds" },
+  { id = "EX-4", text = "`doctrine link SL-095 related FREE-TEXT` is refused (`AnyNumbered` target)" },
+  { id = "EX-5", text = "exact-coverage invariant updated and green" },
+]
+verification = [
+  { id = "VT-1", expects = "lookup(&SLICE_KIND, Related) returns Some" },
+  { id = "VT-2", expects = "lookup(&ISSUE_KIND, Related) returns Some" },
+  { id = "VT-3", expects = "exact-coverage invariant covers new source kinds" },
+  { id = "VT-4", expects = "relation_graph overlay golden updated" },
+  { id = "VT-5", expects = "just gate clean" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Migrate governance `supersedes` to `[[relation]]`"
+objective = "Move governance `supersedes` out of the typed `[relationships]` table into `[[relation]]` rows — remove `supersedes` from the `Relationships` struct, switch `relation_edges` / `supersession_pair` / `format_show` to read from `tier1_edges`/`read_block`, update templates, and run the cosmetic one-time corpus rewrite on 14 governance TOML files."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (RELATION_RULES stable)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Relationships` struct drops `supersedes`; only `superseded_by` and `tags` remain" },
+  { id = "EX-2", text = "`relation_edges` reads both `supersedes` and `related` from `tier1_edges`" },
+  { id = "EX-3", text = "`supersession_pair` reads `supersedes` from `read_block` (not `tier1_edges` — sees illegal rows too)" },
+  { id = "EX-4", text = "`format_show` accepts `supersedes: &[String]` from caller; render order unchanged" },
+  { id = "EX-5", text = "adr/policy/standard templates drop `supersedes = []` line" },
+  { id = "EX-6", text = "corpus governance TOML files have `supersedes = []` line removed (cosmetic)" },
+  { id = "EX-7", text = "`doctrine show` output byte-identical pre/post for every governance entity" },
+]
+verification = [
+  { id = "VT-1", expects = "governance relation_edges emits same edges pre/post migration" },
+  { id = "VT-2", expects = "supersession_pair returns same (empty) supersedes vector post-migration" },
+  { id = "VT-3", expects = "governance show output identical across migration (empty supersedes = no display line)" },
+  { id = "VT-4", expects = "show --json drops relationships.supersedes; downstream tests updated" },
+  { id = "VT-5", expects = "new governance entity scaffolded from template parses with no unknown keys" },
+  { id = "VT-6", expects = "doctrine validate reports clean (no supersession drift)" },
+  { id = "VT-7", expects = "existing governance suites green unchanged" },
+  { id = "VT-8", expects = "just gate clean" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Extend `doctrine supersede` to POL/STD with `[[relation]]` writes"
+objective = "Add `Superseded` variant to PolicyStatus and StandardStatus, extend `SupersedePolicy` (in `src/supersede.rs`) to POL and STD with `StorageTarget::RelationRow`, and refactor `run_supersede` to dispatch on `StorageTarget` — governance writes `[[relation]]` rows via `append_edge`, typed `superseded_by` carve-out unchanged."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete (governance readers switched to `[[relation]]`)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`PolicyStatus` and `StandardStatus` enums carry `Superseded` variant" },
+  { id = "EX-2", text = "`supersede_policy()` returns `Some` for POL and STD" },
+  { id = "EX-3", text = "`SupersedePolicy` carries `storage: StorageTarget` discriminant" },
+  { id = "EX-4", text = "`doctrine supersede ADR-NEW ADR-OLD` writes `[[relation]] label=\"supersedes\"` on NEW" },
+  { id = "EX-5", text = "`doctrine supersede POL-NEW POL-OLD` succeeds (new arm)" },
+  { id = "EX-6", text = "`doctrine supersede STD-NEW STD-OLD` succeeds (new arm)" },
+  { id = "EX-7", text = "typed `superseded_by` carve-out on OLD unchanged for all governance kinds" },
+  { id = "EX-8", text = "idempotent re-run reports `already recorded` for `RelationRow` path" },
+]
+verification = [
+  { id = "VT-1", expects = "supersede_policy adds POL/STD arms with StorageTarget::RelationRow" },
+  { id = "VT-2", expects = "run_supersede dispatches on policy.storage; RelationRow → append_edge" },
+  { id = "VT-3", expects = "ADR supersede writes [[relation]] row, not typed array" },
+  { id = "VT-4", expects = "superseded_by still written as typed array (carve-out unchanged)" },
+  { id = "VT-5", expects = "idempotent re-supersede is no-op for RelationRow path" },
+  { id = "VT-6", expects = "POL/STD supersede terminal flip to 'superseded' status" },
+  { id = "VT-7", expects = "existing ADR supersede tests green (behaviour-preserving)" },
+  { id = "VT-8", expects = "just gate clean" },
+]
+specs        = []
+requirements = []
