@@ -26,6 +26,12 @@ Free text is refused. Enables `doctrine link SL-X related ADR-Y` and `doctrine l
 IMP-X related SPEC-Y`. Inbound name is `"related"` for both directions (the label is
 inherently symmetric — "can't be an only child's brother").
 
+`AnyNumbered` matches every numbered kind, including RV (reviews) and GOV (governance).
+The existing `GovernedBy` row already connects `SLICE→GOV` — a Slice→Policy pair can
+carry both a `GovernedBy` edge (strong governance claim) and a `Related` edge (weak
+association). Both are valid, distinct labels with different semantics; `inbound`
+rendering shows both.
+
 **No template or code changes** beyond the one table row + test updates. Slices and
 backlog items already have `[[relation]]` blocks from SL-048.
 
@@ -99,10 +105,13 @@ pub(crate) fn relation_edges(g: &GovKind, root: &Path, id: u32) -> ... {
 
 **`supersession_pair`** — reads `supersedes` from `[[relation]]` instead of the typed
 field. MUST use `read_block` directly (the `(edges, illegal)` pair), NOT
-`tier1_edges` (edges-only). `tier1_edges` silently drops `IllegalRow`s — a
-hand-edited `[[relation]] label="supersedes" target="FREE-TEXT"` would be invisible
-to the supersession cross-check, producing a false-clean report. `IllegalRow`s are
-still caught by the general `validate` scan, but the cross-check must see them too.
+`tier1_edges` (edges-only). `tier1_edges` filters to valid edges only (appropriate
+for display paths); `read_block` returns the full `(edges, illegal)` pair (needed
+for validate paths that must surface every row). A hand-edited
+`[[relation]] label="supersedes" target="FREE-TEXT"` would be invisible to the
+supersession cross-check under `tier1_edges`, producing a false-clean report.
+`IllegalRow`s are still caught by the general `validate` scan, but the cross-check
+must see them too.
 
 ```rust
 pub(crate) fn supersession_pair(g: &GovKind, root: &Path, id: u32) -> ... {
@@ -221,9 +230,40 @@ Records arm (SL-097):
   idempotent semantics as `link` (`Noop` = already recorded)
 - `TypedArray { field }` → existing `dep_seq::apply_string_append` path (unchanged)
 
-The F-1 pre-flight for `RelationRow` changes: instead of checking a typed array, check
-the `[relationships]` table exists (for `superseded_by`) and the file has no F1 trap
-(the `trailing_typed_table_after_relation` check already in `append_relation_row`).
+**F-1 pre-flight dispatch** — the current `run_supersede` at main.rs:~4105 checks
+`rel_array(&new_doc, policy.supersedes_field)`. After SL-097 extracts
+`SupersedePolicy` to `src/supersede.rs`, the `supersedes_field` member is replaced
+by `storage`. The pre-flight becomes a match:
+
+```rust
+// F-1 pre-flight: check NEW doesn't already supersede a different entity
+match policy.storage {
+    StorageTarget::RelationRow => {
+        // Read [[relation]] rows for Supersedes label
+        let relation_doc = RelationDoc::parse(&new_toml)?;
+        let (edges, _illegal) = read_block(&kind, &relation_doc);
+        let existing: Vec<_> = edges.iter()
+            .filter(|e| e.label == RelationLabel::Supersedes)
+            .collect();
+        if !existing.is_empty() {
+            bail!("NEW ({new_ref}) already supersedes {}", existing[0].target);
+        }
+    }
+    StorageTarget::TypedArray { field } => {
+        // Existing path: typed array read
+        let existing = rel_array(&new_doc, field);
+        if !existing.is_empty() {
+            bail!("NEW ({new_ref}) already supersedes {}", existing[0]);
+        }
+    }
+}
+```
+
+**Write dispatch** follows the same match:
+- `RelationRow`: write `new_doc` first, then `relation::append_edge` as a separate
+  file write (idempotent — `Noop` on re-run). The one-write-per-file guarantee is
+  relaxed here: two writes to NEW's file (doc + edge), one to OLD's.
+- `TypedArray { field }`: mutate `new_doc` in memory (existing path), single write.
 
 The typed `superseded_by` carve-out writes the same way for both paths — it's always
 typed, always `dep_seq::apply_string_append`.
@@ -274,11 +314,11 @@ is a follow-on, not required for either slice).
 
 - **R1 — POL/STD `superseded` status variant.** No POL/STD entities exist to test the
   terminal flip on real data. Mitigation: unit test with seeded test TOML.
-- **R2 — coexistence with SL-097.** Both slices touch `src/supersede.rs`. SL-095
-  `.after` SL-096 but is independent of SL-097. If SL-097 lands first, SL-095 adds
-  POL/STD arms + `StorageTarget` to the already-extracted module. If SL-095 lands
-  first, SL-097 extracts the policy code (including SL-095's POL/STD arms) to
-  `src/supersede.rs`. Either order is mergeable.
+- **R2 — coexistence with SL-097.** Both slices touch `src/supersede.rs`.
+  SL-095 carries `after = [{ to = "SL-097", rank = 0 }]` — SL-097 lands first,
+  extracting `SupersedePolicy` + `supersede_policy()` from `adr.rs` into
+  `src/supersede.rs` with ADR+RECORD arms. SL-095's POL/STD arms and
+  `StorageTarget` discriminant land in the already-extracted module.
 - **R3 — `read_doc` double-use.** `supersession_pair` needs both `read_block` (for
   `supersedes`) and `Doc` parse (for typed `superseded_by`). One text read, two
   consumers — `toml::from_str` for the typed struct, `RelationDoc::parse` for

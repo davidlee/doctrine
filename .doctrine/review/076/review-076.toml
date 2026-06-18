@@ -1,0 +1,118 @@
+id    = 76
+slug  = "inquisition-sl-095-plan-does-the-phase-breakdown-hold-under-hostile-scrutiny"
+title = "Inquisition: SL-095 plan — does the phase breakdown hold under hostile scrutiny?"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "plan"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-095"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "No plan artefacts exist for SL-095"
+detail = """
+The slice at  contains only  (289 lines, 8 decisions). No , no , no phase sheets exist anywhere in the working tree. The phase-execution workflow (/execute, /dispatch) requires these artefacts to create runtime phase sheets and drive implementation.
+
+The design lists inter-slice dependency R2 (SL-097 extraction of ) that would require plan-level phase ordering regardless.
+
+Expected: A plan with phase breakdown covering the two orthogonal deliverables (D1 Slice/Backlog  row vs. D2-D8 governance supersedes migration + POL/STD verb extension), with explicit ordering to handle the SL-097 coexistence window.
+
+Observed: No plan artefacts. The slice cannot proceed to /plan without writing them."""
+disposition = "must-fix"
+response = "No plan artefacts exist. The slice cannot proceed to /plan and no phase can be executed without them. The penance: write plan.toml + plan.md with at least two phases — PHASE-01 for D1 (Slice/Backlog related row + test updates) and PHASE-02 for D2-D8 (governance supersedes migration + POL/STD verb extension + template cleanup + corpus rewrite). The plan must explicitly order these relative to SL-097's extraction work (R2)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Missing plan blocks SL-097 inter-slice dependency ordering"
+detail = """
+SL-095 design R2 states: 'If SL-097 lands first, SL-095 adds POL/STD arms + StorageTarget to the already-extracted [src/supersede.rs]. If SL-095 lands first, SL-097 extracts the policy code (including SL-095's POL/STD arms) to src/supersede.rs.'
+
+Without a plan, there is no phase ordering to handle these two merge scenarios. The plan must include:
+- Which phases (if any) are independent and can proceed before SL-097's extraction work
+- Whether SL-095 temporarily houses the supersede_policy in main.rs or creates src/supersede.rs directly
+- A gate phase that verifies coexistence works in both merge orders
+
+Expected: plan.toml + plan.md with explicit phases covering the dependency window.
+
+Observed: No plan. R2 is a design-level acknowledgement, not an execution plan."""
+disposition = "must-fix"
+response = "This is resolved by writing the plan. The plan's phase ordering must state whether SL-097 extraction lands first (PHASE-00: ensure src/supersede.rs exists with ADR+RECORD arms → PHASE-01/02 add POL/STD) or SL-095 goes first (PHASE-01/02 add POL/STD to adr.rs temporarily → PHASE-03 rebase after SL-097 extraction). Either way, the plan owns the decision."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Correction: prior F-1 and F-2 were erroneous — plan exists at .doctrine/slice/095/"
+detail = """
+F-1 (blocker, 'no plan artefacts') and F-2 (major, 'SL-097 ordering missing') were raised before discovering the plan at  + . The plan exists, is well-structured (3 phases, sequenced correctly), and plan.md §'SL-097 coexistence' explicitly covers both merge orders. The glob  missed it because the artefacts live under , not .
+
+This finding corrects the record. The prior findings remain terminal (verified, irreversible per ADR-007 §5) but are factually superseded by this correction."""
+disposition = "aligned"
+response = "The plan exists at .doctrine/slice/095/plan.toml + .doctrine/slice/095/plan.md. F-1 and F-2 were raised in error — they are superseded by this correction. The plan is 57 lines of rationale, 3 phases with full EN/EX/VT criteria, and explicit SL-097 coexistence coverage. No further action needed on this finding."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "PHASE-03 EN-1 insufficient: assumes src/supersede.rs exists but SL-097 not landed"
+detail = """
+ does not exist in the working tree (verified). SL-097 has not landed.
+
+PHASE-03 EN-1 says 'PHASE-02 complete' — it does not gate on  existing or on SL-097 being done. Yet PHASE-03's objective says 'extends supersede_policy (in src/supersede.rs — SL-097's extracted home)' and VT-1 says 'supersede_policy adds POL/STD arms with StorageTarget::RelationRow'.
+
+The plan.md coexistence section says 'If SL-095 lands first, SL-097 extracts the policy code (including POL/STD arms) to the new module' — implying the implementer adds the code to  and SL-097 later extracts it. But the plan doesn't say:
+1. Where to put the code when SL-097 hasn't landed (adr.rs temporarily?)
+2. Whether  enum goes in  or alongside 
+3. Whether PHASE-03 should create  itself if SL-097 hasn't
+
+Expected: EN-1 either gates on SL-097 done (), or the plan specifies the interim code location (adr.rs + a note to extract after SL-097).
+
+Observed: EN-1 only gates on PHASE-02, and the plan references a module that doesn't exist."""
+disposition = "must-fix"
+response = """
+src/supersede.rs does not exist in the working tree. PHASE-03's EN-1 must gate on this. Two concrete resolutions:
+
+(a) Add an EN criterion: 'SL-097 extraction complete — src/supersede.rs exists with SupersedePolicy + supersede_policy + StorageTarget' (preferred — avoids the interim code location problem).
+
+(b) Document the interim path: PHASE-03 adds POL/STD arms to adr.rs temporarily, with a PHASE-04 or follow-up task to extract to src/supersede.rs after SL-097 lands.
+
+Either way, the implementer must not arrive at PHASE-03 with a reference to a module that doesn't exist."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Read/write disconnect window: PHASE-02 switches readers to [[relation]] but PHASE-03 is when the verb writes there"
+detail = """
+PHASE-02 drops  from  and switches / to read from  (tier1_edges/read_block). But the  verb still uses  to write to the typed  array — PHASE-03 is when the write path switches to .
+
+Between PHASE-02 commit and PHASE-03 commit, a  would:
+1. WRITE the edge to the typed  array (via )
+2. But the  struct no longer has  — nothing deserializes it
+3.  reads from  — where nothing was written
+4. Net result: the supersede edge is invisible
+
+The plan acknowledges 'all supersedes arrays are empty — no data loss risk' for the corpus migration, but this is about EXISTING data, not the operational window.
+
+Expected: Either (a) PHASE-02 and PHASE-03 are a single atomic phase, or (b) the plan documents the invariants for the gap window (no supersede operations, or the gap is acceptable because no real-world supersede runs between phases), or (c) PHASE-02 keeps the typed supersedes write path working until PHASE-03 switches it.
+
+Observed: Plan separates read migration (PHASE-02) from write migration (PHASE-03) but doesn't acknowledge the operational gap."""
+disposition = "must-fix"
+response = """
+The gap between PHASE-02 (readers on [[relation]]) and PHASE-03 (verb writes to [[relation]]) is real but narrow. The simplest fix: add one sentence to PHASE-02's exit criteria or PHASE-03's entrance criteria stating 'no supersede operations shall be run between PHASE-02 and PHASE-03 commits — the write path still targets the typed array while readers have already migrated.'
+
+Alternative: merge PHASE-02 and PHASE-03 into a single phase. The structural refactoring and verb extension are logically separable but the read/write coupling makes separate commits fragile.
+
+Either approach closes the gap. The current plan has the phases sequenced correctly (readers first, then writers — no stale-read risk), but the operational gap between commits must be acknowledged."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

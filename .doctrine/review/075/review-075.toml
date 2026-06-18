@@ -1,0 +1,131 @@
+id    = 75
+slug  = "inquisition-sl-095-design-does-the-governance-supersedes-migration-related-row-hold-under-hostile"
+title = "Inquisition: SL-095 design — does the governance supersedes migration + related row hold under hostile scrutiny?"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-095"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "D1: Related + GovernedBy create ambiguous dual-label Slice→Policy pairs"
+detail = """
+The new RELATION_RULES row is:
+
+    sources: &[SLICE, ISS, IMP, CHR, RSK, IDE],
+    label: RelationLabel::Related,
+    target: TargetSpec::AnyNumbered,
+
+ includes ALL numbered kinds, including ADR/POL/STD. But slices already connect to governance via  (sources: &[SLICE, PRD, SPEC, CM, ASM, DEC, QUE, CON], label: GovernedBy, target: GOV). This means  and  are BOTH valid for the same (source, target) pair, using different labels with different semantics.
+
+Expected: Either the Related row's target excludes GOV (TargetSpec::Kinds with non-GOV kinds), or the design explicitly acknowledges the overlap, distinguishes the semantics ('governed_by' = strong governance claim, 'related' = weak association), and documents when to use which.
+
+Observed: No discussion of the overlap. A user writing  creates a semantically weaker edge alongside the existing  — confusing for graph navigation and inbound rendering (both show up under )."""
+disposition = "will-follow-up"
+response = "Acknowledged: GovernedBy (strong governance claim) and Related (weak association) can coexist for the same Slice→Policy pair. This is defensible — they have different semantics and inbound rendering shows both. The penance: add one sentence to D1 acknowledging the overlap and stating when to use each. If  is never the right choice (GovernedBy is strictly better for governance entities), narrow the target set to exclude GOV. Either approach closes the ambiguity."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "D7: run_supersede verb dispatch — POL/STD arms unreachable through current code path"
+detail = """
+ (main.rs:4079) currently calls . That function only matches  — POL and STD get  and the verb returns .
+
+The design (D6-D7) adds POL and STD arms to , but:
+1. The function currently lives in  (ADR-only by name and location)
+2. SL-097's extraction to  is a dependency — if SL-097 hasn't landed, where does the POL/STD code go?
+
+The design's R2 addresses merge ordering but not the intermediate code location. If SL-095 ships first, it must either:
+- Create  itself (designing around SL-097 extracting later), OR
+- Add POL/STD arms to  temporarily
+The code impact summary says : 'supersede_policy removed (moved to src/supersede.rs by SL-097)' — implying SL-097 goes first, which makes SL-095's POL/STD arms unreachable.
+
+Expected: Either an explicit phase ordering that ensures SL-097 extraction lands first, or a plan that slots the POL/STD code into whichever module exists at merge time. The design alone is insufficient — the plan must own this.
+
+Observed: Design-level intent without an executable path for the dependency window."""
+disposition = "must-fix"
+response = """
+The design shows POL/STD arms in  but the code impact summary says : 'supersede_policy removed (moved to src/supersede.rs by SL-097)'. If SL-097 extraction hasn't landed, the POL/STD arms have no home.
+
+The penance: either (a) commit to SL-097 landing first as a dependency (add explicit  to slice metadata), or (b) document the interim code location — e.g. add POL/STD arms to  as a temporary measure, with a follow-up task to move them to  after SL-097 extraction.
+
+The design's R2 says 'either order is mergeable' but doesn't specify WHERE the code goes in each case. Make it explicit."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "D1: TargetSpec::AnyNumbered includes RV (reviews) — slices can link 'related' to reviews"
+detail = """
+The new  row for Slice/Backlog uses , which structurally permits . The  label in RELATION_RULES uses  but with  — only  can set the review subject. Here,  with  allows any user to manually link a slice to a review.
+
+This may be intentional (linking a slice to a review that evaluated it), but the design doesn't discuss it. If unintentional, the fix is  or an explicit note that reviews are valid targets.
+
+Expected: Either a narrower target set, or design acknowledgment that linking to reviews is a valid use case.
+
+Observed:  blanket includes RV with no discussion."""
+disposition = "acknowledged"
+response = "The TargetSpec::AnyNumbered blanket includes RV. This is defensible — a slice could be 'related' to a review that evaluated it. The minor risk is that a user accidentally links a slice to a review-in-progress instead of waiting for the review to complete. Add one sentence to D1: 'AnyNumbered includes every numbered kind, including RV (reviews).' No code change needed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "D4: supersession_pair uses read_block (preserving IllegalRow) but this is not explained in design rationale"
+detail = """
+D4 says  MUST use  directly (not ) because  silently drops s. A hand-edited  would be invisible to  but surfaced by .
+
+This is CORRECT — the design's choice is sound. But the design rationale mentions  visibility to the cross-check without explaining that  returns  while  drops the illegal rows. The implementer reading D4 needs to know this distinction.
+
+Expected: One sentence clarifying that  drops illegal rows (intentional for display paths) while  preserves them (needed for validate paths).
+
+Observed: The design says 'tier1_edges silently drops IllegalRows' but doesn't clarify when dropping is correct vs. when it isn't."""
+disposition = "acknowledged"
+response = "The IllegalRow visibility distinction in D4 is correct but under-explained. tier1_edges drops IllegalRow (silent skip for display); read_block preserves them (needed for validate). Add one sentence to D4: 'tier1_edges filters to valid edges only (intentional for display paths); read_block returns the full (edges, illegal) pair so the cross-check sees all rows.' No code change needed."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "D7: run_supersede F-1 pre-flight and write path references supersedes_field — field removed from SupersedePolicy"
+detail = """
+Current run_supersede (main.rs:4105, 4171):
+
+    let new_sup = rel_array(&new_doc, policy.supersedes_field);
+    ...
+    dep_seq::apply_string_append(&mut new_doc, policy.supersedes_field, &old_ref)?;
+
+The new SupersedePolicy (design D7) replaces  with . There is no longer a  member. The RelationRow path writes via  (which operates on a file path, not an in-memory DocumentMut), and the F-1 pre-flight must check for  table existence instead of the typed array.
+
+The design says 'the F-1 pre-flight for RelationRow changes' but doesn't show the conditional code. The implementer must resolve:
+
+1. F-1 pre-flight dispatch: check  table for RelationRow vs.  for TypedArray
+2. Write dispatch:  for RelationRow vs.  for TypedArray
+3. Write ordering:  is a separate write (must happen after new_doc is written), changing the one-write-per-file guarantee
+
+Expected: Either the design shows the conditional dispatch code, or the plan commits to resolving these three points in implementation.
+
+Observed: Design describes intent but leaves the branching for the implementer to reconstruct from prose."""
+disposition = "must-fix"
+response = """
+The new SupersedePolicy replaces  with . The current run_supersede at main.rs:4105/4171 references  which no longer exists.
+
+The penance: show the dispatch pseudocode for both the F-1 pre-flight and the write path. The implementer must resolve:
+
+1. F-1: match on storage — RelationRow checks table exists + no F1 trap; TypedArray{field} uses rel_array(&new_doc, field)
+2. Write: RelationRow → write new_doc first, then call append_edge; TypedArray{field} → mutate new_doc in memory, then write once (existing path)
+3. Write ordering: the one-write-per-file guarantee changes for RelationRow (two writes: new_doc then append_edge) — document that this is acceptable because append_edge is idempotent
+
+This is the highest-impact finding — the core verb logic changes are under-specified."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
