@@ -1737,7 +1737,11 @@ mod tests {
         // seed the user-owned governance layer.
         let gov = root.join(GOVERNANCE_REL);
         fs::create_dir_all(gov.parent().unwrap()).unwrap();
-        fs::write(&gov, "# Governance (project)\n\npoint at doc/spec.md\n").unwrap();
+        fs::write(
+            &gov,
+            "# Governance (project)\n\npoint at .doctrine/spec/tech/\n",
+        )
+        .unwrap();
 
         assert!(regenerate(root, exec).unwrap());
         let snap = fs::read_to_string(root.join(BOOT_REL)).unwrap();
@@ -1757,7 +1761,7 @@ mod tests {
             "reference-docs pointer projected onto the snapshot:\n{snap}"
         );
         assert!(
-            snap.contains("point at doc/spec.md"),
+            snap.contains("point at .doctrine/spec/tech/"),
             "governance body (disk) projected:\n{snap}"
         );
         assert!(
@@ -1785,7 +1789,7 @@ mod tests {
         // populate every disk/store-backed source so no section markers.
         let gov = root.join(GOVERNANCE_REL);
         fs::create_dir_all(gov.parent().unwrap()).unwrap();
-        fs::write(&gov, "# Governance\n\npoint at doc/spec.md\n").unwrap();
+        fs::write(&gov, "# Governance\n\npoint at .doctrine/spec/tech/\n").unwrap();
         adr::run_new(Some(root.to_path_buf()), Some("Use Rust".into()), None).unwrap();
         adr::run_status(Some(root.to_path_buf()), 1, adr::AdrStatus::Accepted, false).unwrap();
         policy::run_new(
@@ -1895,7 +1899,7 @@ mod tests {
         // seed governance.md → that section is no longer a marker.
         let gov = root.join(GOVERNANCE_REL);
         fs::create_dir_all(gov.parent().unwrap()).unwrap();
-        fs::write(&gov, "# Governance\n\npoint at doc/spec.md\n").unwrap();
+        fs::write(&gov, "# Governance\n\npoint at .doctrine/spec/tech/\n").unwrap();
         regenerate(root, exec).unwrap();
         let seeded = boot_check(root, exec);
         assert!(
