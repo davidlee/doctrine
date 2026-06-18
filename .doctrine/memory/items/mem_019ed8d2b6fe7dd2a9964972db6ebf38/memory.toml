@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed8d2b6fe7dd2a9964972db6ebf38"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "SL-094: wheel event cross-browser normalization"
+summary = "Wheel event deltaY normalization: use deltaMode to distinguish pixels (0) from lines (1). Chrome emits pixels, Firefox emits lines. Normalize: delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY. Cap |delta| to 40 for trackpad inertial spikes. Scale factor 0.002. Use { passive: false } on wheel listener."
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "323bed0dba8b2f6363480245d6dd732065ce9a50"
+ref_name = "refs/heads/main"
+checkout_state_id = "7940626c6ea43f5de3651b4260d9d0de8b8918ec73f1756f4cb858ea54bc5d82"
+base_commit = "8014a1a2da9177fa8e4d34c3912ec8f7788dc642"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
