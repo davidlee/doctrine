@@ -1,0 +1,50 @@
+memory_uid = "mem_019edb158c487b4295c7db6331f611ef"
+memory_key = "mem.pattern.doctrine.dtoml-shared-reader"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "dtoml::parse is the shared config reader — never eagerly validate optional sub-configs there"
+summary = "dtoml::parse() feeds conduct/verification/coverage_store; eager validation of an optional sub-config couples all of them to its validity"
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7e3e1cc9af0eee607c8af501baaa3d45ceba7393"
+ref_name = "refs/heads/main"
+checkout_state_id = "6a2eeabbcbc50289176cbb57b35d4f3690a370269bf54d3ea580f37d2efde6d4"
+base_commit = "468927b06467447805976f0fac03bc193977bcd5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-101"
+
+[[source]]
+kind = "review"
+ref = "RV-085"
+
