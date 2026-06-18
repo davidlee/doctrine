@@ -10,7 +10,7 @@ two blockers requiring redesign before plan.
 | # | Severity | Finding | Disposition |
 |---|---|---|---|
 | F-1 | blocker | `/design` skill already has requirements pass at state 3 — design proposes adding duplicate at sub-step 4a | design-wrong: redesign to acknowledge current state or drop §3 |
-| F-2 | blocker | REQ-DNN handle is structured metadata as prose — violates entity-model.md storage rule | design-wrong: define TOML facet for implied requirements |
+| F-2 | blocker | REQ-DNN handle is structured metadata as prose — violates storage rule (AGENTS.md § storage model; the design's citation of doc/entity-model.md is moot — that tree is SL-082-bound for erasure) | design-wrong: define TOML facet for implied requirements |
 | F-3 | major | `plan.toml [requirements]` as dead fields corrupts storage tier model | design-wrong: move to plan.md prose or make tooling read it |
 | F-4 | major | Orphan placement depends on altitude framework that does not exist | design-wrong: add /consult guardrail + backlog dependency |
 | F-5 | major | `/plan` skill says `[requirements]` stays empty — design contradicts without acknowledging | design-wrong: acknowledge current instruction and explain change |
