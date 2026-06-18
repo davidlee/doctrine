@@ -32,6 +32,9 @@ const SELF_FILE: &str = "denylist.rs";
 /// Directories never walked: build artefacts and VCS metadata.
 const SKIP_DIRS: &[&str] = &["target", ".git"];
 
+/// Files never scanned: licence text and similar non-code artefacts.
+const SKIP_FILES: &[&str] = &["LICENSE"];
+
 /// The forbidden vocabulary, each entry assembled from fragments so this source
 /// file never contains the contiguous token (guard 2). Whole-word matched,
 /// case-insensitive. Curated from SPEC-001 D2 / Appendix B: product/domain entity
@@ -153,7 +156,7 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
                 continue;
             }
             collect_files(&path, out);
-        } else if name != SELF_FILE {
+        } else if name != SELF_FILE && !SKIP_FILES.contains(&name) {
             out.push(path);
         }
     }
