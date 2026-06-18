@@ -1,7 +1,7 @@
 id = 99
 slug = "memory-read-path-relations-and-agent-ux-hardening"
 title = "Memory read-path relations and agent UX hardening"
-status = "proposed"
+status = "design"
 created = "2026-06-18"
 updated = "2026-06-18"
 
