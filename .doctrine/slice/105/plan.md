@@ -19,18 +19,18 @@ Must come first per ADR-001: leaf ← command, no cycles. The shell phases
 consume `dep_seq::remove_after` and `dep_seq::remove`; they can't exist before
 the leaf does.
 
-The `resolve_dep_seq_src_path` refactor is included here because it's a pure
-extraction — no new behaviour, just exposing the source-half of the existing
-validation so PHASE-03's prune can use it without duplicating the work-like
-gate logic.
-
 All unit tests live here in the leaf module. The existing suite (append, read,
 status seams) acts as the behaviour-preservation gate — must stay green
 unchanged.
 
-### PHASE-02: Remove shell
+### PHASE-02: Remove shell + path refactor
 
-Wire `--remove` on both `Command::After` and `BacklogCommand::After`. This
+Extract `resolve_dep_seq_src_path` from `resolve_dep_seq_src` in `main.rs` —
+a pure extraction, no new behaviour, just exposing the source-half of the
+existing validation so PHASE-03's prune can use it without duplicating the
+work-like gate logic.
+
+Then wire `--remove` on both `Command::After` and `BacklogCommand::After`. This
 also makes `target` optional (`required_unless_present("prune")`) which
 PHASE-03 needs. The remove path itself is thin: validate source+target via
 existing `resolve_dep_seq_src`, call `dep_seq::remove`, report count.
