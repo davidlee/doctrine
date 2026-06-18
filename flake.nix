@@ -163,11 +163,20 @@
           jailPkgs
           // {
             inherit doctrine;
+            # Unjailed dirge pulled straight from the pub flake — same pkgs +
+            # callPackage as the jailed-dirge wrapper bundles, so it's the
+            # identical derivation (one drv hash, store path reused, no rebuild).
+            # Must come from pub's eval; doctrine's own pkgs (different nixpkgs +
+            # rust-overlay pin) would fork the drv and rebuild from scratch.
+            dirge = inputs.pub.packages.${system}.dirge;
             default = doctrine;
           };
 
         devshells.default = {
-          packages = projectPkgs ++ lib.optionals isLinux (lib.attrValues jailPkgs);
+          packages =
+            projectPkgs
+            ++ lib.optional isLinux inputs.pub.packages.${system}.dirge
+            ++ lib.optionals isLinux (lib.attrValues jailPkgs);
 
           # darwin + nix: rustc's link line emits `-liconv` with `-nodefaultlibs`,
           # which strips the Nix clang wrapper's auto-injected NIX_LDFLAGS — so
