@@ -368,7 +368,7 @@ fn knowledge_status_on_malformed_toml_refuses_and_leaves_file_untouched() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: malformed record 050: missing seeded `status`/`updated` (regenerate via `knowledge new`)\n"
+        "Error: malformed record 050: missing seeded `status`/`updated` — restore the missing keys and retry; the file is left untouched\n"
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), toml, "file untouched");
 }

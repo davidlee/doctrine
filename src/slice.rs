@@ -522,8 +522,9 @@ fn set_slice_status(
     // stays in this shell — only the WRITE is shared. Hint preserved verbatim (the
     // behaviour-preservation gate scopes the EX-4 rewording to gov + requirement).
     let path = slice_root.join(&name).join(format!("slice-{name}.toml"));
-    let hint =
-        format!("malformed slice {name}: missing `status`/`updated` (regenerate via `slice new`)");
+    let hint = format!(
+        "malformed slice {name}: missing `status`/`updated` — restore the missing keys and retry; the file is left untouched"
+    );
     crate::dep_seq::set_authored_status(&path, &[("status", to), ("updated", today)], &hint)?;
     Ok(())
 }

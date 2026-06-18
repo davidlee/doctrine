@@ -1,7 +1,7 @@
 id = 106
 slug = "set-auth-status-fold-reword"
 title = "Fold knowledge::set_record_status onto set_authored_status seam and reword F-1 refuse hints"
-status = "plan"
+status = "started"
 created = "2026-06-18"
 updated = "2026-06-18"
 
@@ -20,14 +20,6 @@ target = "ADR-010"
 [[relation]]
 label = "supersedes"
 target = "SL-062"
-
-[[relation]]
-label = "related"
-target = "IMP-061"
-
-[[relation]]
-label = "related"
-target = "IMP-066"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
