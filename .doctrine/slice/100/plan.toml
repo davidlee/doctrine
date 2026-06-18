@@ -1,0 +1,169 @@
+# Implementation plan for SL-100 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-100"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "tag leaf extraction + memory tag"
+objective = "Extract normalize_tag from src/backlog.rs into new leaf module src/tag.rs; backlog imports it (local copy removed). Build apply_memory_tags (pure set-algebra over scope.tags) + run_tag shell + MemoryCommand::Tag CLI variant. Add/remove with overlap reject, charset gate, idempotent no-op, shipped-memory reject."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "design.md approved; SL-099 done (resolve_memory_toml_path, MemoryRef, scope.tags field in-tree)"
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "baseline green: cargo test + cargo clippy clean before edits"
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "src/tag.rs exists at leaf tier (imports nothing from command/engine), exposes pub(crate) normalize_tag; src/backlog.rs imports tag::normalize_tag with no local copy"
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "doctrine memory tag <REF> [TAGS]... [-d TAG]... wired via MemoryCommand::Tag with --color/-p derive flags"
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "apply_memory_tags is pure (no clock/disk/git/rng — today injected); run_tag is the IO shell"
+[[phase.exit_criteria]]
+id   = "EX-4"
+text = "just gate green: cargo test + cargo clippy --workspace zero warnings"
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Existing backlog tag tests (run_tag_round_trips_add_filter_remove et al, backlog.rs) pass UNCHANGED after normalize_tag extraction — behaviour-preservation gate"
+[[phase.verification]]
+id      = "VT-2"
+expects = "apply_memory_tags set algebra: new = (current ∪ adds) ∖ removes, output sorted; union/minus over scope.tags"
+[[phase.verification]]
+id      = "VT-3"
+expects = "Idempotent no-op: re-adding an existing tag / removing an absent tag returns false → no write, mtime held (incl. unsorted hand-authored store left untouched on no-op)"
+[[phase.verification]]
+id      = "VT-4"
+expects = "normalize_tag charset gate rejects out-of-[a-z0-9_:-] tags; add∩remove overlap rejected (not silent remove-wins); empty edit-set rejected"
+[[phase.verification]]
+id      = "VT-5"
+expects = "Malformed memory (scope.tags array absent) bails F-1 style, file untouched; shipped/ memory refused for write"
+
+[[phase.specs]]
+[[phase.requirements]]
+
+[[phase]]
+id        = "PHASE-02"
+name      = "memory status + pure transition core"
+objective = "Build memory_status_transition pure core (composes dep_seq::apply_status with Status::parse vocab gate over a held DocumentMut) and run_status shell following knowledge::run_status. Wire MemoryCommand::Status. --by <OTHER> appends [[relation]] superseded_by via append_memory_relation then flips status; required for superseded, forbidden otherwise; self-supersession refused; idempotent."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01 complete (or independent — no code dependency on tag); baseline green"
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "dep_seq::apply_status (pure), set_authored_status (IO), append_memory_relation, Status enum, MemoryRef confirmed in-tree"
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "memory_status_transition pure core exists over &mut DocumentMut: Status::parse vocab gate + apply_status([(status, state),(updated, today)]); reused by both status verb and (PHASE-03) edit --status"
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "doctrine memory status <REF> <STATE> [--by <OTHER>] wired via MemoryCommand::Status with --color/-p; output {ref}: {status} matching knowledge status"
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "just gate green: cargo test + cargo clippy --workspace zero warnings"
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Each of the 6 states (active/draft/superseded/retracted/archived/quarantined) transitions and stamps updated; re-transition to current status is no-op (no write)"
+[[phase.verification]]
+id      = "VT-2"
+expects = "Status::parse refuses unknown state with the known-vocab list; CLI surfaces the error"
+[[phase.verification]]
+id      = "VT-3"
+expects = "status superseded --by writes [[relation]] superseded_by on the dead record then flips status (relation before status); memory show renders the row; re-supersession is a no-op"
+[[phase.verification]]
+id      = "VT-4"
+expects = "superseded without --by refused; --by on non-superseded refused; self-supersession (REF == OTHER) refused; shipped/ memory refused"
+
+[[phase.specs]]
+[[phase.requirements]]
+
+[[phase]]
+id        = "PHASE-03"
+name      = "memory edit (multi-field)"
+objective = "Build run_edit + pure apply_edit(doc, EditFields) single read→mutate→write transaction. Flags: --title/--summary/--status/--lifespan/--review-by/--trust/--severity/--key/--path-scope/--glob/--command. updated stamped once on any change; no-op when unchanged. --status composes the PHASE-02 transition core on the held doc (one write, no double stamp); --key late-binds iff memory_key is None (Option guard), normalized via normalize_key for record parity; scope arrays replace. At least one flag required."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-02 complete — memory_status_transition pure core available for --status delegation"
+[[phase.entrance_criteria]]
+id   = "EN-2"
+text = "normalize_key (not private validate_key) confirmed as the key-acceptance path; review_by/lifespan/trust/severity TOML paths confirmed from SL-099"
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "doctrine memory edit <REF> [flags] wired via MemoryCommand::Edit with --color/-p; at-least-one-flag enforced"
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "apply_edit is pure over &mut DocumentMut, returns true iff any field changed; updated stamped once; --status delegates to memory_status_transition (no second IO write, no double stamp)"
+[[phase.exit_criteria]]
+id   = "EX-3"
+text = "just gate green: cargo test + cargo clippy --workspace zero warnings"
+
+[[phase.verification]]
+id      = "VT-1"
+expects = "Multi-field atomic update: --title + --lifespan in one call changes both, stamps updated once; re-apply same values → apply_edit returns false (no write)"
+[[phase.verification]]
+id      = "VT-2"
+expects = "edit --status draft equals memory status draft (same transition core); edit --status superseded refused with 'use memory status superseded --by <OTHER>'"
+[[phase.verification]]
+id      = "VT-3"
+expects = "edit --key late-binds on unkeyed (memory_key None) memory normalized via normalize_key; refused (Option is_some) on keyed memory — no empty-string case"
+[[phase.verification]]
+id      = "VT-4"
+expects = "--review-by DATE insert-or-replace; --review-by \"\" clears (no-op when key absent); --path-scope/--glob/--command replace entire array; shipped/ memory refused"
+
+[[phase.specs]]
+[[phase.requirements]]
+
+[[phase]]
+id        = "PHASE-04"
+name      = "agent skill updates"
+objective = "Update record-memory (§2 relations/wikilinks/lifespan guidance; §4 --trust/--severity as flags not TOML edits) and retrieve-memory (backlinks/--expand/--lifespan, connection-making step, validate-before-act). Author new reviewing-memory (stability-gate audit) and dreaming (unified reactive+proactive maintenance) skills in .agents/skills/ following the SKILL.md skeleton."
+
+[[phase.entrance_criteria]]
+id   = "EN-1"
+text = "PHASE-01..03 complete — the verbs the skills document (tag/status/edit) exist and behave as designed"
+
+[[phase.exit_criteria]]
+id   = "EX-1"
+text = "record-memory §2 + §4 and retrieve-memory updated; reviewing-memory + dreaming authored in .agents/skills/ with valid SKILL.md frontmatter (name, description, trigger guidance)"
+[[phase.exit_criteria]]
+id   = "EX-2"
+text = "doctrine boot lists the new skills via filesystem scan"
+
+[[phase.verification]]
+id      = "VA-1"
+expects = "Skill prose references only verbs/flags that exist post-PHASE-03 (no --lifespan \"\" clear, no scope-append — both deferred); commands cited are runnable as written"
+[[phase.verification]]
+id      = "VT-1"
+expects = "doctrine boot enumerates record-memory, retrieve-memory, reviewing-memory, dreaming"
+
+[[phase.specs]]
+[[phase.requirements]]
