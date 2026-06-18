@@ -1,0 +1,67 @@
+id    = 73
+slug  = "reconciliation-review-of-sl-096"
+title = "reconciliation review of SL-096"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-096"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "D1-D6: all design decisions faithfully implemented"
+detail = """
+D1 — Shapes/Spawns variants exist in RelationLabel enum; name()/from_name() arms present; GovernedBy source-set extended to ASM/DEC/QUE/CON; Drift NOT extended.
+D2 — Shapes target: explicit 16-kind set (PRD/SPEC/REQ/SLICE/ISS/IMP/CHR/RSK/IDE/ADR/POL/STD/ASM/DEC/QUE/CON); excludes REV/REC/RV/CM.
+D3 — KnowledgeRecord.tier1 field; populated in read_record via tier1_edges(); relation_edges accessor delegates to read_record; format_show renders shapes/spawns/governed_by axes (empty silent); show_json projects relationships object.
+D4 — No template changes; [evidence] ends each file; append_edge creates [[relation]] on first link.
+D5 — Supersession deferred; no Supersedes RECORD rule row.
+D6 — unlink requires no new mechanism; riding existing SL-048 verb."""
+disposition = "aligned"
+response = "Observed behaviour conforms to design.md, plan.toml, and closure intent. No changes needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "PHASE-01: all 10 VT criteria verified"
+detail = "VT-1: from_name round-trip via debug_assert. VT-2: lookup(ASM,Shapes) and (ASM,Spawns) return correct rules. VT-3: lookup(ASM,GovernedBy) returns extended rule. VT-4: Shapes target set excludes RV; Spawns target set excludes SLICE. VT-5: distinct_labels golden updated; every_variant_appears_in_the_table ALL includes Shapes/Spawns; tier_partition_matches_design tier_one includes Shapes/Spawns. VT-6: inbound_name inverted list includes Shapes/Spawns. VT-7: empty tier1 on seeded record. VT-8: populated tier1 on authored rows. VT-9: supersedes→IllegalForSource. VT-10: nonsense→UnknownLabel."
+disposition = "aligned"
+response = "Observed behaviour conforms to design.md, plan.toml, and closure intent. No changes needed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Knowledge-record link/unlink: e2e coverage is indirect (unit-level covers it)"
+detail = "e2e_link_unlink.rs tests link/unlink with SL→governed_by→ADR. No dedicated e2e test for 'doctrine link ASM-001 shapes SPEC-004'. Mitigation: the link verb uses RELATION_RULES for validation; unit-level relation.rs tests cover Shapes/Spawns lookup and target-kind refusal. Low risk — shared mechanism with single source of truth. Not a blocker."
+disposition = "aligned"
+response = "Observed behaviour conforms to design.md, plan.toml, and closure intent. No changes needed."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Supersession (FR-006) correctly deferred — no scope leak"
+detail = "Verified the Supersedes LifecycleOnly RECORD rule row is NOT present in RELATION_RULES. Only Shapes and Spawns added. IMP-093 backlogged for FR-006 follow-up."
+disposition = "aligned"
+response = "Observed behaviour conforms to design.md, plan.toml, and closure intent. No changes needed."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "PHASE-02: all VTs, VA, VH gates green"
+detail = "VT-1: SL-059 VT-1 replaced with knowledge_kinds_author_outbound_edges. VT-2: exact-coverage extended with ASM/DEC/QUE/CON fixtures. VT-3: sources_match_shipped_accessors extended. VT-4: knowledge show renders relation axes. VT-5: show_json golden updated with relationships object. VA-1: 1664 core tests pass (0 fail), all per-kind suites green unchanged. VH-1: just gate clean (zero clippy warnings)."
+disposition = "aligned"
+response = "Observed behaviour conforms to design.md, plan.toml, and closure intent. No changes needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
