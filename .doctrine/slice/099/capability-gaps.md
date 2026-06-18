@@ -26,18 +26,18 @@ The spec's primary cross-reference mechanism:
 | Spec says | Doctrine has |
 |---|---|
 | Parse `[[...]]` from body, skip code blocks | No wikilink extractor |
-| `links.out` (resolved) and `links.missing` (unresolved) as **derived** metadata | No link resolution |
+| `links.out` and `links.missing` as derived metadata | No link resolution |
 | `--links-to MEMORY` backlink query | No backlink command |
 | `expand_link_graph()` BFS up to depth 5 | No graph traversal |
 | `admin resolve links` command | No equivalent |
 
 `record-memory` §6 tells agents to use `[[uid]]` inline ("cheaper than
-relations"), which aligns with the spec's principle — but nothing resolves
-them into structured edges.
+relations"), which aligns with the spec's principle — but nothing extracts
+or resolves them.
 
-**Clarification:** Extraction is cheap — a corpus-wide regex over 193
-memories runs in ~0.007s. No persistence of derived links needed;
-compute on-the-fly.
+Wikilinks and `[[relation]]` edges coexist: wikilinks for contextual inline
+meaning, edges for introspectable graph structure. Graph ops (backlinks,
+expansion) treat the deduplicated union as a single link set.
 
 ## 3. Verify gated on clean worktree
 
@@ -54,15 +54,17 @@ type instead.
 
 ## 4. Fields missing from schema
 
-| Spec field | Doctrine equivalent | Gap |
+| Field | Doctrine equivalent | Gap |
 |---|---|---|
-| `audience` (`human`/`agent`) | — | Missing |
-| `visibility` (pre-hook surfacing) | — | Missing |
-| `requires_reading` (prerequisite files) | — | Missing |
-| `owners` (team ownership) | — | Missing |
 | `provenance.sources` (`[{kind, ref, note}]`) | Implicit git anchor only | Missing structured provenance |
-| `links.out` / `links.missing` | — | Not needed — computed on-the-fly; no persistence |
 | `review_by` (scheduled review date) | — | Missing |
+| `lifespan` (cognitive category) | — | Missing — orthogonal axis to `memory_type` |
+
+Dropped from spec (no current consumer; add when needed):
+`audience`, `visibility`, `requires_reading`, `owners`.
+
+`links.out`/`links.missing` not needed — wikilinks computed on-the-fly
+(~0.007s corpus-wide).
 
 ## 5. Skills don't encourage connection-making
 
