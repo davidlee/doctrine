@@ -1,115 +1,99 @@
-# Knowledge-record entity surface (SPEC-019)
+# Knowledge-record relation seam (SPEC-019 FR-005)
 
 ## Context
 
-**SPEC-019** defines the knowledge-record entity surface — four `record_kind`s
-(assumption `ASM`, decision `DEC`, question `QUE`, constraint `CON`) riding the
-shared entity engine (**SPEC-004**) as the epistemic-and-governance sibling of
-the backlog (**SPEC-015**). No code shipped; this is forward-intent.
+**SL-059** shipped Slice A — the standalone knowledge-record entity surface:
+four `RecordKind`s on the engine with per-kind lifecycles, typed facets,
+evidence, prefix→kind resolution, priority partition entries, and the
+`doctrine knowledge new/show/list/status` CLI (`knowledge.rs` is fully live).
 
-The relation surface is the forcing function: records need to participate in the
-cross-corpus relation contract (**SPEC-018**, **ADR-010**) so they can link to
-slices, specs, ADRs, and each other. IMP-050 and IMP-053 track the relation gaps;
-IMP-051 tracks the cross-kind supersession verb for records.
+**This slice (Slice B)** delivers SPEC-019 **FR-005**: the outbound relation and
+spawn-work seam over the cross-corpus relation contract (**SPEC-018**,
+**ADR-010**). Record `RELATION_RULES` rows, two minted `RelationLabel` variants,
+the `outbound_for` dispatch arm, and the `show`/`inspect` render of relation edges.
 
-This slice realises the full SPEC-019: entity scaffolding, per-kind lifecycle
-vocabularies, typed facets, evidence structure, the outbound relation seam, and
-the supersession verb for knowledge records.
+The core semantic design decision amends SPEC-019 D6: source-set extensions
+are rejected for `specs`/`slices`/`requirements` because the inbound rendering
+would lie. Instead, one epistemic label `shapes` / `shaped_by` covers all
+record→artefact influence.
 
-**Sequenced after SL-095** so the relation foundation (including the `supersede`
-verb) is bedded in before records extend it.
+Supersession (FR-006) is deferred — gated on the unbuilt IMP-006 transactional
+verb. IMP-006 and the FR-006 follow-up are backlogged with a priority boost.
 
 ## Scope & Objectives
 
-1. **Four engine Kinds** — bind `ASM`, `DEC`, `QUE`, `CON` onto the entity engine
-   with independent reservation namespaces under `.doctrine/knowledge/<kind>/`.
+1. **Two new `RelationLabel` variants** — `Shapes` (record → epistemic-impact
+   set) and `Spawns` (record → backlog items). Source-set extensions for
+   `GovernedBy` and `Drift` only (inbound names are semantically neutral).
 
-2. **Per-kind lifecycle vocabularies** as specified:
-   - Assumption: `held → testing → validated | invalidated | obsolete`
-   - Decision: `proposed → accepted | rejected | superseded`
-   - Question: `open → answered | obsolete`
-   - Constraint: `active → waived | superseded | retired`
-   - Per-kind `is_terminal` predicate for list hide-set.
+2. **`RELATION_RULES` rows** for the RECORD source group, plus the source-set
+   extensions.
 
-3. **Per-kind typed `[facet]` blocks** + shared `[evidence]` structure.
+3. **`KnowledgeRecord` gains `tier1` edges** — read in `read_record` via
+   `tier1_edges`, rendered in `format_show` / `show_json`, returned by the
+   `relation_edges` accessor.
 
-4. **Prefix→kind resolution** on read path — one `doctrine knowledge` verb set
-   dispatches across all four prefixes.
+4. **`outbound_for` dispatch arm** — replaced the empty SL-059 stub with a
+   real `knowledge::relation_edges` call.
 
-5. **Outbound relation seam** (IMP-050): records in `RELATION_RULES` with
-   `relates_to` (record → any numbered entity) and `spawns` (record → backlog
-   item). Reverse derived per ADR-004.
+5. **`Shapes` target: explicit epistemic-impact set** — PRD, SPEC, REQ, SLICE,
+   ISS/IMP/CHR/RSK/IDE, ADR/POL/STD, ASM/DEC/QUE/CON. Excludes REV, REC, RV, CM.
 
-6. **Record↔record associative edges** (IMP-053): `informs` and `bears_on`
-   labels for record→record relations.
-
-7. **Cross-kind supersession verb for records** (IMP-051): extends the
-   `doctrine supersede` verb (built in SL-095) to knowledge records with the
-   SPEC-019 §6 allowed matrix.
-
-8. **`doctrine knowledge` CLI surface** riding SPEC-013's uniform grammar.
+6. **Record↔record relations** use `shapes` — not separate `informs`/`bears_on`
+   labels (IMP-053 collapsed).
 
 ## Non-Goals
 
-- **No priority-engine change** — IMP-047 (trinary actionability, record→item
-  gating edges) is out of scope. Records ship with all-`Terminal` partition.
-- **No constraint facet extensions** — IDE-006 (owner + immutability/enforceability
-  axis) is deferred.
-- **No knowledge lint verb** — IDE-009 is deferred.
-- **No DEC-vs-ADR guidance** — IDE-007 is deferred.
-- **No knowledge-record memory signpost** — IMP-083 is a separate fast-follow.
+- **Supersession (FR-006)** — deferred; `Supersedes` RECORD `LifecycleOnly`
+  rule row, cross-kind matrix, and transactional verb gated on IMP-006.
+- **IMP-047** — trinary actionability (unchanged).
+- **IMP-053** — separate record↔record labels (collapsed into `shapes`).
+- **No template changes** — `[evidence]` ends the file; `append_edge` creates
+  `[[relation]]` on first `link`.
 
 ## Affected Surface
 
-- `src/relation.rs` — RELATION_RULES rows for record source kinds (`relates_to`,
-  `spawns`, `informs`, `bears_on`); RelationLabel variants
-- `src/knowledge.rs` — new: entity scaffolding, facet/evidence parse, lifecycle
-  transition, outbound_for arm
-- `src/entity.rs` or engine — new KINDS entries
-- `src/main.rs` — `knowledge` CLI verb family
-- `src/supersede.rs` — extend to knowledge records (IMP-051)
-- `src/listing.rs` — knowledge list columns
-- `.doctrine/knowledge/` — new entity trees
-- SPEC-019 — status transition to `done`; possibly amendments from implementation
-  findings
+- `src/relation.rs` — 2 new `RelationLabel` variants; `name()`/`from_name()`
+  arms; 2 new `RELATION_RULES` rows; extend `GovernedBy`/`Drift` sources;
+  local kind aliases; RECORD source-group const
+- `src/knowledge.rs` — `tier1` field on `KnowledgeRecord`; read in
+  `read_record`; new `relation_edges` accessor; extend `format_show`/`show_json`
+- `src/catalog/scan.rs` — swap `outbound_for` empty arm for real dispatch
+- `src/relation_graph.rs` (tests) — update SL-059 VT-1; exact-coverage invariant
+- `src/relation.rs` (tests) — golden churn for new labels
 
 ## Risks & Assumptions
 
-- **R1 (SPEC-019 completeness):** the spec is forward-intent; implementation may
-  surface gaps. `/consult` on any spec ambiguity rather than improvising.
-- **R2 (supersede verb extension):** the governance supersede verb (SL-095)
-  must be designed for extension to other kinds — the record supersede matrix
-  (§6) adds cross-kind crossing.
-- **R3 (behaviour preservation):** the entity engine is shared machinery; existing
-  suites (slice, ADR, spec, backlog, memory) must stay green unchanged.
-- **A1:** No records exist yet — no migration, no backwards compat.
-- **A2:** IMP-047 (gating) ships later; records don't block work on launch.
+- **R1 — distinct_labels golden churn.** Two new labels change declaration order. One-shot update.
+- **R2 — behaviour preservation.** Shared entity engine and existing per-kind suites stay green.
+- **A1:** SL-059 is shipped and green. No records exist yet.
+- **A2:** `append_edge` creates `[[relation]]` array on first use; extant templates need no change.
 
 ## Verification / Closure Intent
 
-- `doctrine knowledge new assumption "…"` scaffolds ASM-001 with correct facet.
-- `doctrine knowledge list` shows records; `--status` filters per lifecycle vocab.
-- `doctrine knowledge show ASM-001` renders identity, facet, evidence, relations.
-- `doctrine link ASM-001 relates_to SL-095` succeeds.
-- `doctrine link DEC-001 informs ASM-001` succeeds.
-- `doctrine supersede DEC-001 DEC-002` flips DEC-001 to `superseded`.
-- `doctrine inspect ASM-001` shows inbound + outbound relations.
-- RELATION_RULES exact-coverage invariant updated and green.
-- Existing suites green; `just gate` clean.
-- SPEC-019 status → `done`.
+- `doctrine link ASM-001 shapes SPEC-004` succeeds
+- `doctrine link DEC-001 spawns ISS-001` succeeds
+- `doctrine link ASM-001 shapes RV-001` refused (not in target set)
+- `doctrine link ASM-001 spawns SL-001` refused (spawns targets only backlog)
+- `doctrine inspect SPEC-004` shows `shaped_by: [ASM-001]`
+- `doctrine inspect ISS-001` shows `spawned_by: [DEC-001]`
+- `doctrine link ASM-001 governed_by ADR-004` succeeds
+- `doctrine inspect ADR-004` shows `governs: [ASM-001]` (proving neutral inbound)
+- Exact-coverage invariant extended and green
+- Existing suites green; `just gate` clean
+- SPEC-019 FR-005 status → `done`
 
 ## Summary
 
-The knowledge-record entity surface realises SPEC-019: four record kinds riding
-the shared engine with per-kind lifecycles, typed facets, and a full relation
-seam over the SPEC-018 contract. The relation work (IMP-050/053/051) is the
-forcing function — bedding in records extends the relation foundation SL-095
-completes.
+The knowledge-record relation seam delivers SPEC-019 FR-005: two new labels
+(`shapes`/`spawns`) on the cross-corpus relation contract, source-set
+extension for `governed_by`, tier1 edge read-and-render in
+`knowledge show`, and the live `outbound_for` dispatch arm — all riding the
+already-shipped `link`/`unlink` verb.
 
 ## Follow-Ups
 
-- **IMP-047** — trinary actionability (records gate work without being actionable)
+- **FR-006 / IMP-006** — supersession verb + RECORD `Supersedes` rule row
+- **IMP-047** — trinary actionability / record gating
 - **IMP-083** — knowledge-record memory signpost
 - **IDE-006** — constraint facet extensions
-- **IDE-007** — DEC-vs-ADR guidance
-- **IDE-009** — knowledge lint verb
