@@ -17,62 +17,21 @@ Inputs:
 Complete in order without deviation. Each depends on the preceding stage:
 
 1. **Explore context** — specs, ADRs, memories, files, docs, recent commits. Begin high-level.
-2. **Collect decisions.** Survey the design surface for every open decision
-   — choices not yet made, tradeoffs not yet resolved, constraints not yet
-   accepted. Where a design doc already exists (refinement, not greenfield),
-   read it; otherwise work from the slice scope and the Explore output.
-   Survey implications: what entity constraints, existing REQs, or ADR clauses
-   bear on each question.
-
-   Batch all decisions together. Present them as a structured list with
-   options, tradeoffs, and your recommendation for each. Ask the user to
-   confirm or correct each one.
-
-   **Guardrail:** Batch ALL decisions before presenting. Do not badger the
-   user with each decision — collect first, then present.
-
-   This state is a decision-confirmation loop, not a replacement for the
-   exploratory "Ask clarifying questions" loop (state 3). If surfacing a
-   decision reveals an unknown the user must resolve, hand to state 3 rather
-   than forcing a premature choice.
-3. **Ask clarifying questions** — one at a time, understand purpose/guiding principles/constraints/success criteria
-4. **Requirements pass.** Before proposing approaches, inventory the
-   requirements picture:
-   - Which existing canonical REQs (REQ-NNN) are impacted?
-   - Which implied requirements does this design's decisions demand that no
-     existing REQ captures? These are **orphan requirements** (REQ-DNN).
-   - Ask the user: are there requirements they see that aren't captured?
-
-   Record in `design-requirements.toml` (authoritative) and reference from
-   `design.md` `## Implied Requirements` with one-line summaries.
-
-   **Guardrail:** Do not record implied requirements as structured fields in
-   prose — use `design-requirements.toml` (§2).
-
-   **Guardrail:** If an implied requirement crosses the altitude boundary
-   (product vs C4 level, or crosses spec kinds), note the ambiguity in the
-   TOML `home_hint` field — don't force a decision here. `/reconcile` handles
-   placement.
-5. **Propose 2-3 approaches** — identify the next unanswered design question; propose options with trade-offs and your recommendation
-6. **Present design** — in sections scaled to their complexity, get user approval after each section.
-7. **Write design.md** — save to the slice `design.md` file and commit
-8. **Adversarial Review** — perform a hostile review of the design doc, probing for imprecision and flawed reasoning
-9. **Integrate Review Feedback** — triage and respond to feedback; integrate into slice / design doc; repeat until the design locks (explicit user approval)
-10. **Transition to planning** — record the lifecycle move (`doctrine slice
+2. **Ask clarifying questions** — one at a time, understand purpose/guiding principles/constraints/success criteria
+3. **Propose 2-3 approaches** — identify the next unanswered design question; propose options with trade-offs and your recommendation
+4. **Present design** — in sections scaled to their complexity, get user approval after each section.
+5. **Write design.md** — save to the slice `design.md` file and commit
+6. **Adversarial Review** — perform a hostile review of the design doc, probing for imprecision and flawed reasoning
+7. **Integrate Review Feedback** — triage and respond to feedback; integrate into slice / design doc; repeat until the design locks (explicit user approval)
+8. **Transition to planning** — record the lifecycle move (`doctrine slice
    status <id> plan` — bare number), then invoke `/plan` to create the
    implementation plan
 
 <Process State Machine>
   <state name="Explore context">
-    <transition to="Collect decisions" />
-  </state>
-  <state name="Collect decisions">
     <transition to="Ask clarifying questions" />
   </state>
   <state name="Ask clarifying questions">
-    <transition to="Requirements pass" />
-  </state>
-  <state name="Requirements pass">
     <transition to="Propose 2-3 approaches" />
   </state>
   <state name="Propose 2-3 approaches">
@@ -96,32 +55,6 @@ Complete in order without deviation. Each depends on the preceding stage:
     <transition to="invoke /plan skill" />
   </state>
 </Process State Machine>
-
-## design-requirements.toml sidecar
-
-The `design-requirements.toml` file records implied/derived requirements
-discovered during design. It is the **authoritative** source; `design.md`
-`## Implied Requirements` is a prose cross-reference with one-line summaries
-only — never structured fields.
-
-```toml
-[[implied]]
-handle = "REQ-D01"
-statement = "..."
-kind = "quality"
-home_hint = "..."
-descends_from = "..."
-```
-
-Each `[[implied]]` entry:
-- **`handle`** — provisional id (`REQ-DNN`); assigned by the design skill,
-  resolved later via `/reconcile`.
-- **`statement`** — what the requirement demands.
-- **`kind`** — `functional`, `quality`, `constraint`, or `interface`.
-- **`home_hint`** — where the requirement likely lives (product-level, C4
-  container, etc.). Leave empty when uncertain; `/reconcile` handles placement.
-- **`descends_from`** — what drove this: a design decision, an ADR clause,
-  or an existing REQ.
 
 ## Process (detail)
 
@@ -206,8 +139,6 @@ reflects your current shared understanding before proceeding.
    - attack missing, misread, or weakly applied ADR/policy/standard constraints
    - ensure doctrinal alignment
    - record the findings in the design doc or companion slice notes as needed
-   - "What requirements are implied by these decisions but not captured in
-     `design-requirements.toml`?"
 2. Review for doctrinal alignment.
    - If the doctrine pass exposes governance conflicts, missing authorities, or
      ambiguous constraints, stop and `/consult` rather than normalizing around
@@ -241,8 +172,6 @@ The design doc is canon for design intent.
   are still unresolved.
 - Do not move on to planning while the slice scope still tells an older story than the design.
 - Do not treat governance as optional background reading when the design makes architectural or workflow choices.
-- Do not record implied requirements as structured fields in prose — use `design-requirements.toml`.
-- If an implied requirement crosses altitude boundaries, note ambiguity in `home_hint`; do not force a decision. `/reconcile` handles placement.
 
 ## Outcomes
 

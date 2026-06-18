@@ -47,34 +47,6 @@ Inputs:
    * The RV ledger is resolved (`done · await=none`).
    * The reconcile outcome is recorded (REV rationale and/or RV
      `## Reconciliation Outcome`).
-
-   **Orphan check (advisory).** Read `plan.md` `## Requirements verification`
-   and collect every `REQ-DNN` handle listed. For each, follow the read-path
-   below to determine its outcome:
-   - **Placed** — the reconciliation outcome records a `REQ-DNN → REQ-NNN`
-     mapping → pass.
-   - **Withdrawn** — the reconciliation outcome records a withdrawal with
-     rationale → pass.
-   - **Stuck** — the reconciliation outcome records "stuck — `/consult`" with no
-     mapping → **refuse close.** Return to `/reconcile`.
-   - **Absent** — no outcome recorded → **refuse close.** Return to `/reconcile`.
-
-   **Read-path.** The reconciliation outcome lives in `review-NNN.md`
-   `## Reconciliation Outcome` (written by reconcile step 6), which *points to*
-   the REV narrative in `revision-NNN.md` `### Orphan placements` for the
-   `REQ-DNN → REQ-NNN` mappings. Close reads `review-NNN.md` first; if the
-   outcome references a REV for orphan placements, follow the pointer into
-   `revision-NNN.md` to read the mappings. Do not read `revision-NNN.md`
-   directly without the `review-NNN.md` pointer — the RV is the reconciled-truth
-   surface.
-
-   **Advisory, not enforced.** This check is agent discipline, not a binary
-   gate: nothing in the CLI refuses close on an unplaced orphan (the existing
-   close-gate binary enforces only unresolved RV blockers). The close skill's
-   own walkthrough is the backstop. The long-term fix — orphan status riding the
-   RV ledger, where the existing close-gate binary already enforces — is filed
-   as a follow-up IMP; SL-098 ships the advisory version and names it honestly.
-
    No free-floating "rejected" disposition is permitted — every finding
    must land in one of the terminal states above.
    If any item is unresolved, **refuse close** and return to `/reconcile`.
