@@ -53,6 +53,7 @@ mod spec;
 mod standard;
 mod state;
 mod status;
+mod supersede;
 mod tomlfmt;
 mod tty;
 mod verify;
@@ -4046,6 +4047,52 @@ fn resolve_supersede_path(
 
 /// `doctrine supersede <NEW> <OLD>` (SL-062 §5.4) — the transactional, ADR-first
 /// supersession verb. One parse-once / hold-both / write-once transaction composing
+/// Check if OLD entity is already superseded and handle idempotent re-run case.
+/// Returns `Ok(true)` for idempotent re-run (should exit early),
+/// `Ok(false)` to proceed with supersession, or `Err` for validation failures.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "complex validation function needs context"
+)]
+fn check_already_superseded(
+    old_status: &str,
+    policy: &crate::supersede::SupersedePolicy,
+    old_carveout: &[String],
+    new_sup: &[String],
+    new_ref: &str,
+    old_ref: &str,
+    new: &str,
+    old: &str,
+) -> anyhow::Result<bool> {
+    use std::io::Write;
+
+    if old_status == policy.superseded_status {
+        let new_lists_old = new_sup.contains(&old_ref.to_string());
+        let single_self =
+            old_carveout.len() == 1 && old_carveout.first() == Some(&new_ref.to_string());
+        if single_self && new_lists_old {
+            // Idempotent re-run: all three surfaces already hold — no-op.
+            writeln!(
+                std::io::stdout(),
+                "already recorded: {new} supersedes {old}"
+            )?;
+            return Ok(true);
+        }
+        // A DIFFERENT supersessor named in the carve-out → FromTerminal analog.
+        if let Some(other) = old_carveout.iter().find(|x| **x != new_ref) {
+            anyhow::bail!("{old} already superseded by {other}; reopening is deferred");
+        }
+        // Empty/inconsistent carve-out while status==superseded → hand-drift; refuse as
+        // DRIFT (no <X> to name, P5 — do NOT self-heal).
+        anyhow::bail!(
+            "{old} status is superseded but its superseded_by carve-out is empty/inconsistent — run `doctrine validate`"
+        );
+    }
+    Ok(false)
+}
+
+/// Cross-kind supersession for records + governance docs (`ADR` stays same-kind;
+/// the four record kinds `ASM`/`DEC`/`QUE`/`CON` ride the §6 matrix). Composes
 /// the PHASE-02 pure cores (`dep_seq::apply_string_append` + `dep_seq::apply_status`)
 /// over docs parsed once and held in scope: `NEW.supersedes += OLD`,
 /// `OLD.superseded_by += NEW` (the single sanctioned reverse carve-out, ADR-004 §5),
@@ -4070,18 +4117,54 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
         !(new_kref.kind.prefix == old_kref.kind.prefix && new_id == old_id),
         "`{new}` cannot supersede itself — a self-supersession is not a decision change"
     );
-    anyhow::ensure!(
-        new_kref.kind.prefix == old_kref.kind.prefix,
-        "cross-kind supersession is refused: `{new}` is a {} but `{old}` is a {} — supersession is within one kind",
-        new_kref.kind.prefix,
-        old_kref.kind.prefix
-    );
-    let policy = adr::supersede_policy(new_kref.kind).with_context(|| {
+    // Cross-kind gating: ADR → same-kind only; records → matrix; mixed → refuse
+    let new_is_adr = new_kref.kind.prefix == "ADR";
+    let old_is_adr = old_kref.kind.prefix == "ADR";
+    match (new_is_adr, old_is_adr) {
+        (true, true) => {
+            // Both ADR: same-kind only — always true here (both are "ADR"), but keep
+            // the ensure! for symmetry and as a guard against future ADR sub-kinds.
+        }
+        (false, false) => {
+            // Both records: check matrix
+            let new_record_kind = crate::knowledge::RecordKind::from_prefix(new_kref.kind.prefix)
+                .context("NEW kind not a valid record kind")?;
+            let old_record_kind = crate::knowledge::RecordKind::from_prefix(old_kref.kind.prefix)
+                .context("OLD kind not a valid record kind")?;
+            anyhow::ensure!(
+                crate::supersede::validate_matrix(new_record_kind, old_record_kind),
+                "cross-kind supersession refused: the §6 matrix disallows {} → {}",
+                new_kref.kind.prefix,
+                old_kref.kind.prefix
+            );
+        }
+        _ => {
+            // Mixed: refuse
+            anyhow::bail!(
+                "cross-family supersession refused: `{new}` is a {} but `{old}` is a {}",
+                new_kref.kind.prefix,
+                old_kref.kind.prefix
+            );
+        }
+    }
+    let policy = crate::supersede::supersede_policy(new_kref.kind).with_context(|| {
         format!(
             "supersession not yet supported for {} (follow-up F2)",
             new_kref.kind.prefix
         )
     })?;
+
+    // For cross-kind record supersession, OLD status should be based on OLD kind policy
+    let old_policy = if !new_is_adr && !old_is_adr && new_kref.kind.prefix != old_kref.kind.prefix {
+        crate::supersede::supersede_policy(old_kref.kind).with_context(|| {
+            format!(
+                "supersession not yet supported for OLD {} (follow-up F2)",
+                old_kref.kind.prefix
+            )
+        })?
+    } else {
+        policy
+    };
 
     let (new_path, new_ref) = resolve_supersede_path(&root, new_kref, new_id);
     let (old_path, old_ref) = resolve_supersede_path(&root, old_kref, old_id);
@@ -4139,28 +4222,21 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
     let old_status = old_doc
         .get("status")
         .and_then(toml_edit::Item::as_str)
-        .unwrap_or_default();
-    if old_status == policy.superseded_status {
-        let carveout = old_carveout.unwrap_or_default();
-        let new_lists_old = new_sup.unwrap_or_default().contains(&old_ref);
-        let single_self = carveout.len() == 1 && carveout.first() == Some(&new_ref);
-        if single_self && new_lists_old {
-            // Idempotent re-run: all three surfaces already hold — no-op.
-            writeln!(
-                std::io::stdout(),
-                "already recorded: {new} supersedes {old}"
-            )?;
-            return Ok(());
-        }
-        // A DIFFERENT supersessor named in the carve-out → FromTerminal analog.
-        if let Some(other) = carveout.iter().find(|x| **x != new_ref) {
-            anyhow::bail!("{old} already superseded by {other}; reopening is deferred");
-        }
-        // Empty/inconsistent carve-out while status==superseded → hand-drift; refuse as
-        // DRIFT (no <X> to name, P5 — do NOT self-heal).
-        anyhow::bail!(
-            "{old} status is superseded but its superseded_by carve-out is empty/inconsistent — run `doctrine validate`"
-        );
+        .unwrap_or_default()
+        .to_string(); // Clone to avoid borrow conflicts
+    let carveout = old_carveout.unwrap_or_default();
+    let new_sup_slice = new_sup.unwrap_or_default();
+    if check_already_superseded(
+        &old_status,
+        &old_policy,
+        &carveout,
+        &new_sup_slice,
+        &new_ref,
+        &old_ref,
+        new,
+        old,
+    )? {
+        return Ok(());
     }
 
     // Mutate the held docs (no IO) — compose the PHASE-02 pure cores.
@@ -4170,11 +4246,35 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
     );
     dep_seq::apply_string_append(&mut new_doc, policy.supersedes_field, &old_ref)?;
     dep_seq::apply_string_append(&mut old_doc, policy.carveout_field, &new_ref)?;
-    dep_seq::apply_status(
-        &mut old_doc,
-        &[("status", policy.superseded_status), ("updated", &today)],
-        &status_hint,
-    )?;
+
+    // Conditional status flip: skip if OLD is a record kind and already terminal
+    let should_flip_status = if old_is_adr {
+        // ADR: always flip status
+        true
+    } else {
+        // Record: skip flip if already terminal
+        let old_record_kind = crate::knowledge::RecordKind::from_prefix(old_kref.kind.prefix)
+            .context("OLD kind not a valid record kind")?;
+        !old_record_kind.is_terminal(&old_status)
+    };
+
+    if should_flip_status {
+        dep_seq::apply_status(
+            &mut old_doc,
+            &[
+                ("status", old_policy.superseded_status),
+                ("updated", &today),
+            ],
+            &status_hint,
+        )?;
+    } else {
+        // Record is already terminal: skip status flip, update timestamp only.
+        // apply_status short-circuits with only "updated" (the unchanged guard fires
+        // on an empty non-"updated" set), so set updated directly.
+        old_doc
+            .as_table_mut()
+            .insert("updated", toml_edit::value(today.as_str()));
+    }
 
     // Write each file ONCE, NEW then OLD (the order that makes a torn state
     // detectable by `validate`). No re-read, no re-parse.
@@ -4366,6 +4466,496 @@ mod tests {
             "NEW.supersedes should contain ADR-002 exactly once, got {supersedes_count}: {new_toml}"
         );
     }
+
+    // --- SL-097 PHASE-03: record cross-kind supersession tests ----------------
+
+    #[test]
+    fn supersede_same_kind_record_allowed() {
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // Seed ASM-001 (NEW): open status
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/001/record-001.toml",
+            "id = 1\nslug = \"a1\"\ntitle = \"A1\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/001/record-001.md",
+            "body\n",
+        );
+
+        // Seed ASM-002 (OLD): open status
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/002/record-002.toml",
+            "id = 2\nslug = \"a2\"\ntitle = \"A2\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/002/record-002.md",
+            "body\n",
+        );
+
+        // Act: supersede same-kind records
+        run_supersede(Some(root.to_path_buf()), "ASM-001", "ASM-002")
+            .expect("same-kind record supersession should succeed");
+
+        // Assert: OLD status flipped to obsolete
+        let old_toml = std::fs::read_to_string(
+            root.join(".doctrine/knowledge/assumption/002/record-002.toml"),
+        )
+        .unwrap();
+        assert!(
+            old_toml.contains("status = \"obsolete\""),
+            "OLD.status should be obsolete, got: {old_toml}"
+        );
+    }
+
+    #[test]
+    fn supersede_cross_kind_allowed_matrix() {
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // Seed DEC-001 (NEW): decision
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/001/record-001.toml",
+            "id = 1\nslug = \"d1\"\ntitle = \"D1\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"action_item\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/001/record-001.md",
+            "body\n",
+        );
+
+        // Seed ASM-002 (OLD): assumption
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/002/record-002.toml",
+            "id = 2\nslug = \"a2\"\ntitle = \"A2\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/002/record-002.md",
+            "body\n",
+        );
+
+        // Act: supersede cross-kind (DEC → ASM is allowed per §6 matrix)
+        run_supersede(Some(root.to_path_buf()), "DEC-001", "ASM-002")
+            .expect("cross-kind supersession DEC → ASM should succeed");
+
+        // Assert: OLD status flipped to obsolete
+        let old_toml = std::fs::read_to_string(
+            root.join(".doctrine/knowledge/assumption/002/record-002.toml"),
+        )
+        .unwrap();
+        assert!(
+            old_toml.contains("status = \"obsolete\""),
+            "OLD.status should be obsolete, got: {old_toml}"
+        );
+    }
+
+    #[test]
+    fn supersede_cross_kind_refused_matrix() {
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // Seed ASM-001 (NEW): assumption
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/001/record-001.toml",
+            "id = 1\nslug = \"a1\"\ntitle = \"A1\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/001/record-001.md",
+            "body\n",
+        );
+
+        // Seed DEC-002 (OLD): decision
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/002/record-002.toml",
+            "id = 2\nslug = \"d2\"\ntitle = \"D2\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"action_item\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/002/record-002.md",
+            "body\n",
+        );
+
+        // Act: supersede cross-kind (ASM → DEC is disallowed per §6 matrix)
+        let result = run_supersede(Some(root.to_path_buf()), "ASM-001", "DEC-002");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("§6 matrix disallows ASM → DEC")
+        );
+    }
+
+    #[test]
+    fn supersede_question_reopening_refused() {
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // Seed QUE-001 (NEW): question
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/question/001/record-001.toml",
+            "id = 1\nslug = \"q1\"\ntitle = \"Q1\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/question/001/record-001.md",
+            "body\n",
+        );
+
+        // Seed QUE-002 (OLD): question with terminal status
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/question/002/record-002.toml",
+            "id = 2\nslug = \"q2\"\ntitle = \"Q2\"\nstatus = \"answered\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/question/002/record-002.md",
+            "body\n",
+        );
+
+        // Act: supersede terminal record - status should NOT flip
+        run_supersede(Some(root.to_path_buf()), "QUE-001", "QUE-002")
+            .expect("supersession should proceed but not flip terminal status");
+
+        // Assert: OLD status stays answered (terminal status not flipped)
+        let old_toml =
+            std::fs::read_to_string(root.join(".doctrine/knowledge/question/002/record-002.toml"))
+                .unwrap();
+        assert!(
+            old_toml.contains("status = \"answered\""),
+            "OLD.status should remain answered (terminal), got: {old_toml}"
+        );
+        // But timestamp should be updated
+        assert!(
+            old_toml.contains("updated = \"2026-06-18\""),
+            "OLD.updated should be refreshed, got: {old_toml}"
+        );
+    }
+
+    #[test]
+    fn supersede_cross_family_refused() {
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // Seed ADR-001 (NEW): ADR
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/adr/001/adr-001.toml",
+            "id = 1\nslug = \"a1\"\ntitle = \"A1\"\nstatus = \"accepted\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n",
+        );
+        catalog::test_helpers::write(root, ".doctrine/adr/001/adr-001.md", "body\n");
+
+        // Seed ASM-002 (OLD): assumption
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/002/record-002.toml",
+            "id = 2\nslug = \"a2\"\ntitle = \"A2\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/002/record-002.md",
+            "body\n",
+        );
+
+        // Act: cross-family supersession (ADR → ASM) should fail
+        let result = run_supersede(Some(root.to_path_buf()), "ADR-001", "ASM-002");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cross-family supersession refused")
+        );
+    }
+
+    #[test]
+    fn supersede_self_supersession_refused() {
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // Seed ASM-001
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/001/record-001.toml",
+            "id = 1\nslug = \"a1\"\ntitle = \"A1\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/assumption/001/record-001.md",
+            "body\n",
+        );
+
+        // Act: self-supersession should fail
+        let result = run_supersede(Some(root.to_path_buf()), "ASM-001", "ASM-001");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot supersede itself")
+        );
+    }
+
+    #[test]
+    fn supersede_already_terminal_no_flip() {
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // Seed DEC-001 (NEW): decision
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/001/record-001.toml",
+            "id = 1\nslug = \"d1\"\ntitle = \"D1\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"action_item\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/001/record-001.md",
+            "body\n",
+        );
+
+        // Seed DEC-002 (OLD): decision with terminal status
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/002/record-002.toml",
+            "id = 2\nslug = \"d2\"\ntitle = \"D2\"\nstatus = \"accepted\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"action_item\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/002/record-002.md",
+            "body\n",
+        );
+
+        // Act: supersede terminal record
+        run_supersede(Some(root.to_path_buf()), "DEC-001", "DEC-002")
+            .expect("supersession should succeed but not flip terminal status");
+
+        // Assert: OLD status stays accepted (terminal status preserved)
+        let old_toml =
+            std::fs::read_to_string(root.join(".doctrine/knowledge/decision/002/record-002.toml"))
+                .unwrap();
+        assert!(
+            old_toml.contains("status = \"accepted\""),
+            "OLD.status should remain accepted (terminal), got: {old_toml}"
+        );
+        // Timestamp should still be updated
+        assert!(
+            old_toml.contains("updated = \"2026-06-18\""),
+            "OLD.updated should be refreshed even for terminal, got: {old_toml}"
+        );
+    }
+
+    #[test]
+    fn supersede_idempotent_cross_kind() {
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // Seed CON-001 (NEW): already linked to QUE-002
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/constraint/001/record-001.toml",
+            "id = 1\nslug = \"c1\"\ntitle = \"C1\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = [\"QUE-002\"]\nsuperseded_by = []\n[facet]\nkind = \"implementation\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/constraint/001/record-001.md",
+            "body\n",
+        );
+
+        // Seed QUE-002 (OLD): already superseded by CON-001
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/question/002/record-002.toml",
+            "id = 2\nslug = \"q2\"\ntitle = \"Q2\"\nstatus = \"obsolete\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = [\"CON-001\"]\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/question/002/record-002.md",
+            "body\n",
+        );
+
+        // Act: re-run the same supersession (idempotent)
+        run_supersede(Some(root.to_path_buf()), "CON-001", "QUE-002")
+            .expect("idempotent cross-kind supersession should succeed");
+
+        // Assert: no changes, relationships preserved
+        let new_toml = std::fs::read_to_string(
+            root.join(".doctrine/knowledge/constraint/001/record-001.toml"),
+        )
+        .unwrap();
+        let old_toml =
+            std::fs::read_to_string(root.join(".doctrine/knowledge/question/002/record-002.toml"))
+                .unwrap();
+        assert!(new_toml.contains("supersedes = [\"QUE-002\"]"));
+        assert!(old_toml.contains("superseded_by = [\"CON-001\"]"));
+        assert!(old_toml.contains("status = \"obsolete\""));
+    }
+
+    #[test]
+    fn supersede_decision_to_question_reopening_refused() {
+        // VT-4: DEC→QUE (NEW=question, OLD=decision) — decision cannot be
+        // superseded by question per the §6 matrix.
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/question/001/record-001.toml",
+            "id = 1\nslug = \"q1\"\ntitle = \"Q1\"\nstatus = \"open\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"yes_no\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/question/001/record-001.md",
+            "body\n",
+        );
+
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/002/record-002.toml",
+            "id = 2\nslug = \"d2\"\ntitle = \"D2\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"action_item\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/002/record-002.md",
+            "body\n",
+        );
+
+        let result = run_supersede(Some(root.to_path_buf()), "QUE-001", "DEC-002");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("§6 matrix disallows QUE → DEC")
+        );
+    }
+
+    #[test]
+    fn supersede_torn_recovery() {
+        // VT-10: NEW has the supersedes edge but OLD's superseded_by is missing
+        // — re-running the supersede verb should recover (detected as drift into
+        // empty/inconsistent carve-out, or recover on re-run if status is not yet
+        // superseded).
+        let tmp = catalog::test_helpers::tmp();
+        let root = tmp.path();
+
+        // First: create a valid supersession DEC-001 → DEC-002
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/001/record-001.toml",
+            "id = 1\nslug = \"d1\"\ntitle = \"D1\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"action_item\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/001/record-001.md",
+            "body\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/002/record-002.toml",
+            "id = 2\nslug = \"d2\"\ntitle = \"D2\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"action_item\"\n",
+        );
+        catalog::test_helpers::write(
+            root,
+            ".doctrine/knowledge/decision/002/record-002.md",
+            "body\n",
+        );
+
+        run_supersede(Some(root.to_path_buf()), "DEC-001", "DEC-002")
+            .expect("initial supersession should succeed");
+
+        // Now simulate torn state: remove superseded_by from OLD
+        std::fs::write(
+            root.join(".doctrine/knowledge/decision/002/record-002.toml"),
+            "id = 2\nslug = \"d2\"\ntitle = \"D2\"\nstatus = \"superseded\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [relationships]\nsupersedes = []\nsuperseded_by = []\n[facet]\nkind = \"action_item\"\n",
+        )
+        .unwrap();
+
+        // Re-run: should detect drift (status=superseded but carve-out empty)
+        let result = run_supersede(Some(root.to_path_buf()), "DEC-001", "DEC-002");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("superseded_by carve-out is empty")
+        );
+    }
+
+    /// VT-9: `doctrine link` on a record Supersedes edge must be refused — the
+    /// rule row declares LifecycleOnly, so the link verb cannot create it.
+    #[test]
+    fn link_supersedes_on_record_is_lifecycle_only() {
+        use crate::relation::{LinkPolicy, RelationLabel, lookup};
+        // We can't call run_link directly (it writes IO), but we can check the
+        // rule: the RECORD→RECORD Supersedes row must be LifecycleOnly.
+        let rule = lookup(&crate::knowledge::DECISION_KIND, RelationLabel::Supersedes)
+            .expect("DECISION_KIND should have a Supersedes rule row");
+        assert!(
+            matches!(rule.link, LinkPolicy::LifecycleOnly),
+            "record Supersedes must be LifecycleOnly"
+        );
+        // Verify an ADR Supersedes lookup also returns LifecycleOnly.
+        let adr_rule = lookup(&crate::adr::ADR_KIND.kind, RelationLabel::Supersedes)
+            .expect("ADR_KIND should have a Supersedes rule row");
+        assert!(
+            matches!(adr_rule.link, LinkPolicy::LifecycleOnly),
+            "ADR Supersedes must be LifecycleOnly"
+        );
+    }
+
     // --- SL-090 §PHASE-03: memory link/unlink tests ---------------------------
 
     const MEM_TEST_UID: &str = "mem_018f3a1b2c3d4e5f60718293a4b5c6d7";
