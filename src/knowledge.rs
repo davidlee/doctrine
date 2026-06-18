@@ -142,6 +142,15 @@ impl RecordKind {
         statuses(self).first().copied().unwrap_or_default()
     }
 
+    /// Whether `status` is a terminal status for this record kind (D2). An
+    /// already-terminal record is not status-flipped during supersession — an
+    /// already-`validated` assumption stays `validated`; an `open` question becomes
+    /// `obsolete`. Delegates to the per-kind terminal set; an out-of-vocab token is
+    /// conservatively treated as terminal (decline to flip unknown status).
+    pub(crate) fn is_terminal(self, status: &str) -> bool {
+        terminal(self).contains(&status)
+    }
+
     /// Every kind in DECLARATION order — the single source for the cross-kind
     /// `list` read (each tree in turn) and the prefix round-trip.
     pub(crate) const ALL: [RecordKind; 4] = [
@@ -175,6 +184,15 @@ const DECISION_HIDDEN: &[&str] = &["rejected", "superseded"];
 const QUESTION_HIDDEN: &[&str] = &["answered", "obsolete"];
 const CONSTRAINT_HIDDEN: &[&str] = &["waived", "superseded", "retired"];
 
+/// The per-kind terminal status sets (D2, SL-097 PHASE-01) — distinct from the
+/// hide-set: `accepted` (decision) is terminal but not hidden. Each is a subset of
+/// the kind's status vocabulary. An already-terminal record is not flipped during
+/// supersession.
+const ASSUMPTION_TERMINAL: &[&str] = &["validated", "invalidated", "obsolete"];
+const DECISION_TERMINAL: &[&str] = &["accepted", "rejected", "superseded"];
+const QUESTION_TERMINAL: &[&str] = &["answered", "obsolete"];
+const CONSTRAINT_TERMINAL: &[&str] = &["waived", "superseded", "retired"];
+
 /// The kind's status vocabulary + known-set — the single source `default_status`,
 /// the PHASE-02 partition, and the PHASE-03 `--status` validator read.
 pub(crate) fn statuses(k: RecordKind) -> &'static [&'static str] {
@@ -201,6 +219,17 @@ const fn hidden(k: RecordKind) -> &'static [&'static str] {
         RecordKind::Decision => DECISION_HIDDEN,
         RecordKind::Question => QUESTION_HIDDEN,
         RecordKind::Constraint => CONSTRAINT_HIDDEN,
+    }
+}
+
+/// The kind's terminal set — the supersession guard (D2, SL-097 PHASE-01).
+/// An already-terminal record is not status-flipped during supersession.
+const fn terminal(k: RecordKind) -> &'static [&'static str] {
+    match k {
+        RecordKind::Assumption => ASSUMPTION_TERMINAL,
+        RecordKind::Decision => DECISION_TERMINAL,
+        RecordKind::Question => QUESTION_TERMINAL,
+        RecordKind::Constraint => CONSTRAINT_TERMINAL,
     }
 }
 
@@ -847,7 +876,11 @@ fn read_record(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<Knowled
 
 /// The kind-module accessor for relation edges (SL-096 PHASE-01): read one record
 /// and return its tier-1 relation edges. Delegates to [`read_record`].
-pub(crate) fn relation_edges(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
+pub(crate) fn relation_edges(
+    root: &Path,
+    kind: RecordKind,
+    id: u32,
+) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
     let record = read_record(root, kind, id)?;
     Ok(record.tier1)
 }
@@ -954,7 +987,11 @@ fn format_show(record: &KnowledgeRecord) -> String {
     parts.push(format_facet(&record.facet));
     parts.push(format_evidence(&record.evidence));
     // shapes, spawns, governed_by axes
-    for label in [crate::relation::RelationLabel::Shapes, crate::relation::RelationLabel::Spawns, crate::relation::RelationLabel::GovernedBy] {
+    for label in [
+        crate::relation::RelationLabel::Shapes,
+        crate::relation::RelationLabel::Spawns,
+        crate::relation::RelationLabel::GovernedBy,
+    ] {
         let targets = crate::relation::targets_for(&record.tier1, label);
         if !targets.is_empty() {
             let targets_str = targets.join(", ");
@@ -1469,6 +1506,49 @@ mod tests {
         assert!(is_hidden(RecordKind::Decision, "superseded"));
     }
 
+    // --- VT-1/VT-2/VT-3/VT-4: per-kind terminal predicate (D2, SL-097) ---
+
+    #[test]
+    fn is_terminal_returns_correct_per_kind() {
+        // Assumption (VT-1)
+        assert!(!RecordKind::Assumption.is_terminal("held"));
+        assert!(!RecordKind::Assumption.is_terminal("testing"));
+        assert!(RecordKind::Assumption.is_terminal("validated"));
+        assert!(RecordKind::Assumption.is_terminal("invalidated"));
+        assert!(RecordKind::Assumption.is_terminal("obsolete"));
+        // Decision (VT-2)
+        assert!(!RecordKind::Decision.is_terminal("proposed"));
+        assert!(RecordKind::Decision.is_terminal("accepted"));
+        assert!(RecordKind::Decision.is_terminal("rejected"));
+        assert!(RecordKind::Decision.is_terminal("superseded"));
+        // Question (VT-3)
+        assert!(!RecordKind::Question.is_terminal("open"));
+        assert!(RecordKind::Question.is_terminal("answered"));
+        assert!(RecordKind::Question.is_terminal("obsolete"));
+        // Constraint (VT-4)
+        assert!(!RecordKind::Constraint.is_terminal("active"));
+        assert!(RecordKind::Constraint.is_terminal("waived"));
+        assert!(RecordKind::Constraint.is_terminal("superseded"));
+        assert!(RecordKind::Constraint.is_terminal("retired"));
+    }
+
+    #[test]
+    fn terminal_set_is_subset_of_the_vocab_and_excludes_the_seed() {
+        for kind in RecordKind::ALL {
+            let vocab: BTreeSet<&str> = statuses(kind).iter().copied().collect();
+            for t in terminal(kind) {
+                assert!(vocab.contains(t), "{kind:?}: terminal `{t}` is in-vocab");
+            }
+            assert!(
+                !kind.is_terminal(kind.default_status()),
+                "{kind:?}: the seed is never terminal"
+            );
+        }
+        // `accepted` is terminal (D2) but not hidden (F-A5 precursor).
+        assert!(RecordKind::Decision.is_terminal("accepted"));
+        assert!(!is_hidden(RecordKind::Decision, "accepted"));
+    }
+
     // --- VT-3: three facet-enum drift canaries (variant set == known-set) ---
 
     #[test]
@@ -1689,18 +1769,33 @@ confidence = \"bogus\"
                 toml_body.contains(&format!("status = \"{}\"", kind.default_status())),
                 "{kind:?}: scaffolded status == default_status (F-A2)"
             );
-            // F1 on-disk order: top-level meta -> [facet] -> [evidence]; no relations.
+            // F1 on-disk order: meta -> [facet] -> [evidence] -> [relationships].
             let facet_at = toml_body.find("[facet]").expect("a [facet] block");
             let evidence_at = toml_body.find("[evidence]").expect("an [evidence] block");
             let tags_at = toml_body.find("tags = []").expect("seeded tags");
+            let relationships_at = toml_body
+                .find("[relationships]")
+                .expect("a [relationships] block");
             assert!(tags_at < facet_at, "{kind:?}: meta before [facet]");
             assert!(
                 facet_at < evidence_at,
                 "{kind:?}: [facet] before [evidence]"
             );
             assert!(
-                !toml_body.contains("[[relation]]") && !toml_body.contains("[relationships]"),
-                "{kind:?}: Slice A seeds no relation block"
+                evidence_at < relationships_at,
+                "{kind:?}: [evidence] before [relationships]"
+            );
+            assert!(
+                !toml_body.contains("[[relation]]"),
+                "{kind:?}: Slice A seeds no [[relation]] block"
+            );
+            assert!(
+                toml_body.contains("supersedes    = []"),
+                "{kind:?}: seeded supersedes"
+            );
+            assert!(
+                toml_body.contains("superseded_by = []"),
+                "{kind:?}: seeded superseded_by"
             );
             assert!(
                 !toml_body.contains("{{"),
@@ -1889,9 +1984,15 @@ target = \"PRD-001\"
 ";
         seed_record(&root, RecordKind::Assumption, 1, record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
-        assert_eq!(r.tier1.len(), 1, "illegal supersedes row excluded, shapes survives");
-        assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::Shapes);
-        assert_eq!(r.tier1[0].target, "PRD-001");
+        assert_eq!(
+            r.tier1.len(),
+            2,
+            "supersedes now has a RECORD rule (LifecycleOnly), shapes is Writable — both in tier1"
+        );
+        assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::Supersedes);
+        assert_eq!(r.tier1[0].target, "SL-001");
+        assert_eq!(r.tier1[1].label, crate::relation::RelationLabel::Shapes);
+        assert_eq!(r.tier1[1].target, "PRD-001");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -1929,7 +2030,11 @@ target = \"ADR-001\"
 ";
         seed_record(&root, RecordKind::Assumption, 1, record);
         let r = read_record(&root, RecordKind::Assumption, 1).unwrap();
-        assert_eq!(r.tier1.len(), 1, "unknown nonsense label excluded, governed_by survives");
+        assert_eq!(
+            r.tier1.len(),
+            1,
+            "unknown nonsense label excluded, governed_by survives"
+        );
         assert_eq!(r.tier1[0].label, crate::relation::RelationLabel::GovernedBy);
         assert_eq!(r.tier1[0].target, "ADR-001");
         let _ = std::fs::remove_dir_all(&root);
