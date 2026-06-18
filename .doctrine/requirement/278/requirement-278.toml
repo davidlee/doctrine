@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 278
+slug = "define-a-reusable-valuefacet-with-a-single-finite-f64-magnitude-parsed-from-an-optional-value-toml"
+title = "Define a reusable ValueFacet with a single finite f64 magnitude parsed from an optional [value] TOML table"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

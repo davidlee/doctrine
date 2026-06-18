@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 279
+slug = "validate-a-present-value-value-required-finite-absent-parses-clean"
+title = "Validate a present value: value required, finite; absent parses clean"
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []
