@@ -1,0 +1,52 @@
+id    = 86
+slug  = "inquisition-sl-100-design-do-the-memory-lifecycle-verbs-rest-on-truthful-claims-about-the-substrate"
+title = "Inquisition: SL-100 design — do the memory lifecycle verbs rest on truthful claims about the substrate?"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-100"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "major"
+title = 'R1/F1 rest on a phantom: scaffold does NOT write memory_key="" and the field is Option<String>, not a String to is_empty()-check'
+detail = """EXPECTED (design.md R1 L378-379, F1 L402): 'the scaffold writes memory_key = "" when no key provided at record. run_edit checks memory_key.is_empty() rather than Option<>.' and 'is_empty() handles both absent key and empty string'. OBSERVED: memory_key is declared Option<String> (src/memory.rs:379). The scaffold render_memory_toml OMITS the line entirely when no key is given (Some(k) => line; None => String::new(); src/memory.rs:782-786). The doc-comment directly above (src/memory.rs:779) confesses 'an empty memory_key = "" would fail validate_key on read' — so the empty-string case the design carefully accommodates (a) never arises from the scaffold and (b) would be rejected at parse before any edit guard runs. The immutability check must therefore test the Option (is_some()/is_none()), NOT String::is_empty(). The canon's named risk-mitigation (R1) is built on a data model that does not exist; an implementer following it literally writes an is_empty() guard against an Option (compile error) or the wrong predicate. PENANCE: rewrite R1, F1, and D2 'key invariance' (L124-126) to the Option model — '--key refused iff memory_key is Some; late-binding allowed iff None'; strike the empty-string fiction."""
+disposition = "design-wrong"
+response = "Confessed. The design canon, not code, is the defect: memory_key is Option<String> and the scaffold omits the line when unset. R1, F1, and D2's --key invariance prose will be rewritten to the Option model (refuse iff Some; late-bind iff None); the empty-string fiction struck. Corrected in design.md before /plan."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "minor"
+title = "edit's 'single read->mutate->write transaction' contradicts delegating --status to the IO set_authored_status (second write, double updated stamp)"
+detail = "EXPECTED (design.md D2 L101): 'Single read->mutate->write transaction via toml_edit. Writes only if any field changed.' OBSERVED: D2 L128 says --status 'Calls the same pure transition logic as memory status', but memory status (D1 L73) and its cited precedent knowledge::run_status (src/knowledge.rs:1342) route through dep_seq::set_authored_status (src/dep_seq.rs:344) — an IO wrapper that does its OWN read->parse->write and stamps ('updated', today). Folding that into edit yields a SECOND independent file write and a SECOND updated stamp, breaking the single-transaction invariant the same section asserts. The pure core DOES exist — dep_seq::apply_status (src/dep_seq.rs:287) mutates a held DocumentMut in place. PENANCE: the design must name apply_status (not set_authored_status) as the composition point and require edit fold --status into its one held doc; or explicitly concede edit performs two writes and drop the single-transaction claim. The new memory_status_transition fn (module layout L37) should be the pure core over &mut DocumentMut so both status and edit compose it."
+disposition = "fix-now"
+response = "Granted. D2 will name dep_seq::apply_status (the pure DocumentMut core) as the composition point for --status inside edit's single transaction, and memory_status_transition becomes that pure core so both verbs compose it. The single-write invariant is preserved; the IO set_authored_status is the shell only for the standalone status verb."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "edit --key cites private validate_key (rejects bare key) where record normalizes via normalize_key (prepends mem.) — record/edit divergence"
+detail = "EXPECTED (design.md D2 table L117 + L124): '--key | root memory_key | validate_key; refused if already set'. OBSERVED: validate_key (src/memory.rs:270) is private and validates an ALREADY-mem.-prefixed key, rejecting bare input. Record-time --key flows through the pub(crate) normalize_key (src/memory.rs:293) which prepends 'mem.' THEN validates. Consequence: 'memory edit --key foo' under the design rejects 'foo', while 'record --key foo' accepts and stores 'mem.foo' — same flag, two behaviours. PENANCE: cite normalize_key for edit --key for record/edit parity, or state and justify the divergence. Low stakes, but the canon names the wrong (private) function."
+disposition = "fix-now"
+response = "Granted. D2 table will cite normalize_key (the pub(crate) prepend+validate entry record uses), not the private validate_key, so edit --key and record --key share one normalization. Parity restored."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "nit"
+title = "review_by edit must INSERT not 'replace': scaffold template omits the key on a freshly-recorded memory"
+detail = "EXPECTED (design.md D2 table L114): the --review-by flag maps to [review].review_by with behaviour 'replace'; OQ2 (L395) says empty string clears the key. OBSERVED: the scaffold template (.doctrine/templates/memory.toml) writes the [review] table with ONLY verification_state — the review_by key is ABSENT at record time (it appears only on memories already touched, e.g. the shipped sample). On a fresh memory: setting --review-by DATE must INSERT the key (toml_edit handles this), and clearing with empty string is a no-op (nothing to remove). The canon says 'replace', silent on the insert-when-absent / clear-when-absent cases. PENANCE: reword to 'insert-or-replace; clear is a no-op when absent'. Cosmetic — the substrate copes — but the canon should not assert a key is present that the scaffold never writes."
+disposition = "fix-now"
+response = "Granted. D2's --review-by row reworded to 'insert-or-replace; clear is a no-op when the key is absent', acknowledging the scaffold template omits review_by at record time."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
