@@ -18,8 +18,8 @@ dependencies = []
 
 [[phase]]
 id        = "PHASE-01"
-name      = "Leaf: dep_seq::remove_after core + IO wrapper + source-path refactor"
-objective = "Add the pure `remove_after` core and its IO wrapper to `dep_seq.rs`, plus extract `resolve_dep_seq_src_path` for source-only resolution. All unit-tested."
+name      = "Leaf: dep_seq::remove_after core + IO wrapper"
+objective = "Add the pure `remove_after` core and its IO wrapper to `dep_seq.rs`. All unit-tested."
 
 entrance_criteria = [
   { id = "EN-1", text = "design.md locked and approved" },
@@ -28,8 +28,7 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "`remove_after(doc, to, rank_ceiling)` removes matching inline tables from `after` array, edit-preserving" },
   { id = "EX-2", text = "`remove(toml_path, to, rank_ceiling)` IO wrapper: read→parse→core→write-once; no-op holds mtime" },
-  { id = "EX-3", text = "`resolve_dep_seq_src_path(root, source)` extracts source-only validation; existing `resolve_dep_seq_src` delegates to it" },
-  { id = "EX-4", text = "All existing tests still green (append, read, status seams)" },
+  { id = "EX-3", text = "All existing tests still green (append, read, status seams)" },
 ]
 verification = [
   { id = "VT-1", expects = "`remove_after` removes all matching edges by to+ceiling, returns correct count" },
@@ -37,13 +36,12 @@ verification = [
   { id = "VT-3", expects = "F-1 refuse: absent `after` array bails with non-destructive message, file untouched" },
   { id = "VT-4", expects = "IO wrapper: no-op (0 removed) leaves file byte-identical and mtime unchanged" },
   { id = "VT-5", expects = "IO wrapper: edit-preserving — comments and inert tables survive removal" },
-  { id = "VT-6", expects = "`resolve_dep_seq_src_path` rejects non-work-like source; self-edge still gated in `resolve_dep_seq_src`" },
 ]
 
 [[phase]]
 id        = "PHASE-02"
-name      = "Shell: --remove flag on Command::After and BacklogCommand::After"
-objective = "Wire the `--remove` flag on both the generic cross-kind and backlog-specific `after` commands. Make `target` optional with `required_unless_present(\"prune\")` in preparation for PHASE-03. E2E golden tests for remove."
+name      = "Shell: --remove flag + resolve_dep_seq_src_path refactor"
+objective = "Extract `resolve_dep_seq_src_path` for source-only resolution, then wire the `--remove` flag on both `Command::After` and `BacklogCommand::After`. Make `target` optional in preparation for PHASE-03. E2E golden tests for remove."
 
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete: leaf functions available, all VT green" },
@@ -54,13 +52,15 @@ exit_criteria = [
   { id = "EX-3", text = "`doctrine after SRC TGT --remove` on non-existent edge errors with clear message" },
   { id = "EX-4", text = "`doctrine backlog after SRC TGT --remove` works identically (backlog shell)" },
   { id = "EX-5", text = "Existing append behaviour unchanged (no regression)" },
-  { id = "EX-6", text = "`cargo clippy` zero warnings; `just check` green" },
+  { id = "EX-6", text = "`resolve_dep_seq_src_path` rejects non-work-like source; existing `resolve_dep_seq_src` delegates to it" },
+  { id = "EX-7", text = "`cargo clippy` zero warnings; `just check` green" },
 ]
 verification = [
   { id = "VT-1", expects = "E2E golden: remove single edge, verify count printed and TOML on disk" },
   { id = "VT-2", expects = "E2E golden: remove with rank ceiling — only low-rank edges dropped" },
   { id = "VT-3", expects = "E2E golden: remove non-existent edge → non-zero exit, stderr message" },
   { id = "VT-4", expects = "E2E golden: append still works after `target` made optional" },
+  { id = "VA-1", expects = "`resolve_dep_seq_src_path` rejects non-work-like source kind" },
 ]
 
 [[phase]]
