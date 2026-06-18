@@ -51,6 +51,7 @@ mod skills;
 mod slice;
 mod spec;
 mod standard;
+mod supersede;
 mod state;
 mod status;
 mod tomlfmt;
@@ -4076,7 +4077,7 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
         new_kref.kind.prefix,
         old_kref.kind.prefix
     );
-    let policy = adr::supersede_policy(new_kref.kind).with_context(|| {
+    let policy = crate::supersede::supersede_policy(new_kref.kind).with_context(|| {
         format!(
             "supersession not yet supported for {} (follow-up F2)",
             new_kref.kind.prefix
