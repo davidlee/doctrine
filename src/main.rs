@@ -29,6 +29,7 @@ mod knowledge;
 mod ledger;
 mod lexical;
 mod lifecycle;
+pub(crate) mod links;
 mod listing;
 mod map_server;
 mod memory;
@@ -66,6 +67,16 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::commands::map::MapServeArgs;
 use crate::listing::{Format, ListArgs};
+
+fn parse_expand_depth(s: &str) -> Result<usize, String> {
+    let depth = s
+        .parse::<usize>()
+        .map_err(|_err| "expand depth must be a number")?;
+    if depth == 0 {
+        return Err("expand depth must be >= 1".to_string());
+    }
+    Ok(depth)
+}
 
 /// doctrine — project tooling.
 #[derive(Parser)]
@@ -185,6 +196,10 @@ pub(crate) struct FindRetrieveArgs {
     #[arg(long, value_parser = memory::Status::parse)]
     pub(crate) status: Option<memory::Status>,
 
+    /// Hard filter by lifespan.
+    #[arg(long, value_parser = memory::Lifespan::from_str)]
+    pub(crate) lifespan: Option<memory::Lifespan>,
+
     /// Output format.
     #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
     pub(crate) format: Format,
@@ -212,6 +227,10 @@ pub(crate) struct FindRetrieveArgs {
     /// Explicit project root (default: auto-detect).
     #[arg(short = 'p', long)]
     pub(crate) path: Option<PathBuf>,
+
+    /// Expand graph by traversing relations N levels deep (retrieve only).
+    #[arg(long, value_parser = parse_expand_depth)]
+    pub(crate) expand: Option<usize>,
 }
 
 #[derive(Subcommand)]
@@ -1765,6 +1784,10 @@ enum MemoryCommand {
         #[arg(long)]
         key: Option<String>,
 
+        /// Lifespan classification.
+        #[arg(long, value_parser = memory::Lifespan::from_str)]
+        lifespan: Option<memory::Lifespan>,
+
         /// Lifecycle status (default: active).
         #[arg(long, default_value = "active", value_parser = memory::Status::parse)]
         status: memory::Status,
@@ -1772,6 +1795,22 @@ enum MemoryCommand {
         /// One-line summary.
         #[arg(long)]
         summary: Option<String>,
+
+        /// Review-by date carried in `[review].review_by`.
+        #[arg(long)]
+        review_by: Option<String>,
+
+        /// Provenance source, repeatable, in `KIND:REF` form.
+        #[arg(long = "provenance-source", value_parser = memory::Provenance::parse_flag)]
+        provenance_source: Vec<memory::Provenance>,
+
+        /// Trust level carried in `[trust].trust_level`.
+        #[arg(long = "trust")]
+        trust: Option<String>,
+
+        /// Severity carried in `[ranking].severity`.
+        #[arg(long = "severity")]
+        severity: Option<String>,
 
         /// Tag, repeatable — written to `scope.tags`.
         #[arg(long = "tag")]
@@ -1829,6 +1868,20 @@ enum MemoryCommand {
         /// Memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
         reference: String,
 
+        /// Allow verification on dirty tree (stamps `checkout_state_id`).
+        #[arg(long)]
+        allow_dirty: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Run advisory validation checks on memories (dangling relations, stale verification, draft expiry).
+    Validate {
+        /// Optional memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: Option<String>,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -1872,6 +1925,26 @@ enum MemoryCommand {
         /// high severity (high|medium|low; only raises the default `medium`).
         #[arg(long = "min-trust", value_parser = retrieve::parse_min_trust)]
         min_trust: Option<String>,
+    },
+
+    /// Resolve memory wikilinks for one memory or the whole corpus.
+    ResolveLinks {
+        /// Optional memory reference: a `mem_<hex>` uid or a `mem.<…>` key.
+        reference: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Show reverse links into one target from wikilinks and authored relations.
+    Backlinks {
+        /// Target reference: a `mem_<hex>` uid, a `mem.<…>` key, or another target token.
+        reference: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
     },
 
     /// Materialize the embedded global-memory corpus into the gitignored
@@ -2639,10 +2712,13 @@ fn write_class(cmd: &Command) -> WriteClass {
                 None => Write("memory sync"),
                 Some(SyncCommand::Install { .. }) => Write("memory sync install"),
             },
-            MemoryCommand::Show { .. }
+            MemoryCommand::Validate { .. }
+            | MemoryCommand::Show { .. }
             | MemoryCommand::List { .. }
             | MemoryCommand::Find { .. }
-            | MemoryCommand::Retrieve { .. } => Read,
+            | MemoryCommand::Retrieve { .. }
+            | MemoryCommand::ResolveLinks { .. }
+            | MemoryCommand::Backlinks { .. } => Read,
         },
         Command::Review { command } => match command {
             ReviewCommand::New { .. } => Write("review new"),
@@ -2868,6 +2944,18 @@ fn run_inspect(path: Option<PathBuf>, id: &str, format: Format, json: bool) -> a
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let resolved = if json { Format::Json } else { format };
 
+    if let Ok(
+        crate::memory::MemoryRef::Uid(_)
+        | crate::memory::MemoryRef::UidPrefix(_)
+        | crate::memory::MemoryRef::Key(_),
+    ) = crate::memory::MemoryRef::parse(id)
+    {
+        let uid = crate::memory::resolve_inspect_uid(&root, id)?;
+        let out = crate::memory::memory_inspect_view(&root, &uid, resolved)?;
+        write!(std::io::stdout(), "{out}")?;
+        return Ok(());
+    }
+
     // SL-050 F2: ONE corpus scan shared by both consumers (was two — relation_graph and
     // priority each walked the corpus). Both `_from` entry points consume this slice;
     // the scan order is the same both saw (KINDS table / id ascending), preserving
@@ -3055,8 +3143,13 @@ fn main() -> anyhow::Result<()> {
                 title,
                 memory_type,
                 key,
+                lifespan,
                 status,
                 summary,
+                review_by,
+                provenance_source,
+                trust,
+                severity,
                 tag,
                 path_scope,
                 glob,
@@ -3070,8 +3163,13 @@ fn main() -> anyhow::Result<()> {
                     title: &title,
                     memory_type,
                     key: key.as_deref(),
+                    lifespan,
                     status,
                     summary: summary.as_deref(),
+                    review_by: review_by.as_deref(),
+                    sources: &provenance_source,
+                    trust_level: trust.as_deref(),
+                    severity: severity.as_deref(),
                     tags: &tag,
                     paths: &path_scope,
                     globs: &glob,
@@ -3086,7 +3184,27 @@ fn main() -> anyhow::Result<()> {
                 json,
                 path,
             } => memory::run_show(path, &reference, if json { Format::Json } else { format }),
-            MemoryCommand::Verify { reference, path } => memory::run_verify(path, &reference),
+            MemoryCommand::Verify {
+                reference,
+                allow_dirty,
+                path,
+            } => memory::run_verify(path, &reference, allow_dirty),
+            MemoryCommand::Validate { reference, path } => {
+                match memory::run_validate(path, reference.as_deref()) {
+                    Ok(()) => Ok(()),
+                    Err(e) if e.to_string().contains("validation warnings found") => {
+                        // Exit with code 1 for validation warnings - this is the expected CLI behavior
+                        #[expect(
+                            clippy::disallowed_methods,
+                            reason = "CLI tool needs to exit with code 1 for validation warnings"
+                        )]
+                        {
+                            std::process::exit(1);
+                        }
+                    }
+                    Err(e) => Err(e),
+                }
+            }
             MemoryCommand::List {
                 memory_type,
                 list,
@@ -3118,6 +3236,7 @@ fn main() -> anyhow::Result<()> {
                     args.glob,
                     args.command,
                     args.tag,
+                    args.lifespan,
                     free_query,
                     args.memory_type,
                     args.status,
@@ -3150,6 +3269,7 @@ fn main() -> anyhow::Result<()> {
                     args.glob,
                     args.command,
                     args.tag,
+                    args.lifespan,
                     args.flag_query,
                     args.memory_type,
                     args.status,
@@ -3158,8 +3278,13 @@ fn main() -> anyhow::Result<()> {
                     min_trust.as_deref(),
                     offset,
                     resolved_format,
+                    args.expand,
                 )
             }
+            MemoryCommand::ResolveLinks { reference, path } => {
+                memory::run_resolve_links(path, reference.as_deref())
+            }
+            MemoryCommand::Backlinks { reference, path } => memory::run_backlinks(path, &reference),
             MemoryCommand::Sync {
                 command,
                 dry_run: sync_dry_run,
@@ -5310,8 +5435,13 @@ mod write_class_tests {
                 title: String::new(),
                 memory_type: memory::MemoryType::Concept,
                 key: None,
+                lifespan: None,
                 status: memory::Status::Active,
                 summary: None,
+                review_by: None,
+                provenance_source: Vec::new(),
+                trust: None,
+                severity: None,
                 tag: Vec::new(),
                 path_scope: Vec::new(),
                 glob: Vec::new(),
@@ -5325,6 +5455,7 @@ mod write_class_tests {
         assert_eq!(
             w(MemoryCommand::Verify {
                 reference: String::new(),
+                allow_dirty: false,
                 path: None
             }),
             Some("memory verify")
@@ -5357,6 +5488,7 @@ mod write_class_tests {
                     flag_query: None,
                     memory_type: None,
                     status: None,
+                    lifespan: None,
                     include_draft: false,
                     format: Format::Table,
                     json: false,
@@ -5364,6 +5496,7 @@ mod write_class_tests {
                     page: None,
                     limit: None,
                     path: None,
+                    expand: None,
                 },
             }),
             None
@@ -5378,6 +5511,7 @@ mod write_class_tests {
                     flag_query: None,
                     memory_type: None,
                     status: None,
+                    lifespan: None,
                     include_draft: false,
                     format: Format::Table,
                     json: false,
@@ -5385,8 +5519,23 @@ mod write_class_tests {
                     page: None,
                     limit: None,
                     path: None,
+                    expand: None,
                 },
                 min_trust: None,
+            }),
+            None
+        );
+        assert_eq!(
+            w(MemoryCommand::ResolveLinks {
+                reference: None,
+                path: None,
+            }),
+            None
+        );
+        assert_eq!(
+            w(MemoryCommand::Backlinks {
+                reference: String::new(),
+                path: None,
             }),
             None
         );
@@ -5413,6 +5562,95 @@ mod write_class_tests {
             }),
             Some("memory sync install")
         );
+    }
+
+    #[test]
+    fn memory_record_new_flags_parse_and_reach_the_variant() {
+        let cli = Cli::try_parse_from([
+            "doctrine",
+            "memory",
+            "record",
+            "T",
+            "--type",
+            "fact",
+            "--lifespan",
+            "semantic",
+            "--review-by",
+            "2026-08-01",
+            "--provenance-source",
+            "code:src/main.rs:42",
+            "--trust",
+            "low",
+            "--severity",
+            "critical",
+        ])
+        .unwrap();
+        let Command::Memory {
+            command:
+                MemoryCommand::Record {
+                    lifespan,
+                    review_by,
+                    provenance_source,
+                    trust,
+                    severity,
+                    ..
+                },
+        } = cli.command
+        else {
+            panic!("expected memory record");
+        };
+        assert_eq!(lifespan, Some(memory::Lifespan::Semantic));
+        assert_eq!(review_by.as_deref(), Some("2026-08-01"));
+        assert_eq!(provenance_source.len(), 1);
+        assert_eq!(provenance_source[0].kind, "code");
+        assert_eq!(provenance_source[0].ref_, "src/main.rs:42");
+        assert_eq!(trust.as_deref(), Some("low"));
+        assert_eq!(severity.as_deref(), Some("critical"));
+    }
+
+    #[test]
+    fn memory_record_invalid_lifespan_is_rejected() {
+        let cli = Cli::try_parse_from([
+            "doctrine",
+            "memory",
+            "record",
+            "T",
+            "--type",
+            "fact",
+            "--lifespan",
+            "bogus",
+        ]);
+        assert!(cli.is_err());
+    }
+
+    #[test]
+    fn memory_find_retrieve_lifespan_flag_parses_on_the_shared_args() {
+        let find =
+            Cli::try_parse_from(["doctrine", "memory", "find", "--lifespan", "semantic"]).unwrap();
+        let Command::Memory {
+            command: MemoryCommand::Find { args, .. },
+        } = find.command
+        else {
+            panic!("expected memory find");
+        };
+        assert_eq!(args.lifespan, Some(memory::Lifespan::Semantic));
+
+        let retrieve =
+            Cli::try_parse_from(["doctrine", "memory", "retrieve", "--lifespan", "working"])
+                .unwrap();
+        let Command::Memory {
+            command: MemoryCommand::Retrieve { args, .. },
+        } = retrieve.command
+        else {
+            panic!("expected memory retrieve");
+        };
+        assert_eq!(args.lifespan, Some(memory::Lifespan::Working));
+    }
+
+    #[test]
+    fn memory_find_invalid_lifespan_is_rejected() {
+        let cli = Cli::try_parse_from(["doctrine", "memory", "find", "--lifespan", "garbage"]);
+        assert!(cli.is_err());
     }
 
     #[test]

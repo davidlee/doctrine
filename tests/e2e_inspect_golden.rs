@@ -116,6 +116,53 @@ fn seed_tech_spec_with_interaction(root: &Path, id: u32, target: &str, ty: &str)
     );
 }
 
+/// Seed a memory under `memory/items/<uid>/` with optional key, relation rows, and body.
+fn seed_memory(root: &Path, uid: &str, key: Option<&str>, relations: &[(&str, &str)], body: &str) {
+    let key_line = key
+        .map(|key| format!("memory_key = \"{key}\"\n"))
+        .unwrap_or_default();
+    let relation_rows: String = relations
+        .iter()
+        .map(|(label, target)| {
+            format!("[[relation]]\nlabel = \"{label}\"\ntarget = \"{target}\"\n")
+        })
+        .collect();
+    write(
+        root,
+        &format!(".doctrine/memory/items/{uid}/memory.toml"),
+        &format!(
+            "memory_uid = \"{uid}\"\n\
+             {key_line}\
+             schema_version = 1\n\
+             memory_type = \"pattern\"\n\
+             status = \"active\"\n\
+             title = \"{uid}\"\n\
+             summary = \"summary\"\n\
+             created = \"2026-01-01\"\n\
+             updated = \"2026-01-01\"\n\
+             [scope]\n\
+             workspace = \"default\"\n\
+             [git]\n\
+             repo = \"repo\"\n\
+             [trust]\n\
+             level = \"medium\"\n\
+             [ranking]\n\
+             severity = \"none\"\n\
+             weight = 0\n\
+             {relation_rows}"
+        ),
+    );
+    write(
+        root,
+        &format!(".doctrine/memory/items/{uid}/memory.md"),
+        body,
+    );
+    if let Some(key) = key {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(uid, root.join(".doctrine/memory/items").join(key)).unwrap();
+    }
+}
+
 /// `doctrine inspect <args...> -p <root>` over the built binary.
 fn run(root: &Path, args: &[&str]) -> Output {
     Command::new(BIN)
@@ -413,5 +460,125 @@ fn inspect_req091_ids_remapped_and_edges_authored() {
         pv["outbound"].as_array().expect("array").len(),
         0,
         "predecessor authors no outbound — inbound is derived, not a synthetic edge"
+    );
+}
+
+// === SL-099 PHASE-04 — memory inspect bridge ============================
+
+#[test]
+fn inspect_memory_uid_renders_outbound_danglers_and_wikilinks() {
+    let dir = tmp();
+    seed_corpus(dir.path());
+    let target = "mem_11111111111111111111111111111111";
+    let source = "mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    seed_memory(
+        dir.path(),
+        source,
+        Some("mem.pattern.alpha"),
+        &[
+            ("supports", "SL-099"),
+            ("relates", target),
+            ("drift", "mem.dead"),
+        ],
+        &format!("See [[{target}]] and [[mem.dead]]."),
+    );
+    seed_memory(
+        dir.path(),
+        target,
+        Some("mem.pattern.target"),
+        &[],
+        "target",
+    );
+
+    let out = run(dir.path(), &[source]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa — relations\n\
+         \n\
+         outbound:\n\
+         \x20\x20drift: mem.dead\n\
+         \x20\x20relates: mem_11111111111111111111111111111111\n\
+         \x20\x20supports: SL-099\n\
+         \n\
+         danglers:\n\
+         \x20\x20drift: mem.dead\n\
+         \x20\x20supports: SL-099\n\
+         \n\
+         wikilinks:\n\
+         \x20\x20mem_11111111111111111111111111111111\n\
+         \x20\x20mem.dead (dangling)\n"
+    );
+}
+
+#[test]
+fn inspect_memory_uid_renders_inbound_edges() {
+    let dir = tmp();
+    let target = "mem_11111111111111111111111111111111";
+    let source = "mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    seed_memory(
+        dir.path(),
+        target,
+        Some("mem.pattern.target"),
+        &[],
+        "target",
+    );
+    seed_memory(
+        dir.path(),
+        source,
+        Some("mem.pattern.alpha"),
+        &[("relates", target)],
+        "body",
+    );
+
+    let out = run(dir.path(), &[target]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "mem_11111111111111111111111111111111 — relations\n\
+         \n\
+         inbound:\n\
+         \x20\x20relates: mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+    );
+}
+
+#[test]
+fn inspect_memory_key_resolves_and_renders() {
+    let dir = tmp();
+    let uid = "mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    seed_memory(
+        dir.path(),
+        uid,
+        Some("mem.pattern.alpha"),
+        &[("relates", "mem.dead")],
+        "[[mem.pattern.alpha]]",
+    );
+
+    let out = run(dir.path(), &["mem.pattern.alpha"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert!(stdout(&out).starts_with("mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa — relations\n"));
+}
+
+#[test]
+fn inspect_memory_nonexistent_uid_prefix_is_error() {
+    let dir = tmp();
+    seed_memory(
+        dir.path(),
+        "mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        Some("mem.pattern.alpha"),
+        &[],
+        "body",
+    );
+
+    let out = run(dir.path(), &["mem_deadbeef"]);
+    assert!(
+        !out.status.success(),
+        "missing memory ref must exit non-zero"
+    );
+    let err = stderr(&out);
+    assert!(err.starts_with("Error: "), "clean anyhow error: {err}");
+    assert!(
+        err.contains("no memory matches uid prefix \"mem_deadbeef\""),
+        "clear memory-prefix error: {err}"
     );
 }

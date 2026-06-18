@@ -1,6 +1,6 @@
 memory_uid = "{{uid}}"
 {{key_line}}schema_version = {{schema_version}}
-memory_type = "{{type}}"
+{{lifespan_line}}memory_type = "{{type}}"
 status = "{{status}}"
 title = {{title}}
 summary = {{summary}}
@@ -30,11 +30,12 @@ normalizer = "{{normalizer}}"
 [review]
 verification_state = "unverified"
 reviewed = "{{reviewed}}"
-review_by = "{{review_by}}"
+review_by = {{review_by}}
 
 [trust]
-trust_level = "medium"
+trust_level = {{trust_level}}
 
 [ranking]
-severity = "none"
+severity = {{severity}}
 weight = 0
+{{sources}}
