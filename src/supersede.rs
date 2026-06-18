@@ -2,22 +2,32 @@
 //! Cross-kind supersession policy gate consumed by `doctrine supersede`.
 //!
 //! `supersede_policy()` answers "can this kind be the actor (NEW) in a
-//! supersession?" and returns the vocabulary the verb needs: the outbound
-//! `supersedes` array name, the sanctioned reverse carve-out `superseded_by` on
-//! OLD (ADR-004 §5), and the terminal status OLD is flipped into.
+//! supersession?" and returns the vocabulary the verb needs: the storage
+//! write mechanism (`StorageTarget`), the sanctioned reverse carve-out
+//! `superseded_by` on OLD (ADR-004 §5), and the terminal status OLD is
+//! flipped into.
 //!
-//! Extracted from `src/adr.rs` (SL-097 PHASE-02) — ADR is one arm among five;
-//! record-kind arms (ASM/DEC/QUE/CON) join here. POL/STD/slice arms are
-//! future work (IMP-063).
+//! Extracted from `src/adr.rs` (SL-097 PHASE-02). Governance (ADR/POL/STD)
+//! arms added by SL-095 PHASE-03. Records (ASM/DEC/QUE/CON) arms are SL-097.
 
 use crate::entity::Kind;
 use crate::knowledge::RecordKind;
 
-/// The supersession vocabulary for one kind — field names + terminal status.
+/// How the `doctrine supersede` verb writes the outbound edge for this kind.
+#[derive(Copy, Clone)]
+pub(crate) enum StorageTarget {
+    /// Write via `relation::append_edge` — governance (ADR/POL/STD) post-SL-095.
+    RelationRow,
+    /// Write via `dep_seq::apply_string_append` — records (ASM/DEC/QUE/CON).
+    TypedArray { field: &'static str },
+}
+
+/// The supersession vocabulary for one kind — storage mechanism + carved-in
+/// field names + terminal status.
 #[derive(Copy, Clone)]
 pub(crate) struct SupersedePolicy {
-    /// NEW's outbound edge array — `[relationships].supersedes` (ADR-004 §5).
-    pub(crate) supersedes_field: &'static str,
+    /// The verb's write mechanism for NEW's outbound edge.
+    pub(crate) storage: StorageTarget,
     /// OLD's reverse carve-out array — `[relationships].superseded_by`.
     pub(crate) carveout_field: &'static str,
     /// The terminal status OLD is flipped into (D2 per-kind table).
@@ -27,20 +37,29 @@ pub(crate) struct SupersedePolicy {
 /// The supersession capability boundary: returns `Some(policy)` for every kind
 /// that can be the NEW actor in a `doctrine supersede` transaction.
 ///
-/// ADR is the governance arm (SL-062); the four record kinds (ASM/DEC/QUE/CON)
-/// are the knowledge arms (SL-097). Every other kind returns `None`, and the
-/// verb refuses it with a "not yet supported" message.
+/// Governance arms (ADR/POL/STD) write `[[relation]]` rows via `RelationRow`.
+/// Record arms (ASM/DEC/QUE/CON) write typed arrays via `TypedArray`.
+/// Every other kind returns `None`.
 pub(crate) fn supersede_policy(kind: &Kind) -> Option<SupersedePolicy> {
     match kind.prefix {
-        "ADR" | "DEC" | "CON" => Some(SupersedePolicy {
-            supersedes_field: "supersedes",
+        "ADR" | "POL" | "STD" => Some(SupersedePolicy {
+            storage: StorageTarget::RelationRow,
             carveout_field: "superseded_by",
             superseded_status: "superseded",
         }),
         "ASM" | "QUE" => Some(SupersedePolicy {
-            supersedes_field: "supersedes",
+            storage: StorageTarget::TypedArray {
+                field: "supersedes",
+            },
             carveout_field: "superseded_by",
             superseded_status: "obsolete",
+        }),
+        "DEC" | "CON" => Some(SupersedePolicy {
+            storage: StorageTarget::TypedArray {
+                field: "supersedes",
+            },
+            carveout_field: "superseded_by",
+            superseded_status: "superseded",
         }),
         _ => None,
     }
@@ -72,9 +91,10 @@ mod tests {
     use super::*;
     use crate::knowledge::RecordKind::*;
 
+    // --- validate_matrix tests (SL-097) ---
+
     #[test]
     fn validate_matrix_assumption_predecessor() {
-        // Assumption (old) can be superseded by: Assumption, Decision, Constraint
         assert!(validate_matrix(Assumption, Assumption));
         assert!(validate_matrix(Decision, Assumption));
         assert!(validate_matrix(Constraint, Assumption));
@@ -83,7 +103,6 @@ mod tests {
 
     #[test]
     fn validate_matrix_question_predecessor() {
-        // Question (old) can be superseded by: Question, Decision, Constraint, Assumption
         assert!(validate_matrix(Question, Question));
         assert!(validate_matrix(Decision, Question));
         assert!(validate_matrix(Constraint, Question));
@@ -92,7 +111,6 @@ mod tests {
 
     #[test]
     fn validate_matrix_decision_predecessor() {
-        // Decision (old) can be superseded by: Decision, Constraint
         assert!(validate_matrix(Decision, Decision));
         assert!(validate_matrix(Constraint, Decision));
         assert!(!validate_matrix(Assumption, Decision));
@@ -101,10 +119,89 @@ mod tests {
 
     #[test]
     fn validate_matrix_constraint_predecessor() {
-        // Constraint (old) can be superseded by: Constraint, Decision
         assert!(validate_matrix(Constraint, Constraint));
         assert!(validate_matrix(Decision, Constraint));
         assert!(!validate_matrix(Assumption, Constraint));
         assert!(!validate_matrix(Question, Constraint));
+    }
+
+    // --- supersede_policy tests (SL-095 PHASE-03) ---
+
+    fn governance_kind(prefix: &str) -> &'static crate::entity::Kind {
+        for kref in crate::integrity::KINDS {
+            if kref.kind.prefix == prefix {
+                return kref.kind;
+            }
+        }
+        panic!("no kind with prefix {prefix}");
+    }
+
+    #[test]
+    fn supersede_policy_returns_some_for_pol() {
+        let kind = governance_kind("POL");
+        let policy = supersede_policy(kind).unwrap();
+        assert_eq!(policy.carveout_field, "superseded_by");
+        assert_eq!(policy.superseded_status, "superseded");
+        assert!(matches!(policy.storage, StorageTarget::RelationRow));
+    }
+
+    #[test]
+    fn supersede_policy_returns_some_for_std() {
+        let kind = governance_kind("STD");
+        let policy = supersede_policy(kind).unwrap();
+        assert_eq!(policy.carveout_field, "superseded_by");
+        assert_eq!(policy.superseded_status, "superseded");
+        assert!(matches!(policy.storage, StorageTarget::RelationRow));
+    }
+
+    #[test]
+    fn supersede_policy_returns_some_for_adr() {
+        let kind = governance_kind("ADR");
+        let policy = supersede_policy(kind).unwrap();
+        assert_eq!(policy.superseded_status, "superseded");
+        assert!(matches!(policy.storage, StorageTarget::RelationRow));
+    }
+
+    #[test]
+    fn supersede_policy_storage_is_relation_row_for_governance() {
+        for prefix in ["ADR", "POL", "STD"] {
+            let kind = governance_kind(prefix);
+            let policy = supersede_policy(kind).unwrap();
+            assert!(
+                matches!(policy.storage, StorageTarget::RelationRow),
+                "{prefix} should use RelationRow"
+            );
+        }
+    }
+
+    #[test]
+    fn supersede_policy_storage_is_typed_array_for_records() {
+        for (prefix, expected_status) in [
+            ("ASM", "obsolete"),
+            ("DEC", "superseded"),
+            ("QUE", "obsolete"),
+            ("CON", "superseded"),
+        ] {
+            let kind = governance_kind(prefix);
+            let policy = supersede_policy(kind).unwrap();
+            assert_eq!(policy.superseded_status, expected_status);
+            assert!(
+                matches!(
+                    policy.storage,
+                    StorageTarget::TypedArray {
+                        field: "supersedes"
+                    }
+                ),
+                "{prefix} should use TypedArray"
+            );
+        }
+    }
+
+    #[test]
+    fn supersede_policy_returns_none_for_unsupported_kinds() {
+        for prefix in ["SL", "IMP", "RV", "PRD", "REQ", "RSK"] {
+            let kind = governance_kind(prefix);
+            assert!(supersede_policy(kind).is_none(), "{prefix} should be None");
+        }
     }
 }

@@ -9,12 +9,9 @@ created = "{{date}}"
 updated = "{{date}}"
 
 [relationships]
-# Reserved. Empty in v1 — supersession and tagging are not wired yet.
-# Authored-but-inert: present so the shape is stable when those land.
-supersedes    = []   # POL ids this one replaces (relationship, not a status — design D2)
+# The `supersedes` and `related` axes are uniform `[[relation]]` rows now (SL-095,
+# SL-048). Author them with `doctrine link POL-NNN supersedes|related <target>`.
+# `doctrine inspect POL-NNN` renders them. `superseded_by` (ADR-004) and `tags` stay typed.
 superseded_by = []   # reverse link is derived
 tags          = []   # free-form classification
 
-# `related` cross-references are uniform `[[relation]]` rows now (SL-048 "the cut"),
-# never a typed key here. Author one with `doctrine link POL-NNN related <target>`;
-# `doctrine inspect POL-NNN` renders it. The supersession pair + tags stay typed.

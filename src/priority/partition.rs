@@ -78,13 +78,13 @@ const PARTITION: &[KindPartition] = &[
     KindPartition {
         prefix: "POL",
         workable: &["draft"],
-        terminal: &["required", "deprecated", "retired"],
+        terminal: &["required", "superseded", "deprecated", "retired"],
     },
     // standard
     KindPartition {
         prefix: "STD",
         workable: &["draft"],
-        terminal: &["default", "required", "deprecated", "retired"],
+        terminal: &["default", "required", "superseded", "deprecated", "retired"],
     },
     // PRD (product spec)
     KindPartition {
