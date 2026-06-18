@@ -85,9 +85,10 @@ struct Relationships {
 ```
 
 `serde(default)` on the remaining fields tolerates a hand-trimmed file that omits one.
-JSON surface changes: `relationships.supersedes` disappears from `--json` output.
-Zero web/map consumers (confirmed: no references to `supersedes`, `relationships`,
-`adr`, `governance` in `web/map/`).
+JSON surface unchanged — `supersedes` is spliced back from `[[relation]]` rows in
+`show_json`, preserving the byte-identical `relationships` object. Zero web/map
+consumers (confirmed: no references to `supersedes`, `relationships`, `adr`,
+`governance` in `web/map/`).
 
 ### D4 — Reader switch: `relation_edges`, `supersession_pair`, `format_show`
 
@@ -303,7 +304,7 @@ is a follow-on, not required for either slice).
 - `doctrine supersede STD-NEW STD-OLD` succeeds (new standard arm)
 - Every governance entity round-trips `show` byte-identical across the migration (empty
   arrays → no display line → no churn)
-- `show --json` output drops `relationships.supersedes` (empty, no consumers)
+- `show --json` output preserves `relationships.supersedes` — byte-identical to pre-migration (spliced from `[[relation]]` rows)
 - `relation_edges` for governance emits same edges post-migration
 - `supersession_pair` returns same (empty) supersedes vector post-migration
 - `doctrine validate` reports no supersession drift
