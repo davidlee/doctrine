@@ -180,6 +180,75 @@ pub(crate) fn append(toml_path: &Path, edit: &RelEdit<'_>) -> anyhow::Result<()>
     Ok(())
 }
 
+/// Remove `after` edges from `[relationships].after` matching `to`.
+/// `rank_ceiling`: `None` → all ranks; `Some(n)` → only edges where rank ≤ n.
+///
+/// Returns the number of edges removed (0 if none matched).
+///
+/// **F-1**: `[relationships].after` array absent → bail with a non-destructive
+/// message (malformed entity, never create).
+pub(crate) fn remove_after(
+    doc: &mut toml_edit::DocumentMut,
+    to: &str,
+    rank_ceiling: Option<i32>,
+) -> anyhow::Result<usize> {
+    let array = doc
+        .get_mut("relationships")
+        .and_then(toml_edit::Item::as_table_mut)
+        .and_then(|t| t.get_mut("after"))
+        .and_then(toml_edit::Item::as_array_mut)
+        .with_context(|| {
+            "malformed entity: missing seeded `[relationships].after` array — restore the seeded arrays before removing edges; the file is left untouched"
+        })?;
+
+    // Collect matching indices in forward order (remove in reverse to avoid shift).
+    let indices: Vec<usize> = array
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, v)| {
+            let t = v.as_inline_table()?;
+            let to_matches = t.get("to").and_then(toml_edit::Value::as_str) == Some(to);
+            if !to_matches {
+                return None;
+            }
+            if let Some(ceiling) = rank_ceiling {
+                let rank = t.get("rank").and_then(toml_edit::Value::as_integer)?;
+                if rank > i64::from(ceiling) {
+                    return None;
+                }
+            }
+            Some(idx)
+        })
+        .collect();
+
+    let count = indices.len();
+    // Remove in reverse index order to avoid index shift.
+    for idx in indices.into_iter().rev() {
+        array.remove(idx);
+    }
+    Ok(count)
+}
+
+/// IO wrapper for [`remove_after`]: read→parse→core→write-once.
+/// If count == 0, returns `Ok(0)` without writing (mtime holds).
+pub(crate) fn remove(
+    toml_path: &Path,
+    to: &str,
+    rank_ceiling: Option<i32>,
+) -> anyhow::Result<usize> {
+    let text = std::fs::read_to_string(toml_path)
+        .with_context(|| format!("dep/seq entity not found at {}", toml_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+    let count = remove_after(&mut doc, to, rank_ceiling)?;
+    if count > 0 {
+        std::fs::write(toml_path, doc.to_string())
+            .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+    }
+    Ok(count)
+}
+
 /// Idempotent string-membership push into a `toml_edit` array — the shared inner
 /// core for BOTH `append`'s `Needs` arm and [`apply_string_append`]. Pushes
 /// `value` only if no existing string element already equals it; returns whether
@@ -619,5 +688,173 @@ mod tests {
             "non-destructive: {msg}"
         );
         assert_eq!(std::fs::read_to_string(&bare).unwrap(), before, "untouched");
+    }
+
+    // --- remove_after & remove — SL-105 PHASE-01 --------------------------------
+
+    /// Seeded entity with 3 `after` edges to X at ranks 0, 2, 5.
+    fn seeded_with_after() -> String {
+        "id = 1\nslug = \"a\"\ntitle = \"A\"\n\n[relationships]\nneeds = []\n\
+         after = [\n  { to = \"X\", rank = 0 },\n  { to = \"X\", rank = 2 },\n  { to = \"X\", rank = 5 },\n]\n"
+            .to_string()
+    }
+
+    fn seeded_mixed_after() -> String {
+        "id = 1\nslug = \"a\"\ntitle = \"A\"\n\n[relationships]\nneeds = []\n\
+         after = [\n  { to = \"X\", rank = 0 },\n  { to = \"Y\", rank = 1 },\n  { to = \"Z\", rank = 2 },\n]\n"
+            .to_string()
+    }
+
+    #[test]
+    fn remove_after_all_matching() {
+        // VT-1: 3 after edges to X, remove all → count=3, none to X remain.
+        let (_dir, path) = write_tmp(&seeded_with_after());
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut doc = text.parse::<toml_edit::DocumentMut>().unwrap();
+        let count = remove_after(&mut doc, "X", None).unwrap();
+        assert_eq!(count, 3, "all 3 edges to X removed");
+        // Check the in-memory doc (we didn't write back, mutated doc directly).
+        let array = doc
+            .get("relationships")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("after"))
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert_eq!(array.len(), 0, "no edges remain");
+    }
+
+    #[test]
+    fn remove_after_rank_ceiling() {
+        // VT-2: edges to X at ranks 0, 2, 5. rank_ceiling=2 → remove rank 0 and 2,
+        // keep rank 5.
+        let (_dir, path) = write_tmp(&seeded_with_after());
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut doc = text.parse::<toml_edit::DocumentMut>().unwrap();
+        let count = remove_after(&mut doc, "X", Some(2)).unwrap();
+        assert_eq!(count, 2, "only rank 0 and 2 removed");
+        let array = doc
+            .get("relationships")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("after"))
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert_eq!(array.len(), 1, "one edge remains");
+        let remaining = array.get(0).and_then(|v| v.as_inline_table()).unwrap();
+        assert_eq!(
+            remaining.get("rank").and_then(|v| v.as_integer()),
+            Some(5),
+            "rank 5 edge kept"
+        );
+    }
+
+    #[test]
+    fn remove_after_no_match() {
+        // VT-3: edge to Y only. remove_after X → count=0.
+        let body = "id = 1\nslug = \"a\"\ntitle = \"A\"\n\n[relationships]\nneeds = []\n\
+                     after = [{ to = \"Y\", rank = 0 }]\n";
+        let (_dir, path) = write_tmp(body);
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut doc = text.parse::<toml_edit::DocumentMut>().unwrap();
+        let count = remove_after(&mut doc, "X", None).unwrap();
+        assert_eq!(count, 0, "no match → zero removed");
+    }
+
+    #[test]
+    fn remove_after_mixed_targets() {
+        // VT-3 extension: edges to X, Y, Z. Remove X. Assert only X gone, Y and Z
+        // untouched, count=1.
+        let (_dir, path) = write_tmp(&seeded_mixed_after());
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut doc = text.parse::<toml_edit::DocumentMut>().unwrap();
+        let count = remove_after(&mut doc, "X", None).unwrap();
+        assert_eq!(count, 1, "only X removed");
+        let array = doc
+            .get("relationships")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("after"))
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert_eq!(array.len(), 2, "Y and Z remain");
+        let tos: Vec<&str> = array
+            .iter()
+            .filter_map(|v| {
+                v.as_inline_table()
+                    .and_then(|t| t.get("to"))
+                    .and_then(|v| v.as_str())
+            })
+            .collect();
+        assert_eq!(tos, vec!["Y", "Z"], "only Y and Z remain");
+    }
+
+    #[test]
+    fn remove_after_f1_refuse() {
+        // VT-5/F-1: entity with no `after` array at all — no `[relationships]` or
+        // `[relationships]` without `after`. remove_after bails. Assert error contains
+        // "malformed" or "missing seeded".
+        let (_dir, path) = write_tmp("id = 1\nslug = \"a\"\ntitle = \"A\"\n");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut doc = text.parse::<toml_edit::DocumentMut>().unwrap();
+        let err = remove_after(&mut doc, "X", None).expect_err("absent after array refuses");
+        let msg = format!("{err:#}").to_lowercase();
+        assert!(
+            msg.contains("malformed") || msg.contains("missing seeded"),
+            "F-1 refuse message: {msg}"
+        );
+        assert!(
+            !msg.contains("regenerate") && !msg.contains("recreate"),
+            "non-destructive: {msg}"
+        );
+    }
+
+    #[test]
+    fn remove_io_noop_holds_mtime() {
+        // VT-4: no matching edges. Call remove. Assert mtime unchanged.
+        let body = "id = 1\nslug = \"a\"\ntitle = \"A\"\n\n[relationships]\nneeds = []\n\
+                     after = [{ to = \"Y\", rank = 0 }]\n";
+        let (_dir, path) = write_tmp(body);
+        let before_mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
+        let count = remove(&path, "X", None).unwrap();
+        assert_eq!(count, 0, "no match");
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().modified().unwrap(),
+            before_mtime,
+            "mtime held on noop"
+        );
+    }
+
+    #[test]
+    fn remove_io_roundtrip() {
+        // VT-5: entity with comment and inert [notes] table plus after edges.
+        // Remove one edge. Assert comment, [notes] table, other edges survive.
+        let body = r#"id = 1
+slug = "a"
+title = "A"
+# keep this comment
+[notes]
+info = "survive"
+
+[relationships]
+needs = []
+after = [
+  { to = "X", rank = 0 },
+  { to = "Y", rank = 1 },
+]
+"#;
+        let (_dir, path) = write_tmp(body);
+        let count = remove(&path, "X", None).unwrap();
+        assert_eq!(count, 1);
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(written.contains("# keep this comment"), "comment survives");
+        assert!(written.contains("[notes]"), "inert table survives");
+        assert!(
+            written.contains("info = \"survive\""),
+            "inert table content survives"
+        );
+        // Y edge remains, X edge gone.
+        assert!(
+            written.contains("{ to = \"Y\", rank = 1 }"),
+            "Y edge survives"
+        );
+        assert!(!written.contains("{ to = \"X\""), "X edge removed");
     }
 }
