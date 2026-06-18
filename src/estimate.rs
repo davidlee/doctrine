@@ -18,6 +18,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+pub(crate) mod display;
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
