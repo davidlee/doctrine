@@ -91,3 +91,18 @@ Zero consumers exist; the pragmatic choice is correct.
   "relationships.supersedes disappears from --json output" to "JSON surface
   unchanged — supersedes is spliced back from [[relation]] rows, preserving
   the byte-identical relationships object."
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- `slice/095/design.md` §D3: updated JSON surface claim → "JSON surface unchanged —
+  `supersedes` is spliced back from `[[relation]]` rows in `show_json`, preserving
+  the byte-identical `relationships` object." (RV-079 F-1)
+- `slice/095/design.md` Verification alignment: `show --json` bullet updated to
+  match (RV-079 F-1)
+
+### REVs completed
+- None — no governance/spec items in brief.
+
+### Withdrawn / tolerated
+- None — the single finding (F-1) was verified and remediated.
