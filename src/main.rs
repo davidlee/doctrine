@@ -51,9 +51,9 @@ mod skills;
 mod slice;
 mod spec;
 mod standard;
-mod supersede;
 mod state;
 mod status;
+mod supersede;
 mod tomlfmt;
 mod tty;
 mod verify;
@@ -4099,17 +4099,7 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
         .parse::<toml_edit::DocumentMut>()
         .with_context(|| format!("Failed to parse {}", old_path.display()))?;
 
-    // F-1 pre-flight (before any write, P2): every key/array the transaction touches
-    // must be scaffold-present. A missing one → non-destructive bail (restore seeded
-    // keys; never regenerate). Because steps below mutate+write THESE held docs with no
-    // re-read, F-1 cannot re-fire mid-transaction.
-    let new_sup = rel_array(&new_doc, policy.supersedes_field);
-    anyhow::ensure!(
-        new_sup.is_some(),
-        "malformed `{new}` at {}: missing seeded `[relationships].{}` array — restore the seeded `[relationships]` arrays before superseding; the file is left untouched",
-        new_path.display(),
-        policy.supersedes_field
-    );
+    // F-1 pre-flight on OLD's typed carve-out (always typed, both paths).
     let old_carveout = rel_array(&old_doc, policy.carveout_field);
     anyhow::ensure!(
         old_carveout.is_some(),
@@ -4134,57 +4124,132 @@ fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyhow::Result<
         old_path.display()
     );
 
-    // F-D not-already-superseded guard. If OLD is already `superseded`, allow ONLY the
-    // idempotent re-run — BOTH OLD.superseded_by == [NEW] AND NEW.supersedes ∋ OLD
-    // (check BOTH files, codex C4). Else refuse.
     let old_status = old_doc
         .get("status")
         .and_then(toml_edit::Item::as_str)
         .unwrap_or_default();
-    if old_status == policy.superseded_status {
-        let carveout = old_carveout.unwrap_or_default();
-        let new_lists_old = new_sup.unwrap_or_default().contains(&old_ref);
-        let single_self = carveout.len() == 1 && carveout.first() == Some(&new_ref);
-        if single_self && new_lists_old {
-            // Idempotent re-run: all three surfaces already hold — no-op.
-            writeln!(
-                std::io::stdout(),
-                "already recorded: {new} supersedes {old}"
+
+    // Dispatch write path on storage discriminant (SL-095 D7).
+    match policy.storage {
+        crate::supersede::StorageTarget::RelationRow => {
+            use crate::relation::{self, RelationLabel};
+
+            // F-1 pre-flight: read [[relation]] rows for Supersedes on NEW.
+            let relation_doc = relation::RelationDoc::parse(&new_text)
+                .with_context(|| {
+                    format!(
+                        "malformed `{new}` at {}: missing seeded `[[relation]]` table — restore the seeded template; the file is left untouched",
+                        new_path.display()
+                    )
+                })?;
+            let (edges, _illegal) = relation::read_block(new_kref.kind, &relation_doc);
+            let existing_supersedes: Vec<_> = edges
+                .iter()
+                .filter(|e| e.label == RelationLabel::Supersedes)
+                .collect();
+
+            // F-D not-already-superseded guard ([[relation]] path).
+            if old_status == policy.superseded_status {
+                let carveout = old_carveout.unwrap_or_default();
+                let new_lists_old = existing_supersedes.iter().any(|e| e.target == old_ref);
+                let single_self = carveout.len() == 1 && carveout.first() == Some(&new_ref);
+                if single_self && new_lists_old {
+                    writeln!(
+                        std::io::stdout(),
+                        "already recorded: {new} supersedes {old}"
+                    )?;
+                    return Ok(());
+                }
+                if let Some(other) = carveout.iter().find(|x| **x != new_ref) {
+                    anyhow::bail!("{old} already superseded by {other}; reopening is deferred");
+                }
+                anyhow::bail!(
+                    "{old} status is superseded but its superseded_by carve-out is empty/inconsistent — run `doctrine validate`"
+                );
+            }
+            // F-1: NEW must not already supersede a different entity.
+            if let Some(edge) = existing_supersedes.first() {
+                anyhow::bail!("{new} already supersedes {}", edge.target);
+            }
+
+            // Write NEW's outbound edge via [[relation]].
+            let outcome = relation::append_edge(&new_path, RelationLabel::Supersedes, &old_ref)?;
+            if matches!(outcome, relation::AppendOutcome::Noop) {
+                writeln!(
+                    std::io::stdout(),
+                    "already recorded: {new} supersedes {old}"
+                )?;
+                // Still write OLD's carved-out + status (typed, below).
+            } else {
+                writeln!(std::io::stdout(), "{new} supersedes {old}")?;
+            }
+
+            // OLD: typed carved-out + status flip (unchanged).
+            let today = clock::today();
+            let status_hint = format!(
+                "malformed `{old}`: missing seeded top-level `status`/`updated` — restore the seeded keys; the file is left untouched"
+            );
+            dep_seq::apply_string_append(&mut old_doc, policy.carveout_field, &new_ref)?;
+            dep_seq::apply_status(
+                &mut old_doc,
+                &[("status", policy.superseded_status), ("updated", &today)],
+                &status_hint,
             )?;
-            return Ok(());
+            std::fs::write(&old_path, old_doc.to_string())
+                .with_context(|| format!("Failed to write {}", old_path.display()))?;
         }
-        // A DIFFERENT supersessor named in the carve-out → FromTerminal analog.
-        if let Some(other) = carveout.iter().find(|x| **x != new_ref) {
-            anyhow::bail!("{old} already superseded by {other}; reopening is deferred");
+        crate::supersede::StorageTarget::TypedArray { field } => {
+            // F-1 pre-flight: typed outbound array must be scaffold-present.
+            let new_sup = rel_array(&new_doc, field);
+            anyhow::ensure!(
+                new_sup.is_some(),
+                "malformed `{new}` at {}: missing seeded `[relationships].{}` array — restore the seeded `[relationships]` arrays before superseding; the file is left untouched",
+                new_path.display(),
+                field
+            );
+
+            // F-D not-already-superseded guard (typed path, existing).
+            if old_status == policy.superseded_status {
+                let carveout = old_carveout.unwrap_or_default();
+                let new_lists_old = new_sup.unwrap_or_default().contains(&old_ref);
+                let single_self = carveout.len() == 1 && carveout.first() == Some(&new_ref);
+                if single_self && new_lists_old {
+                    writeln!(
+                        std::io::stdout(),
+                        "already recorded: {new} supersedes {old}"
+                    )?;
+                    return Ok(());
+                }
+                if let Some(other) = carveout.iter().find(|x| **x != new_ref) {
+                    anyhow::bail!("{old} already superseded by {other}; reopening is deferred");
+                }
+                anyhow::bail!(
+                    "{old} status is superseded but its superseded_by carve-out is empty/inconsistent — run `doctrine validate`"
+                );
+            }
+
+            // Mutate the held docs (no IO) and write.
+            let today = clock::today();
+            let status_hint = format!(
+                "malformed `{old}`: missing seeded top-level `status`/`updated` — restore the seeded keys; the file is left untouched"
+            );
+            dep_seq::apply_string_append(&mut new_doc, field, &old_ref)?;
+            dep_seq::apply_string_append(&mut old_doc, policy.carveout_field, &new_ref)?;
+            dep_seq::apply_status(
+                &mut old_doc,
+                &[("status", policy.superseded_status), ("updated", &today)],
+                &status_hint,
+            )?;
+
+            // Write each file ONCE, NEW then OLD.
+            std::fs::write(&new_path, new_doc.to_string())
+                .with_context(|| format!("Failed to write {}", new_path.display()))?;
+            std::fs::write(&old_path, old_doc.to_string())
+                .with_context(|| format!("Failed to write {}", old_path.display()))?;
+
+            writeln!(std::io::stdout(), "{new} supersedes {old}")?;
         }
-        // Empty/inconsistent carve-out while status==superseded → hand-drift; refuse as
-        // DRIFT (no <X> to name, P5 — do NOT self-heal).
-        anyhow::bail!(
-            "{old} status is superseded but its superseded_by carve-out is empty/inconsistent — run `doctrine validate`"
-        );
     }
-
-    // Mutate the held docs (no IO) — compose the PHASE-02 pure cores.
-    let today = clock::today();
-    let status_hint = format!(
-        "malformed `{old}`: missing seeded top-level `status`/`updated` — restore the seeded keys; the file is left untouched"
-    );
-    dep_seq::apply_string_append(&mut new_doc, policy.supersedes_field, &old_ref)?;
-    dep_seq::apply_string_append(&mut old_doc, policy.carveout_field, &new_ref)?;
-    dep_seq::apply_status(
-        &mut old_doc,
-        &[("status", policy.superseded_status), ("updated", &today)],
-        &status_hint,
-    )?;
-
-    // Write each file ONCE, NEW then OLD (the order that makes a torn state
-    // detectable by `validate`). No re-read, no re-parse.
-    std::fs::write(&new_path, new_doc.to_string())
-        .with_context(|| format!("Failed to write {}", new_path.display()))?;
-    std::fs::write(&old_path, old_doc.to_string())
-        .with_context(|| format!("Failed to write {}", old_path.display()))?;
-
-    writeln!(std::io::stdout(), "{new} supersedes {old}")?;
     Ok(())
 }
 
@@ -4358,13 +4423,15 @@ mod tests {
             "OLD.superseded_by should contain ADR-001, got: {old_toml}"
         );
 
-        // Assert: NEW.supersedes contains ADR-002, no duplicate.
+        // Assert: NEW has a [[relation]] label="supersedes" row targeting ADR-002
+        // (SL-095 PHASE-03: RelationRow path writes [[relation]] rows, not typed arrays).
         let new_toml =
             std::fs::read_to_string(root.join(".doctrine/adr/001/adr-001.toml")).unwrap();
-        let supersedes_count = new_toml.matches("ADR-002").count();
-        assert_eq!(
-            supersedes_count, 1,
-            "NEW.supersedes should contain ADR-002 exactly once, got {supersedes_count}: {new_toml}"
+        assert!(
+            new_toml.contains("[[relation]]")
+                && new_toml.contains("label = \"supersedes\"")
+                && new_toml.contains("target = \"ADR-002\""),
+            "NEW should have [[relation]] supersedes → ADR-002: {new_toml}"
         );
     }
     // --- SL-090 §PHASE-03: memory link/unlink tests ---------------------------

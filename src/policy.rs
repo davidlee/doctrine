@@ -42,14 +42,15 @@ pub(crate) const POLICY_KIND: GovKind = GovKind {
 };
 
 /// The status transitions `policy status` writes. A standing rule's life:
-/// `draft → required → deprecated / retired`. `required` is the in-force state
-/// (the boot section projects only these, SL-030 PHASE-04). Supersession is a
-/// relationship (`relationships.supersedes`), not a status (design D2) — so no
-/// `Superseded` variant. A flat enum, no per-state stamping.
+/// `draft → required → superseded → deprecated / retired`. `required` is the
+/// in-force state (the boot section projects only these, SL-030 PHASE-04).
+/// `superseded` is a terminal state set ONLY by `doctrine supersede` (SL-095
+/// PHASE-03), NOT an authoring-surface status. A flat enum, no per-state stamping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub(crate) enum PolicyStatus {
     Draft,
     Required,
+    Superseded,
     Deprecated,
     Retired,
 }
@@ -59,6 +60,7 @@ impl PolicyStatus {
         match self {
             Self::Draft => "draft",
             Self::Required => "required",
+            Self::Superseded => "superseded",
             Self::Deprecated => "deprecated",
             Self::Retired => "retired",
         }
@@ -69,14 +71,15 @@ impl PolicyStatus {
 /// `--status` against. Mirrors `PolicyStatus`'s variants, kept in lockstep by
 /// `policy_known_set_matches_variants` (a drift canary). The enum kinds cannot
 /// store an out-of-vocab status, so this doubles as the complete vocabulary.
-pub(crate) const POLICY_STATUSES: &[&str] = &["draft", "required", "deprecated", "retired"];
+pub(crate) const POLICY_STATUSES: &[&str] =
+    &["draft", "required", "superseded", "deprecated", "retired"];
 
 /// The `policy list` hide-set (design §5.3): `deprecated` (sunsetting but extant)
 /// and `retired` (terminal off) policies no longer govern, so they drop from the
 /// default list. The override (`--all` or any explicit `--status`) reveals them —
 /// handled in `listing::retain`, not here. Bound as `POLICY_KIND.hidden`.
 fn is_hidden(status: &str) -> bool {
-    matches!(status, "deprecated" | "retired")
+    matches!(status, "superseded" | "deprecated" | "retired")
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +288,7 @@ mod tests {
         let variants = [
             PolicyStatus::Draft,
             PolicyStatus::Required,
+            PolicyStatus::Superseded,
             PolicyStatus::Deprecated,
             PolicyStatus::Retired,
         ];
@@ -303,6 +307,7 @@ mod tests {
         }
         assert!(is_hidden("deprecated"));
         assert!(is_hidden("retired"));
+        assert!(is_hidden("superseded"));
         assert!(!is_hidden("draft"));
         assert!(!is_hidden("required"));
     }
