@@ -655,7 +655,7 @@ mod tests {
     fn glossary_is_shipped() {
         // ADR-005 / SL-023 PHASE-01: the glossary must be in the embed/ship set
         // so a client install receives the foundational conventions. Guards the
-        // regression where it lived unembedded under doc/.
+        // regression where it lived unembedded under the legacy doc/ directory.
         let names = embedded_filenames();
         assert!(
             names.contains(&"glossary.md".to_string()),
