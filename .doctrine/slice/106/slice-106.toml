@@ -1,7 +1,7 @@
 id = 106
 slug = "set-auth-status-fold-reword"
 title = "Fold knowledge::set_record_status onto set_authored_status seam and reword F-1 refuse hints"
-status = "started"
+status = "done"
 created = "2026-06-18"
 updated = "2026-06-18"
 
