@@ -4,7 +4,7 @@ version = 1
 id = 167
 slug = "build-an-inspectable-plan-of-create-dir-install-skip-and-gitignore-steps-before-executing"
 title = "Build an inspectable plan of create-dir, install, skip, and gitignore steps before executing"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

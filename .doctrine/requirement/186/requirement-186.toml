@@ -4,7 +4,7 @@ version = 1
 id = 186
 slug = "boot-install-merges-a-exec-boot-sessionstart-hook-into-claude-settingslocaljson-refreshing-a-stale-owned-copy-and-preserving-every-foreign-hook-and-key"
 title = "`boot install` merges a `<exec> boot` SessionStart hook into Claude settings.local.json, refreshing a stale owned copy and preserving every foreign hook and key."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

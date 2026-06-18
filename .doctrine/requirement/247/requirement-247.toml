@@ -4,7 +4,7 @@ version = 1
 id = 247
 slug = "no-record-state-is-ever-workable-records-never-eligible-never-in-survey-or-next-zero-work-consequence"
 title = "No record state is ever Workable-class: a record is never eligible, never appears in survey or next, and carries zero work-lineage consequence — actionability stays decoupled from gating (records gate dependents via the IMP-047 trinary class; under today's binary partition they are Terminal-inert)"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

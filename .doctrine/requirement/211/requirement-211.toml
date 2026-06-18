@@ -4,7 +4,7 @@ version = 1
 id = 211
 slug = "keep-the-terminal-done-hide-done-abandoned-and-reopen-refusal-done-abandoned-predicates-distinct-so-an-abandoned-incomplete-slice-is-never-false-flagged-divergent"
 title = "Keep the terminal {done}, hide {done, abandoned}, and reopen-refusal {done, abandoned} predicates distinct so an abandoned-incomplete slice is never false-flagged divergent."
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

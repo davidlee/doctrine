@@ -4,7 +4,7 @@ version = 1
 id = 227
 slug = "project-active-policies-required-and-active-standards-default-required-into-the-boot-snapshot-via-governancelist-rows-with-an-explicit-in-force-set"
 title = "Project Active Policies (required) and Active Standards (default + required) into the boot snapshot via governance::list_rows with an explicit in-force set."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

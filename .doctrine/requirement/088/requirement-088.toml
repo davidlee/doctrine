@@ -4,7 +4,7 @@ version = 1
 id = 88
 slug = "converge-hand-authored-and-imported-specs-on-one-code-anchor"
 title = "Converge hand-authored and imported specs on one code anchor"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "A hand-authored spec and one imported from code structure for the same code anchor reconcile to a single entity, never a parallel or competing surface."

@@ -4,7 +4,7 @@ version = 1
 id = 223
 slug = "fix-the-standard-status-vocabulary-to-draft-default-required-deprecated-retired-default-is-recommended-unless-justified-required-is-mandated"
 title = "Fix the standard status vocabulary to draft, default, required, deprecated, retired; default is recommended-unless-justified, required is mandated."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

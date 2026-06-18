@@ -4,7 +4,7 @@ version = 1
 id = 179
 slug = "lay-down-the-derived-canonical-tree-and-links-atomically-via-staged-swaps-so-a-crash-leaves-only-a-healable-dangling-link"
 title = "Lay down the derived canonical tree and links atomically via staged swaps so a crash leaves only a healable dangling link"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

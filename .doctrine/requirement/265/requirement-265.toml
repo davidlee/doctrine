@@ -4,7 +4,7 @@ version = 1
 id = 265
 slug = "expose-estimate-metadata-to-graph-tooling-through-a-stable-contract"
 title = "Expose estimate metadata to graph tooling through a stable contract"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Catalog/graph hydration exposes each estimated node's metadata to graph tooling through a stable, policy-agnostic contract, so a consumer can aggregate without doctrine-specific project-management semantics."

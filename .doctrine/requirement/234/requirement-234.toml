@@ -4,7 +4,7 @@ version = 1
 id = 234
 slug = "carry-interactionstoml-edge-rows-targettypenotes-under-the-edge-key-as-the-tech-only-outbound-peer-axis-a-missing-file-yields-zero-edges"
 title = "Carry `interactions.toml` `[[edge]]` rows (target/type/notes) under the `edge` key as the tech-only outbound peer axis; a missing file yields zero edges."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

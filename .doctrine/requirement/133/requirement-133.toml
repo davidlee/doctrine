@@ -4,7 +4,7 @@ version = 1
 id = 133
 slug = "render-the-adr-body-as-frontmatter-free-prose-context-decision-consequences-verification-references-with-metadata-in-the-sister-toml"
 title = "Render the ADR body as frontmatter-free prose (Context, Decision, Consequences, Verification, References) with metadata in the sister TOML"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

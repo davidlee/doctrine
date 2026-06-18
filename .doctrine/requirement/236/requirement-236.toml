@@ -4,7 +4,7 @@ version = 1
 id = 236
 slug = "treat-source-anchors-as-descriptive-not-currency-liveness-is-not-checked-so-a-stale-anchor-ships-silently-and-freshness-is-an-authoring-discipline"
 title = "Treat `[[source]]` anchors as descriptive, not currency: liveness is not checked, so a stale anchor ships silently and freshness is an authoring discipline."
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

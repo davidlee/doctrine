@@ -4,7 +4,7 @@ version = 1
 id = 86
 slug = "preserve-lineage-and-integrity-when-a-technical-spec-is-retired-or-superseded"
 title = "Preserve lineage and integrity when a technical spec is retired or superseded"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A technical spec is retired or superseded through the shared lifecycle, recording recoverable lineage rather than being deleted or rewritten in place, and never silently orphaning its decomposition children. Dedicated merge and split verbs are reserved."

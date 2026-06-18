@@ -4,7 +4,7 @@ version = 1
 id = 169
 slug = "make-a-new-authored-kind-distributable-by-adding-its-dir-to-the-manifest-and-negating-its-derived-subtrees-in-gitignore"
 title = "Make a new authored kind distributable by adding its dir to the manifest and negating its derived subtrees in gitignore"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

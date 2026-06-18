@@ -4,7 +4,7 @@ version = 1
 id = 183
 slug = "fall-back-to-a-fixed-heading-not-yet-populated-marker-on-any-producer-miss-error-or-empty-listing-so-a-missing-source-never-crashes-assembly"
 title = "Fall back to a fixed `<!-- heading: not yet populated -->` marker on any producer miss (error or empty listing), so a missing source never crashes assembly."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

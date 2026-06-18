@@ -4,7 +4,7 @@ version = 1
 id = 154
 slug = "verification-state-is-a-separate-axis-from-lifecycle-status-a-memory-can-be-active-stale-and-unverified-at-once-and-verification-is-never-folded-into-status"
 title = "Verification state is a separate axis from lifecycle status; a memory can be active, stale, and unverified at once, and verification is never folded into status"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

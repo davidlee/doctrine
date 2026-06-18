@@ -4,7 +4,7 @@ version = 1
 id = 217
 slug = "hold-the-outbound-relationships-seam-slicesspecsdrift-plus-needsaftertriggers-priority-edges-appending-edit-preservingly-and-refusing-when-a-seeded-array-is-absent"
 title = "Hold the outbound [relationships] seam (slices/specs/drift, plus needs/after/triggers priority edges), appending edit-preservingly and refusing when a seeded array is absent."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

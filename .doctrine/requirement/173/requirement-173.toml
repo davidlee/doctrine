@@ -4,7 +4,7 @@ version = 1
 id = 173
 slug = "embed-the-plugins-source-tree-at-compile-time-as-the-single-canonical-skill-source-feeding-both-the-marketplace-and-binary-channels"
 title = "Embed the plugins source tree at compile time as the single canonical skill source feeding both the marketplace and binary channels"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

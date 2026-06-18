@@ -4,7 +4,7 @@ version = 1
 id = 123
 slug = "address-entities-by-canonical-string-id-externally-and-numeric-id-internally-cross-references-target-the-durable-peer-id-membership-labels-ride-on-edges"
 title = "Address entities by canonical string id externally and numeric id internally; cross-references target the durable peer id, membership labels ride on edges"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

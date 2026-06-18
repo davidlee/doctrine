@@ -4,7 +4,7 @@ version = 1
 id = 134
 slug = "materialise-both-spec-subtypes-product-prd-tech-spec-through-one-kind-blind-engine-each-in-its-own-directory-tree-and-reservation-namespace-diverging-only-in-scaffold-fileset-and-the-tech-only-flat-fields"
 title = "Materialise both spec subtypes (product PRD, tech SPEC) through one kind-blind engine, each in its own directory tree and reservation namespace, diverging only in scaffold fileset and the tech-only flat fields"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

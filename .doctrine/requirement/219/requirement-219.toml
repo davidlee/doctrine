@@ -4,7 +4,7 @@ version = 1
 id = 219
 slug = "model-every-kind-as-one-entity-discriminated-by-a-kind-facet-over-the-kind-blind-engine-never-parallel-per-kind-schemas-kind-variation-is-facet-fields-not-a-fork"
 title = "Model every kind as one entity discriminated by a kind facet over the kind-blind engine — never parallel per-kind schemas; kind variation is facet fields, not a fork."
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

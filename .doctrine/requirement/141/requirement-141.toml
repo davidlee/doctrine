@@ -4,7 +4,7 @@ version = 1
 id = 141
 slug = "the-spine-and-edge-tables-are-authored-toml-the-engine-round-trips-but-never-generates-no-cli-flag-sets-a-spine-field"
 title = "The spine and edge tables are authored TOML the engine round-trips but never generates; no CLI flag sets a spine field"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

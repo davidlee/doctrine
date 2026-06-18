@@ -4,7 +4,7 @@ version = 1
 id = 271
 slug = "resolve-a-project-wide-estimation-unit-with-a-default"
 title = "Resolve a project-wide estimation unit with a default"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The estimation unit is read from doctrine.toml [estimation].unit, defaulting to high_caffeine_hours; no entity carries its own unit."

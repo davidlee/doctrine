@@ -4,7 +4,7 @@ version = 1
 id = 189
 slug = "provision-a-fork-only-through-worktree-provision-copying-solely-allowlisted-worktreeinclude-gitignored-files-select-copies-drops-every-coordinationruntime-tier-path-even-under-a-broad-glob"
 title = "Provision a fork only through `worktree provision`, copying solely allowlisted (`.worktreeinclude`) gitignored files; `select_copies` drops every coordination/runtime-tier path even under a broad `**` glob."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

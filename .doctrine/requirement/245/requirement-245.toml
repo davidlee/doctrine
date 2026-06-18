@@ -4,7 +4,7 @@ version = 1
 id = 245
 slug = "model-all-four-kinds-as-one-knowledge-record-entity-discriminated-by-record-kind-over-the-kind"
 title = "Model all four kinds as one knowledge_record entity discriminated by record_kind over the kind-blind engine — never parallel per-kind schemas — reusing the shared entity scaffold so the existing slice, ADR, spec, backlog, and memory suites stay green unchanged"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

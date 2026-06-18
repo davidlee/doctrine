@@ -4,7 +4,7 @@ version = 1
 id = 174
 slug = "discover-the-embedded-catalog-from-skillmd-frontmatter-with-globally-unique-skill-ids-excluding-the-marketplace-only-subset-domains"
 title = "Discover the embedded catalog from SKILL.md frontmatter with globally-unique skill ids, excluding the marketplace-only subset domains"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

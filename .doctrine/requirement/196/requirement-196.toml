@@ -4,7 +4,7 @@ version = 1
 id = 196
 slug = "normalizer-algorithms-are-version-tagged-remote-normalizercheckout-normalizer-so-a-deliberate-change-is-visible-and-never-silently-re-anchors-existing-memory"
 title = "Normalizer algorithms are version-tagged (`REMOTE_NORMALIZER`/`CHECKOUT_NORMALIZER`) so a deliberate change is visible and never silently re-anchors existing memory."
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

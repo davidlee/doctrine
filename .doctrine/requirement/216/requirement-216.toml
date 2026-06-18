@@ -4,7 +4,7 @@ version = 1
 id = 216
 slug = "carry-the-optional-resolution-close-reason-enum-and-the-risk-only-facet-risklevel-likelihoodimpact-origin-controls-as-typed-enums-through-the-empty-to-none-validation-seam"
 title = "Carry the optional Resolution close-reason enum and the risk-only [facet] (RiskLevel likelihood/impact, origin, controls) as typed enums through the empty-to-None validation seam."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

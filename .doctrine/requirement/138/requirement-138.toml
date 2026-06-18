@@ -4,7 +4,7 @@ version = 1
 id = 138
 slug = "reassemble-the-whole-spec-on-show-by-splicing-identity-toml-prose-body-members-resolved-by-fk-in-advisory-order-and-tech-interaction-edges"
 title = "Reassemble the whole spec on show by splicing identity TOML, prose body, members resolved by FK in advisory order, and tech interaction edges"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

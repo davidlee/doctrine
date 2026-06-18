@@ -4,7 +4,7 @@ version = 1
 id = 142
 slug = "interaction-edges-are-outbound-only-the-reverse-direction-is-derived-never-authored-on-both-sides"
 title = "Interaction edges are outbound-only; the reverse direction is derived, never authored on both sides"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

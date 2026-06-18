@@ -4,7 +4,7 @@ version = 1
 id = 225
 slug = "scaffold-each-kind-as-a-stem-nnntomlmd-fileset-plus-nnn-slug-symlink-with-a-frontmatter-free-statementrationalescopeverificationreferences-body"
 title = "Scaffold each kind as a stem-NNN.{toml,md} fileset plus NNN-slug symlink, with a frontmatter-free Statement/Rationale/Scope/Verification/References body."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

@@ -4,7 +4,7 @@ version = 1
 id = 129
 slug = "bind-an-adr-specific-kind-descriptor-and-scaffold-onto-the-shared-materialiser-producing-the-adr-toml-prose-body-and-slug-symlink"
 title = "Bind an ADR-specific Kind descriptor and scaffold onto the shared materialiser, producing the adr TOML, prose body, and slug symlink"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

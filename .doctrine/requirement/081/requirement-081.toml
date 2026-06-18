@@ -4,7 +4,7 @@ version = 1
 id = 81
 slug = "place-a-technical-spec-at-a-c4-level-of-abstraction"
 title = "Place a technical spec at a C4 level of abstraction"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A technical spec declares its level on the closed C4 ladder — context, container, component, or code — so its architectural altitude is explicit."

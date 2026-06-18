@@ -4,7 +4,7 @@ version = 1
 id = 159
 slug = "enumerate-every-numbered-kind-its-prefix-dir-toml-stem-and-runtime-state-dir-in-one-corpus-wide-kinds-table"
 title = "Enumerate every numbered kind, its prefix, dir, toml stem, and runtime state dir in one corpus-wide KINDS table"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

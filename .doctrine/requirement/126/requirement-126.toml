@@ -4,7 +4,7 @@ version = 1
 id = 126
 slug = "write-status-and-coupled-key-transitions-edit-preservingly-leaving-comments-inert-tables-and-unknown-keys-intact"
 title = "Write status and coupled-key transitions edit-preservingly, leaving comments, inert tables, and unknown keys intact"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

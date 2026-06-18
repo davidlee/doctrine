@@ -4,7 +4,7 @@ version = 1
 id = 249
 slug = "worktree-import-belted-dispatch-funnel"
 title = "`worktree import --base B --fork BR` funnels a single distilled worker delta: refuse unless HEAD==B, the tree is clean, and S^==B; reject a `.doctrine/`/`.claude/` belt touch in the B..S tracked diff; then `git apply --3way --index` (the commit is separate, no runtime receipt). Orchestrator-classed, dispatch-only."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

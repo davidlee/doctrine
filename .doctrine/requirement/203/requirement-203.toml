@@ -4,7 +4,7 @@ version = 1
 id = 203
 slug = "a-behavioural-parse-conformance-matrix-proves-every-spine-kind-parses-every-shared-list-flag-over-the-built-binary-since-clap-exposes-no-structural-flatten-check"
 title = "A behavioural parse-conformance matrix proves every spine kind parses every shared list flag over the built binary, since clap exposes no structural flatten check."
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

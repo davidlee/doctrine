@@ -4,7 +4,7 @@ version = 1
 id = 224
 slug = "hide-deprecated-and-retired-rows-from-each-kinds-default-list-revealed-by-all-or-an-explicit-status-via-the-govkind-hidden-predicate"
 title = "Hide deprecated and retired rows from each kind's default list, revealed by --all or an explicit --status, via the GovKind hidden predicate."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

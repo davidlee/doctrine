@@ -4,7 +4,7 @@ version = 1
 id = 136
 slug = "produce-requirements-only-through-spec-req-add-reserve-the-requirement-set-its-kind-allocate-the-next-free-membership-label-and-append-the-membership-edge-edit-preservingly"
 title = "Produce requirements only through spec req add — reserve the requirement, set its kind, allocate the next-free membership label, and append the membership edge edit-preservingly"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

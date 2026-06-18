@@ -4,7 +4,7 @@ version = 1
 id = 89
 slug = "hold-technical-specs-at-evergreen-architectural-altitude"
 title = "Hold technical specs at evergreen architectural altitude"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "A technical spec holds durable architecture and mechanism, not a single change's design or transient implementation detail; the boundary against slice design is maintained."

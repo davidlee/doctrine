@@ -4,7 +4,7 @@ version = 1
 id = 269
 slug = "define-a-reusable-estimatefacet-and-normalize-bounds-to-finite-f64"
 title = "Define a reusable EstimateFacet and normalize bounds to finite f64"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A single reusable EstimateFacet is parsed from an optional [estimate] table; lower/upper authored as TOML integers or floats normalize to finite f64 internally, and non-finite values are rejected at the parse boundary."

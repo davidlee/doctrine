@@ -4,7 +4,7 @@ version = 1
 id = 124
 slug = "allocate-ids-and-place-named-entities-through-one-atomic-claim-seam-interpreting-an-existing-claim-per-caller"
 title = "Allocate ids and place named entities through one atomic claim seam, interpreting an existing claim per caller"
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);

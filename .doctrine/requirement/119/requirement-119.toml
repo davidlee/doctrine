@@ -4,7 +4,7 @@ version = 1
 id = 119
 slug = "the-pure-layer-takes-no-clock-rng-git-or-disk-impurity-is-confined-to-the-thin-shell-via-injected-inputs"
 title = "The pure layer takes no clock, RNG, git, or disk; impurity is confined to the thin shell via injected inputs"
-status = "pending"
+status = "active"
 kind = "quality"
 
 # description — optional one-line summary (queryable). Omitted by default (None);
