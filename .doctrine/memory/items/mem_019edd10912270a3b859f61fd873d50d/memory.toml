@@ -1,0 +1,41 @@
+memory_uid = "mem_019edd10912270a3b859f61fd873d50d"
+memory_key = "mem.fact.doctrine.sl-101-facets-unintegrated"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "SL-101 Estimate & Value facets are not integrated into main"
+summary = "SL-101 closed 'done' but neither Estimate nor Value facet is wired into main; spec truth reconciled by REV-002, code integration still owed."
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["estimation", "value", "sl-101", "drift"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5473eb5a671285c98460a51ab6ebeae9a4af4a46"
+ref_name = "refs/heads/main"
+checkout_state_id = "1d7690a5d05c3eaf03401c50e52ca046c23ce831313de7823fecc2085c6e3d4c"
+base_commit = "446806cb125865f0c1fb4a2050d71dc9355e264d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
