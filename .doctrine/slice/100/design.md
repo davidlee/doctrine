@@ -121,9 +121,14 @@ Writes only if any field changed (idempotent).
 
 **Tags excluded** — routed through `memory tag` (set algebra, not replace).
 
-**`--key` invariance:** If `memory_key` is already set, `--key` is refused with
-"key already set; memory_key is immutable once recorded." If no key exists,
-`--key` allows late-binding. Enforced before any write.
+**`--key` invariance:** `memory_key` is `Option<String>`. If it is `Some`, `--key`
+is refused with "key already set; memory_key is immutable once recorded." If it is
+`None` (the scaffold omits the line — there is no empty-string case), `--key`
+allows late-binding. The guard tests the `Option` (`is_some()`), not string
+emptiness. Enforced before any write. The supplied key is normalised through
+`normalize_key` (prepend `mem.` + validate) — the same entry record uses, not the
+private `validate_key` — so `edit --key` and `record --key` accept identically
+(RV-086 F-1, F-3).
 
 **`--status` delegation:** Calls the same pure transition logic as `memory status`.
 For `superseded`, the transition requires `--by` which `edit` doesn't offer →
@@ -371,12 +376,15 @@ doctrine memory edit
 
 ## Risks
 
-- **R1 — `--key` immutability enforcement.** The memory TOML currently carries
-  `memory_key` as an optional string. `edit --key` must refuse if the existing
-  value is non-empty. A hand-edited TOML with an empty string key (`memory_key
-  = ""`) must still accept late-binding — distinguish "never set" from "set to
-  empty" (the scaffold writes `memory_key = ""` when no key provided at record).
-  `run_edit` checks `memory_key.is_empty()` rather than `Option<>`.
+- **R1 — `--key` immutability enforcement.** `memory_key` is `Option<String>`
+  (`src/memory.rs:379`). The scaffold **omits the line entirely** when no key is
+  given at record (`render_memory_toml`: `None => String::new()`,
+  `src/memory.rs:782-786`); an empty `memory_key = ""` is *not* a scaffold output
+  and would in fact fail `validate_key` on read (`src/memory.rs:779`). So
+  immutability is decided on the **`Option`**, not a string emptiness test:
+  `edit --key` is refused iff `memory_key` is `Some`, and late-binding is allowed
+  iff it is `None`. `run_edit` checks `is_some()`/`is_none()` — there is no
+  empty-string case to accommodate (RV-086 F-1).
 - **R2 — `edit --lifespan` removal not supported.** V1 sets lifespan to a new
   value or leaves it unchanged. Removing a previously-set lifespan (back to
   unset) requires hand-editing the TOML. A follow-up `--lifespan ""` to clear
