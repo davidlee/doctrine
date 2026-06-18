@@ -84,7 +84,7 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "Same-kind record supersede succeeds: doctrine supersede DEC-001 DEC-002 flips DEC-002 to superseded, co-writes edges." },
   { id = "EX-2", text = "§6 allowed cross-kind pairs succeed: ASM→CON, ASM→DEC, QUE→DEC, QUE→ASM, DEC→CON, CON→DEC." },
-  { id = "EX-3", text = "§6 reopening directions refused decisively: DEC→ASM, DEC→QUE, QUE→CON (not in matrix), CON→ASM, CON→QUE." },
+  { id = "EX-3", text = "§6 reopening directions refused decisively: DEC→ASM, DEC→QUE, CON→ASM, CON→QUE." },
   { id = "EX-4", text = "Cross-family (record↔ADR, either direction) refused with clear message." },
   { id = "EX-5", text = "Self-supersession (ASM-001 ASM-001 etc.) refused." },
   { id = "EX-6", text = "Already-terminal records not flipped: validated ASM stays validated when superseded by CON." },
