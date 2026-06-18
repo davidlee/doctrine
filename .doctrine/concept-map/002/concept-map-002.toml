@@ -4,13 +4,68 @@ title = "Workflow"
 status = "draft"
 created = "2026-06-18"
 updated = "2026-06-18"
-description = ""
+description = "The core doctrine workflow: how work originates, flows through the slice lifecycle, interacts with specifications and governance, and reaches closure — for agents and human users."
 
-# DSL format: one edge per line
-#   Source Label > relationship > Target Label
-# Lines starting with # are comments, blank lines are ignored.
-# Example:
-#   User Story > expresses > User Need
-#   Capability > aggregates > Requirements
-dsl = '''
-'''
+dsl = """
+# ── Origins of work ──
+User Intent > enters > Router
+Router > gates entry to > Slice
+Backlog > collects > Backlog Item
+Backlog Item > promotes to > Slice
+GitHub Issue > feeds > Backlog
+GitHub PR > may prompt > Slice
+
+# ── Core slice lifecycle (FSM states) ──
+Slice > begins as > Proposed
+Proposed > advances to > Design
+Design > advances to > Plan
+Plan > advances to > Ready
+Ready > advances to > Started
+Started > advances to > Audit
+Audit > advances to > Reconcile
+Reconcile > advances to > Done
+
+# ── Deliverables per state ──
+Design > produces > Design Document
+Plan > organises into > Phase
+Phase > delivers > Code Change
+Audit > produces > Audit Findings
+Reconcile > resolves > Spec Drift
+
+# ── Human gates ──
+Human > holds gate for > Ready
+Human > holds gate for > Done
+
+# ── Specifications: durable truth, reconciled after the fact ──
+PRD > defines > Product Intent
+Tech Spec > defines > Architecture
+Audit Findings > identify > Spec Drift
+Slice > is governed by > PRD
+Slice > is governed by > Tech Spec
+
+# ── Execution modes ──
+Solo > drives > Started
+Dispatch > drives > Started
+Dispatch > spawns > Worker
+Worker > returns > Source Delta
+Orchestrator > integrates > Source Delta
+Worktree > isolates > Worker
+Coordination Branch > funnels > Source Delta
+
+# ── Governance ──
+ADR > governs > Slice
+Policy > governs > Conduct Axis
+Standard > constrains > Code Change
+
+# ── Support activities ──
+Review > verifies > Phase
+Review > informs > Audit
+Memory > preserves > Knowledge
+Handover > transfers > Context
+Consult > resolves > Tradeoff
+
+# ── External interaction ──
+GitHub > hosts > Repository
+Peer > performs > Review
+Team > coordinates > Dispatch
+"""
