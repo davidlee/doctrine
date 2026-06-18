@@ -1,0 +1,111 @@
+# Implementation plan for SL-097 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-097"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Foundation — RecordKind::is_terminal() + template relationship blocks"
+objective = "Add per-kind terminal-status knowledge to RecordKind and seed [relationships] blocks in the four record templates so that every downstream phase has a stable type-surface and a stable storage surface."
+
+entrance_criteria = [
+  { id = "EN-1", text = "SL-097 scope and design are locked; RV-074 penances applied." },
+  { id = "EN-2", text = "RecordKind enum and per-kind status vocab arrays exist in src/knowledge.rs." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "RecordKind::is_terminal(status) returns correct bool for every (kind, status) pair in the D2 terminal table." },
+  { id = "EX-2", text = "Per-kind terminal slices (ASSUMPTION_TERMINAL etc.) declared alongside the status vocab arrays." },
+  { id = "EX-3", text = "Four knowledge record templates (.doctrine/templates/knowledge-*.toml) carry seeded [relationships] block with supersedes = [] and superseded_by = []." },
+  { id = "EX-4", text = "Template render/round-trip tests updated and green." },
+]
+verification = [
+  { id = "VT-1", expects = "is_terminal(\"held\") → false; is_terminal(\"validated\") → true; is_terminal(\"invalidated\") → true; is_terminal(\"obsolete\") → true (assumption)." },
+  { id = "VT-2", expects = "is_terminal(\"proposed\") → false; is_terminal(\"accepted\") → true; is_terminal(\"rejected\") → true; is_terminal(\"superseded\") → true (decision)." },
+  { id = "VT-3", expects = "is_terminal(\"open\") → false; is_terminal(\"answered\") → true; is_terminal(\"obsolete\") → true (question)." },
+  { id = "VT-4", expects = "is_terminal(\"active\") → false; is_terminal(\"waived\") → true; is_terminal(\"superseded\") → true; is_terminal(\"retired\") → true (constraint)." },
+  { id = "VT-5", expects = "record template render test round-trips the new [relationships] block — supersedes/superseded_by arrays parse as empty." },
+  { id = "VT-6", expects = "just check green (root package inner loop)." },
+]
+specs  = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Extract supersede policy + RECORD Supersedes rule row"
+objective = "Move SupersedePolicy + supersede_policy() to a new src/supersede.rs leaf module with record-kind arms, and add the RECORD Supersedes LifecycleOnly rule row to RELATION_RULES — behaviour-preservation gate on existing ADR path."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — RecordKind::is_terminal() and template [relationships] blocks exist." },
+  { id = "EN-2", text = "Current supersede_policy() in src/adr.rs (line ~108) identified; RELATION_RULES block at src/relation.rs ~284 identified." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/supersede.rs exists as a new leaf module with SupersedePolicy struct + supersede_policy() carrying five match arms (ADR, ASM, DEC, QUE, CON)." },
+  { id = "EX-2", text = "src/adr.rs no longer contains supersede policy code; it imports from crate::supersede." },
+  { id = "EX-3", text = "src/main.rs imports supersede policy from crate::supersede (mod supersede; declared)." },
+  { id = "EX-4", text = "RELATION_RULES contains RECORD Supersedes LifecycleOnly row between RECORD Spawns and GovernedBy rows — sources: RECORD, label: Supersedes, inbound_name: \"superseded by\", target: TargetSpec::Kinds(RECORD), tier: One, link: LifecycleOnly." },
+  { id = "EX-5", text = "RELATION_RULES exact-coverage invariant updated — sources_match_shipped_accessors includes ASM/DEC/QUE/CON for Supersedes; target_spec_matches_design recognises RECORD Supersedes as Kinds(RECORD) not SameKind." },
+]
+verification = [
+  { id = "VT-1", expects = "Existing ADR supersede tests pass unchanged (behaviour-preservation gate)." },
+  { id = "VT-2", expects = "cargo test -p doctrine -- supersede:: (or equivalent ADR supersede test filter) — all green." },
+  { id = "VT-3", expects = "supersede_policy(\"ASM\") → Some(… { supersedes_field: \"supersedes\", carveout_field: \"superseded_by\", superseded_status: \"obsolete\" })." },
+  { id = "VT-4", expects = "supersede_policy(\"DEC\") → Some(… superseded_status: \"superseded\"); QUE → \"obsolete\"; CON → \"superseded\"." },
+  { id = "VT-5", expects = "supersede_policy(\"ZZZ\") → None." },
+  { id = "VT-6", expects = "RELATION_RULES exact-coverage invariant passes: sources_match_shipped_accessors, target_spec_matches_design, every_variant_appears_in_the_table all green." },
+  { id = "VT-7", expects = "RELATION_RULES lookup(RECORD_kind, Supersedes) → Some(rule) with target Kinds(RECORD) and LinkPolicy::LifecycleOnly." },
+  { id = "VT-8", expects = "Relation graph golden tests updated (new rule row changes label counts / source sets)." },
+  { id = "VT-9", expects = "just check green." },
+]
+specs  = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Generalize run_supersede() for record cross-kind supersession"
+objective = "Widen run_supersede() to accept record pairs with cross-kind gating per the §6 matrix, conditional terminal-status flip (D2), and idempotency refactor — while keeping the ADR same-kind path unchanged."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — supersede policy extracted with record arms; RECORD Supersedes rule row live." },
+  { id = "EN-2", text = "run_supersede() in src/main.rs ~4061 identified; current guards (self-edge, same-kind, F-1, F-D idempotency) understood." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Same-kind record supersede succeeds: doctrine supersede DEC-001 DEC-002 flips DEC-002 to superseded, co-writes edges." },
+  { id = "EX-2", text = "§6 allowed cross-kind pairs succeed: ASM→CON, ASM→DEC, QUE→DEC, QUE→ASM, DEC→CON, CON→DEC." },
+  { id = "EX-3", text = "§6 reopening directions refused decisively: DEC→ASM, DEC→QUE, QUE→CON (not in matrix), CON→ASM, CON→QUE." },
+  { id = "EX-4", text = "Cross-family (record↔ADR, either direction) refused with clear message." },
+  { id = "EX-5", text = "Self-supersession (ASM-001 ASM-001 etc.) refused." },
+  { id = "EX-6", text = "Already-terminal records not flipped: validated ASM stays validated when superseded by CON." },
+  { id = "EX-7", text = "Idempotent re-run detected: prints \"already recorded\", no writes." },
+  { id = "EX-8", text = "doctrine link ASM-001 supersedes DEC-001 refused (LifecycleOnly — names the supersede verb)." },
+  { id = "EX-9", text = "doctrine validate clean — no supersession drift from the new rule row or record edges." },
+  { id = "EX-10", text = "Existing ADR supersede tests green unchanged (behaviour-preservation, retested)." },
+]
+verification = [
+  { id = "VT-1", expects = "record_supersede_same_kind — DEC-001 supersedes DEC-002 succeeds; status flipped; edges co-written." },
+  { id = "VT-2", expects = "record_supersede_cross_kind_allowed — CON-001 supersedes ASM-001 succeeds (assumption→constraint per §6)." },
+  { id = "VT-3", expects = "record_supersede_reopening_refused — DEC→ASM refused with message naming the §6 matrix." },
+  { id = "VT-4", expects = "record_supersede_question_reopening — DEC→QUE refused (decision→question is reopening per §6)." },
+  { id = "VT-5", expects = "record_supersede_cross_family_refused — DEC→ADR refused (cross-family)." },
+  { id = "VT-6", expects = "record_supersede_self_refused — ASM-001 supersedes itself refused." },
+  { id = "VT-7", expects = "record_supersede_already_terminal_no_flip — validated ASM stays validated when superseded." },
+  { id = "VT-8", expects = "record_supersede_idempotent — re-run prints \"already recorded\", files unchanged." },
+  { id = "VT-9", expects = "link_supersedes_on_record_refused — doctrine link ASM-001 supersedes DEC-001 refused (LifecycleOnly)." },
+  { id = "VT-10", expects = "record_supersede_torn_recovery — torn state (NEW has edge, OLD doesn't) recovers on re-run of supersede." },
+  { id = "VT-11", expects = "Existing ADR supersede tests remain green — no regression." },
+  { id = "VT-12", expects = "just gate clean (full --workspace)." },
+]
+specs  = []
+requirements = []
