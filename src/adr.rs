@@ -83,40 +83,6 @@ fn is_hidden(status: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Supersession capability boundary (SL-062 PHASE-03)
-// ---------------------------------------------------------------------------
-
-/// The per-kind supersession field/status names the `supersede` verb composes its
-/// transaction over. Owned here because every field is ADR-specific governance
-/// vocabulary — the outbound `supersedes` edge (ADR-004 legit), the single
-/// sanctioned reverse carve-out `superseded_by` (written ONLY by `supersede`), and
-/// the terminal `superseded` status this kind flips OLD into.
-pub(crate) struct SupersedePolicy {
-    /// NEW's outbound edge array — `[relationships].supersedes` (ADR-004 §5).
-    pub(crate) supersedes_field: &'static str,
-    /// OLD's reverse carve-out array — `[relationships].superseded_by`.
-    pub(crate) carveout_field: &'static str,
-    /// The terminal status OLD is flipped into.
-    pub(crate) superseded_status: &'static str,
-}
-
-/// The supersession capability boundary (SL-062 PHASE-03 / EX-1, D4): supersession
-/// is supported for **ADR only** today. A hardcoded kind MATCH on the canonical
-/// prefix, NOT a `GovKind` data field — POL/STD/slice (and every other kind) return
-/// `None`, and the verb refuses them with the ADR-first message. A later phase that
-/// widens supersession to POL/STD adds the arms here.
-pub(crate) fn supersede_policy(kind: &Kind) -> Option<SupersedePolicy> {
-    match kind.prefix {
-        "ADR" => Some(SupersedePolicy {
-            supersedes_field: "supersedes",
-            carveout_field: "superseded_by",
-            superseded_status: "superseded",
-        }),
-        _ => None,
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Pure: render, scaffold (the ADR-specific templates — per-kind data)
 // ---------------------------------------------------------------------------
 
