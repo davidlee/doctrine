@@ -1,0 +1,40 @@
+memory_uid = "mem_019ed9f59a8f7f6398145b4a99c59f62"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Design staleness: skill-amendment designs must read current skill files before proposing changes"
+summary = "Designs that amend skill files must read current skill files before proposing changes — SL-098 proposed adding a requirements pass that already existed"
+created = "2026-06-18"
+updated = "2026-06-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:skills", "area:design", "gotcha"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a5a85cefc572747d3f953aad91621c349b655a30"
+ref_name = "refs/heads/main"
+checkout_state_id = "4280e01eab99d443c647e19545997fa75342b5500a2321d98d660c4302da1307"
+base_commit = "079955e05dc0a1d2480f39c633b71972498f5dff"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
