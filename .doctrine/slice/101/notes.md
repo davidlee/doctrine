@@ -65,3 +65,17 @@ Memory recorded: `mem.pattern.doctrine.dtoml-shared-reader`.
 **Handoff to /reconcile:** design.md §3.3 + §6.1 edits (per Reconciliation Brief
 in review-085.md). SPEC-020 amendments from RV-082's standing list remain the
 reconcile-stage spec work. No `blocker` outstanding.
+
+## Reconciliation complete — 2026-06-19 (REV-001)
+
+- **Direct edits:** design.md §3.3 (resolve_confidence → Result) + §6.1 (Eq dropped) — RV-085 F-3, F-4
+- **REV-001** (`reconcile-sl-101`): **done** — SPEC-020 amended:
+  - Default unit `high_caffeine_hours` → `espresso_shots` (RV-082 F-1)
+  - Value facet coverage: model, validation, unit resolution `magic_beans`; D5 decision (RV-082 F-2)
+  - New requirements: FR-007 (REQ-278), FR-008 (REQ-279), FR-009 (REQ-280)
+- Reconciliation outcome recorded on RV-085.
+- All findings terminal, no blockers.
+
+## Closed — 2026-06-19
+
+Slice transitioned `reconcile → done`. `just check` green (1768 pass).
