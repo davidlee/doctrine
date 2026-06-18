@@ -1,6 +1,6 @@
 id = 99
-slug = "memory-read-path-relations-and-agent-ux-hardening"
-title = "Memory read-path relations and agent UX hardening"
+slug = "memory-read-path-and-data-model"
+title = "Memory read-path relations and data-model hardening"
 status = "design"
 created = "2026-06-18"
 updated = "2026-06-18"
