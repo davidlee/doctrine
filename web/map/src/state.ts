@@ -46,4 +46,5 @@ export const state: AppState = {
   priorityZoomPending: false,
   kindFilter: null,
   graphRenderSeq: 0,
+  graphViewport: null,
 };

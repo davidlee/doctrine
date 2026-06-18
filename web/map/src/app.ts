@@ -487,6 +487,9 @@ function renderView(): void {
           dotAvailable: state.dotAvailable,
           seq: state.graphRenderSeq,
           getCurrentSeq: () => state.graphRenderSeq,
+          initialViewport: state.graphViewport,
+          focusChanged,
+          onViewportChange: (vp) => { state.graphViewport = vp },
           onNodeClick: goto,
           onNodeHoverEnter: (id) => {
             state.hoveredId = id

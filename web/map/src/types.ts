@@ -1,4 +1,6 @@
 // API shapes
+import type { GraphViewport } from './viewport';
+
 export interface RawGraph {
   nodes: Record<string, RawCatalogNode>;
   edges: RawEdge[];
@@ -144,4 +146,6 @@ export interface AppState {
   priorityZoomPending: boolean;
   kindFilter: Set<string> | null;
   graphRenderSeq: number;
+  /** Viewport state for the semantic (DOT/Graphviz) graph zoom/pan. null = fit on next render. */
+  graphViewport: GraphViewport | null;
 }
