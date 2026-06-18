@@ -5,10 +5,10 @@ id = 18
 slug = "columns-in-spine-flags-matrix"
 title = "columns flag joins the uniform shared-grammar conformance matrix when memory migrates"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-10"
-updated = "2026-06-15"
+updated = "2026-06-18"
 tags = ["area:cli", "area:memory"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
