@@ -23,3 +23,11 @@
   `high_caffeine_hours` to `espresso_shots`; add Value facet coverage.
 - Value facet needs a governing PRD+SPEC authored (reconciliation deliverable).
 - F-3 and F-4 design.md edits are mechanical — do them before implementation.
+
+## PHASE-01 complete — 2026-06-18
+
+- `src/estimate.rs`: 27 tests green, clippy clean
+- `mod estimate;` added to `src/main.rs` (sequencing fix — was erroneously in PHASE-04)
+- `#![allow(dead_code)]` on estimate.rs (temporary; lifted in PHASE-03 when dtoml.rs wires config imports)
+- `plan.toml` updated: mod declarations moved from PHASE-04 to PHASE-01/02 exit criteria
+- Handover updated for PHASE-02 entry

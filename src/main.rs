@@ -19,6 +19,7 @@ mod dep_seq;
 mod dispatch;
 mod dtoml;
 mod entity;
+mod estimate;
 mod fsutil;
 mod git;
 mod governance;
