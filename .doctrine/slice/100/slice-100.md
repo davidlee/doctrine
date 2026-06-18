@@ -78,26 +78,12 @@ add or remove required.
 - Mention `memory validate` for checking drift before acting on old
   memories
 
-**New skill: maintaining-memory**
-
-Skeleton with tracked headings. Trigger: files move, commands change,
-invariants shift, memories stale or wrong, duplicates found. Operations:
-1. Locate impacted memories via scope/tags
-2. Validate against current code/docs/ADRs (use `memory validate`)
-3. Apply minimal corrective edits (update `verified`, adjust scope,
-   fix pointers)
-4. Handle lifecycle: `memory status <ID> superseded --by <OTHER>`,
-   `archived`, `retracted`
-5. Re-scope if retrieval misses
-6. De-duplicate: merge into one canonical + signpost
-7. Sanity check: re-run same query, confirm corrected record ranks
-
 **New skill: reviewing-memory**
 
 Skeleton with tracked headings. Structured audit for stability gates:
 before releases, migrations, large refactors, or when agent confusion
 detected. Procedure:
-1. Pull highest-impact via `--stale` (or `memory validate` corpus-wide)
+1. Pull highest-impact via `memory validate` corpus-wide
 2. Prioritize: scoped + attested + high commit count
 3. Apply checklist: provenance, freshness, metadata efficiency, scope,
    actionability, duplication
@@ -107,11 +93,10 @@ detected. Procedure:
 
 **New skill: dreaming**
 
-Proactive memory corpus maintenance posture — the agent actively works the
-memory graph rather than waiting for triggers. Unlike `maintaining-memory`
-(triggered by a concrete change) or `reviewing-memory` (triggered before a
-gate), dreaming is periodic / idle-time: improve the corpus because you
-can, not because something broke.
+Unified memory corpus maintenance posture — covers both reactive
+(change-triggered: files move, commands change, invariants shift,
+duplicates found) and proactive (periodic/idle-time improvement). One
+skill, two entry paths.
 
 Procedure:
 1. **Validate.** Run `memory validate` corpus-wide. For each finding,

@@ -198,7 +198,7 @@
 
           commands = [
             {
-              name = "dn";
+              name = "drn";
               help = "short for doctrine";
               command = "doctrine $@";
             }
