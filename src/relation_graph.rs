@@ -1048,7 +1048,9 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         // Seed an assumption record with [[relation]] rows
-        write(&root, ".doctrine/knowledge/assumption/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/assumption/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"a\"\ntitle = \"A\"\n\
              record_kind = \"assumption\"\nstatus = \"held\"\n\
@@ -1062,14 +1064,31 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/assumption/001/record-001.md", "body\n");
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
+        );
+        write(
+            &root,
+            ".doctrine/knowledge/assumption/001/record-001.md",
+            "body\n",
+        );
         let edges = outbound_for(&root, kind_for("ASM"), 1).unwrap();
         assert_eq!(edges.len(), 3);
         // Verify each edge exists with correct target
-        assert!(edges.iter().any(|e| e.label == RelationLabel::Shapes && e.target == "SL-001"));
-        assert!(edges.iter().any(|e| e.label == RelationLabel::Spawns && e.target == "ISS-001"));
-        assert!(edges.iter().any(|e| e.label == RelationLabel::GovernedBy && e.target == "ADR-001"));
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.label == RelationLabel::Shapes && e.target == "SL-001")
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.label == RelationLabel::Spawns && e.target == "ISS-001")
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.label == RelationLabel::GovernedBy && e.target == "ADR-001")
+        );
     }
 
     // -- SL-059 VT-2: scan-side totality (F-A7, the L7 partner) ---------------
@@ -1748,7 +1767,9 @@ mod tests {
         );
 
         // --- ASM (knowledge): shapes + spawns + governed_by ---
-        write(&root, ".doctrine/knowledge/assumption/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/assumption/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"a\"\ntitle = \"A\"\n\
              record_kind = \"assumption\"\nstatus = \"held\"\n\
@@ -1762,16 +1783,33 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/assumption/001/record-001.md", "body\n");
-        assert_eq!(
-            emitted_labels(root, "ASM", 1),
-            table_labels_for("ASM"),
-            "ASM reader emits exactly shapes + spawns + governed_by"
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
         );
+        write(
+            &root,
+            ".doctrine/knowledge/assumption/001/record-001.md",
+            "body\n",
+        );
+        // RECORD kinds emit shapes + spawns + governed_by via [[relation]] rows;
+        // Supersedes is LifecycleOnly (verb-writes to typed [relationships], not
+        // authored in [[relation]]) — the typed parse lands in PHASE-03.
+        // table_labels_for now includes Supersedes from RELATION_RULES, but
+        // outbound_for won't emit it until the typed [relationships] block is
+        // parsed, so we compare against the Writable subset.
+        {
+            let mut expected = table_labels_for("ASM");
+            expected.remove(&RelationLabel::Supersedes);
+            assert_eq!(
+                emitted_labels(root, "ASM", 1),
+                expected,
+                "ASM: shapes + spawns + governed_by (supersedes is LifecycleOnly — typed parse in PHASE-03)"
+            );
+        }
 
         // --- DEC (knowledge): shapes + spawns + governed_by ---
-        write(&root, ".doctrine/knowledge/decision/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/decision/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"d\"\ntitle = \"D\"\n\
              record_kind = \"decision\"\nstatus = \"proposed\"\n\
@@ -1785,16 +1823,27 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/decision/001/record-001.md", "body\n");
-        assert_eq!(
-            emitted_labels(root, "DEC", 1),
-            table_labels_for("DEC"),
-            "DEC reader emits exactly shapes + spawns + governed_by"
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
         );
+        write(
+            &root,
+            ".doctrine/knowledge/decision/001/record-001.md",
+            "body\n",
+        );
+        {
+            let mut expected = table_labels_for("DEC");
+            expected.remove(&RelationLabel::Supersedes);
+            assert_eq!(
+                emitted_labels(root, "DEC", 1),
+                expected,
+                "DEC: shapes + spawns + governed_by (supersedes is LifecycleOnly — typed parse in PHASE-03)"
+            );
+        }
 
         // --- QUE (knowledge): shapes + spawns + governed_by ---
-        write(&root, ".doctrine/knowledge/question/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/question/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"q\"\ntitle = \"Q\"\n\
              record_kind = \"question\"\nstatus = \"open\"\n\
@@ -1807,16 +1856,27 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/question/001/record-001.md", "body\n");
-        assert_eq!(
-            emitted_labels(root, "QUE", 1),
-            table_labels_for("QUE"),
-            "QUE reader emits exactly shapes + spawns + governed_by"
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
         );
+        write(
+            &root,
+            ".doctrine/knowledge/question/001/record-001.md",
+            "body\n",
+        );
+        {
+            let mut expected = table_labels_for("QUE");
+            expected.remove(&RelationLabel::Supersedes);
+            assert_eq!(
+                emitted_labels(root, "QUE", 1),
+                expected,
+                "QUE: shapes + spawns + governed_by (supersedes is LifecycleOnly — typed parse in PHASE-03)"
+            );
+        }
 
         // --- CON (knowledge): shapes + spawns + governed_by ---
-        write(&root, ".doctrine/knowledge/constraint/001/record-001.toml",
+        write(
+            &root,
+            ".doctrine/knowledge/constraint/001/record-001.toml",
             "schema = \"doctrine.knowledge\"\nversion = 1\n\n\
              id = 1\nslug = \"c\"\ntitle = \"C\"\n\
              record_kind = \"constraint\"\nstatus = \"active\"\n\
@@ -1829,13 +1889,22 @@ mod tests {
              supports = []\ncontradicts = []\nnotes = []\n\
              [[relation]]\nlabel = \"shapes\"\ntarget = \"SL-001\"\n\
              [[relation]]\nlabel = \"spawns\"\ntarget = \"ISS-001\"\n\
-             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n");
-        write(&root, ".doctrine/knowledge/constraint/001/record-001.md", "body\n");
-        assert_eq!(
-            emitted_labels(root, "CON", 1),
-            table_labels_for("CON"),
-            "CON reader emits exactly shapes + spawns + governed_by"
+             [[relation]]\nlabel = \"governed_by\"\ntarget = \"ADR-001\"\n",
         );
+        write(
+            &root,
+            ".doctrine/knowledge/constraint/001/record-001.md",
+            "body\n",
+        );
+        {
+            let mut expected = table_labels_for("CON");
+            expected.remove(&RelationLabel::Supersedes);
+            assert_eq!(
+                emitted_labels(root, "CON", 1),
+                expected,
+                "CON: shapes + spawns + governed_by (supersedes is LifecycleOnly — typed parse in PHASE-03)"
+            );
+        }
     }
 
     // -- PHASE-05: corpus-edge validate + supersession cross-check ------------
