@@ -1,0 +1,102 @@
+# Implementation plan for SL-101 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-101"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# PHASE-01: estimate.rs — the EstimateFacet model, parse, validate, config
+[[phase]]
+id        = "PHASE-01"
+name      = "Estimate facet module"
+objective = "Implement src/estimate.rs with EstimateFacet, EstimateRaw, parse_optional, normalise, validate, EstimationConfig, resolve_unit, resolve_confidence, and full test suite (E1–E15d, E19). Pure leaf module — imports only external crates (ADR-001)."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §3, §3.1–3.4 approved and locked" },
+  { id = "EN-2", text = "main.rs mod estimate addition is trivial and non-blocking" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "EstimateFacet { lower: f64, upper: f64 } with custom Deserialize from [estimate] table" },
+  { id = "EX-2", text = "parse_optional returns Ok(None) absent, Ok(Some(_)) present+valid, Err(_) malformed" },
+  { id = "EX-3", text = "validate rejects: missing bounds, non-finite, lower < 0, upper < lower" },
+  { id = "EX-4", text = "EstimationConfig with unit, lower_confidence, upper_confidence; resolve_unit + resolve_confidence with defaults" },
+  { id = "EX-5", text = "NF-003: unknown keys tolerated (EstimateRaw _extra absorbs, dropped at normalise)" },
+  { id = "EX-6", text = "All tests E1–E15d, E19 green; cargo clippy zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test -- estimate:: — all 17+ tests green" },
+  { id = "VT-2", expects = "cargo clippy — zero warnings in estimate.rs" },
+  { id = "VA-1", expects = "estimate.rs imports verified: only toml, serde, anyhow, std — no doctrine deps (ADR-001 leaf)" },
+]
+
+# PHASE-02: value.rs — the ValueFacet model, parse, config
+[[phase]]
+id        = "PHASE-02"
+name      = "Value facet module"
+objective = "Implement src/value.rs with ValueFacet, ValueRaw, parse_optional, normalise, ValueConfig, resolve_unit, and full test suite (V1–V7). Pure leaf module — imports only external crates."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete, establish estimate.rs as the pattern to follow" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ValueFacet { value: f64 } with custom Deserialize from [value] table" },
+  { id = "EX-2", text = "parse_optional returns Ok(None) absent, Ok(Some(_)) present+valid, Err(_) malformed" },
+  { id = "EX-3", text = "ValueConfig with unit; resolve_unit with default 'magic_beans'" },
+  { id = "EX-4", text = "NF-003: unknown keys tolerated (ValueRaw _extra absorbs)" },
+  { id = "EX-5", text = "All tests V1–V7 green; cargo clippy zero warnings" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test -- value:: — all 7 tests green" },
+  { id = "VT-2", expects = "cargo clippy — zero warnings in value.rs" },
+  { id = "VA-1", expects = "value.rs imports verified: only toml, serde, anyhow, std — no doctrine deps" },
+]
+
+# PHASE-03: dtoml.rs wiring + doctrine.toml.example template
+[[phase]]
+id        = "PHASE-03"
+name      = "Config wiring"
+objective = "Add EstimationConfig and ValueConfig fields to DoctrineToml in dtoml.rs; update install/doctrine.toml.example with commented [estimation] and [value] sections."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 and PHASE-02 complete — EstimateConfig and ValueConfig types exist" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "DoctrineToml gains estimation + value fields with #[serde(default)]" },
+  { id = "EX-2", text = "dtoml::parse(\"\") yields EstimationConfig::default() and ValueConfig::default()" },
+  { id = "EX-3", text = "install/doctrine.toml.example updated with commented [estimation] and [value] sections" },
+  { id = "EX-4", text = "Existing conduct + verification tests unaffected (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test — dtoml::tests — existing + 2 new tests green" },
+  { id = "VT-2", expects = "cargo clippy — zero warnings" },
+  { id = "VA-1", expects = "touch src/install.rs && cargo build — template rebuilt, verify with grep" },
+]
+
+# PHASE-04: SliceDoc wiring — entity-level integration
+[[phase]]
+id        = "PHASE-04"
+name      = "Entity wiring"
+objective = "Add estimate: Option<EstimateFacet> and value: Option<ValueFacet> fields to SliceDoc; add mod estimate and mod value to main.rs; verify Meta unchanged, round-trip tests (E17–E18), existing slice tests unaffected."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01, PHASE-02, PHASE-03 complete — modules and config exist" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SliceDoc carries estimate: Option<EstimateFacet> and value: Option<ValueFacet> with #[serde(default)]" },
+  { id = "EX-2", text = "Absent [estimate]/[value] tables parse to None; present+valid parse to Some" },
+  { id = "EX-3", text = "Meta unchanged — 4-field summary, list scan unaffected" },
+  { id = "EX-4", text = "Existing slice tests green (behaviour-preservation gate)" },
+  { id = "EX-5", text = "NF-001 verified: rg estimate\\|value in src/slice.rs finds only SliceDoc fields + deserialize wiring, no workflow gate references" },
+]
+verification = [
+  { id = "VT-1", expects = "cargo test — slice::tests — all existing tests green + new round-trip tests (E17–E18)" },
+  { id = "VT-2", expects = "cargo clippy — zero warnings" },
+  { id = "VA-1", expects = "rg 'estimate|value' src/slice.rs — inspect that no gate/status/close references exist (NF-001 proof)" },
+]
