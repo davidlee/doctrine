@@ -31,3 +31,11 @@
 - `#![allow(dead_code)]` on estimate.rs (temporary; lifted in PHASE-03 when dtoml.rs wires config imports)
 - `plan.toml` updated: mod declarations moved from PHASE-04 to PHASE-01/02 exit criteria
 - Handover updated for PHASE-02 entry
+
+## Dispatch coordination — 2026-06-18
+
+- Coordination worktree created at `/tmp/doctrine-dispatch-101` (base `d22ab0be`)
+- Dispatch ref: `refs/heads/dispatch/101`
+- Phase sheets materialised in coordination worktree
+- Handover rewritten with dispatch mandate, pre-distilled PHASE-02 worker prompt, and full funnel instructions
+- Note: `1ffdeb3f` (PHASE-01) was followed by `49f41684` (SL-099 fix) and `d22ab0be` (SL-099 candidate merge) on main — coordination base is `d22ab0be`
