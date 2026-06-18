@@ -97,10 +97,6 @@ Also permitted inside a slice, spec, or backlog dir:
 
 User-owned governance pointer layer — projected into the boot snapshot.
 
-### `doc/*`
-
-Evergreen, authoritative specs. Not yet structurally supported by doctrine tooling.
-
 ### `.doctrine/state/` — runtime phase tracking
 
 `.doctrine/state/slice/nnn/phases/phase-NN.{toml,md}` — gitignored, disposable.
