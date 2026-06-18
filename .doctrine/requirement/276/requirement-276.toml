@@ -4,7 +4,7 @@ version = 1
 id = 276
 slug = "keep-the-estimate-facet-kind-agnostic-reusable-and-pure-layer"
 title = "Keep the estimate facet kind-agnostic, reusable, and pure-layer"
-status = "active"
+status = "pending"
 kind = "quality"
 
 description = "The facet model is defined once and shared; attaching it to a new kind wires only parse/hydrate; normalize/validate/render stay in the pure layer."

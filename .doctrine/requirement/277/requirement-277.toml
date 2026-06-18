@@ -4,7 +4,7 @@ version = 1
 id = 277
 slug = "keep-the-estimate-schema-forward-compatible"
 title = "Keep the estimate schema forward-compatible"
-status = "active"
+status = "pending"
 kind = "quality"
 
 description = "The v1 two-bound schema extends without invalidating estimates authored under v1."

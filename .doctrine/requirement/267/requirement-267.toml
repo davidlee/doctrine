@@ -4,7 +4,7 @@ version = 1
 id = 267
 slug = "the-estimate-facet-is-reusable-and-kind-agnostic"
 title = "The estimate facet is reusable and kind-agnostic"
-status = "active"
+status = "pending"
 kind = "quality"
 
 description = "The estimate facet is a single reusable, kind-agnostic schema attachable to any TOML-backed addressable entity; it is not slice-specific, so later adoption by other kinds is mechanical."

@@ -4,7 +4,7 @@ version = 1
 id = 270
 slug = "validate-a-present-estimate-as-a-hard-error-and-accept-absence"
 title = "Validate a present estimate as a hard error and accept absence"
-status = "active"
+status = "pending"
 kind = "functional"
 
 description = "A present [estimate] is structurally validated as a hard error; an absent table validates. Optional means omittable, not malformed."

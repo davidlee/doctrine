@@ -4,7 +4,7 @@ version = 1
 id = 274
 slug = "expose-estimate-metadata-through-a-policy-free-graph-contract"
 title = "Expose estimate metadata through a policy-free graph contract"
-status = "active"
+status = "pending"
 kind = "functional"
 
 description = "Catalog/graph hydration exposes each estimated node's metadata through a stable, policy-free contract carrying no aggregation or interpretation."

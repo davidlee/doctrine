@@ -4,7 +4,7 @@ version = 1
 id = 264
 slug = "surface-estimates-in-detailed-display-with-optional-derived-spread"
 title = "Surface estimates in detailed display with optional derived spread"
-status = "active"
+status = "pending"
 kind = "functional"
 
 description = "Detailed entity display shows the estimate when present and a fixed phrase when absent; verbose/review display may add derived attention spread (ratio and absolute width) without classifying the spread."
