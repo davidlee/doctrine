@@ -48,3 +48,12 @@ None. No governance or spec changes are required for SL-082 closure.
 ### Deferred work
 
 - F-3: SL-021 PHASE-05 — resume or capture as backlog item for interactions edges, parent retrofit, draft→active flips, and capability-coverage audit.
+
+## Reconciliation Outcome
+
+All findings were withdrawn or tolerated with rationale. No writes needed:
+- F-1: tolerated (pre-existing SL-095 failure, not introduced by SL-082)
+- F-2: aligned (design omission caught and corrected during sweep)
+- F-3: follow-up (SL-021 PHASE-05 deferred — captured here for visibility)
+
+No per-slice direct edits required. No governance/spec REV required. Reconcile pass complete — handoff to /close.
