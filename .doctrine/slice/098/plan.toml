@@ -14,7 +14,8 @@ collaborators = []
 
 # plan.toml [requirements] stays empty in v1 (no registry yet) — SL-098 §4
 # honours the /plan skill constraint. The REQ-D → REQ-NNN verification mapping
-# lives in plan.md prose (the ## Requirements verification table), not here.
+# lives in plan.md prose (the ## Requirements verification narrative list, not a
+# table — D1), not here.
 [requirements]
 targets      = []
 dependencies = []
@@ -22,62 +23,70 @@ dependencies = []
 # ── Phase sequencing ──────────────────────────────────────────────────────
 # Five prose-only skill edits, one phase per skill, in data-flow order:
 # design (produces design-requirements.toml) → plan (maps REQ-D→phase) →
-# audit (surfaces orphans in the brief) → reconcile (places orphans via REV) →
-# close (deadlock gate). Each phase's walkthrough (design §11a–§11e) is its
-# verification target. No code changes — verification is VA (agent reads the
-# edited skill) with one VH end-to-end coherence check at close.
+# audit (surfaces orphans in the brief) → reconcile (places orphans via REV
+# step 4f) → close (advisory check). Each phase's walkthrough (design §11a–§11e)
+# is its verification target. No code changes — verification is VA (agent reads
+# the edited skill) with an intermediate VH coherence check after PHASE-03 and a
+# final VH end-to-end check at PHASE-05 (F1).
 #
-# Scope note: slice-098.md scope body names 7 skills (incl. /spec-product,
-# /spec-tech); design §8 — the authoritative change table — narrows to the 5
-# reconcile-loop skills. The spec skills are deferred to IMP-096 (design §10).
-# This plan follows design §8. Scope-body drift to be reconciled separately.
+# Scope (G1): slice-098.md names 5 skills — /spec-product and /spec-tech are
+# deferred to IMP-096 (design §10). Plan follows design §8.
+#
+# No dogfooding (G2): SL-098 is a skill-guidance slice with no implied
+# requirements of its own, so the §11a–§11e walkthroughs run against
+# hypothetical artefact state, not SL-098's own. Inherent to the slice kind;
+# verification confidence is bounded accordingly.
 
 [[phase]]
 id        = "PHASE-01"
-name      = "/design — collect-decisions + requirements-pass + sidecar format"
-objective = "Edit the /design skill (plugins master): insert 'Collect decisions' (state 2) and 'Requirements pass' (state 3) between Explore and Propose, absorbing the old 'Ask clarifying questions' into the batched-decisions state; define the design-requirements.toml [[implied]] sidecar as the authoritative home for implied requirements (handle, statement, kind, home_hint, descends_from) with design.md ## Implied Requirements as prose reference only; add the 'what requirements are implied but not captured' adversarial-review vector; add guardrails (no structured fields in prose; altitude ambiguity noted in home_hint, not forced)."
+name      = "/design — collect-decisions + requirements-pass states + sidecar format"
+objective = "Edit the /design skill (plugins master): insert 'Collect decisions' (new state 2) and 'Requirements pass' (new state 4) around the renumbered 'Ask clarifying questions' (state 3, content unchanged — B2: they are distinct activities, not absorbed). Define the design-requirements.toml [[implied]] sidecar as the authoritative home for implied requirements (handle, statement, kind, home_hint, descends_from) with design.md ## Implied Requirements as prose reference only. Add the 'what requirements are implied but not captured' adversarial-review vector. Add guardrails (no structured fields in prose; altitude ambiguity noted in home_hint, not forced). Update BOTH the numbered state list and the <Process State Machine> XML block in sync (E1). Reword the collect-decisions 'read the design doc' instruction to handle greenfield (G3)."
 entrance_criteria = [
-  { id = "EN-1", text = "design.md locked and committed (RV-078 resolved, redesign landed)" },
+  { id = "EN-1", text = "design.md locked and committed (RV-078 + post-plan amendment landed)" },
   { id = "EN-2", text = "skill-file baseline confirmed: plugins/doctrine/skills/ is the master; install targets (.doctrine/skills, .agents/skills, .dirge/skills) are gitignored and not edited" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "/design state machine shows 'Collect decisions' and 'Requirements pass' inserted between Explore and Propose; old 'Ask clarifying questions' absorbed (not duplicated)" },
-  { id = "EX-2", text = "/design skill documents the design-requirements.toml [[implied]] format with all five fields (handle, statement, kind, home_hint, descends_from)" },
-  { id = "EX-3", text = "/design skill instructs that design.md ## Implied Requirements is prose reference only — one-line summaries pointing to the TOML, no repeated structured fields" },
-  { id = "EX-4", text = "/design adversarial-review section carries the requirements attack vector ('what requirements are implied by these decisions but not captured in design-requirements.toml?')" },
-  { id = "EX-5", text = "/design guardrails: no structured implied-req fields in prose; altitude ambiguity recorded in home_hint and deferred to /reconcile, not forced at design" },
-  { id = "EX-6", text = "state numbering updated to reflect the two inserted states (Explore → Collect decisions → Requirements pass → Propose → …)" },
+  { id = "EX-1", text = "/design numbered state list shows 'Collect decisions' (state 2), 'Ask clarifying questions' (state 3, renumbered), 'Requirements pass' (state 4) — no absorption, no duplicate" },
+  { id = "EX-2", text = "/design <Process State Machine> XML block lists the same states with matching transitions; the 'Adversarial review → Ask clarifying questions' back-edge survives (E1)" },
+  { id = "EX-3", text = "/design skill documents the design-requirements.toml [[implied]] format with all five fields (handle, statement, kind, home_hint, descends_from)" },
+  { id = "EX-4", text = "/design skill instructs that design.md ## Implied Requirements is prose reference only — one-line summaries pointing to the TOML, no repeated structured fields" },
+  { id = "EX-5", text = "/design adversarial-review section carries the requirements attack vector ('what requirements are implied by these decisions but not captured in design-requirements.toml?')" },
+  { id = "EX-6", text = "/design guardrails: no structured implied-req fields in prose; altitude ambiguity recorded in home_hint and deferred to /reconcile, not forced at design" },
+  { id = "EX-7", text = "collect-decisions instruction handles greenfield (works from slice scope + Explore output when no design doc exists yet — G3), not 'read the current state of the design doc' verbatim" },
 ]
 verification = [
-  { id = "VA-1", expects = "reading /design SKILL.md: state machine lists the two new states at positions 2–3 with no duplicate 'Ask clarifying questions'" },
-  { id = "VA-2", expects = "reading /design SKILL.md: design-requirements.toml format block shows all five [[implied]] fields" },
-  { id = "VA-3", expects = "reading /design SKILL.md: ## Implied Requirements guidance says prose reference only (no Statement:/Kind:/Home: field blocks)" },
-  { id = "VA-4", expects = "reading /design SKILL.md: adversarial-review section includes the requirements attack vector" },
-  { id = "VA-5", expects = "design §11a walkthrough holds against the edited skill in isolation (sidecar + prose reference produced; no structured prose fields)" },
+  { id = "VA-1", expects = "reading /design SKILL.md numbered list: Collect decisions (2), Ask clarifying questions (3), Requirements pass (4) — three distinct states" },
+  { id = "VA-2", expects = "reading /design SKILL.md <Process State Machine> XML: same three states named, Adversarial review → Ask clarifying questions back-edge present" },
+  { id = "VA-3", expects = "reading /design SKILL.md: design-requirements.toml format block shows all five [[implied]] fields" },
+  { id = "VA-4", expects = "reading /design SKILL.md: ## Implied Requirements guidance says prose reference only (no Statement:/Kind:/Home: field blocks)" },
+  { id = "VA-5", expects = "reading /design SKILL.md: adversarial-review section includes the requirements attack vector" },
+  { id = "VA-6", expects = "design §11a walkthrough holds against the edited skill in isolation" },
 ]
 specs        = []
 requirements = []
 
 [[phase]]
 id        = "PHASE-02"
-name      = "/plan — requirements verification table in plan.md prose"
-objective = "Edit the /plan skill (plugins master): add sub-step 2a (Requirements mapping) between read-design and scaffold — read design-requirements.toml, map each REQ-DNN handle to verifying phase(s), record the mapping in plan.md ## Requirements verification as a prose table. Acknowledge explicitly that plan.toml [requirements] stays empty in v1 (the constraint the original design contradicted, per RV-078 F-5)."
+name      = "/plan — requirements verification narrative in plan.md prose"
+objective = "Edit the /plan skill (plugins master): add sub-step 2a (Requirements mapping) between read-design and scaffold — read design-requirements.toml, map each REQ-DNN handle to verifying phase(s), record the mapping in plan.md ## Requirements verification as a prose LIST (not a pipe-table — D1). Acknowledge explicitly that plan.toml [requirements] stays empty in v1 (F-5). Amend step 5's storage-rule prohibition to permit authored, agent-read verification narrative as a distinct category from tool-queried/derived data (D1)."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete (design-requirements.toml format canonical in /design; consumers can reference it)" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "/plan skill has sub-step 2a (Requirements mapping) between read-design (step 1) and scaffold (step 3)" },
-  { id = "EX-2", text = "/plan skill specifies the plan.md ## Requirements verification table shape: columns Handle | Verifying phase(s) | Note" },
-  { id = "EX-3", text = "/plan skill explicitly acknowledges plan.toml [requirements] stays empty in v1 — the mapping lives in plan.md prose, not TOML (RV-078 F-3/F-5 resolution)" },
-  { id = "EX-4", text = "/plan guardrail: a REQ-DNN with no phase assigned is a /consult trigger, not a silent drop" },
-  { id = "EX-5", text = "/plan skill notes the table is presentational prose (not machine-read); the close gate is the sole enforcement point" },
+  { id = "EX-2", text = "/plan skill specifies the plan.md ## Requirements verification section as a prose list (not a pipe-table — D1); example shows narrative bullets" },
+  { id = "EX-3", text = "/plan skill explicitly acknowledges plan.toml [requirements] stays empty in v1 — the mapping lives in plan.md prose, not TOML (RV-078 F-3/F-5 resolution, reframed as a trade per D1)" },
+  { id = "EX-4", text = "/plan step 5 storage-rule prohibition amended to permit authored, agent-read verification narrative as distinct from tool-queried/derived data" },
+  { id = "EX-5", text = "/plan guardrail: a REQ-DNN with no phase assigned is a /consult trigger, not a silent drop" },
+  { id = "EX-6", text = "/plan skill names the close check (§7) as advisory agent-discipline, not a binary-enforced gate (F2)" },
 ]
 verification = [
   { id = "VA-1", expects = "reading /plan SKILL.md: sub-step 2a present and references design-requirements.toml" },
-  { id = "VA-2", expects = "reading /plan SKILL.md: plan.md ## Requirements verification table shape documented with the three columns" },
-  { id = "VA-3", expects = "reading /plan SKILL.md: plan.toml [requirements] empty-in-v1 constraint acknowledged and the plan.md rationale given" },
-  { id = "VA-4", expects = "reading /plan SKILL.md: /consult guardrail for unassigned REQ-DNN present" },
-  { id = "VA-5", expects = "design §11b walkthrough holds: plan.md table has one row per design-requirements.toml [[implied]]; plan.toml [requirements] empty" },
+  { id = "VA-2", expects = "reading /plan SKILL.md: plan.md ## Requirements verification example is a prose list, not a pipe-table" },
+  { id = "VA-3", expects = "reading /plan SKILL.md: plan.toml [requirements] empty-in-v1 constraint acknowledged with the plan.md rationale" },
+  { id = "VA-4", expects = "reading /plan SKILL.md: step 5 prohibition amended to name the authored-agent-read-narrative exception" },
+  { id = "VA-5", expects = "reading /plan SKILL.md: /consult guardrail for unassigned REQ-DNN present" },
+  { id = "VA-6", expects = "design §11b walkthrough holds: plan.md list has one entry per design-requirements.toml [[implied]]; plan.toml [requirements] empty; no pipe-table" },
 ]
 specs        = []
 requirements = []
@@ -85,71 +94,82 @@ requirements = []
 [[phase]]
 id        = "PHASE-03"
 name      = "/audit — orphan survey + brief sub-section"
-objective = "Edit the /audit skill (plugins master): add sub-step 4a (Orphan survey) between raise/dispose and synthesis — read design-requirements.toml, cross-reference existing canonical REQ-NNN, and add orphan entries to the reconciliation brief nested under ### Governance/spec (REV) as #### Orphaned requirements (REV introduce). Handle legacy designs (no sidecar → no orphan section, not an error) and flag REQ-DNN present in sidecar but absent from plan.md as a finding."
+objective = "Edit the /audit skill (plugins master): add sub-step 4a (Orphan survey) between raise/dispose and synthesis — read design-requirements.toml, cross-reference existing canonical REQ-NNN, hold the survey output for brief-writing at step 5 (G4). Add orphan entries to the reconciliation brief nested under ### Governance/spec (REV) as #### Orphaned requirements (REV introduce) (F-6). Handle legacy designs (no sidecar → no orphan section, not an error) and flag REQ-DNN present in sidecar but absent from plan.md as a finding."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete (sidecar format canonical)" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "/audit skill has sub-step 4a (Orphan survey) between raise/dispose (step 3) and synthesis (step 4)" },
-  { id = "EX-2", text = "/audit skill specifies orphan entries nest under ### Governance/spec (REV) as #### Orphaned requirements (REV introduce) — a sub-section, not a peer (RV-078 F-6 resolution)" },
-  { id = "EX-3", text = "/audit skill handles legacy designs: no design-requirements.toml → orphan survey yields nothing, not an error" },
-  { id = "EX-4", text = "/audit skill flags a REQ-DNN in design-requirements.toml but absent from plan.md ## Requirements verification as a finding (audit identifies; reconcile decides)" },
-  { id = "EX-5", text = "brief template in /audit skill shows the orphan sub-section in its final nested position relative to Per-slice and Governance/spec" },
+  { id = "EX-2", text = "/audit skill specifies the survey output is held for brief-writing at step 5 (not added to a brief that doesn't exist yet — G4)" },
+  { id = "EX-3", text = "/audit skill specifies orphan entries nest under ### Governance/spec (REV) as #### Orphaned requirements (REV introduce) — a sub-section, not a peer (RV-078 F-6)" },
+  { id = "EX-4", text = "/audit skill handles legacy designs: no design-requirements.toml → orphan survey yields nothing, not an error" },
+  { id = "EX-5", text = "/audit skill flags a REQ-DNN in design-requirements.toml but absent from plan.md ## Requirements verification as a finding (audit identifies; reconcile decides)" },
+  { id = "EX-6", text = "brief template in /audit skill shows the orphan sub-section in its final nested position relative to Per-slice and Governance/spec" },
 ]
 verification = [
   { id = "VA-1", expects = "reading /audit SKILL.md: sub-step 4a present and references design-requirements.toml" },
-  { id = "VA-2", expects = "reading /audit SKILL.md: orphan section documented as #### nested under ### Governance/spec (REV), not a top-level peer" },
-  { id = "VA-3", expects = "reading /audit SKILL.md: legacy-design (no sidecar) handling documented as non-error" },
-  { id = "VA-4", expects = "reading /audit SKILL.md: sidecar/plan.md drift flagged as a finding" },
-  { id = "VA-5", expects = "design §11c walkthrough holds: brief carries the nested orphan sub-section; legacy design yields no orphan section" },
+  { id = "VA-2", expects = "reading /audit SKILL.md: survey output held for step 5 (G4 sequencing documented)" },
+  { id = "VA-3", expects = "reading /audit SKILL.md: orphan section documented as #### nested under ### Governance/spec (REV), not a top-level peer" },
+  { id = "VA-4", expects = "reading /audit SKILL.md: legacy-design (no sidecar) handling documented as non-error" },
+  { id = "VA-5", expects = "reading /audit SKILL.md: sidecar/plan.md drift flagged as a finding" },
+  { id = "VA-6", expects = "design §11c walkthrough holds: brief carries the nested orphan sub-section; legacy design yields no orphan section" },
+  { id = "VH-1", expects = "intermediate coherence check (F1): /design, /plan, /audit edited skills tell one consistent REQ-D story so far — the sidecar format, the plan.md list, and the brief sub-section reference each other correctly; user confirms no drift introduced in PHASE-01 has propagated" },
 ]
 specs        = []
 requirements = []
 
 [[phase]]
 id        = "PHASE-04"
-name      = "/reconcile — orphan placement workflow"
-objective = "Edit the /reconcile skill (plugins master): add step 2b (Orphan placement) between the no-op gate and per-slice edits — for each orphaned requirement in the brief: determine spec home(s), work with existing REQ-NNN (verify currency, map duplicates, REV move if misplaced), handle multi-spec placement, negotiate wording, author REV introduce/create/move rows, and record REQ-DNN → REQ-NNN mappings in revision-NNN.md ### Orphan placements. Carry the /consult guardrail for altitude ambiguity (IMP-097 deferred)."
+name      = "/reconcile — no-op gate amendment + orphan placement at step 4f"
+objective = "Edit the /reconcile skill (plugins master): amend the no-op gate (step 2) so orphan content counts as brief content and the gate does not fire while any orphan is unplaced (C2). Add sub-step 4f (Orphan placement) after the existing 4e split rule — for each orphaned requirement: determine spec home(s), work with existing REQ-NNN, handle multi-spec placement as sibling REQs with traced lineage (B1 — one introduce row per spec, each minting its own REQ-NNN), negotiate wording, author REV rows, record REQ-DNN → REQ-NNN mappings in revision-NNN.md ### Orphan placements. Define stuck (non-terminal, close refuses) and withdrawn (design-level retraction) outcomes (E2). Carry the /consult altitude guardrail (IMP-097 deferred)."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 complete (brief orphan sub-section defined for reconcile to consume)" },
+  { id = "EN-2", text = "VH-1 (intermediate coherence) passed — design/plan/audit tell one consistent story" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "/reconcile skill has step 2b (Orphan placement) between no-op gate (step 2) and per-slice edits (step 3)" },
-  { id = "EX-2", text = "/reconcile step 2b specifies the placement sub-steps: determine spec home(s), work with existing REQs, handle multi-spec placement, negotiate wording, author REV rows, record mapping" },
-  { id = "EX-3", text = "/reconcile skill carries the /consult guardrail for altitude ambiguity and references IMP-097 (deferred altitude framework) — does not force placement when no natural home exists" },
-  { id = "EX-4", text = "/reconcile skill specifies REQ-DNN → REQ-NNN mappings recorded in revision-NNN.md under ### Orphan placements" },
-  { id = "EX-5", text = "/reconcile skill notes each placement is a REV introduce row; multi-spec placement = multiple introduce rows sharing one REQ-NNN; new spec = create row" },
+  { id = "EX-1", text = "/reconcile no-op gate (step 2) amended: orphan entries count as brief content; gate does not fire while any orphan is unplaced (C2)" },
+  { id = "EX-2", text = "/reconcile has sub-step 4f (Orphan placement) after 4e split rule, before step 5 approve & apply (C1 — not at 2b)" },
+  { id = "EX-3", text = "/reconcile 4f specifies the placement sub-steps: determine spec home(s), work with existing REQs, handle multi-spec, negotiate wording, author REV rows, record mapping, stuck/withdrawn" },
+  { id = "EX-4", text = "/reconcile 4f multi-spec guidance: one introduce row per destination spec, each minting its own REQ-NNN, all traced to the same REQ-DNN — does NOT claim shared REQ-NNN across rows (B1)" },
+  { id = "EX-5", text = "/reconcile 4f defines stuck as non-terminal (close refuses → reconcile) and withdrawn as design-level retraction (edit design-requirements.toml + narrative record); notes orphans are not RV findings so 'withdrawn' is not the finding disposition (E2)" },
+  { id = "EX-6", text = "/reconcile 4f carries the /consult altitude guardrail and references IMP-097 (deferred altitude framework)" },
+  { id = "EX-7", text = "/reconcile 4f specifies REQ-DNN → REQ-NNN mappings recorded in revision-NNN.md under ### Orphan placements (multi-spec = one line per sibling REQ)" },
 ]
 verification = [
-  { id = "VA-1", expects = "reading /reconcile SKILL.md: step 2b present with all six placement sub-steps" },
-  { id = "VA-2", expects = "reading /reconcile SKILL.md: /consult altitude guardrail present with IMP-097 cross-reference" },
-  { id = "VA-3", expects = "reading /reconcile SKILL.md: ### Orphan placements mapping format documented in the reconcile narrative" },
-  { id = "VA-4", expects = "reading /reconcile SKILL.md: REV introduce/create/move row guidance for placements present" },
-  { id = "VA-5", expects = "design §11d walkthrough holds: every orphan has a mapping or a 'stuck — /consult' note; none silently dropped" },
+  { id = "VA-1", expects = "reading /reconcile SKILL.md: no-op gate amended with the orphan-content-counts guardrail" },
+  { id = "VA-2", expects = "reading /reconcile SKILL.md: sub-step 4f present after 4e, not at 2b" },
+  { id = "VA-3", expects = "reading /reconcile SKILL.md: multi-spec guidance says sibling REQ-NNNs with traced lineage, not shared REQ-NNN" },
+  { id = "VA-4", expects = "reading /reconcile SKILL.md: stuck = non-terminal, withdrawn = design-level retraction; mechanism for each documented" },
+  { id = "VA-5", expects = "reading /reconcile SKILL.md: /consult altitude guardrail present with IMP-097 cross-reference" },
+  { id = "VA-6", expects = "reading /reconcile SKILL.md: ### Orphan placements mapping format documented (multi-spec = one line per sibling)" },
+  { id = "VA-7", expects = "design §11d walkthrough holds: every orphan has a mapping, sibling set, withdrawal, or stuck note; no silent drop; no shared-REQ-NNN claim" },
 ]
 specs        = []
 requirements = []
 
 [[phase]]
 id        = "PHASE-05"
-name      = "/close — orphan deadlock gate"
-objective = "Edit the /close skill (plugins master): add the orphan deadlock check to the spec-coherence gate (step 2) — read plan.md ## Requirements verification, collect every REQ-DNN handle, and for each confirm the reconciliation outcome records a REQ-DNN → REQ-NNN mapping or a 'withdrawn' with rationale; otherwise refuse close and return to /reconcile. This is the sole enforcement point for the REQ-D lifecycle."
+name      = "/close — orphan advisory check with explicit read-path"
+objective = "Edit the /close skill (plugins master): add the orphan advisory check to the spec-coherence gate (step 2) — read plan.md ## Requirements verification, collect every REQ-DNN handle, follow the read-path (review-NNN.md ## Reconciliation Outcome → pointer to revision-NNN.md ### Orphan placements) to determine each orphan's outcome. Placed or withdrawn pass; stuck or absent refuse and return to /reconcile (E2). Name the check honestly as advisory agent-discipline, not a binary-enforced gate (F2)."
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-02 complete (plan.md ## Requirements verification table shape defined — the gate's read source)" },
-  { id = "EN-2", text = "PHASE-04 complete (reconciliation outcome carries REQ-DNN → REQ-NNN mappings — the gate's check target)" },
+  { id = "EN-1", text = "PHASE-02 complete (plan.md ## Requirements verification list shape defined — the check's read source)" },
+  { id = "EN-2", text = "PHASE-04 complete (reconciliation outcome carries REQ-DNN → REQ-NNN mappings in revision-NNN.md — the check's target)" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "/close spec-coherence gate (step 2) carries an orphan deadlock sub-check" },
+  { id = "EX-1", text = "/close spec-coherence gate (step 2) carries an orphan advisory sub-check" },
   { id = "EX-2", text = "/close skill reads plan.md ## Requirements verification to collect REQ-DNN handles" },
-  { id = "EX-3", text = "/close skill passes when each REQ-DNN has a → REQ-NNN mapping or 'withdrawn' with rationale in the reconciliation outcome; refuses otherwise" },
-  { id = "EX-4", text = "/close skill names plan.md as prose (presentational table) and the gate as an LLM-read, not structural parse" },
+  { id = "EX-3", text = "/close skill spells out the read-path: review-NNN.md ## Reconciliation Outcome → pointer into revision-NNN.md ### Orphan placements (E3); does not read revision-NNN.md without the review-NNN.md pointer" },
+  { id = "EX-4", text = "/close pass conditions: placed (mapping) or withdrawn (with rationale); refuse conditions: stuck or absent — return to /reconcile (E2)" },
+  { id = "EX-5", text = "/close skill names the check as advisory agent-discipline (not binary-enforced), with the §11e walkthrough as backstop and the RV-ledger enforcement filed as a follow-up IMP (F2)" },
 ]
 verification = [
-  { id = "VA-1", expects = "reading /close SKILL.md: orphan deadlock check present in the spec-coherence gate" },
-  { id = "VA-2", expects = "reading /close SKILL.md: pass conditions (mapping or withdrawn-with-rationale) and refuse condition (unplaced orphan) documented" },
-  { id = "VA-3", expects = "design §11e walkthrough holds: close reads plan.md table, checks mappings, passes when all placed" },
-  { id = "VA-4", expects = "design §11e negative case holds: an orphan with no mapping → close refuses with the REQ-DNN handle named" },
-  { id = "VH-1", expects = "end-to-end coherence: all five edited skills (design→plan→audit→reconcile→close) tell one consistent REQ-D → REQ-NNN lifecycle story; the user confirms the workflow reads as a natural part of the reconcile loop" },
+  { id = "VA-1", expects = "reading /close SKILL.md: orphan advisory check present in the spec-coherence gate" },
+  { id = "VA-2", expects = "reading /close SKILL.md: read-path review-NNN.md → revision-NNN.md spelled out explicitly" },
+  { id = "VA-3", expects = "reading /close SKILL.md: pass conditions (placed/withdrawn) and refuse conditions (stuck/absent) documented" },
+  { id = "VA-4", expects = "reading /close SKILL.md: check named as advisory, not 'sole enforcement point'; RV-ledger IMP referenced" },
+  { id = "VA-5", expects = "design §11e walkthrough holds: close reads plan.md list, follows read-path, passes when all placed" },
+  { id = "VA-6", expects = "design §11e negative case holds: an orphan with no mapping and no withdrawal → close refuses with the REQ-DNN handle named; a withdrawn orphan passes" },
+  { id = "VH-1", expects = "end-to-end coherence (F1): all five edited skills (design→plan→audit→reconcile→close) tell one consistent REQ-D → REQ-NNN lifecycle story — sidecar format, plan.md list, brief sub-section, REV 4f placement, close read-path all reference each other correctly; user confirms the workflow reads as a natural part of the reconcile loop" },
 ]
 specs        = []
 requirements = []
