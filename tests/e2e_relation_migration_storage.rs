@@ -417,15 +417,16 @@ fn assert_slice_shape(label: &str, text: &str) {
     assert_guidance_comment_present(label, text);
 }
 
-/// Governance kinds (adr/policy/standard): `related` migrated OUT; the supersession
-/// pair + tags stay typed. `tags` is free-form classification, NOT a relation axis —
-/// it is asserted here only because it shares the `[relationships]` table the migration
+/// Governance kinds (adr/policy/standard): `related` and `supersedes` migrated OUT
+/// (SL-048 / SL-095). Only `superseded_by` (ADR-004 §5 typed carve-out) + `tags`
+/// stay typed. `tags` is free-form classification, NOT a relation axis — it is
+/// asserted here only because it shares the `[relationships]` table the migration
 /// rewrites, so "the cut" must leave it untouched. Its presence is a migration-blast-
 /// radius guard, not a relation-vocabulary claim.
 fn assert_governance_shape(label: &str, text: &str) {
     let v = line_view(text);
-    assert_no_migrated_key_left(Path::new(label), &v, &["related"]);
-    for kept in ["supersedes", "superseded_by", "tags"] {
+    assert_no_migrated_key_left(Path::new(label), &v, &["related", "supersedes"]);
+    for kept in ["superseded_by", "tags"] {
         assert!(
             v.relationships_keys.iter().any(|k| k == kept),
             "{label}: governance template must keep `{kept}` typed in [relationships]:\n{text}"
